@@ -4,8 +4,8 @@
   "description": "Pulse QoE beacon for Ant Media Server players — startup time, rebuffering, errors, bitrate. Self-hosted; your viewer data never leaves your infrastructure.",
   "license": "MIT",
   "type": "module",
-  "main": "./dist/pulse-beacon.cjs",
-  "module": "./dist/pulse-beacon.js",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "sideEffects": false,
   "scripts": {
@@ -16,7 +16,7 @@
   },
   "size-limit": [
     {
-      "path": "dist/pulse-beacon.js",
+      "path": "dist/index.js",
       "limit": "15 KB",
       "gzip": true
     }

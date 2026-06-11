@@ -4,12 +4,13 @@
 #
 # Two containers only — pulse (all-in-one binary, serves UI+API+ingest) and
 # ClickHouse. Metadata store is embedded SQLite on the pulse volume by default.
+# Base image digests pinned 2026-06-11 via registry HTTP API (no Docker daemon).
 
 name: pulse
 
 services:
   pulse:
-    # TODO(INFRA-01): published image; build context used until first release.
+    # TODO(INFRA-01 wave-1): switch to published image once first release ships.
     build:
       context: ..
       dockerfile: deploy/docker/pulse.Dockerfile
@@ -30,7 +31,8 @@ services:
     restart: unless-stopped
 
   clickhouse:
-    image: clickhouse/clickhouse-server:24.8   # TODO(INFRA-01): pin digest, pre-tuned low-footprint config
+    # clickhouse/clickhouse-server:24.8
+    image: clickhouse/clickhouse-server@sha256:1ffa82edee000a42c09313bd9f1293d94c570aee74babc1b3ca9983a35fa597b
     volumes:
       - clickhouse-data:/var/lib/clickhouse
     healthcheck:

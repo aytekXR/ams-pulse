@@ -26,4 +26,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Integration test against AMS ${{ matrix.ams-version }}
         run: |
-          echo "TODO(QA-01): docker run ant-media CE ${{ matrix.ams-version }}, publish test stream (ffmpeg), assert collector normalizes REST/log/webhook events per contract"
+          echo "PENDING(QA-01 wave-1): AMS ${{ matrix.ams-version }} matrix tests not yet implemented." >&2
+          echo "Implementation requires: docker run ant-media CE ${{ matrix.ams-version }}," >&2
+          echo "  publish test stream (ffmpeg), assert collector normalizes REST/log/webhook" >&2
+          echo "  events per contract. Tracked in WO-001 gaps." >&2
+          exit 1

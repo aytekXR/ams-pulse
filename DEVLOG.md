@@ -38,3 +38,43 @@ form. Recorded in `agents/handoffs/decisions.md`.
 6. Validation: per-feature acceptance-criteria sweep, adversarial verification,
    defect-fix loop until clean.
 7. Consolidation + IMPLEMENTATION_LOG.md + final review notification.
+
+## 2026-06-11 — Session 2: orchestration start
+
+- Go 1.26.4 now installed (session-1 blocker cleared). Docker still absent →
+  decision D-002 stands (local process stack for verification).
+- ClickHouse single binary v26.6.1 downloaded to `/tmp/clickhouse`.
+- Repo placed under git, skeleton committed as baseline (decision D-003); BE-01
+  and BE-02 serialized within waves to avoid go.mod write races.
+- `agents/handoffs/decisions.md` created with D-001..D-003.
+- Understand-phase workflow dispatched: 4 parallel readers (server, contracts,
+  web+sdk, infra), structured maps + build-state probes.
+
+### Understand-phase findings (workflow `pulse-understand`, 4 agents)
+
+- **server/**: compiles clean but pure skeleton — every exported type an empty
+  struct; only `collector.Source` and `channels.Channel` interfaces defined;
+  go.mod has zero deps (intended deps listed as comments).
+- **contracts/**: OpenAPI 18 paths / 23 operations, ALL response bodies "TODO";
+  3 event schemas have solid envelopes but open `data` objects; both SQL
+  migrations are `SELECT 1` placeholders. 10 concrete gaps catalogued (beacon
+  ingest path missing, geo/device enrichment unspecified, no error envelope,
+  no query params, rollup dims missing, etc.) → folded into WO-101.
+- **web/**: React 19 + RR7 + Vite skeleton, no router yet; tsc clean; needs
+  openapi-typescript, charting lib, test setup. **sdk/**: stubs build, but
+  size gate broken — tsup emits `dist/index.*` while package.json/size-limit
+  expect `dist/pulse-beacon.*` → WO-002.
+- **infra**: Makefile targets real but `build-web` breaks without prior
+  `npm install`; ci.yml has 3 echo-stub jobs (contracts, web, sdk); images
+  unpinned; AMS matrix workflow stub → WO-001.
+
+### Orchestration
+
+- Decisions D-004 (single full contract freeze) and D-005 (cmd/pulse assembly
+  shared sequentially BE-01→BE-02) recorded.
+- Wave 0 dispatched (workflow `pulse-wave-0`): INFRA-01 WO-001 ∥ SDK-01 WO-002,
+  then QA-01 gate verification.
+- Wave 1 work orders written while wave 0 runs: WO-101 (INT-01 full freeze),
+  WO-102 (BE-01 data plane), WO-103 (BE-02 product plane), WO-104 (FE-01
+  shell/live/analytics/alerts), WO-105 (QA-01 gate + mock AMS), WO-106 (DOC-01
+  install runbook).
