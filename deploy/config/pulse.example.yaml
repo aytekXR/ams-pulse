@@ -1,0 +1,33 @@
+# Pulse configuration — example with full surface documented.
+# Copy to pulse.yaml next to this file; every key has a sane default except
+# the AMS source. SKELETON: keys finalized by BE-01 with internal/config.
+
+server:
+  listen: ":8090"          # UI + API
+  ingest_listen: ":8091"   # beacon ingest (public)
+  # base_url: https://pulse.example.com   # used in alert deep-links
+
+ams:
+  sources:
+    - name: main
+      rest_url: http://localhost:5080
+      # credentials via PULSE_AMS_MAIN_TOKEN env var — never in this file
+      # analytics_log: /var/log/antmedia/ant-media-server-analytics.log
+      # kafka_brokers: localhost:9092
+      # webhook_secret: ...
+
+storage:
+  clickhouse_addr: localhost:9000
+  meta: sqlite             # sqlite (default) | postgres
+  # postgres_dsn: via PULSE_POSTGRES_DSN env var
+  retention:
+    raw_days: 90
+    rollup_months: 13
+
+beacon:
+  sample_rate: 1.0
+  # anonymize_ip: true     # GDPR/KVKK posture — geo to country only
+
+license:
+  # key: ...               # empty = Free tier (1 node, 7-day retention)
+  # offline_file: /etc/pulse/license.sig   # air-gapped Enterprise installs

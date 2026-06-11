@@ -1,0 +1,44 @@
+# Pulse CI — skeleton. INFRA-01 activates jobs as components gain real code;
+# until then jobs that need dependencies are placeholders kept green.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  contracts:
+    # Contracts are the source of truth — validate them first; everything else
+    # is allowed to depend on this job.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate JSON schemas + OpenAPI lint
+        run: |
+          echo "TODO(INFRA-01): ajv compile contracts/events/*.json; redocly lint contracts/openapi/pulse-api.yaml"
+
+  server:
+    runs-on: ubuntu-latest
+    needs: contracts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24" }
+      - run: cd server && go vet ./... && go build ./... && go test ./...
+
+  web:
+    runs-on: ubuntu-latest
+    needs: contracts
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build + test web UI
+        run: echo "TODO(INFRA-01): npm ci && npm run lint && npm run build && npm test (enable once lockfile exists)"
+
+  sdk:
+    runs-on: ubuntu-latest
+    needs: contracts
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build + test beacon SDK + 15KB size gate
+        run: echo "TODO(INFRA-01): npm ci && npm run build && npm test && npm run size (enable once lockfile exists)"

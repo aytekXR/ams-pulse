@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pulse.dev/schemas/ams-server-event.json",
+  "title": "ServerEvent",
+  "description": "Normalized internal event produced by the collector from any AMS source (REST poll, analytics-log tail, Kafka feed, webhook). Downstream storage and query layers depend ONLY on this shape, never on raw AMS formats — this is the portability boundary (PRD §7.11 expansion play). SKELETON.",
+  "type": "object",
+  "required": ["version", "type", "ts", "source", "node_id"],
+  "properties": {
+    "version": { "const": 1 },
+    "type": {
+      "type": "string",
+      "enum": [
+        "stream_publish_start", "stream_publish_end",
+        "stream_stats", "webrtc_client_stats",
+        "ingest_stats", "node_stats",
+        "recording_ready", "viewer_join", "viewer_leave"
+      ]
+    },
+    "ts": { "type": "integer", "description": "Unix epoch ms" },
+    "source": { "type": "string", "enum": ["rest_poll", "log_tail", "kafka", "webhook", "host_agent"] },
+    "node_id": { "type": "string", "description": "AMS cluster node identifier (or 'standalone')" },
+    "app": { "type": "string" },
+    "stream_id": { "type": "string" },
+    "data": { "type": "object", "description": "Type-specific payload (viewer counts, bitrate, fps, packet loss, cpu/ram, ...) — finalized per event type by INT-01" }
+  }
+}

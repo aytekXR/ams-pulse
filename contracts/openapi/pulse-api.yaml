@@ -1,0 +1,89 @@
+openapi: "3.1.0"
+info:
+  title: Pulse API
+  description: >
+    Pulse Query & Config API. Serves the web dashboard and the customer-facing
+    Data API (PRD F8). Token-authenticated; read endpoints operate over rollups.
+    SKELETON — paths are enumerated with summaries only; INT-01 fleshes out
+    schemas before each implementation phase.
+  version: 0.1.0
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: live       # F1 — real-time ops dashboard
+  - name: analytics  # F2 — historical audience analytics
+  - name: qoe        # F3/F4 — viewer QoE and ingest health
+  - name: alerts     # F5 — alert rules, channels, history
+  - name: reports    # F6 — usage & billing reports
+  - name: fleet      # F7 — cluster nodes
+  - name: admin      # config, users, license
+
+paths:
+  # ---- F1: live ----
+  /live/overview:
+    get: { tags: [live], summary: "Current concurrent viewers, publishers, node health, protocol mix", responses: { "200": { description: TODO } } }
+  /live/streams:
+    get: { tags: [live], summary: "Active streams with per-stream viewer counts", responses: { "200": { description: TODO } } }
+  /live/ws:
+    get: { tags: [live], summary: "WebSocket upgrade for live dashboard push", responses: { "101": { description: TODO } } }
+
+  # ---- F2: analytics ----
+  /analytics/audience:
+    get: { tags: [analytics], summary: "Views, uniques, watch time, peak concurrency over a date range (per stream/app/node)", responses: { "200": { description: TODO } } }
+  /analytics/geo:
+    get: { tags: [analytics], summary: "Geography breakdown (country, optional region)", responses: { "200": { description: TODO } } }
+  /analytics/devices:
+    get: { tags: [analytics], summary: "Device / OS / browser / protocol breakdown", responses: { "200": { description: TODO } } }
+
+  # ---- F3/F4: qoe ----
+  /qoe/summary:
+    get: { tags: [qoe], summary: "Startup time, rebuffer ratio, error rate aggregates", responses: { "200": { description: TODO } } }
+  /qoe/ingest:
+    get: { tags: [qoe], summary: "Publisher/ingest health: bitrate, fps, packet loss, health score", responses: { "200": { description: TODO } } }
+
+  # ---- F5: alerts ----
+  /alerts/rules:
+    get: { tags: [alerts], summary: "List alert rules", responses: { "200": { description: TODO } } }
+    post: { tags: [alerts], summary: "Create alert rule", responses: { "201": { description: TODO } } }
+  /alerts/rules/{ruleId}:
+    parameters: [{ name: ruleId, in: path, required: true, schema: { type: string } }]
+    put: { tags: [alerts], summary: "Update alert rule", responses: { "200": { description: TODO } } }
+    delete: { tags: [alerts], summary: "Delete alert rule", responses: { "204": { description: TODO } } }
+  /alerts/channels:
+    get: { tags: [alerts], summary: "List notification channels", responses: { "200": { description: TODO } } }
+    post: { tags: [alerts], summary: "Create notification channel (email/slack/telegram/pagerduty/webhook)", responses: { "201": { description: TODO } } }
+  /alerts/channels/{channelId}/test:
+    post: { tags: [alerts], summary: "Test-fire a channel", responses: { "202": { description: TODO } } }
+  /alerts/history:
+    get: { tags: [alerts], summary: "Alert firing history", responses: { "200": { description: TODO } } }
+
+  # ---- F6: reports ----
+  /reports/usage:
+    get: { tags: [reports], summary: "Viewer-minutes, peak concurrency, egress GB, recording storage per app/stream/tenant", responses: { "200": { description: TODO } } }
+  /reports/schedules:
+    get: { tags: [reports], summary: "List scheduled report exports", responses: { "200": { description: TODO } } }
+    post: { tags: [reports], summary: "Create scheduled CSV/PDF export", responses: { "201": { description: TODO } } }
+
+  # ---- F7: fleet ----
+  /fleet/nodes:
+    get: { tags: [fleet], summary: "Discovered cluster nodes with role labels and health", responses: { "200": { description: TODO } } }
+
+  # ---- admin ----
+  /admin/sources:
+    get: { tags: [admin], summary: "Configured AMS data sources (REST/log/Kafka/webhook)", responses: { "200": { description: TODO } } }
+    post: { tags: [admin], summary: "Add an AMS data source", responses: { "201": { description: TODO } } }
+  /admin/license:
+    get: { tags: [admin], summary: "License status and tier entitlements", responses: { "200": { description: TODO } } }
+
+  # ---- non-versioned operational endpoints (documented here for completeness) ----
+  # GET /metrics   — Prometheus exposition (F8), gauges/counters only, low cardinality
+  # GET /healthz   — liveness
+  # POST /ingest/beacon — beacon ingest (public, token + rate limited); payload: contracts/events/beacon-event.schema.json
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

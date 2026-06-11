@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pulse.dev/schemas/alert-notification.json",
+  "title": "AlertNotification",
+  "description": "Payload delivered by the alert evaluator to every notification channel adapter (and verbatim to generic-webhook channels). SKELETON.",
+  "type": "object",
+  "required": ["version", "alert_id", "rule_id", "state", "severity", "ts", "title"],
+  "properties": {
+    "version": { "const": 1 },
+    "alert_id": { "type": "string", "description": "Unique firing instance; identical across firing/resolved pair for grouping" },
+    "rule_id": { "type": "string" },
+    "state": { "type": "string", "enum": ["firing", "resolved"] },
+    "severity": { "type": "string", "enum": ["info", "warning", "critical"] },
+    "ts": { "type": "integer" },
+    "title": { "type": "string", "description": "Human-readable one-liner, e.g. 'Stream auction-main offline'" },
+    "metric": { "type": "string", "description": "Metric that triggered, e.g. rebuffer_ratio" },
+    "value": { "type": "number" },
+    "threshold": { "type": "number" },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "node_id": { "type": "string" },
+        "app": { "type": "string" },
+        "stream_id": { "type": "string" }
+      }
+    },
+    "dashboard_url": { "type": "string", "format": "uri" }
+  }
+}

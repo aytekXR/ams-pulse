@@ -1,0 +1,45 @@
+# Pulse — self-hosted deployment bundle (PRD §7.10).
+# Installs beside AMS or on a dedicated VM. Target: `docker compose up -d`
+# to a working dashboard in under 15 minutes, including AMS source setup.
+#
+# Two containers only — pulse (all-in-one binary, serves UI+API+ingest) and
+# ClickHouse. Metadata store is embedded SQLite on the pulse volume by default.
+
+name: pulse
+
+services:
+  pulse:
+    # TODO(INFRA-01): published image; build context used until first release.
+    build:
+      context: ..
+      dockerfile: deploy/docker/pulse.Dockerfile
+    ports:
+      - "8090:8090"   # UI + API
+      - "8091:8091"   # beacon ingest (expose publicly behind TLS)
+    environment:
+      PULSE_CONFIG: /etc/pulse/pulse.yaml
+      PULSE_CLICKHOUSE_ADDR: clickhouse:9000
+    volumes:
+      - ./config:/etc/pulse:ro
+      - pulse-data:/var/lib/pulse          # SQLite meta store + license cache
+      # Mount the AMS analytics log read-only when Pulse runs on the AMS host:
+      # - /var/log/antmedia:/var/log/antmedia:ro
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: unless-stopped
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8   # TODO(INFRA-01): pin digest, pre-tuned low-footprint config
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+volumes:
+  pulse-data:
+  clickhouse-data:

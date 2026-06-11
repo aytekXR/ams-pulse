@@ -1,0 +1,32 @@
+{
+  "name": "@pulse/beacon",
+  "version": "0.1.0",
+  "description": "Pulse QoE beacon for Ant Media Server players — startup time, rebuffering, errors, bitrate. Self-hosted; your viewer data never leaves your infrastructure.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/pulse-beacon.cjs",
+  "module": "./dist/pulse-beacon.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs,iife --dts --minify",
+    "test": "vitest run",
+    "lint": "eslint src",
+    "size": "size-limit"
+  },
+  "size-limit": [
+    {
+      "path": "dist/pulse-beacon.js",
+      "limit": "15 KB",
+      "gzip": true
+    }
+  ],
+  "devDependencies": {
+    "@size-limit/preset-small-lib": "^11.2.0",
+    "eslint": "^9.28.0",
+    "size-limit": "^11.2.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  }
+}

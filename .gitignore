@@ -1,0 +1,26 @@
+# Binaries / build output
+/server/bin/
+/web/dist/
+/sdk/beacon-js/dist/
+*.exe
+
+# Dependencies
+node_modules/
+/server/vendor/
+
+# Local env & data
+.env
+.env.*
+!.env.example
+/deploy/data/
+*.db
+*.sqlite
+
+# Editor / OS
+.DS_Store
+.idea/
+*.swp
+
+# Test artifacts
+coverage/
+*.out

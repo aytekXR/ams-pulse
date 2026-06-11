@@ -1,0 +1,29 @@
+# AMS compatibility matrix — integration tests against real Ant Media Server
+# containers. Direct mitigation for PRD §7.13 risk "AMS API/log format changes
+# across versions". Runs nightly + on collector/amsclient changes.
+name: ams-version-matrix
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  pull_request:
+    paths:
+      - "server/pkg/amsclient/**"
+      - "server/internal/collector/**"
+      - "contracts/events/ams-server-event.schema.json"
+  workflow_dispatch:
+
+jobs:
+  matrix-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # TODO(QA-01): maintain supported AMS versions here; community edition
+        # images for CI, EE covered by the design-partner test bed.
+        ams-version: ["2.10.0", "2.14.0", "3.0.2"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Integration test against AMS ${{ matrix.ams-version }}
+        run: |
+          echo "TODO(QA-01): docker run ant-media CE ${{ matrix.ams-version }}, publish test stream (ffmpeg), assert collector normalizes REST/log/webhook events per contract"

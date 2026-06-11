@@ -1,0 +1,83 @@
+# Machine-readable agent registry. Source of truth for scopes (single-writer
+# rule) and wave ordering. ORCH-00 reads this to dispatch; CI may enforce
+# scope boundaries on PRs labeled with an agent ID.
+
+version: 1
+
+agents:
+  - id: ORCH-00
+    name: orchestrator
+    charter: definitions/ORCH-00-orchestrator.md
+    scope: [agents/handoffs/]
+    dispatches: true
+
+  - id: INT-01
+    name: integration-contracts
+    charter: definitions/INT-01-integration.md
+    scope: [contracts/]
+    blocks: [BE-01, BE-02, FE-01, SDK-01]   # implementation waits on contract freeze
+
+  - id: BE-01
+    name: backend-dataplane
+    charter: definitions/BE-01-backend-dataplane.md
+    scope:
+      - server/pkg/amsclient/
+      - server/internal/collector/
+      - server/internal/store/clickhouse/
+      - server/internal/cluster/
+      - server/cmd/
+      - server/internal/domain/   # shared with BE-02; changes need INT-01 sign-off
+
+  - id: BE-02
+    name: backend-productplane
+    charter: definitions/BE-02-backend-productplane.md
+    scope:
+      - server/internal/api/
+      - server/internal/query/
+      - server/internal/alert/
+      - server/internal/reports/
+      - server/internal/license/
+      - server/internal/config/
+      - server/internal/store/meta/
+
+  - id: FE-01
+    name: frontend
+    charter: definitions/FE-01-frontend.md
+    scope: [web/]
+
+  - id: SDK-01
+    name: beacon-sdk
+    charter: definitions/SDK-01-beacon-sdk.md
+    scope: [sdk/]
+
+  - id: INFRA-01
+    name: infrastructure
+    charter: definitions/INFRA-01-infra.md
+    scope: [deploy/, .github/, Makefile, .gitignore]
+
+  - id: QA-01
+    name: qa-verification
+    charter: definitions/QA-01-qa.md
+    scope: [qa/]          # reports; test files inside other scopes via owner-reviewed PRs
+    verifies: [BE-01, BE-02, FE-01, SDK-01, INFRA-01]
+
+  - id: DOC-01
+    name: documentation
+    charter: definitions/DOC-01-docs.md
+    scope: [docs/, README.md]
+
+waves:
+  - id: 0
+    goal: CI real and green on the skeleton
+    sequence: [[INFRA-01]]
+  - id: 1
+    goal: "PRD Phase 1 / MVP: collector, live dashboard, core alerting, installer"
+    sequence: [[INT-01], [BE-01, BE-02, FE-01], [QA-01], [DOC-01]]
+    gate: "compose-up to live dashboard on real AMS; alert <30s; install <15min"
+  - id: 2
+    goal: "PRD Phase 2: beacons, QoE, reports, fleet, API/Prometheus, Helm"
+    sequence: [[INT-01], [SDK-01, BE-01, BE-02, FE-01, INFRA-01], [QA-01], [DOC-01]]
+    gate: "beacon->dashboard round trip; billing reconciles ±1%"
+  - id: 3
+    goal: "PRD Phase 3: mobile beacons, anomaly detection, probes, enterprise"
+    sequence: []   # planned at wave-2 gate

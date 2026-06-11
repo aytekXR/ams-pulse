@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pulse.dev/schemas/beacon-event.json",
+  "title": "BeaconEvent",
+  "description": "QoE event batch posted by the player beacon SDK to POST /ingest/beacon. Field naming is CMCD-aligned where applicable (PRD F3). SKELETON: enums and field sets to be finalized by INT-01 before Phase 2 implementation.",
+  "type": "object",
+  "required": ["version", "session_id", "stream_id", "events"],
+  "properties": {
+    "version": { "const": 1 },
+    "session_id": { "type": "string", "format": "uuid", "description": "Viewer session UUID, generated client-side, used for session stitching" },
+    "stream_id": { "type": "string" },
+    "app": { "type": "string", "description": "AMS application name" },
+    "meta": {
+      "type": "object",
+      "description": "Customer-supplied metadata set at init (e.g. tenant tag for F6 billing mapping)",
+      "additionalProperties": { "type": "string" }
+    },
+    "player": {
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "enum": ["ams-webrtc", "hls.js", "video.js", "native", "other"] },
+        "sdk_version": { "type": "string" }
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "ts"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["session_start", "startup_complete", "heartbeat", "rebuffer_start", "rebuffer_end", "error", "bitrate_change", "resolution_change", "session_end"]
+          },
+          "ts": { "type": "integer", "description": "Unix epoch ms" },
+          "data": { "type": "object", "description": "Type-specific payload (startup_ms, error_code, bitrate_kbps, watch_time_s, ...) — finalized per event type by INT-01" }
+        }
+      }
+    }
+  }
+}
