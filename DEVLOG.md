@@ -78,3 +78,23 @@ form. Recorded in `agents/handoffs/decisions.md`.
   WO-102 (BE-01 data plane), WO-103 (BE-02 product plane), WO-104 (FE-01
   shell/live/analytics/alerts), WO-105 (QA-01 gate + mock AMS), WO-106 (DOC-01
   install runbook).
+
+## 2026-06-12 — Session 2 end: Wave 0 gate PASS
+
+- User directive: stop after the wave-0 gate; continue next session.
+- Wave-0 workflow: INFRA-01 (WO-001) and SDK-01 (WO-002) both DONE, changes
+  committed as `df66509`. The QA-01 gate agent was lost to a session
+  interruption; criteria are mechanical, so ORCH-00 re-ran them directly
+  (one-time protocol deviation, recorded in the gate report).
+- **Gate verdict: PASS** — `make build` / `make test` / `make lint` /
+  `make validate-contracts` all exit 0; SDK size gate runs (15 kB limit, 88 B
+  stub). Details + carried-forward gaps: `agents/handoffs/wave-0/gate-report.md`.
+- Task state: #1 understand DONE, #2 wave 0 DONE; #3–#7 pending.
+
+### RESUME POINT (next session)
+
+Full hand-off prompt: `agents/handoffs/RESUME-PROMPT.md`. Short form: dispatch
+Wave 1 as one workflow per WO-101..106 — INT-01 freeze first, then
+BE-01 → BE-02 sequential (D-003/D-005) ∥ FE-01, then QA-01 gate, then DOC-01.
+ClickHouse binary lives at `/tmp/clickhouse` (re-download if /tmp was cleared:
+v26.6.1 single binary). No Docker on this machine (D-002).
