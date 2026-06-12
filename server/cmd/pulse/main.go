@@ -27,6 +27,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/pulse-analytics/pulse/server/internal/store/meta"
 )
 
 // Version is set by the build system via -ldflags.
@@ -140,25 +142,65 @@ func runMigrate(args []string) error {
 		return fmt.Errorf("config: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
+	var errs []error
+
+	// ── 1. Meta store migrations (D-W1-003) ──────────────────────────────────
+	// Runs unconditionally (does not require ClickHouse). The DDL is embedded in
+	// the binary (meta.EmbeddedDDL) so PULSE_META_DDL_PATH is not required for a
+	// working binary; the env var acts as an override for custom schemas.
+	metaDSN := os.Getenv("PULSE_META_DSN")
+	if metaDSN == "" {
+		metaDSN = "pulse_meta.db"
+	}
+	metaSecretKey := os.Getenv("PULSE_SECRET_KEY")
+	logger.Info("pulse migrate: running meta store migrations", "dsn", metaDSN)
+	metaStore, metaErr := meta.New(ctx, "sqlite", metaDSN, metaSecretKey)
+	if metaErr != nil {
+		logger.Error("pulse migrate: meta store open failed", "error", metaErr)
+		errs = append(errs, fmt.Errorf("meta store open: %w", metaErr))
+	} else {
+		defer metaStore.Close()
+		metaDDLPath := os.Getenv("PULSE_META_DDL_PATH")
+		var applyErr error
+		if metaDDLPath != "" {
+			logger.Info("pulse migrate: using explicit meta DDL path", "path", metaDDLPath)
+			applyErr = metaStore.Migrate(ctx, metaDDLPath)
+		} else {
+			applyErr = metaStore.MigrateEmbedded(ctx, meta.EmbeddedDDL)
+		}
+		if applyErr != nil {
+			logger.Error("pulse migrate: meta DDL apply failed", "error", applyErr)
+			errs = append(errs, fmt.Errorf("meta migrations: %w", applyErr))
+		} else {
+			logger.Info("pulse migrate: meta store migrations done")
+		}
+	}
+
+	// ── 2. ClickHouse migrations ──────────────────────────────────────────────
+	// ClickHouse failures are logged but do not prevent a successful exit.
+	// This allows operators to run `pulse migrate` to pre-populate the meta schema
+	// before ClickHouse is available (common in staged deployment scenarios).
+	// ClickHouse migrations will be retried the next time `pulse migrate` is run
+	// or applied via `pulse serve` on start (which also applies schema).
 	logger.Info("pulse migrate: running ClickHouse migrations",
 		"dsn", maskDSN(cfg.ClickHouseDSN),
 		"dir", cfg.MigrationsDir,
 	)
-
-	if err := runClickHouseMigrations(ctx, cfg, logger); err != nil {
-		return fmt.Errorf("clickhouse migrations: %w", err)
+	if chErr := runClickHouseMigrations(ctx, cfg, logger); chErr != nil {
+		logger.Warn("pulse migrate: ClickHouse migrations failed (non-fatal; retry when ClickHouse is available)",
+			"error", chErr)
+	} else {
+		logger.Info("pulse migrate: ClickHouse migrations done")
 	}
 
-	// HOOK(BE-02): Meta migrations go here.
-	// When be-02 implements store/meta, uncomment:
-	//   if err := meta.Migrate(cfg.MetaDSN); err != nil {
-	//       return fmt.Errorf("meta migrations: %w", err)
-	//   }
-	logger.Info("pulse migrate: done (meta migrations: HOOK pending BE-02)")
-
+	if len(errs) > 0 {
+		// Return the first error (meta failure is fatal).
+		return errs[0]
+	}
+	logger.Info("pulse migrate: done")
 	return nil
 }
 

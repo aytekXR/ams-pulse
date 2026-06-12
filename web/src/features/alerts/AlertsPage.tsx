@@ -41,9 +41,9 @@ function fmtTs(ts: number | null | undefined): string {
   return new Date(ts).toLocaleString();
 }
 
-/** Derive a human-readable display name from a rule (group_by label or metric summary). */
+/** Display name for a rule — uses the required name field (CR-1). */
 function ruleDisplayName(rule: AlertRule): string {
-  return rule.group_by ?? `${rule.metric} ${rule.operator} ${rule.threshold}`;
+  return rule.name;
 }
 
 export function AlertsPage() {
@@ -271,7 +271,8 @@ export function AlertsPage() {
                       </div>
                     </div>
                     <Badge label={rule.severity} variant={severityVariant(rule.severity)} />
-                    {rule.muted && <Badge label="muted" variant="muted" />}
+                    {!rule.enabled && <Badge label="disabled" variant="muted" />}
+                    {rule.enabled && rule.muted && <Badge label="muted" variant="muted" />}
                     <button style={smBtnStyle} onClick={() => setEditingRule(rule)}>Edit</button>
                     <button
                       style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}

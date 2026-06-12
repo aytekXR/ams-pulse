@@ -140,9 +140,9 @@ func NormalizeClusterNode(n amsclient.ClusterNodeDTO) domain.ServerEvent {
 		Source:  domain.SourceRestPoll,
 		NodeID:  nodeID,
 		Data: map[string]any{
-			"cpu_pct":          n.CPUUsage * 100,
-			"mem_pct":          n.MemoryUsage * 100,
-			"disk_pct":         n.DiskUsage * 100,
+			"cpu_pct":          n.CPUUsage,
+			"mem_pct":          n.MemoryUsage,
+			"disk_pct":         n.DiskUsage,
 			"net_in_mbps":      n.NetworkInputBps / 1_000_000,
 			"net_out_mbps":     n.NetworkOutputBps / 1_000_000,
 			"jvm_heap_used_mb": n.JvmMemoryUsage,

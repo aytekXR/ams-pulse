@@ -145,4 +145,62 @@ v26.6.1 single binary). No Docker on this machine (D-002).
 - **ORCH-00 ruling (D-006):** fix-loop in-wave for D-W1-001/002/003/004/005 +
   approved CRs 1–4 (CR-3 contract-only, impl wave 2); D-W1-006 carried to
   wave 2. Housekeeping: .gitignore for ClickHouse artifacts/binaries, repo-root
-  test junk removed. Checkpoint commit before fix-loop dispatch.
+  test junk removed. Checkpoint commit before fix-loop dispatch (`408915b`).
+
+### Fix-loop dispatched + Wave 2 work orders written (in parallel)
+
+- Fix-loop workflow `pulse-wave-1-fixloop` (run `wf_e7294343-88a`):
+  INT-01 (CR-1..4) ∥ BE-01 (D-W1-001/005) → BE-02 (D-W1-002/003/004 + CR-1/2
+  impl) ∥ FE-01 (consume name/enabled) → QA-01 re-gate (per-defect repros +
+  full mechanical re-run) → DOC-01 reconcile on pass.
+- While it runs (protocol precedent: wave-1 WOs were written during wave 0):
+  decision **D-007** (wave-2 structure: no INT-01 step per D-004; beacon
+  ingest → BE-02 scope exception; BE-02 split WO-203/WO-204; geo = mmdb
+  reader-only; Kafka fake-broker verification waiver) and wave-2 work orders
+  **WO-201..WO-208** written to `agents/handoffs/wave-2/`:
+  201 SDK-01 F3 beacon SDK · 202 BE-01 Kafka/enrichment/ingest-health/fleet ·
+  203 BE-02 beacon-ingest/QoE/Prometheus/channels/gating · 204 BE-02
+  reports/exports · 205 FE-01 QoE/ingest/reports/fleet/analytics-full ·
+  206 INFRA-01 Helm/compose/CI · 207 QA-01 gate (beacon round trip, billing
+  ±1%) · 208 DOC-01 SDK guide/Prometheus guide/runbooks.
+- Wave-2 dispatch order (one workflow, after wave-1 closes):
+  parallel([BE-01→BE-02(203)→BE-02(204)], SDK-01, FE-01, INFRA-01) → QA-01 →
+  DOC-01.
+
+## 2026-06-12 — Session 3 end: Wave 1 GATE CLOSED (fix-loop re-gate PASS_WITH_LIMITATIONS)
+
+- Fix-loop workflow done (6 agents, ~23 min). All five defects verified fixed
+  with fresh measurements (re-gate section in `qa/wave-1/gate-report.md`):
+  - D-W1-001 ✅ normalize multipliers removed; regression test pins
+    cpuUsage=15.0 → cpu_pct=15.0 (was 1500).
+  - D-W1-002 ✅ /healthz really probes ClickHouse+meta (3 s timeout, measured
+    latency_ms), HTTP 503 when a critical component is down (tested).
+  - D-W1-003 ✅ meta DDL embedded (go:embed); `pulse migrate` creates all 14
+    meta tables without PULSE_META_DDL_PATH (env var now optional override).
+  - D-W1-004 ✅ duplicate import alias gone; D-W1-005 ✅ dead get() deleted.
+  - CR-1/CR-2 ✅ round-tripped contract→DDL→store→API→evaluator→FE: rules have
+    real `name`; `enabled=false` skips evaluation (tested), distinct from
+    muted; FE workarounds removed. CR-3 contract-only per D-006; CR-4 fixed.
+  - Full mechanical re-run green: gate script exit 0 (stream 1 061 ms, viewer
+    error 0%), all 8 budget tests, Go 7/7 pkgs, web build/lint/21 tests,
+    redocly 0/0. Remaining waivers: D-002 (compose) + D-W1-006 (AMS matrix
+    tests, carried to wave 2). **Wave 1 gate CLOSED — proceed to Wave 2.**
+- DOC-01 reconciled install/alerting runbooks, ARCHITECTURE, README with the
+  fixes (PULSE_META_DDL_PATH optional, healthz 503 semantics, enabled-vs-muted
+  truth table).
+- Housekeeping: `web/pulse_secret.key` (generated dev encryption key)
+  gitignored — never commit; ClickHouse artifacts ignore rules landed earlier.
+- **D-008 (user directive):** from wave 2 on, every agent commits its own
+  scope after its acceptance criteria pass — explicit-path staging only,
+  `<AGENT-ID> WO-XXX:` messages, no blanket `git add`, no push; ORCH-00 keeps
+  a small wave-close commit. Encoded in decisions.md; wave-2 dispatch prompts
+  must carry it.
+- Task state: wave 1 DONE; wave-2 WOs written (WO-201..208) — next session
+  dispatches them. Resume prompt: `agents/handoffs/RESUME-PROMPT.md`.
+
+### RESUME POINT (next session)
+
+Dispatch Wave 2 as one workflow per WO-201..208 with the D-008 commit
+protocol: parallel([BE-01(202) → BE-02(203) → BE-02(204)], SDK-01(201),
+FE-01(205), INFRA-01(206)) → QA-01 gate (207) → DOC-01 (208). ClickHouse
+binary at `/tmp/clickhouse` (re-download if /tmp cleared). No Docker (D-002).

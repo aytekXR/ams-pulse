@@ -1,13 +1,3 @@
-/**
- * Alert rule create/edit form.
- *
- * NOTE: AlertRule/AlertRuleWrite (generated from contracts/openapi/pulse-api.yaml)
- * do not include a "name" or "enabled" field. A contract change request has been
- * filed (see WO-104-report.md §gaps). The form below uses "label" for display
- * purposes only (stored in group_by as a convention) and omits the enabled toggle
- * until the contract is updated. The muted flag serves as the enabled/disabled
- * control in the meantime.
- */
 import { useState } from "react";
 import type { AlertRule, AlertRuleWrite } from "@/lib/api/types";
 
@@ -34,15 +24,18 @@ const SEVERITIES = ["info", "warning", "critical"] as const;
 const WINDOWS = [60, 300, 600, 1800, 3600];
 
 export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
-  // "label" is a UI convenience: stored in group_by until the contract adds a name field
-  const [label, setLabel] = useState(initial?.group_by ?? "");
+  const [name, setName] = useState(initial?.name ?? "");
   const [metric, setMetric] = useState(initial?.metric ?? METRICS[0]);
   const [operator, setOperator] = useState<"gt" | "lt" | "gte" | "lte" | "eq">(initial?.operator ?? "gt");
   const [threshold, setThreshold] = useState(String(initial?.threshold ?? ""));
   const [windowS, setWindowS] = useState(initial?.window_s ?? 300);
   const [severity, setSeverity] = useState(initial?.severity ?? "warning");
   const [cooldownS, setCooldownS] = useState(String(initial?.cooldown_s ?? "300"));
+  // CR-2: enabled and muted are distinct controls
+  const [enabled, setEnabled] = useState(initial?.enabled ?? true);
   const [muted, setMuted] = useState(initial?.muted ?? false);
+  // group_by is the real grouping dimension (e.g. "stream_id", "app")
+  const [groupBy, setGroupBy] = useState(initial?.group_by ?? "");
   const [scopeStreamId, setScopeStreamId] = useState(initial?.scope?.stream_id ?? "");
   const [scopeApp, setScopeApp] = useState(initial?.scope?.app ?? "");
   const [scopeNodeId, setScopeNodeId] = useState(initial?.scope?.node_id ?? "");
@@ -51,7 +44,7 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
 
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
-    if (!label.trim()) errs.name = "Name is required";
+    if (!name.trim()) errs.name = "Name is required";
     if (!threshold.trim() || isNaN(Number(threshold))) errs.threshold = "Valid number required";
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -68,14 +61,16 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
       if (scopeNodeId) scope.node_id = scopeNodeId;
 
       await onSave({
+        name: name.trim(),
         metric,
         operator,
         threshold: Number(threshold),
         window_s: windowS,
         severity,
         cooldown_s: Number(cooldownS) || 300,
+        enabled,
         muted,
-        group_by: label.trim() || undefined,
+        group_by: groupBy.trim() || undefined,
         scope: Object.keys(scope).length > 0 ? scope : undefined,
         maintenance_windows: [],
       });
@@ -114,8 +109,8 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
         <label style={labelStyle}>Name *</label>
         <input
           style={{ ...inputStyle, borderColor: errors.name ? "var(--color-error)" : "var(--color-border)" }}
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
           placeholder="e.g. High CPU alert"
         />
         {errors.name && <span style={{ fontSize: 11, color: "var(--color-error)" }}>{errors.name}</span>}
@@ -191,17 +186,38 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
             <input style={inputStyle} value={scopeNodeId} onChange={(e) => setScopeNodeId(e.target.value)} placeholder="any" />
           </div>
         </div>
+        <div style={{ marginTop: 12, ...fieldStyle }}>
+          <label style={labelStyle}>Group by dimension (e.g. stream_id, app, node_id)</label>
+          <input
+            style={inputStyle}
+            value={groupBy}
+            onChange={(e) => setGroupBy(e.target.value)}
+            placeholder="stream_id"
+          />
+        </div>
       </details>
 
-      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-        <input
-          type="checkbox"
-          checked={muted}
-          onChange={(e) => setMuted(e.target.checked)}
-          style={{ width: 14, height: 14, accentColor: "var(--color-accent)" }}
-        />
-        Muted (suppress notifications)
-      </label>
+      {/* enabled / muted — distinct controls per CR-2 */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+            style={{ width: 14, height: 14, accentColor: "var(--color-accent)" }}
+          />
+          Enabled (rule is evaluated; uncheck to pause without deleting)
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={muted}
+            onChange={(e) => setMuted(e.target.checked)}
+            style={{ width: 14, height: 14, accentColor: "var(--color-accent)" }}
+          />
+          Muted (evaluated and recorded, but no notifications sent)
+        </label>
+      </div>
 
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 4 }}>
         <button

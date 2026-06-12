@@ -84,3 +84,58 @@ All four applied by an INT-01 fix agent (contract freeze is amended through
 this approval, per D-004). ORCH-00 housekeeping done directly: .gitignore
 entries for ClickHouse test artifacts + built binaries (BE-01 gap, owner
 ORCH-00).
+
+## D-007 · 2026-06-12 · Wave 2 structure: no INT-01 step; beacon ingest scope; BE-02 split
+
+Rulings for the wave-2 work orders (`agents/handoffs/wave-2/WO-201..208`):
+
+1. **No INT-01 wave step.** D-004's freeze already covers wave 2+3-MVP surface;
+   contract changes route through ORCH-00 CRs (as exercised in D-006). The
+   manifest's wave-2 `[[INT-01], …]` slot is satisfied by the standing freeze.
+2. **Beacon ingest (`server/internal/collector/beacon/`) is BE-02 scope for
+   wave 2**, confirming WO-102/103's working assumption. Rationale: it is an
+   HTTP product surface (token auth, rate limits, schema validation — hostile
+   input, ARCHITECTURE §3.5) not an AMS wire-format concern; BE-01/BE-02
+   serialization (D-003) removes write-conflict risk. Manifest scope map is
+   NOT edited; this WO-scoped exception is recorded here.
+3. **BE-02's wave-2 load is split into two sequential work orders** run by the
+   same agent role: WO-203 (ingest + QoE/fleet/Prometheus/channels/gating)
+   then WO-204 (F6 reports/exports). One double-size order risks agent
+   stalls/context exhaustion observed as retries in wave 1.
+4. **Geo enrichment ships reader-only.** MaxMind-format `.mmdb` reader with a
+   configurable path + anonymize-IP switch; no database bundled (GeoLite2
+   licensing requires per-user registration). Absent DB ⇒ honest no-op +
+   documented setup. Satisfies F2 "IP-derived, anonymizable" within
+   redistribution constraints.
+5. **Kafka source verification limitation.** No broker runs on this machine;
+   the Kafka source is contract/unit-tested against an in-process fake.
+   Recorded as a D-002-class gate waiver; AMS-side Kafka E2E goes to the
+   version-matrix CI (with D-W1-006) once real AMS containers are available.
+
+## D-008 · 2026-06-12 · Per-agent commits after self-verification (user directive)
+
+From wave 2 onward, every implementation/docs agent COMMITS its own changes
+once its work-order acceptance criteria pass (its "solution is verified"),
+instead of leaving everything uncommitted for one ORCH-00 wave commit.
+
+Rules (enforced in every work order and dispatch prompt):
+
+1. **Verify first.** Run your WO acceptance criteria; commit only when they
+   pass. Partial/blocked work is NOT committed — report it instead.
+2. **Stage by explicit path, never `git add -A`/`-u`/`.`** — agents run in
+   parallel in one working tree; blanket staging would swallow another
+   agent's in-flight files. Stage only paths inside your charter scope (plus
+   declared cmd/ edits per D-005).
+3. **Message format:** `<AGENT-ID> WO-XXX: <summary>` body listing
+   verification evidence (commands run, key measurements). No push.
+4. **Index contention:** if `.git/index.lock` is busy, wait and retry
+   (bounded); never delete the lock.
+5. QA-01 commits its qa/ artifacts + gate report the same way. ORCH-00 still
+   makes a small wave-close commit (decisions, DEVLOG, handoffs) at the gate
+   and remains the only committer for orchestration files.
+6. The wave gate itself is unchanged: QA verifies the integrated tree after
+   all agent commits; a fix-loop produces follow-up commits the same way.
+
+Rationale: user directive (2026-06-12) + recoverability — wave 1 held ~6
+agents of work uncommitted for hours; a crash would have lost it. Single-writer
+scopes (manifest) make per-scope staging safe.

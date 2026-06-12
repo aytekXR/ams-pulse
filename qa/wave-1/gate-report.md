@@ -261,3 +261,173 @@ Local-process equivalents verified above satisfy all functional requirements. Th
 ## Summary
 
 Wave-1 is **PASS_WITH_LIMITATIONS**. All testable gate criteria pass with measured numbers below budget. Three defects found: one major (D-W1-001, node CPU normalization 100x too high), two minor documentation/code-quality issues. The D-002 waiver covers Docker Compose unexecutability on this machine. Recommend ORCH-00 route D-W1-001 to BE-01 for fix before wave-2 deployment, as it affects fleet health display and alert threshold calibration.
+
+---
+
+## Re-gate after fix-loop (D-006)
+
+**QA-01 re-verification date:** 2026-06-12  
+**Verdict: PASS_WITH_LIMITATIONS**
+
+All five assigned defects (D-W1-001 through D-W1-005) are fixed and verified with fresh measurements below. D-W1-006 (AMS version-matrix Go tests) remains deferred per D-006. No regressions vs the 12 original gate criteria.
+
+### Per-defect verdicts
+
+| Defect | Owner | Fix verified | Method | Verdict |
+|--------|-------|-------------|--------|---------|
+| D-W1-001 — Node CPU/mem normalized 100x too high | BE-01 | `NormalizeClusterNode` no longer multiplies by 100; `cpu_pct=15.0` for `cpuUsage=15.0` | `TestNormalizeClusterNode_CPUScale` PASS + code inspection of `normalize.go` | **FIXED** |
+| D-W1-002 — /healthz latency_ms hardcoded null, never 503 | BE-02 | /healthz pings ClickHouse with 3s timeout; returns 503 + `status:down` when unreachable; `latency_ms` is measured integer | `TestAPI_Healthz_ClickHouseDown_Returns503` + `TestAPI_Healthz_MetaStoreLatency` PASS | **FIXED** |
+| D-W1-003 — `pulse migrate` skips meta migrations | BE-02 | `pulse migrate` runs meta DDL from embedded `meta.EmbeddedDDL`; `sqlite3 /tmp/test.db ".tables"` shows 14 tables | Live `PULSE_META_DSN=/tmp/test_migrate.db /tmp/pulse migrate` + sqlite3 check | **FIXED** |
+| D-W1-004 — Duplicate import alias in serve.go | BE-02 | Single `"github.com/pulse-analytics/pulse/server/internal/store/clickhouse"` import; `chstore` alias removed | Code inspection of `server/cmd/pulse/serve.go` | **FIXED** |
+| D-W1-005 — Dead `get()` method with double-decoder bug | BE-01 | `get()` method deleted from `amsclient/client.go`; only `getJSON()` remains | Code inspection; `go vet ./...` exit 0 | **FIXED** |
+| D-W1-006 — AMS version-matrix Go tests not implemented | QA-01 | Deferred per D-006; needs real AMS containers in CI | Carried forward to wave-2 validation sweep | **DEFERRED** |
+
+### CR-1/CR-2 round-trip verification
+
+**CR-1 (AlertRule.name):**
+- OpenAPI: `name` is in `AlertRule.required` and `AlertRuleWrite.required` (line 1738 of `pulse-api.yaml`).
+- DDL: `name TEXT NOT NULL` in `alert_rules` table (`contracts/db/meta/0001_init.sql`).
+- API: `alertRuleFromAPI` returns 422 if `name` is missing; `alertRuleToAPI` emits `"name"` field.
+- FE: `ruleDisplayName()` returns `rule.name` directly (no `group_by` workaround); `AlertRuleForm` uses `name` state backed by `AlertRuleWrite.name`.
+- Test: `TestAPI_AlertRules_CreateAndList` PASS — POST body includes `"name"` field, 201 returned.
+- Workaround check: `grep -n "group_by.*label\|label.*workaround" web/src/features/alerts/AlertRuleForm.tsx` → no output.
+
+**CR-2 (AlertRule.enabled):**
+- OpenAPI: `enabled` in `AlertRule.required`; `AlertRuleWrite.enabled` defaults to `true`; description documents `enabled=false` vs `muted=true` semantics.
+- DDL: `enabled INTEGER NOT NULL DEFAULT 1` in `alert_rules`.
+- Evaluator: `if !rule.Enabled { continue }` check before any evaluation — verified at `evaluator.go:200`.
+- Test: `TestEvaluator_DisabledRule_NotEvaluated` PASS — disabled rule produces 0 notifications, 0 history writes.
+- FE: `AlertRuleForm` renders `enabled` checkbox (defaults true); `AlertsPage` shows `disabled` badge when `rule.enabled === false`.
+
+### Full mechanical re-run outputs
+
+#### `cd server && CGO_ENABLED=0 go build ./...`
+```
+(exit 0 — no output)
+```
+
+#### `cd server && CGO_ENABLED=0 go vet ./...`
+```
+(exit 0 — no output)
+```
+
+#### `cd server && CGO_ENABLED=0 go test ./... -timeout 120s` (fresh, cache cleared)
+```
+ok  github.com/pulse-analytics/pulse/server/internal/alert          0.420s
+ok  github.com/pulse-analytics/pulse/server/internal/api            1.169s
+ok  github.com/pulse-analytics/pulse/server/internal/collector      0.460s
+ok  github.com/pulse-analytics/pulse/server/internal/collector/logtail   1.269s
+ok  github.com/pulse-analytics/pulse/server/internal/collector/restpoller 4.634s
+ok  github.com/pulse-analytics/pulse/server/internal/domain         2.985s
+ok  github.com/pulse-analytics/pulse/server/internal/store/meta     0.810s
+PASS — 7 packages, 0 FAIL
+```
+
+#### `cd web && npm run build`
+```
+vite v6.4.3 building for production...
+✓ 638 modules transformed.
+dist/assets/index-DGUx5GLK.js   697.98 kB │ gzip: 206.87 kB
+✓ built in 915ms
+EXIT: 0
+```
+
+#### `cd web && npm run lint`
+```
+(no output — 0 errors, 0 warnings)
+EXIT: 0
+```
+
+#### `cd web && npm run test`
+```
+✓ src/features/live/__tests__/LiveSocket.test.ts (8 tests) 4ms
+✓ src/features/live/__tests__/StreamsTable.test.tsx (7 tests) 109ms
+✓ src/features/alerts/__tests__/AlertRuleForm.test.tsx (6 tests) 168ms
+Tests: 21 passed (21)
+EXIT: 0
+```
+
+#### `npx @redocly/cli lint contracts/openapi/pulse-api.yaml`
+```
+contracts/openapi/pulse-api.yaml: validated in 37ms
+Woohoo! Your API description is valid.
+EXIT: 0
+```
+
+#### `bash qa/budgets/run-budget-tests.sh`
+```
+B-01: Stream visibility latency 1.500s ≤ 10s         PASS
+B-02: Viewer count normalization sums all protocols   PASS
+B-03: Alert latency 15s ≤ 30s                        PASS
+B-04: ClickHouse DDL 14 create statements             PASS
+B-05: Meta DDL 14 CREATE TABLE statements             PASS
+B-06: CGO_ENABLED=0 go build ./... green              PASS
+B-07: Web bundle 697.98 kB pre-gzip                   PASS
+B-08: OpenAPI spec valid (0 errors, 0 warnings)       PASS
+EXIT: 0
+```
+
+#### `bash qa/wave-1/run-gate.sh`
+```
+[PASS] go test ./... — all packages pass
+[PASS] npm run build — green
+[PASS] npm run test — all 21 tests pass
+[PASS] ClickHouse started
+[PASS] pulse migrate succeeded (30ms)
+[PASS] ClickHouse migration: 15 tables created (≥9 expected)
+[PASS] mock-ams started
+[PASS] pulse serve started
+[PASS] /healthz returns status=ok
+[PASS] /healthz includes component: clickhouse
+[PASS] /healthz includes component: meta_store
+[PASS] /healthz includes component: collector
+[PASS] Stream visible latency: 1061ms (budget: 10000ms)
+[PASS] Viewer accuracy for stream-alpha: truth=133 pulse=133 error=0.0% (≤2%)
+[PASS] Viewer accuracy for stream-beta: truth=66 pulse=66 error=0.0% (≤2%)
+[PASS] Viewer accuracy for stream-gamma: truth=266 pulse=266 error=0.0% (≤2%)
+EXIT: 0
+```
+
+#### D-W1-003 repro killed
+```
+$ rm -f /tmp/test_migrate.db && PULSE_META_DSN=/tmp/test_migrate.db /tmp/pulse migrate
+[INFO] pulse migrate: meta store migrations done
+[WARN] pulse migrate: ClickHouse migrations failed (non-fatal)
+[INFO] pulse migrate: done
+EXIT: 0
+
+$ sqlite3 /tmp/test_migrate.db ".tables"
+alert_channels     anomaly_baselines  license            tenants
+alert_history      api_tokens         probes             users
+alert_rules        cluster_nodes      report_schedules
+ams_sources        ingest_tokens      schema_migrations
+```
+14 tables present — repro definitively killed.
+
+### Regression check: original 12 gate criteria
+
+| # | Criterion | Re-gate measurement | Verdict |
+|---|-----------|---------------------|---------|
+| 1 | Go unit tests green | 7 pkg PASS, 0 FAIL (fresh run) | PASS |
+| 2 | Web `npm run build` green | tsc strict + vite build green | PASS |
+| 3 | Web `npm run test` — 21 tests | 21/21 PASS (3 files) | PASS |
+| 4 | ClickHouse migration: `pulse migrate` | 15 tables/views (≥9) | PASS |
+| 5 | pulse serve starts + /healthz ok | All 3 components status=ok, latency_ms measured | PASS |
+| 6 | New stream visible ≤ 10 s (F1) | **1061 ms** | PASS |
+| 7 | Viewer counts ±2% of mock truth (F1) | stream-alpha 0%, stream-beta 0%, stream-gamma 0% | PASS |
+| 8 | Alert rules survive pulse restart | Verified in existing `TestMetaStore_AlertRules_SurviveRestart` | PASS |
+| 9 | Alert detection→notification ≤ 30 s (F5) | **15 s** fake-clock test (unchanged) | PASS |
+| 10 | /healthz reports all components | clickhouse, meta_store, collector — now with real latency_ms | PASS |
+| 11 | Install path ≤ 15 min | Binary build < 2 min (unchanged) | PASS |
+| 12 | Live dashboard shows scenario streams | total_publishers=3, total_viewers=465, streams=3 (gate run) | PASS |
+| 13 | Docker Compose bundle authored | Unchanged — deploy/ exists | WAIVED (D-002) |
+
+### Remaining / carried defects
+
+| ID | Owner | Severity | Summary |
+|----|-------|----------|---------|
+| D-W1-006 | QA-01 | minor | AMS version-matrix Go integration tests not yet written; deferred to wave-2 validation sweep per D-006. Needs real AMS containers in CI. |
+
+### Re-gate conclusion
+
+**PASS_WITH_LIMITATIONS.** All five assigned defects (D-W1-001 through D-W1-005) are confirmed fixed with fresh measurements. Both contract change requests (CR-1/CR-2) are fully implemented and tested end-to-end (contract → store → API → evaluator → FE). All 12 original testable gate criteria hold at measured values. The sole ongoing waiver is D-002 (no Docker) which carries D-W1-006. Wave 1 gate is closed; proceed to Wave 2.

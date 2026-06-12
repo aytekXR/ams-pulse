@@ -40,7 +40,9 @@ cd /tmp && curl -fsSL https://clickhouse.com/ | sh
 cd server && CGO_ENABLED=0 go build -o /tmp/pulse ./cmd/pulse/
 
 # 3. Apply migrations and start
-PULSE_CLICKHOUSE_DSN=clickhouse://localhost:9000/pulse /tmp/pulse migrate
+PULSE_CLICKHOUSE_DSN=clickhouse://localhost:9000/pulse \
+PULSE_META_DSN=/tmp/pulse.db \
+/tmp/pulse migrate
 PULSE_AMS_URL=http://your-ams:5080 \
 PULSE_AMS_AUTH_TOKEN=your_ams_token \
 PULSE_META_DSN=/tmp/pulse.db \

@@ -103,6 +103,7 @@ func createStreamOfflineRule(t *testing.T, store *meta.Store, streamID string, w
 		scopeJSON = string(b)
 	}
 	row := meta.AlertRuleRow{
+		Name:               "test-stream-offline",
 		Metric:             "stream_offline",
 		Operator:           "eq",
 		Threshold:          1,
@@ -110,6 +111,7 @@ func createStreamOfflineRule(t *testing.T, store *meta.Store, streamID string, w
 		ScopeJSON:          scopeJSON,
 		Severity:           "critical",
 		CooldownS:          cooldownS,
+		Enabled:            true,
 		Muted:              false,
 		MaintenanceWindows: "[]",
 		ChannelIDs:         `["test-channel"]`,
@@ -354,12 +356,14 @@ func TestEvaluator_MaintenanceWindow_Suppresses(t *testing.T) {
 	// Rule with maintenance window (always-suppressed in this test by marking muted).
 	ctx := context.Background()
 	row := meta.AlertRuleRow{
+		Name:               "test-muted-rule",
 		Metric:             "stream_offline",
 		Operator:           "eq",
 		Threshold:          1,
 		WindowS:            5,
 		Severity:           "warning",
 		CooldownS:          60,
+		Enabled:            true, // rule is enabled but muted (evaluated, no notifications)
 		Muted:              true, // muted = simulates maintenance window suppression
 		MaintenanceWindows: "[]",
 		ChannelIDs:         `["test-channel"]`,
@@ -413,12 +417,14 @@ func TestEvaluator_Storm_GroupedNotGrouped(t *testing.T) {
 	// Rule without group_by: each stream fires independently.
 	ctx := context.Background()
 	row := meta.AlertRuleRow{
+		Name:               "test-storm-rule",
 		Metric:             "viewer_count",
 		Operator:           "lt",
 		Threshold:          1,
 		WindowS:            5,
 		Severity:           "info",
 		CooldownS:          300,
+		Enabled:            true,
 		Muted:              false,
 		MaintenanceWindows: "[]",
 		ChannelIDs:         `["test-channel"]`,
@@ -465,6 +471,82 @@ func TestEvaluator_Storm_GroupedNotGrouped(t *testing.T) {
 		t.Errorf("storm test: expected ≤50 notifications for 50 streams without group_by, got %d", n)
 	}
 	t.Logf("PASS: storm test (50 streams) produced %d notifications without group_by (no storm = no deadlock/panic)", n)
+}
+
+// ─── Test: enabled=false skips evaluation entirely ────────────────────────────
+
+func TestEvaluator_DisabledRule_NotEvaluated(t *testing.T) {
+	// A rule with enabled=false must produce zero notifications even when
+	// the condition is met. This is distinct from muted=true (which evaluates
+	// but suppresses notifications).
+	store := openTestStore(t)
+	live := newFakeLive()
+	clock := alert.NewFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+
+	ev, _ := newTestEvaluator(t, store, live, clock)
+
+	ctx := context.Background()
+	// Create a rule with enabled=false.
+	row := meta.AlertRuleRow{
+		Name:               "disabled-rule",
+		Metric:             "stream_offline",
+		Operator:           "eq",
+		Threshold:          1,
+		WindowS:            5,
+		Severity:           "critical",
+		CooldownS:          60,
+		Enabled:            false, // not evaluated at all
+		Muted:              false,
+		MaintenanceWindows: "[]",
+		ChannelIDs:         `["test-channel"]`,
+		ScopeJSON:          "{}",
+	}
+	_, err := store.CreateAlertRule(ctx, row)
+	if err != nil {
+		t.Fatalf("CreateAlertRule: %v", err)
+	}
+
+	var notifMu sync.Mutex
+	var notifs []map[string]any
+	ev.SetNotifySink(func(p []byte) {
+		var n map[string]any
+		_ = json.Unmarshal(p, &n)
+		notifMu.Lock()
+		notifs = append(notifs, n)
+		notifMu.Unlock()
+	})
+
+	// All streams offline — condition that would normally fire.
+	live.setSnap(&domain.LiveSnapshot{
+		Streams: map[string]*domain.LiveStream{},
+		Nodes:   map[string]*domain.LiveNodeStats{},
+	})
+
+	// Advance well past window.
+	clock.Advance(10 * time.Second)
+	ev.TickOnce(ctx)
+	clock.Advance(10 * time.Second)
+	ev.TickOnce(ctx)
+
+	notifMu.Lock()
+	n := len(notifs)
+	notifMu.Unlock()
+
+	if n > 0 {
+		t.Errorf("expected 0 notifications for disabled rule (enabled=false), got %d", n)
+	} else {
+		t.Logf("PASS: disabled rule (enabled=false) produced 0 notifications")
+	}
+
+	// Also check no history entries were written.
+	hist, err := store.ListAlertHistory(ctx, "", "", 0, 0, 10)
+	if err != nil {
+		t.Fatalf("ListAlertHistory: %v", err)
+	}
+	if len(hist) > 0 {
+		t.Errorf("expected 0 history entries for disabled rule, got %d", len(hist))
+	}
+	t.Logf("PASS: enabled=false rule not evaluated (no notifications, no history)")
 }
 
 // ─── Test: detection-to-notification < 30 s by construction ──────────────────

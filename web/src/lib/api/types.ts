@@ -32,6 +32,7 @@ export type ChannelTestResult = Schemas["ChannelTestResult"];
 export type Source = Schemas["Source"];
 export type SourceWrite = Schemas["SourceWrite"];
 export type SourceList = Schemas["SourceList"];
+export type AmsSourceStatus = Schemas["AmsSourceStatus"];
 
 export type Token = Schemas["Token"];
 export type TokenWrite = Schemas["TokenWrite"];

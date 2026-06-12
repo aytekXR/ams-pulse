@@ -145,42 +145,6 @@ func (c *Client) BaseURL() string { return c.baseURL }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
-func (c *Client) get(ctx context.Context, path string, query url.Values, out any) error {
-	u := c.baseURL + path
-	if len(query) > 0 {
-		u += "?" + query.Encode()
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return fmt.Errorf("amsclient: build request: %w", err)
-	}
-	if c.authHeader != "" {
-		req.Header.Set("Authorization", c.authHeader)
-	}
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("amsclient: %s: %w", path, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("amsclient: %s: HTTP %d: %s", path, resp.StatusCode, body)
-	}
-
-	dec := json.NewDecoder(resp.Body)
-	dec.DisallowUnknownFields() // no — we want tolerant decoding
-	// Use standard decoder so unknown fields are silently ignored.
-	dec2 := json.NewDecoder(resp.Body)
-	_ = dec  // discard strict decoder
-	if err := dec2.Decode(out); err != nil {
-		return fmt.Errorf("amsclient: %s: decode: %w", path, err)
-	}
-	return nil
-}
-
 // getJSON performs a GET request with tolerant JSON decoding.
 func (c *Client) getJSON(ctx context.Context, path string, query url.Values, out any) error {
 	u := c.baseURL + path

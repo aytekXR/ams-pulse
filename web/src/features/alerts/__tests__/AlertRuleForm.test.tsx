@@ -22,7 +22,7 @@ describe("AlertRuleForm", () => {
 
   it("shows validation error when threshold is not a number", async () => {
     render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
-    // Fill name/label
+    // Fill name
     fireEvent.change(screen.getByPlaceholderText(/e\.g\. High CPU/i), {
       target: { value: "Test rule" },
     });
@@ -49,10 +49,12 @@ describe("AlertRuleForm", () => {
 
     await waitFor(() => {
       expect(onSave).toHaveBeenCalledOnce();
-      const [data] = onSave.mock.calls[0] as [{ group_by?: string; threshold: number }];
-      // label is stored in group_by (pending contract change to add name field)
-      expect(data.group_by).toBe("CPU alert");
+      const [data] = onSave.mock.calls[0] as [{ name: string; threshold: number; enabled: boolean }];
+      // CR-1: name is now the real contract field (no longer stored in group_by)
+      expect(data.name).toBe("CPU alert");
       expect(data.threshold).toBe(80);
+      // CR-2: enabled defaults to true
+      expect(data.enabled).toBe(true);
     });
   });
 
@@ -66,12 +68,14 @@ describe("AlertRuleForm", () => {
   it("shows edit heading when initial data provided", () => {
     const initial = {
       id: "rule-1",
+      name: "High CPU",
       metric: "cpu_pct",
       operator: "gt" as const,
       threshold: 90,
       window_s: 300,
       severity: "critical" as const,
       cooldown_s: 300,
+      enabled: true,
       muted: false,
       created_at: 0,
       updated_at: 0,

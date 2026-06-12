@@ -43,7 +43,7 @@ The following components are implemented and unit-tested as of Wave 1:
 | Webhook receiver | `internal/collector/webhook` | Implemented; HMAC-SHA256 validation |
 | Fanout + dedup | `internal/collector/fanout`, `dedup` | Implemented |
 | Live aggregator | `internal/collector/aggregator` | Implemented; in-memory, deep-copy snapshots |
-| Normalizer | `internal/collector/normalize` | Implemented; AMS→domain mapping; known defect D-W1-001 (CPU 100x) |
+| Normalizer | `internal/collector/normalize` | Implemented; AMS→domain mapping. D-W1-001 fixed (CPU/mem/disk no longer multiplied by 100). |
 | ClickHouse store | `internal/store/clickhouse` | Implemented; batched async inserts |
 | Meta store | `internal/store/meta` | Implemented; SQLite (pure-Go), AES-256-GCM encryption |
 | Config | `internal/config` | Implemented; YAML + env override, full surface |
@@ -174,14 +174,16 @@ before the WebSocket upgrade completes.
 ## 8. Alert evaluator design
 
 The `internal/alert.Evaluator` runs a tick loop (default 5 s) that:
-1. Lists enabled alert rules from the meta store.
-2. Gets a `CurrentSnapshot()` from the live aggregator.
-3. Evaluates each rule against the snapshot using the state machine in §2 above.
-4. For rules that transition to `firing` or `resolved`, builds an
+1. Lists alert rules from the meta store.
+2. Skips any rule where `enabled = false` (no metric fetch, no history write).
+3. Gets a `CurrentSnapshot()` from the live aggregator.
+4. Evaluates each remaining rule against the snapshot using the state machine in §2 above.
+5. For rules that transition to `firing` or `resolved`, builds an
    `alert-notification` JSON payload (conforming to
    `contracts/events/alert-notification.schema.json`) and delivers it to
-   all configured channels via the channel registry.
-5. Persists history to `alert_history` in the meta store.
+   all configured channels via the channel registry — unless `muted = true`,
+   in which case the history is written but no notification is dispatched.
+6. Persists history to `alert_history` in the meta store.
 
 The tick interval is capped at 30 s to ensure the 30 s latency budget is always met.
 A fake-clock (`alert.FakeClock`) allows deterministic latency tests without real time.
@@ -197,13 +199,16 @@ Encrypted columns store base64-encoded `nonce || ciphertext`. The Go API
 exposes `meta.Store.Encrypt(plaintext) (ciphertext, error)` and
 `meta.Store.Decrypt(ciphertext) (plaintext, error)`.
 
-## 10. Known issues (Wave 1)
+## 10. Known issues (Wave 1 — post fix-loop status)
 
-| ID | Component | Description |
-|---|---|---|
-| D-W1-001 | `collector/normalize.go` | Node CPU/mem values multiplied by 100 (AMS already returns 0–100). Fix: remove `* 100`. Pending BE-01. |
-| D-W1-002 | `api/server.go` | `/healthz` `latency_ms` is always null; does not detect ClickHouse down. Wave 2. |
-| D-W1-003 | `cmd/pulse/migrate.go` | `pulse migrate` does not run meta migrations; meta DDL requires `PULSE_META_DDL_PATH` set when running `pulse serve`. Wave 2 embeds DDL in binary. |
-| D-W1-004 | `cmd/pulse/serve.go` | Duplicate import alias (cosmetic). Wave 2. |
-| D-W1-005 | `pkg/amsclient/client.go` | Dead `get()` method. Wave 2 cleanup. |
-| D-W1-006 | `.github/workflows/ams-version-matrix.yml` | Matrix test workflow exists but `TestAMSVersionMatrix` Go integration tests not implemented. AMS format-drift detection partial. Wave 2. |
+Wave-1 fix-loop (D-006, 2026-06-12) resolved D-W1-001 through D-W1-005. The table
+below records the final status of each defect.
+
+| ID | Component | Description | Status |
+|---|---|---|---|
+| D-W1-001 | `collector/normalize.go` | Node CPU/mem values multiplied by 100. | **Fixed** — `* 100` multipliers removed; `cpu_pct=15.0` for AMS `cpuUsage=15.0`. |
+| D-W1-002 | `api/server.go` | `/healthz` `latency_ms` always null; no 503 on ClickHouse down. | **Fixed** — `/healthz` now pings ClickHouse (3 s timeout) and meta store, returns measured `latency_ms` and HTTP 503 + `status:"down"` when unreachable. |
+| D-W1-003 | `cmd/pulse/main.go` | `pulse migrate` skipped meta migrations; meta DDL required `PULSE_META_DDL_PATH`. | **Fixed** — meta DDL embedded in binary (`meta.EmbeddedDDL`); `pulse migrate` applies it automatically. `PULSE_META_DDL_PATH` is now an optional override. |
+| D-W1-004 | `cmd/pulse/serve.go` | Duplicate import alias (`clickhouse` + `chstore`). | **Fixed** — single import, `chstore` alias removed. |
+| D-W1-005 | `pkg/amsclient/client.go` | Dead `get()` method with double-decoder bug. | **Fixed** — `get()` deleted; only `getJSON()` remains. |
+| D-W1-006 | `.github/workflows/ams-version-matrix.yml` | `TestAMSVersionMatrix` Go integration tests not implemented. | **Deferred** — needs real AMS containers in CI; carried to wave-2 validation sweep (QA-01). |

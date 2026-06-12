@@ -137,6 +137,11 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
+// Ping pings the database with the given context. Used by /healthz to check liveness.
+func (s *Store) Ping(ctx context.Context) error {
+	return s.db.PingContext(ctx)
+}
+
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 // User represents a local user account.
@@ -328,6 +333,7 @@ func scanAPIToken(row scanner) (*APIToken, error) {
 // AlertRuleRow mirrors the alert_rules table.
 type AlertRuleRow struct {
 	ID                 string
+	Name               string // human-readable display name (CR-1)
 	Metric             string
 	Operator           string
 	Threshold          float64
@@ -336,6 +342,7 @@ type AlertRuleRow struct {
 	Severity           string
 	CooldownS          int
 	GroupBy            sql.NullString
+	Enabled            bool   // when false, rule is not evaluated at all (CR-2)
 	Muted              bool
 	MaintenanceWindows string // JSON array
 	ChannelIDs         string // JSON array
@@ -365,11 +372,11 @@ func (s *Store) CreateAlertRule(ctx context.Context, r AlertRuleRow) (AlertRuleR
 	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO alert_rules
-		 (id, metric, operator, threshold, window_s, scope, severity, cooldown_s, group_by, muted,
-		  maintenance_windows, channel_ids, created_at, updated_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		r.ID, r.Metric, r.Operator, r.Threshold, r.WindowS, r.ScopeJSON,
-		r.Severity, r.CooldownS, r.GroupBy, boolToInt(r.Muted),
+		 (id, name, metric, operator, threshold, window_s, scope, severity, cooldown_s, group_by,
+		  enabled, muted, maintenance_windows, channel_ids, created_at, updated_at)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.ID, r.Name, r.Metric, r.Operator, r.Threshold, r.WindowS, r.ScopeJSON,
+		r.Severity, r.CooldownS, r.GroupBy, boolToInt(r.Enabled), boolToInt(r.Muted),
 		r.MaintenanceWindows, r.ChannelIDs, r.CreatedAt, r.UpdatedAt)
 	return r, err
 }
@@ -377,8 +384,8 @@ func (s *Store) CreateAlertRule(ctx context.Context, r AlertRuleRow) (AlertRuleR
 // GetAlertRule fetches a rule by ID.
 func (s *Store) GetAlertRule(ctx context.Context, id string) (*AlertRuleRow, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, metric, operator, threshold, window_s, scope, severity, cooldown_s, group_by,
-		        muted, maintenance_windows, channel_ids, created_at, updated_at
+		`SELECT id, name, metric, operator, threshold, window_s, scope, severity, cooldown_s, group_by,
+		        enabled, muted, maintenance_windows, channel_ids, created_at, updated_at
 		 FROM alert_rules WHERE id=?`, id)
 	return scanAlertRule(row)
 }
@@ -386,8 +393,8 @@ func (s *Store) GetAlertRule(ctx context.Context, id string) (*AlertRuleRow, err
 // ListAlertRules returns all alert rules.
 func (s *Store) ListAlertRules(ctx context.Context) ([]AlertRuleRow, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, metric, operator, threshold, window_s, scope, severity, cooldown_s, group_by,
-		        muted, maintenance_windows, channel_ids, created_at, updated_at
+		`SELECT id, name, metric, operator, threshold, window_s, scope, severity, cooldown_s, group_by,
+		        enabled, muted, maintenance_windows, channel_ids, created_at, updated_at
 		 FROM alert_rules ORDER BY created_at`)
 	if err != nil {
 		return nil, err
@@ -408,11 +415,11 @@ func (s *Store) ListAlertRules(ctx context.Context) ([]AlertRuleRow, error) {
 func (s *Store) UpdateAlertRule(ctx context.Context, r AlertRuleRow) error {
 	r.UpdatedAt = nowMS()
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE alert_rules SET metric=?, operator=?, threshold=?, window_s=?, scope=?,
-		  severity=?, cooldown_s=?, group_by=?, muted=?, maintenance_windows=?, channel_ids=?,
+		`UPDATE alert_rules SET name=?, metric=?, operator=?, threshold=?, window_s=?, scope=?,
+		  severity=?, cooldown_s=?, group_by=?, enabled=?, muted=?, maintenance_windows=?, channel_ids=?,
 		  updated_at=? WHERE id=?`,
-		r.Metric, r.Operator, r.Threshold, r.WindowS, r.ScopeJSON,
-		r.Severity, r.CooldownS, r.GroupBy, boolToInt(r.Muted),
+		r.Name, r.Metric, r.Operator, r.Threshold, r.WindowS, r.ScopeJSON,
+		r.Severity, r.CooldownS, r.GroupBy, boolToInt(r.Enabled), boolToInt(r.Muted),
 		r.MaintenanceWindows, r.ChannelIDs, r.UpdatedAt, r.ID)
 	return err
 }
@@ -425,15 +432,16 @@ func (s *Store) DeleteAlertRule(ctx context.Context, id string) error {
 
 func scanAlertRule(row scanner) (*AlertRuleRow, error) {
 	var r AlertRuleRow
-	var muted int
-	if err := row.Scan(&r.ID, &r.Metric, &r.Operator, &r.Threshold, &r.WindowS,
-		&r.ScopeJSON, &r.Severity, &r.CooldownS, &r.GroupBy, &muted,
+	var enabled, muted int
+	if err := row.Scan(&r.ID, &r.Name, &r.Metric, &r.Operator, &r.Threshold, &r.WindowS,
+		&r.ScopeJSON, &r.Severity, &r.CooldownS, &r.GroupBy, &enabled, &muted,
 		&r.MaintenanceWindows, &r.ChannelIDs, &r.CreatedAt, &r.UpdatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
 	}
+	r.Enabled = enabled != 0
 	r.Muted = muted != 0
 	return &r, nil
 }

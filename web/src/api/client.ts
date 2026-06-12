@@ -25,6 +25,7 @@ import type {
   TokenCreated,
   LicenseInfo,
   ChannelTestResult,
+  AmsSourceStatus,
   WsMessage,
   LiveOverview,
   ErrorResponse,
@@ -229,13 +230,21 @@ export const adminApi = {
   deleteSource: (id: string) =>
     apiFetch<void>(`/admin/sources/${id}`, { method: "DELETE" }),
 
-  // NOTE: AmsSourceStatus schema is missing from contracts/openapi/pulse-api.yaml
-  // (filed as contract change request in WO-104-report.md). Using unknown until
-  // the spec is updated.
-  testSource: (id: string) =>
-    apiFetch<{ ok?: boolean; error?: string }>(`/admin/sources/${id}/test`, {
-      method: "POST",
-    }),
+  // CR-3: POST /admin/sources/{sourceId}/test — contract added; server implementation
+  // deferred to wave 2. Handles 404/501 gracefully: returns a synthetic AmsSourceStatus
+  // with reachable=false so the UI can display a friendly "not yet implemented" state.
+  testSource: async (id: string): Promise<AmsSourceStatus> => {
+    try {
+      return await apiFetch<AmsSourceStatus>(`/admin/sources/${id}/test`, {
+        method: "POST",
+      });
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 404 || err.status === 501)) {
+        return { reachable: false, error: "Source test not yet implemented (wave 2)" };
+      }
+      throw err;
+    }
+  },
 
   getTokens: () =>
     apiFetch<GetAdminTokensResponse>("/admin/tokens"),

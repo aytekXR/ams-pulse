@@ -162,19 +162,31 @@ Verified output (Wave 1 QA gate, 2026-06-12):
 
 Build time: approximately 15 s on a 2-vCPU machine.
 
-**3. Run ClickHouse migrations**
+**3. Run migrations**
 
 ```sh
-PULSE_CLICKHOUSE_DSN=clickhouse://localhost:9000/pulse /tmp/pulse migrate
+PULSE_CLICKHOUSE_DSN=clickhouse://localhost:9000/pulse \
+PULSE_META_DSN=/tmp/pulse.db \
+/tmp/pulse migrate
 ```
 
-This creates the `pulse` database with 9 raw/rollup tables and 5 materialized views.
+This runs both:
+- **Meta migrations** (SQLite) — creates 14 tables: `alert_rules`, `alert_channels`,
+  `alert_history`, `api_tokens`, `ams_sources`, `ingest_tokens`, `users`, `tenants`,
+  `license`, `cluster_nodes`, `probes`, `anomaly_baselines`, `report_schedules`,
+  `schema_migrations`. The DDL is embedded in the binary; no external file needed.
+- **ClickHouse migrations** — creates the `pulse` database with 9 raw/rollup tables
+  and 5 materialized views.
 
-Verified output (Wave 1 QA gate):
+Verified output (Wave 1 fix-loop QA gate, 2026-06-12):
 ```
-migrations: applying file=0001_init.sql
-migrations: applied file=0001_init.sql
+[INFO] pulse migrate: meta store migrations done
+[WARN] pulse migrate: ClickHouse migrations failed (non-fatal)   ← only if CH unreachable
+[INFO] pulse migrate: done
 ```
+
+ClickHouse migration failure is logged as a warning (non-fatal) so you can run meta
+migrations standalone. When ClickHouse is running, both complete cleanly.
 
 **4. Start Pulse**
 
@@ -182,15 +194,16 @@ migrations: applied file=0001_init.sql
 PULSE_AMS_URL=http://YOUR_AMS_HOST:5080 \
 PULSE_AMS_AUTH_TOKEN=your_ams_token_here \
 PULSE_META_DSN=/tmp/pulse.db \
-PULSE_META_DDL_PATH=/path/to/pulse/contracts/db/meta/0001_init.sql \
 PULSE_SECRET_KEY=$(openssl rand -hex 32) \
 /tmp/pulse serve
 ```
 
-> `PULSE_META_DDL_PATH` must point to the meta DDL file from the Pulse repository
-> (`contracts/db/meta/0001_init.sql`). Without it, meta tables (rules, tokens,
-> channels) are not created and API calls will fail. In Wave 2 this will be
-> embedded in the binary so no path is required (D-W1-003).
+The meta schema (rules, tokens, channels) is embedded in the binary and applied
+automatically. `PULSE_META_DDL_PATH` is no longer required.
+
+> **Optional override:** Set `PULSE_META_DDL_PATH` to a custom SQL file path to
+> replace the embedded meta DDL — useful for advanced deployments or schema
+> customization. Under normal operation this variable should be omitted.
 
 Pulse logs the first-run bootstrap token to stderr:
 
@@ -207,20 +220,26 @@ Copy the token.
 curl http://localhost:8090/healthz
 ```
 
-Expected response (verified Wave 1 QA gate):
+Expected response (verified Wave 1 fix-loop QA gate, 2026-06-12):
 
 ```json
 {
+  "status": "ok",
   "components": {
-    "clickhouse": {"status": "ok", "latency_ms": null, "message": null},
-    "meta_store":  {"status": "ok", "latency_ms": null, "message": null},
+    "clickhouse": {"status": "ok", "latency_ms": 2, "message": null},
+    "meta_store":  {"status": "ok", "latency_ms": 0, "message": null},
     "collector":   {"status": "ok", "latency_ms": null, "message": null}
   }
 }
 ```
 
-> Known limitation (D-W1-002): `latency_ms` fields are `null` in Wave 1 — actual
-> latency measurement is a Wave 2 enhancement.
+`latency_ms` values are measured in milliseconds. `clickhouse` and `meta_store`
+report real round-trip latency from a live probe. `collector` is non-latency
+(pipeline status) so its `latency_ms` is `null`.
+
+When ClickHouse or the meta store is unreachable, `/healthz` returns HTTP 503
+and `status: "down"` for the affected component. Use this for health checks
+and load-balancer probes.
 
 **6. Open the dashboard and complete onboarding**
 
@@ -302,7 +321,7 @@ Wave 2 when the full config system lands.
 | `PULSE_RETENTION_DAYS` | `90` | Raw event retention in ClickHouse (days) |
 | `PULSE_ROLLUP_TTL_DAYS` | `395` | Rollup table TTL in ClickHouse (days; 395 ≈ 13 months) |
 | `PULSE_MIGRATIONS_DIR` | auto from source tree | Override path to ClickHouse migration SQL files (default: resolved relative to binary at build time) |
-| `PULSE_META_DDL_PATH` | — | **Required in Wave 1.** Path to `contracts/db/meta/0001_init.sql`; meta tables are not created without it. Wave 2 embeds the DDL in the binary. |
+| `PULSE_META_DDL_PATH` | embedded in binary | Optional override: path to a custom meta DDL SQL file. The binary embeds `contracts/db/meta/0001_init.sql` and runs it automatically; set this only to substitute a custom schema. |
 
 ### YAML config file (Wave 2 — roadmap)
 
@@ -347,10 +366,9 @@ license:
 |---|---|---|
 | `/healthz` returns `"status": "down"` for `clickhouse` | ClickHouse not reachable | Check `PULSE_CLICKHOUSE_DSN`; verify ClickHouse is running with `clickhouse client --query "SELECT 1"` |
 | `/healthz` returns `"status": "down"` for `meta_store` | SQLite file unwritable or Postgres DSN wrong | Check `PULSE_META_DSN` path permissions |
+| `/healthz` returns HTTP 503 | One or more critical components are unreachable | Check the `components` object in the response body; each component reports its own `status` and `latency_ms` |
 | Dashboard shows no streams after publish | AMS token wrong or REST URL unreachable | Run `pulse diag` to see config + connectivity; check `PULSE_AMS_AUTH_TOKEN` |
 | `pulse migrate` exits with "connection refused" | ClickHouse not yet ready | Wait for ClickHouse healthcheck to pass; retry |
-| Node CPU shows > 100% in fleet view | D-W1-001 (known defect, BE-01 fix pending) | Bug: normalize.go multiplies CPU value by 100 when AMS already returns 0–100; fix in Wave 2 |
-| `pulse migrate` does not create meta tables | D-W1-003 (known) | `pulse migrate` runs ClickHouse migrations only; meta DDL is applied on `pulse serve` when `PULSE_META_DDL_PATH` is set. Ensure Step 4 includes that env var. Wave 2 will embed the DDL in the binary. |
 | No admin token printed | Not a first run — tokens already exist | Generate a new token via `POST /api/v1/admin/tokens` using an existing admin token |
 | `FIRST RUN` token lost | Token is never stored in plaintext | Reset: delete the meta database file and restart; all existing data will need re-configuration |
 

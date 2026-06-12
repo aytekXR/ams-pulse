@@ -1014,6 +1014,35 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /admin/sources/{sourceId}/test:
+    parameters:
+      - name: sourceId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: testSource
+      tags: [admin]
+      summary: Test connectivity to an AMS data source
+      description: |
+        Attempts to reach the AMS source and returns reachability, detected
+        version, round-trip latency, and any error detail.
+
+        **Implementation note:** server-side implementation deferred to wave 2
+        (requires collector/amsclient wiring). The contract is finalized here so
+        the frontend can integrate immediately with a stub response.
+      responses:
+        "200":
+          description: Connectivity test result (success or failure detail)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AmsSourceStatus"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /admin/license:
     get:
       operationId: getLicense
@@ -1706,10 +1735,13 @@ components:
 
     AlertRule:
       type: object
-      required: [id, metric, operator, threshold, window_s, severity, muted, created_at, updated_at]
+      required: [id, name, metric, operator, threshold, window_s, severity, enabled, muted, created_at, updated_at]
       properties:
         id:
           type: string
+        name:
+          type: string
+          description: Human-readable display name for the alert rule (e.g. "High rebuffer ratio")
         metric:
           type: string
           description: Metric name, e.g. rebuffer_ratio, bitrate_kbps, viewer_count
@@ -1734,8 +1766,19 @@ components:
         group_by:
           type: [string, 'null']
           description: Group alerts by this dimension key (e.g. stream_id, app)
+        enabled:
+          type: boolean
+          description: |
+            When false the rule is not evaluated at all (no firing, no notification).
+            Distinct from `muted`: a muted rule is still evaluated and a firing is
+            recorded, but no notification is dispatched. Use `enabled=false` to
+            completely suspend a rule; use `muted=true` to silence notifications only.
         muted:
           type: boolean
+          description: |
+            When true the rule is evaluated and firings are recorded in alert_history,
+            but no notifications are sent to channels. Distinct from `enabled`: a
+            disabled rule (`enabled=false`) is not evaluated at all.
         maintenance_windows:
           type: array
           items:
@@ -1753,8 +1796,11 @@ components:
 
     AlertRuleWrite:
       type: object
-      required: [metric, operator, threshold, window_s, severity]
+      required: [name, metric, operator, threshold, window_s, severity]
       properties:
+        name:
+          type: string
+          description: Human-readable display name for the alert rule
         metric:
           type: string
         operator:
@@ -1775,9 +1821,19 @@ components:
           default: 300
         group_by:
           type: [string, 'null']
+        enabled:
+          type: boolean
+          default: true
+          description: |
+            When false the rule is not evaluated at all. Distinct from `muted`:
+            `enabled=false` suspends evaluation entirely; `muted=true` evaluates
+            but suppresses notifications. Defaults to true on creation.
         muted:
           type: boolean
           default: false
+          description: |
+            When true the rule is evaluated but no notifications are sent.
+            Distinct from `enabled`: a disabled rule is not evaluated at all.
         maintenance_windows:
           type: array
           items:
@@ -2421,6 +2477,27 @@ components:
           description: Write-only; stored encrypted
         credential_env_ref:
           type: [string, 'null']
+
+    AmsSourceStatus:
+      type: object
+      required: [reachable]
+      description: |
+        Result of a connectivity test against an AMS data source.
+        `reachable` is the authoritative pass/fail flag. Optional fields
+        are populated when the source responds successfully.
+      properties:
+        reachable:
+          type: boolean
+          description: True if the source responded within the timeout
+        version:
+          type: [string, 'null']
+          description: AMS version string returned by the source, if detectable
+        latency_ms:
+          type: [integer, 'null']
+          description: Round-trip latency in milliseconds; null if unreachable
+        error:
+          type: [string, 'null']
+          description: Human-readable error detail when reachable=false; null on success
 
     # ── Admin: License ────────────────────────────────────────
     LicenseInfo:

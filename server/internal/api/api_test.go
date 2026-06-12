@@ -28,6 +28,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers/gorillamux"
@@ -309,12 +310,14 @@ func TestAPI_AlertRules_CreateAndList(t *testing.T) {
 
 	// POST /api/v1/alerts/rules
 	ruleBody := map[string]any{
-		"metric":    "viewer_count",
-		"operator":  "lt",
-		"threshold": 5,
-		"window_s":  60,
-		"severity":  "warning",
-		"cooldown_s": 300,
+		"name":        "Low viewer count",
+		"metric":      "viewer_count",
+		"operator":    "lt",
+		"threshold":   5,
+		"window_s":    60,
+		"severity":    "warning",
+		"cooldown_s":  300,
+		"enabled":     true,
 		"channel_ids": []string{},
 	}
 	bodyBytes, _ := json.Marshal(ruleBody)
@@ -422,6 +425,107 @@ func TestAPI_License_Get(t *testing.T) {
 		t.Errorf("expected tier=free, got %v", licResp["tier"])
 	}
 	t.Logf("PASS: GET /api/v1/admin/license → 200, tier=%v", licResp["tier"])
+}
+
+// ─── Test: /healthz 503 when ClickHouse is unreachable ───────────────────────
+
+func TestAPI_Healthz_ClickHouseDown_Returns503(t *testing.T) {
+	// D-W1-002: /healthz must return 503 when a critical component is unreachable.
+	// We build a server directly (not via setupTestServer) with an unreachable CH conn.
+
+	// Inject an unreachable ClickHouse connection (points to a port that is
+	// guaranteed to be closed/unreachable).
+	conn, err := clickhouse.Open(&clickhouse.Options{
+		Addr:        []string{"127.0.0.1:19191"}, // unreachable
+		DialTimeout: 100 * 1000 * 1000,           // 100ms as nanoseconds for time.Duration
+	})
+	if err != nil {
+		// If even opening fails, skip the test — the point is an unreachable server.
+		t.Skipf("could not open unreachable ch conn: %v", err)
+	}
+
+	// We need to inject the connection into the server — but the test server
+	// is already started. We test via a fresh handler with the bad conn.
+	ctx := context.Background()
+	ddlPath := metaDDLPath(t)
+	ddl, err := os.ReadFile(ddlPath)
+	if err != nil {
+		t.Skipf("meta DDL not found: %v", err)
+	}
+	store2, err := meta.New(ctx, "sqlite", ":memory:", "test-secret2")
+	if err != nil {
+		t.Fatalf("meta.New: %v", err)
+	}
+	if err := store2.MigrateEmbedded(ctx, string(ddl)); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	defer store2.Close()
+
+	lic2, _ := license.New("", "")
+	live2 := &fakeLiveProvider{}
+	qsvc2 := query.New(live2, nil, lic2)
+	srv2 := api.New(api.Config{ListenAddr: ":0"}, store2, live2, qsvc2, lic2, nil)
+	srv2.SetClickHouseConn(conn)
+	ts2 := httptest.NewServer(srv2.Handler())
+	defer ts2.Close()
+
+	resp, err := http.Get(ts2.URL + "/healthz")
+	if err != nil {
+		t.Fatalf("GET /healthz: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		body, _ := io.ReadAll(resp.Body)
+		t.Errorf("expected 503 when ClickHouse unreachable, got %d: %s", resp.StatusCode, body)
+	} else {
+		var body map[string]any
+		json.NewDecoder(resp.Body).Decode(&body)
+		t.Logf("PASS: /healthz → 503 with body=%v", body)
+	}
+}
+
+// ─── Test: /healthz returns latency_ms as integer when CH is up ──────────────
+
+func TestAPI_Healthz_MetaStoreLatency(t *testing.T) {
+	// D-W1-002: latency_ms must be a real measured integer, not null.
+	ts, _, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	resp, err := http.Get(ts.URL + "/healthz")
+	if err != nil {
+		t.Fatalf("GET /healthz: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode healthz: %v", err)
+	}
+
+	components, ok := body["components"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected components object, got %T", body["components"])
+	}
+	metaComp, ok := components["meta_store"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected meta_store component, got %T", components["meta_store"])
+	}
+	if metaComp["status"] != "ok" {
+		t.Errorf("expected meta_store status=ok, got %v", metaComp["status"])
+	}
+	// latency_ms must be a number (JSON number → float64 after decode), not nil.
+	latency := metaComp["latency_ms"]
+	if latency == nil {
+		t.Errorf("expected latency_ms to be a measured integer, got nil")
+	} else {
+		t.Logf("PASS: /healthz meta_store latency_ms=%v (measured, not null)", latency)
+	}
 }
 
 // keys returns the keys of a map (for logging).

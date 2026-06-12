@@ -16,14 +16,13 @@ import (
 	"github.com/pulse-analytics/pulse/server/internal/license"
 	"github.com/pulse-analytics/pulse/server/internal/query"
 	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse"
-	chstore "github.com/pulse-analytics/pulse/server/internal/store/clickhouse"
 	"github.com/pulse-analytics/pulse/server/internal/store/meta"
 	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
 )
 
 // server holds all running services for the pulse binary.
 type server struct {
-	store     *chstore.Store
+	store     *clickhouse.Store
 	meta      *meta.Store
 	agg       *aggregator.Aggregator
 	col       *collector.Collector
@@ -142,6 +141,8 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		ListenAddr: cfg.ListenAddr,
 	}
 	apiServer := api.New(apiCfg, metaStore, agg, qsvc, lic, logger)
+	// Wire ClickHouse connection for /healthz probes (D-W1-002).
+	apiServer.SetClickHouseConn(store.GetConn())
 
 	return &server{
 		store:     store,

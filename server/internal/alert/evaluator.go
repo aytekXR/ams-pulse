@@ -195,7 +195,9 @@ func (e *Evaluator) evaluate(ctx context.Context) {
 	now := e.clock.Now()
 
 	for _, rule := range rules {
-		if rule.Muted {
+		// enabled=false: rule is completely suspended — not evaluated at all.
+		// This is distinct from muted=true (evaluated, but notifications suppressed).
+		if !rule.Enabled {
 			continue
 		}
 		// Maintenance window suppression.

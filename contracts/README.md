@@ -46,7 +46,7 @@ FE-01 should add this npm script to `web/package.json`:
 ```json
 {
   "scripts": {
-    "gen:api": "openapi-typescript ../../contracts/openapi/pulse-api.yaml -o src/lib/api/schema.d.ts"
+    "gen:api": "openapi-typescript ../contracts/openapi/pulse-api.yaml -o src/lib/api/schema.d.ts"
   }
 }
 ```

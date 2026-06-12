@@ -29,21 +29,36 @@ pending ──(condition met for window_s)──► firing ──(condition clea
 - **resolved**: condition is no longer true; resolved notification sent.
 
 A rule in **firing** state that is still true after `cooldown_s` will re-fire.
-A rule suppressed by a maintenance window or `muted: true` produces no notifications.
+A rule suppressed by a maintenance window or `muted: true` produces no notifications. A rule with `enabled: false` is not evaluated at all.
 
 ### Rule fields
 
 | Field | Type | Description |
 |---|---|---|
+| `name` | string | **Required.** Human-readable label for this rule (e.g. "CPU high on node-1"). Displayed in the alerts list and notification payloads. |
 | `metric` | string | What to evaluate. See [supported metrics](#supported-metrics). |
 | `operator` | string | Comparison: `gt`, `lt`, `gte`, `lte`, `eq` |
 | `threshold` | number | The value to compare against |
 | `window_s` | integer | Seconds the condition must be true before firing (default 60) |
 | `cooldown_s` | integer | Seconds between repeat firings for the same alert (default 300) |
 | `severity` | string | `info`, `warning`, `critical` |
-| `muted` | boolean | If true, rule evaluates but no notifications are sent |
+| `enabled` | boolean | **Default true.** When `false`, the rule is completely skipped — not evaluated, no history written. Use to pause a rule without deleting it. |
+| `muted` | boolean | When `true`, the rule is evaluated and history is written, but no notifications are dispatched. Use for maintenance periods where you want to keep the evaluation record. |
 | `scope` | object | Optional filter: `node_id`, `app`, `stream_id` |
 | `channel_ids` | array | IDs of alert channels to notify |
+
+#### `enabled` vs `muted` — distinct semantics
+
+| State | Evaluated? | History written? | Notifications sent? |
+|---|---|---|---|
+| `enabled: true, muted: false` | Yes | Yes | Yes |
+| `enabled: true, muted: true` | Yes | Yes | No |
+| `enabled: false` | **No** | **No** | No |
+
+- **`enabled: false`** — the rule is completely paused. The evaluator skips it before any metric fetch. No evaluation cost, no history.
+- **`muted: true`** — the rule keeps running and firing internally (history is preserved), but notifications are suppressed. Useful for planned maintenance where you want a record of what would have fired.
+
+A disabled rule's `muted` state is not surfaced — it has no effect until the rule is re-enabled.
 
 ### Supported metrics
 
@@ -54,7 +69,7 @@ A rule suppressed by a maintenance window or `muted: true` produces no notificat
 | `viewer_count` | Live aggregator | Absolute viewer count per stream |
 | `ingest_bitrate_kbps` | Live aggregator | Ingested bitrate for active streams |
 | `fps` | Live aggregator | Current frames-per-second |
-| `node_cpu` | Live aggregator | CPU % per node (0–100). Known defect D-W1-001: if nodes report > 100%, apply fix before use. |
+| `node_cpu` | Live aggregator | CPU % per node (0–100). AMS returns 0–100 directly; Pulse passes it through unchanged. |
 | `node_mem` | Live aggregator | Memory % per node |
 | `node_disk` | Live aggregator | Disk % per node |
 
@@ -220,15 +235,27 @@ the condition clears regardless of where the cooldown timer stands.
 
 > **Roadmap (Wave 2):** Full cron-expression maintenance windows.
 
-Wave 1 supports a `muted` field on rules as a manual on/off toggle.
-Set `muted: true` on a rule to suppress all notifications without deleting the rule.
+Wave 1 supports two manual controls on rules:
 
-**Via API:**
+- `muted: true` — rule evaluates normally and history is recorded, but no notifications are dispatched. Useful for planned maintenance where you want to keep the evaluation record.
+- `enabled: false` — rule is completely paused (not evaluated at all). Use to stop a rule temporarily without deleting it.
+
+See [enabled vs muted semantics](#enabled-vs-muted--distinct-semantics) in the Rule fields section for the full comparison.
+
+**Mute a rule via API:**
 ```sh
 curl -X PUT http://localhost:8090/api/v1/alerts/rules/{rule_id} \
   -H "Authorization: Bearer plt_<token>" \
   -H "Content-Type: application/json" \
   -d '{"muted": true}'
+```
+
+**Disable a rule via API:**
+```sh
+curl -X PUT http://localhost:8090/api/v1/alerts/rules/{rule_id} \
+  -H "Authorization: Bearer plt_<token>" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": false}'
 ```
 
 ---
@@ -243,12 +270,14 @@ In Wave 1, rules must be created manually. Recommended starting rules:
 **Stream offline (critical):**
 ```json
 {
+  "name": "Stream offline",
   "metric": "stream_offline",
   "operator": "eq",
   "threshold": 0,
   "window_s": 30,
   "cooldown_s": 300,
   "severity": "critical",
+  "enabled": true,
   "scope": {}
 }
 ```
@@ -256,12 +285,14 @@ In Wave 1, rules must be created manually. Recommended starting rules:
 **Node CPU high (warning):**
 ```json
 {
+  "name": "Node CPU high",
   "metric": "node_cpu",
   "operator": "gt",
   "threshold": 80,
   "window_s": 60,
   "cooldown_s": 600,
   "severity": "warning",
+  "enabled": true,
   "scope": {}
 }
 ```
@@ -269,12 +300,14 @@ In Wave 1, rules must be created manually. Recommended starting rules:
 **Viewer count low (info):**
 ```json
 {
+  "name": "Viewer count low",
   "metric": "viewer_count",
   "operator": "lt",
   "threshold": 1,
   "window_s": 60,
   "cooldown_s": 300,
   "severity": "info",
+  "enabled": true,
   "scope": {}
 }
 ```
@@ -300,8 +333,7 @@ History is retained indefinitely in the meta store. No TTL in Wave 1.
 
 | Issue | Severity | Status |
 |---|---|---|
-| Node CPU/mem values are 100x too high (D-W1-001) — `node_cpu` and `node_mem` rules will fire at wrong thresholds | Major | Pending BE-01 fix (Wave 2) |
-| Maintenance windows not implemented — only `muted` toggle available (BE-02 G2) | Minor | Wave 2 |
+| Maintenance windows not implemented — only `muted` and `enabled` toggles available (BE-02 G2) | Minor | Wave 2 |
 | Telegram, PagerDuty, generic webhook channels not implemented (BE-02 G1) | Minor | Wave 2 |
 | Default rule pack not seeded on bootstrap (BE-02 G8) | Minor | Wave 2 |
 | Prometheus `/metrics` endpoint is stub — only 2 metrics exported (BE-02 G4) | Minor | Wave 2 |

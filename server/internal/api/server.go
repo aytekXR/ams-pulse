@@ -37,6 +37,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"nhooyr.io/websocket"
@@ -63,6 +64,7 @@ type Server struct {
 	cfg     Config
 	router  *chi.Mux
 	store   *meta.Store
+	chConn  clickhouse.Conn // may be nil if ClickHouse is not configured
 	live    domain.LiveProvider
 	qsvc    *query.Service
 	lic     *license.Manager
@@ -92,6 +94,13 @@ func New(cfg Config, store *meta.Store, live domain.LiveProvider, qsvc *query.Se
 	}
 	s.buildRouter()
 	return s
+}
+
+// SetClickHouseConn wires the ClickHouse connection for /healthz liveness probes.
+// Call after New, before Start. If not called, the clickhouse component reports "ok"
+// without a real probe (no ClickHouse in test environments).
+func (s *Server) SetClickHouseConn(conn clickhouse.Conn) {
+	s.chConn = conn
 }
 
 // Start bootstraps the server (token if needed) and starts listening.
@@ -299,14 +308,84 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 // ─── Operational ──────────────────────────────────────────────────────────────
 
+// healthzTimeout is the per-component ping timeout for /healthz probes.
+const healthzTimeout = 3 * time.Second
+
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status": "ok",
-		"components": map[string]any{
-			"clickhouse": map[string]any{"status": "ok", "latency_ms": nil, "message": nil},
-			"meta_store": map[string]any{"status": "ok", "latency_ms": nil, "message": nil},
-			"collector":  map[string]any{"status": "ok", "latency_ms": nil, "message": nil},
-		},
+	overallOK := true
+	components := map[string]any{}
+
+	// Probe ClickHouse.
+	if s.chConn != nil {
+		start := time.Now()
+		pingCtx, cancel := context.WithTimeout(r.Context(), healthzTimeout)
+		err := s.chConn.Ping(pingCtx)
+		cancel()
+		latencyMS := time.Since(start).Milliseconds()
+		if err != nil {
+			overallOK = false
+			components["clickhouse"] = map[string]any{
+				"status":     "down",
+				"latency_ms": latencyMS,
+				"message":    err.Error(),
+			}
+		} else {
+			components["clickhouse"] = map[string]any{
+				"status":     "ok",
+				"latency_ms": latencyMS,
+				"message":    nil,
+			}
+		}
+	} else {
+		// No ClickHouse configured (e.g. test environment).
+		components["clickhouse"] = map[string]any{"status": "ok", "latency_ms": nil, "message": nil}
+	}
+
+	// Probe meta store.
+	if s.store != nil {
+		start := time.Now()
+		pingCtx, cancel := context.WithTimeout(r.Context(), healthzTimeout)
+		err := s.store.Ping(pingCtx)
+		cancel()
+		latencyMS := time.Since(start).Milliseconds()
+		if err != nil {
+			overallOK = false
+			components["meta_store"] = map[string]any{
+				"status":     "down",
+				"latency_ms": latencyMS,
+				"message":    err.Error(),
+			}
+		} else {
+			components["meta_store"] = map[string]any{
+				"status":     "ok",
+				"latency_ms": latencyMS,
+				"message":    nil,
+			}
+		}
+	} else {
+		components["meta_store"] = map[string]any{"status": "ok", "latency_ms": nil, "message": nil}
+	}
+
+	// Collector: check live provider has a snapshot (liveness proxy).
+	collectorStatus := "ok"
+	if s.live == nil || s.live.CurrentSnapshot() == nil {
+		collectorStatus = "degraded"
+	}
+	components["collector"] = map[string]any{"status": collectorStatus, "latency_ms": nil, "message": nil}
+
+	overallStatus := "ok"
+	if !overallOK {
+		overallStatus = "down"
+	}
+
+	httpStatus := http.StatusOK
+	if !overallOK {
+		httpStatus = http.StatusServiceUnavailable
+	}
+
+	writeJSON(w, httpStatus, map[string]any{
+		"status":     overallStatus,
+		"components": components,
 	})
 }
 
@@ -1028,12 +1107,14 @@ func (s *Server) bootstrapIfFirstRun(ctx context.Context) error {
 func alertRuleToAPI(r meta.AlertRuleRow) map[string]any {
 	m := map[string]any{
 		"id":                  r.ID,
+		"name":                r.Name,
 		"metric":              r.Metric,
 		"operator":            r.Operator,
 		"threshold":           r.Threshold,
 		"window_s":            r.WindowS,
 		"severity":            r.Severity,
 		"cooldown_s":          r.CooldownS,
+		"enabled":             r.Enabled,
 		"muted":               r.Muted,
 		"scope":               jsonOrEmpty(r.ScopeJSON),
 		"channel_ids":         jsonArrayOrEmpty(r.ChannelIDs),
@@ -1050,9 +1131,13 @@ func alertRuleToAPI(r meta.AlertRuleRow) map[string]any {
 }
 
 func alertRuleFromAPI(body map[string]any) (meta.AlertRuleRow, error) {
+	name, _ := body["name"].(string)
 	metric, _ := body["metric"].(string)
 	operator, _ := body["operator"].(string)
 	severity, _ := body["severity"].(string)
+	if name == "" {
+		return meta.AlertRuleRow{}, fmt.Errorf("name required")
+	}
 	if metric == "" {
 		return meta.AlertRuleRow{}, fmt.Errorf("metric required")
 	}
@@ -1064,6 +1149,11 @@ func alertRuleFromAPI(body map[string]any) (meta.AlertRuleRow, error) {
 	cooldownS, _ := body["cooldown_s"].(float64)
 	if cooldownS == 0 {
 		cooldownS = 300
+	}
+	// enabled defaults to true (OpenAPI spec default); muted defaults to false.
+	enabled := true
+	if v, ok := body["enabled"].(bool); ok {
+		enabled = v
 	}
 	muted, _ := body["muted"].(bool)
 
@@ -1086,6 +1176,7 @@ func alertRuleFromAPI(body map[string]any) (meta.AlertRuleRow, error) {
 		}
 	}
 	row := meta.AlertRuleRow{
+		Name:               name,
 		Metric:             metric,
 		Operator:           operator,
 		Threshold:          threshold,
@@ -1093,6 +1184,7 @@ func alertRuleFromAPI(body map[string]any) (meta.AlertRuleRow, error) {
 		ScopeJSON:          scopeJSON,
 		Severity:           severity,
 		CooldownS:          int(cooldownS),
+		Enabled:            enabled,
 		Muted:              muted,
 		MaintenanceWindows: mw,
 		ChannelIDs:         channelIDs,

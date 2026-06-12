@@ -604,6 +604,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/sources/{sourceId}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test connectivity to an AMS data source
+         * @description Attempts to reach the AMS source and returns reachability, detected
+         *     version, round-trip latency, and any error detail.
+         *
+         *     **Implementation note:** server-side implementation deferred to wave 2
+         *     (requires collector/amsclient wiring). The contract is finalized here so
+         *     the frontend can integrate immediately with a stub response.
+         */
+        post: operations["testSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/license": {
         parameters: {
             query?: never;
@@ -895,6 +922,8 @@ export interface components {
         };
         AlertRule: {
             id: string;
+            /** @description Human-readable display name for the alert rule (e.g. "High rebuffer ratio") */
+            name: string;
             /** @description Metric name, e.g. rebuffer_ratio, bitrate_kbps, viewer_count */
             metric: string;
             /** @enum {string} */
@@ -913,6 +942,18 @@ export interface components {
             cooldown_s: number;
             /** @description Group alerts by this dimension key (e.g. stream_id, app) */
             group_by?: string | null;
+            /**
+             * @description When false the rule is not evaluated at all (no firing, no notification).
+             *     Distinct from `muted`: a muted rule is still evaluated and a firing is
+             *     recorded, but no notification is dispatched. Use `enabled=false` to
+             *     completely suspend a rule; use `muted=true` to silence notifications only.
+             */
+            enabled: boolean;
+            /**
+             * @description When true the rule is evaluated and firings are recorded in alert_history,
+             *     but no notifications are sent to channels. Distinct from `enabled`: a
+             *     disabled rule (`enabled=false`) is not evaluated at all.
+             */
             muted: boolean;
             maintenance_windows?: components["schemas"]["MaintenanceWindow"][];
             channel_ids?: string[];
@@ -922,6 +963,8 @@ export interface components {
             updated_at: number;
         };
         AlertRuleWrite: {
+            /** @description Human-readable display name for the alert rule */
+            name: string;
             metric: string;
             /** @enum {string} */
             operator: "gt" | "lt" | "gte" | "lte" | "eq";
@@ -934,7 +977,18 @@ export interface components {
             /** @default 300 */
             cooldown_s: number;
             group_by?: string | null;
-            /** @default false */
+            /**
+             * @description When false the rule is not evaluated at all. Distinct from `muted`:
+             *     `enabled=false` suspends evaluation entirely; `muted=true` evaluates
+             *     but suppresses notifications. Defaults to true on creation.
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * @description When true the rule is evaluated but no notifications are sent.
+             *     Distinct from `enabled`: a disabled rule is not evaluated at all.
+             * @default false
+             */
             muted: boolean;
             maintenance_windows?: components["schemas"]["MaintenanceWindow"][];
             channel_ids?: string[];
@@ -1291,6 +1345,21 @@ export interface components {
             /** @description Write-only; stored encrypted */
             webhook_secret?: string | null;
             credential_env_ref?: string | null;
+        };
+        /**
+         * @description Result of a connectivity test against an AMS data source.
+         *     `reachable` is the authoritative pass/fail flag. Optional fields
+         *     are populated when the source responds successfully.
+         */
+        AmsSourceStatus: {
+            /** @description True if the source responded within the timeout */
+            reachable: boolean;
+            /** @description AMS version string returned by the source, if detectable */
+            version?: string | null;
+            /** @description Round-trip latency in milliseconds; null if unreachable */
+            latency_ms?: number | null;
+            /** @description Human-readable error detail when reachable=false; null on success */
+            error?: string | null;
         };
         LicenseInfo: {
             /** @enum {string} */
@@ -2569,6 +2638,31 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    testSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Connectivity test result (success or failure detail) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AmsSourceStatus"];
+                };
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];

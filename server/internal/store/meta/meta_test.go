@@ -102,6 +102,7 @@ func TestMetaStore_AlertRules_RoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	row := meta.AlertRuleRow{
+		Name:               "test-viewer-count-rule",
 		Metric:             "viewer_count",
 		Operator:           "lt",
 		Threshold:          10.0,
@@ -109,6 +110,7 @@ func TestMetaStore_AlertRules_RoundTrip(t *testing.T) {
 		ScopeJSON:          `{"app":"live"}`,
 		Severity:           "warning",
 		CooldownS:          300,
+		Enabled:            true,
 		Muted:              false,
 		MaintenanceWindows: "[]",
 		ChannelIDs:         "[]",
@@ -184,12 +186,14 @@ func TestMetaStore_AlertRules_SurviveRestart(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 	row := meta.AlertRuleRow{
+		Name:      "test-stream-offline",
 		Metric:    "stream_offline",
 		Operator:  "eq",
 		Threshold: 1,
 		WindowS:   30,
 		Severity:  "critical",
 		CooldownS: 60,
+		Enabled:   true,
 	}
 	created, err := s1.CreateAlertRule(ctx, row)
 	if err != nil {

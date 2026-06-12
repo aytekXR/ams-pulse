@@ -84,10 +84,21 @@ export function OnboardingWizard({ onComplete }: Props) {
     if (!createdSourceId) return;
     setTestStatus("testing");
     try {
-      // AmsSourceStatus from generated schema — currently minimal; just checks success
-      await adminApi.testSource(createdSourceId);
-      setTestStatus("ok");
-      setTestMessage("Connection verified successfully");
+      // CR-3: now calls the typed POST /admin/sources/{id}/test endpoint.
+      // Server returns AmsSourceStatus; wave-2 implements the real check.
+      // 404/501 (not yet implemented) returns synthetic reachable=false gracefully.
+      const status = await adminApi.testSource(createdSourceId);
+      if (status.reachable) {
+        setTestStatus("ok");
+        setTestMessage(
+          status.latency_ms != null
+            ? `Connection verified (${status.latency_ms} ms${status.version ? `, AMS ${status.version}` : ""})`
+            : "Connection verified successfully",
+        );
+      } else {
+        setTestStatus("fail");
+        setTestMessage(status.error ?? "Source unreachable");
+      }
     } catch (err) {
       setTestStatus("fail");
       setTestMessage(err instanceof ApiError ? err.message : "Test failed");
