@@ -24,3 +24,20 @@ node_modules/
 # Test artifacts
 coverage/
 *.out
+*.tsbuildinfo
+
+# Built binaries
+/server/pulse
+/qa/mock-ams/mock-ams
+
+# ClickHouse server artifacts (integration tests / local stack)
+access/
+metadata/
+preprocessed_configs/
+format_schemas/
+user_files/
+flags/
+/data/
+/store/
+uuid
+status

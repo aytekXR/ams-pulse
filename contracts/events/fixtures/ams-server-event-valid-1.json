@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "type": "stream_publish_start",
+  "ts": 1700000000000,
+  "source": "rest_poll",
+  "node_id": "ams-node-1",
+  "app": "live",
+  "stream_id": "auction-main",
+  "data": {
+    "publish_type": "rtmp"
+  },
+  "enrichment": {
+    "geo": {
+      "country": "TR",
+      "region": "Istanbul"
+    },
+    "client": {
+      "device": "desktop",
+      "os": "Windows",
+      "browser": "Chrome"
+    }
+  }
+}

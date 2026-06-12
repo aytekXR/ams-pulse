@@ -15,7 +15,13 @@
 // same lifecycle event; the collector normalizes and dedupes before storage.
 package collector
 
-import "context"
+import (
+	"context"
+	"log/slog"
+	"math"
+	"sync"
+	"time"
+)
 
 // Source is one ingest pipeline producing normalized ServerEvents/BeaconEvents.
 type Source interface {
@@ -27,5 +33,78 @@ type Source interface {
 
 // Collector supervises all configured sources with per-source restart/backoff.
 type Collector struct {
-	// TODO(BE-01)
+	sources []Source
+	logger  *slog.Logger
+}
+
+// New creates a Collector that supervises the given sources.
+func New(logger *slog.Logger, sources ...Source) *Collector {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &Collector{sources: sources, logger: logger}
+}
+
+// Run starts all sources and supervises them with exponential backoff restart.
+// It blocks until ctx is cancelled, then waits for all sources to exit.
+func (c *Collector) Run(ctx context.Context) {
+	var wg sync.WaitGroup
+	for _, src := range c.sources {
+		wg.Add(1)
+		go func(s Source) {
+			defer wg.Done()
+			c.supervise(ctx, s)
+		}(src)
+	}
+	wg.Wait()
+}
+
+// supervise runs a single source with exponential backoff restart.
+// It stops when ctx is cancelled.
+func (c *Collector) supervise(ctx context.Context, src Source) {
+	const (
+		minBackoff = 100 * time.Millisecond
+		maxBackoff = 60 * time.Second
+	)
+	attempt := 0
+
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+
+		err := src.Run(ctx)
+
+		if ctx.Err() != nil {
+			// Normal shutdown — ctx was cancelled.
+			return
+		}
+
+		if err != nil {
+			backoff := minBackoff * time.Duration(math.Pow(2, float64(attempt)))
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+			c.logger.Warn("collector: source exited, restarting",
+				"source", src.Name(),
+				"error", err,
+				"backoff", backoff,
+				"attempt", attempt+1,
+			)
+			attempt++
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+		} else {
+			// Clean exit (source returned nil) — reset backoff and restart.
+			attempt = 0
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(minBackoff):
+			}
+		}
+	}
 }

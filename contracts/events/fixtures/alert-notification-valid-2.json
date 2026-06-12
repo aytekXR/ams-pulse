@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "alert_id": "alert-20260112-def456",
+  "rule_id": "rule-node-cpu",
+  "state": "resolved",
+  "severity": "critical",
+  "ts": 1700000600000,
+  "title": "Node ams-node-1 CPU critical — resolved",
+  "metric": "cpu_pct",
+  "value": 72.3,
+  "threshold": 90.0,
+  "scope": {
+    "node_id": "ams-node-1"
+  },
+  "cooldown_until": null,
+  "group_key": null,
+  "test": false
+}

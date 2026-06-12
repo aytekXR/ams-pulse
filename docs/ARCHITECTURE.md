@@ -3,6 +3,8 @@
 Authoritative technical-design document. PRD: `prd-report.md` §7. Decisions with
 trade-offs get an ADR in `docs/adr/`.
 
+Last updated: Wave 1 implementation complete (2026-06-12).
+
 ## 1. System context
 
 Pulse is a **read-only sidecar** to Ant Media Server. It never modifies AMS, needs no
@@ -30,6 +32,34 @@ Player beacons ►│ collector/beacon ─────┘        ├─► alert
 One Go binary (`server/cmd/pulse`), role-splittable via `--role` for large installs.
 Default deployment is all-in-one + ClickHouse via Docker Compose.
 
+### Wave-1 implementation status
+
+The following components are implemented and unit-tested as of Wave 1:
+
+| Component | Package | Status |
+|---|---|---|
+| REST poller | `internal/collector/restpoller` | Implemented; 5 s default poll, ≤10 s stream visibility |
+| Log tail | `internal/collector/logtail` | Implemented; rotation-safe, partial-line-safe |
+| Webhook receiver | `internal/collector/webhook` | Implemented; HMAC-SHA256 validation |
+| Fanout + dedup | `internal/collector/fanout`, `dedup` | Implemented |
+| Live aggregator | `internal/collector/aggregator` | Implemented; in-memory, deep-copy snapshots |
+| Normalizer | `internal/collector/normalize` | Implemented; AMS→domain mapping; known defect D-W1-001 (CPU 100x) |
+| ClickHouse store | `internal/store/clickhouse` | Implemented; batched async inserts |
+| Meta store | `internal/store/meta` | Implemented; SQLite (pure-Go), AES-256-GCM encryption |
+| Config | `internal/config` | Implemented; YAML + env override, full surface |
+| Alert evaluator | `internal/alert` | Implemented; fake-clock tested, 15 s detection latency |
+| Alert channels | `internal/alert/channels` | Email + Slack implemented; PD/TG/webhook roadmap Wave 2 |
+| Query service | `internal/query` | Implemented; live + historical (ClickHouse) |
+| API server | `internal/api` | Implemented; chi router, bearer auth, WS hub, OpenAPI-conformant |
+| License manager | `internal/license` | Implemented; ed25519 verification, tier entitlements |
+| Web UI | `web/` | Implemented; live dashboard (F1), analytics (F2), alerts (F5), settings; Wave 2 routes are placeholders |
+| Kafka collector | `internal/collector/kafka` | Stub; Wave 2 |
+| Beacon ingest | `internal/collector/beacon` | Stub; Wave 2 |
+| Geo/UA enrichment | `internal/collector/enrichment` | No-op interfaces in place; Wave 2 |
+| Reports (CSV/PDF) | `internal/reports` | Stub; Wave 2 |
+| Cluster discovery | `internal/cluster` | Stub; Wave 2 |
+| Prometheus /metrics | `internal/api` | 2 metrics exported; full coverage Wave 2 |
+
 ## 3. Key boundaries (the rules agents must not break)
 
 1. **Contracts first.** All shapes in `contracts/` (OpenAPI, event schemas, DDL).
@@ -41,6 +71,11 @@ Default deployment is all-in-one + ClickHouse via Docker Compose.
 3. **Two stores, strict split.** ClickHouse = events and rollups (high volume,
    append-only). Meta store (SQLite/Postgres) = config and small relational state.
    Metrics never go in the meta store; config never goes in ClickHouse.
+   - **Probe results** go in ClickHouse (`probe_results` table, 90-day TTL). Probe
+     _config_ goes in the meta store (`probes` table). Decided Wave 1 (INT-01, Q2).
+   - **Anomaly baselines** go in the meta store (`anomaly_baselines` table). They are
+     low-cardinality, mutated in-place rolling-window stats — config-like, not event-series.
+     Decided Wave 1 (INT-01, Q3).
 4. **API layer is thin.** `internal/api` does HTTP/auth/transport; business logic in
    `query`, `alert`, `reports`. The web UI consumes only the public API — no
    private endpoints, so the customer-facing Data API (F8) gets parity for free.
@@ -51,18 +86,18 @@ Default deployment is all-in-one + ClickHouse via Docker Compose.
 
 ## 4. Performance budgets (from PRD acceptance criteria)
 
-| Budget | Source |
-|---|---|
-| New stream on dashboard ≤ 10 s after publish | F1 |
-| Viewer counts within ±2% of AMS REST | F1 |
-| Dashboard < 2 s load at 500 concurrent streams | F1 |
-| 13-month rollup queries < 3 s | F2 |
-| Beacon SDK < 15 KB gzipped, < 1% player CPU | F3 |
-| Ingest degradation visible ≤ 15 s | F4 |
-| Alert detection→notification < 30 s | F5 |
-| Monthly statement generation < 60 s, ±1% reconciliation | F6 |
-| New cluster nodes auto-discovered ≤ 2 min | F7 |
-| ~1–2 GB ClickHouse per 1M viewer-sessions | §7.10 |
+| Budget | Source | Wave-1 measured |
+|---|---|---|
+| New stream on dashboard ≤ 10 s after publish | F1 | **1064 ms** (2 s poll, local stack; 5 s worst-case in production) |
+| Viewer counts within ±2% of AMS REST | F1 | **0.0%** error on all tested streams |
+| Dashboard < 2 s load at 500 concurrent streams | F1 | Virtualized table confirmed ≤20 DOM rows for 500-stream input |
+| 13-month rollup queries < 3 s | F2 | Not yet measurable (Wave 1 DDL only; data needed) |
+| Beacon SDK < 15 KB gzipped, < 1% player CPU | F3 | SDK stub; Wave 2 |
+| Ingest degradation visible ≤ 15 s | F4 | Ingest health stub; Wave 2 |
+| Alert detection→notification < 30 s | F5 | **15 s** (fake-clock unit test; 10.1 s worst-case by construction) |
+| Monthly statement generation < 60 s, ±1% reconciliation | F6 | Reports stub; Wave 2 |
+| New cluster nodes auto-discovered ≤ 2 min | F7 | Cluster discovery stub; Wave 2 |
+| ~1–2 GB ClickHouse per 1M viewer-sessions | §7.10 | Not yet measurable (requires production load) |
 
 These are CI-verifiable targets; QA-01 owns regression checks against them.
 
@@ -72,10 +107,103 @@ See ADRs: [0001 tech stack](adr/0001-tech-stack.md),
 [0002 ClickHouse](adr/0002-storage-clickhouse.md),
 [0003 single binary](adr/0003-single-binary.md).
 
+Additional Wave-1 library decisions:
+- **`modernc.org/sqlite`** — pure-Go SQLite (CGO_ENABLED=0 enforced throughout).
+- **`go-chi/chi v5`** — HTTP router for `internal/api`.
+- **`nhooyr.io/websocket`** — WebSocket hub for `/live/ws`.
+- **`getkin/kin-openapi`** — OpenAPI conformance testing in API tests.
+- **`recharts`** — client-side charts (SVG; server-aggregated data, not raw events).
+- **`@tanstack/react-virtual`** — virtual list for 500+ row stream table.
+
 ## 6. Security posture
 
 - All API access token-authenticated; beacon ingest uses separate revocable tokens.
-- AMS credentials and channel secrets encrypted at rest in the meta store.
+- AMS credentials and channel secrets encrypted at rest in the meta store using
+  **AES-256-GCM**. Key sourced from `PULSE_SECRET_KEY` env var (32-byte hex);
+  if absent, a key is generated and stored in `<db_dir>/pulse_secret.key`.
+- First-run bootstrap: on first `pulse serve` with no tokens, a random admin token
+  (`plt_<16 hex bytes>`) is generated, SHA-256 hashed and stored, and printed once
+  to stderr. The raw token is never stored.
 - IP anonymization switch for GDPR/KVKK postures (geo degrades to country).
+  Configured via `PULSE_ANONYMIZE_IP=true`; the Wave 1 binary logs this as
+  a no-op (enrichment stubs); effective in Wave 2 when geo enrichment lands.
 - License check fails open for reading already-collected data, fails closed for
   tier-gated features; Free tier requires no key and no phone-home.
+- `/metrics` endpoint is unauthenticated by default; set `PULSE_METRICS_TOKEN` to
+  require a scrape token (INT-01 Q4 decision). `PULSE_METRICS_TOKEN` is a Wave 2
+  env var; the Wave 1 binary does not enforce it.
+- Token passwords use SHA-256 in Wave 1. bcrypt migration planned for Wave 2
+  (BE-02 G3; requires pure-Go bcrypt library).
+
+## 7. Live aggregates design
+
+The live dashboard (`/api/v1/live/overview`, `/api/v1/live/streams`,
+`/live/ws`) is served from **in-memory aggregates**, not ClickHouse queries.
+
+The `internal/collector/aggregator.Aggregator` maintains a `LiveSnapshot` in memory:
+- Updated on every `OnServerEvent` call from the Fanout.
+- Deep-copied for lock-free reads (no reader contention during updates).
+- Distributed to WebSocket subscribers via `Subscribe() (<-chan *LiveSnapshot, func())`.
+- Stale stream eviction runs periodically (streams not updated in >2 poll intervals).
+
+This design satisfies the ≤10 s stream visibility budget and keeps dashboard latency
+independent of ClickHouse query performance. Historical analytics (`/api/v1/analytics/*`)
+query ClickHouse.
+
+### WebSocket message envelope
+
+The `/live/ws` endpoint sends JSON messages with a common envelope:
+
+```json
+{
+  "type": "snapshot" | "delta" | "heartbeat",
+  "ts": <unix epoch ms>,
+  "payload": <LiveSnapshot | null>
+}
+```
+
+- `snapshot` — sent immediately on connection; full `LiveSnapshot`.
+- `delta` — sent after each aggregator update; full `LiveSnapshot` (diff compression Wave 2).
+- `heartbeat` — sent every 30 s when no updates; `payload` is absent.
+
+Clients authenticate via `Authorization: Bearer plt_<hex>` header or
+`?token=plt_<hex>` query parameter. The token is validated against the meta
+store on connection; unauthenticated requests receive a 401 HTTP response
+before the WebSocket upgrade completes.
+
+## 8. Alert evaluator design
+
+The `internal/alert.Evaluator` runs a tick loop (default 5 s) that:
+1. Lists enabled alert rules from the meta store.
+2. Gets a `CurrentSnapshot()` from the live aggregator.
+3. Evaluates each rule against the snapshot using the state machine in §2 above.
+4. For rules that transition to `firing` or `resolved`, builds an
+   `alert-notification` JSON payload (conforming to
+   `contracts/events/alert-notification.schema.json`) and delivers it to
+   all configured channels via the channel registry.
+5. Persists history to `alert_history` in the meta store.
+
+The tick interval is capped at 30 s to ensure the 30 s latency budget is always met.
+A fake-clock (`alert.FakeClock`) allows deterministic latency tests without real time.
+
+## 9. Meta store encryption
+
+AMS source credentials, SMTP passwords, and Slack webhook URLs are stored
+encrypted in the meta store. The encryption scheme is AES-256-GCM with a
+random 12-byte nonce prepended to each ciphertext. The encryption key is
+derived from `PULSE_SECRET_KEY` (32-byte hex).
+
+Encrypted columns store base64-encoded `nonce || ciphertext`. The Go API
+exposes `meta.Store.Encrypt(plaintext) (ciphertext, error)` and
+`meta.Store.Decrypt(ciphertext) (plaintext, error)`.
+
+## 10. Known issues (Wave 1)
+
+| ID | Component | Description |
+|---|---|---|
+| D-W1-001 | `collector/normalize.go` | Node CPU/mem values multiplied by 100 (AMS already returns 0–100). Fix: remove `* 100`. Pending BE-01. |
+| D-W1-002 | `api/server.go` | `/healthz` `latency_ms` is always null; does not detect ClickHouse down. Wave 2. |
+| D-W1-003 | `cmd/pulse/migrate.go` | `pulse migrate` does not run meta migrations; meta DDL requires `PULSE_META_DDL_PATH` set when running `pulse serve`. Wave 2 embeds DDL in binary. |
+| D-W1-004 | `cmd/pulse/serve.go` | Duplicate import alias (cosmetic). Wave 2. |
+| D-W1-005 | `pkg/amsclient/client.go` | Dead `get()` method. Wave 2 cleanup. |
+| D-W1-006 | `.github/workflows/ams-version-matrix.yml` | Matrix test workflow exists but `TestAMSVersionMatrix` Go integration tests not implemented. AMS format-drift detection partial. Wave 2. |

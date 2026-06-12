@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "session_id": "7f000001-dead-beef-cafe-000000000002",
+  "stream_id": "sports-live",
+  "app": "broadcast",
+  "events": [
+    {
+      "type": "rebuffer_start",
+      "ts": 1700000100000,
+      "data": {
+        "buffer_ms": 0
+      }
+    },
+    {
+      "type": "rebuffer_end",
+      "ts": 1700000103500,
+      "data": {
+        "duration_ms": 3500
+      }
+    },
+    {
+      "type": "error",
+      "ts": 1700000200000,
+      "data": {
+        "code": "MEDIA_ERR_NETWORK",
+        "message": "Network request failed",
+        "fatal": false
+      }
+    },
+    {
+      "type": "session_end",
+      "ts": 1700000300000,
+      "data": {
+        "watch_ms": 298000,
+        "reason": "user_exit"
+      }
+    }
+  ]
+}

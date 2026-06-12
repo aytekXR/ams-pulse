@@ -12,7 +12,16 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": "http://localhost:8090",
-      "/live/ws": { target: "ws://localhost:8090", ws: true },
+      "/live": {
+        target: "http://localhost:8090",
+        ws: true,
+      },
     },
+  },
+  test: {
+    globals: true,
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+    css: false,
   },
 });

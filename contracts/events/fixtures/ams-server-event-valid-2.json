@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "type": "node_stats",
+  "ts": 1700000060000,
+  "source": "kafka",
+  "node_id": "ams-node-2",
+  "data": {
+    "cpu_pct": 42.5,
+    "mem_pct": 67.1,
+    "disk_pct": 31.0,
+    "net_in_mbps": 120.3,
+    "net_out_mbps": 890.7,
+    "jvm_heap_used_mb": 1024
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "type": "unknown_event_type",
+  "ts": 1700000000000,
+  "source": "rest_poll",
+  "node_id": "ams-node-1",
+  "data": {}
+}

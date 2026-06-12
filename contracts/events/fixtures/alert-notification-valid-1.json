@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "alert_id": "alert-20260112-abc123",
+  "rule_id": "rule-rebuffer-high",
+  "state": "firing",
+  "severity": "warning",
+  "ts": 1700000000000,
+  "title": "Stream auction-main rebuffer ratio high",
+  "metric": "rebuffer_ratio",
+  "value": 0.15,
+  "threshold": 0.05,
+  "scope": {
+    "app": "live",
+    "stream_id": "auction-main"
+  },
+  "cooldown_until": 1700000300000,
+  "group_key": "auction-main",
+  "test": false,
+  "dashboard_url": "https://pulse.example.com/qoe?stream=auction-main"
+}

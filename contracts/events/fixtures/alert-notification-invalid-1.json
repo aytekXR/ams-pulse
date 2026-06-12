@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "alert_id": "alert-bad",
+  "rule_id": "rule-1",
+  "state": "unknown_state",
+  "severity": "critical",
+  "ts": 1700000000000,
+  "title": "Bad alert",
+  "metric": "viewer_count"
+}

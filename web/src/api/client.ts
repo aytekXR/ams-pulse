@@ -2,12 +2,381 @@
  * Typed API client for the Pulse REST API and live WebSocket.
  *
  * Contract: contracts/openapi/pulse-api.yaml — request/response types are
- * GENERATED from the spec (openapi-typescript) into ./generated.ts; this file
- * adds only fetch plumbing (auth header, error normalization, WS reconnect).
+ * GENERATED from the spec (openapi-typescript) into src/lib/api/schema.d.ts.
  * Hand-written shapes that drift from the spec are a contract violation.
+ *
+ * Token storage: localStorage key "pulse_token".
  */
 
-// TODO(FE-01): codegen wiring + ApiClient with token injection.
-// TODO(FE-01): LiveSocket — auto-reconnecting WebSocket for /live/ws (F1).
+import type {
+  GetLiveOverviewResponse,
+  GetLiveStreamsResponse,
+  GetAlertRulesResponse,
+  GetAlertChannelsResponse,
+  GetAlertHistoryResponse,
+  GetAudienceResponse,
+  GetAdminSourcesResponse,
+  GetAdminTokensResponse,
+  GetAdminLicenseResponse,
+  AlertRuleWrite,
+  AlertChannelWrite,
+  SourceWrite,
+  TokenWrite,
+  TokenCreated,
+  LicenseInfo,
+  ChannelTestResult,
+  WsMessage,
+  LiveOverview,
+  ErrorResponse,
+  UserList,
+  UserWrite,
+  User,
+} from "@/lib/api/types";
+import type { components } from "@/lib/api/schema.d.ts";
 
-export {};
+// ─── Token management ─────────────────────────────────────────────────────────
+
+const TOKEN_KEY = "pulse_token";
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+// ─── Core fetch wrapper ───────────────────────────────────────────────────────
+
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    public body: ErrorResponse,
+  ) {
+    super(body.message ?? `HTTP ${status}`);
+    this.name = "ApiError";
+  }
+}
+
+async function apiFetch<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(init.headers as Record<string, string>),
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`/api/v1${path}`, { ...init, headers });
+
+  if (!res.ok) {
+    let body: ErrorResponse;
+    try {
+      body = (await res.json()) as ErrorResponse;
+    } catch {
+      body = { message: res.statusText, code: String(res.status) };
+    }
+    throw new ApiError(res.status, body);
+  }
+
+  if (res.status === 204) {
+    return undefined as T;
+  }
+
+  return res.json() as Promise<T>;
+}
+
+// ─── Live endpoints ───────────────────────────────────────────────────────────
+
+export const liveApi = {
+  getOverview: () => apiFetch<GetLiveOverviewResponse>("/live/overview"),
+  getStreams: (params?: { limit?: number; cursor?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.cursor) q.set("cursor", params.cursor);
+    const qs = q.toString() ? `?${q.toString()}` : "";
+    return apiFetch<GetLiveStreamsResponse>(`/live/streams${qs}`);
+  },
+};
+
+// ─── Analytics endpoints ──────────────────────────────────────────────────────
+
+export const analyticsApi = {
+  getAudience: (params: {
+    from: number;
+    to: number;
+    granularity?: string;
+    stream_id?: string;
+    app?: string;
+  }) => {
+    const q = new URLSearchParams({
+      from: String(params.from),
+      to: String(params.to),
+    });
+    if (params.granularity) q.set("granularity", params.granularity);
+    if (params.stream_id) q.set("stream_id", params.stream_id);
+    if (params.app) q.set("app", params.app);
+    return apiFetch<GetAudienceResponse>(`/analytics/audience?${q}`);
+  },
+
+  getGeo: (params: { from: number; to: number; stream_id?: string; app?: string }) => {
+    const q = new URLSearchParams({ from: String(params.from), to: String(params.to) });
+    if (params.stream_id) q.set("stream_id", params.stream_id);
+    if (params.app) q.set("app", params.app);
+    return apiFetch<components["schemas"]["GeoResponse"]>(`/analytics/geo?${q}`);
+  },
+
+  getDevices: (params: { from: number; to: number; stream_id?: string; app?: string }) => {
+    const q = new URLSearchParams({ from: String(params.from), to: String(params.to) });
+    if (params.stream_id) q.set("stream_id", params.stream_id);
+    if (params.app) q.set("app", params.app);
+    return apiFetch<components["schemas"]["DeviceResponse"]>(`/analytics/devices?${q}`);
+  },
+
+  exportCsv: (params: { from: number; to: number; stream_id?: string; app?: string }) => {
+    const q = new URLSearchParams({ from: String(params.from), to: String(params.to) });
+    if (params.stream_id) q.set("stream_id", params.stream_id);
+    if (params.app) q.set("app", params.app);
+    const token = getToken();
+    const url = `/api/v1/reports/export?${q}&format=csv${token ? `&token=${token}` : ""}`;
+    window.location.href = url;
+  },
+};
+
+// ─── Alerts endpoints ─────────────────────────────────────────────────────────
+
+export const alertsApi = {
+  getRules: (params?: { severity?: string; state?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.severity) q.set("severity", params.severity);
+    if (params?.state) q.set("state", params.state);
+    const qs = q.toString() ? `?${q}` : "";
+    return apiFetch<GetAlertRulesResponse>(`/alerts/rules${qs}`);
+  },
+
+  createRule: (body: AlertRuleWrite) =>
+    apiFetch<components["schemas"]["AlertRule"]>("/alerts/rules", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateRule: (id: string, body: AlertRuleWrite) =>
+    apiFetch<components["schemas"]["AlertRule"]>(`/alerts/rules/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  deleteRule: (id: string) =>
+    apiFetch<void>(`/alerts/rules/${id}`, { method: "DELETE" }),
+
+  getChannels: () =>
+    apiFetch<GetAlertChannelsResponse>("/alerts/channels"),
+
+  createChannel: (body: AlertChannelWrite) =>
+    apiFetch<components["schemas"]["AlertChannel"]>("/alerts/channels", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateChannel: (id: string, body: AlertChannelWrite) =>
+    apiFetch<components["schemas"]["AlertChannel"]>(`/alerts/channels/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  deleteChannel: (id: string) =>
+    apiFetch<void>(`/alerts/channels/${id}`, { method: "DELETE" }),
+
+  testChannel: (id: string) =>
+    apiFetch<ChannelTestResult>(`/alerts/channels/${id}/test`, { method: "POST" }),
+
+  getHistory: (params?: { rule_id?: string; state?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.rule_id) q.set("rule_id", params.rule_id);
+    if (params?.state) q.set("state", params.state);
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString() ? `?${q}` : "";
+    return apiFetch<GetAlertHistoryResponse>(`/alerts/history${qs}`);
+  },
+};
+
+// ─── Admin endpoints ──────────────────────────────────────────────────────────
+
+export const adminApi = {
+  getSources: () =>
+    apiFetch<GetAdminSourcesResponse>("/admin/sources"),
+
+  createSource: (body: SourceWrite) =>
+    apiFetch<components["schemas"]["Source"]>("/admin/sources", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateSource: (id: string, body: SourceWrite) =>
+    apiFetch<components["schemas"]["Source"]>(`/admin/sources/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  deleteSource: (id: string) =>
+    apiFetch<void>(`/admin/sources/${id}`, { method: "DELETE" }),
+
+  // NOTE: AmsSourceStatus schema is missing from contracts/openapi/pulse-api.yaml
+  // (filed as contract change request in WO-104-report.md). Using unknown until
+  // the spec is updated.
+  testSource: (id: string) =>
+    apiFetch<{ ok?: boolean; error?: string }>(`/admin/sources/${id}/test`, {
+      method: "POST",
+    }),
+
+  getTokens: () =>
+    apiFetch<GetAdminTokensResponse>("/admin/tokens"),
+
+  createToken: (body: TokenWrite) =>
+    apiFetch<TokenCreated>("/admin/tokens", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  deleteToken: (id: string) =>
+    apiFetch<void>(`/admin/tokens/${id}`, { method: "DELETE" }),
+
+  getLicense: () =>
+    apiFetch<GetAdminLicenseResponse>("/admin/license"),
+
+  setLicense: (key: string) =>
+    apiFetch<LicenseInfo>("/admin/license", {
+      method: "PUT",
+      body: JSON.stringify({ key }),
+    }),
+
+  getUsers: () =>
+    apiFetch<UserList>("/admin/users"),
+
+  createUser: (body: UserWrite) =>
+    apiFetch<User>("/admin/users", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateUser: (id: string, body: UserWrite) =>
+    apiFetch<User>(`/admin/users/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  deleteUser: (id: string) =>
+    apiFetch<void>(`/admin/users/${id}`, { method: "DELETE" }),
+};
+
+// ─── LiveSocket — auto-reconnecting WebSocket for /live/ws ────────────────────
+
+type SocketListener = (msg: WsMessage<LiveOverview>) => void;
+
+interface LiveSocketOptions {
+  /** initial reconnect delay in ms; doubles each attempt up to maxDelay */
+  baseDelay?: number;
+  maxDelay?: number;
+  /** Called when the socket transitions between connected/disconnected states */
+  onStatusChange?: (connected: boolean) => void;
+}
+
+export class LiveSocket {
+  private ws: WebSocket | null = null;
+  private listeners: Set<SocketListener> = new Set();
+  private retryDelay: number;
+  private readonly baseDelay: number;
+  private readonly maxDelay: number;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private destroyed = false;
+  private _connected = false;
+  private readonly onStatusChange?: (connected: boolean) => void;
+
+  constructor(options: LiveSocketOptions = {}) {
+    this.baseDelay = options.baseDelay ?? 1000;
+    this.retryDelay = this.baseDelay;
+    this.maxDelay = options.maxDelay ?? 30_000;
+    this.onStatusChange = options.onStatusChange;
+  }
+
+  get connected(): boolean {
+    return this._connected;
+  }
+
+  connect(): void {
+    if (this.destroyed) return;
+    const token = getToken();
+    const url = `/live/ws${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+
+    // Use wss:// if page is served over HTTPS
+    const wsUrl = (window.location.protocol === "https:" ? "wss://" : "ws://") +
+      window.location.host + url;
+
+    this.ws = new WebSocket(wsUrl);
+
+    this.ws.onopen = () => {
+      this.retryDelay = this.baseDelay; // reset backoff to configured base on success
+      this._setConnected(true);
+    };
+
+    this.ws.onmessage = (ev: MessageEvent) => {
+      try {
+        const msg = JSON.parse(ev.data as string) as WsMessage<LiveOverview>;
+        this.listeners.forEach((fn) => fn(msg));
+      } catch {
+        // malformed frame — ignore
+      }
+    };
+
+    this.ws.onclose = () => {
+      this._setConnected(false);
+      if (!this.destroyed) {
+        this.scheduleRetry();
+      }
+    };
+
+    this.ws.onerror = () => {
+      // onerror is always followed by onclose; let onclose handle retry
+    };
+  }
+
+  private _setConnected(value: boolean): void {
+    if (this._connected !== value) {
+      this._connected = value;
+      this.onStatusChange?.(value);
+    }
+  }
+
+  private scheduleRetry(): void {
+    if (this.retryTimer !== null) clearTimeout(this.retryTimer);
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      this.connect();
+    }, this.retryDelay);
+    this.retryDelay = Math.min(this.retryDelay * 2, this.maxDelay);
+  }
+
+  subscribe(fn: SocketListener): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  destroy(): void {
+    this.destroyed = true;
+    if (this.retryTimer !== null) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+    this.ws?.close();
+    this.ws = null;
+    this.listeners.clear();
+  }
+}

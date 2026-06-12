@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "stream_id": "auction-main",
+  "app": "live",
+  "meta": {
+    "tenant": "acme-corp"
+  },
+  "player": {
+    "kind": "hls.js",
+    "sdk_version": "0.1.0"
+  },
+  "events": [
+    {
+      "type": "session_start",
+      "ts": 1700000000000,
+      "data": {
+        "page_url": "https://example.com/watch/auction-main",
+        "autoplay": true
+      }
+    },
+    {
+      "type": "startup_complete",
+      "ts": 1700000002500,
+      "data": {
+        "startup_ms": 2500,
+        "bitrate_kbps": 2500
+      }
+    },
+    {
+      "type": "heartbeat",
+      "ts": 1700000032500,
+      "data": {
+        "watch_ms": 30000,
+        "bitrate_kbps": 2500,
+        "buffer_ms": 8000,
+        "dropped_frames": 0
+      }
+    }
+  ]
+}

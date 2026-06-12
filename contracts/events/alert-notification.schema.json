@@ -2,28 +2,85 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://pulse.dev/schemas/alert-notification.json",
   "title": "AlertNotification",
-  "description": "Payload delivered by the alert evaluator to every notification channel adapter (and verbatim to generic-webhook channels). SKELETON.",
+  "description": "Payload delivered by the alert evaluator to every notification channel adapter (and verbatim to generic-webhook channels). Finalized by INT-01 for wave-1 freeze.",
   "type": "object",
-  "required": ["version", "alert_id", "rule_id", "state", "severity", "ts", "title"],
+  "required": ["version", "alert_id", "rule_id", "state", "severity", "ts", "title", "metric"],
   "properties": {
-    "version": { "const": 1 },
-    "alert_id": { "type": "string", "description": "Unique firing instance; identical across firing/resolved pair for grouping" },
-    "rule_id": { "type": "string" },
-    "state": { "type": "string", "enum": ["firing", "resolved"] },
-    "severity": { "type": "string", "enum": ["info", "warning", "critical"] },
-    "ts": { "type": "integer" },
-    "title": { "type": "string", "description": "Human-readable one-liner, e.g. 'Stream auction-main offline'" },
-    "metric": { "type": "string", "description": "Metric that triggered, e.g. rebuffer_ratio" },
-    "value": { "type": "number" },
-    "threshold": { "type": "number" },
+    "version": {
+      "const": 1,
+      "description": "Schema version"
+    },
+    "alert_id": {
+      "type": "string",
+      "description": "Unique firing instance ID. The same alert_id appears in both the 'firing' and 'resolved' events for a rule evaluation cycle, enabling correlation."
+    },
+    "rule_id": {
+      "type": "string",
+      "description": "ID of the AlertRule that triggered"
+    },
+    "state": {
+      "type": "string",
+      "enum": ["firing", "resolved"],
+      "description": "Current state of this alert instance"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["info", "warning", "critical"]
+    },
+    "ts": {
+      "type": "integer",
+      "description": "Unix epoch ms — when this state transition was detected"
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable one-liner, e.g. 'Stream auction-main rebuffer ratio high'"
+    },
+    "metric": {
+      "type": "string",
+      "description": "Metric that triggered, using normalized internal names (e.g. rebuffer_ratio, bitrate_kbps, viewer_count). These names align with the server-event field naming (gap #6 fix)."
+    },
+    "value": {
+      "type": "number",
+      "description": "Observed metric value at trigger time"
+    },
+    "threshold": {
+      "type": "number",
+      "description": "Configured threshold that was breached"
+    },
     "scope": {
       "type": "object",
+      "description": "Scope identifies which stream/app/node triggered the alert. Field names align with normalized ServerEvent fields (node_id, app, stream_id — not raw AMS names).",
       "properties": {
-        "node_id": { "type": "string" },
-        "app": { "type": "string" },
-        "stream_id": { "type": "string" }
+        "node_id": {
+          "type": "string",
+          "description": "Cluster node ID (matches ServerEvent.node_id)"
+        },
+        "app": {
+          "type": "string",
+          "description": "AMS application name (matches ServerEvent.app)"
+        },
+        "stream_id": {
+          "type": "string",
+          "description": "Stream identifier (matches ServerEvent.stream_id)"
+        }
       }
     },
-    "dashboard_url": { "type": "string", "format": "uri" }
+    "cooldown_until": {
+      "type": ["integer", "null"],
+      "description": "Unix epoch ms until which re-firing is suppressed. Present when the evaluator sets a cooldown on this rule instance; null otherwise."
+    },
+    "group_key": {
+      "type": ["string", "null"],
+      "description": "Grouping key value for this firing instance (e.g. the stream_id value when group_by=stream_id). Null when the rule has no group_by."
+    },
+    "test": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when this notification is a test-fire triggered via POST /alerts/channels/{channelId}/test. Channel adapters should mark test notifications visually."
+    },
+    "dashboard_url": {
+      "type": "string",
+      "description": "Deep link to the relevant dashboard page (URI)"
+    }
   }
 }

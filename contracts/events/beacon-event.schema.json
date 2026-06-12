@@ -2,38 +2,240 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://pulse.dev/schemas/beacon-event.json",
   "title": "BeaconEvent",
-  "description": "QoE event batch posted by the player beacon SDK to POST /ingest/beacon. Field naming is CMCD-aligned where applicable (PRD F3). SKELETON: enums and field sets to be finalized by INT-01 before Phase 2 implementation.",
+  "description": "QoE event batch posted by the player beacon SDK to POST /ingest/beacon. Field naming is CMCD-aligned where applicable (PRD F3). Finalized by INT-01 for wave-1 freeze.",
   "type": "object",
   "required": ["version", "session_id", "stream_id", "events"],
   "properties": {
-    "version": { "const": 1 },
-    "session_id": { "type": "string", "format": "uuid", "description": "Viewer session UUID, generated client-side, used for session stitching" },
-    "stream_id": { "type": "string" },
-    "app": { "type": "string", "description": "AMS application name" },
+    "version": {
+      "const": 1,
+      "description": "Schema version"
+    },
+    "session_id": {
+      "type": "string",
+      "description": "Viewer session UUID (v4), generated client-side, used for session stitching. CMCD: cid (content ID not used here; session is viewer-scoped)."
+    },
+    "stream_id": {
+      "type": "string",
+      "description": "Stream identifier matching the AMS stream name"
+    },
+    "app": {
+      "type": "string",
+      "description": "AMS application name"
+    },
     "meta": {
       "type": "object",
-      "description": "Customer-supplied metadata set at init (e.g. tenant tag for F6 billing mapping)",
+      "description": "Customer-supplied metadata set at SDK init (e.g. tenant tag for F6 billing mapping). String key-value pairs only.",
       "additionalProperties": { "type": "string" }
     },
     "player": {
       "type": "object",
       "properties": {
-        "kind": { "type": "string", "enum": ["ams-webrtc", "hls.js", "video.js", "native", "other"] },
-        "sdk_version": { "type": "string" }
+        "kind": {
+          "type": "string",
+          "enum": ["ams-webrtc", "hls.js", "video.js", "native", "other"]
+        },
+        "sdk_version": {
+          "type": "string",
+          "description": "Beacon SDK version string"
+        }
       }
     },
     "events": {
       "type": "array",
+      "minItems": 1,
+      "description": "Ordered list of QoE events in this batch (may span multiple type values)",
       "items": {
-        "type": "object",
-        "required": ["type", "ts"],
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["session_start", "startup_complete", "heartbeat", "rebuffer_start", "rebuffer_end", "error", "bitrate_change", "resolution_change", "session_end"]
-          },
-          "ts": { "type": "integer", "description": "Unix epoch ms" },
-          "data": { "type": "object", "description": "Type-specific payload (startup_ms, error_code, bitrate_kbps, watch_time_s, ...) — finalized per event type by INT-01" }
+        "$ref": "#/$defs/BeaconEventItem"
+      }
+    }
+  },
+  "$defs": {
+    "BeaconEventItem": {
+      "type": "object",
+      "required": ["type", "ts"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "session_start",
+            "startup_complete",
+            "heartbeat",
+            "rebuffer_start",
+            "rebuffer_end",
+            "error",
+            "bitrate_change",
+            "resolution_change",
+            "session_end"
+          ]
+        },
+        "ts": {
+          "type": "integer",
+          "description": "Unix epoch ms — client-side timestamp"
+        },
+        "data": {
+          "type": "object",
+          "description": "Type-specific payload. Shape validated by allOf if/then clauses based on event type."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "startup_complete" } }, "required": ["type"] },
+          "then": { "properties": { "data": { "$ref": "#/$defs/StartupCompleteData" } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "heartbeat" } }, "required": ["type"] },
+          "then": { "properties": { "data": { "$ref": "#/$defs/HeartbeatData" } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "rebuffer_end" } }, "required": ["type"] },
+          "then": { "properties": { "data": { "$ref": "#/$defs/RebufferEndData" } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "error" } }, "required": ["type"] },
+          "then": { "properties": { "data": { "$ref": "#/$defs/ErrorData" } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "bitrate_change" } }, "required": ["type"] },
+          "then": { "properties": { "data": { "$ref": "#/$defs/BitrateChangeData" } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "resolution_change" } }, "required": ["type"] },
+          "then": { "properties": { "data": { "$ref": "#/$defs/ResolutionChangeData" } } }
+        }
+      ]
+    },
+    "SessionStartData": {
+      "type": "object",
+      "description": "session_start: first event in a session; carries initial context",
+      "properties": {
+        "page_url": {
+          "type": "string",
+          "description": "Page URL where playback started (for context, not tracking)"
+        },
+        "autoplay": {
+          "type": "boolean"
+        }
+      }
+    },
+    "StartupCompleteData": {
+      "type": "object",
+      "description": "startup_complete: video started playing after initial buffer. CMCD-aligned: br (bitrate) at first frame.",
+      "required": ["startup_ms"],
+      "properties": {
+        "startup_ms": {
+          "type": "integer",
+          "description": "Time from play() call to first frame rendered, in milliseconds"
+        },
+        "bitrate_kbps": {
+          "type": "number",
+          "description": "Initial playback bitrate in kbps (CMCD: br)"
+        }
+      }
+    },
+    "HeartbeatData": {
+      "type": "object",
+      "description": "heartbeat: periodic quality snapshot while playing. Sent every ~30s. CMCD-aligned: br, bl (buffer length).",
+      "required": ["watch_ms"],
+      "properties": {
+        "watch_ms": {
+          "type": "integer",
+          "description": "Cumulative watch time in this session (ms) at the time of this heartbeat"
+        },
+        "bitrate_kbps": {
+          "type": "number",
+          "description": "Current playback bitrate in kbps (CMCD: br)"
+        },
+        "buffer_ms": {
+          "type": "integer",
+          "description": "Current playback buffer length in ms (CMCD: bl)"
+        },
+        "dropped_frames": {
+          "type": "integer",
+          "description": "Total dropped frames since last heartbeat"
+        }
+      }
+    },
+    "RebufferStartData": {
+      "type": "object",
+      "description": "rebuffer_start: playback stalled waiting for buffer",
+      "properties": {
+        "buffer_ms": {
+          "type": "integer",
+          "description": "Buffer level when stall began (ms)"
+        }
+      }
+    },
+    "RebufferEndData": {
+      "type": "object",
+      "description": "rebuffer_end: playback resumed after stall",
+      "required": ["duration_ms"],
+      "properties": {
+        "duration_ms": {
+          "type": "integer",
+          "description": "Stall duration in milliseconds"
+        }
+      }
+    },
+    "ErrorData": {
+      "type": "object",
+      "description": "error: playback error occurred",
+      "required": ["code"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Error code (e.g. MEDIA_ERR_NETWORK, MEDIA_ERR_DECODE, custom)"
+        },
+        "message": {
+          "type": "string",
+          "description": "Optional human-readable error description"
+        },
+        "fatal": {
+          "type": "boolean",
+          "description": "True if the error ended the session"
+        }
+      }
+    },
+    "BitrateChangeData": {
+      "type": "object",
+      "description": "bitrate_change: adaptive bitrate switch. CMCD-aligned: br (new bitrate).",
+      "required": ["from_kbps", "to_kbps"],
+      "properties": {
+        "from_kbps": {
+          "type": "number",
+          "description": "Previous bitrate in kbps (CMCD: previous br)"
+        },
+        "to_kbps": {
+          "type": "number",
+          "description": "New bitrate in kbps (CMCD: br)"
+        }
+      }
+    },
+    "ResolutionChangeData": {
+      "type": "object",
+      "description": "resolution_change: video resolution changed",
+      "required": ["from", "to"],
+      "properties": {
+        "from": {
+          "type": "string",
+          "description": "Previous resolution, e.g. '1280x720'"
+        },
+        "to": {
+          "type": "string",
+          "description": "New resolution, e.g. '1920x1080'"
+        }
+      }
+    },
+    "SessionEndData": {
+      "type": "object",
+      "description": "session_end: viewer left or page unloaded",
+      "properties": {
+        "watch_ms": {
+          "type": "integer",
+          "description": "Total session watch time in ms"
+        },
+        "reason": {
+          "type": "string",
+          "description": "End reason: user_exit, page_unload, error, timeout"
         }
       }
     }

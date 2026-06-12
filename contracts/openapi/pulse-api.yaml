@@ -1,89 +1,2561 @@
 openapi: "3.1.0"
 info:
   title: Pulse API
-  description: >
+  version: "1.0.0"
+  license:
+    name: "Proprietary"
+    url: "https://pulse.dev/license"
+  description: |
     Pulse Query & Config API. Serves the web dashboard and the customer-facing
-    Data API (PRD F8). Token-authenticated; read endpoints operate over rollups.
-    SKELETON — paths are enumerated with summaries only; INT-01 fleshes out
-    schemas before each implementation phase.
-  version: 0.1.0
+    Data API (PRD F8). All `/api/v1` paths require bearer-token authentication
+    unless noted. Read endpoints answer from pre-built rollups (ClickHouse) or
+    live in-memory aggregates — never from raw event tables directly.
+
+    **Live endpoints** (`/live/overview`, `/live/streams`, `/live/ws`) serve from
+    in-memory aggregates maintained by the collector, not from ClickHouse. This
+    gives the sub-10 s latency required by PRD F1 while keeping ClickHouse load low.
+
+    **Timestamps:** All time parameters accept either Unix epoch milliseconds
+    (integer) or RFC 3339 strings (e.g. `2026-01-01T00:00:00Z`). Responses always
+    return Unix epoch milliseconds integers.
+
+    **Pagination:** List endpoints that may grow large use cursor pagination via
+    `cursor` (opaque string) and `limit` (max 500, default 50). A `next_cursor`
+    field in the response envelope signals more pages; absent or null means last page.
+
+    **Error envelope:** All 4xx/5xx responses use the `Error` schema.
+
+    **Data API parity:** The public Data API (F8) exposes the same `/api/v1`
+    surface under a separate ingest token scope; no private endpoints exist.
+
 servers:
   - url: /api/v1
+    description: Versioned REST API
+
 security:
   - bearerAuth: []
+
 tags:
-  - name: live       # F1 — real-time ops dashboard
-  - name: analytics  # F2 — historical audience analytics
-  - name: qoe        # F3/F4 — viewer QoE and ingest health
-  - name: alerts     # F5 — alert rules, channels, history
-  - name: reports    # F6 — usage & billing reports
-  - name: fleet      # F7 — cluster nodes
-  - name: admin      # config, users, license
+  - name: live
+    description: "F1 — real-time ops dashboard (in-memory aggregates)"
+  - name: analytics
+    description: "F2 — historical audience analytics (rollup queries)"
+  - name: qoe
+    description: "F3/F4 — viewer QoE and ingest health"
+  - name: alerts
+    description: "F5 — alert rules, channels, history"
+  - name: reports
+    description: "F6 — usage & billing reports"
+  - name: fleet
+    description: "F7 — cluster nodes"
+  - name: anomalies
+    description: "F9 — anomaly detection (baseline-deviation flags)"
+  - name: probes
+    description: "F10 — synthetic stream probes"
+  - name: ingest
+    description: "Beacon ingest — internet-facing, token auth"
+  - name: operational
+    description: "Health and metrics endpoints — unauthenticated or scrape-token"
+  - name: admin
+    description: "Configuration: sources, users, tokens, license"
 
 paths:
-  # ---- F1: live ----
+
+  # ─────────────────────────────────────────────────────────────
+  # F1 — Live ops dashboard
+  # ─────────────────────────────────────────────────────────────
+
   /live/overview:
-    get: { tags: [live], summary: "Current concurrent viewers, publishers, node health, protocol mix", responses: { "200": { description: TODO } } }
+    get:
+      operationId: getLiveOverview
+      tags: [live]
+      summary: Current concurrent viewers, publishers, node health, protocol mix
+      description: |
+        Returns a snapshot of the live aggregation state. Data comes from the
+        in-memory aggregate, not ClickHouse. Updated as the collector processes
+        each poll/event cycle (≤10 s lag per PRD F1).
+      parameters:
+        - $ref: "#/components/parameters/app"
+        - $ref: "#/components/parameters/node"
+        - $ref: "#/components/parameters/tenant"
+      responses:
+        "200":
+          description: Live overview snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveOverview"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /live/streams:
-    get: { tags: [live], summary: "Active streams with per-stream viewer counts", responses: { "200": { description: TODO } } }
+    get:
+      operationId: getLiveStreams
+      tags: [live]
+      summary: Active streams with per-stream viewer counts and publisher state
+      description: |
+        Virtualizable list of currently active streams. Client should use
+        cursor pagination and a virtual scroll UI to satisfy the 500-stream
+        <2 s load requirement (PRD F1). Data served from in-memory aggregates.
+      parameters:
+        - $ref: "#/components/parameters/app"
+        - $ref: "#/components/parameters/node"
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Paginated list of active streams
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveStreamList"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /live/ws:
-    get: { tags: [live], summary: "WebSocket upgrade for live dashboard push", responses: { "101": { description: TODO } } }
+    get:
+      operationId: connectLiveWs
+      tags: [live]
+      summary: WebSocket upgrade for live dashboard push
+      description: |
+        Upgrades to a WebSocket connection. The server pushes typed messages:
 
-  # ---- F2: analytics ----
+        - **`snapshot`** — full `LiveOverview` state, sent immediately on connect
+          and periodically (default every 5 s).
+        - **`delta`** — partial update object containing only changed fields;
+          client merges into its local state.
+        - **`heartbeat`** — `{"type":"heartbeat","ts":<epoch_ms>}` sent every 30 s.
+
+        Authentication: bearer token in `Authorization` header or `token` query
+        parameter (WebSocket clients may not set headers).
+
+        Message envelope schema:
+        ```json
+        {
+          "type": "snapshot | delta | heartbeat",
+          "ts": 1700000000000,
+          "payload": { ... }
+        }
+        ```
+        `payload` for `snapshot`/`delta` matches the `LiveOverview` schema
+        (delta carries only changed keys). `heartbeat` has no payload.
+      security:
+        - bearerAuth: []
+        - wsTokenQuery: []
+      responses:
+        "101":
+          description: WebSocket upgrade accepted
+        "200":
+          description: WebSocket connected (some proxies report 200 on upgrade)
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  # ─────────────────────────────────────────────────────────────
+  # F2 — Historical audience analytics
+  # ─────────────────────────────────────────────────────────────
+
   /analytics/audience:
-    get: { tags: [analytics], summary: "Views, uniques, watch time, peak concurrency over a date range (per stream/app/node)", responses: { "200": { description: TODO } } }
+    get:
+      operationId: getAudienceAnalytics
+      tags: [analytics]
+      summary: Views, uniques, watch time, peak concurrency over a date range
+      description: |
+        Answers from hourly/daily rollups. Queries spanning ≤13 months are
+        guaranteed to return in <3 s (PRD F2). Accepts `interval=hour` for
+        hourly buckets or `interval=day` for daily buckets.
+      parameters:
+        - $ref: "#/components/parameters/from"
+        - $ref: "#/components/parameters/to"
+        - $ref: "#/components/parameters/app"
+        - $ref: "#/components/parameters/stream"
+        - $ref: "#/components/parameters/node"
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/interval"
+      responses:
+        "200":
+          description: Audience analytics timeseries and totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AudienceResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /analytics/geo:
-    get: { tags: [analytics], summary: "Geography breakdown (country, optional region)", responses: { "200": { description: TODO } } }
+    get:
+      operationId: getGeoAnalytics
+      tags: [analytics]
+      summary: Geography breakdown (country, optional region)
+      parameters:
+        - $ref: "#/components/parameters/from"
+        - $ref: "#/components/parameters/to"
+        - $ref: "#/components/parameters/app"
+        - $ref: "#/components/parameters/stream"
+        - $ref: "#/components/parameters/tenant"
+        - name: region
+          in: query
+          description: If true, include region-level rows in addition to country totals
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Geo breakdown rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeoResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /analytics/devices:
-    get: { tags: [analytics], summary: "Device / OS / browser / protocol breakdown", responses: { "200": { description: TODO } } }
+    get:
+      operationId: getDeviceAnalytics
+      tags: [analytics]
+      summary: Device / OS / browser / protocol breakdown
+      parameters:
+        - $ref: "#/components/parameters/from"
+        - $ref: "#/components/parameters/to"
+        - $ref: "#/components/parameters/app"
+        - $ref: "#/components/parameters/stream"
+        - $ref: "#/components/parameters/tenant"
+      responses:
+        "200":
+          description: Device breakdown rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
 
-  # ---- F3/F4: qoe ----
+  # ─────────────────────────────────────────────────────────────
+  # F3/F4 — QoE
+  # ─────────────────────────────────────────────────────────────
+
   /qoe/summary:
-    get: { tags: [qoe], summary: "Startup time, rebuffer ratio, error rate aggregates", responses: { "200": { description: TODO } } }
+    get:
+      operationId: getQoeSummary
+      tags: [qoe]
+      summary: Startup time, rebuffer ratio, error rate aggregates
+      description: |
+        Viewer-side QoE fed by the beacon SDK. Sliceable by region, device,
+        stream. Returns both totals and a bitrate timeline (F3).
+        Interval granularity follows the `interval` parameter.
+      parameters:
+        - $ref: "#/components/parameters/from"
+        - $ref: "#/components/parameters/to"
+        - $ref: "#/components/parameters/app"
+        - $ref: "#/components/parameters/stream"
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/interval"
+        - name: country
+          in: query
+          description: Filter by ISO 3166-1 alpha-2 country code
+          schema:
+            type: string
+        - name: device
+          in: query
+          description: Filter by device type (desktop, mobile, tablet, tv, other)
+          schema:
+            type: string
+      responses:
+        "200":
+          description: QoE summary and bitrate timeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QoeSummaryResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /qoe/ingest:
-    get: { tags: [qoe], summary: "Publisher/ingest health: bitrate, fps, packet loss, health score", responses: { "200": { description: TODO } } }
+    get:
+      operationId: getIngestHealth
+      tags: [qoe]
+      summary: Publisher ingest health — bitrate, fps, packet loss, health score
+      description: |
+        Server-side ingest metrics from `ingest_stats` events. Degradation
+        visible within 15 s of occurrence (PRD F4). Returns per-publisher
+        timeseries and drop events.
+      parameters:
+        - $ref: "#/components/parameters/from"
+        - $ref: "#/components/parameters/to"
+        - $ref: "#/components/parameters/app"
+        - $ref: "#/components/parameters/stream"
+        - $ref: "#/components/parameters/node"
+        - $ref: "#/components/parameters/interval"
+      responses:
+        "200":
+          description: Ingest health timeseries and health score
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestHealthResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
 
-  # ---- F5: alerts ----
+  # ─────────────────────────────────────────────────────────────
+  # F5 — Alerts
+  # ─────────────────────────────────────────────────────────────
+
   /alerts/rules:
-    get: { tags: [alerts], summary: "List alert rules", responses: { "200": { description: TODO } } }
-    post: { tags: [alerts], summary: "Create alert rule", responses: { "201": { description: TODO } } }
+    get:
+      operationId: listAlertRules
+      tags: [alerts]
+      summary: List alert rules
+      parameters:
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Paginated list of alert rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRuleList"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      operationId: createAlertRule
+      tags: [alerts]
+      summary: Create alert rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertRuleWrite"
+      responses:
+        "201":
+          description: Alert rule created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRule"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /alerts/rules/{ruleId}:
-    parameters: [{ name: ruleId, in: path, required: true, schema: { type: string } }]
-    put: { tags: [alerts], summary: "Update alert rule", responses: { "200": { description: TODO } } }
-    delete: { tags: [alerts], summary: "Delete alert rule", responses: { "204": { description: TODO } } }
+    parameters:
+      - $ref: "#/components/parameters/ruleId"
+    put:
+      operationId: updateAlertRule
+      tags: [alerts]
+      summary: Update alert rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertRuleWrite"
+      responses:
+        "200":
+          description: Alert rule updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRule"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      operationId: deleteAlertRule
+      tags: [alerts]
+      summary: Delete alert rule
+      responses:
+        "204":
+          description: Alert rule deleted
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /alerts/channels:
-    get: { tags: [alerts], summary: "List notification channels", responses: { "200": { description: TODO } } }
-    post: { tags: [alerts], summary: "Create notification channel (email/slack/telegram/pagerduty/webhook)", responses: { "201": { description: TODO } } }
+    get:
+      operationId: listAlertChannels
+      tags: [alerts]
+      summary: List notification channels
+      parameters:
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Paginated list of notification channels
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertChannelList"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      operationId: createAlertChannel
+      tags: [alerts]
+      summary: Create notification channel
+      description: |
+        Supported types: `email`, `slack`, `telegram`, `pagerduty`, `webhook`.
+        Channel config (URL, token, etc.) is stored encrypted. The config fields
+        vary by type — see `AlertChannelConfig` discriminated union.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertChannelWrite"
+      responses:
+        "201":
+          description: Channel created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertChannel"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /alerts/channels/{channelId}:
+    parameters:
+      - $ref: "#/components/parameters/channelId"
+    put:
+      operationId: updateAlertChannel
+      tags: [alerts]
+      summary: Update notification channel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertChannelWrite"
+      responses:
+        "200":
+          description: Channel updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertChannel"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      operationId: deleteAlertChannel
+      tags: [alerts]
+      summary: Delete notification channel
+      responses:
+        "204":
+          description: Channel deleted
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /alerts/channels/{channelId}/test:
-    post: { tags: [alerts], summary: "Test-fire a channel", responses: { "202": { description: TODO } } }
+    parameters:
+      - $ref: "#/components/parameters/channelId"
+    post:
+      operationId: testAlertChannel
+      tags: [alerts]
+      summary: Send a test notification to a channel
+      description: |
+        Fires a test payload to the channel. The notification will have
+        `test: true` in the payload (per `alert-notification.schema.json`).
+      responses:
+        "202":
+          description: Test fire accepted; delivery is asynchronous
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChannelTestResult"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /alerts/history:
-    get: { tags: [alerts], summary: "Alert firing history", responses: { "200": { description: TODO } } }
+    get:
+      operationId: getAlertHistory
+      tags: [alerts]
+      summary: Alert firing history
+      parameters:
+        - $ref: "#/components/parameters/from"
+        - $ref: "#/components/parameters/to"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/cursor"
+        - name: rule_id
+          in: query
+          description: Filter by rule ID
+          schema:
+            type: string
+        - name: state
+          in: query
+          description: Filter by state
+          schema:
+            type: string
+            enum: [firing, resolved]
+      responses:
+        "200":
+          description: Paginated alert firing history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertHistoryList"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
 
-  # ---- F6: reports ----
+  # ─────────────────────────────────────────────────────────────
+  # F6 — Reports
+  # ─────────────────────────────────────────────────────────────
+
   /reports/usage:
-    get: { tags: [reports], summary: "Viewer-minutes, peak concurrency, egress GB, recording storage per app/stream/tenant", responses: { "200": { description: TODO } } }
+    get:
+      operationId: getUsageReport
+      tags: [reports]
+      summary: Viewer-minutes, peak concurrency, egress GB, recording GB per app/stream/tenant
+      description: |
+        Monthly/custom range usage report. The `egress_method` field documents
+        how egress was estimated (always included per FE acceptance criteria).
+        Generation must complete in <60 s (PRD F6). `±1%` reconciliation guarantee
+        requires matching the same rollup source used for billing.
+      parameters:
+        - $ref: "#/components/parameters/from"
+        - $ref: "#/components/parameters/to"
+        - $ref: "#/components/parameters/app"
+        - $ref: "#/components/parameters/stream"
+        - $ref: "#/components/parameters/tenant"
+        - $ref: "#/components/parameters/interval"
+      responses:
+        "200":
+          description: Usage report rows and summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageReportResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /reports/schedules:
-    get: { tags: [reports], summary: "List scheduled report exports", responses: { "200": { description: TODO } } }
-    post: { tags: [reports], summary: "Create scheduled CSV/PDF export", responses: { "201": { description: TODO } } }
+    get:
+      operationId: listReportSchedules
+      tags: [reports]
+      summary: List scheduled report exports
+      parameters:
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Paginated list of report schedules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportScheduleList"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      operationId: createReportSchedule
+      tags: [reports]
+      summary: Create a scheduled CSV/PDF export
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportScheduleWrite"
+      responses:
+        "201":
+          description: Schedule created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportSchedule"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "500": { $ref: "#/components/responses/InternalError" }
 
-  # ---- F7: fleet ----
+  /reports/schedules/{scheduleId}:
+    parameters:
+      - name: scheduleId
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      operationId: updateReportSchedule
+      tags: [reports]
+      summary: Update a scheduled report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportScheduleWrite"
+      responses:
+        "200":
+          description: Schedule updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportSchedule"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      operationId: deleteReportSchedule
+      tags: [reports]
+      summary: Delete a scheduled report
+      responses:
+        "204":
+          description: Schedule deleted
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  # ─────────────────────────────────────────────────────────────
+  # F7 — Fleet
+  # ─────────────────────────────────────────────────────────────
+
   /fleet/nodes:
-    get: { tags: [fleet], summary: "Discovered cluster nodes with role labels and health", responses: { "200": { description: TODO } } }
+    get:
+      operationId: listFleetNodes
+      tags: [fleet]
+      summary: Discovered cluster nodes with role, health, and version info
+      description: |
+        Nodes are auto-discovered within 2 minutes of first contact (PRD F7).
+        Includes origin/edge role labels, last-seen timestamp, load metrics,
+        and per-node AMS version.
+      parameters:
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: List of cluster nodes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FleetNodeList"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
 
-  # ---- admin ----
+  # ─────────────────────────────────────────────────────────────
+  # F9 — Anomalies
+  # ─────────────────────────────────────────────────────────────
+
+  /anomalies:
+    get:
+      operationId: listAnomalies
+      tags: [anomalies]
+      summary: Baseline-deviation anomaly flags
+      description: |
+        Returns anomaly flags where a metric has deviated beyond `sigma`
+        standard deviations from the stored baseline. Baselines are computed
+        as rolling window statistics stored in the meta store (see
+        `anomaly_baselines` table). This endpoint queries the meta store for
+        recent flags; results complement (but do not replace) the alerting
+        subsystem.
+      parameters:
+        - $ref: "#/components/parameters/from"
+        - $ref: "#/components/parameters/to"
+        - $ref: "#/components/parameters/app"
+        - $ref: "#/components/parameters/stream"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/cursor"
+        - name: metric
+          in: query
+          description: Filter by metric name
+          schema:
+            type: string
+        - name: min_sigma
+          in: query
+          description: Minimum sigma deviation to include (default 2.0)
+          schema:
+            type: number
+            format: float
+            default: 2.0
+      responses:
+        "200":
+          description: Paginated list of anomaly flags
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnomalyList"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  # ─────────────────────────────────────────────────────────────
+  # F10 — Probes
+  # ─────────────────────────────────────────────────────────────
+
+  /probes:
+    get:
+      operationId: listProbes
+      tags: [probes]
+      summary: List synthetic stream probe configurations
+      parameters:
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Paginated list of probe configs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbeList"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      operationId: createProbe
+      tags: [probes]
+      summary: Create a synthetic stream probe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProbeWrite"
+      responses:
+        "201":
+          description: Probe created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Probe"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /probes/{probeId}:
+    parameters:
+      - $ref: "#/components/parameters/probeId"
+    put:
+      operationId: updateProbe
+      tags: [probes]
+      summary: Update a synthetic probe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProbeWrite"
+      responses:
+        "200":
+          description: Probe updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Probe"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      operationId: deleteProbe
+      tags: [probes]
+      summary: Delete a synthetic probe
+      responses:
+        "204":
+          description: Probe deleted
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /probes/{probeId}/results:
+    parameters:
+      - $ref: "#/components/parameters/probeId"
+    get:
+      operationId: getProbeResults
+      tags: [probes]
+      summary: Recent results for a synthetic probe
+      description: |
+        Probe results are stored in ClickHouse (`probe_results` table) for
+        efficient time-range queries. This endpoint queries ClickHouse and
+        returns a time-ordered list. For probe config and last-result summary
+        use `GET /probes`.
+      parameters:
+        - $ref: "#/components/parameters/from"
+        - $ref: "#/components/parameters/to"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Probe results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbeResultList"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  # ─────────────────────────────────────────────────────────────
+  # Beacon ingest (non-versioned prefix, documented here)
+  # ─────────────────────────────────────────────────────────────
+
+  /ingest/beacon:
+    post:
+      operationId: ingestBeacon
+      tags: [ingest]
+      summary: Ingest player QoE beacon batch
+      description: |
+        Internet-facing endpoint. Only authentication surface for the player SDK.
+        Authorization via `X-Pulse-Ingest-Token` header (revocable, per-stream
+        tokens managed via `/admin/tokens`). No bearer JWT required.
+
+        Request body: `BeaconBatch` (array of `BeaconEvent` envelopes per
+        `contracts/events/beacon-event.schema.json`).
+
+        Rate limited per token; body size limit 256 KB. Schema-validated on
+        ingestion; invalid events are dropped with a partial-accept response.
+      security:
+        - ingestTokenHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BeaconBatch"
+      responses:
+        "202":
+          description: Batch accepted (all or partial)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestAccepted"
+        "401":
+          description: Missing or invalid ingest token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: Request body exceeds 256 KB limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: All events in batch failed schema validation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded for this ingest token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ─────────────────────────────────────────────────────────────
+  # Operational endpoints (non-versioned, no auth)
+  # ─────────────────────────────────────────────────────────────
+
+  /healthz:
+    get:
+      operationId: getHealth
+      tags: [operational]
+      summary: Component liveness check
+      description: |
+        Unauthenticated. Returns HTTP 200 when all critical components are up,
+        503 when any critical component is down. Body always contains a
+        per-component status map.
+      security: []
+      responses:
+        "200":
+          description: All components healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+        "400":
+          description: Not used; present to satisfy tooling requirements
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+        "503":
+          description: One or more components degraded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /metrics:
+    get:
+      operationId: getMetrics
+      tags: [operational]
+      summary: Prometheus metrics exposition
+      description: |
+        Prometheus text exposition format (Content-Type:
+        `text/plain; version=0.0.4`). Low-cardinality gauges and counters only.
+
+        **Authentication:** Unauthenticated by default; operators may configure
+        a separate scrape token via `PULSE_METRICS_TOKEN` environment variable.
+        If set, the endpoint requires `Authorization: Bearer <token>` (same
+        scheme as the main API). Scrape-token is independent from the main API
+        bearer tokens and scoped only to this endpoint. Documented here as a
+        design choice: unauthenticated is the right default for Prometheus
+        deployments where network-level controls are standard; the optional
+        token satisfies stricter environments.
+      security:
+        - {}
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Prometheus text exposition
+          content:
+            text/plain:
+              schema:
+                type: string
+        "401":
+          description: Scrape token configured but missing/invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ─────────────────────────────────────────────────────────────
+  # Admin
+  # ─────────────────────────────────────────────────────────────
+
   /admin/sources:
-    get: { tags: [admin], summary: "Configured AMS data sources (REST/log/Kafka/webhook)", responses: { "200": { description: TODO } } }
-    post: { tags: [admin], summary: "Add an AMS data source", responses: { "201": { description: TODO } } }
+    get:
+      operationId: listSources
+      tags: [admin]
+      summary: List configured AMS data sources
+      description: |
+        Returns all configured AMS sources. Credential fields (`rest_password`,
+        `kafka_brokers`, `webhook_secret`) are **write-only** — they are never
+        echoed in GET responses. Use the masked-indicator flag `credential_set`
+        to show the user a credential is stored.
+      parameters:
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Paginated source list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourceList"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      operationId: createSource
+      tags: [admin]
+      summary: Add an AMS data source
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SourceWrite"
+      responses:
+        "201":
+          description: Source created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Source"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/sources/{sourceId}:
+    parameters:
+      - name: sourceId
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      operationId: updateSource
+      tags: [admin]
+      summary: Update a data source
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SourceWrite"
+      responses:
+        "200":
+          description: Source updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Source"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      operationId: deleteSource
+      tags: [admin]
+      summary: Delete a data source
+      responses:
+        "204":
+          description: Source deleted
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /admin/license:
-    get: { tags: [admin], summary: "License status and tier entitlements", responses: { "200": { description: TODO } } }
+    get:
+      operationId: getLicense
+      tags: [admin]
+      summary: License status, tier, limits and validity
+      responses:
+        "200":
+          description: License info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LicenseInfo"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    put:
+      operationId: activateLicense
+      tags: [admin]
+      summary: Activate or update license key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key]
+              properties:
+                key:
+                  type: string
+                  description: License key string
+      responses:
+        "200":
+          description: License activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LicenseInfo"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "500": { $ref: "#/components/responses/InternalError" }
 
-  # ---- non-versioned operational endpoints (documented here for completeness) ----
-  # GET /metrics   — Prometheus exposition (F8), gauges/counters only, low cardinality
-  # GET /healthz   — liveness
-  # POST /ingest/beacon — beacon ingest (public, token + rate limited); payload: contracts/events/beacon-event.schema.json
+  /admin/tokens:
+    get:
+      operationId: listTokens
+      tags: [admin]
+      summary: List API and ingest tokens
+      parameters:
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/cursor"
+        - name: kind
+          in: query
+          description: Filter by token kind
+          schema:
+            type: string
+            enum: [api, ingest]
+      responses:
+        "200":
+          description: Paginated token list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenList"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      operationId: createToken
+      tags: [admin]
+      summary: Create an API or ingest token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TokenWrite"
+      responses:
+        "201":
+          description: Token created; the raw token value is only returned here
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenCreated"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "500": { $ref: "#/components/responses/InternalError" }
 
+  /admin/tokens/{tokenId}:
+    parameters:
+      - name: tokenId
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      operationId: revokeToken
+      tags: [admin]
+      summary: Revoke a token
+      responses:
+        "204":
+          description: Token revoked
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/users:
+    get:
+      operationId: listUsers
+      tags: [admin]
+      summary: List local users
+      parameters:
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Paginated user list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserList"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      operationId: createUser
+      tags: [admin]
+      summary: Create a local user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserWrite"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/users/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      operationId: updateUser
+      tags: [admin]
+      summary: Update a local user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserWrite"
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      operationId: deleteUser
+      tags: [admin]
+      summary: Delete a local user
+      responses:
+        "204":
+          description: User deleted
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Components
+# ─────────────────────────────────────────────────────────────────────────────
 components:
+
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
+      description: JWT or opaque bearer token from `/admin/tokens` (kind=api)
+    ingestTokenHeader:
+      type: apiKey
+      in: header
+      name: X-Pulse-Ingest-Token
+      description: Per-stream ingest token for beacon POST endpoint
+    wsTokenQuery:
+      type: apiKey
+      in: query
+      name: token
+      description: Bearer token passed as query param for WebSocket upgrades
+
+  parameters:
+    from:
+      name: from
+      in: query
+      description: Start of time range — Unix epoch ms or RFC 3339 string
+      schema:
+        type: string
+    to:
+      name: to
+      in: query
+      description: End of time range — Unix epoch ms or RFC 3339 string
+      schema:
+        type: string
+    app:
+      name: app
+      in: query
+      description: Filter by AMS application name
+      schema:
+        type: string
+    stream:
+      name: stream
+      in: query
+      description: Filter by stream ID
+      schema:
+        type: string
+    node:
+      name: node
+      in: query
+      description: Filter by cluster node ID
+      schema:
+        type: string
+    tenant:
+      name: tenant
+      in: query
+      description: Filter by tenant identifier (F6 multi-tenancy)
+      schema:
+        type: string
+    interval:
+      name: interval
+      in: query
+      description: Rollup bucket size
+      schema:
+        type: string
+        enum: [hour, day]
+        default: day
+    limit:
+      name: limit
+      in: query
+      description: Maximum items per page (max 500)
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 50
+    cursor:
+      name: cursor
+      in: query
+      description: Pagination cursor from previous response `next_cursor`
+      schema:
+        type: string
+    ruleId:
+      name: ruleId
+      in: path
+      required: true
+      schema:
+        type: string
+    channelId:
+      name: channelId
+      in: path
+      required: true
+      schema:
+        type: string
+    probeId:
+      name: probeId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing or invalid authentication
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    UnprocessableEntity:
+      description: Request is well-formed but semantically invalid
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+
+    # ── Error envelope ─────────────────────────────────────────
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code (e.g. INVALID_PARAM, RATE_LIMITED)
+        message:
+          type: string
+          description: Human-readable description
+        details:
+          type: object
+          additionalProperties: true
+          description: Optional structured extra context (field errors, etc.)
+
+    # ── Pagination envelope ────────────────────────────────────
+    PaginatedMeta:
+      type: object
+      properties:
+        next_cursor:
+          type: [string, 'null']
+          description: Opaque cursor; null if this is the last page
+        total:
+          type: [integer, 'null']
+          description: Total count if cheaply computable; omitted otherwise
+
+    # ── Timestamp type alias (documented) ─────────────────────
+    # All ts fields are Unix epoch milliseconds (integer).
+
+    # ── Live ──────────────────────────────────────────────────
+    LiveOverview:
+      type: object
+      required: [ts, total_viewers, total_publishers, protocol_mix, apps, nodes]
+      properties:
+        ts:
+          type: integer
+          description: Snapshot timestamp (Unix epoch ms)
+        total_viewers:
+          type: integer
+        total_publishers:
+          type: integer
+        protocol_mix:
+          $ref: "#/components/schemas/ProtocolMix"
+        apps:
+          type: array
+          items:
+            $ref: "#/components/schemas/AppOverview"
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/NodeHealth"
+
+    ProtocolMix:
+      type: object
+      description: Viewer counts per delivery protocol
+      properties:
+        webrtc:
+          type: integer
+          default: 0
+        hls:
+          type: integer
+          default: 0
+        rtmp:
+          type: integer
+          default: 0
+        dash:
+          type: integer
+          default: 0
+        other:
+          type: integer
+          default: 0
+
+    AppOverview:
+      type: object
+      required: [app, viewers, publishers, streams]
+      properties:
+        app:
+          type: string
+        viewers:
+          type: integer
+        publishers:
+          type: integer
+        streams:
+          type: integer
+
+    NodeHealth:
+      type: object
+      required: [node_id, status]
+      properties:
+        node_id:
+          type: string
+        role:
+          type: string
+          enum: [origin, edge, standalone]
+        status:
+          type: string
+          enum: [up, degraded, down]
+        last_seen:
+          type: integer
+          description: Unix epoch ms
+        cpu_pct:
+          type: number
+          format: float
+        mem_pct:
+          type: number
+          format: float
+        version:
+          type: string
+
+    LiveStreamList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LiveStream"
+        meta:
+          $ref: "#/components/schemas/PaginatedMeta"
+
+    LiveStream:
+      type: object
+      required: [stream_id, app, viewers, publisher_state, health_score]
+      properties:
+        stream_id:
+          type: string
+        app:
+          type: string
+        node_id:
+          type: string
+        viewers:
+          type: integer
+        publisher_state:
+          type: string
+          enum: [publishing, idle, offline]
+        health_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          description: Composite ingest health score 0–100
+        protocol_mix:
+          $ref: "#/components/schemas/ProtocolMix"
+        bitrate_kbps:
+          type: number
+          format: float
+        started_at:
+          type: integer
+          description: Unix epoch ms
+
+    # ── Analytics ─────────────────────────────────────────────
+    AudienceResponse:
+      type: object
+      required: [totals, timeseries]
+      properties:
+        totals:
+          $ref: "#/components/schemas/AudienceTotals"
+        timeseries:
+          type: array
+          items:
+            $ref: "#/components/schemas/AudienceBucket"
+
+    AudienceTotals:
+      type: object
+      required: [views, uniques, watch_time_s, peak_concurrency]
+      properties:
+        views:
+          type: integer
+        uniques:
+          type: integer
+        watch_time_s:
+          type: integer
+          description: Total viewer-seconds
+        peak_concurrency:
+          type: integer
+
+    AudienceBucket:
+      type: object
+      required: [ts, views, uniques, watch_time_s, peak_concurrency]
+      properties:
+        ts:
+          type: integer
+          description: Bucket start (Unix epoch ms)
+        views:
+          type: integer
+        uniques:
+          type: integer
+        watch_time_s:
+          type: integer
+        peak_concurrency:
+          type: integer
+
+    GeoResponse:
+      type: object
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/GeoRow"
+
+    GeoRow:
+      type: object
+      required: [country, views, uniques, watch_time_s]
+      properties:
+        country:
+          type: string
+          description: ISO 3166-1 alpha-2 country code
+        region:
+          type: [string, 'null']
+          description: Region name; present only when region=true was requested
+        views:
+          type: integer
+        uniques:
+          type: integer
+        watch_time_s:
+          type: integer
+
+    DeviceResponse:
+      type: object
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeviceRow"
+
+    DeviceRow:
+      type: object
+      required: [device, os, browser, protocol, views, uniques, watch_time_s]
+      properties:
+        device:
+          type: string
+          description: desktop, mobile, tablet, tv, other
+        os:
+          type: string
+        browser:
+          type: string
+        protocol:
+          type: string
+          description: webrtc, hls, rtmp, dash, other
+        views:
+          type: integer
+        uniques:
+          type: integer
+        watch_time_s:
+          type: integer
+
+    # ── QoE ───────────────────────────────────────────────────
+    QoeSummaryResponse:
+      type: object
+      required: [totals, bitrate_timeline]
+      properties:
+        totals:
+          $ref: "#/components/schemas/QoeTotals"
+        bitrate_timeline:
+          type: array
+          items:
+            $ref: "#/components/schemas/BitrateBucket"
+
+    QoeTotals:
+      type: object
+      required: [startup_p50_ms, startup_p95_ms, rebuffer_ratio, error_rate]
+      properties:
+        startup_p50_ms:
+          type: number
+          format: float
+        startup_p95_ms:
+          type: number
+          format: float
+        rebuffer_ratio:
+          type: number
+          format: float
+          description: Ratio of rebuffer time to total watch time (0–1)
+        error_rate:
+          type: number
+          format: float
+          description: Fraction of sessions with at least one error (0–1)
+
+    BitrateBucket:
+      type: object
+      required: [ts, bitrate_kbps_p50]
+      properties:
+        ts:
+          type: integer
+          description: Bucket start (Unix epoch ms)
+        bitrate_kbps_p50:
+          type: number
+          format: float
+        bitrate_kbps_p95:
+          type: number
+          format: float
+
+    IngestHealthResponse:
+      type: object
+      required: [streams]
+      properties:
+        streams:
+          type: array
+          items:
+            $ref: "#/components/schemas/IngestStream"
+
+    IngestStream:
+      type: object
+      required: [stream_id, app, health_score, timeseries]
+      properties:
+        stream_id:
+          type: string
+        app:
+          type: string
+        node_id:
+          type: [string, 'null']
+        health_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          description: Composite health 0–100; computed from packet loss, jitter, fps stability
+        timeseries:
+          type: array
+          items:
+            $ref: "#/components/schemas/IngestBucket"
+        drop_events:
+          type: array
+          items:
+            $ref: "#/components/schemas/DropEvent"
+
+    IngestBucket:
+      type: object
+      required: [ts, bitrate_kbps, fps]
+      properties:
+        ts:
+          type: integer
+          description: Bucket start (Unix epoch ms)
+        bitrate_kbps:
+          type: number
+          format: float
+        fps:
+          type: number
+          format: float
+        keyframe_interval_s:
+          type: number
+          format: float
+        packet_loss_pct:
+          type: number
+          format: float
+        jitter_ms:
+          type: number
+          format: float
+
+    DropEvent:
+      type: object
+      required: [ts, reason]
+      properties:
+        ts:
+          type: integer
+          description: Unix epoch ms
+        reason:
+          type: string
+          description: bitrate_drop, fps_drop, packet_loss_spike, jitter_spike, disconnect
+
+    # ── Alerts ────────────────────────────────────────────────
+    AlertRuleList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlertRule"
+        meta:
+          $ref: "#/components/schemas/PaginatedMeta"
+
+    AlertRule:
+      type: object
+      required: [id, metric, operator, threshold, window_s, severity, muted, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        metric:
+          type: string
+          description: Metric name, e.g. rebuffer_ratio, bitrate_kbps, viewer_count
+        operator:
+          type: string
+          enum: ["gt", "lt", "gte", "lte", "eq"]
+        threshold:
+          type: number
+          format: float
+        window_s:
+          type: integer
+          description: Evaluation window in seconds
+        scope:
+          $ref: "#/components/schemas/AlertScope"
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        cooldown_s:
+          type: integer
+          description: Minimum seconds between re-firing the same rule
+          default: 300
+        group_by:
+          type: [string, 'null']
+          description: Group alerts by this dimension key (e.g. stream_id, app)
+        muted:
+          type: boolean
+        maintenance_windows:
+          type: array
+          items:
+            $ref: "#/components/schemas/MaintenanceWindow"
+        channel_ids:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: integer
+          description: Unix epoch ms
+        updated_at:
+          type: integer
+          description: Unix epoch ms
+
+    AlertRuleWrite:
+      type: object
+      required: [metric, operator, threshold, window_s, severity]
+      properties:
+        metric:
+          type: string
+        operator:
+          type: string
+          enum: ["gt", "lt", "gte", "lte", "eq"]
+        threshold:
+          type: number
+          format: float
+        window_s:
+          type: integer
+        scope:
+          $ref: "#/components/schemas/AlertScope"
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        cooldown_s:
+          type: integer
+          default: 300
+        group_by:
+          type: [string, 'null']
+        muted:
+          type: boolean
+          default: false
+        maintenance_windows:
+          type: array
+          items:
+            $ref: "#/components/schemas/MaintenanceWindow"
+        channel_ids:
+          type: array
+          items:
+            type: string
+
+    AlertScope:
+      type: object
+      description: Scope filters for alert evaluation; omit to evaluate globally
+      properties:
+        node_id:
+          type: [string, 'null']
+        app:
+          type: [string, 'null']
+        stream_id:
+          type: [string, 'null']
+
+    MaintenanceWindow:
+      type: object
+      required: [start_cron, duration_s]
+      properties:
+        start_cron:
+          type: string
+          description: Cron expression for window start (UTC)
+        duration_s:
+          type: integer
+          description: Window duration in seconds
+
+    AlertChannelList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlertChannel"
+        meta:
+          $ref: "#/components/schemas/PaginatedMeta"
+
+    AlertChannel:
+      type: object
+      required: [id, type, name, created_at]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [email, slack, telegram, pagerduty, webhook]
+        name:
+          type: string
+        credential_set:
+          type: boolean
+          description: True if secret config fields are stored (never echoed)
+        config_summary:
+          type: object
+          description: Non-secret config fields (e.g. email address, Slack channel name)
+          additionalProperties: true
+        created_at:
+          type: integer
+          description: Unix epoch ms
+
+    AlertChannelWrite:
+      type: object
+      required: [type, name, config]
+      properties:
+        type:
+          type: string
+          enum: [email, slack, telegram, pagerduty, webhook]
+        name:
+          type: string
+        config:
+          $ref: "#/components/schemas/AlertChannelConfig"
+
+    AlertChannelConfig:
+      description: |
+        Discriminated union on `type`. Use the parent `type` field to
+        determine which properties apply. Secrets are stored encrypted and
+        never returned.
+      type: object
+      properties:
+        email_to:
+          type: string
+          description: "email: recipient address"
+        slack_webhook_url:
+          type: string
+          description: "slack: incoming webhook URL (secret)"
+        slack_channel:
+          type: string
+          description: "slack: channel name for display"
+        telegram_bot_token:
+          type: string
+          description: "telegram: bot token (secret)"
+        telegram_chat_id:
+          type: string
+          description: "telegram: chat ID"
+        pagerduty_routing_key:
+          type: string
+          description: "pagerduty: integration routing key (secret)"
+        webhook_url:
+          type: string
+          description: "webhook: target URL"
+        webhook_secret:
+          type: string
+          description: "webhook: HMAC signing secret (secret)"
+
+    ChannelTestResult:
+      type: object
+      required: [accepted]
+      properties:
+        accepted:
+          type: boolean
+        message:
+          type: [string, 'null']
+
+    AlertHistoryList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlertHistoryEntry"
+        meta:
+          $ref: "#/components/schemas/PaginatedMeta"
+
+    AlertHistoryEntry:
+      type: object
+      required: [id, rule_id, state, severity, ts, metric, value, threshold]
+      properties:
+        id:
+          type: string
+        rule_id:
+          type: string
+        state:
+          type: string
+          enum: [firing, resolved]
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        ts:
+          type: integer
+          description: Unix epoch ms
+        metric:
+          type: string
+        value:
+          type: number
+          format: float
+        threshold:
+          type: number
+          format: float
+        scope:
+          $ref: "#/components/schemas/AlertScope"
+        cooldown_until:
+          type: [integer, 'null']
+          description: Unix epoch ms; set when a re-fire is suppressed by cooldown
+        group_key:
+          type: [string, 'null']
+          description: Grouping key value for this firing instance
+
+    # ── Reports ───────────────────────────────────────────────
+    UsageReportResponse:
+      type: object
+      required: [rows, totals, egress_method]
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/UsageRow"
+        totals:
+          $ref: "#/components/schemas/UsageTotals"
+        egress_method:
+          type: string
+          description: |
+            Documents how egress was estimated (always included per F6 spec).
+            Example: "bitrate_x_watch_time" or "ams_rest_stats_byte_counter".
+
+    UsageRow:
+      type: object
+      required: [app, viewer_minutes, peak_concurrency, egress_gb, recording_gb]
+      properties:
+        app:
+          type: string
+        stream_id:
+          type: [string, 'null']
+        tenant:
+          type: [string, 'null']
+        viewer_minutes:
+          type: number
+          format: float
+        peak_concurrency:
+          type: integer
+        egress_gb:
+          type: number
+          format: float
+        recording_gb:
+          type: number
+          format: float
+
+    UsageTotals:
+      type: object
+      required: [viewer_minutes, peak_concurrency, egress_gb, recording_gb]
+      properties:
+        viewer_minutes:
+          type: number
+          format: float
+        peak_concurrency:
+          type: integer
+        egress_gb:
+          type: number
+          format: float
+        recording_gb:
+          type: number
+          format: float
+
+    ReportScheduleList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportSchedule"
+        meta:
+          $ref: "#/components/schemas/PaginatedMeta"
+
+    ReportSchedule:
+      type: object
+      required: [id, cron, format, scope, created_at]
+      properties:
+        id:
+          type: string
+        cron:
+          type: string
+          description: Cron expression (UTC)
+        format:
+          type: string
+          enum: [csv, pdf]
+        scope:
+          type: object
+          properties:
+            app:
+              type: [string, 'null']
+            tenant:
+              type: [string, 'null']
+        tenant_mapping:
+          type: [string, 'null']
+          description: Tenant mapping rule reference
+        whitelabel_header:
+          type: [object, 'null']
+          description: White-label PDF header JSON (F6 Phase 3)
+          additionalProperties: true
+        created_at:
+          type: integer
+          description: Unix epoch ms
+
+    ReportScheduleWrite:
+      type: object
+      required: [cron, format]
+      properties:
+        cron:
+          type: string
+        format:
+          type: string
+          enum: [csv, pdf]
+        scope:
+          type: object
+          properties:
+            app:
+              type: [string, 'null']
+            tenant:
+              type: [string, 'null']
+        tenant_mapping:
+          type: [string, 'null']
+        whitelabel_header:
+          type: [object, 'null']
+          additionalProperties: true
+
+    # ── Fleet ─────────────────────────────────────────────────
+    FleetNodeList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/FleetNode"
+        meta:
+          $ref: "#/components/schemas/PaginatedMeta"
+
+    FleetNode:
+      type: object
+      required: [node_id, role, status, last_seen]
+      properties:
+        node_id:
+          type: string
+        role:
+          type: string
+          enum: [origin, edge, standalone]
+        status:
+          type: string
+          enum: [up, degraded, down]
+        last_seen:
+          type: integer
+          description: Unix epoch ms
+        version:
+          type: [string, 'null']
+          description: AMS version string
+        cpu_pct:
+          type: number
+          format: float
+        mem_pct:
+          type: number
+          format: float
+        net_in_mbps:
+          type: number
+          format: float
+        net_out_mbps:
+          type: number
+          format: float
+
+    # ── Anomalies ─────────────────────────────────────────────
+    AnomalyList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnomalyFlag"
+        meta:
+          $ref: "#/components/schemas/PaginatedMeta"
+
+    AnomalyFlag:
+      type: object
+      required: [id, metric, scope, observed, expected, sigma, ts]
+      properties:
+        id:
+          type: string
+        metric:
+          type: string
+          description: Metric name where deviation was detected
+        scope:
+          $ref: "#/components/schemas/AlertScope"
+        observed:
+          type: number
+          format: float
+          description: Observed metric value at detection time
+        expected:
+          type: number
+          format: float
+          description: Baseline mean
+        sigma:
+          type: number
+          format: float
+          description: Number of standard deviations from baseline mean
+        ts:
+          type: integer
+          description: Detection timestamp (Unix epoch ms)
+
+    # ── Probes ────────────────────────────────────────────────
+    ProbeList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Probe"
+        meta:
+          $ref: "#/components/schemas/PaginatedMeta"
+
+    Probe:
+      type: object
+      required: [id, name, url, interval_s, enabled, created_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+          description: Stream URL to probe (HLS, WebRTC, RTMP)
+        protocol:
+          type: string
+          enum: [hls, webrtc, rtmp, dash]
+        interval_s:
+          type: integer
+          description: Probe interval in seconds (min 30)
+          minimum: 30
+        timeout_s:
+          type: integer
+          description: Per-probe timeout in seconds
+          default: 10
+        enabled:
+          type: boolean
+        last_result:
+          $ref: "#/components/schemas/ProbeResult"
+        created_at:
+          type: integer
+          description: Unix epoch ms
+
+    ProbeWrite:
+      type: object
+      required: [name, url, interval_s]
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        protocol:
+          type: string
+          enum: [hls, webrtc, rtmp, dash]
+        interval_s:
+          type: integer
+          minimum: 30
+        timeout_s:
+          type: integer
+          default: 10
+        enabled:
+          type: boolean
+          default: true
+
+    ProbeResultList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProbeResult"
+        meta:
+          $ref: "#/components/schemas/PaginatedMeta"
+
+    ProbeResult:
+      type: object
+      required: [id, probe_id, ts, success, ttfb_ms]
+      properties:
+        id:
+          type: string
+        probe_id:
+          type: string
+        ts:
+          type: integer
+          description: Unix epoch ms
+        success:
+          type: boolean
+        ttfb_ms:
+          type: [integer, 'null']
+          description: Time to first byte in ms; null on failure
+        error_code:
+          type: [string, 'null']
+        error_message:
+          type: [string, 'null']
+        bitrate_kbps:
+          type: number
+          format: float
+
+    # ── Beacon ingest ─────────────────────────────────────────
+    BeaconBatch:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/BeaconEventEnvelope"
+
+    BeaconEventEnvelope:
+      type: object
+      required: [version, session_id, stream_id, events]
+      properties:
+        version:
+          type: integer
+          const: 1
+        session_id:
+          type: string
+          format: uuid
+        stream_id:
+          type: string
+        app:
+          type: [string, 'null']
+        meta:
+          type: object
+          additionalProperties:
+            type: string
+        player:
+          type: object
+          properties:
+            kind:
+              type: string
+              enum: [ams-webrtc, hls.js, video.js, native, other]
+            sdk_version:
+              type: string
+        events:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [type, ts]
+            properties:
+              type:
+                type: string
+                enum: [session_start, startup_complete, heartbeat, rebuffer_start, rebuffer_end, error, bitrate_change, resolution_change, session_end]
+              ts:
+                type: integer
+                description: Unix epoch ms
+              data:
+                type: object
+                additionalProperties: true
+
+    IngestAccepted:
+      type: object
+      required: [accepted, rejected]
+      properties:
+        accepted:
+          type: integer
+          description: Number of events accepted
+        rejected:
+          type: integer
+          description: Number of events rejected (schema invalid)
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              index:
+                type: integer
+              reason:
+                type: string
+
+    # ── Health ────────────────────────────────────────────────
+    HealthStatus:
+      type: object
+      required: [status, components]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, down]
+        components:
+          type: object
+          required: [clickhouse, meta_store, collector]
+          properties:
+            clickhouse:
+              $ref: "#/components/schemas/ComponentStatus"
+            meta_store:
+              $ref: "#/components/schemas/ComponentStatus"
+            collector:
+              $ref: "#/components/schemas/ComponentStatus"
+
+    ComponentStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, down]
+        latency_ms:
+          type: [integer, 'null']
+        message:
+          type: [string, 'null']
+
+    # ── Admin: Sources ────────────────────────────────────────
+    SourceList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Source"
+        meta:
+          $ref: "#/components/schemas/PaginatedMeta"
+
+    Source:
+      type: object
+      required: [id, name, type, created_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [rest_poll, log_tail, kafka, webhook]
+        rest_url:
+          type: string
+          format: uri
+          description: AMS REST base URL
+        rest_user:
+          type: [string, 'null']
+          description: AMS REST username (password never echoed)
+        credential_set:
+          type: boolean
+          description: True if a credential (password/secret) is stored
+        log_path:
+          type: [string, 'null']
+          description: Path to AMS analytics log file
+        kafka_brokers:
+          type: [array, 'null']
+          items:
+            type: string
+          description: Kafka broker addresses (secrets never echoed)
+        credential_env_ref:
+          type: [string, 'null']
+          description: Environment variable name holding the credential (no value echoed)
+        created_at:
+          type: integer
+          description: Unix epoch ms
+
+    SourceWrite:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [rest_poll, log_tail, kafka, webhook]
+        rest_url:
+          type: string
+          format: uri
+        rest_user:
+          type: [string, 'null']
+        rest_password:
+          type: [string, 'null']
+          description: Write-only; stored encrypted
+        log_path:
+          type: [string, 'null']
+        kafka_brokers:
+          type: [array, 'null']
+          items:
+            type: string
+        webhook_secret:
+          type: [string, 'null']
+          description: Write-only; stored encrypted
+        credential_env_ref:
+          type: [string, 'null']
+
+    # ── Admin: License ────────────────────────────────────────
+    LicenseInfo:
+      type: object
+      required: [tier, valid]
+      properties:
+        tier:
+          type: string
+          enum: [free, pro, enterprise]
+        valid:
+          type: boolean
+        limits:
+          $ref: "#/components/schemas/TierLimits"
+        expires_at:
+          type: [integer, 'null']
+          description: Unix epoch ms; null for perpetual/free
+        offline_file:
+          type: boolean
+          description: True if activated via offline license file
+
+    TierLimits:
+      type: object
+      description: Tier entitlement limits (null = unlimited)
+      properties:
+        max_streams:
+          type: [integer, 'null']
+        max_nodes:
+          type: [integer, 'null']
+        retention_days:
+          type: [integer, 'null']
+        data_api:
+          type: boolean
+        white_label:
+          type: boolean
+
+    # ── Admin: Tokens ─────────────────────────────────────────
+    TokenList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Token"
+        meta:
+          $ref: "#/components/schemas/PaginatedMeta"
+
+    Token:
+      type: object
+      required: [id, kind, name, scopes, created_at]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [api, ingest]
+        name:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        expires_at:
+          type: [integer, 'null']
+          description: Unix epoch ms
+        last_used_at:
+          type: [integer, 'null']
+          description: Unix epoch ms
+        created_at:
+          type: integer
+          description: Unix epoch ms
+
+    TokenWrite:
+      type: object
+      required: [kind, name]
+      properties:
+        kind:
+          type: string
+          enum: [api, ingest]
+        name:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        expires_at:
+          type: [integer, 'null']
+          description: Unix epoch ms; omit for non-expiring
+
+    TokenCreated:
+      allOf:
+        - $ref: "#/components/schemas/Token"
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: Raw token value — only returned on creation, never again
+
+    # ── Admin: Users ──────────────────────────────────────────
+    UserList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        meta:
+          $ref: "#/components/schemas/PaginatedMeta"
+
+    User:
+      type: object
+      required: [id, username, role, created_at]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        role:
+          type: string
+          enum: [admin, viewer]
+        created_at:
+          type: integer
+          description: Unix epoch ms
+
+    UserWrite:
+      type: object
+      required: [username, role]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          description: Write-only; stored as bcrypt hash
+        role:
+          type: string
+          enum: [admin, viewer]

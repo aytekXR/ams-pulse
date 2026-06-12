@@ -2,4 +2,5 @@ package config
 
 import "errors"
 
-var errNotImplemented = errors.New("config: not implemented (skeleton)")
+// errNotImplemented is kept for backward-compat in case cmd/ references it.
+var errNotImplemented = errors.New("config: not implemented")

@@ -2,25 +2,334 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://pulse.dev/schemas/ams-server-event.json",
   "title": "ServerEvent",
-  "description": "Normalized internal event produced by the collector from any AMS source (REST poll, analytics-log tail, Kafka feed, webhook). Downstream storage and query layers depend ONLY on this shape, never on raw AMS formats — this is the portability boundary (PRD §7.11 expansion play). SKELETON.",
+  "description": "Normalized internal event produced by the collector from any AMS source (REST poll, analytics-log tail, Kafka feed, webhook). Downstream storage and query layers depend ONLY on this shape, never on raw AMS formats — this is the portability boundary (PRD §7.11 expansion play). Finalized by INT-01 for wave-1 freeze.",
   "type": "object",
   "required": ["version", "type", "ts", "source", "node_id"],
   "properties": {
-    "version": { "const": 1 },
+    "version": {
+      "const": 1,
+      "description": "Schema version — bump on breaking change"
+    },
     "type": {
       "type": "string",
       "enum": [
-        "stream_publish_start", "stream_publish_end",
-        "stream_stats", "webrtc_client_stats",
-        "ingest_stats", "node_stats",
-        "recording_ready", "viewer_join", "viewer_leave"
+        "stream_publish_start",
+        "stream_publish_end",
+        "stream_stats",
+        "webrtc_client_stats",
+        "ingest_stats",
+        "node_stats",
+        "recording_ready",
+        "viewer_join",
+        "viewer_leave"
       ]
     },
-    "ts": { "type": "integer", "description": "Unix epoch ms" },
-    "source": { "type": "string", "enum": ["rest_poll", "log_tail", "kafka", "webhook", "host_agent"] },
-    "node_id": { "type": "string", "description": "AMS cluster node identifier (or 'standalone')" },
-    "app": { "type": "string" },
-    "stream_id": { "type": "string" },
-    "data": { "type": "object", "description": "Type-specific payload (viewer counts, bitrate, fps, packet loss, cpu/ram, ...) — finalized per event type by INT-01" }
+    "ts": {
+      "type": "integer",
+      "description": "Unix epoch ms — wall-clock time of the event as reported by the collector"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["rest_poll", "log_tail", "kafka", "webhook", "host_agent"],
+      "description": "Which AMS data-collection pathway produced this event"
+    },
+    "node_id": {
+      "type": "string",
+      "description": "AMS cluster node identifier. Use 'standalone' for single-node deployments."
+    },
+    "app": {
+      "type": "string",
+      "description": "AMS application name (normalized)"
+    },
+    "stream_id": {
+      "type": "string",
+      "description": "Stream identifier (normalized)"
+    },
+    "data": {
+      "type": "object",
+      "description": "Type-specific payload. Shape is validated by the if/then clauses on the parent object based on the 'type' field. See $defs for each event type's documented shape."
+    },
+    "enrichment": {
+      "$ref": "#/$defs/EnrichmentBlock",
+      "description": "Collector-added enrichment (geo-IP lookup, UA parsing). NOT sent by AMS — added by the collector during normalization."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "stream_publish_start" } }, "required": ["type"] },
+      "then": { "properties": { "data": { "$ref": "#/$defs/StreamPublishStartData" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "stream_publish_end" } }, "required": ["type"] },
+      "then": { "properties": { "data": { "$ref": "#/$defs/StreamPublishEndData" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "stream_stats" } }, "required": ["type"] },
+      "then": { "properties": { "data": { "$ref": "#/$defs/StreamStatsData" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "webrtc_client_stats" } }, "required": ["type"] },
+      "then": { "properties": { "data": { "$ref": "#/$defs/WebRTCClientStatsData" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "ingest_stats" } }, "required": ["type"] },
+      "then": { "properties": { "data": { "$ref": "#/$defs/IngestStatsData" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "node_stats" } }, "required": ["type"] },
+      "then": { "properties": { "data": { "$ref": "#/$defs/NodeStatsData" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "recording_ready" } }, "required": ["type"] },
+      "then": { "properties": { "data": { "$ref": "#/$defs/RecordingReadyData" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "viewer_join" } }, "required": ["type"] },
+      "then": { "properties": { "data": { "$ref": "#/$defs/ViewerJoinData" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "viewer_leave" } }, "required": ["type"] },
+      "then": { "properties": { "data": { "$ref": "#/$defs/ViewerLeaveData" } } }
+    }
+  ],
+  "$defs": {
+    "StreamPublishStartData": {
+      "type": "object",
+      "description": "stream_publish_start: a publisher begins streaming",
+      "required": ["publish_type"],
+      "properties": {
+        "publish_type": {
+          "type": "string",
+          "enum": ["webrtc", "rtmp", "hls", "mp4", "other"],
+          "description": "Normalized publish protocol"
+        }
+      }
+    },
+    "StreamPublishEndData": {
+      "type": "object",
+      "description": "stream_publish_end: publisher stopped or was disconnected",
+      "properties": {
+        "duration_s": {
+          "type": "integer",
+          "description": "Publish duration in seconds, if available"
+        },
+        "reason": {
+          "type": "string",
+          "description": "end reason: client_disconnect, timeout, admin_stop, etc."
+        }
+      }
+    },
+    "StreamStatsData": {
+      "type": "object",
+      "description": "stream_stats: periodic viewer-count + bitrate snapshot for an active stream",
+      "required": ["viewer_count"],
+      "properties": {
+        "viewer_count": {
+          "type": "integer",
+          "description": "Total concurrent viewers across all protocols"
+        },
+        "viewer_count_by_protocol": {
+          "type": "object",
+          "description": "Per-protocol viewer breakdown",
+          "properties": {
+            "webrtc": { "type": "integer", "default": 0 },
+            "hls":    { "type": "integer", "default": 0 },
+            "rtmp":   { "type": "integer", "default": 0 },
+            "dash":   { "type": "integer", "default": 0 },
+            "other":  { "type": "integer", "default": 0 }
+          }
+        },
+        "bitrate_kbps": {
+          "type": "number",
+          "description": "Current outbound bitrate in kbps"
+        },
+        "speed_read_kbps": {
+          "type": "number",
+          "description": "Network read speed from AMS REST stats"
+        }
+      }
+    },
+    "WebRTCClientStatsData": {
+      "type": "object",
+      "description": "webrtc_client_stats: per-WebRTC-client quality stats",
+      "required": ["client_id"],
+      "properties": {
+        "client_id": {
+          "type": "string",
+          "description": "WebRTC peer connection identifier"
+        },
+        "rtt_ms": {
+          "type": "number",
+          "description": "Round-trip time in milliseconds"
+        },
+        "jitter_ms": {
+          "type": "number",
+          "description": "Jitter in milliseconds"
+        },
+        "packet_loss_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Packet loss percentage"
+        }
+      }
+    },
+    "IngestStatsData": {
+      "type": "object",
+      "description": "ingest_stats: publisher-side ingest quality metrics (F4)",
+      "properties": {
+        "bitrate_kbps": {
+          "type": "number",
+          "description": "Ingest bitrate in kbps"
+        },
+        "fps": {
+          "type": "number",
+          "description": "Frames per second"
+        },
+        "keyframe_interval_s": {
+          "type": "number",
+          "description": "Keyframe interval in seconds"
+        },
+        "packet_loss_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Ingest packet loss percentage"
+        },
+        "jitter_ms": {
+          "type": "number",
+          "description": "Ingest jitter in milliseconds"
+        }
+      }
+    },
+    "NodeStatsData": {
+      "type": "object",
+      "description": "node_stats: host-level resource utilization",
+      "properties": {
+        "cpu_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "mem_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "disk_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "net_in_mbps": {
+          "type": "number"
+        },
+        "net_out_mbps": {
+          "type": "number"
+        },
+        "jvm_heap_used_mb": {
+          "type": "number",
+          "description": "JVM heap used (AMS runs on JVM)"
+        }
+      }
+    },
+    "RecordingReadyData": {
+      "type": "object",
+      "description": "recording_ready: a recording file is available",
+      "required": ["path"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "File path on the AMS host"
+        },
+        "size_bytes": {
+          "type": "integer"
+        },
+        "duration_s": {
+          "type": "integer"
+        }
+      }
+    },
+    "ViewerJoinData": {
+      "type": "object",
+      "description": "viewer_join: a viewer started watching. viewer_id is a collector-generated opaque ID for session stitching; it is NOT the AMS peer ID.",
+      "required": ["viewer_id", "protocol"],
+      "properties": {
+        "viewer_id": {
+          "type": "string",
+          "description": "Opaque viewer identifier for session stitching (collector-generated or beacon session_id)"
+        },
+        "protocol": {
+          "type": "string",
+          "enum": ["webrtc", "hls", "rtmp", "dash", "other"]
+        },
+        "ip_hash": {
+          "type": "string",
+          "description": "SHA-256 hash of viewer IP (anonymized; never raw IP)"
+        },
+        "user_agent": {
+          "type": "string",
+          "description": "Raw UA string for device parsing"
+        },
+        "referrer": {
+          "type": "string",
+          "description": "HTTP Referer if available"
+        }
+      }
+    },
+    "ViewerLeaveData": {
+      "type": "object",
+      "description": "viewer_leave: a viewer stopped watching",
+      "required": ["viewer_id", "protocol"],
+      "properties": {
+        "viewer_id": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string",
+          "enum": ["webrtc", "hls", "rtmp", "dash", "other"]
+        },
+        "watch_time_s": {
+          "type": "integer",
+          "description": "Total watch duration in seconds for this session segment"
+        }
+      }
+    },
+    "EnrichmentBlock": {
+      "type": "object",
+      "description": "Fields added by the collector during normalization. AMS does NOT send these. Documented here to make the pipeline transparent.",
+      "properties": {
+        "geo": {
+          "type": "object",
+          "properties": {
+            "country": {
+              "type": "string",
+              "description": "ISO 3166-1 alpha-2 country code from geo-IP lookup"
+            },
+            "region": {
+              "type": "string",
+              "description": "Region/state name from geo-IP lookup"
+            }
+          }
+        },
+        "client": {
+          "type": "object",
+          "properties": {
+            "device": {
+              "type": "string",
+              "description": "Parsed device type: desktop, mobile, tablet, tv, other"
+            },
+            "os": {
+              "type": "string",
+              "description": "Parsed OS name"
+            },
+            "browser": {
+              "type": "string",
+              "description": "Parsed browser name"
+            }
+          }
+        }
+      }
+    }
   }
 }

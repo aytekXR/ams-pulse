@@ -3,16 +3,69 @@
  * folder per PRD feature; FE-01 fills them in per phase. Routes mirror the
  * left-nav information architecture:
  *
- *   /            → live ops dashboard (F1)        — Phase 1
- *   /analytics   → historical audience (F2)       — Phase 1 core, Phase 2 full
- *   /qoe         → viewer QoE (F3)                — Phase 2
- *   /ingest      → publisher/ingest health (F4)   — Phase 2
- *   /alerts      → rules, channels, history (F5)  — Phase 1
- *   /reports     → usage & billing (F6)           — Phase 2
- *   /fleet       → cluster nodes (F7)             — Phase 2
+ *   /            → live ops dashboard (F1)        — Wave 1
+ *   /analytics   → historical audience (F2)       — Wave 1 core, Wave 2 full
+ *   /qoe         → viewer QoE (F3)                — Wave 2
+ *   /ingest      → publisher/ingest health (F4)   — Wave 2
+ *   /alerts      → rules, channels, history (F5)  — Wave 1
+ *   /reports     → usage & billing (F6)           — Wave 2
+ *   /fleet       → cluster nodes (F7)             — Wave 2
  *   /settings    → sources, tokens, license, users
  */
+
+import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { AuthGate } from "@/components/AuthGate";
+import { Layout } from "@/components/Layout";
+import { ToastProvider } from "@/components/Toast";
+import { ComingSoon } from "@/components/ComingSoon";
+import { LiveDashboard } from "@/features/live/LiveDashboard";
+import { AnalyticsPage } from "@/features/analytics/AnalyticsPage";
+import { AlertsPage } from "@/features/alerts/AlertsPage";
+import { SettingsPage } from "@/features/settings/SettingsPage";
+import { OnboardingWizard } from "@/features/settings/OnboardingWizard";
+import "@/styles/global.css";
+
+function AppRoutes() {
+  const [wsConnected, setWsConnected] = useState(false);
+  const navigate = useNavigate();
+
+  return (
+    <AuthGate>
+      <Layout wsConnected={wsConnected}>
+        <Routes>
+          <Route path="/" element={<LiveDashboard onConnectionChange={setWsConnected} />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/qoe" element={<ComingSoon feature="Viewer QoE (F3)" wave="Wave 2" />} />
+          <Route path="/ingest" element={<ComingSoon feature="Ingest Health (F4)" wave="Wave 2" />} />
+          <Route path="/alerts" element={<AlertsPage />} />
+          <Route path="/reports" element={<ComingSoon feature="Usage Reports (F6)" wave="Wave 2" />} />
+          <Route path="/fleet" element={<ComingSoon feature="Fleet View (F7)" wave="Wave 2" />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route
+            path="/onboarding"
+            element={<OnboardingWizard onComplete={() => navigate("/")} />}
+          />
+          <Route
+            path="*"
+            element={
+              <div style={{ padding: "3rem", color: "var(--color-muted)", fontSize: 14 }}>
+                Page not found — <a href="/">go home</a>
+              </div>
+            }
+          />
+        </Routes>
+      </Layout>
+    </AuthGate>
+  );
+}
+
 export function App() {
-  // TODO(FE-01): router, layout chrome (nav, header, theme), auth gate.
-  return <main>Pulse — skeleton build</main>;
+  return (
+    <BrowserRouter>
+      <ToastProvider>
+        <AppRoutes />
+      </ToastProvider>
+    </BrowserRouter>
+  );
 }

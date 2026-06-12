@@ -52,3 +52,35 @@ data plane and leaves clearly-marked assembly hooks; BE-02 (running strictly
 after BE-01 per D-003) may extend `cmd/pulse` wiring, declaring the edit in its
 completion report. Single-writer's intent (no concurrent writes) is preserved by
 the serialization.
+
+## D-006 · 2026-06-12 · Wave 1 gate ruling: fix-loop in-wave; contract CRs approved
+
+Wave-1 QA gate verdict PASS_WITH_LIMITATIONS (sole waiver: Docker Compose
+execution, per D-002). Ruling: run a fix-loop within wave 1 before declaring
+the gate closed — the major defect D-W1-001 (node CPU/mem normalized 100×
+too high) corrupts fleet health and alert calibration and must not carry
+into wave 2.
+
+**Fix-loop scope:** D-W1-001/003/005 (BE-01), D-W1-002/004 (BE-02), then
+targeted QA re-verification (re-run `qa/wave-1/run-gate.sh` + per-defect
+checks). D-W1-006 (AMS version-matrix Go tests) is deferred to wave 2 /
+validation sweep — it needs real AMS containers; carried forward, owner QA-01.
+
+**Contract change requests (first uses of the D-004 CR channel) — all approved:**
+
+- CR-1 `AlertRule.name` (string) — added to OpenAPI + meta DDL; implemented
+  in this fix-loop (BE-02 store/API, FE-01 consumes; removes group_by
+  label workaround).
+- CR-2 `AlertRule.enabled` (boolean) — same treatment as CR-1 (replaces the
+  muted-toggle workaround; `muted` stays, distinct semantics: enabled=off
+  means not evaluated, muted means evaluated-but-silenced per PRD F5).
+- CR-3 `POST /admin/sources/{sourceId}/test` + `AmsSourceStatus` schema —
+  contract added NOW; server implementation deferred to wave 2 (touches
+  collector/amsclient wiring); FE keeps its generic workaround until then.
+- CR-4 `contracts/README.md` codegen path `../../contracts/…` → `../contracts/…`
+  — trivial doc fix, INT-01.
+
+All four applied by an INT-01 fix agent (contract freeze is amended through
+this approval, per D-004). ORCH-00 housekeeping done directly: .gitignore
+entries for ClickHouse test artifacts + built binaries (BE-01 gap, owner
+ORCH-00).

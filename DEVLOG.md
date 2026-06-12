@@ -98,3 +98,51 @@ Wave 1 as one workflow per WO-101..106 — INT-01 freeze first, then
 BE-01 → BE-02 sequential (D-003/D-005) ∥ FE-01, then QA-01 gate, then DOC-01.
 ClickHouse binary lives at `/tmp/clickhouse` (re-download if /tmp was cleared:
 v26.6.1 single binary). No Docker on this machine (D-002).
+
+## 2026-06-12 — Session 3: Wave 1 dispatched
+
+- Resumed per `agents/handoffs/RESUME-PROMPT.md`. Tree clean at `44f02f1`.
+- `/tmp` had been cleared → ClickHouse single binary re-downloaded
+  (v26.6.1.694, macos-aarch64) to `/tmp/clickhouse` before dispatch.
+- Wave 1 workflow dispatched (`pulse-wave-1`, run `wf_23764fb7-417`), per
+  D-003/D-005 ordering: INT-01 (WO-101 freeze, alone) → [BE-01 (WO-102) →
+  BE-02 (WO-103) sequential] ∥ FE-01 (WO-104) → QA-01 gate (WO-105) →
+  DOC-01 (WO-106, dispatched only on PASS / PASS_WITH_LIMITATIONS).
+- All agents return structured `{status, reportPath, gaps[],
+  cmdEditsDeclared[], changeRequests[]}`; QA returns per-criterion verdicts +
+  defect list (owner/severity/repro). Gate decision (fix-loop vs proceed) is
+  ORCH-00's on workflow completion.
+
+### Wave 1 results (workflow `pulse-wave-1`, 6 agents, ~140 min)
+
+- **All six agents done.** Reports in `agents/handoffs/wave-1/WO-10x-report.md`;
+  gate report `qa/wave-1/gate-report.md`.
+- **INT-01 freeze:** OpenAPI 18→32 paths / 46 ops / 66 schemas, zero redocly
+  errors/warnings (was 55 warnings); 3 event schemas finalized w/ per-type
+  payloads + 9 fixtures; ClickHouse DDL 9 tables + 5 MVs executes on v26.6.1;
+  meta DDL 14 tables in SQLite. Rulings: epoch-ms responses / RFC3339-or-epoch
+  input; probe results→ClickHouse, probe config+anomaly baselines→meta;
+  /metrics unauthenticated by default w/ optional PULSE_METRICS_TOKEN.
+- **BE-01:** data plane green (build/vet/test); 10k events inserted in 1.01 s,
+  0 drops; stream-visibility 1.50 s measured (10 s budget); 4 cmd/pulse files
+  declared w/ HOOK(BE-02) assembly hooks.
+- **BE-02:** product plane green; 20 tests / 6 packages, CGO_ENABLED=0;
+  kin-openapi conformance on 8 endpoints; alert latency 15 s worst-case by
+  construction (30 s budget); AES-256-GCM at-rest secrets; serve.go hooks
+  filled (declared per D-005).
+- **FE-01:** build/lint/test green (21 tests); all four wave-1 surfaces;
+  generated types only (zero hand-rolled API shapes); virtualized streams
+  table ≤20 DOM nodes at 500 rows. Filed 3 contract CRs (AlertRule.name,
+  AlertRule.enabled, source-test endpoint) + codegen path doc fix.
+- **QA-01 gate: PASS_WITH_LIMITATIONS.** 12/12 testable criteria PASS —
+  stream visible 1 052 ms (≤10 s), viewer counts 0% error (±2%), alert 15 s
+  fake-clock-proven (<30 s), migrate 15 tables in 49 ms, /healthz all ok,
+  install <2 min (<15 min), dashboard shows scenario streams. WAIVED:
+  compose-up execution (D-002). Defects: D-W1-001 major (node CPU/mem 100×,
+  normalize.go) + 5 minors.
+- **DOC-01:** install/alerting runbooks + README + ARCHITECTURE updated to
+  verified reality; 3 QA doc defects fixed; every documented command re-run.
+- **ORCH-00 ruling (D-006):** fix-loop in-wave for D-W1-001/002/003/004/005 +
+  approved CRs 1–4 (CR-3 contract-only, impl wave 2); D-W1-006 carried to
+  wave 2. Housekeeping: .gitignore for ClickHouse artifacts/binaries, repo-root
+  test junk removed. Checkpoint commit before fix-loop dispatch.
