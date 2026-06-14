@@ -225,17 +225,23 @@ func (s *Service) AudienceAnalytics(ctx context.Context, p AudienceParams) (*Aud
 		args = append(args, p.Stream)
 	}
 
+	// rollup_audience_1h / rollup_audience_1d (AggregatingMergeTree) column names:
+	//   bucket (DateTime for 1h, Date for 1d), views, uniq_viewers,
+	//   watch_time_s AggregateFunction(sum,UInt64),
+	//   peak_concurrency AggregateFunction(max,UInt32).
+	// Use *Merge() functions to finalize the aggregate states.
+	// toInt64(toUnixTimestamp(bucket)) gives epoch-seconds; multiply by 1000 for ms.
 	q := fmt.Sprintf(`
 		SELECT
-			toUnixTimestamp64Milli(bucket_ts) AS ts,
-			sumMerge(views_state)             AS views,
-			uniqMerge(uniques_state)          AS uniques,
-			sumMerge(watch_s_state)           AS watch_time_s,
-			maxMerge(peak_viewers_state)      AS peak_concurrency
+			toInt64(toUnixTimestamp(bucket)) * 1000 AS ts,
+			countMerge(views)                        AS views,
+			uniqMerge(uniq_viewers)                  AS uniques,
+			toInt64(sumMerge(watch_time_s))          AS watch_time_s,
+			toInt64(maxMerge(peak_concurrency))      AS peak_concurrency
 		FROM %s
 		WHERE %s
-		GROUP BY bucket_ts
-		ORDER BY bucket_ts`, table, where)
+		GROUP BY bucket
+		ORDER BY bucket`, table, where)
 
 	rows, err := s.conn.Query(ctx, q, args...)
 	if err != nil {
@@ -441,10 +447,10 @@ func buildTimeWhere(from, to time.Time) (string, []any) {
 		return "1=1", nil
 	}
 	if from.IsZero() {
-		return "bucket_ts <= ?", []any{to}
+		return "bucket <= ?", []any{to}
 	}
 	if to.IsZero() {
-		return "bucket_ts >= ?", []any{from}
+		return "bucket >= ?", []any{from}
 	}
-	return "bucket_ts >= ? AND bucket_ts <= ?", []any{from, to}
+	return "bucket >= ? AND bucket <= ?", []any{from, to}
 }

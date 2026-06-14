@@ -123,8 +123,10 @@ func (a *Accountant) resolveTenantMatcher(ctx context.Context) (*TenantMatcher, 
 }
 
 // ComputeUsage queries rollup tables and returns usage report rows.
-// Source: rollup_audience_1d (daily rollup from viewer_sessions watch_ms).
-// Fallback: rollup_audience_1h for partial days at the boundary.
+// Source: rollup_usage_1d (SummingMergeTree billing table — plain columns, use
+// sum()/max() — no sumMerge/maxMerge needed).
+// Fallback for partial days: rollup_audience_1h (AggregatingMergeTree — use
+// sumMerge(watch_time_s)/maxMerge(peak_concurrency)).
 func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageReport, error) {
 	tm, err := a.resolveTenantMatcher(ctx)
 	if err != nil {
@@ -140,38 +142,61 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 		}, nil
 	}
 
-	table := "rollup_audience_1d"
-	if p.Interval == "hour" {
-		table = "rollup_audience_1h"
-	}
-
-	where := "bucket_ts >= ? AND bucket_ts <= ?"
+	// rollup_usage_1d is a SummingMergeTree with plain numeric columns:
+	//   bucket Date, app, stream_id, tenant, viewer_minutes Float64,
+	//   peak_concurrency UInt32, egress_bytes UInt64, recording_bytes UInt64.
+	// Use sum()/max() — NOT sumMerge/maxMerge (those are for AggregatingMergeTree).
+	// rollup_audience_1h is AggregatingMergeTree; use sumMerge/maxMerge there.
+	var q string
+	var where string
 	args := []any{p.From, p.To}
-	if p.App != "" {
-		where += " AND app = ?"
-		args = append(args, p.App)
+	if p.Interval == "hour" {
+		// Partial-day fallback: rollup_audience_1h (AggregatingMergeTree).
+		// Partition column: bucket DateTime. Egress model: bitrate_x_watch_time.
+		where = "bucket >= ? AND bucket <= ?"
+		if p.App != "" {
+			where += " AND app = ?"
+			args = append(args, p.App)
+		}
+		if p.StreamID != "" {
+			where += " AND stream_id = ?"
+			args = append(args, p.StreamID)
+		}
+		q = fmt.Sprintf(`
+			SELECT
+				app,
+				stream_id,
+				sumMerge(watch_time_s) / 60.0    AS viewer_minutes,
+				toInt64(maxMerge(peak_concurrency)) AS peak_concurrency
+			FROM rollup_audience_1h
+			WHERE %s
+			GROUP BY app, stream_id
+			ORDER BY app, stream_id`, where)
+	} else {
+		// Primary billing path: rollup_usage_1d (SummingMergeTree).
+		// Partition column: bucket Date.
+		where = "bucket >= ? AND bucket <= ?"
+		if p.App != "" {
+			where += " AND app = ?"
+			args = append(args, p.App)
+		}
+		if p.StreamID != "" {
+			where += " AND stream_id = ?"
+			args = append(args, p.StreamID)
+		}
+		q = fmt.Sprintf(`
+			SELECT
+				app,
+				stream_id,
+				sum(viewer_minutes)              AS viewer_minutes,
+				toInt64(max(peak_concurrency))   AS peak_concurrency,
+				sum(egress_bytes)                AS egress_bytes,
+				sum(recording_bytes)             AS recording_bytes
+			FROM rollup_usage_1d
+			WHERE %s
+			GROUP BY app, stream_id
+			ORDER BY app, stream_id`, where)
 	}
-	if p.StreamID != "" {
-		where += " AND stream_id = ?"
-		args = append(args, p.StreamID)
-	}
-
-	// Query rollup tables. The rollup_audience_1d columns are:
-	//   bucket_ts DateTime64, app String, stream_id String,
-	//   views_state (AggregateFunction(sum,UInt64)),
-	//   uniques_state, watch_s_state, peak_viewers_state,
-	// The watch_s_state merges watch_time_s (seconds). Convert to minutes.
-	// Bitrate is not stored in audience rollups — use a default 1000 kbps fallback.
-	q := fmt.Sprintf(`
-		SELECT
-			app,
-			stream_id,
-			sumMerge(watch_s_state) / 60.0          AS viewer_minutes,
-			maxMerge(peak_viewers_state)             AS peak_concurrency
-		FROM %s
-		WHERE %s
-		GROUP BY app, stream_id
-		ORDER BY app, stream_id`, table, where)
 
 	rows, err := a.conn.Query(ctx, q, args...)
 	if err != nil {
@@ -179,7 +204,7 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 	}
 	defer rows.Close()
 
-	// Aggregate by app×tenant.
+	// Aggregate by app×stream.
 	type aggKey struct {
 		app    string
 		stream string
@@ -187,14 +212,26 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 	type aggVal struct {
 		viewerMinutes   float64
 		peakConcurrency int64
+		egressBytes     uint64
+		recordingBytes  uint64
 	}
 	byKey := map[aggKey]*aggVal{}
+	isHour := p.Interval == "hour"
 	for rows.Next() {
 		var app, streamID string
 		var viewerMinutes float64
 		var peakConcurrency int64
-		if err := rows.Scan(&app, &streamID, &viewerMinutes, &peakConcurrency); err != nil {
-			return nil, fmt.Errorf("scan: %w", err)
+		var egressBytes, recordingBytes uint64
+		if isHour {
+			// rollup_audience_1h: 4 columns (no egress_bytes/recording_bytes).
+			if err := rows.Scan(&app, &streamID, &viewerMinutes, &peakConcurrency); err != nil {
+				return nil, fmt.Errorf("scan (hour): %w", err)
+			}
+		} else {
+			// rollup_usage_1d: 6 columns.
+			if err := rows.Scan(&app, &streamID, &viewerMinutes, &peakConcurrency, &egressBytes, &recordingBytes); err != nil {
+				return nil, fmt.Errorf("scan (day): %w", err)
+			}
 		}
 		k := aggKey{app: app, stream: streamID}
 		if v, ok := byKey[k]; ok {
@@ -202,16 +239,25 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 			if peakConcurrency > v.peakConcurrency {
 				v.peakConcurrency = peakConcurrency
 			}
+			v.egressBytes += egressBytes
+			v.recordingBytes += recordingBytes
 		} else {
-			byKey[k] = &aggVal{viewerMinutes: viewerMinutes, peakConcurrency: peakConcurrency}
+			byKey[k] = &aggVal{
+				viewerMinutes:   viewerMinutes,
+				peakConcurrency: peakConcurrency,
+				egressBytes:     egressBytes,
+				recordingBytes:  recordingBytes,
+			}
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("row iter: %w", err)
 	}
 
-	// Default bitrate assumption (kbps) when no per-stream bitrate is stored.
+	// Default bitrate assumption (kbps) used as fallback egress model.
 	const defaultBitrateKbps = 1000.0
+	// bytes → GB conversion factor.
+	const bytesToGB = 1.0 / 1e9
 
 	var resultRows []UsageRow
 	var totals UsageTotals
@@ -224,7 +270,16 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 			continue
 		}
 
-		egressGB := kbpsToGBPerMinute(v.viewerMinutes, defaultBitrateKbps)
+		// Egress: use stored egress_bytes from rollup_usage_1d when available;
+		// fall back to bitrate_x_watch_time model for the hourly (audience) path.
+		var egressGB float64
+		if !isHour && v.egressBytes > 0 {
+			egressGB = float64(v.egressBytes) * bytesToGB
+		} else {
+			egressGB = kbpsToGBPerMinute(v.viewerMinutes, defaultBitrateKbps)
+		}
+		recordingGB := float64(v.recordingBytes) * bytesToGB
+
 		sid := k.stream
 		var sidPtr *string
 		if sid != "" {
@@ -241,12 +296,13 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 			ViewerMinutes:   roundToDecimal(v.viewerMinutes, 4),
 			PeakConcurrency: v.peakConcurrency,
 			EgressGB:        roundToDecimal(egressGB, 6),
-			RecordingGB:     0, // recording_ready events not yet in schema; Wave 3
+			RecordingGB:     roundToDecimal(recordingGB, 6),
 			EgressMethod:    EgressMethodBitrateXWatchTime,
 		}
 		resultRows = append(resultRows, row)
 		totals.ViewerMinutes += v.viewerMinutes
 		totals.EgressGB += egressGB
+		totals.RecordingGB += recordingGB
 		if v.peakConcurrency > totals.PeakConcurrency {
 			totals.PeakConcurrency = v.peakConcurrency
 		}
@@ -257,6 +313,7 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 
 	totals.ViewerMinutes = roundToDecimal(totals.ViewerMinutes, 4)
 	totals.EgressGB = roundToDecimal(totals.EgressGB, 6)
+	totals.RecordingGB = roundToDecimal(totals.RecordingGB, 6)
 
 	return &UsageReport{
 		Rows:         resultRows,
@@ -276,7 +333,7 @@ type ReconcileResult struct {
 	// WithinTolerance is true if DriftPct ≤ 1.0 (±1% budget).
 	WithinTolerance bool
 	// DataPoints is the number of viewer_sessions rows scanned.
-	DataPoints int64
+	DataPoints uint64
 }
 
 // Reconcile recomputes viewer-minutes from raw viewer_sessions and compares to
@@ -294,25 +351,32 @@ func (a *Accountant) Reconcile(ctx context.Context, from, to time.Time) (*Reconc
 		}, nil
 	}
 
-	// Step 1: compute viewer-minutes from rollup.
+	// Step 1: compute viewer-minutes from rollup_usage_1d (SummingMergeTree billing
+	// table — plain columns, use sum() not sumMerge()).
+	// Partition column: bucket (Date), not bucket_ts.
 	rollupQ := `
-		SELECT sumMerge(watch_s_state) / 60.0 AS viewer_minutes
-		FROM rollup_audience_1d
-		WHERE bucket_ts >= ? AND bucket_ts <= ?`
+		SELECT sum(viewer_minutes) AS viewer_minutes
+		FROM rollup_usage_1d
+		WHERE bucket >= ? AND bucket <= ?`
 	var rollupMinutes float64
 	if err := a.conn.QueryRow(ctx, rollupQ, from, to).Scan(&rollupMinutes); err != nil {
 		return nil, fmt.Errorf("rollup query: %w", err)
 	}
 
 	// Step 2: compute viewer-minutes from raw viewer_sessions.
+	// viewer_sessions.watch_time_s is UInt32 (seconds) — divide by 60 for minutes.
+	// FINAL forces deduplication from ReplacingMergeTree (correct for session upserts).
+	// Use toDate(started_at) for the WHERE predicate — the partition column is Date
+	// and the comparison avoids DateTime64 timezone-binding edge cases with the
+	// clickhouse-go v2 driver when passing time.Time as a bound parameter.
 	rawQ := `
 		SELECT
-			sum(watch_ms) / 60000.0 AS viewer_minutes,
-			count()                  AS data_points
-		FROM viewer_sessions
-		WHERE started_at >= ? AND started_at <= ?`
+			sum(watch_time_s) / 60.0 AS viewer_minutes,
+			count()                   AS data_points
+		FROM viewer_sessions FINAL
+		WHERE toDate(started_at) >= ? AND toDate(started_at) <= ?`
 	var rawMinutes float64
-	var dataPoints int64
+	var dataPoints uint64
 	if err := a.conn.QueryRow(ctx, rawQ, from, to).Scan(&rawMinutes, &dataPoints); err != nil {
 		return nil, fmt.Errorf("raw sessions query: %w", err)
 	}
