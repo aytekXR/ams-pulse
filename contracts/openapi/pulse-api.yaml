@@ -57,7 +57,7 @@ tags:
   - name: operational
     description: "Health and metrics endpoints — unauthenticated or scrape-token"
   - name: admin
-    description: "Configuration: sources, users, tokens, license"
+    description: "Configuration: sources, users, tokens, license, tenants"
 
 paths:
 
@@ -1225,6 +1225,119 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/InternalError" }
 
+  # ─────────────────────────────────────────────────────────────
+  # F6 — Tenant CRUD (D-010 CR amendment)
+  # ─────────────────────────────────────────────────────────────
+
+  /admin/tenants:
+    get:
+      operationId: listTenants
+      tags: [admin]
+      summary: List tenant definitions
+      description: |
+        Returns all configured tenants for multi-tenant billing (F6).
+        Tenants match streams by `stream_pattern` (SQL LIKE / regex) or
+        by `meta_tag_key`/`meta_tag_value` (beacon meta field). Requires
+        Business tier (D-010).
+      parameters:
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Paginated tenant list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantList"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      operationId: createTenant
+      tags: [admin]
+      summary: Create a tenant definition
+      description: |
+        Creates a new tenant. `name` must be unique (meta constraint →
+        409 on duplicate). At least one of `stream_pattern` or
+        (`meta_tag_key` + `meta_tag_value`) must be provided.
+        Requires Business tier (D-010).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TenantWrite"
+      responses:
+        "201":
+          description: Tenant created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tenant"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /admin/tenants/{tenantId}:
+    parameters:
+      - $ref: "#/components/parameters/tenantId"
+    get:
+      operationId: getTenant
+      tags: [admin]
+      summary: Get a tenant definition
+      responses:
+        "200":
+          description: Tenant definition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tenant"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    put:
+      operationId: updateTenant
+      tags: [admin]
+      summary: Update a tenant definition
+      description: |
+        Full replacement. `name` must remain unique. At least one of
+        `stream_pattern` or (`meta_tag_key` + `meta_tag_value`) must be set.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TenantWrite"
+      responses:
+        "200":
+          description: Tenant updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tenant"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      operationId: deleteTenant
+      tags: [admin]
+      summary: Delete a tenant definition
+      responses:
+        "204":
+          description: Tenant deleted
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Components
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1324,6 +1437,13 @@ components:
       required: true
       schema:
         type: string
+    tenantId:
+      name: tenantId
+      in: path
+      required: true
+      description: Tenant UUID
+      schema:
+        type: string
 
   responses:
     BadRequest:
@@ -1346,6 +1466,18 @@ components:
             $ref: "#/components/schemas/Error"
     UnprocessableEntity:
       description: Request is well-formed but semantically invalid
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Resource already exists (e.g. duplicate name)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Authenticated but not authorized (e.g. tier gate)
       content:
         application/json:
           schema:
@@ -2636,3 +2768,67 @@ components:
         role:
           type: string
           enum: [admin, viewer]
+
+    # ── Admin: Tenants (F6 — D-010 CR amendment) ─────────────
+    Tenant:
+      type: object
+      required: [id, name, created_at, updated_at]
+      description: |
+        Tenant definition for multi-tenant billing (F6). A tenant matches
+        streams by `stream_pattern` (SQL LIKE / regex on stream_id) or by
+        `meta_tag_key`+`meta_tag_value` (beacon meta field). Aligned to
+        the `tenants` meta table in `contracts/db/meta/0001_init.sql`.
+      properties:
+        id:
+          type: string
+          description: UUID primary key
+        name:
+          type: string
+          description: Unique display name
+        stream_pattern:
+          type: [string, 'null']
+          description: SQL LIKE / regex pattern matched against stream_id
+        meta_tag_key:
+          type: [string, 'null']
+          description: Beacon meta field key for tag-based tenant matching
+        meta_tag_value:
+          type: [string, 'null']
+          description: Beacon meta field value for tag-based tenant matching
+        created_at:
+          type: integer
+          description: Unix epoch ms
+        updated_at:
+          type: integer
+          description: Unix epoch ms
+
+    TenantWrite:
+      type: object
+      required: [name]
+      description: |
+        Request body for creating or replacing a tenant. At least one of
+        `stream_pattern` or (`meta_tag_key` + `meta_tag_value`) must be
+        provided; validated by the server (→ 422 on missing matcher).
+      properties:
+        name:
+          type: string
+          description: Unique display name (meta constraint; duplicate → 409)
+        stream_pattern:
+          type: [string, 'null']
+          description: SQL LIKE / regex pattern matched against stream_id
+        meta_tag_key:
+          type: [string, 'null']
+          description: Beacon meta field key for tag-based matching
+        meta_tag_value:
+          type: [string, 'null']
+          description: Beacon meta field value for tag-based matching
+
+    TenantList:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tenant"
+        meta:
+          $ref: "#/components/schemas/PaginatedMeta"
