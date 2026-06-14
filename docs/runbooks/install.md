@@ -1,7 +1,7 @@
 # Pulse — Install Runbook
 
 **PRD ref:** §7.12 (launch asset — 15-minute install target)  
-**QA-verified:** local binary path < 2 min (see Wave-1 gate report)
+**QA-verified:** local binary path < 2 min (Wave-1 gate); wave-2 build verified 2026-06-14
 
 ---
 
@@ -9,8 +9,16 @@
 
 Pulse installs beside your Ant Media Server (AMS) and never modifies it.
 Two components are required: the **Pulse binary** (collector + API + UI) and **ClickHouse**
-(event store). Configuration lives in a single YAML file; AMS credentials stay in
-environment variables, never in the config file.
+(event store). Configuration is via environment variables; AMS credentials never go
+in a config file or image.
+
+Three install paths are available:
+
+| Path | Status | Recommended for |
+|---|---|---|
+| **Path A: Docker Compose** | Authored; unexecuted per D-002 | Single-server production |
+| **Path B: Local binary** | QA-verified (< 2 min) | Dev, bare-metal, ClickHouse managed separately |
+| **Path C: Helm** | Authored and lint-verified; cluster validation deferred D-002 | Kubernetes / clustered AMS |
 
 **Primary install path — Docker Compose:**  
 One command brings up both containers. This is the supported production path
@@ -297,9 +305,10 @@ See `deploy/config/pulse.example.yaml` for the full annotated file.
 
 ### Environment variables
 
-The following env vars are supported by the Wave 1 binary. Additional vars
-(multi-source tokens, IP anonymisation, metrics scrape token) are added in
-Wave 2 when the full config system lands.
+All wave-1 and wave-2 variables are listed below. Omit any wave-2 variable to get the
+noted default; the binary runs correctly without it.
+
+**Wave-1 variables (collector + API core):**
 
 | Variable | Default | Description |
 |---|---|---|
@@ -318,22 +327,47 @@ Wave 2 when the full config system lands.
 | `PULSE_WEBHOOK_ADDR` | — | Address for the AMS webhook receiver (optional) |
 | `PULSE_WEBHOOK_SECRET` | — | HMAC shared secret for webhook validation |
 | `PULSE_LICENSE_KEY` | — | License key (empty = Free tier) |
+| `PULSE_LICENSE_FILE` | — | Path to offline license file (air-gapped Enterprise) |
 | `PULSE_RETENTION_DAYS` | `90` | Raw event retention in ClickHouse (days) |
 | `PULSE_ROLLUP_TTL_DAYS` | `395` | Rollup table TTL in ClickHouse (days; 395 ≈ 13 months) |
-| `PULSE_MIGRATIONS_DIR` | auto from source tree | Override path to ClickHouse migration SQL files (default: resolved relative to binary at build time) |
-| `PULSE_META_DDL_PATH` | embedded in binary | Optional override: path to a custom meta DDL SQL file. The binary embeds `contracts/db/meta/0001_init.sql` and runs it automatically; set this only to substitute a custom schema. |
+| `PULSE_MIGRATIONS_DIR` | auto from source tree | Override path to ClickHouse migration SQL files |
+| `PULSE_META_DDL_PATH` | embedded in binary | Optional override: path to a custom meta DDL SQL file |
 
-### YAML config file (Wave 2 — roadmap)
+**Wave-2 variables (beacon ingest listener, geo, Kafka, metrics, reports, S3):**
 
-> **Roadmap (Wave 2):** YAML config file support is not yet wired in the Wave 1
-> binary. Wave 1 uses environment variables only. The schema below is the planned
-> format; it is the authoritative reference for `deploy/config/pulse.example.yaml`.
+| Variable | Default | Description |
+|---|---|---|
+| `PULSE_INGEST_LISTEN_ADDR` | — (main listener) | Dedicated beacon ingest address, e.g. `:8091`. Set to expose beacon on a separate port for DMZ routing. |
+| `PULSE_METRICS_TOKEN` | — (401 without) | Prometheus scrape token. Set to enable `/metrics` with token auth. See [Prometheus guide](../guides/prometheus.md). |
+| `PULSE_ANONYMIZE_IP` | `false` | Set `true` to zero last IPv4 octet / last 80 IPv6 bits before geo lookup and ClickHouse storage (GDPR/KVKK posture). |
+| `PULSE_GEO_MMDB_PATH` | — (no-op) | Path to a MaxMind GeoLite2 `.mmdb` file for geo enrichment. Absent = no-op, one WARN logged. Register at maxmind.com for the free GeoLite2 download (D-007.4). |
+| `PULSE_KAFKA_BROKERS` | — (disabled) | Comma-separated Kafka broker addresses, e.g. `kafka1:9092,kafka2:9092`. Empty = Kafka source disabled. |
+| `PULSE_KAFKA_GROUP_ID` | `pulse-collector` | Kafka consumer group ID. |
+| `PULSE_SESSION_IDLE_TIMEOUT` | `5m` | Viewer session idle close timeout (Go duration, e.g. `3m`, `10m`). |
+| `PULSE_CLUSTER_DISCOVERY_INTERVAL` | `30s` | How often to poll AMS for cluster nodes. New node visible within 1 poll cycle (≤ 2 min budget). |
+| `PULSE_INGEST_TARGET_BITRATE_KBPS` | `2000` | Expected healthy ingest bitrate for the health score formula. |
+| `PULSE_INGEST_TARGET_FPS` | `30` | Expected healthy ingest frame rate for the health score formula. |
+| `PULSE_REPORTS_DIR` | `pulse-reports` | Local directory for generated CSV/PDF report files. |
+| `PULSE_S3_ENDPOINT` | — (AWS) | S3-compatible endpoint URL (for MinIO, DigitalOcean Spaces, etc.). Empty = AWS. |
+| `PULSE_S3_BUCKET` | — | S3 bucket name for report uploads. |
+| `PULSE_S3_PREFIX` | `reports/` | S3 key prefix for uploaded reports. |
+| `PULSE_S3_REGION` | `us-east-1` | S3 region. |
+| `PULSE_S3_ACCESS_KEY_ENV` | `PULSE_S3_ACCESS_KEY_ID` | Name of the env var holding the S3 access key ID (indirect reference — never store the key in this var). |
+| `PULSE_S3_SECRET_KEY_ENV` | `PULSE_S3_SECRET_ACCESS_KEY` | Name of the env var holding the S3 secret access key. |
+
+### YAML config file
+
+> **Note:** The Wave-2 binary continues to use environment variables as the primary
+> configuration mechanism. The schema below is the planned YAML format; it is the
+> authoritative reference for `deploy/config/pulse.example.yaml`. Full YAML config
+> file wiring is planned for Wave 3.
 
 ```yaml
 server:
   listen: ":8090"
-  ingest_listen: ":8091"
+  ingest_listen: ":8091"      # beacon ingest (separate DMZ port)
   base_url: https://pulse.example.com   # used in alert deep-links
+  metrics_token: ""           # Prometheus scrape token (see guides/prometheus.md)
 
 ams:
   sources:
@@ -348,11 +382,14 @@ storage:
   meta: sqlite            # or: postgres
   retention:
     raw_days: 90
-    rollup_months: 13
+    rollup_months: 13     # 395 days rollup TTL
 
 beacon:
   sample_rate: 1.0
-  # anonymize_ip: true   # GDPR/KVKK posture
+  # anonymize_ip: true   # GDPR/KVKK posture — zeros last IPv4 octet / last 80 IPv6 bits
+
+geo:
+  # mmdb_path: /data/GeoLite2-City.mmdb   # user-supplied; register at maxmind.com
 
 license:
   # key: ...             # empty = Free tier
@@ -372,14 +409,20 @@ license:
 | No admin token printed | Not a first run — tokens already exist | Generate a new token via `POST /api/v1/admin/tokens` using an existing admin token |
 | `FIRST RUN` token lost | Token is never stored in plaintext | Reset: delete the meta database file and restart; all existing data will need re-configuration |
 
-### Diagnostic command
+### Diagnostic commands
 
 ```sh
+# Print resolved config (secrets redacted), CH connectivity, meta store status:
 /tmp/pulse diag
+
+# Check billing reconciliation (Wave 2) — requires live ClickHouse:
+/tmp/pulse diag --reconcile
+# Output: drift%, tolerance verdict (exits non-zero if > 1%)
 ```
 
-Prints resolved config (secrets redacted), ClickHouse connectivity, and meta store
-status. Run this first when diagnosing connectivity issues.
+`pulse diag` is the first tool to run when diagnosing connectivity issues.
+`pulse diag --reconcile` compares rollup-derived viewer-minutes against raw
+`viewer_sessions` and reports the drift percentage (budget: ≤ 1%).
 
 ---
 
@@ -395,17 +438,133 @@ ClickHouse DDL migrations are append-only (no destructive changes).
 
 ---
 
+## Path C: Helm (Kubernetes)
+
+> **D-002 limitation (authored-unexecuted):** `helm install` / `helm upgrade` have not
+> been run against a real cluster on this machine. `helm lint` passes and all three
+> template variants render without error (QA-01 WO-206 verified). Validate on a clean
+> cluster before production use. See `deploy/helm/pulse/README.md` for the full values
+> table and HA configuration.
+
+### Prerequisites
+
+- Kubernetes 1.25+, Helm 3.12+
+- A Kubernetes Secret with sensitive values (create before install)
+
+### Steps
+
+**1. Create the secrets**
+
+```sh
+kubectl create secret generic pulse-secrets \
+  --from-literal=PULSE_AMS_AUTH_TOKEN=<your-ams-token> \
+  --from-literal=PULSE_SECRET_KEY=$(openssl rand -hex 32) \
+  --from-literal=PULSE_METRICS_TOKEN=<prometheus-scrape-token>
+```
+
+Never store sensitive values in `values.yaml`. The chart reads all secrets from
+the Secret named in `pulse.secretRef.name`.
+
+**Note (GAP-206-02):** If you enable the bundled Postgres StatefulSet
+(`postgres.enabled=true`), you must also create a `pulse-postgres-secret` Secret
+with a `POSTGRES_PASSWORD` key before install. The chart does not auto-generate
+passwords.
+
+**2. Install the chart**
+
+```sh
+helm install pulse ./deploy/helm/pulse \
+  --set pulse.ams.url=http://your-ams:5080 \
+  --set pulse.ams.nodeId=node-01 \
+  --set pulse.secretRef.name=pulse-secrets
+```
+
+Bundled ClickHouse StatefulSet starts automatically. The chart uses a minimal
+low-footprint ClickHouse config (512 MB memory cap; 2-vCPU tier default).
+
+**3. Apply migrations**
+
+```sh
+kubectl exec deploy/pulse -- pulse migrate
+```
+
+**4. Access the UI**
+
+```sh
+kubectl port-forward svc/pulse 8090:8090
+# Open http://localhost:8090
+```
+
+For production access configure an Ingress:
+```yaml
+pulse:
+  secretRef:
+    name: pulse-secrets
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: pulse.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+```
+
+**Beacon ingest (internet-facing):** Configure a separate Ingress or LoadBalancer
+for the ingest port. See `deploy/helm/pulse/README.md §ingressIngest`.
+
+**5. Enable geo enrichment (optional)**
+
+Pulse uses a user-supplied MaxMind GeoLite2 database for country/city-level geo
+enrichment (D-007.4). MaxMind requires a free registration to download GeoLite2
+files.
+
+1. Register at [https://www.maxmind.com/en/geolite2/signup](https://www.maxmind.com/en/geolite2/signup)
+2. Download `GeoLite2-City.mmdb`
+3. Mount it in your deployment and set the path:
+
+```yaml
+pulse:
+  extraEnv:
+    - name: PULSE_GEO_MMDB_PATH
+      value: /data/GeoLite2-City.mmdb
+  extraVolumeMounts:
+    - name: mmdb
+      mountPath: /data
+  extraVolumes:
+    - name: mmdb
+      configMap:           # or a PVC / hostPath
+        name: mmdb-data
+```
+
+Or set `mmdb.enabled=true` in values.yaml for the built-in mmdb volume mount stub.
+
+When `PULSE_GEO_MMDB_PATH` is absent or the file cannot be read, Pulse logs one
+WARN and falls back to no-op geo enrichment — existing collection continues normally.
+
+**6. Upgrade**
+
+```sh
+helm upgrade pulse ./deploy/helm/pulse -f my-values.yaml
+kubectl exec deploy/pulse -- pulse migrate  # apply new DDL if any
+```
+
+---
+
 ## Free tier limits
 
 Pulse starts in Free tier when no license key is configured:
 
-| Limit | Free | Pro | Business |
+| Limit | Free | Pro | Enterprise |
 |---|---|---|---|
-| AMS source nodes | 1 | 5 | Unlimited |
-| Notification channels | Email only | Email + Slack | All channels |
-| Data retention | 7 days (raw) | 90 days | 13 months |
-| API access | Yes | Yes | Yes + data export |
+| AMS source nodes | 1 | 10 | Unlimited |
+| Notification channels | Email only | Email + Slack + Telegram | All (+ PagerDuty, webhook) |
+| Data retention | 7 days (raw) | 90 days | Unlimited |
+| Data API (/metrics), CSV export | No | Yes | Yes |
+| Usage reports + scheduled exports | No | No | Yes |
+| White-label PDF | No | No | Yes |
+| Beacon ingest (QoE) | Read fail-open | Yes | Yes |
 
 Upgrading: set `PULSE_LICENSE_KEY` in your environment or YAML config.
-The license check **fails open for reads** — you can always read collected data
-even if the key is invalid. Tier-gated features fail closed (return 403).
+The license check **fails open for reads** — you can always read already-collected
+data even if the key is invalid. Tier-gated features fail closed (return 403).

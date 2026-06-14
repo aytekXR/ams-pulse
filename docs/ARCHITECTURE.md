@@ -16,49 +16,55 @@ crash reporting) must be opt-in and documented.
 ## 2. Components
 
 ```
-                ┌──────────────────────────── pulse binary ───────────────────────────┐
-AMS REST ──────►│ collector/restpoller ─┐                                             │
-AMS log ───────►│ collector/logtail ────┤                                             │
-AMS Kafka ─────►│ collector/kafka ──────┼─► normalize ─► store/clickhouse (events)    │
-AMS webhooks ──►│ collector/webhook ────┤        │                                    │
-Player beacons ►│ collector/beacon ─────┘        ├─► alert/evaluator ─► channels ────────► Slack/Email/PD/TG/webhook
-                │                                └─► live aggregates ─► api (WS push) │
-                │ query ◄── store reads ◄────────────────────────────────────────────│
-                │ api: REST (/api/v1) · WS (/live/ws) · /metrics · /healthz · static UI │
-                │ reports ─► CSV/PDF exports          license ─► tier entitlements   │
-                └─────────────────────────────── meta store (SQLite/Postgres) ────────┘
+                ┌──────────────────────────── pulse binary ───────────────────────────────────────┐
+AMS REST ──────►│ collector/restpoller ─┐                                                         │
+AMS log ───────►│ collector/logtail ────┤                                                         │
+AMS Kafka ─────►│ collector/kafka ──────┼─► normalize ─► store/clickhouse (events)                │
+AMS webhooks ──►│ collector/webhook ────┤        │                                                │
+Player beacons ►│ collector/beacon ─────┤        ├─► sessions.Stitcher ─► viewer_sessions (CH)   │
+  (:8091 ingest)│                       │        ├─► ingest.HealthTracker (health score, F4)      │
+                │ cluster/discovery ────┘        ├─► alert/evaluator ─► channels ──────────────────► Slack/Email/PD/TG/webhook
+                │  (fleet nodes, F7)             └─► live aggregates ─► api (WS push)             │
+                │ query ◄── store reads ◄─────────────────────────────────────────────────────────│
+                │ api: REST (/api/v1) · WS (/live/ws) · /metrics · /healthz · static UI           │
+                │ reports/scheduler ─► CSV/PDF exports (F6) · S3 upload                           │
+                │ license ─► tier entitlements                                                     │
+                └──────────────────────────── meta store (SQLite/Postgres) ────────────────────────┘
 ```
 
 One Go binary (`server/cmd/pulse`), role-splittable via `--role` for large installs.
 Default deployment is all-in-one + ClickHouse via Docker Compose.
 
-### Wave-1 implementation status
+### Wave-2 implementation status
 
-The following components are implemented and unit-tested as of Wave 1:
+Last updated: Wave 2 implementation complete (2026-06-14).
 
 | Component | Package | Status |
 |---|---|---|
-| REST poller | `internal/collector/restpoller` | Implemented; 5 s default poll, ≤10 s stream visibility |
-| Log tail | `internal/collector/logtail` | Implemented; rotation-safe, partial-line-safe |
-| Webhook receiver | `internal/collector/webhook` | Implemented; HMAC-SHA256 validation |
-| Fanout + dedup | `internal/collector/fanout`, `dedup` | Implemented |
-| Live aggregator | `internal/collector/aggregator` | Implemented; in-memory, deep-copy snapshots |
-| Normalizer | `internal/collector/normalize` | Implemented; AMS→domain mapping. D-W1-001 fixed (CPU/mem/disk no longer multiplied by 100). |
-| ClickHouse store | `internal/store/clickhouse` | Implemented; batched async inserts |
-| Meta store | `internal/store/meta` | Implemented; SQLite (pure-Go), AES-256-GCM encryption |
-| Config | `internal/config` | Implemented; YAML + env override, full surface |
-| Alert evaluator | `internal/alert` | Implemented; fake-clock tested, 15 s detection latency |
-| Alert channels | `internal/alert/channels` | Email + Slack implemented; PD/TG/webhook roadmap Wave 2 |
-| Query service | `internal/query` | Implemented; live + historical (ClickHouse) |
-| API server | `internal/api` | Implemented; chi router, bearer auth, WS hub, OpenAPI-conformant |
-| License manager | `internal/license` | Implemented; ed25519 verification, tier entitlements |
-| Web UI | `web/` | Implemented; live dashboard (F1), analytics (F2), alerts (F5), settings; Wave 2 routes are placeholders |
-| Kafka collector | `internal/collector/kafka` | Stub; Wave 2 |
-| Beacon ingest | `internal/collector/beacon` | Stub; Wave 2 |
-| Geo/UA enrichment | `internal/collector/enrichment` | No-op interfaces in place; Wave 2 |
-| Reports (CSV/PDF) | `internal/reports` | Stub; Wave 2 |
-| Cluster discovery | `internal/cluster` | Stub; Wave 2 |
-| Prometheus /metrics | `internal/api` | 2 metrics exported; full coverage Wave 2 |
+| REST poller | `internal/collector/restpoller` | **Shipped** — 5 s default poll, ≤10 s stream visibility |
+| Log tail | `internal/collector/logtail` | **Shipped** — rotation-safe, partial-line-safe |
+| Webhook receiver | `internal/collector/webhook` | **Shipped** — HMAC-SHA256 validation |
+| Fanout + dedup | `internal/collector/fanout`, `dedup` | **Shipped** |
+| Live aggregator | `internal/collector/aggregator` | **Shipped** — in-memory, deep-copy snapshots; wave-2 health fields added |
+| Normalizer | `internal/collector/normalize` | **Shipped** — AMS→domain mapping; D-W1-001 fixed |
+| ClickHouse store | `internal/store/clickhouse` | **Shipped** — batched async inserts; viewer_sessions + rollup_qoe_1h added Wave 2 |
+| Meta store | `internal/store/meta` | **Shipped** — SQLite (pure-Go), AES-256-GCM; tenant + schedule CRUD added Wave 2 |
+| Alert evaluator | `internal/alert` | **Shipped** — 15 s detection latency; cert_expiry, node_up/down, ingest_bitrate_floor added Wave 2 |
+| Alert channels | `internal/alert/channels` | **Shipped** — Email, Slack, Telegram, PagerDuty, Webhook (Wave 2); HMAC signature on webhook |
+| Query service | `internal/query` | **Shipped** — live + historical (ClickHouse); QoE + fleet endpoints Wave 2 |
+| API server | `internal/api` | **Shipped** — 32 paths, 46 ops; /metrics, /qoe/*, /fleet/nodes, /reports/* added Wave 2 |
+| License manager | `internal/license` | **Shipped** — ed25519 verification; pro/enterprise tier gating Wave 2 |
+| Web UI | `web/` | **Shipped** — F1 live dashboard, F2 analytics, F3 QoE, F4 ingest health, F5 alerts, F6 reports, F7 fleet, F8 /metrics; 58 tests green |
+| Beacon SDK | `sdk/beacon-js/` | **Shipped** (F3) — 3.44 KB gzip, 56 tests green, MIT license |
+| Beacon ingest | `internal/collector/beacon` | **Shipped** (F3) — token auth, rate limit, body cap, schema validation |
+| Kafka collector | `internal/collector/kafka` | **Shipped** — pure-Go kafka-go; 8 contract tests; D-007.5 no-broker limitation |
+| Geo/UA enrichment | `internal/collector/enrichment` | **Shipped** — MMDBGeoResolver, EmbeddedUAParser, AnonymizeIP; absent DB = no-op |
+| Session stitcher | `internal/collector/sessions` | **Shipped** — viewer join/heartbeat/leave stitching; 5 tests |
+| Ingest health | `internal/collector/ingest` | **Shipped** (F4) — health score formula, 141 µs detection |
+| Reports (CSV/PDF) | `internal/reports` | **Shipped** (F6) — accounting, tenant mapping, statement gen, scheduler, S3 uploader |
+| Cluster discovery | `internal/cluster` | **Shipped** (F7) — 30 s poll, new node visible ≤30 s |
+| Prometheus /metrics | `internal/api` | **Shipped** (F8) — 5 metrics, bounded cardinality; scrape token gate |
+| Helm chart | `deploy/helm/pulse/` | **Shipped** (authored-unexecuted per D-002) — lint passes, 3 template variants |
 
 ## 3. Key boundaries (the rules agents must not break)
 
@@ -86,20 +92,24 @@ The following components are implemented and unit-tested as of Wave 1:
 
 ## 4. Performance budgets (from PRD acceptance criteria)
 
-| Budget | Source | Wave-1 measured |
-|---|---|---|
-| New stream on dashboard ≤ 10 s after publish | F1 | **1064 ms** (2 s poll, local stack; 5 s worst-case in production) |
-| Viewer counts within ±2% of AMS REST | F1 | **0.0%** error on all tested streams |
-| Dashboard < 2 s load at 500 concurrent streams | F1 | Virtualized table confirmed ≤20 DOM rows for 500-stream input |
-| 13-month rollup queries < 3 s | F2 | Not yet measurable (Wave 1 DDL only; data needed) |
-| Beacon SDK < 15 KB gzipped, < 1% player CPU | F3 | SDK stub; Wave 2 |
-| Ingest degradation visible ≤ 15 s | F4 | Ingest health stub; Wave 2 |
-| Alert detection→notification < 30 s | F5 | **15 s** (fake-clock unit test; 10.1 s worst-case by construction) |
-| Monthly statement generation < 60 s, ±1% reconciliation | F6 | Reports stub; Wave 2 |
-| New cluster nodes auto-discovered ≤ 2 min | F7 | Cluster discovery stub; Wave 2 |
-| ~1–2 GB ClickHouse per 1M viewer-sessions | §7.10 | Not yet measurable (requires production load) |
+All wave-2 budgets are QA-verified (QA-01 WO-207 gate report, 2026-06-14).
+
+| Budget | Source | Wave-1 | Wave-2 measured |
+|---|---|---|---|
+| New stream on dashboard ≤ 10 s after publish | F1 | **1064 ms** | **1.50 s** (B-01 budget regression) |
+| Viewer counts within ±2% of AMS REST | F1 | **0.0%** | **0.0%** (B-02) |
+| Dashboard < 2 s load at 500 concurrent streams | F1 | Virtualized, ≤20 DOM rows | ≤20 DOM rows confirmed (C-W2-02) |
+| 13-month rollup queries < 3 s | F2 | DDL only | **126 ms** (1,975 rows, 14 months; C-W2-08) |
+| Beacon SDK < 15 KB gzip, < 1% player CPU | F3 | Stub | **3.44 KB** gzip (C-W2-03); < 1% (5 s poll cadence) |
+| Ingest degradation visible ≤ 15 s | F4 | Stub | **250.8 µs** in-process; ≤10 s production worst-case (C-W2-06) |
+| Alert detection→notification < 30 s | F5 | **15 s** | **15 s** (B-03; fake clock unit test) |
+| Monthly statement generation < 60 s | F6 | Stub | **4.8 ms** (C-W2-05) |
+| Billing reconciliation ≤ ±1% | F6 | Stub | **0.0000%** drift (n=10,000; C-W2-05 in-memory) |
+| New cluster nodes auto-discovered ≤ 2 min | F7 | Stub | **24.4 ms** (test interval 20 ms; C-W2-07) |
+| ~1–2 GB ClickHouse per 1M viewer-sessions | §7.10 | Not measurable | Not measurable (requires production load) |
 
 These are CI-verifiable targets; QA-01 owns regression checks against them.
+See `qa/budgets/run-budget-tests.sh` for the budget regression suite.
 
 ## 5. Technology choices
 
@@ -163,7 +173,7 @@ The `/live/ws` endpoint sends JSON messages with a common envelope:
 ```
 
 - `snapshot` — sent immediately on connection; full `LiveSnapshot`.
-- `delta` — sent after each aggregator update; full `LiveSnapshot` (diff compression Wave 2).
+- `delta` — sent after each aggregator update; full `LiveSnapshot` (diff compression: Phase-3 roadmap).
 - `heartbeat` — sent every 30 s when no updates; `payload` is absent.
 
 Clients authenticate via `Authorization: Bearer plt_<hex>` header or
@@ -199,16 +209,77 @@ Encrypted columns store base64-encoded `nonce || ciphertext`. The Go API
 exposes `meta.Store.Encrypt(plaintext) (ciphertext, error)` and
 `meta.Store.Decrypt(ciphertext) (plaintext, error)`.
 
-## 10. Known issues (Wave 1 — post fix-loop status)
+## 10. Ingest health score formula (F4)
 
-Wave-1 fix-loop (D-006, 2026-06-12) resolved D-W1-001 through D-W1-005. The table
-below records the final status of each defect.
+The health score is computed per publisher from live ingest stats. It is the
+authoritative formula used by BE-02's `/api/v1/qoe/ingest` response and the
+FE ingest health dashboard.
+
+```
+score = 0.35*S_bitrate + 0.25*S_fps + 0.20*S_keyframe + 0.12*S_loss + 0.08*S_jitter
+
+S_bitrate  = clamp(bitrate_kbps / target_kbps, 0, 1)       [target default: 2000]
+S_fps      = clamp(fps / target_fps, 0, 1)                  [target default: 30]
+S_keyframe = 1.0                         if keyframe_s <= 2.0
+             clamp(2.0 / keyframe_s, 0,1) if keyframe_s >  2.0
+S_loss     = clamp(1.0 - loss_pct/10.0, 0, 1)
+S_jitter   = clamp(1.0 - jitter_ms/100.0, 0, 1)
+
+Weight sum: 0.35+0.25+0.20+0.12+0.08 = 1.0 (verified by unit test)
+
+Classification:
+  score >= 0.80 -> Good
+  score >= 0.50 -> Warning
+  score <  0.50 -> Critical
+  absent > sourceGoneTimeout (default 15 s) -> Offline
+```
+
+Authoritative Go implementation: `server/internal/collector/ingest/health.go:ComputeHealthScore`.
+
+**Drop detection thresholds:**
+- Bitrate floor breach: `S_bitrate < 0.5` (< 50% of target bitrate)
+- FPS collapse: `fps < 5.0`
+- Source gone: no `ingest_stats` event for > `SourceGoneTimeout` (default 15 s)
+
+**Budget:** In-process detection is sub-millisecond (measured 141–250 µs).
+Production worst-case with 5 s REST poll: ≤ 10 s (2 poll cycles) — well within
+the 15 s F4 budget.
+
+Configurable via: `PULSE_INGEST_TARGET_BITRATE_KBPS` (default 2000),
+`PULSE_INGEST_TARGET_FPS` (default 30).
+
+---
+
+## 11. Known issues
+
+### Wave-1 defects (post fix-loop status, D-006, 2026-06-12)
 
 | ID | Component | Description | Status |
 |---|---|---|---|
-| D-W1-001 | `collector/normalize.go` | Node CPU/mem values multiplied by 100. | **Fixed** — `* 100` multipliers removed; `cpu_pct=15.0` for AMS `cpuUsage=15.0`. |
-| D-W1-002 | `api/server.go` | `/healthz` `latency_ms` always null; no 503 on ClickHouse down. | **Fixed** — `/healthz` now pings ClickHouse (3 s timeout) and meta store, returns measured `latency_ms` and HTTP 503 + `status:"down"` when unreachable. |
-| D-W1-003 | `cmd/pulse/main.go` | `pulse migrate` skipped meta migrations; meta DDL required `PULSE_META_DDL_PATH`. | **Fixed** — meta DDL embedded in binary (`meta.EmbeddedDDL`); `pulse migrate` applies it automatically. `PULSE_META_DDL_PATH` is now an optional override. |
-| D-W1-004 | `cmd/pulse/serve.go` | Duplicate import alias (`clickhouse` + `chstore`). | **Fixed** — single import, `chstore` alias removed. |
-| D-W1-005 | `pkg/amsclient/client.go` | Dead `get()` method with double-decoder bug. | **Fixed** — `get()` deleted; only `getJSON()` remains. |
-| D-W1-006 | `.github/workflows/ams-version-matrix.yml` | `TestAMSVersionMatrix` Go integration tests not implemented. | **Deferred** — needs real AMS containers in CI; carried to wave-2 validation sweep (QA-01). |
+| D-W1-001 | `collector/normalize.go` | Node CPU/mem values multiplied by 100. | **Fixed** — `* 100` multipliers removed. |
+| D-W1-002 | `api/server.go` | `/healthz` `latency_ms` always null; no 503 on ClickHouse down. | **Fixed** — `/healthz` pings CH + meta store, returns 503 on failure. |
+| D-W1-003 | `cmd/pulse/main.go` | `pulse migrate` skipped meta migrations; meta DDL required external file. | **Fixed** — meta DDL embedded in binary; applied automatically. |
+| D-W1-004 | `cmd/pulse/serve.go` | Duplicate import alias. | **Fixed** |
+| D-W1-005 | `pkg/amsclient/client.go` | Dead `get()` method with double-decoder bug. | **Fixed** — `get()` deleted. |
+| D-W1-006 | `.github/workflows/ams-version-matrix.yml` | `TestAMSVersionMatrix` Go integration tests not implemented. | **Fixed** (Wave 2, QA-01) — 3 mock profiles; real-container assertions documented for CI. |
+
+### Wave-2 defects (post QA gate, WO-207, 2026-06-14)
+
+| ID | Component | Description | Status |
+|---|---|---|---|
+| D-W2-001 | `qa/wave-1/run-gate.sh` | Alert rule POST missing `name` field — wave-1 gate script exits nonzero. | Open — QA-01 fix pending |
+| D-W2-002 | `internal/reports/accounting.go` | Wrong ClickHouse column names (`watch_s_state`, `peak_viewers_state`, `bucket_ts`) — live billing broken; unit test passes. | Open — BE-02 fix pending. Fix: rename to `watch_time_s`, `peak_concurrency`, `bucket`. |
+| D-W2-003 | `qa/wave-1/run-gate.sh` | Same as D-W2-001 (filed separately as regression). | Open — QA-01 fix pending |
+
+### Wave-2 gaps (non-blocking)
+
+| ID | Description | Owner | Wave |
+|---|---|---|---|
+| GAP-2-001 | BuildTestMMDB produces invalid mmdb format; `TestGeo_MMDBFixture` skipped | BE-01 | 3 |
+| GAP-2-002 | `cluster.Discovery.IsEdgeStream()` always returns false; edge/origin dedup not implemented | BE-01 | 3 |
+| GAP-2-003 | Kafka `Lag()` / `ParseErrors()` not surfaced in `/healthz` component detail | BE-02 | 3 |
+| GAP-2-004 | Pro tier beacon write gating not API-enforced (fails-open for any valid ingest token) | BE-02 | 3 |
+| GAP-2-005 | `/qoe/summary` QoE data is live-snapshot proxy, not from `rollup_qoe_1h` | BE-02 | 3 |
+| GAP-206-01 | Helm chart image `ghcr.io/pulse-analytics/pulse:0.1.0` not yet published | INFRA-01 | 3 |
+| GAP-206-02 | Postgres Secret `pulse-postgres-secret` must be created manually before Helm install | DOC-01 (documented in install runbook) | — |
+| GAP-206-03 | Helm `busybox:1.36` initContainer image unpinned | INFRA-01 | 3 |

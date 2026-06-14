@@ -72,9 +72,17 @@ A disabled rule's `muted` state is not surfaced — it has no effect until the r
 | `node_cpu` | Live aggregator | CPU % per node (0–100). AMS returns 0–100 directly; Pulse passes it through unchanged. |
 | `node_mem` | Live aggregator | Memory % per node |
 | `node_disk` | Live aggregator | Disk % per node |
+| `rebuffer_ratio` | Live health proxy | QoE rebuffer ratio (live snapshot proxy; Wave 3: full ClickHouse query) |
+| `error_rate` | Live health proxy | QoE error rate (live snapshot proxy; Wave 3: full ClickHouse query) |
+| `ingest_bitrate_floor` | Ingest health tracker | Fires when ingest health score indicates bitrate < 50% of target (`S_bitrate < 0.5`) |
+| `node_down` | Fleet discovery | Fires when a cluster node transitions to `status=down` |
+| `node_degraded` | Fleet discovery | Fires when a cluster node transitions to `status=degraded` |
+| `cert_expiry` | TLS dial to host | Fires when TLS certificate days_left < threshold (e.g. `threshold: 30`) |
 
-> **Roadmap (Wave 2):** ClickHouse-backed historical metrics (e.g. rebuffer rate,
-> startup latency) will be added as rule metrics in Wave 2.
+> **Phase-3 roadmap:** Full ClickHouse-backed QoE metrics (rebuffer rate, startup
+> latency p50/p95) with time-window queries over `rollup_qoe_1h` are planned for
+> Wave 3. The Wave-2 `rebuffer_ratio` and `error_rate` rule types use a live
+> snapshot proxy.
 
 ### Scope filtering
 
@@ -99,7 +107,7 @@ offline), Pulse fires one notification per group key. The group key defaults to
 `stream_id` for stream-scoped rules and `node_id` for node-scoped rules.
 There is no cap on concurrent alerts — each distinct group key fires independently.
 
-> **Roadmap (Wave 2):** The `group_by` field will allow collapsing multiple matching
+> **Phase-3 roadmap:** The `group_by` field will allow collapsing multiple matching
 > streams into a single grouped notification.
 
 ### Latency
@@ -156,9 +164,8 @@ Supported on all tiers.
 
 Supported on Pro tier and above.
 
-> Note: Slack channel type is implemented in Wave 1 (code: `channels.SlackChannel`).
-> Tier enforcement (Pro+) is a Wave 2 feature; in Wave 1 the channel type is available
-> but the license check is not yet wired.
+> Note: Slack channel type is implemented since Wave 1 (code: `channels.SlackChannel`).
+> Pro tier enforcement is implemented in Wave 2.
 
 **Via UI:** Settings → Alerts → Channels → New channel → type: slack.
 
@@ -184,15 +191,103 @@ Scope: `stream_id=live/main-stage`
 <https://pulse.example.com/alerts|Open Dashboard>
 ```
 
-### Other channels (roadmap)
+### Telegram
 
-The following channels are architected (interface defined) but not implemented in Wave 1:
+Supported on Pro tier and above.
 
-| Channel | Wave | Notes |
-|---|---|---|
-| Webhook (generic HTTP) | Wave 2 | POST the `alert-notification` JSON payload to any URL |
-| PagerDuty | Wave 2 | Events API v2 |
-| Telegram | Wave 2 | Bot API |
+**Via UI:** Settings → Alerts → Channels → New channel → type: telegram.
+
+**Via API:**
+```json
+{
+  "type": "telegram",
+  "name": "Ops Telegram",
+  "config": {
+    "telegram_bot_token": "<SENSITIVE — stored encrypted>",
+    "chat_id": "-100123456789"
+  }
+}
+```
+
+`telegram_bot_token` is the Bot API token from @BotFather. `chat_id` is the
+group or channel ID (negative number for groups/channels, positive for DMs).
+The bot must be added to the group/channel before it can send messages.
+
+Pulse sends HTML-formatted messages via the Bot API `sendMessage` method.
+
+### PagerDuty
+
+Supported on Enterprise tier only.
+
+**Via API:**
+```json
+{
+  "type": "pagerduty",
+  "name": "On-call PagerDuty",
+  "config": {
+    "pagerduty_routing_key": "<SENSITIVE — stored encrypted>",
+    "severity": "critical"
+  }
+}
+```
+
+`pagerduty_routing_key` is the Events API v2 integration key from your PagerDuty
+service. Pulse sends `event_action=trigger` when an alert fires and
+`event_action=resolve` when it clears. The `dedup_key` is set to the Pulse
+alert ID for reliable trigger/resolve pairing.
+
+### Webhook (generic HTTP + HMAC)
+
+Supported on Enterprise tier only.
+
+**Via API:**
+```json
+{
+  "type": "webhook",
+  "name": "SIEM integration",
+  "config": {
+    "url": "https://siem.example.com/pulse/alerts",
+    "webhook_secret": "<SENSITIVE — stored encrypted>",
+    "headers": {"X-Source": "pulse"}
+  }
+}
+```
+
+Pulse POSTs the `alert-notification` JSON payload to the configured URL.
+When `webhook_secret` is set, a signature header is added:
+
+```
+X-Pulse-Signature: sha256=<hex(HMAC-SHA256(secret, body))>
+```
+
+**Verifying the signature (consumer side):**
+```python
+import hmac, hashlib
+
+def verify_pulse_webhook(body: bytes, secret: str, signature: str) -> bool:
+    expected = 'sha256=' + hmac.new(
+        secret.encode(), body, hashlib.sha256
+    ).hexdigest()
+    # Use constant-time comparison to prevent timing attacks:
+    return hmac.compare_digest(expected, signature)
+```
+
+```go
+// Go example (constant-time)
+import "crypto/hmac"
+import "crypto/sha256"
+import "encoding/hex"
+
+func verify(body []byte, secret, sig string) bool {
+    mac := hmac.New(sha256.New, []byte(secret))
+    mac.Write(body)
+    expected := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+    return hmac.Equal([]byte(expected), []byte(sig))
+}
+```
+
+Always use constant-time comparison (`hmac.compare_digest` / `hmac.Equal`) to
+prevent timing attacks.
 
 ---
 
@@ -233,9 +328,30 @@ the condition clears regardless of where the cooldown timer stands.
 
 ### Maintenance windows
 
-> **Roadmap (Wave 2):** Full cron-expression maintenance windows.
+Wave 2 implements cron-expression maintenance windows via the rule `maintenance_window`
+field.
 
-Wave 1 supports two manual controls on rules:
+**Cron format:** 3-field `MIN HOUR WEEKDAY` plus an optional duration:
+
+```json
+{
+  "name": "Sunday maintenance window",
+  "metric": "node_cpu",
+  "operator": "gt",
+  "threshold": 80,
+  "maintenance_window": {
+    "cron_expr": "0 2 0",
+    "duration_s": 3600
+  }
+}
+```
+
+This rule is suppressed between 02:00–03:00 on Sundays (weekday=0).
+
+During a maintenance window, rules are evaluated and history is written but
+notifications are not dispatched (same semantics as `muted: true`).
+
+You can also use the two manual controls on rules:
 
 - `muted: true` — rule evaluates normally and history is recorded, but no notifications are dispatched. Useful for planned maintenance where you want to keep the evaluation record.
 - `enabled: false` — rule is completely paused (not evaluated at all). Use to stop a rule temporarily without deleting it.
@@ -262,10 +378,20 @@ curl -X PUT http://localhost:8090/api/v1/alerts/rules/{rule_id} \
 
 ## Default rule pack
 
-> **Roadmap (Wave 2):** A default rule pack will be seeded automatically on first run.
-> See BE-02 gap G8.
+Pulse automatically seeds 4 default rules on first run (Wave 2). All default rules
+are seeded with `enabled: true` and `muted: true` — they evaluate and record history
+from day one, but send no notifications until you configure channels and unmute them.
 
-In Wave 1, rules must be created manually. Recommended starting rules:
+| Rule | Metric | Condition | Severity |
+|---|---|---|---|
+| Stream offline | `stream_offline` | eq 0, window 30s | critical |
+| Viewer drop | `viewer_drop_pct` | lt 20, window 60s | warning |
+| Node CPU high | `node_cpu` | gt 80, window 60s | warning |
+| Ingest bitrate floor | `ingest_bitrate_floor` | bitrate < 50% target, window 30s | critical |
+
+To activate notifications: assign a channel to the rule and set `muted: false`.
+
+Manually create additional rules as needed:
 
 **Stream offline (critical):**
 ```json
@@ -325,7 +451,7 @@ All fired and resolved notifications are persisted in the meta store
 History entries include: `alert_id`, `rule_id`, `state`, `severity`, `ts`, `metric`,
 `value`, `threshold`, `scope`, `group_key`, `cooldown_until`.
 
-History is retained indefinitely in the meta store. No TTL in Wave 1.
+History is retained indefinitely in the meta store. History TTL is a Phase-3 roadmap item.
 
 ---
 
@@ -333,7 +459,6 @@ History is retained indefinitely in the meta store. No TTL in Wave 1.
 
 | Issue | Severity | Status |
 |---|---|---|
-| Maintenance windows not implemented — only `muted` and `enabled` toggles available (BE-02 G2) | Minor | Wave 2 |
-| Telegram, PagerDuty, generic webhook channels not implemented (BE-02 G1) | Minor | Wave 2 |
-| Default rule pack not seeded on bootstrap (BE-02 G8) | Minor | Wave 2 |
-| Prometheus `/metrics` endpoint is stub — only 2 metrics exported (BE-02 G4) | Minor | Wave 2 |
+| QoE metrics (`rebuffer_ratio`, `error_rate`) use live snapshot proxy, not historical ClickHouse query | Minor | Phase-3 roadmap |
+| `group_by` field for alert grouping not implemented — each stream/node fires independently | Minor | Phase-3 roadmap |
+| Alert history has no TTL — grows unbounded in the meta store | Minor | Phase-3 roadmap |
