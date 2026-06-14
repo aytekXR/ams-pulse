@@ -691,6 +691,12 @@ paths:
                 $ref: "#/components/schemas/AnomalyList"
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403":
+          description: Enterprise tier required — anomaly detection (F9) is gated to Enterprise subscribers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500": { $ref: "#/components/responses/InternalError" }
 
   # ─────────────────────────────────────────────────────────────
@@ -817,7 +823,8 @@ paths:
         Request body: `BeaconBatch` (array of `BeaconEvent` envelopes per
         `contracts/events/beacon-event.schema.json`).
 
-        Rate limited per token; body size limit 256 KB. Schema-validated on
+        Rate limited per token; body size limit 64 KB (authoritative: hardened
+        handler enforces `maxBodyBytes = 64 * 1024`). Schema-validated on
         ingestion; invalid events are dropped with a partial-accept response.
       security:
         - ingestTokenHeader: []
@@ -841,7 +848,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "413":
-          description: Request body exceeds 256 KB limit
+          description: Request body exceeds 64 KB limit (hardened handler enforces maxBodyBytes=65536)
           content:
             application/json:
               schema:
@@ -1139,12 +1146,16 @@ paths:
     delete:
       operationId: revokeToken
       tags: [admin]
-      summary: Revoke a token
+      summary: Revoke a token (idempotent)
+      description: |
+        Revokes a token. This operation is **idempotent**: revoking an already-revoked
+        or non-existent token returns 204 (not 404). This is the chosen semantic to
+        allow clients to safely retry token revocations without error-handling for
+        the "already deleted" case. Callers must not rely on 404 to detect missing tokens.
       responses:
         "204":
-          description: Token revoked
+          description: Token revoked (or was already revoked / did not exist)
         "401": { $ref: "#/components/responses/Unauthorized" }
-        "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /admin/users:
@@ -1217,12 +1228,16 @@ paths:
     delete:
       operationId: deleteUser
       tags: [admin]
-      summary: Delete a local user
+      summary: Delete a local user (idempotent)
+      description: |
+        Deletes a local user. This operation is **idempotent**: deleting an already-deleted
+        or non-existent user returns 204 (not 404). This is the chosen semantic to
+        allow clients to safely retry deletions without error-handling for the
+        "already deleted" case. Callers must not rely on 404 to detect missing users.
       responses:
         "204":
-          description: User deleted
+          description: User deleted (or was already deleted / did not exist)
         "401": { $ref: "#/components/responses/Unauthorized" }
-        "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   # ─────────────────────────────────────────────────────────────
@@ -2635,10 +2650,26 @@ components:
     LicenseInfo:
       type: object
       required: [tier, valid]
+      description: |
+        License status and tier entitlements (PRD §7.11 four-tier matrix).
+
+        **Tier entitlement matrix:**
+        | Tier       | Nodes | Retention | Channels               | Data API | White-label | Multi-tenant | Anomalies |
+        |------------|-------|-----------|------------------------|----------|-------------|--------------|-----------|
+        | free       | 1     | 7 days    | email                  | no       | no          | no           | no        |
+        | pro        | 1–2   | 90 days   | email, slack, telegram | yes      | no          | no           | no        |
+        | business   | ≤5    | 13 months | + pagerduty, webhook   | yes      | no          | yes          | no        |
+        | enterprise | ∞     | unlimited | all                    | yes      | yes         | yes          | yes       |
       properties:
         tier:
           type: string
-          enum: [free, pro, enterprise]
+          enum: [free, pro, business, enterprise]
+          description: |
+            License tier (PRD §7.11):
+            - `free`: 1 node, 7-day retention, email alerts only — $0/mo
+            - `pro`: 1–2 nodes, 90-day retention, Slack/Telegram, CSV export — $99/mo
+            - `business`: ≤5 nodes, 13-month retention, PagerDuty/webhooks, usage reports, multi-tenant, API+Prometheus — $299/mo
+            - `enterprise`: unlimited nodes, SSO, white-label reports, anomaly detection, air-gapped licensing — from $799/mo
         valid:
           type: boolean
         limits:

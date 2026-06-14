@@ -10,7 +10,7 @@
 // Claims JSON shape:
 //
 //	{
-//	  "tier":           "pro" | "enterprise",
+//	  "tier":           "pro" | "business" | "enterprise",
 //	  "max_nodes":      3,        // null = unlimited
 //	  "max_streams":    null,
 //	  "retention_days": 365,      // null = unlimited
@@ -61,6 +61,7 @@ type Tier string
 const (
 	TierFree       Tier = "free"
 	TierPro        Tier = "pro"
+	TierBusiness   Tier = "business"
 	TierEnterprise Tier = "enterprise"
 )
 
@@ -104,6 +105,17 @@ var proTierEntitlements = Entitlements{
 	DataAPI:       true,
 	WhiteLabel:    false,
 	Channels:      []string{"email", "slack", "telegram"},
+}
+
+// Business tier (§7.11): up to 5 nodes, 13-month retention, PagerDuty+webhook,
+// usage/billing reports, multi-tenant billing, API+Prometheus. $299/month.
+var businessTierEntitlements = Entitlements{
+	MaxNodes:      5,
+	MaxStreams:    -1,
+	RetentionDays: 396, // 13 months ≈ 396 days
+	DataAPI:       true,
+	WhiteLabel:    false,
+	Channels:      []string{"email", "slack", "telegram", "pagerduty", "webhook"},
 }
 
 var enterpriseTierEntitlements = Entitlements{
@@ -301,12 +313,11 @@ func (m *Manager) CheckAnomalies() error {
 }
 
 // CheckMultiTenant returns nil if the tier includes multi-tenant billing (F6 tenant CRUD).
-// Multi-tenant billing requires Enterprise tier (§7.11 — "Business/Enterprise" in PRD maps
-// to TierEnterprise in the license model; Free and Pro → 403).
+// Multi-tenant billing requires Business tier or higher (PRD §7.11 table); Free and Pro → 403.
 func (m *Manager) CheckMultiTenant() error {
 	t := m.Tier()
-	if t != TierEnterprise {
-		return fmt.Errorf("multi-tenant billing (F6) requires Enterprise tier (current: %q)", t)
+	if t != TierBusiness && t != TierEnterprise {
+		return fmt.Errorf("multi-tenant billing (F6) requires Business tier or higher (current: %q)", t)
 	}
 	return nil
 }
@@ -407,10 +418,13 @@ func buildEntitlements(c claims) Entitlements {
 	// Channels by tier (§7.11 tier matrix):
 	//   Free:       email only
 	//   Pro:        email, slack, telegram
+	//   Business:   email, slack, telegram, pagerduty, webhook
 	//   Enterprise: all channels (email, slack, telegram, pagerduty, webhook)
 	switch Tier(c.Tier) {
 	case TierPro:
 		ent.Channels = proTierEntitlements.Channels
+	case TierBusiness:
+		ent.Channels = businessTierEntitlements.Channels
 	case TierEnterprise:
 		ent.Channels = enterpriseTierEntitlements.Channels
 	default:
