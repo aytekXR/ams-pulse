@@ -40,13 +40,23 @@ QoE monitoring and alerting for Ant Media Server), strictly per PRD:
     Free/Pro/Business/Enterprise; impl enum = `free|pro|enterprise`), so F5
     PagerDuty/webhook, F6 reports/multi-tenant, F8 API/Prometheus are mis-gated
     to enterprise. CR pre-approved; fix in V3.
-  - **V2 IN FLIGHT** (`pulse-val-2-adversarial`, run `wf_3bdbf61e-76d`) — 10
-    feature verifiers + 4 cross-cutting critics (architecture, tier model,
-    contract conformance, security) → triage. Binaries rebuilt fresh first.
-    **FIRST ACTION next session:** read its result + `agents/handoffs/validation/
-    V2-triage-report.md`.
-  - **NEXT: V3 fix-loop** for the triaged findings (tier model D-014 + whatever
-    V2 surfaces), owner-routed (INT/BE/FE/QA), then re-verify until clean.
+  - **V2 DONE** (`wf_3bdbf61e-76d`) — found **41 defects, 11 MVP-blocking**
+    (`agents/handoffs/validation/V2-triage-report.md`, committed `1f090e6`). The
+    wave gates missed these via workarounds (manual ingest header, unit tests
+    bypassing real paths, tautological asserts). Headlines: F3 beacon pipeline
+    broken (SDK wrong header VD-09, main ingest discards VD-10), F2 geo/device
+    stubs + enrichment unwired (VD-06/07/08), F4 health always 0 (VD-20/21), F5
+    muted/group_by dead (VD-28/29), F6 reports ungated + cron broken (VD-35/36),
+    tier model wrong (VD-01), security (VD-S1/S2), WS shape (VD-02).
+  - **V3 fix-loop (plan D-015), two sequential workflows:**
+    - **V3a IN FLIGHT** (`pulse-val-3a`, run `wf_daf126f5-e1e`) — make the data
+      flow: INT-01 contract (business tier + conformance) → [BE-01 data-plane →
+      BE-02-A pipelines] | SDK-01 (header) → QA mini round-trip. **FIRST ACTION
+      next session:** read its result + `V3a-QA-report.md`.
+    - **V3b NEXT** — gating/alerting/security/UI: BE-02-B (alerting) → BE-02-C
+      (gating/WS/fleet/security) | FE-01 → QA full re-gate → DOC-01. (See D-015
+      for the exact VD→agent assignment.)
+  - **THEN:** consolidation + `IMPLEMENTATION_LOG.md` → notify user, STOP.
 
 - **THEN:** consolidation (single unified project) + write `IMPLEMENTATION_LOG.md`
   (per F1–F10: what was done, issues hit, how resolved) → **notify the user and
