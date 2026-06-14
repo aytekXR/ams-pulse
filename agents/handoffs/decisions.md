@@ -333,3 +333,47 @@ contract enum, `internal/license` entitlement matrix + every gate call site, UI
 upsell copy/logic, and the tier tests. Owner chain: INT-01 (enum) → BE-02 (license
 + gating) → FE-01 (copy/logic) → QA-01 (per-tier matrix). Do NOT pre-fix before V2
 confirms the full call-site list.
+
+## D-015 · 2026-06-14 · V2 result + V3 fix-loop plan (41 findings, 11 MVP-blocking)
+
+V2 adversarial validation (run `wf_3bdbf61e-76d`, 14 verifiers) → 41 unique defects
+(`agents/handoffs/validation/V2-triage-report.md`), 11 MVP-blocking. The wave gates
+passed these because they used workarounds (manual ingest header, unit tests
+bypassing the real path à la D-W2-002, tautological/never-fail assertions). Ruling:
+the MVP is NOT yet "functional end-to-end" — run a comprehensive V3 fix-loop for all
+P0/P1 + P2 (majors/security/contract); document P3 (test gaps, cosmetic, Phase-3) as
+known limitations in IMPLEMENTATION_LOG. Structured as two sequential workflows
+(bounded agent loads; server tree sequential per D-003; verify between them):
+
+**V3a — make the data flow (run `pulse-val-3a`):**
+- INT-01 (contract): VD-01 add `business` to `License.tier` enum + entitlement-matrix
+  doc; VD-X3-A AmsSourceStatus `reachable`; VD-X3-D 403 on `/anomalies`; VD-X3-C
+  delete-404 semantics (document idempotent 204); VD-S4 body-cap → 64 KB in spec.
+- BE-01 (data plane): VD-07 wire geo/UA resolvers into restpoller; VD-08 enrich
+  beacon events (client IP/UA); VD-03 implement `IsEdgeStream()` + dedup; VD-20a
+  HealthTracker→aggregator bridge; VD-22 REST `EventIngestStats`; VD-40 node Version;
+  VD-17 valid test mmdb; VD-16/VD-25 doc-accuracy.
+- BE-02-A (pipelines/queries, after BE-01): VD-10 main-port ingest→EventSink; VD-06
+  geo/device breakdown queries; VD-11 `/qoe/summary` from rollup_qoe_1h + bitrate
+  field name; VD-20b propagate health to `/qoe/ingest`; VD-21 ingest timeseries +
+  drop_events; VD-23 IngestTracker interface; VD-37/38 egress/peak labels;
+  VD-X3-A/C handlers.
+- SDK-01 (parallel, disjoint): VD-09 header `X-Pulse-Ingest-Token`; VD-12 HLS
+  rebuffer_end; VD-13 HLS bitrate from levels.
+- QA-01 mini-verify: REAL-SDK beacon round-trip (VD-09), geo/device non-empty
+  (VD-06), health score >0 (VD-20), ingest timeseries (VD-21), build/vet/test.
+
+**V3b — correctness: gating/alerting/security/UI (run after V3a):**
+- BE-02-B (alerting): VD-28 muted suppression; VD-29 group_by storm grouping; VD-30
+  node_down via eviction not CPU proxy; VD-32 rebuffer/error from rollup_qoe_1h;
+  VD-33 cron range; VD-36 server 5-field cron.
+- BE-02-C (gating+WS+fleet+security, after B): VD-01 gating per §7.11 matrix; VD-35
+  reports gate; VD-15 beacon Pro+ gate; VD-02 WS LiveOverview shape; VD-39 fleet role;
+  VD-S1 metrics-token constant-time; VD-S2 WS origin check; VD-S3 token-kind scope.
+- FE-01 (parallel): VD-01 upsell copy/isGated; VD-36 cron presets; VD-02 WS field
+  mapping; VD-X3-B granularity→interval.
+- QA-01 full re-gate + add the missing tests (VD-05/18/19/24/26/34/41) + wave-1/2/3
+  regression. DOC-01: reconcile docs + honest feature-status + remaining limitations.
+
+After V3b passes: consolidation + `IMPLEMENTATION_LOG.md` (per F1–F10: done / issues /
+resolutions / known limitations) → notify user, STOP for review.
