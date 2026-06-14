@@ -18,7 +18,9 @@ import (
 	kafkasrc "github.com/pulse-analytics/pulse/server/internal/collector/kafka"
 	"github.com/pulse-analytics/pulse/server/internal/collector/restpoller"
 	"github.com/pulse-analytics/pulse/server/internal/collector/sessions"
+	"github.com/pulse-analytics/pulse/server/internal/domain"
 	"github.com/pulse-analytics/pulse/server/internal/license"
+	"github.com/pulse-analytics/pulse/server/internal/prober"
 	"github.com/pulse-analytics/pulse/server/internal/query"
 	"github.com/pulse-analytics/pulse/server/internal/reports"
 	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse"
@@ -64,6 +66,9 @@ type server struct {
 	// Wave 2: product-plane additions (BE-02).
 	beaconServer    *beaconingest.Server  // dedicated ingest listener (optional)
 	reportScheduler *reports.Scheduler   // report schedule runner (WO-204)
+
+	// Wave 3 (WO-301): F10 synthetic probe runner.
+	probeRunner *prober.Runner // nil until BE-02 provides ProbeConfigSource (WO-302)
 }
 
 // newServer constructs all services from config.
@@ -281,6 +286,26 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	}
 	apiServer.SetReportGenerator(reportGen)
 
+	// Wave 3 (WO-301): F10 probe runner.
+	// HOOK(BE-02, WO-302): Replace nil with a *meta.ProbeConfigSource once
+	// BE-02 implements ProbeConfigSource over the meta probes table.
+	// The runner is constructed here but Start() is conditional on the source
+	// being non-nil.  Signature expected from BE-02:
+	//
+	//   type MetaProbeConfigSource struct { ... }
+	//   func (s *MetaProbeConfigSource) ListEnabled(ctx) ([]domain.ProbeConfig, error)
+	//   func (s *MetaProbeConfigSource) RecordResult(ctx, r domain.ProbeResult) error
+	//
+	// Wire example (to be added by BE-02 in serve.go):
+	//   probeSource := meta.NewProbeConfigSource(metaStore)
+	//   srv.probeRunner = prober.New(prober.Config{Workers: 4}, probeSource, store, logger, nil)
+	var probeSource domain.ProbeConfigSource // nil until WO-302
+	var probeRunnerInstance *prober.Runner
+	if probeSource != nil {
+		// This branch is unreachable until BE-02 sets probeSource.
+		probeRunnerInstance = prober.New(prober.Config{Workers: 4}, probeSource, store, logger, nil)
+	}
+
 	return &server{
 		store:            store,
 		meta:             metaStore,
@@ -297,6 +322,7 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		uaParser:         uaParser,
 		beaconServer:     beaconSrv,
 		reportScheduler:  reportScheduler,
+		probeRunner:      probeRunnerInstance,
 	}, nil
 }
 
@@ -373,6 +399,18 @@ func (s *server) Start(ctx context.Context) error {
 	// Wave 2 (BE-02, WO-204): Start report scheduler.
 	if s.reportScheduler != nil {
 		s.reportScheduler.Start(ctx)
+	}
+
+	// Wave 3 (WO-301): Start probe runner when ProbeConfigSource is wired.
+	// HOOK(BE-02, WO-302): Once BE-02 provides ProbeConfigSource and sets
+	// s.probeRunner, this block launches the runner goroutine automatically.
+	if s.probeRunner != nil {
+		go func() {
+			if err := s.probeRunner.Run(ctx); err != nil && ctx.Err() == nil {
+				s.logger.Error("pulse: probe runner exited unexpectedly", "error", err)
+			}
+		}()
+		s.logger.Info("pulse: probe runner started")
 	}
 
 	s.logger.Info("pulse: all services started")

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	clickhousego "github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/google/uuid"
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse"
 	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse/migrations"
@@ -389,6 +390,250 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// startClickHouse is a test helper that starts a ClickHouse server on a random port,
+// runs migrations against it, and returns a connected store and a direct verify connection.
+// The caller must close the store and verify connection; the server is cleaned up by t.Cleanup.
+func startClickHouseForProbes(t *testing.T, dbName string) (*clickhouse.Store, clickhousego.Conn, string) {
+	t.Helper()
+	chBin := "/tmp/clickhouse"
+	if _, err := os.Stat(chBin); err != nil {
+		t.Skipf("clickhouse binary not found at %s: %v", chBin, err)
+	}
+
+	tcpPort := freePort(t)
+	httpPort := freePort(t)
+	for httpPort == tcpPort {
+		httpPort = freePort(t)
+	}
+
+	tmpDir := t.TempDir()
+	cmd := exec.Command(chBin, "server",
+		"--",
+		fmt.Sprintf("--path=%s", tmpDir),
+		fmt.Sprintf("--tcp_port=%d", tcpPort),
+		fmt.Sprintf("--http_port=%d", httpPort),
+		"--listen_host=127.0.0.1",
+		"--mysql_port=0",
+		"--postgresql_port=0",
+	)
+	if os.Getenv("PULSE_TEST_VERBOSE_CH") == "" {
+		cmd.Stdout = nil
+		cmd.Stderr = nil
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start clickhouse: %v", err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+
+	startupDSN := fmt.Sprintf("clickhouse://127.0.0.1:%d/default", tcpPort)
+	dsn := fmt.Sprintf("clickhouse://127.0.0.1:%d/%s", tcpPort, dbName)
+
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer waitCancel()
+
+	t.Logf("waiting for ClickHouse on 127.0.0.1:%d...", tcpPort)
+	for {
+		opts, _ := clickhousego.ParseDSN(startupDSN)
+		conn, err := clickhousego.Open(opts)
+		if err == nil {
+			pingCtx, c := context.WithTimeout(waitCtx, 2*time.Second)
+			err = conn.Ping(pingCtx)
+			c()
+			conn.Close()
+			if err == nil {
+				break
+			}
+		}
+		select {
+		case <-waitCtx.Done():
+			t.Fatal("timeout waiting for ClickHouse")
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	t.Log("ClickHouse ready")
+
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot determine source file")
+	}
+	repoRoot := filepath.Join(filepath.Dir(thisFile), "../../../..")
+	migrationsDir := filepath.Join(repoRoot, "contracts/db/clickhouse")
+
+	startupOpts, _ := clickhousego.ParseDSN(startupDSN)
+	migConn, err := clickhousego.Open(startupOpts)
+	if err != nil {
+		t.Fatalf("open migration conn: %v", err)
+	}
+	defer migConn.Close()
+
+	runner := migrations.New(migConn, migrations.Config{
+		MigrationsDir: migrationsDir,
+		Database:      dbName,
+		RetentionDays: 90,
+		RollupTTLDays: 395,
+	}, nil)
+
+	migCtx, migCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer migCancel()
+	if err := runner.Run(migCtx); err != nil {
+		t.Fatalf("migrations: %v", err)
+	}
+	t.Log("migrations applied")
+
+	store, err := clickhouse.New(context.Background(), clickhouse.Config{
+		DSN:           dsn,
+		Database:      dbName,
+		BatchSize:     100,
+		FlushInterval: 500 * time.Millisecond,
+		MaxRetries:    1,
+	}, nil)
+	if err != nil {
+		t.Fatalf("store.New: %v", err)
+	}
+
+	verifyOpts, _ := clickhousego.ParseDSN(dsn)
+	verifyConn, err := clickhousego.Open(verifyOpts)
+	if err != nil {
+		t.Fatalf("open verify conn: %v", err)
+	}
+
+	return store, verifyConn, dbName
+}
+
+// TestIntegration_ProbeResults verifies the probe_results ClickHouse store:
+// insert N results for a probe_id, then QueryProbeResults returns them
+// time-ordered within the queried range.
+func TestIntegration_ProbeResults(t *testing.T) {
+	store, verifyConn, dbName := startClickHouseForProbes(t, "pulse_probe_test")
+	defer store.Close()
+	defer verifyConn.Close()
+
+	insertCtx, insertCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer insertCancel()
+
+	store.Start(insertCtx)
+
+	const numResults = 20
+	probeID := "probe-integration-001"
+	baseTime := time.Now().UTC().Truncate(time.Millisecond).Add(-time.Duration(numResults) * time.Minute)
+
+	t.Logf("inserting %d probe_results for probe_id=%s...", numResults, probeID)
+
+	expectedIDs := make([]string, numResults)
+	for i := 0; i < numResults; i++ {
+		resultID := uuid.New().String()
+		expectedIDs[i] = resultID
+		r := domain.ProbeResult{
+			ID:          resultID,
+			ProbeID:     probeID,
+			TS:          baseTime.Add(time.Duration(i) * time.Minute),
+			Success:     i%3 != 0, // every 3rd result is a failure
+			TTFBMs:      uint32(50 + i*10),
+			BitrateKbps: float32(1000 + i*50),
+		}
+		if !r.Success {
+			r.ErrorCode = "http_5xx"
+			r.ErrorMsg = fmt.Sprintf("simulated error at step %d", i)
+			r.BitrateKbps = 0
+		}
+		if err := store.InsertProbeResult(insertCtx, r); err != nil {
+			t.Fatalf("InsertProbeResult[%d]: %v", i, err)
+		}
+	}
+
+	// Give ClickHouse a moment to flush/commit.
+	time.Sleep(1 * time.Second)
+
+	// Verify count via direct connection.
+	var count uint64
+	qCtx, qCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer qCancel()
+
+	row := verifyConn.QueryRow(qCtx,
+		fmt.Sprintf("SELECT count() FROM %s.probe_results WHERE probe_id = ?", dbName),
+		probeID,
+	)
+	if err := row.Scan(&count); err != nil {
+		t.Fatalf("count probe_results: %v", err)
+	}
+	t.Logf("probe_results inserted: %d (expected %d)", count, numResults)
+	if count != numResults {
+		t.Errorf("expected %d probe_results, got %d", numResults, count)
+	}
+
+	// Test QueryProbeResults — query the full range, expect all results ordered by ts.
+	from := baseTime.Add(-1 * time.Minute)
+	to := baseTime.Add(time.Duration(numResults+1) * time.Minute)
+	results, err := store.QueryProbeResults(qCtx, probeID, from, to, 100)
+	if err != nil {
+		t.Fatalf("QueryProbeResults: %v", err)
+	}
+	t.Logf("QueryProbeResults returned %d results (expected %d)", len(results), numResults)
+
+	if len(results) != numResults {
+		t.Errorf("expected %d results from QueryProbeResults, got %d", numResults, len(results))
+	}
+
+	// Verify time ordering: each result.TS >= previous.
+	for i := 1; i < len(results); i++ {
+		if results[i].TS.Before(results[i-1].TS) {
+			t.Errorf("results not time-ordered at index %d: %v < %v",
+				i, results[i].TS, results[i-1].TS)
+		}
+	}
+
+	// Verify success/failure fields round-trip.
+	failCount := 0
+	for _, r := range results {
+		if !r.Success {
+			failCount++
+			if r.ErrorCode != "http_5xx" {
+				t.Errorf("failure result missing error_code: probe_id=%s id=%s", r.ProbeID, r.ID)
+			}
+		}
+	}
+	// Every 3rd result starting at index 0 is a failure: 0, 3, 6, 9, 12, 15, 18 → 7
+	expectedFails := 0
+	for i := 0; i < numResults; i++ {
+		if i%3 == 0 {
+			expectedFails++
+		}
+	}
+	if failCount != expectedFails {
+		t.Errorf("expected %d failure results, got %d", expectedFails, failCount)
+	}
+
+	// Test range filtering: query only the first half.
+	midTime := baseTime.Add(time.Duration(numResults/2) * time.Minute)
+	firstHalf, err := store.QueryProbeResults(qCtx, probeID, from, midTime, 100)
+	if err != nil {
+		t.Fatalf("QueryProbeResults (first half): %v", err)
+	}
+	t.Logf("first-half range query: %d results (expected ~%d)", len(firstHalf), numResults/2)
+	if len(firstHalf) == 0 || len(firstHalf) >= numResults {
+		t.Errorf("range query should return a subset; got %d/%d", len(firstHalf), numResults)
+	}
+	// All results in firstHalf should be before midTime.
+	for _, r := range firstHalf {
+		if !r.TS.Before(midTime) {
+			t.Errorf("result outside range: ts=%v, expected < %v", r.TS, midTime)
+		}
+	}
+
+	// Test limit enforcement.
+	limited, err := store.QueryProbeResults(qCtx, probeID, from, to, 5)
+	if err != nil {
+		t.Fatalf("QueryProbeResults (limited): %v", err)
+	}
+	if len(limited) > 5 {
+		t.Errorf("limit=5: expected ≤5 results, got %d", len(limited))
+	}
+	t.Logf("limit=5 query returned %d results", len(limited))
+
+	t.Logf("PASS: probe_results=%d inserted+queried, time-ordered, range-filtered, limited",
+		numResults)
 }
 
 // TestIntegration_ViewerSessionsAndRollups verifies that viewer_sessions are inserted

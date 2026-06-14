@@ -8,7 +8,10 @@
 // normalized types. That boundary is the Phase 3 multi-server portability play.
 package domain
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // ─── Event type constants ─────────────────────────────────────────────────────
 
@@ -357,4 +360,51 @@ type EventSink interface {
 
 	// WriteViewerSession upserts a viewer session record.
 	WriteViewerSession(session ViewerSession)
+}
+
+// ─── F10 Synthetic probe types (WO-301) ──────────────────────────────────────
+
+// ProbeConfig holds the configuration for a single synthetic probe.
+// Source of truth lives in the meta store (probes table); read via ProbeConfigSource.
+type ProbeConfig struct {
+	ID        string // UUID primary key
+	Name      string // human-readable label
+	URL       string // stream URL to probe
+	Protocol  string // hls | webrtc | rtmp | dash
+	IntervalS int    // probe interval in seconds (default 60)
+	TimeoutS  int    // per-check timeout in seconds (default 10)
+	Enabled   bool   // only enabled probes are listed by ListEnabled
+}
+
+// ProbeResult holds the outcome of a single probe execution.
+// Written to ClickHouse probe_results by the runner; also passed to
+// ProbeConfigSource.RecordResult to update probes.last_* denorm fields.
+type ProbeResult struct {
+	ID          string    // UUID for this result row
+	ProbeID     string    // foreign key → ProbeConfig.ID
+	TS          time.Time // when the probe ran (UTC)
+	Success     bool      // true only on 2xx + parseable response
+	TTFBMs      uint32    // time-to-first-byte in milliseconds
+	ErrorCode   string    // "timeout" | "dns" | "http_4xx" | "http_5xx" | "parse" | "not_probed" | ""
+	ErrorMsg    string    // human-readable detail; empty on success
+	BitrateKbps float32   // estimated kbps = segment_bytes / segment_duration_s; 0 on failure
+}
+
+// ProbeConfigSource is the seam between the probe runner (BE-01) and the meta
+// store implementation (BE-02, WO-302). The runner calls ListEnabled each
+// interval to discover which probes to run, and RecordResult after each check
+// to update the denormalized last_* columns in the probes table.
+//
+// This interface follows the EventSink pattern established in Wave 1.
+//
+// Authoritative signatures — BE-02 implements these against the meta store.
+type ProbeConfigSource interface {
+	// ListEnabled returns all probes where enabled = 1.
+	// Called by the runner at the start of each scheduler tick.
+	ListEnabled(ctx context.Context) ([]ProbeConfig, error)
+
+	// RecordResult updates the probes.last_result_id, last_success, and
+	// last_run_at denormalized fields after a probe check completes.
+	// The full time-series result is written to ClickHouse by the runner itself.
+	RecordResult(ctx context.Context, r ProbeResult) error
 }

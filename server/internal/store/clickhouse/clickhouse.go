@@ -519,6 +519,77 @@ func (s *Store) Metrics() (inserted, dropped int64) {
 	return s.inserted.Load(), s.dropped.Load()
 }
 
+// ─── F10 Probe result store ───────────────────────────────────────────────────
+
+// InsertProbeResult writes a single probe result to ClickHouse probe_results.
+// Called synchronously by the probe runner after each check (results are low
+// frequency — one per probe per interval — so batching is not needed).
+func (s *Store) InsertProbeResult(ctx context.Context, r domain.ProbeResult) error {
+	b, err := s.conn.PrepareBatch(ctx, fmt.Sprintf("INSERT INTO %s.probe_results", s.db))
+	if err != nil {
+		return fmt.Errorf("probe_results: prepare batch: %w", err)
+	}
+	var successByte uint8
+	if r.Success {
+		successByte = 1
+	}
+	if err := b.Append(
+		r.ID,
+		r.ProbeID,
+		r.TS.UTC(),
+		successByte,
+		r.TTFBMs,
+		r.ErrorCode,
+		r.ErrorMsg,
+		r.BitrateKbps,
+	); err != nil {
+		return fmt.Errorf("probe_results: append: %w", err)
+	}
+	return b.Send()
+}
+
+// QueryProbeResults fetches probe results for a given probeID in the [from, to)
+// time range, ordered by ts ASC, capped at limit rows.
+// Used by BE-02's GET /probes/{id}/results handler.
+func (s *Store) QueryProbeResults(ctx context.Context, probeID string, from, to time.Time, limit int) ([]domain.ProbeResult, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	query := fmt.Sprintf(
+		`SELECT id, probe_id, ts, success, ttfb_ms, error_code, error_msg, bitrate_kbps
+		 FROM %s.probe_results
+		 WHERE probe_id = ?
+		   AND ts >= ? AND ts < ?
+		 ORDER BY ts ASC
+		 LIMIT %d`,
+		s.db, limit,
+	)
+	rows, err := s.conn.Query(ctx, query, probeID, from.UTC(), to.UTC())
+	if err != nil {
+		return nil, fmt.Errorf("probe_results: query: %w", err)
+	}
+	defer rows.Close()
+
+	var results []domain.ProbeResult
+	for rows.Next() {
+		var (
+			r         domain.ProbeResult
+			successU8 uint8
+			ts        time.Time
+		)
+		if err := rows.Scan(
+			&r.ID, &r.ProbeID, &ts, &successU8,
+			&r.TTFBMs, &r.ErrorCode, &r.ErrorMsg, &r.BitrateKbps,
+		); err != nil {
+			return nil, fmt.Errorf("probe_results: scan: %w", err)
+		}
+		r.TS = ts.UTC()
+		r.Success = successU8 != 0
+		results = append(results, r)
+	}
+	return results, rows.Err()
+}
+
 // ─── Data helpers ─────────────────────────────────────────────────────────────
 
 func strFromData(d map[string]any, key string) string {
