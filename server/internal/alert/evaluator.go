@@ -117,6 +117,9 @@ type Evaluator struct {
 	mu     sync.Mutex
 	states map[string]*ruleState // key = ruleID+":"+groupKey
 
+	// Wave 2: TLS cert expiry checker (nil = cert_expiry rules skipped).
+	certChecker CertExpiryChecker
+
 	// Notification sink for tests.
 	notifySink func([]byte)
 }
@@ -150,6 +153,14 @@ func (e *Evaluator) SetNotifySink(fn func([]byte)) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.notifySink = fn
+}
+
+// SetCertChecker configures the TLS cert expiry checker for cert_expiry rules.
+// If not set, cert_expiry rules are silently skipped.
+func (e *Evaluator) SetCertChecker(checker CertExpiryChecker) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.certChecker = checker
 }
 
 // Start runs the evaluator loop until ctx is cancelled.
@@ -227,6 +238,16 @@ func (e *Evaluator) evaluateRule(ctx context.Context, rule meta.AlertRuleRow, sn
 		evals = e.evalNodeMetric(snap, scope, rule, "mem_pct")
 	case "node_disk":
 		evals = e.evalNodeMetric(snap, scope, rule, "disk_pct")
+	// Wave 2: new metric types.
+	case "rebuffer_ratio", "error_rate", "ingest_bitrate_floor":
+		evals = e.evalQoEMetric(snap, scope, rule)
+	case "node_down", "node_degraded":
+		evals = e.evalNodeUpDown(snap, scope, rule)
+	case "cert_expiry":
+		// Cert expiry uses a real TLS checker in production; nil checker = skip.
+		if e.certChecker != nil {
+			evals = e.evalCertExpiry(ctx, rule, scope, e.certChecker)
+		}
 	default:
 		evals = e.evalGenericMetric(snap, scope, rule)
 	}
@@ -478,24 +499,9 @@ func (e *Evaluator) evalGenericMetric(snap *domain.LiveSnapshot, scope domain.Al
 }
 
 // inMaintenanceWindow returns true if now falls within any maintenance window.
+// Wave 2: delegates to the cron-based implementation in wave2.go (closes G2).
 func (e *Evaluator) inMaintenanceWindow(rule meta.AlertRuleRow, now time.Time) bool {
-	if rule.MaintenanceWindows == "[]" || rule.MaintenanceWindows == "" {
-		return false
-	}
-	// Parse maintenance windows: [{start_cron, duration_s}, ...]
-	// Wave 1: simple weekday+hour matching. Full cron parsing deferred to wave 2.
-	var windows []struct {
-		StartCron  string `json:"start_cron"`
-		DurationS  int    `json:"duration_s"`
-	}
-	if err := json.Unmarshal([]byte(rule.MaintenanceWindows), &windows); err != nil {
-		return false
-	}
-	// For wave 1, we use a simple approach: if any window contains "now"
-	// based on its cron expression, suppress.
-	// Full cron parsing is a wave-2 enhancement.
-	_ = windows
-	return false
+	return inMaintenanceWindowCron(rule, now)
 }
 
 // compare applies a comparison operator.

@@ -93,6 +93,18 @@ type EnvConfig struct {
 	// IngestTargetFPS is the expected healthy ingest frame rate.
 	// Default: 30.
 	IngestTargetFPS float64
+
+	// ─── Wave 2 product-plane config (BE-02) ──────────────────────────────────
+
+	// IngestListenAddr is the dedicated beacon ingest listener address.
+	// If empty, beacon ingest is served on the main API listener.
+	// Set to e.g. ":8091" to expose only the beacon endpoint on a separate port
+	// (DMZ deployment). Corresponds to PULSE_INGEST_LISTEN_ADDR.
+	IngestListenAddr string
+
+	// MetricsToken, if set, requires Authorization: Bearer <token> on GET /metrics.
+	// Corresponds to PULSE_METRICS_TOKEN.
+	MetricsToken string
 }
 
 // loadEnvConfig reads configuration from PULSE_* environment variables.
@@ -192,6 +204,10 @@ func loadEnvConfig() (EnvConfig, error) {
 	if cfg.IngestTargetFPS == 0 {
 		cfg.IngestTargetFPS = 30
 	}
+
+	// Wave 2 product-plane config.
+	cfg.IngestListenAddr = os.Getenv("PULSE_INGEST_LISTEN_ADDR")
+	cfg.MetricsToken = os.Getenv("PULSE_METRICS_TOKEN")
 
 	return cfg, nil
 }

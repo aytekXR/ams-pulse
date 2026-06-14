@@ -95,13 +95,15 @@ var freeTierEntitlements = Entitlements{
 	Channels:      []string{"email"},
 }
 
+// Pro tier (§7.11): adds Slack+Telegram, beacons/QoE, 90-day retention, CSV export.
+// PagerDuty+webhook require Business/Enterprise tier.
 var proTierEntitlements = Entitlements{
 	MaxNodes:      10,
 	MaxStreams:    -1,
 	RetentionDays: 90,
 	DataAPI:       true,
 	WhiteLabel:    false,
-	Channels:      []string{"email", "slack", "pagerduty", "telegram", "webhook"},
+	Channels:      []string{"email", "slack", "telegram"},
 }
 
 var enterpriseTierEntitlements = Entitlements{
@@ -371,7 +373,10 @@ func buildEntitlements(c claims) Entitlements {
 		ent.RetentionDays = -1
 	}
 
-	// Channels by tier fallback.
+	// Channels by tier (§7.11 tier matrix):
+	//   Free:       email only
+	//   Pro:        email, slack, telegram
+	//   Enterprise: all channels (email, slack, telegram, pagerduty, webhook)
 	switch Tier(c.Tier) {
 	case TierPro:
 		ent.Channels = proTierEntitlements.Channels

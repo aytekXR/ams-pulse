@@ -202,6 +202,11 @@ func (s *Service) LiveStreams(ctx context.Context, app, nodeID, tenant string, l
 
 // AudienceAnalytics returns audience timeseries and totals from rollup tables.
 func (s *Service) AudienceAnalytics(ctx context.Context, p AudienceParams) (*AudienceResult, error) {
+	// No ClickHouse connection — return empty result (test/dev environment).
+	if s.conn == nil {
+		return &AudienceResult{Totals: AudienceTotals{}, Timeseries: []AudienceBucket{}}, nil
+	}
+
 	// Apply retention check.
 	effectiveFrom, effectiveTo := s.applyRetention(p.From, p.To)
 

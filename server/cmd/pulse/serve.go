@@ -13,6 +13,7 @@ import (
 	"github.com/pulse-analytics/pulse/server/internal/cluster"
 	"github.com/pulse-analytics/pulse/server/internal/collector"
 	"github.com/pulse-analytics/pulse/server/internal/collector/aggregator"
+	beaconingest "github.com/pulse-analytics/pulse/server/internal/collector/beacon"
 	"github.com/pulse-analytics/pulse/server/internal/collector/ingest"
 	kafkasrc "github.com/pulse-analytics/pulse/server/internal/collector/kafka"
 	"github.com/pulse-analytics/pulse/server/internal/collector/restpoller"
@@ -23,6 +24,23 @@ import (
 	"github.com/pulse-analytics/pulse/server/internal/store/meta"
 	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
 )
+
+// metaIngestTokenStore adapts meta.Store to the beacon.TokenStore interface.
+// beacon.TokenStore requires GetIngestTokenByHash; meta.Store exposes GetTokenByHash.
+type metaIngestTokenStore struct {
+	store *meta.Store
+}
+
+func (m *metaIngestTokenStore) GetIngestTokenByHash(ctx context.Context, hash string) (string, bool, error) {
+	tok, err := m.store.GetTokenByHash(ctx, hash)
+	if err != nil {
+		return "", false, err
+	}
+	if tok == nil || tok.Kind != "ingest" {
+		return "", false, nil
+	}
+	return tok.ID, true, nil
+}
 
 // server holds all running services for the pulse binary.
 type server struct {
@@ -41,6 +59,9 @@ type server struct {
 	clusterDiscovery *cluster.Discovery
 	geoResolver      collector.GeoResolver
 	uaParser         collector.UAParser
+
+	// Wave 2: product-plane additions (BE-02).
+	beaconServer *beaconingest.Server // dedicated ingest listener (optional)
 }
 
 // newServer constructs all services from config.
@@ -199,11 +220,37 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 
 	// HOOK(BE-02): Wire API server.
 	apiCfg := api.Config{
-		ListenAddr: cfg.ListenAddr,
+		ListenAddr:   cfg.ListenAddr,
+		MetricsToken: cfg.MetricsToken, // Wave 2: PULSE_METRICS_TOKEN gating
 	}
 	apiServer := api.New(apiCfg, metaStore, agg, qsvc, lic, logger)
 	// Wire ClickHouse connection for /healthz probes (D-W1-002).
 	apiServer.SetClickHouseConn(store.GetConn())
+
+	// Wave 2 (BE-02): Seed default alert rule pack on first run (closes G8).
+	// Idempotent — no-op if rules already exist.
+	if err := alert.SeedDefaultRulePack(ctx, metaStore, logger); err != nil {
+		logger.Warn("pulse: default rule pack seeding failed (non-fatal)", "error", err)
+	}
+
+	// Wave 2 (BE-02): Dedicated beacon ingest listener (optional, PULSE_INGEST_LISTEN_ADDR).
+	// When set, the beacon ingest endpoint is also available on a separate port
+	// for DMZ/edge deployment without exposing the full API.
+	var beaconSrv *beaconingest.Server
+	if cfg.IngestListenAddr != "" {
+		ingestTokenStore := &metaIngestTokenStore{store: metaStore}
+		beaconSrv = beaconingest.NewServer(beaconingest.Config{
+			ListenAddr:           cfg.IngestListenAddr,
+			RateLimitPerTokenRPS: 100,
+			RateBurst:            200,
+		}, ingestTokenStore, fanout, logger)
+		logger.Info("pulse: beacon ingest listener configured", "addr", cfg.IngestListenAddr)
+	}
+
+	// Wave 2 (BE-02): Cert expiry checker for cert_expiry alert rules.
+	// Wired to the evaluator to enable TLS cert monitoring.
+	certChecker := alert.NewCertChecker(10 * time.Second)
+	alertEval.SetCertChecker(certChecker)
 
 	return &server{
 		store:            store,
@@ -219,6 +266,7 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		clusterDiscovery: clusterDiscovery,
 		geoResolver:      geoResolver,
 		uaParser:         uaParser,
+		beaconServer:     beaconSrv,
 	}, nil
 }
 
@@ -285,6 +333,13 @@ func (s *server) Start(ctx context.Context) error {
 		return fmt.Errorf("api server: %w", err)
 	}
 
+	// Wave 2 (BE-02): Start dedicated beacon ingest listener if configured.
+	if s.beaconServer != nil {
+		if err := s.beaconServer.Start(); err != nil {
+			return fmt.Errorf("beacon ingest server: %w", err)
+		}
+	}
+
 	s.logger.Info("pulse: all services started")
 	return nil
 }
@@ -292,6 +347,14 @@ func (s *server) Start(ctx context.Context) error {
 // Stop shuts down all services gracefully.
 func (s *server) Stop() {
 	s.alertEval.Stop()
+	// Wave 2 (BE-02): Gracefully stop dedicated beacon ingest listener.
+	if s.beaconServer != nil {
+		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.beaconServer.Stop(stopCtx); err != nil {
+			s.logger.Warn("pulse: beacon server stop error", "error", err)
+		}
+	}
 	if s.meta != nil {
 		s.meta.Close()
 	}
