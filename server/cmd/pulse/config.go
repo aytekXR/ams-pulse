@@ -105,6 +105,37 @@ type EnvConfig struct {
 	// MetricsToken, if set, requires Authorization: Bearer <token> on GET /metrics.
 	// Corresponds to PULSE_METRICS_TOKEN.
 	MetricsToken string
+
+	// ─── Wave 2 product-plane: reports, schedules, S3 (BE-02, WO-204) ────────────
+
+	// ReportsDir is the base directory for generated report artifacts.
+	// Corresponds to PULSE_REPORTS_DIR (default: ./pulse-reports).
+	ReportsDir string
+
+	// S3Endpoint is the S3-compatible endpoint URL (e.g. https://s3.amazonaws.com).
+	// Corresponds to PULSE_S3_ENDPOINT. Empty = S3 export disabled.
+	S3Endpoint string
+
+	// S3Bucket is the target bucket for report uploads.
+	// Corresponds to PULSE_S3_BUCKET.
+	S3Bucket string
+
+	// S3Prefix is the key prefix applied to every uploaded object.
+	// Corresponds to PULSE_S3_PREFIX (default: "reports/").
+	S3Prefix string
+
+	// S3Region is the AWS region (default: us-east-1).
+	// Corresponds to PULSE_S3_REGION.
+	S3Region string
+
+	// S3AccessKeyEnvRef is the name of the env var that holds the S3 access key ID.
+	// The ACTUAL key is read from that env var at upload time, never stored.
+	// Corresponds to PULSE_S3_ACCESS_KEY_ENV (default: PULSE_S3_ACCESS_KEY_ID).
+	S3AccessKeyEnvRef string
+
+	// S3SecretKeyEnvRef is the name of the env var that holds the S3 secret access key.
+	// Corresponds to PULSE_S3_SECRET_KEY_ENV (default: PULSE_S3_SECRET_ACCESS_KEY).
+	S3SecretKeyEnvRef string
 }
 
 // loadEnvConfig reads configuration from PULSE_* environment variables.
@@ -208,6 +239,15 @@ func loadEnvConfig() (EnvConfig, error) {
 	// Wave 2 product-plane config.
 	cfg.IngestListenAddr = os.Getenv("PULSE_INGEST_LISTEN_ADDR")
 	cfg.MetricsToken = os.Getenv("PULSE_METRICS_TOKEN")
+
+	// Wave 2 (WO-204): reports + S3 export config.
+	cfg.ReportsDir = envOrDefault("PULSE_REPORTS_DIR", "pulse-reports")
+	cfg.S3Endpoint = os.Getenv("PULSE_S3_ENDPOINT")
+	cfg.S3Bucket = os.Getenv("PULSE_S3_BUCKET")
+	cfg.S3Prefix = envOrDefault("PULSE_S3_PREFIX", "reports/")
+	cfg.S3Region = envOrDefault("PULSE_S3_REGION", "us-east-1")
+	cfg.S3AccessKeyEnvRef = envOrDefault("PULSE_S3_ACCESS_KEY_ENV", "PULSE_S3_ACCESS_KEY_ID")
+	cfg.S3SecretKeyEnvRef = envOrDefault("PULSE_S3_SECRET_KEY_ENV", "PULSE_S3_SECRET_ACCESS_KEY")
 
 	return cfg, nil
 }

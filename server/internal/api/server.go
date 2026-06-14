@@ -49,6 +49,7 @@ import (
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 	"github.com/pulse-analytics/pulse/server/internal/license"
 	"github.com/pulse-analytics/pulse/server/internal/query"
+	"github.com/pulse-analytics/pulse/server/internal/reports"
 	"github.com/pulse-analytics/pulse/server/internal/store/meta"
 )
 
@@ -76,6 +77,9 @@ type Server struct {
 
 	// Wave 2: ingest tracker for QoE endpoints (optional).
 	ingestTracker IngestTracker
+
+	// Wave 2: reports generator (optional — requires ClickHouse for real data).
+	reportGen *reports.Generator
 
 	// WS hub
 	wsMu    sync.Mutex
@@ -120,6 +124,12 @@ func (s *Server) SetClickHouseConn(conn clickhouse.Conn) {
 // Call after New, before Start.
 func (s *Server) SetIngestTracker(tracker IngestTracker) {
 	s.ingestTracker = tracker
+}
+
+// SetReportGenerator wires the reports generator (F6).
+// Call after New, before Start.
+func (s *Server) SetReportGenerator(gen *reports.Generator) {
+	s.reportGen = gen
 }
 
 // Start bootstraps the server (token if needed) and starts listening.
@@ -226,6 +236,13 @@ func (s *Server) buildRouter() {
 		r.Post("/reports/schedules", s.handleCreateReportSchedule)
 		r.Put("/reports/schedules/{scheduleId}", s.handleUpdateReportSchedule)
 		r.Delete("/reports/schedules/{scheduleId}", s.handleDeleteReportSchedule)
+
+		// Wave 2 (WO-204): Tenant management (F6 multi-tenant billing).
+		// Route path follows the admin pattern; not in OpenAPI contracts (contracts frozen).
+		r.Get("/admin/tenants", s.handleListTenants)
+		r.Post("/admin/tenants", s.handleCreateTenant)
+		r.Put("/admin/tenants/{tenantId}", s.handleUpdateTenant)
+		r.Delete("/admin/tenants/{tenantId}", s.handleDeleteTenant)
 
 		r.Get("/fleet/nodes", s.handleFleetNodes)
 
@@ -906,32 +923,6 @@ func (s *Server) handleAlertHistory(w http.ResponseWriter, r *http.Request) {
 		items = append(items, item)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items, "meta": map[string]any{"next_cursor": nil}})
-}
-
-// ─── Reports (stubs) ──────────────────────────────────────────────────────────
-
-func (s *Server) handleReportUsage(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"rows":          []any{},
-		"totals":        map[string]any{"viewer_minutes": 0, "peak_concurrency": 0, "egress_gb": 0, "recording_gb": 0},
-		"egress_method": "bitrate_x_watch_time",
-	})
-}
-
-func (s *Server) handleListReportSchedules(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"items": []any{}, "meta": map[string]any{"next_cursor": nil}})
-}
-
-func (s *Server) handleCreateReportSchedule(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "report schedules available in wave 2")
-}
-
-func (s *Server) handleUpdateReportSchedule(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "report schedules available in wave 2")
-}
-
-func (s *Server) handleDeleteReportSchedule(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "report schedules available in wave 2")
 }
 
 // ─── Fleet ────────────────────────────────────────────────────────────────────

@@ -28,6 +28,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pulse-analytics/pulse/server/internal/reports"
+	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse"
 	"github.com/pulse-analytics/pulse/server/internal/store/meta"
 )
 
@@ -207,7 +209,13 @@ func runMigrate(args []string) error {
 // ─── Diag ─────────────────────────────────────────────────────────────────────
 
 func runDiag(args []string) error {
-	_ = args
+	// Parse --reconcile flag.
+	doReconcile := false
+	for _, a := range args {
+		if a == "--reconcile" || a == "-reconcile" {
+			doReconcile = true
+		}
+	}
 
 	cfg, err := loadEnvConfig()
 	if err != nil {
@@ -229,6 +237,76 @@ func runDiag(args []string) error {
 	checkClickHouse(cfg.ClickHouseDSN)
 	checkAMS(cfg.AMSBaseURL)
 
+	// ─── Reconciliation check (WO-204, PRD F6): pulse diag --reconcile ────────
+	if doReconcile {
+		fmt.Println("\n=== Reconciliation (±1% budget) ===")
+		if err := runReconcile(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "reconcile: %v\n", err)
+			return err
+		}
+	}
+
+	return nil
+}
+
+// runReconcile runs the ±1% reconciliation check against live ClickHouse data.
+// Source: Accountant.Reconcile — compares rollup_audience_1d to raw viewer_sessions.
+func runReconcile(cfg EnvConfig) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+	// Connect to ClickHouse.
+	chCfg := clickhouse.Config{
+		DSN:           cfg.ClickHouseDSN,
+		Database:      cfg.ClickHouseDatabase,
+		BatchSize:     1,
+		FlushInterval: time.Second,
+		MaxRetries:    1,
+		RetryDelay:    time.Second,
+	}
+	chStore, err := clickhouse.New(ctx, chCfg, logger)
+	if err != nil {
+		return fmt.Errorf("connect ClickHouse: %w", err)
+	}
+	defer chStore.Close()
+
+	// Connect to meta store (for tenant mapping).
+	metaDSN := os.Getenv("PULSE_META_DSN")
+	if metaDSN == "" {
+		metaDSN = "pulse_meta.db"
+	}
+	metaSecretKey := os.Getenv("PULSE_SECRET_KEY")
+	metaStore, err := meta.New(ctx, "sqlite", metaDSN, metaSecretKey)
+	if err != nil {
+		return fmt.Errorf("connect meta store: %w", err)
+	}
+	defer metaStore.Close()
+
+	// Default: previous calendar month.
+	now := time.Now().UTC()
+	to := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	from := to.AddDate(0, -1, 0)
+	fmt.Printf("Period:         %s to %s\n", from.Format("2006-01-02"), to.Format("2006-01-02"))
+
+	accountant := reports.NewAccountant(chStore.GetConn(), metaStore)
+	result, err := accountant.Reconcile(ctx, from, to)
+	if err != nil {
+		return fmt.Errorf("reconcile: %w", err)
+	}
+
+	fmt.Printf("Rollup minutes: %.4f\n", result.RollupViewerMinutes)
+	fmt.Printf("Raw minutes:    %.4f\n", result.RawViewerMinutes)
+	fmt.Printf("Data points:    %d\n", result.DataPoints)
+	fmt.Printf("Drift:          %.4f%%\n", result.DriftPct)
+
+	if result.WithinTolerance {
+		fmt.Printf("Result:         PASS (drift %.4f%% ≤ 1.0%%)\n", result.DriftPct)
+	} else {
+		fmt.Printf("Result:         FAIL (drift %.4f%% > 1.0%% budget)\n", result.DriftPct)
+		return fmt.Errorf("reconciliation drift %.4f%% exceeds ±1%% budget", result.DriftPct)
+	}
 	return nil
 }
 

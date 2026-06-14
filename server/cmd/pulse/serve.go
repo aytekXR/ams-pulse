@@ -20,6 +20,7 @@ import (
 	"github.com/pulse-analytics/pulse/server/internal/collector/sessions"
 	"github.com/pulse-analytics/pulse/server/internal/license"
 	"github.com/pulse-analytics/pulse/server/internal/query"
+	"github.com/pulse-analytics/pulse/server/internal/reports"
 	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse"
 	"github.com/pulse-analytics/pulse/server/internal/store/meta"
 	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
@@ -61,7 +62,8 @@ type server struct {
 	uaParser         collector.UAParser
 
 	// Wave 2: product-plane additions (BE-02).
-	beaconServer *beaconingest.Server // dedicated ingest listener (optional)
+	beaconServer    *beaconingest.Server  // dedicated ingest listener (optional)
+	reportScheduler *reports.Scheduler   // report schedule runner (WO-204)
 }
 
 // newServer constructs all services from config.
@@ -252,6 +254,33 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	certChecker := alert.NewCertChecker(10 * time.Second)
 	alertEval.SetCertChecker(certChecker)
 
+	// Wave 2 (BE-02, WO-204): Report accountant, scheduler, and generator.
+	// Accountant queries ClickHouse rollup tables for usage figures.
+	// Scheduler polls report_schedules and fires artifact generation.
+	accountant := reports.NewAccountant(store.GetConn(), metaStore)
+
+	s3Cfg := reports.S3Config{
+		Endpoint:        cfg.S3Endpoint,
+		Bucket:          cfg.S3Bucket,
+		Prefix:          cfg.S3Prefix,
+		Region:          cfg.S3Region,
+		AccessKeyEnvRef: cfg.S3AccessKeyEnvRef,
+		SecretKeyEnvRef: cfg.S3SecretKeyEnvRef,
+	}
+	reportScheduler := reports.NewScheduler(reports.SchedulerConfig{
+		ArtifactsDir: cfg.ReportsDir,
+		TickInterval: 60 * time.Second,
+		S3:           s3Cfg,
+	}, accountant, metaStore, logger)
+	// Wire alert history for schedule failure notifications.
+	reportScheduler.SetAlertStore(metaStore)
+
+	reportGen := &reports.Generator{
+		Accountant: accountant,
+		Scheduler:  reportScheduler,
+	}
+	apiServer.SetReportGenerator(reportGen)
+
 	return &server{
 		store:            store,
 		meta:             metaStore,
@@ -267,6 +296,7 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		geoResolver:      geoResolver,
 		uaParser:         uaParser,
 		beaconServer:     beaconSrv,
+		reportScheduler:  reportScheduler,
 	}, nil
 }
 
@@ -340,12 +370,21 @@ func (s *server) Start(ctx context.Context) error {
 		}
 	}
 
+	// Wave 2 (BE-02, WO-204): Start report scheduler.
+	if s.reportScheduler != nil {
+		s.reportScheduler.Start(ctx)
+	}
+
 	s.logger.Info("pulse: all services started")
 	return nil
 }
 
 // Stop shuts down all services gracefully.
 func (s *server) Stop() {
+	// Wave 2 (BE-02, WO-204): Stop report scheduler.
+	if s.reportScheduler != nil {
+		s.reportScheduler.Stop()
+	}
 	s.alertEval.Stop()
 	// Wave 2 (BE-02): Gracefully stop dedicated beacon ingest listener.
 	if s.beaconServer != nil {

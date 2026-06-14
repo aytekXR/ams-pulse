@@ -782,6 +782,219 @@ func scanAMSSource(row scanner) (*AMSSourceRow, error) {
 	return &src, nil
 }
 
+// ─── Tenants ─────────────────────────────────────────────────────────────────
+
+// TenantRow mirrors the tenants table (F6 multi-tenant billing mapping).
+type TenantRow struct {
+	ID             string
+	Name           string
+	StreamPattern  string // LIKE glob on stream_id; empty = not used
+	MetaTagKey     string // beacon meta field key; empty = not used
+	MetaTagValue   string // beacon meta field value to match
+	CreatedAt      int64
+	UpdatedAt      int64
+}
+
+// CreateTenant inserts a new tenant.
+func (s *Store) CreateTenant(ctx context.Context, t TenantRow) (TenantRow, error) {
+	if t.ID == "" {
+		t.ID = newUUID()
+	}
+	now := nowMS()
+	t.CreatedAt = now
+	t.UpdatedAt = now
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO tenants (id, name, stream_pattern, meta_tag_key, meta_tag_value, created_at, updated_at)
+		 VALUES (?,?,?,?,?,?,?)`,
+		t.ID, t.Name, t.StreamPattern, t.MetaTagKey, t.MetaTagValue, t.CreatedAt, t.UpdatedAt)
+	return t, err
+}
+
+// GetTenant fetches a tenant by ID.
+func (s *Store) GetTenant(ctx context.Context, id string) (*TenantRow, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, name, stream_pattern, meta_tag_key, meta_tag_value, created_at, updated_at
+		 FROM tenants WHERE id=?`, id)
+	return scanTenant(row)
+}
+
+// GetTenantByName fetches a tenant by name.
+func (s *Store) GetTenantByName(ctx context.Context, name string) (*TenantRow, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, name, stream_pattern, meta_tag_key, meta_tag_value, created_at, updated_at
+		 FROM tenants WHERE name=?`, name)
+	return scanTenant(row)
+}
+
+// ListTenants returns all tenants.
+func (s *Store) ListTenants(ctx context.Context) ([]TenantRow, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, name, stream_pattern, meta_tag_key, meta_tag_value, created_at, updated_at
+		 FROM tenants ORDER BY created_at`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var tenants []TenantRow
+	for rows.Next() {
+		t, err := scanTenant(rows)
+		if err != nil {
+			return nil, err
+		}
+		tenants = append(tenants, *t)
+	}
+	return tenants, rows.Err()
+}
+
+// UpdateTenant updates a tenant by ID.
+func (s *Store) UpdateTenant(ctx context.Context, t TenantRow) error {
+	t.UpdatedAt = nowMS()
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE tenants SET name=?, stream_pattern=?, meta_tag_key=?, meta_tag_value=?, updated_at=?
+		 WHERE id=?`,
+		t.Name, t.StreamPattern, t.MetaTagKey, t.MetaTagValue, t.UpdatedAt, t.ID)
+	return err
+}
+
+// DeleteTenant removes a tenant by ID.
+func (s *Store) DeleteTenant(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM tenants WHERE id=?`, id)
+	return err
+}
+
+func scanTenant(row scanner) (*TenantRow, error) {
+	var t TenantRow
+	if err := row.Scan(&t.ID, &t.Name, &t.StreamPattern, &t.MetaTagKey, &t.MetaTagValue, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &t, nil
+}
+
+// ─── Report Schedules ─────────────────────────────────────────────────────────
+
+// ReportScheduleRow mirrors the report_schedules table.
+type ReportScheduleRow struct {
+	ID                string
+	Cron              string
+	Format            string // "csv" | "pdf"
+	ScopeJSON         string // {"app": ..., "tenant": ...}
+	TenantMapping     sql.NullString
+	WhitelabelHeader  sql.NullString // JSON
+	LastRunAt         *int64
+	NextRunAt         *int64
+	CreatedAt         int64
+	UpdatedAt         int64
+}
+
+// CreateReportSchedule inserts a new report schedule.
+func (s *Store) CreateReportSchedule(ctx context.Context, r ReportScheduleRow) (ReportScheduleRow, error) {
+	if r.ID == "" {
+		r.ID = newUUID()
+	}
+	now := nowMS()
+	r.CreatedAt = now
+	r.UpdatedAt = now
+	if r.ScopeJSON == "" {
+		r.ScopeJSON = "{}"
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO report_schedules
+		 (id, cron, format, scope, tenant_mapping, whitelabel_header, last_run_at, next_run_at, created_at, updated_at)
+		 VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		r.ID, r.Cron, r.Format, r.ScopeJSON, r.TenantMapping, r.WhitelabelHeader,
+		r.LastRunAt, r.NextRunAt, r.CreatedAt, r.UpdatedAt)
+	return r, err
+}
+
+// GetReportSchedule fetches a schedule by ID.
+func (s *Store) GetReportSchedule(ctx context.Context, id string) (*ReportScheduleRow, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, cron, format, scope, tenant_mapping, whitelabel_header, last_run_at, next_run_at, created_at, updated_at
+		 FROM report_schedules WHERE id=?`, id)
+	return scanReportSchedule(row)
+}
+
+// ListReportSchedules returns all schedules.
+func (s *Store) ListReportSchedules(ctx context.Context) ([]ReportScheduleRow, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, cron, format, scope, tenant_mapping, whitelabel_header, last_run_at, next_run_at, created_at, updated_at
+		 FROM report_schedules ORDER BY created_at`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var schedules []ReportScheduleRow
+	for rows.Next() {
+		r, err := scanReportSchedule(rows)
+		if err != nil {
+			return nil, err
+		}
+		schedules = append(schedules, *r)
+	}
+	return schedules, rows.Err()
+}
+
+// UpdateReportSchedule updates a schedule by ID.
+func (s *Store) UpdateReportSchedule(ctx context.Context, r ReportScheduleRow) error {
+	r.UpdatedAt = nowMS()
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE report_schedules SET cron=?, format=?, scope=?, tenant_mapping=?, whitelabel_header=?,
+		  last_run_at=?, next_run_at=?, updated_at=? WHERE id=?`,
+		r.Cron, r.Format, r.ScopeJSON, r.TenantMapping, r.WhitelabelHeader,
+		r.LastRunAt, r.NextRunAt, r.UpdatedAt, r.ID)
+	return err
+}
+
+// DeleteReportSchedule removes a schedule by ID.
+func (s *Store) DeleteReportSchedule(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM report_schedules WHERE id=?`, id)
+	return err
+}
+
+// ListDueReportSchedules returns schedules whose next_run_at <= now (Unix ms).
+func (s *Store) ListDueReportSchedules(ctx context.Context, nowMS int64) ([]ReportScheduleRow, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, cron, format, scope, tenant_mapping, whitelabel_header, last_run_at, next_run_at, created_at, updated_at
+		 FROM report_schedules WHERE next_run_at IS NOT NULL AND next_run_at <= ?
+		 ORDER BY next_run_at`, nowMS)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var schedules []ReportScheduleRow
+	for rows.Next() {
+		r, err := scanReportSchedule(rows)
+		if err != nil {
+			return nil, err
+		}
+		schedules = append(schedules, *r)
+	}
+	return schedules, rows.Err()
+}
+
+// MarkScheduleRan updates last_run_at and next_run_at for a completed schedule.
+func (s *Store) MarkScheduleRan(ctx context.Context, id string, lastRunAt, nextRunAt int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE report_schedules SET last_run_at=?, next_run_at=?, updated_at=? WHERE id=?`,
+		lastRunAt, nextRunAt, nowMS(), id)
+	return err
+}
+
+func scanReportSchedule(row scanner) (*ReportScheduleRow, error) {
+	var r ReportScheduleRow
+	if err := row.Scan(&r.ID, &r.Cron, &r.Format, &r.ScopeJSON, &r.TenantMapping,
+		&r.WhitelabelHeader, &r.LastRunAt, &r.NextRunAt, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &r, nil
+}
+
 // ─── Encryption helpers ───────────────────────────────────────────────────────
 
 // Encrypt encrypts plaintext using AES-256-GCM and returns a base64 ciphertext.
