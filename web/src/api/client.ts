@@ -39,6 +39,11 @@ import type {
   ReportScheduleList,
   ReportSchedule,
   ReportScheduleWrite,
+  AnomalyList,
+  ProbeList,
+  Probe,
+  ProbeWrite,
+  ProbeResultList,
 } from "@/lib/api/types";
 import type { components } from "@/lib/api/schema.d.ts";
 
@@ -372,6 +377,73 @@ export const reportsApi = {
     const token = getToken();
     const url = `/api/v1/reports/export?${q}${token ? `&token=${token}` : ""}`;
     window.location.href = url;
+  },
+};
+
+// ─── Anomalies endpoints (F9) ────────────────────────────────────────────────
+
+export const anomaliesApi = {
+  list: (params?: {
+    from?: number;
+    to?: number;
+    app?: string;
+    stream?: string;
+    metric?: string;
+    min_sigma?: number;
+    limit?: number;
+    cursor?: string;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.from) q.set("from", String(params.from));
+    if (params?.to) q.set("to", String(params.to));
+    if (params?.app) q.set("app", params.app);
+    if (params?.stream) q.set("stream", params.stream);
+    if (params?.metric) q.set("metric", params.metric);
+    if (params?.min_sigma != null) q.set("min_sigma", String(params.min_sigma));
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.cursor) q.set("cursor", params.cursor);
+    const qs = q.toString() ? `?${q}` : "";
+    return apiFetch<AnomalyList>(`/anomalies${qs}`);
+  },
+};
+
+// ─── Probes endpoints (F10) ──────────────────────────────────────────────────
+
+export const probesApi = {
+  list: (params?: { limit?: number; cursor?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.cursor) q.set("cursor", params.cursor);
+    const qs = q.toString() ? `?${q}` : "";
+    return apiFetch<ProbeList>(`/probes${qs}`);
+  },
+
+  create: (body: ProbeWrite) =>
+    apiFetch<Probe>("/probes", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  update: (id: string, body: ProbeWrite) =>
+    apiFetch<Probe>(`/probes/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  delete: (id: string) =>
+    apiFetch<void>(`/probes/${id}`, { method: "DELETE" }),
+
+  getResults: (
+    id: string,
+    params?: { from?: number; to?: number; limit?: number; cursor?: string },
+  ) => {
+    const q = new URLSearchParams();
+    if (params?.from) q.set("from", String(params.from));
+    if (params?.to) q.set("to", String(params.to));
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.cursor) q.set("cursor", params.cursor);
+    const qs = q.toString() ? `?${q}` : "";
+    return apiFetch<ProbeResultList>(`/probes/${id}/results${qs}`);
   },
 };
 

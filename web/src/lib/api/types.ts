@@ -78,6 +78,17 @@ export type User = Schemas["User"];
 export type UserWrite = Schemas["UserWrite"];
 export type UserList = Schemas["UserList"];
 
+// ─── F9 — Anomaly detection ───────────────────────────────────────────────────
+export type AnomalyFlag = Schemas["AnomalyFlag"];
+export type AnomalyList = Schemas["AnomalyList"];
+
+// ─── F10 — Synthetic probes ───────────────────────────────────────────────────
+export type Probe = Schemas["Probe"];
+export type ProbeWrite = Schemas["ProbeWrite"];
+export type ProbeList = Schemas["ProbeList"];
+export type ProbeResult = Schemas["ProbeResult"];
+export type ProbeResultList = Schemas["ProbeResultList"];
+
 // ─── WS envelope types (per spec /live/ws description) ───────────────────────
 export interface WsMessage<T = unknown> {
   type: "snapshot" | "delta" | "heartbeat";

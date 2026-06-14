@@ -10,6 +10,8 @@
  *   /alerts      → rules, channels, history (F5)  — Wave 1
  *   /reports     → usage & billing (F6)           — Wave 2
  *   /fleet       → cluster nodes (F7)             — Wave 2
+ *   /anomalies   → anomaly flags (F9)             — Wave 3
+ *   /probes      → synthetic probes (F10)         — Wave 3
  *   /settings    → sources, tokens, license, users
  */
 
@@ -25,6 +27,8 @@ import { IngestPage } from "@/features/ingest/IngestPage";
 import { AlertsPage } from "@/features/alerts/AlertsPage";
 import { ReportsPage } from "@/features/reports/ReportsPage";
 import { FleetPage } from "@/features/fleet/FleetPage";
+import { AnomaliesPage } from "@/features/anomalies/AnomaliesPage";
+import { ProbesPage } from "@/features/probes/ProbesPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import { OnboardingWizard } from "@/features/settings/OnboardingWizard";
 import "@/styles/global.css";
@@ -44,6 +48,8 @@ function AppRoutes() {
           <Route path="/alerts" element={<AlertsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/fleet" element={<FleetPage />} />
+          <Route path="/anomalies" element={<AnomaliesPage />} />
+          <Route path="/probes" element={<ProbesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route
             path="/onboarding"

@@ -1,0 +1,532 @@
+/**
+ * Probes page tests (F10):
+ *  - Probe list rendering (name, url, protocol, interval, enabled, last_result)
+ *  - Create form validation (interval < 30 rejected, URL required, name required)
+ *  - Probe results rendering with SYNTHETIC labeling
+ *  - Tier-gated views (Free blocked / Pro+ entitled)
+ *  - Synthetic-labeling present on results
+ *  - Delete confirm flow
+ */
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import type { Probe, ProbeResult, LicenseInfo } from "@/lib/api/types";
+
+// ─── Probe form validation (pure unit tests) ──────────────────────────────────
+
+interface ProbeFormData {
+  name: string;
+  url: string;
+  protocol: string;
+  interval_s: string;
+  timeout_s: string;
+  enabled: boolean;
+}
+
+function validateProbeForm(data: ProbeFormData): string | null {
+  if (!data.name.trim()) return "Name is required";
+  if (!data.url.trim()) return "URL is required";
+  try {
+    new URL(data.url.trim());
+  } catch {
+    return "URL must be a valid URL (include http:// or rtmp://)";
+  }
+  const interval = Number(data.interval_s);
+  if (!Number.isInteger(interval) || interval < 30) {
+    return "Interval must be an integer ≥ 30 seconds";
+  }
+  const timeout = Number(data.timeout_s);
+  if (!Number.isInteger(timeout) || timeout < 1) {
+    return "Timeout must be a positive integer";
+  }
+  return null;
+}
+
+describe("ProbeForm validation", () => {
+  const base: ProbeFormData = {
+    name: "Test probe",
+    url: "https://example.com/live/stream.m3u8",
+    protocol: "hls",
+    interval_s: "60",
+    timeout_s: "10",
+    enabled: true,
+  };
+
+  it("valid form returns null", () => {
+    expect(validateProbeForm(base)).toBeNull();
+  });
+
+  it("interval < 30 is rejected", () => {
+    expect(validateProbeForm({ ...base, interval_s: "29" })).toMatch(/≥ 30/);
+  });
+
+  it("interval = 30 is accepted", () => {
+    expect(validateProbeForm({ ...base, interval_s: "30" })).toBeNull();
+  });
+
+  it("interval = 0 is rejected", () => {
+    expect(validateProbeForm({ ...base, interval_s: "0" })).toMatch(/≥ 30/);
+  });
+
+  it("non-integer interval is rejected", () => {
+    expect(validateProbeForm({ ...base, interval_s: "45.5" })).toMatch(/≥ 30/);
+  });
+
+  it("empty name is rejected", () => {
+    expect(validateProbeForm({ ...base, name: "" })).toMatch(/name is required/i);
+  });
+
+  it("whitespace-only name is rejected", () => {
+    expect(validateProbeForm({ ...base, name: "   " })).toMatch(/name is required/i);
+  });
+
+  it("empty URL is rejected", () => {
+    expect(validateProbeForm({ ...base, url: "" })).toMatch(/url is required/i);
+  });
+
+  it("invalid URL is rejected", () => {
+    expect(validateProbeForm({ ...base, url: "not-a-url" })).toMatch(/valid url/i);
+  });
+
+  it("rtmp:// URL is accepted", () => {
+    expect(validateProbeForm({ ...base, url: "rtmp://example.com/live/stream" })).toBeNull();
+  });
+
+  it("timeout < 1 is rejected", () => {
+    expect(validateProbeForm({ ...base, timeout_s: "0" })).toMatch(/positive integer/i);
+  });
+});
+
+// ─── Component tests ──────────────────────────────────────────────────────────
+
+vi.mock("@/api/client", () => ({
+  probesApi: {
+    list: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    getResults: vi.fn(),
+  },
+  adminApi: {
+    getLicense: vi.fn(),
+  },
+  ApiError: class ApiError extends Error {
+    status: number;
+    body: unknown;
+    constructor(status: number, body: { message?: string }) {
+      super(body.message ?? `HTTP ${status}`);
+      this.status = status;
+      this.body = body;
+      this.name = "ApiError";
+    }
+  },
+}));
+
+vi.mock("@/components/Toast", () => ({
+  useToast: () => ({ toast: vi.fn() }),
+}));
+
+vi.mock("recharts", () => ({
+  LineChart: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="line-chart">{children}</div>
+  ),
+  Line: () => null,
+  XAxis: () => null,
+  YAxis: () => null,
+  CartesianGrid: () => null,
+  Tooltip: () => null,
+  ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="responsive-container">{children}</div>
+  ),
+  ReferenceLine: () => null,
+}));
+
+import { adminApi, probesApi } from "@/api/client";
+import { ProbesPage } from "../ProbesPage";
+
+const freeLicense: LicenseInfo = { tier: "free", valid: true };
+const proLicense: LicenseInfo = { tier: "pro", valid: true };
+const enterpriseLicense: LicenseInfo = { tier: "enterprise", valid: true };
+
+const now = Date.now();
+
+const sampleProbes: Probe[] = [
+  {
+    id: "probe-1",
+    name: "Main HLS stream",
+    url: "https://example.com/live/main.m3u8",
+    protocol: "hls",
+    interval_s: 60,
+    timeout_s: 10,
+    enabled: true,
+    created_at: now - 86_400_000,
+    last_result: {
+      id: "result-1",
+      probe_id: "probe-1",
+      ts: now - 60_000,
+      success: true,
+      ttfb_ms: 150,
+      bitrate_kbps: 2500,
+    },
+  },
+  {
+    id: "probe-2",
+    name: "Backup stream",
+    url: "rtmp://example.com/live/backup",
+    protocol: "rtmp",
+    interval_s: 120,
+    timeout_s: 15,
+    enabled: false,
+    created_at: now - 3_600_000,
+    last_result: {
+      id: "result-2",
+      probe_id: "probe-2",
+      ts: now - 120_000,
+      success: false,
+      ttfb_ms: null,
+      error_code: "timeout",
+      error_message: "Connection timed out",
+    },
+  },
+];
+
+const sampleResults: ProbeResult[] = [
+  {
+    id: "r-1",
+    probe_id: "probe-1",
+    ts: now - 60_000,
+    success: true,
+    ttfb_ms: 150,
+    bitrate_kbps: 2500,
+  },
+  {
+    id: "r-2",
+    probe_id: "probe-1",
+    ts: now - 120_000,
+    success: false,
+    ttfb_ms: null,
+    error_code: "http_5xx",
+    error_message: "Service unavailable",
+  },
+];
+
+describe("ProbesPage tier gate", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows loading spinner while license loads", () => {
+    vi.mocked(adminApi.getLicense).mockReturnValue(new Promise(() => {}));
+    const { unmount } = render(<ProbesPage />);
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    unmount();
+  });
+
+  it("shows upsell when license is 'free'", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue(freeLicense);
+    render(<ProbesPage />);
+    await waitFor(() => {
+      expect(
+        screen.getByText(/synthetic probes requires pro tier/i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows upgrade link when gated", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue(freeLicense);
+    render(<ProbesPage />);
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: /upgrade license/i })).toBeInTheDocument();
+    });
+  });
+
+  it("shows probe list when license is 'pro'", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue(proLicense);
+    vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
+    render(<ProbesPage />);
+    await waitFor(() => {
+      expect(screen.getByText("Main HLS stream")).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/requires pro tier/i)).toBeNull();
+  });
+
+  it("shows probe list when license is 'enterprise'", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue(enterpriseLicense);
+    vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
+    render(<ProbesPage />);
+    await waitFor(() => {
+      expect(screen.getByText("Main HLS stream")).toBeInTheDocument();
+    });
+  });
+});
+
+describe("ProbesPage probe list rendering", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(adminApi.getLicense).mockResolvedValue(proLicense);
+  });
+
+  it("renders probe names", async () => {
+    vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
+    render(<ProbesPage />);
+    await waitFor(() => {
+      expect(screen.getByText("Main HLS stream")).toBeInTheDocument();
+      expect(screen.getByText("Backup stream")).toBeInTheDocument();
+    });
+  });
+
+  it("renders protocol badges", async () => {
+    vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
+    render(<ProbesPage />);
+    await waitFor(() => {
+      // Badge renders text-transform: uppercase via CSS but DOM text is lowercase
+      expect(screen.getByText("hls")).toBeInTheDocument();
+      expect(screen.getByText("rtmp")).toBeInTheDocument();
+    });
+  });
+
+  it("renders enabled/off status badges", async () => {
+    vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
+    render(<ProbesPage />);
+    await waitFor(() => {
+      expect(screen.getByText("on")).toBeInTheDocument();
+      expect(screen.getByText("off")).toBeInTheDocument();
+    });
+  });
+
+  it("renders last result TTFB", async () => {
+    vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
+    render(<ProbesPage />);
+    await waitFor(() => {
+      expect(screen.getByText("150 ms")).toBeInTheDocument();
+    });
+  });
+
+  it("renders last result status ok/fail", async () => {
+    vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
+    render(<ProbesPage />);
+    await waitFor(() => {
+      // Probe 1 has last_result success=true → "ok" badge
+      // Probe 2 has last_result success=false → "fail" badge
+      expect(screen.getAllByText("ok").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("fail").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows empty state when no probes", async () => {
+    vi.mocked(probesApi.list).mockResolvedValue({ items: [], meta: {} });
+    render(<ProbesPage />);
+    await waitFor(() => {
+      expect(screen.getByText(/no probes configured/i)).toBeInTheDocument();
+    });
+  });
+
+  it("shows error banner on fetch failure", async () => {
+    vi.mocked(probesApi.list).mockRejectedValue(new Error("network error"));
+    render(<ProbesPage />);
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+    });
+  });
+
+  it("renders synthetic notice banner", async () => {
+    vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
+    render(<ProbesPage />);
+    await waitFor(() => {
+      expect(screen.getByRole("note", { name: /synthetic probes notice/i })).toBeInTheDocument();
+    });
+  });
+});
+
+describe("ProbesPage create form validation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(adminApi.getLicense).mockResolvedValue(proLicense);
+    vi.mocked(probesApi.list).mockResolvedValue({ items: [], meta: {} });
+  });
+
+  async function openForm() {
+    render(<ProbesPage />);
+    await waitFor(() => {
+      expect(screen.getByText(/no probes configured/i)).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText("+ New Probe"));
+    await waitFor(() => {
+      expect(screen.getByLabelText(/create probe form/i)).toBeInTheDocument();
+    });
+  }
+
+  it("shows create form when button clicked", async () => {
+    await openForm();
+    expect(screen.getByLabelText(/create probe form/i)).toBeInTheDocument();
+  });
+
+  it("validates interval < 30 and shows error", async () => {
+    await openForm();
+    const nameInput = screen.getByLabelText(/name/i);
+    const urlInput = screen.getByLabelText(/stream url/i);
+    const intervalInput = screen.getByLabelText(/interval/i);
+
+    fireEvent.change(nameInput, { target: { value: "Test" } });
+    fireEvent.change(urlInput, { target: { value: "https://example.com/stream.m3u8" } });
+    fireEvent.change(intervalInput, { target: { value: "10" } });
+
+    fireEvent.submit(screen.getByLabelText(/create probe form/i));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(/≥ 30/i);
+  });
+
+  it("validates empty name", async () => {
+    await openForm();
+    const urlInput = screen.getByLabelText(/stream url/i);
+    fireEvent.change(urlInput, { target: { value: "https://example.com/stream.m3u8" } });
+
+    fireEvent.submit(screen.getByLabelText(/create probe form/i));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(/name is required/i);
+  });
+
+  it("validates invalid URL", async () => {
+    await openForm();
+    const nameInput = screen.getByLabelText(/name/i);
+    const urlInput = screen.getByLabelText(/stream url/i);
+
+    fireEvent.change(nameInput, { target: { value: "Test" } });
+    fireEvent.change(urlInput, { target: { value: "not-a-url" } });
+
+    fireEvent.submit(screen.getByLabelText(/create probe form/i));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(/valid url/i);
+  });
+});
+
+describe("ProbesPage synthetic labeling", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(adminApi.getLicense).mockResolvedValue(proLicense);
+  });
+
+  it("shows 'Synthetic' badges in probe results panel", async () => {
+    vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
+    vi.mocked(probesApi.getResults).mockResolvedValue({
+      items: sampleResults,
+      meta: {},
+    });
+
+    render(<ProbesPage />);
+    await waitFor(() => {
+      expect(screen.getByText("Main HLS stream")).toBeInTheDocument();
+    });
+
+    // Click Results button for the first probe
+    const resultsBtns = screen.getAllByRole("button", { name: /view results for/i });
+    fireEvent.click(resultsBtns[0]);
+
+    await waitFor(() => {
+      // The results panel header says "Synthetic Probe Results"
+      expect(screen.getByText(/synthetic probe results/i)).toBeInTheDocument();
+    });
+
+    // "Synthetic" badge should appear in the panel — multiple instances expected
+    // (header + each result row)
+    const syntheticBadges = screen.getAllByText("Synthetic");
+    expect(syntheticBadges.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows 'not organic viewer data' disclaimer", async () => {
+    vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
+    vi.mocked(probesApi.getResults).mockResolvedValue({
+      items: sampleResults,
+      meta: {},
+    });
+
+    render(<ProbesPage />);
+    await waitFor(() => {
+      expect(screen.getByText("Main HLS stream")).toBeInTheDocument();
+    });
+
+    const resultsBtns = screen.getAllByRole("button", { name: /view results for/i });
+    fireEvent.click(resultsBtns[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/not organic viewer data/i)).toBeInTheDocument();
+    });
+  });
+
+  it("shows synthetic notice banner on the main probes page", async () => {
+    vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
+    render(<ProbesPage />);
+    await waitFor(() => {
+      const notice = screen.getByRole("note", { name: /synthetic probes notice/i });
+      expect(notice).toBeInTheDocument();
+      expect(notice.textContent).toMatch(/synthetic/i);
+    });
+  });
+
+  it("probe results panel shows error details", async () => {
+    vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
+    vi.mocked(probesApi.getResults).mockResolvedValue({
+      items: sampleResults,
+      meta: {},
+    });
+
+    render(<ProbesPage />);
+    await waitFor(() => expect(screen.getByText("Main HLS stream")).toBeInTheDocument());
+
+    const resultsBtns = screen.getAllByRole("button", { name: /view results for/i });
+    fireEvent.click(resultsBtns[0]);
+
+    await waitFor(() => {
+      // Result row for probe-1 r-2 has error_code: "http_5xx"
+      expect(screen.getByText(/http_5xx/i)).toBeInTheDocument();
+    });
+  });
+});
+
+describe("ProbesPage delete confirm", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(adminApi.getLicense).mockResolvedValue(proLicense);
+    vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
+  });
+
+  it("shows delete confirm dialog when delete clicked", async () => {
+    render(<ProbesPage />);
+    await waitFor(() => expect(screen.getByText("Main HLS stream")).toBeInTheDocument());
+
+    const deleteButtons = screen.getAllByRole("button", { name: /delete probe/i });
+    fireEvent.click(deleteButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog", { name: /confirm probe deletion/i })).toBeInTheDocument();
+    });
+  });
+
+  it("cancel dismiss the delete confirm", async () => {
+    render(<ProbesPage />);
+    await waitFor(() => expect(screen.getByText("Main HLS stream")).toBeInTheDocument());
+
+    const deleteButtons = screen.getAllByRole("button", { name: /delete probe/i });
+    fireEvent.click(deleteButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog", { name: /confirm probe deletion/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("dialog", { name: /confirm probe deletion/i }),
+      ).toBeNull();
+    });
+  });
+});
