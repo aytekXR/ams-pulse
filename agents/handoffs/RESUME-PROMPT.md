@@ -31,16 +31,22 @@ QoE monitoring and alerting for Ant Media Server), strictly per PRD:
   NOTE (D-013): the wave-3 gate report's "carried" D-W2-001/D-W2-002 are SPURIOUS
   (QA-3 tested a stale binary) — both remain CLOSED; corrected in-report.
 
-- **NEXT (FIRST ACTION next session): the validation sweep.** Mission item 2 —
-  adversarial per-feature verification of F1–F10 against PRD §7 acceptance
-  criteria + ARCHITECTURE §4 numeric budgets; find inconsistencies, missing
-  behavior, broken flows; defect-fix loop until clean. **Fold in the approved
-  D-010 work:** the `/admin/tenants` CRUD CR (INT-01 contract amend → BE-02
-  routes → FE-01 UI) and the carried non-blocking gaps (GAP-2-001..005,
-  GAP-3-001/003/004/006, INFRA 206-x). Suggested shape: one Workflow that
-  fans out F1–F10 verifiers (each adversarial, with measured budgets), dedups +
-  triages defects, runs a fix-loop, re-verifies. Rebuild `/tmp/pulse` + mock-ams
-  FIRST (D-013 lesson — never gate a stale binary).
+- **Validation underway (mission item 2):**
+  - **V1 DONE** — F6 `/admin/tenants` CRUD landed (D-010 CR): INT-01 `2323429`
+    contract, BE-02 `3793b9c` routes, FE-01 `cd5c4d5` UI, ORCH-00 `38469bf`
+    fixed the one blocker (DEF-QA-001 test types). Live-verified: per-tenant
+    reconcile drift 0.0000%, full CRUD + tier gates.
+  - **D-014 finding** — the **Business tier is missing** (PRD §7.11 = 4 tiers
+    Free/Pro/Business/Enterprise; impl enum = `free|pro|enterprise`), so F5
+    PagerDuty/webhook, F6 reports/multi-tenant, F8 API/Prometheus are mis-gated
+    to enterprise. CR pre-approved; fix in V3.
+  - **V2 IN FLIGHT** (`pulse-val-2-adversarial`, run `wf_3bdbf61e-76d`) — 10
+    feature verifiers + 4 cross-cutting critics (architecture, tier model,
+    contract conformance, security) → triage. Binaries rebuilt fresh first.
+    **FIRST ACTION next session:** read its result + `agents/handoffs/validation/
+    V2-triage-report.md`.
+  - **NEXT: V3 fix-loop** for the triaged findings (tier model D-014 + whatever
+    V2 surfaces), owner-routed (INT/BE/FE/QA), then re-verify until clean.
 
 - **THEN:** consolidation (single unified project) + write `IMPLEMENTATION_LOG.md`
   (per F1–F10: what was done, issues hit, how resolved) → **notify the user and
