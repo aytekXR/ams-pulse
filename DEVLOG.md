@@ -266,3 +266,26 @@ binary at `/tmp/clickhouse` (re-download if /tmp cleared). No Docker (D-002).
   next-session handoff every session. This commit applies that — orchestration
   files only, explicit-path staged (fix-loop's in-flight server/ edits left for
   BE-02 to commit, per D-008/D-011).
+
+## 2026-06-14 — Wave 2 CLOSED + Wave 3-MVP dispatched
+
+- **Wave-2 fix-loop done** (run `wf_02779f15-126`, 2 agents). D-W2-002 CLOSED:
+  BE-02 (`77e32c3`) sourced billing from `rollup_usage_1d`, corrected the wrong
+  CH columns in BOTH `accounting.go` and `query.go`, and added
+  `TestAccountant_CHIntegration` (build tag `integration`) exercising the REAL
+  ClickHouse path — ComputeUsage drift 0.0000%, Reconcile drift 0.0000%, tenant
+  attribution correct; live `GET /reports/usage` 200, `pulse diag --reconcile`
+  0.0000%. QA-01 re-gate (`558377c`): **PASS_WITH_LIMITATIONS, 0 defects** —
+  D-W2-001/003 also closed (gate script `name` field), full regression green
+  (15 server pkgs, 58/58 web, 56/56 SDK, 8/8 budgets, wave-2 gate exits 0).
+  Waivers: D-002 + D-007.5 only. **Wave 2 GATE CLOSED.**
+- **Wave 3-MVP dispatched** (`pulse-wave-3-mvp`, run `wf_4320e819-3b5`,
+  script `agents/handoffs/wave-3/wave3.workflow.js`): one Workflow per D-012 —
+  Implement `parallel([BE-01(301) → BE-02(302)], FE-01(303))` → Gate QA-01(304)
+  (probe round-trip + anomaly false-alarm) → Docs DOC-01(305) on pass. Each
+  prompt carries read-order, hard rules, env (CH path, CGO=0, no Docker), the
+  D-008 commit protocol with explicit-path emphasis (D-011), and the structured
+  schema. Running at this checkpoint.
+- Next on return: review wave-3 gate → fix-loop vs proceed → wave-close commit →
+  **validation sweep** (F1–F10 adversarial vs PRD + deferred D-010 tenant-CRUD
+  CR) → consolidation + `IMPLEMENTATION_LOG.md` → notify user, STOP for review.

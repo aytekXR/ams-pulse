@@ -20,31 +20,24 @@ QoE monitoring and alerting for Ant Media Server), strictly per PRD:
 
 ## Where the build stands (updated 2026-06-14, session 4)
 
-- **Done:** understand phase; Wave 0 (CI real+green); **Wave 1 CLOSED**
-  (contract freeze, data/product plane, frontend F1/F2-core/F5-core, fix-loop,
-  re-gate PASS_WITH_LIMITATIONS); **Wave 2 implementation done + gated**
-  PASS_WITH_LIMITATIONS (`qa/wave-2/gate-report.md`). Wave-2 commits on `main`:
-  f327da9, 2d2910f, 4be5549, 8c53a7b, f1554ed, 599a5a3, 8eddbe2, 06cc6b4.
-  All 6 impl agents COMPLETE; F3 SDK 3.44 KB; F4/F7/QoE/reports/fleet/channels/
-  Prometheus/Helm shipped. CR-3 source-test endpoint closed.
+- **Done:** understand phase; Wave 0 (CI real+green); **Wave 1 CLOSED**;
+  **Wave 2 CLOSED** — implementation (8 commits f327da9…06cc6b4) + fix-loop
+  (`77e32c3` BE-02 D-W2-002, `558377c` QA-01 re-gate **PASS_WITH_LIMITATIONS,
+  0 defects**). Live billing verified on real ClickHouse (reconcile drift
+  0.0000%). Gate report `qa/wave-2/gate-report.md` (incl. `## Re-gate` section).
+  Waivers: D-002 (no Docker) + D-007.5 (no Kafka) only. F3 SDK 3.44 KB;
+  F2-full/F3/F4/F6/F7/F8 shipped; CR-3 closed.
 
-- **IN FLIGHT at this checkpoint: wave-2 fix-loop** (`pulse-wave-2-fixloop`,
-  run `wf_02779f15-126`) for the one wave-3 blocker **D-W2-002** (accounting.go
-  wrong ClickHouse columns + wrong rollup table → live billing 500s; unit test
-  masked it). BE-02 fixes it (source from `rollup_usage_1d` per WO-204 + live-CH
-  reconcile test); QA-01 fixes its wave-1 gate script (D-W2-001/003) and
-  re-gates live. **FIRST ACTION next session:** check this run's result — read
-  the `## Re-gate` section of `qa/wave-2/gate-report.md` and `git log`. If the
-  re-gate is PASS/PASS_WITH_LIMITATIONS → Wave 2 is CLOSED (BE-02 + QA-01 will
-  have self-committed their fixes); proceed to Wave 3. If FAIL → iterate the fix
-  (same focused loop) before proceeding.
-
-- **Next: dispatch Wave 3-MVP** (F9 anomaly detection + F10 synthetic probes,
-  minimal-but-working per D-001). Work orders ALREADY WRITTEN — do NOT rewrite,
-  read and dispatch: `agents/handoffs/wave-3/WO-301.md` (BE-01: probe runner +
-  probe_results CH store + ProbeConfigSource seam) … `WO-305.md` (DOC-01).
-  Structure per D-012: one Workflow, `parallel([BE-01(301) → BE-02(302)],
-  FE-01(303)) → QA-01(304) gate → DOC-01(305)`.
+- **IN FLIGHT at this checkpoint: Wave 3-MVP** (`pulse-wave-3-mvp`, run
+  `wf_4320e819-3b5`, script `agents/handoffs/wave-3/wave3.workflow.js`) — F9
+  anomaly detection + F10 synthetic probes (minimal-but-working per D-001).
+  Structure per D-012: Implement `parallel([BE-01(301) → BE-02(302)],
+  FE-01(303))` → Gate QA-01(304) → Docs DOC-01(305) on pass. **FIRST ACTION
+  next session:** check this run's result — read `qa/wave-3/gate-report.md` +
+  `git log`. If gate PASS/PASS_WITH_LIMITATIONS → Wave 3-MVP CLOSED (agents
+  self-commit per D-008); proceed to the validation sweep. If FAIL → focused
+  fix-loop (precedent D-006/D-009) before proceeding. Work orders
+  `agents/handoffs/wave-3/WO-301..305.md` are written — do NOT rewrite.
 
 - **Then: validation sweep** — per-feature adversarial verification of F1–F10
   against PRD acceptance criteria (numeric budgets in ARCHITECTURE §4), with a
