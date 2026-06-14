@@ -254,3 +254,49 @@ Ownership split (single-writer map respected; BE-01→BE-02 sequential per D-003
 Dispatch (one Workflow): parallel([BE-01(301) → BE-02(302)], FE-01(303)) →
 QA-01(304) → DOC-01(305). Validation sweep (F1–F10 adversarial + deferred D-010
 items incl. tenant CRUD) follows the wave-3 gate.
+
+## D-013 · 2026-06-14 · Wave 3-MVP gate ruling: CLOSED; two "carried" defects are spurious
+
+Wave-3 workflow (`pulse-wave-3-mvp`, run `wf_4320e819-3b5`) complete: 3 impl
+agents COMPLETE + self-committed (BE-01 `31e0a13`, BE-02 `e9e4a99`, FE-01
+`d63a28b`/`844abbf`), QA gate `05e0fd6`, DOC `2b55235`. QA-01 verdict
+**PASS_WITH_LIMITATIONS** (`qa/wave-3/gate-report.md`). Measured: F9 false-alarm
+**0.2594/node-week** (sigma=4.0, MinSamples=30, HysteresisTicks=10; PRD target
+<1/node-week, 3.8× margin) + true-positive 20σ→1 flag; F10 probe round-trip
+success ttfb=1ms bitrate=66.7kbps, degraded→http_5xx, 4-level synthetic labeling;
+tier gates (anomalies Enterprise, probes Pro+) live-verified; kin-openapi
+conformance; regression 17 Go pkgs / 109 web / 56 SDK / SDK 3.44 KB. Waivers:
+D-002 only (probe CH round-trip covered by BE-01 integration_test.go; live-stack
+gates by unit sweep).
+
+**The gate report lists D-W2-001 + D-W2-002 as "carried from wave-2" defects.
+These are SPURIOUS — empirically disproven by ORCH-00:**
+- `accounting.go` is UNTOUCHED since the wave-2 close `558377c` (`git diff
+  558377c..HEAD` = only `query.go`, which keeps the correct `watch_time_s`
+  columns); `qa/wave-1/run-gate.sh:380` still carries the `name` fix.
+- The authoritative live-ClickHouse test `TestAccountant_CHIntegration` PASSES
+  (4.2s) on a freshly built `/tmp/pulse` → reconcile path works (D-W2-002 closed).
+- Root cause of the false report: QA-01-wave-3 ran a STALE `/tmp/pulse` (built
+  before the wave-2 fix `77e32c3`) and copied the wave-2 defect table without
+  re-checking. Both wave-2 defects remain CLOSED (re-gate `558377c`, 0 defects).
+
+**Ruling:** Wave 3-MVP gate CLOSED (PASS_WITH_LIMITATIONS, D-002 waiver only). No
+fix-loop — there are no real open defects. An ORCH-00 correction note is appended
+to `qa/wave-3/gate-report.md`. Process reinforcement for future QA prompts: REBUILD
+all binaries (`/tmp/pulse`, mock-ams) before gating, and re-verify (never carry)
+prior-wave defects against the current tree.
+
+**Accepted minor scope crossing:** BE-02 (WO-302) edited `internal/prober/
+prober.go` (BE-01 scope) for a 1-line TTFB floor (localhost TTFB rounds to 0ms,
+breaking BE-01's `TestHLSProbe_Success`). Declared in the report; BE-01 had already
+finished (sequential, no concurrent write); semantically correct. Accepted like the
+D-005 cmd sharing — no revert.
+
+**All F1–F10 now implemented in MVP form.** Non-blocking wave-3 gaps → validation
+sweep / Phase-3 backlog (owner BE-02 unless noted): GAP-3-001 HLS segment TTFB
+(needs CR for `segment_ttfb_ms`; Phase 3), GAP-3-003 master-playlist bitrate=0
+(follow variant; Phase 3, BE-01), GAP-3-004 anomaly zero-stddev blind spot
+(epsilon floor; Phase 3), GAP-3-006 no Pro-tier end-to-end test, FE act() warning
+(cosmetic). Next: validation sweep (adversarial F1–F10 vs PRD §7 + ARCHITECTURE §4
+budgets) folding in the approved D-010 `/admin/tenants` CRUD CR, then consolidation
++ `IMPLEMENTATION_LOG.md`, then notify user.

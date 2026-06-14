@@ -289,3 +289,34 @@ binary at `/tmp/clickhouse` (re-download if /tmp cleared). No Docker (D-002).
 - Next on return: review wave-3 gate → fix-loop vs proceed → wave-close commit →
   **validation sweep** (F1–F10 adversarial vs PRD + deferred D-010 tenant-CRUD
   CR) → consolidation + `IMPLEMENTATION_LOG.md` → notify user, STOP for review.
+
+## 2026-06-14 — Wave 3-MVP CLOSED (D-013)
+
+- **Wave 3-MVP complete** (run `wf_4320e819-3b5`, 5 agents): BE-01 `31e0a13`
+  (probe runner + probe_results CH store + ProbeConfigSource seam), BE-02
+  `e9e4a99` (F9 Welford anomaly baselines + flags-on-read; F10 probe CRUD +
+  results API + MetaProbeConfigSource + serve wiring), FE-01 `d63a28b`/`844abbf`
+  (anomalies + probes pages, 4-level synthetic labeling), QA-01 `05e0fd6` gate,
+  DOC-01 `2b55235` docs. Verdict PASS_WITH_LIMITATIONS.
+- Measured: **F9 false-alarm 0.2594/node-week** (σ=4.0, MinSamples=30,
+  HysteresisTicks=10; PRD <1/node-week, 3.8× margin) + 20σ→1 flag true positive;
+  **F10 probe round-trip** success ttfb=1ms bitrate=66.7kbps, degraded→http_5xx;
+  tier gates (anomalies Enterprise, probes Pro+) live; kin-openapi conformance;
+  regression 17 Go pkgs / 109 web / 56 SDK / SDK 3.44 KB.
+- **D-013 ruling:** the gate report listed D-W2-001/D-W2-002 as "carried from
+  wave-2" — SPURIOUS. ORCH-00 disproved empirically: `accounting.go` untouched
+  since `558377c` (only `query.go` changed, columns still correct);
+  `TestAccountant_CHIntegration` PASSES (4.2s) on a fresh `/tmp/pulse`;
+  `run-gate.sh:380` still has the `name` fix. Root cause: QA-3 tested a STALE
+  `/tmp/pulse` + copied the wave-2 defect table. Both wave-2 defects remain
+  CLOSED. No fix-loop needed. Correction note appended to the gate report;
+  future QA prompts must rebuild binaries + re-verify prior defects.
+- Accepted minor scope crossing: BE-02 edited `internal/prober/prober.go`
+  (1-line TTFB floor, BE-01's flaky-test fix) — declared, sequential, no revert.
+- **All F1–F10 now implemented in MVP form.** Non-blocking gaps (GAP-3-001/003/
+  004/006, FE act() warning) → validation sweep / Phase-3 backlog.
+- **Next: validation sweep** — adversarial per-feature verification of F1–F10
+  against PRD §7 + ARCHITECTURE §4 budgets, folding in the approved D-010
+  `/admin/tenants` CRUD CR (INT-01 contract amend → BE-02 routes → FE-01 UI) and
+  the carried gaps, defect-fix loop until clean. Then consolidation +
+  `IMPLEMENTATION_LOG.md` → notify user, STOP.

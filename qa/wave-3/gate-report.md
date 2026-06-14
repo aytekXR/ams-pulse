@@ -245,3 +245,25 @@ F10 probe round-trip: **success=true, ttfb_ms=1, bitrate_kbps=66.7** (HLS httpte
 Tier gates: **Enterprise-only anomalies, Pro+-only probes** — confirmed with 403 on free tier.
 kin-openapi conformance: **all 3 new endpoint shapes conform**.
 Regression: **17 Go packages PASS, 109 web tests PASS, SDK 3.44 kB (budget 15 KB)**.
+
+---
+
+## ORCH-00 correction (wave-3 close, 2026-06-14) — see decision D-013
+
+The Defects table above lists **D-W2-001** and **D-W2-002** as carried from wave 2.
+**These are SPURIOUS** — both were CLOSED in the wave-2 fix-loop (re-gate `558377c`,
+0 defects) and remain closed. ORCH-00 empirically disproved them against the current
+tree:
+
+- `accounting.go` is UNTOUCHED since the wave-2 close (`git diff 558377c..HEAD` →
+  only `query.go`, which keeps the correct `watch_time_s`/`peak_concurrency`/`bucket`
+  columns and `rollup_usage_1d` source); `qa/wave-1/run-gate.sh:380` still carries
+  the `name`-field fix.
+- The authoritative live-ClickHouse test `TestAccountant_CHIntegration` **PASSES**
+  (4.2 s) on a freshly built `/tmp/pulse` → `pulse diag --reconcile` works, drift 0%.
+
+Root cause of the false entries: this gate run tested a **stale `/tmp/pulse`** binary
+(built before the wave-2 fix `77e32c3`) and carried the wave-2 defect table without
+re-verifying. **No real defects are open.** Wave 3-MVP gate stands CLOSED at
+PASS_WITH_LIMITATIONS with the D-002 waiver only. Future gates MUST rebuild binaries
+and re-verify prior-wave defects against the current tree before listing them.

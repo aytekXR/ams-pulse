@@ -21,23 +21,30 @@ QoE monitoring and alerting for Ant Media Server), strictly per PRD:
 ## Where the build stands (updated 2026-06-14, session 4)
 
 - **Done:** understand phase; Wave 0 (CI real+green); **Wave 1 CLOSED**;
-  **Wave 2 CLOSED** — implementation (8 commits f327da9…06cc6b4) + fix-loop
-  (`77e32c3` BE-02 D-W2-002, `558377c` QA-01 re-gate **PASS_WITH_LIMITATIONS,
-  0 defects**). Live billing verified on real ClickHouse (reconcile drift
-  0.0000%). Gate report `qa/wave-2/gate-report.md` (incl. `## Re-gate` section).
-  Waivers: D-002 (no Docker) + D-007.5 (no Kafka) only. F3 SDK 3.44 KB;
-  F2-full/F3/F4/F6/F7/F8 shipped; CR-3 closed.
+  **Wave 2 CLOSED** (impl 8 commits f327da9…06cc6b4 + fix-loop `77e32c3`/
+  `558377c`; live billing reconcile drift 0.0000%); **Wave 3-MVP CLOSED**
+  (D-013) — F9 anomaly + F10 probes. Wave-3 commits: `31e0a13` BE-01,
+  `e9e4a99` BE-02, `d63a28b`+`844abbf` FE-01, `05e0fd6` QA gate, `2b55235` DOC.
+  Verdict PASS_WITH_LIMITATIONS (D-002 waiver only). Measured: F9 false-alarm
+  0.2594/node-week (<1 target); F10 round-trip ttfb=1ms bitrate=66.7kbps; tier
+  gates live; 17 Go pkgs / 109 web / 56 SDK green. **All F1–F10 now in MVP form.**
+  NOTE (D-013): the wave-3 gate report's "carried" D-W2-001/D-W2-002 are SPURIOUS
+  (QA-3 tested a stale binary) — both remain CLOSED; corrected in-report.
 
-- **IN FLIGHT at this checkpoint: Wave 3-MVP** (`pulse-wave-3-mvp`, run
-  `wf_4320e819-3b5`, script `agents/handoffs/wave-3/wave3.workflow.js`) — F9
-  anomaly detection + F10 synthetic probes (minimal-but-working per D-001).
-  Structure per D-012: Implement `parallel([BE-01(301) → BE-02(302)],
-  FE-01(303))` → Gate QA-01(304) → Docs DOC-01(305) on pass. **FIRST ACTION
-  next session:** check this run's result — read `qa/wave-3/gate-report.md` +
-  `git log`. If gate PASS/PASS_WITH_LIMITATIONS → Wave 3-MVP CLOSED (agents
-  self-commit per D-008); proceed to the validation sweep. If FAIL → focused
-  fix-loop (precedent D-006/D-009) before proceeding. Work orders
-  `agents/handoffs/wave-3/WO-301..305.md` are written — do NOT rewrite.
+- **NEXT (FIRST ACTION next session): the validation sweep.** Mission item 2 —
+  adversarial per-feature verification of F1–F10 against PRD §7 acceptance
+  criteria + ARCHITECTURE §4 numeric budgets; find inconsistencies, missing
+  behavior, broken flows; defect-fix loop until clean. **Fold in the approved
+  D-010 work:** the `/admin/tenants` CRUD CR (INT-01 contract amend → BE-02
+  routes → FE-01 UI) and the carried non-blocking gaps (GAP-2-001..005,
+  GAP-3-001/003/004/006, INFRA 206-x). Suggested shape: one Workflow that
+  fans out F1–F10 verifiers (each adversarial, with measured budgets), dedups +
+  triages defects, runs a fix-loop, re-verifies. Rebuild `/tmp/pulse` + mock-ams
+  FIRST (D-013 lesson — never gate a stale binary).
+
+- **THEN:** consolidation (single unified project) + write `IMPLEMENTATION_LOG.md`
+  (per F1–F10: what was done, issues hit, how resolved) → **notify the user and
+  STOP for review** (mission item 6 — no further iteration before user review).
 
 - **Then: validation sweep** — per-feature adversarial verification of F1–F10
   against PRD acceptance criteria (numeric budgets in ARCHITECTURE §4), with a
