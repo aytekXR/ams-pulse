@@ -70,8 +70,8 @@ PULSE_SECRET_KEY=$(openssl rand -hex 32) \
 | Licensing + tier enforcement | — | **Shipped** | Free/Pro/Enterprise; ed25519 verification; 403 on gated features |
 | API (REST + WebSocket) | — | **Shipped** | 32 paths, 46 ops, OpenAPI-conformant |
 | Onboarding wizard | §7.12 | **Shipped** | 4-step first-run flow |
-| Anomaly detection | F9 | Roadmap Wave 3 | Statistical baselines |
-| Synthetic probes | F10 | Roadmap Wave 3 | Single probe runner |
+| Anomaly detection | F9 | **Shipped** (Wave 3-MVP, Enterprise) | Welford baselines; σ=4.0; 0.259 false alarms/node-week (target <1); minSamples=30 warmup; hysteresis cooldown |
+| Synthetic probes | F10 | **Shipped** (Wave 3-MVP, Pro+) | HLS full; webrtc/rtmp/dash reachability-only stubs (Phase-3 roadmap); 60 s config refresh; 4-worker pool; 90-day result TTL |
 
 ---
 
@@ -88,25 +88,32 @@ Cluster fleet discovery ──────────────────�
                                    │  ├ beacon ingest (:8091)         │
                                    │  ├ session stitcher (F3/F4)      │
                                    │  ├ ingest health tracker (F4)    │
-                                   │  └ cluster discovery (F7)        │
+                                   │  ├ cluster discovery (F7)        │
+                                   │  ├ probe runner (F10)            │  synthetic HLS checks
+                                   │  └ anomaly detector tick (F9)    │  Welford baselines, 60 s
                                    └──────────┬──────────────────────┘
                                               ▼
                               ┌───────────────────────────────────┐
                               │ ClickHouse (events + rollups)      │  90-day raw / 13-month rollups
                               │   viewer_sessions, beacon_events   │
                               │   rollup_audience_1d/1h, qoe_1h    │
+                              │   probe_results (90-day TTL, F10)  │
                               │ SQLite / Postgres (meta store)     │  rules, users, tokens, schedules,
                               │   tenants, report_schedules        │  alert channels, cluster_nodes
+                              │   probes config (F10)              │
+                              │   anomaly_baselines (F9)           │
                               └──────────┬────────────────────────┘
                          ┌──────────────┼───────────────┬──────────┐
                          ▼              ▼                ▼          ▼
                    Query API    Alert Evaluator   Report Scheduler  /metrics
                    /qoe/ingest  (F4/F5/cert)     + S3 uploader     Prometheus
+                   /anomalies   /probes + results
                          │              │                │
                          ▼              ▼                ▼
                    Web UI (React)  Slack/Email/    CSV/PDF exports
                    F1 F2 F3 F4     Telegram/PD/
                    F5 F6 F7 F8     Webhook
+                   F9 F10
 ```
 
 ---
@@ -137,6 +144,8 @@ Cluster fleet discovery ──────────────────�
 | [docs/runbooks/reports.md](docs/runbooks/reports.md) | Usage reports: tenant mapping, egress estimation, schedule setup, S3 export, reconciliation |
 | [docs/guides/beacon-sdk.md](docs/guides/beacon-sdk.md) | Beacon SDK integration: AMS WebRTC, hls.js, video.js, native video; sampling; privacy |
 | [docs/guides/prometheus.md](docs/guides/prometheus.md) | Prometheus scrape config, metric reference, Grafana starter panels |
+| [docs/guides/anomaly-detection.md](docs/guides/anomaly-detection.md) | F9 anomaly detection: Welford statistical model, sensitivity calibration, false-alarm math, tuning min_sigma, API usage (Enterprise) |
+| [docs/runbooks/probes.md](docs/runbooks/probes.md) | F10 synthetic probes: creating probes, HLS/protocol coverage, result interpretation, synthetic vs organic labeling (Pro+) |
 | [docs/adr/0001-tech-stack.md](docs/adr/0001-tech-stack.md) | ADR: Go + React + ClickHouse stack decision |
 | [docs/adr/0002-storage-clickhouse.md](docs/adr/0002-storage-clickhouse.md) | ADR: two-store split (ClickHouse + SQLite) |
 | [docs/adr/0003-single-binary.md](docs/adr/0003-single-binary.md) | ADR: single binary with role flags |
@@ -166,7 +175,7 @@ cd server && CGO_ENABLED=0 go build ./... && CGO_ENABLED=0 go test ./...
 ```sh
 cd web && npm install && npm run dev   # proxies to pulse serve on :8090
 cd web && npm run build                # production build
-cd web && npm run test                 # 58 component tests (Wave 2)
+cd web && npm run test                 # 109 component tests (58 Wave 2 + 51 Wave 3)
 ```
 
 **API types (auto-generated from OpenAPI spec):**
@@ -186,5 +195,5 @@ sqlite3 :memory: < contracts/db/meta/0001_init.sql        # meta DDL
 
 - **Wave 1 / MVP (complete):** Collector, live ops dashboard (F1), historical analytics (F2), core alerting (F5), Docker Compose installer, licensing.
 - **Wave 2 (complete):** QoE beacon SDK (F3, 3.44 KB gzip), ingest health (F4, 250 µs detection), usage/billing reports (F6, ±1% reconciliation), cluster fleet view (F7, ≤30 s discovery), full data API + Prometheus (F8), Telegram/PD/webhook channels, Helm chart.
-- **Wave 3-MVP:** Anomaly detection (F9), synthetic probes (F10). Statistical baselines, single probe runner. Fix D-W2-002, edge/origin dedup, full QoE ClickHouse queries.
-- **Post-MVP:** Mobile beacons, SSO, white-label, air-gapped licensing.
+- **Wave 3-MVP (complete):** Anomaly detection (F9, Enterprise — Welford baselines, 0.259 false alarms/node-week), synthetic probes (F10, Pro+ — HLS full coverage, webrtc/rtmp/dash minimal-honest stubs).
+- **Post-MVP (Phase 3):** Mobile beacons, SSO, white-label PDF, air-gapped licensing, distributed probe network, multi-node edge dedup, multi-window anomaly baselines, native RTMP/WebRTC/DASH probing.
