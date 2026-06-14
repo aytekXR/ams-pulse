@@ -724,6 +724,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/tenants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List tenant definitions
+         * @description Returns all configured tenants for multi-tenant billing (F6).
+         *     Tenants match streams by `stream_pattern` (SQL LIKE / regex) or
+         *     by `meta_tag_key`/`meta_tag_value` (beacon meta field). Requires
+         *     Business tier (D-010).
+         */
+        get: operations["listTenants"];
+        put?: never;
+        /**
+         * Create a tenant definition
+         * @description Creates a new tenant. `name` must be unique (meta constraint →
+         *     409 on duplicate). At least one of `stream_pattern` or
+         *     (`meta_tag_key` + `meta_tag_value`) must be provided.
+         *     Requires Business tier (D-010).
+         */
+        post: operations["createTenant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Tenant UUID */
+                tenantId: components["parameters"]["tenantId"];
+            };
+            cookie?: never;
+        };
+        /** Get a tenant definition */
+        get: operations["getTenant"];
+        /**
+         * Update a tenant definition
+         * @description Full replacement. `name` must remain unique. At least one of
+         *     `stream_pattern` or (`meta_tag_key` + `meta_tag_value`) must be set.
+         */
+        put: operations["updateTenant"];
+        post?: never;
+        /** Delete a tenant definition */
+        delete: operations["deleteTenant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1427,6 +1483,47 @@ export interface components {
             /** @enum {string} */
             role: "admin" | "viewer";
         };
+        /**
+         * @description Tenant definition for multi-tenant billing (F6). A tenant matches
+         *     streams by `stream_pattern` (SQL LIKE / regex on stream_id) or by
+         *     `meta_tag_key`+`meta_tag_value` (beacon meta field). Aligned to
+         *     the `tenants` meta table in `contracts/db/meta/0001_init.sql`.
+         */
+        Tenant: {
+            /** @description UUID primary key */
+            id: string;
+            /** @description Unique display name */
+            name: string;
+            /** @description SQL LIKE / regex pattern matched against stream_id */
+            stream_pattern?: string | null;
+            /** @description Beacon meta field key for tag-based tenant matching */
+            meta_tag_key?: string | null;
+            /** @description Beacon meta field value for tag-based tenant matching */
+            meta_tag_value?: string | null;
+            /** @description Unix epoch ms */
+            created_at: number;
+            /** @description Unix epoch ms */
+            updated_at: number;
+        };
+        /**
+         * @description Request body for creating or replacing a tenant. At least one of
+         *     `stream_pattern` or (`meta_tag_key` + `meta_tag_value`) must be
+         *     provided; validated by the server (→ 422 on missing matcher).
+         */
+        TenantWrite: {
+            /** @description Unique display name (meta constraint; duplicate → 409) */
+            name: string;
+            /** @description SQL LIKE / regex pattern matched against stream_id */
+            stream_pattern?: string | null;
+            /** @description Beacon meta field key for tag-based matching */
+            meta_tag_key?: string | null;
+            /** @description Beacon meta field value for tag-based matching */
+            meta_tag_value?: string | null;
+        };
+        TenantList: {
+            items: components["schemas"]["Tenant"][];
+            meta: components["schemas"]["PaginatedMeta"];
+        };
     };
     responses: {
         /** @description Invalid request parameters */
@@ -1458,6 +1555,24 @@ export interface components {
         };
         /** @description Request is well-formed but semantically invalid */
         UnprocessableEntity: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Resource already exists (e.g. duplicate name) */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Authenticated but not authorized (e.g. tier gate) */
+        Forbidden: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1497,6 +1612,8 @@ export interface components {
         ruleId: string;
         channelId: string;
         probeId: string;
+        /** @description Tenant UUID */
+        tenantId: string;
     };
     requestBodies: never;
     headers: never;
@@ -2906,6 +3023,150 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listTenants: {
+        parameters: {
+            query?: {
+                /** @description Maximum items per page (max 500) */
+                limit?: components["parameters"]["limit"];
+                /** @description Pagination cursor from previous response `next_cursor` */
+                cursor?: components["parameters"]["cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated tenant list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createTenant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantWrite"];
+            };
+        };
+        responses: {
+            /** @description Tenant created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tenant"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getTenant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Tenant UUID */
+                tenantId: components["parameters"]["tenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tenant definition */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tenant"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateTenant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Tenant UUID */
+                tenantId: components["parameters"]["tenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantWrite"];
+            };
+        };
+        responses: {
+            /** @description Tenant updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tenant"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteTenant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Tenant UUID */
+                tenantId: components["parameters"]["tenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tenant deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };

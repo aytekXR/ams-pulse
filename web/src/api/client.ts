@@ -39,6 +39,9 @@ import type {
   ReportScheduleList,
   ReportSchedule,
   ReportScheduleWrite,
+  Tenant,
+  TenantList,
+  TenantWrite,
   AnomalyList,
   ProbeList,
   Probe,
@@ -301,6 +304,33 @@ export const adminApi = {
 
   deleteUser: (id: string) =>
     apiFetch<void>(`/admin/users/${id}`, { method: "DELETE" }),
+
+  // ── Tenant CRUD (F6 multi-tenant billing; Business tier only) ──
+  listTenants: (params?: { limit?: number; cursor?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.cursor) q.set("cursor", params.cursor);
+    const qs = q.toString() ? `?${q}` : "";
+    return apiFetch<TenantList>(`/admin/tenants${qs}`);
+  },
+
+  createTenant: (body: TenantWrite) =>
+    apiFetch<Tenant>("/admin/tenants", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  getTenant: (id: string) =>
+    apiFetch<Tenant>(`/admin/tenants/${id}`),
+
+  updateTenant: (id: string, body: TenantWrite) =>
+    apiFetch<Tenant>(`/admin/tenants/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  deleteTenant: (id: string) =>
+    apiFetch<void>(`/admin/tenants/${id}`, { method: "DELETE" }),
 };
 
 // ─── QoE endpoints ───────────────────────────────────────────────────────────

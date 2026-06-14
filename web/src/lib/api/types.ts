@@ -74,6 +74,11 @@ export type ReportSchedule = Schemas["ReportSchedule"];
 export type ReportScheduleList = Schemas["ReportScheduleList"];
 export type ReportScheduleWrite = Schemas["ReportScheduleWrite"];
 
+// ─── F6 — Tenant management ───────────────────────────────────────────────────
+export type Tenant = Schemas["Tenant"];
+export type TenantWrite = Schemas["TenantWrite"];
+export type TenantList = Schemas["TenantList"];
+
 export type User = Schemas["User"];
 export type UserWrite = Schemas["UserWrite"];
 export type UserList = Schemas["UserList"];
