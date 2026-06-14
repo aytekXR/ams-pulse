@@ -9,6 +9,7 @@ import (
 
 	"github.com/pulse-analytics/pulse/server/internal/alert"
 	"github.com/pulse-analytics/pulse/server/internal/alert/channels"
+	"github.com/pulse-analytics/pulse/server/internal/anomaly"
 	"github.com/pulse-analytics/pulse/server/internal/api"
 	"github.com/pulse-analytics/pulse/server/internal/cluster"
 	"github.com/pulse-analytics/pulse/server/internal/collector"
@@ -18,7 +19,6 @@ import (
 	kafkasrc "github.com/pulse-analytics/pulse/server/internal/collector/kafka"
 	"github.com/pulse-analytics/pulse/server/internal/collector/restpoller"
 	"github.com/pulse-analytics/pulse/server/internal/collector/sessions"
-	"github.com/pulse-analytics/pulse/server/internal/domain"
 	"github.com/pulse-analytics/pulse/server/internal/license"
 	"github.com/pulse-analytics/pulse/server/internal/prober"
 	"github.com/pulse-analytics/pulse/server/internal/query"
@@ -27,6 +27,33 @@ import (
 	"github.com/pulse-analytics/pulse/server/internal/store/meta"
 	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
 )
+
+// anomalyDetectorBridge adapts *anomaly.Detector to the api.AnomalyDetector interface.
+// The anomaly package uses anomaly.AnomalyFlag; the api package uses api.AnomalyFlagAPI.
+// These are structurally identical; the bridge converts between them.
+type anomalyDetectorBridge struct {
+	det *anomaly.Detector
+}
+
+func (b *anomalyDetectorBridge) ComputeFlags(ctx context.Context, sigmaThreshold float64) ([]api.AnomalyFlagAPI, error) {
+	flags, err := b.det.ComputeFlags(ctx, sigmaThreshold)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]api.AnomalyFlagAPI, len(flags))
+	for i, f := range flags {
+		out[i] = api.AnomalyFlagAPI{
+			ID:       f.ID,
+			Metric:   f.Metric,
+			Scope:    f.Scope,
+			Observed: f.Observed,
+			Expected: f.Expected,
+			Sigma:    f.Sigma,
+			TS:       f.TS,
+		}
+	}
+	return out, nil
+}
 
 // metaIngestTokenStore adapts meta.Store to the beacon.TokenStore interface.
 // beacon.TokenStore requires GetIngestTokenByHash; meta.Store exposes GetTokenByHash.
@@ -68,7 +95,10 @@ type server struct {
 	reportScheduler *reports.Scheduler   // report schedule runner (WO-204)
 
 	// Wave 3 (WO-301): F10 synthetic probe runner.
-	probeRunner *prober.Runner // nil until BE-02 provides ProbeConfigSource (WO-302)
+	probeRunner *prober.Runner // wired by BE-02 (WO-302) via ProbeConfigSource
+
+	// Wave 3 (WO-302): F9 anomaly detector.
+	anomalyDetector *anomaly.Detector
 }
 
 // newServer constructs all services from config.
@@ -286,25 +316,20 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	}
 	apiServer.SetReportGenerator(reportGen)
 
-	// Wave 3 (WO-301): F10 probe runner.
-	// HOOK(BE-02, WO-302): Replace nil with a *meta.ProbeConfigSource once
-	// BE-02 implements ProbeConfigSource over the meta probes table.
-	// The runner is constructed here but Start() is conditional on the source
-	// being non-nil.  Signature expected from BE-02:
-	//
-	//   type MetaProbeConfigSource struct { ... }
-	//   func (s *MetaProbeConfigSource) ListEnabled(ctx) ([]domain.ProbeConfig, error)
-	//   func (s *MetaProbeConfigSource) RecordResult(ctx, r domain.ProbeResult) error
-	//
-	// Wire example (to be added by BE-02 in serve.go):
-	//   probeSource := meta.NewProbeConfigSource(metaStore)
-	//   srv.probeRunner = prober.New(prober.Config{Workers: 4}, probeSource, store, logger, nil)
-	var probeSource domain.ProbeConfigSource // nil until WO-302
-	var probeRunnerInstance *prober.Runner
-	if probeSource != nil {
-		// This branch is unreachable until BE-02 sets probeSource.
-		probeRunnerInstance = prober.New(prober.Config{Workers: 4}, probeSource, store, logger, nil)
-	}
+	// Wave 3 (WO-302): Wire F10 ProbeConfigSource + probe runner.
+	// BE-02 implements MetaProbeConfigSource over the meta probes table.
+	probeSource := meta.NewProbeConfigSource(metaStore)
+	probeRunnerInstance := prober.New(prober.Config{Workers: 4}, probeSource, store, logger, nil)
+
+	// Wire probe result querier into query service for GET /probes/{id}/results.
+	qsvc.SetProbeResultQuerier(store)
+
+	// Wave 3 (WO-302): F9 anomaly detector.
+	// Reads live snapshots and maintains rolling baselines in anomaly_baselines.
+	anomalyDet := anomaly.New(anomaly.Config{}, metaStore, agg, logger)
+
+	// Wire anomaly detector into API server.
+	apiServer.SetAnomalyDetector(&anomalyDetectorBridge{det: anomalyDet})
 
 	return &server{
 		store:            store,
@@ -323,6 +348,7 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		beaconServer:     beaconSrv,
 		reportScheduler:  reportScheduler,
 		probeRunner:      probeRunnerInstance,
+		anomalyDetector:  anomalyDet,
 	}, nil
 }
 
@@ -401,9 +427,7 @@ func (s *server) Start(ctx context.Context) error {
 		s.reportScheduler.Start(ctx)
 	}
 
-	// Wave 3 (WO-301): Start probe runner when ProbeConfigSource is wired.
-	// HOOK(BE-02, WO-302): Once BE-02 provides ProbeConfigSource and sets
-	// s.probeRunner, this block launches the runner goroutine automatically.
+	// Wave 3 (WO-301 + WO-302): Start probe runner (ProbeConfigSource is now wired).
 	if s.probeRunner != nil {
 		go func() {
 			if err := s.probeRunner.Run(ctx); err != nil && ctx.Err() == nil {
@@ -411,6 +435,12 @@ func (s *server) Start(ctx context.Context) error {
 			}
 		}()
 		s.logger.Info("pulse: probe runner started")
+	}
+
+	// Wave 3 (WO-302): Start anomaly baseline update loop (F9).
+	if s.anomalyDetector != nil {
+		go s.anomalyDetector.Run(ctx)
+		s.logger.Info("pulse: anomaly detector started")
 	}
 
 	s.logger.Info("pulse: all services started")

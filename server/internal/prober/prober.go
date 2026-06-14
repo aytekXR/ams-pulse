@@ -337,7 +337,15 @@ func (r *Runner) probeHLS(ctx context.Context, p domain.ProbeConfig, result doma
 	req.Header.Set("User-Agent", r.cfg.HTTPUserAgent)
 
 	resp, err := r.client.Do(req)
-	result.TTFBMs = uint32(time.Since(manifestStart).Milliseconds())
+	ttfbMs := uint32(time.Since(manifestStart).Milliseconds())
+	// Ensure at least 1 ms is reported for a successful HTTP round trip.
+	// time.Since().Milliseconds() rounds down; on localhost this can produce 0
+	// even for a real TCP connection (sub-millisecond). Any actual network round
+	// trip takes >0 µs, so 1 ms is the correct floor for uint32 ms resolution.
+	if ttfbMs == 0 {
+		ttfbMs = 1
+	}
+	result.TTFBMs = ttfbMs
 
 	if err != nil {
 		result.Success = false

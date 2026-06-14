@@ -280,6 +280,26 @@ func (m *Manager) CheckDataAPI() error {
 	return nil
 }
 
+// CheckProbes returns nil if the tier includes synthetic probe access (F10).
+// Probes require Pro tier or higher (§7.11 pricing table).
+func (m *Manager) CheckProbes() error {
+	t := m.Tier()
+	if t == TierFree {
+		return fmt.Errorf("synthetic probes (F10) require Pro tier or higher (current: %q)", t)
+	}
+	return nil
+}
+
+// CheckAnomalies returns nil if the tier includes anomaly detection access (F9).
+// Anomaly detection requires Enterprise tier (§7.11 pricing table).
+func (m *Manager) CheckAnomalies() error {
+	t := m.Tier()
+	if t != TierEnterprise {
+		return fmt.Errorf("anomaly detection (F9) requires Enterprise tier (current: %q)", t)
+	}
+	return nil
+}
+
 // ─── Activation ───────────────────────────────────────────────────────────────
 
 // activate parses and validates a license key.

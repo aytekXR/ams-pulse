@@ -20,9 +20,10 @@ import (
 
 // Service answers metric queries for the API layer.
 type Service struct {
-	live    domain.LiveProvider
-	conn    clickhouse.Conn
-	lic     *license.Manager
+	live               domain.LiveProvider
+	conn               clickhouse.Conn
+	lic                *license.Manager
+	probeResultQuerier ProbeResultQuerier // optional; wired via SetProbeResultQuerier
 }
 
 // New creates a Service.
@@ -438,6 +439,29 @@ type FleetNode struct {
 type FleetNodeListResult struct {
 	Items []FleetNode   `json:"items"`
 	Meta  PaginatedMeta `json:"meta"`
+}
+
+// ─── F10 Probe results ────────────────────────────────────────────────────────
+
+// ProbeResultQuerier is the interface the query service uses to read probe results.
+// Implemented by *store/clickhouse.Store.
+type ProbeResultQuerier interface {
+	QueryProbeResults(ctx context.Context, probeID string, from, to time.Time, limit int) ([]domain.ProbeResult, error)
+}
+
+// SetProbeResultQuerier wires the probe result reader (from the ClickHouse store)
+// into the query service. Call after New, before use.
+func (s *Service) SetProbeResultQuerier(q ProbeResultQuerier) {
+	s.probeResultQuerier = q
+}
+
+// QueryProbeResults fetches probe results for a given probeID via the ClickHouse
+// store. Returns nil, nil when no querier is wired (ClickHouse not available).
+func (s *Service) QueryProbeResults(ctx context.Context, probeID string, from, to time.Time, limit int) ([]domain.ProbeResult, error) {
+	if s.probeResultQuerier == nil {
+		return nil, nil
+	}
+	return s.probeResultQuerier.QueryProbeResults(ctx, probeID, from, to, limit)
 }
 
 // ─── SQL helpers ─────────────────────────────────────────────────────────────

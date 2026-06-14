@@ -63,6 +63,26 @@ type Config struct {
 	MetricsToken string
 }
 
+// AnomalyDetector is the interface to the anomaly detection service.
+// Implemented by *anomaly.Detector.
+type AnomalyDetector interface {
+	// ComputeFlags returns current anomaly flags above sigmaThreshold.
+	// If sigmaThreshold <= 0, the configured default is used.
+	ComputeFlags(ctx context.Context, sigmaThreshold float64) ([]AnomalyFlagAPI, error)
+}
+
+// AnomalyFlagAPI is the API representation of an anomaly flag.
+// Mirrors the AnomalyFlag schema in contracts/openapi/pulse-api.yaml.
+type AnomalyFlagAPI struct {
+	ID       string          `json:"id"`
+	Metric   string          `json:"metric"`
+	Scope    domain.AlertScope `json:"scope"`
+	Observed float64         `json:"observed"`
+	Expected float64         `json:"expected"`
+	Sigma    float64         `json:"sigma"`
+	TS       int64           `json:"ts"`
+}
+
 // Server hosts all HTTP surfaces of a Pulse node.
 type Server struct {
 	cfg     Config
@@ -80,6 +100,9 @@ type Server struct {
 
 	// Wave 2: reports generator (optional — requires ClickHouse for real data).
 	reportGen *reports.Generator
+
+	// Wave 3: anomaly detector (optional — wired in serve.go).
+	anomalyDetector AnomalyDetector
 
 	// WS hub
 	wsMu    sync.Mutex
@@ -130,6 +153,12 @@ func (s *Server) SetIngestTracker(tracker IngestTracker) {
 // Call after New, before Start.
 func (s *Server) SetReportGenerator(gen *reports.Generator) {
 	s.reportGen = gen
+}
+
+// SetAnomalyDetector wires the anomaly detector (F9, Wave 3).
+// Call after New, before Start.
+func (s *Server) SetAnomalyDetector(det AnomalyDetector) {
+	s.anomalyDetector = det
 }
 
 // Start bootstraps the server (token if needed) and starts listening.
@@ -938,31 +967,9 @@ func (s *Server) handleFleetNodes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-// ─── Anomalies / Probes (wave-3 stubs) ───────────────────────────────────────
-
-func (s *Server) handleAnomalies(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"items": []any{}, "meta": map[string]any{"next_cursor": nil}})
-}
-
-func (s *Server) handleListProbes(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"items": []any{}, "meta": map[string]any{"next_cursor": nil}})
-}
-
-func (s *Server) handleCreateProbe(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "probes available in wave 3")
-}
-
-func (s *Server) handleUpdateProbe(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "probes available in wave 3")
-}
-
-func (s *Server) handleDeleteProbe(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "probes available in wave 3")
-}
-
-func (s *Server) handleProbeResults(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"items": []any{}, "meta": map[string]any{"next_cursor": nil}})
-}
+// ─── Anomalies / Probes (wave-3 — implemented in wave3.go) ──────────────────
+// handleAnomalies, handleListProbes, handleCreateProbe, handleUpdateProbe,
+// handleDeleteProbe, handleProbeResults are defined in wave3.go.
 
 // ─── Admin: Sources ───────────────────────────────────────────────────────────
 
