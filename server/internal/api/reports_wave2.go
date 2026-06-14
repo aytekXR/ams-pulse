@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -143,7 +144,12 @@ func (s *Server) handleDeleteReportSchedule(w http.ResponseWriter, r *http.Reque
 // ─── Tenants (F6) ─────────────────────────────────────────────────────────────
 
 // handleListTenants serves GET /api/v1/admin/tenants.
+// Business-tier gated (D-010, §7.11): multi-tenant billing requires Enterprise tier.
 func (s *Server) handleListTenants(w http.ResponseWriter, r *http.Request) {
+	if err := s.lic.CheckMultiTenant(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
 	tenants, err := s.store.ListTenants(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
@@ -157,7 +163,12 @@ func (s *Server) handleListTenants(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleCreateTenant serves POST /api/v1/admin/tenants.
+// Business-tier gated. Returns 409 on duplicate name; 422 if no matcher field set.
 func (s *Server) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
+	if err := s.lic.CheckMultiTenant(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_JSON", "invalid request body")
@@ -168,16 +179,46 @@ func (s *Server) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "INVALID_TENANT", err.Error())
 		return
 	}
+	// Check for duplicate name (unique constraint in DB).
+	if existing, _ := s.store.GetTenantByName(r.Context(), row.Name); existing != nil {
+		writeError(w, http.StatusConflict, "DUPLICATE_NAME", "tenant name already exists")
+		return
+	}
 	created, err := s.store.CreateTenant(r.Context(), row)
 	if err != nil {
+		if isUniqueConstraintError(err) {
+			writeError(w, http.StatusConflict, "DUPLICATE_NAME", "tenant name already exists")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
 	writeJSON(w, http.StatusCreated, tenantToAPI(created))
 }
 
+// handleGetTenant serves GET /api/v1/admin/tenants/{tenantId}.
+// Business-tier gated. Returns 404 if tenant not found.
+func (s *Server) handleGetTenant(w http.ResponseWriter, r *http.Request) {
+	if err := s.lic.CheckMultiTenant(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
+	id := chi.URLParam(r, "tenantId")
+	t, err := s.store.GetTenant(r.Context(), id)
+	if err != nil || t == nil {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "tenant not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, tenantToAPI(*t))
+}
+
 // handleUpdateTenant serves PUT /api/v1/admin/tenants/{tenantId}.
+// Business-tier gated. Returns 404 if not found; 409 if new name conflicts; 422 if no matcher.
 func (s *Server) handleUpdateTenant(w http.ResponseWriter, r *http.Request) {
+	if err := s.lic.CheckMultiTenant(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
 	id := chi.URLParam(r, "tenantId")
 	existing, err := s.store.GetTenant(r.Context(), id)
 	if err != nil || existing == nil {
@@ -194,9 +235,20 @@ func (s *Server) handleUpdateTenant(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "INVALID_TENANT", err.Error())
 		return
 	}
+	// Check for duplicate name if name is being changed.
+	if row.Name != existing.Name {
+		if dup, _ := s.store.GetTenantByName(r.Context(), row.Name); dup != nil {
+			writeError(w, http.StatusConflict, "DUPLICATE_NAME", "tenant name already exists")
+			return
+		}
+	}
 	row.ID = id
 	row.CreatedAt = existing.CreatedAt
 	if err := s.store.UpdateTenant(r.Context(), row); err != nil {
+		if isUniqueConstraintError(err) {
+			writeError(w, http.StatusConflict, "DUPLICATE_NAME", "tenant name already exists")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
@@ -205,7 +257,12 @@ func (s *Server) handleUpdateTenant(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteTenant serves DELETE /api/v1/admin/tenants/{tenantId}.
+// Business-tier gated. Returns 404 if not found.
 func (s *Server) handleDeleteTenant(w http.ResponseWriter, r *http.Request) {
+	if err := s.lic.CheckMultiTenant(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
 	id := chi.URLParam(r, "tenantId")
 	if existing, _ := s.store.GetTenant(r.Context(), id); existing == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "tenant not found")
@@ -216,6 +273,15 @@ func (s *Server) handleDeleteTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// isUniqueConstraintError returns true if the error is a SQLite UNIQUE constraint violation.
+func isUniqueConstraintError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "UNIQUE constraint failed") || strings.Contains(msg, "unique constraint")
 }
 
 // ─── Conversion helpers ───────────────────────────────────────────────────────
@@ -300,11 +366,18 @@ func tenantFromAPI(body map[string]any) (meta.TenantRow, error) {
 	if name == "" {
 		return meta.TenantRow{}, fmt.Errorf("name required")
 	}
+	streamPattern := stringOrEmpty(body["stream_pattern"])
+	metaTagKey := stringOrEmpty(body["meta_tag_key"])
+	metaTagValue := stringOrEmpty(body["meta_tag_value"])
+	// Require at least one matcher: stream_pattern OR (meta_tag_key + meta_tag_value).
+	if streamPattern == "" && (metaTagKey == "" || metaTagValue == "") {
+		return meta.TenantRow{}, fmt.Errorf("at least one matcher required: stream_pattern or (meta_tag_key + meta_tag_value)")
+	}
 	return meta.TenantRow{
 		Name:          name,
-		StreamPattern: stringOrEmpty(body["stream_pattern"]),
-		MetaTagKey:    stringOrEmpty(body["meta_tag_key"]),
-		MetaTagValue:  stringOrEmpty(body["meta_tag_value"]),
+		StreamPattern: streamPattern,
+		MetaTagKey:    metaTagKey,
+		MetaTagValue:  metaTagValue,
 	}, nil
 }
 

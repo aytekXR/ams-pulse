@@ -300,6 +300,17 @@ func (m *Manager) CheckAnomalies() error {
 	return nil
 }
 
+// CheckMultiTenant returns nil if the tier includes multi-tenant billing (F6 tenant CRUD).
+// Multi-tenant billing requires Enterprise tier (§7.11 — "Business/Enterprise" in PRD maps
+// to TierEnterprise in the license model; Free and Pro → 403).
+func (m *Manager) CheckMultiTenant() error {
+	t := m.Tier()
+	if t != TierEnterprise {
+		return fmt.Errorf("multi-tenant billing (F6) requires Enterprise tier (current: %q)", t)
+	}
+	return nil
+}
+
 // ─── Activation ───────────────────────────────────────────────────────────────
 
 // activate parses and validates a license key.

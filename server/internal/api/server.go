@@ -266,10 +266,11 @@ func (s *Server) buildRouter() {
 		r.Put("/reports/schedules/{scheduleId}", s.handleUpdateReportSchedule)
 		r.Delete("/reports/schedules/{scheduleId}", s.handleDeleteReportSchedule)
 
-		// Wave 2 (WO-204): Tenant management (F6 multi-tenant billing).
-		// Route path follows the admin pattern; not in OpenAPI contracts (contracts frozen).
+		// Tenant management (F6 multi-tenant billing): D-010 APPROVED CR, spec amended by INT-01.
+		// Business-tier (Enterprise) gated. All 5 ops per contracts/openapi/pulse-api.yaml.
 		r.Get("/admin/tenants", s.handleListTenants)
 		r.Post("/admin/tenants", s.handleCreateTenant)
+		r.Get("/admin/tenants/{tenantId}", s.handleGetTenant)
 		r.Put("/admin/tenants/{tenantId}", s.handleUpdateTenant)
 		r.Delete("/admin/tenants/{tenantId}", s.handleDeleteTenant)
 
