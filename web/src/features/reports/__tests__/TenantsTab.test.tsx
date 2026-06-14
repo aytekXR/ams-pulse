@@ -181,7 +181,7 @@ describe("ReportsPage tenants tab", () => {
     vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "pro", valid: true });
     vi.mocked(adminApi.listTenants).mockResolvedValue({
       items: [],
-      meta: { total: 0, limit: 50, cursor: null },
+      meta: { total: 0, next_cursor: null },
     });
     render(<ReportsPage />);
     await waitFor(() => {
@@ -199,10 +199,10 @@ describe("ReportsPage tenants tab", () => {
   });
 
   it("renders tenant list after clicking tenants tab", async () => {
-    vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "business", valid: true });
+    vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "enterprise", valid: true });
     vi.mocked(adminApi.listTenants).mockResolvedValue({
       items: SAMPLE_TENANTS,
-      meta: { total: 2, limit: 50, cursor: null },
+      meta: { total: 2, next_cursor: null },
     });
     render(<ReportsPage />);
     await waitFor(() => {
@@ -219,7 +219,7 @@ describe("ReportsPage tenants tab", () => {
     vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "enterprise", valid: true });
     vi.mocked(adminApi.listTenants).mockResolvedValue({
       items: [SAMPLE_TENANTS[0]],
-      meta: { total: 1, limit: 50, cursor: null },
+      meta: { total: 1, next_cursor: null },
     });
     render(<ReportsPage />);
     await waitFor(() => screen.getByRole("button", { name: /tenants/i }));
@@ -233,7 +233,7 @@ describe("ReportsPage tenants tab", () => {
     vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "enterprise", valid: true });
     vi.mocked(adminApi.listTenants).mockResolvedValue({
       items: [SAMPLE_TENANTS[1]],
-      meta: { total: 1, limit: 50, cursor: null },
+      meta: { total: 1, next_cursor: null },
     });
     render(<ReportsPage />);
     await waitFor(() => screen.getByRole("button", { name: /tenants/i }));
@@ -247,7 +247,7 @@ describe("ReportsPage tenants tab", () => {
     vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "pro", valid: true });
     vi.mocked(adminApi.listTenants).mockResolvedValue({
       items: [],
-      meta: { total: 0, limit: 50, cursor: null },
+      meta: { total: 0, next_cursor: null },
     });
     render(<ReportsPage />);
     await waitFor(() => screen.getByRole("button", { name: /tenants/i }));
@@ -261,7 +261,7 @@ describe("ReportsPage tenants tab", () => {
     vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "pro", valid: true });
     vi.mocked(adminApi.listTenants).mockResolvedValue({
       items: [],
-      meta: { total: 0, limit: 50, cursor: null },
+      meta: { total: 0, next_cursor: null },
     });
     render(<ReportsPage />);
     await waitFor(() => screen.getByRole("button", { name: /tenants/i }));
@@ -277,7 +277,7 @@ describe("ReportsPage tenants tab", () => {
     vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "enterprise", valid: true });
     vi.mocked(adminApi.listTenants).mockResolvedValue({
       items: [SAMPLE_TENANTS[0]],
-      meta: { total: 1, limit: 50, cursor: null },
+      meta: { total: 1, next_cursor: null },
     });
     render(<ReportsPage />);
     await waitFor(() => screen.getByRole("button", { name: /tenants/i }));
@@ -293,7 +293,7 @@ describe("ReportsPage tenants tab", () => {
     vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "pro", valid: true });
     vi.mocked(adminApi.listTenants).mockResolvedValue({
       items: [],
-      meta: { total: 0, limit: 50, cursor: null },
+      meta: { total: 0, next_cursor: null },
     });
     vi.mocked(adminApi.createTenant).mockResolvedValue({
       id: "t-new",
@@ -336,7 +336,7 @@ describe("ReportsPage tenants tab", () => {
     vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "enterprise", valid: true });
     vi.mocked(adminApi.listTenants).mockResolvedValue({
       items: [SAMPLE_TENANTS[0]],
-      meta: { total: 1, limit: 50, cursor: null },
+      meta: { total: 1, next_cursor: null },
     });
     vi.mocked(adminApi.deleteTenant).mockResolvedValue(undefined);
     render(<ReportsPage />);
