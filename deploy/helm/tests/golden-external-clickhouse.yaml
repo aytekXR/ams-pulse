@@ -1,0 +1,234 @@
+---
+# Source: pulse/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pulse
+  namespace: default
+  labels:
+    helm.sh/chart: pulse-0.1.0
+    app.kubernetes.io/name: pulse
+    app.kubernetes.io/instance: pulse
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+
+---
+# Source: pulse/templates/pvc.yaml
+# PVC for pulse meta store (SQLite) + license cache.
+# Not needed when postgres.enabled=true (meta store is in Postgres then).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pulse-data
+  namespace: default
+  labels:
+    helm.sh/chart: pulse-0.1.0
+    app.kubernetes.io/name: pulse
+    app.kubernetes.io/instance: pulse
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: pulse
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+
+---
+# Source: pulse/templates/service.yaml
+# Pulse API + UI service (cluster-internal by default).
+# Use ingress or a separate LoadBalancer for external access.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pulse
+  namespace: default
+  labels:
+    helm.sh/chart: pulse-0.1.0
+    app.kubernetes.io/name: pulse
+    app.kubernetes.io/instance: pulse
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: pulse
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: pulse
+    app.kubernetes.io/instance: pulse
+    app.kubernetes.io/component: pulse
+  ports:
+    - name: api
+      port: 8090
+      targetPort: api
+      protocol: TCP
+---
+# Source: pulse/templates/service.yaml
+# Beacon ingest Service — THE ONLY INTERNET-FACING SERVICE in this chart.
+# Players send QoE beacons directly to this endpoint.
+# SECURITY: always terminate TLS at a load balancer or ingress in front of this service.
+# Default type is ClusterIP; change to LoadBalancer for cloud deployments.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pulse-ingest
+  namespace: default
+  labels:
+    helm.sh/chart: pulse-0.1.0
+    app.kubernetes.io/name: pulse
+    app.kubernetes.io/instance: pulse
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: pulse-ingest
+  annotations:
+    # SECURITY NOTE: This is the only internet-facing service. Configure TLS
+    # termination at the load balancer / ingress. Do NOT expose HTTP directly.
+    pulse.io/internet-facing: "true"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: pulse
+    app.kubernetes.io/instance: pulse
+    app.kubernetes.io/component: pulse
+  ports:
+    - name: ingest
+      port: 8091
+      targetPort: ingest
+      protocol: TCP
+
+---
+# Source: pulse/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pulse
+  namespace: default
+  labels:
+    helm.sh/chart: pulse-0.1.0
+    app.kubernetes.io/name: pulse
+    app.kubernetes.io/instance: pulse
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: pulse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pulse
+      app.kubernetes.io/instance: pulse
+      app.kubernetes.io/component: pulse
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pulse
+        app.kubernetes.io/instance: pulse
+        app.kubernetes.io/component: pulse
+    spec:
+      serviceAccountName: pulse
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: pulse
+          image: "ghcr.io/pulse-analytics/pulse:0.1.0"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: false
+            runAsGroup: 1000
+            runAsNonRoot: true
+            runAsUser: 1000
+          command: ["pulse", "serve"]
+          ports:
+            - name: api
+              containerPort: 8090
+              protocol: TCP
+            - name: ingest
+              containerPort: 8091
+              protocol: TCP
+          env:
+            # ── Core server ──────────────────────────────────────────────
+            - name: PULSE_LISTEN_ADDR
+              value: ":8090"
+            # ── ClickHouse ───────────────────────────────────────────────
+            - name: PULSE_CLICKHOUSE_DSN
+              value: "clickhouse://clickhouse.example.com:9000/pulse"
+            - name: PULSE_CLICKHOUSE_DATABASE
+              value: "pulse"
+            - name: PULSE_RETENTION_DAYS
+              value: "90"
+            - name: PULSE_ROLLUP_TTL_DAYS
+              value: "395"
+            # ── AMS source ───────────────────────────────────────────────
+            - name: PULSE_AMS_URL
+              value: "http://ams.example.com:5080"
+            - name: PULSE_AMS_NODE_ID
+              value: "node-01"
+            - name: PULSE_POLL_INTERVAL
+              value: "5s"
+            # ── Meta store ───────────────────────────────────────────────
+            - name: PULSE_META_DSN
+              value: "/var/lib/pulse/pulse_meta.db"
+            # ── Collector extras (optional) ──────────────────────────────
+            # ── License ──────────────────────────────────────────────────
+            # ── Observability ────────────────────────────────────────────
+            - name: PULSE_LOG_LEVEL
+              value: "info"
+            # ── Secrets from secretRef ────────────────────────────────────
+            - name: PULSE_AMS_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: pulse-secrets
+                  key: PULSE_AMS_AUTH_TOKEN
+                  optional: true
+            - name: PULSE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pulse-secrets
+                  key: PULSE_SECRET_KEY
+                  optional: true
+            - name: PULSE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: pulse-secrets
+                  key: PULSE_WEBHOOK_SECRET
+                  optional: true
+            - name: PULSE_METRICS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: pulse-secrets
+                  key: PULSE_METRICS_TOKEN
+                  optional: true
+            # ── Extra env from values.yaml ────────────────────────────────
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: api
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: api
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/pulse
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 250m
+              memory: 256Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: pulse-data

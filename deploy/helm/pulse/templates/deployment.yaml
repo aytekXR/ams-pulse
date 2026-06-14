@@ -1,0 +1,227 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pulse.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pulse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pulse
+  {{- with .Values.pulse.podAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.pulse.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "pulse.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: pulse
+  template:
+    metadata:
+      labels:
+        {{- include "pulse.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: pulse
+      {{- with .Values.pulse.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "pulse.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.pulse.podSecurityContext | nindent 8 }}
+      {{- if .Values.clickhouse.enabled }}
+      initContainers:
+        # Wait for ClickHouse to be ready before starting pulse.
+        - name: wait-clickhouse
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for ClickHouse at {{ include "pulse.fullname" . }}-clickhouse:8123..."
+              until wget -qO- http://{{ include "pulse.fullname" . }}-clickhouse:8123/ping > /dev/null 2>&1; do
+                echo "ClickHouse not ready, retrying in 3s..."
+                sleep 3
+              done
+              echo "ClickHouse ready."
+      {{- end }}
+      containers:
+        - name: pulse
+          image: "{{ .Values.pulse.image.repository }}:{{ .Values.pulse.image.tag }}"
+          imagePullPolicy: {{ .Values.pulse.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.pulse.securityContext | nindent 12 }}
+          command: ["pulse", "serve"]
+          ports:
+            - name: api
+              containerPort: 8090
+              protocol: TCP
+            - name: ingest
+              containerPort: 8091
+              protocol: TCP
+          env:
+            # ── Core server ──────────────────────────────────────────────
+            - name: PULSE_LISTEN_ADDR
+              value: {{ .Values.pulse.listenAddr | quote }}
+            # ── ClickHouse ───────────────────────────────────────────────
+            - name: PULSE_CLICKHOUSE_DSN
+              value: {{ include "pulse.clickhouseDSN" . | quote }}
+            - name: PULSE_CLICKHOUSE_DATABASE
+              value: {{ .Values.pulse.clickhouse.database | quote }}
+            {{- if .Values.pulse.clickhouse.migrationsDir }}
+            - name: PULSE_MIGRATIONS_DIR
+              value: {{ .Values.pulse.clickhouse.migrationsDir | quote }}
+            {{- end }}
+            - name: PULSE_RETENTION_DAYS
+              value: {{ .Values.pulse.retentionDays | quote }}
+            - name: PULSE_ROLLUP_TTL_DAYS
+              value: {{ .Values.pulse.rollupTTLDays | quote }}
+            # ── AMS source ───────────────────────────────────────────────
+            - name: PULSE_AMS_URL
+              value: {{ .Values.pulse.ams.url | quote }}
+            - name: PULSE_AMS_NODE_ID
+              value: {{ .Values.pulse.ams.nodeId | quote }}
+            - name: PULSE_POLL_INTERVAL
+              value: {{ .Values.pulse.ams.pollInterval | quote }}
+            {{- if .Values.pulse.ams.applications }}
+            - name: PULSE_AMS_APPLICATIONS
+              value: {{ .Values.pulse.ams.applications | quote }}
+            {{- end }}
+            # ── Meta store ───────────────────────────────────────────────
+            {{- $metaDSN := include "pulse.metaDSN" . }}
+            {{- if $metaDSN }}
+            - name: PULSE_META_DSN
+              value: {{ $metaDSN | quote }}
+            {{- end }}
+            # ── Collector extras (optional) ──────────────────────────────
+            {{- if .Values.pulse.logTailPath }}
+            - name: PULSE_LOG_TAIL_PATH
+              value: {{ .Values.pulse.logTailPath | quote }}
+            {{- end }}
+            {{- if .Values.pulse.webhookAddr }}
+            - name: PULSE_WEBHOOK_ADDR
+              value: {{ .Values.pulse.webhookAddr | quote }}
+            {{- end }}
+            # ── License ──────────────────────────────────────────────────
+            {{- if .Values.pulse.license.key }}
+            - name: PULSE_LICENSE_KEY
+              value: {{ .Values.pulse.license.key | quote }}
+            {{- end }}
+            {{- if .Values.pulse.license.offlineFile }}
+            - name: PULSE_LICENSE_FILE
+              value: {{ .Values.pulse.license.offlineFile | quote }}
+            {{- end }}
+            # ── Observability ────────────────────────────────────────────
+            - name: PULSE_LOG_LEVEL
+              value: {{ .Values.pulse.logLevel | quote }}
+            # ── Secrets from secretRef ────────────────────────────────────
+            {{- if .Values.pulse.secretRef.name }}
+            - name: PULSE_AMS_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.pulse.secretRef.name }}
+                  key: PULSE_AMS_AUTH_TOKEN
+                  optional: true
+            - name: PULSE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.pulse.secretRef.name }}
+                  key: PULSE_SECRET_KEY
+                  optional: true
+            - name: PULSE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.pulse.secretRef.name }}
+                  key: PULSE_WEBHOOK_SECRET
+                  optional: true
+            - name: PULSE_METRICS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.pulse.secretRef.name }}
+                  key: PULSE_METRICS_TOKEN
+                  optional: true
+            {{- if .Values.postgres.enabled }}
+            - name: PULSE_META_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.pulse.secretRef.name }}
+                  key: PULSE_POSTGRES_DSN
+                  optional: false
+            {{- end }}
+            {{- if .Values.s3Export.enabled }}
+            - name: PULSE_S3_EXPORT_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.pulse.secretRef.name }}
+                  key: PULSE_S3_EXPORT_KEY_ID
+                  optional: true
+            - name: PULSE_S3_EXPORT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.pulse.secretRef.name }}
+                  key: PULSE_S3_EXPORT_SECRET_KEY
+                  optional: true
+            {{- end }}
+            {{- end }}
+            # ── Extra env from values.yaml ────────────────────────────────
+            {{- with .Values.pulse.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: api
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: api
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/pulse
+            {{- if .Values.mmdb.enabled }}
+            - name: mmdb
+              mountPath: {{ .Values.mmdb.mountPath }}
+              subPath: {{ .Values.mmdb.subPath }}
+              readOnly: true
+            {{- end }}
+            {{- with .Values.pulse.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.pulse.resources | nindent 12 }}
+      volumes:
+        - name: data
+          {{- if .Values.pulse.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "pulse.fullname" . }}-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- if .Values.mmdb.enabled }}
+        - name: mmdb
+          persistentVolumeClaim:
+            claimName: {{ .Values.mmdb.claimName }}
+        {{- end }}
+        {{- with .Values.pulse.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.pulse.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.pulse.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.pulse.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

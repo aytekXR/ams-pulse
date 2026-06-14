@@ -1,0 +1,77 @@
+{{- if .Values.clickhouse.enabled -}}
+# ClickHouse low-footprint configuration for 2-vCPU Free-tier installs.
+# Memory limits, concurrency caps, and cache sizes are tuned conservatively
+# for the PRD §7.10 deployment target: 2 vCPU, 2–4 GB RAM sidecar.
+# Adjust clickhouse.config values in values.yaml for larger installs.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "pulse.fullname" . }}-clickhouse-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pulse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+data:
+  config.xml: |
+    <clickhouse>
+      <!-- Storage path — mounted from PVC -->
+      <path>/var/lib/clickhouse/</path>
+      <tmp_path>/var/lib/clickhouse/tmp/</tmp_path>
+      <user_data_path>/var/lib/clickhouse/user_data/</user_data_path>
+
+      <!-- Ports -->
+      <tcp_port>9000</tcp_port>
+      <http_port>8123</http_port>
+      <interserver_http_port>9009</interserver_http_port>
+
+      <!-- Listen on all interfaces inside the pod -->
+      <listen_host>0.0.0.0</listen_host>
+
+      <!-- Logging: errors only to reduce I/O on small VMs -->
+      <logger>
+        <level>error</level>
+        <console>1</console>
+      </logger>
+
+      <!-- Low-footprint memory limits (2-vCPU tier) -->
+      <max_server_memory_usage>{{ .Values.clickhouse.config.maxMemoryUsage }}</max_server_memory_usage>
+      <max_concurrent_queries>{{ .Values.clickhouse.config.maxConcurrentQueries }}</max_concurrent_queries>
+      <uncompressed_cache_size>{{ .Values.clickhouse.config.uncompressedCacheSize }}</uncompressed_cache_size>
+      <mark_cache_size>{{ .Values.clickhouse.config.markCacheSize }}</mark_cache_size>
+
+      <!-- Background pool sizing -->
+      <background_pool_size>{{ .Values.clickhouse.config.backgroundPoolSize }}</background_pool_size>
+      <background_schedule_pool_size>{{ .Values.clickhouse.config.backgroundSchedulePoolSize }}</background_schedule_pool_size>
+
+      <!-- Max threads per query -->
+      <max_threads>{{ .Values.clickhouse.config.maxThreads }}</max_threads>
+
+      <!-- Users config loaded from separate ConfigMap key -->
+      <users_config>/etc/clickhouse-server/users.xml</users_config>
+    </clickhouse>
+
+  users.xml: |
+    <clickhouse>
+      <profiles>
+        <default>
+          <max_memory_usage>{{ .Values.clickhouse.config.maxMemoryUsage }}</max_memory_usage>
+          <max_memory_usage_for_all_queries>{{ .Values.clickhouse.config.maxMemoryUsageForAllQueries }}</max_memory_usage_for_all_queries>
+        </default>
+      </profiles>
+      <users>
+        <default>
+          <!-- No password for cluster-internal access; NetworkPolicy restricts external access. -->
+          <password></password>
+          <profile>default</profile>
+          <quota>default</quota>
+          <networks>
+            <ip>::/0</ip>
+          </networks>
+          <access_management>1</access_management>
+        </default>
+      </users>
+      <quotas>
+        <default></default>
+      </quotas>
+    </clickhouse>
+{{- end }}

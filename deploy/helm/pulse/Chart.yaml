@@ -1,0 +1,38 @@
+apiVersion: v2
+name: pulse
+description: >
+  Self-hosted analytics, QoE monitoring and alerting for Ant Media Server.
+  Runs the pulse all-in-one binary alongside ClickHouse (bundled StatefulSet)
+  with an optional Postgres meta store for HA deployments.
+type: application
+# Chart version (semver, independent of the pulse binary version).
+version: 0.1.0
+# App version matches the pulse binary release tag.
+appVersion: "0.1.0"
+
+keywords:
+  - antmedia
+  - analytics
+  - monitoring
+  - qoe
+  - clickhouse
+
+home: https://github.com/pulse-analytics/pulse
+sources:
+  - https://github.com/pulse-analytics/pulse
+
+maintainers:
+  - name: INFRA-01
+    email: infra@pulse-analytics.io
+
+# Sub-chart design decision (INFRA-01, WO-206):
+#   ClickHouse is bundled as a StatefulSet template rather than a Bitnami
+#   sub-chart for two reasons:
+#   1. Dependency on bitnami/clickhouse would force internet access at helm
+#      install time, blocking air-gapped Enterprise installs (PRD §7.10).
+#   2. The low-footprint 2-vCPU tuning (ARCHITECTURE §3.6) requires patching
+#      several non-default ClickHouse settings that the Bitnami chart does not
+#      expose as values — embedding the StatefulSet lets us own the config XML.
+#   Trade-off: we own upgrades; the template is deliberately minimal and
+#   documented so operators can swap in an external ClickHouse by setting
+#   clickhouse.enabled=false and providing clickhouse.externalDSN.

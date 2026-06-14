@@ -1,0 +1,66 @@
+# Test values: postgres meta store + S3 export enabled.
+# Used by: helm template golden-file test in CI.
+
+pulse:
+  image:
+    repository: ghcr.io/pulse-analytics/pulse
+    tag: "0.1.0"
+  secretRef:
+    name: pulse-secrets
+  ams:
+    url: "http://ams.example.com:5080"
+    nodeId: "node-01"
+  logLevel: "debug"
+
+clickhouse:
+  enabled: true
+  persistence:
+    size: 50Gi
+
+postgres:
+  enabled: true
+  auth:
+    database: "pulse_meta"
+    username: "pulse"
+  persistence:
+    size: 10Gi
+
+s3Export:
+  enabled: true
+  bucket: "pulse-reports"
+  region: "eu-west-1"
+
+ingestService:
+  enabled: true
+  type: LoadBalancer
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: pulse.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: pulse-tls
+      hosts:
+        - pulse.example.com
+
+ingressIngest:
+  enabled: true
+  className: "nginx"
+  hosts:
+    - host: ingest.pulse.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: pulse-ingest-tls
+      hosts:
+        - ingest.pulse.example.com

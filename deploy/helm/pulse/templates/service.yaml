@@ -1,0 +1,55 @@
+# Pulse API + UI service (cluster-internal by default).
+# Use ingress or a separate LoadBalancer for external access.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pulse.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pulse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pulse
+spec:
+  type: {{ .Values.pulse.service.type }}
+  selector:
+    {{- include "pulse.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: pulse
+  ports:
+    - name: api
+      port: {{ .Values.pulse.service.apiPort }}
+      targetPort: api
+      protocol: TCP
+---
+{{- if .Values.ingestService.enabled }}
+# Beacon ingest Service — THE ONLY INTERNET-FACING SERVICE in this chart.
+# Players send QoE beacons directly to this endpoint.
+# SECURITY: always terminate TLS at a load balancer or ingress in front of this service.
+# Default type is ClusterIP; change to LoadBalancer for cloud deployments.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pulse.fullname" . }}-ingest
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pulse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pulse-ingest
+  annotations:
+    # SECURITY NOTE: This is the only internet-facing service. Configure TLS
+    # termination at the load balancer / ingress. Do NOT expose HTTP directly.
+    pulse.io/internet-facing: "true"
+    {{- with .Values.ingestService.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.ingestService.type }}
+  selector:
+    {{- include "pulse.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: pulse
+  ports:
+    - name: ingest
+      port: {{ .Values.ingestService.port }}
+      targetPort: ingest
+      protocol: TCP
+      {{- if and (eq .Values.ingestService.type "NodePort") .Values.ingestService.nodePort }}
+      nodePort: {{ .Values.ingestService.nodePort }}
+      {{- end }}
+{{- end }}

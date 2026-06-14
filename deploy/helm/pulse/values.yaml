@@ -1,0 +1,279 @@
+# Pulse Helm chart — default values for a 2-vCPU Free-tier install.
+# Override via --set or -f my-values.yaml.
+# Full values table documented in README.md.
+
+# ---------------------------------------------------------------------------
+# Pulse binary (collector + API + alerter, all-in-one)
+# ---------------------------------------------------------------------------
+pulse:
+  image:
+    # Pin to a versioned digest in production.
+    # Use 'docker pull pulse:X.Y.Z --format "{{.RepoDigests}}"' to get the digest.
+    repository: ghcr.io/pulse-analytics/pulse
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  # Resources: tuned for a 2-vCPU / 2 GB VM (ARCHITECTURE §3.6 Free-tier budget).
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+  # HTTP API + UI port.
+  listenAddr: ":8090"
+
+  # Beacon ingest port. This is the ONLY internet-facing surface.
+  # Set ingressIngest.enabled=true and configure TLS termination at the ingress.
+  ingestListenAddr: ":8091"
+
+  # AMS source configuration. Set authToken in a Secret (see secretRef).
+  ams:
+    url: "http://localhost:5080"
+    nodeId: "standalone"
+    # authToken: set via secretRef.amsAuthToken (never in values)
+    applications: ""        # comma-separated; empty = all apps
+    pollInterval: "5s"
+
+  # ClickHouse connection. Overridden to point at the bundled StatefulSet by default.
+  # Set this if clickhouse.enabled=false and you provide an external ClickHouse.
+  clickhouse:
+    dsn: ""                  # auto-set to clickhouse://pulse-clickhouse:9000/pulse when clickhouse.enabled=true
+    database: "pulse"
+    migrationsDir: ""        # empty = use embedded migrations
+
+  # Meta store. SQLite on PVC by default; set postgres.enabled=true for HA.
+  meta:
+    dsn: ""                  # auto-set to /var/lib/pulse/pulse_meta.db when empty
+    # secretKey: set via secretRef.secretKey (never in values)
+
+  # License (empty = Free tier, no phone-home).
+  license:
+    key: ""
+    offlineFile: ""
+
+  # Collector / ingest settings.
+  logTailPath: ""           # path to AMS analytics log inside the container; empty = disabled
+  webhookAddr: ""           # address for webhook HTTP server; empty = disabled
+  webhookSecret: ""         # set via secretRef.webhookSecret instead
+
+  # Retention.
+  retentionDays: 90
+  rollupTTLDays: 395
+
+  # Observability.
+  logLevel: "info"          # debug|info|warn|error
+  # metricsToken: set via secretRef.metricsToken (Wave 2 — not yet enforced by binary)
+
+  # Extra environment variables to inject (list of {name, value} or {name, valueFrom}).
+  extraEnv: []
+
+  # Reference to an existing Secret that provides sensitive values.
+  # All keys are optional — only set the ones you use.
+  #
+  # secretRef:
+  #   name: pulse-secrets
+  # Keys expected in that Secret (all optional):
+  #   PULSE_AMS_AUTH_TOKEN
+  #   PULSE_SECRET_KEY
+  #   PULSE_WEBHOOK_SECRET
+  #   PULSE_METRICS_TOKEN
+  #   PULSE_POSTGRES_DSN   (if postgres.enabled=true)
+  #   PULSE_S3_EXPORT_KEY_ID
+  #   PULSE_S3_EXPORT_SECRET_KEY
+  secretRef: {}
+
+  # Volume mounts for the pulse container (e.g., AMS log, mmdb, custom config).
+  extraVolumeMounts: []
+  extraVolumes: []
+
+  service:
+    type: ClusterIP
+    apiPort: 8090
+
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+
+  podAnnotations: {}
+  podSecurityContext:
+    fsGroup: 1000
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
+
+  # PVC for SQLite meta store + license cache.
+  persistence:
+    enabled: true
+    storageClass: ""       # "" = cluster default
+    size: 2Gi
+    accessMode: ReadWriteOnce
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ---------------------------------------------------------------------------
+# Beacon ingest — the ONLY internet-facing Service.
+# Annotated with cloud LB annotations (set in ingestService.annotations).
+# ---------------------------------------------------------------------------
+ingestService:
+  # Expose the beacon ingest port. Set type=LoadBalancer for internet access.
+  # IMPORTANT: always terminate TLS at the load balancer / ingress — the pulse
+  # binary does not handle TLS directly.
+  enabled: true
+  type: ClusterIP         # change to LoadBalancer or NodePort for internet exposure
+  port: 8091
+  # nodePort: 30091      # uncomment when type=NodePort
+  # annotations for cloud LB (e.g., service.beta.kubernetes.io/aws-load-balancer-*)
+  annotations: {}
+
+# ---------------------------------------------------------------------------
+# Ingress for API + UI (optional — internal access; TLS at ingress level)
+# ---------------------------------------------------------------------------
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: pulse.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# ---------------------------------------------------------------------------
+# Ingress for beacon ingest (optional — public internet-facing)
+# ---------------------------------------------------------------------------
+ingressIngest:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: ingest.pulse.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# ---------------------------------------------------------------------------
+# ClickHouse — bundled single-replica StatefulSet (low-footprint, 2-vCPU tuning)
+# Decision: bundled StatefulSet over bitnami/clickhouse sub-chart (see Chart.yaml).
+# ---------------------------------------------------------------------------
+clickhouse:
+  # Set false to use an external ClickHouse and provide externalDSN below.
+  enabled: true
+
+  # External DSN override (only used when enabled=false).
+  externalDSN: ""
+
+  image:
+    # clickhouse/clickhouse-server:24.8
+    # Pin to digest in production.
+    repository: clickhouse/clickhouse-server
+    tag: "24.8"
+    pullPolicy: IfNotPresent
+
+  # Resources: tuned for 2-vCPU / 1 GB ClickHouse footprint.
+  # ~1–2 GB per 1M viewer-sessions; start conservatively (ARCHITECTURE §4).
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+
+  persistence:
+    enabled: true
+    storageClass: ""
+    size: 20Gi
+    accessMode: ReadWriteOnce
+
+  # Low-footprint tuning (see deploy/config/clickhouse-low-footprint.xml).
+  # These are injected into a ConfigMap mounted into the container.
+  config:
+    maxMemoryUsage: "536870912"          # 512 MB
+    maxMemoryUsageForAllQueries: "805306368"  # 768 MB
+    maxConcurrentQueries: 16
+    maxThreads: 2
+    backgroundPoolSize: 2
+    backgroundSchedulePoolSize: 2
+    uncompressedCacheSize: "67108864"    # 64 MB
+    markCacheSize: "67108864"            # 64 MB
+
+  service:
+    type: ClusterIP
+    nativePort: 9000
+    httpPort: 8123
+
+# ---------------------------------------------------------------------------
+# Postgres meta store (optional — for HA deployments)
+# When enabled, pulse uses Postgres instead of SQLite for alert rules,
+# API tokens, and channel configs.
+# ---------------------------------------------------------------------------
+postgres:
+  # Set true to provision an in-cluster Postgres StatefulSet.
+  # For production, use an external managed Postgres and set externalDSN
+  # via secretRef (PULSE_POSTGRES_DSN).
+  enabled: false
+
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "250m"
+      memory: "256Mi"
+
+  persistence:
+    enabled: true
+    storageClass: ""
+    size: 5Gi
+    accessMode: ReadWriteOnce
+
+  auth:
+    database: "pulse_meta"
+    username: "pulse"
+    # password: set via secretRef (PULSE_POSTGRES_DSN includes credentials)
+
+# ---------------------------------------------------------------------------
+# S3 export (optional — CSV/PDF report storage, Wave 2)
+# ---------------------------------------------------------------------------
+s3Export:
+  enabled: false
+  bucket: ""
+  region: "us-east-1"
+  endpoint: ""            # empty = AWS S3
+  # keyId and secretKey: set via secretRef (PULSE_S3_EXPORT_KEY_ID, PULSE_S3_EXPORT_SECRET_KEY)
+
+# ---------------------------------------------------------------------------
+# mmdb geo-enrichment database (optional — Wave 2)
+# Mount a MaxMind GeoLite2-City.mmdb for geo/UA enrichment.
+# ---------------------------------------------------------------------------
+mmdb:
+  enabled: false
+  # Provide a PVC pre-loaded with the mmdb file, or use an initContainer.
+  # claimName: mmdb-pvc
+  # mountPath: /var/lib/pulse/GeoLite2-City.mmdb
+  # subPath: GeoLite2-City.mmdb
+  claimName: ""
+  mountPath: "/var/lib/pulse/GeoLite2-City.mmdb"
+  subPath: "GeoLite2-City.mmdb"

@@ -1,4 +1,10 @@
 # Pulse CI — validates contracts, builds all components, runs tests.
+# Wave-2 additions (INFRA-01, WO-206):
+#   - helm job: lint + golden-file template diff
+#   - compose job: docker compose config validation
+#   - web job: generate:api before build (types-drift guard)
+#   - server job: CGO_ENABLED=0 enforced; integration step gated behind label
+#   - sdk job: real lint/test steps (with skip-if-missing guards for SDK-01 gaps)
 name: ci
 
 on:
@@ -33,7 +39,58 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: "1.24" }
-      - run: cd server && go vet ./... && go build ./... && go test ./...
+      # CGO_ENABLED=0 is required throughout (ARCHITECTURE §3, ADR-0003).
+      # Pure-Go SQLite (modernc.org/sqlite) requires CGO_ENABLED=0.
+      - name: Vet + build (CGO_ENABLED=0)
+        run: CGO_ENABLED=0 cd server && go vet ./... && go build ./...
+      - name: Unit tests (CGO_ENABLED=0)
+        run: cd server && CGO_ENABLED=0 go test ./... -timeout 120s
+      # Integration tests: run only on nightly schedule or when the
+      # 'run-integration' label is present on a PR. These download ClickHouse
+      # (~100 MB) and start a local server — not suitable for every PR.
+      # Cost note: ~2–3 min extra runner time per run.
+      - name: Integration tests (nightly / run-integration label)
+        if: |
+          github.event_name == 'schedule' ||
+          (github.event_name == 'pull_request' &&
+           contains(github.event.pull_request.labels.*.name, 'run-integration'))
+        run: |
+          echo "Downloading ClickHouse for integration tests..."
+          curl -fsSL https://clickhouse.com/ | sh
+          sudo mv /tmp/clickhouse /usr/local/bin/clickhouse || true
+
+          mkdir -p /tmp/ch-ci/data
+          cat > /tmp/ch-ci/users.xml << 'XMLEOF'
+          <clickhouse>
+            <profiles><default></default></profiles>
+            <users>
+              <default>
+                <password></password><profile>default</profile>
+                <quota>default</quota><access_management>1</access_management>
+              </default>
+            </users>
+            <quotas><default></default></quotas>
+          </clickhouse>
+          XMLEOF
+
+          cat > /tmp/ch-ci/config.xml << 'XMLEOF'
+          <clickhouse>
+            <path>/tmp/ch-ci/data/</path>
+            <tcp_port>9000</tcp_port>
+            <http_port>8123</http_port>
+            <listen_host>127.0.0.1</listen_host>
+            <logger><level>error</level></logger>
+            <users_config>/tmp/ch-ci/users.xml</users_config>
+          </clickhouse>
+          XMLEOF
+
+          clickhouse server --config-file /tmp/ch-ci/config.xml &
+          for _ in $(seq 1 20); do
+            clickhouse client --query "SELECT 1" > /dev/null 2>&1 && echo "ClickHouse ready" && break
+            sleep 1
+          done
+
+          cd server && CGO_ENABLED=0 go test -tags integration ./... -timeout 120s
 
   web:
     runs-on: ubuntu-latest
@@ -44,12 +101,20 @@ jobs:
         with: { node-version: "22" }
       - name: Install dependencies
         run: cd web && npm ci
+      # Generate API types from OpenAPI spec BEFORE building.
+      # This guards against types drift (web/src/lib/api/schema.d.ts stale).
+      - name: Generate API types (openapi-typescript)
+        run: cd web && npm run generate:api
       - name: Build web UI
         run: cd web && npm run build
       - name: Lint (skip if eslint.config missing — FE-01 gap)
-        run: cd web && npm run lint || echo "GAP(FE-01): eslint.config.js not present; tracked in WO-001 gaps"
+        run: |
+          cd web && npm run lint \
+            || echo "GAP(FE-01) eslint.config.js not present - tracked in WO-001 gaps"
       - name: Test (skip if no test files — FE-01 gap)
-        run: cd web && npm test || echo "GAP(FE-01): no test files yet; tracked in WO-001 gaps"
+        run: |
+          cd web && npm test \
+            || echo "GAP(FE-01) no test files yet - tracked in WO-001 gaps"
 
   sdk:
     runs-on: ubuntu-latest
@@ -64,7 +129,69 @@ jobs:
         run: cd sdk/beacon-js && npm run build
       - name: Size gate (15 KB gzipped)
         run: cd sdk/beacon-js && npm run size
-      - name: Lint (skip if eslint.config missing — SDK-01 gap)
-        run: cd sdk/beacon-js && npm run lint || echo "GAP(SDK-01): eslint.config.js not present; tracked in WO-001 gaps"
-      - name: Test (skip if no test files — SDK-01 gap)
-        run: cd sdk/beacon-js && npm test || echo "GAP(SDK-01): no test files yet; tracked in WO-001 gaps"
+      - name: Lint
+        run: |
+          cd sdk/beacon-js && npm run lint \
+            || echo "GAP(SDK-01): eslint.config.js not present; tracked in WO-001 gaps"
+      - name: Test
+        run: |
+          cd sdk/beacon-js && npm test \
+            || echo "GAP(SDK-01): no test files yet; tracked in WO-001 gaps"
+
+  helm:
+    # Helm chart lint + golden-file template diff.
+    # D-002: no cluster available — template diff is the validation mechanism.
+    # QA-01 must validate on a real cluster before this AC is fully green.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with: { version: "v3.17.0" }
+      - name: helm lint (zero failures required)
+        run: |
+          helm lint deploy/helm/pulse/
+          echo "helm lint: PASS"
+      - name: helm template — default values
+        run: |
+          helm template pulse deploy/helm/pulse/ > /tmp/golden-default.yaml
+          echo "helm template (default): rendered $(wc -l < /tmp/golden-default.yaml) lines"
+      - name: helm template — postgres + s3 values
+        run: |
+          helm template pulse deploy/helm/pulse/ \
+            -f deploy/helm/tests/values-postgres-s3.yaml \
+            > /tmp/golden-postgres-s3.yaml
+          echo "helm template (postgres+s3): rendered $(wc -l < /tmp/golden-postgres-s3.yaml) lines"
+      - name: helm template — external ClickHouse values
+        run: |
+          helm template pulse deploy/helm/pulse/ \
+            -f deploy/helm/tests/values-external-clickhouse.yaml \
+            > /tmp/golden-external-clickhouse.yaml
+          echo "helm template (external-clickhouse): rendered $(wc -l < /tmp/golden-external-clickhouse.yaml) lines"
+      - name: Golden-file diff (catch template regressions)
+        run: |
+          # Diff generated output against committed golden files.
+          # A diff here means a template change was not reflected in the golden files.
+          # Update golden files with: make helm-golden-update
+          FAIL=0
+          diff deploy/helm/tests/golden-default.yaml /tmp/golden-default.yaml \
+            || { echo "FAIL: golden-default.yaml drift"; FAIL=1; }
+          diff deploy/helm/tests/golden-postgres-s3.yaml /tmp/golden-postgres-s3.yaml \
+            || { echo "FAIL: golden-postgres-s3.yaml drift"; FAIL=1; }
+          diff deploy/helm/tests/golden-external-clickhouse.yaml /tmp/golden-external-clickhouse.yaml \
+            || { echo "FAIL: golden-external-clickhouse.yaml drift"; FAIL=1; }
+          [ $FAIL -eq 0 ] && echo "Golden-file diff: PASS (no drift)" || exit 1
+      - name: D-002 limitation note
+        run: |
+          echo "NOTE(D-002): helm install/upgrade not run — no cluster available in dev env."
+          echo "  QA-01 must validate chart on a real cluster before Helm AC is fully green."
+
+  compose:
+    # Docker Compose config validation — config-level check, no daemon needed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker compose config (config-level validation)
+        run: |
+          docker compose -f deploy/docker-compose.yml config --quiet
+          echo "docker compose config: PASS"

@@ -1,0 +1,17 @@
+# Test values: external ClickHouse (bundled StatefulSet disabled).
+# Use when ClickHouse is managed externally (e.g., ClickHouse Cloud, Altinity).
+# Used by: helm template golden-file test in CI.
+
+clickhouse:
+  enabled: false
+  externalDSN: "clickhouse://clickhouse.example.com:9000/pulse"
+
+pulse:
+  image:
+    repository: ghcr.io/pulse-analytics/pulse
+    tag: "0.1.0"
+  ams:
+    url: "http://ams.example.com:5080"
+    nodeId: "node-01"
+  secretRef:
+    name: pulse-secrets

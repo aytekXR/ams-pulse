@@ -4,7 +4,9 @@
 .PHONY: help build build-server build-web build-sdk \
         test test-server test-web test-sdk \
         lint lint-server lint-web lint-sdk \
-        validate-contracts dev up down
+        validate-contracts dev up down \
+        helm-lint helm-template helm-golden-update \
+        mock-ams local-stack-up local-stack-down
 
 # Sentinel files: avoid re-running npm install when node_modules/ is up to date.
 web/node_modules/.package-lock.json: web/package-lock.json
@@ -83,4 +85,53 @@ up: ## Start the full stack locally (Docker Compose)
 	cd deploy && docker compose up -d
 
 down: ## Stop the local stack
+	cd deploy && docker compose down
+
+# ---------------------------------------------------------------------------
+# Helm (Wave 2 — INFRA-01)
+# D-002: helm install/upgrade require a cluster — not available on dev machine.
+# ---------------------------------------------------------------------------
+
+helm-lint: ## Lint the Helm chart (helm lint — no cluster required)
+	helm lint deploy/helm/pulse/
+
+helm-template: ## Render Helm templates with default values (no cluster required)
+	helm template pulse deploy/helm/pulse/
+
+helm-golden-update: ## Update golden template files (run after chart changes)
+	helm template pulse deploy/helm/pulse/ \
+	  > deploy/helm/tests/golden-default.yaml
+	helm template pulse deploy/helm/pulse/ \
+	  -f deploy/helm/tests/values-postgres-s3.yaml \
+	  > deploy/helm/tests/golden-postgres-s3.yaml
+	helm template pulse deploy/helm/pulse/ \
+	  -f deploy/helm/tests/values-external-clickhouse.yaml \
+	  > deploy/helm/tests/golden-external-clickhouse.yaml
+	@echo "Golden files updated."
+
+# ---------------------------------------------------------------------------
+# Local developer path (wraps qa/ scripts)
+# D-002: mock-ams runs without Docker; local-stack-* require Docker Compose.
+# ---------------------------------------------------------------------------
+
+mock-ams: ## Build and start mock-ams for local development (no Docker required)
+	@echo "Building mock-ams..."
+	CGO_ENABLED=0 go build -o /tmp/mock-ams ./qa/mock-ams/
+	@echo "Starting mock-ams on :9090 (use Ctrl-C to stop)..."
+	/tmp/mock-ams -addr :9090 -scenario 1
+
+local-stack-up: ## Start the full developer stack (Docker required — D-002)
+	@command -v docker >/dev/null 2>&1 || { \
+	  echo "ERROR(D-002): Docker not available on this machine."; \
+	  echo "  Use 'make mock-ams' for a Docker-free AMS stub."; \
+	  echo "  Use 'make up' when Docker is available."; \
+	  exit 1; \
+	}
+	cd deploy && docker compose up -d
+	@echo "Stack started. pulse API: http://localhost:8090  beacon ingest: http://localhost:8091"
+
+local-stack-down: ## Stop the developer stack (Docker required — D-002)
+	@command -v docker >/dev/null 2>&1 || { \
+	  echo "ERROR(D-002): Docker not available on this machine."; exit 1; \
+	}
 	cd deploy && docker compose down

@@ -1,0 +1,25 @@
+{{- if .Values.clickhouse.enabled -}}
+# Headless service for ClickHouse StatefulSet (cluster-internal only).
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pulse.fullname" . }}-clickhouse
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pulse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  clusterIP: None
+  selector:
+    {{- include "pulse.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+  ports:
+    - name: native
+      port: {{ .Values.clickhouse.service.nativePort }}
+      targetPort: native
+      protocol: TCP
+    - name: http
+      port: {{ .Values.clickhouse.service.httpPort }}
+      targetPort: http
+      protocol: TCP
+{{- end }}

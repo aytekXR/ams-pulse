@@ -37,9 +37,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          # Match the version used in ci.yml (CGO_ENABLED=0 required throughout).
+          go-version: "1.24"
 
-      - name: Build pulse binary
+      - name: Build pulse binary (CGO_ENABLED=0)
         run: CGO_ENABLED=0 go build -o /tmp/pulse ./server/cmd/pulse/
 
       - name: Build mock-ams (fallback if AMS docker unavailable)
@@ -48,45 +49,52 @@ jobs:
       - name: Pull AMS docker image
         id: pull-ams
         continue-on-error: true
+        env:
+          AMS_VER: ${{ matrix.ams-version }}
         run: |
-          docker pull ${{ env.AMS_IMAGE }}:${{ matrix.ams-version }} || echo "pull-failed=true" >> $GITHUB_OUTPUT
+          docker pull "${AMS_IMAGE}:${AMS_VER}" || echo "pull-failed=true" >> "$GITHUB_OUTPUT"
 
       - name: Start AMS container
         id: start-ams
         if: steps.pull-ams.outputs.pull-failed != 'true'
+        env:
+          AMS_VER: ${{ matrix.ams-version }}
         run: |
           docker run -d \
             --name ams-test \
-            -p ${{ env.AMS_REST_PORT }}:5080 \
-            ${{ env.AMS_IMAGE }}:${{ matrix.ams-version }}
+            -p "${AMS_REST_PORT}:5080" \
+            "${AMS_IMAGE}:${AMS_VER}"
           # Wait up to 60s for AMS REST to become available
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:${{ env.AMS_REST_PORT }}/rest/v2/applications > /dev/null 2>&1; then
-              echo "AMS ${{ matrix.ams-version }} REST ready (${i}x2s)"
-              echo "ams-running=true" >> $GITHUB_OUTPUT
+          for _ in $(seq 1 30); do
+            if curl -sf "http://localhost:${AMS_REST_PORT}/rest/v2/applications" > /dev/null 2>&1; then
+              echo "AMS ${AMS_VER} REST ready"
+              echo "ams-running=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             sleep 2
           done
           echo "AMS failed to start within 60s" >&2
           docker logs ams-test || true
-          echo "ams-running=false" >> $GITHUB_OUTPUT
+          echo "ams-running=false" >> "$GITHUB_OUTPUT"
           exit 1
 
       - name: Start mock-ams (fallback)
         id: start-mock
         if: steps.pull-ams.outputs.pull-failed == 'true' || steps.start-ams.outputs.ams-running != 'true'
+        env:
+          AMS_VER: ${{ matrix.ams-version }}
         run: |
           /tmp/mock-ams -addr :5080 -scenario 1 &
           sleep 2
-          echo "mock-running=true" >> $GITHUB_OUTPUT
-          echo "Using mock-ams instead of AMS ${{ matrix.ams-version }}"
+          echo "mock-running=true" >> "$GITHUB_OUTPUT"
+          echo "Using mock-ams instead of AMS ${AMS_VER}"
 
       - name: Install ClickHouse
         run: |
           curl -fsSL https://clickhouse.com/ | sh
           sudo mv /tmp/clickhouse /usr/local/bin/clickhouse || true
-          which clickhouse || curl -fsSL https://packages.clickhouse.com/tgz/stable/clickhouse-server-$(curl -s https://packages.clickhouse.com/tgz/stable/ | grep -oP 'clickhouse-server-\K[0-9.]+(?=-)' | sort -V | tail -1)-aarch64.tgz 2>/dev/null || true
+          # Verify installation
+          which clickhouse || { echo "ClickHouse binary not found after install"; exit 1; }
 
       - name: Start ClickHouse
         run: |
@@ -115,7 +123,7 @@ jobs:
           </clickhouse>
           XMLEOF
           clickhouse server --config-file /tmp/ch-ci/config.xml &
-          for i in $(seq 1 20); do
+          for _ in $(seq 1 20); do
             clickhouse client --query "SELECT 1" > /dev/null 2>&1 && echo "ClickHouse ready" && break
             sleep 1
           done

@@ -1,0 +1,21 @@
+{{- if and .Values.pulse.persistence.enabled (not .Values.postgres.enabled) -}}
+# PVC for pulse meta store (SQLite) + license cache.
+# Not needed when postgres.enabled=true (meta store is in Postgres then).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "pulse.fullname" . }}-data
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pulse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pulse
+spec:
+  accessModes:
+    - {{ .Values.pulse.persistence.accessMode }}
+  {{- if .Values.pulse.persistence.storageClass }}
+  storageClassName: {{ .Values.pulse.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.pulse.persistence.size }}
+{{- end }}
