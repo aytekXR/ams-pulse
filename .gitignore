@@ -15,6 +15,9 @@ node_modules/
 pulse_secret.key
 /deploy/data/
 *.db
+*.db-shm
+*.db-wal
+*.db-journal
 *.sqlite
 
 # Editor / OS
