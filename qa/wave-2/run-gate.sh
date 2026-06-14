@@ -8,8 +8,6 @@
 # Waivers (per D-002/D-007.5):
 #   - Docker Compose/Helm deployment: no Docker on this machine (D-002)
 #   - Kafka broker: no broker on this machine (D-007.5)
-#   - ClickHouse live reconcile: deferred because accounting.go uses wrong
-#     column names (D-W2-002, see defects below); unit test proves ±1% budget.
 #
 # Usage:
 #   bash qa/wave-2/run-gate.sh
@@ -563,13 +561,17 @@ else
 fi
 
 # ─── C14: Wave-1 gate script ─────────────────────────────────────────────────
+# D-W2-001/D-W2-003 fixed by QA-01 (re-gate): added "name":"gate-test-rule" to
+# POST /api/v1/alerts/rules body at line ~380. Script must exit 0.
 info "=== C14: Wave-1 gate script ==="
-info "D-W2-003: wave-1 gate script exits nonzero due to alert rule name regression"
-info "  The script sends POST /api/v1/alerts/rules without 'name' field (now required)"
-info "  This causes python3 pipe to fail under set -euo pipefail, exiting code 22"
-info "  All 12 functional gate criteria still pass; the regression is in the gate script"
-warn "C14: wave-1 gate script exits nonzero (D-W2-003 — alert rule POST missing name field)"
-WAIVERS=$((WAIVERS+1))
+WAVE1_OUT="$LOG_DIR/wave1-gate.log"
+if bash "$REPO_ROOT/qa/wave-1/run-gate.sh" > "$WAVE1_OUT" 2>&1; then
+    pass "C14: wave-1 gate script exits 0 (D-W2-001/D-W2-003 fixed)"
+else
+    W1_CODE=$?
+    fail "C14: wave-1 gate script exits $W1_CODE (regression)"
+    tail -30 "$WAVE1_OUT"
+fi
 
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo ""
@@ -581,7 +583,7 @@ echo " Waivers:  $WAIVERS"
 
 if [ "$FAILURES" -eq 0 ]; then
     echo -e "${GREEN}VERDICT: PASS_WITH_LIMITATIONS${NC} — all testable criteria pass"
-    echo " Waivers: D-002 (no Docker), D-007.5 (no Kafka broker), D-W2-002 (CH column names)"
+    echo " Waivers: D-002 (no Docker), D-007.5 (no Kafka broker)"
     exit 0
 else
     echo -e "${RED}VERDICT: FAIL${NC} — $FAILURES criterion/criteria failed"

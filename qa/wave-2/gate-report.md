@@ -403,3 +403,72 @@ Wave-2 acceptance gates by criterion:
 - Blockers for wave-3 start: D-W2-002 (BE-02 must fix `accounting.go` column names)
 - Non-blockers: D-W2-001 / D-W2-003 (QA-01 will fix wave-1 gate script before next gate run)
 - Waivers applied: D-002, D-007.5
+
+---
+
+## Re-gate (D-W2-002 fix)
+
+**Agent:** QA-01
+**Date:** 2026-06-14
+**Trigger:** BE-02 fixed `accounting.go` column names + filed `accounting_integration_test.go`
+
+### Fixes applied (QA-01 scope)
+
+1. `qa/wave-1/run-gate.sh` line 380: added `"name":"gate-test-rule"` to the alert rule POST body (D-W2-001/D-W2-003 fix, QA-01 owns gate scripts).
+2. `qa/wave-2/run-gate.sh` C14 section: replaced hardcoded WARN/waiver with actual `bash qa/wave-1/run-gate.sh` execution; removed stale D-W2-002 waiver from summary.
+
+### D-W2-002 live verification (integration test)
+
+**Command:**
+```bash
+cd /Users/ae/repo/ant-marketplace/server
+CGO_ENABLED=0 go test -tags integration -run TestAccountant_CHIntegration ./internal/reports/... -v -timeout 180s
+```
+
+**Measured output:**
+```
+ClickHouse ready
+migrations applied
+seeded 8 viewer_sessions (truth: 55.0 min total)
+rollup_usage_1d rows after seed: 2
+ComputeUsage returned 2 rows, totals: viewer_minutes=55.0000, peak=1
+ComputeUsage: computed=55.0000 min, truth=55.0000 min, drift=0.0000%
+Per-stream: alpha=30.0000 min (truth=30.0), beta=25.0000 min (truth=25.0)
+PASS (a): ComputeUsage — viewer-minutes drift=0.0000%, stream attribution within 1%
+Reconcile: rollup=55.0000 min, raw=55.0000 min, drift=0.000000%, within_tolerance=true, data_points=8
+PASS (b): Reconcile drift=0.000000% ≤ 1%
+tenant="tenant-a": 30.0000 viewer-minutes
+tenant="tenant-b": 25.0000 viewer-minutes
+PASS (c): tenant-a=30.0000 min (truth=30.0), tenant-b=25.0000 min (truth=25.0) — attribution correct
+PASS: D-W2-002 regression guard complete — live CH path verified
+--- PASS: TestAccountant_CHIntegration (1.20s)
+```
+
+### Re-gate criterion verdicts
+
+| Criterion | Re-check | Measured | Verdict |
+|---|---|---|---|
+| C-W2-05a: Billing ±1% (live CH) | `TestAccountant_CHIntegration` — starts real CH, seeds 8 sessions, calls `ComputeUsage` + `Reconcile` | drift=0.0000%, data_points=8 | **PASS** |
+| C-W2-05b: `GET /api/v1/reports/usage` | Wave-2 gate C6a (live stack) | 200, viewer_minutes=55.0000 (unit), drift=0.0000% | **PASS** |
+| C-W2-05c: `pulse diag --reconcile` | Wave-2 gate C6b (live stack) | Prints "Reconciliation …", no watch_s_state error | **PASS** |
+| C-W2-13: Wave-1 gate script (D-W2-001/D-W2-003) | `bash qa/wave-1/run-gate.sh` (now with `name` field) | exits 0 | **PASS** |
+| Regression: full server build/test | `CGO_ENABLED=0 go build ./... && go test ./... -timeout 120s` | 15 packages green | **PASS** |
+| Regression: web build/lint/test | `npm run lint && npm run test` | 0 errors, 58/58 tests | **PASS** |
+| Regression: SDK size gate | `npm run build && npm run size` | 3.44 kB gzip (budget 15 kB) | **PASS** |
+| Regression: wave-1 budget tests | `bash qa/budgets/run-budget-tests.sh` | 8/8 PASS | **PASS** |
+| Regression: wave-2 gate script | `bash qa/wave-2/run-gate.sh` | 0 failures, exits 0 | **PASS** |
+
+### Updated waivers
+
+| Waiver ID | Class | Scope | Rationale |
+|---|---|---|---|
+| W-002 | D-002 | Helm/Docker Compose deployment | No Docker on dev machine. Helm lint + template pass (INFRA-01 WO-206). |
+| W-007-5 | D-007.5 | Kafka consumer integration | No Kafka broker. Kafka consumer tests pass with stub transport. |
+
+D-W2-002 is CLOSED (BE-02 fix verified). D-W2-001 and D-W2-003 are CLOSED (QA-01 fix applied).
+
+### Updated overall verdict
+
+**PASS_WITH_LIMITATIONS** (unchanged class; remaining limitations are D-002 and D-007.5 infrastructure waivers only)
+
+All wave-3 blockers cleared. No open defects.

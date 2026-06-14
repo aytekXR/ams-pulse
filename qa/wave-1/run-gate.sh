@@ -377,7 +377,7 @@ info "=== Criterion 7: Alert rules survive pulse restart ==="
 RULE_JSON=$(curl -sf -X POST "${PULSE_URL}/api/v1/alerts/rules" \
     -H "Authorization: Bearer ${ADMIN_TOKEN}" \
     -H "Content-Type: application/json" \
-    -d '{"metric":"viewer_count","operator":"lt","threshold":1,"window_s":10,"severity":"warning"}' 2>/dev/null)
+    -d '{"name":"gate-test-rule","metric":"viewer_count","operator":"lt","threshold":1,"window_s":10,"severity":"warning"}' 2>/dev/null)
 
 RULE_ID=$(echo "$RULE_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
 if [ -n "$RULE_ID" ]; then
