@@ -139,3 +139,118 @@ Rules (enforced in every work order and dispatch prompt):
 Rationale: user directive (2026-06-12) + recoverability — wave 1 held ~6
 agents of work uncommitted for hours; a crash would have lost it. Single-writer
 scopes (manifest) make per-scope staging safe.
+
+## D-009 · 2026-06-14 · Wave 2 gate ruling: focused fix-loop for the one wave-3 blocker
+
+Wave-2 QA gate (WO-207) verdict **PASS_WITH_LIMITATIONS** (`qa/wave-2/gate-report.md`):
+12/14 criteria PASS/WAIVED; all 6 implementation agents COMPLETE + committed;
+DOC-01 done. Waivers limited to D-002 (no Docker) + D-007.5 (no Kafka broker).
+
+Defects:
+- **D-W2-002 (major, BE-02)** — the only wave-3 blocker. `accounting.go` queries
+  the wrong rollup with non-existent columns (`bucket_ts`/`watch_s_state`/
+  `peak_viewers_state` vs schema `bucket`/`watch_time_s`/`peak_concurrency`), so
+  `GET /reports/usage` → 500 and `pulse diag --reconcile` → CH error 47 on the
+  LIVE stack. The headline gate criterion "billing reconciles ±1%" passes only at
+  the in-memory unit level (which bypasses ClickHouse). Deeper finding (ORCH-00):
+  `ComputeUsage` sources from `rollup_audience_1d` (where `peak_concurrency =
+  maxState(1) = 1` and egress is a 1000-kbps model) but WO-204 specified
+  `rollup_usage_1d` (real `viewer_minutes`/`peak_concurrency`/`egress_bytes`/
+  `recording_bytes`/`tenant`). The unit test masked both because it never touched CH.
+- **D-W2-001 / D-W2-003 (minor, QA-01)** — `qa/wave-1/run-gate.sh` POST
+  /alerts/rules now needs the wave-2-required `name` field; script exits nonzero.
+  Test-code only; non-blocking.
+
+**Ruling:** run a focused in-wave fix-loop (precedent D-006: do not carry a major
+defect into the next wave). Scope = D-W2-002 (BE-02: source billing from
+`rollup_usage_1d` per WO-204, correct all SQL-vs-schema drift in `accounting.go`,
+and ADD a ClickHouse integration test that exercises `GET /reports/usage` +
+`Reconcile` against a live seeded CH and asserts ±1% — closing the blind spot the
+in-memory test left) + D-W2-001/003 (QA-01 fixes its own gate script). Then QA-01
+re-gates the committed tree (live reconcile is the real check). Everything else is
+non-blocking → D-010.
+
+## D-010 · 2026-06-14 · CR ruling + non-blocking gap disposition (validation sweep)
+
+CRs filed in wave 2:
+- **APPROVED — `/admin/tenants` CRUD** (BE-02 CR-WO204-01 + FE-01 CR-1). F6 required
+  "tenants ... CRUD per OpenAPI" but the D-004 freeze omitted the paths (the
+  `tenants` meta table, `tenant` query param, and `tenant.go` matcher all exist —
+  only the management paths are missing). This is a freeze oversight, not new
+  scope. INT-01 will amend the OpenAPI (`/admin/tenants` GET/POST + `/{id}`
+  GET/PUT/DELETE, `Tenant` schema aligned to the meta table: id, name,
+  stream_pattern, meta_tag_key, meta_tag_value), then BE-02 implements routes and
+  FE-01 builds the surface. **Scheduled into the validation-sweep defect-fix loop**
+  (not the wave-2 fix-loop) to keep the wave-3 critical path tight — F6 management
+  is a completeness item, not a wave-3 blocker.
+- **DEFERRED — global white-label config endpoint** (FE-01 CR-2). Per-schedule
+  `whitelabel_header` already exists; a global `/admin/whitelabel` brand-config
+  endpoint is Phase-3 integrator polish per the WO-204 annotation. Post-MVP.
+- **CLOSED — CR-3 source-test endpoint** (`POST /admin/sources/{id}/test`):
+  implemented by BE-02 in wave 2 (closes the D-006 carry-over).
+
+Non-blocking gaps carried to the validation sweep (owner in parens):
+- GAP-2-003 Kafka `Lag()`/`ParseErrors()` not surfaced in /healthz (BE-02).
+- GAP-2-004 beacon ingest not tier-gated on Free (fail-open) — hostile-surface
+  hardening (BE-02).
+- GAP-2-005 `/qoe/summary` uses a live health-score proxy, not `rollup_qoe_1h`
+  CH queries (BE-02).
+- GAP-2-001 `BuildTestMMDB` yields an invalid mmdb → `TestGeo_MMDBFixture` SKIP
+  (anonymize/absent-path/interface ARE tested) (BE-01/QA-01).
+- GAP-2-002 edge/origin viewer dedup `IsEdgeStream()` always false — needs
+  multi-node clusters (BE-01, wave 3).
+- INFRA GAP-206-01..05 (image publish, postgres Secret template, busybox digest
+  pin, real-AMS-container matrix assertions, ingest-addr Helm value) — D-002/
+  release-time class (INFRA-01).
+
+## D-011 · 2026-06-14 · D-008 adherence note: SDK-01 blanket-staging incident
+
+SDK-01's commit `2d2910f` used blanket staging and absorbed FE-01's `web/` files
+(FE-01's own commit `4be5549` carried only its report). Tree CONTENT is correct
+and complete — nothing lost — but commit attribution is wrong, violating D-008.2
+(explicit-path staging). No tree action needed. Reinforce explicit-path staging
+(`git add <listed paths>` only) in every fix-loop/wave dispatch prompt; consider a
+pre-commit scope check in a later infra pass.
+
+## D-012 · 2026-06-14 · Wave 3-MVP structure (F9 anomaly detection + F10 synthetic probes)
+
+Per D-001, F9 and F10 ship minimal-but-working in a Wave 3-MVP. Contracts are
+already frozen (D-004) for both: `GET /anomalies` (AnomalyFlag), `/probes` CRUD +
+`/probes/{id}/results`; meta tables `anomaly_baselines` + `probes`; ClickHouse
+`probe_results`. No INT-01 step (freeze stands; CR channel only). Work orders
+WO-301..305.
+
+Ownership split (single-writer map respected; BE-01→BE-02 sequential per D-003):
+
+- **F9 anomaly detection → BE-02 entirely (WO-302).** It is product-plane like the
+  alert evaluator: maintain rolling baselines (mean/stddev/sample_count via Welford
+  or EWMA) in the `anomaly_baselines` meta table over viewers/error-rate/rebuffer
+  metrics per scope+window; compute AnomalyFlags on read (observed-vs-baseline,
+  |z| ≥ sigma, with a min-sample-count gate + default sensitivity tuned for the
+  PRD target <1 false alarm/node-week); serve `GET /anomalies`. No separate
+  anomalies storage table exists by design — flags are derived. Metric access
+  reuses the alert evaluator's live snapshot + query layer.
+- **F10 probes → split BE-01 (WO-301) + BE-02 (WO-302).** The "single probe
+  runner" (D-001) is a data producer, so BE-01 owns the runner engine (outbound
+  playback check: HLS manifest+first-segment fetch measuring success/TTFB/bitrate
+  at minimum; honest minimal handling or documented-stub for webrtc/rtmp/dash) and
+  the `probe_results` ClickHouse store (writer + time-range reader). BE-01 defines
+  a `ProbeConfigSource` interface in `internal/domain` (the EventSink pattern):
+  `ListEnabled() []ProbeConfig` + `RecordResult(probeID, ProbeResult)` (so the
+  runner updates `probes.last_*` denormalized fields). BE-02 (WO-302) implements
+  `ProbeConfigSource` over the meta `probes` table, builds probe CRUD +
+  `GET /probes/{id}/results` (reads BE-01's results store), and wires runner+source
+  into `pulse serve` (declared cmd edit, D-005).
+- **FE-01 (WO-303):** `/anomalies` surface (flag list with scope/sigma/observed-vs-
+  expected) and `/probes` surface (CRUD + results shown ALONGSIDE organic QoE with
+  clear "synthetic" labeling — the PRD F10 acceptance). Generated types only.
+- **QA-01 (WO-304) gate:** probe round-trip (create probe → runner executes →
+  `probe_results` row in CH → visible via API/UI, labeled); anomaly false-alarm
+  proxy (drive a synthetic steady metric stream through the baseline updater at
+  default sensitivity, assert flag rate maps to <1/node-week; inject a real
+  deviation, assert it IS flagged). VERIFY, NEVER FIX.
+- **DOC-01 (WO-305):** anomaly + probe feature docs/runbooks; flip F9/F10 status.
+
+Dispatch (one Workflow): parallel([BE-01(301) → BE-02(302)], FE-01(303)) →
+QA-01(304) → DOC-01(305). Validation sweep (F1–F10 adversarial + deferred D-010
+items incl. tenant CRUD) follows the wave-3 gate.

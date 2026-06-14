@@ -204,3 +204,65 @@ Dispatch Wave 2 as one workflow per WO-201..208 with the D-008 commit
 protocol: parallel([BE-01(202) → BE-02(203) → BE-02(204)], SDK-01(201),
 FE-01(205), INFRA-01(206)) → QA-01 gate (207) → DOC-01 (208). ClickHouse
 binary at `/tmp/clickhouse` (re-download if /tmp cleared). No Docker (D-002).
+
+## 2026-06-14 — Session 4: Wave 2 DISPATCHED
+
+- Pre-flight: `git status` clean (only the RESUME-PROMPT header strip — cosmetic);
+  `/tmp/clickhouse` had been wiped, re-downloaded v26.6.1.778 (726 MB) per D-002;
+  baseline `server` builds green (`CGO_ENABLED=0 go build ./...` exit 0).
+- Re-read all 8 wave-2 work orders, decisions D-001..D-008, ARCHITECTURE refs.
+  Work orders NOT rewritten — dispatched as written.
+- Wave 2 launched as one Workflow (`pulse-wave-2`, run `wf_e0a0efbd-2ed`,
+  script `agents/handoffs/wave-2/wave2.workflow.js`):
+  - Phase Implement (parallel barrier): lane A = BE-01(202) → BE-02(203) →
+    BE-02(204) sequential (shared go.mod/cmd, D-003); lanes B/C/D = SDK-01(201),
+    FE-01(205), INFRA-01(206) concurrent (disjoint trees).
+  - Phase Gate: QA-01(207) verifies the integrated tree (barrier justified —
+    needs all commits): beacon→dashboard round trip, billing ±1%, budgets.
+  - Phase Docs: DOC-01(208) only on PASS / PASS_WITH_LIMITATIONS.
+  - Each agent prompt carries: read-order (charter+WO+prereq reports+ARCH §3-4),
+    hard rules, env (CH path, CGO=0, no Docker), D-008 self-commit protocol,
+    structured-output schema. Reminder added to BE-02(203) to ALSO land the
+    CR-3 source-test endpoint (D-006, server impl deferred to wave 2).
+- Awaiting workflow completion notification. On return: review gate verdict →
+  fix-loop vs proceed → wave-close commit (decisions/DEVLOG/handoffs) → write +
+  dispatch Wave 3-MVP (F9 anomaly baselines, F10 single probe runner).
+
+### Wave 2 gate result + ORCH-00 ruling (D-009..D-012)
+
+- **Workflow `pulse-wave-2` (run `wf_e0a0efbd-2ed`) complete** — 8 agents,
+  ~2 h, 6/6 implementation COMPLETE + self-committed (D-008), DOC-01 done.
+  Commits f327da9 (INFRA), 2d2910f (SDK), 4be5549 (FE), 8c53a7b (BE-01 202),
+  f1554ed (BE-02 203), 599a5a3 (BE-02 204), 8eddbe2 (QA gate), 06cc6b4 (DOC).
+  Measured: SDK 3.44 KB gzip, billing unit drift 0.0000%, F4 250µs, node 24ms,
+  13-mo query 126ms, /metrics bounded, tier gate live-verified.
+- **QA-01 gate (WO-207): PASS_WITH_LIMITATIONS** (`qa/wave-2/gate-report.md`).
+  12/14 criteria PASS/WAIVED. Waivers: D-002 (no Docker), D-007.5 (no Kafka
+  broker). Defects: **D-W2-002 major** (accounting.go wrong CH columns + wrong
+  rollup table → live billing 500s; unit test masked it by bypassing CH) —
+  the only wave-3 blocker; D-W2-001/003 minor (wave-1 gate script missing the
+  now-required alert-rule `name` field).
+- **Rulings:** D-009 (focused fix-loop for D-W2-002 + QA script; precedent
+  D-006 — no major defect carried forward); D-010 (APPROVE /admin/tenants CRUD
+  CR → schedule into validation sweep, not the fix-loop; DEFER global
+  white-label endpoint to Phase 3; non-blocking gaps GAP-2-001..005 + INFRA
+  206-x tracked); D-011 (D-008 note: SDK-01 commit 2d2910f blanket-staged and
+  absorbed FE-01's web/ files — content correct, attribution wrong; reinforce
+  explicit-path staging); D-012 (Wave 3-MVP structure: F9→BE-02, F10 split
+  BE-01 runner+CH store / BE-02 CRUD+API via ProbeConfigSource seam).
+- **Fix-loop dispatched** (`pulse-wave-2-fixloop`, run `wf_02779f15-126`):
+  BE-02 fixes D-W2-002 properly (source from rollup_usage_1d per WO-204, fix
+  ALL SQL drift, add a live-ClickHouse reconcile integration test that exercises
+  the real a.conn path) → QA-01 fixes its gate script + re-gates live. Running
+  at this checkpoint.
+- **Wave 3-MVP work orders written** (`agents/handoffs/wave-3/WO-301..305`):
+  301 BE-01 (probe runner + probe_results CH store + ProbeConfigSource seam),
+  302 BE-02 (F9 anomaly baselines/detector/API + F10 probe CRUD/results API +
+  source impl), 303 FE-01 (anomalies + probes surfaces, synthetic labeling),
+  304 QA-01 (probe round-trip + anomaly false-alarm gate), 305 DOC-01. Ready to
+  dispatch as one Workflow once the fix-loop re-gate passes.
+- **Process (user directive, this session):** commit orchestration work as it
+  lands (don't leave it dangling) and keep `RESUME-PROMPT.md` current as the
+  next-session handoff every session. This commit applies that — orchestration
+  files only, explicit-path staged (fix-loop's in-flight server/ edits left for
+  BE-02 to commit, per D-008/D-011).

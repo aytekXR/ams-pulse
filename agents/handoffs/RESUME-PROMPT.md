@@ -1,11 +1,3 @@
-# Resume prompt — Pulse MVP build (paste into a fresh Claude Code session)
-
-> Written by ORCH-00 at the end of the 2026-06-12 session #3 (Wave 1 gate
-> CLOSED). Paste everything below the line into a new session started in
-> `/Users/ae/repo/ant-marketplace`.
-
----
-
 Continue the Pulse MVP build as ORCH-00 (orchestrator), using the **Workflow
 tool for multi-agent orchestration** — I am explicitly opting in to workflows
 for this entire session. One wave = one Workflow invocation.
@@ -26,20 +18,43 @@ QoE monitoring and alerting for Ant Media Server), strictly per PRD:
 6. **Final output** — notify me when the MVP is ready for review; no further
    iteration before my review.
 
-## Where the build stands
+## Where the build stands (updated 2026-06-14, session 4)
 
-- **Done:** understand phase; Wave 0 (CI real+green); **Wave 1 CLOSED** —
-  contract freeze (32 paths/46 ops/66 schemas, 0 lint issues), data plane,
-  product plane, frontend (F1, F2-core, F5-core), QA gate
-  PASS_WITH_LIMITATIONS, fix-loop (all 5 defects fixed + CR-1..4), re-gate
-  PASS_WITH_LIMITATIONS with fresh measurements (stream 1 061 ms ≤10 s,
-  viewer error 0% ≤±2%, alert 15 s <30 s). Gate report:
-  `qa/wave-1/gate-report.md` (incl. re-gate section). All committed on `main`.
-- **Next: dispatch Wave 2.** Work orders are already written and committed:
-  `agents/handoffs/wave-2/WO-201.md` … `WO-208.md`. Do NOT rewrite them —
-  read them and dispatch.
-- Then Wave 3-MVP (F9+F10 minimal per D-001), validation sweep, consolidation
-  + `IMPLEMENTATION_LOG.md`, notify user.
+- **Done:** understand phase; Wave 0 (CI real+green); **Wave 1 CLOSED**
+  (contract freeze, data/product plane, frontend F1/F2-core/F5-core, fix-loop,
+  re-gate PASS_WITH_LIMITATIONS); **Wave 2 implementation done + gated**
+  PASS_WITH_LIMITATIONS (`qa/wave-2/gate-report.md`). Wave-2 commits on `main`:
+  f327da9, 2d2910f, 4be5549, 8c53a7b, f1554ed, 599a5a3, 8eddbe2, 06cc6b4.
+  All 6 impl agents COMPLETE; F3 SDK 3.44 KB; F4/F7/QoE/reports/fleet/channels/
+  Prometheus/Helm shipped. CR-3 source-test endpoint closed.
+
+- **IN FLIGHT at this checkpoint: wave-2 fix-loop** (`pulse-wave-2-fixloop`,
+  run `wf_02779f15-126`) for the one wave-3 blocker **D-W2-002** (accounting.go
+  wrong ClickHouse columns + wrong rollup table → live billing 500s; unit test
+  masked it). BE-02 fixes it (source from `rollup_usage_1d` per WO-204 + live-CH
+  reconcile test); QA-01 fixes its wave-1 gate script (D-W2-001/003) and
+  re-gates live. **FIRST ACTION next session:** check this run's result — read
+  the `## Re-gate` section of `qa/wave-2/gate-report.md` and `git log`. If the
+  re-gate is PASS/PASS_WITH_LIMITATIONS → Wave 2 is CLOSED (BE-02 + QA-01 will
+  have self-committed their fixes); proceed to Wave 3. If FAIL → iterate the fix
+  (same focused loop) before proceeding.
+
+- **Next: dispatch Wave 3-MVP** (F9 anomaly detection + F10 synthetic probes,
+  minimal-but-working per D-001). Work orders ALREADY WRITTEN — do NOT rewrite,
+  read and dispatch: `agents/handoffs/wave-3/WO-301.md` (BE-01: probe runner +
+  probe_results CH store + ProbeConfigSource seam) … `WO-305.md` (DOC-01).
+  Structure per D-012: one Workflow, `parallel([BE-01(301) → BE-02(302)],
+  FE-01(303)) → QA-01(304) gate → DOC-01(305)`.
+
+- **Then: validation sweep** — per-feature adversarial verification of F1–F10
+  against PRD acceptance criteria (numeric budgets in ARCHITECTURE §4), with a
+  defect-fix loop until clean. **Fold in the deferred D-010 items here:**
+  the approved `/admin/tenants` CRUD CR (INT-01 contract amend → BE-02 routes →
+  FE-01 UI) and the non-blocking wave-2 gaps (GAP-2-001..005, INFRA 206-x).
+
+- **Then: consolidation** (single unified project) + write `IMPLEMENTATION_LOG.md`
+  (per feature: what was done, issues, resolutions) + **notify the user; STOP
+  for review** (no further iteration before user review, per mission item 6).
 
 ## How to run a wave (established protocol)
 
