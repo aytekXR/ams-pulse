@@ -300,3 +300,36 @@ sweep / Phase-3 backlog (owner BE-02 unless noted): GAP-3-001 HLS segment TTFB
 (cosmetic). Next: validation sweep (adversarial F1–F10 vs PRD §7 + ARCHITECTURE §4
 budgets) folding in the approved D-010 `/admin/tenants` CRUD CR, then consolidation
 + `IMPLEMENTATION_LOG.md`, then notify user.
+
+## D-014 · 2026-06-14 · Validation finding: the "Business" tier is missing (4-tier PRD vs 3-tier impl)
+
+V1 closed the F6 tenant CRUD (INT-01 `2323429`, BE-02 `3793b9c`, FE-01 `cd5c4d5`,
+QA live-reconcile drift 0.0000%); the one blocker DEF-QA-001 (TenantsTab.test.tsx
+wrong PaginatedMeta/tier types) was fixed by ORCH-00 directly (`38469bf`, a
+QA-diagnosed 9-line test-mock fix, no FE agent running — tsc -b/build/lint/127 tests
+green). While verifying it, ORCH-00 found a cross-cutting inconsistency:
+
+**PRD §7.11 defines FOUR pricing tiers** — Free ($0), Pro ($99), **Business ($299:
+up-to-5 nodes, 13-month retention, PagerDuty+webhooks, usage/billing reports,
+multi-tenant, API+Prometheus)**, Enterprise ($799: +SSO, white-label, air-gapped,
+anomaly detection). **The implementation has only THREE** (`License.tier` enum =
+`free|pro|enterprise`; the D-004 freeze dropped Business). Consequences:
+- Features the PRD assigns to **Business** are mis-gated to **Enterprise**: F5
+  PagerDuty/webhook channels, F6 reports + multi-tenant (incl. the new tenant CRUD,
+  gated `enterprise`), F8 API tokens + Prometheus. A real $299 "Business" customer
+  cannot be represented or correctly billed.
+- The UI upsell copy says "requires Business tier" (`web/.../ReportsPage.tsx`) while
+  the gate checks `enterprise` — symptom of the same gap.
+
+**Disposition:** this is a genuine PRD-vs-impl correctness gap, not a naming nit
+(the monetization model is the product). It is a lead for the V2 adversarial sweep
+(tier-gating verifier produces the full cross-feature impact) and will be FIXED in
+the validation fix-loop (V3). **Pre-approved CR (ORCH-00, D-004 authority):** add
+`business` to the `License.tier` enum (between `pro` and `enterprise`) and re-map
+entitlements to the PRD §7.11 table — Free=email/1-node/7d; Pro=+Slack/Telegram/
+QoE-beacons/90d/CSV; Business=+PagerDuty/webhook/reports/multi-tenant/API/Prometheus/
+13mo/5-node; Enterprise=+SSO/white-label/air-gapped/anomaly/unlimited. Touches
+contract enum, `internal/license` entitlement matrix + every gate call site, UI
+upsell copy/logic, and the tier tests. Owner chain: INT-01 (enum) → BE-02 (license
++ gating) → FE-01 (copy/logic) → QA-01 (per-tier matrix). Do NOT pre-fix before V2
+confirms the full call-site list.
