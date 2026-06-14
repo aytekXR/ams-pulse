@@ -10,9 +10,13 @@ import (
 	"github.com/pulse-analytics/pulse/server/internal/alert"
 	"github.com/pulse-analytics/pulse/server/internal/alert/channels"
 	"github.com/pulse-analytics/pulse/server/internal/api"
+	"github.com/pulse-analytics/pulse/server/internal/cluster"
 	"github.com/pulse-analytics/pulse/server/internal/collector"
 	"github.com/pulse-analytics/pulse/server/internal/collector/aggregator"
+	"github.com/pulse-analytics/pulse/server/internal/collector/ingest"
+	kafkasrc "github.com/pulse-analytics/pulse/server/internal/collector/kafka"
 	"github.com/pulse-analytics/pulse/server/internal/collector/restpoller"
+	"github.com/pulse-analytics/pulse/server/internal/collector/sessions"
 	"github.com/pulse-analytics/pulse/server/internal/license"
 	"github.com/pulse-analytics/pulse/server/internal/query"
 	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse"
@@ -30,6 +34,13 @@ type server struct {
 	alertEval *alert.Evaluator
 	lic       *license.Manager
 	logger    *slog.Logger
+
+	// Wave 2: data-plane additions.
+	sessionStitcher  *sessions.Stitcher
+	ingestTracker    *ingest.HealthTracker
+	clusterDiscovery *cluster.Discovery
+	geoResolver      collector.GeoResolver
+	uaParser         collector.UAParser
 }
 
 // newServer constructs all services from config.
@@ -63,6 +74,34 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		Timeout:   10 * time.Second,
 	})
 
+	// Wave 2: Geo and UA enrichment resolvers.
+	var geoResolver collector.GeoResolver
+	var uaParser collector.UAParser
+	if cfg.GeoMMDBPath != "" {
+		geoResolver = collector.NewMMDBGeoResolver(cfg.GeoMMDBPath, cfg.AnonymizeIP, logger)
+	} else {
+		geoResolver = collector.NoopGeoResolver{}
+	}
+	uaParser = collector.NewEmbeddedUAParser()
+
+	// Wave 2: Session stitcher (Consumer that stitches viewer sessions).
+	sessionStitcher := sessions.New(sessions.Config{
+		IdleTimeout: cfg.SessionIdleTimeout,
+	}, fanout, logger)
+
+	// Wave 2: Ingest health tracker (Consumer that tracks publisher health).
+	ingestTracker := ingest.New(ingest.Config{
+		TargetBitrateKbps: cfg.IngestTargetBitrateKbps,
+		TargetFPS:         cfg.IngestTargetFPS,
+	}, logger)
+
+	// Wire additional consumers into fanout (Wave 2 additions).
+	// NOTE: fanout was created above with store + agg. We add session stitcher
+	// and ingest tracker here. A production refactor could pass all consumers
+	// at fanout creation time; for Wave 2, we re-create the fanout with the
+	// full consumer list.
+	fanout = collector.NewFanout(logger, store, agg, sessionStitcher, ingestTracker)
+
 	// 5. Sources.
 	var sources []collector.Source
 
@@ -89,6 +128,28 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	//     wh := webhook.New(webhook.Config{...}, fanout, logger)
 	//     sources = append(sources, wh)
 	// }
+
+	// Wave 2: Kafka source (when brokers are configured).
+	if len(cfg.KafkaBrokers) > 0 {
+		kafkaSource := kafkasrc.New(kafkasrc.Config{
+			Brokers:  cfg.KafkaBrokers,
+			GroupID:  cfg.KafkaGroupID,
+			NodeID:   cfg.AMSNodeID,
+			MaxWait:  1 * time.Second,
+			MinBytes: 1,
+			MaxBytes: 10 << 20,
+		}, fanout, logger)
+		sources = append(sources, kafkaSource)
+		logger.Info("pulse: kafka source configured", "brokers", cfg.KafkaBrokers)
+	}
+
+	// Wave 2: Cluster discovery (always enabled; single-node deployments
+	// will get one node in the cluster list which is correct).
+	clusterDiscovery := cluster.New(cluster.Config{
+		PollInterval: cfg.ClusterDiscoveryInterval,
+		NodeID:       cfg.AMSNodeID,
+	}, amsClient, fanout, logger)
+	sources = append(sources, clusterDiscovery)
 
 	// 6. Collector supervisor.
 	col := collector.New(logger, sources...)
@@ -145,14 +206,19 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	apiServer.SetClickHouseConn(store.GetConn())
 
 	return &server{
-		store:     store,
-		meta:      metaStore,
-		agg:       agg,
-		col:       col,
-		apiServer: apiServer,
-		alertEval: alertEval,
-		lic:       lic,
-		logger:    logger,
+		store:            store,
+		meta:             metaStore,
+		agg:              agg,
+		col:              col,
+		apiServer:        apiServer,
+		alertEval:        alertEval,
+		lic:              lic,
+		logger:           logger,
+		sessionStitcher:  sessionStitcher,
+		ingestTracker:    ingestTracker,
+		clusterDiscovery: clusterDiscovery,
+		geoResolver:      geoResolver,
+		uaParser:         uaParser,
 	}, nil
 }
 
@@ -175,6 +241,38 @@ func (s *server) Start(ctx context.Context) error {
 			}
 		}
 	}()
+
+	// Wave 2: Session idle eviction loop (evict every 60s).
+	if s.sessionStitcher != nil {
+		go func() {
+			ticker := time.NewTicker(60 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					s.sessionStitcher.EvictIdle()
+				}
+			}
+		}()
+	}
+
+	// Wave 2: Ingest health sweep loop (sweep every 5s for F4 budget).
+	if s.ingestTracker != nil {
+		go func() {
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					s.ingestTracker.SweepStale()
+				}
+			}
+		}()
+	}
 
 	// Start collector (non-blocking — runs in goroutines).
 	go s.col.Run(ctx)

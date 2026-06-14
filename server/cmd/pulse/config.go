@@ -60,6 +60,39 @@ type EnvConfig struct {
 
 	// LogLevel is the log level (debug|info|warn|error).
 	LogLevel string
+
+	// ─── Wave 2 data-plane config ─────────────────────────────────────────────
+
+	// KafkaBrokers is a comma-separated list of Kafka broker addresses.
+	// Empty = Kafka source disabled.
+	KafkaBrokers []string
+
+	// KafkaGroupID is the consumer group ID for the Kafka source.
+	KafkaGroupID string
+
+	// GeoMMDBPath is the path to a MaxMind-format .mmdb file for geo enrichment.
+	// Empty = geo enrichment disabled (no-op resolver).
+	GeoMMDBPath string
+
+	// AnonymizeIP controls IP anonymization before geo lookup and storage.
+	// Set to true for GDPR/KVKK compliance.
+	AnonymizeIP bool
+
+	// SessionIdleTimeout is the viewer session idle close timeout.
+	// Default: 5 min.
+	SessionIdleTimeout time.Duration
+
+	// ClusterDiscoveryInterval is how often to poll AMS for cluster nodes.
+	// Default: 30 s. New node visible ≤ 1 interval ≤ 2 min budget.
+	ClusterDiscoveryInterval time.Duration
+
+	// IngestTargetBitrateKbps is the expected healthy ingest bitrate (health score formula).
+	// Default: 2000.
+	IngestTargetBitrateKbps float64
+
+	// IngestTargetFPS is the expected healthy ingest frame rate.
+	// Default: 30.
+	IngestTargetFPS float64
 }
 
 // loadEnvConfig reads configuration from PULSE_* environment variables.
@@ -101,6 +134,63 @@ func loadEnvConfig() (EnvConfig, error) {
 				cfg.AMSApplications = append(cfg.AMSApplications, app)
 			}
 		}
+	}
+
+	// Wave 2: Kafka source.
+	if v := os.Getenv("PULSE_KAFKA_BROKERS"); v != "" {
+		for _, broker := range strings.Split(v, ",") {
+			broker = strings.TrimSpace(broker)
+			if broker != "" {
+				cfg.KafkaBrokers = append(cfg.KafkaBrokers, broker)
+			}
+		}
+	}
+	cfg.KafkaGroupID = envOrDefault("PULSE_KAFKA_GROUP_ID", "pulse-collector")
+
+	// Wave 2: Geo enrichment.
+	cfg.GeoMMDBPath = os.Getenv("PULSE_GEO_MMDB_PATH")
+	cfg.AnonymizeIP = os.Getenv("PULSE_ANONYMIZE_IP") == "true"
+
+	// Wave 2: Session stitcher.
+	if v := os.Getenv("PULSE_SESSION_IDLE_TIMEOUT"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return cfg, fmt.Errorf("PULSE_SESSION_IDLE_TIMEOUT: %w", err)
+		}
+		cfg.SessionIdleTimeout = d
+	} else {
+		cfg.SessionIdleTimeout = 5 * time.Minute
+	}
+
+	// Wave 2: Cluster discovery.
+	if v := os.Getenv("PULSE_CLUSTER_DISCOVERY_INTERVAL"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return cfg, fmt.Errorf("PULSE_CLUSTER_DISCOVERY_INTERVAL: %w", err)
+		}
+		cfg.ClusterDiscoveryInterval = d
+	} else {
+		cfg.ClusterDiscoveryInterval = 30 * time.Second
+	}
+
+	// Wave 2: Ingest health formula targets.
+	if v := os.Getenv("PULSE_INGEST_TARGET_BITRATE_KBPS"); v != "" {
+		n, err := strconv.ParseFloat(v, 64)
+		if err == nil {
+			cfg.IngestTargetBitrateKbps = n
+		}
+	}
+	if cfg.IngestTargetBitrateKbps == 0 {
+		cfg.IngestTargetBitrateKbps = 2000
+	}
+	if v := os.Getenv("PULSE_INGEST_TARGET_FPS"); v != "" {
+		n, err := strconv.ParseFloat(v, 64)
+		if err == nil {
+			cfg.IngestTargetFPS = n
+		}
+	}
+	if cfg.IngestTargetFPS == 0 {
+		cfg.IngestTargetFPS = 30
 	}
 
 	return cfg, nil

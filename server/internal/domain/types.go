@@ -286,6 +286,13 @@ type LiveStream struct {
 	IngestBitrate  float64              `json:"ingest_bitrate_kbps"`
 	FPS            float64              `json:"fps"`
 	Health         StreamHealth         `json:"health"`
+
+	// Ingest health metrics (populated by ingest.HealthTracker, Wave 2).
+	// HealthScore is the weighted composite score (0.0–1.0); see ingest.ComputeHealthScore.
+	HealthScore      float64 `json:"health_score,omitempty"`
+	PacketLossPct    float64 `json:"packet_loss_pct,omitempty"`
+	JitterMS         float64 `json:"jitter_ms,omitempty"`
+	KeyframeIntervalS float64 `json:"keyframe_interval_s,omitempty"`
 }
 
 // LiveNodeStats holds real-time state for one cluster node.

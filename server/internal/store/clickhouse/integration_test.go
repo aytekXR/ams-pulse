@@ -390,3 +390,242 @@ func max(a, b int) int {
 	}
 	return b
 }
+
+// TestIntegration_ViewerSessionsAndRollups verifies that viewer_sessions are inserted
+// and the materialized views (mv_audience_1h, mv_audience_1d) populate correctly.
+// Also verifies beacon_events populate the mv_qoe_1h rollup.
+func TestIntegration_ViewerSessionsAndRollups(t *testing.T) {
+	chBin := "/tmp/clickhouse"
+	if _, err := os.Stat(chBin); err != nil {
+		t.Skipf("clickhouse binary not found at %s: %v", chBin, err)
+	}
+
+	tcpPort := freePort(t)
+	httpPort := freePort(t)
+	for httpPort == tcpPort {
+		httpPort = freePort(t)
+	}
+
+	tmpDir := t.TempDir()
+
+	cmd := exec.Command(chBin, "server",
+		"--",
+		fmt.Sprintf("--path=%s", tmpDir),
+		fmt.Sprintf("--tcp_port=%d", tcpPort),
+		fmt.Sprintf("--http_port=%d", httpPort),
+		"--listen_host=127.0.0.1",
+		"--mysql_port=0",
+		"--postgresql_port=0",
+	)
+	if os.Getenv("PULSE_TEST_VERBOSE_CH") == "" {
+		cmd.Stdout = nil
+		cmd.Stderr = nil
+	}
+
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start clickhouse: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+
+	startupDSN := fmt.Sprintf("clickhouse://127.0.0.1:%d/default", tcpPort)
+	dbName := "pulse_rollup_test"
+	dsn := fmt.Sprintf("clickhouse://127.0.0.1:%d/%s", tcpPort, dbName)
+
+	// Wait for ClickHouse.
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer waitCancel()
+
+	t.Logf("waiting for ClickHouse on 127.0.0.1:%d...", tcpPort)
+	for {
+		opts, _ := clickhousego.ParseDSN(startupDSN)
+		conn, err := clickhousego.Open(opts)
+		if err == nil {
+			pingCtx, c := context.WithTimeout(waitCtx, 2*time.Second)
+			err = conn.Ping(pingCtx)
+			c()
+			conn.Close()
+			if err == nil {
+				break
+			}
+		}
+		select {
+		case <-waitCtx.Done():
+			t.Fatal("timeout waiting for ClickHouse")
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	t.Log("ClickHouse ready")
+
+	// Run migrations.
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot determine source file")
+	}
+	repoRoot := filepath.Join(filepath.Dir(thisFile), "../../../..")
+	migrationsDir := filepath.Join(repoRoot, "contracts/db/clickhouse")
+
+	startupOpts, _ := clickhousego.ParseDSN(startupDSN)
+	migConn, err := clickhousego.Open(startupOpts)
+	if err != nil {
+		t.Fatalf("open migration conn: %v", err)
+	}
+	defer migConn.Close()
+
+	runner := migrations.New(migConn, migrations.Config{
+		MigrationsDir: migrationsDir,
+		Database:      dbName,
+		RetentionDays: 90,
+		RollupTTLDays: 395,
+	}, nil)
+
+	migCtx, migCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer migCancel()
+
+	if err := runner.Run(migCtx); err != nil {
+		t.Fatalf("migrations: %v", err)
+	}
+	t.Log("migrations applied")
+
+	// Create store.
+	store, err := clickhouse.New(context.Background(), clickhouse.Config{
+		DSN:           dsn,
+		Database:      dbName,
+		BatchSize:     100,
+		FlushInterval: 500 * time.Millisecond,
+		MaxRetries:    1,
+	}, nil)
+	if err != nil {
+		t.Fatalf("store.New: %v", err)
+	}
+	defer store.Close()
+
+	insertCtx, insertCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer insertCancel()
+
+	store.Start(insertCtx)
+
+	// Insert 100 viewer sessions with geo/device dims.
+	t.Log("inserting 100 viewer_sessions...")
+	baseTime := time.Now().UTC().Truncate(time.Hour)
+	for i := 0; i < 100; i++ {
+		sess := domain.ViewerSession{
+			SessionID:     fmt.Sprintf("sess-%d", i),
+			StreamID:      fmt.Sprintf("stream-%d", i%5),
+			App:           "live",
+			NodeID:        "n1",
+			StartedAt:     baseTime.Add(time.Duration(i) * time.Second),
+			EndedAt:       baseTime.Add(time.Duration(i)*time.Second + 60*time.Second),
+			UpdatedAt:     time.Now().UTC(),
+			WatchTimeS:    60,
+			Protocol:      []string{"webrtc", "hls", "rtmp"}[i%3],
+			GeoCountry:    []string{"US", "DE", "TR"}[i%3],
+			GeoRegion:     "CA",
+			ClientDevice:  []string{"desktop", "mobile"}[i%2],
+			ClientOS:      "macOS",
+			ClientBrowser: "Chrome",
+		}
+		store.OnViewerSession(sess)
+	}
+
+	// Insert 50 beacon events for QoE rollup.
+	t.Log("inserting 50 beacon_events for QoE rollup...")
+	for i := 0; i < 50; i++ {
+		beacon := domain.BeaconEvent{
+			Version:   1,
+			SessionID: fmt.Sprintf("bsess-%d", i),
+			StreamID:  fmt.Sprintf("stream-%d", i%5),
+			App:       "live",
+			Events: []domain.BeaconItem{
+				{
+					Type: "startup_complete",
+					TS:   baseTime.Add(time.Duration(i) * time.Second).UnixMilli(),
+					Data: map[string]any{
+						"startup_ms": float64(500 + i*10),
+					},
+				},
+				{
+					Type: "heartbeat",
+					TS:   baseTime.Add(time.Duration(i)*time.Second + 30*time.Second).UnixMilli(),
+					Data: map[string]any{
+						"watch_ms":     float64(30000),
+						"bitrate_kbps": float64(1500 + i*10),
+					},
+				},
+			},
+			Enrichment: &domain.EnrichmentBlock{
+				Geo: &domain.GeoEnrichment{Country: "US"},
+			},
+		}
+		store.OnBeaconEvent(beacon)
+	}
+
+	// Wait for flush.
+	t.Log("waiting for flush...")
+	time.Sleep(2 * time.Second)
+
+	// Verify via direct connection.
+	opts, _ := clickhousego.ParseDSN(dsn)
+	verifyConn, err := clickhousego.Open(opts)
+	if err != nil {
+		t.Fatalf("open verify conn: %v", err)
+	}
+	defer verifyConn.Close()
+
+	qCtx, qCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer qCancel()
+
+	// Check viewer_sessions count.
+	var sessCount uint64
+	row := verifyConn.QueryRow(qCtx, fmt.Sprintf("SELECT count() FROM %s.viewer_sessions", dbName))
+	if err := row.Scan(&sessCount); err != nil {
+		t.Fatalf("viewer_sessions count: %v", err)
+	}
+	t.Logf("viewer_sessions inserted: %d (expected ~100)", sessCount)
+	if sessCount == 0 {
+		t.Error("expected > 0 viewer_sessions")
+	}
+
+	// Check that viewer_sessions contain geo/device dims.
+	var geoCount uint64
+	geoRow := verifyConn.QueryRow(qCtx,
+		fmt.Sprintf("SELECT countIf(geo_country != '') FROM %s.viewer_sessions", dbName))
+	if err := geoRow.Scan(&geoCount); err != nil {
+		t.Fatalf("geo_country check: %v", err)
+	}
+	if geoCount == 0 {
+		t.Error("expected geo_country to be populated in viewer_sessions")
+	}
+	t.Logf("viewer_sessions with geo_country: %d/%d", geoCount, sessCount)
+
+	// Check rollup_audience_1h was populated by the materialized view.
+	// Give ClickHouse a moment to process the MV triggers.
+	time.Sleep(1 * time.Second)
+	var audienceCount uint64
+	aRow := verifyConn.QueryRow(qCtx,
+		fmt.Sprintf("SELECT count() FROM %s.rollup_audience_1h", dbName))
+	if err := aRow.Scan(&audienceCount); err != nil {
+		t.Fatalf("rollup_audience_1h count: %v", err)
+	}
+	t.Logf("rollup_audience_1h rows: %d", audienceCount)
+	if audienceCount == 0 {
+		t.Error("rollup_audience_1h should be populated by MV from viewer_sessions")
+	}
+
+	// Check rollup_qoe_1h was populated by the QoE materialized view.
+	var qoeCount uint64
+	qRow := verifyConn.QueryRow(qCtx,
+		fmt.Sprintf("SELECT count() FROM %s.rollup_qoe_1h", dbName))
+	if err := qRow.Scan(&qoeCount); err != nil {
+		t.Fatalf("rollup_qoe_1h count: %v", err)
+	}
+	t.Logf("rollup_qoe_1h rows: %d", qoeCount)
+	if qoeCount == 0 {
+		t.Error("rollup_qoe_1h should be populated by MV from beacon_events")
+	}
+
+	t.Logf("PASS: viewer_sessions=%d, rollup_audience_1h=%d rows, rollup_qoe_1h=%d rows",
+		sessCount, audienceCount, qoeCount)
+}

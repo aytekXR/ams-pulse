@@ -258,6 +258,30 @@ func (a *Aggregator) onIngestStats(ev domain.ServerEvent) {
 	if bps, ok := ev.Data["bitrate_kbps"].(float64); ok {
 		s.IngestBitrate = bps
 	}
+	if loss, ok := ev.Data["packet_loss_pct"].(float64); ok {
+		s.PacketLossPct = loss
+	}
+	if jitter, ok := ev.Data["jitter_ms"].(float64); ok {
+		s.JitterMS = jitter
+	}
+	if kf, ok := ev.Data["keyframe_interval_s"].(float64); ok {
+		s.KeyframeIntervalS = kf
+	}
+}
+
+// UpdateIngestHealth sets the health score for a stream from the ingest health tracker.
+// Called by the ingest.HealthTracker via a bridge goroutine or directly.
+func (a *Aggregator) UpdateIngestHealth(nodeID, streamID string, score float64, health domain.StreamHealth) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	key := nodeID + "/" + streamID
+	if s, ok := a.streams[key]; ok {
+		s.HealthScore = score
+		s.Health = health
+		a.rebuildSnapshot()
+		a.notifySubs()
+	}
 }
 
 // ─── Snapshot builder (called with lock held) ────────────────────────────────
