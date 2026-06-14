@@ -1,5 +1,13 @@
-import { useState } from "react";
-import { getToken, setToken } from "@/api/client";
+/**
+ * AuthGate: shows login screen if no token is stored.
+ * Also listens for the global "pulse:auth:401" event dispatched by the API
+ * client on HTTP 401 — clears the stored (expired/invalid) token and
+ * redirects the user back to the token entry screen without a full page reload.
+ *
+ * Wave-2 carried fix: 401 → React Router redirect to token screen.
+ */
+import { useState, useEffect } from "react";
+import { getToken, setToken, clearToken } from "@/api/client";
 
 interface Props {
   children: React.ReactNode;
@@ -9,6 +17,17 @@ export function AuthGate({ children }: Props) {
   const [token, _setToken] = useState(() => getToken());
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  // Wave-2: listen for 401 events from the API client to auto-redirect
+  useEffect(() => {
+    const handler = () => {
+      clearToken();
+      _setToken(null);
+      setError("Session expired or token revoked. Please enter your token again.");
+    };
+    window.addEventListener("pulse:auth:401", handler);
+    return () => window.removeEventListener("pulse:auth:401", handler);
+  }, []);
 
   if (token) {
     return <>{children}</>;

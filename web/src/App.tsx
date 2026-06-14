@@ -18,10 +18,13 @@ import { useState } from "react";
 import { AuthGate } from "@/components/AuthGate";
 import { Layout } from "@/components/Layout";
 import { ToastProvider } from "@/components/Toast";
-import { ComingSoon } from "@/components/ComingSoon";
 import { LiveDashboard } from "@/features/live/LiveDashboard";
 import { AnalyticsPage } from "@/features/analytics/AnalyticsPage";
+import { QoePage } from "@/features/qoe/QoePage";
+import { IngestPage } from "@/features/ingest/IngestPage";
 import { AlertsPage } from "@/features/alerts/AlertsPage";
+import { ReportsPage } from "@/features/reports/ReportsPage";
+import { FleetPage } from "@/features/fleet/FleetPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import { OnboardingWizard } from "@/features/settings/OnboardingWizard";
 import "@/styles/global.css";
@@ -36,11 +39,11 @@ function AppRoutes() {
         <Routes>
           <Route path="/" element={<LiveDashboard onConnectionChange={setWsConnected} />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
-          <Route path="/qoe" element={<ComingSoon feature="Viewer QoE (F3)" wave="Wave 2" />} />
-          <Route path="/ingest" element={<ComingSoon feature="Ingest Health (F4)" wave="Wave 2" />} />
+          <Route path="/qoe" element={<QoePage />} />
+          <Route path="/ingest" element={<IngestPage />} />
           <Route path="/alerts" element={<AlertsPage />} />
-          <Route path="/reports" element={<ComingSoon feature="Usage Reports (F6)" wave="Wave 2" />} />
-          <Route path="/fleet" element={<ComingSoon feature="Fleet View (F7)" wave="Wave 2" />} />
+          <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/fleet" element={<FleetPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route
             path="/onboarding"

@@ -32,6 +32,13 @@ import type {
   UserList,
   UserWrite,
   User,
+  QoeSummaryResponse,
+  IngestHealthResponse,
+  FleetNodeList,
+  UsageReportResponse,
+  ReportScheduleList,
+  ReportSchedule,
+  ReportScheduleWrite,
 } from "@/lib/api/types";
 import type { components } from "@/lib/api/schema.d.ts";
 
@@ -84,6 +91,11 @@ async function apiFetch<T>(
       body = (await res.json()) as ErrorResponse;
     } catch {
       body = { message: res.statusText, code: String(res.status) };
+    }
+    // Wave-2 fix: dispatch a custom event on 401 so AuthGate can redirect
+    // to the token entry screen without a full page reload.
+    if (res.status === 401) {
+      window.dispatchEvent(new Event("pulse:auth:401"));
     }
     throw new ApiError(res.status, body);
   }
@@ -284,6 +296,83 @@ export const adminApi = {
 
   deleteUser: (id: string) =>
     apiFetch<void>(`/admin/users/${id}`, { method: "DELETE" }),
+};
+
+// ─── QoE endpoints ───────────────────────────────────────────────────────────
+
+export const qoeApi = {
+  getSummary: (params: {
+    from: number;
+    to: number;
+    stream_id?: string;
+    app?: string;
+  }) => {
+    const q = new URLSearchParams({ from: String(params.from), to: String(params.to) });
+    if (params.stream_id) q.set("stream", params.stream_id);
+    if (params.app) q.set("app", params.app);
+    return apiFetch<QoeSummaryResponse>(`/qoe/summary?${q}`);
+  },
+
+  getIngestHealth: (params: { from: number; to: number; stream_id?: string; app?: string }) => {
+    const q = new URLSearchParams({ from: String(params.from), to: String(params.to) });
+    if (params.stream_id) q.set("stream", params.stream_id);
+    if (params.app) q.set("app", params.app);
+    return apiFetch<IngestHealthResponse>(`/qoe/ingest?${q}`);
+  },
+};
+
+// ─── Fleet endpoints ──────────────────────────────────────────────────────────
+
+export const fleetApi = {
+  listNodes: (params?: { limit?: number; cursor?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.cursor) q.set("cursor", params.cursor);
+    const qs = q.toString() ? `?${q}` : "";
+    return apiFetch<FleetNodeList>(`/fleet/nodes${qs}`);
+  },
+};
+
+// ─── Reports endpoints ────────────────────────────────────────────────────────
+
+export const reportsApi = {
+  getUsage: (params: { from: number; to: number; app?: string; tenant?: string }) => {
+    const q = new URLSearchParams({ from: String(params.from), to: String(params.to) });
+    if (params.app) q.set("app", params.app);
+    if (params.tenant) q.set("tenant", params.tenant);
+    return apiFetch<UsageReportResponse>(`/reports/usage?${q}`);
+  },
+
+  listSchedules: () =>
+    apiFetch<ReportScheduleList>("/reports/schedules"),
+
+  createSchedule: (body: ReportScheduleWrite) =>
+    apiFetch<ReportSchedule>("/reports/schedules", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateSchedule: (id: string, body: ReportScheduleWrite) =>
+    apiFetch<ReportSchedule>(`/reports/schedules/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  deleteSchedule: (id: string) =>
+    apiFetch<void>(`/reports/schedules/${id}`, { method: "DELETE" }),
+
+  downloadExport: (params: { from: number; to: number; format: "csv" | "pdf"; app?: string; tenant?: string }) => {
+    const q = new URLSearchParams({
+      from: String(params.from),
+      to: String(params.to),
+      format: params.format,
+    });
+    if (params.app) q.set("app", params.app);
+    if (params.tenant) q.set("tenant", params.tenant);
+    const token = getToken();
+    const url = `/api/v1/reports/export?${q}${token ? `&token=${token}` : ""}`;
+    window.location.href = url;
+  },
 };
 
 // ─── LiveSocket — auto-reconnecting WebSocket for /live/ws ────────────────────

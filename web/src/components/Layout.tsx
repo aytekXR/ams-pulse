@@ -32,7 +32,6 @@ const navItems: NavItem[] = [
   {
     to: "/qoe",
     label: "QoE",
-    wave2: true,
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
@@ -43,7 +42,6 @@ const navItems: NavItem[] = [
   {
     to: "/ingest",
     label: "Ingest",
-    wave2: true,
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
         <polyline points="23 7 13 17 8 12 1 19" />
@@ -63,7 +61,6 @@ const navItems: NavItem[] = [
   {
     to: "/reports",
     label: "Reports",
-    wave2: true,
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -77,7 +74,6 @@ const navItems: NavItem[] = [
   {
     to: "/fleet",
     label: "Fleet",
-    wave2: true,
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
         <rect x="2" y="3" width="7" height="7" />

@@ -55,6 +55,25 @@ export type PaginatedMeta = Schemas["PaginatedMeta"];
 
 export type HealthStatus = Schemas["HealthStatus"];
 
+export type QoeSummaryResponse = Schemas["QoeSummaryResponse"];
+export type QoeTotals = Schemas["QoeTotals"];
+export type BitrateBucket = Schemas["BitrateBucket"];
+
+export type IngestHealthResponse = Schemas["IngestHealthResponse"];
+export type IngestStream = Schemas["IngestStream"];
+export type IngestBucket = Schemas["IngestBucket"];
+export type DropEvent = Schemas["DropEvent"];
+
+export type FleetNode = Schemas["FleetNode"];
+export type FleetNodeList = Schemas["FleetNodeList"];
+
+export type UsageReportResponse = Schemas["UsageReportResponse"];
+export type UsageRow = Schemas["UsageRow"];
+export type UsageTotals = Schemas["UsageTotals"];
+export type ReportSchedule = Schemas["ReportSchedule"];
+export type ReportScheduleList = Schemas["ReportScheduleList"];
+export type ReportScheduleWrite = Schemas["ReportScheduleWrite"];
+
 export type User = Schemas["User"];
 export type UserWrite = Schemas["UserWrite"];
 export type UserList = Schemas["UserList"];

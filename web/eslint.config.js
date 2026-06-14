@@ -55,6 +55,7 @@ export default [
         confirm: "readonly",
         prompt: "readonly",
         global: "readonly",
+        navigator: "readonly",
       },
     },
     plugins: {
