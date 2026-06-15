@@ -549,6 +549,96 @@ func TestEvaluator_DisabledRule_NotEvaluated(t *testing.T) {
 	t.Logf("PASS: enabled=false rule not evaluated (no notifications, no history)")
 }
 
+// ─── Test: real wall-clock detect-and-notify latency (VD-31) ─────────────────
+
+// TestEvaluator_DetectAndNotify_WallClockBudget verifies that the real async
+// path (Start → goroutine ticker → evaluate → channel.Send) delivers a
+// notification within 30 s of wall-clock time. It exercises the real goroutine
+// path, not the synchronous TickOnce path used by other tests.
+//
+// Anti-stall: a context deadline + select-with-timeout guard ensures the test
+// never hangs. A 200 ms tick interval is used so the notification arrives in
+// ~1 tick (≈200 ms), keeping the test fast.
+func TestEvaluator_DetectAndNotify_WallClockBudget(t *testing.T) {
+	store := openTestStore(t)
+	live := newFakeLive()
+
+	// Use RealClock (nil → default) for the real async path.
+	noop := &channels.NoopChannel{}
+	reg := channels.NewRegistry()
+	reg.Register("test-channel-wc", noop)
+
+	cfg := alert.Config{
+		TickInterval: 200 * time.Millisecond, // fast tick so test finishes in ~1 tick
+		BaseURL:      "http://localhost:8090",
+	}
+	ev := alert.New(cfg, live, store, reg, nil /* RealClock */, nil)
+
+	// Rule: window_s=0 so the condition fires on the very first tick after it is met.
+	// Use stream_id in scope so evalStreamOffline checks if the specific stream is absent
+	// from the snapshot — guaranteed to fire immediately since we set an empty streams map.
+	ctx := context.Background()
+	b, _ := json.Marshal(map[string]string{"stream_id": "wc-stream-1"})
+	row := meta.AlertRuleRow{
+		Name:               "wc-budget-test",
+		Metric:             "stream_offline",
+		Operator:           "eq",
+		Threshold:          1,
+		WindowS:            0, // fires immediately when condition is met
+		ScopeJSON:          string(b),
+		Severity:           "critical",
+		CooldownS:          300,
+		Enabled:            true,
+		Muted:              false,
+		MaintenanceWindows: "[]",
+		ChannelIDs:         `["test-channel-wc"]`,
+	}
+	if _, err := store.CreateAlertRule(ctx, row); err != nil {
+		t.Fatalf("CreateAlertRule: %v", err)
+	}
+
+	// Buffered notification sink so delivery is non-blocking.
+	notifCh := make(chan map[string]any, 1)
+	ev.SetNotifySink(func(payload []byte) {
+		var n map[string]any
+		_ = json.Unmarshal(payload, &n)
+		select {
+		case notifCh <- n:
+		default:
+		}
+	})
+
+	// All streams offline — condition met immediately.
+	live.setSnap(&domain.LiveSnapshot{
+		Streams: map[string]*domain.LiveStream{},
+		Nodes:   map[string]*domain.LiveNodeStats{},
+	})
+
+	// Cancel context after 30 s to guarantee no hang (anti-stall).
+	runCtx, runCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer runCancel()
+
+	t0 := time.Now()
+	ev.Start(runCtx) // real goroutine: ticker.C → evaluate → notifySink
+
+	// Wait for the first firing notification or timeout.
+	select {
+	case n := <-notifCh:
+		elapsed := time.Since(t0)
+		t.Logf("VD-31: wall-clock detect→notify latency = %v (budget: 30s)", elapsed)
+		if n["state"] != "firing" {
+			t.Errorf("expected state=firing, got %v", n["state"])
+		}
+		if elapsed >= 30*time.Second {
+			t.Errorf("VD-31 FAIL: wall-clock latency %v >= 30s budget", elapsed)
+		} else {
+			t.Logf("PASS VD-31: wall-clock latency %v < 30s — real async path within budget", elapsed)
+		}
+	case <-runCtx.Done():
+		t.Fatal("VD-31 FAIL: timeout — no firing notification received within 30s wall-clock budget")
+	}
+}
+
 // ─── Test: detection-to-notification < 30 s by construction ──────────────────
 
 func TestEvaluator_DetectionNotificationBudget_ByConstruction(t *testing.T) {

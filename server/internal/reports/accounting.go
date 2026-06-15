@@ -150,29 +150,33 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 
 	// rollup_usage_1d is a SummingMergeTree with plain numeric columns:
 	//   bucket Date, app, stream_id, tenant, viewer_minutes Float64,
-	//   peak_concurrency UInt32, egress_bytes UInt64, recording_bytes UInt64.
-	// Use sum()/max() — NOT sumMerge/maxMerge (those are for AggregatingMergeTree).
-	// rollup_audience_1h is AggregatingMergeTree; use sumMerge/maxMerge there.
+	//   egress_bytes UInt64, recording_bytes UInt64.
+	// Use sum() — NOT sumMerge/maxMerge (those are for AggregatingMergeTree).
+	// rollup_audience_1h is AggregatingMergeTree; use sumMerge there.
 	//
-	// VD-38 caveat — peak_concurrency in rollup_usage_1d is a session-count proxy,
-	// not a true concurrent-viewer peak. The mv_usage_1d materialized view inserts
-	// toUInt32(1) per session row; SummingMergeTree sums these across merges, so
-	// sum(peak_concurrency) accumulates as session count for the GROUP BY key.
-	// For non-overlapping sessions this overstates concurrency; for heavy-overlap
-	// streams it understates it.
-	//
-	// A true concurrent-peak would require a sliding-window max over viewer-session
-	// overlap per minute — deferred to Wave 3 (requires schema change to store
-	// a maxState per minute bucket rather than toUInt32(1) per session).
-	// The rollup_audience_1h path uses maxMerge(peak_concurrency) which is also
-	// toUInt32(1) per session, so it shares the same approximation.
-	// Callers should treat PeakConcurrency as an upper-bound approximation.
+	// VD-38: peak_concurrency is now sourced from rollup_concurrency_1d
+	// (AggregatingMergeTree, key bucket/app/stream_id, peak_concurrency
+	// AggregateFunction(max, UInt32)) which is populated by mv_concurrency_1d
+	// from server_events.viewer_count (the AMS-authoritative instantaneous
+	// concurrent count). This provides a true windowed max (max over per-day
+	// maxState(viewer_count)) for both the daily and hour-fallback paths.
+	// The bucket column is Date in rollup_concurrency_1d, covering both ranges.
+
+	// concurrencyMap fetches true peak_concurrency for the query time range.
+	concurrencyMap, concErr := a.fetchConcurrencyPeaks(ctx, p.From, p.To, p.App, p.StreamID)
+	if concErr != nil {
+		// Non-fatal: fall back to 0 for all streams if the query fails.
+		concurrencyMap = map[concurrencyKey]int64{}
+	}
+
 	var q string
 	var where string
 	args := []any{p.From, p.To}
 	if p.Interval == "hour" {
 		// Partial-day fallback: rollup_audience_1h (AggregatingMergeTree).
 		// Partition column: bucket DateTime. Egress model: bitrate_x_watch_time.
+		// peak_concurrency is no longer read from rollup_audience_1h — it comes
+		// from rollup_concurrency_1d via concurrencyMap (true windowed max).
 		where = "bucket >= ? AND bucket <= ?"
 		if p.App != "" {
 			where += " AND app = ?"
@@ -186,8 +190,7 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 			SELECT
 				app,
 				stream_id,
-				sumMerge(watch_time_s) / 60.0    AS viewer_minutes,
-				toInt64(maxMerge(peak_concurrency)) AS peak_concurrency
+				sumMerge(watch_time_s) / 60.0    AS viewer_minutes
 			FROM rollup_audience_1h
 			WHERE %s
 			GROUP BY app, stream_id
@@ -195,6 +198,9 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 	} else {
 		// Primary billing path: rollup_usage_1d (SummingMergeTree).
 		// Partition column: bucket Date.
+		// peak_concurrency is no longer read from rollup_usage_1d (it stored
+		// toUInt32(1) per session — a session-count proxy, not true concurrency).
+		// True peak comes from rollup_concurrency_1d via concurrencyMap.
 		where = "bucket >= ? AND bucket <= ?"
 		if p.App != "" {
 			where += " AND app = ?"
@@ -209,7 +215,6 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 				app,
 				stream_id,
 				sum(viewer_minutes)              AS viewer_minutes,
-				toInt64(max(peak_concurrency))   AS peak_concurrency,
 				sum(egress_bytes)                AS egress_bytes,
 				sum(recording_bytes)             AS recording_bytes
 			FROM rollup_usage_1d
@@ -230,43 +235,39 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 		stream string
 	}
 	type aggVal struct {
-		viewerMinutes   float64
-		peakConcurrency int64
-		egressBytes     uint64
-		recordingBytes  uint64
+		viewerMinutes  float64
+		egressBytes    uint64
+		recordingBytes uint64
 	}
 	byKey := map[aggKey]*aggVal{}
 	isHour := p.Interval == "hour"
 	for rows.Next() {
 		var app, streamID string
 		var viewerMinutes float64
-		var peakConcurrency int64
 		var egressBytes, recordingBytes uint64
 		if isHour {
-			// rollup_audience_1h: 4 columns (no egress_bytes/recording_bytes).
-			if err := rows.Scan(&app, &streamID, &viewerMinutes, &peakConcurrency); err != nil {
+			// rollup_audience_1h: 3 columns (no egress_bytes/recording_bytes,
+			// no peak_concurrency — sourced from rollup_concurrency_1d instead).
+			if err := rows.Scan(&app, &streamID, &viewerMinutes); err != nil {
 				return nil, fmt.Errorf("scan (hour): %w", err)
 			}
 		} else {
-			// rollup_usage_1d: 6 columns.
-			if err := rows.Scan(&app, &streamID, &viewerMinutes, &peakConcurrency, &egressBytes, &recordingBytes); err != nil {
+			// rollup_usage_1d: 5 columns (no peak_concurrency column selected —
+			// peak_concurrency sourced from rollup_concurrency_1d instead).
+			if err := rows.Scan(&app, &streamID, &viewerMinutes, &egressBytes, &recordingBytes); err != nil {
 				return nil, fmt.Errorf("scan (day): %w", err)
 			}
 		}
 		k := aggKey{app: app, stream: streamID}
 		if v, ok := byKey[k]; ok {
 			v.viewerMinutes += viewerMinutes
-			if peakConcurrency > v.peakConcurrency {
-				v.peakConcurrency = peakConcurrency
-			}
 			v.egressBytes += egressBytes
 			v.recordingBytes += recordingBytes
 		} else {
 			byKey[k] = &aggVal{
-				viewerMinutes:   viewerMinutes,
-				peakConcurrency: peakConcurrency,
-				egressBytes:     egressBytes,
-				recordingBytes:  recordingBytes,
+				viewerMinutes:  viewerMinutes,
+				egressBytes:    egressBytes,
+				recordingBytes: recordingBytes,
 			}
 		}
 	}
@@ -313,12 +314,16 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 		if tenantName != "" {
 			tenPtr = &tenantName
 		}
+		// VD-38: true windowed peak from rollup_concurrency_1d (max over per-day
+		// maxState(viewer_count) from server_events.viewer_count snapshots).
+		peakConcurrency := concurrencyMap[concurrencyKey{app: k.app, stream: k.stream}]
+
 		row := UsageRow{
 			App:             k.app,
 			StreamID:        sidPtr,
 			Tenant:          tenPtr,
 			ViewerMinutes:   roundToDecimal(v.viewerMinutes, 4),
-			PeakConcurrency: v.peakConcurrency,
+			PeakConcurrency: peakConcurrency,
 			EgressGB:        roundToDecimal(egressGB, 6),
 			RecordingGB:     roundToDecimal(recordingGB, 6),
 			EgressMethod:    egressMethod,
@@ -327,8 +332,8 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 		totals.ViewerMinutes += v.viewerMinutes
 		totals.EgressGB += egressGB
 		totals.RecordingGB += recordingGB
-		if v.peakConcurrency > totals.PeakConcurrency {
-			totals.PeakConcurrency = v.peakConcurrency
+		if peakConcurrency > totals.PeakConcurrency {
+			totals.PeakConcurrency = peakConcurrency
 		}
 	}
 	if resultRows == nil {
@@ -344,6 +349,60 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 		Totals:       totals,
 		EgressMethod: EgressMethodBitrateXWatchTime,
 	}, nil
+}
+
+// concurrencyKey identifies a (app, stream_id) pair for peak-concurrency lookup.
+type concurrencyKey struct {
+	app    string
+	stream string
+}
+
+// fetchConcurrencyPeaks queries rollup_concurrency_1d for the true windowed
+// peak_concurrency per (app, stream_id) over the given time range.
+//
+// rollup_concurrency_1d (AggregatingMergeTree) is populated by mv_concurrency_1d
+// from server_events.viewer_count (stream_stats events — the AMS-authoritative
+// instantaneous concurrent viewer count). Using maxMerge correctly merges the
+// per-day maxState(viewer_count) partial aggregates, yielding the true windowed
+// maximum concurrent viewers per stream for the billing period (VD-38).
+//
+// bucket is Date — covers both the daily and hour-fallback time ranges.
+func (a *Accountant) fetchConcurrencyPeaks(ctx context.Context, from, to time.Time, app, streamID string) (map[concurrencyKey]int64, error) {
+	where := "bucket >= ? AND bucket <= ?"
+	args := []any{from, to}
+	if app != "" {
+		where += " AND app = ?"
+		args = append(args, app)
+	}
+	if streamID != "" {
+		where += " AND stream_id = ?"
+		args = append(args, streamID)
+	}
+	q := fmt.Sprintf(`
+		SELECT app, stream_id, toInt64(maxMerge(peak_concurrency)) AS peak
+		FROM rollup_concurrency_1d
+		WHERE %s
+		GROUP BY app, stream_id`, where)
+
+	rows, err := a.conn.Query(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("concurrency peak query: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[concurrencyKey]int64)
+	for rows.Next() {
+		var ap, sid string
+		var peak int64
+		if err := rows.Scan(&ap, &sid, &peak); err != nil {
+			return nil, fmt.Errorf("concurrency peak scan: %w", err)
+		}
+		result[concurrencyKey{app: ap, stream: sid}] = peak
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("concurrency peak iter: %w", err)
+	}
+	return result, nil
 }
 
 // ReconcileResult is the result of a reconciliation check.

@@ -150,16 +150,18 @@ func TestAccountant_CHIntegration(t *testing.T) {
 
 	ctx := context.Background()
 
-	// ── 5. Seed KNOWN-TRUTH viewer_sessions ──────────────────────────────────
+	// ── 5. Seed KNOWN-TRUTH viewer_sessions + server_events for VD-38 ─────────
 	// Two tenants, two streams, known watch times.
 	// Tenant A (stream "stream-alpha"): 3 sessions × 600 s each = 1800 s = 30 min
 	// Tenant B (stream "stream-beta"):  5 sessions × 300 s each = 1500 s = 25 min
 	// Total: 8 sessions, 55 min
 	//
 	// mv_usage_1d inserts: viewer_minutes = watch_time_s / 60.0 per session row.
-	// Since peak_concurrency is toUInt32(1) per row in the MV, sum over sessions
-	// gives session count (not true concurrent peak). For the test we verify
-	// total viewer-minutes and drift, not peak (which is an approximation in the MV).
+	//
+	// VD-38: additionally seed server_events stream_stats rows with OVERLAPPING
+	// viewer_count snapshots so mv_concurrency_1d populates rollup_concurrency_1d:
+	//   stream-alpha: viewer_count snapshots {10, 25, 18} → true peak = 25
+	//   stream-beta:  viewer_count snapshots {5, 5, 5}   → true peak = 5
 
 	// Use a recent date — within the 90-day viewer_sessions TTL.
 	// Fixed past dates (e.g., 2026-03-01) may exceed the TTL and cause
@@ -248,7 +250,47 @@ func TestAccountant_CHIntegration(t *testing.T) {
 	}
 	t.Logf("seeded %d viewer_sessions (truth: %.1f min total)", len(seeds), truthTotalMin)
 
-	// Wait briefly for materialized view to trigger.
+	// ── VD-38: seed server_events stream_stats rows for concurrency rollup ─────
+	// The event_type used by mv_concurrency_1d is 'stream_stats' (from 0002_concurrency_rollup.sql).
+	// Insert overlapping viewer_count snapshots to exercise maxMerge aggregation:
+	//   stream-alpha: {10, 25, 18} → true peak 25
+	//   stream-beta:  {5, 5, 5}   → true peak 5
+	//
+	// Insert using the minimal column list that satisfies server_events NOT NULL columns.
+	// All other columns use their DEFAULT values from the DDL.
+	type seEvent struct {
+		eventType   string
+		ts          time.Time
+		app         string
+		streamID    string
+		viewerCount uint32
+	}
+	concTs := baseDay.Add(time.Hour) // same billing day as viewer_sessions
+	seSeeds := []seEvent{
+		{eventType: "stream_stats", ts: concTs.Add(0 * time.Minute), app: "live", streamID: "stream-alpha", viewerCount: 10},
+		{eventType: "stream_stats", ts: concTs.Add(1 * time.Minute), app: "live", streamID: "stream-alpha", viewerCount: 25},
+		{eventType: "stream_stats", ts: concTs.Add(2 * time.Minute), app: "live", streamID: "stream-alpha", viewerCount: 18},
+		{eventType: "stream_stats", ts: concTs.Add(0 * time.Minute), app: "live", streamID: "stream-beta", viewerCount: 5},
+		{eventType: "stream_stats", ts: concTs.Add(1 * time.Minute), app: "live", streamID: "stream-beta", viewerCount: 5},
+		{eventType: "stream_stats", ts: concTs.Add(2 * time.Minute), app: "live", streamID: "stream-beta", viewerCount: 5},
+	}
+
+	seBatch, err := conn.PrepareBatch(insertCtx,
+		`INSERT INTO server_events (event_type, ts, app, stream_id, viewer_count)`)
+	if err != nil {
+		t.Fatalf("prepare server_events batch: %v", err)
+	}
+	for _, se := range seSeeds {
+		if err := seBatch.Append(se.eventType, se.ts, se.app, se.streamID, se.viewerCount); err != nil {
+			t.Fatalf("server_events batch append: %v", err)
+		}
+	}
+	if err := seBatch.Send(); err != nil {
+		t.Fatalf("server_events batch send: %v", err)
+	}
+	t.Logf("seeded %d server_events stream_stats rows for VD-38 concurrency rollup", len(seSeeds))
+
+	// Wait briefly for materialized views to trigger (mv_usage_1d + mv_concurrency_1d).
 	time.Sleep(500 * time.Millisecond)
 
 	// Verify rollup_usage_1d was populated.
@@ -262,6 +304,18 @@ func TestAccountant_CHIntegration(t *testing.T) {
 	t.Logf("rollup_usage_1d rows after seed: %d", usageRows)
 	if usageRows == 0 {
 		t.Fatal("rollup_usage_1d is empty — mv_usage_1d MV did not trigger; MV population broken")
+	}
+
+	// Verify rollup_concurrency_1d was populated by mv_concurrency_1d.
+	var concRows uint64
+	if err := conn.QueryRow(insertCtx,
+		"SELECT count() FROM rollup_concurrency_1d",
+	).Scan(&concRows); err != nil {
+		t.Fatalf("rollup_concurrency_1d count: %v", err)
+	}
+	t.Logf("rollup_concurrency_1d rows after seed: %d", concRows)
+	if concRows == 0 {
+		t.Fatal("rollup_concurrency_1d is empty — mv_concurrency_1d MV did not trigger; concurrency rollup broken")
 	}
 
 	// ── 6. Create Accountant (real conn path) ─────────────────────────────────
@@ -331,6 +385,33 @@ func TestAccountant_CHIntegration(t *testing.T) {
 	}
 
 	t.Logf("PASS (a): ComputeUsage — viewer-minutes drift=%.4f%%, stream attribution within 1%%", drift)
+
+	// ── 7a-VD38. Assert TRUE peak_concurrency from rollup_concurrency_1d ────────
+	// stream-alpha seeded viewer_count {10, 25, 18} → maxMerge = 25
+	// stream-beta  seeded viewer_count {5, 5, 5}   → maxMerge = 5
+	// These values must be reflected in UsageRow.PeakConcurrency, NOT the
+	// old session-count proxy (which would be 3 and 5 for the viewer_sessions rows).
+	alphaPeak := int64(0)
+	betaPeak := int64(0)
+	for _, r := range usageReport.Rows {
+		if r.StreamID != nil && *r.StreamID == "stream-alpha" {
+			alphaPeak = r.PeakConcurrency
+		}
+		if r.StreamID != nil && *r.StreamID == "stream-beta" {
+			betaPeak = r.PeakConcurrency
+		}
+	}
+	t.Logf("VD-38 peak_concurrency: stream-alpha=%d (want 25), stream-beta=%d (want 5)",
+		alphaPeak, betaPeak)
+	if alphaPeak != 25 {
+		t.Errorf("VD-38 FAIL: stream-alpha peak_concurrency=%d, want 25 (true windowed max from rollup_concurrency_1d)", alphaPeak)
+	}
+	if betaPeak != 5 {
+		t.Errorf("VD-38 FAIL: stream-beta peak_concurrency=%d, want 5 (true windowed max from rollup_concurrency_1d)", betaPeak)
+	}
+	if alphaPeak == 25 && betaPeak == 5 {
+		t.Logf("PASS VD-38: peak_concurrency is true windowed max (alpha=25, beta=5) from rollup_concurrency_1d")
+	}
 
 	// ── 7b. Reconcile — assert DriftPct ≤ 1.0 ───────────────────────────────
 	// Reconcile compares rollup_usage_1d sum(viewer_minutes) vs raw
