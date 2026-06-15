@@ -528,3 +528,64 @@ multi-node cluster E2E (D-002).
 stack up against the mock AMS on a real VPS, i.e. to finally EXECUTE the D-002-waived
 compose path. Authored outside this wave (untracked; no D-018 agent created them); left for
 the user to decide whether to adopt as a separate "close the D-002 waiver" workstream.
+
+## D-020 · 2026-06-15 · W1 `pulse-cicd` — always-on CI/CD that gates `main` (CLOSED)
+
+**Plan/CR (ORCH pre-approval).** The skeleton-era CI (`ci.yml`, `ams-version-matrix.yml`,
+dated before the MVP) was BROKEN against the shipped MVP: Go 1.24 (`go.mod` needs ≥1.25),
+`npm ci` without `--legacy-peer-deps`, a malformed `CGO_ENABLED=0 cd server` line,
+soft-failing (`|| echo GAP`) lint/test, and no docker-build / e2e / release jobs. CR-CI01:
+fix + harden + extend CI so every push/PR to `main` is built, linted and tested, and add an
+e2e smoke + a GHCR release path. Contracts unchanged (no OpenAPI/schema edits) — D-004 intact.
+
+**Workflow `pulse-cicd`** (run `wf_ca6228d5-6cf`, 18 agents: Author ∥ → Verify adversarial +
+2-round fix-loop → Gate). Files (committed by explicit path, D-008/D-011):
+- `.github/workflows/ci.yml` — rewritten 7-job: **contracts** (ajv draft2020 + redocly),
+  **server** (setup-go **1.25**; `CGO_ENABLED=0` vet+build; `go test ./... -race` WITHOUT
+  CGO=0 since `-race` needs cgo+gcc which ubuntu-latest has; a **ClickHouse 24.8 service
+  container** for a `pulse migrate` smoke-test; integration tests via a downloaded CH binary —
+  the harness self-manages its own CH subprocess on random ports), **web** (node 22,
+  `npm ci --legacy-peer-deps`, `gen:api` + `git diff --exit-code` types-drift guard, build,
+  **HARD** lint, test), **sdk** (`npm ci`, build, 15 KB size gate, HARD lint, test),
+  **docker-build** (`docker build` the all-in-one image, GHCR **lowercase** tag), **helm**
+  (lint + golden diff, kept), **compose** (config-validate base AND CI override).
+- `.github/workflows/e2e.yml` (new, PR + dispatch) + `deploy/docker-compose.ci.yml` (new
+  CI-safe override: loopback 127.0.0.1:18090/18091, mock-ams control API on 127.0.0.1:19090,
+  ephemeral secret) — compose up, extract first-run admin token from logs, wait mock-ams
+  `/healthz`, seed a stream via `/control/publish`, assert `/healthz` 200 + migrate exit 0 +
+  `SHOW TABLES FROM pulse` non-empty + authed `/api/v1/live/overview` viewers>0; `down -v` in
+  `always()`, distinct project `pulse-e2e`.
+- `.github/workflows/ams-version-matrix.yml` — Go 1.24→1.25 (only change).
+- `.github/workflows/release.yml` (new, on tag `v*`) — build+push `ghcr.io/aytekxr/ams-pulse`
+  via docker/metadata+build-push.
+- `.github/branch-protection.sh` (new) — `gh api` script: required status checks =
+  the 7 ci job names, PR reviews, no force-push/deletion.
+- **Out-of-scope but ACCEPTED:** `deploy/docker-compose.yml` pulse `ports:`→`expose:` and
+  `deploy/docker-compose.override.yml` dropped `!override`. Behaviour-PRESERVING (base+override
+  and base+ci both render the SAME published ports as before — verified via `docker compose
+  config`) and cleaner per CLAUDE.md "base stays clean, host exposure lives in overrides".
+  `make up` (`cd deploy && docker compose up -d`, auto-merges only `override.yml`) unaffected.
+  A sibling/fix agent made the edit outside its single-writer scope — noted; accepted on merit.
+
+**ORCH-00 independent verification (D-013/D-017 — verify is NOT authoritative alone).**
+The workflow's adversarial Verify phase reproduced 6/7 jobs locally inside the exact CI images
+(`golang:1.25(-alpine)`, `node:22-alpine`): contracts ✓; server vet/build + `-race` ✓; web
+`npm ci --legacy-peer-deps` + build + 157 tests + HARD lint, no schema.d.ts drift ✓; sdk build
++ size 3.52 KB ≪ 15 KB + 65 tests ✓; docker-build → 17.4 MB image ✓; all 5 YAML parse +
+both compose configs render ✓. **e2e was "refuted" only as a harness artifact** (my prescribed
+assert curled `/live/overview` without a token and against an UNSEEDED mock → 401 / 0 viewers).
+ORCH then re-ran the FULL e2e chain directly (`/tmp/e2e_confirm.sh`, project
+`pulse-e2e-confirm`): healthz 200, migrate exit 0, 17 CH tables, token extracted from logs,
+mock-ams seeded → authed `/live/overview` returned **`total_viewers=13, total_publishers=1`**
+(webrtc 10 + hls 3), clean `down -v`. e2e.yml logic CONFIRMED correct. Empirically also
+confirmed `docker compose … config --quiet` exits 0 even with `PULSE_SECRET_KEY` unset
+(Compose v5 enforces `:?` only at up/run), so the compose job is sound.
+
+**Verdict: gate CLOSED — PASS_WITH_LIMITATIONS.** Everything is locally reproduced; what
+remains is necessarily GitHub-side and the user's to do: (1) push these workflows + open a PR
+so Actions actually runs green; (2) run `.github/branch-protection.sh` (needs `gh` + repo
+admin — `gh` is NOT installed on the VPS) to make the checks gating; (3) push a `v*` tag to
+exercise the GHCR release. Limitations: `e2e` is deliberately NOT a required check (full
+compose bring-up is slow/heavy — PR/dispatch only); the integration step downloads a ~CH
+binary at CI time (network-dependent); `helm` is GitHub-runner-only (helm not installed
+locally). Carried waivers: D-002 (real cluster / real multi-node), D-007.5 (Kafka broker).

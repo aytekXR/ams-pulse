@@ -411,3 +411,33 @@ on a real VPS; left untracked for the user to decide.
 Remaining Phase-3 backlog: VD-04 (headless render-time) + VD-14 (player CPU) need a real
 browser profiler; mobile SDKs, SSO, white-label PDF, air-gapped licensing, hosted beta,
 distributed probe network, real multi-node cluster E2E.
+
+## 2026-06-15 — session 4 · W1 `pulse-cicd`: always-on CI/CD that gates `main` (D-020)
+
+Goal (RESUME-PROMPT Workflow 1): every push/PR to `main` is built + linted + tested; add an
+e2e smoke + a GHCR release path; make broken changes unmergeable. Found the skeleton CI was
+BROKEN vs. the shipped MVP (Go 1.24 not 1.25, `npm ci` w/o `--legacy-peer-deps`, a malformed
+`CGO_ENABLED=0 cd server`, soft-fail lint, no docker-build/e2e/release). So W1 = fix + harden
++ extend, not greenfield.
+
+Workflow `pulse-cicd` (`wf_ca6228d5-6cf`, 18 agents): 4 parallel authors (disjoint files) →
+adversarial Verify reproducing each job inside the real CI images (`golang:1.25`,
+`node:22-alpine`) with a 2-round self-heal fix-loop → independent Gate. ORCH then committed
+centrally by explicit path (agents did NOT commit — avoids the parallel-tree index races of
+D-008/D-011).
+
+**Verification (D-013/D-017 — never trust the verify phase alone):** 6/7 jobs reproduced
+locally; e2e's "refuted" was a harness artifact (my assert curled `/live/overview` with no
+token + against an unseeded mock). ORCH re-ran the full e2e chain directly — seed via
+mock-ams `/control/publish` → authed `/live/overview` = **viewers=13, publishers=1**; healthz
+200; migrate exit 0; 17 CH tables; clean `down -v`. e2e.yml confirmed correct.
+
+Shipped: `.github/workflows/{ci,e2e,release,ams-version-matrix}.yml`,
+`deploy/docker-compose.ci.yml`, `.github/branch-protection.sh`, plus a behaviour-preserving
+base/override compose refactor (`ports:`→`expose:`, drop `!override`). Gate **CLOSED**
+(PASS_WITH_LIMITATIONS). GitHub-side-only (user's to do): push + open a PR so Actions runs
+green, run `.github/branch-protection.sh` (needs `gh` + admin — gh not installed on the VPS),
+push a `v*` tag for the GHCR release. `e2e` is intentionally not a required check.
+
+Note: the running demo stack (project `pulse`) is currently UNHEALTHY (pulse container up but
+not serving on :8090/:80) — flagged for the next session; not in W1 scope.

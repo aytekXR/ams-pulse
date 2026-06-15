@@ -10,7 +10,7 @@ from empirical verification on the current `main`, not from agent self-reports.
 > QoE, reports, fleet, API/Prometheus, Helm), Wave 3-MVP (anomaly detection,
 > synthetic probes), then a **validation phase** (mission item 2) that adversarially
 > re-verified F1–F10 against the PRD and drove a defect-fix loop. Full chronology in
-> `DEVLOG.md`; all rulings in `agents/handoffs/decisions.md` (D-001…D-017).
+> `DEVLOG.md`; all rulings in `agents/handoffs/decisions.md` (D-001…D-020).
 
 ## Verification status (current `main`)
 
@@ -29,6 +29,16 @@ from empirical verification on the current `main`, not from agent self-reports.
 > windowed `peak_concurrency`** via new `rollup_concurrency_1d` (VD-38), and test
 > coverage (VD-18/19/24/26/31/41). Migrations `0002_concurrency_rollup.sql` +
 > `0003_probe_segment_ttfb.sql`. Independently re-verified on HEAD by ORCH-00.
+
+> **W1 CI/CD (session 4, D-020, 2026-06-15).** Always-on GitHub Actions that gate `main`:
+> `ci.yml` (7 jobs — contracts, server [go 1.25, CGO=0 build + `-race` tests + CH-service
+> `pulse migrate` smoke + integration], web [`npm ci --legacy-peer-deps`, drift guard, HARD
+> lint/test], sdk [size gate + HARD lint/test], docker-build, helm, compose), `e2e.yml`
+> (compose-up smoke: seed mock-ams → authed `/live/overview` viewers>0) + `deploy/docker-compose.ci.yml`,
+> `release.yml` (GHCR on `v*`), and `.github/branch-protection.sh`. Every job reproduced in
+> the real CI images locally; e2e re-run by ORCH (viewers=13). Gate CLOSED
+> (PASS_WITH_LIMITATIONS — Actions-green-on-push + branch protection are the user's GitHub-side
+> step; `gh` not installed on the VPS).
 
 **Single unified project** (one repo, one `pulse` binary `serve|migrate|diag` +
 one web app + one SDK). No separate codebases to merge.
