@@ -260,6 +260,9 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 
 	// HOOK(BE-02): Wire query service.
 	qsvc := query.New(agg, store.GetConn(), lic)
+	// VD-39: wire cluster discovery so FleetNodes() returns real role (origin/edge)
+	// instead of hardcoded "standalone".
+	qsvc.SetClusterDiscovery(clusterDiscovery)
 
 	// HOOK(BE-02): Wire API server.
 	apiCfg := api.Config{

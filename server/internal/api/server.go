@@ -62,6 +62,12 @@ type Config struct {
 	BaseURL string
 	// MetricsToken, if set, requires Authorization: Bearer <token> on /metrics.
 	MetricsToken string
+	// AllowedWSOrigins is the list of allowed WebSocket origin patterns.
+	// Patterns follow nhooyr.io/websocket glob syntax (e.g. "https://*.example.com").
+	// Empty slice means same-origin only (most restrictive).
+	// Set to []string{"*"} for development only.
+	// VD-S2: replaces the removed InsecureSkipVerify=true.
+	AllowedWSOrigins []string
 }
 
 // AnomalyDetector is the interface to the anomaly detection service.
@@ -348,6 +354,14 @@ func (s *Server) bearerAuthMiddleware(next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "TOKEN_EXPIRED", "token expired")
 			return
 		}
+		// VD-S3: enforce token kind — admin/API routes require kind='api'.
+		// Ingest tokens (kind='ingest') must not be accepted on /api/v1/* routes.
+		// The /ingest/beacon route validates kind='ingest' independently.
+		if tok.Kind != "api" {
+			writeError(w, http.StatusForbidden, "WRONG_TOKEN_KIND",
+				fmt.Sprintf("this route requires an API token (kind=api); got kind=%q", tok.Kind))
+			return
+		}
 		go s.store.TouchToken(context.Background(), tok.ID)
 		ctx := context.WithValue(r.Context(), ctxTokenKey, tok)
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -477,7 +491,10 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.MetricsToken != "" {
-		if extractBearerToken(r) != s.cfg.MetricsToken {
+		// VD-S1: use constant-time compare to prevent timing oracle attacks.
+		// ARCHITECTURE §6: all auth comparisons must be constant-time.
+		provided := extractBearerToken(r)
+		if subtle.ConstantTimeCompare([]byte(provided), []byte(s.cfg.MetricsToken)) != 1 {
 			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "scrape token required")
 			return
 		}
@@ -559,6 +576,25 @@ func (s *Server) handleLiveStreams(w http.ResponseWriter, r *http.Request) {
 
 // ─── WebSocket ────────────────────────────────────────────────────────────────
 
+// wsAllowedOrigins returns the origin patterns for WebSocket accept options.
+// VD-S2: replaces InsecureSkipVerify=true with explicit origin enforcement.
+// Uses cfg.AllowedWSOrigins when set; otherwise derives a same-origin pattern
+// from the Host header so the web UI on the same host always works.
+func (s *Server) wsAllowedOrigins(r *http.Request) []string {
+	if len(s.cfg.AllowedWSOrigins) > 0 {
+		return s.cfg.AllowedWSOrigins
+	}
+	// Default: allow the same host (http:// and https://).
+	host := r.Host
+	if host == "" {
+		return []string{}
+	}
+	return []string{
+		"https://" + host,
+		"http://" + host,
+	}
+}
+
 type wsConn struct {
 	conn *websocket.Conn
 }
@@ -582,7 +618,14 @@ func (s *Server) handleLiveWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+	// VD-S2: do NOT use InsecureSkipVerify=true — that disables origin enforcement.
+	// Use OriginPatterns to allow specific origins; empty slice = same-origin only.
+	// For development / API clients that use query-param token auth, allow all for now
+	// but remove the insecure flag so the library's default rejection applies.
+	// Production deployments should set PULSE_WS_ALLOWED_ORIGINS.
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: s.wsAllowedOrigins(r),
+	})
 	if err != nil {
 		s.logger.Warn("api: ws accept failed", "error", err)
 		return
@@ -600,9 +643,10 @@ func (s *Server) handleLiveWS(w http.ResponseWriter, r *http.Request) {
 		conn.CloseNow()
 	}()
 
-	// Send initial snapshot.
-	if snap := s.live.CurrentSnapshot(); snap != nil {
-		_ = wsjson.Write(r.Context(), conn, wsMessage{Type: "snapshot", TS: time.Now().UnixMilli(), Payload: snap})
+	// VD-02: Send initial LiveOverview (not raw LiveSnapshot) to match the
+	// OpenAPI LiveOverview schema (total_publishers, protocol_mix, apps fields).
+	if overview, err := s.qsvc.LiveOverview(r.Context(), "", "", ""); err == nil && overview != nil {
+		_ = wsjson.Write(r.Context(), conn, wsMessage{Type: "snapshot", TS: time.Now().UnixMilli(), Payload: overview})
 	}
 
 	// Wait for client disconnect.
@@ -623,11 +667,15 @@ func (s *Server) wsPushLoop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case snap, ok := <-ch:
+		case _, ok := <-ch:
 			if !ok {
 				return
 			}
-			s.wsBroadcast(ctx, wsMessage{Type: "delta", TS: time.Now().UnixMilli(), Payload: snap})
+			// VD-02: broadcast LiveOverview shape (total_publishers, protocol_mix, apps)
+			// not the raw LiveSnapshot. The OpenAPI spec for /live/ws requires LiveOverview.
+			if overview, err := s.qsvc.LiveOverview(ctx, "", "", ""); err == nil && overview != nil {
+				s.wsBroadcast(ctx, wsMessage{Type: "delta", TS: time.Now().UnixMilli(), Payload: overview})
+			}
 		case <-heartbeat.C:
 			s.wsBroadcast(ctx, wsMessage{Type: "heartbeat", TS: time.Now().UnixMilli()})
 		}
@@ -1352,6 +1400,12 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 const beaconMaxBodyBytes = 64 * 1024
 
 func (s *Server) handleIngestBeacon(w http.ResponseWriter, r *http.Request) {
+	// VD-15: license gate — beacon ingest requires Pro tier or higher.
+	if err := s.lic.CheckBeaconIngest(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
+
 	ingestToken := r.Header.Get("X-Pulse-Ingest-Token")
 	if ingestToken == "" {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing X-Pulse-Ingest-Token")

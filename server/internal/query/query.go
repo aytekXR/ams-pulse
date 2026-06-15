@@ -18,17 +18,32 @@ import (
 	"github.com/pulse-analytics/pulse/server/internal/license"
 )
 
+// NodeRoleDiscoverer provides per-node role lookup from cluster discovery.
+// Satisfied by *cluster.Discovery. Using an interface avoids import cycles.
+type NodeRoleDiscoverer interface {
+	// NodeRole returns the role string ("origin" | "edge" | "") for a given nodeID.
+	// Returns "" if the node is not known to the discovery service (standalone or not yet polled).
+	NodeRole(nodeID string) string
+}
+
 // Service answers metric queries for the API layer.
 type Service struct {
 	live               domain.LiveProvider
 	conn               clickhouse.Conn
 	lic                *license.Manager
 	probeResultQuerier ProbeResultQuerier // optional; wired via SetProbeResultQuerier
+	clusterDiscovery   NodeRoleDiscoverer // optional; wired via SetClusterDiscovery (VD-39)
 }
 
 // New creates a Service.
 func New(live domain.LiveProvider, conn clickhouse.Conn, lic *license.Manager) *Service {
 	return &Service{live: live, conn: conn, lic: lic}
+}
+
+// SetClusterDiscovery wires the cluster discovery service for real node role lookup (VD-39).
+// Call after New, before any FleetNodes() calls.
+func (s *Service) SetClusterDiscovery(d NodeRoleDiscoverer) {
+	s.clusterDiscovery = d
 }
 
 // ─── Live queries (from in-memory aggregates) ─────────────────────────────────
@@ -299,9 +314,17 @@ func (s *Service) FleetNodes(ctx context.Context, limit int, cursor string) (*Fl
 
 	var nodes []FleetNode
 	for nid, n := range snap.Nodes {
+		// VD-39: use real role from cluster discovery instead of hardcoded "standalone".
+		// Falls back to "standalone" when discovery has not polled the node yet.
+		role := "standalone"
+		if s.clusterDiscovery != nil {
+			if r := s.clusterDiscovery.NodeRole(nid); r != "" {
+				role = r
+			}
+		}
 		fn := FleetNode{
 			NodeID:   nid,
-			Role:     "standalone",
+			Role:     role,
 			Status:   "up",
 			LastSeen: n.UpdatedAt.UnixMilli(),
 			Version:  n.Version, // VD-40: propagate from LiveNodeStats

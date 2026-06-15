@@ -56,6 +56,14 @@ type TokenStore interface {
 	GetIngestTokenByHash(ctx context.Context, hash string) (tokenID string, ok bool, err error)
 }
 
+// LicenseChecker is a minimal interface for beacon entitlement checks.
+// Satisfied by *license.Manager. Using an interface avoids import cycles.
+type LicenseChecker interface {
+	// CheckBeaconIngest returns non-nil if the license does not permit QoE beacon ingest.
+	// Returns nil on Pro tier or higher; non-nil on Free tier.
+	CheckBeaconIngest() error
+}
+
 // MemTokenStore is an in-memory token store for testing.
 type MemTokenStore struct {
 	mu     sync.RWMutex
@@ -147,6 +155,11 @@ type Config struct {
 	// If nil, enrichment is skipped (no-op).
 	GeoResolver collector.GeoResolver
 	UAParser    collector.UAParser
+
+	// License is the license manager for tier-based entitlement checks.
+	// VD-15: beacon ingest requires Pro tier or higher.
+	// If nil, beacon ingest is allowed (fail-open for unconfigured deployments).
+	License LicenseChecker
 }
 
 // Handler is the beacon ingest HTTP handler.
@@ -155,6 +168,7 @@ type Handler struct {
 	store  TokenStore
 	sink   domain.EventSink
 	logger *slog.Logger
+	lic    LicenseChecker // nil = unconfigured, fail-open
 
 	mu      sync.Mutex
 	buckets map[string]*tokenBucket // per-token-ID rate limit
@@ -182,6 +196,7 @@ func New(cfg Config, store TokenStore, sink domain.EventSink, logger *slog.Logge
 		store:   store,
 		sink:    sink,
 		logger:  logger,
+		lic:     cfg.License,
 		buckets: make(map[string]*tokenBucket),
 	}
 }
@@ -195,12 +210,21 @@ func (h *Handler) Mount(r chi.Router) {
 // Handle is the HTTP handler for POST /ingest/beacon.
 //
 // Security path:
+//  0. License check: Pro tier or higher (VD-15)
 //  1. Validate X-Pulse-Ingest-Token (constant-time compare via SHA-256)
 //  2. Per-token rate limit (429)
 //  3. Body size cap 64 KB (413)
 //  4. JSON decode + schema validation (422)
 //  5. 202 + async WriteBeaconEvent
 func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
+	// ── 0. License gate: beacon ingest requires Pro tier or higher (VD-15) ─
+	if h.lic != nil {
+		if err := h.lic.CheckBeaconIngest(); err != nil {
+			writeBeaconError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+			return
+		}
+	}
+
 	// ── 1. Token auth (constant-time via hash lookup) ──────────────────────
 	rawToken := r.Header.Get("X-Pulse-Ingest-Token")
 	if rawToken == "" {

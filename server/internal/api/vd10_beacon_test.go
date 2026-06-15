@@ -14,6 +14,9 @@ package api_test
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -59,8 +62,38 @@ func (s *testEventSink) LastEvent() (domain.BeaconEvent, bool) {
 	return s.beaconEvents[len(s.beaconEvents)-1], true
 }
 
+// makeTestProLicense generates a valid test Pro-tier license key using a freshly
+// generated ed25519 key pair. Sets PULSE_LICENSE_PUBKEY so license.New accepts it.
+// Returns the license key and a cleanup function that restores the env var.
+func makeTestProLicense(t *testing.T) (key string, cleanup func()) {
+	t.Helper()
+	pubKey, privKey, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate license key pair: %v", err)
+	}
+	claims := map[string]any{
+		"tier":           "pro",
+		"max_nodes":      10,
+		"retention_days": 90,
+		"data_api":       true,
+		"white_label":    false,
+	}
+	claimsJSON, _ := json.Marshal(claims)
+	claimsB64 := base64.StdEncoding.EncodeToString(claimsJSON)
+	sig := ed25519.Sign(privKey, claimsJSON)
+	sigB64 := base64.StdEncoding.EncodeToString(sig)
+	key = claimsB64 + "." + sigB64
+
+	orig := os.Getenv("PULSE_LICENSE_PUBKEY")
+	os.Setenv("PULSE_LICENSE_PUBKEY", hex.EncodeToString(pubKey))
+	return key, func() {
+		os.Setenv("PULSE_LICENSE_PUBKEY", orig)
+	}
+}
+
 // setupServerWithSink creates an API test server with a wired testEventSink.
-// Returns the server, an ingest token (raw), a test admin token, and cleanup.
+// VD-15: uses a Pro-tier license so beacon ingest is permitted.
+// Returns the server, an ingest token (raw), a test event sink, and cleanup.
 func setupServerWithSink(t *testing.T) (ts *httptest.Server, ingestToken string, sink *testEventSink, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
@@ -91,7 +124,18 @@ func setupServerWithSink(t *testing.T) (ts *httptest.Server, ingestToken string,
 		t.Fatalf("CreateToken (ingest): %v", err)
 	}
 
-	lic, _ := license.New("", "")
+	// VD-15: beacon ingest requires Pro tier or higher. Use a test Pro license.
+	proKey, licCleanup := makeTestProLicense(t)
+	lic, err := license.New(proKey, "")
+	if err != nil {
+		licCleanup()
+		t.Fatalf("license.New (pro tier): %v", err)
+	}
+	if lic.Tier() != license.TierPro {
+		licCleanup()
+		t.Fatalf("expected pro tier, got %q", lic.Tier())
+	}
+
 	live := &fakeLiveProvider{}
 	qsvc := query.New(live, nil, lic)
 
@@ -105,6 +149,7 @@ func setupServerWithSink(t *testing.T) (ts *httptest.Server, ingestToken string,
 	cleanup = func() {
 		ts.Close()
 		store.Close()
+		licCleanup()
 	}
 	return ts, rawIngest, sink, cleanup
 }
@@ -220,41 +265,54 @@ func TestVD10_BeaconPOST_64KB_Cap(t *testing.T) {
 	}
 }
 
-// TestVD10_BeaconPOST_NoSink_StillAccepts verifies that without a wired sink
-// (legacy / test scenario) the handler still returns 202 (graceful degradation).
+// TestVD10_BeaconPOST_NoSink_StillAccepts verifies that on Pro tier (beacon allowed)
+// and without a wired sink, the handler still returns 202 (graceful degradation).
+// Uses the Pro-tier setup from setupServerWithSink but without the event sink.
 func TestVD10_BeaconPOST_NoSink_StillAccepts(t *testing.T) {
-	ts, adminToken, cleanup := setupTestServer(t)
-	defer cleanup()
+	ctx := context.Background()
 
-	// The default setupTestServer does NOT wire an event sink.
-	// We need an ingest token — create one using the admin token.
-	createBody, _ := json.Marshal(map[string]any{
-		"name": "test-ingest-nosink",
-		"kind": "ingest",
-	})
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/admin/tokens",
-		bytes.NewReader(createBody))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+adminToken)
-	resp, err := http.DefaultClient.Do(req)
+	ddlPath := metaDDLPath(t)
+	ddl, err := os.ReadFile(ddlPath)
 	if err != nil {
-		t.Fatalf("create ingest token: %v", err)
+		t.Skipf("meta DDL not found: %v", err)
 	}
-	respBody, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
+	store, err := meta.New(ctx, "sqlite", ":memory:", "nosink-test-secret")
+	if err != nil {
+		t.Fatalf("meta.New: %v", err)
+	}
+	if err := store.MigrateEmbedded(ctx, string(ddl)); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	defer store.Close()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		t.Skipf("cannot create ingest token (status %d): %s", resp.StatusCode, respBody)
+	// Create an ingest token.
+	rawIngest := "pit_nosink_test_abcdef1234567890"
+	ingestHash := hashToken(rawIngest)
+	if err := store.CreateToken(ctx, meta.APIToken{
+		Kind:      "ingest",
+		Name:      "nosink-ingest",
+		TokenHash: ingestHash,
+		Scopes:    []string{"ingest"},
+		CreatedAt: 1000,
+	}); err != nil {
+		t.Fatalf("CreateToken (ingest): %v", err)
 	}
 
-	var tokenResp map[string]any
-	if err := json.Unmarshal(respBody, &tokenResp); err != nil {
-		t.Skipf("cannot parse token response: %v", err)
+	// VD-15: use Pro tier so beacon ingest is permitted.
+	proKey, licCleanup := makeTestProLicense(t)
+	defer licCleanup()
+	lic, err := license.New(proKey, "")
+	if err != nil {
+		t.Fatalf("license.New (pro tier): %v", err)
 	}
-	rawToken, _ := tokenResp["token"].(string)
-	if rawToken == "" {
-		t.Skip("token not in response — skipping no-sink test")
-	}
+
+	live := &fakeLiveProvider{}
+	qsvc := query.New(live, nil, lic)
+
+	// Intentionally do NOT wire an event sink.
+	srv := api.New(api.Config{ListenAddr: ":0"}, store, live, qsvc, lic, nil)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
 
 	batch := map[string]any{
 		"version":    1,
@@ -265,10 +323,9 @@ func TestVD10_BeaconPOST_NoSink_StillAccepts(t *testing.T) {
 		},
 	}
 	batchBody, _ := json.Marshal(batch)
-	beaconReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/ingest/beacon",
-		bytes.NewReader(batchBody))
+	beaconReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/ingest/beacon", bytes.NewReader(batchBody))
 	beaconReq.Header.Set("Content-Type", "application/json")
-	beaconReq.Header.Set("X-Pulse-Ingest-Token", rawToken)
+	beaconReq.Header.Set("X-Pulse-Ingest-Token", rawIngest)
 
 	beaconResp, err := http.DefaultClient.Do(beaconReq)
 	if err != nil {
@@ -280,6 +337,6 @@ func TestVD10_BeaconPOST_NoSink_StillAccepts(t *testing.T) {
 		b, _ := io.ReadAll(beaconResp.Body)
 		t.Errorf("expected 202, got %d: %s", beaconResp.StatusCode, b)
 	} else {
-		t.Logf("PASS: without sink the handler still returns 202 (graceful degradation)")
+		t.Logf("PASS: Pro tier + no sink → handler still returns 202 (graceful degradation)")
 	}
 }

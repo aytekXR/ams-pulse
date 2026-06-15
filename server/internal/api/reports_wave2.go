@@ -22,6 +22,11 @@ import (
 // handleReportUsage serves GET /api/v1/reports/usage.
 // Business-tier gated; returns usage rows with egress_method field per row.
 func (s *Server) handleReportUsage(w http.ResponseWriter, r *http.Request) {
+	// VD-35: gate — reports require Business tier or higher.
+	if err := s.lic.CheckReports(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
 	q := r.URL.Query()
 	from, to := parseTimeRange(q.Get("from"), q.Get("to"))
 	interval := q.Get("interval")
@@ -59,7 +64,13 @@ func (s *Server) handleReportUsage(w http.ResponseWriter, r *http.Request) {
 // ─── Report Schedules ─────────────────────────────────────────────────────────
 
 // handleListReportSchedules serves GET /api/v1/reports/schedules.
+// Business-tier gated (reports = Business per PRD §7.11).
 func (s *Server) handleListReportSchedules(w http.ResponseWriter, r *http.Request) {
+	// VD-35: gate — reports require Business tier or higher.
+	if err := s.lic.CheckReports(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
 	schedules, err := s.store.ListReportSchedules(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
@@ -75,6 +86,11 @@ func (s *Server) handleListReportSchedules(w http.ResponseWriter, r *http.Reques
 // handleCreateReportSchedule serves POST /api/v1/reports/schedules.
 // Business tier gated (reports = Business per PRD §7.11).
 func (s *Server) handleCreateReportSchedule(w http.ResponseWriter, r *http.Request) {
+	// VD-35: gate — reports require Business tier or higher.
+	if err := s.lic.CheckReports(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_JSON", "invalid request body")
@@ -100,7 +116,13 @@ func (s *Server) handleCreateReportSchedule(w http.ResponseWriter, r *http.Reque
 }
 
 // handleUpdateReportSchedule serves PUT /api/v1/reports/schedules/{scheduleId}.
+// Business tier gated (reports = Business per PRD §7.11).
 func (s *Server) handleUpdateReportSchedule(w http.ResponseWriter, r *http.Request) {
+	// VD-35: gate — reports require Business tier or higher.
+	if err := s.lic.CheckReports(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
 	id := chi.URLParam(r, "scheduleId")
 	existing, err := s.store.GetReportSchedule(r.Context(), id)
 	if err != nil || existing == nil {
@@ -128,7 +150,13 @@ func (s *Server) handleUpdateReportSchedule(w http.ResponseWriter, r *http.Reque
 }
 
 // handleDeleteReportSchedule serves DELETE /api/v1/reports/schedules/{scheduleId}.
+// Business tier gated (reports = Business per PRD §7.11).
 func (s *Server) handleDeleteReportSchedule(w http.ResponseWriter, r *http.Request) {
+	// VD-35: gate — reports require Business tier or higher.
+	if err := s.lic.CheckReports(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
 	id := chi.URLParam(r, "scheduleId")
 	if existing, _ := s.store.GetReportSchedule(r.Context(), id); existing == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "schedule not found")

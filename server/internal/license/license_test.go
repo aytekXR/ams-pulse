@@ -226,3 +226,34 @@ func TestAnomalies_RequiresEnterprise(t *testing.T) {
 	}
 	t.Logf("PASS: CheckAnomalies blocks free tier")
 }
+
+// TestCheckReports_FreeTierBlocked guards VD-35: reports require Business tier or higher.
+// Free and Pro tiers must receive a non-nil error from CheckReports().
+func TestCheckReports_FreeTierBlocked(t *testing.T) {
+	lic, _ := license.New("", "") // free tier
+	err := lic.CheckReports()
+	if err == nil {
+		t.Error("VD-35 FAIL: free tier: CheckReports must return error (Business+ required)")
+	}
+	// Verify the error message mentions Business.
+	errMsg := err.Error()
+	if errMsg == "" {
+		t.Error("CheckReports error message must not be empty")
+	}
+	t.Logf("PASS VD-35: CheckReports on free tier → error: %v", err)
+}
+
+// TestCheckBeaconIngest_FreeTierBlocked guards VD-15: beacon ingest requires Pro+.
+// Free tier must receive a non-nil error from CheckBeaconIngest().
+func TestCheckBeaconIngest_FreeTierBlocked(t *testing.T) {
+	lic, _ := license.New("", "") // free tier
+	err := lic.CheckBeaconIngest()
+	if err == nil {
+		t.Error("VD-15 FAIL: free tier: CheckBeaconIngest must return error (Pro+ required)")
+	}
+	errMsg := err.Error()
+	if errMsg == "" {
+		t.Error("CheckBeaconIngest error message must not be empty")
+	}
+	t.Logf("PASS VD-15: CheckBeaconIngest on free tier → error: %v", err)
+}

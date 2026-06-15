@@ -322,6 +322,40 @@ func (m *Manager) CheckMultiTenant() error {
 	return nil
 }
 
+// CheckReports returns nil if the tier includes usage/billing reports (F6).
+// Reports require Business tier or higher (PRD §7.11: "usage reports" is a Business+ feature).
+// Free and Pro tiers receive 403.
+func (m *Manager) CheckReports() error {
+	t := m.Tier()
+	if t != TierBusiness && t != TierEnterprise {
+		return fmt.Errorf("usage/billing reports (F6) require Business tier or higher (current: %q)", t)
+	}
+	return nil
+}
+
+// CheckBeaconIngest returns nil if the tier includes QoE beacon ingest (F3).
+// Beacon ingest (player-side QoE data) requires Pro tier or higher (PRD §7.11 table).
+// Free tier returns 403.
+func (m *Manager) CheckBeaconIngest() error {
+	t := m.Tier()
+	if t == TierFree {
+		return fmt.Errorf("QoE beacon ingest (F3) requires Pro tier or higher (current: %q)", t)
+	}
+	return nil
+}
+
+// CheckPrometheus returns nil if the tier includes the Prometheus /metrics endpoint (F8).
+// Prometheus requires Business tier or higher (PRD §7.11: "Prometheus endpoint" is Business+).
+// Free and Pro tiers use the unauthenticated /metrics path; Business+ can use the secured endpoint.
+// This check gates Business-tier-gated routes that expose internal Prometheus data.
+func (m *Manager) CheckPrometheus() error {
+	t := m.Tier()
+	if t != TierBusiness && t != TierEnterprise {
+		return fmt.Errorf("Prometheus endpoint (F8) requires Business tier or higher (current: %q)", t)
+	}
+	return nil
+}
+
 // ─── Activation ───────────────────────────────────────────────────────────────
 
 // activate parses and validates a license key.
