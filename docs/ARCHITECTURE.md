@@ -3,7 +3,7 @@
 Authoritative technical-design document. PRD: `prd-report.md` §7. Decisions with
 trade-offs get an ADR in `docs/adr/`.
 
-Last updated: V3b fix-loop complete (2026-06-15). QA gate: PASS_WITH_LIMITATIONS.
+Last updated: Wave-3-Plus complete (2026-06-15). QA gate: PASS_WITH_LIMITATIONS.
 
 ## 1. System context
 
@@ -39,9 +39,9 @@ Player beacons ►│ collector/beacon ─────┤        ├─► sessi
 One Go binary (`server/cmd/pulse`), role-splittable via `--role` for large installs.
 Default deployment is all-in-one + ClickHouse via Docker Compose.
 
-### V3b fix-loop implementation status (2026-06-15)
+### Wave-3-Plus implementation status (2026-06-15)
 
-Last updated: V3b fix-loop complete (2026-06-15). QA gate: **PASS_WITH_LIMITATIONS**
+Last updated: Wave-3-Plus complete (2026-06-15). QA gate: **PASS_WITH_LIMITATIONS**
 (waivers D-002 no-Docker, D-007.5 no-Kafka; 0 FAIL defects; all guard tests green).
 
 The V3a and V3b fix-loops resolved 30 defects from the adversarial validation (V2
@@ -80,7 +80,13 @@ Minimal-but-working scope (D-001):
 - F9: 3 metrics (viewers, cpu_pct, mem_pct); 1-hour rolling window; on-read flag computation.
 - F10: HLS probes fully implemented; webrtc/rtmp/dash are reachability-only stubs (`error_code=not_probed`).
 
-Phase-3 deltas (not in MVP):
+Wave-3-Plus enhancements (closed in D-018):
+- F10: `segment_ttfb_ms` stored separately from manifest TTFB; master-playlist probes follow first variant for real bitrate measurement.
+- F9: epsilon floor in `ComputeFlags` — constant-baseline deviations now correctly flagged (GAP-3-004 closed).
+- F4/infra: Kafka `lag` + `parse_errors` surfaced in `/healthz` kafka component.
+- F6: `peak_concurrency` in billing reports sourced from `rollup_concurrency_1d` (true windowed max, not session count).
+
+Phase-3 deltas (remaining):
 - Mobile beacons (F3 extension), SSO, white-label PDF, distributed probe network, multi-node edge dedup.
 - F9: multi-window baselines (24h, 7d), additional metrics, flag persistence table.
 - F10: native RTMP client, WHIP/WHEP WebRTC probing, DASH manifest parsing.
@@ -107,11 +113,11 @@ Last updated: Wave 2 implementation complete (2026-06-14).
 | Web UI | `web/` | **Shipped** — F1–F8; 150 tests green (V3b); tier gate logic updated for 4-tier model |
 | Beacon SDK | `sdk/beacon-js/` | **Shipped** (F3) — 3.52 KB gzip, 65 tests green, MIT license; header fix (VD-09), `rebuffer_end` (VD-12), bitrate levels (VD-13) applied V3a |
 | Beacon ingest | `internal/collector/beacon` | **Shipped** (F3) — token auth, rate limit, 64 KB body cap, schema validation; Pro+ tier gate (VD-15 V3b); geo/UA enrichment from HTTP request (VD-08 V3a) |
-| Kafka collector | `internal/collector/kafka` | **Shipped** — pure-Go kafka-go; 8 contract tests; D-007.5 no-broker limitation |
+| Kafka collector | `internal/collector/kafka` | **Shipped** — pure-Go kafka-go; 8 contract tests; D-007.5 no-broker limitation; `lag` + `parse_errors` in `/healthz` (Wave-3-Plus, VD-27) |
 | Geo/UA enrichment | `internal/collector/enrichment` | **Shipped** — MMDBGeoResolver, EmbeddedUAParser, AnonymizeIP; absent DB = no-op; MMDB test fixture valid (VD-17 V3a) |
 | Session stitcher | `internal/collector/sessions` | **Shipped** — viewer join/heartbeat/leave stitching; 5 tests |
 | Ingest health | `internal/collector/ingest` | **Shipped** (F4) — health score formula, 141 µs detection; `HealthScore` non-zero from REST events (VD-20 V3a); ingest timeseries returned by API (VD-21 V3a) |
-| Reports (CSV/PDF) | `internal/reports` | **Shipped** (F6) — accounting, tenant mapping, statement gen, scheduler, S3 uploader; 5-field cron support (VD-36 V3b); Business+ tier gate (VD-35 V3b) |
+| Reports (CSV/PDF) | `internal/reports` | **Shipped** (F6) — accounting, tenant mapping, statement gen, scheduler, S3 uploader; 5-field cron support (VD-36 V3b); Business+ tier gate (VD-35 V3b); peak sourced from `rollup_concurrency_1d` true windowed max (Wave-3-Plus, VD-38) |
 | Cluster discovery | `internal/cluster` | **Shipped** (F7) — 30 s poll, new node visible ≤30 s; `IsEdgeStream()` implemented (VD-03 V3a); node version field (VD-40 V3a) |
 | Prometheus /metrics | `internal/api` | **Shipped** (F8) — 5 metrics, bounded cardinality; scrape token uses `subtle.ConstantTimeCompare` (VD-S1 V3b) |
 | Helm chart | `deploy/helm/pulse/` | **Shipped** (authored-unexecuted per D-002) — lint passes, 3 template variants |
@@ -145,6 +151,7 @@ Last updated: Wave 2 implementation complete (2026-06-14).
 All wave-2 budgets are QA-verified (QA-01 WO-207 gate report, 2026-06-14).
 Wave-3 budgets QA-verified in WO-304 gate report (2026-06-14).
 V3b fix-loop re-gate: PASS_WITH_LIMITATIONS (2026-06-15).
+Wave-3-Plus re-gate: PASS_WITH_LIMITATIONS (2026-06-15, `qa/wave-3-plus/gate-report.md`).
 
 | Budget | Source | Wave-1 | Wave-2 measured | Wave-3 / V3b measured |
 |---|---|---|---|---|
@@ -152,7 +159,7 @@ V3b fix-loop re-gate: PASS_WITH_LIMITATIONS (2026-06-15).
 | Viewer counts within ±2% of AMS REST (standalone) | F1 | **0.0%** | **0.0%** (B-02 runtime; VD-05 runtime test added V3b) | Unchanged |
 | Viewer counts within ±2% of AMS REST (cluster) | F1 | Not tested | Not tested | **0% double-count**: `IsEdgeStream()` implemented; edge viewer dedup active (VD-03 V3a) |
 | Dashboard < 2 s load at 500 concurrent streams | F1 | Virtualized, ≤20 DOM rows | ≤20 DOM rows (C-W2-02) | Unchanged — render time not measured; see known limitations |
-| 13-month rollup queries < 3 s | F2 | DDL only | **126 ms** simple aggregate (C-W2-08) | **150 ms** with dimensional GROUP BY (VD-18 addressed in V3b gate) |
+| 13-month rollup queries < 3 s | F2 | DDL only | **126 ms** simple aggregate (C-W2-08) | **144 ms** simple aggregate + **145 ms** dimensional GROUP BY (3 geo × 2 device × 2 protocol, 12 rows; C9b `qa/wave-2/run-gate.sh`; VD-18 CLOSED) |
 | Beacon SDK < 15 KB gzip | F3 | Stub | **3.44 KB** gzip (C-W2-03) | **3.52 KB** (no regression; VD-09/12/13 fixes added code) |
 | Beacon SDK < 1% player CPU | F3 | Not measurable | Not measurable | Not measurable (deferred; VD-14) |
 | Beacon round-trip accepted | F3 | Broken | Broken (VD-09/10) | **Fixed V3a** — header correct, main-port persists to EventSink |
@@ -160,17 +167,21 @@ V3b fix-loop re-gate: PASS_WITH_LIMITATIONS (2026-06-15).
 | QoE `startup_p50_ms` non-zero | F3 | Never set | Always 0 | **250.0 ms** measured (VD-11 V3a; `TestQuery_QoeSummary_RealStartupP50`) |
 | Ingest health_score non-zero | F4 | Not wired | Always 0 (VD-20) | **95** (0–100 scale) for healthy ingest (VD-20/20b V3a) |
 | Ingest degradation visible ≤ 15 s | F4 | Stub | **250.8 µs** in-process (C-W2-06) | Unchanged |
-| Alert detection→notification < 30 s | F5 | **15 s** | **15 s** (B-03) | Unchanged; `muted` and `group_by` now functional (V3b) |
+| Alert detection→notification < 30 s | F5 | **15 s** | **15 s** (B-03) | **201 ms** wall-clock measured (`TestEvaluator_DetectAndNotify_WallClockBudget`; budget 30 s; VD-31 CLOSED); analytical bound: tick≤5 s + poll≤5 s + channel<5 s = ≤15 s |
 | Monthly statement generation < 60 s | F6 | Stub | **4.8 ms** (C-W2-05) | Unchanged |
-| Billing reconciliation ≤ ±1% | F6 | Stub | **0.0000%** drift (n=10,000) | Unchanged |
+| Billing reconciliation ≤ ±1% | F6 | Stub | **0.0000%** drift (n=10,000) | **0.0000% drift** with TRUE windowed peak from `rollup_concurrency_1d` (maxState/maxMerge; `TestAccountant_CHIntegration`; VD-38 CLOSED) |
+| Peak concurrency (billing) — true windowed max | F6 | — | Session-count proxy | **True windowed max** via `maxState(viewer_count)` → `rollup_concurrency_1d` → `maxMerge` on read; peak=25 for alpha, peak=5 for beta (overlapping snapshots; `TestAccountant_CHIntegration` integration test; VD-38 CLOSED) |
 | New cluster nodes auto-discovered ≤ 2 min | F7 | Stub | **24.4 ms** (C-W2-07) | Unchanged |
 | ~1–2 GB ClickHouse per 1M viewer-sessions | §7.10 | Not measurable | Not measurable | Not measurable |
 | F9 false-alarm rate < 1/node-week | F9 | — | — | **0.259/node-week** (σ=4.0, hysteresis=10; `TestAnomaly_FalseAlarmRate_ModeledTarget`) |
 | F10 HLS probe: success, TTFB > 0, bitrate > 0 | F10 | — | — | **success=true, ttfb_ms=1, bitrate_kbps=66.7** (`TestHLSProbe_Success`) |
+| F10 HLS probe: segment TTFB (`segment_ttfb_ms`) > 0 | F10 | — | — | **segment_ttfb_ms=1** (`TestHLSProbe_Success`; `result.SegmentTTFBMs > 0` assertion; GAP-3-001 CLOSED) — serialized as `segment_ttfb_ms` in API response (wave3.go) |
+| F10 HLS master-playlist: follows variant, bitrate > 0 | F10 | — | — | **bitrate=66.7 kbps, seg_ttfb_ms=1** (`TestHLSProbe_MasterFollowsVariant`; GAP-3-003 CLOSED) |
 | F10 probe new config → first result latency | F10 | — | — | **< 100 ms** (After(0) fires immediately; fake clock) |
+| `/healthz` Kafka lag + parse_errors | F4/infra | — | — | **lag=42, parse_errors=3, status=degraded** surfaced in `/healthz` kafka component (`TestAPI_Healthz_KafkaStats`, `TestKafka_AtomicCounters`; VD-27 CLOSED) |
 | Web build bundle (regression) | — | — | **773.85 kB** (221.69 kB gzip) | **773.85 kB** (no regression) |
-| Web tests pass | — | — | 58 tests | **150 tests** (V3b — 11 suites) |
-| Server tests pass | — | — | 17 packages | **22 packages** (V3b full suite) |
+| Web tests pass | — | — | 58 tests | **157 tests** (Wave-3-Plus — 12 suites) |
+| Server tests pass | — | — | 17 packages | **20 packages** (Wave-3-Plus) |
 | SDK tests pass | — | — | 56 tests | **65 tests** (V3b — 5 files) |
 
 These are CI-verifiable targets; QA-01 owns regression checks against them.
@@ -280,6 +291,9 @@ The `internal/alert.Evaluator` runs a tick loop (default 5 s) that:
 
 The tick interval is capped at 30 s to ensure the 30 s latency budget is always met.
 A fake-clock (`alert.FakeClock`) allows deterministic latency tests without real time.
+A real wall-clock test (`TestEvaluator_DetectAndNotify_WallClockBudget`) exercises
+`Start()` with a real ticker and asserts the detect→notify latency is under 30 s
+(measured: **201 ms**; VD-31 CLOSED in Wave-3-Plus).
 
 **`node_down` behavior:** Fires when a cluster node is **absent** from the live
 snapshot (not seen within `3 × PollInterval`). The prior CPU-proxy heuristic (`CPU > 95`)
@@ -355,9 +369,9 @@ Configurable via: `PULSE_INGEST_TARGET_BITRATE_KBPS` (default 2000),
 
 | ID | Component | Description | Status |
 |---|---|---|---|
-| D-W2-001 | `qa/wave-1/run-gate.sh` | Alert rule POST missing `name` field — wave-1 gate script exits nonzero. | Open — QA-01 fix pending |
-| D-W2-002 | `internal/reports/accounting.go` | Wrong ClickHouse column names (`watch_s_state`, `peak_viewers_state`, `bucket_ts`) — live billing broken; unit test passes. | Open — BE-02 fix pending. Fix: rename to `watch_time_s`, `peak_concurrency`, `bucket`. |
-| D-W2-003 | `qa/wave-1/run-gate.sh` | Same as D-W2-001 (filed separately as regression). | Open — QA-01 fix pending |
+| D-W2-001 | `qa/wave-1/run-gate.sh` | Alert rule POST missing `name` field — wave-1 gate script exits nonzero. | **Fixed** (D-009 fix-loop) |
+| D-W2-002 | `internal/reports/accounting.go` | Wrong ClickHouse column names (`watch_s_state`, `peak_viewers_state`, `bucket_ts`). | **Fixed** (D-009 fix-loop) — correct column names + `TestAccountant_CHIntegration` verifies live CH path |
+| D-W2-003 | `qa/wave-1/run-gate.sh` | Same as D-W2-001 (filed separately as regression). | **Fixed** (D-009 fix-loop) |
 
 ### Wave-2 gaps (post V3b fix-loop status)
 
@@ -365,44 +379,44 @@ Configurable via: `PULSE_INGEST_TARGET_BITRATE_KBPS` (default 2000),
 |---|---|---|---|
 | GAP-2-001 | BuildTestMMDB produces invalid mmdb format; `TestGeo_MMDBFixture` skipped | BE-01 | **Fixed V3a** — valid MMDB binary; real country lookups verified (VD-17) |
 | GAP-2-002 | `cluster.Discovery.IsEdgeStream()` always returns false; edge/origin dedup not implemented | BE-01 | **Fixed V3a** — IsEdgeStream() implemented; aggregator edge dedup active (VD-03) |
-| GAP-2-003 | Kafka `Lag()` / `ParseErrors()` not surfaced in `/healthz` component detail | BE-02 | **Open** — Wave-3 Phase-3 roadmap (VD-27) |
+| GAP-2-003 | Kafka `Lag()` / `ParseErrors()` not surfaced in `/healthz` component detail | BE-02 | **CLOSED Wave-3-Plus** — kafka component (status/lag/parse_errors) in `/healthz`; `TestAPI_Healthz_KafkaStats` PASS (VD-27) |
 | GAP-2-004 | Pro tier beacon write gating not API-enforced (fails-open for any valid ingest token) | BE-02 | **Fixed V3b** — `CheckBeaconIngest()` enforces Pro+ (VD-15) |
 | GAP-2-005 | `/qoe/summary` QoE data is live-snapshot proxy, not from `rollup_qoe_1h` | BE-02 | **Fixed V3a** — queries `rollup_qoe_1h`; `startup_p50_ms` non-zero (VD-11) |
 | GAP-206-01 | Helm chart image `ghcr.io/pulse-analytics/pulse:0.1.0` not yet published | INFRA-01 | Open — Phase-3 roadmap |
 | GAP-206-02 | Postgres Secret `pulse-postgres-secret` must be created manually before Helm install | DOC-01 (documented in install runbook) | — |
 | GAP-206-03 | Helm `busybox:1.36` initContainer image unpinned | INFRA-01 | Open — Phase-3 roadmap |
 
-### Wave-3 gaps (post V3b fix-loop status)
+### Wave-3 gaps (post Wave-3-Plus status)
 
 | ID | Description | Owner | Status |
 |---|---|---|---|
-| GAP-3-001 | HLS TTFB is manifest TTFB only; segment TTFB not stored separately (single `ttfb_ms` column in frozen DDL — schema CR needed for Phase 3) | BE-01 | Open — Phase-3 |
-| GAP-3-003 | Master HLS playlist probe: `success=true, bitrate_kbps=0` — correct behavior but Phase 3 should follow first variant URL | BE-01 | Open — Phase-3 |
-| GAP-3-004 | Zero-stddev blind spot: perfectly constant metric streams produce stddev=0, preventing z-score computation. Phase 3: epsilon floor | BE-02 | Open — Phase-3 |
-| GAP-3-005 | `GET /probes/{id}/results` returns empty list when ClickHouse is unavailable (correct behavior; full round-trip requires integration tag) | BE-02 | Open — Phase-3 |
-| GAP-3-006 | Pro tier license test gap: only Enterprise key tested for probe entitlement; Pro-tier key test needs a dev license | BE-02 | Open — Phase-3 |
+| GAP-3-001 | HLS TTFB is manifest TTFB only; segment TTFB not stored separately | BE-01 | **CLOSED Wave-3-Plus** — `segment_ttfb_ms` column added (`0003_probe_segment_ttfb.sql`); `ProbeResult.SegmentTTFBMs` field populated by prober; `TestHLSProbe_Success` asserts `segment_ttfb_ms > 0`; serialized as `segment_ttfb_ms` in API response |
+| GAP-3-003 | Master HLS playlist probe: `bitrate_kbps=0` — follow first variant URL | BE-01 | **CLOSED Wave-3-Plus** — prober follows master-playlist variant to a media segment; `TestHLSProbe_MasterFollowsVariant` asserts `bitrate=66.7 seg_ttfb_ms=1` |
+| GAP-3-004 | Zero-stddev blind spot: constant metric streams prevent z-score computation | BE-02 | **CLOSED Wave-3-Plus** — epsilon floor applied in `ComputeFlags`: `effStddev = max(stddev, relEps·|mean|, absEps)`; `TestAnomaly_ConstantBaseline_LargeDeviation_Flags` PASS (sigma=80.00, 1 flag); false-alarm rate unchanged 0.259/node-week |
+| GAP-3-005 | `GET /probes/{id}/results` returns empty list when ClickHouse is unavailable (correct behavior) | BE-02 | Open — by design |
+| GAP-3-006 | Pro tier license test gap: only Enterprise key tested for probe entitlement | BE-02 | Open — Phase-3 |
 
-### V3b remaining known limitations (P2/P3 deferred items)
+### Known limitations (post Wave-3-Plus)
 
-The following V2 adversarial triage defects remain open after the V3a/V3b fix-loops.
-Items marked CLOSED were fixed during the fix-loops and are included for traceability only.
+The following items remain open after the V3a/V3b fix-loops and the Wave-3-Plus
+tech-debt closeout. Previously-deferred items closed in Wave-3-Plus are marked CLOSED.
 
 | VD | Description | Severity | Status |
 |---|---|---|---|
 | VD-04 | Dashboard render time at 500 streams not measured — ≤20 DOM rows proxy only | Minor | OPEN — headless-browser measurement requires Phase-3 Playwright setup |
 | VD-05 | Viewer count ±2% (standalone): runtime test added V3b; cluster double-count: edge dedup active (VD-03 V3a) | Minor | CLOSED |
-| VD-12 | `HlsAdapter` `rebuffer_end` emission — unbounded open stalls in ClickHouse | Major | CLOSED — Fixed V3a (SDK-01) |
+| VD-12 | `HlsAdapter` `rebuffer_end` emission | Major | CLOSED — Fixed V3a (SDK-01) |
 | VD-13 | `HlsAdapter` bitrate levels from `hls.levels[]` — ABR switches always 0→0 kbps | Minor | CLOSED — Fixed V3a (SDK-01) |
-| VD-14 | Player CPU <1% budget — no test or measurement | Minor | OPEN — deferred; ARCHITECTURE §4 marks "not measurable" for MVP |
-| VD-18 | 13-month query budget (GROUP BY dimensional query) | Minor | CLOSED — 150 ms measured in V3b gate (budget 3 s) |
-| VD-24 | No integration tests for GET /api/v1/qoe/ingest with seeded data | Minor | OPEN — requires real ClickHouse (D-002 waiver); Phase-3 |
-| VD-25 | keyframe formula package comment contradicted code; dead `keyframeBadS` constant | Minor | CLOSED — Fixed V3a (code comment corrected) |
+| VD-14 | Player CPU <1% budget — no test or measurement | Minor | OPEN — deferred; requires real browser profiler; Phase-3 |
+| VD-18 | 13-month query budget (GROUP BY dimensional query) | Minor | CLOSED — 145 ms measured (C9b; budget 3 s; Wave-3-Plus) |
+| VD-24 | No integration tests for GET /api/v1/qoe/ingest with seeded data | Minor | CLOSED — `TestVD24_IngestQoE_TimeseriesNonEmpty` passes (Wave-3-Plus, 4 buckets) |
+| VD-25 | keyframe formula package comment contradicted code | Minor | CLOSED — Fixed V3a |
 | VD-26 | No frontend tests for IngestPage | Minor | OPEN — Phase-3 roadmap |
-| VD-27 | Kafka `Lag()`/`ParseErrors()` not in `/healthz` | Minor | OPEN — Phase-3 roadmap (GAP-2-003) |
-| VD-31 | 30 s detection budget measured with fake clock only | Minor | OPEN — formal bound documented: tick≤5 s + poll≤5 s + channel<5 s = ≤15 s ≤ 30 s budget |
-| VD-38 | `peak_concurrency` in rollup = session count, not true concurrent peak | Minor | OPEN — Phase-3 schema change needed (SummingMergeTree → maxState) |
-| VD-23 | `api.IngestTracker` interface has wrong `Snapshot()` return type; `SetIngestTracker` never called | Major | **CLOSED — Fixed V3a** (`782c166`): `Snapshot()` returns `map[string]ingest.PublisherState`; `SetIngestTracker` wired in `serve.go`; `TestVD23_IngestTracker_InterfaceConformance` passes (D-017) |
-| VD-X3-A | POST /admin/sources/{id}/test missing `reachable` field in response | Major | **CLOSED — Fixed V3a** (`782c166`): `handleTestSource` returns `reachable:bool` in all paths; `TestContract_AmsSourceStatus_HandlerReachableField` un-skipped and passing (D-017) |
-| VD-X3-B | Frontend sent `granularity` param; server expects `interval` | Minor | CLOSED — Fixed V3b (FE-01 — param renamed to `interval`) |
-| VD-X3-C | DELETE idempotent-204 vs spec 404 | Minor | CLOSED — Fixed V3b (INT-01 — spec updated to document idempotent-204) |
-| VD-X3-D | OpenAPI spec missing 403 for GET /anomalies | Minor | CLOSED — Fixed V3b (INT-01 — 403 response added to spec) |
+| VD-27 | Kafka `Lag()`/`ParseErrors()` not in `/healthz` | Minor | CLOSED — kafka component (status/lag/parse_errors) added to `/healthz`; `TestAPI_Healthz_KafkaStats` passes (Wave-3-Plus) |
+| VD-31 | 30 s alert detect→notify budget measured with fake clock only | Minor | CLOSED — wall-clock test `TestEvaluator_DetectAndNotify_WallClockBudget` passes at 201 ms (budget 30 s; Wave-3-Plus) |
+| VD-38 | `peak_concurrency` in billing rollup = session count, not true concurrent peak | Minor | CLOSED — `rollup_concurrency_1d` (maxState/maxMerge) now the source for peak; `TestAccountant_CHIntegration` verifies peak=25/5 with overlapping snapshots (Wave-3-Plus) |
+| VD-23 | `api.IngestTracker` interface wrong `Snapshot()` type; `SetIngestTracker` never called | Major | CLOSED — Fixed V3a |
+| VD-X3-A | POST /admin/sources/{id}/test missing `reachable` field | Major | CLOSED — Fixed V3a |
+| VD-X3-B | Frontend sent `granularity` param; server expects `interval` | Minor | CLOSED — Fixed V3b |
+| VD-X3-C | DELETE idempotent-204 vs spec 404 | Minor | CLOSED — Fixed V3b |
+| VD-X3-D | OpenAPI spec missing 403 for GET /anomalies | Minor | CLOSED — Fixed V3b |

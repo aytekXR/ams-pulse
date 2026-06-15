@@ -1,6 +1,6 @@
 # Pulse — Usage Reports Runbook
 
-**PRD ref:** F6 (usage/billing reports) · **Status: Shipped (Wave 2 + V3b)**  
+**PRD ref:** F6 (usage/billing reports) · **Status: Shipped (Wave 2 + V3b + Wave-3-Plus)**  
 **Tier:** Business tier required for all report access (on-demand, CSV, PDF, scheduled S3 exports). White-label PDF header requires Enterprise tier. Free and Pro tiers receive 403 on all report endpoints (enforced V3b VD-35).
 
 ---
@@ -251,12 +251,9 @@ Run reconciliation:
 - Before generating billing statements for Enterprise customers
 - After any ClickHouse cluster maintenance (merges, node additions)
 
-**Known limitation (D-W2-002):** In the Wave-2 initial release, `accounting.go`
-contained wrong ClickHouse column names (`watch_s_state`, `peak_viewers_state`,
-`bucket_ts`). This was reported as defect D-W2-002 (owner: BE-02). If
-`pulse diag --reconcile` returns an error about unknown identifier, apply the
-BE-02 patch for D-W2-002. The in-memory reconciliation unit test (n=10,000,
-drift=0.0000%) is unaffected.
+D-W2-002 (wrong column names in `accounting.go`) was fixed in the D-009 fix-loop.
+The correct column names (`watch_time_s`, `peak_concurrency`, `bucket`) are in place
+and verified by `TestAccountant_CHIntegration` (live ClickHouse integration test).
 
 ---
 
@@ -277,14 +274,23 @@ curl "http://localhost:8090/api/v1/reports/usage?format=pdf" \
 The CSV includes these columns: `app`, `stream_id`, `tenant`, `viewer_minutes`,
 `peak_concurrency`, `egress_gb`, `recording_gb`, `egress_method`.
 
+**`peak_concurrency` data source (Wave-3-Plus):** Peak concurrent viewers per stream is
+sourced from the `rollup_concurrency_1d` ClickHouse table — a true windowed maximum using
+`maxState(viewer_count)` (AggregateFunction from `server_events`) per stream per day,
+read back with `maxMerge`. This replaces the prior session-count proxy. The value
+represents the highest instantaneous concurrent viewer count recorded in the day's
+stream-stats events, regardless of session overlap. Verified by
+`TestAccountant_CHIntegration`: overlapping viewer snapshots (peak=25, peak=5) produce
+drift=0.0000% (VD-38 CLOSED).
+
 ---
 
 ## Known limitations
 
 | Issue | Severity | Status |
 |---|---|---|
-| `/api/v1/admin/tenants` not in OpenAPI spec (D-004 freeze) | Minor | Wave 3 CR-WO204-01 |
+| `/api/v1/admin/tenants` not in OpenAPI spec (D-004 freeze) | Minor | Added via CR-WO204-01 (implemented) |
 | White-label `GET/PUT /api/v1/admin/whitelabel` endpoint not implemented | Minor | Phase-3 roadmap |
-| D-W2-002: live ClickHouse column names wrong in `accounting.go` (`watch_s_state`, `peak_viewers_state`, `bucket_ts`; correct names: `watch_time_s`, `peak_concurrency`, `bucket`) | Major | BE-02 fix pending |
-| `peak_concurrency` in rollup = session count (SummingMergeTree), not true concurrent viewer peak | Minor | Phase-3 schema change needed (maxState/maxMerge rollup) |
+| D-W2-002: wrong column names in `accounting.go` | Major | **Fixed** (D-009 fix-loop) |
+| `peak_concurrency` in billing = session count | Minor | **Fixed Wave-3-Plus** — true windowed max from `rollup_concurrency_1d` (VD-38 CLOSED) |
 | Edge-origin viewer dedup | — | **Fixed V3a** — `IsEdgeStream()` implemented; aggregator dedup active (VD-03) |

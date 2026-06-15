@@ -56,7 +56,7 @@ PULSE_SECRET_KEY=$(openssl rand -hex 32) \
 
 ## Feature status
 
-Last updated: V3b fix-loop (2026-06-15). QA gate: PASS_WITH_LIMITATIONS.
+Last updated: Wave-3-Plus (2026-06-15). QA gate: PASS_WITH_LIMITATIONS.
 
 | Feature | PRD ref | Status | Notes |
 |---|---|---|---|
@@ -67,23 +67,22 @@ Last updated: V3b fix-loop (2026-06-15). QA gate: PASS_WITH_LIMITATIONS.
 | QoE summary (`/qoe/summary`) | F3 | **Shipped** | Queries `rollup_qoe_1h`; `startup_p50_ms` non-zero (250 ms measured); `bitrate_kbps_p50` field |
 | Ingest health monitoring | F4 | **Shipped** | Health score formula; `health_score` 0–100 scale; ingest timeseries + drop_events in API; 250 µs detection (budget 15 s) |
 | Core alerting | F5 | **Shipped** | Email (Free+), Slack/Telegram (Pro+), PagerDuty/Webhook (Business+); `muted=true` suppresses notifications; `group_by` collapses storm alerts; `node_down` fires on node absence; maintenance windows with range cron syntax |
-| Usage / billing reports | F6 | **Shipped** | Business+ tier required; CSV + PDF; tenant mapping; S3 export; ±1% reconciliation; 5-field cron schedules work |
+| Usage / billing reports | F6 | **Shipped** | Business+ tier required; CSV + PDF; tenant mapping; S3 export; ±1% reconciliation; 5-field cron schedules work; `peak_concurrency` sourced from true windowed max (`rollup_concurrency_1d`) |
 | Cluster fleet view | F7 | **Shipped** | Auto-discovery ≤ 30 s (budget 2 min); real origin/edge roles; node version field populated |
 | Data API + Prometheus | F8 | **Shipped** | 5 bounded metrics; scrape token uses constant-time compare; Grafana starter panels |
 | Helm install path | §7.10 | **Shipped** (authored) | Lint and template verified; cluster deploy deferred D-002 |
 | Licensing + tier enforcement | — | **Shipped** | 4-tier: Free/Pro/Business/Enterprise (PRD §7.11); ed25519 verification; 403 on gated features; token kind enforcement |
 | API (REST + WebSocket) | — | **Shipped** | 32 paths, 46 ops, OpenAPI-conformant; WS origin enforcement; idempotent DELETE documented |
 | Onboarding wizard | §7.12 | **Shipped** | 4-step first-run flow |
-| Anomaly detection | F9 | **Shipped** (Wave 3-MVP, Enterprise) | Welford baselines; σ=4.0; 0.259 false alarms/node-week (target <1); minSamples=30 warmup; hysteresis cooldown |
-| Synthetic probes | F10 | **Shipped** (Wave 3-MVP, Pro+) | HLS full; webrtc/rtmp/dash reachability-only stubs (Phase-3 roadmap); 60 s config refresh; 4-worker pool; 90-day result TTL |
+| Anomaly detection | F9 | **Shipped** (Wave 3-MVP + Wave-3-Plus, Enterprise) | Welford baselines; σ=4.0; 0.259 false alarms/node-week (target <1); minSamples=30 warmup; hysteresis cooldown; epsilon floor — constant-baseline deviations now flagged |
+| Synthetic probes | F10 | **Shipped** (Wave 3-MVP + Wave-3-Plus, Pro+) | HLS full — media and master playlists; `ttfb_ms` + `segment_ttfb_ms` stored separately; bitrate >0 for master playlists; webrtc/rtmp/dash reachability-only stubs (Phase-3 roadmap); 60 s config refresh; 4-worker pool; 90-day result TTL |
 
 ### Known limitations (Phase-3 / deferred)
 
-- Dashboard render time at 500 streams: virtualization confirmed (≤20 DOM rows), wall-clock not measured — Phase-3 Playwright benchmark.
+- Dashboard render time at 500 streams: virtualization confirmed (≤20 DOM rows), wall-clock not measured — Phase-3 Playwright benchmark (VD-04).
 - `rebuffer_ratio` / `error_rate` alert rules: computed from live ingest health heuristic proxy; full ClickHouse `rollup_qoe_1h` query is Phase-3.
-- `peak_concurrency` in billing rollup is session count (SummingMergeTree), not true concurrent viewer peak — Phase-3 schema change.
-- Kafka `Lag()` / `ParseErrors()` not in `/healthz` — Phase-3.
-- AMS Kafka / log-tail source: no broker available in CI (D-007.5 waiver); REST poller path fully functional and QA-verified.
+- Player CPU <1% budget: not measurable in jsdom/vitest; Phase-3 real-browser profiler needed (VD-14).
+- AMS Kafka / log-tail source: no broker available in CI (D-007.5 waiver); REST poller path fully functional and QA-verified. Kafka `lag` + `parse_errors` are surfaced in `/healthz` (Wave-3-Plus).
 - Docker Compose not tested on build machine (D-002 waiver); local binary path is QA-verified.
 
 ---
@@ -188,7 +187,7 @@ cd server && CGO_ENABLED=0 go build ./... && CGO_ENABLED=0 go test ./...
 ```sh
 cd web && npm install && npm run dev   # proxies to pulse serve on :8090
 cd web && npm run build                # production build
-cd web && npm run test                 # 150 component tests (V3b — 11 suites)
+cd web && npm run test                 # 157 component tests (Wave-3-Plus — 12 suites)
 ```
 
 **API types (auto-generated from OpenAPI spec):**
@@ -209,5 +208,6 @@ sqlite3 :memory: < contracts/db/meta/0001_init.sql        # meta DDL
 - **Wave 1 / MVP (complete):** Collector, live ops dashboard (F1), historical analytics (F2), core alerting (F5), Docker Compose installer, licensing.
 - **Wave 2 (complete):** QoE beacon SDK (F3, 3.44 KB gzip), ingest health (F4, 250 µs detection), usage/billing reports (F6, ±1% reconciliation), cluster fleet view (F7, ≤30 s discovery), full data API + Prometheus (F8), Telegram/PD/webhook channels, Helm chart.
 - **Wave 3-MVP (complete):** Anomaly detection (F9, Enterprise — Welford baselines, 0.259 false alarms/node-week), synthetic probes (F10, Pro+ — HLS full coverage, webrtc/rtmp/dash minimal-honest stubs).
-- **V3a/V3b fix-loop (complete, 2026-06-15):** Beacon round-trip end-to-end (SDK header, main-port sink, Pro+ gate, geo enrichment); geo/device analytics; QoE rollup queries; ingest health non-zero; alerting muted/group_by/node_down; 4-tier license model (Business tier); report tier gates; 5-field cron; security hardening (CT compare, WS origin, token kind). See `docs/ARCHITECTURE.md` §V3b for full defect list.
-- **Post-MVP (Phase 3):** Mobile beacons, SSO, white-label PDF, air-gapped licensing, distributed probe network, native RTMP/WebRTC/DASH probing, multi-window anomaly baselines, true concurrent-peak billing rollup, headless render-time benchmarks.
+- **V3a/V3b fix-loop (complete, 2026-06-15):** Beacon round-trip end-to-end (SDK header, main-port sink, Pro+ gate, geo enrichment); geo/device analytics; QoE rollup queries; ingest health non-zero; alerting muted/group_by/node_down; 4-tier license model (Business tier); report tier gates; 5-field cron; security hardening (CT compare, WS origin, token kind). See `docs/ARCHITECTURE.md` for full defect list.
+- **Wave-3-Plus (complete, 2026-06-15):** True windowed peak concurrency in billing (`rollup_concurrency_1d`, maxState/maxMerge; VD-38); alert detect→notify wall-clock test passes at 201 ms (VD-31); 13-month dimensional GROUP BY query at 145 ms (VD-18/C9b); HLS probe segment TTFB (`segment_ttfb_ms`) and master-playlist variant-following for real bitrate; anomaly epsilon floor — constant-baseline deviations now flagged; Kafka lag + parse_errors in `/healthz`.
+- **Post-MVP (Phase 3):** Mobile beacons, SSO, white-label PDF, air-gapped licensing, distributed probe network, native RTMP/WebRTC/DASH probing, multi-window anomaly baselines, headless render-time benchmarks.

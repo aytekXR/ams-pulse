@@ -1,6 +1,6 @@
 # Anomaly Detection (F9)
 
-**Status: Shipped (Wave 3-MVP)**
+**Status: Shipped (Wave 3-MVP + Wave-3-Plus)**
 **Tier: Enterprise only**
 
 Pulse detects statistical deviations in stream and node metrics using rolling
@@ -72,6 +72,28 @@ observed metrics, and persists the results to the meta store.
 | `MinSamples` | **30** | Minimum observations before any flag can fire (~30 min warmup) |
 | `HysteresisTicks` | **10** | Ticks suppressed after a flag fires (600 s cooldown) |
 | `TickInterval` | **60 s** | Baseline update and detection period |
+| `relEps` | **0.01** (1%) | Relative epsilon floor: `effStddev >= 0.01 × |mean|` |
+| `absEps` | **0.5** | Absolute epsilon floor: `effStddev >= 0.5` |
+
+**Epsilon floor (Wave-3-Plus):** When a metric is perfectly constant (stddev=0),
+z-score computation would divide by zero. The detector applies an effective stddev:
+
+```
+effStddev = max(stored_stddev, relEps × |mean|, absEps)
+```
+
+This means a deviation of 1% of the mean or 0.5 absolute units is always enough
+to produce a finite z-score. At a constant baseline of 100 viewers, a spike to 180
+yields `effStddev = max(0, 1.0, 0.5) = 1.0` and `sigma = (180-100)/1.0 = 80.0`
+— a clear flag. Small perturbations (e.g. 100→102.5) fall below the relative floor
+and correctly produce 0 flags. The stored Welford state is not modified; the floor
+is applied on-read in `ComputeFlags` only. The analytical false-alarm rate is
+unchanged (the floor only widens the effective stddev, reducing false positives
+on constant signals).
+
+Verified by `TestAnomaly_ConstantBaseline_LargeDeviation_Flags` (sigma=80.00, 1 flag)
+and `TestAnomaly_ConstantBaseline_SmallDeviation_NoFlag` (0 flags) in
+`server/internal/anomaly/anomaly_test.go`.
 
 ### False-alarm calibration math
 
@@ -193,11 +215,11 @@ Navigate to `/anomalies` in the Pulse dashboard. The page shows:
 
 ---
 
-## Known limitations (Wave 3-MVP, D-001)
+## Known limitations
 
 | Gap | Description | Phase |
 |---|---|---|
-| GAP-3-004 | Zero-stddev blind spot: perfectly constant metrics cannot produce a z-score. Real production streams have natural variance; this is non-blocking for MVP. | Phase 3: epsilon floor |
+| GAP-3-004 | Zero-stddev blind spot | **CLOSED Wave-3-Plus** — epsilon floor applied in `ComputeFlags` (see "Epsilon floor" above) |
 | Single window | Only a 1-hour rolling window is tracked. Multi-window anomaly detection (e.g., 24-hour baseline) is Phase 3. | Phase 3 |
 | 3 metrics only | `viewers`, `cpu_pct`, `mem_pct` are tracked. Additional metrics (e.g., `error_rate`, `rebuffer_ratio`) are Phase 3 extensions. | Phase 3 |
 
@@ -207,6 +229,5 @@ Navigate to `/anomalies` in the Pulse dashboard. The page shows:
 
 - Multi-window baselines (1h, 24h, 7d).
 - Additional metrics: `error_rate`, `rebuffer_ratio`, `ingest_bitrate_floor`.
-- Epsilon floor for zero-stddev detection.
 - Flag persistence in a dedicated table (currently computed on-read from live snapshot + baselines).
 - Alert integration: auto-create an alert rule from an anomaly flag.

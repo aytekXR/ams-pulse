@@ -1,6 +1,6 @@
 # Synthetic Probes Runbook (F10)
 
-**Status: Shipped (Wave 3-MVP)**
+**Status: Shipped (Wave 3-MVP + Wave-3-Plus)**
 **Tier: Pro and Enterprise**
 
 Pulse can periodically probe your stream URLs — fetching manifests, measuring
@@ -133,21 +133,23 @@ in ClickHouse are retained until the 90-day TTL expires.
 |---|---|
 | `success` | `true` if the HTTP response is 2xx AND the manifest is parseable |
 | `ttfb_ms` | Time-to-first-byte of the manifest HTTP response (milliseconds) |
+| `segment_ttfb_ms` | Time-to-first-byte of the first media segment fetch (milliseconds) — stored separately from manifest TTFB (Wave-3-Plus) |
 | `bitrate_kbps` | Estimated bitrate: `segment_bytes × 8 / segment_duration_s / 1000` |
 
 The HLS probe flow:
-1. **Manifest fetch** — GET the URL, measure TTFB. Fails on 4xx, 5xx, timeout, DNS error.
-2. **Manifest parse** — verify `#EXTM3U` header; extract first `#EXTINF` segment URI.
-3. **Segment fetch** — GET the first media segment; measure its size and use the
-   `#EXTINF` duration to compute estimated bitrate_kbps.
+1. **Manifest fetch** — GET the URL, measure `ttfb_ms`. Fails on 4xx, 5xx, timeout, DNS error.
+2. **Manifest parse** — verify `#EXTM3U` header; determine content type:
+   - If a **media playlist** (contains `#EXTINF` segments): extract first segment URI.
+   - If a **master playlist** (contains `#EXT-X-STREAM-INF` variants): follow the first
+     variant URL, fetch that media playlist, then extract a segment URI.
+3. **Segment fetch** — GET the first media segment; measure `segment_ttfb_ms`, segment
+   size, and use the `#EXTINF` duration to compute `bitrate_kbps`.
 
-If the manifest is a **master playlist** (contains variant stream URLs rather than
-segment URIs), the probe returns `success=true, bitrate_kbps=0` — the stream is
-reachable at the manifest level. Phase 3: follow the first variant URL for a more
-complete measurement (GAP-3-003).
+Both media-playlist and master-playlist probes produce `success=true` and
+non-zero `bitrate_kbps` when a segment is reachable. (Closed: GAP-3-001 and GAP-3-003.)
 
-TTFB reported is the **manifest** TTFB (the most actionable metric for HLS delivery
-monitoring). Segment TTFB is implicitly captured in the bitrate timing (GAP-3-001).
+TTFB measurements are stored separately: `ttfb_ms` for the manifest, `segment_ttfb_ms`
+for the first segment. Both are surfaced in the API response and the results panel.
 
 ### WebRTC / RTMP / DASH probes (minimal — Phase-3 roadmap)
 
@@ -163,9 +165,9 @@ the URL is reachable over HTTP — it says nothing about playback quality.
 
 ### Protocol coverage matrix
 
-| Protocol | Coverage | MVP Limitation | Phase-3 Plan |
+| Protocol | Coverage | Limitation | Phase-3 Plan |
 |---|---|---|---|
-| `hls` | **Full** — manifest parse, first segment fetch; TTFB, bitrate, parse/4xx/5xx/timeout/DNS errors | None | — |
+| `hls` | **Full** — manifest parse (media and master playlists); segment fetch; manifest TTFB, segment TTFB, bitrate; parse/4xx/5xx/timeout/DNS errors | None | — |
 | `rtmp` | **Minimal** — HTTP GET reachability only | `error_code=not_probed` always | Native RTMP client |
 | `webrtc` | **Minimal** — HTTP GET reachability only | `error_code=not_probed` always | WHIP/WHEP HTTP signaling + STUN reachability |
 | `dash` | **Minimal** — HTTP GET reachability only | `error_code=not_probed` always | DASH manifest parse (similar to HLS) |
@@ -182,12 +184,13 @@ prominently displays:
 - "— not organic viewer data" disclaimer.
 
 The panel shows:
-- **TTFB timeline** — recharts LineChart of TTFB over time, with a 500 ms warning
-  reference line.
+- **TTFB timeline** — recharts LineChart of manifest TTFB (`ttfb_ms`) over time, with
+  a 500 ms warning reference line.
+- **Segment TTFB** — `segment_ttfb_ms` is included in result rows (Wave-3-Plus).
 - **Bitrate timeline** — recharts LineChart of bitrate_kbps over time (shown only
-  when data exists).
+  when data exists; non-zero for both media-playlist and master-playlist probes).
 - **Recent results table** — each row has a "Synthetic" badge in the Type column,
-  plus timestamp, status (ok/fail), TTFB (color-coded), bitrate, and error message.
+  plus timestamp, status (ok/fail), TTFB (color-coded), segment TTFB, bitrate, and error message.
 
 Every result row is individually labeled "Synthetic" to prevent any ambiguity with
 organic viewer data.
@@ -218,6 +221,7 @@ Authorization: Bearer <token>
       "ts": 1781451000000,
       "success": true,
       "ttfb_ms": 42,
+      "segment_ttfb_ms": 18,
       "bitrate_kbps": 2500.0,
       "error_code": "",
       "error_msg": ""
@@ -301,12 +305,12 @@ The 403 response body:
 
 ---
 
-## Known limitations (Wave 3-MVP, D-001)
+## Known limitations
 
 | Gap | Description | Phase |
 |---|---|---|
-| GAP-3-001 | TTFB is manifest TTFB only; segment TTFB is captured implicitly in bitrate timing but not stored separately. The frozen `probe_results` DDL has a single `ttfb_ms` column. | Phase 3 (schema CR needed) |
-| GAP-3-003 | Master HLS playlist probes return `bitrate_kbps=0` — bitrate requires a media segment URI. Phase 3: follow first variant URL. | Phase 3 |
+| GAP-3-001 | Segment TTFB stored separately from manifest TTFB | **CLOSED Wave-3-Plus** — `segment_ttfb_ms` column added to `probe_results` DDL (`0003_probe_segment_ttfb.sql`); populated by prober; returned in API response |
+| GAP-3-003 | Master HLS playlist probes returned `bitrate_kbps=0` | **CLOSED Wave-3-Plus** — prober follows first variant URL; `TestHLSProbe_MasterFollowsVariant` asserts `bitrate=66.7 seg_ttfb_ms=1` |
 | RTMP/WebRTC/DASH | Reachability-only; no playback quality measurement. | Phase 3 |
 
 ---
@@ -318,4 +322,3 @@ The 403 response body:
 - DASH manifest parsing (mirrors HLS).
 - Distributed probe network (run probes from multiple locations).
 - Multi-node edge deduplication.
-- Separate manifest and segment TTFB columns.
