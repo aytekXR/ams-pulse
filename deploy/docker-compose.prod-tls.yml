@@ -1,0 +1,36 @@
+# Pulse — PRODUCTION public TLS overlay (real domain + Let's Encrypt via Caddy).
+#
+# Layers on base + hardened. Switches Caddy from the loopback / internal-CA
+# local-verify config to a public deployment: binds 0.0.0.0:80 and 0.0.0.0:443
+# and mounts the production Caddyfile (no 'tls internal' → real Let's Encrypt).
+#
+# Prereqs (see deploy/config/Caddyfile.prod + docs/runbooks/productionize.md):
+#   - DNS A record for $PULSE_DOMAIN → 161.97.172.146 (propagated).
+#   - deploy/.env has PULSE_DOMAIN, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD,
+#     PULSE_SECRET_KEY (copy from deploy/.env.example).
+#   - Host :80 and :443 free (stop the demo: `docker compose -p pulse down`).
+#
+# Bring up (mock AMS):
+#   docker compose -p pulse-prod \
+#     -f deploy/docker-compose.yml \
+#     -f deploy/docker-compose.hardened.yml \
+#     -f deploy/docker-compose.prod-tls.yml \
+#     --env-file deploy/.env up -d --build
+#
+# Production with a real AMS — add -f deploy/docker-compose.real-ams.yml too.
+#
+# Verify TLS:  curl -sS https://$PULSE_DOMAIN/healthz   (real cert, no -k needed)
+
+services:
+  caddy:
+    # !override replaces the hardened service's loopback ports / Caddyfile mount
+    # (Compose otherwise concatenates list values across files).
+    ports: !override
+      - "0.0.0.0:80:80"     # ACME HTTP-01 + HTTP→HTTPS redirect
+      - "0.0.0.0:443:443"   # public HTTPS
+    environment:
+      PULSE_DOMAIN: "${PULSE_DOMAIN:?set PULSE_DOMAIN to your real domain, e.g. beyondkaira.com}"
+    volumes: !override
+      - ./config/Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data       # persists the issued Let's Encrypt certs across restarts
+      - caddy_config:/config

@@ -14,6 +14,13 @@ Pulse ships a Caddy reverse proxy in the hardened override
 (`deploy/docker-compose.hardened.yml`). Caddy auto-provisions TLS via Let's
 Encrypt when a real domain is pointed at the server.
 
+> **Turnkey path (recommended).** Add the pre-staged production overlay
+> `deploy/docker-compose.prod-tls.yml` (with `deploy/config/Caddyfile.prod`) — it
+> binds Caddy on `0.0.0.0:80/443` and uses real Let's Encrypt (no `tls internal`),
+> so you do NOT hand-edit the hardened files. Compose order:
+> `-f docker-compose.yml -f docker-compose.hardened.yml -f docker-compose.prod-tls.yml`.
+> Stop anything holding host `:80` first (e.g. the demo: `docker compose -p pulse down`).
+
 ### Steps
 
 **1a. Point DNS to the server**

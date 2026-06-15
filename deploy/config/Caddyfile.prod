@@ -1,0 +1,59 @@
+# Pulse — Caddy TLS terminator, PRODUCTION (real domain + Let's Encrypt).
+#
+# Used by deploy/docker-compose.prod-tls.yml. Differs from ./Caddyfile only by:
+#   - NO 'tls internal' line  → Caddy auto-obtains a public Let's Encrypt cert.
+#   - the site address is {$PULSE_DOMAIN} (REQUIRED — no localhost fallback).
+#
+# Prerequisites before bringing this up:
+#   1. DNS: an A record for your domain → the VPS public IP (161.97.172.146),
+#      propagated (verify: dig +short <domain> == 161.97.172.146).
+#   2. TCP :80 and :443 reachable from the internet (ACME HTTP-01 / TLS-ALPN).
+#   3. PULSE_DOMAIN set in deploy/.env (e.g. PULSE_DOMAIN=beyondkaira.com).
+#   4. Nothing else bound to host :80/:443 (stop the demo first:
+#        cd deploy && docker compose -p pulse down).
+#
+# Optional: receive cert-expiry notices — add  email you@beyondkaira.com  to the
+# global block below (Caddy works fine without it).
+
+{
+    # Global options.
+    # For dry runs against Let's Encrypt STAGING (avoids rate limits), uncomment:
+    # acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+{$PULSE_DOMAIN} {
+    # No 'tls internal' → Caddy provisions a public Let's Encrypt certificate
+    # for {$PULSE_DOMAIN} automatically on first request.
+
+    # Beacon ingest — proxy /beacon/* to pulse:8091 so clients only need :443.
+    handle /beacon/* {
+        reverse_proxy pulse:8091 {
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # UI + API — proxy everything else to pulse:8090.
+    handle {
+        reverse_proxy pulse:8090 {
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
+            header_up Host {host}
+        }
+    }
+
+    # Security headers.
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    log {
+        output stdout
+        format json
+        level INFO
+    }
+}
