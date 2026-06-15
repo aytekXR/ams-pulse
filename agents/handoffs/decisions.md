@@ -377,3 +377,30 @@ known limitations in IMPLEMENTATION_LOG. Structured as two sequential workflows
 
 After V3b passes: consolidation + `IMPLEMENTATION_LOG.md` (per F1–F10: done / issues /
 resolutions / known limitations) → notify user, STOP for review.
+
+## D-016 · 2026-06-15 · V3a stall + recovery (anti-stall hardening)
+
+V3a (run `wf_daf126f5-e1e`) ran ~9 h and FAILED: both Implement-phase lanes
+stalled (no progress 180 s × 6 retries). Almost certainly an agent ran a
+foreground long-running process (`/tmp/pulse serve` or `clickhouse server`),
+blocking its Bash call indefinitely; the workflow's stall detector then burned
+retries for hours.
+
+State at failure: **INT-01 committed cleanly** (`0d84d31`) — it landed the
+`business` tier in BOTH the contract enum AND `server/internal/license/license.go`
+(+ tests + a conformance test); a sensible declared scope-cross that completes
+VD-01's enum foundation. The Implement agents left INCOMPLETE uncommitted edits
+(SDK: 3 failing tests; `beacon.go`: unused imports + half-changed `batchToDomain`
+signature → server did NOT build). ORCH-00 discarded the partial edits
+(`git restore server/ sdk/` + clean), keeping `0d84d31`; clean tree builds.
+
+**Re-run as `pulse-val-3a-rest`** (INT-01 done, cached out): Implement
+`parallel([BE-01 → BE-02-A1 → BE-02-A2], SDK-01)` → QA mini. Hardening baked into
+every prompt (ANTISTALL): never run a server/CH in the foreground — background +
+hard `timeout` + kill, or prefer in-process `go test`; every test/build command
+gets an explicit `timeout` and `-timeout`; never `vitest` watch mode (use
+`npm run test` = `vitest run`); never bare `go test ./...` without `-timeout`;
+if a command hangs, kill and move on. Smaller per-agent scope (3-deep server chain
+vs 2 heavy) to bound context/time. Verification favors bounded Go tests over live
+servers (e.g. VD-09 = assert the SDK header constant equals the server's expected
+header — no server needed).
