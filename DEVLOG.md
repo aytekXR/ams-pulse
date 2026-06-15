@@ -347,3 +347,25 @@ binary at `/tmp/clickhouse` (re-download if /tmp cleared). No Docker (D-002).
     role/security] | FE-01 (tier copy/WS/params) → QA full re-gate → DOC-01.
 - Next: V3b gate → (fix-loop if needed) → consolidation + `IMPLEMENTATION_LOG.md`
   → notify user, STOP for review.
+
+## 2026-06-15 — Validation COMPLETE → MVP ready for review
+
+- **V3b done** (`wf_f21da966-d85`, hardened, QA PASS_WITH_LIMITATIONS): BE-02-B
+  `cfd6d79` (alerting muted/group_by/node_down/cron), BE-02-C `982f73e` (tier
+  gating §7.11 / WS LiveOverview / fleet role / security S1-S3), FE-01 `9a0ba42`
+  (tier copy/WS/params), QA `050ba6f`, DOC `568a22b`.
+- **D-017:** QA-3b's "remaining defects" table (12 VDs marked OPEN) was SPURIOUS —
+  all fixed in V3a (D-013 recurrence: QA echoed the V2 triage without re-verifying).
+  ORCH-00 empirically disproved every one (integration tests + SDK 65/65 on HEAD);
+  corrected ARCHITECTURE.md (VD-23/X3-A) + the gate report; commit `2c60350`. The
+  feature status in IMPLEMENTATION_LOG is built from ORCH-00's own test runs.
+- **Consolidation verified on HEAD:** server build/vet clean, `go test ./...`
+  0 failures + integration tests pass; web 150/150 + lint + tsc strict; SDK 65/65,
+  3.52 KB. Already a single unified project (one binary + web + SDK).
+- **`IMPLEMENTATION_LOG.md` written** — per F1–F10: built / issues / resolutions /
+  known limitations, all numeric budgets measured, cross-cutting (tier model,
+  security), validation summary, Phase-3 backlog.
+- **MVP COMPLETE.** All F1–F10 functional end-to-end in MVP form; the 11 V2
+  MVP-blocking defects + majors/security/contract fixed and verified; only genuine
+  P3 (test-coverage/cosmetic/Phase-3) + D-002/D-007.5 waivers remain. **Notifying
+  the user for review; stopping per mission item 6.**

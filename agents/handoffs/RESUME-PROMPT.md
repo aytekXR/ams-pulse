@@ -18,6 +18,23 @@ QoE monitoring and alerting for Ant Media Server), strictly per PRD:
 6. **Final output** — notify me when the MVP is ready for review; no further
    iteration before my review.
 
+## ✅ MVP COMPLETE — awaiting user review (2026-06-15)
+
+**The build is done and was handed to the user for review (mission item 6 — STOP, no
+further iteration before review).** All F1–F10 are functional end-to-end in MVP form;
+the validation phase's 11 MVP-blocking defects + majors/security/contract are fixed
+and empirically verified on `main`. See `IMPLEMENTATION_LOG.md` (authoritative
+per-feature status) and the verification table there. Only genuine P3
+(test-coverage/cosmetic/Phase-3) + the D-002 (no Docker) / D-007.5 (no Kafka)
+waivers remain.
+
+**If the user returns with feedback:** address their specific points; otherwise the
+build is complete. Do NOT silently re-open the closed work. The full chronology is in
+`DEVLOG.md`; all rulings in `agents/handoffs/decisions.md` (D-001…D-017). The
+sections below are the historical resume context from during the build.
+
+---
+
 ## Where the build stands (updated 2026-06-14, session 4)
 
 - **Done:** understand phase; Wave 0 (CI real+green); **Wave 1 CLOSED**;
