@@ -134,7 +134,8 @@ export const analyticsApi = {
   getAudience: (params: {
     from: number;
     to: number;
-    granularity?: string;
+    // VD-X3-B: spec/server use 'interval', not 'granularity'
+    interval?: string;
     stream_id?: string;
     app?: string;
   }) => {
@@ -142,7 +143,7 @@ export const analyticsApi = {
       from: String(params.from),
       to: String(params.to),
     });
-    if (params.granularity) q.set("granularity", params.granularity);
+    if (params.interval) q.set("interval", params.interval);
     if (params.stream_id) q.set("stream_id", params.stream_id);
     if (params.app) q.set("app", params.app);
     return apiFetch<GetAudienceResponse>(`/analytics/audience?${q}`);

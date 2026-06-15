@@ -177,8 +177,9 @@ describe("ReportsPage tenants tab", () => {
     vi.clearAllMocks();
   });
 
-  it("shows tenants tab button when entitled (pro tier)", async () => {
-    vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "pro", valid: true });
+  // VD-01: tenants require Business tier (not pro)
+  it("shows tenants tab button when entitled (business tier)", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "business", valid: true });
     vi.mocked(adminApi.listTenants).mockResolvedValue({
       items: [],
       meta: { total: 0, next_cursor: null },
@@ -187,6 +188,16 @@ describe("ReportsPage tenants tab", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /tenants/i })).toBeInTheDocument();
     });
+  });
+
+  // VD-01: pro tier is NOT entitled for tenants/reports (needs business+)
+  it("hides tenants tab when tier is pro (upsell shown instead)", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "pro", valid: true });
+    render(<ReportsPage />);
+    await waitFor(() => {
+      expect(screen.getByText(/requires business tier/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: /tenants/i })).toBeNull();
   });
 
   it("hides tenants tab when tier is free (upsell shown instead)", async () => {
@@ -244,7 +255,8 @@ describe("ReportsPage tenants tab", () => {
   });
 
   it("shows empty state when no tenants configured", async () => {
-    vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "pro", valid: true });
+    // VD-01: use business tier (pro is now gated)
+    vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "business", valid: true });
     vi.mocked(adminApi.listTenants).mockResolvedValue({
       items: [],
       meta: { total: 0, next_cursor: null },
@@ -258,7 +270,8 @@ describe("ReportsPage tenants tab", () => {
   });
 
   it("shows tenant form when '+ New tenant' clicked", async () => {
-    vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "pro", valid: true });
+    // VD-01: use business tier (pro is now gated)
+    vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "business", valid: true });
     vi.mocked(adminApi.listTenants).mockResolvedValue({
       items: [],
       meta: { total: 0, next_cursor: null },
@@ -290,7 +303,8 @@ describe("ReportsPage tenants tab", () => {
   });
 
   it("calls adminApi.createTenant with correct payload on form submit", async () => {
-    vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "pro", valid: true });
+    // VD-01: use business tier (pro is now gated)
+    vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "business", valid: true });
     vi.mocked(adminApi.listTenants).mockResolvedValue({
       items: [],
       meta: { total: 0, next_cursor: null },

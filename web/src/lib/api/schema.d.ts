@@ -498,7 +498,8 @@ export interface paths {
          *     Request body: `BeaconBatch` (array of `BeaconEvent` envelopes per
          *     `contracts/events/beacon-event.schema.json`).
          *
-         *     Rate limited per token; body size limit 256 KB. Schema-validated on
+         *     Rate limited per token; body size limit 64 KB (authoritative: hardened
+         *     handler enforces `maxBodyBytes = 64 * 1024`). Schema-validated on
          *     ingestion; invalid events are dropped with a partial-accept response.
          */
         post: operations["ingestBeacon"];
@@ -679,7 +680,13 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Revoke a token */
+        /**
+         * Revoke a token (idempotent)
+         * @description Revokes a token. This operation is **idempotent**: revoking an already-revoked
+         *     or non-existent token returns 204 (not 404). This is the chosen semantic to
+         *     allow clients to safely retry token revocations without error-handling for
+         *     the "already deleted" case. Callers must not rely on 404 to detect missing tokens.
+         */
         delete: operations["revokeToken"];
         options?: never;
         head?: never;
@@ -717,7 +724,13 @@ export interface paths {
         /** Update a local user */
         put: operations["updateUser"];
         post?: never;
-        /** Delete a local user */
+        /**
+         * Delete a local user (idempotent)
+         * @description Deletes a local user. This operation is **idempotent**: deleting an already-deleted
+         *     or non-existent user returns 204 (not 404). This is the chosen semantic to
+         *     allow clients to safely retry deletions without error-handling for the
+         *     "already deleted" case. Callers must not rely on 404 to detect missing users.
+         */
         delete: operations["deleteUser"];
         options?: never;
         head?: never;
@@ -1417,9 +1430,27 @@ export interface components {
             /** @description Human-readable error detail when reachable=false; null on success */
             error?: string | null;
         };
+        /**
+         * @description License status and tier entitlements (PRD §7.11 four-tier matrix).
+         *
+         *     **Tier entitlement matrix:**
+         *     | Tier       | Nodes | Retention | Channels               | Data API | White-label | Multi-tenant | Anomalies |
+         *     |------------|-------|-----------|------------------------|----------|-------------|--------------|-----------|
+         *     | free       | 1     | 7 days    | email                  | no       | no          | no           | no        |
+         *     | pro        | 1–2   | 90 days   | email, slack, telegram | yes      | no          | no           | no        |
+         *     | business   | ≤5    | 13 months | + pagerduty, webhook   | yes      | no          | yes          | no        |
+         *     | enterprise | ∞     | unlimited | all                    | yes      | yes         | yes          | yes       |
+         */
         LicenseInfo: {
-            /** @enum {string} */
-            tier: "free" | "pro" | "enterprise";
+            /**
+             * @description License tier (PRD §7.11):
+             *     - `free`: 1 node, 7-day retention, email alerts only — $0/mo
+             *     - `pro`: 1–2 nodes, 90-day retention, Slack/Telegram, CSV export — $99/mo
+             *     - `business`: ≤5 nodes, 13-month retention, PagerDuty/webhooks, usage reports, multi-tenant, API+Prometheus — $299/mo
+             *     - `enterprise`: unlimited nodes, SSO, white-label reports, anomaly detection, air-gapped licensing — from $799/mo
+             * @enum {string}
+             */
+            tier: "free" | "pro" | "business" | "enterprise";
             valid: boolean;
             limits?: components["schemas"]["TierLimits"];
             /** @description Unix epoch ms; null for perpetual/free */
@@ -2380,6 +2411,15 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            /** @description Enterprise tier required — anomaly detection (F9) is gated to Enterprise subscribers */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             500: components["responses"]["InternalError"];
         };
     };
@@ -2557,7 +2597,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Request body exceeds 256 KB limit */
+            /** @description Request body exceeds 64 KB limit (hardened handler enforces maxBodyBytes=65536) */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -2907,7 +2947,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Token revoked */
+            /** @description Token revoked (or was already revoked / did not exist) */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -2915,7 +2955,6 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -3015,7 +3054,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description User deleted */
+            /** @description User deleted (or was already deleted / did not exist) */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -3023,7 +3062,6 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
     };

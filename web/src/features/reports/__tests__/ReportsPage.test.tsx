@@ -76,6 +76,44 @@ describe("Reports schedule form validation", () => {
   });
 });
 
+// ─── VD-36: Cron preset validation ───────────────────────────────────────────
+// Presets must be valid 5-field cron (now that server accepts 5-field per BE-02-B VD-36).
+// Guard: old 3-field presets would fail validation; only 5-field is correct.
+
+const CRON_PRESETS_FOR_TEST = [
+  { label: "Monthly (1st of month, 6 AM UTC)", value: "0 6 1 * *" },
+  { label: "Weekly (Monday, 6 AM UTC)", value: "0 6 * * 1" },
+  { label: "Daily (6 AM UTC)", value: "0 6 * * *" },
+];
+
+describe("VD-36: cron presets are valid 5-field cron", () => {
+  it.each(CRON_PRESETS_FOR_TEST)("preset '$label' has exactly 5 fields", ({ value }) => {
+    const parts = value.trim().split(/\s+/).filter(Boolean);
+    expect(parts).toHaveLength(5);
+  });
+
+  it("each preset passes schedule form validation", () => {
+    for (const preset of CRON_PRESETS_FOR_TEST) {
+      const result = validateScheduleForm({
+        cronPreset: preset.value,
+        cronRaw: "",
+        format: "csv",
+      });
+      expect(result).toBeNull();
+    }
+  });
+
+  it("3-field cron would fail validation (guard against regression)", () => {
+    // Old behavior: 3-field cron strings used to be sent to server,
+    // which means 5-field validation correctly rejects them.
+    expect(validateScheduleForm({
+      cronPreset: "custom",
+      cronRaw: "0 6 1",   // 3-field — invalid in 5-field world
+      format: "csv",
+    })).not.toBeNull();
+  });
+});
+
 // ─── Tier-gate rendering ─────────────────────────────────────────────────────
 
 // Mock the necessary modules
@@ -133,9 +171,24 @@ describe("ReportsPage tier gate", () => {
     });
   });
 
-  it("shows usage tab when license is 'pro'", async () => {
+  // VD-01: pro tier is NOT entitled for reports (requires business+)
+  it("shows upsell when license tier is 'pro'", async () => {
     vi.mocked(adminApi.getLicense).mockResolvedValue({
       tier: "pro",
+      valid: true,
+    });
+    render(<ReportsPage />);
+    await waitFor(() => {
+      expect(screen.getByText(/requires business tier/i)).toBeInTheDocument();
+    });
+    // Usage tabs must NOT appear
+    expect(screen.queryByRole("button", { name: /usage/i })).toBeNull();
+  });
+
+  // VD-01: business tier IS entitled for reports
+  it("shows usage tab when license is 'business'", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue({
+      tier: "business",
       valid: true,
     });
     // reportsApi.getUsage resolves with empty but valid response
@@ -149,7 +202,7 @@ describe("ReportsPage tier gate", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /usage/i })).toBeInTheDocument();
     });
-    // should NOT show upsell
+    // should NOT show upsell on business tier
     expect(screen.queryByText(/requires business tier/i)).toBeNull();
   });
 

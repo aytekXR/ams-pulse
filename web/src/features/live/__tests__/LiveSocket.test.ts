@@ -169,6 +169,72 @@ describe("LiveSocket", () => {
     sock.destroy();
   });
 
+  // VD-02: verify WS payload is read as LiveOverview and carries all required fields
+  it("delivers LiveOverview fields — total_publishers, protocol_mix, apps — from WS snapshot", () => {
+    type Msg = { type: string; ts: number; payload: Record<string, unknown> };
+    const messages: Msg[] = [];
+    const sock = new LiveSocket();
+    sock.connect();
+    sock.subscribe((msg) => messages.push(msg as Msg));
+
+    MockWebSocket.instances[0].open();
+    const liveOverviewPayload = {
+      ts: 1700000001000,
+      total_viewers: 120,
+      total_publishers: 8,             // field that was missing from old LiveSnapshot
+      protocol_mix: { webrtc: 80, hls: 40, rtmp: 0, dash: 0, other: 0 },
+      apps: [{ app: "live", viewers: 120, publishers: 8, streams: 8 }],
+      nodes: [],
+    };
+
+    MockWebSocket.instances[0].triggerMessage({
+      type: "snapshot",
+      ts: 1700000001000,
+      payload: liveOverviewPayload,
+    });
+
+    expect(messages).toHaveLength(1);
+    const msg = messages[0];
+    expect(msg.type).toBe("snapshot");
+    // Payload must carry the full LiveOverview shape including total_publishers,
+    // protocol_mix, and apps (VD-02: these fields went stale on old LiveSnapshot).
+    expect(msg.payload.total_publishers).toBe(8);
+    expect(msg.payload.protocol_mix).toEqual({ webrtc: 80, hls: 40, rtmp: 0, dash: 0, other: 0 });
+    expect(msg.payload.apps).toHaveLength(1);
+    expect((msg.payload.apps as { app: string }[])[0].app).toBe("live");
+
+    sock.destroy();
+  });
+
+  // VD-02: delta message also carries LiveOverview fields
+  it("delivers LiveOverview fields from WS delta message", () => {
+    type Msg = { type: string; payload: Record<string, unknown> };
+    const messages: Msg[] = [];
+    const sock = new LiveSocket();
+    sock.connect();
+    sock.subscribe((msg) => messages.push(msg as Msg));
+
+    MockWebSocket.instances[0].open();
+    // Delta carries partial LiveOverview — total_publishers and protocol_mix must be present
+    MockWebSocket.instances[0].triggerMessage({
+      type: "delta",
+      ts: 1700000002000,
+      payload: {
+        total_viewers: 130,
+        total_publishers: 9,
+        protocol_mix: { webrtc: 90, hls: 40, rtmp: 0, dash: 0, other: 0 },
+      },
+    });
+
+    expect(messages).toHaveLength(1);
+    const msg = messages[0];
+    expect(msg.type).toBe("delta");
+    expect(msg.payload.total_publishers).toBe(9);
+    expect(msg.payload.protocol_mix).toBeDefined();
+
+    sock.destroy();
+  });
+
   it("does not reconnect after destroy()", () => {
     const sock = new LiveSocket({ baseDelay: 100 });
     sock.connect();

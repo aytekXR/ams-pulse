@@ -755,8 +755,11 @@ export function ReportsPage() {
       .finally(() => setLicenseLoading(false));
   }, []);
 
-  // Per WO spec "Business upsell" means free tier lacks reports. Gate: tier === "free" → show upsell.
-  const isGated = license?.tier === "free";
+  // VD-01: Reports require Business tier or higher (PRD §7.11). Gate: free and pro → upsell.
+  // license?.tier can be "free" | "pro" | "business" | "enterprise" (per generated schema).
+  const isGated = license != null
+    && license.tier !== "business"
+    && license.tier !== "enterprise";
 
   const loadUsage = useCallback(async () => {
     setLoading(true);
