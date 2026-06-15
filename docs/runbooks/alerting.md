@@ -1,7 +1,8 @@
 # Pulse — Alerting Runbook
 
 **PRD ref:** F5 (core alerting)  
-**Budget:** alert detection-to-notification < 30 s (QA-verified: 15 s)
+**Budget:** alert detection-to-notification < 30 s (QA-verified: 15 s)  
+**Last updated:** V3b fix-loop (2026-06-15) — muted suppression, group_by grouping, node_down absence detection, cron range syntax all verified and shipped.
 
 ---
 
@@ -44,6 +45,7 @@ A rule suppressed by a maintenance window or `muted: true` produces no notificat
 | `severity` | string | `info`, `warning`, `critical` |
 | `enabled` | boolean | **Default true.** When `false`, the rule is completely skipped — not evaluated, no history written. Use to pause a rule without deleting it. |
 | `muted` | boolean | When `true`, the rule is evaluated and history is written, but no notifications are dispatched. Use for maintenance periods where you want to keep the evaluation record. |
+| `group_by` | string | Optional. When set (e.g. `"app"`, `"stream_id"`), collapses multiple matching streams/nodes into a single notification per unique group key value. Without `group_by`, each stream fires independently. See [Storm protection](#storm-protection). |
 | `scope` | object | Optional filter: `node_id`, `app`, `stream_id` |
 | `channel_ids` | array | IDs of alert channels to notify |
 
@@ -75,14 +77,15 @@ A disabled rule's `muted` state is not surfaced — it has no effect until the r
 | `rebuffer_ratio` | Live health proxy | QoE rebuffer ratio (live snapshot proxy; Wave 3: full ClickHouse query) |
 | `error_rate` | Live health proxy | QoE error rate (live snapshot proxy; Wave 3: full ClickHouse query) |
 | `ingest_bitrate_floor` | Ingest health tracker | Fires when ingest health score indicates bitrate < 50% of target (`S_bitrate < 0.5`) |
-| `node_down` | Fleet discovery | Fires when a cluster node transitions to `status=down` |
+| `node_down` | Fleet discovery | Fires when a cluster node is absent from the live snapshot (not seen within `3 × PollInterval`). Use a scope `node_id` to target a specific node, or leave scope empty to monitor all nodes. |
 | `node_degraded` | Fleet discovery | Fires when a cluster node transitions to `status=degraded` |
 | `cert_expiry` | TLS dial to host | Fires when TLS certificate days_left < threshold (e.g. `threshold: 30`) |
 
-> **Phase-3 roadmap:** Full ClickHouse-backed QoE metrics (rebuffer rate, startup
-> latency p50/p95) with time-window queries over `rollup_qoe_1h` are planned for
-> Wave 3. The Wave-2 `rebuffer_ratio` and `error_rate` rule types use a live
-> snapshot proxy.
+> **Known limitation:** `rebuffer_ratio` and `error_rate` alert metrics are computed
+> from the live ingest health heuristic (`(1−HealthScore)×0.1` and `(1−HealthScore)×0.05`
+> respectively), not from a direct ClickHouse `rollup_qoe_1h` time-window query. A full
+> ClickHouse-backed implementation is a Phase-3 roadmap item. The heuristic does fire
+> correctly once HealthScore is non-zero (VD-20 V3a fix).
 
 ### Scope filtering
 
@@ -103,12 +106,29 @@ notification per distinct stream/node that meets the condition (subject to
 ### Storm protection
 
 When many streams match a rule simultaneously (e.g. a node failure takes 50 streams
-offline), Pulse fires one notification per group key. The group key defaults to
-`stream_id` for stream-scoped rules and `node_id` for node-scoped rules.
-There is no cap on concurrent alerts — each distinct group key fires independently.
+offline), Pulse uses `group_by` to collapse notifications:
 
-> **Phase-3 roadmap:** The `group_by` field will allow collapsing multiple matching
-> streams into a single grouped notification.
+- **Without `group_by`:** Each distinct stream/node fires its own notification. Use
+  when you need per-stream visibility (e.g. PagerDuty incident per stream).
+- **With `group_by: "app"`:** All firing streams in the same AMS app produce
+  exactly 1 notification per app. N streams in app `live` → 1 notification, not N.
+- **With `group_by: "stream_id"`:** One notification per unique stream (same as the
+  default behavior; useful when you want explicit grouping semantics documented in the rule).
+
+Set `group_by` when a single node failure could trigger hundreds of `stream_offline`
+alerts and you want one actionable alert, not a storm.
+
+```json
+{
+  "name": "App stream offline (grouped)",
+  "metric": "stream_offline",
+  "operator": "eq",
+  "threshold": 0,
+  "window_s": 30,
+  "group_by": "app",
+  "channel_ids": ["ch-slack-01"]
+}
+```
 
 ### Latency
 
@@ -217,7 +237,7 @@ Pulse sends HTML-formatted messages via the Bot API `sendMessage` method.
 
 ### PagerDuty
 
-Supported on Enterprise tier only.
+Supported on Business tier and above.
 
 **Via API:**
 ```json
@@ -238,7 +258,7 @@ alert ID for reliable trigger/resolve pairing.
 
 ### Webhook (generic HTTP + HMAC)
 
-Supported on Enterprise tier only.
+Supported on Business tier and above.
 
 **Via API:**
 ```json
@@ -459,6 +479,7 @@ History is retained indefinitely in the meta store. History TTL is a Phase-3 roa
 
 | Issue | Severity | Status |
 |---|---|---|
-| QoE metrics (`rebuffer_ratio`, `error_rate`) use live snapshot proxy, not historical ClickHouse query | Minor | Phase-3 roadmap |
-| `group_by` field for alert grouping not implemented — each stream/node fires independently | Minor | Phase-3 roadmap |
+| QoE metrics (`rebuffer_ratio`, `error_rate`) use live ingest health proxy (`(1-HealthScore)*0.1`), not a direct ClickHouse `rollup_qoe_1h` query | Minor | Phase-3 roadmap |
 | Alert history has no TTL — grows unbounded in the meta store | Minor | Phase-3 roadmap |
+| `node_down` alert requires `scope.node_id` to target a specific node; without scope it checks node absence globally from the snapshot | Minor | By design — use scope to target individual nodes |
+| `node_degraded` alert metric is a placeholder — `status=degraded` transition is not yet implemented in the aggregator | Minor | Phase-3 roadmap |

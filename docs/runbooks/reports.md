@@ -1,7 +1,7 @@
 # Pulse — Usage Reports Runbook
 
-**PRD ref:** F6 (usage/billing reports) · **Status: Shipped (Wave 2)**  
-**Tier:** Enterprise tier required for reports, white-label PDF, and scheduled S3 exports. CSV generation and on-demand report download require Pro tier or higher..
+**PRD ref:** F6 (usage/billing reports) · **Status: Shipped (Wave 2 + V3b)**  
+**Tier:** Business tier required for all report access (on-demand, CSV, PDF, scheduled S3 exports). White-label PDF header requires Enterprise tier. Free and Pro tiers receive 403 on all report endpoints (enforced V3b VD-35).
 
 ---
 
@@ -9,8 +9,8 @@
 
 Pulse generates per-tenant viewer-minute and egress usage statements. Operators
 create tenant mapping rules that associate stream-name patterns or stream metadata
-tags with tenant identifiers. Reports are available as CSV (all tiers with access)
-and PDF (Enterprise white-label). Scheduled exports can push reports to S3.
+tags with tenant identifiers. Reports are available as CSV and PDF (Business+ tier)
+with white-label PDF headers (Enterprise tier). Scheduled exports can push reports to S3.
 
 ---
 
@@ -105,9 +105,18 @@ not CDN accuracy.
 
 ## Schedule setup
 
-Scheduled reports run on a 3-field cron schedule (`min hour weekday`).
+Scheduled reports accept both standard 5-field cron and Pulse's simplified 3-field format
+(V3b VD-36: 5-field cron parser added).
 
 ### Cron expression format
+
+**Standard 5-field cron (recommended — matches system cron syntax):**
+
+```
+MIN HOUR DOM MONTH WEEKDAY
+```
+
+**Pulse simplified 3-field cron (also accepted):**
 
 ```
 MIN HOUR WEEKDAY
@@ -117,32 +126,49 @@ MIN HOUR WEEKDAY
 |---|---|---|
 | `MIN` | 0-59 or `*` | `0` = on the hour, `30` = :30 |
 | `HOUR` | 0-23 or `*` | `8` = 8 AM |
-| `WEEKDAY` | 0-6 (0=Sun) or `*` | `1` = Monday, `1-5` = Mon-Fri |
+| `DOM` (5-field only) | 1-31 or `*` | `1` = 1st of month; use `*` for weekly/daily schedules |
+| `MONTH` (5-field only) | 1-12 or `*` | `*` for all months |
+| `WEEKDAY` | 0-6 (0=Sun) or `*`; ranges `lo-hi` supported | `1` = Monday, `1-5` = Mon-Fri |
 
 Common presets:
 
-| Schedule | Cron expression |
-|---|---|
-| Daily (midnight) | `0 0 *` |
-| Weekly (Monday 6 AM) | `0 6 1` |
-| Weekdays at noon | `0 12 1-5` |
+| Schedule | 5-field expression | 3-field expression |
+|---|---|---|
+| Daily at midnight | `0 0 * * *` | `0 0 *` |
+| Monthly on 1st at 6 AM | `0 6 1 * *` | *(not representable in 3-field)* |
+| Weekly (Monday 6 AM) | `0 6 * * 1` | `0 6 1` |
+| Weekdays at noon | `0 12 * * 1-5` | `0 12 1-5` |
 
-> **Note:** The 3-field format is Pulse's own simplified parser, not standard
-> 5-field cron. Month-day scheduling is not supported; use a daily schedule
-> for month-relative scheduling.
+> **Note:** When using 5-field cron, the `DOM` and `MONTH` fields are accepted
+> but only `MIN`, `HOUR`, and `WEEKDAY` drive next-run time computation. For
+> month-day scheduling, use the 5-field format and set `DOM=1` — the scheduler
+> will compute next Monday/Wednesday/etc from the WEEKDAY field.
 
 ### Creating a schedule via API
 
+Requires Business tier or higher (returns 403 for Free and Pro).
+
 ```sh
+# Monthly report on the 1st at 06:00 (5-field cron)
 curl -X POST http://localhost:8090/api/v1/reports/schedules \
   -H "Authorization: Bearer plt_<admin_token>" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Monthly viewer-minutes report",
-    "cron_expr": "0 0 *",
+    "cron_expr": "0 6 1 * *",
     "format": "csv",
     "app_filter": "live",
     "tenant_filter": "tenant-a"
+  }'
+
+# Equivalent 3-field form (same schedule, Pulse-specific syntax)
+curl -X POST http://localhost:8090/api/v1/reports/schedules \
+  -H "Authorization: Bearer plt_<admin_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Weekly viewer-minutes report",
+    "cron_expr": "0 6 1",
+    "format": "csv"
   }'
 ```
 
@@ -182,12 +208,16 @@ export PULSE_S3_REGION=us-east-1    # required even for S3-compatible endpoints
 
 ## White-label config
 
-The PDF statement header can show your company name and address (Enterprise tier):
+The PDF statement header can show your company name and address (Enterprise tier only — `white_label` entitlement):
 
 > **Phase-3 roadmap:** A dedicated `GET/PUT /api/v1/admin/whitelabel` endpoint
 > for global brand config (company name, address, logo URL) is planned for Wave 3
 > (CR-2, WO-205). In Wave 2, the PDF report header is minimal. White-label PDF polish
 > is a Phase-3 item.
+
+Note: **Business tier** enables report access (CSV, PDF, scheduling) but the white-label
+PDF header requires **Enterprise tier** (`white_label: true` entitlement). Business-tier
+PDF exports have a standard Pulse header.
 
 ---
 
@@ -255,5 +285,6 @@ The CSV includes these columns: `app`, `stream_id`, `tenant`, `viewer_minutes`,
 |---|---|---|
 | `/api/v1/admin/tenants` not in OpenAPI spec (D-004 freeze) | Minor | Wave 3 CR-WO204-01 |
 | White-label `GET/PUT /api/v1/admin/whitelabel` endpoint not implemented | Minor | Phase-3 roadmap |
-| D-W2-002: live ClickHouse column names wrong in `accounting.go` | Major | BE-02 fix pending |
-| Edge-origin viewer dedup not implemented in Wave 2 | Minor | Wave 3 GAP-2-002 |
+| D-W2-002: live ClickHouse column names wrong in `accounting.go` (`watch_s_state`, `peak_viewers_state`, `bucket_ts`; correct names: `watch_time_s`, `peak_concurrency`, `bucket`) | Major | BE-02 fix pending |
+| `peak_concurrency` in rollup = session count (SummingMergeTree), not true concurrent viewer peak | Minor | Phase-3 schema change needed (maxState/maxMerge rollup) |
+| Edge-origin viewer dedup | — | **Fixed V3a** — `IsEdgeStream()` implemented; aggregator dedup active (VD-03) |

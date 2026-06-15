@@ -56,22 +56,35 @@ PULSE_SECRET_KEY=$(openssl rand -hex 32) \
 
 ## Feature status
 
+Last updated: V3b fix-loop (2026-06-15). QA gate: PASS_WITH_LIMITATIONS.
+
 | Feature | PRD ref | Status | Notes |
 |---|---|---|---|
-| Live ops dashboard | F1 | **Shipped** | Streams, viewers, nodes, WS push; ≤10 s stream visibility |
-| Historical analytics | F2 | **Shipped** | 13-month rollup queries: 126 ms measured (budget 3 s) |
-| QoE beacon SDK | F3 | **Shipped** | TypeScript, 3.44 KB gzip (budget 15 KB); 56 tests; MIT |
-| Ingest health monitoring | F4 | **Shipped** | Health score formula; 250 µs detection (budget 15 s) |
-| Core alerting | F5 | **Shipped** | Email, Slack, Telegram, PagerDuty, Webhook; maintenance windows; default rule pack |
-| Usage / billing reports | F6 | **Shipped** | CSV + PDF; tenant mapping; S3 export; ±1% reconciliation |
-| Cluster fleet view | F7 | **Shipped** | Auto-discovery ≤ 30 s (budget 2 min); origin/edge roles |
-| Data API + Prometheus | F8 | **Shipped** | 5 bounded metrics; scrape token gate; Grafana starter panels |
+| Live ops dashboard | F1 | **Shipped** | Streams, viewers, nodes; WS push broadcasts `LiveOverview` shape; ≤10 s stream visibility; edge/origin viewer dedup active |
+| Historical analytics | F2 | **Shipped** | Geo + device breakdown: real rows from `viewer_sessions`; 13-month rollup: 150 ms measured (budget 3 s) |
+| QoE beacon SDK | F3 | **Shipped** | TypeScript, 3.52 KB gzip (budget 15 KB); 65 tests; MIT; `rebuffer_end` from HlsAdapter; bitrate from `hls.levels[]` |
+| QoE beacon round-trip | F3 | **Shipped** | SDK sends `X-Pulse-Ingest-Token`; main-port `/ingest/beacon` persists to EventSink (64 KB cap); Pro+ tier required; beacon events geo/UA enriched |
+| QoE summary (`/qoe/summary`) | F3 | **Shipped** | Queries `rollup_qoe_1h`; `startup_p50_ms` non-zero (250 ms measured); `bitrate_kbps_p50` field |
+| Ingest health monitoring | F4 | **Shipped** | Health score formula; `health_score` 0–100 scale; ingest timeseries + drop_events in API; 250 µs detection (budget 15 s) |
+| Core alerting | F5 | **Shipped** | Email (Free+), Slack/Telegram (Pro+), PagerDuty/Webhook (Business+); `muted=true` suppresses notifications; `group_by` collapses storm alerts; `node_down` fires on node absence; maintenance windows with range cron syntax |
+| Usage / billing reports | F6 | **Shipped** | Business+ tier required; CSV + PDF; tenant mapping; S3 export; ±1% reconciliation; 5-field cron schedules work |
+| Cluster fleet view | F7 | **Shipped** | Auto-discovery ≤ 30 s (budget 2 min); real origin/edge roles; node version field populated |
+| Data API + Prometheus | F8 | **Shipped** | 5 bounded metrics; scrape token uses constant-time compare; Grafana starter panels |
 | Helm install path | §7.10 | **Shipped** (authored) | Lint and template verified; cluster deploy deferred D-002 |
-| Licensing + tier enforcement | — | **Shipped** | Free/Pro/Enterprise; ed25519 verification; 403 on gated features |
-| API (REST + WebSocket) | — | **Shipped** | 32 paths, 46 ops, OpenAPI-conformant |
+| Licensing + tier enforcement | — | **Shipped** | 4-tier: Free/Pro/Business/Enterprise (PRD §7.11); ed25519 verification; 403 on gated features; token kind enforcement |
+| API (REST + WebSocket) | — | **Shipped** | 32 paths, 46 ops, OpenAPI-conformant; WS origin enforcement; idempotent DELETE documented |
 | Onboarding wizard | §7.12 | **Shipped** | 4-step first-run flow |
 | Anomaly detection | F9 | **Shipped** (Wave 3-MVP, Enterprise) | Welford baselines; σ=4.0; 0.259 false alarms/node-week (target <1); minSamples=30 warmup; hysteresis cooldown |
 | Synthetic probes | F10 | **Shipped** (Wave 3-MVP, Pro+) | HLS full; webrtc/rtmp/dash reachability-only stubs (Phase-3 roadmap); 60 s config refresh; 4-worker pool; 90-day result TTL |
+
+### Known limitations (Phase-3 / deferred)
+
+- Dashboard render time at 500 streams: virtualization confirmed (≤20 DOM rows), wall-clock not measured — Phase-3 Playwright benchmark.
+- `rebuffer_ratio` / `error_rate` alert rules: computed from live ingest health heuristic proxy; full ClickHouse `rollup_qoe_1h` query is Phase-3.
+- `peak_concurrency` in billing rollup is session count (SummingMergeTree), not true concurrent viewer peak — Phase-3 schema change.
+- Kafka `Lag()` / `ParseErrors()` not in `/healthz` — Phase-3.
+- AMS Kafka / log-tail source: no broker available in CI (D-007.5 waiver); REST poller path fully functional and QA-verified.
+- Docker Compose not tested on build machine (D-002 waiver); local binary path is QA-verified.
 
 ---
 
@@ -175,7 +188,7 @@ cd server && CGO_ENABLED=0 go build ./... && CGO_ENABLED=0 go test ./...
 ```sh
 cd web && npm install && npm run dev   # proxies to pulse serve on :8090
 cd web && npm run build                # production build
-cd web && npm run test                 # 109 component tests (58 Wave 2 + 51 Wave 3)
+cd web && npm run test                 # 150 component tests (V3b — 11 suites)
 ```
 
 **API types (auto-generated from OpenAPI spec):**
@@ -196,4 +209,5 @@ sqlite3 :memory: < contracts/db/meta/0001_init.sql        # meta DDL
 - **Wave 1 / MVP (complete):** Collector, live ops dashboard (F1), historical analytics (F2), core alerting (F5), Docker Compose installer, licensing.
 - **Wave 2 (complete):** QoE beacon SDK (F3, 3.44 KB gzip), ingest health (F4, 250 µs detection), usage/billing reports (F6, ±1% reconciliation), cluster fleet view (F7, ≤30 s discovery), full data API + Prometheus (F8), Telegram/PD/webhook channels, Helm chart.
 - **Wave 3-MVP (complete):** Anomaly detection (F9, Enterprise — Welford baselines, 0.259 false alarms/node-week), synthetic probes (F10, Pro+ — HLS full coverage, webrtc/rtmp/dash minimal-honest stubs).
-- **Post-MVP (Phase 3):** Mobile beacons, SSO, white-label PDF, air-gapped licensing, distributed probe network, multi-node edge dedup, multi-window anomaly baselines, native RTMP/WebRTC/DASH probing.
+- **V3a/V3b fix-loop (complete, 2026-06-15):** Beacon round-trip end-to-end (SDK header, main-port sink, Pro+ gate, geo enrichment); geo/device analytics; QoE rollup queries; ingest health non-zero; alerting muted/group_by/node_down; 4-tier license model (Business tier); report tier gates; 5-field cron; security hardening (CT compare, WS origin, token kind). See `docs/ARCHITECTURE.md` §V3b for full defect list.
+- **Post-MVP (Phase 3):** Mobile beacons, SSO, white-label PDF, air-gapped licensing, distributed probe network, native RTMP/WebRTC/DASH probing, multi-window anomaly baselines, true concurrent-peak billing rollup, headless render-time benchmarks.
