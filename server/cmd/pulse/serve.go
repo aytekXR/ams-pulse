@@ -268,9 +268,14 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	qsvc.SetClusterDiscovery(clusterDiscovery)
 
 	// HOOK(BE-02): Wire API server.
+	webDir := os.Getenv("PULSE_WEB_DIR")
+	if webDir == "" {
+		webDir = "/usr/share/pulse/web" // matches deploy/docker/pulse.Dockerfile
+	}
 	apiCfg := api.Config{
 		ListenAddr:   cfg.ListenAddr,
 		MetricsToken: cfg.MetricsToken, // Wave 2: PULSE_METRICS_TOKEN gating
+		WebDir:       webDir,
 	}
 	apiServer := api.New(apiCfg, metaStore, agg, qsvc, lic, logger)
 	// Wire ClickHouse connection for /healthz probes (D-W1-002).

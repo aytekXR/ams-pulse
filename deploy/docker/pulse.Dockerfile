@@ -9,13 +9,13 @@
 FROM node@sha256:9385cd9f3001dfc3431e8ead12c43e9e1f87cc1b9b5c6cfd0f73865d405b27c4 AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json* ./
-RUN npm ci || npm install
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 COPY web/ ./
 RUN npm run build
 
 # --- server ---
-# golang:1.24-alpine
-FROM golang@sha256:8bee1901f1e530bfb4a7850aa7a479d17ae3a18beb6e09064ed54cfd245b7191 AS server
+# golang:1.25-alpine — bumped from the 1.24 digest: server/go.mod requires go >= 1.25.0
+FROM golang:1.25-alpine AS server
 WORKDIR /src/server
 COPY server/go.mod server/go.sum* ./
 RUN go mod download || true
@@ -26,7 +26,9 @@ RUN CGO_ENABLED=0 go build -o /out/pulse ./cmd/pulse
 # --- runtime ---
 # alpine:3.21
 FROM alpine@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
-RUN adduser -D -H pulse
+# Create the meta-store/secret-key dir owned by the non-root pulse user so a fresh
+# pulse-data named volume inherits pulse:pulse ownership (else SQLITE_CANTOPEN at /var/lib/pulse).
+RUN adduser -D -H pulse && mkdir -p /var/lib/pulse && chown pulse:pulse /var/lib/pulse
 COPY --from=server /out/pulse /usr/local/bin/pulse
 COPY --from=web /src/web/dist /usr/share/pulse/web
 USER pulse

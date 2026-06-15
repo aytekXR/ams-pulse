@@ -68,6 +68,11 @@ type Config struct {
 	// Set to []string{"*"} for development only.
 	// VD-S2: replaces the removed InsecureSkipVerify=true.
 	AllowedWSOrigins []string
+	// WebDir is the directory of the built web UI (index.html + assets/).
+	// When set and present, the server serves the SPA and its static assets,
+	// falling back to index.html for client-side routes. Empty (or an absent
+	// dir) disables static serving so API-only and test deployments keep 404s.
+	WebDir string
 }
 
 // KafkaStatsProvider is the interface to the Kafka source for health reporting.
@@ -347,7 +352,49 @@ func (s *Server) buildRouter() {
 		r.Delete("/admin/users/{userId}", s.handleDeleteUser)
 	})
 
+	// Static serving of the built web UI (SPA). Registered after the API routes
+	// (so they take precedence) and gated on the assets being present, so
+	// API-only and test builds keep clean 404s.
+	s.mountWebUI(r)
+
 	s.router = r
+}
+
+// mountWebUI serves the built React SPA from s.cfg.WebDir: hashed assets under
+// /assets/*, and an index.html fallback for any unmatched non-API GET so deep
+// links (e.g. /live, /dashboard) resolve via client-side routing. It is a no-op
+// when WebDir is unset or its index.html is absent.
+func (s *Server) mountWebUI(r chi.Router) {
+	webDir := s.cfg.WebDir
+	if webDir == "" {
+		return
+	}
+	indexPath := webDir + "/index.html"
+	if _, err := os.Stat(indexPath); err != nil {
+		s.logger.Warn("api: web UI assets not found; static serving disabled", "dir", webDir, "error", err)
+		return
+	}
+
+	fileServer := http.FileServer(http.Dir(webDir))
+	// Hashed, immutable build assets (e.g. /assets/index-*.js).
+	r.Handle("/assets/*", fileServer)
+	// Root-level static files emitted by the build.
+	r.Get("/favicon.ico", fileServer.ServeHTTP)
+
+	// SPA fallback: serve index.html for unmatched GETs that are not API,
+	// ingest, or operational paths (those keep their own handlers / 404s).
+	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
+		p := req.URL.Path
+		if req.Method != http.MethodGet ||
+			strings.HasPrefix(p, "/api/") ||
+			strings.HasPrefix(p, "/ingest/") ||
+			p == "/healthz" || p == "/metrics" {
+			http.NotFound(w, req)
+			return
+		}
+		http.ServeFile(w, req, indexPath)
+	})
+	s.logger.Info("api: serving web UI", "dir", webDir)
 }
 
 // ─── Auth middleware ───────────────────────────────────────────────────────────
@@ -1800,7 +1847,11 @@ func userToAPI(u meta.User) map[string]any {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		// Status is already committed; at least make the silent failure visible
+		// (e.g. a NaN/Inf float that encoding/json refuses, truncating the body).
+		slog.Error("api: writeJSON encode failed; response body truncated", "error", err, "status", status)
+	}
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string) {

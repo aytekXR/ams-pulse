@@ -1,0 +1,71 @@
+services:
+  # ClickHouse 24.8 image disables network access for the `default` user unless
+  # CLICKHOUSE_USER/PASSWORD are set — which made the remote clickhouse-go client
+  # fail with "code 516: Authentication failed" while the local healthcheck passed.
+  # SKIP_USER_SETUP=1 keeps the built-in permissive default. Safe here: CH ports
+  # are only `expose`d on the cluster-internal network, never published to the host.
+  clickhouse:
+    environment:
+      CLICKHOUSE_SKIP_USER_SETUP: "1"
+
+  mock-ams:
+    image: golang:1.26
+    working_dir: /src/qa/mock-ams
+    command: ["go", "run", ".", "-addr", ":9090", "-app", "live"]
+    volumes:
+      - ../:/src:ro
+      - go-build-cache:/root/.cache/go-build
+    ports:
+      - "127.0.0.1:9090:9090"
+    restart: unless-stopped
+
+  pulse-migrate:
+    build:
+      context: ..
+      dockerfile: deploy/docker/pulse.Dockerfile
+    entrypoint: ["pulse", "migrate"]
+    environment:
+      PULSE_CLICKHOUSE_DSN: "clickhouse://clickhouse:9000/pulse"
+      PULSE_CLICKHOUSE_DATABASE: "pulse"
+      PULSE_MIGRATIONS_DIR: "/contracts/db/clickhouse"
+      PULSE_META_DSN: "/tmp/pulse_meta.db"
+    volumes:
+      - ../contracts:/contracts:ro
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: "no"
+
+  pulse:
+    # MVP exposure (user request): publish the UI+API on host port 80 so the
+    # dashboard is reachable in a browser at http://161.97.172.146.
+    # Docker port publishing bypasses ufw (INPUT=DROP) at the DNAT/FORWARD layer,
+    # so no firewall change is needed — consistent with "leave the firewall as-is".
+    # `!override` replaces the base ports list (compose otherwise CONCATENATES).
+    # NOTE: plain HTTP with the admin API public — acceptable for an MVP demo only;
+    # front with TLS + a domain and re-restrict before any production use.
+    ports: !override
+      - "80:8090"                # public UI+API → http://161.97.172.146
+      - "127.0.0.1:8090:8090"    # local debug access
+      - "8091:8091"              # beacon ingest (internet-facing)
+    environment:
+      PULSE_AMS_URL: "http://mock-ams:9090"
+      PULSE_AMS_NODE_ID: "standalone"
+      PULSE_POLL_INTERVAL: "5s"
+      PULSE_MIGRATIONS_DIR: "/contracts/db/clickhouse"
+      # `pulse serve` only applies the meta-store DDL when PULSE_META_DDL_PATH is set
+      # (it does not auto-run embedded meta migrations). The migrate one-shot ran meta
+      # DDL only against its throwaway /tmp DSN, so point serve at the mounted DDL to
+      # create api_tokens/alert_rules/probes/... in the real /var/lib/pulse meta db.
+      PULSE_META_DDL_PATH: "/contracts/db/meta/0001_init.sql"
+      PULSE_SECRET_KEY: "${PULSE_SECRET_KEY:?set PULSE_SECRET_KEY in deploy/.env}"
+    volumes:
+      - ../contracts:/contracts:ro
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      pulse-migrate:
+        condition: service_completed_successfully
+
+volumes:
+  go-build-cache:

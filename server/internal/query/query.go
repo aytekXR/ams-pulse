@@ -10,6 +10,7 @@ package query
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	clickhouse "github.com/ClickHouse/clickhouse-go/v2"
@@ -698,6 +699,17 @@ type QoeSummaryResult struct {
 	BitrateTimeline []BitrateBucket `json:"bitrate_timeline"`
 }
 
+// jsonSafeFloat replaces NaN/Inf with 0 so the value survives encoding/json.
+// ClickHouse quantilesMerge() over an empty rollup returns NaN — Scan accepts
+// it without error, so the no-data guards below do not fire; without this the
+// JSON encoder aborts mid-write and the client receives an empty 200 body.
+func jsonSafeFloat(f float64) float64 {
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return 0
+	}
+	return f
+}
+
 // QoeSummary queries rollup_qoe_1h (or rollup_qoe_1d for daily interval) and
 // returns startup latency percentiles, rebuffer ratio, error rate and bitrate
 // timeline. Falls back to empty result when ClickHouse is not configured.
@@ -759,6 +771,10 @@ func (s *Service) QoeSummary(ctx context.Context, p QoeParams) (*QoeSummaryResul
 		// No data — return empty.
 		return empty, nil
 	}
+	// quantilesMerge() over an empty rollup yields NaN (Scan succeeds, so the
+	// guard above does not fire) — sanitize so the response stays valid JSON.
+	startupP50 = jsonSafeFloat(startupP50)
+	startupP95 = jsonSafeFloat(startupP95)
 
 	var rebRatio, errRate float64
 	if watchMs > 0 {
@@ -799,6 +815,8 @@ func (s *Service) QoeSummary(ctx context.Context, p QoeParams) (*QoeSummaryResul
 		if err := trows.Scan(&b.TS, &b.BitrateKbpsP50, &b.BitrateKbpsP95); err != nil {
 			continue
 		}
+		b.BitrateKbpsP50 = jsonSafeFloat(b.BitrateKbpsP50)
+		b.BitrateKbpsP95 = jsonSafeFloat(b.BitrateKbpsP95)
 		timeline = append(timeline, b)
 	}
 	if timeline == nil {
