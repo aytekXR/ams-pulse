@@ -1,0 +1,181 @@
+# Pulse e2e — brings up the full compose stack and asserts end-to-end behaviour:
+#   • /healthz returns 200
+#   • pulse-migrate exits 0
+#   • ClickHouse schema tables exist
+#   • live/overview shows streams/viewers > 0 after mock traffic
+
+name: e2e
+
+on:
+  pull_request: {}
+  workflow_dispatch: {}
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate ephemeral secret key
+        run: echo "PULSE_SECRET_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+
+      - name: Build and start stack
+        run: |
+          docker compose \
+            -p pulse-e2e \
+            -f deploy/docker-compose.yml \
+            -f deploy/docker-compose.ci.yml \
+            up -d --build
+
+      - name: Wait for pulse /healthz (up to 150 s)
+        run: |
+          echo "Polling http://127.0.0.1:18090/healthz ..."
+          deadline=$(( $(date +%s) + 150 ))
+          while true; do
+            if curl -m 5 -sf http://127.0.0.1:18090/healthz; then
+              echo ""
+              echo "pulse is healthy"
+              break
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "TIMEOUT: pulse never became healthy after 150 s"
+              exit 1
+            fi
+            echo "  not ready yet, retrying in 5 s ..."
+            sleep 5
+          done
+
+      # ── Assert (a): /healthz 200 ────────────────────────────────────────────
+      - name: Assert /healthz returns 200
+        run: |
+          STATUS=$(curl -m 5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:18090/healthz)
+          echo "/healthz HTTP status: $STATUS"
+          [ "$STATUS" = "200" ] || { echo "FAIL: expected 200, got $STATUS"; exit 1; }
+
+      # ── Assert (b): pulse-migrate exited 0 ─────────────────────────────────
+      - name: Assert pulse-migrate exited 0
+        run: |
+          CONTAINER=$(docker compose -p pulse-e2e ps -a --format json \
+            | python3 -c "
+          import sys, json
+          rows = [json.loads(l) for l in sys.stdin if l.strip()]
+          match = [r for r in rows if 'migrate' in r.get('Name','').lower() or 'migrate' in r.get('Service','').lower()]
+          if not match:
+              print('NOT_FOUND')
+          else:
+              print(match[0]['Name'])
+          ")
+          echo "pulse-migrate container: $CONTAINER"
+          if [ "$CONTAINER" = "NOT_FOUND" ]; then
+            echo "FAIL: pulse-migrate container not found in compose ps output"
+            exit 1
+          fi
+          EXIT_CODE=$(docker inspect --format='{{.State.ExitCode}}' "$CONTAINER")
+          echo "pulse-migrate exit code: $EXIT_CODE"
+          [ "$EXIT_CODE" = "0" ] || { echo "FAIL: pulse-migrate exited $EXIT_CODE"; exit 1; }
+
+      # ── Assert (c): ClickHouse schema tables are non-empty ─────────────────
+      - name: Assert ClickHouse pulse tables exist
+        run: |
+          TABLES=$(docker compose \
+            -p pulse-e2e \
+            exec -T clickhouse \
+            clickhouse-client --query "SHOW TABLES FROM pulse")
+          echo "Tables in 'pulse' database:"
+          echo "$TABLES"
+          [ -n "$TABLES" ] || { echo "FAIL: no tables found in ClickHouse 'pulse' database"; exit 1; }
+
+      # ── Extract bootstrap admin token ───────────────────────────────────────
+      - name: Extract admin token from pulse logs
+        run: |
+          # The pulse binary prints the bootstrap token to stderr on first run:
+          #   pulse: FIRST RUN — generated admin token: plt_<random>
+          TOKEN=$(docker compose -p pulse-e2e logs pulse 2>&1 \
+            | grep -o 'plt_[A-Za-z0-9_-]*' | head -1)
+          if [ -z "$TOKEN" ]; then
+            echo "FAIL: could not find bootstrap token in pulse logs"
+            docker compose -p pulse-e2e logs pulse 2>&1 | tail -40
+            exit 1
+          fi
+          echo "PULSE_ADMIN_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          echo "Admin token found (prefix): ${TOKEN:0:10}..."
+
+      # ── Wait for mock-ams to finish compiling and become ready ──────────────
+      - name: Wait for mock-ams /healthz (up to 120 s)
+        run: |
+          echo "Polling http://127.0.0.1:19090/healthz ..."
+          deadline=$(( $(date +%s) + 120 ))
+          while true; do
+            if curl -m 5 -sf http://127.0.0.1:19090/healthz; then
+              echo ""
+              echo "mock-ams is healthy"
+              break
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "TIMEOUT: mock-ams never became healthy after 120 s"
+              docker compose -p pulse-e2e logs mock-ams 2>&1 | tail -30
+              exit 1
+            fi
+            echo "  not ready yet, retrying in 5 s ..."
+            sleep 5
+          done
+
+      # ── Seed a stream via mock-ams control API ───────────────────────────────
+      - name: Seed a broadcasting stream in mock-ams
+        run: |
+          # mock-ams is exposed on 127.0.0.1:19090 in CI (loopback only).
+          curl -m 5 -sf \
+            -X POST \
+            -H 'Content-Type: application/json' \
+            -d '{"stream_id":"e2e-stream-1","viewers":10}' \
+            http://127.0.0.1:19090/control/publish
+          echo "Stream seeded."
+
+      # ── Wait for poll cycle to propagate seeded stream ───────────────────────
+      - name: Wait 15 s for mock-ams traffic to propagate
+        run: sleep 15
+
+      - name: Assert live/overview shows streams/viewers > 0
+        run: |
+          RESP=$(curl -m 5 -s \
+            -H "Authorization: Bearer ${PULSE_ADMIN_TOKEN}" \
+            http://127.0.0.1:18090/api/v1/live/overview)
+          echo "live/overview response: $RESP"
+          # API returns total_publishers (streams) and total_viewers at top level.
+          echo "$RESP" | python3 -c "
+          import sys, json
+          try:
+              data = json.load(sys.stdin)
+          except Exception as e:
+              print(f'FAIL: invalid JSON — {e}')
+              sys.exit(1)
+          streams  = data.get('total_publishers', 0)
+          viewers  = data.get('total_viewers', 0)
+          print(f'streams={streams}  viewers={viewers}')
+          if int(streams) > 0 or int(viewers) > 0:
+              print('PASS: live overview has activity')
+          else:
+              print('FAIL: both streams and viewers are 0')
+              sys.exit(1)
+          "
+
+      # ── Teardown — always runs ───────────────────────────────────────────────
+      - name: Dump compose logs on failure
+        if: failure()
+        run: |
+          docker compose \
+            -p pulse-e2e \
+            -f deploy/docker-compose.yml \
+            -f deploy/docker-compose.ci.yml \
+            logs --no-color
+
+      - name: Tear down stack and remove volumes
+        if: always()
+        run: |
+          docker compose \
+            -p pulse-e2e \
+            -f deploy/docker-compose.yml \
+            -f deploy/docker-compose.ci.yml \
+            down -v

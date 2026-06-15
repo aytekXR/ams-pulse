@@ -41,10 +41,9 @@ services:
     # dashboard is reachable in a browser at http://161.97.172.146.
     # Docker port publishing bypasses ufw (INPUT=DROP) at the DNAT/FORWARD layer,
     # so no firewall change is needed — consistent with "leave the firewall as-is".
-    # `!override` replaces the base ports list (compose otherwise CONCATENATES).
     # NOTE: plain HTTP with the admin API public — acceptable for an MVP demo only;
     # front with TLS + a domain and re-restrict before any production use.
-    ports: !override
+    ports:
       - "80:8090"                # public UI+API → http://161.97.172.146
       - "127.0.0.1:8090:8090"    # local debug access
       - "8091:8091"              # beacon ingest (internet-facing)

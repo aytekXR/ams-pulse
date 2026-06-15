@@ -1,0 +1,67 @@
+# Pulse CI override — safe for GitHub Actions runners.
+#
+# Differences from docker-compose.override.yml (the DEMO override):
+#   - pulse published ONLY on loopback (127.0.0.1:18090/18091), not :80
+#   - mock-ams control API published on loopback (127.0.0.1:19090) for CI seeding
+#   - PULSE_SECRET_KEY sourced from the CI environment (never .env)
+#
+# Usage:
+#   docker compose -p pulse-e2e \
+#     -f deploy/docker-compose.yml \
+#     -f deploy/docker-compose.ci.yml \
+#     up -d --build
+
+services:
+  clickhouse:
+    environment:
+      CLICKHOUSE_SKIP_USER_SETUP: "1"
+
+  mock-ams:
+    image: golang:1.26
+    working_dir: /src/qa/mock-ams
+    command: ["go", "run", ".", "-addr", ":9090", "-app", "live"]
+    volumes:
+      - ../:/src:ro
+      - go-build-cache:/root/.cache/go-build
+    ports:
+      - "127.0.0.1:19090:9090"   # Control API — loopback only, CI seed calls
+    restart: unless-stopped
+
+  pulse-migrate:
+    build:
+      context: ..
+      dockerfile: deploy/docker/pulse.Dockerfile
+    entrypoint: ["pulse", "migrate"]
+    environment:
+      PULSE_CLICKHOUSE_DSN: "clickhouse://clickhouse:9000/pulse"
+      PULSE_CLICKHOUSE_DATABASE: "pulse"
+      PULSE_MIGRATIONS_DIR: "/contracts/db/clickhouse"
+      PULSE_META_DSN: "/tmp/pulse_meta.db"
+    volumes:
+      - ../contracts:/contracts:ro
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: "no"
+
+  pulse:
+    ports:
+      - "127.0.0.1:18090:8090"   # UI + API — loopback only (no host :80)
+      - "127.0.0.1:18091:8091"   # Beacon ingest — loopback only
+    environment:
+      PULSE_AMS_URL: "http://mock-ams:9090"
+      PULSE_AMS_NODE_ID: "standalone"
+      PULSE_POLL_INTERVAL: "5s"
+      PULSE_MIGRATIONS_DIR: "/contracts/db/clickhouse"
+      PULSE_META_DDL_PATH: "/contracts/db/meta/0001_init.sql"
+      PULSE_SECRET_KEY: "${PULSE_SECRET_KEY:?set PULSE_SECRET_KEY}"
+    volumes:
+      - ../contracts:/contracts:ro
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      pulse-migrate:
+        condition: service_completed_successfully
+
+volumes:
+  go-build-cache:

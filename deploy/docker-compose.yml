@@ -23,11 +23,9 @@ services:
     build:
       context: ..
       dockerfile: deploy/docker/pulse.Dockerfile
-    ports:
-      - "8090:8090"   # UI + API (internal network / reverse proxy only)
-      - "8091:8091"   # Beacon ingest — the ONLY internet-facing port.
-                      # Put a TLS-terminating reverse proxy (nginx/caddy) in front.
-                      # Never expose HTTP beacon ingest directly to the internet.
+    expose:
+      - "8090"    # UI + API — publish via an override (demo/CI) or a reverse proxy
+      - "8091"    # Beacon ingest — publish via an override or TLS-terminating proxy
     environment:
       # ── Core server ──────────────────────────────────────────────────────────
       PULSE_LISTEN_ADDR: ":8090"

@@ -38,7 +38,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           # Match the version used in ci.yml (CGO_ENABLED=0 required throughout).
-          go-version: "1.24"
+          go-version: "1.25"
 
       - name: Build pulse binary (CGO_ENABLED=0)
         run: CGO_ENABLED=0 go build -o /tmp/pulse ./server/cmd/pulse/
