@@ -404,3 +404,36 @@ if a command hangs, kill and move on. Smaller per-agent scope (3-deep server cha
 vs 2 heavy) to bound context/time. Verification favors bounded Go tests over live
 servers (e.g. VD-09 = assert the SDK header constant equals the server's expected
 header — no server needed).
+
+## D-017 · 2026-06-15 · V3b gate PASS; QA-3b "remaining defects" SPURIOUS (D-013 recurrence)
+
+V3b (`wf_f21da966-d85`, hardened) completed: BE-02-B `cfd6d79` (alerting: muted,
+group_by, node_down, cron range/5-field), BE-02-C `982f73e` (tier gating per §7.11,
+WS LiveOverview, fleet role, security VD-S1/S2/S3), FE-01 `9a0ba42` (tier copy, WS
+mapping, interval param), QA `050ba6f`, DOC `568a22b`. **QA verdict
+PASS_WITH_LIMITATIONS**; all V3b VD guard tests PASS; full regression green (22 Go
+pkgs, 150 web, 65 SDK; wave-1/2/3 gate scripts pass).
+
+**BUT QA-3b's "still-open defects" table listed 12 VDs (VD-03/06/07/08/09/10/11/12/
+17/21/23/X3-A) as OPEN — all SPURIOUS.** Every one was fixed + verified in V3a-rest;
+QA-3b echoed the V2-triage descriptions without re-verifying ("not re-verified in
+V3b scope"). DOC propagated two (VD-23, VD-X3-A) into ARCHITECTURE.md. This is the
+**second** occurrence of this QA failure mode (cf. D-013, wave-3 stale binary).
+
+ORCH-00 empirically disproved all 12 on HEAD: `go test -tags integration -run
+'TestQuery_Geo/Device/QoeSummary|TestVD10/20b/21' ./internal/query/... ./internal/
+api/...` PASS; handlers call real queries (server.go:752/771, not stubs);
+`TestVD23_IngestTracker_InterfaceConformance`, `TestContract_AmsSourceStatus_
+HandlerReachableField` PASS; SDK 65/65 (VD-09/12). **All 12 CLOSED.**
+
+Corrections applied: ARCHITECTURE.md VD-23/VD-X3-A → CLOSED; an ORCH-00 correction
+banner prepended to `V3b-QA-gate-report.md`. **Systemic guard:** QA-agent
+"remaining/carried defect" lists are NOT authoritative — the IMPLEMENTATION_LOG
+feature status is built from ORCH-00's own empirical verification (tests run on
+HEAD), not from echoed triage descriptions. Future QA prompts must REBUILD + RE-RUN
+each prior-fixed defect's guard test before listing it as open.
+
+**Validation COMPLETE.** All V2 P0/P1/P2 defects (the 11 MVP-blocking + the majors/
+security/contract) are fixed and verified; only genuine P3 (test-coverage, cosmetic,
+Phase-3) + D-002/D-007.5 waivers remain. Next: consolidation + `IMPLEMENTATION_LOG.md`
+→ notify user, STOP for review.

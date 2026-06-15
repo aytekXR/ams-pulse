@@ -150,7 +150,29 @@ Result: PASS — `viewer_count=95 (hls=50 webrtc=30 rtmp=10 dash=5)`.
 
 ---
 
-## Still-open defects (non-blocking for current wave)
+## ⚠️ ORCH-00 CORRECTION (2026-06-15, decision D-017): the table below is SPURIOUS
+
+**This "Still-open defects" table is WRONG.** Every VD it marks "OPEN" (VD-03, VD-06,
+VD-07, VD-08, VD-09, VD-10, VD-11, VD-12, VD-17, VD-21, VD-23, VD-X3-A) was FIXED and
+verified in **V3a-rest** (commits `f1d0a7c` BE-01, `5996f2e`+`782c166` BE-02,
+`63f5e81` SDK-01; QA `0845ae8` PASS) — the QA-3b agent echoed the V2-triage
+descriptions WITHOUT re-verifying against the current tree (it even says VD-09 "not
+re-verified in V3b scope"). This is the same mis-report pattern as D-013.
+
+ORCH-00 empirically disproved all of them on the current HEAD:
+- `go test -tags integration -run 'TestQuery_GeoBreakdown|TestQuery_DeviceBreakdown|TestQuery_QoeSummary|TestVD21|TestVD20b|TestVD10' ./internal/query/... ./internal/api/...` → **PASS** (geo/device non-empty, QoE startup_p50 non-zero, ingest timeseries, beacon→sink).
+- `handleGeoAnalytics`/`handleDeviceAnalytics` call `qsvc.GeoBreakdown/DeviceBreakdown` (server.go:752/771) — NOT stubs.
+- aggregator edge-dedup + health guard tests PASS; `TestVD23_IngestTracker_InterfaceConformance` + `TestContract_AmsSourceStatus_HandlerReachableField` PASS.
+- SDK 65/65 (VD-09 header + VD-12 rebuffer_end guard tests).
+
+**All 12 are CLOSED.** The V3b verdict (PASS_WITH_LIMITATIONS) stands; the only real
+limitations are the D-002/D-007.5 waivers and the genuine P3 items (VD-04, VD-14,
+VD-18, VD-24, VD-26, VD-27, VD-31, VD-38, VD-X3-B/C/D — test-coverage/cosmetic/
+Phase-3). The original (incorrect) table is retained below for the audit trail.
+
+---
+
+## Still-open defects (non-blocking for current wave) — SUPERSEDED by the correction above
 
 The following VDs were NOT addressed in V3b (out of scope for BE-02/FE-01 fix-loop assignment). They remain as known-open items with assigned owners:
 
