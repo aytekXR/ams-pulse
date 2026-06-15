@@ -1,106 +1,156 @@
 # Resume prompt — Pulse (next session)
 
-> Written by ORCH-00 at the end of the 2026-06-15 **session 2**. The MVP plus the first
-> post-MVP wave (**Wave 3-Plus: Phase-3 tech-debt & accuracy closeout**) are complete,
-> independently verified, and committed to `main`. Paste this into a fresh Claude Code
-> session started in `/Users/ae/repo/ant-marketplace`.
+> Updated 2026-06-15 (**session 3**). The functional MVP is now **DEPLOYED end-to-end on a
+> real VPS via Docker Compose** against the built-in mock AMS — **closing the long-standing
+> D-002 waiver** — and committed + pushed to `main`. The next phases are defined below **as
+> Workflows**, each with a built-in **verification flow** and a **commit + handoff flow**.
+> Paste this into a fresh Claude Code session started in the repo root
+> (`/home/aytek/repo/ams-pulse` on the VPS).
 
-## ✅ Status: Wave 3-Plus COMPLETE — awaiting user direction
+## ✅ Status
 
-The MVP (F1–F10) was complete and reviewed; this session closed the deferred,
-environment-feasible **Phase-3 tech-debt & accuracy** gaps the user selected. All 10 items
-landed and were **independently re-verified on HEAD by ORCH-00** (not just QA — per the
-D-013/D-017 lesson). Gate **CLOSED** (decision **D-019**, PASS_WITH_LIMITATIONS; only the
-D-002 no-Docker and D-007.5 no-Kafka-broker waivers remain).
+**Prior (sessions 1–2):** MVP (F1–F10) + **Wave 3-Plus** (Phase-3 tech-debt & accuracy)
+complete, independently verified, on `main`. Gate **CLOSED** (D-019, PASS_WITH_LIMITATIONS).
+Authoritative artifacts: `IMPLEMENTATION_LOG.md`, `DEVLOG.md`, `agents/handoffs/decisions.md`
+(**D-001…D-019** binding), `qa/wave-3-plus/gate-report.md`.
 
-**What shipped this wave** (Workflow `pulse-phase3-techdebt`, run `wf_fba510ab-717`,
-commits `19ea611`→`7aa877a` + the ORCH-00 D-019 orchestration commit):
+**This session (session 3) — D-002 waiver CLOSED.** Brought the FULL stack up on an Ubuntu
+VPS via Docker Compose against the mock AMS and verified end-to-end; exposed a working
+dashboard on the internet.
+- Pipeline `mock-AMS → collector → ClickHouse → aggregator → API → web UI` verified **live**:
+  559 viewers across cam1/cam2; real-time publish/unpublish/viewer-change propagation within
+  the 5s poll; license-tier gating correct (anomalies=Enterprise, probes=Pro → 403 on Free).
+- Getting a working stack required **5 deploy fixes + 2 server bugs** (commit `c5d882f`):
+  npm `--legacy-peer-deps` (eslint@9 vs @eslint/js@10); builder `golang 1.24→1.25`
+  (`go.mod` needs ≥1.25); `/var/lib/pulse` owned by `pulse` (SQLITE_CANTOPEN); ClickHouse
+  `CLICKHOUSE_SKIP_USER_SETUP=1`; `PULSE_META_DDL_PATH` so serve creates meta tables + the
+  first-run admin token; one-shot **`pulse migrate`** that creates the CH schema (the real
+  D-002 gap — `pulse serve` does NOT run CH migrations); **web-UI static serving** registered
+  in `buildRouter` (was 404; assets shipped but unserved); **`/api/v1/qoe/summary`** NaN→valid
+  empty JSON (was an empty 200 body). `go test ./internal/api` ok (0 fail).
+- **Live (DEMO-GRADE)** at `http://161.97.172.146/` — UI+API on host `:80 → pulse:8090`, plain
+  HTTP, admin API public, CH auth relaxed. **Admin token** is printed once to
+  `docker compose logs pulse` (first-run). `deploy/docker-compose.override.yml` carries the
+  mock-AMS + migrate + exposure config; `deploy/.env` (gitignored) holds `PULSE_SECRET_KEY`.
+- Committed + pushed to `main`: `c5d882f` (MVP) + the resume/handoff commit.
 
-- **VD-38** — true windowed `peak_concurrency`: new `rollup_concurrency_1d`
-  (AggregatingMergeTree) takes `maxState(viewer_count)` from `server_events`; billing reads
-  `maxMerge`. Verified peak=25/5 from overlapping snapshots (was a session-count proxy).
-- **GAP-3-001** — probe first-segment TTFB (`segment_ttfb_ms`) end-to-end (domain→CH→API→UI).
-- **GAP-3-003** — HLS probe now follows a master playlist's first variant → real bitrate.
-- **GAP-3-004** — anomaly epsilon floor (`max(stddev, 0.05·|mean|, 1e-9)`): deviations from a
-  *constant* baseline now flag; false-alarm bound unchanged (0.2594/node-week).
-- **VD-27** — Kafka consumer lag + parse-errors now in `/healthz` (and `Lag()` actually reads
-  `r.Stats().Lag`, atomic-safe).
-- **VD-18/19/24/26/31/41** — dimensional 13-mo query gate; geo/device + qoe/ingest API
-  integration tests; IngestPage UI test; **real wall-clock** alert-latency test; discovery
-  sink-emit test.
+## Next session — run these Workflows (orchestrate with the Workflow tool)
 
-**Verified green on HEAD:** server `go build/vet` clean + `go test ./...` **18 pkgs, 0 fail**
-+ CH integration (VD-38/19/24) pass; web **157/157** + lint + tsc strict; SDK unchanged
-(65, 3.52 KB). New migrations: `0002_concurrency_rollup.sql`, `0003_probe_segment_ttfb.sql`.
+Default order **W1 → W2**; the rest are optional (ask the user). **Every** workflow MUST end
+with the Verify + Commit + Handoff flows defined in the next section.
 
-**Authoritative artifacts:** `IMPLEMENTATION_LOG.md` (per-feature, updated), `DEVLOG.md`
-(chronology), `agents/handoffs/decisions.md` (**D-001…D-019** binding; D-018 = the wave plan,
-D-019 = the gate close). QA gate: `qa/wave-3-plus/gate-report.md`.
+### Workflow 1 — `pulse-cicd` — stand up always-on CI/CD (gates `main`)
+Goal: every push/PR to `main` is built + linted + tested; broken changes cannot merge.
+Phases:
+1. **Plan/contracts** — ORCH writes the CI plan + branch-protection policy to `decisions.md` (new CR).
+2. **Author** (parallel agents, disjoint files under `.github/workflows/`):
+   - `server`: Go 1.25 → `cd server && go vet ./... && go build ./... && go test ./... -race`,
+     with a ClickHouse **service container** so integration tests run (or isolate
+     build-tagged integration tests into their own job).
+   - `web`: `cd web && npm ci --legacy-peer-deps && npm run lint && npm run build && npm test`.
+   - `sdk`: `cd sdk/beacon-js && npm ci && npm run build && npm run size` (fail if >15 KB).
+   - `docker`: `docker build -f deploy/docker/pulse.Dockerfile .` (prove the image builds).
+   - `e2e` (PR only): compose up (base + override), wait for health, drive mock-ams traffic,
+     assert `/healthz` ok + `/api/v1/live/overview` shows published viewers + `pulse-migrate`
+     exited 0 + `SHOW TABLES FROM pulse` non-empty; then `compose down -v`.
+   - `release.yml` (on tag `v*`): build + push the pulse image to GHCR, tagged with the version.
+3. **VERIFY (adversarial)** — open a draft PR; confirm all jobs go green; push a *deliberately
+   broken* change (failing test) and confirm the merge is **BLOCKED**; confirm required status
+   checks + branch protection on `main` (provide a `gh` script).
+4. **GATE** — ORCH independently inspects the PR checks / re-runs locally (QA not authoritative
+   alone — D-013/D-017). Only then accept.
+5. **Commit + Handoff** (see protocol below).
 
-## ⚠️ One thing to decide: untracked VPS/Docker test-kit
+### Workflow 2 — `pulse-productionize` — TLS + real AMS + hardening
+Goal: production-ready, real-AMS deployment. Current live exposure is DEMO-GRADE.
+Phases:
+1. **Plan/contracts.**
+2. **Author** (parallel where disjoint):
+   - **Real AMS**: add `deploy/docker-compose.real-ams.yml` (no mock) wiring `PULSE_AMS_URL` +
+     `PULSE_AMS_AUTH_TOKEN` + `PULSE_AMS_NODE_ID` + `PULSE_AMS_APPLICATIONS`; harden
+     `pkg/amsclient` for real wire-format variance (extra/missing fields, status values,
+     pagination, cluster vs standalone, AMS version differences) with captured fixtures + tests.
+   - **Security**: TLS-terminating reverse proxy (Caddy/nginx) + real domain; move UI/API off
+     public plain HTTP back to internal + proxy; restore CH auth (CLICKHOUSE_USER/PASSWORD,
+     thread into DSNs, drop SKIP_USER_SETUP); secrets manager for PULSE_SECRET_KEY + AMS token;
+     review CORS / WS allowed origins.
+   - **QoE/beacon**: integrate `sdk/beacon-js` into AMS player pages; validate end-to-end
+     (needs Pro+ license to lift the ingest gate so `beacon_events` populate `qoe/summary`).
+   - **Ops**: backups + retention (ClickHouse + SQLite meta); resource limits; metrics scraping
+     (`PULSE_METRICS_TOKEN`); a short runbook.
+3. **VERIFY** — against a running stack: `POST /api/v1/admin/sources/{id}/test` for the real AMS;
+   re-run the e2e smoke; **adversarially verify each goal** (try to refute "it works" before
+   accepting); confirm the public surface is locked down + TLS valid.
+4. **GATE** — ORCH independent re-gate on HEAD.
+5. **Commit + Handoff.**
 
-Three **untracked** files are sitting in the tree, NOT created by this wave's agents and NOT
-committed: `deploy/docker-compose.override.yml`, `docs/runbooks/test-on-vps.md`,
-`qa/vps-smoke-test.sh`. They are a coherent kit to bring the full stack up against the mock
-AMS **on a real VPS** — i.e. to finally execute the **D-002-waived** Docker Compose path that
-this macOS machine can't run. Decide whether to adopt them as a separate "close the D-002
-waiver" workstream (then commit via INFRA-01/QA-01 scope) or discard. ORCH-00 left them
-untouched per the "don't commit what you didn't author / surface it" rule.
+### Optional follow-on workflows (ask the user first)
+- `pulse-enterprise` — SSO (OIDC), white-label (brand config + branded PDF), air-gapped
+  licensing (signed offline license). Maps to PRD "2 Enterprise logos".
+- `pulse-portability-spike` — protocol-level beacon against a non-AMS HLS source
+  (Wowza/Red5/Flussonic). PRD "one non-AMS pilot".
+- `pulse-mobile-sdks` — Android/iOS/Flutter beacons (native toolchains may be absent → author +
+  unit-test, execution waived).
+- `pulse-techdebt` — VD-04 headless render-time + VD-14 player-CPU via Playwright/CDP; long-run
+  anomaly false-alarm simulation.
 
-## What to do next session
+## Every workflow MUST include these flows (binding user directive)
 
-1. **If the user has feedback / change requests on Wave 3-Plus:** address exactly those.
-   Do NOT silently re-open the closed items.
-2. **If the user wants to keep going on Phase 3**, the remaining tracks (ask which):
-   - **Enterprise feature wave** — SSO (OIDC), white-label (global brand config + branded
-     PDF), air-gapped licensing (signed offline license). All buildable + verifiable here;
-     map to the PRD's "2 Enterprise logos" exit criterion.
-   - **Non-AMS portability spike** — protocol-level beacon against a Wowza/Red5/Flussonic-
-     style HLS source (PRD "3× addressable base"; "one non-AMS pilot").
-   - **Close the D-002 waiver on a real VPS** — use the untracked kit above (real Docker).
-   - **Mobile beacon SDKs** (Android/iOS/Flutter) — biggest item, but native toolchains are
-     likely absent here (would be authored + unit-tested, execution waived).
-   - **Remaining tech-debt** — VD-04 headless render-time + VD-14 player-CPU need a real
-     browser profiler (Playwright/CDP); long-run anomaly false-alarm simulation.
-3. **First, always:** `git status` (expect clean apart from the 3 untracked VPS files), and
-   if you will run code, re-download ClickHouse if `/tmp/clickhouse` was wiped (see Environment).
+- **Verification flow** — an independent/adversarial re-check of *every* claim against a running
+  stack or a fresh build. **QA is NOT authoritative alone** (D-013/D-017/D-019): rebuild and
+  re-run the guard, default to "refuted" until reproduced. Make it a dedicated workflow phase
+  (e.g. `parallel` skeptics per finding), not an afterthought.
+- **Commit flow** — commit the work by **EXPLICIT path**, per scope (never `git add -A`/`-u`/`.`;
+  parallel agents share the tree — D-008/D-011). Message `<scope> <id>: <summary>` + evidence.
+  **Push to `main` when the user directs** (this session pushed `c5d882f` + handoff to `main`).
+  Set a local git identity if the box has none (`git config user.email …`).
+- **Handoff flow** — UPDATE **this `RESUME-PROMPT.md`** with the new status + the next workflows,
+  then commit + push it. **Keep it current every session** (binding user directive). The old
+  separate `NEXT-SESSION-PROMPTS.md` is retired — everything lives here.
 
 ## Operating protocol (binding — learned the hard way)
 
-- **Orchestrate with the Workflow tool.** One wave = one Workflow; ORCH-00 writes the plan +
-  pre-approved CRs to `decisions.md`, dispatches `INT-01 → [BE-01→BE-02-…] ∥ FE-01 → QA-01 →
-  DOC-01`, then **independently gates**.
-- **Per-agent commits (D-008):** each agent verifies acceptance THEN commits its own scope by
-  **EXPLICIT path** (never `git add -A`/`-u`/`.` — parallel agents share the tree; D-011);
-  message `<AGENT-ID> <id>: <summary>` + evidence; no push; on `.git/index.lock` busy,
-  bounded wait+retry, never delete. ORCH-00 owns `DEVLOG`/`decisions`/`IMPLEMENTATION_LOG`/
-  `RESUME-PROMPT` and **keeps RESUME-PROMPT current every session** (user directive).
-- **Anti-stall (D-016 — a run once hung 9 h):** NEVER run a server/ClickHouse in the
-  foreground (`pulse serve`, `clickhouse server`). CH only via the Go integration harness
-  (`go test -tags integration`). `timeout` on every build/test; `-timeout` on every `go test`;
-  `npm run test` (vitest run), never watch. If a command hangs, kill it.
-- **QA is NOT authoritative alone (D-013, D-017, re-confirmed D-019):** before trusting any
-  "open/closed" claim, REBUILD binaries and RE-RUN that guard test on HEAD. ORCH-00's own test
-  runs are the source of truth. (This wave QA was *accurate* — but it was still re-verified.)
-- **Single-writer scope map** in `agents/manifest.yaml`. BE-01 → BE-02 strictly sequential
-  within a phase (shared `go.mod`/`cmd`); `prober/`→BE-01, `anomaly/`→BE-02 (D-012); SDK/FE/
-  INFRA parallel (disjoint trees). Contracts frozen (D-004) — changes only via ORCH-00-approved
-  CRs applied by INT-01.
+- **Orchestrate with the Workflow tool.** One phase of work = one Workflow; ORCH writes the plan
+  + pre-approved CRs to `decisions.md`, fans out to disjoint-scope agents, then **independently
+  gates** before accepting.
+- **Per-scope commits (D-008):** verify acceptance THEN commit your own scope by EXPLICIT path
+  (D-011); on `.git/index.lock` busy, bounded wait+retry, never delete. ORCH owns `DEVLOG`/
+  `decisions`/`IMPLEMENTATION_LOG`/`RESUME-PROMPT`.
+- **Anti-stall (D-016 — a run once hung 9 h):** NEVER run a server/ClickHouse in the foreground
+  (`pulse serve`, `clickhouse server`) **inside an agent**. For deploys use `docker compose up -d`
+  (detached) + health polling; for CH unit work use the Go integration harness
+  (`go test -tags integration`). Put `timeout` on builds and `-timeout` on `go test`; vitest
+  `run` not watch. **Never leave a foreground `curl` without `-m`** — that stranded 3 shells this
+  session. If a command hangs, kill it (TaskStop / kill the PID).
+- **Single-writer scope map** in `agents/manifest.yaml`. Contracts frozen (D-004) — changes only
+  via ORCH-approved CRs applied by INT-01. Background work is harness-tracked: you're re-invoked
+  on completion — don't poll-spin.
 
 ## Hard rules (CLAUDE.md / ARCHITECTURE §3)
 
 - AMS wire formats ONLY in `server/pkg/amsclient` + `server/internal/collector`; metrics in
-  ClickHouse, config in the meta store, never crossed; web UI consumes ONLY generated
-  public-API types; beacon ingest is hostile-input territory.
-- `CGO_ENABLED=0`; single binary `pulse serve|migrate|diag`; React 19 + RR7 + Vite 6 + TS
-  strict; recharts; no external fonts/CDNs.
-- **4 tiers** per PRD §7.11 (free / pro / **business** / enterprise) — `business` in the
-  contract enum and `internal/license/license.go` (D-014).
+  ClickHouse, config in the meta store, never crossed; web UI consumes ONLY generated public-API
+  types; beacon ingest is hostile-input territory.
+- `CGO_ENABLED=0`; single binary `pulse serve|migrate|diag`; React 19 + RR7 + Vite 6 + TS strict;
+  recharts; no external fonts/CDNs.
+- **4 tiers** per PRD §7.11 (free / pro / **business** / enterprise) — `business` in the contract
+  enum and `internal/license/license.go` (D-014).
+- Deploy fixes live in `deploy/` (Dockerfile + overrides); keep `deploy/docker-compose.yml` (base)
+  clean and put environment-specific config in overrides.
 
-## Environment
+## Environment (UPDATED — VPS with Docker)
 
-- macOS arm64; Go 1.26.4, Node v26, npm 11.12.1; **NO Docker** (D-002).
-- `/tmp/clickhouse` (v26.6.1) may be wiped between sessions — re-download BEFORE running BE/QA
-  code: `cd /tmp && curl -fsSL https://clickhouse.com/ | sh`.
-- `web/pulse_secret.key` (dev key) and `*.db*` ClickHouse artifacts are gitignored — never
-  commit. Work on `main`.
+- **This session ran on an Ubuntu 24.04 VPS** (`161.97.172.146`), x86_64, **WITH Docker 29 +
+  Compose v5**. The D-002 "no Docker" waiver is **CLOSED** for the mock-AMS path.
+- **Docker access:** user `aytek` is in the `docker` group; if a shell's group set is stale,
+  prefix commands with `sg docker -c "…"` (no password). **`sudo` requires a password** — ask the
+  user (via the `! <cmd>` prompt) for privileged ops (Docker install, `ufw`, etc.).
+- **Run the stack:** `cd deploy && docker compose up -d --build` (uses `docker-compose.yml` +
+  `docker-compose.override.yml`). Admin token: `docker compose logs pulse | grep plt_`.
+  `deploy/.env` holds `PULSE_SECRET_KEY` (gitignored).
+- **Firewall:** `ufw` is active (default DROP) but **Docker-published ports bypass ufw** here
+  (FORWARD/DNAT), which is why `:80`/`:8091` are internet-reachable without a ufw rule.
+- **If a future session runs on a no-Docker dev box** (the old environment): Go/Node toolchains;
+  ClickHouse via the Go integration harness only; re-download `/tmp/clickhouse` if wiped
+  (`cd /tmp && curl -fsSL https://clickhouse.com/ | sh`).
+- `*.db*`, `web/pulse_secret.key`, `deploy/.env` are gitignored — never commit. Work on `main`.
