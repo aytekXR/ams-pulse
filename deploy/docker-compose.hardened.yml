@@ -1,0 +1,124 @@
+# Pulse — hardened production-shaped override.
+#
+# Usage (local verify, self-contained):
+#   docker compose -p pulse-hardened \
+#     -f deploy/docker-compose.yml \
+#     -f deploy/docker-compose.hardened.yml \
+#     --env-file deploy/.env \
+#     up -d --build
+#
+# This file is a COMPLETE override:  base + hardened = production-shaped stack.
+# It includes mock-ams + pulse-migrate so it can be verified WITHOUT external
+# infra.  A separate real-ams override (not authored here) swaps mock-ams for
+# a real AMS endpoint.
+#
+# TLS:
+#   - Local verify:  Caddy obtains a certificate from its INTERNAL CA
+#     (no outbound ACME traffic, no domain required).  Import the root cert from
+#     the caddy_data volume if your browser shows an untrusted-CA warning:
+#       docker cp pulse-hardened-caddy-1:/data/caddy/pki/authorities/local/root.crt /tmp/
+#   - Production:  replace '{$PULSE_DOMAIN:localhost}' in config/Caddyfile with
+#     your public domain and switch 'tls internal' to 'tls {email}' (see comment
+#     in Caddyfile).  Caddy will obtain a Let's Encrypt certificate automatically.
+#
+# Required env vars (put in deploy/.env — see deploy/.env.example):
+#   PULSE_SECRET_KEY, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD
+# Optional:
+#   PULSE_DOMAIN (default: localhost)
+
+name: pulse-hardened
+
+services:
+
+  # ── Caddy TLS terminator ─────────────────────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"    # HTTP → Caddy handles redirect to HTTPS
+      - "127.0.0.1:8443:443"   # HTTPS — loopback only; avoids clashing with demo :80/:443
+    environment:
+      PULSE_DOMAIN: "${PULSE_DOMAIN:-localhost}"
+    volumes:
+      - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      pulse:
+        condition: service_healthy
+    networks:
+      - default
+
+  # ── Pulse application ────────────────────────────────────────────────────────
+  pulse:
+    # Remove ALL host port publishing — pulse is only reachable via Caddy.
+    ports: !override []
+    environment:
+      PULSE_CLICKHOUSE_DSN: "clickhouse://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@clickhouse:9000/pulse"
+      PULSE_CLICKHOUSE_DATABASE: "pulse"
+      PULSE_AMS_URL: "http://mock-ams:9090"
+      PULSE_AMS_NODE_ID: "standalone"
+      PULSE_POLL_INTERVAL: "5s"
+      PULSE_MIGRATIONS_DIR: "/contracts/db/clickhouse"
+      PULSE_META_DDL_PATH: "/contracts/db/meta/0001_init.sql"
+      PULSE_SECRET_KEY: "${PULSE_SECRET_KEY:?set PULSE_SECRET_KEY in deploy/.env}"
+      PULSE_META_DSN: "/var/lib/pulse/pulse_meta.db"
+      PULSE_LOG_LEVEL: "info"
+      PULSE_RETENTION_DAYS: "90"
+      PULSE_ROLLUP_TTL_DAYS: "395"
+    volumes:
+      - ../contracts:/contracts:ro
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      pulse-migrate:
+        condition: service_completed_successfully
+
+  # ── ClickHouse with authentication ──────────────────────────────────────────
+  clickhouse:
+    environment:
+      CLICKHOUSE_USER: "${CLICKHOUSE_USER}"
+      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD}"
+      # CLICKHOUSE_SKIP_USER_SETUP must NOT be set here — auth must be enforced.
+    healthcheck:
+      # Override the base healthcheck to pass credentials once auth is enabled.
+      test: ["CMD", "clickhouse-client", "--user", "${CLICKHOUSE_USER}", "--password", "${CLICKHOUSE_PASSWORD}", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 12
+
+  # ── Mock AMS (self-contained; real-ams override replaces this) ───────────────
+  mock-ams:
+    image: golang:1.26
+    working_dir: /src/qa/mock-ams
+    command: ["go", "run", ".", "-addr", ":9090", "-app", "live"]
+    volumes:
+      - ../:/src:ro
+      - go-build-cache:/root/.cache/go-build
+    # Internal only — no host port; Caddy and pulse reach it via the default network.
+    restart: unless-stopped
+
+  # ── Schema migration one-shot ────────────────────────────────────────────────
+  pulse-migrate:
+    build:
+      context: ..
+      dockerfile: deploy/docker/pulse.Dockerfile
+    entrypoint: ["pulse", "migrate"]
+    environment:
+      # Authenticated DSN — required once CLICKHOUSE_USER/PASSWORD are set.
+      PULSE_CLICKHOUSE_DSN: "clickhouse://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@clickhouse:9000/pulse"
+      PULSE_CLICKHOUSE_DATABASE: "pulse"
+      PULSE_MIGRATIONS_DIR: "/contracts/db/clickhouse"
+      PULSE_META_DSN: "/tmp/pulse_meta.db"
+    volumes:
+      - ../contracts:/contracts:ro
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  caddy_data:
+  caddy_config:
+  go-build-cache:

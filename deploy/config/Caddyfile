@@ -1,0 +1,68 @@
+# Pulse — Caddy TLS terminator configuration.
+#
+# LOCAL VERIFICATION (default):
+#   The site block uses '{$PULSE_DOMAIN:localhost}' which resolves to 'localhost'
+#   when the env var is unset.  'tls internal' makes Caddy issue a certificate
+#   from its own local CA — no outbound ACME traffic, no domain required.
+#
+#   To trust the local CA cert in your browser:
+#     docker cp pulse-hardened-caddy-1:/data/caddy/pki/authorities/local/root.crt /tmp/
+#   Then import /tmp/root.crt into your OS/browser trust store.
+#
+# PRODUCTION (operator-provided real domain):
+#   1. Set PULSE_DOMAIN=pulse.yourdomain.com in your .env / secrets manager.
+#   2. Remove or comment out the 'tls internal' line — Caddy will automatically
+#      obtain a Let's Encrypt TLS certificate for the domain.
+#   3. Optionally add 'tls admin@yourdomain.com' if ACME ToS acceptance is needed.
+#   4. Ensure TCP :80 and :443 are reachable from the internet for ACME HTTP-01.
+#   5. Update 'ports' in the override to publish on 0.0.0.0 instead of 127.0.0.1
+#      (or add a separate production ports override).
+#
+# Beacon ingest (:8091):
+#   Pulse's beacon ingest port is an internal protocol port; Caddy proxies the
+#   beacon HTTP path through the same :443 listener so clients need only one
+#   public port.  Adjust the path matcher if your SDK uses a different prefix.
+
+{
+    # Global options
+    # Uncomment to use a custom ACME CA (e.g. staging):
+    # acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+{$PULSE_DOMAIN:localhost} {
+    # LOCAL: Caddy internal CA — remove this line for production (Let's Encrypt).
+    tls internal
+
+    # Beacon ingest — proxy /beacon/* to pulse:8091 so clients only need :443.
+    handle /beacon/* {
+        reverse_proxy pulse:8091 {
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # UI + API — proxy everything else to pulse:8090.
+    handle {
+        reverse_proxy pulse:8090 {
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
+            # Pass the original Host so pulse can construct correct deep-link URLs.
+            header_up Host {host}
+        }
+    }
+
+    # Security headers.
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    log {
+        output stdout
+        format json
+        level INFO
+    }
+}
