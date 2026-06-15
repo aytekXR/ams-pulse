@@ -8,6 +8,64 @@ import (
 	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
 )
 
+// TestVD05_ViewerCountAccuracy_NonTautological verifies that NormalizeBroadcast
+// produces the correct viewer_count sum by using *asymmetric* per-protocol
+// counts that cannot be conflated. VD-05 noted the old budget test in
+// run-budget-tests.sh was tautological (grep for the addition string, not a
+// runtime check). This test checks the runtime output directly.
+//
+// Truth: hls=50, webrtc=30, rtmp=10, dash=5 → total=95
+// The per-protocol map must also be correctly populated (no field is silently
+// dropped or double-counted). Using values that are all distinct so a wrong
+// sum (e.g. missing dash, or summing hls twice) produces a wrong answer.
+func TestVD05_ViewerCountAccuracy_NonTautological(t *testing.T) {
+	dto := amsclient.BroadcastDTO{
+		StreamID:          "s1",
+		AppName:           "live",
+		Status:            "broadcasting",
+		HlsViewerCount:    50,
+		WebRTCViewerCount: 30,
+		RTMPViewerCount:   10,
+		DashViewerCount:   5,
+	}
+	events := NormalizeBroadcast(dto, "node-x", "broadcasting", NoopGeoResolver{}, NoopUAParser{})
+
+	var statsEv *domain.ServerEvent
+	for i := range events {
+		if events[i].Type == domain.EventStreamStats {
+			statsEv = &events[i]
+			break
+		}
+	}
+	if statsEv == nil {
+		t.Fatal("VD-05: NormalizeBroadcast emitted no EventStreamStats; cannot check viewer_count")
+	}
+
+	// viewer_count must be the runtime sum, not an inlined grep target.
+	const wantTotal = 95 // 50+30+10+5
+	got, ok := statsEv.Data["viewer_count"].(int)
+	if !ok {
+		t.Fatalf("VD-05: viewer_count type = %T, want int", statsEv.Data["viewer_count"])
+	}
+	if got != wantTotal {
+		t.Errorf("VD-05: viewer_count = %d, want %d (hls=50 webrtc=30 rtmp=10 dash=5)", got, wantTotal)
+	}
+
+	// Verify the per-protocol breakdown is also correct.
+	byProto, ok := statsEv.Data["viewer_count_by_protocol"].(map[string]any)
+	if !ok {
+		t.Fatalf("VD-05: viewer_count_by_protocol missing or wrong type")
+	}
+	checks := map[string]int{"hls": 50, "webrtc": 30, "rtmp": 10, "dash": 5}
+	for proto, wantV := range checks {
+		if v, ok2 := byProto[proto].(int); !ok2 || v != wantV {
+			t.Errorf("VD-05: viewer_count_by_protocol[%s] = %v, want %d", proto, byProto[proto], wantV)
+		}
+	}
+	t.Logf("PASS VD-05: viewer_count=%d (hls=%v webrtc=%v rtmp=%v dash=%v)",
+		got, byProto["hls"], byProto["webrtc"], byProto["rtmp"], byProto["dash"])
+}
+
 // TestNormalizeBroadcast_EmitsIngestStats verifies that NormalizeBroadcast
 // emits an EventIngestStats event when BroadcastDTO has FPS or bitrate (VD-22).
 // Before the fix, REST-only deployments always had fps=0 and FPS=0 in ClickHouse
