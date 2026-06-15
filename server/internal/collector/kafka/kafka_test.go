@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pulse-analytics/pulse/server/internal/domain"
+	kafkago "github.com/segmentio/kafka-go"
 )
 
 // captureSink collects events written to it.
@@ -193,4 +194,56 @@ func TestKafka_ContractRoundTrip(t *testing.T) {
 	if fps != 25.0 {
 		t.Errorf("fps = %v, want 25", fps)
 	}
+}
+
+// TestKafka_AtomicCounters verifies that ParseErrors() and Lag() are race-safe
+// and that processMessage increments parseErrors on malformed input (D-007.5 — no broker).
+func TestKafka_AtomicCounters(t *testing.T) {
+	sink := &captureSink{}
+	src := New(Config{Brokers: []string{"localhost:9092"}, NodeID: "n1"}, sink, nil)
+
+	// Counters start at zero.
+	if src.ParseErrors() != 0 {
+		t.Errorf("initial ParseErrors = %d, want 0", src.ParseErrors())
+	}
+	if src.Lag() != 0 {
+		t.Errorf("initial Lag = %d, want 0", src.Lag())
+	}
+
+	// Feed a malformed JSON message directly through processMessage.
+	malformed := kafkago.Message{
+		Topic:     "ams-server-events",
+		Partition: 0,
+		Offset:    0,
+		Value:     []byte("{not valid json"),
+	}
+	src.processMessage(malformed)
+
+	if src.ParseErrors() != 1 {
+		t.Errorf("after 1 malformed message: ParseErrors = %d, want 1", src.ParseErrors())
+	}
+
+	// Feed another malformed message — counter must increment again.
+	src.processMessage(malformed)
+	if src.ParseErrors() != 2 {
+		t.Errorf("after 2 malformed messages: ParseErrors = %d, want 2", src.ParseErrors())
+	}
+
+	// Valid message must NOT increment parseErrors.
+	valid := kafkago.Message{
+		Topic: "ams-server-events",
+		Value: []byte(`{"cpuUsage":10.0,"nodeId":"n1"}`),
+	}
+	src.processMessage(valid)
+	if src.ParseErrors() != 2 {
+		t.Errorf("after valid message: ParseErrors = %d, want still 2", src.ParseErrors())
+	}
+
+	// Lag() is readable at any time (atomic); manually store a value and check.
+	src.lag.Store(42)
+	if src.Lag() != 42 {
+		t.Errorf("Lag() = %d, want 42", src.Lag())
+	}
+
+	t.Logf("PASS: ParseErrors=%d, Lag=%d — atomic counters correct", src.ParseErrors(), src.Lag())
 }

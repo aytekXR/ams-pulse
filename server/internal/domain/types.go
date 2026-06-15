@@ -393,7 +393,8 @@ type ProbeResult struct {
 	TTFBMs      uint32    // time-to-first-byte in milliseconds
 	ErrorCode   string    // "timeout" | "dns" | "http_4xx" | "http_5xx" | "parse" | "not_probed" | ""
 	ErrorMsg    string    // human-readable detail; empty on success
-	BitrateKbps float32   // estimated kbps = segment_bytes / segment_duration_s; 0 on failure
+	BitrateKbps    float32   // estimated kbps = segment_bytes / segment_duration_s; 0 on failure
+	SegmentTTFBMs  uint32    // TTFB of the first media segment in ms; 0 if not measured
 }
 
 // ProbeConfigSource is the seam between the probe runner (BE-01) and the meta

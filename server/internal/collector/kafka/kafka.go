@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"github.com/pulse-analytics/pulse/server/internal/domain"
@@ -76,11 +77,12 @@ type Source struct {
 	logger *slog.Logger
 
 	// lag holds the last observed consumer lag (for /healthz reporting).
-	// Accessed via Lag(); updated on each fetch.
-	lag int64
+	// Accessed via Lag() from the healthz goroutine; updated by Run() — must be race-safe.
+	lag atomic.Int64
 
 	// parseErrors counts malformed messages since start.
-	parseErrors int64
+	// Accessed via ParseErrors() from the healthz goroutine; updated by processMessage() — race-safe.
+	parseErrors atomic.Int64
 }
 
 // New creates a Kafka Source.
@@ -110,11 +112,12 @@ func New(cfg Config, sink domain.EventSink, logger *slog.Logger) *Source {
 func (s *Source) Name() string { return "kafka" }
 
 // Lag returns the last observed consumer lag across all topic-partitions.
-// This is surfaced in /healthz component detail.
-func (s *Source) Lag() int64 { return s.lag }
+// This is surfaced in /healthz component detail. Safe to call from any goroutine.
+func (s *Source) Lag() int64 { return s.lag.Load() }
 
 // ParseErrors returns the count of malformed messages since start.
-func (s *Source) ParseErrors() int64 { return s.parseErrors }
+// Safe to call from any goroutine.
+func (s *Source) ParseErrors() int64 { return s.parseErrors.Load() }
 
 // Run implements collector.Source. It blocks until ctx is cancelled.
 // On broker failure the function returns an error; the supervisor restarts
@@ -151,6 +154,10 @@ func (s *Source) Run(ctx context.Context) error {
 			return fmt.Errorf("kafka: fetch: %w", err)
 		}
 
+		// Update lag from reader stats after each successful fetch.
+		// Stats().Lag reflects the lag at the time of the last fetch.
+		s.lag.Store(r.Stats().Lag)
+
 		s.processMessage(msg)
 
 		// Commit offset after successful processing (at-least-once delivery).
@@ -174,7 +181,7 @@ func (s *Source) processMessage(msg kafkago.Message) {
 	// so we can route to the correct normalized event type.
 	var raw map[string]any
 	if err := json.Unmarshal(msg.Value, &raw); err != nil {
-		s.parseErrors++
+		s.parseErrors.Add(1)
 		s.logger.Debug("kafka: malformed JSON, skipping",
 			"topic", msg.Topic,
 			"partition", msg.Partition,
@@ -186,7 +193,7 @@ func (s *Source) processMessage(msg kafkago.Message) {
 
 	ev, err := normalizeKafkaMessage(raw, s.cfg.NodeID)
 	if err != nil {
-		s.parseErrors++
+		s.parseErrors.Add(1)
 		s.logger.Debug("kafka: normalize failed, skipping",
 			"topic", msg.Topic,
 			"error", err,

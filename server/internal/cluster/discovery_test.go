@@ -6,32 +6,49 @@ package cluster
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/pulse-analytics/pulse/server/internal/domain"
 	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
 )
 
 // mockClusterClient returns a configurable list of cluster nodes.
 type mockClusterClient struct {
+	mu    sync.Mutex
 	nodes []amsclient.ClusterNodeDTO
 	calls atomic.Int32
 }
 
 func (m *mockClusterClient) ClusterNodes(_ context.Context) ([]amsclient.ClusterNodeDTO, error) {
 	m.calls.Add(1)
-	return m.nodes, nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cp := make([]amsclient.ClusterNodeDTO, len(m.nodes))
+	copy(cp, m.nodes)
+	return cp, nil
 }
 
-// captureSink records events written to it.
+// setNodes replaces the node list in a race-safe manner.
+func (m *mockClusterClient) setNodes(nodes []amsclient.ClusterNodeDTO) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.nodes = nodes
+}
+
+// captureSink records events written to it. Satisfies domain.EventSink.
 type captureSink struct {
 	count atomic.Int32
 }
 
-func (c *captureSink) WriteServerEvent(_ interface{}) { c.count.Add(1) }
-func (c *captureSink) WriteBeaconEvent(_ interface{}) {}
-func (c *captureSink) WriteViewerSession(_ interface{}) {}
+func (c *captureSink) WriteServerEvent(_ domain.ServerEvent)  { c.count.Add(1) }
+func (c *captureSink) WriteBeaconEvent(_ domain.BeaconEvent)  {}
+func (c *captureSink) WriteViewerSession(_ domain.ViewerSession) {}
+
+// Compile-time assertion that captureSink satisfies domain.EventSink.
+var _ domain.EventSink = (*captureSink)(nil)
 
 // TestDiscovery_NewNodeVisible verifies that a new node appears in the snapshot
 // within one poll interval (≤ 2 min budget = ≤ 30s default, proven by math).
@@ -43,6 +60,7 @@ func (c *captureSink) WriteViewerSession(_ interface{}) {}
 //   - test uses 20ms interval to verify the mechanism quickly
 func TestDiscovery_NewNodeVisible(t *testing.T) {
 	mock := &mockClusterClient{}
+	sink := &captureSink{}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -52,12 +70,12 @@ func TestDiscovery_NewNodeVisible(t *testing.T) {
 	d := New(Config{
 		PollInterval: testInterval,
 		NodeID:       "local",
-	}, mock, nil, nil)
+	}, mock, sink, nil)
 
 	// Start with one node.
-	mock.nodes = []amsclient.ClusterNodeDTO{
+	mock.setNodes([]amsclient.ClusterNodeDTO{
 		{NodeID: "node-1", IP: "10.0.0.1", Role: "origin", CPUUsage: 15.0, MemoryUsage: 40.0},
-	}
+	})
 
 	go d.Run(ctx)
 
@@ -70,8 +88,9 @@ func TestDiscovery_NewNodeVisible(t *testing.T) {
 
 	// Add a second node.
 	t_add := time.Now()
-	mock.nodes = append(mock.nodes, amsclient.ClusterNodeDTO{
-		NodeID: "node-2", IP: "10.0.0.2", Role: "edge", CPUUsage: 20.0, MemoryUsage: 30.0,
+	mock.setNodes([]amsclient.ClusterNodeDTO{
+		{NodeID: "node-1", IP: "10.0.0.1", Role: "origin", CPUUsage: 15.0, MemoryUsage: 40.0},
+		{NodeID: "node-2", IP: "10.0.0.2", Role: "edge", CPUUsage: 20.0, MemoryUsage: 30.0},
 	})
 
 	// Wait for up to 2 poll cycles.
@@ -98,6 +117,13 @@ func TestDiscovery_NewNodeVisible(t *testing.T) {
 	}
 
 	t.Logf("PASS: F7 new node visible in ≤ 1 poll cycle (%v)", discoveryLatency)
+
+	// Verify the sink.WriteServerEvent emit path (discovery.go ~177) actually fired.
+	if sinkCalls := sink.count.Load(); sinkCalls < 1 {
+		t.Errorf("expected sink.WriteServerEvent to be called ≥1 time; got %d", sinkCalls)
+	} else {
+		t.Logf("PASS: sink.WriteServerEvent called %d times (emit path verified)", sinkCalls)
+	}
 
 	// Default config math: 30s poll → node visible within 30s → ≤ 2 min (120s).
 	defaultInterval := 30 * time.Second

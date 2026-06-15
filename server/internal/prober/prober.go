@@ -375,7 +375,7 @@ func (r *Runner) probeHLS(ctx context.Context, p domain.ProbeConfig, result doma
 	}
 
 	// Step 2: parse manifest.
-	segmentURI, segmentDurationS, err := parseHLSManifest(resp.Body, p.URL)
+	segmentURI, segmentDurationS, isMaster, variantURI, err := parseHLSManifest(resp.Body, p.URL)
 	if err != nil {
 		result.Success = false
 		result.ErrorCode = "parse"
@@ -383,12 +383,66 @@ func (r *Runner) probeHLS(ctx context.Context, p domain.ProbeConfig, result doma
 		return result
 	}
 
-	if segmentURI == "" {
-		// This is a master playlist (points to variant streams). Success at the
-		// manifest level counts as a reachability pass for HLS; bitrate = 0.
-		result.Success = true
-		result.BitrateKbps = 0
-		return result
+	if isMaster {
+		// This is a master playlist. Follow the first variant to obtain bitrate data.
+		// Cap at ONE level of indirection — master → variant → segment.
+		if variantURI == "" {
+			// Master with no variants (empty/malformed) — reachability pass, bitrate = 0.
+			result.Success = true
+			result.BitrateKbps = 0
+			return result
+		}
+
+		// Fetch the variant playlist.
+		varReq, err := http.NewRequestWithContext(ctx, http.MethodGet, variantURI, nil)
+		if err != nil {
+			result.Success = false
+			result.ErrorCode = "parse"
+			result.ErrorMsg = fmt.Sprintf("variant request: %v", err)
+			return result
+		}
+		varReq.Header.Set("User-Agent", r.cfg.HTTPUserAgent)
+
+		varResp, err := r.client.Do(varReq)
+		if err != nil {
+			result.Success = false
+			result.ErrorCode = classifyHTTPError(err)
+			result.ErrorMsg = fmt.Sprintf("variant fetch: %v", err)
+			return result
+		}
+		defer varResp.Body.Close()
+
+		if varResp.StatusCode/100 != 2 {
+			result.Success = false
+			result.ErrorCode = fmt.Sprintf("http_%d", varResp.StatusCode)
+			result.ErrorMsg = fmt.Sprintf("variant HTTP %d", varResp.StatusCode)
+			return result
+		}
+
+		// Parse the variant playlist — it must be a media playlist (not another master).
+		var isMasterAgain bool
+		segmentURI, segmentDurationS, isMasterAgain, _, err = parseHLSManifest(varResp.Body, variantURI)
+		if err != nil {
+			result.Success = false
+			result.ErrorCode = "parse"
+			result.ErrorMsg = fmt.Sprintf("parse variant manifest: %v", err)
+			return result
+		}
+		if isMasterAgain {
+			// Malformed: master → master — refuse to recurse.
+			result.Success = false
+			result.ErrorCode = "parse"
+			result.ErrorMsg = "variant playlist is also a master (malformed HLS)"
+			return result
+		}
+		if segmentURI == "" {
+			// Variant has no segments yet (live edge case) — reachability pass.
+			result.Success = true
+			result.BitrateKbps = 0
+			return result
+		}
+		// segmentURI and segmentDurationS are now updated from the variant playlist;
+		// fall through to Step 3 below.
 	}
 
 	// Step 3: fetch first media segment and measure bitrate.
@@ -402,7 +456,13 @@ func (r *Runner) probeHLS(ctx context.Context, p domain.ProbeConfig, result doma
 	}
 	segReq.Header.Set("User-Agent", r.cfg.HTTPUserAgent)
 
+	segStart := time.Now()
 	segResp, err := r.client.Do(segReq)
+	segTTFBMs := uint32(time.Since(segStart).Milliseconds())
+	// Apply same 1ms floor as manifest TTFB (D-013): localhost sub-ms rounds to 0.
+	if segTTFBMs == 0 {
+		segTTFBMs = 1
+	}
 	if err != nil {
 		result.Success = true // manifest OK; segment is bonus measurement
 		result.ErrorCode = classifyHTTPError(err)
@@ -417,6 +477,9 @@ func (r *Runner) probeHLS(ctx context.Context, p domain.ProbeConfig, result doma
 		result.ErrorMsg = fmt.Sprintf("segment HTTP %d", segResp.StatusCode)
 		return result
 	}
+
+	// Record segment TTFB on successful 2xx response.
+	result.SegmentTTFBMs = segTTFBMs
 
 	segBytes, err := io.ReadAll(segResp.Body)
 	if err != nil {
@@ -439,15 +502,19 @@ func (r *Runner) probeHLS(ctx context.Context, p domain.ProbeConfig, result doma
 
 // parseHLSManifest reads an HLS playlist body and returns:
 //   - segmentURI: the first .ts/.m4s/.fmp4 media segment URL (absolute).
-//     Empty string means this is a master playlist (variant streams only).
+//     Empty string with isMaster=true means a master playlist; variantURI is populated.
 //   - segmentDurationS: the #EXTINF duration for the first segment.
+//   - isMaster: true when the playlist is a master (EXT-X-STREAM-INF present); in that
+//     case segmentURI is empty and variantURI is the first variant playlist URL (absolute).
+//   - variantURI: the first variant playlist URL when isMaster=true; empty otherwise.
 //
 // baseURL is used to resolve relative URIs.
-func parseHLSManifest(body io.Reader, baseURL string) (segmentURI string, segmentDurationS float64, err error) {
+func parseHLSManifest(body io.Reader, baseURL string) (segmentURI string, segmentDurationS float64, isMaster bool, variantURI string, err error) {
 	scanner := bufio.NewScanner(body)
 
 	isM3U := false
 	var pendingDuration float64
+	pendingVariant := false // true when the previous line was #EXT-X-STREAM-INF
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -458,7 +525,7 @@ func parseHLSManifest(body io.Reader, baseURL string) (segmentURI string, segmen
 			if strings.HasPrefix(line, "#EXTM3U") {
 				isM3U = true
 			} else {
-				return "", 0, fmt.Errorf("not an M3U8: first non-empty line = %q", line)
+				return "", 0, false, "", fmt.Errorf("not an M3U8: first non-empty line = %q", line)
 			}
 			continue
 		}
@@ -470,11 +537,18 @@ func parseHLSManifest(body io.Reader, baseURL string) (segmentURI string, segmen
 			var dur float64
 			fmt.Sscanf(info, "%f", &dur) //nolint:errcheck
 			pendingDuration = dur
+			pendingVariant = false
+			continue
+		}
+
+		if strings.HasPrefix(line, "#EXT-X-STREAM-INF") {
+			// Master playlist stream entry — next non-comment line is the variant URI.
+			pendingVariant = true
 			continue
 		}
 
 		if strings.HasPrefix(line, "#") {
-			// Other tags (e.g. #EXT-X-STREAM-INF) — skip.
+			// Other tags — skip, but don't clear pendingVariant.
 			continue
 		}
 
@@ -482,19 +556,23 @@ func parseHLSManifest(body io.Reader, baseURL string) (segmentURI string, segmen
 		if pendingDuration > 0 {
 			// Preceded by #EXTINF → this is a media segment.
 			uri := resolveURI(line, baseURL)
-			return uri, pendingDuration, nil
+			return uri, pendingDuration, false, "", nil
 		}
-		// No preceding #EXTINF → variant playlist URI in a master playlist.
-		// Return empty segmentURI to signal master playlist.
-		return "", 0, nil
+		if pendingVariant {
+			// Preceded by #EXT-X-STREAM-INF → this is a variant playlist URI in a master.
+			uri := resolveURI(line, baseURL)
+			return "", 0, true, uri, nil
+		}
+		// No preceding #EXTINF or #EXT-X-STREAM-INF → treat as master (non-error).
+		return "", 0, true, "", nil
 	}
 
 	if err := scanner.Err(); err != nil {
-		return "", 0, err
+		return "", 0, false, "", err
 	}
 
 	// Empty or live playlist with no segments yet — signal master (non-error).
-	return "", 0, nil
+	return "", 0, true, "", nil
 }
 
 // resolveURI resolves a potentially relative URI against the base playlist URL.

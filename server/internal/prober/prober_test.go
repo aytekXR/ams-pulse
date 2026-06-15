@@ -246,6 +246,9 @@ func TestHLSProbe_Success(t *testing.T) {
 	if result.BitrateKbps <= 0 {
 		t.Errorf("expected BitrateKbps > 0, got %.1f", result.BitrateKbps)
 	}
+	if result.SegmentTTFBMs == 0 {
+		t.Errorf("expected SegmentTTFBMs > 0")
+	}
 	if result.ErrorCode != "" {
 		t.Errorf("expected empty ErrorCode on success, got %q", result.ErrorCode)
 	}
@@ -499,19 +502,43 @@ func TestInterval_Honored(t *testing.T) {
 
 // TestHLSManifest_Parse verifies correct handling of a master HLS playlist.
 func TestHLSManifest_Parse(t *testing.T) {
-	t.Run("master_playlist_returns_empty_segment", func(t *testing.T) {
-		// Master playlist — no #EXTINF + segment, only #EXT-X-STREAM-INF.
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	t.Run("master_playlist_follows_variant", func(t *testing.T) {
+		// Master playlist → variant → segment chain.
+		// The prober must follow the master to the variant and measure bitrate.
+		const segBytes = 20_000
+		const segDurS = 4.0
+		segData := make([]byte, segBytes)
+
+		var srv *httptest.Server
+		mux := http.NewServeMux()
+
+		// /master.m3u8 → points to /variant.m3u8.
+		mux.HandleFunc("/master.m3u8", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-			_, _ = w.Write([]byte("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=5000000\nhttps://example.com/variant.m3u8\n"))
-		}))
+			_, _ = fmt.Fprintf(w, "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=5000000\n%s/variant.m3u8\n", srv.URL)
+		})
+		// /variant.m3u8 → media playlist with one segment.
+		mux.HandleFunc("/variant.m3u8", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			_, _ = fmt.Fprintf(w,
+				"#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXTINF:%.3f,\n%s/seg.ts\n#EXT-X-ENDLIST\n",
+				segDurS, srv.URL,
+			)
+		})
+		// /seg.ts → synthetic segment data.
+		mux.HandleFunc("/seg.ts", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "video/MP2T")
+			_, _ = w.Write(segData)
+		})
+
+		srv = httptest.NewServer(mux)
 		t.Cleanup(srv.Close)
 
 		source := &fakeSource{
 			probes: []domain.ProbeConfig{{
 				ID:        "p-master",
 				Name:      "master",
-				URL:       srv.URL,
+				URL:       srv.URL + "/master.m3u8",
 				Protocol:  "hls",
 				IntervalS: 60,
 				TimeoutS:  5,
@@ -531,9 +558,86 @@ func TestHLSManifest_Parse(t *testing.T) {
 		if len(results) == 0 {
 			t.Fatal("no results for master playlist probe")
 		}
-		if !results[0].Success {
-			t.Errorf("master playlist should succeed; got error=%q", results[0].ErrorMsg)
+		result := results[0]
+		t.Logf("master→variant result: success=%v bitrate=%.1f segment_ttfb_ms=%d error=%q",
+			result.Success, result.BitrateKbps, result.SegmentTTFBMs, result.ErrorMsg)
+		if !result.Success {
+			t.Errorf("master→variant probe should succeed; got error=%q", result.ErrorMsg)
 		}
-		t.Logf("PASS: master playlist → success=true, bitrate=0")
+		if result.BitrateKbps <= 0 {
+			t.Errorf("expected BitrateKbps > 0 after following master→variant, got %.1f", result.BitrateKbps)
+		}
+		t.Logf("PASS: master playlist → variant followed → bitrate=%.1f kbps", result.BitrateKbps)
 	})
+}
+
+// TestHLSProbe_MasterFollowsVariant verifies master → variant → segment chain end-to-end.
+func TestHLSProbe_MasterFollowsVariant(t *testing.T) {
+	const segBytes = 50_000
+	const segDurS = 6.0
+	segData := make([]byte, segBytes)
+
+	var srv *httptest.Server
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/master.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+		_, _ = fmt.Fprintf(w, "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=5000000\n%s/variant.m3u8\n", srv.URL)
+	})
+	mux.HandleFunc("/variant.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+		_, _ = fmt.Fprintf(w,
+			"#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:8\n#EXTINF:%.3f,\n%s/seg.ts\n#EXT-X-ENDLIST\n",
+			segDurS, srv.URL,
+		)
+	})
+	mux.HandleFunc("/seg.ts", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "video/MP2T")
+		_, _ = w.Write(segData)
+	})
+
+	srv = httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	source := &fakeSource{
+		probes: []domain.ProbeConfig{{
+			ID:        "p-master-variant",
+			Name:      "master-variant",
+			URL:       srv.URL + "/master.m3u8",
+			Protocol:  "hls",
+			IntervalS: 60,
+			TimeoutS:  5,
+			Enabled:   true,
+		}},
+	}
+	store := &fakeStore{}
+	clock := NewFakeClock(time.Now())
+	r := prober.New(prober.Config{Workers: 1, MaxJitterFraction: 0}, source, store, nil, clock)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	go func() { _ = r.Run(ctx) }()
+
+	results := waitForResults(store, 1, 5*time.Second)
+	cancel()
+
+	if len(results) == 0 {
+		t.Fatal("expected at least one probe result; got none")
+	}
+	result := results[0]
+	t.Logf("master→variant: success=%v bitrate=%.1f seg_ttfb_ms=%d error=%q",
+		result.Success, result.BitrateKbps, result.SegmentTTFBMs, result.ErrorMsg)
+
+	if !result.Success {
+		t.Errorf("expected Success=true after following master→variant; error=%q", result.ErrorMsg)
+	}
+	if result.BitrateKbps <= 0 {
+		t.Errorf("expected BitrateKbps > 0, got %.1f", result.BitrateKbps)
+	}
+	// Expected: 50000 * 8 / 6 / 1000 ≈ 66.7 kbps
+	if result.BitrateKbps < 10 || result.BitrateKbps > 5000 {
+		t.Errorf("BitrateKbps out of expected range [10,5000]: %.1f", result.BitrateKbps)
+	}
+	t.Logf("PASS: master→variant→segment: success=true, bitrate=%.1f kbps, seg_ttfb_ms=%d",
+		result.BitrateKbps, result.SegmentTTFBMs)
 }

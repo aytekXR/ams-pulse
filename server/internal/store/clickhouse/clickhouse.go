@@ -542,6 +542,7 @@ func (s *Store) InsertProbeResult(ctx context.Context, r domain.ProbeResult) err
 		r.ErrorCode,
 		r.ErrorMsg,
 		r.BitrateKbps,
+		r.SegmentTTFBMs,
 	); err != nil {
 		return fmt.Errorf("probe_results: append: %w", err)
 	}
@@ -556,7 +557,7 @@ func (s *Store) QueryProbeResults(ctx context.Context, probeID string, from, to 
 		limit = 100
 	}
 	query := fmt.Sprintf(
-		`SELECT id, probe_id, ts, success, ttfb_ms, error_code, error_msg, bitrate_kbps
+		`SELECT id, probe_id, ts, success, ttfb_ms, error_code, error_msg, bitrate_kbps, segment_ttfb_ms
 		 FROM %s.probe_results
 		 WHERE probe_id = ?
 		   AND ts >= ? AND ts < ?
@@ -579,7 +580,7 @@ func (s *Store) QueryProbeResults(ctx context.Context, probeID string, from, to 
 		)
 		if err := rows.Scan(
 			&r.ID, &r.ProbeID, &ts, &successU8,
-			&r.TTFBMs, &r.ErrorCode, &r.ErrorMsg, &r.BitrateKbps,
+			&r.TTFBMs, &r.ErrorCode, &r.ErrorMsg, &r.BitrateKbps, &r.SegmentTTFBMs,
 		); err != nil {
 			return nil, fmt.Errorf("probe_results: scan: %w", err)
 		}
