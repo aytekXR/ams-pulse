@@ -135,7 +135,7 @@ export class Transport {
     const body = JSON.stringify(batch);
     const headers = {
       'Content-Type': 'application/json',
-      'X-Pulse-Token': this.cfg.token,
+      'X-Pulse-Ingest-Token': this.cfg.token,
     };
 
     try {

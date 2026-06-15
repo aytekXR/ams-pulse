@@ -218,6 +218,27 @@ describe('Transport — unreachable collector (retry + backoff)', () => {
   });
 });
 
+describe('Transport — header name (VD-09)', () => {
+  it('sends X-Pulse-Ingest-Token header (NOT X-Pulse-Token)', async () => {
+    const t = new Transport(makeConfig({ token: 'plt_test_secret' }));
+    t.push({ type: 'heartbeat', ts: Date.now(), data: { watch_ms: 1000 } });
+
+    await vi.advanceTimersByTimeAsync(FLUSH_INTERVAL_MS + 100);
+    await flushMicrotasks();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = opts.headers as Record<string, string>;
+
+    // VD-09: the EXACT header name the server and OpenAPI spec require
+    expect(headers['X-Pulse-Ingest-Token']).toBe('plt_test_secret');
+    // Ensure the old (wrong) header name is NOT sent
+    expect(headers['X-Pulse-Token']).toBeUndefined();
+
+    t.dispose();
+  });
+});
+
 describe('Transport — dispose', () => {
   it('flushes remaining events on dispose via sendBeacon', async () => {
     const t = new Transport(makeConfig());

@@ -197,6 +197,10 @@ export class HlsAdapter {
   private readonly emit: EventEmitter;
   private manifestLoadedAt: number | null = null;
   private startupEmitted = false;
+  /** Non-null when a buffer stall is active (set by _onBufferStalled). */
+  private stallStartAt: number | null = null;
+  /** Most recently active hls level index (for from_kbps computation on level switch). */
+  private currentLevel = -1;
 
   /** Bound handlers for cleanup. */
   private readonly hlsHandlers: Array<[string, (...args: unknown[]) => void]> = [];
@@ -231,10 +235,11 @@ export class HlsAdapter {
   }
 
   private _onFragBuffered(): void {
+    const now = Date.now();
+
     // First FRAG_BUFFERED after MANIFEST_LOADED = startup complete
     if (!this.startupEmitted && this.manifestLoadedAt !== null) {
       this.startupEmitted = true;
-      const now = Date.now();
       const startup_ms = now - this.manifestLoadedAt;
       this.emit({
         type: 'startup_complete',
@@ -242,9 +247,24 @@ export class HlsAdapter {
         data: { startup_ms },
       });
     }
+
+    // VD-12: close any open stall — FRAG_BUFFERED means playback can resume
+    if (this.stallStartAt !== null) {
+      const duration_ms = now - this.stallStartAt;
+      this.stallStartAt = null;
+      this.emit({
+        type: 'rebuffer_end',
+        ts: now,
+        data: { duration_ms },
+      });
+    }
   }
 
   private _onBufferStalled(): void {
+    // Only open a new stall if one is not already active
+    if (this.stallStartAt === null) {
+      this.stallStartAt = Date.now();
+    }
     this.emit({
       type: 'rebuffer_start',
       ts: Date.now(),
@@ -272,17 +292,26 @@ export class HlsAdapter {
     try {
       const d = data as { level?: number };
       const level = d.level ?? -1;
-      // Emit bitrate_change — we report level index as a proxy;
-      // hls.js levels[level].bitrate is available if the caller provides
-      // the Hls instance with levels, but we don't want to type it here.
-      // Instead, emit a minimal resolution_change marker (level number).
       if (level >= 0) {
+        const levels = this.hls.levels;
+        // VD-13: look up actual bitrates from hls.levels[] (in bps → convert to kbps)
+        const to_kbps =
+          levels && level < levels.length
+            ? Math.round(levels[level].bitrate / 1000)
+            : 0;
+        const prevLevel = this.currentLevel;
+        const from_kbps =
+          levels && prevLevel >= 0 && prevLevel < levels.length
+            ? Math.round(levels[prevLevel].bitrate / 1000)
+            : 0;
+        // Update current level after capturing from_kbps
+        this.currentLevel = level;
         this.emit({
           type: 'bitrate_change',
           ts: Date.now(),
           data: {
-            from_kbps: 0,
-            to_kbps: 0,
+            from_kbps,
+            to_kbps,
             hls_level: level,
           },
         });

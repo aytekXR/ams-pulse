@@ -81,4 +81,6 @@ export interface RTCAdaptor {
 export interface HlsLike {
   on(event: string, callback: (...args: unknown[]) => void): void;
   off(event: string, callback: (...args: unknown[]) => void): void;
+  /** hls.js levels array — each entry has at minimum a bitrate field (bps). */
+  levels?: Array<{ bitrate: number }>;
 }
