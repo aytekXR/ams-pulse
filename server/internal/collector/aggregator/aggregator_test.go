@@ -222,3 +222,53 @@ func TestAggregator_NodeStats_Version(t *testing.T) {
 	}
 	t.Logf("PASS VD-40: LiveNodeStats.Version=%q", node.Version)
 }
+
+// reentrantAggSink calls back into the aggregator (CurrentSnapshot → a.mu.RLock)
+// from inside WriteServerEvent — the production sink (Fanout) likewise fans
+// EvictStale's publish_end back to this same aggregator's OnServerEvent. If
+// EvictStale emits while holding a.mu, this RLock self-deadlocks.
+type reentrantAggSink struct {
+	a     *Aggregator
+	calls int
+}
+
+func (s *reentrantAggSink) WriteServerEvent(domain.ServerEvent) {
+	_ = s.a.CurrentSnapshot() // RLock a.mu — must not be held by EvictStale()
+	s.calls++
+}
+func (s *reentrantAggSink) WriteBeaconEvent(domain.BeaconEvent)     {}
+func (s *reentrantAggSink) WriteViewerSession(domain.ViewerSession) {}
+
+// TestAggregator_EvictStaleDoesNotHoldLockDuringSinkEmit is a regression guard:
+// EvictStale must emit eviction events only AFTER releasing a.mu, or the sink's
+// fan-back into OnServerEvent (a.mu.Lock) self-deadlocks (the same class of bug
+// as the cluster.Discovery.poll AB→BA deadlock that wedged the live dashboard).
+func TestAggregator_EvictStaleDoesNotHoldLockDuringSinkEmit(t *testing.T) {
+	agg := New(time.Minute, nil, nil)
+	sink := &reentrantAggSink{a: agg}
+	agg.sink = sink
+
+	// Seed an Active stream with an old LastSeenAt (TS in the past) so it is
+	// immediately stale relative to the 1-minute threshold.
+	agg.OnServerEvent(domain.ServerEvent{
+		Version:  1,
+		Type:     domain.EventStreamPublishStart,
+		TS:       time.Now().Add(-time.Hour).UnixMilli(),
+		Source:   domain.SourceRestPoll,
+		NodeID:   "n1",
+		StreamID: "s1",
+		App:      "live",
+		Data:     map[string]any{"publish_type": "rtmp"},
+	})
+
+	done := make(chan struct{})
+	go func() { agg.EvictStale(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("EvictStale() deadlocked: it emitted to the sink while holding a.mu")
+	}
+	if sink.calls == 0 {
+		t.Fatal("expected EvictStale to emit a publish_end event for the stale stream")
+	}
+}

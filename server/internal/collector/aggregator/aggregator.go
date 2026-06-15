@@ -176,8 +176,8 @@ func (a *Aggregator) EvictStaleNodes(nodeStaleThreshold time.Duration) {
 // EvictStale checks for stale streams and emits offline events.
 // Call this periodically (e.g. from a goroutine in serve.go).
 func (a *Aggregator) EvictStale() {
+	var pending []domain.ServerEvent
 	a.mu.Lock()
-	defer a.mu.Unlock()
 
 	now := time.Now()
 	for key, s := range a.streams {
@@ -190,9 +190,9 @@ func (a *Aggregator) EvictStale() {
 			s.Active = false
 			s.Health = domain.StreamHealthOffline
 
-			// Emit publish_end event for downstream consumers.
+			// Collect the publish_end event; emit after releasing a.mu (see below).
 			if a.sink != nil {
-				a.sink.WriteServerEvent(domain.ServerEvent{
+				pending = append(pending, domain.ServerEvent{
 					Version:  1,
 					Type:     domain.EventStreamPublishEnd,
 					TS:       now.UnixMilli(),
@@ -211,6 +211,14 @@ func (a *Aggregator) EvictStale() {
 	}
 	a.rebuildSnapshot()
 	a.notifySubs()
+	a.mu.Unlock()
+
+	// Emit eviction events to the sink only AFTER releasing a.mu: the sink fans
+	// back into this aggregator's OnServerEvent (a.mu.Lock), so emitting under
+	// the lock would self-deadlock (mirror of the cluster.Discovery.poll fix).
+	for _, ev := range pending {
+		a.sink.WriteServerEvent(ev)
+	}
 }
 
 // ─── Event handlers (called with lock held) ───────────────────────────────────

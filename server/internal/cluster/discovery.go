@@ -128,8 +128,14 @@ func (d *Discovery) poll(ctx context.Context) {
 	}
 
 	now := time.Now()
+
+	// pending node_stats events are emitted to the sink only AFTER releasing
+	// d.mu (see the explicit Unlock below). Emitting while holding d.mu wedges
+	// the server: the sink fans the event into the live aggregator, whose
+	// OnServerEvent takes a.mu and then calls Discovery.IsEdgeStream (d.mu.RLock)
+	// — an A→B / B→A lock-order inversion (mirror of the aggregator.EvictStale fix).
+	var pending []domain.ServerEvent
 	d.mu.Lock()
-	defer d.mu.Unlock()
 
 	seen := make(map[string]struct{}, len(nodes))
 
@@ -173,9 +179,9 @@ func (d *Discovery) poll(ctx context.Context) {
 		info.DiskPct = n.DiskUsage
 		info.ActiveStreams = n.ActiveStreamCount
 
-		// Emit node_stats event to aggregator + ClickHouse.
+		// Collect the node_stats event; emit after releasing d.mu (see above).
 		if d.sink != nil {
-			d.sink.WriteServerEvent(domain.ServerEvent{
+			pending = append(pending, domain.ServerEvent{
 				Version: 1,
 				Type:    domain.EventNodeStats,
 				TS:      now.UnixMilli(),
@@ -207,6 +213,13 @@ func (d *Discovery) poll(ctx context.Context) {
 				}
 			}
 		}
+	}
+	d.mu.Unlock()
+
+	// Emit AFTER releasing d.mu — never hold d.mu across a sink call (the sink
+	// fans back into the aggregator which re-enters Discovery via IsEdgeStream).
+	for _, ev := range pending {
+		d.sink.WriteServerEvent(ev)
 	}
 }
 

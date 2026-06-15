@@ -258,3 +258,43 @@ func TestDiscovery_PollsRepeatedly(t *testing.T) {
 	}
 	t.Logf("poll count in 100ms (interval=15ms): %d", calls)
 }
+
+// reentrantSink mimics the live aggregator: from inside WriteServerEvent it calls
+// back into Discovery.IsEdgeStream, which takes d.mu.RLock — exactly the path
+// OnServerEvent → onStreamStats → IsEdgeStream takes in production. If poll()
+// holds d.mu while emitting, that RLock deadlocks the goroutine against itself.
+type reentrantSink struct {
+	d     *Discovery
+	calls atomic.Int32
+}
+
+func (s *reentrantSink) WriteServerEvent(domain.ServerEvent) {
+	s.d.IsEdgeStream("any-stream") // RLock d.mu — must not be held by poll()
+	s.calls.Add(1)
+}
+func (s *reentrantSink) WriteBeaconEvent(domain.BeaconEvent)     {}
+func (s *reentrantSink) WriteViewerSession(domain.ViewerSession) {}
+
+// TestDiscovery_PollDoesNotHoldLockDuringSinkEmit is a regression guard for the
+// AB→BA deadlock between cluster.Discovery (d.mu) and the live aggregator (a.mu)
+// that wedged the dashboard: poll() emitted node_stats while holding d.mu, the
+// sink fanned it into the aggregator (a.mu.Lock), which re-entered Discovery via
+// IsEdgeStream (d.mu.RLock). With the fix, poll() emits only after releasing d.mu.
+func TestDiscovery_PollDoesNotHoldLockDuringSinkEmit(t *testing.T) {
+	mock := &mockClusterClient{}
+	mock.setNodes([]amsclient.ClusterNodeDTO{{NodeID: "n1", IP: "10.0.0.1", Role: "origin"}})
+	d := New(Config{}, mock, nil, nil)
+	sink := &reentrantSink{d: d}
+	d.sink = sink
+
+	done := make(chan struct{})
+	go func() { d.poll(context.Background()); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("poll() deadlocked: it emitted to the sink while holding d.mu (AB→BA with the aggregator)")
+	}
+	if sink.calls.Load() == 0 {
+		t.Fatal("expected the reentrant sink to receive the node_stats event")
+	}
+}
