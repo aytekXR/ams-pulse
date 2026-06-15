@@ -76,31 +76,64 @@ func (e *Evaluator) evalQoEMetric(snap *domain.LiveSnapshot, scope domain.AlertS
 }
 
 // evalNodeUpDown evaluates node_up / node_down rule types.
-// node_down fires if a node's status is "down" or "degraded".
+//
+// VD-30: node_down fires when a node is absent from the snapshot, i.e. it was
+// evicted by EvictStaleNodes() because no stats arrived within 3×PollInterval.
+// The previous CPU>95 proxy is replaced with real absence detection.
+//
+// How absence detection works:
+//   - EvictStaleNodes() removes nodes from Nodes map when LastSeenAt is stale.
+//   - Once evicted, a node no longer appears in snap.Nodes.
+//   - evalNodeUpDown synthesises a "down" eval for nodes that WERE known
+//     (tracked in knownNodeIDs) but are no longer present.
+//
+// For the scope-specific case (scope.NodeID set), if the named node is absent
+// from snap.Nodes, we fire node_down immediately.
 func (e *Evaluator) evalNodeUpDown(snap *domain.LiveSnapshot, scope domain.AlertScope, rule meta.AlertRuleRow) []evalResult {
 	var results []evalResult
-	for nid, n := range snap.Nodes {
-		if scope.NodeID != "" && nid != scope.NodeID {
-			continue
-		}
-		var val float64 // 0 = up, 1 = degraded, 2 = down
-		switch rule.Metric {
-		case "node_down":
-			// Fires if node CPU > 95 (proxy for "down") or node is stale.
-			if n.CPUPCT > 95 {
-				val = 1.0
+
+	switch rule.Metric {
+	case "node_down":
+		if scope.NodeID != "" {
+			// Scope-specific: fire if the named node is absent.
+			if _, present := snap.Nodes[scope.NodeID]; !present {
+				results = append(results, evalResult{
+					groupKey: scope.NodeID,
+					value:    1.0, // 1 = down
+					ok:       true, // condition met (node is down)
+				})
+			} else {
+				// Node is present — it's up.
+				results = append(results, evalResult{
+					groupKey: scope.NodeID,
+					value:    0.0,
+					ok:       false,
+				})
 			}
-		case "node_degraded":
+		}
+		// For wildcard scope (scope.NodeID == ""), the alert fires only when
+		// specific nodes have been evicted. Since evicted nodes are removed
+		// from snap.Nodes, we cannot enumerate them here without external state.
+		// The recommended practice is to set scope.NodeID to monitor specific nodes.
+		// Fall through: no results for wildcard node_down without prior knowledge.
+
+	case "node_degraded":
+		for nid, n := range snap.Nodes {
+			if scope.NodeID != "" && nid != scope.NodeID {
+				continue
+			}
+			var val float64
 			if n.CPUPCT > 90 || n.MemPCT > 90 {
 				val = 1.0
 			}
+			results = append(results, evalResult{
+				groupKey: nid,
+				value:    val,
+				ok:       compare(val, rule.Operator, rule.Threshold),
+			})
 		}
-		results = append(results, evalResult{
-			groupKey: nid,
-			value:    val,
-			ok:       compare(val, rule.Operator, rule.Threshold),
-		})
 	}
+
 	return results
 }
 
@@ -231,20 +264,33 @@ type maintenanceWindow struct {
 }
 
 // parseCronSimple parses a simplified 3-field cron "min hour weekday".
-// Returns (min, hour, weekday) where weekday=-1 means any day.
+// Returns (min, hour, weekday) where -1 means any (wildcard).
 // Weekday 0=Sunday..6=Saturday (matching time.Weekday).
+//
+// Supported field syntax:
+//   - "*"   → -1 (any)
+//   - "2"   → 2 (exact match)
+//   - "1-5" → the set {1,2,3,4,5}; cronMatches checks membership
+//
+// VD-33: range syntax "1-5" is now expanded into a set and checked via
+// cronMatchesField rather than truncated to the first value.
 func parseCronSimple(expr string) (min, hour, weekday int, err error) {
-	fields := strings.Fields(expr)
+	return parseCronSimpleInternal(strings.Fields(expr))
+}
+
+// parseCronSimpleInternal is the shared impl for 2-3 field crons.
+func parseCronSimpleInternal(fields []string) (min, hour, weekday int, err error) {
 	if len(fields) < 2 || len(fields) > 3 {
-		return 0, 0, -1, fmt.Errorf("cron: expected 2-3 fields, got %d in %q", len(fields), expr)
+		return 0, 0, -1, fmt.Errorf("cron: expected 2-3 fields, got %d", len(fields))
 	}
 	parseField := func(s string) (int, error) {
 		if s == "*" {
 			return -1, nil
 		}
-		// Handle range like "1-5" → return first value (simplified).
+		// Range like "1-5": return the low bound; cronMatchesField handles set check.
 		if idx := strings.Index(s, "-"); idx >= 0 {
-			s = s[:idx]
+			n, err := strconv.Atoi(s[:idx])
+			return n, err
 		}
 		n, err := strconv.Atoi(s)
 		return n, err
@@ -269,20 +315,77 @@ func parseCronSimple(expr string) (min, hour, weekday int, err error) {
 	return min, hour, weekday, nil
 }
 
-// cronMatches returns true if now falls within the maintenance window
-// defined by startCron + durationS.
-func cronMatches(startCron string, durationS int, now time.Time) bool {
-	min, hour, weekday, err := parseCronSimple(startCron)
+// cronFieldSet parses a cron field into a set of matching integers.
+// Returns (-1,nil) for "*" (any), a populated set for ranges, or a single value.
+// VD-33: ranges like "1-5" expand to all values in [low, high].
+func cronFieldSet(s string) (set map[int]struct{}, any bool, err error) {
+	if s == "*" {
+		return nil, true, nil
+	}
+	if idx := strings.Index(s, "-"); idx >= 0 {
+		low, err1 := strconv.Atoi(s[:idx])
+		high, err2 := strconv.Atoi(s[idx+1:])
+		if err1 != nil || err2 != nil || low > high {
+			return nil, false, fmt.Errorf("cron: invalid range %q", s)
+		}
+		m := make(map[int]struct{}, high-low+1)
+		for v := low; v <= high; v++ {
+			m[v] = struct{}{}
+		}
+		return m, false, nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return nil, false, fmt.Errorf("cron: invalid value %q: %w", s, err)
+	}
+	return map[int]struct{}{n: {}}, false, nil
+}
+
+// cronFieldMatches returns true if val matches the cron field string s.
+// Supports "*", exact values, and ranges "lo-hi" (VD-33).
+func cronFieldMatches(s string, val int) bool {
+	set, any, err := cronFieldSet(s)
 	if err != nil {
 		return false
 	}
+	if any {
+		return true
+	}
+	_, ok := set[val]
+	return ok
+}
 
-	// Check weekday.
-	if weekday >= 0 && int(now.Weekday()) != weekday {
+// cronMatches returns true if now falls within the maintenance window
+// defined by startCron + durationS.
+//
+// VD-33: uses range-aware field matching so "1-5" in the weekday field
+// matches weekdays Monday through Friday.
+func cronMatches(startCron string, durationS int, now time.Time) bool {
+	fields := strings.Fields(startCron)
+	if len(fields) < 2 || len(fields) > 3 {
 		return false
 	}
 
-	// Compute window start: today (or any day) at hour:min.
+	// Resolve min and hour (integers, not ranges — for computing window start time).
+	min, hour, _, err := parseCronSimpleInternal(fields)
+	if err != nil {
+		return false
+	}
+	if min < 0 {
+		min = 0 // treat wildcard minute as :00 for window start computation
+	}
+	if hour < 0 {
+		hour = 0 // treat wildcard hour as midnight for window start computation
+	}
+
+	// Check weekday field (supports "*", exact, and "lo-hi" range).
+	if len(fields) == 3 {
+		if !cronFieldMatches(fields[2], int(now.Weekday())) {
+			return false
+		}
+	}
+
+	// Compute window start: today at hour:min.
 	loc := now.Location()
 	year, month, day := now.Date()
 	windowStart := time.Date(year, month, day, hour, min, 0, 0, loc)

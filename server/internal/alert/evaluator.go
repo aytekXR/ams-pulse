@@ -252,6 +252,13 @@ func (e *Evaluator) evaluateRule(ctx context.Context, rule meta.AlertRuleRow, sn
 		evals = e.evalGenericMetric(snap, scope, rule)
 	}
 
+	// VD-29: Apply group_by storm grouping.
+	// When group_by is set, collapse per-stream evals into one per group key.
+	// e.g. group_by="app" → one notification per app, not per stream.
+	if rule.GroupBy.Valid && rule.GroupBy.String != "" {
+		evals = applyGroupBy(evals, rule.GroupBy.String, snap)
+	}
+
 	for _, ev := range evals {
 		e.processEvaluation(ctx, rule, scope, ev.groupKey, ev.value, ev.ok, now)
 	}
@@ -309,6 +316,11 @@ func (e *Evaluator) processEvaluation(ctx context.Context, rule meta.AlertRuleRo
 // fire sends a firing notification and persists history.
 func (e *Evaluator) fire(ctx context.Context, rule meta.AlertRuleRow, scope domain.AlertScope,
 	groupKey string, value float64, alertID string, now time.Time, cooldownUntil *time.Time) {
+	// VD-28: muted=true means evaluated but notifications suppressed.
+	if rule.Muted {
+		return
+	}
+
 	var cooldownMS *int64
 	if cooldownUntil != nil {
 		ms := cooldownUntil.UnixMilli()
@@ -348,6 +360,11 @@ func (e *Evaluator) fire(ctx context.Context, rule meta.AlertRuleRow, scope doma
 // resolve sends a resolved notification and persists history.
 func (e *Evaluator) resolve(ctx context.Context, rule meta.AlertRuleRow, scope domain.AlertScope,
 	groupKey string, value float64, alertID string, firedAt, now time.Time) {
+	// VD-28: muted=true suppresses resolve notifications too.
+	if rule.Muted {
+		return
+	}
+
 	resolvedAt := now.UnixMilli()
 	notif := buildNotification(rule, scope, groupKey, "resolved", value, alertID, firedAt, nil, &resolvedAt, false)
 	payload, err := json.Marshal(notif)
@@ -468,6 +485,59 @@ func (e *Evaluator) evalNodeMetric(snap *domain.LiveSnapshot, scope domain.Alert
 		results = append(results, evalResult{groupKey: nodeID, value: val, ok: compare(val, rule.Operator, rule.Threshold)})
 	}
 	return results
+}
+
+// applyGroupBy collapses per-stream evals into one per group key value.
+// For group_by="app", the group key is the stream's App field.
+// For group_by="stream_id" (or anything else), each stream stays independent
+// but the groupKey is forced to the stream's stream_id (the default).
+// The collapsed eval is conditionMet=true if ANY member stream fires,
+// and value = max(values) to represent the worst member.
+func applyGroupBy(evals []evalResult, groupByDim string, snap *domain.LiveSnapshot) []evalResult {
+	if len(evals) == 0 {
+		return evals
+	}
+	// Build group key → best (worst-value) eval.
+	type grouped struct {
+		ok    bool
+		value float64
+	}
+	groups := make(map[string]grouped)
+	for _, ev := range evals {
+		gk := ev.groupKey // default: stream_id dimension
+		if groupByDim == "app" {
+			// Resolve app name from snapshot.
+			if s, ok := snap.Streams[ev.groupKey]; ok {
+				gk = s.App
+			}
+		}
+		if gk == "" {
+			gk = ev.groupKey // fallback
+		}
+		prev, exists := groups[gk]
+		if !exists {
+			groups[gk] = grouped{ok: ev.ok, value: ev.value}
+		} else {
+			// Condition fires if any member fires; use max value.
+			combined := grouped{
+				ok:    prev.ok || ev.ok,
+				value: maxFloat(prev.value, ev.value),
+			}
+			groups[gk] = combined
+		}
+	}
+	result := make([]evalResult, 0, len(groups))
+	for gk, g := range groups {
+		result = append(result, evalResult{groupKey: gk, value: g.value, ok: g.ok})
+	}
+	return result
+}
+
+func maxFloat(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func (e *Evaluator) evalGenericMetric(snap *domain.LiveSnapshot, scope domain.AlertScope, rule meta.AlertRuleRow) []evalResult {

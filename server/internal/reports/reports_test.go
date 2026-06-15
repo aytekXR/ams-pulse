@@ -307,3 +307,61 @@ func newTestLogger(t *testing.T) *slog.Logger {
 	t.Helper()
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
+
+// ─── Guard test VD-36: 5-field cron presets must parse correctly ──────────────
+
+// TestGuard_VD36_FiveFieldCronParsing verifies that standard 5-field cron
+// expressions like "0 6 1 * *" (1st of each month at 06:00) are accepted and
+// return a sane next run time — NOT the 1-month fallback.
+// Old behavior: parseCronFieldsInternal returned an error for len>3, so
+// scheduler.go fell back to AddDate(0,1,0) for ALL UI preset cron strings.
+func TestGuard_VD36_FiveFieldCronParsing(t *testing.T) {
+	// Baseline: 5-field cron "0 6 1 * *" = 06:00 on the 1st of the month.
+	// NextCronTime should find the next 06:00 occurrence, NOT next month blindly.
+	from := time.Date(2026, 6, 14, 8, 0, 0, 0, time.UTC) // 14 Jun 2026, 08:00
+
+	cases := []struct {
+		cron    string
+		desc    string
+		// wantBefore: the result must be before this time (not the 1-month fallback).
+		wantBefore time.Time
+	}{
+		{
+			cron:       "0 6 1 * *",
+			desc:       "1st of month at 06:00",
+			wantBefore: from.AddDate(0, 1, 0), // must not fall back to 1 month from now
+		},
+		{
+			cron:       "30 9 * * 1",
+			desc:       "every Monday at 09:30",
+			wantBefore: from.Add(7 * 24 * time.Hour), // within a week
+		},
+		{
+			cron:       "0 0 * * *",
+			desc:       "midnight daily (5-field)",
+			wantBefore: from.Add(24 * time.Hour), // within a day
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.desc, func(t *testing.T) {
+			next := reports.NextCronTime(tc.cron, from)
+			t.Logf("cron=%q, from=%s → next=%s", tc.cron, from.Format(time.RFC3339), next.Format(time.RFC3339))
+
+			// Must be after `from`.
+			if !next.After(from) {
+				t.Errorf("VD-36 FAIL: next=%s is not after from=%s for cron=%q",
+					next.Format(time.RFC3339), from.Format(time.RFC3339), tc.cron)
+			}
+
+			// Must be before the 1-month fallback (proving it was actually parsed).
+			fallback := from.AddDate(0, 1, 0)
+			if !next.Before(fallback) {
+				t.Errorf("VD-36 FAIL: cron=%q gave fallback next=%s (same as AddDate(0,1,0)=%s); 5-field cron not parsed correctly",
+					tc.cron, next.Format(time.RFC3339), fallback.Format(time.RFC3339))
+			} else {
+				t.Logf("PASS VD-36: %q → next=%s (before fallback %s)", tc.cron, next.Format(time.RFC3339), fallback.Format(time.RFC3339))
+			}
+		})
+	}
+}

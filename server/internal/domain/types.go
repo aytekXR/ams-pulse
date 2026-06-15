@@ -309,7 +309,10 @@ type LiveNodeStats struct {
 	DiskPCT   float64 `json:"disk_pct"`
 	NetIn     float64 `json:"net_in_mbps"`
 	NetOut    float64 `json:"net_out_mbps"`
-	UpdatedAt time.Time `json:"updated_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	// LastSeenAt is the wall-clock time when the last NodeStats event was received.
+	// Used by the aggregator to evict stale nodes (VD-30).
+	LastSeenAt time.Time `json:"last_seen_at,omitempty"`
 }
 
 // LiveSnapshot is the in-memory aggregate state served to the dashboard.

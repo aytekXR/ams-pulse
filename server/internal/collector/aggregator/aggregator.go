@@ -142,6 +142,35 @@ func (a *Aggregator) Subscribe() (<-chan *domain.LiveSnapshot, func()) {
 	return ch, cancel
 }
 
+// ─── EvictStaleNodes removes nodes with no updates for nodeStaleThreshold ────────
+
+// EvictStaleNodes removes nodes that have not been seen within nodeStaleThreshold.
+// This enables node_down alerting on genuine node disappearance (VD-30).
+// nodeStaleThreshold should be 3×PollInterval; call this from the same
+// periodic goroutine that calls EvictStale.
+func (a *Aggregator) EvictStaleNodes(nodeStaleThreshold time.Duration) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	now := time.Now()
+	for nodeID, n := range a.nodes {
+		// LastSeenAt is zero for nodes created before VD-30 was applied; skip those.
+		if n.LastSeenAt.IsZero() {
+			continue
+		}
+		if now.Sub(n.LastSeenAt) > nodeStaleThreshold {
+			a.logger.Info("aggregator: node stale, evicting",
+				"node_id", nodeID,
+				"last_seen", n.LastSeenAt,
+				"threshold", nodeStaleThreshold,
+			)
+			delete(a.nodes, nodeID)
+		}
+	}
+	a.rebuildSnapshot()
+	a.notifySubs()
+}
+
 // ─── EvictStale removes streams with no updates for staleThreshold ────────────
 
 // EvictStale checks for stale streams and emits offline events.
@@ -267,9 +296,11 @@ func (a *Aggregator) onStreamStats(ev domain.ServerEvent) {
 }
 
 func (a *Aggregator) onNodeStats(ev domain.ServerEvent) {
+	now := time.Now()
 	ns := &domain.LiveNodeStats{
-		NodeID:    ev.NodeID,
-		UpdatedAt: time.Now(),
+		NodeID:     ev.NodeID,
+		UpdatedAt:  now,
+		LastSeenAt: now, // VD-30: track when we last heard from this node
 	}
 	if v, ok := ev.Data["cpu_pct"].(float64); ok {
 		ns.CPUPCT = v

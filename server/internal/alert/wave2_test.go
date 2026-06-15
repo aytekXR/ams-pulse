@@ -8,7 +8,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"net"
 	"net/http"
@@ -91,14 +93,18 @@ func TestCronMaintenance_ExactMatch(t *testing.T) {
 func TestCronMaintenance_OutsideWindow(t *testing.T) {
 	// Window: every day at 02:00 for 3600s.
 	// "now" = 10:00 → should NOT be in window → rule fires.
+	// VD-34: this test must assert that alerts DO fire outside a maintenance window.
 	now := time.Date(2026, 1, 5, 10, 0, 0, 0, time.UTC) // 10:00 AM
 
 	store := openTestStore(t)
 	ctx := context.Background()
+
+	// Use viewer_count rule so we have a concrete firing condition:
+	// a stream with 0 viewers satisfies viewer_count < 1.
 	row := meta.AlertRuleRow{
 		Name:               "cron-outside-rule",
-		Metric:             "stream_offline",
-		Operator:           "eq",
+		Metric:             "viewer_count",
+		Operator:           "lt",
 		Threshold:          1,
 		WindowS:            5,
 		ScopeJSON:          "{}",
@@ -115,9 +121,17 @@ func TestCronMaintenance_OutsideWindow(t *testing.T) {
 	}
 
 	live := newFakeLive()
+	// Snapshot: one stream with 0 viewers — condition fires outside the maintenance window.
 	live.setSnap(&domain.LiveSnapshot{
-		Streams: map[string]*domain.LiveStream{},
-		Nodes:   map[string]*domain.LiveNodeStats{},
+		Streams: map[string]*domain.LiveStream{
+			"stream-x": {
+				StreamID:    "stream-x",
+				App:         "live",
+				Active:      true,
+				ViewerCount: 0, // 0 < 1 → condition met
+			},
+		},
+		Nodes: map[string]*domain.LiveNodeStats{},
 	})
 
 	clock := alert.NewFakeClock(now)
@@ -133,7 +147,9 @@ func TestCronMaintenance_OutsideWindow(t *testing.T) {
 		notifMu.Unlock()
 	})
 
-	// Advance past window, multiple ticks.
+	// Advance past window_s=5s, multiple ticks.
+	// Tick 1 (t+5s):  pendingSince set; now-pending=0s < 5s
+	// Tick 2 (t+10s): now-pending=5s >= 5s → FIRE
 	clock.Advance(5 * time.Second)
 	ev.TickOnce(ctx)
 	clock.Advance(5 * time.Second)
@@ -145,9 +161,9 @@ func TestCronMaintenance_OutsideWindow(t *testing.T) {
 	n := len(notifs)
 	notifMu.Unlock()
 
-	// Outside window: should fire after window_s passes.
+	// VD-34: must assert that alerts DO fire outside the maintenance window.
 	if n == 0 {
-		t.Logf("NOTE: 0 notifications — rule may need more ticks to satisfy window_s=5s")
+		t.Error("expected at least 1 notification outside maintenance window (10:00 AM, window=02:00+1h), got 0")
 	} else {
 		t.Logf("PASS: outside maintenance window — received %d notification(s) at 10:00 AM", n)
 	}
@@ -595,5 +611,448 @@ func TestEvaluator_IngestBitrateFloor(t *testing.T) {
 		notif := notifs[0]
 		notifMu.Unlock()
 		t.Logf("PASS: ingest_bitrate_floor fired: value=%.1f, threshold=%.1f", notif["value"], notif["threshold"])
+	}
+}
+
+// ─── Guard test VD-28: muted=true MUST suppress notifications ────────────────
+
+// TestGuard_VD28_MutedRuleSuppressesNotifications verifies that a muted rule
+// whose condition fires delivers NOTHING to the notifySink or channels.
+// This test would FAIL on the old behavior (muted was ignored in fire/resolve).
+func TestGuard_VD28_MutedRuleSuppressesNotifications(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+
+	// Rule: muted=true, condition will fire (viewer_count < 1, stream with 0 viewers).
+	row := meta.AlertRuleRow{
+		Name:               "muted-guard-rule",
+		Metric:             "viewer_count",
+		Operator:           "lt",
+		Threshold:          1,
+		WindowS:            5,
+		ScopeJSON:          "{}",
+		Severity:           "warning",
+		CooldownS:          60,
+		Enabled:            true,
+		Muted:              true, // KEY: muted=true must suppress everything
+		MaintenanceWindows: "[]",
+		ChannelIDs:         `["test-channel"]`,
+	}
+	_, err := store.CreateAlertRule(ctx, row)
+	if err != nil {
+		t.Fatalf("CreateAlertRule: %v", err)
+	}
+
+	live := newFakeLive()
+	live.setSnap(&domain.LiveSnapshot{
+		Streams: map[string]*domain.LiveStream{
+			"zero-viewer-stream": {
+				StreamID:    "zero-viewer-stream",
+				App:         "live",
+				Active:      true,
+				ViewerCount: 0, // fires viewer_count < 1
+			},
+		},
+		Nodes: map[string]*domain.LiveNodeStats{},
+	})
+
+	clock := alert.NewFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	ev, _ := newTestEvaluator(t, store, live, clock)
+
+	var notifMu sync.Mutex
+	var notifs []map[string]any
+	ev.SetNotifySink(func(p []byte) {
+		var n map[string]any
+		_ = json.Unmarshal(p, &n)
+		notifMu.Lock()
+		notifs = append(notifs, n)
+		notifMu.Unlock()
+	})
+
+	// Advance well past window — condition fires but must be suppressed.
+	clock.Advance(5 * time.Second)
+	ev.TickOnce(ctx)
+	clock.Advance(5 * time.Second)
+	ev.TickOnce(ctx)
+	clock.Advance(5 * time.Second)
+	ev.TickOnce(ctx)
+
+	notifMu.Lock()
+	n := len(notifs)
+	notifMu.Unlock()
+
+	// Guard: muted=true MUST deliver 0 notifications even when condition fires.
+	if n > 0 {
+		t.Errorf("VD-28 guard FAIL: muted=true rule delivered %d notification(s), expected 0", n)
+	} else {
+		t.Logf("PASS VD-28: muted=true rule suppressed all %d potential notification(s)", n)
+	}
+}
+
+// ─── Guard test VD-29: group_by="app" emits ONE notification for N streams ───
+
+// TestGuard_VD29_GroupByAppEmitsOneNotification verifies that when group_by="app",
+// N streams in the same app produce exactly 1 notification (not N).
+// This test would FAIL on the old behavior (group_by was ignored).
+func TestGuard_VD29_GroupByAppEmitsOneNotification(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+
+	// Rule: viewer_count < 1 with group_by=app. 5 streams in same app.
+	row := meta.AlertRuleRow{
+		Name:      "groupby-app-guard-rule",
+		Metric:    "viewer_count",
+		Operator:  "lt",
+		Threshold: 1,
+		WindowS:   5,
+		ScopeJSON: "{}",
+		Severity:  "info",
+		CooldownS: 300,
+		Enabled:   true,
+		Muted:     false,
+		GroupBy: sql.NullString{
+			String: "app",
+			Valid:  true,
+		},
+		MaintenanceWindows: "[]",
+		ChannelIDs:         `["test-channel"]`,
+	}
+	_, err := store.CreateAlertRule(ctx, row)
+	if err != nil {
+		t.Fatalf("CreateAlertRule: %v", err)
+	}
+
+	live := newFakeLive()
+	// 5 streams all in the same app "live", all with 0 viewers.
+	streams := make(map[string]*domain.LiveStream)
+	for i := 0; i < 5; i++ {
+		sid := fmt.Sprintf("grouped-stream-%d", i)
+		streams[sid] = &domain.LiveStream{
+			StreamID:    sid,
+			App:         "live", // all in the same app
+			Active:      true,
+			ViewerCount: 0, // all fire the condition
+		}
+	}
+	live.setSnap(&domain.LiveSnapshot{
+		Streams: streams,
+		Nodes:   map[string]*domain.LiveNodeStats{},
+	})
+
+	clock := alert.NewFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	ev, _ := newTestEvaluator(t, store, live, clock)
+
+	var notifMu sync.Mutex
+	var notifs []map[string]any
+	ev.SetNotifySink(func(p []byte) {
+		var n map[string]any
+		_ = json.Unmarshal(p, &n)
+		notifMu.Lock()
+		notifs = append(notifs, n)
+		notifMu.Unlock()
+	})
+
+	// Advance past window — fire the alert.
+	clock.Advance(5 * time.Second)
+	ev.TickOnce(ctx)
+	clock.Advance(5 * time.Second)
+	ev.TickOnce(ctx)
+	clock.Advance(5 * time.Second)
+	ev.TickOnce(ctx)
+
+	notifMu.Lock()
+	n := len(notifs)
+	notifMu.Unlock()
+
+	// Guard: group_by=app + 5 streams in same app → exactly 1 notification.
+	// Old behavior: 5 notifications (one per stream). New behavior: 1 (grouped by app).
+	if n == 0 {
+		t.Errorf("VD-29 guard FAIL: group_by=app rule fired 0 notifications, expected 1")
+	} else if n > 1 {
+		t.Errorf("VD-29 guard FAIL: group_by=app with 5 streams in same app fired %d notifications, expected 1", n)
+	} else {
+		notifMu.Lock()
+		notif := notifs[0]
+		notifMu.Unlock()
+		t.Logf("PASS VD-29: group_by=app emitted %d notification (group_key=%v)", n, notif["group_key"])
+	}
+}
+
+// ─── Guard test VD-30: node_down fires when node is absent from snapshot ─────
+
+// TestGuard_VD30_NodeDownFiresOnAbsence verifies that node_down fires when a
+// node disappears from the snapshot (not based on CPU>95 proxy).
+// This test would FAIL on the old behavior (CPU proxy never fires for offline nodes).
+func TestGuard_VD30_NodeDownFiresOnAbsence(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+
+	// Rule: node_down on node "node-1" (scope-specific).
+	row := meta.AlertRuleRow{
+		Name:               "node-down-guard-rule",
+		Metric:             "node_down",
+		Operator:           "gt",
+		Threshold:          0,
+		WindowS:            5,
+		ScopeJSON:          `{"node_id":"node-1"}`,
+		Severity:           "critical",
+		CooldownS:          300,
+		Enabled:            true,
+		Muted:              false,
+		MaintenanceWindows: "[]",
+		ChannelIDs:         `["test-channel"]`,
+	}
+	_, err := store.CreateAlertRule(ctx, row)
+	if err != nil {
+		t.Fatalf("CreateAlertRule: %v", err)
+	}
+
+	live := newFakeLive()
+	// Snapshot: node-1 is ABSENT (already evicted or never came online).
+	live.setSnap(&domain.LiveSnapshot{
+		Streams: map[string]*domain.LiveStream{},
+		Nodes:   map[string]*domain.LiveNodeStats{}, // node-1 not present = offline
+	})
+
+	clock := alert.NewFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	ev, _ := newTestEvaluator(t, store, live, clock)
+
+	var notifMu sync.Mutex
+	var notifs []map[string]any
+	ev.SetNotifySink(func(p []byte) {
+		var n map[string]any
+		_ = json.Unmarshal(p, &n)
+		notifMu.Lock()
+		notifs = append(notifs, n)
+		notifMu.Unlock()
+	})
+
+	// Advance past window.
+	clock.Advance(5 * time.Second)
+	ev.TickOnce(ctx)
+	clock.Advance(5 * time.Second)
+	ev.TickOnce(ctx)
+	clock.Advance(5 * time.Second)
+	ev.TickOnce(ctx)
+
+	notifMu.Lock()
+	n := len(notifs)
+	notifMu.Unlock()
+
+	// Guard: node absent from snapshot → node_down fires.
+	// Old behavior: only fired when CPU>95, not when node disappears.
+	if n == 0 {
+		t.Errorf("VD-30 guard FAIL: node_down rule did not fire when node-1 is absent from snapshot")
+	} else {
+		notifMu.Lock()
+		notif := notifs[0]
+		notifMu.Unlock()
+		t.Logf("PASS VD-30: node_down fired when node absent: group_key=%v, value=%v", notif["group_key"], notif["value"])
+	}
+}
+
+// ─── Guard test VD-32: rebuffer_ratio >5% fires with real HealthScore ────────
+
+// TestGuard_VD32_RebufferRatioFires verifies that a rebuffer_ratio > 0.05 rule
+// fires when a stream has HealthScore < 0.5 (heuristic: (1-HS)*0.1 > 0.05).
+// This test would FAIL on the old behavior when HealthScore was always 0.
+func TestGuard_VD32_RebufferRatioFires(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+
+	// Rule: rebuffer_ratio > 0.05 (5% rebuffer rate).
+	// With HealthScore=0.4: (1-0.4)*0.1 = 0.06 > 0.05 → fires.
+	row := meta.AlertRuleRow{
+		Name:               "rebuffer-ratio-guard-rule",
+		Metric:             "rebuffer_ratio",
+		Operator:           "gt",
+		Threshold:          0.05, // 5% threshold
+		WindowS:            5,
+		ScopeJSON:          "{}",
+		Severity:           "warning",
+		CooldownS:          300,
+		Enabled:            true,
+		Muted:              false,
+		MaintenanceWindows: "[]",
+		ChannelIDs:         `["test-channel"]`,
+	}
+	_, err := store.CreateAlertRule(ctx, row)
+	if err != nil {
+		t.Fatalf("CreateAlertRule: %v", err)
+	}
+
+	live := newFakeLive()
+	live.setSnap(&domain.LiveSnapshot{
+		Streams: map[string]*domain.LiveStream{
+			"degraded-stream": {
+				StreamID:    "degraded-stream",
+				App:         "live",
+				Active:      true,
+				HealthScore: 0.4, // rebuffer_ratio = (1-0.4)*0.1 = 0.06 > 0.05
+			},
+		},
+		Nodes: map[string]*domain.LiveNodeStats{},
+	})
+
+	clock := alert.NewFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	ev, _ := newTestEvaluator(t, store, live, clock)
+
+	var notifMu sync.Mutex
+	var notifs []map[string]any
+	ev.SetNotifySink(func(p []byte) {
+		var n map[string]any
+		_ = json.Unmarshal(p, &n)
+		notifMu.Lock()
+		notifs = append(notifs, n)
+		notifMu.Unlock()
+	})
+
+	clock.Advance(5 * time.Second)
+	ev.TickOnce(ctx)
+	clock.Advance(5 * time.Second)
+	ev.TickOnce(ctx)
+	clock.Advance(5 * time.Second)
+	ev.TickOnce(ctx)
+
+	notifMu.Lock()
+	n := len(notifs)
+	notifMu.Unlock()
+
+	// Guard: rebuffer_ratio > 5% fires when HealthScore=0.4 (non-zero).
+	// Old behavior: HealthScore=0 → rebuffer_ratio=0 → never fired.
+	if n == 0 {
+		t.Errorf("VD-32 guard FAIL: rebuffer_ratio alert did not fire (HealthScore=0.4, expected ratio=0.06 > threshold=0.05)")
+	} else {
+		notifMu.Lock()
+		notif := notifs[0]
+		notifMu.Unlock()
+		t.Logf("PASS VD-32: rebuffer_ratio fired: value=%v > threshold=0.05", notif["value"])
+	}
+}
+
+// ─── Guard test VD-33: cron weekday range "1-5" matches Mon-Fri ──────────────
+
+// TestGuard_VD33_CronWeekdayRange verifies that a maintenance window with
+// weekday="1-5" (Mon-Fri) suppresses alerts on weekdays and allows them
+// on weekends. This would FAIL on the old behavior which truncated "1-5" to 1.
+func TestGuard_VD33_CronWeekdayRange(t *testing.T) {
+	// Window: Mon-Fri (weekdays "1-5") from 02:00 for 7200s (2 hours).
+	// Test on Wednesday 02:30 → should be suppressed (in window).
+	wednesday := time.Date(2026, 1, 7, 2, 30, 0, 0, time.UTC) // Wednesday
+	if wednesday.Weekday() != time.Wednesday {
+		t.Fatalf("expected Wednesday, got %v", wednesday.Weekday())
+	}
+
+	store := openTestStore(t)
+	ctx := context.Background()
+	row := meta.AlertRuleRow{
+		Name:               "weekday-range-suppression",
+		Metric:             "viewer_count",
+		Operator:           "lt",
+		Threshold:          1,
+		WindowS:            5,
+		ScopeJSON:          "{}",
+		Severity:           "info",
+		CooldownS:          300,
+		Enabled:            true,
+		Muted:              false,
+		MaintenanceWindows: `[{"start_cron":"0 2 1-5","duration_s":7200}]`, // Mon-Fri 02:00
+		ChannelIDs:         `["test-channel"]`,
+	}
+	_, err := store.CreateAlertRule(ctx, row)
+	if err != nil {
+		t.Fatalf("CreateAlertRule: %v", err)
+	}
+
+	live := newFakeLive()
+	live.setSnap(&domain.LiveSnapshot{
+		Streams: map[string]*domain.LiveStream{
+			"wday-stream": {StreamID: "wday-stream", App: "live", Active: true, ViewerCount: 0},
+		},
+		Nodes: map[string]*domain.LiveNodeStats{},
+	})
+
+	clock := alert.NewFakeClock(wednesday)
+	ev, _ := newTestEvaluator(t, store, live, clock)
+
+	var notifMu sync.Mutex
+	var notifs []map[string]any
+	ev.SetNotifySink(func(p []byte) {
+		var n map[string]any
+		_ = json.Unmarshal(p, &n)
+		notifMu.Lock()
+		notifs = append(notifs, n)
+		notifMu.Unlock()
+	})
+
+	// Tick during Wednesday 02:30 — should be suppressed (in Mon-Fri 02:00+2h window).
+	clock.Advance(5 * time.Second)
+	ev.TickOnce(ctx)
+	clock.Advance(5 * time.Second)
+	ev.TickOnce(ctx)
+	clock.Advance(5 * time.Second)
+	ev.TickOnce(ctx)
+
+	notifMu.Lock()
+	n := len(notifs)
+	notifMu.Unlock()
+
+	// Guard: Wednesday is in range 1-5 → suppressed.
+	// Old behavior: "1-5" truncated to "1" (Monday only), so Wednesday 02:30 would NOT
+	// be suppressed and the alert would fire. New behavior: suppressed.
+	if n > 0 {
+		t.Errorf("VD-33 guard FAIL: weekday range '1-5' should suppress Wednesday 02:30 but fired %d notification(s)", n)
+	} else {
+		t.Logf("PASS VD-33: weekday range '1-5' correctly suppressed alerts on Wednesday")
+	}
+
+	// Also verify Saturday is NOT suppressed (outside range).
+	saturday := time.Date(2026, 1, 10, 2, 30, 0, 0, time.UTC) // Saturday
+	if saturday.Weekday() != time.Saturday {
+		t.Fatalf("expected Saturday, got %v", saturday.Weekday())
+	}
+
+	store2 := openTestStore(t)
+	_, err = store2.CreateAlertRule(ctx, row) // same rule
+	if err != nil {
+		t.Fatalf("CreateAlertRule2: %v", err)
+	}
+
+	live2 := newFakeLive()
+	live2.setSnap(&domain.LiveSnapshot{
+		Streams: map[string]*domain.LiveStream{
+			"sat-stream": {StreamID: "sat-stream", App: "live", Active: true, ViewerCount: 0},
+		},
+		Nodes: map[string]*domain.LiveNodeStats{},
+	})
+
+	clock2 := alert.NewFakeClock(saturday)
+	ev2, _ := newTestEvaluator(t, store2, live2, clock2)
+
+	var notifMu2 sync.Mutex
+	var notifs2 []map[string]any
+	ev2.SetNotifySink(func(p []byte) {
+		var n2 map[string]any
+		_ = json.Unmarshal(p, &n2)
+		notifMu2.Lock()
+		notifs2 = append(notifs2, n2)
+		notifMu2.Unlock()
+	})
+
+	clock2.Advance(5 * time.Second)
+	ev2.TickOnce(ctx)
+	clock2.Advance(5 * time.Second)
+	ev2.TickOnce(ctx)
+	clock2.Advance(5 * time.Second)
+	ev2.TickOnce(ctx)
+
+	notifMu2.Lock()
+	n2 := len(notifs2)
+	notifMu2.Unlock()
+
+	if n2 == 0 {
+		t.Errorf("VD-33 guard FAIL: Saturday (outside weekday range 1-5) should NOT be suppressed but got 0 notifications")
+	} else {
+		t.Logf("PASS VD-33: Saturday correctly NOT suppressed (weekday=6, outside range 1-5): %d notification(s)", n2)
 	}
 }
