@@ -1,19 +1,21 @@
 # Resume prompt — Pulse (next session)
 
-> Updated 2026-06-15 (**session 4**). **W1 `pulse-cicd` is DONE** — always-on GitHub Actions
-> CI/CD that gates `main` (build + lint + test + docker-build + e2e + GHCR release) is authored,
-> **independently verified locally in the real CI images**, and committed + pushed to `main`
-> (D-020, gate CLOSED, PASS_WITH_LIMITATIONS). The next default is **W2 `pulse-productionize`**.
-> Each workflow below has a built-in **verification flow** and a **commit + handoff flow**.
-> Paste this into a fresh Claude Code session started in the repo root
-> (`/home/aytek/repo/ams-pulse` on the VPS).
+> Updated 2026-06-15 (**session 4**). Three things landed + pushed to `main` this session:
+> **(1) W1 `pulse-cicd`** — always-on CI/CD that gates `main` (D-020); **(2) D-021** — found &
+> fixed a real **deadlock** that had wedged the live demo, and restored it; **(3) W2
+> `pulse-productionize` SUBSET** — deploy hardening (Caddy TLS + ClickHouse auth + secrets,
+> D-022). All three were authored via Workflows and **independently verified** (build/CI-image
+> reproduction; deadlock proven both ways; live HTTPS+auth stack). What REMAINS is the
+> **real-infra half of W2** (real AMS + a domain) + the **`amsclient` real-wire-format hardening**
+> — both need inputs only you can provide (see below). Paste this into a fresh Claude Code session
+> at the repo root (`/home/aytek/repo/ams-pulse` on the VPS).
 
 ## ✅ Status
 
 **Prior (sessions 1–3):** MVP (F1–F10) + **Wave 3-Plus** + a **functional MVP DEPLOYED on the
 VPS via Docker Compose** against the mock AMS (closed the D-002 waiver). Gate **CLOSED**
 (D-019). Authoritative artifacts: `IMPLEMENTATION_LOG.md`, `DEVLOG.md`,
-`agents/handoffs/decisions.md` (**D-001…D-020** binding), `qa/wave-3-plus/gate-report.md`.
+`agents/handoffs/decisions.md` (**D-001…D-022** binding), `qa/wave-3-plus/gate-report.md`.
 
 **This session (session 4) — W1 `pulse-cicd` CLOSED (D-020).** The skeleton CI was broken vs.
 the shipped MVP (Go 1.24 not 1.25; `npm ci` without `--legacy-peer-deps`; a malformed
@@ -45,53 +47,54 @@ docs — both on `main`):
 3. Push a `v*` tag (e.g. `git tag v0.1.0 && git push origin v0.1.0`) to exercise the GHCR
    release once. `e2e` is intentionally **not** a required status check (slow full-stack bring-up).
 
-### ⚠️ FLAG — the demo stack is currently UNHEALTHY (not a W1 item)
-`docker compose ps` (project `pulse`) shows the `pulse` container `Up (unhealthy)` and not
-serving on `:8090`/`:80` (curl → no response). Next session should diagnose + restore it:
-`cd deploy && sg docker -c "docker compose up -d"`, then
-`sg docker -c "docker compose logs pulse | tail -50"` (suspect meta DB / CH connection /
-first-run token / OOM). The CI override (`docker-compose.ci.yml`) and a fresh `pulse-e2e` stack
-both came up healthy this session, so the image + pipeline are fine — it's a runtime state issue.
+### ✅ D-021 — live-dashboard deadlock fixed, demo restored (commits `70b4b14`, `69a8a1e`)
+The demo's "unhealthy" pulse was a genuine **AB→BA deadlock** (root-caused from a SIGQUIT
+goroutine dump — 486 HTTP handlers wedged on the aggregator RWMutex): `cluster.Discovery.poll`
+and `aggregator.EvictStale` emitted to the fan-out sink **while holding their own lock**, and
+each re-entered the other. Fix (rule: never hold a state lock across a sink call): collect events
+under the lock, emit after releasing it; + regression tests that **deadlock on the un-fixed
+source** and pass on the fix. Image rebuilt + redeployed → `/healthz` 200 on :8090 AND :80.
+Demo live again at `http://161.97.172.146/`.
+
+### ✅ D-022 — W2 productionize SUBSET (deploy hardening) done (no-infra half)
+New files (committed): `deploy/docker-compose.hardened.yml` (**Caddy TLS** + **ClickHouse auth** +
+pulse off all host ports + secrets-from-env, self-contained `base+hardened`), `deploy/config/Caddyfile`,
+`deploy/.env.example` (placeholder template), `deploy/docker-compose.real-ams.yml`,
+`docs/runbooks/productionize.md`. Adversarially verified live: HTTPS 200 (TLSv1.3, Caddy local CA),
+CH auth enforced (wrong-password → Code 516, `default` user removed), migrate exit 0 on the authed
+DSN, pulse with zero host ports. Local verify: `sg docker -c "CLICKHOUSE_USER=… CLICKHOUSE_PASSWORD=…
+PULSE_SECRET_KEY=… docker compose -p pulse-hardened -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml up -d --build"`
+then `curl -k --resolve localhost:8443:127.0.0.1 https://localhost:8443/healthz`.
 
 ## Next session — run these Workflows (orchestrate with the Workflow tool)
 
-Default: **W2** next; the optional follow-ons need a user OK first. **Every** workflow MUST end
-with the Verify + Commit + Handoff flows defined in the next section.
+W1 (D-020) + the W2 SUBSET (D-022) are DONE. The remaining default work needs **your infra
+inputs**. **Every** workflow MUST end with the Verify + Commit + Handoff flows in the next section.
 
-### Workflow 2 — `pulse-productionize` — TLS + real AMS + hardening
-Goal: production-ready, real-AMS deployment. Current live exposure is DEMO-GRADE (plain HTTP,
-admin API public, CH auth relaxed). **Split by what is verifiable on this box vs. what needs
-external infra** — author both, but only the first half can be self-verified here:
+### W2b — `pulse-productionize-realinfra` — complete the production deploy (NEEDS your infra)
+The hardened overlay (`deploy/docker-compose.hardened.yml` + Caddyfile + `.env.example` +
+`docker-compose.real-ams.yml`) already exists and is verified locally. To finish, set these in
+`deploy/.env` (copy from `deploy/.env.example`):
+- A real **AMS**: `PULSE_AMS_URL`, `PULSE_AMS_AUTH_TOKEN`, `PULSE_AMS_NODE_ID`, `PULSE_AMS_APPLICATIONS`.
+- A real **domain** pointed at this VPS: set `PULSE_DOMAIN`, remove `tls internal` from the
+  Caddyfile (Caddy auto-provisions Let's Encrypt), and bind Caddy to `0.0.0.0:443/80` (the
+  hardened file uses loopback `127.0.0.1` for local verify — see `docs/runbooks/productionize.md`).
+Then bring up `base + hardened + real-ams`, run `POST /api/v1/admin/sources/{id}/test` against the
+real AMS, confirm a **valid public TLS cert** + the public surface is locked down, re-run the e2e
+smoke. Adversarially verify each claim; ORCH independent gate; commit + handoff.
 
-**A) Locally-verifiable subset (no external infra — DO + verify against the mock stack):**
-1. **TLS reverse proxy**: add a Caddy/nginx TLS-terminating proxy (compose override) in front of
-   pulse; move UI/API off public plain HTTP to internal-only + proxy; for local verify use a
-   self-signed / `caddy internal` cert and `curl -k https://localhost`.
-2. **Restore CH auth**: set `CLICKHOUSE_USER`/`CLICKHOUSE_PASSWORD`, thread into all DSNs, drop
-   `CLICKHOUSE_SKIP_USER_SETUP`; verify migrate + serve + e2e still pass with auth on.
-3. **Secrets**: move `PULSE_SECRET_KEY` + AMS token to env/secret-files (not committed); review
-   CORS / WS allowed origins.
-4. **`pkg/amsclient` hardening**: capture REST fixtures (extra/missing fields, status variants,
-   pagination, cluster vs standalone, AMS version diffs) + unit tests that actually RUN.
-5. **`deploy/docker-compose.real-ams.yml`** (no mock) wiring `PULSE_AMS_URL` + `PULSE_AMS_AUTH_TOKEN`
-   + `PULSE_AMS_NODE_ID` + `PULSE_AMS_APPLICATIONS`; `docker compose … config -q` it.
-6. **Ops**: backups + retention (ClickHouse + SQLite meta), resource limits, metrics scraping
-   (`PULSE_METRICS_TOKEN`), a short runbook.
+### W2c — `pulse-amsclient-hardening` — real-wire-format robustness (DEFERRED from session 4)
+Harden `server/pkg/amsclient` (+ `internal/collector`) against real AMS wire variance: capture REST
+fixtures (extra/missing fields, status-value variants, pagination, cluster vs standalone, AMS-version
+diffs) + unit tests that actually RUN. Author + unit-test is doable WITHOUT live infra; validate
+against **real captures** once W2b's AMS exists — so pair it with W2b.
 
-**B) Real-infra (NEEDS user inputs — WAIVE execution until provided, record as a D-021 waiver):**
-- A **real production AMS**: URL + auth token + node id + applications, to run
-  `POST /api/v1/admin/sources/{id}/test` and validate `pkg/amsclient` against real wire formats.
-- A **real DNS domain** + Let's Encrypt for valid PUBLIC TLS (vs. the self-signed local cert).
-- **QoE/beacon end-to-end**: integrate `sdk/beacon-js` into AMS player pages (needs a Pro+
-  license to lift the ingest gate so `beacon_events` populate `qoe/summary`).
-
-Phases: Plan/contracts (ORCH writes the CR + waiver to `decisions.md`) → Author (parallel, disjoint)
-→ **VERIFY** (adversarial, against a running stack; refute "it works" before accepting; confirm the
-public surface is locked down + local TLS valid) → **GATE** (ORCH independent re-gate on HEAD) →
-Commit + Handoff.
+### Also open (carry-forward)
+- **QoE/beacon end-to-end**: integrate `sdk/beacon-js` into AMS player pages (needs a Pro+ license to
+  lift the ingest gate so `beacon_events` populate `qoe/summary`).
+- The **USER GitHub-side TODO** above (Actions-green PR · `branch-protection.sh` · `v*` tag).
 
 ### Optional follow-on workflows (ask the user first)
-- `pulse-fix-demo` — diagnose + restore the unhealthy live demo stack (see FLAG above).
 - `pulse-enterprise` — SSO (OIDC), white-label (brand config + branded PDF), air-gapped licensing.
 - `pulse-portability-spike` — protocol-level beacon vs. a non-AMS HLS source (Wowza/Red5/Flussonic).
 - `pulse-mobile-sdks` — Android/iOS/Flutter beacons (native toolchains may be absent → author +

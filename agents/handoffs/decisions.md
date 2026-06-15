@@ -621,3 +621,41 @@ lock") against the un-fixed source (git-stashed) and **PASS race-clean** against
 full server unit suite **all packages ok**; image rebuilt + demo redeployed (project `pulse`)
 → `/healthz` **200 on :8090 AND :80**, body `status:ok`. Demo restored at
 `http://161.97.172.146/`. Committed by explicit path (server scope).
+
+## D-022 · 2026-06-15 · W2 `pulse-productionize` (subset, no external infra) — deploy hardening (CLOSED)
+
+User chose "subset now, no infra" (the full real-AMS + public-TLS path needs operator
+infra). Workflow `pulse-productionize-subset` (run `wf_e82c50f2-c1e`, 4 agents: author ∥ →
+adversarial verify → gate). Authored (committed by explicit path, deploy + docs scope):
+- `deploy/docker-compose.hardened.yml` — a SELF-CONTAINED, production-shaped override
+  (`base + hardened` = full testable stack): adds **Caddy** (`caddy:2-alpine`) TLS-terminating
+  reverse proxy (loopback `127.0.0.1:8443→443`, `8080→80`); **removes ALL host ports from pulse**
+  (`ports: !override []`) so it's reachable only via Caddy; **restores ClickHouse auth**
+  (`CLICKHOUSE_USER`/`CLICKHOUSE_PASSWORD`, no `SKIP_USER_SETUP`, authenticated healthcheck);
+  threads an authenticated `clickhouse://user:pass@…` DSN into pulse + pulse-migrate; secrets
+  from env.
+- `deploy/config/Caddyfile` — `{$PULSE_DOMAIN:localhost}` + `tls internal` (local CA) for
+  verification, `/beacon/*`→pulse:8091 else →pulse:8090, security headers, no CDNs/fonts;
+  documents the Let's-Encrypt-on-a-real-domain switch.
+- `deploy/.env.example` — committable template (placeholders only) for every required/optional var.
+- `deploy/docker-compose.real-ams.yml` — disables mock-ams (`profiles: [mock]`), wires the four
+  `PULSE_AMS_*` vars from operator env (`:?` required / `:-` defaults); validated names against
+  `config.go`.
+- `docs/runbooks/productionize.md` — operator runbook (TLS+domain, CH auth, secrets, real-AMS
+  wiring + `POST /api/v1/admin/sources/{id}/test`, backups/retention, resource limits + metrics).
+
+**Verification (adversarial, against a live `base + hardened` stack with the mock AMS, project
+`pulse-prod-verify`, then ORCH independent re-check).** (a) **HTTPS via Caddy = 200, TLSv1.3**,
+Caddy local-CA cert, healthz `status:ok`. (b) **CH auth ENFORCED**: authed query → 17 tables;
+wrong password → `Code 516 Authentication failed`; the `default` user is REMOVED; only `pulse_rw`
+exists. (c) pulse-migrate **exit 0** with the authenticated DSN (3 migrations applied). (d) pulse
+has **zero host port bindings**. real-ams overlay `config -q` exits 0; clean `down -v`. ORCH
+re-confirmed both config parses, `.env.example` placeholders-only, all referenced env vars exist
+in `config.go`, and the demo (`:80`) stayed healthy throughout.
+
+**Verdict: gate CLOSED — PASS_WITH_LIMITATIONS** (blocking_issues: none). **Waived (real infra,
+operator-provided):** real public TLS via Let's Encrypt (needs a live domain + ACME); real Ant
+Media Server connectivity (`PULSE_AMS_URL`/`PULSE_AMS_AUTH_TOKEN`); and the **`pkg/amsclient`
+real-wire-format fixture hardening — explicitly DEFERRED to a future session** (it pairs with the
+real-AMS infra). Minor non-blocking notes: Caddy host ports are loopback (operator binds
+`0.0.0.0:443/80` for prod — runbook says so); resource-limit YAML is in the runbook, not pre-wired.

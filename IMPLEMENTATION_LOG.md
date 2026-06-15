@@ -10,7 +10,7 @@ from empirical verification on the current `main`, not from agent self-reports.
 > QoE, reports, fleet, API/Prometheus, Helm), Wave 3-MVP (anomaly detection,
 > synthetic probes), then a **validation phase** (mission item 2) that adversarially
 > re-verified F1–F10 against the PRD and drove a defect-fix loop. Full chronology in
-> `DEVLOG.md`; all rulings in `agents/handoffs/decisions.md` (D-001…D-021).
+> `DEVLOG.md`; all rulings in `agents/handoffs/decisions.md` (D-001…D-022).
 
 ## Verification status (current `main`)
 
@@ -47,6 +47,16 @@ from empirical verification on the current `main`, not from agent self-reports.
 > handlers wedged on `CurrentSnapshot`). Fix: collect events under the lock, emit after
 > releasing it (`Discovery.poll`, `aggregator.EvictStale`) + regression tests that
 > deadlock on the un-fixed source. Demo redeployed → `/healthz` 200, `status:ok`.
+
+> **W2 productionize subset (session 4, D-022, 2026-06-15).** Hardened the public surface
+> (no external infra): `deploy/docker-compose.hardened.yml` (Caddy TLS termination +
+> ClickHouse auth + pulse off all host ports + secrets-from-env), `deploy/config/Caddyfile`,
+> `deploy/.env.example`, `deploy/docker-compose.real-ams.yml`, `docs/runbooks/productionize.md`.
+> Adversarially verified against a live `base+hardened` stack: HTTPS 200 (TLSv1.3, Caddy local
+> CA), CH auth enforced (wrong-password → Code 516, `default` user removed), migrate exit 0 on
+> the authenticated DSN, pulse with zero host ports. Gate CLOSED (PASS_WITH_LIMITATIONS).
+> Waived to operator infra: Let's-Encrypt public TLS + real AMS; **`amsclient` real-wire-format
+> fixture hardening deferred** to a future session.
 
 **Single unified project** (one repo, one `pulse` binary `serve|migrate|diag` +
 one web app + one SDK). No separate codebases to merge.

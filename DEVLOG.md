@@ -459,3 +459,19 @@ regression tests that reproduce the deadlock. **Verified both ways** (D-013/D-01
 FAIL (3 s watchdog) on the un-fixed source and PASS race-clean on the fix; full server unit
 suite green; image rebuilt + demo redeployed → `/healthz` 200 on :8090 AND :80, `status:ok`.
 Demo live again at http://161.97.172.146/.
+
+## 2026-06-15 — session 4 · W2 `pulse-productionize` subset: deploy hardening (D-022)
+
+User picked "subset now, no infra." Workflow `pulse-productionize-subset` (`wf_e82c50f2-c1e`,
+4 agents) authored a self-contained hardened overlay: **Caddy TLS** termination, **ClickHouse
+auth restored**, pulse off all host ports (reachable only via the proxy), secrets from env —
+plus a real-AMS compose overlay and an operator runbook. (First launch crashed on a `${VAR}`
+JS-interpolation bug in my own workflow script; escaped and re-ran.)
+
+Adversarially verified against a live `base + hardened` stack (mock AMS, isolated project):
+HTTPS 200 over **TLSv1.3** via Caddy's local CA; CH auth **enforced** (authed → 17 tables;
+wrong password → Code 516; `default` user removed); pulse-migrate exit 0 on the authenticated
+DSN; pulse has **zero host port bindings**. ORCH re-confirmed config parses, `.env.example`
+placeholders-only, every referenced env var exists in `config.go`, demo undisturbed. Gate
+**CLOSED** (PASS_WITH_LIMITATIONS). Waived to real infra: Let's-Encrypt public TLS + real AMS
+connectivity; **`amsclient` real-wire-format fixture hardening deferred** to a future session.
