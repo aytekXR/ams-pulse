@@ -2442,6 +2442,9 @@ components:
         bitrate_kbps:
           type: number
           format: float
+        segment_ttfb_ms:
+          type: [integer, 'null']
+          description: Time to first byte of the first media segment in ms; null on failure or when not applicable
 
     # ── Beacon ingest ─────────────────────────────────────────
     BeaconBatch:
@@ -2535,6 +2538,8 @@ components:
               $ref: "#/components/schemas/ComponentStatus"
             collector:
               $ref: "#/components/schemas/ComponentStatus"
+            kafka:
+              $ref: "#/components/schemas/KafkaComponentStatus"
 
     ComponentStatus:
       type: object
@@ -2547,6 +2552,18 @@ components:
           type: [integer, 'null']
         message:
           type: [string, 'null']
+
+    KafkaComponentStatus:
+      allOf:
+        - $ref: "#/components/schemas/ComponentStatus"
+        - type: object
+          properties:
+            lag:
+              type: integer
+              description: Total consumer group lag across all topic partitions
+            parse_errors:
+              type: integer
+              description: Number of message parse errors since last reset
 
     # ── Admin: Sources ────────────────────────────────────────
     SourceList:
