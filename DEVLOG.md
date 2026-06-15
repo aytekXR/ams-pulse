@@ -475,3 +475,12 @@ DSN; pulse has **zero host port bindings**. ORCH re-confirmed config parses, `.e
 placeholders-only, every referenced env var exists in `config.go`, demo undisturbed. Gate
 **CLOSED** (PASS_WITH_LIMITATIONS). Waived to real infra: Let's-Encrypt public TLS + real AMS
 connectivity; **`amsclient` real-wire-format fixture hardening deferred** to a future session.
+
+## 2026-06-16 — session 4 (cont.) · production TLS pre-staged for `beyondkaira.com` (D-023)
+
+User acquired the domain `beyondkaira.com`. Gave Squarespace DNS directions (replace the default
+parking A records with `@ → 161.97.172.146`) and pre-staged turnkey public TLS so the SSL go-live
+is one command once DNS propagates: `deploy/docker-compose.prod-tls.yml` (Caddy on `0.0.0.0:80/443`)
++ `deploy/config/Caddyfile.prod` (real Let's Encrypt, no `tls internal`). Config-verified both
+compositions (`base+hardened+prod-tls` and `+real-ams`) — not brought up (real ACME needs the DNS
+change + the demo's :80 freed). The exact go-live steps are in `RESUME-PROMPT.md` → W2b.

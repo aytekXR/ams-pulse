@@ -659,3 +659,25 @@ Media Server connectivity (`PULSE_AMS_URL`/`PULSE_AMS_AUTH_TOKEN`); and the **`p
 real-wire-format fixture hardening — explicitly DEFERRED to a future session** (it pairs with the
 real-AMS infra). Minor non-blocking notes: Caddy host ports are loopback (operator binds
 `0.0.0.0:443/80` for prod — runbook says so); resource-limit YAML is in the runbook, not pre-wired.
+
+## D-023 · 2026-06-16 · Production TLS pre-staged for `beyondkaira.com` (real domain acquired)
+
+User acquired `beyondkaira.com` (Squarespace) and asked for (a) DNS-forwarding directions and
+(b) the deploy made SSL-ready. DNS guidance given (replace Squarespace's default parking A
+records `198.49.23.x`/`198.185.159.x` with an **A record `@` → 161.97.172.146** + `www`; verify
+with `dig`). To avoid hand-editing the verified hardened files, added a turnkey production-TLS
+overlay (deploy scope, committed):
+- `deploy/docker-compose.prod-tls.yml` — `!override`s the Caddy service to bind **0.0.0.0:80/443**
+  (public) and mount `Caddyfile.prod`; `PULSE_DOMAIN` is `:?`-required.
+- `deploy/config/Caddyfile.prod` — no `tls internal` → real **Let's Encrypt**; `{$PULSE_DOMAIN}`
+  required; staging-ACME line for dry runs; same proxy/security-header/log blocks as the local Caddyfile.
+- `.env.example` updated with the `PULSE_DOMAIN=beyondkaira.com` production note.
+
+Production composition: `base + hardened + prod-tls` (mock AMS) or `+ real-ams`. **Verified by
+config only** (ORCH): `docker compose … config -q` exits 0 for both compositions; the rendered
+caddy shows `host_ip 0.0.0.0` ports 80/443 and `source …/Caddyfile.prod`; the `PULSE_DOMAIN` `:?`
+guard errors when unset. **NOT brought up** — real Let's Encrypt issuance is blocked on the user's
+DNS change + propagation (and host :80 is currently held by the running demo, which must be stopped
+first). Live execution is the W2b step (RESUME-PROMPT), to run once `dig +short beyondkaira.com`
+== `161.97.172.146`. Carries the D-022 waivers; the public-TLS waiver is now PRE-STAGED (config
+ready, awaiting DNS).

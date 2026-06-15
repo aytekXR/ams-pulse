@@ -71,17 +71,29 @@ then `curl -k --resolve localhost:8443:127.0.0.1 https://localhost:8443/healthz`
 W1 (D-020) + the W2 SUBSET (D-022) are DONE. The remaining default work needs **your infra
 inputs**. **Every** workflow MUST end with the Verify + Commit + Handoff flows in the next section.
 
-### W2b — `pulse-productionize-realinfra` — complete the production deploy (NEEDS your infra)
-The hardened overlay (`deploy/docker-compose.hardened.yml` + Caddyfile + `.env.example` +
-`docker-compose.real-ams.yml`) already exists and is verified locally. To finish, set these in
-`deploy/.env` (copy from `deploy/.env.example`):
-- A real **AMS**: `PULSE_AMS_URL`, `PULSE_AMS_AUTH_TOKEN`, `PULSE_AMS_NODE_ID`, `PULSE_AMS_APPLICATIONS`.
-- A real **domain** pointed at this VPS: set `PULSE_DOMAIN`, remove `tls internal` from the
-  Caddyfile (Caddy auto-provisions Let's Encrypt), and bind Caddy to `0.0.0.0:443/80` (the
-  hardened file uses loopback `127.0.0.1` for local verify — see `docs/runbooks/productionize.md`).
-Then bring up `base + hardened + real-ams`, run `POST /api/v1/admin/sources/{id}/test` against the
-real AMS, confirm a **valid public TLS cert** + the public surface is locked down, re-run the e2e
-smoke. Adversarially verify each claim; ORCH independent gate; commit + handoff.
+### W2b — `pulse-productionize-realinfra` — go live on real TLS (domain: `beyondkaira.com`)
+**DNS (user does this at Squarespace):** point `beyondkaira.com` at the VPS — an **A record
+`@` → 161.97.172.146** (+ `www` → 161.97.172.146), and REMOVE Squarespace's default parking A
+records (`198.49.23.x`, `198.185.159.x`) + the `www → ext-sq.squarespace.com` CNAME. Verify:
+`dig +short beyondkaira.com` returns `161.97.172.146` (propagation: usually <1 h).
+
+**Turnkey TLS is pre-staged (D-023)** — `deploy/docker-compose.prod-tls.yml` + `deploy/config/Caddyfile.prod`
+bind Caddy on `0.0.0.0:80/443` and use real Let's Encrypt (no `tls internal`). NO hand-editing.
+Once DNS resolves:
+1. `deploy/.env` (copy `deploy/.env.example`): set `PULSE_DOMAIN=beyondkaira.com`, `CLICKHOUSE_USER`,
+   `CLICKHOUSE_PASSWORD`, `PULSE_SECRET_KEY` (`openssl rand -hex 32`).
+2. **Free :80/:443** — stop the demo (it holds host :80):
+   `cd deploy && sg docker -c "docker compose -p pulse down"`.
+3. Bring up: `sg docker -c "docker compose -p pulse-prod -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml -f deploy/docker-compose.prod-tls.yml --env-file deploy/.env up -d --build"`.
+4. Verify real TLS: `curl -sS https://beyondkaira.com/healthz` (valid public cert, no `-k`).
+   Docker-published :80/:443 bypass ufw here, so no firewall change is needed.
+   First request triggers ACME issuance (~10–30 s); if it fails, check `docker compose -p pulse-prod logs caddy`
+   (common causes: DNS not propagated, or :80 still held by the demo). Use the staging ACME CA line in
+   `Caddyfile.prod` for dry runs to avoid Let's Encrypt rate limits.
+
+**Real AMS** (optional, when you have one): set the `PULSE_AMS_*` vars in `deploy/.env` and add
+`-f deploy/docker-compose.real-ams.yml` (it disables mock-ams); then `POST /api/v1/admin/sources/{id}/test`
+against the real AMS. Adversarially verify each claim; ORCH independent gate; commit + handoff.
 
 ### W2c — `pulse-amsclient-hardening` — real-wire-format robustness (DEFERRED from session 4)
 Harden `server/pkg/amsclient` (+ `internal/collector`) against real AMS wire variance: capture REST

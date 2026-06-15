@@ -10,7 +10,7 @@ from empirical verification on the current `main`, not from agent self-reports.
 > QoE, reports, fleet, API/Prometheus, Helm), Wave 3-MVP (anomaly detection,
 > synthetic probes), then a **validation phase** (mission item 2) that adversarially
 > re-verified F1–F10 against the PRD and drove a defect-fix loop. Full chronology in
-> `DEVLOG.md`; all rulings in `agents/handoffs/decisions.md` (D-001…D-022).
+> `DEVLOG.md`; all rulings in `agents/handoffs/decisions.md` (D-001…D-023).
 
 ## Verification status (current `main`)
 
