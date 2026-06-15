@@ -20,6 +20,7 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
@@ -418,6 +419,7 @@ function ttfbColor(ttfb: number | null): string {
 interface ProbeResultsChartData {
   ts: number;
   ttfb_ms: number | null;
+  segment_ttfb_ms: number | null;
   bitrate_kbps: number | undefined;
   success: boolean;
 }
@@ -454,6 +456,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
   const chartData: ProbeResultsChartData[] = results.map((r) => ({
     ts: r.ts,
     ttfb_ms: r.ttfb_ms,
+    segment_ttfb_ms: r.segment_ttfb_ms ?? null,
     bitrate_kbps: r.bitrate_kbps,
     success: r.success,
   }));
@@ -558,7 +561,6 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                   <Tooltip
                     formatter={(v: unknown) => [
                       typeof v === "number" ? `${v} ms` : "—",
-                      "TTFB",
                     ]}
                     labelFormatter={(ts: unknown) =>
                       typeof ts === "number" ? new Date(ts).toLocaleString() : String(ts)
@@ -569,6 +571,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                       fontSize: 12,
                     }}
                   />
+                  <Legend wrapperStyle={{ fontSize: 11, color: "var(--color-muted)" }} />
                   {/* 500ms warning threshold */}
                   <ReferenceLine y={500} stroke="#fbbf24" strokeDasharray="4 2" />
                   <Line
@@ -579,6 +582,15 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                     dot={false}
                     connectNulls={false}
                     name="TTFB (ms)"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="segment_ttfb_ms"
+                    stroke="#a78bfa"
+                    strokeWidth={2}
+                    dot={false}
+                    connectNulls={false}
+                    name="Segment TTFB (ms)"
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -685,6 +697,9 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                       TTFB
                     </th>
                     <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-muted)" }}>
+                      Segment TTFB
+                    </th>
+                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-muted)" }}>
                       Bitrate
                     </th>
                     <th style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "var(--color-muted)" }}>
@@ -724,6 +739,17 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                         }}
                       >
                         {r.ttfb_ms != null ? `${r.ttfb_ms} ms` : "—"}
+                      </td>
+                      <td
+                        style={{
+                          padding: "6px 10px",
+                          textAlign: "right",
+                          color: ttfbColor(r.segment_ttfb_ms ?? null),
+                          fontFamily: "var(--font-mono)",
+                          fontSize: 12,
+                        }}
+                      >
+                        {r.segment_ttfb_ms != null ? `${r.segment_ttfb_ms} ms` : "—"}
                       </td>
                       <td
                         style={{

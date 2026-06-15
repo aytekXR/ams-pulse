@@ -1319,6 +1319,8 @@ export interface components {
             error_message?: string | null;
             /** Format: float */
             bitrate_kbps?: number;
+            /** @description Time to first byte of the first media segment in ms; null on failure or when not applicable */
+            segment_ttfb_ms?: number | null;
         };
         BeaconBatch: {
             events: components["schemas"]["BeaconEventEnvelope"][];
@@ -1365,6 +1367,7 @@ export interface components {
                 clickhouse: components["schemas"]["ComponentStatus"];
                 meta_store: components["schemas"]["ComponentStatus"];
                 collector: components["schemas"]["ComponentStatus"];
+                kafka?: components["schemas"]["KafkaComponentStatus"];
             };
         };
         ComponentStatus: {
@@ -1372,6 +1375,12 @@ export interface components {
             status: "ok" | "degraded" | "down";
             latency_ms?: number | null;
             message?: string | null;
+        };
+        KafkaComponentStatus: components["schemas"]["ComponentStatus"] & {
+            /** @description Total consumer group lag across all topic partitions */
+            lag?: number;
+            /** @description Number of message parse errors since last reset */
+            parse_errors?: number;
         };
         SourceList: {
             items: components["schemas"]["Source"][];
