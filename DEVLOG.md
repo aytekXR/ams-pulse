@@ -320,3 +320,30 @@ binary at `/tmp/clickhouse` (re-download if /tmp cleared). No Docker (D-002).
   `/admin/tenants` CRUD CR (INT-01 contract amend → BE-02 routes → FE-01 UI) and
   the carried gaps, defect-fix loop until clean. Then consolidation +
   `IMPLEMENTATION_LOG.md` → notify user, STOP.
+
+## 2026-06-14/15 — Validation phase (mission item 2)
+
+- **V1 — F6 tenant CRUD** (deferred D-010 CR): INT-01 `2323429`, BE-02 `3793b9c`,
+  FE-01 `cd5c4d5`, ORCH-00 `38469bf` (fixed DEF-QA-001 test types). Live-verified:
+  per-tenant reconcile drift 0.0000%. **D-014 finding:** Business tier missing.
+- **V2 — adversarial sweep** (`wf_3bdbf61e-76d`, 14 verifiers, triage `1f090e6`):
+  **41 defects, 11 MVP-blocking** the wave gates missed via workarounds. Headlines:
+  F3 beacon pipeline broken (SDK header VD-09, main ingest discards VD-10), F2
+  geo/device stubs + enrichment unwired (VD-06/07/08), F4 health always 0
+  (VD-20/21), F5 muted/group_by dead (VD-28/29), F6 reports ungated + cron broken
+  (VD-35/36), tier model (VD-01), security (VD-S1/S2), WS shape (VD-02).
+- **V3 fix-loop (D-015):**
+  - **V3a INT-01** `0d84d31`: business tier in contract enum + license.go +
+    conformance. First V3a run STALLED ~9h on a foreground process (D-016);
+    partial non-building edits discarded, INT-01 kept.
+  - **V3a-rest** (`wf_4e8b282a-a47`, hardened, ~49 min) — **QA PASS**: BE-01
+    `f1d0a7c` (enrichment wiring, health bridge, edge dedup, ingest stats, mmdb),
+    BE-02-A1 `5996f2e` (beacon→EventSink, geo/device queries, QoE rollup),
+    BE-02-A2 `782c166` (ingest-health API timeseries, tracker, conformance),
+    SDK-01 `63f5e81` (header VD-09, rebuffer_end, bitrate), QA `0845ae8`. Data now
+    actually flows: beacon round-trip, geo/device analytics, health>0, qoe summary.
+  - **V3b IN FLIGHT** (`wf_f21da966-d85`, hardened): [BE-02-B alerting (muted/
+    group_by/node_down/cron) → BE-02-C gating(§7.11 matrix)/WS LiveOverview/fleet
+    role/security] | FE-01 (tier copy/WS/params) → QA full re-gate → DOC-01.
+- Next: V3b gate → (fix-loop if needed) → consolidation + `IMPLEMENTATION_LOG.md`
+  → notify user, STOP for review.

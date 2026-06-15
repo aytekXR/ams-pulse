@@ -54,16 +54,20 @@ QoE monitoring and alerting for Ant Media Server), strictly per PRD:
       VD-S4). The first V3a run (`wf_daf126f5-e1e`) then STALLED ~9h on a
       foreground process (D-016); partial server/SDK edits were discarded
       (non-building), INT-01's commit kept.
-    - **V3a-rest IN FLIGHT** (`pulse-val-3a-rest`, run `wf_4e8b282a-a47`) —
-      hardened re-run (no foreground servers, mandatory timeouts, smaller 3-deep
-      server chain): [BE-01 data-plane → BE-02-A1 ingest/geo/qoe → BE-02-A2
-      ingest-health API] | SDK-01 (header VD-09) → QA mini. **FIRST ACTION next
-      session:** read its result + `V3a-QA-report.md`; if it stalled again,
-      split agents smaller / run as monitored foreground Agent calls.
-    - **V3b NEXT** — gating/alerting/security/UI: BE-02-B (alerting) → BE-02-C
-      (gating/WS/fleet/security) | FE-01 → QA full re-gate → DOC-01. (See D-015
-      for the exact VD→agent assignment.)
-  - **THEN:** consolidation + `IMPLEMENTATION_LOG.md` → notify user, STOP.
+    - **V3a-rest DONE** (`wf_4e8b282a-a47`, hardened, **QA PASS**): BE-01
+      `f1d0a7c`, BE-02-A1 `5996f2e`, BE-02-A2 `782c166`, SDK-01 `63f5e81`,
+      QA `0845ae8`. Data now flows — beacon round-trip (correct header +
+      main-port persistence), geo/device analytics, ingest health>0 + timeseries,
+      QoE summary from rollup_qoe_1h.
+    - **V3b IN FLIGHT** (`pulse-val-3b`, run `wf_f21da966-d85`, hardened) —
+      [BE-02-B alerting (muted/group_by/node_down/cron) → BE-02-C gating(§7.11
+      matrix)/WS LiveOverview/fleet role/security] | FE-01 (tier copy/WS/params)
+      → QA-01 full re-gate → DOC-01. **FIRST ACTION next session:** read its
+      result + `V3b-QA-gate-report.md`. If PASS → validation done. If FAIL →
+      targeted fix-loop. (Anti-stall hardening is in the workflow per D-016.)
+  - **THEN:** consolidation (single unified project) + write `IMPLEMENTATION_LOG.md`
+    (per F1–F10: done / issues / resolutions / known limitations — pull from the
+    V2 triage P3/deferred items + V3b remaining) → **notify user, STOP for review.**
 
 - **THEN:** consolidation (single unified project) + write `IMPLEMENTATION_LOG.md`
   (per F1–F10: what was done, issues hit, how resolved) → **notify the user and
