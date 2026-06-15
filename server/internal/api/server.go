@@ -95,6 +95,12 @@ type Server struct {
 	logger  *slog.Logger
 	httpSrv *http.Server
 
+	// VD-10: event sink for main-port /ingest/beacon persistence (optional).
+	// When set, beacon events POSTed to the main API port are written to the sink
+	// (same fanout as the dedicated beacon handler). Without this, beacon events
+	// posted to the main port would be silently discarded.
+	eventSink domain.EventSink
+
 	// Wave 2: ingest tracker for QoE endpoints (optional).
 	ingestTracker IngestTracker
 
@@ -141,6 +147,15 @@ func New(cfg Config, store *meta.Store, live domain.LiveProvider, qsvc *query.Se
 // without a real probe (no ClickHouse in test environments).
 func (s *Server) SetClickHouseConn(conn clickhouse.Conn) {
 	s.chConn = conn
+}
+
+// SetEventSink wires the event sink so that the main-port /ingest/beacon handler
+// persists events to ClickHouse + aggregator (VD-10).
+// Call after New, before Start. Without this call the main-port handler still
+// validates and authenticates beacons but cannot write them; the dedicated
+// beacon server (PULSE_INGEST_LISTEN_ADDR) always has its own sink.
+func (s *Server) SetEventSink(sink domain.EventSink) {
+	s.eventSink = sink
 }
 
 // SetIngestTracker wires the ingest health tracker for QoE endpoints.
@@ -679,51 +694,77 @@ func (s *Server) handleAudienceAnalytics(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handleGeoAnalytics(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"rows": []any{}})
+	q := r.URL.Query()
+	from, to := parseTimeRange(q.Get("from"), q.Get("to"))
+	includeRegion := q.Get("region") == "true" || q.Get("region") == "1"
+
+	rows, err := s.qsvc.GeoBreakdown(r.Context(), query.GeoParams{
+		From:   from,
+		To:     to,
+		App:    q.Get("app"),
+		Stream: q.Get("stream"),
+		Tenant: q.Get("tenant"),
+		Region: includeRegion,
+	})
+	if err != nil {
+		s.logger.Warn("geo breakdown query failed", "error", err)
+		rows = []query.GeoRow{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rows": rows})
 }
 
 func (s *Server) handleDeviceAnalytics(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"rows": []any{}})
+	q := r.URL.Query()
+	from, to := parseTimeRange(q.Get("from"), q.Get("to"))
+
+	rows, err := s.qsvc.DeviceBreakdown(r.Context(), query.DeviceParams{
+		From:   from,
+		To:     to,
+		App:    q.Get("app"),
+		Stream: q.Get("stream"),
+		Tenant: q.Get("tenant"),
+	})
+	if err != nil {
+		s.logger.Warn("device breakdown query failed", "error", err)
+		rows = []query.DeviceRow{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rows": rows})
 }
 
 // ─── QoE ──────────────────────────────────────────────────────────────────────
 
 func (s *Server) handleQoeSummary(w http.ResponseWriter, r *http.Request) {
-	// Wave 2: QoE summary from live snapshot (fast-path).
-	// Full implementation queries rollup_qoe_1h from ClickHouse (Wave 3).
-	snap := s.live.CurrentSnapshot()
-	var avgStartupMS, avgRebufferRatio, avgErrorRate float64
-	var bitrateTimeline []map[string]any
-	if snap != nil {
-		// Derive QoE proxies from live stream health scores.
-		var count int
-		for _, st := range snap.Streams {
-			if st.HealthScore > 0 {
-				avgRebufferRatio += (1.0 - st.HealthScore) * 0.1
-				avgErrorRate += (1.0 - st.HealthScore) * 0.05
-				count++
-			}
-		}
-		if count > 0 {
-			avgRebufferRatio /= float64(count)
-			avgErrorRate /= float64(count)
-		}
-		// Bitrate timeline: current ingest bitrate as a single point.
-		if snap.IngestBitrate > 0 {
-			bitrateTimeline = append(bitrateTimeline, map[string]any{
-				"ts":          snap.UpdatedAt.UnixMilli(),
-				"bitrate_kbps": snap.IngestBitrate,
-			})
+	// VD-11: Query rollup_qoe_1h for real viewer-side QoE metrics.
+	// startup_p50_ms is now populated from quantile state; bitrate timeline
+	// uses the correct field name bitrate_kbps_p50 per the OpenAPI spec.
+	q := r.URL.Query()
+	from, to := parseTimeRange(q.Get("from"), q.Get("to"))
+	interval := q.Get("interval")
+	if interval == "" {
+		interval = "hour"
+	}
+
+	result, err := s.qsvc.QoeSummary(r.Context(), query.QoeParams{
+		From:     from,
+		To:       to,
+		App:      q.Get("app"),
+		Stream:   q.Get("stream"),
+		Tenant:   q.Get("tenant"),
+		Country:  q.Get("country"),
+		Device:   q.Get("device"),
+		Interval: interval,
+	})
+	if err != nil {
+		s.logger.Warn("qoe summary query failed", "error", err)
+		result = &query.QoeSummaryResult{
+			Totals:          query.QoeTotals{},
+			BitrateTimeline: []query.BitrateBucket{},
 		}
 	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"totals": map[string]any{
-			"startup_p50_ms": avgStartupMS,
-			"startup_p95_ms": avgStartupMS * 1.5, // proxy
-			"rebuffer_ratio": avgRebufferRatio,
-			"error_rate":     avgErrorRate,
-		},
-		"bitrate_timeline": bitrateTimeline,
+		"totals":           result.Totals,
+		"bitrate_timeline": result.BitrateTimeline,
 	})
 }
 
@@ -1259,6 +1300,10 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 
 // ─── Beacon ingest ────────────────────────────────────────────────────────────
 
+// beaconMaxBodyBytes is the body size cap for the main-port beacon handler.
+// Aligned to 64 KB per the OpenAPI spec (VD-10: was incorrectly 256 KB).
+const beaconMaxBodyBytes = 64 * 1024
+
 func (s *Server) handleIngestBeacon(w http.ResponseWriter, r *http.Request) {
 	ingestToken := r.Header.Get("X-Pulse-Ingest-Token")
 	if ingestToken == "" {
@@ -1271,18 +1316,81 @@ func (s *Server) handleIngestBeacon(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid ingest token")
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 256*1024)
-	var body map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		if strings.Contains(err.Error(), "http: request body too large") {
-			writeError(w, http.StatusRequestEntityTooLarge, "REQUEST_TOO_LARGE", "body exceeds 256 KB")
+
+	// Body size cap: 64 KB per spec (VD-10: aligned from 256 KB).
+	// Use io.ReadAll on a MaxBytesReader so we can detect size exceeded vs
+	// JSON parse errors (the dedicated beacon handler uses the same pattern).
+	r.Body = http.MaxBytesReader(w, r.Body, beaconMaxBodyBytes)
+	rawBody, readErr := io.ReadAll(r.Body)
+	if readErr != nil {
+		if strings.Contains(readErr.Error(), "http: request body too large") ||
+			int64(len(rawBody)) >= beaconMaxBodyBytes {
+			writeError(w, http.StatusRequestEntityTooLarge, "REQUEST_TOO_LARGE",
+				fmt.Sprintf("body exceeds %d KB limit", beaconMaxBodyBytes/1024))
 			return
 		}
+		writeError(w, http.StatusBadRequest, "READ_ERROR", "failed to read request body")
+		return
+	}
+	if int64(len(rawBody)) >= beaconMaxBodyBytes {
+		writeError(w, http.StatusRequestEntityTooLarge, "REQUEST_TOO_LARGE",
+			fmt.Sprintf("body exceeds %d KB limit", beaconMaxBodyBytes/1024))
+		return
+	}
+
+	// Parse the beacon batch JSON directly into domain types so we can write
+	// to the event sink (VD-10: was discarding all events after decode).
+	var batch struct {
+		Version   int               `json:"version"`
+		SessionID string            `json:"session_id"`
+		StreamID  string            `json:"stream_id"`
+		App       string            `json:"app"`
+		Meta      map[string]string `json:"meta"`
+		Player    *struct {
+			Kind       string `json:"kind"`
+			SDKVersion string `json:"sdk_version"`
+		} `json:"player"`
+		Events []struct {
+			Type string         `json:"type"`
+			TS   int64          `json:"ts"`
+			Data map[string]any `json:"data"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(rawBody, &batch); err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_JSON", "invalid request body")
 		return
 	}
-	eventsAny, _ := body["events"].([]any)
-	writeJSON(w, http.StatusAccepted, map[string]any{"accepted": len(eventsAny), "rejected": 0, "errors": []any{}})
+
+	// Build domain.BeaconEvent and write to event sink if wired.
+	if s.eventSink != nil && len(batch.Events) > 0 {
+		items := make([]domain.BeaconItem, len(batch.Events))
+		for i, ev := range batch.Events {
+			items[i] = domain.BeaconItem{Type: ev.Type, TS: ev.TS, Data: ev.Data}
+		}
+		evt := domain.BeaconEvent{
+			Version:   batch.Version,
+			SessionID: batch.SessionID,
+			StreamID:  batch.StreamID,
+			App:       batch.App,
+			Events:    items,
+		}
+		if batch.Player != nil {
+			evt.PlayerKind = batch.Player.Kind
+		}
+		if batch.Meta != nil {
+			if tenant, ok := batch.Meta["tenant"]; ok {
+				evt.Tenant = tenant
+			}
+		}
+		// Non-blocking async write — matches the dedicated handler's pattern.
+		go s.eventSink.WriteBeaconEvent(evt)
+	}
+
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"accepted": len(batch.Events),
+		"rejected": 0,
+		"errors":   []any{},
+	})
 }
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────

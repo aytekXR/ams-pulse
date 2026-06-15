@@ -465,7 +465,350 @@ func (s *Service) QueryProbeResults(ctx context.Context, probeID string, from, t
 	return s.probeResultQuerier.QueryProbeResults(ctx, probeID, from, to, limit)
 }
 
+// ─── VD-06: Geo breakdown ────────────────────────────────────────────────────
+
+// GeoParams holds filters for the geo breakdown query.
+type GeoParams struct {
+	From    time.Time
+	To      time.Time
+	App     string
+	Stream  string
+	Tenant  string
+	Region  bool // if true, GROUP BY geo_region as well
+}
+
+// GeoRow is one row in the geo breakdown result.
+type GeoRow struct {
+	Country    string  `json:"country"`
+	Region     *string `json:"region,omitempty"`
+	Views      int64   `json:"views"`
+	Uniques    int64   `json:"uniques"`
+	WatchTimeS int64   `json:"watch_time_s"`
+}
+
+// GeoBreakdown returns viewer counts grouped by geo_country (and optionally
+// geo_region) from viewer_sessions. Falls back to empty when ClickHouse is not
+// configured.
+func (s *Service) GeoBreakdown(ctx context.Context, p GeoParams) ([]GeoRow, error) {
+	if s.conn == nil {
+		return []GeoRow{}, nil
+	}
+
+	groupBy := "geo_country"
+	selectRegion := ""
+	if p.Region {
+		groupBy = "geo_country, geo_region"
+		selectRegion = ", geo_region"
+	}
+
+	where, args := buildSessionTimeWhere(p.From, p.To)
+	if p.App != "" {
+		where += " AND app = ?"
+		args = append(args, p.App)
+	}
+	if p.Stream != "" {
+		where += " AND stream_id = ?"
+		args = append(args, p.Stream)
+	}
+	if p.Tenant != "" {
+		where += " AND tenant = ?"
+		args = append(args, p.Tenant)
+	}
+
+	q := fmt.Sprintf(`
+		SELECT
+			geo_country%s,
+			toInt64(count())            AS views,
+			toInt64(uniq(session_id))   AS uniques,
+			toInt64(sum(watch_time_s))  AS watch_time_s
+		FROM viewer_sessions FINAL
+		WHERE %s
+		GROUP BY %s
+		ORDER BY views DESC`,
+		selectRegion, where, groupBy)
+
+	rows, err := s.conn.Query(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("geo breakdown query: %w", err)
+	}
+	defer rows.Close()
+
+	var result []GeoRow
+	for rows.Next() {
+		var row GeoRow
+		if p.Region {
+			var region string
+			if err := rows.Scan(&row.Country, &region, &row.Views, &row.Uniques, &row.WatchTimeS); err != nil {
+				return nil, err
+			}
+			row.Region = &region
+		} else {
+			if err := rows.Scan(&row.Country, &row.Views, &row.Uniques, &row.WatchTimeS); err != nil {
+				return nil, err
+			}
+		}
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if result == nil {
+		result = []GeoRow{}
+	}
+	return result, nil
+}
+
+// ─── VD-06: Device breakdown ─────────────────────────────────────────────────
+
+// DeviceParams holds filters for the device breakdown query.
+type DeviceParams struct {
+	From   time.Time
+	To     time.Time
+	App    string
+	Stream string
+	Tenant string
+}
+
+// DeviceRow is one row in the device breakdown result.
+type DeviceRow struct {
+	Device     string `json:"device"`
+	OS         string `json:"os"`
+	Browser    string `json:"browser"`
+	Protocol   string `json:"protocol"`
+	Views      int64  `json:"views"`
+	Uniques    int64  `json:"uniques"`
+	WatchTimeS int64  `json:"watch_time_s"`
+}
+
+// DeviceBreakdown returns viewer counts grouped by client_device, client_os,
+// client_browser, and protocol from viewer_sessions. Falls back to empty when
+// ClickHouse is not configured.
+func (s *Service) DeviceBreakdown(ctx context.Context, p DeviceParams) ([]DeviceRow, error) {
+	if s.conn == nil {
+		return []DeviceRow{}, nil
+	}
+
+	where, args := buildSessionTimeWhere(p.From, p.To)
+	if p.App != "" {
+		where += " AND app = ?"
+		args = append(args, p.App)
+	}
+	if p.Stream != "" {
+		where += " AND stream_id = ?"
+		args = append(args, p.Stream)
+	}
+	if p.Tenant != "" {
+		where += " AND tenant = ?"
+		args = append(args, p.Tenant)
+	}
+
+	q := fmt.Sprintf(`
+		SELECT
+			client_device,
+			client_os,
+			client_browser,
+			protocol,
+			toInt64(count())            AS views,
+			toInt64(uniq(session_id))   AS uniques,
+			toInt64(sum(watch_time_s))  AS watch_time_s
+		FROM viewer_sessions FINAL
+		WHERE %s
+		GROUP BY client_device, client_os, client_browser, protocol
+		ORDER BY views DESC`, where)
+
+	rows, err := s.conn.Query(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("device breakdown query: %w", err)
+	}
+	defer rows.Close()
+
+	var result []DeviceRow
+	for rows.Next() {
+		var row DeviceRow
+		if err := rows.Scan(&row.Device, &row.OS, &row.Browser, &row.Protocol,
+			&row.Views, &row.Uniques, &row.WatchTimeS); err != nil {
+			return nil, err
+		}
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if result == nil {
+		result = []DeviceRow{}
+	}
+	return result, nil
+}
+
+// ─── VD-11: QoE summary from rollup_qoe_1h ───────────────────────────────────
+
+// QoeParams holds filters for the QoE summary query.
+type QoeParams struct {
+	From     time.Time
+	To       time.Time
+	App      string
+	Stream   string
+	Tenant   string
+	Country  string
+	Device   string
+	Interval string // "hour" | "day"
+}
+
+// QoeTotals holds the aggregated QoE metrics.
+type QoeTotals struct {
+	StartupP50Ms  float64 `json:"startup_p50_ms"`
+	StartupP95Ms  float64 `json:"startup_p95_ms"`
+	RebufferRatio float64 `json:"rebuffer_ratio"`
+	ErrorRate     float64 `json:"error_rate"`
+}
+
+// BitrateBucket is one point in the bitrate timeline.
+type BitrateBucket struct {
+	TS              int64   `json:"ts"`
+	BitrateKbpsP50  float64 `json:"bitrate_kbps_p50"`
+	BitrateKbpsP95  float64 `json:"bitrate_kbps_p95,omitempty"`
+}
+
+// QoeSummaryResult is the response for GET /qoe/summary.
+type QoeSummaryResult struct {
+	Totals          QoeTotals       `json:"totals"`
+	BitrateTimeline []BitrateBucket `json:"bitrate_timeline"`
+}
+
+// QoeSummary queries rollup_qoe_1h (or rollup_qoe_1d for daily interval) and
+// returns startup latency percentiles, rebuffer ratio, error rate and bitrate
+// timeline. Falls back to empty result when ClickHouse is not configured.
+func (s *Service) QoeSummary(ctx context.Context, p QoeParams) (*QoeSummaryResult, error) {
+	empty := &QoeSummaryResult{
+		Totals:          QoeTotals{},
+		BitrateTimeline: []BitrateBucket{},
+	}
+	if s.conn == nil {
+		return empty, nil
+	}
+
+	table := "rollup_qoe_1h"
+	if p.Interval == "day" {
+		table = "rollup_qoe_1d"
+	}
+
+	where, args := buildTimeWhere(p.From, p.To)
+	if p.App != "" {
+		where += " AND app = ?"
+		args = append(args, p.App)
+	}
+	if p.Stream != "" {
+		where += " AND stream_id = ?"
+		args = append(args, p.Stream)
+	}
+	if p.Tenant != "" {
+		where += " AND tenant = ?"
+		args = append(args, p.Tenant)
+	}
+	if p.Country != "" {
+		where += " AND geo_country = ?"
+		args = append(args, p.Country)
+	}
+	if p.Device != "" {
+		where += " AND client_device = ?"
+		args = append(args, p.Device)
+	}
+
+	// ── Totals row ──────────────────────────────────────────────────────────
+	// quantilesStateMerge returns an array; index 0 = p50, index 1 = p95.
+	// rebuffer_ratio = sum(rebuffer_total_ms) / sum(watch_time_ms), capped at 1.
+	// error_rate = sum(error_count) / sum(session_count).
+	totalsQ := fmt.Sprintf(`
+		SELECT
+			quantilesMerge(0.5, 0.95)(startup_ms_state)[1]  AS startup_p50,
+			quantilesMerge(0.5, 0.95)(startup_ms_state)[2]  AS startup_p95,
+			sumMerge(rebuffer_total_ms)                      AS reb_ms,
+			sumMerge(watch_time_ms)                          AS watch_ms,
+			sumMerge(error_count)                            AS errs,
+			countMerge(session_count)                        AS sessions
+		FROM %s
+		WHERE %s`, table, where)
+
+	trow := s.conn.QueryRow(ctx, totalsQ, args...)
+	var startupP50, startupP95 float64
+	var rebMs, watchMs, errs, sessions uint64
+	if err := trow.Scan(&startupP50, &startupP95, &rebMs, &watchMs, &errs, &sessions); err != nil {
+		// No data — return empty.
+		return empty, nil
+	}
+
+	var rebRatio, errRate float64
+	if watchMs > 0 {
+		r := float64(rebMs) / float64(watchMs)
+		if r > 1.0 {
+			r = 1.0
+		}
+		rebRatio = r
+	}
+	if sessions > 0 {
+		errRate = float64(errs) / float64(sessions)
+	}
+
+	// ── Bitrate timeline ─────────────────────────────────────────────────────
+	timelineQ := fmt.Sprintf(`
+		SELECT
+			toInt64(toUnixTimestamp(bucket)) * 1000       AS ts,
+			quantilesMerge(0.5, 0.95)(bitrate_kbps_state)[1] AS bitrate_p50,
+			quantilesMerge(0.5, 0.95)(bitrate_kbps_state)[2] AS bitrate_p95
+		FROM %s
+		WHERE %s
+		GROUP BY bucket
+		ORDER BY bucket`, table, where)
+
+	trows, err := s.conn.Query(ctx, timelineQ, args...)
+	if err != nil {
+		// Timeline failure is non-fatal; return totals without timeline.
+		return &QoeSummaryResult{
+			Totals:          QoeTotals{StartupP50Ms: startupP50, StartupP95Ms: startupP95, RebufferRatio: rebRatio, ErrorRate: errRate},
+			BitrateTimeline: []BitrateBucket{},
+		}, nil
+	}
+	defer trows.Close()
+
+	var timeline []BitrateBucket
+	for trows.Next() {
+		var b BitrateBucket
+		if err := trows.Scan(&b.TS, &b.BitrateKbpsP50, &b.BitrateKbpsP95); err != nil {
+			continue
+		}
+		timeline = append(timeline, b)
+	}
+	if timeline == nil {
+		timeline = []BitrateBucket{}
+	}
+
+	return &QoeSummaryResult{
+		Totals: QoeTotals{
+			StartupP50Ms:  startupP50,
+			StartupP95Ms:  startupP95,
+			RebufferRatio: rebRatio,
+			ErrorRate:     errRate,
+		},
+		BitrateTimeline: timeline,
+	}, nil
+}
+
 // ─── SQL helpers ─────────────────────────────────────────────────────────────
+
+// buildSessionTimeWhere generates a WHERE clause for viewer_sessions based on
+// started_at. Uses epoch-second DateTime64 column.
+func buildSessionTimeWhere(from, to time.Time) (string, []any) {
+	if from.IsZero() && to.IsZero() {
+		return "1=1", nil
+	}
+	if from.IsZero() {
+		return "started_at <= ?", []any{to}
+	}
+	if to.IsZero() {
+		return "started_at >= ?", []any{from}
+	}
+	return "started_at >= ? AND started_at <= ?", []any{from, to}
+}
 
 func buildTimeWhere(from, to time.Time) (string, []any) {
 	if from.IsZero() && to.IsZero() {

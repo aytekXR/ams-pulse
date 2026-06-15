@@ -269,6 +269,11 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	apiServer := api.New(apiCfg, metaStore, agg, qsvc, lic, logger)
 	// Wire ClickHouse connection for /healthz probes (D-W1-002).
 	apiServer.SetClickHouseConn(store.GetConn())
+	// VD-10: Wire event sink so main-port /ingest/beacon persists events.
+	// Without this, beacons POSTed to the main API port are authenticated but
+	// silently discarded. The dedicated beacon server (PULSE_INGEST_LISTEN_ADDR)
+	// has its own sink; this ensures the default single-port deployment works.
+	apiServer.SetEventSink(fanout)
 
 	// Wave 2 (BE-02): Seed default alert rule pack on first run (closes G8).
 	// Idempotent — no-op if rules already exist.
