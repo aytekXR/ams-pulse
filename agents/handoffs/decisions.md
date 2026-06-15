@@ -681,3 +681,48 @@ DNS change + propagation (and host :80 is currently held by the running demo, wh
 first). Live execution is the W2b step (RESUME-PROMPT), to run once `dig +short beyondkaira.com`
 == `161.97.172.146`. Carries the D-022 waivers; the public-TLS waiver is now PRE-STAGED (config
 ready, awaiting DNS).
+
+## D-024 · 2026-06-16 · W2b — production TLS go-live for `beyondkaira.com` (EXECUTED)
+
+User completed the Squarespace DNS. Both public resolvers (8.8.8.8, 1.1.1.1) returned
+**161.97.172.146** for the apex **and** `www` (no CAA record). NB: the VPS's own local resolver
+was **stale** (still returned Squarespace parking IPs), so all on-box verification used
+`curl --resolve` / `openssl s_client -connect <ip> -servername <host>` to bypass it — a
+verification-only quirk; ACME is unaffected because Let's Encrypt validates from the public
+internet. Executed the W2b go-live:
+
+- Wrote `deploy/.env` (gitignored): `PULSE_DOMAIN=beyondkaira.com`, `CLICKHOUSE_USER=pulse`, a
+  freshly generated `CLICKHOUSE_PASSWORD`, and the existing `PULSE_SECRET_KEY`.
+- **Zero-downtime-during-build swap**, driven directly by ORCH as one sequential operation with
+  auto-rollback (a live single-host cutover is not a fan-out): pre-built the prod images while the
+  demo still served, then `docker compose -p pulse down` (frees host :80) and brought up
+  `base + hardened + prod-tls` as project **`pulse-prod`** (its own fresh, authed volumes). The
+  unrelated `brier-db` container (separate project) was untouched.
+- **Real Let's Encrypt** cert obtained via **TLS-ALPN-01** in ~12 s (issuer `O=Let's Encrypt`,
+  `subject CN=beyondkaira.com`, valid 2026-06-15 → 2026-09-13). HTTP→HTTPS 308; security headers live.
+
+**CR (ORCH-approved, deploy scope) — `deploy/config/Caddyfile.prod`:** added a canonical
+`www.{$PULSE_DOMAIN}` → apex 301 redirect (also provisions a `www` LE cert so the host the user
+also pointed at the VPS never serves a TLS name-mismatch). A graceful `caddy reload` did **not**
+proactively obtain the cert for the newly-added name → a `caddy` container **restart** triggers
+startup provisioning (the `caddy_data` volume persists the apex cert + ACME account, so apex did
+not re-issue). `www` then served a valid LE cert (`CN=www.beyondkaira.com`) + a 301 that preserves
+path+query.
+
+**Independent verification — Workflow `pulse-golive-verify` (`wf_9d503e84-e0e`, 8 adversarial
+verifiers, each default-refuted, reproduced against the live stack): 7/8 PASS.** apex + www public
+certs (`ssl_verify_result=0` against the system trust store, no `-k`); HTTP→308→HTTPS; SPA served
+through Caddy; **ClickHouse auth enforced** (correct→1, wrong pw → code 516 AUTHENTICATION_FAILED);
+**no host-port leakage** (only `caddy` on `0.0.0.0:80/443`; pulse/CH/mock-ams internal-only;
+`127.0.0.1:8090` refused); **authed** `GET /api/v1/live/overview` → 200 (unauth → 401), node
+`standalone` up. The 8th (security-headers) is **PASS-with-accepted-note**: all four required
+headers present and the `Server` header is stripped, but Caddy appends `Via: 1.1 Caddy` at the
+HTTP-server layer — **not removable** via Caddyfile (`header -Via` and `header_down -Via` both
+no-op; tried and reverted so no dead config ships). `Via` is an informational RFC-7230 proxy
+header, not a vulnerability → **accepted, non-blocking**.
+
+**Notes:** `total_viewers=0` is honest — mock-ams has no active streams; the live data path is
+proven (node up, authed JSON flowing). Real viewer data arrives when a real AMS is connected
+(`real-ams` overlay). The fresh `pulse-prod` instance generated a new admin token (operator-held,
+not committed). **This CLOSES the D-022/D-023 public-TLS waiver.** Remaining W2 work: `amsclient`
+real-wire hardening (W2c) + real-AMS connectivity — both need operator infra.

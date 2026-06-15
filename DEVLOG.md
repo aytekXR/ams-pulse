@@ -484,3 +484,21 @@ is one command once DNS propagates: `deploy/docker-compose.prod-tls.yml` (Caddy 
 + `deploy/config/Caddyfile.prod` (real Let's Encrypt, no `tls internal`). Config-verified both
 compositions (`base+hardened+prod-tls` and `+real-ams`) — not brought up (real ACME needs the DNS
 change + the demo's :80 freed). The exact go-live steps are in `RESUME-PROMPT.md` → W2b.
+
+## 2026-06-16 — session 5 · W2b production TLS go-live for `beyondkaira.com` (D-024)
+
+User finished the Squarespace DNS (apex + `www` → 161.97.172.146, confirmed via 8.8.8.8/1.1.1.1;
+the VPS local resolver was stale so on-box checks used `curl --resolve`). Went live: wrote the
+gitignored `deploy/.env` (domain + generated CH password + kept secret key), pre-built the prod
+images with the demo still up, then swapped demo → **`pulse-prod`** (`base+hardened+prod-tls`,
+fresh authed volumes) via an auto-rollback script. **Real Let's Encrypt** cert issued via
+TLS-ALPN-01 in ~12 s. Added a `www → apex` canonical redirect (Caddyfile.prod CR); a graceful
+reload didn't provision the new name, a `caddy` restart did → valid `www` LE cert + 301.
+
+Adversarially verified via Workflow `pulse-golive-verify` (8 verifiers, **7/8 PASS**): apex+www
+public certs (`verify=0`), HTTP→HTTPS, SPA, ClickHouse auth (wrong pw → 516), no host-port leakage
+(`127.0.0.1:8090` refused), authed `/api/v1/live/overview` (unauth 401 / authed 200, node up).
+Security-headers: all four present + `Server` stripped; only `Via: 1.1 Caddy` remains (Caddy adds
+it at the server layer, unremovable via Caddyfile — accepted, informational). `total_viewers=0` is
+honest (mock AMS, no streams). **Live: https://beyondkaira.com (+ www).** Closes the public-TLS
+waiver; W2c amsclient hardening + real-AMS connectivity remain.

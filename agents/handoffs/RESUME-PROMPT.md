@@ -1,21 +1,27 @@
 # Resume prompt — Pulse (next session)
 
-> Updated 2026-06-15 (**session 4**). Three things landed + pushed to `main` this session:
-> **(1) W1 `pulse-cicd`** — always-on CI/CD that gates `main` (D-020); **(2) D-021** — found &
-> fixed a real **deadlock** that had wedged the live demo, and restored it; **(3) W2
-> `pulse-productionize` SUBSET** — deploy hardening (Caddy TLS + ClickHouse auth + secrets,
-> D-022). All three were authored via Workflows and **independently verified** (build/CI-image
-> reproduction; deadlock proven both ways; live HTTPS+auth stack). What REMAINS is the
-> **real-infra half of W2** (real AMS + a domain) + the **`amsclient` real-wire-format hardening**
-> — both need inputs only you can provide (see below). Paste this into a fresh Claude Code session
-> at the repo root (`/home/aytek/repo/ams-pulse` on the VPS).
+> Updated 2026-06-16 (**session 5**). **W2b LANDED + pushed to `main`: Pulse is LIVE in production
+> on real TLS — https://beyondkaira.com (+ `www` → apex), valid Let's Encrypt certs (D-024).** The
+> demo→prod cutover, the `www` canonical redirect, and an 8-verifier adversarial workflow (7/8 PASS;
+> the 8th is an accepted informational `Via` header) are all done. The public-TLS waiver from
+> D-022/D-023 is now **CLOSED**. What REMAINS needs inputs only you can provide: **W2c `amsclient`
+> real-wire-format hardening** + **real-AMS connectivity** (no real AMS yet — prod runs on mock-ams,
+> so the dashboard shows 0 viewers, which is honest), plus the **GitHub-side CI TODOs** (the repo is
+> private and `gh` isn't on the VPS, so CI can't be inspected from here — see "USER GitHub-side
+> TODO"). Paste this into a fresh Claude Code session at the repo root (`/home/aytek/repo/ams-pulse`, VPS).
 
 ## ✅ Status
+
+**This session (session 5) — W2b production TLS go-live DONE (D-024).** `https://beyondkaira.com`
+(+ `www`) is live on real Let's Encrypt certs; stack = project **`pulse-prod`**
+(`base+hardened+prod-tls`, mock-ams, fresh authed volumes). Verified by Workflow
+`pulse-golive-verify` (`wf_9d503e84-e0e`, 8 adversarial verifiers, 7/8 PASS + 1 accepted). Demo
+torn down; `brier-db` (unrelated project) untouched. Operating commands are in the W2b section below.
 
 **Prior (sessions 1–3):** MVP (F1–F10) + **Wave 3-Plus** + a **functional MVP DEPLOYED on the
 VPS via Docker Compose** against the mock AMS (closed the D-002 waiver). Gate **CLOSED**
 (D-019). Authoritative artifacts: `IMPLEMENTATION_LOG.md`, `DEVLOG.md`,
-`agents/handoffs/decisions.md` (**D-001…D-022** binding), `qa/wave-3-plus/gate-report.md`.
+`agents/handoffs/decisions.md` (**D-001…D-024** binding), `qa/wave-3-plus/gate-report.md`.
 
 **This session (session 4) — W1 `pulse-cicd` CLOSED (D-020).** The skeleton CI was broken vs.
 the shipped MVP (Go 1.24 not 1.25; `npm ci` without `--legacy-peer-deps`; a malformed
@@ -47,6 +53,13 @@ docs — both on `main`):
 3. Push a `v*` tag (e.g. `git tag v0.1.0 && git push origin v0.1.0`) to exercise the GHCR
    release once. `e2e` is intentionally **not** a required status check (slow full-stack bring-up).
 
+**CI failing? (user reported red jobs, session 5).** The repo is **private** and `gh` isn't on the
+VPS, so Actions can't be inspected from here. Some first-run red is *expected* (branch protection not
+set; the slow `e2e`; GHCR/auth steps that local verification can't exercise). To diagnose: **(A)**
+reproduce each `ci.yml` job locally in its image on the VPS (catches logic failures, not GitHub-only
+auth ones); **(B)** paste the failing job names/logs (`gh run list` from an admin machine); or **(C)**
+install `gh` here (`! sudo apt-get install -y gh && gh auth login`) and query runs directly.
+
 ### ✅ D-021 — live-dashboard deadlock fixed, demo restored (commits `70b4b14`, `69a8a1e`)
 The demo's "unhealthy" pulse was a genuine **AB→BA deadlock** (root-caused from a SIGQUIT
 goroutine dump — 486 HTTP handlers wedged on the aggregator RWMutex): `cluster.Discovery.poll`
@@ -71,29 +84,25 @@ then `curl -k --resolve localhost:8443:127.0.0.1 https://localhost:8443/healthz`
 W1 (D-020) + the W2 SUBSET (D-022) are DONE. The remaining default work needs **your infra
 inputs**. **Every** workflow MUST end with the Verify + Commit + Handoff flows in the next section.
 
-### W2b — `pulse-productionize-realinfra` — go live on real TLS (domain: `beyondkaira.com`)
-**DNS (user does this at Squarespace):** point `beyondkaira.com` at the VPS — an **A record
-`@` → 161.97.172.146** (+ `www` → 161.97.172.146), and REMOVE Squarespace's default parking A
-records (`198.49.23.x`, `198.185.159.x`) + the `www → ext-sq.squarespace.com` CNAME. Verify:
-`dig +short beyondkaira.com` returns `161.97.172.146` (propagation: usually <1 h).
+### ✅ W2b — production TLS go-live — DONE (D-024, session 5)
+**Pulse is LIVE: https://beyondkaira.com (+ `www` → apex), real Let's Encrypt certs.** Stack is
+project **`pulse-prod`** = `base + hardened + prod-tls` (mock-ams). `deploy/.env` (gitignored) holds
+`PULSE_DOMAIN=beyondkaira.com` + `CLICKHOUSE_USER/PASSWORD` + `PULSE_SECRET_KEY`. Operating commands
+(define `DC="-p pulse-prod -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml -f deploy/docker-compose.prod-tls.yml --env-file deploy/.env"`, run from repo root):
+- **Status / logs:** `sg docker -c "docker compose $DC ps"` (swap `ps`→`logs caddy`/`logs pulse`).
+- **Verify TLS** (⚠️ the VPS *local* DNS resolver is stale — always `--resolve` or `openssl -connect`):
+  `curl -sS --resolve beyondkaira.com:443:161.97.172.146 https://beyondkaira.com/healthz`.
+- **Certs auto-renew** (Caddy; the `caddy_data` volume persists certs + the ACME account).
+- **Admin token** (fresh prod instance): `sg docker -c "docker compose $DC logs pulse" | grep plt_` (operator-held; not in git).
+- **After editing `Caddyfile.prod`:** `sg docker -c "docker compose $DC restart caddy"` — a graceful
+  `reload` does NOT provision a *newly added* hostname (that's why `www` needed a restart).
+- **Teardown / rollback to demo:** `sg docker -c "docker compose $DC down"` then
+  `cd deploy && sg docker -c "docker compose -p pulse up -d"` (base+override demo on :80).
 
-**Turnkey TLS is pre-staged (D-023)** — `deploy/docker-compose.prod-tls.yml` + `deploy/config/Caddyfile.prod`
-bind Caddy on `0.0.0.0:80/443` and use real Let's Encrypt (no `tls internal`). NO hand-editing.
-Once DNS resolves:
-1. `deploy/.env` (copy `deploy/.env.example`): set `PULSE_DOMAIN=beyondkaira.com`, `CLICKHOUSE_USER`,
-   `CLICKHOUSE_PASSWORD`, `PULSE_SECRET_KEY` (`openssl rand -hex 32`).
-2. **Free :80/:443** — stop the demo (it holds host :80):
-   `cd deploy && sg docker -c "docker compose -p pulse down"`.
-3. Bring up: `sg docker -c "docker compose -p pulse-prod -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml -f deploy/docker-compose.prod-tls.yml --env-file deploy/.env up -d --build"`.
-4. Verify real TLS: `curl -sS https://beyondkaira.com/healthz` (valid public cert, no `-k`).
-   Docker-published :80/:443 bypass ufw here, so no firewall change is needed.
-   First request triggers ACME issuance (~10–30 s); if it fails, check `docker compose -p pulse-prod logs caddy`
-   (common causes: DNS not propagated, or :80 still held by the demo). Use the staging ACME CA line in
-   `Caddyfile.prod` for dry runs to avoid Let's Encrypt rate limits.
-
-**Real AMS** (optional, when you have one): set the `PULSE_AMS_*` vars in `deploy/.env` and add
-`-f deploy/docker-compose.real-ams.yml` (it disables mock-ams); then `POST /api/v1/admin/sources/{id}/test`
-against the real AMS. Adversarially verify each claim; ORCH independent gate; commit + handoff.
+**Remaining real-AMS step** (do when you have a real Ant Media Server): set the `PULSE_AMS_*` vars in
+`deploy/.env` and add `-f deploy/docker-compose.real-ams.yml` (disables mock-ams); then
+`POST /api/v1/admin/sources/{id}/test`. Until then the dashboard shows **0 viewers** (honest —
+mock-ams has no streams). Pair this with W2c below. Adversarially verify; ORCH gate; commit + handoff.
 
 ### W2c — `pulse-amsclient-hardening` — real-wire-format robustness (DEFERRED from session 4)
 Harden `server/pkg/amsclient` (+ `internal/collector`) against real AMS wire variance: capture REST
