@@ -30,6 +30,12 @@ const (
 	//   egress_gb = (viewer_minutes * avg_bitrate_kbps * 60 * 1000) / 8 / 1e9
 	// i.e., convert viewer-minutes to bytes via kbps then to GB.
 	EgressMethodBitrateXWatchTime = "bitrate_x_watch_time"
+
+	// EgressMethodAMSRestStatsByteCounter is used when AMS REST /getStats delivers
+	// totalBytesTransferred (or equivalent) stored in the rollup_usage_1d.egress_bytes
+	// column. This method is more accurate than the bitrate×watch_time model.
+	// VD-37: set on UsageRow when the egressBytes > 0 branch is taken.
+	EgressMethodAMSRestStatsByteCounter = "ams_rest_stats_byte_counter"
 )
 
 // kbpsToGBPerMinute converts viewer-minutes at a given kbps to GB.
@@ -147,6 +153,20 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 	//   peak_concurrency UInt32, egress_bytes UInt64, recording_bytes UInt64.
 	// Use sum()/max() — NOT sumMerge/maxMerge (those are for AggregatingMergeTree).
 	// rollup_audience_1h is AggregatingMergeTree; use sumMerge/maxMerge there.
+	//
+	// VD-38 caveat — peak_concurrency in rollup_usage_1d is a session-count proxy,
+	// not a true concurrent-viewer peak. The mv_usage_1d materialized view inserts
+	// toUInt32(1) per session row; SummingMergeTree sums these across merges, so
+	// sum(peak_concurrency) accumulates as session count for the GROUP BY key.
+	// For non-overlapping sessions this overstates concurrency; for heavy-overlap
+	// streams it understates it.
+	//
+	// A true concurrent-peak would require a sliding-window max over viewer-session
+	// overlap per minute — deferred to Wave 3 (requires schema change to store
+	// a maxState per minute bucket rather than toUInt32(1) per session).
+	// The rollup_audience_1h path uses maxMerge(peak_concurrency) which is also
+	// toUInt32(1) per session, so it shares the same approximation.
+	// Callers should treat PeakConcurrency as an upper-bound approximation.
 	var q string
 	var where string
 	args := []any{p.From, p.To}
@@ -272,9 +292,13 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 
 		// Egress: use stored egress_bytes from rollup_usage_1d when available;
 		// fall back to bitrate_x_watch_time model for the hourly (audience) path.
+		// VD-37: set the correct egress_method label for the method actually used.
 		var egressGB float64
+		egressMethod := EgressMethodBitrateXWatchTime
 		if !isHour && v.egressBytes > 0 {
 			egressGB = float64(v.egressBytes) * bytesToGB
+			// Bytes came from rollup_usage_1d.egress_bytes (AMS REST stats counters).
+			egressMethod = EgressMethodAMSRestStatsByteCounter
 		} else {
 			egressGB = kbpsToGBPerMinute(v.viewerMinutes, defaultBitrateKbps)
 		}
@@ -297,7 +321,7 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 			PeakConcurrency: v.peakConcurrency,
 			EgressGB:        roundToDecimal(egressGB, 6),
 			RecordingGB:     roundToDecimal(recordingGB, 6),
-			EgressMethod:    EgressMethodBitrateXWatchTime,
+			EgressMethod:    egressMethod,
 		}
 		resultRows = append(resultRows, row)
 		totals.ViewerMinutes += v.viewerMinutes

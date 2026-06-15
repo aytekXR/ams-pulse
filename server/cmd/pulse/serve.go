@@ -274,6 +274,9 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	// silently discarded. The dedicated beacon server (PULSE_INGEST_LISTEN_ADDR)
 	// has its own sink; this ensures the default single-port deployment works.
 	apiServer.SetEventSink(fanout)
+	// VD-23: Wire ingest health tracker so handleIngestHealth can read per-publisher
+	// state (health scores, raw metrics) from the correct source.
+	apiServer.SetIngestTracker(ingestTracker)
 
 	// Wave 2 (BE-02): Seed default alert rule pack on first run (closes G8).
 	// Idempotent — no-op if rules already exist.

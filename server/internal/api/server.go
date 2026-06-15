@@ -46,6 +46,7 @@ import (
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 
+	"github.com/pulse-analytics/pulse/server/internal/collector/ingest"
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 	"github.com/pulse-analytics/pulse/server/internal/license"
 	"github.com/pulse-analytics/pulse/server/internal/query"
@@ -118,9 +119,11 @@ type Server struct {
 
 // IngestTracker is the interface to the collector/ingest.HealthTracker.
 // Minimal subset used by the API layer.
+// VD-23: return type matches ingest.HealthTracker.Snapshot() → map[string]PublisherState.
 type IngestTracker interface {
-	// Snapshot returns a copy of all publisher states.
-	Snapshot() map[string]interface{}
+	// Snapshot returns a copy of all publisher states keyed by
+	// "nodeID/app/streamID". Return type must match ingest.HealthTracker.Snapshot().
+	Snapshot() map[string]ingest.PublisherState
 }
 
 // New creates and initializes the API server.
@@ -769,7 +772,18 @@ func (s *Server) handleQoeSummary(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleIngestHealth(w http.ResponseWriter, r *http.Request) {
-	// Wave 2: ingest health from live snapshot streams.
+	// VD-20b + VD-21: return health_score (non-zero when ingest_stats received)
+	// and per-stream timeseries + drop_events per OpenAPI IngestStream schema.
+	//
+	// Data sources:
+	//   - health_score, health, and current raw metrics: live aggregator snapshot
+	//     (populated by BE-01 VD-20a bridge: aggregator.onIngestStats calls
+	//      ingest.ComputeHealthScore so LiveStream.HealthScore is non-zero).
+	//   - timeseries + drop_events: server_events table via query.Service.IngestTimeseries.
+	//
+	// OpenAPI IngestStream schema requires: [stream_id, app, health_score, timeseries].
+	// The health_score field is 0–100 per spec (minimum 0, maximum 100).
+	ctx := r.Context()
 	snap := s.live.CurrentSnapshot()
 	var streams []map[string]any
 	if snap != nil {
@@ -777,17 +791,42 @@ func (s *Server) handleIngestHealth(w http.ResponseWriter, r *http.Request) {
 			if !st.Active {
 				continue
 			}
+			// Fetch ingest timeseries for this stream.
+			// Non-blocking: falls back to empty slices when ClickHouse is unavailable.
+			ts, dropEvents := []any{}, []any{}
+			if s.qsvc != nil {
+				tsResult, err := s.qsvc.IngestTimeseries(ctx, query.IngestTimeseriesParams{
+					StreamID: sid,
+					App:      st.App,
+					NodeID:   st.NodeID,
+				})
+				if err == nil && tsResult != nil {
+					for _, b := range tsResult.Timeseries {
+						ts = append(ts, b)
+					}
+					for _, de := range tsResult.DropEvents {
+						dropEvents = append(dropEvents, de)
+					}
+				}
+			}
+
+			// health_score is 0.0–1.0 internally (ComputeHealthScore); the OpenAPI
+			// schema specifies minimum 0, maximum 100 — scale accordingly.
+			healthScoreScaled := st.HealthScore * 100.0
+
 			streams = append(streams, map[string]any{
-				"stream_id":          sid,
-				"app":                st.App,
-				"node_id":            st.NodeID,
-				"health_score":       st.HealthScore,
-				"health":             string(st.Health),
-				"bitrate_kbps":       st.IngestBitrate,
-				"fps":                st.FPS,
-				"packet_loss_pct":    st.PacketLossPct,
-				"jitter_ms":          st.JitterMS,
+				"stream_id":           sid,
+				"app":                 st.App,
+				"node_id":             st.NodeID,
+				"health_score":        healthScoreScaled,
+				"health":              string(st.Health),
+				"bitrate_kbps":        st.IngestBitrate,
+				"fps":                 st.FPS,
+				"packet_loss_pct":     st.PacketLossPct,
+				"jitter_ms":           st.JitterMS,
 				"keyframe_interval_s": st.KeyframeIntervalS,
+				"timeseries":          ts,
+				"drop_events":         dropEvents,
 			})
 		}
 	}
@@ -1098,10 +1137,12 @@ func (s *Server) handleTestSource(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Test connectivity: attempt a lightweight HTTP GET to the source's REST URL.
+	// VD-X3-A: response must include `reachable` (bool) per AmsSourceStatus schema.
 	if !src.RestURL.Valid || src.RestURL.String == "" {
 		writeJSON(w, http.StatusOK, map[string]any{
-			"status":  "unknown",
-			"message": "no rest_url configured for this source",
+			"reachable":  false,
+			"status":     "unknown",
+			"message":    "no rest_url configured for this source",
 			"latency_ms": nil,
 		})
 		return
@@ -1115,6 +1156,7 @@ func (s *Server) handleTestSource(w http.ResponseWriter, r *http.Request) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, testURL, nil)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{
+			"reachable":  false,
 			"status":     "error",
 			"message":    fmt.Sprintf("build request: %v", err),
 			"latency_ms": nil,
@@ -1128,7 +1170,9 @@ func (s *Server) handleTestSource(w http.ResponseWriter, r *http.Request) {
 	resp, err := http.DefaultClient.Do(req)
 	latencyMS := time.Since(start).Milliseconds()
 	if err != nil {
+		// Network error means unreachable.
 		writeJSON(w, http.StatusOK, map[string]any{
+			"reachable":  false,
 			"status":     "error",
 			"message":    err.Error(),
 			"latency_ms": latencyMS,
@@ -1137,12 +1181,15 @@ func (s *Server) handleTestSource(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
+	// reachable = true when HTTP response received (any status code, including 4xx/5xx).
+	reachable := true
 	status := "ok"
 	msg := fmt.Sprintf("HTTP %d from %s", resp.StatusCode, testURL)
 	if resp.StatusCode >= 400 {
 		status = "error"
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
+		"reachable":  reachable,
 		"status":     status,
 		"message":    msg,
 		"latency_ms": latencyMS,

@@ -793,6 +793,151 @@ func (s *Service) QoeSummary(ctx context.Context, p QoeParams) (*QoeSummaryResul
 	}, nil
 }
 
+// ─── VD-21: Ingest timeseries ────────────────────────────────────────────────
+
+// IngestBucket is one timeseries point for GET /qoe/ingest.
+// Maps to the IngestBucket schema in contracts/openapi/pulse-api.yaml.
+type IngestBucket struct {
+	TS               int64   `json:"ts"`                          // Unix epoch ms
+	BitrateKbps      float64 `json:"bitrate_kbps"`
+	FPS              float64 `json:"fps"`
+	KeyframeIntervalS float64 `json:"keyframe_interval_s,omitempty"`
+	PacketLossPct    float64 `json:"packet_loss_pct,omitempty"`
+	JitterMS         float64 `json:"jitter_ms,omitempty"`
+}
+
+// DropEvent is one ingest drop event for GET /qoe/ingest.
+// Maps to the DropEvent schema in contracts/openapi/pulse-api.yaml.
+type DropEvent struct {
+	TS     int64  `json:"ts"`     // Unix epoch ms
+	Reason string `json:"reason"` // bitrate_drop, fps_drop, packet_loss_spike, jitter_spike, disconnect
+}
+
+// IngestTimeseriesParams holds filters for the ingest timeseries query.
+type IngestTimeseriesParams struct {
+	StreamID string
+	App      string
+	NodeID   string
+	From     time.Time
+	To       time.Time
+	// BucketSeconds controls the time bucket width (default 60s).
+	BucketSeconds int
+}
+
+// IngestTimeseriesResult is the per-stream result returned by IngestTimeseries.
+type IngestTimeseriesResult struct {
+	Timeseries []IngestBucket `json:"timeseries"`
+	DropEvents []DropEvent    `json:"drop_events"`
+}
+
+// IngestTimeseries queries server_events for ingest_stats rows and returns
+// per-minute bucketed timeseries + detected drop events.
+// Falls back to an empty result when ClickHouse is not configured.
+func (s *Service) IngestTimeseries(ctx context.Context, p IngestTimeseriesParams) (*IngestTimeseriesResult, error) {
+	empty := &IngestTimeseriesResult{
+		Timeseries: []IngestBucket{},
+		DropEvents: []DropEvent{},
+	}
+	if s.conn == nil {
+		return empty, nil
+	}
+
+	bucketSec := p.BucketSeconds
+	if bucketSec <= 0 {
+		bucketSec = 60
+	}
+
+	// Build WHERE clause for server_events.
+	// Filter to ingest_stats events (fps > 0 OR bitrate_kbps > 0).
+	where := "event_type = 'ingest_stats'"
+	var args []any
+	if p.StreamID != "" {
+		where += " AND stream_id = ?"
+		args = append(args, p.StreamID)
+	}
+	if p.App != "" {
+		where += " AND app = ?"
+		args = append(args, p.App)
+	}
+	if p.NodeID != "" {
+		where += " AND node_id = ?"
+		args = append(args, p.NodeID)
+	}
+	if !p.From.IsZero() {
+		where += " AND ts >= ?"
+		args = append(args, p.From)
+	}
+	if !p.To.IsZero() {
+		where += " AND ts <= ?"
+		args = append(args, p.To)
+	}
+
+	q := fmt.Sprintf(`
+		SELECT
+			toInt64(toUnixTimestamp(toStartOfInterval(ts, toIntervalSecond(%d))) * 1000) AS bucket_ms,
+			avg(bitrate_kbps)         AS avg_bitrate,
+			avg(fps)                  AS avg_fps,
+			avg(keyframe_interval_s)  AS avg_kf,
+			avg(packet_loss_pct)      AS avg_loss,
+			avg(jitter_ms)            AS avg_jitter
+		FROM server_events
+		WHERE %s
+		GROUP BY bucket_ms
+		ORDER BY bucket_ms`, bucketSec, where)
+
+	rows, err := s.conn.Query(ctx, q, args...)
+	if err != nil {
+		// Non-fatal: return empty on ClickHouse error.
+		return empty, nil
+	}
+	defer rows.Close()
+
+	var timeseries []IngestBucket
+	for rows.Next() {
+		var b IngestBucket
+		if err := rows.Scan(&b.TS, &b.BitrateKbps, &b.FPS, &b.KeyframeIntervalS,
+			&b.PacketLossPct, &b.JitterMS); err != nil {
+			continue
+		}
+		timeseries = append(timeseries, b)
+	}
+	if timeseries == nil {
+		timeseries = []IngestBucket{}
+	}
+
+	// Detect drop events from the timeseries buckets.
+	// Heuristics:
+	//   bitrate_drop   — bitrate falls to < 20% of the preceding bucket
+	//   fps_drop       — fps falls to < 20% of the preceding bucket
+	//   packet_loss_spike — packet_loss_pct > 5%
+	//   jitter_spike   — jitter_ms > 50ms
+	var dropEvents []DropEvent
+	for i, b := range timeseries {
+		if i > 0 {
+			prev := timeseries[i-1]
+			if prev.BitrateKbps > 0 && b.BitrateKbps < prev.BitrateKbps*0.20 {
+				dropEvents = append(dropEvents, DropEvent{TS: b.TS, Reason: "bitrate_drop"})
+			} else if prev.FPS > 0 && b.FPS < prev.FPS*0.20 {
+				dropEvents = append(dropEvents, DropEvent{TS: b.TS, Reason: "fps_drop"})
+			}
+		}
+		if b.PacketLossPct > 5.0 {
+			dropEvents = append(dropEvents, DropEvent{TS: b.TS, Reason: "packet_loss_spike"})
+		}
+		if b.JitterMS > 50.0 {
+			dropEvents = append(dropEvents, DropEvent{TS: b.TS, Reason: "jitter_spike"})
+		}
+	}
+	if dropEvents == nil {
+		dropEvents = []DropEvent{}
+	}
+
+	return &IngestTimeseriesResult{
+		Timeseries: timeseries,
+		DropEvents: dropEvents,
+	}, nil
+}
+
 // ─── SQL helpers ─────────────────────────────────────────────────────────────
 
 // buildSessionTimeWhere generates a WHERE clause for viewer_sessions based on

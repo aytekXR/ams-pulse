@@ -80,7 +80,8 @@ func TestContract_AmsSourceStatus_SpecHasReachableRequired(t *testing.T) {
 // The spec-level guard (TestContract_AmsSourceStatus_SpecHasReachableRequired) above
 // catches spec regressions independently.
 func TestContract_AmsSourceStatus_HandlerReachableField(t *testing.T) {
-	t.Skip("VD-X3-A handler fix is BE-02 scope — skipping until BE-02 wires reachable field (see VD-X3-A in V2-triage-report.md)")
+	// VD-X3-A handler fix applied by BE-02: reachable field now returned.
+	// Test is no longer skipped.
 
 	ts, token, cleanup := setupTestServer(t)
 	defer cleanup()
