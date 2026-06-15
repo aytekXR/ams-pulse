@@ -10,7 +10,7 @@ from empirical verification on the current `main`, not from agent self-reports.
 > QoE, reports, fleet, API/Prometheus, Helm), Wave 3-MVP (anomaly detection,
 > synthetic probes), then a **validation phase** (mission item 2) that adversarially
 > re-verified F1–F10 against the PRD and drove a defect-fix loop. Full chronology in
-> `DEVLOG.md`; all rulings in `agents/handoffs/decisions.md` (D-001…D-020).
+> `DEVLOG.md`; all rulings in `agents/handoffs/decisions.md` (D-001…D-021).
 
 ## Verification status (current `main`)
 
@@ -39,6 +39,14 @@ from empirical verification on the current `main`, not from agent self-reports.
 > the real CI images locally; e2e re-run by ORCH (viewers=13). Gate CLOSED
 > (PASS_WITH_LIMITATIONS — Actions-green-on-push + branch protection are the user's GitHub-side
 > step; `gh` not installed on the VPS).
+
+> **Live-dashboard deadlock fix (session 4, D-021, 2026-06-15).** Restoring the demo
+> surfaced a real **AB→BA deadlock** between the live aggregator (`a.mu`) and
+> `cluster.Discovery` (`d.mu`): both emitted to the fan-out sink while holding their own
+> lock and re-entered the other (root-caused from a SIGQUIT goroutine dump — 486 HTTP
+> handlers wedged on `CurrentSnapshot`). Fix: collect events under the lock, emit after
+> releasing it (`Discovery.poll`, `aggregator.EvictStale`) + regression tests that
+> deadlock on the un-fixed source. Demo redeployed → `/healthz` 200, `status:ok`.
 
 **Single unified project** (one repo, one `pulse` binary `serve|migrate|diag` +
 one web app + one SDK). No separate codebases to merge.

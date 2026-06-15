@@ -589,3 +589,35 @@ exercise the GHCR release. Limitations: `e2e` is deliberately NOT a required che
 compose bring-up is slow/heavy — PR/dispatch only); the integration step downloads a ~CH
 binary at CI time (network-dependent); `helm` is GitHub-runner-only (helm not installed
 locally). Carried waivers: D-002 (real cluster / real multi-node), D-007.5 (Kafka broker).
+
+## D-021 · 2026-06-15 · Live-dashboard deadlock fixed — aggregator↔discovery AB→BA (demo restored)
+
+While restoring the demo (the D-020 flag: pulse `Up (unhealthy)`, serving nothing on
+:8090/:80), ORCH took a SIGQUIT goroutine dump and root-caused a genuine **AB→BA
+lock-order deadlock** — NOT a flaky container (process alive, 20 MB, 0.04% CPU, OOMKilled
+false, FailingStreak 448 ≈ 3.7 h). 489 goroutines were wedged on the aggregator RWMutex:
+**486 HTTP handlers** blocked in `aggregator.CurrentSnapshot` (RLock), and the writers
+`EvictStale`/`OnServerEvent` blocked on `Lock` for **152 min**. The cycle:
+- `cluster.Discovery.poll` held `d.mu.Lock` and, still holding it, called
+  `d.sink.WriteServerEvent` → `aggregator.OnServerEvent` wants `a.mu.Lock` (holds **B**, wants **A**).
+- `aggregator.OnServerEvent` held `a.mu.Lock`, then `onStreamStats` → `Discovery.IsEdgeStream`
+  wants `d.mu.RLock` (holds **A**, wants **B**).
+
+Opposite lock orders → deadlock; once a writer queues, Go's RWMutex blocks every new RLock,
+so all `CurrentSnapshot` readers piled up and the dashboard went dark (HTTP 000). The heavy
+W1 build load made the two pollers interleave into it. Also latent: `aggregator.EvictStale`
+emitted to the same Fanout while holding `a.mu` — a self-deadlock, since the aggregator
+consumes its own sink.
+
+**Fix (the rule: never hold a state lock across a sink call).** `Discovery.poll` and
+`aggregator.EvictStale` now collect events into a local slice under the lock and emit to the
+sink only AFTER releasing it. Files (server scope): `internal/cluster/discovery.go`,
+`internal/collector/aggregator/aggregator.go` + deadlock-reproducing regression tests in
+`discovery_test.go` / `aggregator_test.go`.
+
+**Verification (D-013/D-017 gold standard — proved the guard actually guards):** the two
+regression tests **FAIL** (3 s watchdog: "poll()/EvictStale() deadlocked … while holding the
+lock") against the un-fixed source (git-stashed) and **PASS race-clean** against the fix;
+full server unit suite **all packages ok**; image rebuilt + demo redeployed (project `pulse`)
+→ `/healthz` **200 on :8090 AND :80**, body `status:ok`. Demo restored at
+`http://161.97.172.146/`. Committed by explicit path (server scope).

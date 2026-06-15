@@ -441,3 +441,21 @@ push a `v*` tag for the GHCR release. `e2e` is intentionally not a required chec
 
 Note: the running demo stack (project `pulse`) is currently UNHEALTHY (pulse container up but
 not serving on :8090/:80) — flagged for the next session; not in W1 scope.
+
+## 2026-06-15 — session 4 · demo restored: a real AB→BA deadlock fixed (D-021)
+
+The "unhealthy demo" turned out to be a genuine concurrency bug, not a flaky container. A
+SIGQUIT goroutine dump showed 489 goroutines wedged on the aggregator RWMutex — 486 HTTP
+handlers in `CurrentSnapshot` (RLock), writers `EvictStale`/`OnServerEvent` blocked on `Lock`
+for 152 min — an **AB→BA lock-order deadlock** between the live aggregator (`a.mu`) and
+`cluster.Discovery` (`d.mu`): each held its own lock while calling into the other's
+(`Discovery.poll`→sink→`OnServerEvent` wants `a.mu`; `OnServerEvent`→`onStreamStats`→
+`IsEdgeStream` wants `d.mu`). The heavy W1 build load made the two pollers interleave into
+the cycle; then every `CurrentSnapshot` reader piled up and the dashboard went dark.
+
+Fix (the rule: never hold a state lock across a sink call): `Discovery.poll` +
+`aggregator.EvictStale` collect events under the lock, emit after releasing it. Added two
+regression tests that reproduce the deadlock. **Verified both ways** (D-013/D-017): the tests
+FAIL (3 s watchdog) on the un-fixed source and PASS race-clean on the fix; full server unit
+suite green; image rebuilt + demo redeployed → `/healthz` 200 on :8090 AND :80, `status:ok`.
+Demo live again at http://161.97.172.146/.
