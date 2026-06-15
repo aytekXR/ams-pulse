@@ -420,25 +420,43 @@ fi
 
 # ─── C9: 13-month rollup query <3s (F2) ──────────────────────────────────────
 info "=== C9: 13-month rollup query <3s (F2) ==="
-# Seed viewer_sessions for this ClickHouse instance (using python3 script)
-python3 - << 'PYEOF'
+# Seed viewer_sessions with dimensional diversity:
+#   >=3 distinct geo_country (US, DE, TR) and >=2 distinct client_device (desktop, mobile)
+#   so the C9b GROUP BY is meaningful (VD-18).
+# Fix: pass actual CH_TCP_PORT from environment; prior version used literal "CHPORT" string.
+CH_TCP_PORT_SEED="$CH_TCP_PORT"
+python3 - "$CH_TCP_PORT_SEED" << 'PYEOF'
 import time, subprocess, sys
 
+ch_port = sys.argv[1]
 base_ts_s = int(time.time()) - (395 * 86400)
 months = {}
+# Dimensional combinations: 3 geo_country x 2 device x 2 protocol = 12 permutations.
+# Spread across all 395 days to cover 13+ months.
+GEO = ["US", "DE", "TR"]
+DEVICE = ["desktop", "mobile"]
+PROTOCOLS = ["hls", "webrtc"]
+
 for day in range(395):
     ts_ms = (base_ts_s + day * 86400) * 1000
     end_ms = ts_ms + 3600000
     ts_s = ts_ms // 1000
-    import time as t_mod
-    ym = t_mod.strftime("%Y-%m", t_mod.gmtime(ts_s))
-    for viewer in range(3):
-        months.setdefault(ym, []).append(
-            (f"{ts_ms}-{day}-{viewer}", f"stream-{viewer+1}", "live", "node-1",
-             ts_ms, end_ms, ts_ms, 1000, 1800, 0, 0, 0, 0,
-             "webrtc", "US", "", "desktop", "", "", ""))
+    ym = time.strftime("%Y-%m", time.gmtime(ts_s))
+    # Produce 12 rows per day (3 geo x 2 device x 2 protocol)
+    combo_idx = 0
+    for geo in GEO:
+        for dev in DEVICE:
+            for proto in PROTOCOLS:
+                row_id = f"{ts_ms}-{day}-{combo_idx}"
+                months.setdefault(ym, []).append(
+                    (row_id, f"stream-{combo_idx % 3 + 1}", "live", "node-1",
+                     ts_ms, end_ms, ts_ms, 1000, 1800, 0, 0, 0, 0,
+                     proto, geo, "", dev, "", "", ""))
+                combo_idx += 1
 
-cols = "(session_id, stream_id, app, node_id, started_at, ended_at, updated_at, startup_ms, watch_time_s, rebuffer_count, rebuffer_ms, error_count, peak_bitrate, protocol, geo_country, geo_region, client_device, client_os, client_browser, tenant)"
+cols = ("(session_id, stream_id, app, node_id, started_at, ended_at, updated_at, "
+        "startup_ms, watch_time_s, rebuffer_count, rebuffer_ms, error_count, peak_bitrate, "
+        "protocol, geo_country, geo_region, client_device, client_os, client_browser, tenant)")
 
 for ym, rows in sorted(months.items()):
     row_strs = []
@@ -450,10 +468,10 @@ for ym, rows in sorted(months.items()):
                 f"'{r[17]}'", f"'{r[18]}'", f"'{r[19]}'"]
         row_strs.append("(" + ", ".join(vals) + ")")
     q = f"INSERT INTO pulse.viewer_sessions {cols} VALUES {','.join(row_strs)}"
-    result = subprocess.run(["/tmp/clickhouse", "client", "--port", "CHPORT",
+    result = subprocess.run(["/tmp/clickhouse", "client", "--port", ch_port,
                              "--query", q], capture_output=True, text=True)
     if result.returncode != 0:
-        print(f"Insert failed for {ym}: {result.stderr[:100]}", file=sys.stderr)
+        print(f"Insert failed for {ym}: {result.stderr[:200]}", file=sys.stderr)
 PYEOF
 SEED_EXIT=$?
 
@@ -462,18 +480,66 @@ sleep 2
 /tmp/clickhouse client --port "$CH_TCP_PORT" --query "OPTIMIZE TABLE pulse.rollup_audience_1d FINAL" > /dev/null 2>&1 || true
 sleep 1
 
+# Compute 13-month window bounds dynamically.
+NOW_DATE=$(python3 -c "import datetime; print((datetime.datetime.utcnow()).strftime('%Y-%m-%d'))")
+PAST_DATE=$(python3 -c "import datetime; d=datetime.datetime.utcnow()-datetime.timedelta(days=395); print(d.strftime('%Y-%m-%d'))")
+
 Q_START=$(python3 -c "import time; print(int(time.time()*1000))")
 Q_RESULT=$(/tmp/clickhouse client --port "$CH_TCP_PORT" --query \
-    "SELECT sumMerge(watch_time_s) / 60.0 AS viewer_minutes, maxMerge(peak_concurrency) AS peak FROM pulse.rollup_audience_1d WHERE bucket >= '2025-05-01' AND bucket <= '2026-06-14'" 2>&1)
+    "SELECT sumMerge(watch_time_s) / 60.0 AS viewer_minutes, maxMerge(peak_concurrency) AS peak FROM pulse.rollup_audience_1d WHERE bucket >= '${PAST_DATE}' AND bucket <= '${NOW_DATE}'" 2>&1)
 Q_END=$(python3 -c "import time; print(int(time.time()*1000))")
 Q_MS=$((Q_END - Q_START))
 
 info "13-month rollup query result: $Q_RESULT"
 info "Query time: ${Q_MS}ms (budget: 3000ms)"
 if [ "$Q_MS" -le 3000 ]; then
-    pass "C9: 13-month rollup query ${Q_MS}ms ≤ 3000ms (F2)"
+    pass "C9: 13-month simple aggregate ${Q_MS}ms ≤ 3000ms (F2)"
 else
-    fail "C9: 13-month rollup query ${Q_MS}ms > 3000ms budget"
+    fail "C9: 13-month simple aggregate ${Q_MS}ms > 3000ms budget"
+fi
+
+# ─── C9b: VD-18 dimensional query (geo_country × client_device × protocol) ───
+info "=== C9b: VD-18 dimensional 13-month query <3s (F2) ==="
+# Run the grouped-by-dimension query over the same 13-month dataset seeded above.
+# Asserts: (a) wall-clock <= 3000ms; (b) >=3 distinct geo_country rows;
+#           (c) >=2 distinct client_device values.
+D_START=$(python3 -c "import time; print(int(time.time()*1000))")
+D_RESULT=$(/tmp/clickhouse client --port "$CH_TCP_PORT" --query \
+    "SELECT geo_country, client_device, protocol,
+            sumMerge(watch_time_s) / 60.0 AS viewer_minutes,
+            maxMerge(peak_concurrency) AS peak
+     FROM pulse.rollup_audience_1d
+     WHERE bucket >= '${PAST_DATE}' AND bucket <= '${NOW_DATE}'
+     GROUP BY geo_country, client_device, protocol
+     ORDER BY geo_country, client_device, protocol" 2>&1)
+D_END=$(python3 -c "import time; print(int(time.time()*1000))")
+D_MS=$((D_END - D_START))
+
+info "C9b dimensional query time: ${D_MS}ms (budget: 3000ms)"
+info "C9b result rows:"
+echo "$D_RESULT" | head -20
+
+# Timing gate.
+if [ "$D_MS" -le 3000 ]; then
+    pass "C9b timing: dimensional 13-month query ${D_MS}ms ≤ 3000ms (VD-18/F2)"
+else
+    fail "C9b timing: dimensional 13-month query ${D_MS}ms > 3000ms budget"
+fi
+
+# Cardinality assertions.
+GEO_COUNT=$(echo "$D_RESULT" | awk '{print $1}' | sort -u | grep -v '^$' | wc -l | tr -d ' ')
+DEVICE_COUNT=$(echo "$D_RESULT" | awk '{print $2}' | sort -u | grep -v '^$' | wc -l | tr -d ' ')
+info "C9b distinct geo_country=$GEO_COUNT (want >=3), distinct client_device=$DEVICE_COUNT (want >=2)"
+
+if [ "${GEO_COUNT:-0}" -ge 3 ]; then
+    pass "C9b geo: $GEO_COUNT distinct geo_country values (US, DE, TR seeded; want >=3)"
+else
+    fail "C9b geo: only $GEO_COUNT distinct geo_country (want >=3); seed may have failed"
+fi
+if [ "${DEVICE_COUNT:-0}" -ge 2 ]; then
+    pass "C9b device: $DEVICE_COUNT distinct client_device values (desktop, mobile seeded; want >=2)"
+else
+    fail "C9b device: only $DEVICE_COUNT distinct client_device (want >=2); seed may have failed"
 fi
 
 # ─── C10: /metrics bounded cardinality ───────────────────────────────────────
