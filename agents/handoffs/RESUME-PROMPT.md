@@ -49,10 +49,17 @@ QoE monitoring and alerting for Ant Media Server), strictly per PRD:
     muted/group_by dead (VD-28/29), F6 reports ungated + cron broken (VD-35/36),
     tier model wrong (VD-01), security (VD-S1/S2), WS shape (VD-02).
   - **V3 fix-loop (plan D-015), two sequential workflows:**
-    - **V3a IN FLIGHT** (`pulse-val-3a`, run `wf_daf126f5-e1e`) — make the data
-      flow: INT-01 contract (business tier + conformance) → [BE-01 data-plane →
-      BE-02-A pipelines] | SDK-01 (header) → QA mini round-trip. **FIRST ACTION
-      next session:** read its result + `V3a-QA-report.md`.
+    - **V3a INT-01 DONE** (`0d84d31`): `business` tier added to the contract enum
+      AND `server/internal/license/license.go` (+ conformance fixes VD-X3-A/C/D,
+      VD-S4). The first V3a run (`wf_daf126f5-e1e`) then STALLED ~9h on a
+      foreground process (D-016); partial server/SDK edits were discarded
+      (non-building), INT-01's commit kept.
+    - **V3a-rest IN FLIGHT** (`pulse-val-3a-rest`, run `wf_4e8b282a-a47`) —
+      hardened re-run (no foreground servers, mandatory timeouts, smaller 3-deep
+      server chain): [BE-01 data-plane → BE-02-A1 ingest/geo/qoe → BE-02-A2
+      ingest-health API] | SDK-01 (header VD-09) → QA mini. **FIRST ACTION next
+      session:** read its result + `V3a-QA-report.md`; if it stalled again,
+      split agents smaller / run as monitored foreground Agent calls.
     - **V3b NEXT** — gating/alerting/security/UI: BE-02-B (alerting) → BE-02-C
       (gating/WS/fleet/security) | FE-01 → QA full re-gate → DOC-01. (See D-015
       for the exact VD→agent assignment.)
