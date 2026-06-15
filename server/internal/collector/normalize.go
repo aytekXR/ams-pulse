@@ -2,6 +2,15 @@
 //
 // This file is the ONLY place where AMS wire shapes (from amsclient) are
 // interpreted and mapped to domain.ServerEvent. Architecture rule 2.
+//
+// AMS isolation constraint (VD-16 / ARCHITECTURE §3):
+// The AMS REST broadcast-statistics API is a server-side aggregate endpoint.
+// It returns viewer counts and bitrate totals but has NO per-viewer information
+// (IP addresses, User-Agent strings). Therefore buildEnrichment is always called
+// with empty IP and UA on the REST path, and Enrichment will be nil for all
+// REST-polled events. This is an architectural constraint, not a bug — per-viewer
+// geo/UA enrichment is ONLY possible via the beacon path (POST /ingest/beacon)
+// where the HTTP request carries the actual viewer's IP and User-Agent header.
 package collector
 
 import (
@@ -79,6 +88,33 @@ func NormalizeBroadcast(
 			Data:       statsData,
 			Enrichment: enrich,
 		})
+
+		// VD-22: emit ingest_stats from BroadcastDTO fields so REST-only
+		// deployments surface FPS, bitrate, and other ingest metrics
+		// (previously only Kafka/logtail sources emitted this event type).
+		// AMS BroadcastDTO does not expose packet_loss or jitter via REST;
+		// those fields are left zero and may be populated by WebRTC stats events.
+		if b.CurrentFPS > 0 || b.BitRate > 0 {
+			events = append(events, domain.ServerEvent{
+				Version:  1,
+				Type:     domain.EventIngestStats,
+				TS:       now,
+				Source:   domain.SourceRestPoll,
+				NodeID:   nodeID,
+				App:      app,
+				StreamID: b.StreamID,
+				Data: map[string]any{
+					"bitrate_kbps": b.BitRate,
+					"fps":          float64(b.CurrentFPS),
+					// packet_loss_pct and jitter_ms are not available via AMS REST;
+					// they are populated by WebRTC peer-stats events when available.
+					"packet_loss_pct":    0.0,
+					"jitter_ms":          0.0,
+					"keyframe_interval_s": 0.0,
+				},
+				Enrichment: enrich,
+			})
+		}
 
 	case "finished", "ended":
 		if prevStatus == "broadcasting" {

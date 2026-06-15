@@ -77,6 +77,9 @@ type ClusterNodeDTO struct {
 	IP        string `json:"ip"`
 	Port      int    `json:"port"`
 	Role      string `json:"role"` // origin|edge
+	// Version is the AMS server version string (e.g. "2.8.3") returned by
+	// the cluster nodes endpoint. VD-40: populated so FleetPage can render it.
+	Version   string  `json:"version"`
 	CPUUsage  float64 `json:"cpuUsage"`
 	MemoryUsage float64 `json:"memoryUsage"`
 	DiskUsage float64 `json:"diskUsage"`

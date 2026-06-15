@@ -11,7 +11,8 @@
 //   - X-Pulse-Ingest-Token compared constant-time; never echoed
 //   - Tokens stored as SHA-256 hashes (never plaintext)
 //   - 413 on body > 64 KB; 429 on rate limit; 422 on schema error; 401 on bad token
-//   - Enrichment runs in the BE-01 pipeline downstream of this handler
+//   - Enrichment: client IP extracted from X-Forwarded-For/RemoteAddr,
+//     UA from User-Agent header; geo+UA resolved and stored in BeaconEvent.Enrichment.
 package beacon
 
 import (
@@ -23,13 +24,16 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/pulse-analytics/pulse/server/internal/collector"
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 )
 
@@ -136,6 +140,13 @@ type Config struct {
 	// ListenAddr is the dedicated ingest listener address.
 	// If empty, the handler is mounted on the main API router.
 	ListenAddr string
+
+	// GeoResolver and UAParser provide geo-IP and User-Agent enrichment.
+	// The beacon path is the only viable geo source for viewer sessions
+	// (AMS REST is server-side, no per-viewer IP available).
+	// If nil, enrichment is skipped (no-op).
+	GeoResolver collector.GeoResolver
+	UAParser    collector.UAParser
 }
 
 // Handler is the beacon ingest HTTP handler.
@@ -156,6 +167,12 @@ func New(cfg Config, store TokenStore, sink domain.EventSink, logger *slog.Logge
 	}
 	if cfg.RateBurst <= 0 {
 		cfg.RateBurst = defaultRateBurst
+	}
+	if cfg.GeoResolver == nil {
+		cfg.GeoResolver = collector.NoopGeoResolver{}
+	}
+	if cfg.UAParser == nil {
+		cfg.UAParser = collector.NoopUAParser{}
 	}
 	if logger == nil {
 		logger = slog.Default()
@@ -244,7 +261,7 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ── 6. Async write to event sink ─────────────────────────────────────
-	evt := batchToDomain(&batch, r)
+	evt := batchToDomain(&batch, r, h.cfg.GeoResolver, h.cfg.UAParser)
 	// Non-blocking: write runs in the sink's goroutine
 	go h.sink.WriteBeaconEvent(evt)
 
@@ -368,7 +385,9 @@ func validateBeaconBatch(b *beaconBatch) []string {
 }
 
 // batchToDomain converts a parsed batch to a domain.BeaconEvent.
-func batchToDomain(b *beaconBatch, r *http.Request) domain.BeaconEvent {
+// VD-08: extract client IP (X-Forwarded-For / RemoteAddr) and User-Agent,
+// call geo+UA resolvers, populate Enrichment on the event.
+func batchToDomain(b *beaconBatch, r *http.Request, geo collector.GeoResolver, ua collector.UAParser) domain.BeaconEvent {
 	items := make([]domain.BeaconItem, len(b.Events))
 	for i, ev := range b.Events {
 		items[i] = domain.BeaconItem{Type: ev.Type, TS: ev.TS, Data: ev.Data}
@@ -391,13 +410,51 @@ func batchToDomain(b *beaconBatch, r *http.Request) domain.BeaconEvent {
 		}
 	}
 
-	// Carry client IP for geo enrichment downstream (BE-01 enrichment pipeline).
-	// The beacon domain event doesn't carry IP directly; that enrichment uses
-	// the http.Request RemoteAddr in the ingest pipeline wrapper.
-	// For now, the enrichment block is nil; BE-01 enriches by session.
-	_ = r
+	// VD-08: Extract client IP and User-Agent from the HTTP request.
+	// X-Forwarded-For is checked first (CDN/proxy deployments);
+	// fall back to RemoteAddr (direct connections).
+	clientIP := extractClientIP(r)
+	userAgent := r.Header.Get("User-Agent")
+
+	// Resolve geo and UA enrichment.
+	var geoEnrich domain.GeoEnrichment
+	var clientEnrich domain.ClientEnrichment
+	if clientIP != "" && geo != nil {
+		geoEnrich = geo.Resolve(clientIP)
+	}
+	if userAgent != "" && ua != nil {
+		clientEnrich = ua.Parse(userAgent)
+	}
+
+	// Only set Enrichment if there is something to report.
+	if geoEnrich.Country != "" || geoEnrich.Region != "" || clientEnrich.Device != "" {
+		evt.Enrichment = &domain.EnrichmentBlock{
+			Geo:    &geoEnrich,
+			Client: &clientEnrich,
+		}
+	}
 
 	return evt
+}
+
+// extractClientIP returns the best-guess client IP from the request.
+// Prefers the first non-local IP in X-Forwarded-For; falls back to RemoteAddr.
+func extractClientIP(r *http.Request) string {
+	// Check X-Forwarded-For (may contain comma-separated list of proxies).
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// Use the first (leftmost) address — the original client.
+		parts := strings.SplitN(xff, ",", 2)
+		ip := strings.TrimSpace(parts[0])
+		if ip != "" {
+			return ip
+		}
+	}
+	// Fall back to RemoteAddr (strip port).
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
 // ─── HTTP helpers ─────────────────────────────────────────────────────────────

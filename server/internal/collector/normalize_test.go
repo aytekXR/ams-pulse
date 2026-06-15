@@ -4,8 +4,65 @@ package collector
 import (
 	"testing"
 
+	"github.com/pulse-analytics/pulse/server/internal/domain"
 	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
 )
+
+// TestNormalizeBroadcast_EmitsIngestStats verifies that NormalizeBroadcast
+// emits an EventIngestStats event when BroadcastDTO has FPS or bitrate (VD-22).
+// Before the fix, REST-only deployments always had fps=0 and FPS=0 in ClickHouse
+// because EventIngestStats was only produced by Kafka and log-tail sources.
+func TestNormalizeBroadcast_EmitsIngestStats(t *testing.T) {
+	dto := amsclient.BroadcastDTO{
+		StreamID:   "test-stream",
+		AppName:    "live",
+		Status:     "broadcasting",
+		BitRate:    2500.0,
+		CurrentFPS: 30,
+	}
+
+	events := NormalizeBroadcast(dto, "node-1", "broadcasting", NoopGeoResolver{}, NoopUAParser{})
+
+	var ingestStats []domain.ServerEvent
+	for _, ev := range events {
+		if ev.Type == domain.EventIngestStats {
+			ingestStats = append(ingestStats, ev)
+		}
+	}
+
+	if len(ingestStats) == 0 {
+		t.Fatalf("NormalizeBroadcast emitted no EventIngestStats events (VD-22); want 1")
+	}
+	ev := ingestStats[0]
+	if fps, ok := ev.Data["fps"].(float64); !ok || fps != 30.0 {
+		t.Errorf("ingest_stats fps = %v, want 30.0 (VD-22)", ev.Data["fps"])
+	}
+	if bps, ok := ev.Data["bitrate_kbps"].(float64); !ok || bps != 2500.0 {
+		t.Errorf("ingest_stats bitrate_kbps = %v, want 2500.0 (VD-22)", ev.Data["bitrate_kbps"])
+	}
+	t.Logf("PASS VD-22: EventIngestStats emitted with fps=%.0f bitrate=%.0f",
+		ev.Data["fps"], ev.Data["bitrate_kbps"])
+}
+
+// TestNormalizeBroadcast_NoIngestStatsWhenZero verifies that EventIngestStats
+// is NOT emitted when both FPS and BitRate are zero (no useful ingest data).
+func TestNormalizeBroadcast_NoIngestStatsWhenZero(t *testing.T) {
+	dto := amsclient.BroadcastDTO{
+		StreamID:   "test-stream",
+		AppName:    "live",
+		Status:     "broadcasting",
+		BitRate:    0,
+		CurrentFPS: 0,
+	}
+
+	events := NormalizeBroadcast(dto, "node-1", "broadcasting", NoopGeoResolver{}, NoopUAParser{})
+
+	for _, ev := range events {
+		if ev.Type == domain.EventIngestStats {
+			t.Errorf("unexpected EventIngestStats when FPS=0 and BitRate=0 (VD-22)")
+		}
+	}
+}
 
 // TestNormalizeClusterNode_CPUScale pins that cpuUsage=15.0 (AMS REST v2
 // 0-100 percentage) maps to cpu_pct=15.0, NOT 1500.0.

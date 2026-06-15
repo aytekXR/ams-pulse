@@ -166,6 +166,7 @@ func (d *Discovery) poll(ctx context.Context) {
 		info.Port = n.Port
 		info.Role = role
 		info.Status = status
+		info.Version = n.Version // VD-40: propagate version from DTO
 		info.LastSeen = now
 		info.CPUPct = n.CPUUsage
 		info.MemPct = n.MemoryUsage
@@ -187,6 +188,7 @@ func (d *Discovery) poll(ctx context.Context) {
 					"net_in_mbps":      n.NetworkInputBps / 1_000_000,
 					"net_out_mbps":     n.NetworkOutputBps / 1_000_000,
 					"jvm_heap_used_mb": n.JvmMemoryUsage,
+					"version":          n.Version, // VD-40
 				},
 			})
 		}
@@ -226,23 +228,29 @@ func (d *Discovery) NodeCount() int {
 	return len(d.nodes)
 }
 
-// IsEdgeStream returns true if any edge node has reported viewers for the given
-// stream. This is used by the aggregator to avoid double-counting.
+// IsEdgeStream returns true if any edge node is known to serve the given
+// stream. This is used by the aggregator to avoid double-counting viewer
+// counts in origin+edge cluster deployments (F1+F7 AC).
 //
-// Edge dedup rule (F7):
-// Origin nodes report total viewer count including edge viewers. When edges are
-// serving a stream, the origin's viewer_count already includes edge viewers.
-// To avoid double-counting: if edges report viewers for this stream, the
-// origin's viewer count is ignored for that stream.
+// Edge dedup rule:
+// When at least one edge node has Role=="edge" AND has active streams,
+// origin nodes report a viewer_count that already includes edge viewers.
+// To avoid double-counting: if IsEdgeStream(streamID) returns true AND the
+// reporting node's role is "origin", the aggregator must skip adding that
+// node's viewer_count for that stream.
 //
-// Caller (aggregator) responsibility: if IsEdgeStream(streamID) == true AND
-// the reporting nodeID is an origin, discard the viewer_count from that event.
+// Implementation: we check whether any known edge node has ActiveStreams > 0.
+// This is a conservative heuristic — a more precise implementation would
+// track per-stream edge viewers. For F7 MVP correctness this is sufficient:
+// in an origin+edge deployment all active streams route through edges.
 func (d *Discovery) IsEdgeStream(streamID string) bool {
-	// NOTE: This requires cross-referencing edge node events.
-	// Full implementation requires tracking per-stream viewer_counts per-role.
-	// For Wave 2, this returns false (all viewer counts pass through).
-	// The dedup rule is documented here and will be applied in Wave 3
-	// when multi-node AMS clusters are fully tested.
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	for _, n := range d.nodes {
+		if n.Role == "edge" && n.ActiveStreams > 0 {
+			return true
+		}
+	}
 	return false
 }
 

@@ -13,8 +13,10 @@
 //	              where target_bitrate_kbps = 2000 (default; degraded floor = target * 0.5)
 //	  S_fps      = clamp(fps / target_fps, 0, 1)
 //	              where target_fps = 30.0 (default; degraded floor = 5)
-//	  S_keyframe = 1.0 if keyframe_interval_s <= 3.0 else clamp(3.0/keyframe_interval_s, 0, 1)
-//	              (ideal <= 2s for WebRTC; > 3s starts to hurt seek/join latency)
+//	  S_keyframe = 1.0 if keyframe_interval_s <= 2.0 else clamp(2.0/keyframe_interval_s, 0, 1)
+//	              (ideal <= 2s for WebRTC; degrades linearly above 2s)
+//	              Note: keyframeIdealS=2.0 is the threshold used in code.
+//	              keyframeBadS=3.0 is a declared-but-unused constant retained for reference.
 //	  S_loss     = clamp(1.0 - packet_loss_pct/10.0, 0, 1)
 //	              (0% loss = 1.0; 10%+ loss = 0.0)
 //	  S_jitter   = clamp(1.0 - jitter_ms/100.0, 0, 1)
@@ -300,7 +302,10 @@ func ComputeHealthScore(
 		sFPS = clamp01(fps / targetFPS)
 	}
 
-	// S_keyframe: ideal <= 2s; degrades linearly from 2s to 3s, 0 above 3s.
+	// S_keyframe: ideal <= 2.0s (keyframeIdealS); degrades linearly above 2.0s.
+	// Score = 2.0/keyframeIntervalS clamped to [0,1]. There is no hard upper
+	// cutoff at 3.0s — the formula is continuous. keyframeBadS=3.0 is retained
+	// as a reference constant but is not used in the scoring formula (VD-25).
 	sKeyframe := 1.0
 	if keyframeIntervalS > keyframeIdealS {
 		sKeyframe = clamp01(keyframeIdealS / keyframeIntervalS)

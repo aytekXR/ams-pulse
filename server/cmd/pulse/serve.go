@@ -164,11 +164,14 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	var sources []collector.Source
 
 	// REST poller (always enabled).
+	// VD-07: pass geo/UA resolvers so REST-polled events get enrichment.
 	poller := restpoller.New(
 		restpoller.Config{
 			NodeID:       cfg.AMSNodeID,
 			PollInterval: cfg.PollInterval,
 			Applications: cfg.AMSApplications,
+			GeoResolver:  geoResolver,
+			UAParser:     uaParser,
 		},
 		amsClient,
 		fanout,
@@ -208,6 +211,9 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		NodeID:       cfg.AMSNodeID,
 	}, amsClient, fanout, logger)
 	sources = append(sources, clusterDiscovery)
+
+	// VD-03: Wire cluster discovery into aggregator for origin/edge viewer dedup.
+	agg.SetEdgeChecker(clusterDiscovery)
 
 	// 6. Collector supervisor.
 	col := collector.New(logger, sources...)

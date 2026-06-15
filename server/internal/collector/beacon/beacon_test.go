@@ -12,7 +12,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/pulse-analytics/pulse/server/internal/collector"
 	"github.com/pulse-analytics/pulse/server/internal/collector/beacon"
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 )
@@ -453,4 +455,173 @@ func TestBeacon_TokenNeverEchoed(t *testing.T) {
 		t.Errorf("FAIL: response contains the ingest token — must never be echoed")
 	}
 	t.Logf("PASS: valid token accepted, token not echoed in response")
+}
+
+// ─── VD-08: Beacon enrichment tests ──────────────────────────────────────────
+
+// stubGeoResolver is a test GeoResolver that always returns a fixed enrichment.
+type stubGeoResolver struct {
+	country string
+	region  string
+}
+
+func (s stubGeoResolver) Resolve(_ string) domain.GeoEnrichment {
+	return domain.GeoEnrichment{Country: s.country, Region: s.region}
+}
+
+// stubUAParser is a test UAParser that always returns a fixed enrichment.
+type stubUAParser struct {
+	device string
+}
+
+func (s stubUAParser) Parse(_ string) domain.ClientEnrichment {
+	return domain.ClientEnrichment{Device: s.device, OS: "TestOS", Browser: "TestBrowser"}
+}
+
+// captureEnrichSink waits for a beacon event and captures it.
+type captureEnrichSink struct {
+	mu    sync.Mutex
+	event *domain.BeaconEvent
+	ch    chan struct{}
+}
+
+func newCaptureEnrichSink() *captureEnrichSink {
+	return &captureEnrichSink{ch: make(chan struct{}, 1)}
+}
+
+func (s *captureEnrichSink) WriteServerEvent(_ domain.ServerEvent)    {}
+func (s *captureEnrichSink) WriteViewerSession(_ domain.ViewerSession) {}
+func (s *captureEnrichSink) WriteBeaconEvent(e domain.BeaconEvent) {
+	s.mu.Lock()
+	s.event = &e
+	s.mu.Unlock()
+	select {
+	case s.ch <- struct{}{}:
+	default:
+	}
+}
+func (s *captureEnrichSink) WaitEvent(t *testing.T) *domain.BeaconEvent {
+	t.Helper()
+	select {
+	case <-s.ch:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for beacon event")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.event
+}
+
+// TestBeacon_Enrichment_GeoAndUA verifies that the beacon handler populates
+// BeaconEvent.Enrichment with geo and UA data extracted from the HTTP request.
+// VD-08: before this fix, batchToDomain discarded the http.Request and
+// Enrichment was always nil; viewer_sessions had empty geo/device fields.
+func TestBeacon_Enrichment_GeoAndUA(t *testing.T) {
+	validToken := "enrich-test-token"
+	store := beacon.NewMemTokenStore(validToken)
+	sink := newCaptureEnrichSink()
+
+	cfg := beacon.Config{
+		RateLimitPerTokenRPS: 100,
+		RateBurst:            200,
+		GeoResolver:          stubGeoResolver{country: "TR", region: "34"},
+		UAParser:             stubUAParser{device: "mobile"},
+	}
+	h := beacon.New(cfg, store, sink, nil)
+
+	body := validBeaconBody(t)
+	req := httptest.NewRequest(http.MethodPost, "/ingest/beacon", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Pulse-Ingest-Token", validToken)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)")
+	// Simulate a forwarded IP (CDN scenario).
+	req.Header.Set("X-Forwarded-For", "1.2.3.4, 10.0.0.1")
+	req.RemoteAddr = "10.0.0.1:54321"
+
+	rr := httptest.NewRecorder()
+	h.Handle(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Wait for the async goroutine to write the event.
+	ev := sink.WaitEvent(t)
+	if ev == nil {
+		t.Fatal("no beacon event received by sink (VD-08)")
+	}
+
+	if ev.Enrichment == nil {
+		t.Fatalf("BeaconEvent.Enrichment is nil; want geo+UA populated (VD-08)")
+	}
+	if ev.Enrichment.Geo == nil {
+		t.Fatal("Enrichment.Geo is nil (VD-08)")
+	}
+	if ev.Enrichment.Geo.Country != "TR" {
+		t.Errorf("Enrichment.Geo.Country = %q, want %q (VD-08)", ev.Enrichment.Geo.Country, "TR")
+	}
+	if ev.Enrichment.Client == nil {
+		t.Fatal("Enrichment.Client is nil (VD-08)")
+	}
+	if ev.Enrichment.Client.Device != "mobile" {
+		t.Errorf("Enrichment.Client.Device = %q, want %q (VD-08)", ev.Enrichment.Client.Device, "mobile")
+	}
+	t.Logf("PASS VD-08: Enrichment populated: country=%q device=%q",
+		ev.Enrichment.Geo.Country, ev.Enrichment.Client.Device)
+}
+
+// TestBeacon_Enrichment_XForwardedFor verifies extractClientIP prefers
+// X-Forwarded-For over RemoteAddr and uses the leftmost (original) IP (VD-08).
+func TestBeacon_Enrichment_XForwardedFor(t *testing.T) {
+	// Use the collector package's extractor via a round-trip through the handler.
+	// We verify that when XFF is set, the geo resolver gets the XFF IP, not RemoteAddr.
+	var capturedIP string
+	capturingGeo := &captureIPGeoResolver{onResolve: func(ip string) { capturedIP = ip }}
+
+	validToken := "xff-test-token"
+	store := beacon.NewMemTokenStore(validToken)
+	sink := newCaptureEnrichSink()
+
+	cfg := beacon.Config{
+		RateLimitPerTokenRPS: 100,
+		RateBurst:            200,
+		GeoResolver:          capturingGeo,
+		UAParser:             collector.NoopUAParser{},
+	}
+	h := beacon.New(cfg, store, sink, nil)
+
+	body := validBeaconBody(t)
+	req := httptest.NewRequest(http.MethodPost, "/ingest/beacon", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Pulse-Ingest-Token", validToken)
+	req.Header.Set("X-Forwarded-For", "203.0.113.42, 10.0.0.1")
+	req.RemoteAddr = "10.0.0.1:54321"
+
+	rr := httptest.NewRecorder()
+	h.Handle(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", rr.Code)
+	}
+
+	// Wait for event delivery.
+	sink.WaitEvent(t)
+
+	// The geo resolver should have been called with the XFF IP (203.0.113.42),
+	// not the proxy IP (10.0.0.1) from RemoteAddr.
+	if capturedIP != "203.0.113.42" {
+		t.Errorf("extractClientIP: geo resolver got %q, want %q (VD-08)", capturedIP, "203.0.113.42")
+	}
+	t.Logf("PASS VD-08 XFF: geo resolver called with IP=%q", capturedIP)
+}
+
+// captureIPGeoResolver records the IP it was called with.
+type captureIPGeoResolver struct {
+	onResolve func(string)
+}
+
+func (c *captureIPGeoResolver) Resolve(ip string) domain.GeoEnrichment {
+	if c.onResolve != nil {
+		c.onResolve(ip)
+	}
+	return domain.GeoEnrichment{Country: "XX"}
 }

@@ -6,6 +6,13 @@
 //
 // Eviction: streams with no stats update for staleThreshold intervals
 // transition to offline and emit a stream_publish_end event.
+//
+// Edge dedup (VD-03 / F1+F7 AC):
+// In origin+edge cluster deployments, origin nodes report viewer_count that
+// already includes edge-forwarded viewers — summing across all nodes would
+// double-count. The aggregator consults an optional EdgeStreamChecker.
+// When IsEdgeStream(streamID) is true and the reporting node's role is "origin",
+// the viewer_count from that node is skipped for TotalViewers aggregation.
 package aggregator
 
 import (
@@ -13,8 +20,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pulse-analytics/pulse/server/internal/collector/ingest"
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 )
+
+// EdgeStreamChecker is satisfied by *cluster.Discovery (and test doubles).
+// The aggregator uses it to avoid double-counting viewer counts in
+// origin+edge cluster deployments (VD-03, F1+F7 acceptance criterion).
+type EdgeStreamChecker interface {
+	// IsEdgeStream returns true when the stream is served by at least one edge node.
+	IsEdgeStream(streamID string) bool
+	// NodeRole returns the role of a node ("origin" | "edge" | "").
+	NodeRole(nodeID string) string
+}
 
 const (
 	// DefaultStaleThreshold is how long to keep a stream in the live map
@@ -32,6 +50,9 @@ type Aggregator struct {
 
 	staleThreshold time.Duration
 	sink           domain.EventSink // for eviction events (may be nil)
+	// edgeChecker enables origin/edge viewer-count dedup (VD-03).
+	// May be nil (standalone deployments); in that case no dedup occurs.
+	edgeChecker    EdgeStreamChecker
 	subs           map[chan *domain.LiveSnapshot]struct{}
 	logger         *slog.Logger
 }
@@ -55,6 +76,14 @@ func New(staleThreshold time.Duration, sink domain.EventSink, logger *slog.Logge
 	}
 	a.rebuildSnapshot()
 	return a
+}
+
+// SetEdgeChecker wires the cluster discovery service for origin/edge viewer dedup.
+// Call from serve.go after cluster.Discovery is created (VD-03).
+func (a *Aggregator) SetEdgeChecker(c EdgeStreamChecker) {
+	a.mu.Lock()
+	a.edgeChecker = c
+	a.mu.Unlock()
 }
 
 // ─── domain.Consumer implementation ──────────────────────────────────────────
@@ -202,23 +231,37 @@ func (a *Aggregator) onStreamStats(ev domain.ServerEvent) {
 	}
 	s.LastSeenAt = time.Now()
 
-	if vc, ok := ev.Data["viewer_count"].(int); ok {
-		s.ViewerCount = vc
-	} else if vcf, ok := ev.Data["viewer_count"].(float64); ok {
-		s.ViewerCount = int(vcf)
+	// VD-03: edge/origin viewer dedup.
+	// When an edge node serves the stream, the origin already includes edge
+	// viewers in its viewer_count. Skip origin viewer_count to prevent doubling.
+	skipViewerCount := false
+	if a.edgeChecker != nil {
+		if a.edgeChecker.IsEdgeStream(ev.StreamID) && a.edgeChecker.NodeRole(ev.NodeID) == "origin" {
+			skipViewerCount = true
+		}
+	}
+
+	if !skipViewerCount {
+		if vc, ok := ev.Data["viewer_count"].(int); ok {
+			s.ViewerCount = vc
+		} else if vcf, ok := ev.Data["viewer_count"].(float64); ok {
+			s.ViewerCount = int(vcf)
+		}
 	}
 	if bps, ok := ev.Data["bitrate_kbps"].(float64); ok {
 		s.IngestBitrate = bps
 	}
 
-	// Per-protocol viewer counts.
-	if pcMap, ok := ev.Data["viewer_count_by_protocol"].(map[string]any); ok {
-		s.ViewersByProto = domain.ProtocolViewerCounts{
-			WebRTC: intFromAny(pcMap["webrtc"]),
-			HLS:    intFromAny(pcMap["hls"]),
-			RTMP:   intFromAny(pcMap["rtmp"]),
-			DASH:   intFromAny(pcMap["dash"]),
-			Other:  intFromAny(pcMap["other"]),
+	// Per-protocol viewer counts (only from non-origin when edge is active).
+	if !skipViewerCount {
+		if pcMap, ok := ev.Data["viewer_count_by_protocol"].(map[string]any); ok {
+			s.ViewersByProto = domain.ProtocolViewerCounts{
+				WebRTC: intFromAny(pcMap["webrtc"]),
+				HLS:    intFromAny(pcMap["hls"]),
+				RTMP:   intFromAny(pcMap["rtmp"]),
+				DASH:   intFromAny(pcMap["dash"]),
+				Other:  intFromAny(pcMap["other"]),
+			}
 		}
 	}
 }
@@ -242,6 +285,10 @@ func (a *Aggregator) onNodeStats(ev domain.ServerEvent) {
 	}
 	if v, ok := ev.Data["net_out_mbps"].(float64); ok {
 		ns.NetOut = v
+	}
+	// VD-40: propagate version string through to the live snapshot.
+	if v, ok := ev.Data["version"].(string); ok && v != "" {
+		ns.Version = v
 	}
 	a.nodes[ev.NodeID] = ns
 }
@@ -267,6 +314,16 @@ func (a *Aggregator) onIngestStats(ev domain.ServerEvent) {
 	if kf, ok := ev.Data["keyframe_interval_s"].(float64); ok {
 		s.KeyframeIntervalS = kf
 	}
+
+	// VD-20a: bridge HealthTracker → aggregator.
+	// Compute health score inline so LiveStream.HealthScore is non-zero
+	// whenever ingest_stats are received (F4 PRD acceptance criterion).
+	score := ingest.ComputeHealthScore(
+		ingest.DefaultTargetBitrateKbps, ingest.DefaultTargetFPS,
+		s.IngestBitrate, s.FPS, s.KeyframeIntervalS, s.PacketLossPct, s.JitterMS,
+	)
+	s.HealthScore = score
+	s.Health = ingest.ScoreToHealth(score)
 }
 
 // UpdateIngestHealth sets the health score for a stream from the ingest health tracker.

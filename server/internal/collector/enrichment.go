@@ -311,298 +311,240 @@ func containsAny(s string, subs ...string) bool {
 //
 // testEntries: map of IPv4 dotted-quad strings to GeoEnrichment values.
 // Only IPv4 /32 records are supported by this minimal builder.
+//
+// Binary layout (24-bit record size):
+//
+//	[tree: nodeCount*6 bytes]
+//	[16-byte zero separator]
+//	[data section]
+//	[metadata map]
+//	["\xAB\xCD\xEFMaxMind.com"]
+//
+// The tree is a compact binary radix trie over 32 IPv4 bits.
+// Node n is at byte offset n*6; left child is bytes [0:3], right is bytes [3:6].
+// A record value >= nodeCount is a data pointer: data_offset = value - nodeCount.
+// A record value == nodeCount means "no data for this IP" (empty record).
 func BuildTestMMDB(testEntries map[string]domain.GeoEnrichment) []byte {
-	// Build a minimal MaxMind DB v2.0 with 4-bit record size (24-bit nodes),
-	// IPv4-only, containing the given test entries.
-	//
-	// Structure:
-	//   [binary search tree nodes]
-	//   [16-byte data section separator: 0x00 x16]
-	//   [data section: serialized record values]
-	//   [metadata: MaxMind DB metadata]
-	//   [metadata marker: "\xAB\xCD\xEFMaxMind.com"]
-	//
-	// For simplicity we use a 24-bit record size (3 bytes per record, 6 bytes per node).
-	// Each node has two 24-bit child pointers (left=0-bit, right=1-bit).
+	const recordSize = 24
+	const nodeSize = 6 // 2 × 24-bit records
 
-	const recordSize uint = 24
-	const nodeSize = 6 // bytes per node (2 records × 24 bits)
+	// sentinel value used during trie construction (fits in 24 bits).
+	const noData = uint32(0xFFFFFF)
 
-	// Build data section first, collecting offsets for each record.
-	dataSec := make([]byte, 0, 1024)
-	type recordOffset struct {
-		off  int
-		size int
+	// ── 1. Build data section ──────────────────────────────────────────────
+
+	// We need a stable traversal order so offsets are deterministic.
+	type ipEntry struct {
+		ip4    uint32
+		offset int
 	}
-	entryOffsets := make(map[string]int, len(testEntries))
+	var entries []ipEntry
 
-	for _, geo := range testEntries {
-		// Encode as MaxMind map: {country: {iso_code: "XX"}, subdivisions: [{iso_code: "YY"}]}
-		encoded := encodeMMDBRecord(geo)
-		entryOffsets[geo.Country+"/"+geo.Region] = len(dataSec)
-		dataSec = append(dataSec, encoded...)
-	}
-
-	// Map from IP → data offset.
-	ipToOffset := make(map[uint32]int)
+	dataSec := make([]byte, 0, 256)
 	for ipStr, geo := range testEntries {
-		ip := net.ParseIP(ipStr).To4()
-		if ip == nil {
+		parsed := net.ParseIP(ipStr).To4()
+		if parsed == nil {
 			continue
 		}
-		key := binary.BigEndian.Uint32(ip)
-		off, ok := entryOffsets[geo.Country+"/"+geo.Region]
-		if ok {
-			ipToOffset[key] = off
-		}
+		ipU32 := binary.BigEndian.Uint32(parsed)
+		off := len(dataSec)
+		dataSec = append(dataSec, mmdbEncodeGeo(geo)...)
+		entries = append(entries, ipEntry{ipU32, off})
 	}
 
-	// Build the binary search tree.
-	// We use a simple approach: allocate enough nodes for a 32-bit IPv4 tree
-	// (32 levels, 2 subtrees: IPv6-compat + IPv4).
-	// For a minimal implementation with few entries, we can fit in ~100 nodes.
-	//
-	// The MaxMind DB format requires:
-	//   - Node 0 is the root.
-	//   - Left child = bit 0, right child = bit 1.
-	//   - Leaf record value: if >= nodeCount → data section offset + 16 (separator)
-	//     (specifically: value - nodeCount = data offset)
-	//   - Reserved node: nodeCount itself means "no data for this IP".
-
-	// Collect all unique IPv4 addresses.
-	type entry struct {
-		ip  uint32
-		off int
+	// ── 2. Build trie ──────────────────────────────────────────────────────
+	// Pre-allocate generously (32 bits × len(entries) nodes max).
+	maxNodes := 32*len(entries) + 4
+	if maxNodes < 4 {
+		maxNodes = 4
 	}
-	var entries []entry
-	for ip, off := range ipToOffset {
-		entries = append(entries, entry{ip, off})
+	// left/right children; noData = "not yet allocated" during construction.
+	left := make([]uint32, maxNodes)
+	right := make([]uint32, maxNodes)
+	for i := range left {
+		left[i] = noData
+		right[i] = noData
 	}
-
-	// Build a minimal trie. We'll preallocate 200 nodes to be safe.
-	maxNodes := 200
-	// nodes[i][0] = left child, nodes[i][1] = right child
-	nodes := make([][2]uint32, maxNodes)
 	nodeCount := 1 // node 0 is root
-	// Initialize all nodes to point to "no data" (will be set to nodeCount at finalize)
-	for i := range nodes {
-		nodes[i][0] = 0xFFFFFF // placeholder for "no data"
-		nodes[i][1] = 0xFFFFFF
-	}
 
-	// Insert each entry into the trie.
 	for _, e := range entries {
 		node := 0
 		for bit := 31; bit >= 0; bit-- {
-			b := (e.ip >> uint(bit)) & 1
-			child := nodes[node][b]
+			b := (e.ip4 >> uint(bit)) & 1
+			var child uint32
+			if b == 0 {
+				child = left[node]
+			} else {
+				child = right[node]
+			}
 			if bit == 0 {
-				// Leaf: set to nodeCount + data_offset (record value encoding).
-				nodes[node][b] = uint32(nodeCount) + uint32(e.off)
-			} else if child == 0xFFFFFF {
-				// Need a new interior node.
-				newNode := nodeCount
+				// Final bit: store leaf pointer.
+				// Leaf value = nodeCount + data_offset (resolved after tree is built).
+				// We store data_offset + 1 temporarily (offset 0 is valid, so +1 avoids
+				// confusion with the noData sentinel). We fix up below.
+				leafVal := uint32(0x80000000) | uint32(e.offset)
+				if b == 0 {
+					left[node] = leafVal
+				} else {
+					right[node] = leafVal
+				}
+			} else if child == noData {
+				// Allocate a new interior node.
+				if nodeCount >= maxNodes {
+					// Shouldn't happen given maxNodes sizing, but be safe.
+					break
+				}
+				newNode := uint32(nodeCount)
 				nodeCount++
-				nodes[node][b] = uint32(newNode)
-				node = newNode
+				if b == 0 {
+					left[node] = newNode
+				} else {
+					right[node] = newNode
+				}
+				node = int(newNode)
+			} else if child&0x80000000 != 0 {
+				// Already a leaf from a previous insert at the same /32.
+				// Two entries at the same IP: last write wins.
+				leafVal := uint32(0x80000000) | uint32(e.offset)
+				if b == 0 {
+					left[node] = leafVal
+				} else {
+					right[node] = leafVal
+				}
+				break
 			} else {
 				node = int(child)
 			}
 		}
 	}
 
-	// Finalize: replace 0xFFFFFF placeholders with nodeCount (no-data sentinel).
+	// ── 3. Fix up leaf pointers and no-data sentinels ──────────────────────
+	// Now nodeCount is final. Replace:
+	//   0x80000000|offset  →  nodeCount + 16 + offset  (data pointer)
+	//   noData             →  nodeCount                 (empty record)
+	//
+	// Per reader.go: resolveDataPointer computes offset as
+	//   pointer - nodeCount - dataSectionSeparatorSize (16)
+	// So data at offset 0 in dataSec requires pointer = nodeCount + 16 + 0.
+	// nodeCount alone means "no data" (empty record sentinel).
+	const dataSepSize = 16
 	for i := 0; i < nodeCount; i++ {
-		for b := 0; b < 2; b++ {
-			if nodes[i][b] == 0xFFFFFF {
-				nodes[i][b] = uint32(nodeCount)
+		for _, ptr := range []*uint32{&left[i], &right[i]} {
+			v := *ptr
+			if v == noData {
+				*ptr = uint32(nodeCount) // empty / no data
+			} else if v&0x80000000 != 0 {
+				*ptr = uint32(nodeCount) + dataSepSize + (v &^ 0x80000000)
 			}
 		}
 	}
 
-	// Serialize the node tree.
+	// ── 4. Serialize tree ──────────────────────────────────────────────────
 	treeBuf := make([]byte, nodeCount*nodeSize)
 	for i := 0; i < nodeCount; i++ {
-		// 24-bit big-endian for each record.
-		left := nodes[i][0]
-		right := nodes[i][1]
-		treeBuf[i*nodeSize+0] = byte(left >> 16)
-		treeBuf[i*nodeSize+1] = byte(left >> 8)
-		treeBuf[i*nodeSize+2] = byte(left)
-		treeBuf[i*nodeSize+3] = byte(right >> 16)
-		treeBuf[i*nodeSize+4] = byte(right >> 8)
-		treeBuf[i*nodeSize+5] = byte(right)
+		l, r := left[i], right[i]
+		base := i * nodeSize
+		treeBuf[base+0] = byte(l >> 16)
+		treeBuf[base+1] = byte(l >> 8)
+		treeBuf[base+2] = byte(l)
+		treeBuf[base+3] = byte(r >> 16)
+		treeBuf[base+4] = byte(r >> 8)
+		treeBuf[base+5] = byte(r)
 	}
 
-	// Assemble: tree + 16-byte separator + data + metadata + marker.
+	// ── 5. Assemble ────────────────────────────────────────────────────────
+	// MaxMind DB layout (per spec and reader.go):
+	//   [tree: nodeCount * recordSize/4 bytes]
+	//   [16-byte zero separator]
+	//   [data section]
+	//   [metadata marker: "\xAB\xCD\xEFMaxMind.com"]
+	//   [metadata map]
+	// The reader finds the marker via bytes.LastIndex and reads metadata
+	// from the bytes AFTER the marker. Data section ends at marker start.
 	separator := make([]byte, 16)
-
-	// Metadata is encoded as a MaxMind map.
-	meta := encodeMMDBMetadata(uint(nodeCount), recordSize)
-	metaMarker := []byte("\xAB\xCD\xEFMaxMind.com")
+	meta := mmdbEncodeMeta(uint(nodeCount), recordSize)
+	marker := []byte("\xAB\xCD\xEFMaxMind.com")
 
 	var out []byte
 	out = append(out, treeBuf...)
 	out = append(out, separator...)
 	out = append(out, dataSec...)
-	out = append(out, meta...)
-	out = append(out, metaMarker...)
-
+	out = append(out, marker...) // marker BEFORE metadata
+	out = append(out, meta...)   // metadata AFTER marker
 	return out
 }
 
-// encodeMMDBRecord encodes a GeoEnrichment as a MaxMind DB data record (map type).
-// Uses the MaxMind binary format encoding:
-//   - Map type = 7 (0b111 in high 3 bits of control byte)
-//   - String type = 2
-//
-// Format: control_byte [extended_type] size payload
-func encodeMMDBRecord(geo domain.GeoEnrichment) []byte {
-	// Build the subdivisions list (array with one element).
-	var subdivBytes []byte
-	if geo.Region != "" {
-		// Inner map: {iso_code: "YY"}
-		subdivMap := encodeMMDBMap(map[string]string{"iso_code": geo.Region})
-		// Array of 1 element.
-		subdivBytes = append([]byte{byte(0b00000100<<1 | 0b001)}, subdivMap...) // array, size=1? Use explicit.
-		subdivBytes = encodeMMDBArray([][]byte{subdivMap})
-	}
-
+// mmdbEncodeGeo encodes a GeoEnrichment as a MaxMind DB record map.
+// Produces: {country: {iso_code: "XX"}, subdivisions: [{iso_code: "YY"}]}
+func mmdbEncodeGeo(geo domain.GeoEnrichment) []byte {
 	fields := map[string][]byte{}
-
-	// country map: {iso_code: "XX"}
 	if geo.Country != "" {
-		countryMap := encodeMMDBMap(map[string]string{"iso_code": geo.Country})
+		countryMap := mmdbEncodeMap([][2]string{{"iso_code", geo.Country}})
 		fields["country"] = countryMap
 	}
-	if len(subdivBytes) > 0 {
-		fields["subdivisions"] = subdivBytes
+	if geo.Region != "" {
+		subdivMap := mmdbEncodeMap([][2]string{{"iso_code", geo.Region}})
+		subdiv := mmdbEncodeArray([][]byte{subdivMap})
+		fields["subdivisions"] = subdiv
 	}
-
-	return encodeMMDBMapBytes(fields)
+	return mmdbEncodeMapFields(fields)
 }
 
-// encodeMMDBMap encodes a map[string]string as MaxMind binary map.
-func encodeMMDBMap(m map[string]string) []byte {
-	fields := map[string][]byte{}
-	for k, v := range m {
-		fields[k] = encodeMMDBString(v)
+// mmdbEncodeMap encodes ordered key-value string pairs as a MaxMind map.
+func mmdbEncodeMap(pairs [][2]string) []byte {
+	fields := make(map[string][]byte, len(pairs))
+	for _, p := range pairs {
+		fields[p[0]] = mmdbEncodeStr(p[1])
 	}
-	return encodeMMDBMapBytes(fields)
+	return mmdbEncodeMapFields(fields)
 }
 
-// encodeMMDBMapBytes encodes a map of pre-encoded values as a MaxMind DB map.
-func encodeMMDBMapBytes(fields map[string][]byte) []byte {
+// mmdbEncodeMapFields encodes a pre-built map of MaxMind values.
+func mmdbEncodeMapFields(fields map[string][]byte) []byte {
+	// Type 7 = map; control byte high 3 bits = 111 = 7.
 	var out []byte
-	size := len(fields)
-	// Map type = 7 (control byte high 3 bits = 0b111 = 7).
-	out = append(out, encodeMMDBCtrl(7, size)...)
+	out = append(out, mmdbCtrl(7, len(fields))...)
 	for k, v := range fields {
-		out = append(out, encodeMMDBString(k)...)
+		out = append(out, mmdbEncodeStr(k)...)
 		out = append(out, v...)
 	}
 	return out
 }
 
-// encodeMMDBArray encodes a [][]byte as a MaxMind DB array.
-func encodeMMDBArray(items [][]byte) []byte {
+// mmdbEncodeArray encodes a slice of pre-encoded values as a MaxMind array.
+// MaxMind extended type 11 (array) = extended type offset 4 (11 - 7 = 4).
+func mmdbEncodeArray(items [][]byte) []byte {
+	// Extended type: ctrl byte high3=000 → extended marker; low5=size.
+	// Next byte = extended type offset (4 for array).
 	var out []byte
-	// Array type = 11 (extended type 4, in extended space).
-	// Extended: type = 0, extended byte = 4 (array).
 	size := len(items)
-	// Control byte for extended type: high 3 bits = 0, low 5 bits = size if <= 28.
-	// Extended type byte follows: 4 = array.
 	if size <= 28 {
 		out = append(out, byte(size)) // high3=0 (extended), low5=size
-	} else {
-		out = append(out, 29, byte(size-29))
+	} else if size <= 284 {
+		out = append(out, byte(0x1D), byte(size-29)) // 29 + extra byte
 	}
-	out = append(out, 4) // extended type: array
+	out = append(out, 4) // extended type = array (11 - 7 = 4)
 	for _, item := range items {
 		out = append(out, item...)
 	}
 	return out
 }
 
-// encodeMMDBString encodes a string as MaxMind DB UTF-8 string.
-func encodeMMDBString(s string) []byte {
-	return encodeMMDBBytes(2, []byte(s)) // type 2 = UTF-8 string
+// mmdbEncodeStr encodes a string as MaxMind DB UTF-8 string (type 2).
+func mmdbEncodeStr(s string) []byte {
+	b := []byte(s)
+	return append(mmdbCtrl(2, len(b)), b...)
 }
 
-// encodeMMDBBytes encodes a value with the given type id and raw bytes.
-func encodeMMDBBytes(typeID int, data []byte) []byte {
-	return append(encodeMMDBCtrl(typeID, len(data)), data...)
-}
-
-// encodeMMDBCtrl encodes a MaxMind DB control byte (and possible extended size bytes).
-// typeID: 0=extended, 1=pointer, 2=string, 3=double, 4=bytes, 5=uint16, 6=uint32, 7=map
-func encodeMMDBCtrl(typeID, size int) []byte {
-	var out []byte
-	var ctrl byte
-
-	if typeID <= 7 {
-		ctrl = byte(typeID<<5)
-	} else {
-		// Extended type.
-		ctrl = 0 // high 3 bits = 0 for extended
-	}
-
-	switch {
-	case size <= 28:
-		ctrl |= byte(size)
-		out = append(out, ctrl)
-	case size <= 284:
-		ctrl |= 29
-		out = append(out, ctrl, byte(size-29))
-	case size <= 65820:
-		ctrl |= 30
-		s := size - 285
-		out = append(out, ctrl, byte(s>>8), byte(s))
-	default:
-		ctrl |= 31
-		s := size - 65821
-		out = append(out, ctrl, byte(s>>16), byte(s>>8), byte(s))
-	}
-	return out
-}
-
-// encodeMMDBMetadata encodes the MaxMind DB metadata section as a map.
-func encodeMMDBMetadata(nodeCount, recordSize uint) []byte {
-	// Required fields: binary_format_major_version, binary_format_minor_version,
-	// build_epoch, database_type, description, ip_version, node_count, record_size.
-	type uintField struct {
-		name string
-		val  uint64
-	}
-	uintFields := []uintField{
-		{"binary_format_major_version", 2},
-		{"binary_format_minor_version", 0},
-		{"build_epoch", 1700000000},
-		{"ip_version", 4},
-		{"node_count", uint64(nodeCount)},
-		{"record_size", uint64(recordSize)},
-	}
-
-	fields := map[string][]byte{}
-
-	for _, f := range uintFields {
-		fields[f.name] = encodeMMDBUint32(f.val)
-	}
-	fields["database_type"] = encodeMMDBString("GeoLite2-City-Test")
-	// description: map {en: "Test DB"}
-	fields["description"] = encodeMMDBMap(map[string]string{"en": "Test DB"})
-	// languages: array of strings ["en"]
-	fields["languages"] = encodeMMDBArray([][]byte{encodeMMDBString("en")})
-
-	return encodeMMDBMapBytes(fields)
-}
-
-// encodeMMDBUint32 encodes a uint64 as MaxMind DB uint32 (type 6).
-func encodeMMDBUint32(v uint64) []byte {
+// mmdbEncodeUint encodes a non-negative integer using the smallest MaxMind DB
+// unsigned integer type that fits:
+//   - 0: uint16 (type 5) with size 0
+//   - 1..65535: uint16 (type 5)
+//   - 65536+: uint32 (type 6)
+func mmdbEncodeUint(v uint64) []byte {
 	if v == 0 {
-		return encodeMMDBCtrl(6, 0) // zero-size uint = 0
+		return mmdbCtrl(5, 0) // zero-size payload = 0
 	}
-	// Encode as big-endian, minimal bytes.
 	var buf [8]byte
 	binary.BigEndian.PutUint64(buf[:], v)
 	// Find first non-zero byte.
@@ -611,5 +553,57 @@ func encodeMMDBUint32(v uint64) []byte {
 		start++
 	}
 	data := buf[start:]
-	return encodeMMDBBytes(6, data)
+	// Use uint16 (type 5) only if it fits in 2 bytes; otherwise uint32 (type 6).
+	typeID := 5
+	if len(data) > 2 {
+		typeID = 6
+	}
+	return append(mmdbCtrl(typeID, len(data)), data...)
+}
+
+// mmdbCtrl encodes a MaxMind DB control byte sequence for a given type and size.
+// typeID: 1=pointer, 2=string, 3=double, 4=bytes, 5=uint16, 6=uint32, 7=map
+// Extended types (>= 8) are encoded by the caller.
+func mmdbCtrl(typeID, size int) []byte {
+	ctrl := byte(typeID << 5)
+	switch {
+	case size <= 28:
+		return []byte{ctrl | byte(size)}
+	case size <= 284:
+		return []byte{ctrl | 29, byte(size - 29)}
+	case size <= 65820:
+		s := size - 285
+		return []byte{ctrl | 30, byte(s >> 8), byte(s)}
+	default:
+		s := size - 65821
+		return []byte{ctrl | 31, byte(s >> 16), byte(s >> 8), byte(s)}
+	}
+}
+
+// mmdbEncodeMeta encodes the MaxMind DB metadata section as a map.
+// All required fields are included per the MaxMind DB spec.
+func mmdbEncodeMeta(nodeCount uint, recordSize int) []byte {
+	// Build field list with stable iteration order.
+	type kv struct{ k string; v []byte }
+	fields := []kv{
+		{"binary_format_major_version", mmdbEncodeUint(2)},
+		{"binary_format_minor_version", mmdbEncodeUint(0)},
+		{"build_epoch", mmdbEncodeUint(1700000000)},
+		{"database_type", mmdbEncodeStr("GeoLite2-City-Test")},
+		{"description", mmdbEncodeMapFields(map[string][]byte{"en": mmdbEncodeStr("Test DB")})},
+		{"ip_version", mmdbEncodeUint(4)},
+		{"languages", mmdbEncodeArray([][]byte{mmdbEncodeStr("en")})},
+		{"node_count", mmdbEncodeUint(uint64(nodeCount))},
+		{"record_size", mmdbEncodeUint(uint64(recordSize))},
+	}
+
+	// Encode as a MaxMind map.
+	ctrl := mmdbCtrl(7, len(fields))
+	var out []byte
+	out = append(out, ctrl...)
+	for _, f := range fields {
+		out = append(out, mmdbEncodeStr(f.k)...)
+		out = append(out, f.v...)
+	}
+	return out
 }

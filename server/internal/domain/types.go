@@ -301,6 +301,9 @@ type LiveStream struct {
 // LiveNodeStats holds real-time state for one cluster node.
 type LiveNodeStats struct {
 	NodeID    string  `json:"node_id"`
+	// Version is the AMS server version string (e.g. "2.8.3").
+	// Populated from ClusterNodeDTO.Version via discovery (VD-40).
+	Version   string  `json:"version,omitempty"`
 	CPUPCT    float64 `json:"cpu_pct"`
 	MemPCT    float64 `json:"mem_pct"`
 	DiskPCT   float64 `json:"disk_pct"`

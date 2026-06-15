@@ -304,6 +304,7 @@ func (s *Service) FleetNodes(ctx context.Context, limit int, cursor string) (*Fl
 			Role:     "standalone",
 			Status:   "up",
 			LastSeen: n.UpdatedAt.UnixMilli(),
+			Version:  n.Version, // VD-40: propagate from LiveNodeStats
 			CPUPCT:   n.CPUPCT,
 			MemPCT:   n.MemPCT,
 		}
