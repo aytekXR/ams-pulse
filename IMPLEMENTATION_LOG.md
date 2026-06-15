@@ -19,9 +19,16 @@ from empirical verification on the current `main`, not from agent self-reports.
 | `server` — `CGO_ENABLED=0 go build/vet ./...` | clean |
 | `server` — `go test ./...` (22 packages) | **0 failures** |
 | `server` — `go test -tags integration` (reports, query, CH-backed) | pass |
-| `web` — `npm run build && lint && test` | **150/150** tests, tsc strict clean |
+| `web` — `npm run build && lint && test` | **157/157** tests, tsc strict clean |
 | `sdk/beacon-js` — `build && test && size` | **65/65** tests, **3.52 KB** gzip (budget 15 KB) |
-| Wave-1 / Wave-2 / Wave-3 gate scripts | pass (PASS_WITH_LIMITATIONS: D-002, D-007.5) |
+| Wave-1 / Wave-2 / Wave-3 / Wave-3-Plus gate scripts | pass (PASS_WITH_LIMITATIONS: D-002, D-007.5) |
+
+> **Wave 3-Plus (post-MVP, D-018/D-019, 2026-06-15).** Tech-debt & accuracy closeout:
+> probe segment-TTFB + master-playlist variant bitrate (GAP-3-001/003), anomaly
+> epsilon floor (GAP-3-004), Kafka lag/parse-errors in `/healthz` (VD-27), **true
+> windowed `peak_concurrency`** via new `rollup_concurrency_1d` (VD-38), and test
+> coverage (VD-18/19/24/26/31/41). Migrations `0002_concurrency_rollup.sql` +
+> `0003_probe_segment_ttfb.sql`. Independently re-verified on HEAD by ORCH-00.
 
 **Single unified project** (one repo, one `pulse` binary `serve|migrate|diag` +
 one web app + one SDK). No separate codebases to merge.
@@ -32,10 +39,10 @@ one web app + one SDK). No separate codebases to merge.
 |---|---|---|---|
 | Stream visible on dashboard | ≤ 10 s | ~1.05 s | wave-1 gate |
 | Viewer count accuracy (standalone) | ±2 % | 0 % | wave-1 gate |
-| Alert detect → notify | < 30 s | ≤ 15 s (fake-clock bound) | F5 |
+| Alert detect → notify | < 30 s | ≤ 15 s fake-clock + ~0.2 s wall-clock (VD-31) | F5 |
 | Ingest degradation visible | ≤ 15 s | ~250 µs in-proc | F4 |
 | New node discovered | ≤ 2 min | ~24 ms (≤30 s prod) | F7 |
-| 13-month rollup query | < 3 s | ~126 ms | F2 |
+| 13-month rollup query | < 3 s | ~126 ms simple / ~145 ms dimensional (VD-18) | F2 |
 | Billing reconciliation | ±1 % | 0.0000 % | F6 (live CH) |
 | Statement generation | < 60 s | ~5 ms (seeded month) | F6 |
 | SDK bundle | < 15 KB gzip | 3.52 KB | F3 |
@@ -115,8 +122,11 @@ documented health-score formula, drop detection, `/qoe/ingest` API + UI.
   REST-only deployments) → V3a: `NormalizeBroadcast` emits them.
 - *VD-23* the `IngestTracker` interface had a mismatched `Snapshot()` type and was
   never wired → V3a: type fixed; `SetIngestTracker` wired in `serve.go`.
-**Known limitations:** Kafka `Lag()`/`ParseErrors()` not yet in `/healthz` (VD-27,
-Phase-3); some endpoint test-coverage gaps (VD-24/26, Phase-3).
+**Known limitations:** none outstanding. *Closed in Wave 3-Plus:* Kafka
+`Lag()`/`ParseErrors()` now surfaced as a `/healthz` `kafka` component (VD-27 —
+`Lag()` was also a dead counter, now reads `r.Stats().Lag` atomically); the ingest
+endpoint test-coverage gaps are filled (VD-24 seeded-CH timeseries test; VD-26
+IngestPage UI test).
 
 ### F5 — Alerting (rules, channels, scheduling) — **Functional**
 **Built:** threshold + QoE/ingest/cert/node rule types; channels email, Slack,
@@ -134,8 +144,10 @@ Telegram, PagerDuty, generic webhook (HMAC-SHA256); cron maintenance windows;
   `rollup_qoe_1h` queries.
 - *VD-33* cron ranges (`1-5`) silently truncated to the first value → V3b: range sets.
 - *Tier (D-014)*: PagerDuty/webhook channels corrected to **Business** tier.
-**Known limitations:** the `<30 s` detect→notify budget is proven by a fake-clock
-bound (tick ≤5 s + poll ≤5 s + send <5 s), not a wall-clock run (VD-31).
+**Known limitations:** none outstanding. *Closed in Wave 3-Plus:* the `<30 s`
+detect→notify budget is now also proven by a **real wall-clock test** (VD-31 —
+`TestEvaluator_DetectAndNotify_WallClockBudget` drives the real `Start()` goroutine
++ ticker → notify path end-to-end, measured ~0.2 s), not only the fake-clock construction bound.
 
 ### F6 — Usage / billing reports — **Functional**
 **Built:** viewer-minutes / egress / recording per app/stream/tenant (egress method
@@ -155,9 +167,13 @@ generation, S3 (SigV4) export, `pulse diag --reconcile`.
   gate on all report handlers; Free/Pro → 403.
 - *VD-36* the UI's 5-field cron presets fell back to monthly (server parser accepted
   only 2–3 fields) → V3b: server parser extended to 5-field cron.
-**Known limitations:** `peak_concurrency` in `rollup_usage_1d` is a session-count
-proxy, not a true windowed max (VD-38, Phase-3 schema change); egress uses the
-bitrate×watch-time model until AMS delivered-byte counters are wired.
+**Known limitations:** egress uses the bitrate×watch-time model until AMS
+delivered-byte counters are wired. *Closed in Wave 3-Plus:* `peak_concurrency` is now
+a **true windowed maximum** — new `rollup_concurrency_1d` (AggregatingMergeTree) takes
+`maxState(viewer_count)` from `server_events` (AMS's authoritative instantaneous
+concurrent count) per day, and billing reads `maxMerge` over the range; verified
+`TestAccountant_CHIntegration` peak alpha=25/beta=5 from overlapping snapshots, not the
+old session-count proxy (VD-38).
 
 ### F7 — Multi-node fleet — **Functional**
 **Built:** periodic cluster-node discovery, origin/edge roles, per-node load,
@@ -187,18 +203,23 @@ never stream/session); optional metrics token; Grafana starter panels.
 min-sample gate + hysteresis; `GET /anomalies`. Default sensitivity (σ=4,
 min-samples=30, hysteresis=10) yields **0.2594 false alarms/node-week** vs the PRD
 `<1` target. Enterprise tier.
-**Known limitations:** a perfectly-constant metric (σ=0) won't flag any deviation
-(GAP-3-004, Phase-3 epsilon floor); the false-alarm rate is a modeled bound, not a
-long-run simulation.
+**Known limitations:** the false-alarm rate is a modeled bound, not a long-run
+simulation. *Closed in Wave 3-Plus:* a perfectly-constant metric (σ=0) now CAN flag —
+`ComputeFlags` applies an on-read epsilon floor `effStddev = max(stddev, 0.05·|mean|,
+1e-9)` (a coefficient-of-variation floor, metric-agnostic), so a real jump from a
+constant baseline flags while the stored Welford state and the 0.2594/node-week
+false-alarm bound are unchanged (GAP-3-004).
 
 ### F10 — Synthetic viewer probes — **Functional (MVP, D-001)**
 **Built:** single in-process probe runner — HLS probes (manifest + first-segment
 fetch; real TTFB/bitrate/success), honest minimal handling for webrtc/rtmp/dash;
 `probe_results` in ClickHouse; `/probes` CRUD + `/probes/{id}/results`; UI with
 **clear synthetic-vs-organic labeling** (4 levels). Pro+ tier.
-**Known limitations:** HLS TTFB measures the manifest only (GAP-3-001); master-
-playlist probes report bitrate 0 without following a variant (GAP-3-003); single
-runner, not a distributed probe network (Phase-3).
+**Known limitations:** single runner, not a distributed probe network (Phase-3).
+*Closed in Wave 3-Plus:* a real **first-segment TTFB** is now measured and surfaced as
+`segment_ttfb_ms` end-to-end (domain→CH col→API→UI; GAP-3-001), and a probe pointed at
+a **master playlist now follows the first variant** to a media segment and reports real
+bitrate (one level of indirection; master→master = parse error; GAP-3-003).
 
 ---
 
@@ -253,14 +274,18 @@ empirically disproven by re-running each guard test on HEAD. The feature status 
 - **D-007.5 — no Kafka broker.** The Kafka collector is unit/fake-tested; real AMS
   Kafka E2E is deferred to the version-matrix CI.
 
-**Deferred to Phase 3 (not MVP-blocking):** real multi-node cluster verification +
-edge-dedup E2E; dimensional 13-month query measurement (VD-18); headless render-time
-budget (VD-04); player-CPU benchmark (VD-14); Kafka lag in `/healthz` (VD-27);
-wall-clock alert-latency test (VD-31); true windowed `peak_concurrency` (VD-38);
-anomaly epsilon-floor (GAP-3-004) + long-run false-alarm simulation; probe segment-
-TTFB / variant-bitrate (GAP-3-001/003) + distributed probe network; added test
-coverage (VD-19/24/26/34/41); and the PRD's own Phase-3 scope (mobile beacons, SSO,
-white-label PDF, air-gapped licensing, hosted option).
+**Closed in Wave 3-Plus (D-018/D-019, 2026-06-15):** dimensional 13-month query
+measurement (VD-18); Kafka lag in `/healthz` (VD-27); wall-clock alert-latency test
+(VD-31); true windowed `peak_concurrency` (VD-38); anomaly epsilon-floor (GAP-3-004);
+probe segment-TTFB + master-playlist variant-bitrate (GAP-3-001/003); added test
+coverage (VD-19/24/26/41; VD-34 was closed in V3b).
+
+**Still deferred to Phase 3 (not MVP-blocking):** headless render-time budget (VD-04)
+and player-CPU benchmark (VD-14) — both need a real browser profiler (Playwright/CDP),
+not measurable in jsdom/vitest; long-run false-alarm simulation; real multi-node cluster
+verification + edge-dedup E2E and a distributed probe network (both need multiple AMS
+nodes, D-002); and the PRD's own Phase-3 platform scope (mobile beacons, SSO, white-label
+PDF, air-gapped licensing, hosted option).
 
 ---
 

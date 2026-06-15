@@ -437,3 +437,94 @@ each prior-fixed defect's guard test before listing it as open.
 security/contract) are fixed and verified; only genuine P3 (test-coverage, cosmetic,
 Phase-3) + D-002/D-007.5 waivers remain. Next: consolidation + `IMPLEMENTATION_LOG.md`
 → notify user, STOP for review.
+
+## D-018 · 2026-06-15 · Wave 3-Plus: Phase-3 tech-debt & accuracy closeout (post-MVP)
+
+User resumed after the MVP-review STOP (D-017) and chose, from the Phase-3 menu, the
+**tech-debt & accuracy closeout** track (not net-new Enterprise features, not mobile
+SDKs). This is the first post-MVP wave. It closes the deferred, environment-FEASIBLE
+Phase-3 gaps enumerated in `IMPLEMENTATION_LOG.md` "Known limitations & Phase-3 backlog"
+and the GAP-3-* / VD-* items in D-013/D-015. Out of scope (remain waivers, no toolchain
+or multi-node here): VD-04 headless render-time, VD-14 player-CPU (both need a real
+browser profiler — not measurable in jsdom/vitest), real multi-node cluster E2E, mobile
+beacons, SSO/white-label/air-gapped/hosted (deferred Enterprise/platform tracks).
+
+Phase-3 planning is a human-approved checkpoint per `agents/README.md` §4; the user
+approved this track. Contracts are frozen (D-004) — the three contract changes below are
+**pre-approved CRs (ORCH-00, D-004 authority)**, applied by INT-01 before code.
+
+**Scope ownership** (single-writer map; `prober/`→BE-01 and `anomaly/`→BE-02 per D-012;
+BE-01→BE-02 sequential per D-003; FE disjoint/parallel; D-005 cmd-wiring + D-008 commits
++ D-016 anti-stall all in force):
+
+- **INT-01 (CR, contracts/ only):**
+  - CR-VD38: new migration `0002_concurrency_rollup.sql` — `rollup_concurrency_1d`
+    (AggregatingMergeTree, key `(bucket Date, app, stream_id)`,
+    `peak_concurrency AggregateFunction(max, UInt32)`) + `mv_concurrency_1d` doing
+    `maxState(viewer_count)` from `server_events` (the AMS-authoritative instantaneous
+    concurrent count) filtered to the stream-stats event_type, GROUP BY day/app/stream.
+    Do NOT edit `0001_init.sql`.
+  - CR-GAP3001: new migration `0003_probe_segment_ttfb.sql` —
+    `ALTER TABLE {db}.probe_results ADD COLUMN IF NOT EXISTS segment_ttfb_ms UInt32`;
+    plus add `segment_ttfb_ms` to the `ProbeResult` OpenAPI schema (additive, not
+    required).
+  - CR-VD27: add an optional `kafka` component (status + `lag` + `parse_errors`) to the
+    `HealthStatus.components` OpenAPI schema (additive, NOT in `required`; `degraded`
+    is already in the status enum).
+- **BE-01 (data plane, after INT-01):** GAP-3-001 `ProbeResult.SegmentTTFBMs` (domain) +
+  segment-TTFB measurement (prober) + CH store write/read; GAP-3-003 prober follows a
+  master-playlist variant to a real segment for non-zero bitrate; VD-27 source fix
+  (`kafka.Source.Lag()` actually reads `r.Stats().Lag`, atomic-safe); VD-41 fix
+  `discovery_test.go` captureSink signature + assert the sink-emit path fires.
+- **BE-02-A (product plane, after BE-01):** GAP-3-001 api serializer `segment_ttfb_ms`;
+  GAP-3-004 anomaly **epsilon floor** — `effStddev = max(stddev, relEps·|mean|, absEps)`
+  on read in `ComputeFlags` (metric-agnostic relative floor; fixes the constant-baseline
+  blind spot without changing stored Welford state or the unchanged DefaultSigma/
+  MinSamples/Hysteresis, so the analytical false-alarm test stays <1/node-week); VD-27
+  `KafkaStatsProvider` + `/healthz` kafka block + serve.go wiring (D-005) + guard test.
+- **BE-02-B (after BE-02-A):** VD-38 accounting sources peak from `rollup_concurrency_1d`
+  (`maxMerge`) for both primary and hour-fallback paths + integration test seeding
+  overlapping `viewer_count` snapshots and asserting the TRUE windowed max (not session
+  count); VD-31 real wall-clock alert-latency test (`Start()` + real ticker, asserts
+  <30 s); VD-19 api-level geo/device non-empty test; VD-24 qoe/ingest seeded-CH test.
+- **FE-01 (web/, parallel):** regenerate `schema.d.ts` (`npm run gen:api`); show
+  `segment_ttfb_ms` in `ProbeResultsPanel`; VD-26 new `IngestPage` test.
+- **QA-01 (qa/):** VD-18 add a DIMENSIONAL 13-month GROUP BY query to the wave-2 gate
+  (≥3 geo × ≥2 device seed; assert ≤3 s); full re-gate — REBUILD binaries + RE-RUN every
+  new guard test on HEAD (D-013/D-017: never echo triage); `qa/wave-3-plus/gate-report.md`.
+- **DOC-01 (docs/, README):** ARCHITECTURE §4 budget updates (true peak; wall-clock alert
+  latency; dimensional 13-mo; segment TTFB; kafka-lag healthz); feature docs.
+
+ORCH-00 keeps `IMPLEMENTATION_LOG.md`/`DEVLOG.md`/`decisions.md`/`RESUME-PROMPT.md` and
+**independently re-verifies the gate** (own test runs are the source of truth, D-017).
+Dispatch = one Workflow `pulse-phase3-techdebt`:
+`INT-01 → parallel([BE-01→BE-02-A→BE-02-B], FE-01) → QA-01 → DOC-01`.
+
+## D-019 · 2026-06-15 · Wave 3-Plus gate CLOSED — independently verified (QA accurate)
+
+Workflow `pulse-phase3-techdebt` (run `wf_fba510ab-717`, 7 agents) complete; all agents
+COMPLETE + self-committed: INT-01 `19ea611`, BE-01 `042d2e4`, BE-02-A `a173b61`,
+BE-02-B `95ee06d`, FE-01 `86b9994`, QA-01 `454da25`, DOC-01 `7aa877a`. QA verdict
+**PASS_WITH_LIMITATIONS** (waivers: D-002 no-Docker, D-007.5 no-Kafka-broker ONLY).
+
+**ORCH-00 independent re-verification on HEAD** (the D-013/D-017 mandate — never trust a
+QA "open/closed" list without rebuilding + re-running): server `go build`/`go vet` clean;
+full `go test ./...` = **18 packages, 0 failures**; CH-backed integration on HEAD —
+`TestAccountant_CHIntegration` VD-38 `peak_concurrency` alpha=25/beta=5 (TRUE windowed max
+from `rollup_concurrency_1d`), drift 0.0000%; `TestVD19_Geo/Device` non-empty;
+`TestVD24` ingest timeseries 4 buckets; web **157/157**; SDK unchanged (65, 3.52 KB — no
+SDK agent this wave). **Unlike D-013 and D-017, QA-01's report was ACCURATE — every
+claimed PASS reproduced.** All 10 items CLOSED: GAP-3-001/003/004, VD-18/19/24/26/27/31/38/41.
+
+**Gate CLOSED** (PASS_WITH_LIMITATIONS, D-002/D-007.5 waivers only). No fix-loop needed.
+
+**Remaining Phase-3 backlog** (genuinely out of reach on this machine): VD-04 headless
+render-time + VD-14 player-CPU (need a real browser profiler); mobile SDKs, SSO,
+white-label PDF, air-gapped licensing, hosted-beta, distributed probe network, real
+multi-node cluster E2E (D-002).
+
+**Untracked VPS test-kit (flagged, NOT committed):** `deploy/docker-compose.override.yml`,
+`docs/runbooks/test-on-vps.md`, `qa/vps-smoke-test.sh` — a coherent kit to bring the full
+stack up against the mock AMS on a real VPS, i.e. to finally EXECUTE the D-002-waived
+compose path. Authored outside this wave (untracked; no D-018 agent created them); left for
+the user to decide whether to adopt as a separate "close the D-002 waiver" workstream.

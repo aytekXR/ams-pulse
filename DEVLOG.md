@@ -369,3 +369,45 @@ binary at `/tmp/clickhouse` (re-download if /tmp cleared). No Docker (D-002).
   MVP-blocking defects + majors/security/contract fixed and verified; only genuine
   P3 (test-coverage/cosmetic/Phase-3) + D-002/D-007.5 waivers remain. **Notifying
   the user for review; stopping per mission item 6.**
+
+## 2026-06-15 (session 2) — Wave 3-Plus: Phase-3 tech-debt & accuracy closeout
+
+First post-MVP wave. User resumed after the MVP-review STOP and chose the **tech-debt
+& accuracy closeout** track (D-018). One Workflow (`pulse-phase3-techdebt`, run
+`wf_fba510ab-717`, 7 agents, ~42 min): INT-01 → [BE-01 → BE-02-A → BE-02-B] ∥ FE-01 →
+QA-01 → DOC-01. All COMPLETE + self-committed (D-008, explicit paths).
+
+- **INT-01** `19ea611`: 3 pre-approved CRs — OpenAPI `ProbeResult.segment_ttfb_ms` +
+  `HealthStatus.components.kafka` (new `KafkaComponentStatus`); CH migrations
+  `0002_concurrency_rollup.sql` (`rollup_concurrency_1d` + `mv_concurrency_1d` doing
+  `maxState(viewer_count)` from `server_events`, event_type `stream_stats`) and
+  `0003_probe_segment_ttfb.sql` (`ALTER TABLE probe_results ADD COLUMN segment_ttfb_ms`).
+- **BE-01** `042d2e4`: GAP-3-001 segment TTFB (domain/prober/CH store), GAP-3-003 prober
+  follows master→variant for real bitrate, VD-27 `kafka.Source.Lag()` now reads
+  `r.Stats().Lag` (atomic-safe), VD-41 discovery sink-emit test.
+- **BE-02-A** `a173b61`: GAP-3-001 api serializer, GAP-3-004 anomaly epsilon floor
+  (`effStddev = max(stddev, 0.05·|mean|, 1e-9)`), VD-27 `/healthz` kafka component +
+  serve.go wiring (D-005 declared cmd edit).
+- **BE-02-B** `95ee06d`: VD-38 true windowed `peak_concurrency` from
+  `rollup_concurrency_1d` (`maxMerge`), VD-31 real wall-clock alert-latency test (~201 ms),
+  VD-19/VD-24 CH-backed API integration tests.
+- **FE-01** `86b9994`: segment_ttfb_ms column + TTFB-chart series, VD-26 IngestPage tests
+  (web 150→157).
+- **QA-01** `454da25`: VD-18 dimensional 13-mo gate (C9b, 145 ms, 3 geo × 2 device), full
+  re-gate PASS_WITH_LIMITATIONS (waivers D-002, D-007.5 only).
+- **DOC-01** `7aa877a`: ARCHITECTURE §4 budgets + anomaly/probes/reports docs reconciled.
+
+**ORCH-00 independent gate (D-013/D-017 mandate — never trust a QA open/closed list):**
+rebuilt + re-ran on HEAD myself — server build/vet clean, `go test ./...` 18 pkgs 0 fail,
+integration VD-38 peak=25/5 drift 0.0000% / VD-19 / VD-24 pass, web 157/157. **QA was
+ACCURATE this time** — every claimed PASS reproduced (a positive contrast to the
+D-013/D-017 spurious lists). Gate CLOSED → D-019.
+
+Flagged (not part of D-018): 3 untracked VPS/Docker test-kit files
+(`deploy/docker-compose.override.yml`, `docs/runbooks/test-on-vps.md`,
+`qa/vps-smoke-test.sh`) — a separate workstream to execute the D-002-waived compose path
+on a real VPS; left untracked for the user to decide.
+
+Remaining Phase-3 backlog: VD-04 (headless render-time) + VD-14 (player CPU) need a real
+browser profiler; mobile SDKs, SSO, white-label PDF, air-gapped licensing, hosted beta,
+distributed probe network, real multi-node cluster E2E.
