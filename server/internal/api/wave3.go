@@ -370,14 +370,18 @@ func (s *Server) handleProbeResults(w http.ResponseWriter, r *http.Request) {
 // probeResultToAPI converts a domain.ProbeResult to the API shape.
 func probeResultToAPI(r domain.ProbeResult) map[string]any {
 	m := map[string]any{
-		"id":       r.ID,
-		"probe_id": r.ProbeID,
-		"ts":       r.TS.UnixMilli(),
-		"success":  r.Success,
-		"ttfb_ms":  nil,
+		"id":              r.ID,
+		"probe_id":        r.ProbeID,
+		"ts":              r.TS.UnixMilli(),
+		"success":         r.Success,
+		"ttfb_ms":         nil,
+		"segment_ttfb_ms": nil,
 	}
 	if r.Success || r.TTFBMs > 0 {
 		m["ttfb_ms"] = r.TTFBMs
+	}
+	if r.Success || r.SegmentTTFBMs > 0 {
+		m["segment_ttfb_ms"] = r.SegmentTTFBMs
 	}
 	if r.ErrorCode != "" {
 		m["error_code"] = r.ErrorCode

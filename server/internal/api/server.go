@@ -70,6 +70,16 @@ type Config struct {
 	AllowedWSOrigins []string
 }
 
+// KafkaStatsProvider is the interface to the Kafka source for health reporting.
+// Implemented by *kafkasrc.Source (see server/internal/collector/kafka).
+// The API layer uses this to populate the kafka component in /healthz.
+type KafkaStatsProvider interface {
+	// Lag returns the last observed consumer lag across all topic-partitions.
+	Lag() int64
+	// ParseErrors returns the count of malformed messages since start.
+	ParseErrors() int64
+}
+
 // AnomalyDetector is the interface to the anomaly detection service.
 // Implemented by *anomaly.Detector.
 type AnomalyDetector interface {
@@ -116,6 +126,9 @@ type Server struct {
 
 	// Wave 3: anomaly detector (optional — wired in serve.go).
 	anomalyDetector AnomalyDetector
+
+	// Wave 3: kafka stats provider for /healthz (optional — wired in serve.go).
+	kafkaStats KafkaStatsProvider
 
 	// WS hub
 	wsMu    sync.Mutex
@@ -183,6 +196,12 @@ func (s *Server) SetReportGenerator(gen *reports.Generator) {
 // Call after New, before Start.
 func (s *Server) SetAnomalyDetector(det AnomalyDetector) {
 	s.anomalyDetector = det
+}
+
+// SetKafkaStats wires the Kafka stats provider for /healthz (VD-27).
+// Call after New, before Start. When not set, /healthz omits the kafka component.
+func (s *Server) SetKafkaStats(p KafkaStatsProvider) {
+	s.kafkaStats = p
 }
 
 // Start bootstraps the server (token if needed) and starts listening.
@@ -473,9 +492,32 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	}
 	components["collector"] = map[string]any{"status": collectorStatus, "latency_ms": nil, "message": nil}
 
+	// Kafka: report lag and parse_errors when a stats provider is wired (VD-27).
+	hasDegradedNonCritical := collectorStatus == "degraded"
+	if s.kafkaStats != nil {
+		lag := s.kafkaStats.Lag()
+		parseErrors := s.kafkaStats.ParseErrors()
+		kafkaStatus := "ok"
+		if parseErrors > 0 || lag > 10000 {
+			kafkaStatus = "degraded"
+		}
+		if kafkaStatus == "degraded" {
+			hasDegradedNonCritical = true
+		}
+		components["kafka"] = map[string]any{
+			"status":       kafkaStatus,
+			"lag":          lag,
+			"parse_errors": parseErrors,
+		}
+	}
+
 	overallStatus := "ok"
 	if !overallOK {
 		overallStatus = "down"
+	} else if hasDegradedNonCritical {
+		// Non-critical component degraded (collector or kafka) while ClickHouse + meta_store are ok.
+		// Report degraded at overall level but keep HTTP 200 (only down -> 503).
+		overallStatus = "degraded"
 	}
 
 	httpStatus := http.StatusOK

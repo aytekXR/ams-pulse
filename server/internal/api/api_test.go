@@ -536,3 +536,101 @@ func keys(m map[string]any) []string {
 	}
 	return ks
 }
+
+// ─── Test: /healthz kafka stats (VD-27) ──────────────────────────────────────
+
+// fakeKafkaStats implements api.KafkaStatsProvider without a real broker.
+type fakeKafkaStats struct {
+	lag         int64
+	parseErrors int64
+}
+
+func (f *fakeKafkaStats) Lag() int64         { return f.lag }
+func (f *fakeKafkaStats) ParseErrors() int64 { return f.parseErrors }
+
+// TestAPI_Healthz_KafkaStats verifies that /healthz includes a kafka component
+// when SetKafkaStats is wired, and that parse_errors>0 yields status "degraded".
+func TestAPI_Healthz_KafkaStats(t *testing.T) {
+	ctx := context.Background()
+	ddlPath := metaDDLPath(t)
+	ddl, err := os.ReadFile(ddlPath)
+	if err != nil {
+		t.Skipf("meta DDL not found: %v", err)
+	}
+	store, err := meta.New(ctx, "sqlite", ":memory:", "kafka-test-secret")
+	if err != nil {
+		t.Fatalf("meta.New: %v", err)
+	}
+	if err := store.MigrateEmbedded(ctx, string(ddl)); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	defer store.Close()
+
+	lic, _ := license.New("", "")
+	live := &fakeLiveProvider{}
+	qsvc := query.New(live, nil, lic)
+	srv := api.New(api.Config{ListenAddr: ":0"}, store, live, qsvc, lic, nil)
+
+	// Wire a fake KafkaStatsProvider with parse_errors>0 → should report "degraded".
+	kafka := &fakeKafkaStats{lag: 42, parseErrors: 3}
+	srv.SetKafkaStats(kafka)
+
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/healthz")
+	if err != nil {
+		t.Fatalf("GET /healthz: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// /healthz must return 200 even when kafka is degraded (non-critical).
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200 for degraded (non-critical) kafka, got %d: %s", resp.StatusCode, body)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode healthz: %v", err)
+	}
+
+	components, ok := body["components"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected components object, got %T", body["components"])
+	}
+
+	kafkaComp, ok := components["kafka"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected kafka component in /healthz, got %T", components["kafka"])
+	}
+
+	// lag must be present and match the fake value.
+	lag, hasLag := kafkaComp["lag"]
+	if !hasLag {
+		t.Error("kafka component missing 'lag' field")
+	} else if lag.(float64) != 42 {
+		t.Errorf("expected lag=42, got %v", lag)
+	}
+
+	// parse_errors must be present and match the fake value.
+	parseErrors, hasPE := kafkaComp["parse_errors"]
+	if !hasPE {
+		t.Error("kafka component missing 'parse_errors' field")
+	} else if parseErrors.(float64) != 3 {
+		t.Errorf("expected parse_errors=3, got %v", parseErrors)
+	}
+
+	// parse_errors>0 → status must be "degraded".
+	if kafkaComp["status"] != "degraded" {
+		t.Errorf("expected kafka status=degraded when parse_errors>0, got %v", kafkaComp["status"])
+	}
+
+	// Overall status must be "degraded" (non-critical component degraded).
+	if body["status"] != "degraded" {
+		t.Errorf("expected overall status=degraded, got %v", body["status"])
+	}
+
+	t.Logf("PASS: /healthz with kafka stats → 200, kafka.status=%v lag=%v parse_errors=%v overall=%v",
+		kafkaComp["status"], lag, parseErrors, body["status"])
+}

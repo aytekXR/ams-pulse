@@ -191,8 +191,11 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	// }
 
 	// Wave 2: Kafka source (when brokers are configured).
+	// D-005 declared edit (BE-02-A): hoisted to function scope so kafkaSource is
+	// accessible after apiServer is constructed for SetKafkaStats wiring (VD-27).
+	var kafkaSource *kafkasrc.Source
 	if len(cfg.KafkaBrokers) > 0 {
-		kafkaSource := kafkasrc.New(kafkasrc.Config{
+		kafkaSource = kafkasrc.New(kafkasrc.Config{
 			Brokers:  cfg.KafkaBrokers,
 			GroupID:  cfg.KafkaGroupID,
 			NodeID:   cfg.AMSNodeID,
@@ -280,6 +283,11 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	// VD-23: Wire ingest health tracker so handleIngestHealth can read per-publisher
 	// state (health scores, raw metrics) from the correct source.
 	apiServer.SetIngestTracker(ingestTracker)
+	// VD-27: Wire kafka stats provider for /healthz kafka component.
+	// kafkaSource is nil when no brokers are configured; SetKafkaStats is a no-op for nil.
+	if kafkaSource != nil {
+		apiServer.SetKafkaStats(kafkaSource)
+	}
 
 	// Wave 2 (BE-02): Seed default alert rule pack on first run (closes G8).
 	// Idempotent — no-op if rules already exist.

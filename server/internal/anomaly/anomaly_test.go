@@ -278,6 +278,97 @@ func TestAnomaly_MinSamples_Gate(t *testing.T) {
 	t.Logf("PASS: minSamples gate → 0 flags when sample_count < minSamples")
 }
 
+// TestAnomaly_ConstantBaseline_LargeDeviation_Flags verifies that a constant
+// baseline (all observations identical → stddev=0) still flags when a large
+// deviation is observed. This closes the zero-stddev blind spot (GAP-3-004).
+func TestAnomaly_ConstantBaseline_LargeDeviation_Flags(t *testing.T) {
+	store := &fakeBaselineStore{}
+	live := &fakeStreamLive{viewerCount: 200}
+
+	det := anomaly.New(anomaly.Config{
+		DefaultSigma:    4.0,
+		MinSamples:      anomaly.MinSamples, // 30
+		HysteresisTicks: 10,
+		TickInterval:    time.Second,
+	}, store, live, nil)
+
+	ctx := context.Background()
+
+	// Feed MinSamples identical observations so stddev=0.
+	for i := 0; i < anomaly.MinSamples; i++ {
+		if err := det.UpdateBaselines(ctx); err != nil {
+			t.Fatalf("UpdateBaselines iter %d: %v", i, err)
+		}
+	}
+
+	// Confirm the baseline is constant (stddev=0).
+	baselines, _ := store.ListAnomalyBaselines(ctx)
+	var vb *anomaly.AnomalyBaselineRow
+	for i := range baselines {
+		if baselines[i].Metric == "viewers" {
+			vb = &baselines[i]
+			break
+		}
+	}
+	if vb == nil {
+		t.Fatal("viewers baseline not found after warmup")
+	}
+	if vb.Stddev != 0 {
+		t.Fatalf("expected stddev=0 for constant baseline, got %.6f", vb.Stddev)
+	}
+	t.Logf("baseline: mean=%.1f stddev=%.6f samples=%d", vb.Mean, vb.Stddev, vb.SampleCount)
+
+	// Observe a large deviation (1000 vs mean=200): should flag despite stddev=0.
+	// With StddevRelEpsilon=0.05, effStddev = 0.05*200 = 10; z = |1000-200|/10 = 80 >> σ=4.
+	live.viewerCount = 1000
+	flags, err := det.ComputeFlags(ctx, 4.0)
+	if err != nil {
+		t.Fatalf("ComputeFlags: %v", err)
+	}
+	if len(flags) != 1 {
+		t.Errorf("expected exactly 1 flag for large deviation on constant baseline, got %d", len(flags))
+	} else {
+		t.Logf("PASS: constant baseline + large deviation → 1 flag (sigma=%.2f)", flags[0].Sigma)
+	}
+}
+
+// TestAnomaly_ConstantBaseline_SmallDeviation_NoFlag verifies that a small
+// deviation within the relative floor (StddevRelEpsilon) does NOT flag on a
+// constant baseline. This ensures the epsilon floor does not cause spurious alerts.
+func TestAnomaly_ConstantBaseline_SmallDeviation_NoFlag(t *testing.T) {
+	store := &fakeBaselineStore{}
+	live := &fakeStreamLive{viewerCount: 200}
+
+	det := anomaly.New(anomaly.Config{
+		DefaultSigma:    4.0,
+		MinSamples:      anomaly.MinSamples, // 30
+		HysteresisTicks: 10,
+		TickInterval:    time.Second,
+	}, store, live, nil)
+
+	ctx := context.Background()
+
+	// Feed MinSamples identical observations so stddev=0.
+	for i := 0; i < anomaly.MinSamples; i++ {
+		if err := det.UpdateBaselines(ctx); err != nil {
+			t.Fatalf("UpdateBaselines iter %d: %v", i, err)
+		}
+	}
+
+	// Observe 205 vs mean=200: deviation=5, 2.5% of mean.
+	// effStddev = max(0, 0.05*200, 1e-9) = 10; z = 5/10 = 0.5 << σ=4.0 → no flag.
+	live.viewerCount = 205
+	flags, err := det.ComputeFlags(ctx, 4.0)
+	if err != nil {
+		t.Fatalf("ComputeFlags: %v", err)
+	}
+	if len(flags) != 0 {
+		t.Errorf("expected 0 flags for small deviation within relative floor, got %d", len(flags))
+	} else {
+		t.Logf("PASS: constant baseline + small deviation (2.5%% of mean) → 0 flags")
+	}
+}
+
 // TestAnomaly_FalseAlarmRate documents the modeled false-alarm rate.
 // This is a documentation/calibration test, not a stochastic simulation.
 //

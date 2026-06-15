@@ -74,6 +74,18 @@ const MinSamples = 30
 // At 60 s/tick this is 10 × 60 = 600 s cooldown.
 const HysteresisTicks = 10
 
+// StddevRelEpsilon is the minimum effective stddev expressed as a fraction of
+// |mean|. A value of 0.05 means the effective stddev is at least 5% of the
+// absolute mean, implementing a coefficient-of-variation floor.
+// This prevents constant-baseline metrics (stddev=0) from never flagging: a
+// deviation must be less than 5% of the mean to avoid detection (at default σ=4.0).
+const StddevRelEpsilon = 0.05
+
+// StddevAbsEpsilon is a tiny absolute floor added only to avoid divide-by-zero
+// when both mean and stddev are 0. At this floor a 1-unit deviation from a
+// zero-mean, zero-stddev baseline produces a very large z-score and correctly flags.
+const StddevAbsEpsilon = 1e-9
+
 // BaselineStore is the interface to the meta store anomaly_baselines table.
 type BaselineStore interface {
 	// ListBaselines returns all anomaly_baselines rows.
@@ -355,17 +367,20 @@ func (d *Detector) ComputeFlags(ctx context.Context, sigmaThreshold float64) ([]
 		if b.SampleCount < d.minSamples {
 			continue // not enough history
 		}
-		if b.Stddev <= 0 {
-			continue // zero stddev → no deviation possible
-		}
-
 		liveKey := b.Metric + ":" + b.Scope
 		observed, ok := liveValues[liveKey]
 		if !ok {
 			continue // metric not currently observed (stream offline etc.)
 		}
 
-		z := math.Abs(observed-b.Mean) / b.Stddev
+		// Compute effective stddev with epsilon floor to handle constant baselines:
+		//   - StddevRelEpsilon*|mean| prevents flagging on tiny relative deviations
+		//     (e.g. a 1-unit wobble on mean=100 yields z≈0.2 at 5% floor, well below σ=4).
+		//   - StddevAbsEpsilon avoids divide-by-zero when mean=0 and stddev=0.
+		// When a constant baseline (stddev=0) is observed with a large deviation,
+		// the effective stddev is small so z is large and the flag fires correctly.
+		effStddev := math.Max(b.Stddev, math.Max(StddevRelEpsilon*math.Abs(b.Mean), StddevAbsEpsilon))
+		z := math.Abs(observed-b.Mean) / effStddev
 		if z < sigmaThreshold {
 			continue
 		}
