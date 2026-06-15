@@ -21,6 +21,13 @@
     # acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
 }
 
+# Canonical host: redirect www.<domain> -> apex over HTTPS (301). This also makes
+# Caddy provision a certificate for www so it never serves a TLS-name-mismatch
+# error to anyone who types the www host. Requires www.<domain> DNS -> the VPS.
+www.{$PULSE_DOMAIN} {
+    redir https://{$PULSE_DOMAIN}{uri} permanent
+}
+
 {$PULSE_DOMAIN} {
     # No 'tls internal' → Caddy provisions a public Let's Encrypt certificate
     # for {$PULSE_DOMAIN} automatically on first request.
