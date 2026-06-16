@@ -115,9 +115,12 @@ jobs:
       # Types-drift guard: regenerate schema.d.ts and fail if it differs from
       # the committed version (prevents stale generated types slipping in).
       - name: Generate API types and check for drift
+        # NB: after `cd web` the diff path is relative to web/ — it must be
+        # src/lib/... (not web/src/...), else git errors "ambiguous argument".
         run: |
-          cd web && npm run gen:api
-          git diff --exit-code web/src/lib/api/schema.d.ts
+          cd web
+          npm run gen:api
+          git diff --exit-code src/lib/api/schema.d.ts
 
       - name: Build web UI
         run: cd web && npm run build
@@ -240,6 +243,11 @@ jobs:
           echo "docker compose (base): PASS"
 
       - name: Validate CI override compose config
+        # PULSE_SECRET_KEY is :?-required by the CI override (sourced from the CI env
+        # at e2e bring-up, never committed / never from .env). Provide a throwaway
+        # value so config-only validation passes on a clean runner.
+        env:
+          PULSE_SECRET_KEY: ci-config-validation-dummy
         run: |
           docker compose \
             -f deploy/docker-compose.yml \
