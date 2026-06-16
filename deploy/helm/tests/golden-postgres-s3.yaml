@@ -11,7 +11,6 @@ metadata:
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.1.0"
     app.kubernetes.io/managed-by: Helm
-
 ---
 # Source: pulse/templates/configmap-clickhouse.yaml
 # ClickHouse low-footprint configuration for 2-vCPU Free-tier installs.
@@ -93,7 +92,6 @@ data:
         <default></default>
       </quotas>
     </clickhouse>
-
 ---
 # Source: pulse/templates/service-clickhouse.yaml
 # Headless service for ClickHouse StatefulSet (cluster-internal only).
@@ -124,7 +122,6 @@ spec:
       port: 8123
       targetPort: http
       protocol: TCP
-
 ---
 # Source: pulse/templates/service.yaml
 # Pulse API + UI service (cluster-internal by default).
@@ -187,7 +184,6 @@ spec:
       port: 8091
       targetPort: ingest
       protocol: TCP
-
 ---
 # Source: pulse/templates/statefulset-postgres.yaml
 apiVersion: v1
@@ -213,7 +209,6 @@ spec:
       port: 5432
       targetPort: postgres
       protocol: TCP
-
 ---
 # Source: pulse/templates/deployment.yaml
 apiVersion: apps/v1
@@ -380,7 +375,6 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: pulse-data
-
 ---
 # Source: pulse/templates/statefulset-clickhouse.yaml
 apiVersion: apps/v1
@@ -467,7 +461,6 @@ spec:
         resources:
           requests:
             storage: 50Gi
-
 ---
 # Source: pulse/templates/statefulset-postgres.yaml
 # Optional Postgres StatefulSet for HA meta store deployments.
