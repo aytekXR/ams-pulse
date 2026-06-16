@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pulse-analytics/pulse/server/internal/collector"
 	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
 	kafkago "github.com/segmentio/kafka-go"
 )
 
@@ -194,6 +196,106 @@ func TestKafka_ContractRoundTrip(t *testing.T) {
 	if fps != 25.0 {
 		t.Errorf("fps = %v, want 25", fps)
 	}
+}
+
+// TestKafka_DashViewerCountIncluded verifies that dashViewerCount is summed into
+// viewer_count in the Kafka normalizer (FIX 4), matching the REST path
+// (NormalizeBroadcast already included it). Before the fix the Kafka path
+// silently omitted dash viewers.
+func TestKafka_DashViewerCountIncluded(t *testing.T) {
+	raw := map[string]any{
+		"streamId":          "s-dash",
+		"app":               "live",
+		"hlsViewerCount":    float64(10),
+		"webRTCViewerCount": float64(5),
+		"rtmpViewerCount":   float64(2),
+		"dashViewerCount":   float64(3), // the field that was missing from the sum
+	}
+	ev, err := normalizeKafkaMessage(raw, "node-1")
+	if err != nil {
+		t.Fatalf("FIX4: unexpected error: %v", err)
+	}
+	if ev.Type != domain.EventStreamStats {
+		t.Fatalf("FIX4: expected stream_stats, got %q", ev.Type)
+	}
+
+	vc, _ := ev.Data["viewer_count"].(int)
+	const wantTotal = 20 // 10+5+2+3
+	if vc != wantTotal {
+		t.Errorf("FIX4: viewer_count = %d, want %d (dash viewers must be included)", vc, wantTotal)
+	}
+
+	// Also verify that dash appears in the by-protocol breakdown.
+	byProto, ok := ev.Data["viewer_count_by_protocol"].(map[string]any)
+	if !ok {
+		t.Fatalf("FIX4: viewer_count_by_protocol missing or wrong type")
+	}
+	if dash, _ := byProto["dash"].(int); dash != 3 {
+		t.Errorf("FIX4: viewer_count_by_protocol[dash] = %v, want 3", byProto["dash"])
+	}
+	t.Logf("PASS FIX4: viewer_count=%d (hls=%v webrtc=%v rtmp=%v dash=%v)",
+		vc, byProto["hls"], byProto["webrtc"], byProto["rtmp"], byProto["dash"])
+}
+
+// TestKafka_DashViewerCountMatchesREST is a true cross-path parity check: it runs
+// BOTH the Kafka normalizer and the real REST normalizer (collector.NormalizeBroadcast)
+// on the same per-protocol counts and asserts identical viewer_count totals. (It does
+// NOT compute the REST total with inline arithmetic — that would not catch a bug in
+// the REST sum formula.)
+func TestKafka_DashViewerCountMatchesREST(t *testing.T) {
+	const (
+		hls    = 50
+		webrtc = 30
+		rtmp   = 10
+		dash   = 5
+	)
+
+	// Kafka path.
+	raw := map[string]any{
+		"streamId":          "match-stream",
+		"app":               "live",
+		"hlsViewerCount":    float64(hls),
+		"webRTCViewerCount": float64(webrtc),
+		"rtmpViewerCount":   float64(rtmp),
+		"dashViewerCount":   float64(dash),
+	}
+	kafkaEv, err := normalizeKafkaMessage(raw, "node-1")
+	if err != nil {
+		t.Fatalf("kafka normalize: %v", err)
+	}
+	kafkaTotal, _ := kafkaEv.Data["viewer_count"].(int)
+
+	// REST path: run the real NormalizeBroadcast and pull viewer_count from the
+	// emitted stream_stats event. prevStatus="broadcasting" so only stream_stats is
+	// emitted (no publish_start). nil geo/ua is safe (empty IPs short-circuit).
+	dto := amsclient.BroadcastDTO{
+		StreamID:          "match-stream",
+		AppName:           "live",
+		Status:            "broadcasting",
+		HlsViewerCount:    hls,
+		WebRTCViewerCount: webrtc,
+		RTMPViewerCount:   rtmp,
+		DashViewerCount:   dash,
+	}
+	restTotal := -1
+	for _, e := range collector.NormalizeBroadcast(dto, "node-1", "broadcasting", nil, nil) {
+		if e.Type == domain.EventStreamStats {
+			if v, ok := e.Data["viewer_count"].(int); ok {
+				restTotal = v
+			}
+		}
+	}
+	if restTotal < 0 {
+		t.Fatalf("REST path emitted no stream_stats viewer_count")
+	}
+
+	if kafkaTotal != restTotal {
+		t.Errorf("FIX4: Kafka viewer_count=%d != REST viewer_count=%d; paths disagree", kafkaTotal, restTotal)
+	}
+	if want := hls + webrtc + rtmp + dash; kafkaTotal != want {
+		t.Errorf("FIX4: viewer_count=%d, want %d (incl. dash)", kafkaTotal, want)
+	}
+	t.Logf("PASS FIX4: Kafka=%d REST=%d — paths agree (both normalizers run)", kafkaTotal, restTotal)
 }
 
 // TestKafka_AtomicCounters verifies that ParseErrors() and Lag() are race-safe

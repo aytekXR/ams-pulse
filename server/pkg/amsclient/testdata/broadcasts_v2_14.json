@@ -1,0 +1,17 @@
+[
+  {
+    "streamId": "stream2",
+    "name": "Broadcast v2.14",
+    "status": "broadcasting",
+    "type": "liveStream",
+    "publishType": "webrtc",
+    "startTime": 1700001000000,
+    "endTime": 0,
+    "hlsViewerCount": 10,
+    "webRTCViewerCount": 8,
+    "rtmpViewerCount": 1,
+    "dashViewerCount": 0,
+    "speed": 2480,
+    "bitrate": 2500
+  }
+]

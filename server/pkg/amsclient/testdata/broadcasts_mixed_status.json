@@ -1,0 +1,63 @@
+[
+  {
+    "streamId": "stream-created",
+    "name": "Pending Stream",
+    "status": "created",
+    "type": "liveStream",
+    "publishType": "rtmp",
+    "startTime": 0,
+    "endTime": 0,
+    "hlsViewerCount": 0,
+    "webRTCViewerCount": 0,
+    "rtmpViewerCount": 0,
+    "dashViewerCount": 0,
+    "speed": 0,
+    "bitrate": 0
+  },
+  {
+    "streamId": "stream-broadcasting",
+    "name": "Live Now",
+    "status": "broadcasting",
+    "type": "liveStream",
+    "publishType": "webrtc",
+    "startTime": 1700003000000,
+    "endTime": 0,
+    "hlsViewerCount": 7,
+    "webRTCViewerCount": 4,
+    "rtmpViewerCount": 0,
+    "dashViewerCount": 0,
+    "speed": 1800,
+    "bitrate": 1900,
+    "currentFPS": 25
+  },
+  {
+    "streamId": "stream-finished",
+    "name": "Finished Stream",
+    "status": "finished",
+    "type": "liveStream",
+    "publishType": "rtmp",
+    "startTime": 1699990000000,
+    "endTime": 1699993600000,
+    "hlsViewerCount": 0,
+    "webRTCViewerCount": 0,
+    "rtmpViewerCount": 0,
+    "dashViewerCount": 0,
+    "speed": 0,
+    "bitrate": 0
+  },
+  {
+    "streamId": "stream-ended",
+    "name": "Ended Stream",
+    "status": "ended",
+    "type": "liveStream",
+    "publishType": "rtmp",
+    "startTime": 1699900000000,
+    "endTime": 1699903600000,
+    "hlsViewerCount": 0,
+    "webRTCViewerCount": 0,
+    "rtmpViewerCount": 0,
+    "dashViewerCount": 0,
+    "speed": 0,
+    "bitrate": 0
+  }
+]

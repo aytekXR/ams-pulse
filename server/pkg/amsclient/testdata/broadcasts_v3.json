@@ -1,0 +1,18 @@
+[
+  {
+    "streamId": "stream3",
+    "name": "Broadcast v3",
+    "status": "broadcasting",
+    "type": "liveStream",
+    "publishType": "webrtc",
+    "startTime": 1700002000000,
+    "endTime": 0,
+    "hlsViewerCount": 3,
+    "webRTCViewerCount": 15,
+    "rtmpViewerCount": 0,
+    "dashViewerCount": 2,
+    "speed": 3100,
+    "bitrate": 3200,
+    "currentFPS": 30
+  }
+]

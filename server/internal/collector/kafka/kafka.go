@@ -264,16 +264,20 @@ func normalizeKafkaMessage(raw map[string]any, nodeID string) (domain.ServerEven
 
 	default:
 		// Stream stats (viewer counts).
+		// FIX 4 (VD-??): dashViewerCount was omitted from the sum, causing Kafka
+		// and REST paths to disagree. Add it to match NormalizeBroadcast behaviour.
 		evType = domain.EventStreamStats
 		total := int(floatField(raw, "hlsViewerCount")) +
 			int(floatField(raw, "webRTCViewerCount")) +
-			int(floatField(raw, "rtmpViewerCount"))
+			int(floatField(raw, "rtmpViewerCount")) +
+			int(floatField(raw, "dashViewerCount"))
 		data = map[string]any{
 			"viewer_count": total,
 			"viewer_count_by_protocol": map[string]any{
 				"webrtc": int(floatField(raw, "webRTCViewerCount")),
 				"hls":    int(floatField(raw, "hlsViewerCount")),
 				"rtmp":   int(floatField(raw, "rtmpViewerCount")),
+				"dash":   int(floatField(raw, "dashViewerCount")),
 			},
 			"bitrate_kbps": floatField(raw, "bitrate"),
 		}

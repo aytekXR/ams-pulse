@@ -1,0 +1,32 @@
+[
+  {
+    "statId": "peer-abc123",
+    "videoRoundTripTime": 0.045,
+    "audioRoundTripTime": 0.043,
+    "videoJitter": 0.002,
+    "audioJitter": 0.001,
+    "videoPacketLostRatio": 0.005,
+    "audioPacketLostRatio": 0.003,
+    "outboundRtpList": [
+      {
+        "ssrc": 1234567890,
+        "bytesSent": 1048576,
+        "packetsSent": 1000,
+        "kind": "video"
+      }
+    ],
+    "inboundRtpList": [
+      {
+        "ssrc": 9876543210,
+        "bytesReceived": 524288,
+        "packetsReceived": 500,
+        "kind": "audio"
+      }
+    ]
+  },
+  {
+    "statId": "peer-def456",
+    "outboundRtpList": [],
+    "inboundRtpList": []
+  }
+]

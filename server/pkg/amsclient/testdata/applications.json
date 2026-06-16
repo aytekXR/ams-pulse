@@ -1,0 +1,8 @@
+{
+  "applications": [
+    { "name": "LiveApp" },
+    { "name": "WebRTCApp" },
+    { "name": "live" },
+    { "name": "vod" }
+  ]
+}

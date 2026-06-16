@@ -34,6 +34,12 @@ func NormalizeBroadcast(
 	geo GeoResolver,
 	ua UAParser,
 ) []domain.ServerEvent {
+	// FIX 3 (VD-??): empty StreamID would key the aggregator map to "" and corrupt
+	// live state — reject early so we never emit events with a blank stream ID.
+	if b.StreamID == "" {
+		return nil
+	}
+
 	now := time.Now().UnixMilli()
 	var events []domain.ServerEvent
 
@@ -64,6 +70,13 @@ func NormalizeBroadcast(
 			})
 		}
 
+		// FIX 2 (VD-??): AMS v2.10 sends speed and omits bitrate; fall back to
+		// b.Speed when b.BitRate is zero so we never emit 0 kbps for live streams.
+		effectiveBitrate := b.BitRate
+		if effectiveBitrate == 0 && b.Speed > 0 {
+			effectiveBitrate = b.Speed
+		}
+
 		// Always emit stream_stats.
 		statsData := map[string]any{
 			"viewer_count": b.HlsViewerCount + b.WebRTCViewerCount + b.RTMPViewerCount + b.DashViewerCount,
@@ -74,7 +87,7 @@ func NormalizeBroadcast(
 				"dash":   b.DashViewerCount,
 				"other":  0,
 			},
-			"bitrate_kbps":    b.BitRate,
+			"bitrate_kbps":    effectiveBitrate,
 			"speed_read_kbps": b.Speed,
 		}
 		events = append(events, domain.ServerEvent{
@@ -94,7 +107,8 @@ func NormalizeBroadcast(
 		// (previously only Kafka/logtail sources emitted this event type).
 		// AMS BroadcastDTO does not expose packet_loss or jitter via REST;
 		// those fields are left zero and may be populated by WebRTC stats events.
-		if b.CurrentFPS > 0 || b.BitRate > 0 {
+		// FIX 2: use effectiveBitrate (Speed fallback) for the emit condition too.
+		if b.CurrentFPS > 0 || effectiveBitrate > 0 {
 			events = append(events, domain.ServerEvent{
 				Version:  1,
 				Type:     domain.EventIngestStats,
@@ -104,7 +118,7 @@ func NormalizeBroadcast(
 				App:      app,
 				StreamID: b.StreamID,
 				Data: map[string]any{
-					"bitrate_kbps": b.BitRate,
+					"bitrate_kbps": effectiveBitrate,
 					"fps":          float64(b.CurrentFPS),
 					// packet_loss_pct and jitter_ms are not available via AMS REST;
 					// they are populated by WebRTC peer-stats events when available.
@@ -169,20 +183,24 @@ func NormalizeClusterNode(n amsclient.ClusterNodeDTO) domain.ServerEvent {
 	if nodeID == "" {
 		nodeID = n.IP
 	}
+	// FIX 1 (VD-40): Version was decoded from the DTO but never written into Data,
+	// so aggregator.onNodeStats always read Data["version"] == "". Write it now.
+	data := map[string]any{
+		"cpu_pct":          n.CPUUsage,
+		"mem_pct":          n.MemoryUsage,
+		"disk_pct":         n.DiskUsage,
+		"net_in_mbps":      n.NetworkInputBps / 1_000_000,
+		"net_out_mbps":     n.NetworkOutputBps / 1_000_000,
+		"jvm_heap_used_mb": n.JvmMemoryUsage,
+		"version":          n.Version,
+	}
 	return domain.ServerEvent{
 		Version: 1,
 		Type:    domain.EventNodeStats,
 		TS:      time.Now().UnixMilli(),
 		Source:  domain.SourceRestPoll,
 		NodeID:  nodeID,
-		Data: map[string]any{
-			"cpu_pct":          n.CPUUsage,
-			"mem_pct":          n.MemoryUsage,
-			"disk_pct":         n.DiskUsage,
-			"net_in_mbps":      n.NetworkInputBps / 1_000_000,
-			"net_out_mbps":     n.NetworkOutputBps / 1_000_000,
-			"jvm_heap_used_mb": n.JvmMemoryUsage,
-		},
+		Data:    data,
 	}
 }
 

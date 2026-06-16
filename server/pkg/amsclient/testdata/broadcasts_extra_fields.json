@@ -1,0 +1,30 @@
+[
+  {
+    "streamId": "stream-future",
+    "name": null,
+    "status": "broadcasting",
+    "type": "liveStream",
+    "publishType": "webrtc",
+    "startTime": 1700010000000,
+    "endTime": 0,
+    "hlsViewerCount": 1,
+    "webRTCViewerCount": 3,
+    "rtmpViewerCount": 0,
+    "dashViewerCount": 0,
+    "speed": 1500,
+    "bitrate": 1600,
+    "currentFPS": 24,
+    "subFolder": "recordings/2024",
+    "plannedStartDate": 1700005000000,
+    "webhookCallbackURL": "https://example.com/hook",
+    "encoderSettingsString": null,
+    "playListItemList": null,
+    "endPointList": [],
+    "metaData": null,
+    "ipAddr": "192.168.1.100",
+    "streamUrl": null,
+    "quality": "HD",
+    "pendingPacketSize": 0,
+    "hlsParameters": null
+  }
+]

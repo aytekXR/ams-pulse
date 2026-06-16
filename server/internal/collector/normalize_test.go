@@ -207,3 +207,199 @@ func TestNormalizeClusterNode_BoundaryValues(t *testing.T) {
 		})
 	}
 }
+
+// ─── FIX 1 — VD-40: node version propagated through Data map ─────────────────
+
+// TestNormalizeClusterNode_VersionInData verifies that NormalizeClusterNode
+// writes ClusterNodeDTO.Version into Data["version"] so that
+// aggregator.onNodeStats can read it and populate LiveNodeStats.Version.
+// Before the fix, Data["version"] was always "" because the field was decoded
+// but never written into the event.
+func TestNormalizeClusterNode_VersionInData(t *testing.T) {
+	dto := amsclient.ClusterNodeDTO{
+		NodeID:  "node-42",
+		Version: "2.10.3",
+	}
+	ev := NormalizeClusterNode(dto)
+
+	got, ok := ev.Data["version"].(string)
+	if !ok {
+		t.Fatalf("VD-40: Data[\"version\"] not a string, got %T %v", ev.Data["version"], ev.Data["version"])
+	}
+	if got != "2.10.3" {
+		t.Errorf("VD-40: Data[\"version\"] = %q, want %q", got, "2.10.3")
+	}
+	t.Logf("PASS VD-40: Data[\"version\"] = %q", got)
+}
+
+// ─── FIX 2 — v2.10 speed-only bitrate fallback ───────────────────────────────
+
+// TestNormalizeBroadcast_SpeedFallback verifies that when BitRate==0 and
+// Speed>0 (AMS v2.10 behavior), stream_stats uses Speed as bitrate_kbps and
+// ingest_stats is still emitted (condition was `b.BitRate > 0` before fix).
+func TestNormalizeBroadcast_SpeedFallback(t *testing.T) {
+	dto := amsclient.BroadcastDTO{
+		StreamID: "speed-stream",
+		AppName:  "live",
+		Status:   "broadcasting",
+		BitRate:  0,
+		Speed:    2000.0,
+	}
+
+	events := NormalizeBroadcast(dto, "node-1", "broadcasting", NoopGeoResolver{}, NoopUAParser{})
+
+	var statsEv, ingestEv *domain.ServerEvent
+	for i := range events {
+		switch events[i].Type {
+		case domain.EventStreamStats:
+			statsEv = &events[i]
+		case domain.EventIngestStats:
+			ingestEv = &events[i]
+		}
+	}
+
+	if statsEv == nil {
+		t.Fatal("FIX2: no stream_stats event emitted for speed-only DTO")
+	}
+	gotBitrate, ok := statsEv.Data["bitrate_kbps"].(float64)
+	if !ok {
+		t.Fatalf("FIX2: stream_stats bitrate_kbps type = %T, want float64", statsEv.Data["bitrate_kbps"])
+	}
+	if gotBitrate != 2000.0 {
+		t.Errorf("FIX2: stream_stats bitrate_kbps = %.0f, want 2000 (Speed fallback)", gotBitrate)
+	}
+
+	if ingestEv == nil {
+		t.Error("FIX2: no ingest_stats event emitted — emit condition must use effectiveBitrate not b.BitRate")
+	} else {
+		gotIngestBitrate, ok2 := ingestEv.Data["bitrate_kbps"].(float64)
+		if !ok2 {
+			t.Fatalf("FIX2: ingest_stats bitrate_kbps type = %T, want float64", ingestEv.Data["bitrate_kbps"])
+		}
+		if gotIngestBitrate != 2000.0 {
+			t.Errorf("FIX2: ingest_stats bitrate_kbps = %.0f, want 2000", gotIngestBitrate)
+		}
+	}
+	t.Logf("PASS FIX2: stream_stats bitrate=%.0f ingest_stats emitted=%v", gotBitrate, ingestEv != nil)
+}
+
+// ─── FIX 3 — empty StreamID guard ────────────────────────────────────────────
+
+// TestNormalizeBroadcast_EmptyStreamID verifies that NormalizeBroadcast returns
+// no events when StreamID is "". An empty key would silently corrupt the
+// aggregator's live stream map by writing all such streams under key nodeID+"/".
+func TestNormalizeBroadcast_EmptyStreamID(t *testing.T) {
+	dto := amsclient.BroadcastDTO{
+		StreamID: "",
+		AppName:  "live",
+		Status:   "broadcasting",
+		BitRate:  1000.0,
+	}
+
+	events := NormalizeBroadcast(dto, "node-1", "", NoopGeoResolver{}, NoopUAParser{})
+	if len(events) != 0 {
+		t.Errorf("FIX3: expected 0 events for empty StreamID, got %d", len(events))
+	}
+	t.Log("PASS FIX3: no events emitted for empty StreamID")
+}
+
+// TestNormalizeBroadcast_CreatedStatus verifies that a DTO with status "created"
+// (stream registered but not yet live) emits no events.
+func TestNormalizeBroadcast_CreatedStatus(t *testing.T) {
+	dto := amsclient.BroadcastDTO{
+		StreamID: "s-created",
+		AppName:  "live",
+		Status:   "created",
+	}
+	events := NormalizeBroadcast(dto, "node-1", "", NoopGeoResolver{}, NoopUAParser{})
+	if len(events) != 0 {
+		t.Errorf("expected 0 events for status=created, got %d", len(events))
+	}
+}
+
+// TestNormalizeBroadcast_FinishedAfterBroadcasting verifies that status
+// "finished" when prevStatus was "broadcasting" emits a stream_publish_end.
+func TestNormalizeBroadcast_FinishedAfterBroadcasting(t *testing.T) {
+	dto := amsclient.BroadcastDTO{
+		StreamID: "s-end",
+		AppName:  "live",
+		Status:   "finished",
+	}
+	events := NormalizeBroadcast(dto, "node-1", "broadcasting", NoopGeoResolver{}, NoopUAParser{})
+	if len(events) != 1 {
+		t.Fatalf("expected 1 stream_publish_end event, got %d", len(events))
+	}
+	if events[0].Type != domain.EventStreamPublishEnd {
+		t.Errorf("event type = %q, want stream_publish_end", events[0].Type)
+	}
+}
+
+// TestNormalizeBroadcast_EndedAfterBroadcasting verifies that status
+// "ended" when prevStatus was "broadcasting" also emits stream_publish_end.
+func TestNormalizeBroadcast_EndedAfterBroadcasting(t *testing.T) {
+	dto := amsclient.BroadcastDTO{
+		StreamID: "s-ended",
+		AppName:  "live",
+		Status:   "ended",
+	}
+	events := NormalizeBroadcast(dto, "node-1", "broadcasting", NoopGeoResolver{}, NoopUAParser{})
+	if len(events) != 1 {
+		t.Fatalf("expected 1 stream_publish_end event, got %d", len(events))
+	}
+	if events[0].Type != domain.EventStreamPublishEnd {
+		t.Errorf("event type = %q, want stream_publish_end", events[0].Type)
+	}
+}
+
+// ─── WebRTC averaging: zero/absent fields ────────────────────────────────────
+
+// TestNormalizeWebRTCStats_ZeroFields verifies that NormalizeWebRTCStats
+// correctly averages to zero when all peer-stat fields are zero/absent.
+func TestNormalizeWebRTCStats_ZeroFields(t *testing.T) {
+	dto := amsclient.WebRTCClientStatsDTO{
+		StatID:               "client-1",
+		VideoRoundTripTime:   0,
+		AudioRoundTripTime:   0,
+		VideoJitter:          0,
+		AudioJitter:          0,
+		VideoPacketLostRatio: 0,
+		AudioPacketLostRatio: 0,
+	}
+	ev := NormalizeWebRTCStats(dto, "live", "s1", "node-1")
+	if ev.Data["rtt_ms"].(float64) != 0 {
+		t.Errorf("rtt_ms = %v, want 0", ev.Data["rtt_ms"])
+	}
+	if ev.Data["jitter_ms"].(float64) != 0 {
+		t.Errorf("jitter_ms = %v, want 0", ev.Data["jitter_ms"])
+	}
+	if ev.Data["packet_loss_pct"].(float64) != 0 {
+		t.Errorf("packet_loss_pct = %v, want 0", ev.Data["packet_loss_pct"])
+	}
+}
+
+// TestNormalizeWebRTCStats_Averaging verifies the (video+audio)/2 averaging
+// for rtt, jitter, and packet_loss when fields are non-zero.
+func TestNormalizeWebRTCStats_Averaging(t *testing.T) {
+	dto := amsclient.WebRTCClientStatsDTO{
+		StatID:               "client-2",
+		VideoRoundTripTime:   0.02,  // 20ms in seconds
+		AudioRoundTripTime:   0.04,  // 40ms in seconds → avg = 30ms → *1000 = 30
+		VideoJitter:          0.005, // 5ms in seconds
+		AudioJitter:          0.015, // 15ms in seconds → avg = 10ms → *1000 = 10
+		VideoPacketLostRatio: 0.01,  // 1%
+		AudioPacketLostRatio: 0.03,  // 3% → avg = 2% → *100 = 2
+	}
+	ev := NormalizeWebRTCStats(dto, "live", "s1", "node-1")
+
+	if got := ev.Data["rtt_ms"].(float64); got != 30.0 {
+		t.Errorf("rtt_ms = %.1f, want 30.0", got)
+	}
+	if got := ev.Data["jitter_ms"].(float64); got != 10.0 {
+		t.Errorf("jitter_ms = %.1f, want 10.0", got)
+	}
+	if got := ev.Data["packet_loss_pct"].(float64); got != 2.0 {
+		t.Errorf("packet_loss_pct = %.1f, want 2.0", got)
+	}
+	t.Logf("PASS WebRTC averaging: rtt=%.0f jitter=%.0f loss=%.0f",
+		ev.Data["rtt_ms"], ev.Data["jitter_ms"], ev.Data["packet_loss_pct"])
+}

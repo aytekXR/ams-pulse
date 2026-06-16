@@ -1,0 +1,30 @@
+[
+  {
+    "nodeId": "node-origin-1",
+    "ip": "10.0.1.10",
+    "port": 5080,
+    "role": "origin",
+    "version": "2.8.3",
+    "cpuUsage": 35.2,
+    "memoryUsage": 62.5,
+    "diskUsage": 48.0,
+    "networkInputBps": 12500000,
+    "networkOutputBps": 87500000,
+    "jvmMemoryUsage": 55.0,
+    "activeStreamCount": 12
+  },
+  {
+    "nodeId": "node-edge-1",
+    "ip": "10.0.1.20",
+    "port": 5080,
+    "role": "edge",
+    "version": "2.8.3",
+    "cpuUsage": 22.8,
+    "memoryUsage": 41.3,
+    "diskUsage": 30.1,
+    "networkInputBps": 87500000,
+    "networkOutputBps": 175000000,
+    "jvmMemoryUsage": 38.7,
+    "activeStreamCount": 45
+  }
+]

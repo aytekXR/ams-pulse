@@ -1,0 +1,16 @@
+[
+  {
+    "streamId": "stream1",
+    "name": "My Live Stream",
+    "status": "broadcasting",
+    "type": "liveStream",
+    "publishType": "rtmp",
+    "startTime": 1700000000000,
+    "endTime": 0,
+    "hlsViewerCount": 5,
+    "webRTCViewerCount": 2,
+    "rtmpViewerCount": 0,
+    "dashViewerCount": 0,
+    "speed": 2000
+  }
+]
