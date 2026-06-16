@@ -502,3 +502,19 @@ Security-headers: all four present + `Server` stripped; only `Via: 1.1 Caddy` re
 it at the server layer, unremovable via Caddyfile — accepted, informational). `total_viewers=0` is
 honest (mock AMS, no streams). **Live: https://beyondkaira.com (+ www).** Closes the public-TLS
 waiver; W2c amsclient hardening + real-AMS connectivity remain.
+
+## 2026-06-16 — session 5 (cont.) · CI diagnosis/fix + W2c amsclient hardening (D-025)
+
+Diagnosed CI by reproducing every `ci.yml` job locally in its matching image (repo is private + no
+`gh` on the VPS). Only real failure: **helm** — golden files carried trailing blank lines helm
+3.17.0 no longer emits; regenerated the 3 goldens (whitespace-only) → `6c7666c`. The local `server`
+red was a container-as-root git-ownership VCS-stamp artifact, not a real failure (re-ran with
+`safe.directory` → all packages pass `go test -race`); contracts/web/sdk/compose green;
+docker-build covered by the prod image built this session.
+
+Then ran Workflow `pulse-amsclient-hardening` (W2c, `wf_4aab2501-0a4`): mapped amsclient+collector,
+fixed 3 latent bugs (node version dropped/VD-40; v2.10 speed-only bitrate; empty-StreamID
+corruption) + a Kafka dash-viewer parity gap, and added `amsclient`'s **first** tests (11 +
+10 JSON fixtures via the real httptest decode path) plus collector variance tests. Verified by the
+workflow's race gate + an independent ORCH re-run (`go test ./... -race` green, 19 pkgs, no data
+race) + adversarial diff review. Real-capture validation still pairs with a real AMS (W2b real-ams).

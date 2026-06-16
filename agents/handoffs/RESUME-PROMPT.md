@@ -18,6 +18,14 @@
 `pulse-golive-verify` (`wf_9d503e84-e0e`, 8 adversarial verifiers, 7/8 PASS + 1 accepted). Demo
 torn down; `brier-db` (unrelated project) untouched. Operating commands are in the W2b section below.
 
+**Also this session — CI diagnosed + fixed, and W2c amsclient hardening DONE (D-025).** Reproduced
+every `ci.yml` job locally: the only genuinely-red GitHub job was **helm** (stale golden files vs
+helm 3.17.0 — whitespace drift), now regenerated + pushed (`6c7666c`); contracts/server/web/sdk/
+compose/docker-build are green. W2c (Workflow `pulse-amsclient-hardening`) mapped `amsclient` +
+`collector`, fixed **3 latent bugs** (node-version drop/VD-40, v2.10 speed-only bitrate, empty
+`StreamID` corruption) + a Kafka dash-viewer parity gap, and added `amsclient`'s **first** tests
+(11 + 10 fixtures) — full `go test ./... -race` green.
+
 **Prior (sessions 1–3):** MVP (F1–F10) + **Wave 3-Plus** + a **functional MVP DEPLOYED on the
 VPS via Docker Compose** against the mock AMS (closed the D-002 waiver). Gate **CLOSED**
 (D-019). Authoritative artifacts: `IMPLEMENTATION_LOG.md`, `DEVLOG.md`,
@@ -104,11 +112,18 @@ project **`pulse-prod`** = `base + hardened + prod-tls` (mock-ams). `deploy/.env
 `POST /api/v1/admin/sources/{id}/test`. Until then the dashboard shows **0 viewers** (honest —
 mock-ams has no streams). Pair this with W2c below. Adversarially verify; ORCH gate; commit + handoff.
 
-### W2c — `pulse-amsclient-hardening` — real-wire-format robustness (DEFERRED from session 4)
-Harden `server/pkg/amsclient` (+ `internal/collector`) against real AMS wire variance: capture REST
-fixtures (extra/missing fields, status-value variants, pagination, cluster vs standalone, AMS-version
-diffs) + unit tests that actually RUN. Author + unit-test is doable WITHOUT live infra; validate
-against **real captures** once W2b's AMS exists — so pair it with W2b.
+### ✅ W2c — `pulse-amsclient-hardening` — DONE (D-025, author + unit tests)
+Workflow `pulse-amsclient-hardening` (`wf_4aab2501-0a4`) hardened `server/pkg/amsclient` +
+`internal/collector` against real AMS wire variance. Added `amsclient`'s **first** tests:
+`client_test.go` (11) + 10 `testdata/*.json` fixtures driving the real `getJSON`/httptest decode
+path (v2.10/v2.14/v3.0 field variance, mixed statuses, empty list, unknown-fields+nulls, exactly-200
+pagination, non-2xx error, cluster role/version, applications envelope, partial WebRTC). Fixed
+3 latent bugs (node `version` dropped → `Data["version"]`; v2.10 `speed`→bitrate fallback; empty
+`StreamID` guard) + Kafka `dashViewerCount` parity. Verified: full `go test ./... -race` green
+(workflow gate + independent ORCH re-run) + adversarial diff review.
+
+**Still pending (needs a real AMS):** validate these fixtures against **real** AMS REST captures
+once the real-ams overlay is connected (see the W2b real-AMS step above). The unit/wire layer is done.
 
 ### Also open (carry-forward)
 - **QoE/beacon end-to-end**: integrate `sdk/beacon-js` into AMS player pages (needs a Pro+ license to

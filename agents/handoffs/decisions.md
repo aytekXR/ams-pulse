@@ -726,3 +726,45 @@ proven (node up, authed JSON flowing). Real viewer data arrives when a real AMS 
 (`real-ams` overlay). The fresh `pulse-prod` instance generated a new admin token (operator-held,
 not committed). **This CLOSES the D-022/D-023 public-TLS waiver.** Remaining W2 work: `amsclient`
 real-wire hardening (W2c) + real-AMS connectivity — both need operator infra.
+
+## D-025 · 2026-06-16 · W2c — amsclient/collector real-wire-format hardening (author + unit tests)
+
+Ran Workflow `pulse-amsclient-hardening` (`wf_4aab2501-0a4`, 4 agents: two disjoint-scope authors →
+go-test-race gate + adversarial diff review). Mapped the AMS REST ingest surface first
+(`server/pkg/amsclient` + `server/internal/collector`), which surfaced **3 latent bugs + 1 parity
+gap**, all fixed:
+- **FIX1 (VD-40):** `NormalizeClusterNode` decoded `ClusterNodeDTO.Version` but never wrote it to
+  the event `Data["version"]`, so the FleetPage node version was always blank. Now populated.
+- **FIX2:** AMS v2.10 nodes send `speed` and omit `bitrate`; `NormalizeBroadcast` emitted 0 kbps.
+  Now falls back to `Speed` when `BitRate==0 && Speed>0` (both the stream_stats value and the
+  ingest_stats emit gate).
+- **FIX3:** an empty `StreamID` keyed the aggregator map to `nodeID+"/"` and merged/corrupted live
+  state; now guarded (no events emitted for a blank stream id).
+- **FIX4:** the Kafka normalizer omitted `dashViewerCount` from `viewer_count` while the REST path
+  included it; added for REST/Kafka parity.
+
+New tests (all run, no skips): `amsclient` gained its **first** tests — `client_test.go` (11 tests)
++ 10 `testdata/*.json` fixtures driving the real `getJSON`/httptest decode path (v2.10/v2.14/v3.0
+field variance, mixed statuses, empty list, unknown-fields+nulls tolerance, exactly-200 pagination
+boundary, non-2xx error, cluster role/version/usage, applications envelope, partial WebRTC stats).
+`collector` gained tests for each fix + created/finished/ended transitions + WebRTC zero-field
+averaging. ORCH then upgraded the Kafka↔REST parity test to actually run **both** normalizers
+(`collector.NormalizeBroadcast`, no import cycle — only `cmd/pulse` imports the kafka pkg) instead
+of inline arithmetic — closing the workflow reviewer's one non-blocking note.
+
+**Verification (D-013/D-017 — QA not authoritative alone):** the workflow's go-test-race agent AND
+an independent ORCH re-run both ran the full `go vet ./... && go test ./... -race` green (19 pkgs ok,
+incl. the now-tested `amsclient`; no data race). Adversarial review confirmed each fix is
+present/correct/minimal and the tests fail without the fix. **Still pending:** validate the fixtures
+against **real** AMS REST captures once the real-ams overlay is connected (pairs with the W2b
+real-AMS step). The unit/wire layer is done.
+
+### CI diagnosis (session 5) — reproduced ci.yml locally
+The user reported red CI. Repo is private + `gh` not on the VPS, so reproduced each job in its
+matching image. **Only real failure: `helm`** — committed golden files carried trailing blank lines
+that helm 3.17.0 (the pinned CI version) no longer emits; regenerated all three (whitespace-only,
+16 deletions, 0 semantic change) → `6c7666c`. contracts/web/sdk/compose pass; `server` passes
+`go test -race` for all packages (its local-only failure was a container-as-root git "dubious
+ownership" VCS-stamp artifact — `safe.directory` fixes it; not a real CI failure); docker-build is
+covered by the prod image built this session. server-integration not reproduced (needs a CH service
+container) — non-blocking.
