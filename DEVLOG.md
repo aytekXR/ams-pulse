@@ -518,3 +518,21 @@ corruption) + a Kafka dash-viewer parity gap, and added `amsclient`'s **first** 
 10 JSON fixtures via the real httptest decode path) plus collector variance tests. Verified by the
 workflow's race gate + an independent ORCH re-run (`go test ./... -race` green, 19 pkgs, no data
 race) + adversarial diff review. Real-capture validation still pairs with a real AMS (W2b real-ams).
+
+## 2026-06-16 — session 5 (cont.) · real-CI-from-logs fixes + security/AMS hardening LIVE (D-026/D-027)
+
+User pasted the actual GitHub Actions logs, exposing 3 failures my local repro had MASKED: compose
+(`:?`-required PULSE_SECRET_KEY with no `.env`), web (wrong `git diff` path after `cd web`), and a
+~20% flaky query integration test (mv_qoe_1h rollup lag). All fixed + faithfully validated (query
+`-count=20` → 0 fail; compose+web reproduced) + pushed (`22dfd4d`, `b1304da`). Lesson: never trust
+a partial/inexact CI repro — it yields false green.
+
+Then ran Workflow `pulse-security-ams-hardening` (5 authors + verify): CORS allowlist, token-in-URL
+restriction, SSRF guard (scheme+redirect, not private-IP), rate-limiter eviction, beacon caps,
+amsclient body limit, http-warn/redact, and WIRED the previously-dead webhook source (fail-closed
+HMAC) + CSP/Permissions-Policy. Full `-race` green + adversarial review; 2 reviewer defects fixed.
+**Redeployed the hardened binary + CSP to the live site** (CORS + CSP confirmed live; SPA has no
+inline scripts so CSP-compatible). Hit + logged a Docker single-file bind-mount inode-staleness
+gotcha (force-recreate caddy). Added `.dockerignore` (root-owned CH test artifacts were breaking the
+build context). Wrote `agents/handoffs/AMS-INTEGRATION.md` (operator + next-session AMS guide).
+Live: **https://beyondkaira.com hardened.**

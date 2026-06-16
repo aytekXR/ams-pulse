@@ -779,3 +779,54 @@ re-validated end-to-end: `pulse migrate` applies all 3 CH migrations and the ful
 `go test -tags integration ./...` suite passes (incl. `internal/query`, `internal/store/clickhouse`).
 **Lesson (D-013/D-017 reinforced): never trust a PARTIAL CI repro — reproduce EVERY step.** My first
 pass skipped the integration steps and wrongly reported `server` green; the user caught it.
+
+## D-026 · 2026-06-16 · CI — the remaining real failures (from the user's GitHub logs)
+
+The local repro had MASKED three more GitHub-only failures; the user pasted the actual Actions
+logs, which exposed them — all fixed + faithfully validated + pushed:
+- **compose** (`22dfd4d`): `docker-compose.ci.yml` has `${PULSE_SECRET_KEY:?}`; a clean runner has
+  no `deploy/.env`, so `config --quiet` failed. (My repro auto-loaded `deploy/.env` → masked it.)
+  Fix: a throwaway `PULSE_SECRET_KEY` env on the compose-validation step (the `:?` guard stays for e2e).
+- **web** (`22dfd4d`): after `cd web` the drift check ran `git diff web/src/...` (wrong cwd) → exit
+  128 "ambiguous argument". (My repro used `git -C /repo` + the full path → masked it.) Fix:
+  `git diff src/lib/api/schema.d.ts`.
+- **server integration** (`b1304da`): `TestQuery_QoeSummary_RealStartupP50` was ~20% flaky — the
+  `mv_qoe_1h` rollup briefly lags the INSERT/OPTIMIZE → transient `startup_p50_ms=0`. Reproduced
+  locally (2/10), de-flaked with a bounded poll (re-OPTIMIZE + re-query); validated `-count=20` → 0
+  failures. Production queries the rollup long after ingest, so the race is test-only.
+**Lesson (binding): an inexact local repro is worse than none — it produces false green. Reproduce
+each CI step EXACTLY (clean-checkout semantics, literal commands, no auto-loaded `.env`).** All
+`ci.yml` jobs now pass a faithful local reproduction (GitHub confirmation pending a fresh run).
+
+## D-027 · 2026-06-16 · Security + AMS-integration hardening — shipped + LIVE
+
+Recon (Explore) produced a 25-item backlog (14 security A1–A14, 11 AMS B1–B11). Workflow
+`pulse-security-ams-hardening` (`wf_06c3687a-a38`, 5 disjoint-file authors → go-test-race gate +
+adversarial review) implemented the verified high-value subset, each with tests (commits `efe8578`
+server + `89ace7e` Caddy CSP):
+- **CORS allowlist** (A1, `PULSE_CORS_ALLOWED_ORIGINS`; beacon stays permissive; same-origin SPA
+  unaffected) · **token-in-URL only on the WS route** (A4) · **SSRF**: source-test validates
+  http/https scheme + blocks redirects, but NOT private IPs — a real AMS is often private, so
+  IP-blocking would break it (corrected the recon) (B4/A6) · **rate-limiter eviction** (A3) ·
+  **beacon batch caps + UTF-8-safe truncation** (A10) · **alert-history limit cap** (A11) ·
+  **amsclient response body LimitReader 10 MB** (B9) · **http-AMS warn + redacted AMS URL log**
+  (B5/B10) · **wired the previously-DEAD webhook source, fail-closed** (A5/B1/B2: empty secret →
+  validateHMAC returns false AND serve.go refuses to start the listener) · **CSP + Permissions-Policy**
+  (A8). Two reviewer defects fixed by ORCH (webhook fail-closed at the library level; beacon
+  rune-safe truncation). Verified: full `go test ./... -race` green (workflow gate + independent
+  ORCH re-run) + adversarial diff review.
+- **Redeployed LIVE** (auto-rollback script): hardened binary + CSP now serve on
+  https://beyondkaira.com — CORS hardening confirmed (cross-origin → no `Access-Control-Allow-Origin`),
+  CSP/Permissions-Policy headers present, the SPA has NO inline scripts so `script-src 'self'` is
+  compatible; apex+www+authed data all 200. **Gotcha logged:** Docker single-FILE bind-mount inode
+  staleness — after the workflow rewrote `Caddyfile.prod` (new inode), `caddy reload` kept serving
+  the OLD config; fixed with `up -d --force-recreate caddy`. Added a `.dockerignore` — root-owned
+  ClickHouse test artifacts (`preprocessed_configs`/`access` left in package CWDs by integration
+  tests, owned by the container uid, mode 0750) were poisoning the build context; the ignore file
+  excludes them + deps/artifacts (also shrinks/robustifies the docker-build CI job).
+- **Operator guide** `agents/handoffs/AMS-INTEGRATION.md` (683 lines): REST + webhook-over-HTTPS
+  (incl. the required Caddy `/webhook/*` route + `X-Ams-Signature` HMAC + TLS + Docker secrets), a
+  32-var env table, a next-session prompt, verification checklist + troubleshooting.
+- **Deferred (documented in the guide):** B3 (Docker secrets), B6 (source-test should decrypt the
+  stored password), B7 (per-source webhook secret — needs a frozen-contract CR), A2 (rate-limit
+  main-port beacon), A7 (rate-limit `/metrics`).

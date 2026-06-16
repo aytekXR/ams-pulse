@@ -18,12 +18,17 @@
 `pulse-golive-verify` (`wf_9d503e84-e0e`, 8 adversarial verifiers, 7/8 PASS + 1 accepted). Demo
 torn down; `brier-db` (unrelated project) untouched. Operating commands are in the W2b section below.
 
-**Also this session — CI diagnosed + fixed (3 real failures), and W2c amsclient hardening DONE
-(D-025).** Reproduced every `ci.yml` job locally and found **3 real failures, all fixed + pushed**:
-**helm** golden whitespace drift (`6c7666c`); **server "Build pulse binary"** built from repo root
-with no root go.mod (`cd server && go build ./cmd/pulse`, `3a0a489`); **server "Download ClickHouse
-binary"** 404 URL (→ `builds.clickhouse.com`, `3a0a489`). Both server fixes re-validated end-to-end
-(migrate + full `-tags integration` suite pass). contracts/web/sdk/compose/docker-build green. W2c
+**Also this session — ALL CI failures fixed (D-026), security+AMS hardening shipped + LIVE (D-027),
+and W2c amsclient hardening DONE (D-025).** CI: **6 real failures total**, all fixed + pushed —
+3 from my repro (helm goldens `6c7666c`; server build-from-root + dead ClickHouse URL `3a0a489`) and
+**3 the user's actual GitHub logs revealed that my repro had masked** (`22dfd4d` compose `:?`-secret +
+web `git diff` path; `b1304da` de-flaked the ~20% flaky `TestQuery_QoeSummary` rollup race). Every
+job now passes a faithful local repro (query `-count=20` → 0 fail); **GitHub confirmation of a fresh
+green run is still pending — paste it if anything is red.** Hardening (D-027, workflow
+`pulse-security-ams-hardening`): CORS allowlist, token-in-URL, SSRF, rate-limiter eviction, beacon
+caps, amsclient body limit, webhook wiring (fail-closed), CSP — `efe8578`/`89ace7e`; **redeployed
+LIVE** (CORS+CSP confirmed on https://beyondkaira.com). See **`agents/handoffs/AMS-INTEGRATION.md`**
+for the real-AMS operator guide + deferred backlog (B3/B6/B7/A2/A7). W2c
 (Workflow `pulse-amsclient-hardening`) mapped `amsclient` +
 `collector`, fixed **3 latent bugs** (node-version drop/VD-40, v2.10 speed-only bitrate, empty
 `StreamID` corruption) + a Kafka dash-viewer parity gap, and added `amsclient`'s **first** tests
