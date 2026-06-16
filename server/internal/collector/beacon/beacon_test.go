@@ -50,6 +50,7 @@ func (s *testSink) Last() *domain.BeaconEvent {
 }
 
 // setupBeaconHandler creates a Handler with a valid token pre-loaded.
+// The Handler's background goroutine is stopped automatically via t.Cleanup.
 func setupBeaconHandler(t *testing.T) (*beacon.Handler, *testSink, string) {
 	t.Helper()
 	validToken := "test-ingest-token-abc123"
@@ -60,6 +61,7 @@ func setupBeaconHandler(t *testing.T) (*beacon.Handler, *testSink, string) {
 		RateBurst:            200,
 	}
 	h := beacon.New(cfg, store, sink, nil)
+	t.Cleanup(h.Close)
 	return h, sink, validToken
 }
 
@@ -624,4 +626,220 @@ func (c *captureIPGeoResolver) Resolve(ip string) domain.GeoEnrichment {
 		c.onResolve(ip)
 	}
 	return domain.GeoEnrichment{Country: "XX"}
+}
+
+// ─── A10: batch cap tests ─────────────────────────────────────────────────────
+
+// TestBeacon_TooManyEvents_400 verifies that a batch with >100 events is
+// rejected with 422 SCHEMA_ERROR (A10).
+func TestBeacon_TooManyEvents_400(t *testing.T) {
+	h, _, tok := setupBeaconHandler(t)
+
+	// Build 101 valid heartbeat events.
+	events := make([]any, 101)
+	for i := range events {
+		events[i] = map[string]any{
+			"type": "heartbeat",
+			"ts":   int64(1700000000000 + int64(i)*1000),
+			"data": map[string]any{"watch_ms": 1000},
+		}
+	}
+	batch := map[string]any{
+		"version":    1,
+		"session_id": "550e8400-e29b-41d4-a716-446655440000",
+		"stream_id":  "test-stream",
+		"events":     events,
+	}
+	body, err := json.Marshal(batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := doRequest(t, h, http.MethodPost, "/ingest/beacon", body,
+		map[string]string{
+			"Content-Type":         "application/json",
+			"X-Pulse-Ingest-Token": tok,
+		})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for >100 events batch, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp map[string]any
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal("response not JSON:", err)
+	}
+	if resp["code"] != "SCHEMA_ERROR" {
+		t.Errorf("expected code=SCHEMA_ERROR, got %v", resp["code"])
+	}
+	// Errors list should mention the limit.
+	errsList, _ := resp["errors"].([]any)
+	if len(errsList) == 0 {
+		t.Error("expected at least one error in errors array")
+	}
+	t.Logf("PASS A10: >100 events → 422 SCHEMA_ERROR, errors=%v", errsList)
+}
+
+// TestBeacon_ExactlyMaxEvents_202 verifies that a batch with exactly 100 events
+// is accepted (A10 boundary check — must not break valid batches).
+func TestBeacon_ExactlyMaxEvents_202(t *testing.T) {
+	h, _, tok := setupBeaconHandler(t)
+
+	events := make([]any, 100)
+	for i := range events {
+		events[i] = map[string]any{
+			"type": "heartbeat",
+			"ts":   int64(1700000000000 + int64(i)*1000),
+			"data": map[string]any{"watch_ms": 1000},
+		}
+	}
+	batch := map[string]any{
+		"version":    1,
+		"session_id": "550e8400-e29b-41d4-a716-446655440000",
+		"stream_id":  "test-stream",
+		"events":     events,
+	}
+	body, err := json.Marshal(batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := doRequest(t, h, http.MethodPost, "/ingest/beacon", body,
+		map[string]string{
+			"Content-Type":         "application/json",
+			"X-Pulse-Ingest-Token": tok,
+		})
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 for exactly 100 events, got %d: %s", rr.Code, rr.Body.String())
+	}
+	t.Logf("PASS A10 boundary: exactly 100 events → 202")
+}
+
+// ─── A3: bucket eviction tests ────────────────────────────────────────────────
+
+// TestBeacon_BucketEviction_RemovesStale verifies that EvictOnce removes a
+// bucket whose lastFill is older than the provided cutoff (A3).
+func TestBeacon_BucketEviction_RemovesStale(t *testing.T) {
+	validToken := "evict-test-token"
+	store := beacon.NewMemTokenStore(validToken)
+	sink := &testSink{}
+	cfg := beacon.Config{
+		RateLimitPerTokenRPS: 100,
+		RateBurst:            200,
+	}
+	h := beacon.New(cfg, store, sink, nil)
+	defer h.Close()
+
+	// Make a request to populate a bucket.
+	body := validBeaconBody(t)
+	rr := doRequest(t, h, http.MethodPost, "/ingest/beacon", body,
+		map[string]string{
+			"Content-Type":         "application/json",
+			"X-Pulse-Ingest-Token": validToken,
+		})
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	if h.BucketCount() != 1 {
+		t.Fatalf("expected 1 bucket after first request, got %d", h.BucketCount())
+	}
+
+	// Evict with a cutoff in the future — bucket was just used, so lastFill is
+	// recent, but a cutoff of time.Now().Add(1s) means "anything last-filled before
+	// now+1s is stale" which covers our fresh bucket.
+	h.EvictOnce(time.Now().Add(time.Second))
+
+	if h.BucketCount() != 0 {
+		t.Errorf("expected 0 buckets after eviction, got %d", h.BucketCount())
+	}
+	t.Logf("PASS A3: stale bucket evicted, BucketCount=%d", h.BucketCount())
+}
+
+// TestBeacon_BucketEviction_PreservesActive verifies that EvictOnce does NOT
+// evict a bucket that was recently used (A3 — no false eviction).
+func TestBeacon_BucketEviction_PreservesActive(t *testing.T) {
+	validToken := "evict-active-token"
+	store := beacon.NewMemTokenStore(validToken)
+	sink := &testSink{}
+	cfg := beacon.Config{
+		RateLimitPerTokenRPS: 100,
+		RateBurst:            200,
+	}
+	h := beacon.New(cfg, store, sink, nil)
+	defer h.Close()
+
+	body := validBeaconBody(t)
+	rr := doRequest(t, h, http.MethodPost, "/ingest/beacon", body,
+		map[string]string{
+			"Content-Type":         "application/json",
+			"X-Pulse-Ingest-Token": validToken,
+		})
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", rr.Code)
+	}
+
+	// Evict with a cutoff in the past — bucket was just used and is NOT stale.
+	h.EvictOnce(time.Now().Add(-10 * time.Minute))
+
+	if h.BucketCount() != 1 {
+		t.Errorf("expected 1 bucket (active bucket preserved), got %d", h.BucketCount())
+	}
+	t.Logf("PASS A3: active bucket preserved after eviction with past cutoff")
+}
+
+// ─── A10: tenant truncation tests ────────────────────────────────────────────
+
+// TestBeacon_TenantTruncation verifies that a tenant value longer than 64 chars
+// is silently truncated to 64 chars in the domain event (A10).
+func TestBeacon_TenantTruncation(t *testing.T) {
+	validToken := "tenant-truncate-token"
+	store := beacon.NewMemTokenStore(validToken)
+	sink := newCaptureEnrichSink()
+
+	cfg := beacon.Config{
+		RateLimitPerTokenRPS: 100,
+		RateBurst:            200,
+	}
+	h := beacon.New(cfg, store, sink, nil)
+	defer h.Close()
+
+	longTenant := strings.Repeat("a", 200)
+	batch := map[string]any{
+		"version":    1,
+		"session_id": "550e8400-e29b-41d4-a716-446655440000",
+		"stream_id":  "test-stream",
+		"meta":       map[string]string{"tenant": longTenant},
+		"events": []any{
+			map[string]any{
+				"type": "heartbeat",
+				"ts":   int64(1700000000000),
+				"data": map[string]any{"watch_ms": 1000},
+			},
+		},
+	}
+	body, err := json.Marshal(batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/ingest/beacon", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Pulse-Ingest-Token", validToken)
+	rr := httptest.NewRecorder()
+	h.Handle(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	ev := sink.WaitEvent(t)
+	if ev == nil {
+		t.Fatal("no beacon event received")
+	}
+	if len(ev.Tenant) > 64 {
+		t.Errorf("Tenant not truncated: got len=%d, want <=64", len(ev.Tenant))
+	}
+	if ev.Tenant != longTenant[:64] {
+		t.Errorf("Tenant truncation wrong: got %q, want %q", ev.Tenant, longTenant[:64])
+	}
+	t.Logf("PASS A10: tenant truncated to %d chars (was %d)", len(ev.Tenant), len(longTenant))
 }

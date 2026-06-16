@@ -136,6 +136,11 @@ type EnvConfig struct {
 	// S3SecretKeyEnvRef is the name of the env var that holds the S3 secret access key.
 	// Corresponds to PULSE_S3_SECRET_KEY_ENV (default: PULSE_S3_SECRET_ACCESS_KEY).
 	S3SecretKeyEnvRef string
+
+	// CORSAllowedOrigins is the list of origins permitted on /api/v1/* routes.
+	// Parsed from PULSE_CORS_ALLOWED_ORIGINS (comma-separated).
+	// Empty = no CORS headers emitted for API routes (same-origin requests still work).
+	CORSAllowedOrigins []string
 }
 
 // loadEnvConfig reads configuration from PULSE_* environment variables.
@@ -248,6 +253,16 @@ func loadEnvConfig() (EnvConfig, error) {
 	cfg.S3Region = envOrDefault("PULSE_S3_REGION", "us-east-1")
 	cfg.S3AccessKeyEnvRef = envOrDefault("PULSE_S3_ACCESS_KEY_ENV", "PULSE_S3_ACCESS_KEY_ID")
 	cfg.S3SecretKeyEnvRef = envOrDefault("PULSE_S3_SECRET_KEY_ENV", "PULSE_S3_SECRET_ACCESS_KEY")
+
+	// A1: CORS allowlist for /api/v1/* routes.
+	if v := os.Getenv("PULSE_CORS_ALLOWED_ORIGINS"); v != "" {
+		for _, origin := range strings.Split(v, ",") {
+			origin = strings.TrimSpace(origin)
+			if origin != "" {
+				cfg.CORSAllowedOrigins = append(cfg.CORSAllowedOrigins, origin)
+			}
+		}
+	}
 
 	return cfg, nil
 }

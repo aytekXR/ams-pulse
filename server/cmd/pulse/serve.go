@@ -19,6 +19,7 @@ import (
 	kafkasrc "github.com/pulse-analytics/pulse/server/internal/collector/kafka"
 	"github.com/pulse-analytics/pulse/server/internal/collector/restpoller"
 	"github.com/pulse-analytics/pulse/server/internal/collector/sessions"
+	webhooksrc "github.com/pulse-analytics/pulse/server/internal/collector/webhook"
 	"github.com/pulse-analytics/pulse/server/internal/license"
 	"github.com/pulse-analytics/pulse/server/internal/prober"
 	"github.com/pulse-analytics/pulse/server/internal/query"
@@ -185,10 +186,23 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	//     tailer := logtail.New(logtail.Config{...}, fanout, logger)
 	//     sources = append(sources, tailer)
 	// }
-	// if cfg.WebhookListenAddr != "" {
-	//     wh := webhook.New(webhook.Config{...}, fanout, logger)
-	//     sources = append(sources, wh)
-	// }
+
+	// A5/B1: Wire webhook source when PULSE_WEBHOOK_ADDR is set.
+	// B2 fail-closed: refuse to start the listener when the shared secret is
+	// absent — an unauthenticated endpoint would be an open injection point.
+	if cfg.WebhookListenAddr != "" {
+		if cfg.WebhookSharedSecret == "" {
+			logger.Error("pulse: webhook listener skipped — PULSE_WEBHOOK_SECRET must be set when PULSE_WEBHOOK_ADDR is configured (fail-closed)")
+		} else {
+			wh := webhooksrc.New(webhooksrc.Config{
+				NodeID:       cfg.AMSNodeID,
+				SharedSecret: cfg.WebhookSharedSecret,
+				ListenAddr:   cfg.WebhookListenAddr,
+			}, fanout, logger)
+			sources = append(sources, wh)
+			logger.Info("pulse: webhook source configured", "addr", cfg.WebhookListenAddr)
+		}
+	}
 
 	// Wave 2: Kafka source (when brokers are configured).
 	// D-005 declared edit (BE-02-A): hoisted to function scope so kafkaSource is
@@ -273,9 +287,10 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		webDir = "/usr/share/pulse/web" // matches deploy/docker/pulse.Dockerfile
 	}
 	apiCfg := api.Config{
-		ListenAddr:   cfg.ListenAddr,
-		MetricsToken: cfg.MetricsToken, // Wave 2: PULSE_METRICS_TOKEN gating
-		WebDir:       webDir,
+		ListenAddr:         cfg.ListenAddr,
+		MetricsToken:       cfg.MetricsToken, // Wave 2: PULSE_METRICS_TOKEN gating
+		WebDir:             webDir,
+		CORSAllowedOrigins: cfg.CORSAllowedOrigins, // A1: PULSE_CORS_ALLOWED_ORIGINS
 	}
 	apiServer := api.New(apiCfg, metaStore, agg, qsvc, lic, logger)
 	// Wire ClickHouse connection for /healthz probes (D-W1-002).

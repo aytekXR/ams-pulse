@@ -73,6 +73,13 @@ type Config struct {
 	// falling back to index.html for client-side routes. Empty (or an absent
 	// dir) disables static serving so API-only and test deployments keep 404s.
 	WebDir string
+	// CORSAllowedOrigins is the list of origins permitted on /api/v1/* routes.
+	// When set, corsMiddleware echoes the matching request Origin and adds
+	// Vary: Origin. When empty, no Access-Control-Allow-Origin header is emitted
+	// for API/admin routes (same-origin browser requests still work without CORS).
+	// The beacon ingest route (/ingest/beacon) is always permissive regardless.
+	// Corresponds to PULSE_CORS_ALLOWED_ORIGINS (comma-separated).
+	CORSAllowedOrigins []string
 }
 
 // KafkaStatsProvider is the interface to the Kafka source for health reporting.
@@ -270,7 +277,7 @@ func (s *Server) buildRouter() {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(s.loggingMiddleware)
-	r.Use(corsMiddleware)
+	r.Use(s.corsMiddleware)
 	r.Use(middleware.Recoverer)
 
 	// Operational (unauthenticated).
@@ -434,13 +441,15 @@ func (s *Server) bearerAuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// extractBearerToken reads the bearer token from the Authorization header only.
+// Query-parameter token (?token=) is intentionally NOT supported here to prevent
+// tokens from leaking into access logs, proxy caches, and browser history.
+// The only exception is the WebSocket upgrade handler (handleLiveWS), which reads
+// ?token= directly because browsers cannot set custom headers on WS connections.
 func extractBearerToken(r *http.Request) string {
 	auth := r.Header.Get("Authorization")
 	if strings.HasPrefix(auth, "Bearer ") {
 		return strings.TrimPrefix(auth, "Bearer ")
-	}
-	if t := r.URL.Query().Get("token"); t != "" {
-		return t
 	}
 	return ""
 }
@@ -459,11 +468,52 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
+// corsMiddleware handles CORS headers for all routes.
+//
+// Beacon ingest (/ingest/beacon) is permissive: it always echoes the request
+// Origin so third-party pages can POST beacons from any origin.
+//
+// API/admin routes (/api/v1/*) are allowlist-controlled:
+//   - If CORSAllowedOrigins is non-empty and the request Origin matches, the
+//     exact Origin is echoed and Vary: Origin is added.
+//   - If the allowlist is empty, or the Origin does not match, no
+//     Access-Control-Allow-Origin header is emitted. Same-origin browser
+//     requests still work because they do not require CORS headers.
+func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := r.Header.Get("Origin")
+
+		// Beacon ingest: always permissive (browsers can't set custom headers on
+		// cross-origin beacons without a permissive CORS response).
+		if strings.HasPrefix(r.URL.Path, "/ingest/") {
+			if origin != "" {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Add("Vary", "Origin")
+			} else {
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+			}
+			w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Pulse-Ingest-Token")
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// All other routes (API, healthz, metrics, static): allowlist-controlled.
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Pulse-Ingest-Token")
+		if origin != "" && len(s.cfg.CORSAllowedOrigins) > 0 {
+			for _, allowed := range s.cfg.CORSAllowedOrigins {
+				if allowed == origin {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					w.Header().Add("Vary", "Origin")
+					break
+				}
+			}
+		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -695,7 +745,13 @@ type wsMessage struct {
 }
 
 func (s *Server) handleLiveWS(w http.ResponseWriter, r *http.Request) {
+	// Browsers cannot set custom headers on WebSocket connections, so we also
+	// accept ?token= here (WS-only exception). extractBearerToken reads only the
+	// Authorization header; we fall back to the query param explicitly.
 	token := extractBearerToken(r)
+	if token == "" {
+		token = r.URL.Query().Get("token")
+	}
 	if token == "" {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing token")
 		return
@@ -1146,6 +1202,10 @@ func (s *Server) handleAlertHistory(w http.ResponseWriter, r *http.Request) {
 	if limit == 0 {
 		limit = 50
 	}
+	// A11: cap at 500 to prevent unbounded result sets.
+	if limit > 500 {
+		limit = 500
+	}
 	hist, err := s.store.ListAlertHistory(r.Context(), q.Get("rule_id"), q.Get("state"),
 		from.UnixMilli(), to.UnixMilli(), limit)
 	if err != nil {
@@ -1285,7 +1345,22 @@ func (s *Server) handleTestSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	testURL := strings.TrimRight(src.RestURL.String, "/") + "/rest/v2/version"
+	// B4/A6: validate the stored URL scheme before making an outbound request.
+	// This is a defence-in-depth check; amsSourceFromAPI already validates on
+	// write, but a row could have been created before this guard was added.
+	testBase := src.RestURL.String
+	if parsedBase, perr := url.Parse(testBase); perr != nil ||
+		(parsedBase.Scheme != "http" && parsedBase.Scheme != "https") {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"reachable":  false,
+			"status":     "error",
+			"message":    "rest_url must use http or https scheme",
+			"latency_ms": nil,
+		})
+		return
+	}
+
+	testURL := strings.TrimRight(testBase, "/") + "/rest/v2/version"
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
@@ -1304,7 +1379,18 @@ func (s *Server) handleTestSource(w http.ResponseWriter, r *http.Request) {
 		req.SetBasicAuth(src.RestUser.String, "") // password from encrypted store; skip for connectivity check
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	// B4/A6: use a dedicated client that refuses to follow redirects.
+	// Redirects to internal metadata endpoints (e.g. 169.254.169.254) are a
+	// common SSRF vector; stopping at the first response prevents redirect chains.
+	// Private/loopback IPs are intentionally allowed — real AMS nodes are often
+	// on internal networks.
+	testClient := &http.Client{
+		Timeout: 5 * time.Second,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := testClient.Do(req)
 	latencyMS := time.Since(start).Milliseconds()
 	if err != nil {
 		// Network error means unreachable.
@@ -1778,8 +1864,14 @@ func amsSourceFromAPI(body map[string]any, store *meta.Store) (meta.AMSSourceRow
 		return meta.AMSSourceRow{}, fmt.Errorf("type required")
 	}
 	row := meta.AMSSourceRow{Name: name, SourceType: srcType, Enabled: true}
-	if v, ok := body["rest_url"].(string); ok {
-		row.RestURL = sql.NullString{String: v, Valid: v != ""}
+	if v, ok := body["rest_url"].(string); ok && v != "" {
+		// B4/A6: reject schemes other than http/https to prevent SSRF via
+		// file://, ftp://, gopher://, etc.
+		parsed, err := url.Parse(v)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return meta.AMSSourceRow{}, fmt.Errorf("rest_url must use http or https scheme")
+		}
+		row.RestURL = sql.NullString{String: v, Valid: true}
 	}
 	if v, ok := body["rest_user"].(string); ok {
 		row.RestUser = sql.NullString{String: v, Valid: v != ""}

@@ -70,7 +70,7 @@ func (h *Handler) Name() string {
 // ctx is cancelled.
 func (h *Handler) Run(ctx context.Context) error {
 	if h.cfg.SharedSecret == "" {
-		h.logger.Warn("webhook: shared secret not configured — signature validation disabled")
+		h.logger.Error("webhook: shared secret not configured — ALL requests will be REJECTED (fail-closed)")
 	}
 
 	errCh := make(chan error, 1)
@@ -110,14 +110,14 @@ func (h *Handler) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate HMAC signature if configured.
-	if h.cfg.SharedSecret != "" {
-		sig := r.Header.Get("X-Ams-Signature")
-		if !validateHMAC(body, sig, h.cfg.SharedSecret) {
-			h.logger.Warn("webhook: invalid signature", "remote", r.RemoteAddr)
-			http.Error(w, "invalid signature", http.StatusUnauthorized)
-			return
-		}
+	// Validate HMAC signature. Fail-closed: an empty shared secret makes
+	// validateHMAC reject every request (defense-in-depth — the serve.go wiring
+	// already refuses to start this listener without a secret).
+	sig := r.Header.Get("X-Ams-Signature")
+	if !validateHMAC(body, sig, h.cfg.SharedSecret) {
+		h.logger.Warn("webhook: invalid signature", "remote", r.RemoteAddr)
+		http.Error(w, "invalid signature", http.StatusUnauthorized)
+		return
 	}
 
 	events, err := h.parseWebhook(body)
@@ -215,6 +215,9 @@ func (h *Handler) translateWebhook(raw map[string]json.RawMessage) []domain.Serv
 // ─── HMAC validation ──────────────────────────────────────────────────────────
 
 func validateHMAC(body []byte, signature, secret string) bool {
+	if secret == "" {
+		return false // fail-closed: never accept when no shared secret is configured
+	}
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(body)
 	expected := "sha256=" + hex.EncodeToString(mac.Sum(nil))

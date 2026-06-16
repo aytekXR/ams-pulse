@@ -175,7 +175,8 @@ func (c *Client) getJSON(ctx context.Context, path string, query url.Values, out
 	}
 
 	// Use standard Decoder — unknown fields silently ignored (tolerant).
-	return json.NewDecoder(resp.Body).Decode(out)
+	// Limit the body to 10 MB to prevent a rogue AMS response from OOM-ing Pulse.
+	return json.NewDecoder(io.LimitReader(resp.Body, 10<<20)).Decode(out)
 }
 
 // ─── API methods ──────────────────────────────────────────────────────────────

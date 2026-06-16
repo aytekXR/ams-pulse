@@ -29,6 +29,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -46,6 +47,21 @@ const (
 
 	// defaultRateBurst is the token bucket burst size.
 	defaultRateBurst = 200
+
+	// maxEventsPerBatch is the upper bound on events in a single beacon batch (A10).
+	maxEventsPerBatch = 100
+
+	// maxTenantLen is the maximum length for the "tenant" meta value (A10).
+	maxTenantLen = 64
+
+	// maxStringDataValueLen is the maximum length for string values in event data (A10).
+	maxStringDataValueLen = 64
+
+	// bucketIdleTTL is the maximum idle time before a rate-limit bucket is evicted (A3).
+	bucketIdleTTL = 10 * time.Minute
+
+	// bucketEvictInterval is how often the eviction loop runs (A3).
+	bucketEvictInterval = 5 * time.Minute
 )
 
 // TokenStore is a minimal interface to validate ingest tokens.
@@ -172,9 +188,14 @@ type Handler struct {
 
 	mu      sync.Mutex
 	buckets map[string]*tokenBucket // per-token-ID rate limit
+
+	// stopEvict stops the background bucket-eviction goroutine (A3).
+	stopEvict context.CancelFunc
 }
 
 // New creates a new beacon Handler.
+// The returned Handler runs a background goroutine to evict stale rate-limit
+// buckets (A3). Call Close when the Handler is no longer needed to stop it.
 func New(cfg Config, store TokenStore, sink domain.EventSink, logger *slog.Logger) *Handler {
 	if cfg.RateLimitPerTokenRPS <= 0 {
 		cfg.RateLimitPerTokenRPS = defaultRateLimit
@@ -191,14 +212,78 @@ func New(cfg Config, store TokenStore, sink domain.EventSink, logger *slog.Logge
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Handler{
-		cfg:     cfg,
-		store:   store,
-		sink:    sink,
-		logger:  logger,
-		lic:     cfg.License,
-		buckets: make(map[string]*tokenBucket),
+	ctx, cancel := context.WithCancel(context.Background())
+	h := &Handler{
+		cfg:       cfg,
+		store:     store,
+		sink:      sink,
+		logger:    logger,
+		lic:       cfg.License,
+		buckets:   make(map[string]*tokenBucket),
+		stopEvict: cancel,
 	}
+	go h.evictStaleBuckets(ctx)
+	return h
+}
+
+// Close stops the background bucket-eviction goroutine.
+func (h *Handler) Close() {
+	h.stopEvict()
+}
+
+// evictStaleBuckets runs in the background and removes rate-limit buckets
+// that have been idle for longer than bucketIdleTTL (A3).
+func (h *Handler) evictStaleBuckets(ctx context.Context) {
+	ticker := time.NewTicker(bucketEvictInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			h.evictOnce()
+		}
+	}
+}
+
+// evictOnce removes buckets whose lastFill is older than bucketIdleTTL.
+// Called by the background goroutine and also directly in tests.
+func (h *Handler) evictOnce() {
+	cutoff := time.Now().Add(-bucketIdleTTL)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for id, b := range h.buckets {
+		b.mu.Lock()
+		idle := b.lastFill.Before(cutoff)
+		b.mu.Unlock()
+		if idle {
+			delete(h.buckets, id)
+		}
+	}
+}
+
+// EvictOnce is an exported wrapper around evictOnce for use in tests.
+// It triggers one synchronous eviction pass using the provided cutoff time,
+// removing any bucket whose lastFill is before cutoff.
+func (h *Handler) EvictOnce(cutoff time.Time) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for id, b := range h.buckets {
+		b.mu.Lock()
+		idle := b.lastFill.Before(cutoff)
+		b.mu.Unlock()
+		if idle {
+			delete(h.buckets, id)
+		}
+	}
+}
+
+// BucketCount returns the number of active rate-limit buckets.
+// Exported for tests only.
+func (h *Handler) BucketCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.buckets)
 }
 
 // Mount registers the ingest route on the given chi router.
@@ -361,6 +446,8 @@ func validateBeaconBatch(b *beaconBatch) []string {
 	}
 	if len(b.Events) == 0 {
 		errs = append(errs, "events array must have at least 1 item")
+	} else if len(b.Events) > maxEventsPerBatch {
+		errs = append(errs, fmt.Sprintf("events array must not exceed %d items, got %d", maxEventsPerBatch, len(b.Events)))
 	}
 	for i, ev := range b.Events {
 		if ev.Type == "" {
@@ -408,12 +495,33 @@ func validateBeaconBatch(b *beaconBatch) []string {
 	return errs
 }
 
+// truncateUTF8 truncates s to at most maxBytes bytes without splitting a
+// multi-byte UTF-8 rune (plain byte slicing could emit invalid UTF-8).
+func truncateUTF8(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	t := s[:maxBytes]
+	for len(t) > 0 && !utf8.ValidString(t) {
+		t = t[:len(t)-1]
+	}
+	return t
+}
+
 // batchToDomain converts a parsed batch to a domain.BeaconEvent.
 // VD-08: extract client IP (X-Forwarded-For / RemoteAddr) and User-Agent,
 // call geo+UA resolvers, populate Enrichment on the event.
 func batchToDomain(b *beaconBatch, r *http.Request, geo collector.GeoResolver, ua collector.UAParser) domain.BeaconEvent {
 	items := make([]domain.BeaconItem, len(b.Events))
 	for i, ev := range b.Events {
+		// A10: truncate oversized string values in event data.
+		if ev.Data != nil {
+			for k, v := range ev.Data {
+				if s, ok := v.(string); ok && len(s) > maxStringDataValueLen {
+					ev.Data[k] = truncateUTF8(s, maxStringDataValueLen)
+				}
+			}
+		}
 		items[i] = domain.BeaconItem{Type: ev.Type, TS: ev.TS, Data: ev.Data}
 	}
 
@@ -430,6 +538,10 @@ func batchToDomain(b *beaconBatch, r *http.Request, geo collector.GeoResolver, u
 	}
 	if b.Meta != nil {
 		if tenant, ok := b.Meta["tenant"]; ok {
+			// A10: truncate tenant to maxTenantLen to prevent unbounded string growth.
+			if len(tenant) > maxTenantLen {
+				tenant = truncateUTF8(tenant, maxTenantLen)
+			}
 			evt.Tenant = tenant
 		}
 	}

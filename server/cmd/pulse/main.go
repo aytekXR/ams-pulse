@@ -23,8 +23,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -112,11 +114,26 @@ func runServe(args []string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
+	// B10: redact userinfo from the AMS URL before logging.
+	amsURLLog := cfg.AMSBaseURL
+	if parsed, err := url.Parse(cfg.AMSBaseURL); err == nil {
+		amsURLLog = parsed.Redacted()
+	}
 	logger.Info("pulse: starting",
 		"version", Version,
 		"listen", cfg.ListenAddr,
-		"ams_url", cfg.AMSBaseURL,
+		"ams_url", amsURLLog,
 	)
+
+	// B5: warn if the AMS base URL uses plain HTTP against a non-local host.
+	if warnURL, err := url.Parse(cfg.AMSBaseURL); err == nil &&
+		strings.EqualFold(warnURL.Scheme, "http") {
+		host := warnURL.Hostname()
+		if host != "localhost" && host != "127.0.0.1" && host != "::1" {
+			logger.Warn("pulse: AMS bearer token will travel in cleartext; use https:// for remote AMS hosts",
+				"ams_url", amsURLLog)
+		}
+	}
 
 	srv, err := newServer(ctx, cfg, logger)
 	if err != nil {
