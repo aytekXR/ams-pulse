@@ -761,10 +761,21 @@ real-AMS step). The unit/wire layer is done.
 
 ### CI diagnosis (session 5) — reproduced ci.yml locally
 The user reported red CI. Repo is private + `gh` not on the VPS, so reproduced each job in its
-matching image. **Only real failure: `helm`** — committed golden files carried trailing blank lines
-that helm 3.17.0 (the pinned CI version) no longer emits; regenerated all three (whitespace-only,
-16 deletions, 0 semantic change) → `6c7666c`. contracts/web/sdk/compose pass; `server` passes
-`go test -race` for all packages (its local-only failure was a container-as-root git "dubious
-ownership" VCS-stamp artifact — `safe.directory` fixes it; not a real CI failure); docker-build is
-covered by the prod image built this session. server-integration not reproduced (needs a CH service
-container) — non-blocking.
+matching image. **Three real failures found, all fixed:**
+1. **`helm`** — committed golden files carried trailing blank lines that helm 3.17.0 (the pinned CI
+   version) no longer emits; regenerated all three (whitespace-only, 16 deletions, 0 semantic
+   change) → `6c7666c`.
+2. **`server` → "Build pulse binary"** — ran `go build -o /tmp/pulse ./server/cmd/pulse` from the
+   repo ROOT, but the Go module is in `server/` (no root go.mod/go.work) → "cannot find main
+   module". Fixed to `cd server && CGO_ENABLED=0 go build -o /tmp/pulse ./cmd/pulse` → `3a0a489`.
+3. **`server` → "Download ClickHouse binary"** — pinned URL `…/v26.6.1.1844/clickhouse-linux-amd64`
+   404s (GitHub release assets never carried a single static binary, only *.tgz/.deb/.rpm). Fixed to
+   `https://builds.clickhouse.com/master/amd64/clickhouse` → `3a0a489`.
+
+contracts/web/sdk/compose pass; `server` unit/`-race` for all packages passes (the *local-only*
+git "dubious ownership" VCS-stamp error is a container-as-root artifact, `safe.directory` fixes it).
+docker-build is covered by the prod image built this session. Both server-job fixes were
+re-validated end-to-end: `pulse migrate` applies all 3 CH migrations and the full
+`go test -tags integration ./...` suite passes (incl. `internal/query`, `internal/store/clickhouse`).
+**Lesson (D-013/D-017 reinforced): never trust a PARTIAL CI repro — reproduce EVERY step.** My first
+pass skipped the integration steps and wrongly reported `server` green; the user caught it.
