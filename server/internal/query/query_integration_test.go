@@ -453,6 +453,19 @@ func TestQuery_QoeSummary_RealStartupP50(t *testing.T) {
 		t.Fatalf("QoeSummary: %v", err)
 	}
 
+	// De-flake (was flaky ~20%): the rollup populated by mv_qoe_1h can briefly lag the
+	// INSERT/OPTIMIZE, yielding a transient startup_p50_ms=0. Poll (re-OPTIMIZE + re-query)
+	// until it is non-zero or a timeout elapses. In production the rollup is queried long
+	// after ingest, so this race never occurs — this only stabilizes the test.
+	for deadline := time.Now().Add(15 * time.Second); result.Totals.StartupP50Ms == 0 && time.Now().Before(deadline); {
+		_ = conn.Exec(ctx, fmt.Sprintf("OPTIMIZE TABLE %s.rollup_qoe_1h FINAL", dbName))
+		time.Sleep(300 * time.Millisecond)
+		result, err = qsvc.QoeSummary(ctx, query.QoeParams{From: from, To: to, Interval: "hour"})
+		if err != nil {
+			t.Fatalf("QoeSummary (poll): %v", err)
+		}
+	}
+
 	// VD-11 assertion: startup_p50_ms must be non-zero.
 	// The MV includes all matching event types (startup_complete + heartbeat), so the
 	// exact quantile depends on the mix. The critical assertion is that startup_p50_ms
