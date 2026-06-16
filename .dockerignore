@@ -1,0 +1,32 @@
+# Build context excludes for deploy/docker/pulse.Dockerfile (context = repo root).
+# The image rebuilds web + the Go binary from source, so host artifacts/deps are
+# never needed — excluding them keeps the context small and avoids permission errors
+# from root-owned files left by container test runs.
+
+# Dependencies & build outputs (rebuilt inside the image)
+**/node_modules
+web/dist
+sdk/beacon-js/dist
+**/*.tsbuildinfo
+server/pulse
+
+# Local data & secrets (never belong in an image; may be root-owned by test runs)
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+**/pulse_secret.key
+deploy/.env
+
+# VCS / CI metadata
+.git
+.github
+
+# ClickHouse data-dir artifacts that integration tests leave in package CWDs
+# (scoped to server/internal so we never clobber real source dirs)
+server/internal/**/preprocessed_configs
+server/internal/**/access
+server/internal/**/format_schemas
+server/internal/**/user_files
+server/internal/**/metadata_dropped
+server/internal/**/named_collections
