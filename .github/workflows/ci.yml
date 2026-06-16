@@ -67,7 +67,10 @@ jobs:
       # ── Integration step ─────────────────────────────────────────────────────
       # Build the binary and smoke-test pulse migrate against the CH service container.
       - name: Build pulse binary
-        run: CGO_ENABLED=0 go build -o /tmp/pulse ./server/cmd/pulse
+        # The Go module lives in server/ (no go.mod/go.work at repo root), so this
+        # MUST build from server/ — `go build ./server/cmd/pulse` from the repo root
+        # fails with "go: cannot find main module".
+        run: cd server && CGO_ENABLED=0 go build -o /tmp/pulse ./cmd/pulse
 
       - name: Run migrations (pulse migrate — smoke-test against CH service)
         env:
@@ -79,10 +82,13 @@ jobs:
       # /tmp/clickhouse and skip (not fail) if absent. Download v26.6.1 so they
       # run on every push/PR (replaces the old nightly/label-gated approach).
       # The tests do NOT use PULSE_CLICKHOUSE_DSN — they start CH on random ports.
-      - name: Download ClickHouse binary for integration tests (v26.6.1)
+      - name: Download ClickHouse binary for integration tests
+        # GitHub release assets do NOT include a single static `clickhouse-linux-amd64`
+        # binary (only *.tgz/.deb/.rpm), so the previously pinned releases URL 404s.
+        # Use the official builds server, which serves the static binary directly.
         run: |
           curl -fsSL -o /tmp/clickhouse \
-            https://github.com/ClickHouse/ClickHouse/releases/download/v26.6.1.1844/clickhouse-linux-amd64
+            https://builds.clickhouse.com/master/amd64/clickhouse
           chmod +x /tmp/clickhouse
           /tmp/clickhouse --version
 
