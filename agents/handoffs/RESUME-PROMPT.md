@@ -1,10 +1,22 @@
 # Resume prompt — Pulse (next session)
 
-> Updated 2026-06-16 (**session 5 — final**). **Pulse is LIVE + hardened in production:
+> Updated 2026-06-17 (**session 6**). **Pulse is LIVE + hardened in production:
 > https://beyondkaira.com (+ `www` → apex), real Let's Encrypt TLS, CORS/CSP/auth hardened, backed by
-> mock-ams.** Shipped + verified + pushed to `main` this session: W2b TLS go-live (D-024), W2c
-> `amsclient` real-wire hardening (D-025), **ALL 6 CI failures fixed** (D-026), and the security+AMS
-> hardening suite + **live redeploy** (D-027). Commit SHAs + details below.
+> mock-ams.**
+>
+> **Session 6 shipped (D-028, committed `54e2d8f` — PUSH PENDING your go-ahead):** the three unblocked
+> deferred hardening items — **B6** (source-test now decrypts the stored credential), **A2** (per-token
+> rate-limit on the main-port `/ingest/beacon`), **A7** (per-IP rate-limit on `/metrics`). Server-only,
+> no contract change. ⚠️ Process note worth reading: the authoring workflow returned a **false green** —
+> A7 shipped *unwired* and the whole api test suite was silently *skipping* because the Docker gate
+> mounted only `server/` (so `metaDDLPath`'s `../../../contracts` escaped the mount → `t.Skip`, and Go
+> counts skip as pass). ORCH's faithful repro (**mount the repo ROOT**, workdir `/repo/server`,
+> `GOFLAGS=-buildvcs=false`) caught both, wired A7, and re-verified: **api = 92 pass / 0 skip / 0 fail**,
+> full `go test ./... -race` green. See D-028.
+>
+> Session 5 (prior) shipped + pushed to `main`: W2b TLS go-live (D-024), W2c `amsclient` real-wire
+> hardening (D-025), **ALL 6 CI failures fixed** (D-026), and the security+AMS hardening suite +
+> **live redeploy** (D-027). Commit SHAs + details below.
 >
 > **YOUR part (operator) — 4 things only you can do:**
 > 1. **Confirm the live dashboard renders** in a browser (the CSP is browser-enforced; I verified the
@@ -18,7 +30,9 @@
 >
 > **NEXT session (agent) — what's next, in order:** (a) **real-AMS integration** is the headline —
 > follow **`agents/handoffs/AMS-INTEGRATION.md`** (operator guide + a ready-to-paste prompt + the
-> deferred hardening backlog B3/B6/B7/A2/A7), validating the W2c fixtures against real captures; then
+> remaining deferred backlog — **B7** (per-source webhook secret, needs a frozen-contract CR) and
+> **B3** (Docker secrets); B6/A2/A7 are DONE as of D-028), validating the W2c fixtures against real
+> captures; then
 > (b) QoE/beacon end-to-end; then (c) the optional follow-on workflows. Honor the **Verify + Commit +
 > Handoff** flows below (every workflow). Paste this file into a fresh Claude Code session at the repo
 > root (`/home/aytek/repo/ams-pulse`, VPS).
@@ -40,8 +54,9 @@ job now passes a faithful local repro (query `-count=20` → 0 fail); **GitHub c
 green run is still pending — paste it if anything is red.** Hardening (D-027, workflow
 `pulse-security-ams-hardening`): CORS allowlist, token-in-URL, SSRF, rate-limiter eviction, beacon
 caps, amsclient body limit, webhook wiring (fail-closed), CSP — `efe8578`/`89ace7e`; **redeployed
-LIVE** (CORS+CSP confirmed on https://beyondkaira.com). See **`agents/handoffs/AMS-INTEGRATION.md`**
-for the real-AMS operator guide + deferred backlog (B3/B6/B7/A2/A7). W2c
+LIVE** (CORS+CSP confirmed on https://beyondkaira.com). **Session 6 (D-028) then shipped B6/A2/A7**
+(`54e2d8f`, push pending) — the deferred backlog is now just **B7** (frozen-contract CR) + **B3**
+(Docker secrets). See **`agents/handoffs/AMS-INTEGRATION.md`** for the real-AMS operator guide. W2c
 (Workflow `pulse-amsclient-hardening`) mapped `amsclient` +
 `collector`, fixed **3 latent bugs** (node-version drop/VD-40, v2.10 speed-only bitrate, empty
 `StreamID` corruption) + a Kafka dash-viewer parity gap, and added `amsclient`'s **first** tests
@@ -220,6 +235,11 @@ once the real-ams overlay is connected (see the W2b real-AMS step above). The un
 - **Ubuntu 24.04 VPS** (`161.97.172.146`), x86_64, Docker 29 + Compose v5. **`go` is NOT on PATH** —
   Go runs only inside Docker (`golang:1.25-alpine` build; `golang:1.25` debian for `-race`/gcc).
   node 20 + npm 10 are on PATH. `gh` is **NOT installed**.
+  - ⚠️ **For `go test` mount the REPO ROOT, not just `server/`** (D-028 lesson): the api tests'
+    `metaDDLPath` reads `../../../contracts/db/meta/0001_init.sql`, which escapes a `server/`-only
+    mount → `t.Skip` → **skip-counts-as-pass false green** (~90 api tests silently skipped). Use
+    `-v /home/aytek/repo/ams-pulse:/repo -w /repo/server -e GOFLAGS=-buildvcs=false` and confirm the
+    census (`-v -count=1`): expect **0 SKIP** for the api package.
 - **Docker access:** user `aytek` is in the `docker` group but stale in non-login shells — prefix
   with `sg docker -c "…"` (no password). **`sudo` requires a password** — ask the user via the
   `! <cmd>` prompt for privileged ops (Docker/gh install, `ufw`, etc.).

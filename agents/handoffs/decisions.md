@@ -830,3 +830,52 @@ server + `89ace7e` Caddy CSP):
 - **Deferred (documented in the guide):** B3 (Docker secrets), B6 (source-test should decrypt the
   stored password), B7 (per-source webhook secret — needs a frozen-contract CR), A2 (rate-limit
   main-port beacon), A7 (rate-limit `/metrics`).
+
+## D-028 · 2026-06-17 · Deferred hardening B6/A2/A7 — shipped (server-only, no contract change)
+
+Implemented the three unblocked deferred backlog items from D-027 (B6, A2, A7). Scope confined to
+`server/internal/api/`; no contract change, no `go.mod` change. Commit `54e2d8f`.
+- **B6** — `handleTestSource` now decrypts `src.CredentialEnc` (`meta.Store.Decrypt`) and passes it
+  to `SetBasicAuth` (was hard-coded empty), so the connectivity test authenticates against a
+  basic-auth-protected AMS. Decrypt error → `Warn` + empty-password fallback (no 500; robust to a
+  rotated `PULSE_SECRET_KEY`).
+- **A2** — `handleIngestBeacon` (main port) now enforces a per-ingest-token token-bucket limit
+  (100 rps / 200 burst, matching the dedicated beacon server `serve.go:326`) after token validation
+  and before the body read → `429 RATE_LIMITED`.
+- **A7** — `handleMetrics` now enforces a per-IP token-bucket limit (10 rps / 20 burst) keyed on
+  `clientIP(r)`, ahead of the `MetricsToken` check. New `internal/api/ratelimit.go` — a hand-rolled
+  `keyedLimiter` mirroring the proven `collector/beacon` token bucket (no new dependency). Eviction
+  goroutines start in `Server.Start`, stop in `Server.Stop` (no leak in `Handler()`-only tests).
+  **Honesty note:** the router installs `middleware.RealIP`, which rewrites `RemoteAddr` from
+  `X-Forwarded-For` upstream, so the per-IP key is not spoofing-proof. That is acceptable for A7's
+  threat model (bounding a misconfigured scraper, not an adversary) and is documented in the
+  `clientIP` doc comment; a spoofing-resistant key would need trusted-proxy XFF parsing (out of scope).
+
+**Verification — a FALSE-GREEN was caught by ORCH (binding lesson reinforced).** Workflow
+`pulse-hardening-b6-a2-a7` (`wf_dadfcb7e-58d`, 1 author → independent `-race` gate + 3 adversarial
+per-fix skeptics) reported **clean** — but it was wrong on two counts, both surfaced only by ORCH's
+independent faithful reproduction (D-013/D-017/D-019: QA is never authoritative alone; default to
+refuted until reproduced):
+1. **A7 shipped UNWIRED.** The limiter was declared/initialised/evicted but **never called** in
+   `handleMetrics` — dead code; `/metrics` had no limit. One skeptic even cited a line number for the
+   call that did not exist (hallucinated verification).
+2. **The whole api regression suite was silently SKIPPING.** `metaDDLPath` resolves
+   `../../../contracts/db/meta/0001_init.sql` via `runtime.Caller`; the gate mounted only `server/`
+   at `/repo`, so that path escaped the mount → `os.ReadFile` failed → `t.Skip`. Go counts SKIP as
+   non-failing, so ~90 api tests (including all 3 new ones) "passed" without executing. The unwired
+   A7 was invisible because its test never ran.
+   **Fix (now the standard for Go verification here):** mount the **repo ROOT** at `/repo`, workdir
+   `/repo/server`, `GOFLAGS=-buildvcs=false` (matches CI's full-checkout semantics). Re-run census:
+   **api = 92 pass / 0 skip / 0 fail**; full `go test ./... -race` green. ORCH then added the missing
+   `handleMetrics` limiter call and re-verified: all 3 tests fail on pre-fix code, pass after.
+
+**Remaining deferred items (NOT done this session):**
+- **CR-B7 (PENDING — frozen contract, needs INT-01).** Per-source webhook HMAC secret. Requires:
+  a `webhook_secret` column on the `ams_sources` meta table (+ migration); a `webhook_secret` field
+  on `POST`/`PUT /api/v1/admin/sources` (change to `contracts/openapi/pulse-api.yaml`); and the
+  webhook handler selecting the secret by matching the incoming `nodeId`/`app` to a registered
+  source. **Do not implement without an ORCH-approved CR applied by INT-01** (contracts frozen, D-004).
+- **B3 (deploy, flagged for a future ORCH/deploy session).** Move `PULSE_AMS_AUTH_TOKEN` /
+  `PULSE_WEBHOOK_SECRET` from `deploy/.env` env-vars to Docker Compose `secrets:` (tmpfs files);
+  needs secret-file reading added to `loadEnvConfig` (a `cmd/` scope change). Mitigation today:
+  `chmod 600 deploy/.env` (already gitignored). See `AMS-INTEGRATION.md` §5.2.
