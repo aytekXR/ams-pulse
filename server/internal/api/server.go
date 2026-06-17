@@ -80,6 +80,14 @@ type Config struct {
 	// The beacon ingest route (/ingest/beacon) is always permissive regardless.
 	// Corresponds to PULSE_CORS_ALLOWED_ORIGINS (comma-separated).
 	CORSAllowedOrigins []string
+
+	// BeaconRateRPSOverride and BeaconBurstOverride, when both non-zero, replace
+	// the production beacon rate-limit defaults (100 rps / 200 burst) with the
+	// provided values. Intended exclusively for tests that need a tiny burst so
+	// that a small number of requests reliably exhausts the bucket without relying
+	// on wall-clock timing. Never set in production (serve.go leaves them zero).
+	BeaconRateRPSOverride float64
+	BeaconBurstOverride   float64
 }
 
 // KafkaStatsProvider is the interface to the Kafka source for health reporting.
@@ -142,6 +150,15 @@ type Server struct {
 	// Wave 3: kafka stats provider for /healthz (optional — wired in serve.go).
 	kafkaStats KafkaStatsProvider
 
+	// Rate limiters (A2, A7).
+	beaconLimiter  *keyedLimiter // per ingest-token; A2
+	metricsLimiter *keyedLimiter // per client IP;   A7
+
+	// eviction stop functions for the limiter background goroutines.
+	// Started in Start(), stopped in Stop().
+	stopBeaconEvict  func()
+	stopMetricsEvict func()
+
 	// WS hub
 	wsMu    sync.Mutex
 	wsConns map[*wsConn]struct{}
@@ -171,6 +188,18 @@ func New(cfg Config, store *meta.Store, live domain.LiveProvider, qsvc *query.Se
 		lic:     lic,
 		logger:  logger,
 		wsConns: make(map[*wsConn]struct{}),
+		// A2: per-token limiter for main-port beacon ingest.
+		// Allow test overrides so unit tests can use a tiny burst without relying
+		// on wall-clock timing under the race detector.
+		beaconLimiter: func() *keyedLimiter {
+			rps, burst := mainBeaconRateRPS, mainBeaconBurst
+			if cfg.BeaconRateRPSOverride > 0 && cfg.BeaconBurstOverride > 0 {
+				rps, burst = cfg.BeaconRateRPSOverride, cfg.BeaconBurstOverride
+			}
+			return newKeyedLimiter(rps, burst)
+		}(),
+		// A7: per-IP limiter for /metrics scrape.
+		metricsLimiter: newKeyedLimiter(metricsRateRPS, metricsBurst),
 	}
 	s.buildRouter()
 	return s
@@ -229,6 +258,11 @@ func (s *Server) Start(ctx context.Context) error {
 	s.wsStop = wsCancel
 	go s.wsPushLoop(wsCtx)
 
+	// Start rate-limiter eviction goroutines (A2, A7).
+	// 5-minute sweep, evict buckets idle for 10 minutes.
+	s.stopBeaconEvict = s.beaconLimiter.startEviction(5*time.Minute, 10*time.Minute)
+	s.stopMetricsEvict = s.metricsLimiter.startEviction(5*time.Minute, 10*time.Minute)
+
 	s.httpSrv = &http.Server{
 		Addr:         s.cfg.ListenAddr,
 		Handler:      s.router,
@@ -256,6 +290,13 @@ func (s *Server) Start(ctx context.Context) error {
 func (s *Server) Stop() {
 	if s.wsStop != nil {
 		s.wsStop()
+	}
+	// Stop rate-limiter eviction goroutines (A2, A7).
+	if s.stopBeaconEvict != nil {
+		s.stopBeaconEvict()
+	}
+	if s.stopMetricsEvict != nil {
+		s.stopMetricsEvict()
 	}
 	if s.httpSrv != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -629,6 +670,14 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	// A7: per-IP scrape rate limit (10 rps / burst 20). Applied before the token
+	// check so an unauthenticated flood is throttled ahead of the constant-time
+	// compare and the live-snapshot computation. Keyed on clientIP(r); see the
+	// clientIP doc for the RealIP-middleware interaction.
+	if !s.metricsLimiter.Allow(clientIP(r)) {
+		writeError(w, http.StatusTooManyRequests, "RATE_LIMITED", "metrics scrape rate limit exceeded")
+		return
+	}
 	if s.cfg.MetricsToken != "" {
 		// VD-S1: use constant-time compare to prevent timing oracle attacks.
 		// ARCHITECTURE §6: all auth comparisons must be constant-time.
@@ -1375,8 +1424,20 @@ func (s *Server) handleTestSource(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	// B6: decrypt the stored credential so the connectivity test authenticates
+	// correctly — previously the password was always empty, so protected AMS
+	// nodes would return 401 even when a valid credential was stored.
 	if src.RestUser.Valid && src.RestUser.String != "" {
-		req.SetBasicAuth(src.RestUser.String, "") // password from encrypted store; skip for connectivity check
+		password := ""
+		if src.CredentialEnc.Valid && src.CredentialEnc.String != "" {
+			dec, derr := s.store.Decrypt(src.CredentialEnc.String)
+			if derr != nil {
+				s.logger.Warn("source-test: failed to decrypt stored credential", "source_id", id, "error", derr)
+			} else {
+				password = dec
+			}
+		}
+		req.SetBasicAuth(src.RestUser.String, password)
 	}
 
 	// B4/A6: use a dedicated client that refuses to follow redirects.
@@ -1590,6 +1651,15 @@ func (s *Server) handleIngestBeacon(w http.ResponseWriter, r *http.Request) {
 	tok, err := s.store.GetTokenByHash(r.Context(), hash)
 	if err != nil || tok == nil || tok.Kind != "ingest" {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid ingest token")
+		return
+	}
+
+	// A2: per-token rate limit (100 rps / burst 200), matching the dedicated
+	// beacon server (serve.go:326 RateLimitPerTokenRPS:100, burst 200).
+	// Token 401 is checked first (above); 429 check comes second — same ordering
+	// as the dedicated beacon handler.
+	if !s.beaconLimiter.Allow(tok.ID) {
+		writeError(w, http.StatusTooManyRequests, "RATE_LIMITED", "rate limit exceeded; retry after 1s")
 		return
 	}
 
