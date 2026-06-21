@@ -22,19 +22,32 @@ Pulse has three ingest paths for server-side data, and one client-side SDK:
 
 AMS endpoints polled per cycle:
 
-| amsclient method | HTTP path | Purpose |
-|---|---|---|
-| `ListApplications` | `GET /rest/v2/applications` | Discover app names |
-| `ListBroadcastsPaged` | `GET /rest/v2/broadcasts/{app}/list?offset=N&size=200` | All broadcasts, paginated 200/page |
-| `BroadcastStatistics` | `GET /rest/v2/broadcasts/{app}/{streamId}/statistics` | Per-stream watch-time totals |
-| `WebRTCClientStats` | `GET /rest/v2/broadcasts/{app}/{streamId}/webrtc-client-stats/0/100` | Per-peer WebRTC QoE |
-| `ClusterNodes` | `GET /rest/v2/cluster/nodes` | Node list (cluster deployments) |
-| `NodeInfo` | `GET /rest/v2/cluster/nodes/{nodeId}` | Single-node detail |
-| `SystemStats` | `GET /rest/v2/system/stats` | System resource counters |
+**Paths updated for REAL AMS 3.0.3 (D-029/D-029v, curl-verified 2026-06-21).** The
+earlier root-level `/rest/v2/broadcasts/...` paths 404'd; real AMS uses per-app paths.
 
-Auth: every request sends `Authorization: Bearer <PULSE_AMS_AUTH_TOKEN>` when the
-token is non-empty (`client.go:133–143, 162`). Auth is optional — some on-premise
-AMS installs run with auth disabled.
+| amsclient method | HTTP path | Purpose / real-wire note |
+|---|---|---|
+| `ListApplications` | `GET /rest/v2/applications` | Discover apps — **array-of-strings** envelope `{"applications":["LiveApp",…]}` |
+| `ListBroadcastsPaged` | `GET /{app}/rest/v2/broadcasts/list/{offset}/{size}` | All broadcasts, 200/page (per-app) |
+| `BroadcastStatistics` | `GET /{app}/rest/v2/broadcasts/{streamId}/broadcast-statistics` | Watcher-count totals (RTMP count can be **-1** = untracked) |
+| `WebRTCClientStats` | `GET /{app}/rest/v2/broadcasts/{streamId}/webrtc-client-stats/0/100` | Per-peer WebRTC QoE (empty `[]` when no viewers) |
+| `ClusterNodes` | `GET /rest/v2/cluster/nodes` | Node list — **404 on standalone** → mapped to nil (no error) |
+| `NodeInfo` | `GET /rest/v2/cluster/nodes/{nodeId}` | Single-node detail (404-tolerant) |
+| `SystemStats` | `GET /rest/v2/system-status` | `{osName,osArch,javaVersion,processorCount}` — **no cpu/mem** on AMS 3.x |
+
+**D-029v real-wire units (curl-verified — get these wrong and the dashboard lies):**
+broadcast `bitrate` is **bits/sec** (÷1000 → kbps); `speed` is a **realtime ratio**
+(≈1.0), NOT a bitrate; `jitterMs`/`rttMs` are **milliseconds**; `packetLostRatio`
+is a **0..1 fraction** (×100 → pct); `currentFPS` is **absent** from the REST
+broadcast object on AMS 3.0.3 (health scoring redistributes the FPS weight);
+`terminated_unexpectedly` is a real broadcast status (crash) → emit publish_end.
+
+Auth (D-029): AMS 3.0.3 Enterprise has JWT disabled (`jwtServerControlEnabled=false`),
+so amsclient uses **cookie-session** auth — `POST /rest/v2/users/authenticate
+{email,password}` → JSESSIONID via a custom IP-safe cookie jar, with re-login +
+single-retry on 401/403 (throttled vs IP-block storms). `PULSE_AMS_LOGIN_EMAIL` +
+`PULSE_AMS_LOGIN_PASSWORD` drive it. `PULSE_AMS_AUTH_TOKEN` (static Bearer) is still
+supported but unset for this server.
 
 TLS: the amsclient uses a plain `http.Client` with no TLS enforcement beyond what
 the Go stdlib provides. If `PULSE_AMS_URL` begins with `https://`, the stdlib TLS
@@ -44,11 +57,13 @@ option; use `http://` only on trusted private networks.
 Body safety: every response is capped at 10 MB (`client.go:179`). Individual
 request timeout defaults to 10 s (`serve.go:134`).
 
-AMS version tolerance: the client was hardened in W2c (D-025) to tolerate
-v2.10/v2.14/v3.0 wire variance — unknown JSON fields are silently ignored,
-missing fields zero. The `speed` field (v2.10) is used as a bitrate fallback when
-`bitrate` is 0. The `version` field on `ClusterNodeDTO` is preserved so the Fleet
-page can render it. Empty `streamId` in list responses is now guarded.
+AMS version tolerance: the client was hardened in W2c (D-025) + D-030 to tolerate
+v2.10/v2.14/v3.0 wire variance — unknown JSON fields are silently ignored, missing
+fields zero. ~~`speed` was a bitrate fallback~~ — **removed D-030**: `speed` is a
+dimensionless realtime ratio (≈1.0), not a bitrate; the old fallback emitted ~1 "kbps"
+garbage. The `version` field on `ClusterNodeDTO` is preserved so the Fleet page can
+render it. Empty `streamId` in list responses is guarded. See the D-029v real-wire
+units table above for the complete set of unit corrections.
 
 ### 1.2 Webhook source (low-latency, now wired)
 

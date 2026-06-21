@@ -1,8 +1,42 @@
 # Resume prompt — Pulse (next session)
 
-> Updated 2026-06-21 (**session 7 → real-AMS integration DONE + validated live**). **Pulse is LIVE +
-> hardened in production: https://beyondkaira.com (+ `www` → apex), real Let's Encrypt TLS, CORS/CSP/auth
-> hardened, backed by mock-ams.**
+> Updated 2026-06-21 (**session 8 → D-030 wire-bug fixes committed `fe321bf` + pushed to `ams-integration`**).
+> **Pulse is LIVE + hardened in production: https://beyondkaira.com (+ `www` → apex), real Let's Encrypt TLS,
+> CORS/CSP/auth hardened, STILL backed by mock-ams (prod swap NOT done — operator decision pending).**
+>
+> **D-030 committed `fe321bf` (same session — all fixes from D-029v validation):** see bullet list below;
+> pushed to `ams-integration`; full `go test ./... -race` GREEN; live-confirmed `bitrate_kbps=624.152,
+> total_publishers=1`.
+>
+> **Session 8 shipped (D-029v → D-030 — real-AMS wire-correctness, on `ams-integration`, now pushed):** re-validated the
+> D-029 integration LIVE against `test.antmedia.io` (isolated `pulse-realams` stack, loopback :18090,
+> `pulse-prod` untouched) and ran an adversarial validation workflow (5 finders → refute pass) that
+> diffed REAL captures against the decode/normalize code + fixtures. It found **15 confirmed wire
+> bugs**; the high-value, code-confirmed ones are FIXED (scope: `server/pkg/amsclient` +
+> `server/internal/collector`, no contract change):
+> - **CRITICAL bitrate 1000×** — AMS `bitrate` is **bits/sec** (curl-verified: 624016 ≈ receivedBytes·8/duration
+>   ≈ 624 kbps); `normalize.go` stored it raw into `bitrate_kbps`. Now `/1000`. **Verified live: API
+>   `bitrate_kbps` = 624.152** (was 624016). Also REMOVED the bogus `speed`→bitrate fallback (`speed` is a
+>   realtime RATIO ≈1.0, not a bitrate).
+> - **HIGH fps→permanent Warning** — AMS 3.0.3 REST omits `currentFPS`, so every REST stream scored fps=0 →
+>   health capped at 0.75 (Warning), "Good" unreachable. Fix: `fps` is emitted only when present; a `-1`
+>   "unavailable" sentinel makes `ComputeHealthScore` redistribute the 0.25 FPS weight across the other 4.
+>   (test123 now correctly shows **Warning for the HONEST reason** — 624 kbps < 2000 kbps target — not a
+>   phantom fps.)
+> - **MEDIUM dropped ingest QoE** — `packetLostRatio`/`jitterMs`/`rttMs` exist on the real broadcast object
+>   but the DTO dropped them and `normalize` hardcoded loss/jitter=0 (health blind to real degradation).
+>   Now decoded + wired (`packetLostRatio` treated as 0..1 fraction ×100 → pct; jitter/rtt already ms).
+> - **MEDIUM `terminated_unexpectedly`** — real AMS crash status (seen in `meet`), was unhandled → crashed
+>   streams stayed "live" ~3 min. Now emits `publish_end` next poll. **LOW** restpoller now logs non-404
+>   cluster-poll errors; **MEDIUM** WebRTC per-peer rtt/jitter/loss no longer halved for single-track viewers.
+> - **Tests:** real-wire regression tests added (sanitized `testdata/broadcasts_real_test123_v303.json` +
+>   normalize/health/client cases pinning bps→kbps, fps-redistribution, QoE units, terminated_unexpectedly,
+>   single-track WebRTC). Full `go test ./... -race` GREEN (repo-ROOT mount, GOFLAGS=-buildvcs=false).
+> - **Still DEFERRED** (documented below, no current live impact): `webrtc_client_stats` event is normalized
+>   but the aggregator has no `case` for it (viewer-side QoE never applied — needs a QoE-model decision);
+>   standalone AMS has no cpu/mem (system-status lacks them → fleet shows none, needs an "N/A" UX);
+>   AMS `version` (3.0.3) never surfaced; `speed_read_kbps` data-key name is a legacy misnomer (now carries
+>   the ratio). B7 (per-source webhook secret, contract CR) + B3 (Docker secrets) unchanged.
 >
 > **Session 7 shipped (D-029 — real-AMS integration vs `test.antmedia.io`, committed locally on
 > `ams-integration`, push pending):** connected Pulse to the **real AMS 3.0.3 Enterprise** server and
@@ -33,33 +67,32 @@
 > hardening (D-025), **ALL 6 CI failures fixed** (D-026), and the security+AMS hardening suite +
 > **live redeploy** (D-027). Commit SHAs + details below.
 >
-> **YOUR part (operator) — 4 things only you can do:**
+> **YOUR part (operator) — 3 things only you can do:**
 > 1. **Confirm the live dashboard renders** in a browser (the CSP is browser-enforced; I verified the
 >    SPA has no inline scripts but couldn't run a real browser — if the console flags a CSP violation,
 >    tell me and I'll loosen it instantly).
 > 2. **Confirm the latest GitHub Actions run is green** — the repo is private and `gh` isn't on the
 >    VPS, so I cannot see it; paste any red job logs and I'll fix them (that's how the last 3 were found).
-> 3. **Real-AMS creds OBTAINED** (`test.antmedia.io`, user `test@antmedia.io`) → paste the **password**
->    into `deploy/.env` on the `AMS_LOGIN_PASSWORD=` line (gitignored), then run the real-AMS session
->    (full brief immediately below the banner).
-> 4. **GitHub-side admin TODOs** (need a repo admin): `branch-protection.sh`, push a `v*` tag — see
+> 3. **GitHub-side admin TODOs** (need a repo admin): `branch-protection.sh`, push a `v*` tag — see
 >    "USER GitHub-side TODO".
 >
-> **NEXT session (agent) — THE headline is real-AMS integration against `test.antmedia.io`.** Read the
-> **"▶ NEXT SESSION — REAL-AMS INTEGRATION"** section immediately below first, backed by
-> **`agents/handoffs/AMS-INTEGRATION.md`**. After that: (b) QoE/beacon end-to-end; (c) deferred backlog
-> **B7** (per-source webhook secret — frozen-contract CR) + **B3** (Docker secrets); (d) optional
-> follow-ons. B6/A2/A7 are DONE (D-028). Honor the **Verify + Commit + Handoff** flows below (every
-> workflow). Paste this file into a fresh Claude Code session at the repo root
-> (`/home/aytek/repo/ams-pulse`, VPS).
+> ✅ **Real-AMS creds**: obtained + wired. D-029 + D-030 done + pushed on `ams-integration`.
+>
+> **NEXT session (agent) — real-AMS integration is DONE (D-029 + D-030). `ams-integration` is pushed.**
+> Headline options: **(a)** merge `ams-integration` → `main` (run the full test suite first, confirm CI
+> green); **(b)** prod swap: wire `pulse-prod` to real AMS (operator must approve — see "▶ REAL-AMS" below);
+> **(c)** QoE/beacon end-to-end (Pro+ license lifts the ingest gate); **(d)** deferred items:
+> `webrtc_client_stats` aggregator case, `speed_read_kbps` rename, fleet N/A UX, B7 (contract CR), B3
+> (Docker secrets). B6/A2/A7 are DONE (D-028). Honor the **Verify + Commit + Handoff** flows below.
+> Paste this file into a fresh Claude Code session at the repo root (`/home/aytek/repo/ams-pulse`, VPS).
 
 ## ✅ REAL-AMS INTEGRATION — DONE (D-029, session 7) — what's left is the prod SWAP
 
 **Status:** DONE + validated live against `https://test.antmedia.io/` (AMS 3.0.3 Enterprise). The
 dashboard renders the real live stream (`/api/v1/live/overview` → `total_publishers:1`, LiveApp
-`test123`) on an **isolated** `pulse-realams` stack (loopback :18090). Code committed locally on
-`ams-integration` (push pending operator direction). The section below is retained as the integration
-reference + the remaining operator step.
+`test123`) on an **isolated** `pulse-realams` stack (loopback :18090). D-029 (`4ce3a76`) + D-030
+(`fe321bf`) committed and **pushed to `ams-integration`** (2026-06-21). The section below is retained as
+the integration reference + the remaining operator step (prod swap).
 
 **Remaining (operator decision):** swap the LIVE `pulse-prod` demo from mock-ams to real-AMS. Mechanics:
 add `PULSE_AMS_LOGIN_EMAIL/PASSWORD` + `PULSE_AMS_APPLICATIONS` (already in `deploy/.env`) and layer
@@ -76,9 +109,12 @@ live demo only once proven AND the operator says go.
 
 **Operator inputs (provided):**
 - AMS console URL: `https://test.antmedia.io/` · Username: `test@antmedia.io`
-- **Password:** in `deploy/.env` (gitignored) on the `AMS_LOGIN_PASSWORD=` line — operator pastes it.
-  `AMS_LOGIN_EMAIL=test@antmedia.io` is pre-set; `PULSE_AMS_URL=https://test.antmedia.io` is present but
-  **commented** (so the live demo keeps polling mock-ams until you deliberately wire real-AMS).
+- **Creds (provided):** `deploy/.env` (gitignored) now has the full real-AMS block set + UNCOMMENTED:
+  `PULSE_AMS_URL=https://test.antmedia.io`, `PULSE_AMS_LOGIN_EMAIL/PASSWORD`, `PULSE_AMS_NODE_ID=test-antmedia`,
+  `PULSE_AMS_APPLICATIONS=LiveApp,PetarTest2,demo,clipcreator,meet`. **These vars are interpolated ONLY by
+  `docker-compose.real-ams.yml`** — the base + hardened overrides hardcode `PULSE_AMS_URL` to mock-ams, so
+  the live `pulse-prod` demo KEEPS polling mock-ams regardless of `.env` until you deliberately layer the
+  real-ams overlay onto `pulse-prod` (the prod swap).
 
 **Recon already done (2026-06-21, ORCH):** root `/` is the AMS web console (HTTP/2 200). REST is
 **gated** — `GET /rest/v2/version` and `/rest/v2/applications` return **HTTP 403 Forbidden** (Tomcat)
