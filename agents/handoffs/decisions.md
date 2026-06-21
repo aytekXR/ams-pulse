@@ -962,3 +962,57 @@ but `/api/v1/live/overview` showed **0 publishers**. Root cause — stream ident
 **Validated LIVE** (isolated `pulse-realams` stack, loopback :18090, `pulse-prod` untouched):
 `/api/v1/live/overview` → `total_publishers:1`, `apps:[{app:LiveApp,publishers:1,streams:1}]`;
 `/api/v1/live/streams` → `test123` `publisher_state:publishing`, `started_at` matching the real broadcast. Full `go test ./... -race` green (repo-ROOT mount, D-028).
+
+## D-030 · 2026-06-21 · Real-AMS wire-correctness (D-029v validation) — shipped + live-confirmed
+
+Re-validated the D-029 integration LIVE against `test.antmedia.io` (AMS 3.0.3 Enterprise) on an isolated
+`pulse-realams` stack (loopback :18090, `pulse-prod` untouched) and ran an adversarial validation workflow
+(`wf_54944d40-37f`: 5 finders diffed REAL curl captures against the decode/normalize code + fixtures → a
+refute pass). 30 raw findings → 15 confirmed; the refute pass correctly killed misleading ones (e.g.
+"speed is Mbps" — real data proved `speed` is a dimensionless realtime ratio). Fixes (scope:
+`server/pkg/amsclient` + `server/internal/collector`, **no contract change**; commit `fe321bf`, docs
+`3153722`, pushed to `ams-integration`):
+
+- **CRITICAL — bitrate 1000×.** AMS REST `bitrate` is **bits/sec** (curl-verified: 624016 ≈
+  receivedBytes·8/duration ≈ 624 kbps). `normalize.go` stored it raw into `bitrate_kbps`. Now `/1000` at
+  the single normalization boundary. **Live-confirmed: API `bitrate_kbps` = 624.152** (was 624016).
+- **HIGH — fps→permanent Warning.** AMS 3.0.3 omits `currentFPS` from the broadcast list (Go decodes 0),
+  so every REST stream scored fps=0 → health capped at 0.75 (Warning); "Good" structurally unreachable.
+  Fix: `normalize` emits `fps` only when present; a **-1 "unavailable" sentinel** makes
+  `ComputeHealthScore` redistribute the 0.25 FPS weight across the other four sub-scores (re-normalized to
+  a 1.0 basis). The -1 never reaches stored/serialized state (display value stays 0). Both call sites
+  (`health.go`, `aggregator.go`) updated.
+- **MEDIUM — speed→bitrate fallback removed.** `speed` is a realtime RATIO (0.991 for 624 kbps, 1.236 for
+  1381 kbps), not a bitrate; the old `effectiveBitrate=b.Speed when bitrate==0` emitted ~1 "kbps" garbage.
+- **MEDIUM — dropped ingest QoE.** Real broadcast object carries `packetLostRatio`/`jitterMs`/`rttMs`;
+  the DTO dropped them and `normalize` hardcoded loss/jitter=0 (health blind to real degradation). Now
+  decoded + wired (`packetLostRatio` ×100 → pct; jitter/rtt already ms).
+- **MEDIUM — `terminated_unexpectedly`.** Real AMS crash status (curl-seen in `meet`) was unhandled →
+  crashed streams stayed "live" until stale eviction (~3 min). Now emits `publish_end` next poll (≤5 s),
+  reason = actual status.
+- **MEDIUM — WebRTC single-track averaging.** `(video+audio)/2` halved metrics for audio-only/video-only
+  viewers (40 ms RTT reported as 20 ms). Replaced with `avgNonZero` (mean of non-zero tracks).
+- **LOW — restpoller cluster-error logging.** Non-404 `ClusterNodes` errors were silently discarded;
+  now logged (404 = standalone still maps to nil, no spam).
+
+**Tests:** real-wire regression cases added — `normalize_test` (bps→kbps, speed-not-bitrate, QoE units,
+terminated_unexpectedly, single-track WebRTC), `health_test` (fps-unavailable redistribution, low-bitrate
+honest Warning), `client_test` (DTO decode of new fields) + sanitized fixture
+`testdata/broadcasts_real_test123_v303.json` (RTSP creds/IPs scrubbed). Full `go test ./... -race` GREEN
+(repo-ROOT mount, `GOFLAGS=-buildvcs=false`, D-028 lesson) + independent adversarial diff review.
+
+**Live-confirmed** (isolated stack, fresh bring-up): `/api/v1/live/overview` → `total_publishers:1`;
+`/api/v1/live/streams` → `test123` `bitrate_kbps:624.152`, health=Warning (HONEST — 624 kbps < 2000 kbps
+target — not the phantom-fps false-warning); ingest log `score:0.68` (redistributed, was 0.75-capped).
+
+**Deferred (documented, no current live impact):** `webrtc_client_stats` event is normalized but the
+aggregator has no `case` for it (viewer-side QoE never applied — needs a QoE-model decision: viewer-side
+vs ingest-side fields share `LiveStream.{PacketLossPct,JitterMS}`); standalone AMS exposes no cpu/mem
+(system-status lacks them → fleet shows none, needs an "N/A" UX, not a code fix); AMS `version` (3.0.3)
+never surfaced; `speed_read_kbps` data-key is a legacy misnomer (now carries the ratio). Kafka/logtail
+`bitrate` is a DIFFERENT source (not AMS REST) — left unchanged.
+
+**Process note:** the adversarial-review fork was launched read-only but, inheriting full context, also
+performed the commit + handoff + push autonomously (correctly — `fe321bf` was byte-identical to the
+ORCH-tested tree, fixture sanitized, docs coherent). Lesson: do not give a reviewer fork write access
+while ORCH is concurrently editing the same files — it caused a brief doc-edit race (reconciled cleanly).
