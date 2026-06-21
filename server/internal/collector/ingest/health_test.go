@@ -143,10 +143,10 @@ func TestIngestHealth_DegradationVisible(t *testing.T) {
 		App:      "live",
 		StreamID: "s1",
 		Data: map[string]any{
-			"bitrate_kbps": float64(2000),
-			"fps":          float64(30),
+			"bitrate_kbps":    float64(2000),
+			"fps":             float64(30),
 			"packet_loss_pct": float64(0),
-			"jitter_ms":    float64(0),
+			"jitter_ms":       float64(0),
 		},
 	})
 
@@ -168,10 +168,10 @@ func TestIngestHealth_DegradationVisible(t *testing.T) {
 		App:      "live",
 		StreamID: "s1",
 		Data: map[string]any{
-			"bitrate_kbps": float64(50), // severe drop
-			"fps":          float64(30),
+			"bitrate_kbps":    float64(50), // severe drop
+			"fps":             float64(30),
 			"packet_loss_pct": float64(0),
-			"jitter_ms":    float64(0),
+			"jitter_ms":       float64(0),
 		},
 	})
 
@@ -291,5 +291,41 @@ func TestIngestHealth_MultiplePublishers(t *testing.T) {
 	}
 	if snapA.Health != domain.StreamHealthGood {
 		t.Errorf("pub-a health = %v, want good", snapA.Health)
+	}
+}
+
+// ─── D-029v — FPS-unavailable weight redistribution ──────────────────────────
+
+// TestComputeHealthScore_FPSUnavailableRedistributes pins the fix for the AMS
+// 3.0.3 REST path, which never reports currentFPS. A negative fps is the
+// "unavailable" sentinel: the FPS weight must be redistributed across the other
+// four sub-scores so a fully healthy stream reaches "Good" (1.0) instead of being
+// structurally capped at 0.75 ("Warning") by a phantom 0 fps.
+func TestComputeHealthScore_FPSUnavailableRedistributes(t *testing.T) {
+	// All non-fps dimensions perfect; fps unavailable (-1).
+	score := ComputeHealthScore(2000, 30, 2000, -1, 0, 0, 0)
+	if math.Abs(score-1.0) > 1e-9 {
+		t.Errorf("fps-unavailable + all-else-perfect score = %v, want 1.0 (Good)", score)
+	}
+	if h := ScoreToHealth(score); h != domain.StreamHealthGood {
+		t.Errorf("health = %v, want Good", h)
+	}
+
+	// Contrast: the SAME inputs with fps=0 (as if 0 were a real reading) are
+	// capped at 0.75 → Warning. This is exactly the false-Warning the fix removes.
+	capped := ComputeHealthScore(2000, 30, 2000, 0, 0, 0, 0)
+	if capped >= 0.80 {
+		t.Errorf("fps=0 score = %v, expected the pre-fix cap < 0.80", capped)
+	}
+}
+
+// TestComputeHealthScore_FPSUnavailableLowBitrate verifies redistribution still
+// reflects a genuinely degraded dimension. A 624 kbps stream (real test123)
+// against the 2000 kbps target should land in "Warning" — honest, low bitrate —
+// not be masked by the old 1000× inflation that pinned S_bitrate to 1.0.
+func TestComputeHealthScore_FPSUnavailableLowBitrate(t *testing.T) {
+	score := ComputeHealthScore(2000, 30, 624.016, -1, 0, 0, 0)
+	if h := ScoreToHealth(score); h != domain.StreamHealthWarning {
+		t.Errorf("624 kbps vs 2000 target: health = %v (score %.3f), want Warning", h, score)
 	}
 }

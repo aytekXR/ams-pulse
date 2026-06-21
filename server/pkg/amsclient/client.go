@@ -92,10 +92,17 @@ type BroadcastDTO struct {
 	WebRTCViewerCount int     `json:"webRTCViewerCount"`
 	RTMPViewerCount   int     `json:"rtmpViewerCount"`
 	DashViewerCount   int     `json:"dashViewerCount"`
-	Speed             float64 `json:"speed"`   // read speed kbps
-	BitRate           float64 `json:"bitrate"` // real AMS field name is lowercase "bitrate"
-	CurrentFPS        int     `json:"currentFPS"`
-	AppName           string  `json:"appName"` // populated from API path context
+	Speed             float64 `json:"speed"`      // realtime ingest speed RATIO (1.0≈realtime); NOT a bitrate
+	BitRate           float64 `json:"bitrate"`    // ingest bitrate in BITS/sec (curl-verified AMS 3.0.3); /1000 → kbps
+	CurrentFPS        int     `json:"currentFPS"` // ingest FPS; ABSENT from AMS 3.0.3 REST broadcast list (decodes to 0)
+	// Ingest-side QoE fields present in the real AMS 3.0.3 broadcast object
+	// (curl-verified 2026-06-21). Units: packetLostRatio is a 0..1 fraction
+	// (×100 → percent); jitterMs/rttMs are already in milliseconds.
+	PacketLostRatio float64 `json:"packetLostRatio"`
+	PacketsLost     int     `json:"packetsLost"`
+	JitterMs        float64 `json:"jitterMs"`
+	RttMs           float64 `json:"rttMs"`
+	AppName         string  `json:"appName"` // populated from API path context
 }
 
 // BroadcastListResponse wraps the paged list response.

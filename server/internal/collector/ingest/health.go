@@ -76,18 +76,18 @@ const (
 
 // PublisherState holds the latest ingest metrics and computed health for one publisher.
 type PublisherState struct {
-	StreamID   string
-	App        string
-	NodeID     string
-	LastSeen   time.Time
-	UpdatedAt  time.Time
+	StreamID  string
+	App       string
+	NodeID    string
+	LastSeen  time.Time
+	UpdatedAt time.Time
 
 	// Raw metrics from the last ingest_stats event.
-	BitrateKbps      float64
-	FPS              float64
+	BitrateKbps       float64
+	FPS               float64
 	KeyframeIntervalS float64
-	PacketLossPct    float64
-	JitterMS         float64
+	PacketLossPct     float64
+	JitterMS          float64
 
 	// Computed health score (0.0–1.0) and category.
 	HealthScore float64
@@ -174,7 +174,15 @@ func (h *HealthTracker) onIngestStats(ev domain.ServerEvent) {
 	}
 
 	bitrate := floatFromData(ev.Data, "bitrate_kbps")
-	fps := floatFromData(ev.Data, "fps")
+	// fps may be absent (AMS 3.0.3 REST omits currentFPS). Pass the -1 "unavailable"
+	// sentinel so ComputeHealthScore redistributes the FPS weight; keep a separate
+	// display value (0) so PublisherState.FPS never holds the sentinel. D-029v.
+	fps := -1.0
+	fpsDisplay := 0.0
+	if _, ok := ev.Data["fps"]; ok {
+		fpsDisplay = floatFromData(ev.Data, "fps")
+		fps = fpsDisplay
+	}
 	keyframe := floatFromData(ev.Data, "keyframe_interval_s")
 	loss := floatFromData(ev.Data, "packet_loss_pct")
 	jitter := floatFromData(ev.Data, "jitter_ms")
@@ -195,7 +203,7 @@ func (h *HealthTracker) onIngestStats(ev domain.ServerEvent) {
 	pub.LastSeen = now
 	pub.UpdatedAt = time.Now()
 	pub.BitrateKbps = bitrate
-	pub.FPS = fps
+	pub.FPS = fpsDisplay
 	pub.KeyframeIntervalS = keyframe
 	pub.PacketLossPct = loss
 	pub.JitterMS = jitter
@@ -213,7 +221,7 @@ func (h *HealthTracker) onIngestStats(ev domain.ServerEvent) {
 			"score", math.Round(score*100)/100,
 			"health", health,
 			"bitrate_kbps", bitrate,
-			"fps", fps,
+			"fps", fpsDisplay,
 		)
 	}
 	_ = snap
@@ -296,9 +304,15 @@ func ComputeHealthScore(
 		sBitrate = clamp01(bitrateKbps / targetBitrateKbps)
 	}
 
-	// S_fps: linear scale to target fps.
+	// S_fps: linear scale to target fps. A NEGATIVE fps is the "unavailable"
+	// sentinel — AMS 3.0.3 REST broadcast objects omit currentFPS, so REST-polled
+	// streams have no fps signal. In that case the FPS weight is redistributed
+	// proportionally across the remaining four sub-scores (see below) rather than
+	// scoring a phantom 0 fps, which had structurally pinned every REST stream to
+	// "Warning" (max achievable score 0.75 < 0.80 Good threshold). D-029v.
+	fpsAvailable := fps >= 0
 	sFPS := 0.0
-	if targetFPS > 0 {
+	if fpsAvailable && targetFPS > 0 {
 		sFPS = clamp01(fps / targetFPS)
 	}
 
@@ -317,7 +331,17 @@ func ComputeHealthScore(
 	// S_jitter: 0ms = 1.0; 100ms = 0.0; linear.
 	sJitter := clamp01(1.0 - jitterMS/100.0)
 
-	score := wBitrate*sBitrate + wFPS*sFPS + wKeyframe*sKeyframe + wLoss*sLoss + wJitter*sJitter
+	var score float64
+	if fpsAvailable {
+		score = wBitrate*sBitrate + wFPS*sFPS + wKeyframe*sKeyframe + wLoss*sLoss + wJitter*sJitter
+	} else {
+		// FPS unavailable: drop the wFPS term and renormalize the remaining four
+		// weights (which sum to 1-wFPS) back to a 1.0 basis. With all four sub-scores
+		// at 1.0 this yields 1.0 (Good), restoring the reachable "Good" state for
+		// healthy REST-polled streams.
+		rem := wBitrate + wKeyframe + wLoss + wJitter
+		score = (wBitrate*sBitrate + wKeyframe*sKeyframe + wLoss*sLoss + wJitter*sJitter) / rem
+	}
 
 	// Normalize (should already be in [0,1] given weights sum to 1.0).
 	return clamp01(score)

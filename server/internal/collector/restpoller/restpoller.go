@@ -126,13 +126,18 @@ func (p *Poller) poll(ctx context.Context) error {
 		return fmt.Errorf("list applications: %w", err)
 	}
 
-	// Poll cluster nodes (best-effort).
+	// Poll cluster nodes (best-effort). A standalone AMS returns 404, which
+	// ClusterNodes maps to (nil, nil) — no warning. Any OTHER error (500, network,
+	// auth) is surfaced so a clustered deployment's node pipeline doesn't go dark
+	// silently (D-029v / finding #10).
 	if nodes, err := p.client.ClusterNodes(ctx); err == nil {
 		for _, n := range nodes {
 			ev := collector.NormalizeClusterNode(n)
 			ev.NodeID = p.cfg.NodeID // override with our configured ID
 			p.sink.WriteServerEvent(ev)
 		}
+	} else {
+		p.logger.Warn("restpoller: cluster nodes poll failed", "error", err)
 	}
 
 	for _, app := range apps {

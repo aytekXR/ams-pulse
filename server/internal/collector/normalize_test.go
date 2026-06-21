@@ -2,6 +2,7 @@
 package collector
 
 import (
+	"math"
 	"testing"
 
 	"github.com/pulse-analytics/pulse/server/internal/domain"
@@ -75,7 +76,7 @@ func TestNormalizeBroadcast_EmitsIngestStats(t *testing.T) {
 		StreamID:   "test-stream",
 		AppName:    "live",
 		Status:     "broadcasting",
-		BitRate:    2500.0,
+		BitRate:    2_500_000.0, // AMS reports bps; 2.5 Mbps → 2500 kbps after /1000
 		CurrentFPS: 30,
 	}
 
@@ -127,10 +128,10 @@ func TestNormalizeBroadcast_NoIngestStatsWhenZero(t *testing.T) {
 // Regression guard for D-W1-001.
 func TestNormalizeClusterNode_CPUScale(t *testing.T) {
 	dto := amsclient.ClusterNodeDTO{
-		NodeID:     "node-1",
-		CPUUsage:   15.0,
+		NodeID:      "node-1",
+		CPUUsage:    15.0,
 		MemoryUsage: 40.0,
-		DiskUsage:  55.0,
+		DiskUsage:   55.0,
 	}
 	ev := NormalizeClusterNode(dto)
 
@@ -177,10 +178,10 @@ func TestNormalizeClusterNode_NodeIDFallback(t *testing.T) {
 // boundaries are passed through unchanged.
 func TestNormalizeClusterNode_BoundaryValues(t *testing.T) {
 	cases := []struct {
-		name    string
-		cpu     float64
-		mem     float64
-		disk    float64
+		name string
+		cpu  float64
+		mem  float64
+		disk float64
 	}{
 		{"zero", 0.0, 0.0, 0.0},
 		{"max", 100.0, 100.0, 100.0},
@@ -232,18 +233,22 @@ func TestNormalizeClusterNode_VersionInData(t *testing.T) {
 	t.Logf("PASS VD-40: Data[\"version\"] = %q", got)
 }
 
-// ─── FIX 2 — v2.10 speed-only bitrate fallback ───────────────────────────────
+// ─── D-029v — AMS "speed" is a realtime RATIO, never a bitrate ────────────────
 
-// TestNormalizeBroadcast_SpeedFallback verifies that when BitRate==0 and
-// Speed>0 (AMS v2.10 behavior), stream_stats uses Speed as bitrate_kbps and
-// ingest_stats is still emitted (condition was `b.BitRate > 0` before fix).
-func TestNormalizeBroadcast_SpeedFallback(t *testing.T) {
+// TestNormalizeBroadcast_SpeedIsNotBitrate is the regression guard for the
+// removed v2.10 "speed fallback". Real AMS 3.0.3 wire data proved "speed" is a
+// dimensionless realtime ratio (e.g. 0.991 for a 624 kbps stream, 1.236 for a
+// 1381 kbps stream) — NOT a kbps bitrate. The old code set bitrate_kbps = Speed
+// when BitRate==0, emitting ~1 "kbps" of garbage. After the fix, Speed must
+// never leak into bitrate_kbps, and with BitRate==0 (and no fps) there is no
+// useful ingest data so ingest_stats is NOT emitted.
+func TestNormalizeBroadcast_SpeedIsNotBitrate(t *testing.T) {
 	dto := amsclient.BroadcastDTO{
 		StreamID: "speed-stream",
 		AppName:  "live",
 		Status:   "broadcasting",
 		BitRate:  0,
-		Speed:    2000.0,
+		Speed:    0.991, // realtime ratio — must NOT become a bitrate
 	}
 
 	events := NormalizeBroadcast(dto, "node-1", "broadcasting", NoopGeoResolver{}, NoopUAParser{})
@@ -259,28 +264,17 @@ func TestNormalizeBroadcast_SpeedFallback(t *testing.T) {
 	}
 
 	if statsEv == nil {
-		t.Fatal("FIX2: no stream_stats event emitted for speed-only DTO")
+		t.Fatal("D-029v: no stream_stats event emitted for broadcasting DTO")
 	}
-	gotBitrate, ok := statsEv.Data["bitrate_kbps"].(float64)
-	if !ok {
-		t.Fatalf("FIX2: stream_stats bitrate_kbps type = %T, want float64", statsEv.Data["bitrate_kbps"])
+	if got := statsEv.Data["bitrate_kbps"].(float64); got != 0.0 {
+		t.Errorf("D-029v: stream_stats bitrate_kbps = %v, want 0 (Speed must NOT be used as bitrate)", got)
 	}
-	if gotBitrate != 2000.0 {
-		t.Errorf("FIX2: stream_stats bitrate_kbps = %.0f, want 2000 (Speed fallback)", gotBitrate)
+	if got := statsEv.Data["speed_read_kbps"].(float64); got != 0.991 {
+		t.Errorf("D-029v: speed_read_kbps = %v, want 0.991 (speed preserved verbatim)", got)
 	}
-
-	if ingestEv == nil {
-		t.Error("FIX2: no ingest_stats event emitted — emit condition must use effectiveBitrate not b.BitRate")
-	} else {
-		gotIngestBitrate, ok2 := ingestEv.Data["bitrate_kbps"].(float64)
-		if !ok2 {
-			t.Fatalf("FIX2: ingest_stats bitrate_kbps type = %T, want float64", ingestEv.Data["bitrate_kbps"])
-		}
-		if gotIngestBitrate != 2000.0 {
-			t.Errorf("FIX2: ingest_stats bitrate_kbps = %.0f, want 2000", gotIngestBitrate)
-		}
+	if ingestEv != nil {
+		t.Errorf("D-029v: ingest_stats must NOT be emitted when BitRate==0 and fps absent, got %+v", ingestEv.Data)
 	}
-	t.Logf("PASS FIX2: stream_stats bitrate=%.0f ingest_stats emitted=%v", gotBitrate, ingestEv != nil)
 }
 
 // ─── FIX 3 — empty StreamID guard ────────────────────────────────────────────
@@ -402,4 +396,134 @@ func TestNormalizeWebRTCStats_Averaging(t *testing.T) {
 	}
 	t.Logf("PASS WebRTC averaging: rtt=%.0f jitter=%.0f loss=%.0f",
 		ev.Data["rtt_ms"], ev.Data["jitter_ms"], ev.Data["packet_loss_pct"])
+}
+
+// ─── D-029v — real AMS 3.0.3 wire regressions (live-capture-driven) ───────────
+
+// TestNormalizeBroadcast_BitrateBpsToKbps is the headline regression for the
+// 1000× bitrate bug. The live test123 stream reported bitrate=624016, which is
+// BITS/sec (≈624 kbps, cross-checked against receivedBytes/duration). The old
+// code stored it raw into bitrate_kbps. Both stream_stats and ingest_stats must
+// now carry ~624, not 624016.
+func TestNormalizeBroadcast_BitrateBpsToKbps(t *testing.T) {
+	dto := amsclient.BroadcastDTO{
+		StreamID: "test123",
+		AppName:  "LiveApp",
+		Status:   "broadcasting",
+		Type:     "streamSource",
+		BitRate:  624016, // bps, from the real test.antmedia.io capture
+		Speed:    0.991,
+		// no CurrentFPS — AMS 3.0.3 REST omits it
+	}
+	events := NormalizeBroadcast(dto, "test-antmedia", "broadcasting", NoopGeoResolver{}, NoopUAParser{})
+
+	var statsEv, ingestEv *domain.ServerEvent
+	for i := range events {
+		switch events[i].Type {
+		case domain.EventStreamStats:
+			statsEv = &events[i]
+		case domain.EventIngestStats:
+			ingestEv = &events[i]
+		}
+	}
+	if statsEv == nil || ingestEv == nil {
+		t.Fatalf("want both stream_stats and ingest_stats events; got stats=%v ingest=%v", statsEv != nil, ingestEv != nil)
+	}
+	const wantKbps = 624.016
+	if got := statsEv.Data["bitrate_kbps"].(float64); math.Abs(got-wantKbps) > 0.001 {
+		t.Errorf("stream_stats bitrate_kbps = %v, want ≈%.3f (bps→kbps; NOT 624016)", got, wantKbps)
+	}
+	if got := ingestEv.Data["bitrate_kbps"].(float64); math.Abs(got-wantKbps) > 0.001 {
+		t.Errorf("ingest_stats bitrate_kbps = %v, want ≈%.3f", got, wantKbps)
+	}
+	// AMS 3.0.3 omits currentFPS → no "fps" key (so the scorer redistributes weight).
+	if _, ok := ingestEv.Data["fps"]; ok {
+		t.Errorf("ingest_stats must NOT carry an fps key when AMS omits currentFPS; got %v", ingestEv.Data["fps"])
+	}
+}
+
+// TestNormalizeBroadcast_IngestQoEFieldsWired verifies the previously-dropped
+// ingest-side QoE fields now flow through with correct units: packetLostRatio is
+// a 0..1 fraction (×100 → percent), jitterMs/rttMs are already milliseconds.
+func TestNormalizeBroadcast_IngestQoEFieldsWired(t *testing.T) {
+	dto := amsclient.BroadcastDTO{
+		StreamID:        "qoe-stream",
+		AppName:         "LiveApp",
+		Status:          "broadcasting",
+		BitRate:         1_000_000, // 1000 kbps
+		PacketLostRatio: 0.05,      // fraction → 5.0%
+		JitterMs:        12.0,      // ms
+		RttMs:           8.0,       // ms
+	}
+	events := NormalizeBroadcast(dto, "n1", "broadcasting", NoopGeoResolver{}, NoopUAParser{})
+
+	var ingestEv *domain.ServerEvent
+	for i := range events {
+		if events[i].Type == domain.EventIngestStats {
+			ingestEv = &events[i]
+		}
+	}
+	if ingestEv == nil {
+		t.Fatal("no ingest_stats event emitted")
+	}
+	if got := ingestEv.Data["packet_loss_pct"].(float64); got != 5.0 {
+		t.Errorf("packet_loss_pct = %v, want 5.0 (0.05 ratio ×100)", got)
+	}
+	if got := ingestEv.Data["jitter_ms"].(float64); got != 12.0 {
+		t.Errorf("jitter_ms = %v, want 12.0 (AMS jitterMs is already ms)", got)
+	}
+	if got := ingestEv.Data["rtt_ms"].(float64); got != 8.0 {
+		t.Errorf("rtt_ms = %v, want 8.0 (AMS rttMs is already ms)", got)
+	}
+}
+
+// TestNormalizeBroadcast_TerminatedUnexpectedly verifies that a crashed ingest
+// (real AMS 3.0.3 status, curl-verified in the meet app) emits publish_end with
+// the actual status as the reason — instead of staying "live" until stale
+// eviction (~3 min).
+func TestNormalizeBroadcast_TerminatedUnexpectedly(t *testing.T) {
+	dto := amsclient.BroadcastDTO{
+		StreamID: "Tahir_J1KlsQ2QOf",
+		AppName:  "meet",
+		Status:   "terminated_unexpectedly",
+	}
+	events := NormalizeBroadcast(dto, "n1", "broadcasting", NoopGeoResolver{}, NoopUAParser{})
+	if len(events) != 1 || events[0].Type != domain.EventStreamPublishEnd {
+		t.Fatalf("want 1 stream_publish_end, got %d events (%v)", len(events), events)
+	}
+	if got := events[0].Data["reason"].(string); got != "terminated_unexpectedly" {
+		t.Errorf("publish_end reason = %q, want %q", got, "terminated_unexpectedly")
+	}
+}
+
+// TestNormalizeBroadcast_TerminatedUnexpectedlyNotLive verifies the end event is
+// NOT emitted when we never saw the stream live (prevStatus != broadcasting) —
+// avoids phantom end events for streams that were already dead on first poll.
+func TestNormalizeBroadcast_TerminatedUnexpectedlyNotLive(t *testing.T) {
+	dto := amsclient.BroadcastDTO{StreamID: "x", AppName: "meet", Status: "terminated_unexpectedly"}
+	if events := NormalizeBroadcast(dto, "n1", "", NoopGeoResolver{}, NoopUAParser{}); len(events) != 0 {
+		t.Errorf("want 0 events when never seen live, got %d", len(events))
+	}
+}
+
+// TestNormalizeWebRTCStats_SingleTrackNotHalved verifies that an audio-only or
+// video-only viewer (the absent track reports 0) is not halved by a constant /2.
+func TestNormalizeWebRTCStats_SingleTrackNotHalved(t *testing.T) {
+	// Video-only viewer: audio fields are 0.
+	dto := amsclient.WebRTCClientStatsDTO{
+		StatID:               "video-only",
+		VideoRoundTripTime:   0.040, // 40 ms
+		VideoJitter:          0.020, // 20 ms
+		VideoPacketLostRatio: 0.04,  // 4%
+	}
+	ev := NormalizeWebRTCStats(dto, "live", "s1", "node-1")
+	if got := ev.Data["rtt_ms"].(float64); got != 40.0 {
+		t.Errorf("rtt_ms = %v, want 40.0 (single track must not be halved)", got)
+	}
+	if got := ev.Data["jitter_ms"].(float64); got != 20.0 {
+		t.Errorf("jitter_ms = %v, want 20.0", got)
+	}
+	if got := ev.Data["packet_loss_pct"].(float64); got != 4.0 {
+		t.Errorf("packet_loss_pct = %v, want 4.0", got)
+	}
 }

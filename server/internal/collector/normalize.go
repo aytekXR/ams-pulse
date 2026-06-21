@@ -70,12 +70,13 @@ func NormalizeBroadcast(
 			})
 		}
 
-		// FIX 2 (VD-??): AMS v2.10 sends speed and omits bitrate; fall back to
-		// b.Speed when b.BitRate is zero so we never emit 0 kbps for live streams.
-		effectiveBitrate := b.BitRate
-		if effectiveBitrate == 0 && b.Speed > 0 {
-			effectiveBitrate = b.Speed
-		}
+		// D-029v: AMS reports the broadcast "bitrate" in BITS/sec (curl-verified on
+		// AMS 3.0.3: bitrate=624016 ≈ receivedBytes*8/duration ≈ 624 kbps). Convert
+		// to kbps here — the single normalization boundary. The previous code stored
+		// it raw into bitrate_kbps (a 1000× inflation) AND fell back to b.Speed when
+		// bitrate==0; but AMS "speed" is a realtime RATIO (≈1.0), not a bitrate, so
+		// that fallback emitted ~1 "kbps" of garbage. Both are removed.
+		bitrateKbps := b.BitRate / 1000.0
 
 		// Always emit stream_stats.
 		statsData := map[string]any{
@@ -87,8 +88,8 @@ func NormalizeBroadcast(
 				"dash":   b.DashViewerCount,
 				"other":  0,
 			},
-			"bitrate_kbps":    effectiveBitrate,
-			"speed_read_kbps": b.Speed,
+			"bitrate_kbps":    bitrateKbps,
+			"speed_read_kbps": b.Speed, // NOTE: AMS "speed" is a ratio, not kbps (key name is legacy)
 		}
 		events = append(events, domain.ServerEvent{
 			Version:    1,
@@ -102,35 +103,43 @@ func NormalizeBroadcast(
 			Enrichment: enrich,
 		})
 
-		// VD-22: emit ingest_stats from BroadcastDTO fields so REST-only
-		// deployments surface FPS, bitrate, and other ingest metrics
-		// (previously only Kafka/logtail sources emitted this event type).
-		// AMS BroadcastDTO does not expose packet_loss or jitter via REST;
-		// those fields are left zero and may be populated by WebRTC stats events.
-		// FIX 2: use effectiveBitrate (Speed fallback) for the emit condition too.
-		if b.CurrentFPS > 0 || effectiveBitrate > 0 {
+		// VD-22 / D-029v: emit ingest_stats from BroadcastDTO fields so REST-only
+		// deployments surface ingest health. The real AMS 3.0.3 broadcast object DOES
+		// carry ingest-side packetLostRatio/jitterMs/rttMs (curl-verified) — wire them
+		// through instead of hardcoding 0 (which made the health score blind to ingest
+		// packet loss/jitter). It does NOT carry currentFPS, so "fps" is attached only
+		// when AMS actually reported it (>0); when absent, ComputeHealthScore
+		// redistributes the FPS weight rather than scoring a phantom 0 fps (which had
+		// pinned every REST-polled stream to "Warning").
+		if b.CurrentFPS > 0 || bitrateKbps > 0 {
+			ingestData := map[string]any{
+				"bitrate_kbps":        bitrateKbps,
+				"packet_loss_pct":     b.PacketLostRatio * 100.0, // AMS ratio 0..1 → percent
+				"jitter_ms":           b.JitterMs,                // AMS jitterMs already in ms
+				"rtt_ms":              b.RttMs,                   // AMS rttMs already in ms
+				"keyframe_interval_s": 0.0,
+			}
+			if b.CurrentFPS > 0 {
+				ingestData["fps"] = float64(b.CurrentFPS)
+			}
 			events = append(events, domain.ServerEvent{
-				Version:  1,
-				Type:     domain.EventIngestStats,
-				TS:       now,
-				Source:   domain.SourceRestPoll,
-				NodeID:   nodeID,
-				App:      app,
-				StreamID: b.StreamID,
-				Data: map[string]any{
-					"bitrate_kbps": effectiveBitrate,
-					"fps":          float64(b.CurrentFPS),
-					// packet_loss_pct and jitter_ms are not available via AMS REST;
-					// they are populated by WebRTC peer-stats events when available.
-					"packet_loss_pct":    0.0,
-					"jitter_ms":          0.0,
-					"keyframe_interval_s": 0.0,
-				},
+				Version:    1,
+				Type:       domain.EventIngestStats,
+				TS:         now,
+				Source:     domain.SourceRestPoll,
+				NodeID:     nodeID,
+				App:        app,
+				StreamID:   b.StreamID,
+				Data:       ingestData,
 				Enrichment: enrich,
 			})
 		}
 
-	case "finished", "ended":
+	case "finished", "ended", "terminated_unexpectedly":
+		// D-029v: "terminated_unexpectedly" is a real AMS 3.0.3 status (curl-verified
+		// in the meet app) for crashed/dropped ingests. Without it, a crashed stream
+		// stayed "live" on the dashboard until stale eviction (~3 min) instead of
+		// emitting publish_end on the next poll cycle (≤5 s).
 		if prevStatus == "broadcasting" {
 			events = append(events, domain.ServerEvent{
 				Version:  1,
@@ -141,7 +150,7 @@ func NormalizeBroadcast(
 				App:      app,
 				StreamID: b.StreamID,
 				Data: map[string]any{
-					"reason": "finished",
+					"reason": b.Status,
 				},
 				Enrichment: enrich,
 			})
@@ -155,9 +164,13 @@ func NormalizeWebRTCStats(
 	s amsclient.WebRTCClientStatsDTO,
 	app, streamID, nodeID string,
 ) domain.ServerEvent {
-	rtt := (s.VideoRoundTripTime + s.AudioRoundTripTime) / 2
-	jitter := (s.VideoJitter + s.AudioJitter) / 2
-	loss := (s.VideoPacketLostRatio + s.AudioPacketLostRatio) / 2
+	// D-029v: average ONLY the tracks AMS actually reported. A single-track viewer
+	// (audio-only or video-only) leaves the other track's value at 0; a constant /2
+	// then halved the real metric (e.g. 40 ms RTT reported as 20 ms), under-reporting
+	// QoE degradation. avgNonZero averages over the non-zero tracks instead.
+	rtt := avgNonZero(s.VideoRoundTripTime, s.AudioRoundTripTime)
+	jitter := avgNonZero(s.VideoJitter, s.AudioJitter)
+	loss := avgNonZero(s.VideoPacketLostRatio, s.AudioPacketLostRatio)
 
 	return domain.ServerEvent{
 		Version:  1,
@@ -239,6 +252,23 @@ func ifZero(a, b int64) int64 {
 		return b
 	}
 	return a
+}
+
+// avgNonZero returns the mean of a and b counting only the non-zero values.
+// Used for AMS WebRTC per-peer stats where a single-track (audio-only or
+// video-only) viewer reports 0 for the absent track; a plain (a+b)/2 would
+// halve the real metric. Both zero → 0.
+func avgNonZero(a, b float64) float64 {
+	switch {
+	case a > 0 && b > 0:
+		return (a + b) / 2
+	case a > 0:
+		return a
+	case b > 0:
+		return b
+	default:
+		return 0
+	}
 }
 
 // buildEnrichment creates an EnrichmentBlock from IP and UA.

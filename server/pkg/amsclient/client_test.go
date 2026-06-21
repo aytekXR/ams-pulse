@@ -818,3 +818,45 @@ func TestClusterNodes_404ReturnsEmptyNoError(t *testing.T) {
 		t.Errorf("ClusterNodes on standalone AMS (404) must return nil slice, got: %v", nodes)
 	}
 }
+
+// TestListBroadcasts_RealAMS303_QoEFields decodes the SANITIZED real AMS 3.0.3
+// LiveApp/test123 broadcast (curl-captured 2026-06-21) and pins the wire facts
+// the integration fixes depend on: bitrate is bps (624016), speed is a ratio
+// (0.991), currentFPS is ABSENT (decodes to 0), and the ingest-side QoE fields
+// (packetLostRatio/jitterMs/rttMs/packetsLost) decode into the DTO.
+func TestListBroadcasts_RealAMS303_QoEFields(t *testing.T) {
+	fixture := mustReadFixture(t, "broadcasts_real_test123_v303.json")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(fixture)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+	results, err := c.ListBroadcasts(context.Background(), "LiveApp", 0, 200)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 broadcast, got %d", len(results))
+	}
+	b := results[0]
+	if b.StreamID != "test123" || b.Status != "broadcasting" {
+		t.Fatalf("unexpected stream: id=%q status=%q", b.StreamID, b.Status)
+	}
+	if b.BitRate != 624016 {
+		t.Errorf("BitRate = %v, want 624016 (raw bps from the wire)", b.BitRate)
+	}
+	if b.Speed != 0.991 {
+		t.Errorf("Speed = %v, want 0.991 (realtime ratio)", b.Speed)
+	}
+	if b.CurrentFPS != 0 {
+		t.Errorf("CurrentFPS = %v, want 0 (AMS 3.0.3 omits currentFPS)", b.CurrentFPS)
+	}
+	// New DTO fields must bind to the real wire keys (all 0 on this idle stream,
+	// but the decode path is what we are pinning).
+	if b.PacketLostRatio != 0 || b.JitterMs != 0 || b.RttMs != 0 || b.PacketsLost != 0 {
+		t.Errorf("QoE fields = plr:%v jitterMs:%v rttMs:%v packetsLost:%v, want all 0",
+			b.PacketLostRatio, b.JitterMs, b.RttMs, b.PacketsLost)
+	}
+}

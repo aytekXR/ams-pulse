@@ -338,8 +338,13 @@ func (a *Aggregator) onIngestStats(ev domain.ServerEvent) {
 	if !ok {
 		return
 	}
+	// fps is absent on the AMS REST path (currentFPS omitted); use the -1
+	// "unavailable" sentinel for scoring so the FPS weight is redistributed rather
+	// than scoring a phantom 0 fps. s.FPS keeps its display value (0). D-029v.
+	fpsArg := -1.0
 	if fps, ok := ev.Data["fps"].(float64); ok {
 		s.FPS = fps
+		fpsArg = fps
 	}
 	if bps, ok := ev.Data["bitrate_kbps"].(float64); ok {
 		s.IngestBitrate = bps
@@ -359,7 +364,7 @@ func (a *Aggregator) onIngestStats(ev domain.ServerEvent) {
 	// whenever ingest_stats are received (F4 PRD acceptance criterion).
 	score := ingest.ComputeHealthScore(
 		ingest.DefaultTargetBitrateKbps, ingest.DefaultTargetFPS,
-		s.IngestBitrate, s.FPS, s.KeyframeIntervalS, s.PacketLossPct, s.JitterMS,
+		s.IngestBitrate, fpsArg, s.KeyframeIntervalS, s.PacketLossPct, s.JitterMS,
 	)
 	s.HealthScore = score
 	s.Health = ingest.ScoreToHealth(score)
