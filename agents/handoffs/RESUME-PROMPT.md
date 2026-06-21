@@ -1,10 +1,10 @@
 # Resume prompt — Pulse (next session)
 
-> Updated 2026-06-17 (**session 6**). **Pulse is LIVE + hardened in production:
+> Updated 2026-06-21 (**session 6 → real-AMS handoff**). **Pulse is LIVE + hardened in production:
 > https://beyondkaira.com (+ `www` → apex), real Let's Encrypt TLS, CORS/CSP/auth hardened, backed by
 > mock-ams.**
 >
-> **Session 6 shipped (D-028, committed `54e2d8f` — PUSH PENDING your go-ahead):** the three unblocked
+> **Session 6 shipped (D-028 — pushed to `main`: `54e2d8f` + `f43a22e` + `63f702d`):** the three unblocked
 > deferred hardening items — **B6** (source-test now decrypts the stored credential), **A2** (per-token
 > rate-limit on the main-port `/ingest/beacon`), **A7** (per-IP rate-limit on `/metrics`). Server-only,
 > no contract change. ⚠️ Process note worth reading: the authoring workflow returned a **false green** —
@@ -24,18 +24,69 @@
 >    tell me and I'll loosen it instantly).
 > 2. **Confirm the latest GitHub Actions run is green** — the repo is private and `gh` isn't on the
 >    VPS, so I cannot see it; paste any red job logs and I'll fix them (that's how the last 3 were found).
-> 3. **For a real AMS:** give me `PULSE_AMS_URL` + a REST bearer token → I wire the `real-ams` overlay.
+> 3. **Real-AMS creds OBTAINED** (`test.antmedia.io`, user `test@antmedia.io`) → paste the **password**
+>    into `deploy/.env` on the `AMS_LOGIN_PASSWORD=` line (gitignored), then run the real-AMS session
+>    (full brief immediately below the banner).
 > 4. **GitHub-side admin TODOs** (need a repo admin): `branch-protection.sh`, push a `v*` tag — see
 >    "USER GitHub-side TODO".
 >
-> **NEXT session (agent) — what's next, in order:** (a) **real-AMS integration** is the headline —
-> follow **`agents/handoffs/AMS-INTEGRATION.md`** (operator guide + a ready-to-paste prompt + the
-> remaining deferred backlog — **B7** (per-source webhook secret, needs a frozen-contract CR) and
-> **B3** (Docker secrets); B6/A2/A7 are DONE as of D-028), validating the W2c fixtures against real
-> captures; then
-> (b) QoE/beacon end-to-end; then (c) the optional follow-on workflows. Honor the **Verify + Commit +
-> Handoff** flows below (every workflow). Paste this file into a fresh Claude Code session at the repo
-> root (`/home/aytek/repo/ams-pulse`, VPS).
+> **NEXT session (agent) — THE headline is real-AMS integration against `test.antmedia.io`.** Read the
+> **"▶ NEXT SESSION — REAL-AMS INTEGRATION"** section immediately below first, backed by
+> **`agents/handoffs/AMS-INTEGRATION.md`**. After that: (b) QoE/beacon end-to-end; (c) deferred backlog
+> **B7** (per-source webhook secret — frozen-contract CR) + **B3** (Docker secrets); (d) optional
+> follow-ons. B6/A2/A7 are DONE (D-028). Honor the **Verify + Commit + Handoff** flows below (every
+> workflow). Paste this file into a fresh Claude Code session at the repo root
+> (`/home/aytek/repo/ams-pulse`, VPS).
+
+## ▶ NEXT SESSION — REAL-AMS INTEGRATION (`test.antmedia.io`) ← start here
+
+**Goal:** point Pulse at the real Ant Media Server `https://test.antmedia.io/` and prove the dashboard
+renders its real streams/QoE; validate the W2c `amsclient` fixtures (D-025) against real captures; only
+swap it into the live demo once proven AND the operator says go.
+
+**Operator inputs (provided):**
+- AMS console URL: `https://test.antmedia.io/` · Username: `test@antmedia.io`
+- **Password:** in `deploy/.env` (gitignored) on the `AMS_LOGIN_PASSWORD=` line — operator pastes it.
+  `AMS_LOGIN_EMAIL=test@antmedia.io` is pre-set; `PULSE_AMS_URL=https://test.antmedia.io` is present but
+  **commented** (so the live demo keeps polling mock-ams until you deliberately wire real-AMS).
+
+**Recon already done (2026-06-21, ORCH):** root `/` is the AMS web console (HTTP/2 200). REST is
+**gated** — `GET /rest/v2/version` and `/rest/v2/applications` return **HTTP 403 Forbidden** (Tomcat)
+unauthenticated; default ports `:5080`/`:5443` also 403 via the domain. So REST needs auth and/or an
+allow-listed IP.
+
+**⚠️ THE CRUX — AMS auth is email/password, but `amsclient` only sends a STATIC `Authorization: Bearer`.**
+Resolve this BEFORE coding anything:
+1. **Preferred:** log into the console, in **Settings → Security/JWT** generate a **long-lived JWT / app
+   token**. If available → put it in `PULSE_AMS_AUTH_TOKEN`; `amsclient` works unchanged.
+2. **Else:** only `POST /rest/v2/users/authenticate {email,password}` (→ JWT/cookie that **expires**) is
+   available → a static `.env` token will break on expiry, so `amsclient` needs a small **login+refresh
+   extension** (scope `server/pkg/amsclient` + a token provider; **no contract change**). Decide
+   token-vs-login first.
+3. **IP allow-list:** a 403 can also mean the VPS IP `161.97.172.146` isn't allowed — check the console's
+   REST/dashboard CIDR allow-list and add it if needed.
+
+**⛔ DO NOT disturb the live Oğuz demo.** `pulse-prod` is serving the seeded demo to the Ant Media founder
+(`oguz-testing.md`, gitignored; token `plt_c692…`; liveness sidecar container `pulse-demo-liveness`;
+teardown steps in that doc). Bring real-AMS up on a **separate compose project** (e.g. `-p pulse-realams`
+on alt host ports, or a local stack) and validate THERE. Swap `pulse-prod` to real-AMS only after it's
+proven and the operator approves.
+
+**Plan (run as an ORCH workflow; Verify + Commit + Handoff):**
+1. Determine auth (above). Confirm from the VPS:
+   `curl -H "Authorization: Bearer <token>" https://test.antmedia.io/rest/v2/version` → 200.
+2. If login/refresh is required, extend `amsclient` (author + unit tests; no contract change).
+3. Set `PULSE_AMS_URL` + token in `deploy/.env`; bring up a SEPARATE stack with
+   `deploy/docker-compose.real-ams.yml` (AMS-INTEGRATION.md §3.2).
+4. **Validate W2c fixtures vs real captures (D-025):** curl each endpoint `amsclient` polls
+   (AMS-INTEGRATION.md §1.1 table) from inside the container; diff real JSON against
+   `server/pkg/amsclient/testdata/*.json`; fix any field/envelope drift; `go test ./... -race` green
+   (**repo-ROOT mount** + `GOFLAGS=-buildvcs=false` — D-028 lesson, else api tests silently skip).
+5. Register the source (`POST /api/v1/admin/sources`), run `.../test` (B6 decrypt works now), confirm
+   `/api/v1/live/overview` shows real `total_viewers`/`total_publishers` when streams are live.
+6. Verify + commit by explicit path (`feat(real-ams) D-029: …`) + update THIS file + push when directed.
+
+Full operator guide + a ready-to-paste task prompt: **`agents/handoffs/AMS-INTEGRATION.md`** (§3 + §8).
 
 ## ✅ Status
 
