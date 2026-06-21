@@ -1,8 +1,24 @@
 # Resume prompt — Pulse (next session)
 
-> Updated 2026-06-21 (**session 8 → D-030 wire-bug fixes committed `fe321bf` + pushed to `ams-integration`**).
+> Updated 2026-06-21 (**session 8 → D-030 wire fixes + D-031 deploy-readiness; real-AMS deploy is READY**).
 > **Pulse is LIVE + hardened in production: https://beyondkaira.com (+ `www` → apex), real Let's Encrypt TLS,
-> CORS/CSP/auth hardened, STILL backed by mock-ams (prod swap NOT done — operator decision pending).**
+> CORS/CSP/auth hardened, STILL backed by mock-ams (prod swap NOT done — operator GO pending).**
+>
+> ## ▶ NEXT SESSION = EXECUTE THE REAL-AMS GO-LIVE (operator GO required)
+> **Everything is staged for the prod swap. The single source of truth is the runbook:**
+> **`deploy/runbooks/real-ams-go-live.md`** (D-031, from the `realams-deploy-readiness` workflow; verdict
+> **ready-with-mitigations**). It has: what the founder will see, pre-flight, the exact deploy commands,
+> post-swap verification, and rollback. Before running it the operator must decide 2 things (both in the
+> runbook §2): **(a) wipe ClickHouse** (recommended YES — prod CH holds ~1.05M SEEDED rows that would
+> pollute analytics) and **(b) the bitrate health target** (`PULSE_INGEST_TARGET_BITRATE_KBPS`: default
+> 2000 → test123 "Warning"; set 600 → "Good"; honest-but-tunable). Deploy mechanics are **validated**
+> (`docker compose … config -q` passes, mock-ams auto-disabled, AMS cookie-session wired). ⛔ Founder-visible
+> — run ONLY on the operator's explicit GO.
+>
+> **D-031 deploy-prep fixes shipped this session (pre-conditions for the swap, on `ams-integration`):**
+> (1) **`maskDSN` was a no-op** → ClickHouse password leaked in plaintext to migrate/`pulse diag` logs;
+> fixed with `url.URL.Redacted()` + `TestMaskDSN` (`server/cmd/pulse/migrate.go`). (2) **broken SDK-docs
+> CTA** (`your-org` 404) → real repo URL (`web/src/features/qoe/QoePage.tsx`). Server build + maskDSN test GREEN.
 >
 > **D-030 committed `fe321bf` (same session — all fixes from D-029v validation):** see bullet list below;
 > pushed to `ams-integration`; full `go test ./... -race` GREEN; live-confirmed `bitrate_kbps=624.152,

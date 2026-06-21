@@ -1016,3 +1016,42 @@ never surfaced; `speed_read_kbps` data-key is a legacy misnomer (now carries the
 performed the commit + handoff + push autonomously (correctly — `fe321bf` was byte-identical to the
 ORCH-tested tree, fixture sanitized, docs coherent). Lesson: do not give a reviewer fork write access
 while ORCH is concurrently editing the same files — it caused a brief doc-edit race (reconciled cleanly).
+
+## D-031 · 2026-06-21 · Real-AMS prod-swap deploy-readiness (runbook + pre-deploy fixes)
+
+Ran the `realams-deploy-readiness` workflow (`wf_7139d2a0-4e3`: 5 parallel readiness dimensions —
+deploy-mechanics, founder-UX, rollback-safety, data-integrity, pre-flight-security → release-manager
+synthesis). Verdict: **ready-with-mitigations**. Deploy mechanics validated (`docker compose -p pulse-prod
+… -f docker-compose.real-ams.yml config -q` passes; mock-ams auto-profiled-out; AMS cookie-session wired
+from `deploy/.env`). Deliverable: **`deploy/runbooks/real-ams-go-live.md`** (pre-flight → stop sidecar →
+optional CH wipe → deploy → verify → rollback + founder talking points). The actual swap is **founder-visible
+and gated on explicit operator GO** (NOT executed).
+
+**Pre-deploy fixes shipped (pre-conditions for a clean demo, on `ams-integration`):**
+- **`maskDSN` was a no-op** (`server/cmd/pulse/migrate.go` `return dsn`) — the ClickHouse password leaked in
+  plaintext to JSON logs on every migrate run + `pulse diag`. Fixed with `url.URL.Redacted()` (password →
+  `xxxxx`); regression test `TestMaskDSN` (`migrate_test.go`). Server build + test GREEN.
+- **Broken SDK-docs CTA** — `web/src/features/qoe/QoePage.tsx` had `github.com/your-org/pulse#sdk-setup`
+  (404 in the Viewer-QoE empty state). → `github.com/aytekXR/ams-pulse#sdk-setup`.
+
+**Operator decisions captured in the runbook (§2), not pre-decided by ORCH:**
+1. **Wipe ClickHouse (recommended YES).** Prod CH holds ~1.05M SEEDED demo rows (fake stream IDs); analytics
+   endpoints have no node filter → fake+real would aggregate and mislead. Rollups already empty (nothing to
+   lose). Exact `docker volume rm pulse-prod_clickhouse-data` + re-migrate steps in runbook §3-C.
+2. **Bitrate health target.** test123 ≈624 kbps; default target 2000 → "Warning", set
+   `PULSE_INGEST_TARGET_BITRATE_KBPS=600` → "Good". Per-deployment threshold (honest, not a formula override).
+3. Optional: open the HLS URL to seed 1 viewer for the protocol donut; merge `ams-integration`→`main` timing.
+
+**Founder-facing honest empty states (NOT bugs, talking points in runbook §6):** Fleet/CPU/RAM blank
+(standalone AMS → `cluster/nodes` 404); Viewer-QoE empty (no beacon SDK in player); WebRTC viewer stats
+empty (deferred — aggregator lacks `EventWebRTCClientStats` case).
+
+**D-031 backlog (post-demo):** standalone node card from `/rest/v2/system-status`; `EventWebRTCClientStats`
+aggregator case; surface AMS version; merge to main + drop vestigial `AMS_LOGIN_*` env lines; Caddy
+`/webhook/*` route (+ B7/B3).
+
+**Process note (repeat of D-030):** a deploy-readiness workflow agent autonomously wrote
+`deploy/runbooks/real-ams-go-live.md` to disk (Write access). ORCH overwrote it with the authoritative
+synthesized version after correcting agent-guessed facts (exact volume name `pulse-prod_clickhouse-data`,
+real migration filenames `0001_init/0002_concurrency_rollup/0003_probe_segment_ttfb`, endpoint
+`/api/v1/live/streams` for bitrate, `xxxxx` mask, rollback sidecar → reference `oguz-testing.md`).

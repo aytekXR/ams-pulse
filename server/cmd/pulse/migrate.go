@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"path/filepath"
 	"runtime"
 	"time"
@@ -88,9 +89,15 @@ func maskDSN(dsn string) string {
 	if dsn == "" {
 		return ""
 	}
-	// Simple masking: hide password in clickhouse://user:pass@host format.
-	// Actual DSN parsing errors are handled elsewhere.
-	return dsn
+	// D-030: redact the password in clickhouse://user:pass@host DSNs before logging.
+	// The prior implementation returned the DSN unchanged, leaking the ClickHouse
+	// password in plaintext to JSON logs on every migrate run and `pulse diag`.
+	// url.URL.Redacted replaces the password with "xxxxx" (no URL-escaping).
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return dsn
+	}
+	return u.Redacted()
 }
 
 // checkClickHouse prints a connectivity status line.

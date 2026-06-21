@@ -139,7 +139,7 @@ export function QoePage() {
           description="Viewer QoE data is collected by the beacon SDK. Install the SDK in your player to start collecting startup times, rebuffer events, and error rates."
           action={
             <a
-              href="https://github.com/your-org/pulse#sdk-setup"
+              href="https://github.com/aytekXR/ams-pulse#sdk-setup"
               target="_blank"
               rel="noopener noreferrer"
               style={{
