@@ -46,7 +46,7 @@ import (
 // QA-01 emulates what mock-ams documents; assertions that require a real AMS
 // container to validate true wire format are marked "CI-ONLY" in comments.
 //
-// Documented AMS surface: GET /rest/v2/broadcasts/{app}/list (BroadcastDTO).
+// Documented AMS surface: GET /{app}/rest/v2/broadcasts/list/{offset}/{size} (BroadcastDTO).
 // GET /rest/v2/cluster/nodes (ClusterNodeDTO).
 
 // amsProfile is a per-version mock AMS REST response profile.
@@ -188,8 +188,11 @@ func newProfileServer(t *testing.T, profile amsProfile) *httptest.Server {
 		})
 	})
 
-	// GET /rest/v2/broadcasts/{app}/list
-	mux.HandleFunc("/rest/v2/broadcasts/", func(w http.ResponseWriter, r *http.Request) {
+	// GET /{app}/rest/v2/broadcasts/list/{offset}/{size}
+	// Real AMS v3 path layout: the application name is a path prefix, not a
+	// segment inside /rest/v2/broadcasts/. The handler uses a prefix match on
+	// "/live/rest/v2/broadcasts/" to catch all paged-list requests.
+	mux.HandleFunc("/live/rest/v2/broadcasts/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return

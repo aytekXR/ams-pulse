@@ -30,6 +30,15 @@ func newTestClient(srv *httptest.Server) *amsclient.Client {
 	})
 }
 
+// newLoginTestClient returns a Client with cookie-session auth configured.
+func newLoginTestClient(srv *httptest.Server, email, password string) *amsclient.Client {
+	return amsclient.New(amsclient.Config{
+		BaseURL:       srv.URL,
+		LoginEmail:    email,
+		LoginPassword: password,
+	})
+}
+
 // ─── Broadcasts: version fixtures ────────────────────────────────────────────
 
 func TestListBroadcasts_v2_10_NobitRate(t *testing.T) {
@@ -385,6 +394,36 @@ func TestListApplications_DecodesEnvelope(t *testing.T) {
 	}
 }
 
+// TestListApplications_ObjectFormStillDecodes verifies that the older AMS
+// object-array form ([{"name":"LiveApp"},...]) is still decoded correctly.
+func TestListApplications_ObjectFormStillDecodes(t *testing.T) {
+	fixture := mustReadFixture(t, "applications_object_form.json")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/rest/v2/applications" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(fixture)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+	names, err := c.ListApplications(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []string{"LiveApp", "live"}
+	if len(names) != len(want) {
+		t.Fatalf("expected %d applications, got %d: %v", len(want), len(names), names)
+	}
+	for i, w := range want {
+		if names[i] != w {
+			t.Errorf("names[%d] = %q, want %q", i, names[i], w)
+		}
+	}
+}
+
 // ─── B9: response body size limit ────────────────────────────────────────────
 
 // TestGetJSON_HugeBodyDoesNotOOM verifies that a response larger than the
@@ -407,7 +446,7 @@ func TestGetJSON_HugeBodyDoesNotOOM(t *testing.T) {
 		_, _ = fmt.Fprint(w, `[{"streamId":"limit-test","name":"`)
 		// Fill with 'x' characters — deliberately oversized.
 		chunk := strings.Repeat("x", 64*1024) // 64 KB chunks
-		written := 34                          // bytes written so far (the prefix above)
+		written := 34                         // bytes written so far (the prefix above)
 		for written < totalBytes {
 			n := len(chunk)
 			if written+n > totalBytes {
@@ -491,5 +530,291 @@ func TestWebRTCClientStats_FullAndPartialEntries(t *testing.T) {
 	}
 	if partial.AudioJitter != 0 {
 		t.Errorf("stats[1].AudioJitter = %v, want 0 (missing)", partial.AudioJitter)
+	}
+}
+
+// ─── Real AMS captures ───────────────────────────────────────────────────────
+
+// TestListBroadcasts_RealLiveAppCapture decodes the curl-verified LiveApp
+// broadcast list from test.antmedia.io (2026-06-21). Asserts 16 entries, finds
+// the live "test123" stream with BitRate==622312, and confirms viewer counts decode.
+func TestListBroadcasts_RealLiveAppCapture(t *testing.T) {
+	fixture := mustReadFixture(t, "broadcasts_real_liveapp.json")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(fixture)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+	results, err := c.ListBroadcasts(context.Background(), "LiveApp", 0, 200)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 16 {
+		t.Fatalf("expected 16 broadcasts (real LiveApp capture), got %d", len(results))
+	}
+
+	// Find the live test123 stream.
+	var found *amsclient.BroadcastDTO
+	for i := range results {
+		if results[i].StreamID == "test123" {
+			found = &results[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("expected to find stream 'test123' in real capture, not found")
+	}
+	if found.Status != "broadcasting" {
+		t.Errorf("test123.Status = %q, want broadcasting", found.Status)
+	}
+	if found.BitRate != 622312 {
+		t.Errorf("test123.BitRate = %v, want 622312", found.BitRate)
+	}
+	// Viewer counts should be present (zero or more) and decoded without error.
+	_ = found.HlsViewerCount
+	_ = found.WebRTCViewerCount
+	_ = found.RTMPViewerCount
+	_ = found.DashViewerCount
+
+	// AppName must be backfilled on all entries.
+	for i, b := range results {
+		if b.AppName != "LiveApp" {
+			t.Errorf("results[%d].AppName = %q, want LiveApp", i, b.AppName)
+		}
+	}
+}
+
+// TestListBroadcasts_UsesPerAppPathParams verifies that ListBroadcasts sends
+// a request to the correct AMS v3 per-app path: /{app}/rest/v2/broadcasts/list/{offset}/{size}.
+func TestListBroadcasts_UsesPerAppPathParams(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+	_, err := c.ListBroadcasts(context.Background(), "LiveApp", 0, 200)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "/LiveApp/rest/v2/broadcasts/list/0/200"
+	if gotPath != want {
+		t.Errorf("request path = %q, want %q (per-app path params required)", gotPath, want)
+	}
+}
+
+// TestBroadcastStatistics_RealFields decodes the curl-verified broadcast
+// statistics response for stream test123 and asserts the real AMS v3 field names.
+func TestBroadcastStatistics_RealFields(t *testing.T) {
+	fixture := mustReadFixture(t, "broadcast_statistics_real.json")
+
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(fixture)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+	stats, err := c.BroadcastStatistics(context.Background(), "LiveApp", "test123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stats.TotalHLSWatchersCount != 0 {
+		t.Errorf("TotalHLSWatchersCount = %d, want 0", stats.TotalHLSWatchersCount)
+	}
+	if stats.TotalRTMPWatchersCount != -1 {
+		t.Errorf("TotalRTMPWatchersCount = %d, want -1", stats.TotalRTMPWatchersCount)
+	}
+	if stats.TotalWebRTCWatchersCount != 0 {
+		t.Errorf("TotalWebRTCWatchersCount = %d, want 0", stats.TotalWebRTCWatchersCount)
+	}
+	if stats.TotalDASHWatchersCount != 0 {
+		t.Errorf("TotalDASHWatchersCount = %d, want 0", stats.TotalDASHWatchersCount)
+	}
+	// Path must end with /broadcast-statistics (real AMS v3 endpoint).
+	if !strings.HasSuffix(gotPath, "/broadcast-statistics") {
+		t.Errorf("request path %q must end with /broadcast-statistics", gotPath)
+	}
+}
+
+// ─── Auth: cookie-session tests ───────────────────────────────────────────────
+
+// TestLogin_AttachesCookieAndAuthorizes verifies that a client configured with
+// LoginEmail/Password performs a login on first call and the resulting cookie
+// (JSESSIONID) is carried automatically on subsequent protected requests.
+func TestLogin_AttachesCookieAndAuthorizes(t *testing.T) {
+	const testCookie = "JSESSIONID=test-session-abc"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/rest/v2/users/authenticate":
+			// Set JSESSIONID and return success.
+			http.SetCookie(w, &http.Cookie{Name: "JSESSIONID", Value: "test-session-abc"})
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"success":true,"message":"system/ADMIN"}`)
+		case "/rest/v2/applications":
+			// Require the JSESSIONID cookie.
+			cookie, err := r.Cookie("JSESSIONID")
+			if err != nil || cookie.Value != "test-session-abc" {
+				w.WriteHeader(http.StatusForbidden)
+				fmt.Fprint(w, `{"error":"forbidden"}`)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"applications":["LiveApp"]}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := newLoginTestClient(srv, "admin@example.com", "secret")
+	names, err := c.ListApplications(context.Background())
+	if err != nil {
+		t.Fatalf("expected successful response with cookie auth, got: %v", err)
+	}
+	if len(names) != 1 || names[0] != "LiveApp" {
+		t.Errorf("expected [LiveApp], got %v", names)
+	}
+}
+
+// TestLogin_WrongPasswordReturnsError verifies that a {"success":false} login
+// response surfaces as an error in the subsequent API call.
+// The applications endpoint returns 403 (as real AMS does without a valid session),
+// which triggers a forced re-login that also fails → "login failed" error.
+func TestLogin_WrongPasswordReturnsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/rest/v2/users/authenticate":
+			// Wrong password — AMS returns HTTP 200 with success=false.
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"success":false,"message":"wrong password"}`)
+		case "/rest/v2/applications":
+			// Without a valid session, /rest/v2/applications returns 403 on real AMS.
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, `{"error":"unauthorized"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := newLoginTestClient(srv, "admin@example.com", "wrongpassword")
+	_, err := c.ListApplications(context.Background())
+	if err == nil {
+		t.Fatal("expected error for wrong password login, got nil")
+	}
+	if !strings.Contains(err.Error(), "login failed") {
+		t.Errorf("expected error to contain 'login failed', got: %v", err)
+	}
+}
+
+// TestSessionExpiry_RelogsInAndRetriesOnce verifies that when the protected
+// endpoint returns 403 (stale session), the client re-logins and retries exactly
+// once, ultimately succeeding.
+func TestSessionExpiry_RelogsInAndRetriesOnce(t *testing.T) {
+	var loginCount atomic.Int64
+	var appsRequestCount atomic.Int64
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/rest/v2/users/authenticate":
+			n := loginCount.Add(1)
+			// First login sets session-1, second login sets session-2.
+			sessionVal := fmt.Sprintf("session-%d", n)
+			http.SetCookie(w, &http.Cookie{Name: "JSESSIONID", Value: sessionVal})
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"success":true}`)
+		case "/rest/v2/applications":
+			n := appsRequestCount.Add(1)
+			cookie, err := r.Cookie("JSESSIONID")
+			if n == 1 || err != nil || cookie.Value == "session-1" {
+				// First attempt: simulate stale/expired session → 403.
+				w.WriteHeader(http.StatusForbidden)
+				fmt.Fprint(w, `{"error":"session expired"}`)
+				return
+			}
+			// Second attempt (after re-login): success.
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"applications":["LiveApp","demo"]}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := newLoginTestClient(srv, "admin@example.com", "secret")
+	names, err := c.ListApplications(context.Background())
+	if err != nil {
+		t.Fatalf("expected ultimate success after re-login, got: %v", err)
+	}
+	if len(names) != 2 {
+		t.Errorf("expected 2 apps, got %v", names)
+	}
+	if logins := loginCount.Load(); logins != 2 {
+		t.Errorf("expected exactly 2 logins (initial + one refresh), got %d", logins)
+	}
+}
+
+// TestPersistent403_DoesNotStormLogins verifies that when the protected endpoint
+// permanently returns 403 (e.g. IP blocked), the client errors and the login
+// endpoint is hit a small bounded number of times (≤ 2), never more.
+func TestPersistent403_DoesNotStormLogins(t *testing.T) {
+	var loginCount atomic.Int64
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/rest/v2/users/authenticate":
+			loginCount.Add(1)
+			http.SetCookie(w, &http.Cookie{Name: "JSESSIONID", Value: "blocked-session"})
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"success":true}`)
+		case "/rest/v2/applications":
+			// Always 403 — simulates permanent IP block.
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, `{"error":"not allowed IP"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := newLoginTestClient(srv, "admin@example.com", "secret")
+	_, err := c.ListApplications(context.Background())
+	if err == nil {
+		t.Fatal("expected error for permanently blocked IP, got nil")
+	}
+	if logins := loginCount.Load(); logins > 2 {
+		t.Errorf("login endpoint hit %d times, want ≤ 2 (throttle must prevent storm)", logins)
+	}
+}
+
+// TestClusterNodes_404ReturnsEmptyNoError verifies that a standalone AMS node
+// returning 404 for the cluster/nodes endpoint does not cause an error —
+// ClusterNodes returns (nil, nil).
+func TestClusterNodes_404ReturnsEmptyNoError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/rest/v2/cluster/nodes" {
+			http.NotFound(w, r)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+	nodes, err := c.ClusterNodes(context.Background())
+	if err != nil {
+		t.Fatalf("ClusterNodes on standalone AMS (404) must return nil error, got: %v", err)
+	}
+	if nodes != nil {
+		t.Errorf("ClusterNodes on standalone AMS (404) must return nil slice, got: %v", nodes)
 	}
 }

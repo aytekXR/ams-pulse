@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -52,7 +53,7 @@ type Poller struct {
 
 	// prevStatus tracks each stream's last known AMS status for transition detection.
 	mu         sync.Mutex
-	prevStatus map[string]string // key = nodeID+"/"+streamID
+	prevStatus map[string]string // key = nodeID+"/"+app+"/"+streamID
 }
 
 // New creates a new Poller.
@@ -154,7 +155,7 @@ func (p *Poller) pollApp(ctx context.Context, app string) error {
 	}
 
 	for _, b := range broadcasts {
-		key := p.cfg.NodeID + "/" + b.StreamID
+		key := p.cfg.NodeID + "/" + app + "/" + b.StreamID
 
 		p.mu.Lock()
 		prev := p.prevStatus[key]
@@ -197,15 +198,22 @@ func (p *Poller) pollApp(ctx context.Context, app string) error {
 // detectEnded emits publish_end for streams that were "broadcasting" last poll
 // but are no longer in the current broadcast list.
 func (p *Poller) detectEnded(app string, current []amsclient.BroadcastDTO) {
+	// Keys are scoped per application: nodeID/app/streamID. detectEnded runs once
+	// per app and must ONLY consider streams of THIS app — otherwise a broadcasting
+	// stream in another app (absent from this app's list) would be falsely "ended",
+	// deleting a genuinely-live stream. Real AMS nodes host many apps and can even
+	// reuse a streamId across apps (e.g. "test123" in LiveApp and PetarTest2), which
+	// a node-only key conflated.
+	prefix := p.cfg.NodeID + "/" + app + "/"
 	currentIDs := make(map[string]bool, len(current))
 	for _, b := range current {
-		currentIDs[p.cfg.NodeID+"/"+b.StreamID] = true
+		currentIDs[prefix+b.StreamID] = true
 	}
 
 	p.mu.Lock()
 	var ended []string
 	for key, status := range p.prevStatus {
-		if status == "broadcasting" && !currentIDs[key] {
+		if status == "broadcasting" && strings.HasPrefix(key, prefix) && !currentIDs[key] {
 			ended = append(ended, key)
 		}
 	}
@@ -215,11 +223,7 @@ func (p *Poller) detectEnded(app string, current []amsclient.BroadcastDTO) {
 	p.mu.Unlock()
 
 	for _, key := range ended {
-		// Extract streamID from key (format: nodeID/streamID).
-		streamID := key
-		if idx := len(p.cfg.NodeID) + 1; idx < len(key) {
-			streamID = key[idx:]
-		}
+		streamID := strings.TrimPrefix(key, prefix)
 		ev := domain.ServerEvent{
 			Version:  1,
 			Type:     domain.EventStreamPublishEnd,

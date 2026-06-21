@@ -92,7 +92,7 @@ type server struct {
 	uaParser         collector.UAParser
 
 	// Wave 2: product-plane additions (BE-02).
-	beaconServer    *beaconingest.Server  // dedicated ingest listener (optional)
+	beaconServer    *beaconingest.Server // dedicated ingest listener (optional)
 	reportScheduler *reports.Scheduler   // report schedule runner (WO-204)
 
 	// Wave 3 (WO-301): F10 synthetic probe runner.
@@ -128,9 +128,11 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 
 	// 4. AMS REST client.
 	amsClient := amsclient.New(amsclient.Config{
-		BaseURL:   cfg.AMSBaseURL,
-		AuthToken: cfg.AMSAuthToken,
-		Timeout:   10 * time.Second,
+		BaseURL:       cfg.AMSBaseURL,
+		AuthToken:     cfg.AMSAuthToken,
+		LoginEmail:    cfg.AMSLoginEmail,
+		LoginPassword: cfg.AMSLoginPassword,
+		Timeout:       10 * time.Second,
 	})
 
 	// Wave 2: Geo and UA enrichment resolvers.

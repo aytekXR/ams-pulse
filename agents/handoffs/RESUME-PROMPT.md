@@ -1,8 +1,23 @@
 # Resume prompt — Pulse (next session)
 
-> Updated 2026-06-21 (**session 6 → real-AMS handoff**). **Pulse is LIVE + hardened in production:
-> https://beyondkaira.com (+ `www` → apex), real Let's Encrypt TLS, CORS/CSP/auth hardened, backed by
-> mock-ams.**
+> Updated 2026-06-21 (**session 7 → real-AMS integration DONE + validated live**). **Pulse is LIVE +
+> hardened in production: https://beyondkaira.com (+ `www` → apex), real Let's Encrypt TLS, CORS/CSP/auth
+> hardened, backed by mock-ams.**
+>
+> **Session 7 shipped (D-029 — real-AMS integration vs `test.antmedia.io`, committed locally on
+> `ams-integration`, push pending):** connected Pulse to the **real AMS 3.0.3 Enterprise** server and
+> proved the dashboard renders its live stream. The W2c `amsclient` (D-025), built from assumed wire
+> shapes, was **wrong for real AMS** — fixed: (a) **cookie-session login+refresh** auth (AMS has no JWT:
+> `jwtServerControlEnabled=false`; `Config.LoginEmail/LoginPassword` → `POST /rest/v2/users/authenticate`
+> → JSESSIONID via a custom IP-safe cookie jar; re-login+single-retry on 401/403, throttled vs IP-block
+> storms); (b) **per-app REST paths** (`/{app}/rest/v2/broadcasts/list/{offset}/{size}` etc. — root paths
+> 404'd); (c) array-of-strings `applications` decode; (d) 404-tolerant cluster/system endpoints.
+> **Live validation surfaced a 2nd, pre-existing multi-app bug** (D-029 addendum): the restpoller
+> `detectEnded` + aggregator keyed streams by `node/streamID` (no app), so polling multiple apps falsely
+> ended one app's live stream — now keyed `node/app/streamID`. **Result: `/api/v1/live/overview` →
+> `total_publishers:1`** (LiveApp `test123`) on an isolated `pulse-realams` stack; `pulse-prod` untouched.
+> Full `go test ./... -race` green (repo-ROOT mount). New env: `PULSE_AMS_LOGIN_EMAIL/PASSWORD`. Operator
+> still must decide when to **swap `pulse-prod` to real-AMS** (see "▶ REAL-AMS — DONE" below).
 >
 > **Session 6 shipped (D-028 — pushed to `main`: `54e2d8f` + `f43a22e` + `63f702d`):** the three unblocked
 > deferred hardening items — **B6** (source-test now decrypts the stored credential), **A2** (per-token
@@ -38,11 +53,26 @@
 > workflow). Paste this file into a fresh Claude Code session at the repo root
 > (`/home/aytek/repo/ams-pulse`, VPS).
 
-## ▶ NEXT SESSION — REAL-AMS INTEGRATION (`test.antmedia.io`) ← start here
+## ✅ REAL-AMS INTEGRATION — DONE (D-029, session 7) — what's left is the prod SWAP
 
-**Goal:** point Pulse at the real Ant Media Server `https://test.antmedia.io/` and prove the dashboard
-renders its real streams/QoE; validate the W2c `amsclient` fixtures (D-025) against real captures; only
-swap it into the live demo once proven AND the operator says go.
+**Status:** DONE + validated live against `https://test.antmedia.io/` (AMS 3.0.3 Enterprise). The
+dashboard renders the real live stream (`/api/v1/live/overview` → `total_publishers:1`, LiveApp
+`test123`) on an **isolated** `pulse-realams` stack (loopback :18090). Code committed locally on
+`ams-integration` (push pending operator direction). The section below is retained as the integration
+reference + the remaining operator step.
+
+**Remaining (operator decision):** swap the LIVE `pulse-prod` demo from mock-ams to real-AMS. Mechanics:
+add `PULSE_AMS_LOGIN_EMAIL/PASSWORD` + `PULSE_AMS_APPLICATIONS` (already in `deploy/.env`) and layer
+`-f deploy/docker-compose.real-ams.yml` onto the `pulse-prod` stack, then
+`docker compose $DC up -d --build pulse`. ⚠️ Only after the operator says go (it changes what the Ant
+Media founder sees). The dashboard will then show real `test.antmedia.io` streams instead of seeded demo
+data. To VALIDATE without touching prod, bring up the isolated stack:
+`DC="-p pulse-realams -f deploy/docker-compose.yml -f deploy/docker-compose.real-ams.yml -f deploy/docker-compose.realams-test.yml --env-file deploy/.env"; sg docker -c "docker compose $DC up -d --build"`
+then `curl -s http://127.0.0.1:18090/api/v1/live/overview -H "Authorization: Bearer $(sg docker -c "docker compose $DC logs pulse"|grep -oE 'plt_[A-Za-z0-9]+'|head -1)"`.
+
+**Original goal (achieved):** point Pulse at the real Ant Media Server and prove the dashboard renders
+its real streams/QoE; validate the W2c `amsclient` fixtures (D-025) against real captures; swap into the
+live demo only once proven AND the operator says go.
 
 **Operator inputs (provided):**
 - AMS console URL: `https://test.antmedia.io/` · Username: `test@antmedia.io`

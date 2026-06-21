@@ -11,7 +11,7 @@ import (
 // mockEdgeChecker implements EdgeStreamChecker for tests.
 type mockEdgeChecker struct {
 	edgeStreams map[string]bool
-	roles      map[string]string
+	roles       map[string]string
 }
 
 func (m *mockEdgeChecker) IsEdgeStream(streamID string) bool {
@@ -91,8 +91,8 @@ func TestAggregator_HealthScore_DegradedBitrate(t *testing.T) {
 		Type: domain.EventIngestStats, TS: time.Now().UnixMilli(),
 		Source: domain.SourceRestPoll, NodeID: "n", StreamID: "s", App: "live",
 		Data: map[string]any{
-			"bitrate_kbps": 10.0, // very low
-			"fps":          0.0,
+			"bitrate_kbps":    10.0, // very low
+			"fps":             0.0,
 			"packet_loss_pct": 50.0, // severe
 		},
 	})
@@ -270,5 +270,44 @@ func TestAggregator_EvictStaleDoesNotHoldLockDuringSinkEmit(t *testing.T) {
 	}
 	if sink.calls == 0 {
 		t.Fatal("expected EvictStale to emit a publish_end event for the stale stream")
+	}
+}
+
+// TestAggregator_CrossAppStreamID_NoCollision verifies that two AMS applications
+// hosting a stream with the SAME streamId on the SAME node do not collide: a
+// publish_end for one app must not delete the live stream in the other app.
+// Regression for the real-AMS multi-app bug (D-029): test.antmedia.io serves
+// "test123" live in LiveApp while a stale per-app poll emitted a publish_end that
+// — under the old node-only key — deleted the live stream from the snapshot.
+func TestAggregator_CrossAppStreamID_NoCollision(t *testing.T) {
+	agg := New(3*time.Minute, nil, nil)
+
+	// LiveApp/test123 goes live.
+	agg.OnServerEvent(domain.ServerEvent{
+		Version: 1, Type: domain.EventStreamPublishStart, TS: time.Now().UnixMilli(),
+		Source: domain.SourceRestPoll, NodeID: "node-1", App: "LiveApp", StreamID: "test123",
+		Data: map[string]any{"publish_type": "rtmp"},
+	})
+	agg.OnServerEvent(domain.ServerEvent{
+		Version: 1, Type: domain.EventStreamStats, TS: time.Now().UnixMilli(),
+		Source: domain.SourceRestPoll, NodeID: "node-1", App: "LiveApp", StreamID: "test123",
+		Data: map[string]any{"viewer_count": 0},
+	})
+
+	// A different app on the same node ends a (different) stream that happens to
+	// share the streamId. This must NOT delete LiveApp/test123.
+	agg.OnServerEvent(domain.ServerEvent{
+		Version: 1, Type: domain.EventStreamPublishEnd, TS: time.Now().UnixMilli(),
+		Source: domain.SourceRestPoll, NodeID: "node-1", App: "PetarTest2", StreamID: "test123",
+		Data: map[string]any{"reason": "disappeared"},
+	})
+
+	snap := agg.CurrentSnapshot()
+	if snap.ActiveStreams != 1 {
+		t.Fatalf("ActiveStreams = %d after cross-app publish_end; want 1 (LiveApp/test123 still live)", snap.ActiveStreams)
+	}
+	s, ok := snap.Streams["test123"]
+	if !ok || !s.Active || s.App != "LiveApp" {
+		t.Fatalf("LiveApp/test123 missing/inactive after PetarTest2 publish_end: ok=%v stream=%+v", ok, s)
 	}
 }

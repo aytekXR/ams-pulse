@@ -1,6 +1,6 @@
 # Pulse — real-AMS override.
 #
-# Layers on top of the base compose file and the hardened override:
+# Layers on top of the base compose file and optional overrides:
 #
 #   docker compose \
 #     -f deploy/docker-compose.yml \
@@ -12,18 +12,27 @@
 #   1. Disables mock-ams (assigns an unused profile so it never starts).
 #   2. Wires pulse to your production Ant Media Server via operator-supplied env vars.
 #
+# AMS Enterprise Edition uses cookie-session auth (email + password login).
+# Set PULSE_AMS_LOGIN_EMAIL + PULSE_AMS_LOGIN_PASSWORD for automatic session management.
+# PULSE_AMS_AUTH_TOKEN is optional (leave unset if your AMS uses cookie-session only).
+#
 # Required env vars (set in deploy/.env or your secrets manager):
 #
-#   PULSE_AMS_URL            AMS REST base URL, e.g. http://10.0.1.10:5080
-#   PULSE_AMS_AUTH_TOKEN     AMS REST bearer token (required for non-anonymous AMS)
-#   PULSE_AMS_NODE_ID        AMS node identifier emitted in events (e.g. node-01)
-#   PULSE_AMS_APPLICATIONS   Comma-separated app names to poll, e.g. live,vod
-#                            Empty / omit = poll all applications
+#   PULSE_AMS_URL              AMS REST base URL, e.g. http://10.0.1.10:5080
+#   PULSE_AMS_NODE_ID          AMS node identifier emitted in events (e.g. node-01)
+#
+# Optional env vars:
+#
+#   PULSE_AMS_LOGIN_EMAIL      AMS admin email for cookie-session auth
+#   PULSE_AMS_LOGIN_PASSWORD   AMS admin password for cookie-session auth
+#   PULSE_AMS_AUTH_TOKEN       AMS REST bearer token (optional; not needed for cookie-session)
+#   PULSE_AMS_APPLICATIONS     Comma-separated app names to poll, e.g. live,vod
+#                              Empty / omit = poll all applications
 #
 # Validation (requires placeholder env values if .env is absent):
 #
-#   PULSE_AMS_URL=http://ams:5080 PULSE_AMS_AUTH_TOKEN=placeholder \
-#   PULSE_AMS_NODE_ID=node-01 PULSE_AMS_APPLICATIONS=live \
+#   PULSE_AMS_URL=http://ams:5080 PULSE_AMS_LOGIN_EMAIL=a@b.c \
+#   PULSE_AMS_LOGIN_PASSWORD=x PULSE_AMS_NODE_ID=node-01 \
 #   docker compose \
 #     -f deploy/docker-compose.yml \
 #     -f deploy/docker-compose.hardened.yml \
@@ -45,7 +54,9 @@ services:
       # Override the AMS source env vars set in the base and demo overrides.
       # All values come from the operator's environment — nothing is hardcoded.
       PULSE_AMS_URL: "${PULSE_AMS_URL:?PULSE_AMS_URL must be set — e.g. http://your-ams-host:5080}"
-      PULSE_AMS_AUTH_TOKEN: "${PULSE_AMS_AUTH_TOKEN:?PULSE_AMS_AUTH_TOKEN must be set — AMS REST bearer token}"
+      PULSE_AMS_AUTH_TOKEN: "${PULSE_AMS_AUTH_TOKEN:-}"
+      PULSE_AMS_LOGIN_EMAIL: "${PULSE_AMS_LOGIN_EMAIL:-}"
+      PULSE_AMS_LOGIN_PASSWORD: "${PULSE_AMS_LOGIN_PASSWORD:-}"
       PULSE_AMS_NODE_ID: "${PULSE_AMS_NODE_ID:-standalone}"
       # PULSE_AMS_APPLICATIONS: comma-separated list, e.g. "live,vod".
       # Unset or empty = poll all AMS applications.

@@ -43,7 +43,7 @@ func (m *mockEventSink) WriteServerEvent(ev domain.ServerEvent) {
 	default:
 	}
 }
-func (m *mockEventSink) WriteBeaconEvent(_ domain.BeaconEvent)   {}
+func (m *mockEventSink) WriteBeaconEvent(_ domain.BeaconEvent)     {}
 func (m *mockEventSink) WriteViewerSession(_ domain.ViewerSession) {}
 
 func (m *mockEventSink) findPublishStart(streamID string) *domain.ServerEvent {
@@ -77,20 +77,20 @@ func TestLatency_StreamVisibleWithin10s(t *testing.T) {
 					{"name": "live"},
 				},
 			})
-		case "/rest/v2/broadcasts/live/list":
+		case "/live/rest/v2/broadcasts/list/0/200":
 			if streamPresent.Load() == 1 {
 				json.NewEncoder(w).Encode([]map[string]any{
 					{
-						"streamId":         targetStreamID,
-						"status":           "broadcasting",
-						"publishType":      "rtmp",
-						"appName":          "live",
-						"hlsViewerCount":   0,
+						"streamId":          targetStreamID,
+						"status":            "broadcasting",
+						"publishType":       "rtmp",
+						"appName":           "live",
+						"hlsViewerCount":    0,
 						"webRTCViewerCount": 0,
-						"rtmpViewerCount":  0,
-						"dashViewerCount":  0,
-						"bitrate":          2500.0,
-						"speed":            2500.0,
+						"rtmpViewerCount":   0,
+						"dashViewerCount":   0,
+						"bitrate":           2500.0,
+						"speed":             2500.0,
 					},
 				})
 			} else {

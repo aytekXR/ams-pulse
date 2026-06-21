@@ -43,18 +43,18 @@ const (
 // Aggregator implements both domain.LiveProvider and collector.Consumer.
 // It is goroutine-safe.
 type Aggregator struct {
-	mu         sync.RWMutex
-	streams    map[string]*domain.LiveStream    // key = nodeID+"/"+streamID
-	nodes      map[string]*domain.LiveNodeStats // key = nodeID
-	snapshot   *domain.LiveSnapshot
+	mu       sync.RWMutex
+	streams  map[string]*domain.LiveStream    // key = nodeID+"/"+streamID
+	nodes    map[string]*domain.LiveNodeStats // key = nodeID
+	snapshot *domain.LiveSnapshot
 
 	staleThreshold time.Duration
 	sink           domain.EventSink // for eviction events (may be nil)
 	// edgeChecker enables origin/edge viewer-count dedup (VD-03).
 	// May be nil (standalone deployments); in that case no dedup occurs.
-	edgeChecker    EdgeStreamChecker
-	subs           map[chan *domain.LiveSnapshot]struct{}
-	logger         *slog.Logger
+	edgeChecker EdgeStreamChecker
+	subs        map[chan *domain.LiveSnapshot]struct{}
+	logger      *slog.Logger
 }
 
 // New creates an Aggregator.
@@ -224,7 +224,7 @@ func (a *Aggregator) EvictStale() {
 // ─── Event handlers (called with lock held) ───────────────────────────────────
 
 func (a *Aggregator) onPublishStart(ev domain.ServerEvent) {
-	key := ev.NodeID + "/" + ev.StreamID
+	key := ev.NodeID + "/" + ev.App + "/" + ev.StreamID
 	pt := ""
 	if pt2, ok := ev.Data["publish_type"].(string); ok {
 		pt = pt2
@@ -243,7 +243,7 @@ func (a *Aggregator) onPublishStart(ev domain.ServerEvent) {
 }
 
 func (a *Aggregator) onPublishEnd(ev domain.ServerEvent) {
-	key := ev.NodeID + "/" + ev.StreamID
+	key := ev.NodeID + "/" + ev.App + "/" + ev.StreamID
 	if s, ok := a.streams[key]; ok {
 		s.Active = false
 		s.Health = domain.StreamHealthOffline
@@ -252,7 +252,7 @@ func (a *Aggregator) onPublishEnd(ev domain.ServerEvent) {
 }
 
 func (a *Aggregator) onStreamStats(ev domain.ServerEvent) {
-	key := ev.NodeID + "/" + ev.StreamID
+	key := ev.NodeID + "/" + ev.App + "/" + ev.StreamID
 	s, ok := a.streams[key]
 	if !ok {
 		// New stream discovered via stats (start event may have been missed).
@@ -333,7 +333,7 @@ func (a *Aggregator) onNodeStats(ev domain.ServerEvent) {
 }
 
 func (a *Aggregator) onIngestStats(ev domain.ServerEvent) {
-	key := ev.NodeID + "/" + ev.StreamID
+	key := ev.NodeID + "/" + ev.App + "/" + ev.StreamID
 	s, ok := a.streams[key]
 	if !ok {
 		return
@@ -367,11 +367,11 @@ func (a *Aggregator) onIngestStats(ev domain.ServerEvent) {
 
 // UpdateIngestHealth sets the health score for a stream from the ingest health tracker.
 // Called by the ingest.HealthTracker via a bridge goroutine or directly.
-func (a *Aggregator) UpdateIngestHealth(nodeID, streamID string, score float64, health domain.StreamHealth) {
+func (a *Aggregator) UpdateIngestHealth(nodeID, app, streamID string, score float64, health domain.StreamHealth) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	key := nodeID + "/" + streamID
+	key := nodeID + "/" + app + "/" + streamID
 	if s, ok := a.streams[key]; ok {
 		s.HealthScore = score
 		s.Health = health
@@ -435,7 +435,7 @@ func copySnapshot(s *domain.LiveSnapshot) *domain.LiveSnapshot {
 		}
 	}
 	cp := &domain.LiveSnapshot{
-		ActiveStreams:  s.ActiveStreams,
+		ActiveStreams: s.ActiveStreams,
 		TotalViewers:  s.TotalViewers,
 		IngestBitrate: s.IngestBitrate,
 		Streams:       make(map[string]*domain.LiveStream, len(s.Streams)),

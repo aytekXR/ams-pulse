@@ -42,6 +42,14 @@ type EnvConfig struct {
 	// AMSAuthToken is the bearer token for AMS REST API (optional).
 	AMSAuthToken string
 
+	// AMSLoginEmail is the AMS console email for cookie-session auth.
+	// Corresponds to PULSE_AMS_LOGIN_EMAIL.
+	AMSLoginEmail string
+
+	// AMSLoginPassword is the AMS console password for cookie-session auth.
+	// Corresponds to PULSE_AMS_LOGIN_PASSWORD.
+	AMSLoginPassword string
+
 	// AMSApplications is a comma-separated list of AMS app names to poll.
 	// Empty = poll all apps.
 	AMSApplications []string
@@ -146,17 +154,19 @@ type EnvConfig struct {
 // loadEnvConfig reads configuration from PULSE_* environment variables.
 func loadEnvConfig() (EnvConfig, error) {
 	cfg := EnvConfig{
-		ListenAddr:         envOrDefault("PULSE_LISTEN_ADDR", ":8090"),
-		ClickHouseDSN:      envOrDefault("PULSE_CLICKHOUSE_DSN", "clickhouse://localhost:9000/pulse"),
-		ClickHouseDatabase: envOrDefault("PULSE_CLICKHOUSE_DATABASE", "pulse"),
-		MigrationsDir:      envOrDefault("PULSE_MIGRATIONS_DIR", ""),
-		AMSBaseURL:         envOrDefault("PULSE_AMS_URL", "http://localhost:5080"),
-		AMSNodeID:          envOrDefault("PULSE_AMS_NODE_ID", "standalone"),
-		AMSAuthToken:       os.Getenv("PULSE_AMS_AUTH_TOKEN"),
-		LogTailPath:        os.Getenv("PULSE_LOG_TAIL_PATH"),
-		WebhookListenAddr:  os.Getenv("PULSE_WEBHOOK_ADDR"),
+		ListenAddr:          envOrDefault("PULSE_LISTEN_ADDR", ":8090"),
+		ClickHouseDSN:       envOrDefault("PULSE_CLICKHOUSE_DSN", "clickhouse://localhost:9000/pulse"),
+		ClickHouseDatabase:  envOrDefault("PULSE_CLICKHOUSE_DATABASE", "pulse"),
+		MigrationsDir:       envOrDefault("PULSE_MIGRATIONS_DIR", ""),
+		AMSBaseURL:          envOrDefault("PULSE_AMS_URL", "http://localhost:5080"),
+		AMSNodeID:           envOrDefault("PULSE_AMS_NODE_ID", "standalone"),
+		AMSAuthToken:        os.Getenv("PULSE_AMS_AUTH_TOKEN"),
+		AMSLoginEmail:       os.Getenv("PULSE_AMS_LOGIN_EMAIL"),
+		AMSLoginPassword:    os.Getenv("PULSE_AMS_LOGIN_PASSWORD"),
+		LogTailPath:         os.Getenv("PULSE_LOG_TAIL_PATH"),
+		WebhookListenAddr:   os.Getenv("PULSE_WEBHOOK_ADDR"),
 		WebhookSharedSecret: os.Getenv("PULSE_WEBHOOK_SECRET"),
-		LogLevel:           envOrDefault("PULSE_LOG_LEVEL", "info"),
+		LogLevel:            envOrDefault("PULSE_LOG_LEVEL", "info"),
 	}
 
 	// Parse retention days.

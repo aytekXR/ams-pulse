@@ -879,3 +879,86 @@ refuted until reproduced):
   `PULSE_WEBHOOK_SECRET` from `deploy/.env` env-vars to Docker Compose `secrets:` (tmpfs files);
   needs secret-file reading added to `loadEnvConfig` (a `cmd/` scope change). Mitigation today:
   `chmod 600 deploy/.env` (already gitignored). See `AMS-INTEGRATION.md` §5.2.
+
+## D-029 · 2026-06-21 · Real-AMS integration vs `test.antmedia.io` — plan + live recon findings
+
+ORCH connected Pulse to the real Ant Media Server `https://test.antmedia.io` (operator creds in
+gitignored `deploy/.env`). Live recon from the VPS (IP `161.97.172.146`) revealed the W2c amsclient
+(D-025), built from assumed wire shapes, has **wrong REST paths and auth model** for real AMS
+Enterprise. Server = **AMS 3.0.3 Enterprise Edition** (`/rest/v2/version`). Scope of fixes: server
+only (`pkg/amsclient`, `cmd/pulse` wiring) + `deploy/` overrides — **NO contract change** (D-004 safe).
+
+**Live recon facts (every one curl-verified from the VPS, not inferred):**
+- **Auth = cookie-session, not Bearer.** `POST /rest/v2/users/authenticate {email,password}` → HTTP 200
+  `{"success":true,...}` + a `JSESSIONID` cookie. No JWT: `server-settings.jwtServerControlEnabled=false`,
+  empty `jwtServerSecretKey` → the "long-lived JWT" path (crux #1) is unavailable; the **login+refresh
+  extension (crux #2)** is required. Login success is in the JSON body (`success`), NOT the HTTP status
+  (wrong password → HTTP 200 `success:false`).
+- **REST path layout is per-application, not root.** Real working paths:
+  - `GET /rest/v2/applications` → `{"applications":["LiveApp","live",...]}` — **array of STRINGS**
+    (amsclient decodes `[{ "name": … }]` → would fail). Root context; needs the session cookie.
+  - `GET /{app}/rest/v2/broadcasts/list/{offset}/{size}` (path params, per-app) — amsclient builds
+    `/rest/v2/broadcasts/{app}/list?offset=&size=` → **404**. THIS is the only critical-path call
+    (restpoller.go:151 `ListBroadcastsPaged`); broken paths ⇒ `/live/overview` shows 0.
+  - `GET /{app}/rest/v2/broadcasts/{id}/broadcast-statistics` → `{total{RTMP,HLS,WebRTC,DASH}WatchersCount}`
+    (DTO has wrong field names) — but **`BroadcastStatistics` is never called in prod** (cosmetic).
+  - `GET /{app}/rest/v2/broadcasts/{id}/webrtc-client-stats/0/100` (per-app) — best-effort, errors ignored.
+  - `GET /rest/v2/system/stats` → **404**; real `/rest/v2/system-status` — but **`SystemStats` never called**.
+  - `GET /rest/v2/cluster/nodes` → **404** (standalone, not a cluster). `cluster.Discovery`
+    (discovery.go:124) logs a `Warn` every 30 s on the 404 → log spam ⇒ fix amsclient to return
+    empty on 404.
+- **Per-app IP allow-list.** From the VPS IP, 8 of 16 apps return **403 "Not allowed IP"**
+  (Icomms, TEST, VsMediaTesting, WebRTCAppEE, amartest, drmtest, live, ll-hls). The other 8 are open:
+  24x7test, Conference, **LiveApp** (16 broadcasts, **1 live: `test123` broadcasting**), LiveShopping,
+  PetarTest2, clipcreator, demo, meet. Important: **per-app broadcast endpoints need NO auth from an
+  allowed IP** (`/LiveApp/rest/v2/broadcasts/count` → 200 with no cookie). The cookie is needed for app
+  *discovery* (`/rest/v2/applications`) + root/system calls. ⇒ set `PULSE_AMS_APPLICATIONS` to the open
+  apps so the core poll works regardless. Real captures staged in `agents/handoffs/real-ams-captures/`.
+
+**Plan (executed as Workflow `pulse-realams-integration` — 3 disjoint authors → adversarial verify →
+fix loop; then ORCH live-deploy + validate):**
+- **A1 `server/pkg/amsclient`**: cookie-session login+refresh provider (Config `LoginEmail`/`LoginPassword`;
+  `net/http/cookiejar`; lazy login; on 401/403 re-login + single retry, throttled to avoid storms on
+  permanent IP-block 403; static Bearer path preserved for back-compat); fix paths to per-app form;
+  tolerant `applications` decoder (string OR `{name}` — cross-version); `ClusterNodes`/`NodeInfo`
+  404 → empty,nil; fix `BroadcastStatisticsDTO`/`SystemStats` path for correctness; update tests +
+  add real-capture fixtures + auth tests.
+- **A2 `server/cmd/pulse`**: `PULSE_AMS_LOGIN_EMAIL`/`PULSE_AMS_LOGIN_PASSWORD` in config.go; pass to
+  `amsclient.New` in serve.go:130.
+- **A3 `deploy/`**: relax `docker-compose.real-ams.yml` token requirement (`:?`→`:-`, login now primary)
+  + add login-var passthrough; add `docker-compose.realams-test.yml` (loopback-port isolated stack,
+  modeled on `docker-compose.ci.yml`) for ORCH validation without touching `pulse-prod`.
+- **Verify**: `go test ./... -race` with **repo-ROOT mount** + `GOFLAGS=-buildvcs=false` (D-028, else
+  api tests silently skip); re-curl live AMS to confirm the new client.go path templates return 200.
+- **ORCH live-deploy**: isolated project `pulse-realams` on loopback ports (mock-ams disabled), validate
+  `/api/v1/live/overview` shows real `total_publishers` ≥ 1 (LiveApp `test123` is live). `pulse-prod`
+  (Oğuz demo) untouched. Swap into the live demo only on operator approval.
+
+### D-029 addendum · multi-app stream-identity collision (found via live validation)
+
+Live validation against `test.antmedia.io` surfaced a SECOND, pre-existing bug (not in amsclient):
+after the amsclient fixes the poller authenticated and ingested the live stream `LiveApp/test123`,
+but `/api/v1/live/overview` showed **0 publishers**. Root cause — stream identity omitted the AMS
+**application** in two places, so multi-app polling collided:
+1. **`restpoller.detectEnded`** keyed `prevStatus` by `nodeID/streamID` and ran **per app**, comparing
+   the GLOBAL prevStatus map against ONE app's current IDs. With ≥2 apps, each app's `detectEnded`
+   emitted a `publish_end` (reason "disappeared", **not deduped**) for every *other* app's broadcasting
+   stream. (Aggravated because `test.antmedia.io` reuses streamId `test123` across `LiveApp` and
+   `PetarTest2`.) 60 phantom `stream_publish_end` rows in `server_events` confirmed it.
+2. **`aggregator`** keyed `a.streams` by `nodeID/streamID`, so those phantom publish_ends deleted the
+   genuinely-live `LiveApp/test123` every poll cycle (no eviction log, no panic — the snapshot just
+   stayed empty). Single-app mock-ams never exposed either bug.
+
+**Fix (server/internal/collector, allowed AMS territory; no contract change):**
+- `restpoller`: `prevStatus` key → `nodeID/app/streamID`; `detectEnded` scopes its scan to the current
+  app's key prefix (`strings.HasPrefix`) so it only ends streams of THAT app.
+- `aggregator`: the 4 stream-event handlers + `UpdateIngestHealth` key by `nodeID/app/streamID`. The
+  snapshot map (`snap.Streams`) intentionally stays keyed by `streamID` (its consumers iterate values
+  and several tests look it up by bare streamId; `total_publishers` counts active entries, so it is
+  correct for the realistic 1-live-stream case). Regression test
+  `TestAggregator_CrossAppStreamID_NoCollision` proves a cross-app publish_end no longer deletes a live
+  stream.
+
+**Validated LIVE** (isolated `pulse-realams` stack, loopback :18090, `pulse-prod` untouched):
+`/api/v1/live/overview` → `total_publishers:1`, `apps:[{app:LiveApp,publishers:1,streams:1}]`;
+`/api/v1/live/streams` → `test123` `publisher_state:publishing`, `started_at` matching the real broadcast. Full `go test ./... -race` green (repo-ROOT mount, D-028).

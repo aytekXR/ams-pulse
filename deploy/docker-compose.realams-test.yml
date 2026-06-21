@@ -1,0 +1,53 @@
+# Pulse real-AMS ISOLATED TEST stack (loopback only) — pairs with docker-compose.real-ams.yml.
+# Project: pulse-realams. Lets ORCH validate against a real AMS without disturbing pulse-prod.
+#
+# Usage:
+#   docker compose -p pulse-realams \
+#     -f deploy/docker-compose.yml \
+#     -f deploy/docker-compose.real-ams.yml \
+#     -f deploy/docker-compose.realams-test.yml \
+#     --env-file deploy/.env up -d --build
+#
+# This file provides infra overrides only (loopback ports, migration one-shot, secret key).
+# The real-ams override supplies the AMS connection env and disables mock-ams.
+#
+# Required env vars (in deploy/.env or environment):
+#   PULSE_SECRET_KEY   — 32-byte hex
+
+services:
+  clickhouse:
+    environment:
+      CLICKHOUSE_SKIP_USER_SETUP: "1"   # isolated, no auth — separate volume per project
+
+  pulse-migrate:
+    build:
+      context: ..
+      dockerfile: deploy/docker/pulse.Dockerfile
+    entrypoint: ["pulse", "migrate"]
+    environment:
+      PULSE_CLICKHOUSE_DSN: "clickhouse://clickhouse:9000/pulse"
+      PULSE_CLICKHOUSE_DATABASE: "pulse"
+      PULSE_MIGRATIONS_DIR: "/contracts/db/clickhouse"
+      PULSE_META_DSN: "/tmp/pulse_meta.db"
+    volumes:
+      - ../contracts:/contracts:ro
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: "no"
+
+  pulse:
+    ports:
+      - "127.0.0.1:18090:8090"   # UI + API — loopback only (pulse-prod owns :80/:443)
+      - "127.0.0.1:18091:8091"   # beacon ingest — loopback only
+    environment:
+      PULSE_MIGRATIONS_DIR: "/contracts/db/clickhouse"
+      PULSE_META_DDL_PATH: "/contracts/db/meta/0001_init.sql"
+      PULSE_SECRET_KEY: "${PULSE_SECRET_KEY:?set PULSE_SECRET_KEY}"
+    volumes:
+      - ../contracts:/contracts:ro
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      pulse-migrate:
+        condition: service_completed_successfully

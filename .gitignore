@@ -48,3 +48,6 @@ flags/
 /store/
 uuid
 status
+
+# Real-AMS recon captures — contain third-party secrets (AMS licence key, RTSP creds). Never commit.
+agents/handoffs/real-ams-captures/
