@@ -120,6 +120,10 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 
 	// 2. Live aggregator.
 	agg := aggregator.New(3*time.Minute, nil, logger)
+	// D-031: apply the configured ingest health targets so the dashboard's per-stream
+	// health honors PULSE_INGEST_TARGET_BITRATE_KBPS/_FPS (the aggregator previously
+	// hardcoded the package defaults, ignoring config).
+	agg.SetIngestTargets(cfg.IngestTargetBitrateKbps, cfg.IngestTargetFPS)
 	// Wire aggregator back as the eviction sink.
 	// (Circular reference is fine — aggregator holds a domain.EventSink, not *Fanout)
 

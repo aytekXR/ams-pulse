@@ -1055,3 +1055,29 @@ aggregator case; surface AMS version; merge to main + drop vestigial `AMS_LOGIN_
 synthesized version after correcting agent-guessed facts (exact volume name `pulse-prod_clickhouse-data`,
 real migration filenames `0001_init/0002_concurrency_rollup/0003_probe_segment_ttfb`, endpoint
 `/api/v1/live/streams` for bitrate, `xxxxx` mask, rollback sidecar → reference `oguz-testing.md`).
+
+### D-031 addendum · real-AMS go-live EXECUTED + aggregator target-wiring bug (found live)
+
+Operator gave GO (execute now / wipe ClickHouse / bitrate target 600). Ran the runbook against the LIVE
+`pulse-prod` stack: stopped the `pulse-demo-liveness` sidecar, wiped `pulse-prod_clickhouse-data` (token
+volume `pulse-prod_pulse-data` preserved), re-migrated (0001/0002/0003), and `up -d --build pulse` with the
+real-ams overlay. **`beyondkaira.com` now serves real `test.antmedia.io`.** Verified live: healthz ok
+(all components), `/api/v1/live/overview` → `total_publishers:1`, `bitrate_kbps≈623.5` (was 624016),
+ClickHouse = 142 real rows / only `test123` / 0 seeded rows, migrate DSN masked `clickhouse://pulse:xxxxx@…`.
+
+**Bug found during go-live (fixed):** setting `PULSE_INGEST_TARGET_BITRATE_KBPS=600` did NOT change the
+dashboard health — test123 stayed "Warning" (band 50). Root cause: `aggregator.onIngestStats` called
+`ingest.ComputeHealthScore` with the **hardcoded** `ingest.DefaultTargetBitrateKbps` (2000), ignoring the
+configured target. `serve.go` passed the target to the `ingest.HealthTracker` but NOT to the aggregator,
+and the live dashboard reads the aggregator's `LiveStream.Health` (banded in `query.go`). The
+`HealthTracker`'s correct score was unused for the live view. Fix (scope: collector + cmd; no contract
+change): added `targetBitrateKbps`/`targetFPS` fields + `Aggregator.SetIngestTargets()` (mirrors the
+`SetEdgeChecker` pattern), defaulted in `New`, applied from `serve.go` via `cfg.IngestTargetBitrateKbps/FPS`;
+`onIngestStats` now uses the configured targets. Regression test `TestAggregator_SetIngestTargets` (default
+2000 → Warning; 600 → Good). Wired the `PULSE_INGEST_TARGET_BITRATE_KBPS` passthrough into
+`docker-compose.real-ams.yml` (default 2000). Rebuilt + redeployed: **test123 now `health_score:100`
+(Good)** at 623.5 kbps. Full `go test ./... -race` GREEN.
+
+**Live status:** prod swap DONE. Founder-facing honest empty states remain (Fleet/CPU-RAM, Viewer-QoE,
+WebRTC viewer stats) — runbook §6 talking points; D-031 backlog unchanged. Rollback procedure in
+`deploy/runbooks/real-ams-go-live.md` §5 (the seeded-demo sidecar restore is in `oguz-testing.md`).

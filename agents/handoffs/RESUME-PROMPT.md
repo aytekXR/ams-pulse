@@ -1,24 +1,32 @@
 # Resume prompt — Pulse (next session)
 
-> Updated 2026-06-21 (**session 8 → D-030 wire fixes + D-031 deploy-readiness; real-AMS deploy is READY**).
-> **Pulse is LIVE + hardened in production: https://beyondkaira.com (+ `www` → apex), real Let's Encrypt TLS,
-> CORS/CSP/auth hardened, STILL backed by mock-ams (prod swap NOT done — operator GO pending).**
+> Updated 2026-06-22 (**session 8 → REAL-AMS GO-LIVE DONE; `beyondkaira.com` now serves test.antmedia.io**).
+> **Pulse is LIVE on REAL AMS in production: https://beyondkaira.com (+ `www` → apex), real Let's Encrypt TLS,
+> CORS/CSP/auth hardened, backed by `test.antmedia.io` (AMS 3.0.3 Enterprise) — the mock-ams demo is RETIRED.**
 >
-> ## ▶ NEXT SESSION = EXECUTE THE REAL-AMS GO-LIVE (operator GO required)
-> **Everything is staged for the prod swap. The single source of truth is the runbook:**
-> **`deploy/runbooks/real-ams-go-live.md`** (D-031, from the `realams-deploy-readiness` workflow; verdict
-> **ready-with-mitigations**). It has: what the founder will see, pre-flight, the exact deploy commands,
-> post-swap verification, and rollback. Before running it the operator must decide 2 things (both in the
-> runbook §2): **(a) wipe ClickHouse** (recommended YES — prod CH holds ~1.05M SEEDED rows that would
-> pollute analytics) and **(b) the bitrate health target** (`PULSE_INGEST_TARGET_BITRATE_KBPS`: default
-> 2000 → test123 "Warning"; set 600 → "Good"; honest-but-tunable). Deploy mechanics are **validated**
-> (`docker compose … config -q` passes, mock-ams auto-disabled, AMS cookie-session wired). ⛔ Founder-visible
-> — run ONLY on the operator's explicit GO.
+> ## ✅ REAL-AMS GO-LIVE — DONE (D-031, session 8)
+> Operator gave GO (execute / wipe ClickHouse / bitrate target 600). The prod swap is COMPLETE + live-verified:
+> `/api/v1/live/overview` → `total_publishers:1` (LiveApp `test123`), **`bitrate_kbps≈623.5`** (was 624016),
+> **`health_score:100` (Good)**, ClickHouse = real data only (seeded rows wiped, 0 remain), migrate DSN masked
+> (`clickhouse://pulse:xxxxx@…`). Procedure + rollback: **`deploy/runbooks/real-ams-go-live.md`** (the
+> seeded-demo sidecar was stopped; restore steps for rollback are in `oguz-testing.md`, gitignored).
 >
-> **D-031 deploy-prep fixes shipped this session (pre-conditions for the swap, on `ams-integration`):**
-> (1) **`maskDSN` was a no-op** → ClickHouse password leaked in plaintext to migrate/`pulse diag` logs;
-> fixed with `url.URL.Redacted()` + `TestMaskDSN` (`server/cmd/pulse/migrate.go`). (2) **broken SDK-docs
-> CTA** (`your-org` 404) → real repo URL (`web/src/features/qoe/QoePage.tsx`). Server build + maskDSN test GREEN.
+> **NEXT SESSION (agent) — the headline is now the D-031 POST-DEMO BACKLOG** (make the real dashboard richer
+> for the founder), NOT a new deploy. In priority order: (1) **standalone node card** — on `cluster/nodes`
+> 404, synthesize a single-node card from `/rest/v2/system-status` so Fleet + CPU/RAM aren't blank; (2)
+> **`EventWebRTCClientStats` aggregator case** — wire viewer-side RTT/jitter/loss into the live snapshot
+> (decide viewer-side vs ingest-side field ownership); (3) surface AMS **version** (3.0.3); (4) **merge
+> `ams-integration` → `main`** + drop the vestigial `AMS_LOGIN_*` lines from `deploy/.env`; (5) QoE/beacon
+> end-to-end (needs Pro+ license). Honor Verify + Commit + Handoff. Watch for AMS wire drift in pulse logs.
+>
+> **Go-live also surfaced + fixed (D-031 addendum):** the aggregator hardcoded the bitrate health target
+> (2000), ignoring `PULSE_INGEST_TARGET_BITRATE_KBPS` — so the dashboard health badge ignored config. Fixed
+> via `Aggregator.SetIngestTargets()` (wired from `serve.go`; passthrough added to `docker-compose.real-ams.yml`)
+> + `TestAggregator_SetIngestTargets`. That's why test123 reads "Good" (623.5 kbps ≥ 600 target).
+>
+> **D-031 deploy-prep fixes (on `ams-integration`):** (1) **`maskDSN` was a no-op** → ClickHouse password
+> leaked in plaintext to migrate/`pulse diag` logs; fixed with `url.URL.Redacted()` + `TestMaskDSN`. (2)
+> **broken SDK-docs CTA** (`your-org` 404) → real repo URL (`web/src/features/qoe/QoePage.tsx`).
 >
 > **D-030 committed `fe321bf` (same session — all fixes from D-029v validation):** see bullet list below;
 > pushed to `ams-integration`; full `go test ./... -race` GREEN; live-confirmed `bitrate_kbps=624.152,

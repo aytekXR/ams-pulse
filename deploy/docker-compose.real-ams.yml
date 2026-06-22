@@ -61,3 +61,7 @@ services:
       # PULSE_AMS_APPLICATIONS: comma-separated list, e.g. "live,vod".
       # Unset or empty = poll all AMS applications.
       PULSE_AMS_APPLICATIONS: "${PULSE_AMS_APPLICATIONS:-}"
+      # Ingest health target bitrate (kbps). Real sources (e.g. an RTSP camera pull)
+      # are often well below the generic 2000 default — set this to the source's
+      # expected healthy bitrate so the health badge is honest. D-031.
+      PULSE_INGEST_TARGET_BITRATE_KBPS: "${PULSE_INGEST_TARGET_BITRATE_KBPS:-2000}"

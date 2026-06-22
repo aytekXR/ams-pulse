@@ -55,6 +55,13 @@ type Aggregator struct {
 	edgeChecker EdgeStreamChecker
 	subs        map[chan *domain.LiveSnapshot]struct{}
 	logger      *slog.Logger
+
+	// Ingest health-score targets (D-031). Default to the package defaults; the
+	// configured PULSE_INGEST_TARGET_* values are applied via SetIngestTargets so
+	// the dashboard's per-stream health honors the operator's source profile
+	// (previously onIngestStats hardcoded the defaults, ignoring config).
+	targetBitrateKbps float64
+	targetFPS         float64
 }
 
 // New creates an Aggregator.
@@ -67,15 +74,31 @@ func New(staleThreshold time.Duration, sink domain.EventSink, logger *slog.Logge
 		logger = slog.Default()
 	}
 	a := &Aggregator{
-		streams:        make(map[string]*domain.LiveStream),
-		nodes:          make(map[string]*domain.LiveNodeStats),
-		staleThreshold: staleThreshold,
-		sink:           sink,
-		subs:           make(map[chan *domain.LiveSnapshot]struct{}),
-		logger:         logger,
+		streams:           make(map[string]*domain.LiveStream),
+		nodes:             make(map[string]*domain.LiveNodeStats),
+		staleThreshold:    staleThreshold,
+		sink:              sink,
+		subs:              make(map[chan *domain.LiveSnapshot]struct{}),
+		logger:            logger,
+		targetBitrateKbps: ingest.DefaultTargetBitrateKbps,
+		targetFPS:         ingest.DefaultTargetFPS,
 	}
 	a.rebuildSnapshot()
 	return a
+}
+
+// SetIngestTargets overrides the ingest health-score targets from configuration
+// (PULSE_INGEST_TARGET_BITRATE_KBPS / PULSE_INGEST_TARGET_FPS). Call once after
+// New, before events flow. Zero values are ignored (keep the defaults). D-031.
+func (a *Aggregator) SetIngestTargets(bitrateKbps, fps float64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if bitrateKbps > 0 {
+		a.targetBitrateKbps = bitrateKbps
+	}
+	if fps > 0 {
+		a.targetFPS = fps
+	}
 }
 
 // SetEdgeChecker wires the cluster discovery service for origin/edge viewer dedup.
@@ -363,7 +386,7 @@ func (a *Aggregator) onIngestStats(ev domain.ServerEvent) {
 	// Compute health score inline so LiveStream.HealthScore is non-zero
 	// whenever ingest_stats are received (F4 PRD acceptance criterion).
 	score := ingest.ComputeHealthScore(
-		ingest.DefaultTargetBitrateKbps, ingest.DefaultTargetFPS,
+		a.targetBitrateKbps, a.targetFPS,
 		s.IngestBitrate, fpsArg, s.KeyframeIntervalS, s.PacketLossPct, s.JitterMS,
 	)
 	s.HealthScore = score

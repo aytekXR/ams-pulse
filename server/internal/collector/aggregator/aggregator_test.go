@@ -311,3 +311,46 @@ func TestAggregator_CrossAppStreamID_NoCollision(t *testing.T) {
 		t.Fatalf("LiveApp/test123 missing/inactive after PetarTest2 publish_end: ok=%v stream=%+v", ok, s)
 	}
 }
+
+// TestAggregator_SetIngestTargets verifies that the dashboard's per-stream health
+// honors the configured PULSE_INGEST_TARGET_BITRATE_KBPS (D-031). The aggregator
+// previously hardcoded ingest.DefaultTargetBitrateKbps (2000), so a 623 kbps RTSP
+// camera read "Warning" regardless of config. Mirrors the real test123 case.
+func TestAggregator_SetIngestTargets(t *testing.T) {
+	health := func(target float64) domain.StreamHealth {
+		agg := New(3*time.Minute, nil, nil)
+		if target > 0 {
+			agg.SetIngestTargets(target, 0) // fps target left at default
+		}
+		agg.OnServerEvent(domain.ServerEvent{
+			Version: 1, Type: domain.EventStreamPublishStart, TS: time.Now().UnixMilli(),
+			NodeID: "n", App: "LiveApp", StreamID: "test123",
+			Data: map[string]any{"publish_type": "rtmp"},
+		})
+		// ingest_stats WITHOUT an fps key (real AMS REST path) — fps weight is redistributed.
+		agg.OnServerEvent(domain.ServerEvent{
+			Version: 1, Type: domain.EventIngestStats, TS: time.Now().UnixMilli(),
+			NodeID: "n", App: "LiveApp", StreamID: "test123",
+			Data: map[string]any{
+				"bitrate_kbps":        623.0,
+				"keyframe_interval_s": 0.0,
+				"packet_loss_pct":     0.0,
+				"jitter_ms":           0.0,
+			},
+		})
+		s, ok := agg.CurrentSnapshot().Streams["test123"]
+		if !ok {
+			t.Fatal("test123 not in snapshot")
+		}
+		return s.Health
+	}
+
+	// Default target (2000): 623 kbps is well below → Warning.
+	if h := health(0); h != domain.StreamHealthWarning {
+		t.Errorf("default target: health = %q, want Warning", h)
+	}
+	// Configured target (600): 623 kbps clears it → Good. This is the bug fix.
+	if h := health(600); h != domain.StreamHealthGood {
+		t.Errorf("target=600: health = %q, want Good (configured target must reach the aggregator)", h)
+	}
+}
