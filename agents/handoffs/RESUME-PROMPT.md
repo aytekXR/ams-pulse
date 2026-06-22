@@ -1,8 +1,25 @@
 # Resume prompt — Pulse (next session)
 
-> Updated 2026-06-22 (**session 8 → REAL-AMS GO-LIVE DONE; `beyondkaira.com` now serves test.antmedia.io**).
+> Updated 2026-06-22 (**session 8 → GO-LIVE DONE + D-032 completeness/test audit; next session = production-readiness**).
 > **Pulse is LIVE on REAL AMS in production: https://beyondkaira.com (+ `www` → apex), real Let's Encrypt TLS,
 > CORS/CSP/auth hardened, backed by `test.antmedia.io` (AMS 3.0.3 Enterprise) — the mock-ams demo is RETIRED.**
+>
+> ## ▶ NEXT SESSION = PRODUCTION-READINESS (read `agents/handoffs/PRODUCTION-READINESS.md` FIRST)
+> The `pulse-completeness-and-test-audit` workflow (D-032) produced a full, evidence-based brief —
+> **`agents/handoffs/PRODUCTION-READINESS.md`** is the paste-ready next-session prompt. Headline: the MVP is
+> functionally substantial but **NOT "tested at every level"** (3 packages at **0.0%** in a normal run —
+> `internal/query`, `internal/store/clickhouse`, `internal/config`; **0 Playwright**; no response-body↔OpenAPI
+> validation; no enforced coverage gate; e2e = 4 assertions), and several features **stub silently** in prod
+> (alert channel test-fire no-ops; 3 license gates unenforced; standalone node card blank; QoE/beacon needs a
+> Pro+ license to flow). The brief sequences it: **Step A** golang:1.26→1.25 ✅ done; **Step B** merge
+> `ams-integration`→`main`; **Step C** wire the Caddy `/webhook/*` route; then **Phase 1** (`pulse-p1-gaps`),
+> **Phase 2** (`pulse-test-backfill` — TDD + coverage gate, every level), **Phase 3** (`pulse-prod-harden`),
+> **Phase 4** (`pulse-feature-complete`). **Orchestrate each phase with a Workflow.** Honor Verify + Commit +
+> Handoff. Operator follow-up still open: AMS-side **IP allow-list** for the VPS (8/16 apps 403 → user's 4
+> active streams are in blocked apps).
+>
+> **D-032 quick win shipped this session:** `golang:1.26`→`golang:1.25` in
+> `docker-compose.{hardened,ci,override}.yml` (1.26 is unreleased → would break mock-ams + CI on `docker pull`).
 >
 > ## ✅ REAL-AMS GO-LIVE — DONE (D-031, session 8)
 > Operator gave GO (execute / wipe ClickHouse / bitrate target 600). The prod swap is COMPLETE + live-verified:

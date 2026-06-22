@@ -90,7 +90,7 @@ services:
 
   # ── Mock AMS (self-contained; real-ams override replaces this) ───────────────
   mock-ams:
-    image: golang:1.26
+    image: golang:1.25
     working_dir: /src/qa/mock-ams
     command: ["go", "run", ".", "-addr", ":9090", "-app", "live"]
     volumes:

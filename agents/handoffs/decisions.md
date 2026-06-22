@@ -1081,3 +1081,33 @@ change): added `targetBitrateKbps`/`targetFPS` fields + `Aggregator.SetIngestTar
 **Live status:** prod swap DONE. Founder-facing honest empty states remain (Fleet/CPU-RAM, Viewer-QoE,
 WebRTC viewer stats) — runbook §6 talking points; D-031 backlog unchanged. Rollback procedure in
 `deploy/runbooks/real-ams-go-live.md` §5 (the seeded-demo sidecar restore is in `oguz-testing.md`).
+
+## D-032 · 2026-06-22 · Completeness + test-coverage audit → production-readiness brief
+
+Ran the `pulse-completeness-and-test-audit` workflow (`wf_5f88abbb-dae`: 4 parallel auditors —
+test-coverage-by-layer, functional-completeness-vs-PRD, production-readiness, e2e/functional strategy →
+tech-lead synthesis). Deliverable: **`agents/handoffs/PRODUCTION-READINESS.md`** (the next-session prompt:
+what's needed to complete the app, a 4-phase roadmap, and a binding mandate to test at EVERY level with TDD +
+a coverage gate, each phase orchestrated as a Workflow).
+
+**Honest test verdict (measured `go test ./...` coverage, no integration tag):** unit foundation is real
+(321 Go test fns, non-tautological) but NOT "tested at every level" — **3 packages at 0.0% in a normal run**:
+`internal/query` (1010 lines, integration-only), `internal/store/clickhouse` (integration-only),
+`internal/config` (NO test file). `cmd/pulse` 1.2%; `store/meta` 29.7%; `license` 36.9%; api 52.2%. Web: 12
+vitest suites but **no --coverage / no threshold**. **0 Playwright tests.** No response-body↔OpenAPI
+conformance tests. e2e = 4 assertions (smoke). SDK beacon-js is the best-covered layer (15KB gate).
+
+**Top functional gaps to "complete" (evidence-cited in the brief):** alert channel test-fire is a stub
+(`server.go:~1234` returns 202, never calls `Send()`); `rebuffer_ratio`/`error_rate` alerts proxy from
+HealthScore (not real beacon data); **3 license gates defined but never enforced** (`CheckDataAPI` on
+analytics handlers, `CheckNodeLimit`, `CheckPrometheus` on `/metrics`) = monetization leak; standalone node
+card blank (`SystemStats()` implemented but never called); `EventWebRTCClientStats` dropped by the aggregator;
+QoE/beacon needs a Pro+ license to flow in prod; Postgres meta store stubbed; webhook unreachable (no Caddy
+`/webhook/*` route); per-app IP allow-list (8/16 apps 403 the VPS).
+
+**Quick win shipped (D-032):** `golang:1.26`→`golang:1.25` in `docker-compose.{hardened,ci,override}.yml`
+(go1.26 unreleased → `docker pull` failure breaking mock-ams + the CI compose job). Verified:
+`grep -rn golang:1.26 deploy/ .github/` empty.
+
+**Immediate next step (per brief):** merge `ams-integration`→`main` (full `-race`, repo-root mount, 0 SKIP)
++ wire the Caddy `/webhook/*` route; then run the phased Workflows. RESUME-PROMPT updated to point here.
