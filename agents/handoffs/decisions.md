@@ -1111,3 +1111,27 @@ QoE/beacon needs a Pro+ license to flow in prod; Postgres meta store stubbed; we
 
 **Immediate next step (per brief):** merge `ams-integration`→`main` (full `-race`, repo-root mount, 0 SKIP)
 + wire the Caddy `/webhook/*` route; then run the phased Workflows. RESUME-PROMPT updated to point here.
+
+## D-033 · 2026-06-24 · Session-9 audit: verify state, eliminate stale assumptions, harden the handoff
+
+Operator-directed meta-audit ("make sure the prompt is done; verify don't assume; TDD/verification/workflows/
+assumption-elimination"). Actions:
+- **Re-verified current reality (not assumed):** prod LIVE on real test.antmedia.io (`/healthz` ok,
+  `total_publishers:1`, containers up 2 days healthy); `ams-integration @ ea30367` in sync, **7 commits ahead
+  of `main` (main STALE — lacks D-029..D-032)**; `go test ./... -race` EXIT=0 / 21 ok / **0 SKIP** (repo-root
+  mount); Dockerfile embeds the web build (QoePage fix is in the prod image).
+- **Rewrote `RESUME-PROMPT.md` clean** — pruned the contradictory stale sections (it still said "prod swap
+  pending / don't disturb the seeded demo" AFTER the go-live). New structure: §0 verified state, §1 Pending
+  User Actions (U1 AMS IP allow-list, U2 CI-green confirm, U3 Pro+ license, U4 branch-protection/tag, U5
+  browser/CSP, U6 gh install), §2 done-vs-missing, §3 immediate steps, §4 workflow-phase backlog, §5 **binding
+  TDD enforcement** (red→green; unit/integration/contract/functional/e2e/regression/edge/failure-path; coverage
+  gate; critical-business-logic-first), §6 **binding verification workflow** (build/lint/typecheck/test-race/
+  coverage/contract-drift/staging/smoke/adversarial), §7 workflow suggestions (feature/test/deploy/monitor/
+  rollback), §8 **Assumptions to Eliminate** (A1–A13, each with how-to-validate), §9–12 binding flows/protocol/
+  hard-rules/environment.
+- No code changed this session (verification + handoff only). Production untouched.
+
+**Top unverified assumptions flagged for elimination:** main≠prod (merge), CI-green-on-GitHub (user/gh),
+alerts-fire-and-deliver (stub + no retry + no e2e), coverage-adequate (3 pkgs 0%), QoE-works (needs Pro+),
+SPA-renders/CSP (no Playwright/browser run), response-body↔contract (only spec-lint), CH-shutdown-no-loss
+(sleep not drain). See RESUME-PROMPT §8.
