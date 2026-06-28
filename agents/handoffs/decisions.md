@@ -1182,3 +1182,24 @@ remove with `docker rm -f ams-teststream` once real streams flow. VPS has **0 sw
 REST is now public (`0.0.0.0/0`) per the exposure choice — tighten to a specific CIDR if desired. No host
 firewall present (UFW inactive; provider-level only). **No application code changed**; `deploy/.env` and
 `oguz-testing.md` are gitignored (not committed). Runbook: `deploy/runbooks/self-hosted-ams.md`.
+
+## D-035 · 2026-06-28 · Subdomains (pulse./ams.) + test-coverage/CI audit
+
+**Subdomains (operator-directed "utilize subdomains").** Added Caddy site blocks in `deploy/config/Caddyfile.prod`:
+`pulse.{$PULSE_DOMAIN}` → Pulse (apex kept), `ams.{$PULSE_DOMAIN}` → reverse-proxy the self-hosted AMS panel
+(host:5080) with real Let's Encrypt TLS so the AMS admin password is encrypted in transit. DNS A records
+`pulse`/`ams`/`www` → 161.97.172.146 added by the operator (verified via 8.8.8.8/1.1.1.1). **Gotcha:**
+`caddy reload` via `docker exec` did NOT apply the new site addresses (no ACME attempts logged); `docker restart
+pulse-prod-caddy-1` loaded them and certs issued via TLS-ALPN-01. Verified: `https://pulse.beyondkaira.com/healthz`
+200, `https://ams.beyondkaira.com` → "Management of Ant Media Server", cert SANs present. Committed `4f7077b`
+(Caddyfile only; the later operator-added `brier.<domain>` block is a separate project — left uncommitted).
+
+**Test-coverage + CI audit (operator-directed "nothing untested; see breakage in CI").** Measured
+`go test -race -cover ./...` in golang:1.25, repo-root mount: **EXIT=0, all pass, no races; total 47.5%.**
+Zero unit coverage: `internal/query` (0%, powers all chart/API reads), `internal/config` (0%),
+`store/clickhouse` (0% unit; integration ~3/12 query methods), `.../migrations` (0%), `cmd/pulse` (1.2%).
+Low+critical: `license` 36.9% (+3 gates unenforced), `store/meta` 29.7%, `collector/logtail` 37.5%,
+`internal/api` 52.2%, `alert/channels` 56.8%. Strong: ingest 85, cluster 89, sessions 81, anomaly 76,
+amsclient 76, restpoller 72, alert 72. **CI gaps** (won't catch breakage): no coverage gate, no Playwright
+browser e2e (web/e2e absent), no response-body contract tests (only spec-lint), no web coverage threshold,
+shallow mock-only e2e. Full plan + integration-key checklist captured in `agents/handoffs/NEXT-SESSION-PROMPT.md`.
