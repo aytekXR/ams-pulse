@@ -1,16 +1,21 @@
 # Pulse — Caddy TLS terminator, PRODUCTION (real domain + Let's Encrypt).
 #
 # Used by deploy/docker-compose.prod-tls.yml. Differs from ./Caddyfile only by:
-#   - NO 'tls internal' line  → Caddy auto-obtains a public Let's Encrypt cert.
-#   - the site address is {$PULSE_DOMAIN} (REQUIRED — no localhost fallback).
+#   - NO 'tls internal' line  → Caddy auto-obtains public Let's Encrypt certs.
+#   - the site addresses use {$PULSE_DOMAIN} (REQUIRED — no localhost fallback).
 #
-# Prerequisites before bringing this up:
-#   1. DNS: an A record for your domain → the VPS public IP (161.97.172.146),
-#      propagated (verify: dig +short <domain> == 161.97.172.146).
+# Hostnames served (D-034 subdomains):
+#   {$PULSE_DOMAIN}            apex → Pulse app (kept working)
+#   pulse.{$PULSE_DOMAIN}      → Pulse app  (canonical subdomain)
+#   ams.{$PULSE_DOMAIN}        → Ant Media Server panel (reverse-proxied to host:5080)
+#   www.{$PULSE_DOMAIN}        → 301 redirect to apex
+#
+# Prerequisites before bringing this up / reloading:
+#   1. DNS A records → the VPS public IP (161.97.172.146), propagated, for EACH of:
+#        {$PULSE_DOMAIN}, www.{$PULSE_DOMAIN}, pulse.{$PULSE_DOMAIN}, ams.{$PULSE_DOMAIN}
+#      (verify: dig @8.8.8.8 +short <name> == 161.97.172.146).
 #   2. TCP :80 and :443 reachable from the internet (ACME HTTP-01 / TLS-ALPN).
 #   3. PULSE_DOMAIN set in deploy/.env (e.g. PULSE_DOMAIN=beyondkaira.com).
-#   4. Nothing else bound to host :80/:443 (stop the demo first:
-#        cd deploy && docker compose -p pulse down).
 #
 # Optional: receive cert-expiry notices — add  email you@beyondkaira.com  to the
 # global block below (Caddy works fine without it).
@@ -21,16 +26,15 @@
     # acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
 }
 
-# Canonical host: redirect www.<domain> -> apex over HTTPS (301). This also makes
-# Caddy provision a certificate for www so it never serves a TLS-name-mismatch
-# error to anyone who types the www host. Requires www.<domain> DNS -> the VPS.
+# www → apex (301). Provisions a cert for www so it never serves a name mismatch.
 www.{$PULSE_DOMAIN} {
     redir https://{$PULSE_DOMAIN}{uri} permanent
 }
 
-{$PULSE_DOMAIN} {
+# ── Pulse app — apex + pulse.<domain> ────────────────────────────────────────
+{$PULSE_DOMAIN}, pulse.{$PULSE_DOMAIN} {
     # No 'tls internal' → Caddy provisions a public Let's Encrypt certificate
-    # for {$PULSE_DOMAIN} automatically on first request.
+    # for each name automatically on first request.
 
     # Beacon ingest — proxy /beacon/* to pulse:8091 so clients only need :443.
     handle /beacon/* {
@@ -56,8 +60,33 @@ www.{$PULSE_DOMAIN} {
         X-Frame-Options "DENY"
         Referrer-Policy "strict-origin-when-cross-origin"
         -Server
-        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' wss://{$PULSE_DOMAIN} https://{$PULSE_DOMAIN}; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' wss://{$PULSE_DOMAIN} wss://pulse.{$PULSE_DOMAIN} https://{$PULSE_DOMAIN} https://pulse.{$PULSE_DOMAIN}; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    }
+
+    log {
+        output stdout
+        format json
+        level INFO
+    }
+}
+
+# ── Ant Media Server panel — ams.<domain> → host:5080 ────────────────────────
+# AMS runs as the 'antmedia' container with --network host, serving plain HTTP on
+# :5080. Caddy terminates TLS here so the panel password is encrypted in transit.
+# Upstream is the VPS public IP (AMS binds 0.0.0.0; reachable from this container,
+# same path the Pulse collector uses). WebSocket upgrades are proxied automatically.
+ams.{$PULSE_DOMAIN} {
+    reverse_proxy 161.97.172.146:5080 {
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-Proto https
+    }
+
+    # Minimal headers only — AMS ships its own UI/CSP; a strict policy breaks it.
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        -Server
     }
 
     log {
