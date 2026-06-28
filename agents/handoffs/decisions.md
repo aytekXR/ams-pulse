@@ -1135,3 +1135,50 @@ assumption-elimination"). Actions:
 alerts-fire-and-deliver (stub + no retry + no e2e), coverage-adequate (3 pkgs 0%), QoE-works (needs Pro+),
 SPA-renders/CSP (no Playwright/browser run), response-body↔contract (only spec-lint), CH-shutdown-no-loss
 (sleep not drain). See RESUME-PROMPT §8.
+
+## D-034 · 2026-06-28 · Self-hosted AMS Enterprise (trial) + prod Pulse repointed off test.antmedia.io
+
+Operator-directed ("using workflows, implement RESUME-PROMPT; start installing AMS with the trial license").
+Stood up the operator's OWN Ant Media Server so Pulse no longer depends on the IP-blocked shared
+test.antmedia.io (**resolves U1**) and the full ingest/QoE/webhook/multi-app pipeline becomes exercisable on a
+fully-controlled AMS.
+
+**Decisions (operator-approved via AskUserQuestion):** (1) install = Docker on the prod VPS
+(`antmedia/enterprise:3.0.3`, `--network host`); (2) exposure = full public; (3) switch prod Pulse after a
+staging-verify.
+
+**Done — every claim verified against the running stack, not assumed:**
+- Pulled `antmedia/enterprise:3.0.3` (digest `09fbb5cd…`; tag matches the AMS version Pulse already modeled).
+  Container `antmedia`, `--network host`, persistent volume `antmedia_data` → /usr/local/antmedia. Public IP
+  161.97.172.146 is directly on eth0 → WebRTC ICE advertises the real IP (no NAT).
+- **License:** the image does NOT honor `-e LICENSE_KEY` (that was an unverified web guess; docs.antmedia.io
+  403'd the researchers). Injected `server.licence_key` into conf/red5.properties + restart. Confirmed
+  Enterprise via authed `/rest/v2/version` → "Enterprise Edition 3.0.3"; server-settings `licenceKey` set,
+  `heartbeatEnabled:true`. Definitive proof: a 2 Mbps RTMP test stream muxed/transcoded (HLS + adaptive +
+  WebRTC adaptors active) — an unlicensed Enterprise would throttle/refuse.
+- **Admin user** created headlessly: `POST /rest/v2/users/initial` (admin@beyondkaira.com); cookie-session
+  login verified (`/rest/v2/users/authenticate` → system/ADMIN) — exactly Pulse's amsclient auth path. Creds
+  in oguz-testing.md + deploy/.env (both gitignored).
+- **Root cause found & fixed (same class as U1, on our own AMS):** each app's `remoteAllowedCIDR` defaulted to
+  `127.0.0.1` with `ipFilterEnabled=true`. The Pulse container (src 172.20.0.3) got 403 "Not allowed IP" on
+  every `/{app}/rest/v2/broadcasts/list`. Set `remoteAllowedCIDR=0.0.0.0/0` on LiveApp/WebRTCAppEE/live
+  (started at 172.16.0.0/12 to keep the app REST host-private, then widened to 0.0.0.0/0 to honor "expose
+  fully" AND unbreak the browser panel's per-app live view). Polls then returned 200.
+- **Staging-verify (binding §6.7, isolated project `pulse-ams-staging`, NOT prod):** base+hardened+real-ams vs
+  the new AMS; ffmpeg sidecar published a 2 Mbps test pattern (rtmp LiveApp/teststream); AMS broadcast
+  "broadcasting" @2068 kbps/720p/0 loss; Pulse polls 200; ClickHouse `server_events` populated
+  (`ingest_stats`/`stream_stats`, source `rest_poll`, stream_id teststream, bitrate_kbps≈1969 → bps→kbps
+  normalization correct, D-029/D-031 holding vs a real AMS); `/api/v1/live/overview` (Bearer) →
+  `total_publishers:1`. Staging torn down (`down -v`).
+- **Prod switch:** rewrote `deploy/.env` PULSE_AMS_* off test.antmedia.io → `http://161.97.172.146:5080`
+  (cookie auth, node_id `beyondkaira-ams`, apps=auto-discover, target bitrate 2000); old .env backed up to the
+  session scratchpad; `compose config -q` OK; `up -d` recreated `pulse-prod-pulse-1` (no `-v`). Smoke (TLS via
+  `--resolve`): `/healthz` 200 all-ok; `/live/overview` `total_publishers:1`; prod logs zero 403/decode/login
+  errors. **U1 resolved.**
+
+**State / open risks:** synthetic publisher `ams-teststream` left running so the dashboard shows live data —
+remove with `docker rm -f ams-teststream` once real streams flow. VPS has **0 swap**; AMS (JVM, a few GB) + CH
++ Pulse co-located on 11 GiB → watch memory under real load (consider a swapfile + container mem limits). App
+REST is now public (`0.0.0.0/0`) per the exposure choice — tighten to a specific CIDR if desired. No host
+firewall present (UFW inactive; provider-level only). **No application code changed**; `deploy/.env` and
+`oguz-testing.md` are gitignored (not committed). Runbook: `deploy/runbooks/self-hosted-ams.md`.

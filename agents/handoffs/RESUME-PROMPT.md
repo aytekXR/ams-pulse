@@ -3,18 +3,19 @@
 > **Rewritten 2026-06-24 (session 9 audit) — stale/contradictory history pruned; every claim below was
 > re-verified this session, not assumed.** Pulse = self-hosted analytics/QoE/alerting for Ant Media Server.
 > Repo: `/home/aytek/repo/ams-pulse` on VPS `161.97.172.146`. Full decision log: `agents/handoffs/decisions.md`
-> (D-001…D-032, binding). Detailed phase plan: `agents/handoffs/PRODUCTION-READINESS.md`. AMS operator guide:
+> (D-001…D-034, binding). Detailed phase plan: `agents/handoffs/PRODUCTION-READINESS.md`. AMS operator guide:
 > `agents/handoffs/AMS-INTEGRATION.md`. Go-live runbook + rollback: `deploy/runbooks/real-ams-go-live.md`.
 
 ---
 
-## 0. VERIFIED CURRENT STATE (re-verified 2026-06-24 — facts, not assumptions)
+## 0. VERIFIED CURRENT STATE (re-verified 2026-06-28 — facts, not assumptions; prod now on self-hosted AMS, D-034)
 
-- **Production is LIVE on REAL AMS.** `https://beyondkaira.com` → real `test.antmedia.io` (AMS 3.0.3
-  Enterprise). `/healthz` = ok (clickhouse/collector/meta_store all ok); `/api/v1/live/overview` →
-  `total_publishers:1` (LiveApp); containers `pulse`+`clickhouse` up 2 days healthy, `caddy` up 8 days.
-  [verified by curl + `docker ps` 2026-06-24]. The mock-ams seeded demo is **retired** (ClickHouse was wiped
-  at go-live; seeded rows = 0).
+- **Production is LIVE on a SELF-HOSTED AMS (D-034, 2026-06-28).** `https://beyondkaira.com` → operator-owned
+  `antmedia` container (AMS Enterprise 3.0.3, `--network host`, `http://161.97.172.146:5080`), **NOT**
+  test.antmedia.io. `/healthz` = ok (clickhouse/collector/meta_store all ok); `/api/v1/live/overview` →
+  `total_publishers:1` (LiveApp `teststream` = a synthetic 2 Mbps publisher in container `ams-teststream` —
+  remove via `docker rm -f ams-teststream` once real streams flow). AMS admin + license in `oguz-testing.md`
+  (gitignored). [verified by curl + `docker ps` 2026-06-28]. The mock-ams seeded demo is **retired**.
 - **Branch `ams-integration` @ `ea30367`, in sync with origin, clean tree.** ⚠️ **It is 7 commits AHEAD of
   `main` — `main` is STALE** and does NOT contain D-029/D-030/D-031/D-032 (the real-AMS wire fixes, maskDSN,
   aggregator target fix, golang:1.25 fix). Production runs `ams-integration`, NOT `main`. [verified by
@@ -29,7 +30,7 @@
 
 | # | Action | Why it's blocked / needed |
 |---|---|---|
-| U1 | **AMS per-app REST IP allow-list:** in the AMS console add the VPS egress IP `161.97.172.146` to the REST CIDR allow-list of the app(s) holding your live streams, then tell the agent which app(s). | 8/16 apps 403 the VPS ("Not allowed IP"): `Icomms,TEST,VsMediaTesting,WebRTCAppEE,amartest,drmtest,live,ll-hls`. Your 4 active streams are in blocked apps → Pulse shows 0 for them. Agent then adds the app to `PULSE_AMS_APPLICATIONS` + redeploys. |
+| U1 | ✅ **RESOLVED (D-034).** Replaced the shared test.antmedia.io with a self-hosted AMS on this VPS and set each app's `remoteAllowedCIDR=0.0.0.0/0`, so the Pulse container polls cleanly (200). No external allow-list dependency remains. | (was: 8/16 apps 403'd the VPS "Not allowed IP" on test.antmedia.io). |
 | U2 | **Confirm GitHub Actions CI is green** (or paste red job logs). | Repo is private and `gh` is NOT installed on the VPS → the agent **cannot see Actions**. CI-green-on-GitHub has NEVER been confirmed — it is an unverified assumption (see §Assumptions A2). |
 | U3 | **Activate a Pro+ license** on `beyondkaira.com`. | QoE/beacon ingest (F3) is gated to Pro+ (`CheckBeaconIngest` returns 403 on Free). Without it, `beacon_events` stays empty and QoE features/alerts can't be exercised in prod. |
 | U4 | **GitHub admin: run `.github/branch-protection.sh` + push a `v*` tag.** | Needs `gh` + repo-admin; gates `main` and exercises the GHCR release. Can't be done from the VPS. |
@@ -170,7 +171,7 @@ sg docker -c 'docker run --rm -v /home/aytek/repo/ams-pulse:/repo -w /repo/serve
 | A10 | "test123 represents production load." **FALSE** — 1 low-bitrate camera, 0 viewers. | Load/perf test (many streams/apps/viewers); VD-04 render-time at scale. |
 | A11 | "Migrations are idempotent & safe." Assumed (`IF NOT EXISTS`). | Explicit migrate round-trip + re-run test. |
 | A12 | "ClickHouse shutdown loses no events." **FALSE** — 100ms sleep, not drain. | Drain-on-close + a no-loss test. |
-| A13 | "The user's 4 active streams are in the IP-blocked apps." **INFERRED** (couldn't read them). | U1 (user names the app) → allow-list → confirm in Pulse. |
+| A13 | ✅ Moot (D-034): switched to a self-hosted AMS; `remoteAllowedCIDR=0.0.0.0/0` lets Pulse poll all apps (200). | — |
 
 ---
 
