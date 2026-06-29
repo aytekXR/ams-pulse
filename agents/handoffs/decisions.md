@@ -1202,7 +1202,8 @@ Low+critical: `license` 36.9% (+3 gates unenforced), `store/meta` 29.7%, `collec
 `internal/api` 52.2%, `alert/channels` 56.8%. Strong: ingest 85, cluster 89, sessions 81, anomaly 76,
 amsclient 76, restpoller 72, alert 72. **CI gaps** (won't catch breakage): no coverage gate, no Playwright
 browser e2e (web/e2e absent), no response-body contract tests (only spec-lint), no web coverage threshold,
-shallow mock-only e2e. Full plan + integration-key checklist captured in `agents/handoffs/NEXT-SESSION-PROMPT.md`.
+shallow mock-only e2e. Full plan + integration-key checklist captured in `agents/handoffs/RESUME-PROMPT.md` §5–§6
+(was `NEXT-SESSION-PROMPT.md`, merged into RESUME-PROMPT.md in D-037).
 
 ## D-036 · 2026-06-29 · AMS web-console login fixed (client-side MD5 vs plaintext-provisioned accounts) + session ops
 
@@ -1235,3 +1236,14 @@ no 401s, overview publisher intact). Rule going forward: web-loginable users mus
 **NEXT (operator-directed):** start the **`pulse-p1-gaps`** workflow next session — close the P0 silently-stubbed
 features (real alert test-fire `Send()`, license-gate enforcement `CheckDataAPI`/`CheckNodeLimit`/`CheckPrometheus`,
 standalone node card via `SystemStats()`, WebRTC `EventWebRTCClientStats` aggregator case), TDD red→green.
+
+## D-037 · 2026-06-29 · Merged NEXT-SESSION-PROMPT.md into RESUME-PROMPT.md (single handoff doc) + de-staled branch facts
+
+**Operator: "why two files for next prompt? merge them into one."** Folded `NEXT-SESSION-PROMPT.md` (integration-keys
+table, per-package coverage breakdown + the verified alert-firing gap, CI-gap list, ▶ START HERE) into
+`RESUME-PROMPT.md` as the single source of truth; **deleted** `NEXT-SESSION-PROMPT.md`; fixed the two in-repo
+references. While merging, an independent verification pass caught a **flatly-stale claim**: RESUME said "`main` is
+7 commits behind `ams-integration`; prod runs `ams-integration`." Live git shows the **reverse** —
+`main..ams-integration` = **0**, `ams-integration..main` = **5** — i.e. `main` now fully **contains**
+`ams-integration`. Corrected §0 + assumption A1 + Step B: branch divergence is **resolved**; remaining branch work is
+just retiring the stale `ams-integration` pointer + branch protection (U4). No application code changed.
