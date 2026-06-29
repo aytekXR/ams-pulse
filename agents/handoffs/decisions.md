@@ -1203,3 +1203,35 @@ Low+critical: `license` 36.9% (+3 gates unenforced), `store/meta` 29.7%, `collec
 amsclient 76, restpoller 72, alert 72. **CI gaps** (won't catch breakage): no coverage gate, no Playwright
 browser e2e (web/e2e absent), no response-body contract tests (only spec-lint), no web coverage threshold,
 shallow mock-only e2e. Full plan + integration-key checklist captured in `agents/handoffs/NEXT-SESSION-PROMPT.md`.
+
+## D-036 · 2026-06-29 · AMS web-console login fixed (client-side MD5 vs plaintext-provisioned accounts) + session ops
+
+**Symptom (operator could not log into `https://ams.beyondkaira.com` despite the correct password).** Web login
+returned `success:false` while Pulse/amsclient and curl auth succeeded with the *same* credential. Red herrings
+ruled out first: not a typo, not autofill/device/incognito, not the AMS version, not the trial license, not Caddy.
+Real cause proven by capturing the browser's POST body (privileged host-netns `tcpdump` container — the agent
+lacks host root, so `docker run --net=host --cap-add=NET_RAW corfr/tcpdump`): the AMS Angular console
+**MD5-hashes the password in the browser** before POSTing to `/rest/v2/users/authenticate`. AMS auth succeeds iff
+`submitted == stored` OR `MD5(submitted) == stored`, where `stored` is the value the account was *created with*.
+Both admin users were provisioned via REST in D-034 with the **plaintext** password, so plaintext clients (Pulse)
+matched but the console's hashed submission never did → web login impossible.
+
+**Fix.** Re-created both `aytek@` and `admin@` via REST (`DELETE` then `POST /rest/v2/users`) with `password` set
+to the **MD5 of the real password**, so the console's hashed submission matches. Both now web-login. Pulse is
+unaffected — its plaintext auth still matches via the `MD5(submitted)==stored` branch (verified: `/healthz` ok,
+no 401s, overview publisher intact). Rule going forward: web-loginable users must be REST-provisioned with
+`MD5(realpassword)`; plaintext provisioning works for API/Pulse only. Actual values: `oguz-testing.md` (gitignored).
+
+**Also this session (verified; no application code changed):**
+- Brute-force lockout characterised from `io.antmedia.console.rest.CommonRestService`: **2** failed tries →
+  **5-min** block, keyed by **email not IP**; returns "User is blocked" even with the right password.
+- AMS confirmed on the **latest stable** (Enterprise 3.0.3 == Docker Hub `latest`); trial license valid to
+  2026-07-12; quick-start effectively complete (install=Docker, TLS=Caddy not AMS `:5443`, default apps present,
+  WebRTC sample pages HTTP 200).
+- Opened `remoteAllowedCIDR` 127.0.0.1→0.0.0.0/0 for the newly-created **`pulse-test`** app (was logging
+  `HTTP 403: Not allowed IP` every ~5s) → Pulse logs now clean. Note: every new AMS app defaults to 127.0.0.1
+  and must be opened for the Pulse container to poll it.
+
+**NEXT (operator-directed):** start the **`pulse-p1-gaps`** workflow next session — close the P0 silently-stubbed
+features (real alert test-fire `Send()`, license-gate enforcement `CheckDataAPI`/`CheckNodeLimit`/`CheckPrometheus`,
+standalone node card via `SystemStats()`, WebRTC `EventWebRTCClientStats` aggregator case), TDD red→green.

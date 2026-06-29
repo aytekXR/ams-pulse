@@ -10,6 +10,13 @@
 
 ## 0. VERIFIED CURRENT STATE (re-verified 2026-06-28 — facts, not assumptions; prod now on self-hosted AMS, D-034)
 
+- **AMS web-console login RESOLVED (D-036, 2026-06-29).** Root cause: the AMS console MD5-hashes the password
+  client-side, but both admin accounts were REST-provisioned (D-034) with the plaintext password, so the browser's
+  hashed submission never matched. Fixed by re-provisioning `aytek@`+`admin@` with `MD5(realpassword)`; both now
+  web-login, Pulse (plaintext) unaffected. Also: brute-force lockout = 2 tries/5-min/per-email; AMS is latest stable
+  (3.0.3); opened the new `pulse-test` app's `remoteAllowedCIDR` to 0.0.0.0/0 (logs clean). Details in `oguz-testing.md`.
+  **Next session starts the `pulse-p1-gaps` workflow** (see `NEXT-SESSION-PROMPT.md` ▶ START HERE).
+
 - **Production is LIVE on a SELF-HOSTED AMS (D-034, 2026-06-28).** `https://beyondkaira.com` → operator-owned
   `antmedia` container (AMS Enterprise 3.0.3, `--network host`, `http://161.97.172.146:5080`), **NOT**
   test.antmedia.io. `/healthz` = ok (clickhouse/collector/meta_store all ok); `/api/v1/live/overview` →

@@ -2,7 +2,15 @@
 
 > Paste this to start. Pulse = self-hosted analytics/QoE/alerting for Ant Media Server.
 > Repo `/home/aytek/repo/ams-pulse`, branch `ams-integration`, VPS `161.97.172.146`.
-> Deep context: `agents/handoffs/RESUME-PROMPT.md` + `decisions.md` (D-001…D-035, binding).
+> Deep context: `agents/handoffs/RESUME-PROMPT.md` + `decisions.md` (D-001…D-036, binding).
+
+## ▶ START HERE (set 2026-06-29, operator-directed)
+**First action this session: run the `pulse-p1-gaps` workflow** — close the P0 silently-stubbed features, TDD
+red→green: (1) alert **test-fire** must really call `Send()` (currently a 202 no-op); (2) **enforce** the 3
+license gates `CheckDataAPI`/`CheckNodeLimit`/`CheckPrometheus`; (3) **standalone node card** via `SystemStats()`
+(Fleet CPU/RAM blank); (4) **WebRTC** `EventWebRTCClientStats` aggregator case (viewer QoE dropped). End with
+Verify + Commit-by-explicit-path + Handoff. Then: merge `ams-integration`→`main` + wire the Caddy `/webhook/*`
+route, then `pulse-test-backfill`. AMS web login is RESOLVED (D-036) — not a blocker.
 
 ## Verified state (2026-06-28)
 - Prod LIVE on **self-hosted AMS Enterprise 3.0.3** (D-034). Subdomains live w/ real TLS:
