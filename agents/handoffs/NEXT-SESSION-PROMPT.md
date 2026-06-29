@@ -43,7 +43,7 @@ Baseline coverage (2026-06-28): total **47.5%**, all pass.
 **Priority (critical-business-logic-first):**
 1. `license` 37→≥85 **and ENFORCE** the 3 gates + alert test-fire real `Send()`.
 2. `query` 0→≥70 (mock-Conn unit) — analytics behind every chart.
-3. alert firing→delivery (`channels` 57→≥80) + **retry** + alert→history e2e.
+3. alert firing→delivery (`channels` 57→≥80) + **retry** + alert→history e2e. **[VERIFIED 2026-06-29 — real gap]** Unmuting the `Stream offline` default rule + stopping the zombi RTMP test stream produced **NO** history entry in 130s: `evalStreamOffline` reads the live snapshot and a vanished stream isn't in it. To *demonstrate* a visible alert (operator's bar) use a snapshot-present metric (e.g. `ingest_bitrate_floor` with threshold above the live bitrate) or a tracked/registered stream — and the firing→history path itself has no e2e. Fix + test this FIRST.
 4. `config` 0→≥80 — all env vars + failure paths.
 5. `store/clickhouse` + `meta` — unit + expand integration to all query methods.
 6. AMS wire **fixture-replay regression** pinning D-029/D-031 (bps→kbps, FPS-redistribution, `terminated_unexpectedly`, WebRTC single-track).
