@@ -1247,3 +1247,23 @@ references. While merging, an independent verification pass caught a **flatly-st
 `main..ams-integration` = **0**, `ams-integration..main` = **5** — i.e. `main` now fully **contains**
 `ams-integration`. Corrected §0 + assumption A1 + Step B: branch divergence is **resolved**; remaining branch work is
 just retiring the stale `ams-integration` pointer + branch protection (U4). No application code changed.
+
+## D-038 · 2026-06-30 · CI root-caused: integration step downloads an UNPINNED ClickHouse master build (fix = pin)
+
+**Operator: "why does CI still fail? keep using main; update the next-session prompt so next session is green."**
+The `ci` workflow's `server` job → **"Integration tests"** step has been RED since D-035 (06-29); every other job
+(contracts/web/sdk/compose/helm) is green. Root cause (verified, not assumed): the step downloads ClickHouse from the
+**unpinned, rolling** URL `https://builds.clickhouse.com/master/amd64/clickhouse` (the comment claims "v26.6.1" but the
+URL is `master`). Proof it's environmental: `git diff 1d7a26f(last-green, D-034)..HEAD -- server/ contracts/ .github/`
+is **empty** — every commit since is docs/deploy. The master binary rolled (26.6.1 → 26.7.1.281); the 06-29 snapshot was
+broken. **Reproduced faithfully** (golang:1.25, repo-root mount, exact CI cmd `go test -tags integration ./... -timeout
+300s`): the CURRENT master (26.7.1.281) PASSES all integration tests locally (INTEGRATION_EXIT=0, every pkg `ok`) — it
+self-healed, so a fresh push is *likely* green, but `master` is non-deterministic and will break again.
+
+**Also: `gh` is now installed + authed on the VPS (account `aytekXR`)** — the long-standing CI blind spot (U2/U6/A2) is
+gone; the agent reads Actions directly. **FIX (documented in RESUME-PROMPT ▶ START HERE for next session):** pin the
+download to a versioned static binary — `clickhouse-common-static-26.6.1.1193-amd64.tgz` from the
+`v26.6.1.1193-stable` GitHub release (URL HEAD-verified 200) — fix the misleading comment, and verify via a local
+golang:1.25 repro + `gh run watch`. **No `ci.yml`/code change applied this session** — operator directed the fix to next
+session (this is a docs/handoff-only update). The scheduled `ams-version-matrix.yml` workflow is *separately* red (a
+different pre-existing issue, out of scope here).
