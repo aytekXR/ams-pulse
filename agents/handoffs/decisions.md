@@ -1286,3 +1286,20 @@ flake, not a version issue; pinning does not fix it.** Verified the fix: under a
 ▶ START HERE / A2 / U2. `gh` is installed+authed on the VPS (U6 ✅), so CI is now directly readable/verifiable.
 Optional non-blocking hygiene noted for later: pin the `ci.yml` integration CH binary; gofmt the pre-existing
 struct-alignment nits in `query_integration_test.go` (CI does not gate on gofmt).
+
+## D-040 · 2026-06-30 · Pin the CI ClickHouse binary + scout a launch-ready `pulse-p1-gaps` plan (operator-directed)
+
+**(1) Pinned the CI integration ClickHouse binary.** `ci.yml`'s "Download ClickHouse binary" step pulled an unpinned
+rolling build from `builds.clickhouse.com/master/amd64/clickhouse` (drifted 26.6.1 → 26.7.1.281 between runs — a latent
+non-determinism, though NOT the cause of the recent red, which was the flaky test, D-039). Replaced it with the versioned
+static binary extracted from the `v26.6.1.1193-stable` GitHub release tarball (`clickhouse-common-static-26.6.1.1193-amd64.tgz`).
+Commit `ci(server) D-040` (`7d411ba`); pushed to `main`. **Verified green end-to-end: `ci` run 28430661255 = success, all
+7 jobs** (the `server` integration job passed against the pinned binary) — confirmed via `gh run watch`.
+
+**(2) Scouted a ready-to-launch `pulse-p1-gaps` plan** via a 4-agent read-only Workflow (`scout-pulse-p1-gaps`), one agent
+per P0 item. Output (real file:line, current behavior, fix approach, red-test-first, disjoint single-writer scope, verify
+cmd) distilled into RESUME-PROMPT **§4a** so next session launches the workflow immediately: alert test-fire →
+`handleTestAlertChannel` server.go:1234 never calls `Send()`; 3 license gates defined at license.go:288/250/347 but never
+invoked at their handlers; `SystemStats()` amsclient/client.go:532 has 0 callers (blank node card); aggregator switch
+aggregator.go:115-134 has no `EventWebRTCClientStats` case. The §4a code is the *approach* (unverified) — next session
+TDD-verifies each against the live tree. Docs-only update for this entry (the only code change in D-040 is the `ci.yml` pin).

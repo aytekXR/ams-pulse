@@ -20,13 +20,14 @@ container runs alongside it). Fixed by raising the poll window to **90s** (commi
 (an earlier wrong hypothesis, D-038): pinning does NOT fix it — both 26.6.1 and master fail under CPU constraint, so the
 CH version is irrelevant. `gh` is installed+authed (U6 ✅) — read/verify CI directly with
 `gh run watch $(gh run list --branch main --workflow=ci.yml -L1 --json databaseId -q '.[0].databaseId')`.
-*Optional hygiene (non-blocking — NOT required for green):* `ci.yml` still downloads an unpinned `master` CH binary
-(pin it for determinism if desired — tarball `clickhouse-common-static-26.6.1.1193-amd64.tgz` is verified reachable);
-`query_integration_test.go` has pre-existing gofmt struct-alignment nits; the scheduled `ams-version-matrix.yml`
-workflow is separately red (a different, pre-existing issue).
+**CI ClickHouse binary is now PINNED (D-040):** `ci.yml`'s integration step downloads
+`clickhouse-common-static-26.6.1.1193` (deterministic — was an unpinned rolling `master`); verified green end-to-end
+(run 28430661255, all 7 jobs). *Remaining optional hygiene (non-blocking):* `query_integration_test.go` has pre-existing
+gofmt struct-alignment nits; the scheduled `ams-version-matrix.yml` workflow is separately red (a different, pre-existing issue).
 
-**First action — run the `pulse-p1-gaps` workflow** — close the P0 silently-stubbed features, TDD red→green, one disjoint-scope
-author per item, then ORCH gate + commit-by-explicit-path:
+**First action — run the `pulse-p1-gaps` workflow** (scouted ready-to-launch plan with file:line scopes + red-test-first
+per item in **§4a**) — close the P0 silently-stubbed features, TDD red→green, one disjoint-scope author per item, then ORCH
+gate + commit-by-explicit-path:
 1. Alert **test-fire** must really call `Send()` (today returns 202, never sends).
 2. **Enforce** the 3 license gates `CheckDataAPI` (analytics), `CheckNodeLimit`, `CheckPrometheus` (monetization leak).
 3. **Standalone node card** via `SystemStats()` (implemented but never called → Fleet CPU/RAM blank).
@@ -134,6 +135,56 @@ Full detail + exact scopes/commands in **`agents/handoffs/PRODUCTION-READINESS.m
    only deepens coverage of the gates per §6.)
 4. **`pulse-feature-complete`** — QoE/beacon e2e (after U3), AMS version surfacing, anomaly expansion, native probes,
    white-label PDF, B7 (contract CR), SSO/OIDC, mobile SDKs, backup sidecar, Postgres backend.
+
+---
+
+## 4a. `pulse-p1-gaps` — READY-TO-LAUNCH PLAN (scouted 2026-06-30, D-040)
+
+Scouted by a read-only fan-out (4 agents); file:line below were read, not guessed. **Treat the approach as the plan,
+not verified code — each item is TDD red→green (write the failing test FIRST, watch it fail, implement, watch it pass)
+and re-confirmed against the live tree during implementation.** Launch as the `pulse-p1-gaps` workflow: one
+disjoint-scope author per item (scopes are non-overlapping → safe to run in parallel), then ORCH gates (full `-race`
+repo-root mount, §8) + commits by explicit path, then re-confirm CI green via `gh run watch`.
+
+1. **Alert test-fire actually delivers** · scope `server/internal/api`
+   - Now: `handleTestAlertChannel` (`server.go:1234-1243`) returns 202 and **never calls `Send()`**; the ready helper
+     `alert.TestFireChannel` (`alert/evaluator.go:652-680`) is unused; no `buildChannelFromRow` exists.
+   - Fix: add `buildChannelFromRow(store,row)` (decrypt `ConfigEnc`, switch `row.Type` → `channels.New{Slack,Webhook,
+     Telegram,PagerDuty,Email}Channel`) + call `alert.TestFireChannel` in the handler; 200 on delivery, 5xx on failure.
+     Channel impls + `Send` signatures in `alert/channels/*.go`.
+   - Red test (`api/wave2_test.go`): POST `/alerts/channels/{id}/test` at an `httptest` webhook sink → assert the sink
+     RECEIVED a body (fails today). Verify: `go test ./internal/api/... -run TestHandleTestAlertChannel`.
+
+2. **Enforce the 3 license gates** · scope `server/internal/api/server.go` + new `license_gates_test.go`
+   - Now: `CheckDataAPI`/`CheckNodeLimit`/`CheckPrometheus` (`license.go:288/250/347`) are **defined but never called** →
+     Free tier 200s on `/analytics/{audience,geo,devices}`+`/qoe/summary`, registers unlimited sources, scrapes `/metrics`.
+   - Fix: `if err := s.lic.CheckX(); err != nil { writeError(403,"LICENSE_REQUIRED",…); return }` at the top of
+     `handleAudienceAnalytics(908)/handleGeoAnalytics(941)/handleDeviceAnalytics(961)/handleQoeSummary(982)` [DataAPI];
+     `handleCreateSource(1316)` count `ListAMSSources+1` vs `CheckNodeLimit`; `handleMetrics(672)` `CheckPrometheus`.
+     Pattern: `handleReportUsage` (`reports_wave2.go:26-29`).
+   - Red test (`api/license_gates_test.go`, pattern `v3b_guard_test.go`): Free-tier request that should 403 (200s today).
+
+3. **Standalone node card (`SystemStats`)** · scope `server/internal/collector` (BE-01)
+   - Now: `SystemStats()` (`amsclient/client.go:532-541`, GET `/rest/v2/system-status`) has **0 callers**; for a
+     standalone AMS, `ClusterNodes()` 404→nil → 0 `node_stats` → `snap.Nodes` empty → `FleetNodes()`=`[]` → blank card.
+   - Fix: in `restpoller.poll()` (`restpoller.go:123-153`), when `ClusterNodes` returns nil, call `SystemStats()` + a new
+     `NormalizeSystemStats` (`normalize.go`) → emit a `node_stats` event. `aggregator.onNodeStats` + `query.FleetNodes`
+     already consume it (CPU/Mem wired).
+   - Red test (`restpoller/standalone_node_stats_test.go`): mock AMS 404 on `/cluster/nodes` + `{cpuUsage,…}` on
+     `/system-status` → assert an `EventNodeStats` with `cpu_pct` is emitted.
+
+4. **WebRTC viewer QoE (`EventWebRTCClientStats`)** · scope `collector/aggregator` + `domain/types.go` + `cmd/pulse`
+   - Now: aggregator `OnServerEvent` switch (`aggregator.go:115-134`) has **no case** for `EventWebRTCClientStats` → every
+     `webrtc_client_stats` event (`restpoller.go:185-195`, `NormalizeWebRTCStats` `normalize.go:163-190`) is dropped;
+     `domain.LiveStream` (`types.go:279-299`) has no viewer-QoE fields.
+   - Fix: add `ViewerRTTMS/ViewerJitterMS/ViewerLossPct` to `LiveStream` + a `case domain.EventWebRTCClientStats:
+     a.onWebRTCClientStats(ev)` handler that writes rtt/jitter/loss into the stream snapshot. **`PULSE_ALLOWED_WS_ORIGINS`:**
+     `api Config.AllowedWSOrigins` (`server.go:70`) is consumed but never set — add the field to `EnvConfig` (`config.go`)
+     + wire in `serve.go` `apiCfg` (~295-300).
+   - Red test (`aggregator/aggregator_test.go`): feed publish-start + `webrtc_client_stats` → assert snapshot has `ViewerRTTMS` etc.
+
+Full per-item detail (current behavior, fix, red test, verify cmd) was captured by the scout — re-scout cheaply with the
+same fan-out if stale. Cross-check scopes against `agents/manifest.yaml` single-writer map before launching.
 
 ---
 
