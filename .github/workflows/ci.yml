@@ -83,12 +83,16 @@ jobs:
       # run on every push/PR (replaces the old nightly/label-gated approach).
       # The tests do NOT use PULSE_CLICKHOUSE_DSN — they start CH on random ports.
       - name: Download ClickHouse binary for integration tests
-        # GitHub release assets do NOT include a single static `clickhouse-linux-amd64`
-        # binary (only *.tgz/.deb/.rpm), so the previously pinned releases URL 404s.
-        # Use the official builds server, which serves the static binary directly.
+        # PINNED to a specific release (D-040) for DETERMINISTIC CI. The old
+        # builds.clickhouse.com/master URL served a rolling build that changed between runs
+        # (master drifted 26.6.1 -> 26.7.1.281), a non-deterministic dependency. GitHub ships
+        # the static binary inside clickhouse-common-static-*.tgz; extract it from there.
         run: |
-          curl -fsSL -o /tmp/clickhouse \
-            https://builds.clickhouse.com/master/amd64/clickhouse
+          CH_VER=26.6.1.1193
+          curl -fsSL -o /tmp/ch.tgz \
+            "https://github.com/ClickHouse/ClickHouse/releases/download/v${CH_VER}-stable/clickhouse-common-static-${CH_VER}-amd64.tgz"
+          tar -xf /tmp/ch.tgz -C /tmp
+          cp "$(find /tmp -type f -name clickhouse -path '*/bin/*' | head -1)" /tmp/clickhouse
           chmod +x /tmp/clickhouse
           /tmp/clickhouse --version
 
