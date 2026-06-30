@@ -876,6 +876,21 @@ export interface components {
             bitrate_kbps?: number;
             /** @description Unix epoch ms */
             started_at?: number;
+            /**
+             * Format: float
+             * @description Viewer-side WebRTC RTT in milliseconds (absent when no WebRTC viewers)
+             */
+            viewer_rtt_ms?: number;
+            /**
+             * Format: float
+             * @description Viewer-side WebRTC jitter in milliseconds
+             */
+            viewer_jitter_ms?: number;
+            /**
+             * Format: float
+             * @description Viewer-side WebRTC packet loss percentage
+             */
+            viewer_loss_pct?: number;
         };
         AudienceResponse: {
             totals: components["schemas"]["AudienceTotals"];
@@ -1237,6 +1252,14 @@ export interface components {
             net_in_mbps?: number;
             /** Format: float */
             net_out_mbps?: number;
+            /** @description OS name from AMS 3.x /rest/v2/system-status (standalone nodes only) */
+            os_name?: string;
+            /** @description OS architecture (e.g. amd64) */
+            os_arch?: string;
+            /** @description JVM version string */
+            java_version?: string;
+            /** @description Number of logical processors */
+            processor_count?: number;
         };
         AnomalyList: {
             items: components["schemas"]["AnomalyFlag"][];
@@ -1784,6 +1807,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -1820,6 +1844,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -1854,6 +1879,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -1894,6 +1920,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -1930,6 +1957,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -2162,8 +2190,8 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Test fire accepted; delivery is asynchronous */
-            202: {
+            /** @description Test fire result (synchronous delivery); check accepted field for outcome */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2173,7 +2201,6 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
         };
     };
     getAlertHistory: {
@@ -2700,6 +2727,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            403: components["responses"]["Forbidden"];
         };
     };
     listSources: {
@@ -2753,6 +2781,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             422: components["responses"]["UnprocessableEntity"];
             500: components["responses"]["InternalError"];
         };

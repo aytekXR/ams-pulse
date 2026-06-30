@@ -180,6 +180,7 @@ paths:
                 $ref: "#/components/schemas/AudienceResponse"
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /analytics/geo:
@@ -208,6 +209,7 @@ paths:
                 $ref: "#/components/schemas/GeoResponse"
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /analytics/devices:
@@ -230,6 +232,7 @@ paths:
                 $ref: "#/components/schemas/DeviceResponse"
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   # ─────────────────────────────────────────────────────────────
@@ -271,6 +274,7 @@ paths:
                 $ref: "#/components/schemas/QoeSummaryResponse"
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   /qoe/ingest:
@@ -298,6 +302,7 @@ paths:
                 $ref: "#/components/schemas/IngestHealthResponse"
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "500": { $ref: "#/components/responses/InternalError" }
 
   # ─────────────────────────────────────────────────────────────
@@ -469,15 +474,14 @@ paths:
         Fires a test payload to the channel. The notification will have
         `test: true` in the payload (per `alert-notification.schema.json`).
       responses:
-        "202":
-          description: Test fire accepted; delivery is asynchronous
+        "200":
+          description: Test fire result (synchronous delivery); check accepted field for outcome
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ChannelTestResult"
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
-        "500": { $ref: "#/components/responses/InternalError" }
 
   /alerts/history:
     get:
@@ -933,6 +937,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   # ─────────────────────────────────────────────────────────────
   # Admin
@@ -979,6 +984,7 @@ paths:
                 $ref: "#/components/schemas/Source"
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
         "500": { $ref: "#/components/responses/InternalError" }
 
@@ -1656,6 +1662,18 @@ components:
         started_at:
           type: integer
           description: Unix epoch ms
+        viewer_rtt_ms:
+          type: number
+          format: float
+          description: "Viewer-side WebRTC RTT in milliseconds (absent when no WebRTC viewers)"
+        viewer_jitter_ms:
+          type: number
+          format: float
+          description: "Viewer-side WebRTC jitter in milliseconds"
+        viewer_loss_pct:
+          type: number
+          format: float
+          description: "Viewer-side WebRTC packet loss percentage"
 
     # ── Analytics ─────────────────────────────────────────────
     AudienceResponse:
@@ -2303,6 +2321,18 @@ components:
         net_out_mbps:
           type: number
           format: float
+        os_name:
+          type: string
+          description: "OS name from AMS 3.x /rest/v2/system-status (standalone nodes only)"
+        os_arch:
+          type: string
+          description: "OS architecture (e.g. amd64)"
+        java_version:
+          type: string
+          description: "JVM version string"
+        processor_count:
+          type: integer
+          description: "Number of logical processors"
 
     # ── Anomalies ─────────────────────────────────────────────
     AnomalyList:
