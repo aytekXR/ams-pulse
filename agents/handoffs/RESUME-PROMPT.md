@@ -25,17 +25,23 @@ CH version is irrelevant. `gh` is installed+authed (U6 ✅) — read/verify CI d
 (run 28430661255, all 7 jobs). *Remaining optional hygiene (non-blocking):* `query_integration_test.go` has pre-existing
 gofmt struct-alignment nits; the scheduled `ams-version-matrix.yml` workflow is separately red (a different, pre-existing issue).
 
-**First action — run the `pulse-p1-gaps` workflow** (scouted ready-to-launch plan with file:line scopes + red-test-first
-per item in **§4a**) — close the P0 silently-stubbed features, TDD red→green, one disjoint-scope author per item, then ORCH
-gate + commit-by-explicit-path:
-1. Alert **test-fire** must really call `Send()` (today returns 202, never sends).
-2. **Enforce** the 3 license gates `CheckDataAPI` (analytics), `CheckNodeLimit`, `CheckPrometheus` (monetization leak).
-3. **Standalone node card** via `SystemStats()` (implemented but never called → Fleet CPU/RAM blank).
-4. **WebRTC** `EventWebRTCClientStats` aggregator case (viewer QoE dropped) + `PULSE_ALLOWED_WS_ORIGINS`.
+**✅ `pulse-p1-gaps` is DONE (D-041, 2026-06-30).** All 4 P0 silently-stubbed features are closed, TDD + **two
+adversarial-verify rounds** (the verify caught round-1's green-but-false-positive tests — wrong contract keys, an invented
+AMS fixture, a secret-leaking error body; all fixed). Coverage 47.5%→49.2%, full `-race` suite green (23 pkgs, 0 FAIL),
+gofmt-ratchet clean, web `npm ci && vite build` (prod path) green. Details in **D-041** + §2/§4a below. **NOTE: D-041 is
+committed locally but NOT yet pushed** (operator to review; `git push origin main` when ready, then `gh run watch` CI).
 
-End with the binding **Verify → Commit (explicit path) → Handoff** flow (§11). **Then:** retire the stale
-`ams-integration` pointer + wire the Caddy `/webhook/*` route (§3), then run `pulse-test-backfill` (§6).
-AMS web login is RESOLVED (D-036) — not a blocker.
+**First action (next session) — pick up the remaining production-readiness backlog, in order:**
+1. **Wire the Caddy `/webhook/*` route** (§3 Step C) so AMS lifecycle webhooks reach `pulse:8092` (today 404). Verify with
+   a signed test POST → 200.
+2. **Retire the stale `ams-integration` branch** (§3 Step B; `main` fully contains it) + apply branch protection + a `v*`
+   tag (U4 — needs repo-admin).
+3. **Run `pulse-test-backfill`** (§6) — the 0%/low-coverage packages + the missing CI gates (coverage gate, Playwright,
+   response-body contract tests). This is the largest remaining lever for "production ready."
+4. **U3 (operator): activate a Pro+ Pulse license** to unblock real QoE/beacon e2e (the `viewer_*` QoE fields now flow end
+   to end through the API — D-041 item 4 — but real beacon data still needs the license).
+
+Honor the binding **Verify → Commit (explicit path) → Handoff** flow (§11). AMS web login is RESOLVED (D-036) — not a blocker.
 
 ---
 
@@ -89,12 +95,12 @@ per-app paths + multi-app keying (D-029); `golang:1.26`→`1.25` (D-032); subdom
 AMS web-console login (D-036); `ams-integration` is now contained in `main` (branch divergence resolved).
 
 **MISSING / NOT DONE (actionable backlog — detail in `PRODUCTION-READINESS.md`):**
-- **Silently-stubbed features (look done, fail in prod) [P0]:** alert-channel **test-fire is a no-op** (returns 202,
-  never calls `Send()`); **3 license gates unenforced** (`CheckDataAPI`, `CheckNodeLimit`, `CheckPrometheus`) =
-  monetization leak; **standalone node card blank** (`SystemStats()` never called → Fleet/CPU/RAM empty);
-  **`EventWebRTCClientStats` dropped** by the aggregator (viewer QoE never surfaces). *(The `rebuffer_ratio`/`error_rate`
-  alerts proxy from HealthScore, not real beacon data — fixing that needs actual beacon data → blocked on U3; tracked
-  under QoE/beacon e2e in phase 4 (§4), NOT a `pulse-p1-gaps` target.)*
+- ✅ **Silently-stubbed features — DONE (D-041):** alert test-fire now delivers (real `Send` via `buildChannelFromRow`,
+  contract keys, `200 {accepted,message}`, sanitized error body); 3 license gates enforced (+`/qoe/ingest`, +TOCTOU
+  mutex); standalone node card shows real identity (os/cores/java/version — AMS 3.x exposes **no** standalone cpu/mem via
+  REST, a documented AMS limit, A9); WebRTC viewer QoE captured **and** surfaced as `viewer_*` on `/live/streams`.
+  *(Still open: the `rebuffer_ratio`/`error_rate` alerts proxy from HealthScore, not real beacon data — needs actual
+  beacon data → blocked on U3; tracked under QoE/beacon e2e in phase 4 (§4).)*
 - **Webhook unreachable [P1]:** `Caddyfile.prod` has no `/webhook/*` route → AMS lifecycle webhooks 404.
 - **Branch cleanup [P2]:** retire the stale `ams-integration` pointer; branch protection + `v*` tag (U4).
 - **Reliability gaps [P1–P2]:** alert delivery has **no retry** (transient SMTP/Slack failure = silent miss); no
@@ -125,9 +131,9 @@ AMS web-console login (D-036); `ams-integration` is now contained in `main` (bra
 ## 4. BACKLOG = WORKFLOW-DRIVEN PHASES (orchestrate EACH phase as a Workflow)
 
 Full detail + exact scopes/commands in **`agents/handoffs/PRODUCTION-READINESS.md`**. Sequence:
-1. **`pulse-p1-gaps`** — close the P0 silently-stubbed features (alert test-fire real `Send()`, **enforce the 3 license
-   gates** `CheckDataAPI`/`CheckNodeLimit`/`CheckPrometheus`, standalone node card via `SystemStats()`, WebRTC
-   `EventWebRTCClientStats` aggregator case, `PULSE_ALLOWED_WS_ORIGINS`). TDD each. *(Next session — see ▶ START HERE.)*
+1. ✅ **`pulse-p1-gaps`** — DONE (D-041): alert test-fire real delivery, 3 license gates enforced (+`/qoe/ingest`, +TOCTOU
+   mutex), standalone node honest identity (AMS 3.x has no standalone cpu/mem via REST), WebRTC viewer QoE surfaced as
+   `viewer_*`, `PULSE_ALLOWED_WS_ORIGINS` wired. Two adversarial-verify rounds.
 2. **`pulse-test-backfill`** — TDD coverage to every level + enforced gate (3 sub-workflows: Go unit, web coverage
    gate, e2e+contract). See §6/§7.
 3. **`pulse-prod-harden`** — B3 Docker secrets, alert retry, `alert_history` pruning, CH drain, resource limits,
@@ -138,7 +144,15 @@ Full detail + exact scopes/commands in **`agents/handoffs/PRODUCTION-READINESS.m
 
 ---
 
-## 4a. `pulse-p1-gaps` — READY-TO-LAUNCH PLAN (scouted 2026-06-30, D-040)
+## 4a. `pulse-p1-gaps` — ✅ EXECUTED & VERIFIED (D-041, 2026-06-30)
+
+> **DONE.** All 4 items below were implemented TDD + closed through **two adversarial-verify rounds**. The verify rounds
+> overturned several of the round-1 "green" results (false-positive tests): item 1 read internal keys not contract keys
+> (`webhook_url`/`email_to`/`telegram_chat_id`) and leaked secrets in the 502 body; item 3's premise was wrong — real AMS
+> 3.x `/rest/v2/system-status` has **no cpu/mem**, so it now reports honest node identity (os/cores/java/`GetVersion`)
+> instead; item 2 missed the `/qoe/ingest` gate + had a TOCTOU race (now mutex-guarded); item 4 was dead data (now exposed
+> as `viewer_*` on `/live/streams`). The original scouted plan is kept below for provenance. **Do not re-run this workflow.**
+
 
 Scouted by a read-only fan-out (4 agents); file:line below were read, not guessed. **Treat the approach as the plan,
 not verified code — each item is TDD red→green (write the failing test FIRST, watch it fail, implement, watch it pass)
@@ -237,6 +251,9 @@ alert 72.
 5. `store/clickhouse` + `meta` — unit + expand integration to all query methods.
 6. AMS wire **fixture-replay regression** pinning D-029/D-031 (bps→kbps, FPS-redistribution, `terminated_unexpectedly`,
    WebRTC single-track).
+7. **De-flake `TestDiscovery_NewNodeVisible`** (`internal/cluster/discovery_test.go:116`, observed D-041): 60ms (3×20ms)
+   latency budget is too tight on a CPU-contended/2-vCPU runner (measured 68.8ms once under whole-suite `-race`; 3/3 pass
+   unloaded). Loosen the budget like D-039 did — a real future CI-red risk.
 
 **CI gaps to close (`.github/workflows`) — the "see breakage in CI" asks:**
 - **ADD a coverage gate** — fail the build if total < floor OR any package regresses (ratchet). *(the #1 request)*
@@ -316,7 +333,7 @@ health scoring, (4) AMS wire decode/normalize, (5) the query layer. Report cover
 |---|---|---|
 | A1 | ✅ Resolved (2026-06-29): `main` now **contains** `ams-integration` (`main..ams-integration` empty). | Retire the stale `ams-integration` ref + branch protection (U4). |
 | A2 | ✅ **VERIFIED GREEN (2026-06-30, D-039)** — `ci` all-green (run 28429722100) after de-flaking the QoE rollup test (15s→90s); readable via `gh` (U6 ✅), no longer an assumption. | Keep green: `gh run watch` after pushes. |
-| A3 | "Alerts fire and deliver." **UNVERIFIED** — test-fire is a stub, no retry, no e2e (verified gap §6.3). | Implement `Send()` + retry; add alert-fires→history e2e + a delivery test. |
+| A3 | **test-fire DELIVERS (D-041)** — real `Send()` via `buildChannelFromRow`, verified to a httptest sink + adversarially. Still open: no **retry** (transient SMTP/Slack fail = silent miss); no alert-fires→history **e2e**. | Add delivery retry (`pulse-prod-harden`) + alert-fires→history e2e (`pulse-test-backfill`). |
 | A4 | "Coverage is adequate." **FALSE** — 3 pkgs 0%, no gate. | `pulse-test-backfill` + coverage gate (§7). |
 | A5 | "The 0.0% pkgs are covered by integration tests." Partially — only ~3 of ~12 query methods. | Add unit tests with a mock Conn (§6). |
 | A6 | "QoE/beacon works in prod." **UNVERIFIED** — needs Pro+ license. | U3 + beacon→qoe/summary e2e. |

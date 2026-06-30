@@ -1303,3 +1303,61 @@ cmd) distilled into RESUME-PROMPT **§4a** so next session launches the workflow
 invoked at their handlers; `SystemStats()` amsclient/client.go:532 has 0 callers (blank node card); aggregator switch
 aggregator.go:115-134 has no `EventWebRTCClientStats` case. The §4a code is the *approach* (unverified) — next session
 TDD-verifies each against the live tree. Docs-only update for this entry (the only code change in D-040 is the `ci.yml` pin).
+
+## D-041 · 2026-06-30 · `pulse-p1-gaps` shipped — 4 P0 silently-stubbed features closed, TDD + two adversarial-verify rounds
+
+**Operator: "make the application production ready" (workflow-driven).** Ran the §4a plan as workflows: (1) a 3-author
+implementation fan-out in isolated worktrees, (2) ORCH integrate + full `-race` gate, (3) a **default-refuted adversarial
+verify**, (4) a single round-2 fix author for the blockers it found, (5) an **adversarial re-verify**. The verify rounds
+were decisive — round-1 was "green" but the adversarial pass found the tests were **false positives** (happy-path data that
+didn't match the real contract/AMS wire). Net coverage **47.5% → 49.2%**; full suite green (23 pkgs, `-race`, repo-root
+mount, 0 FAIL, 0 unexpected SKIP); CGO=0 build + `go vet` (incl. `-tags integration` compile) clean; gofmt ratchet clean
+(no new dirty files); web types regenerated + clean `npm ci && vite build` (prod path) green.
+
+**The 4 P0 features (each TDD red→green, then adversarially re-verified to hold end-to-end):**
+1. **Alert test-fire actually delivers.** `handleTestAlertChannel` now builds the channel via `buildChannelFromRow`
+   (decrypt `ConfigEnc` + merge `ConfigPublic` → typed `channels.New*`) and calls `alert.TestFireChannel`. Round-1 BLOCKER
+   (caught by verify): it read **internal keys** (`url`/`to`/`chat_id`/`channel`) while the OpenAPI/web UI send **contract
+   keys** (`webhook_url`/`email_to`/`telegram_chat_id`/`slack_channel`) — every real UI-created channel would 502. Fixed to
+   contract keys. Response is now `200 {accepted,message}` (matches `ChannelTestResult` + the web UI which gates on
+   `result.accepted`); delivery failure returns `200 {accepted:false, <sanitized msg>}` — a 2nd verify-round security fix:
+   the old `err.Error()` body **leaked the telegram bot token / slack webhook URL** (Go `*url.Error` embeds the URL).
+   Regression test asserts the body contains neither the URL nor the token.
+2. **3 license gates enforced** (monetization leak). `CheckDataAPI` on `handleAudienceAnalytics/Geo/Device/QoeSummary`
+   **and `handleIngestHealth`** (the `/qoe/ingest` gate was MISSED in round-1, found by verify); `CheckPrometheus` on
+   `/metrics` (Business+); `CheckNodeLimit` on `handleCreateSource`. The node-limit check had a **TOCTOU race**
+   (list→check→create un-serialized) — closed with a `sourceMu` mutex + a concurrent-create regression test (8 parallel
+   creates → exactly 1×201, 7×403 under `-race`); multi-instance would additionally need a DB constraint (followup).
+   Existing Free-tier tests that legitimately exercise these endpoints were upgraded to Pro/Business tiers (not weakened).
+   OpenAPI now documents `403 LICENSE_REQUIRED` on all 7 gated ops.
+3. **Standalone node card — honest identity (NOT the §4a premise).** §4a assumed `SystemStats()` (`/rest/v2/system-status`)
+   yields cpu/mem; the verify pass proved (via the real capture `real-ams-captures/system-status.json` + AMS-INTEGRATION
+   §1.1) that **AMS 3.x system-status returns only `{osName,osArch,javaVersion,processorCount}` — no cpu/mem**, and round-1
+   shipped an **invented fixture + false test**. Reworked: `NormalizeSystemStats` maps only the real fields + a `version`
+   from a new `amsclient.GetVersion()` (`/rest/v2/version` → `versionName`); the standalone node now APPEARS in the fleet
+   with real identity (8 cores, Linux, Java 17, v3.0.3) and **no fabricated 0% metrics** (cpu/mem omitted → `omitempty` →
+   the web FleetPage already renders such a node with no load bars). New `LiveNodeStats`/`FleetNode` identity fields +
+   OpenAPI. **AMS REST has no standalone host cpu/mem — a documented AMS limitation (A9), not a Pulse bug.**
+4. **WebRTC viewer QoE no longer dropped + exposed.** Aggregator gained the `EventWebRTCClientStats` case
+   (`rtt_ms/jitter_ms/packet_loss_pct` → `LiveStream.Viewer{RTT,Jitter,Loss}MS`); round-1 captured it into the snapshot but
+   it was **dead data** (no API consumer) — now surfaced as `viewer_rtt_ms/viewer_jitter_ms/viewer_loss_pct` on
+   `/live/streams` (query + OpenAPI + regenerated web types). `PULSE_ALLOWED_WS_ORIGINS` is wired via `cmd/pulse`
+   `loadEnvConfig` (the live loader; `internal/config.Load` is a not-yet-wired skeleton — its parser is consistent but a
+   dead path). WS-origin patterns are **scheme-included** (verified: nhooyr's working same-origin fallback uses
+   `https://`+host — an earlier "host-only" claim was refuted).
+
+**Deferred (documented, non-blocking — future `pulse-prod-harden`/feature work):** email channel SMTP server config is
+global/env, not per-channel (contract carries only `email_to`); email SMTP `password` is not in `secretFields` (stored in
+public config if a raw API caller sends it — no UI/contract path); multi-instance node-limit needs a DB constraint;
+`viewer_loss_pct` `omitempty` can't distinguish a real 0% from "no data" (RTT presence signals availability).
+
+**Process:** isolated-worktree authors AUTHOR-only → patches to scratchpad → ORCH integrated by `git apply` + committed by
+**explicit path** (operator's `deploy/config/Caddyfile.prod` brier change left untouched, never staged). Two binding
+adversarial-verify rounds (default-refuted) were essential — the green-but-false-positive failure mode (D-028 family) bit
+again and was caught both times.
+
+**Observed flake (NOT a D-041 regression — `internal/cluster` is untouched):** the final full `-race` gate tripped
+`TestDiscovery_NewNodeVisible` (`internal/cluster/discovery_test.go:116`) once — it asserts node-discovery latency `< 3×20ms
+= 60ms` and measured **68.8ms** under the CPU-contended whole-suite `-race` run. Re-ran isolated/unloaded `-count=3` → **3/3
+pass**. Same D-039 family (a too-tight timing budget on a contended runner). Queued for `pulse-test-backfill`/CI-hardening
+(loosen the budget like D-039 did 15s→90s) — a real future CI-red risk on the 2-vCPU runner, but out of D-041 scope.
