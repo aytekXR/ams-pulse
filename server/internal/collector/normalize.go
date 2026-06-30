@@ -189,6 +189,67 @@ func NormalizeWebRTCStats(
 	}
 }
 
+// NormalizeSystemStats converts a raw AMS /rest/v2/system-status map into a
+// domain.ServerEvent of type node_stats for a standalone (non-cluster) AMS node.
+//
+// REAL AMS 3.x system-status shape (confirmed by agents/handoffs/real-ams-captures/
+// system-status.json and AMS-INTEGRATION.md): ONLY {osName, osArch, javaVersion,
+// processorCount} — NO cpu/mem/disk/network metrics. The old parsing of cpuUsage/
+// jvmMemoryUsage/systemMemoryInfo/fileSystemInfo was reading non-existent fields
+// and emitting all-zeros to ClickHouse. This rewrite maps the REAL fields and does
+// NOT emit absent metrics (honest reporting; the UI already guards cpu_pct==null).
+//
+// The version param comes from a separate /rest/v2/version call (best-effort by the
+// caller) and is written to Data["version"] so the fleet card can render it.
+//
+// Defensive: missing or wrong-typed fields default to zero/empty — never panic.
+func NormalizeSystemStats(stats map[string]any, nodeID, version string) domain.ServerEvent {
+	// Safely read string fields.
+	osName, _ := stats["osName"].(string)
+	osArch, _ := stats["osArch"].(string)
+	javaVersion, _ := stats["javaVersion"].(string)
+
+	// processorCount may arrive as float64 (JSON numbers always decode as float64).
+	processorCount := 0
+	if pc, ok := stats["processorCount"]; ok {
+		switch v := pc.(type) {
+		case float64:
+			processorCount = int(v)
+		case int:
+			processorCount = v
+		}
+	}
+
+	// Build data map with only the fields that are present (honest reporting).
+	data := make(map[string]any)
+	if osName != "" {
+		data["os_name"] = osName
+	}
+	if osArch != "" {
+		data["os_arch"] = osArch
+	}
+	if javaVersion != "" {
+		data["java_version"] = javaVersion
+	}
+	if processorCount > 0 {
+		data["processor_count"] = processorCount
+	}
+	if version != "" {
+		data["version"] = version
+	}
+	// cpu_pct / mem_pct / disk_pct / net_* are NOT present in the real AMS 3.x
+	// system-status response — do not emit zeros (those are fabricated metrics).
+
+	return domain.ServerEvent{
+		Version: 1,
+		Type:    domain.EventNodeStats,
+		TS:      time.Now().UnixMilli(),
+		Source:  domain.SourceRestPoll,
+		NodeID:  nodeID,
+		Data:    data,
+	}
+}
+
 // NormalizeClusterNode converts an AMS ClusterNodeDTO to a domain.ServerEvent of
 // type node_stats.
 func NormalizeClusterNode(n amsclient.ClusterNodeDTO) domain.ServerEvent {

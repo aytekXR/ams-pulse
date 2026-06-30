@@ -130,11 +130,30 @@ func (p *Poller) poll(ctx context.Context) error {
 	// ClusterNodes maps to (nil, nil) — no warning. Any OTHER error (500, network,
 	// auth) is surfaced so a clustered deployment's node pipeline doesn't go dark
 	// silently (D-029v / finding #10).
+	//
+	// Standalone path: when ClusterNodes returns no error AND zero nodes the AMS
+	// node is standalone. Fall back to SystemStats so the fleet node card is
+	// populated even without a cluster endpoint (item B).
 	if nodes, err := p.client.ClusterNodes(ctx); err == nil {
-		for _, n := range nodes {
-			ev := collector.NormalizeClusterNode(n)
-			ev.NodeID = p.cfg.NodeID // override with our configured ID
-			p.sink.WriteServerEvent(ev)
+		if len(nodes) > 0 {
+			for _, n := range nodes {
+				ev := collector.NormalizeClusterNode(n)
+				ev.NodeID = p.cfg.NodeID // override with our configured ID
+				p.sink.WriteServerEvent(ev)
+			}
+		} else {
+			// len(nodes)==0 && err==nil → standalone AMS (404 mapped to nil,nil).
+			// Best-effort: log and continue on any SystemStats error.
+			if stats, sErr := p.client.SystemStats(ctx); sErr == nil {
+				// GetVersion is best-effort: version="" on error (older AMS without /rest/v2/version).
+				versionName := ""
+				if vDTO, vErr := p.client.GetVersion(ctx); vErr == nil && vDTO != nil {
+					versionName = vDTO.VersionName
+				}
+				p.sink.WriteServerEvent(collector.NormalizeSystemStats(stats, p.cfg.NodeID, versionName))
+			} else {
+				p.logger.Warn("restpoller: system stats poll failed", "error", sErr)
+			}
 		}
 	} else {
 		p.logger.Warn("restpoller: cluster nodes poll failed", "error", err)

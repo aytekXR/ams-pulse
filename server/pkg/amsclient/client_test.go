@@ -860,3 +860,54 @@ func TestListBroadcasts_RealAMS303_QoEFields(t *testing.T) {
 			b.PacketLostRatio, b.JitterMs, b.RttMs, b.PacketsLost)
 	}
 }
+
+// ─── GetVersion (D-041): standalone fleet-node version source ─────────────────
+
+func TestGetVersion_DecodesVersionName(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/rest/v2/version" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"versionName":"3.0.3","versionType":"Enterprise Edition","buildNumber":"20260504_1443"}`))
+	}))
+	defer srv.Close()
+
+	v, err := newTestClient(srv).GetVersion(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if v == nil || v.VersionName != "3.0.3" {
+		t.Fatalf("VersionName = %+v, want 3.0.3", v)
+	}
+}
+
+// Older AMS without /rest/v2/version must yield (nil, nil) so the caller emits
+// the node with an empty version rather than dropping it (no silent error swallow
+// of a real failure: only 404/405 are tolerated).
+func TestGetVersion_404ReturnsNilNoError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	v, err := newTestClient(srv).GetVersion(context.Background())
+	if err != nil {
+		t.Fatalf("404 must map to nil error, got %v", err)
+	}
+	if v != nil {
+		t.Fatalf("404 must return nil DTO, got %+v", v)
+	}
+}
+
+// A genuine server error (500) must NOT be swallowed — it should surface.
+func TestGetVersion_500ReturnsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	if _, err := newTestClient(srv).GetVersion(context.Background()); err == nil {
+		t.Fatal("500 must surface as an error, got nil")
+	}
+}

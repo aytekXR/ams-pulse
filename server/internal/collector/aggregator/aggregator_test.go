@@ -273,6 +273,72 @@ func TestAggregator_EvictStaleDoesNotHoldLockDuringSinkEmit(t *testing.T) {
 	}
 }
 
+// TestAggregator_WebRTCClientStats_ViewerQoE verifies that webrtc_client_stats events
+// are handled by the aggregator and their payload (rtt_ms, jitter_ms, packet_loss_pct)
+// is written to the matching LiveStream's viewer QoE fields (C1 fix).
+// Before the fix, the switch in OnServerEvent had no case for EventWebRTCClientStats
+// so every such event was silently dropped and ViewerRTTMS / ViewerJitterMS / ViewerLossPct
+// remained 0.
+func TestAggregator_WebRTCClientStats_ViewerQoE(t *testing.T) {
+	agg := New(3*time.Minute, nil, nil)
+
+	// Seed the stream.
+	agg.OnServerEvent(domain.ServerEvent{
+		Version:  1,
+		Type:     domain.EventStreamPublishStart,
+		TS:       time.Now().UnixMilli(),
+		Source:   domain.SourceRestPoll,
+		NodeID:   "node-1",
+		App:      "live",
+		StreamID: "stream-webrtc",
+		Data:     map[string]any{"publish_type": "webrtc"},
+	})
+
+	// Deliver a webrtc_client_stats event.
+	agg.OnServerEvent(domain.ServerEvent{
+		Version:  1,
+		Type:     domain.EventWebRTCClientStats,
+		TS:       time.Now().UnixMilli(),
+		Source:   domain.SourceRestPoll,
+		NodeID:   "node-1",
+		App:      "live",
+		StreamID: "stream-webrtc",
+		Data: map[string]any{
+			"client_id":       "peer-1",
+			"rtt_ms":          42.5,
+			"jitter_ms":       8.0,
+			"packet_loss_pct": 1.5,
+		},
+	})
+
+	snap := agg.CurrentSnapshot()
+	s, ok := snap.Streams["stream-webrtc"]
+	if !ok {
+		t.Fatal("stream-webrtc not in snapshot after publish_start")
+	}
+
+	if s.ViewerRTTMS == 0 {
+		t.Errorf("ViewerRTTMS = 0 after webrtc_client_stats; want 42.5 (C1)")
+	}
+	if s.ViewerJitterMS == 0 {
+		t.Errorf("ViewerJitterMS = 0 after webrtc_client_stats; want 8.0 (C1)")
+	}
+	if s.ViewerLossPct == 0 {
+		t.Errorf("ViewerLossPct = 0 after webrtc_client_stats; want 1.5 (C1)")
+	}
+	if s.ViewerRTTMS != 42.5 {
+		t.Errorf("ViewerRTTMS = %.2f; want 42.5 (C1)", s.ViewerRTTMS)
+	}
+	if s.ViewerJitterMS != 8.0 {
+		t.Errorf("ViewerJitterMS = %.2f; want 8.0 (C1)", s.ViewerJitterMS)
+	}
+	if s.ViewerLossPct != 1.5 {
+		t.Errorf("ViewerLossPct = %.2f; want 1.5 (C1)", s.ViewerLossPct)
+	}
+	t.Logf("PASS C1: ViewerRTTMS=%.2f ViewerJitterMS=%.2f ViewerLossPct=%.2f",
+		s.ViewerRTTMS, s.ViewerJitterMS, s.ViewerLossPct)
+}
+
 // TestAggregator_CrossAppStreamID_NoCollision verifies that two AMS applications
 // hosting a stream with the SAME streamId on the SAME node do not collide: a
 // publish_end for one app must not delete the live stream in the other app.

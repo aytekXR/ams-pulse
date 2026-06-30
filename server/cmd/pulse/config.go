@@ -149,6 +149,11 @@ type EnvConfig struct {
 	// Parsed from PULSE_CORS_ALLOWED_ORIGINS (comma-separated).
 	// Empty = no CORS headers emitted for API routes (same-origin requests still work).
 	CORSAllowedOrigins []string
+
+	// AllowedWSOrigins is the list of WebSocket origin patterns accepted by the
+	// /live/ws endpoint. Parsed from PULSE_ALLOWED_WS_ORIGINS (comma-separated).
+	// Empty = same-origin only (nhooyr.io/websocket derives the pattern from Host).
+	AllowedWSOrigins []string
 }
 
 // loadEnvConfig reads configuration from PULSE_* environment variables.
@@ -270,6 +275,16 @@ func loadEnvConfig() (EnvConfig, error) {
 			origin = strings.TrimSpace(origin)
 			if origin != "" {
 				cfg.CORSAllowedOrigins = append(cfg.CORSAllowedOrigins, origin)
+			}
+		}
+	}
+
+	// WebSocket origin allowlist for /live/ws.
+	if v := os.Getenv("PULSE_ALLOWED_WS_ORIGINS"); v != "" {
+		for _, origin := range strings.Split(v, ",") {
+			origin = strings.TrimSpace(origin)
+			if origin != "" {
+				cfg.AllowedWSOrigins = append(cfg.AllowedWSOrigins, origin)
 			}
 		}
 	}

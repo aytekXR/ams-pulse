@@ -127,6 +127,8 @@ func (a *Aggregator) OnServerEvent(ev domain.ServerEvent) {
 		a.onNodeStats(ev)
 	case domain.EventIngestStats:
 		a.onIngestStats(ev)
+	case domain.EventWebRTCClientStats:
+		a.onWebRTCClientStats(ev)
 	}
 
 	a.rebuildSnapshot()
@@ -352,6 +354,22 @@ func (a *Aggregator) onNodeStats(ev domain.ServerEvent) {
 	if v, ok := ev.Data["version"].(string); ok && v != "" {
 		ns.Version = v
 	}
+	// Standalone node identity fields from real AMS 3.x /rest/v2/system-status.
+	if v, ok := ev.Data["os_name"].(string); ok && v != "" {
+		ns.OsName = v
+	}
+	if v, ok := ev.Data["os_arch"].(string); ok && v != "" {
+		ns.OsArch = v
+	}
+	if v, ok := ev.Data["java_version"].(string); ok && v != "" {
+		ns.JavaVersion = v
+	}
+	// processor_count is stored as int in Data but JSON round-trips as float64.
+	if v, ok := ev.Data["processor_count"].(float64); ok && v > 0 {
+		ns.ProcessorCount = int(v)
+	} else if v, ok := ev.Data["processor_count"].(int); ok && v > 0 {
+		ns.ProcessorCount = v
+	}
 	a.nodes[ev.NodeID] = ns
 }
 
@@ -391,6 +409,34 @@ func (a *Aggregator) onIngestStats(ev domain.ServerEvent) {
 	)
 	s.HealthScore = score
 	s.Health = ingest.ScoreToHealth(score)
+}
+
+// onWebRTCClientStats updates the live stream's viewer-side QoE metrics from a
+// webrtc_client_stats event (emitted by collector.NormalizeWebRTCStats).
+//
+// Multiple peer-stats events may arrive per poll interval when a stream has
+// multiple WebRTC viewers. This implementation uses last-write-wins so the
+// snapshot always reflects the most recently polled viewer — which is
+// deterministic (events are processed sequentially under a.mu) and sufficient
+// for the live dashboard. An averaging approach would require tracking counts
+// across events; that complexity is deferred until the query/API layer needs it.
+// See followup note in aggregator_test.go.
+func (a *Aggregator) onWebRTCClientStats(ev domain.ServerEvent) {
+	key := ev.NodeID + "/" + ev.App + "/" + ev.StreamID
+	s, ok := a.streams[key]
+	if !ok {
+		// Stream not in the live map (may have ended before this stat arrived).
+		return
+	}
+	if v, ok := ev.Data["rtt_ms"].(float64); ok {
+		s.ViewerRTTMS = v
+	}
+	if v, ok := ev.Data["jitter_ms"].(float64); ok {
+		s.ViewerJitterMS = v
+	}
+	if v, ok := ev.Data["packet_loss_pct"].(float64); ok {
+		s.ViewerLossPct = v
+	}
 }
 
 // UpdateIngestHealth sets the health score for a stream from the ingest health tracker.

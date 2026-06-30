@@ -110,6 +110,12 @@ type Config struct {
 	MigrationsDir string        `yaml:"-"`
 	SecretKey     string        `yaml:"-"` // PULSE_SECRET_KEY — for AES-GCM encryption
 	MetricsToken  string        `yaml:"-"` // PULSE_METRICS_TOKEN — optional scrape token
+
+	// AllowedWSOrigins is the list of WebSocket origin patterns that the API
+	// server accepts for the /live/ws endpoint.
+	// Parsed from PULSE_ALLOWED_WS_ORIGINS (comma-separated, spaces trimmed,
+	// empties dropped). Nil/empty means same-origin policy only.
+	AllowedWSOrigins []string `yaml:"-"`
 }
 
 // AMSConfig holds all AMS source definitions.
@@ -351,6 +357,15 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("PULSE_METRICS_TOKEN"); v != "" {
 		cfg.MetricsToken = v
+	}
+	if v := os.Getenv("PULSE_ALLOWED_WS_ORIGINS"); v != "" {
+		cfg.AllowedWSOrigins = nil
+		for _, origin := range strings.Split(v, ",") {
+			origin = strings.TrimSpace(origin)
+			if origin != "" {
+				cfg.AllowedWSOrigins = append(cfg.AllowedWSOrigins, origin)
+			}
+		}
 	}
 
 	// AMS sources: resolve PULSE_AMS_<NAME>_TOKEN for each source.

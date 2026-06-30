@@ -118,12 +118,12 @@ func (s *Service) LiveOverview(ctx context.Context, app, nodeID, tenant string) 
 			continue
 		}
 		nh := NodeHealth{
-			NodeID:  nid,
-			Role:    "standalone",
-			Status:  "up",
+			NodeID:   nid,
+			Role:     "standalone",
+			Status:   "up",
 			LastSeen: n.UpdatedAt.UnixMilli(),
-			CPUPCT:  n.CPUPCT,
-			MemPCT:  n.MemPCT,
+			CPUPCT:   n.CPUPCT,
+			MemPCT:   n.MemPCT,
 		}
 		if n.CPUPCT > 90 || n.MemPCT > 90 {
 			nh.Status = "degraded"
@@ -186,8 +186,11 @@ func (s *Service) LiveStreams(ctx context.Context, app, nodeID, tenant string, l
 				DASH:   stream.ViewersByProto.DASH,
 				Other:  stream.ViewersByProto.Other,
 			},
-			BitrateKbps: stream.IngestBitrate,
-			StartedAt:   stream.StartedAt.UnixMilli(),
+			BitrateKbps:    stream.IngestBitrate,
+			StartedAt:      stream.StartedAt.UnixMilli(),
+			ViewerRttMs:    stream.ViewerRTTMS,
+			ViewerJitterMs: stream.ViewerJitterMS,
+			ViewerLossPct:  stream.ViewerLossPct,
 		})
 	}
 
@@ -324,13 +327,17 @@ func (s *Service) FleetNodes(ctx context.Context, limit int, cursor string) (*Fl
 			}
 		}
 		fn := FleetNode{
-			NodeID:   nid,
-			Role:     role,
-			Status:   "up",
-			LastSeen: n.UpdatedAt.UnixMilli(),
-			Version:  n.Version, // VD-40: propagate from LiveNodeStats
-			CPUPCT:   n.CPUPCT,
-			MemPCT:   n.MemPCT,
+			NodeID:         nid,
+			Role:           role,
+			Status:         "up",
+			LastSeen:       n.UpdatedAt.UnixMilli(),
+			Version:        n.Version, // VD-40: propagate from LiveNodeStats
+			CPUPCT:         n.CPUPCT,
+			MemPCT:         n.MemPCT,
+			OsName:         n.OsName,
+			OsArch:         n.OsArch,
+			JavaVersion:    n.JavaVersion,
+			ProcessorCount: n.ProcessorCount,
 		}
 		if n.CPUPCT > 90 {
 			fn.Status = "degraded"
@@ -379,13 +386,13 @@ type AppOverview struct {
 
 // NodeHealth is per-node health in LiveOverview.
 type NodeHealth struct {
-	NodeID  string  `json:"node_id"`
-	Role    string  `json:"role"`
-	Status  string  `json:"status"`
-	LastSeen int64  `json:"last_seen"`
-	CPUPCT  float64 `json:"cpu_pct,omitempty"`
-	MemPCT  float64 `json:"mem_pct,omitempty"`
-	Version string  `json:"version,omitempty"`
+	NodeID   string  `json:"node_id"`
+	Role     string  `json:"role"`
+	Status   string  `json:"status"`
+	LastSeen int64   `json:"last_seen"`
+	CPUPCT   float64 `json:"cpu_pct,omitempty"`
+	MemPCT   float64 `json:"mem_pct,omitempty"`
+	Version  string  `json:"version,omitempty"`
 }
 
 // LiveStreamItem is one stream in GET /live/streams.
@@ -399,6 +406,11 @@ type LiveStreamItem struct {
 	ProtocolMix    ProtocolMix `json:"protocol_mix,omitempty"`
 	BitrateKbps    float64     `json:"bitrate_kbps,omitempty"`
 	StartedAt      int64       `json:"started_at,omitempty"`
+	// Viewer-side WebRTC QoE metrics (from webrtc_client_stats events via aggregator).
+	// Absent (omitempty) when no WebRTC viewer data is available.
+	ViewerRttMs    float64 `json:"viewer_rtt_ms,omitempty"`
+	ViewerJitterMs float64 `json:"viewer_jitter_ms,omitempty"`
+	ViewerLossPct  float64 `json:"viewer_loss_pct,omitempty"`
 }
 
 // LiveStreamListResult is the response for GET /live/streams.
@@ -458,6 +470,11 @@ type FleetNode struct {
 	MemPCT   float64 `json:"mem_pct,omitempty"`
 	NetIn    float64 `json:"net_in_mbps,omitempty"`
 	NetOut   float64 `json:"net_out_mbps,omitempty"`
+	// Standalone node identity from real AMS 3.x /rest/v2/system-status.
+	OsName         string `json:"os_name,omitempty"`
+	OsArch         string `json:"os_arch,omitempty"`
+	JavaVersion    string `json:"java_version,omitempty"`
+	ProcessorCount int    `json:"processor_count,omitempty"`
 }
 
 // FleetNodeListResult is the response for GET /fleet/nodes.
@@ -493,12 +510,12 @@ func (s *Service) QueryProbeResults(ctx context.Context, probeID string, from, t
 
 // GeoParams holds filters for the geo breakdown query.
 type GeoParams struct {
-	From    time.Time
-	To      time.Time
-	App     string
-	Stream  string
-	Tenant  string
-	Region  bool // if true, GROUP BY geo_region as well
+	From   time.Time
+	To     time.Time
+	App    string
+	Stream string
+	Tenant string
+	Region bool // if true, GROUP BY geo_region as well
 }
 
 // GeoRow is one row in the geo breakdown result.
@@ -688,9 +705,9 @@ type QoeTotals struct {
 
 // BitrateBucket is one point in the bitrate timeline.
 type BitrateBucket struct {
-	TS              int64   `json:"ts"`
-	BitrateKbpsP50  float64 `json:"bitrate_kbps_p50"`
-	BitrateKbpsP95  float64 `json:"bitrate_kbps_p95,omitempty"`
+	TS             int64   `json:"ts"`
+	BitrateKbpsP50 float64 `json:"bitrate_kbps_p50"`
+	BitrateKbpsP95 float64 `json:"bitrate_kbps_p95,omitempty"`
 }
 
 // QoeSummaryResult is the response for GET /qoe/summary.
@@ -839,12 +856,12 @@ func (s *Service) QoeSummary(ctx context.Context, p QoeParams) (*QoeSummaryResul
 // IngestBucket is one timeseries point for GET /qoe/ingest.
 // Maps to the IngestBucket schema in contracts/openapi/pulse-api.yaml.
 type IngestBucket struct {
-	TS               int64   `json:"ts"`                          // Unix epoch ms
-	BitrateKbps      float64 `json:"bitrate_kbps"`
-	FPS              float64 `json:"fps"`
+	TS                int64   `json:"ts"` // Unix epoch ms
+	BitrateKbps       float64 `json:"bitrate_kbps"`
+	FPS               float64 `json:"fps"`
 	KeyframeIntervalS float64 `json:"keyframe_interval_s,omitempty"`
-	PacketLossPct    float64 `json:"packet_loss_pct,omitempty"`
-	JitterMS         float64 `json:"jitter_ms,omitempty"`
+	PacketLossPct     float64 `json:"packet_loss_pct,omitempty"`
+	JitterMS          float64 `json:"jitter_ms,omitempty"`
 }
 
 // DropEvent is one ingest drop event for GET /qoe/ingest.

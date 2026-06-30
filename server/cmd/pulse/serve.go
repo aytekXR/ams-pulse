@@ -297,6 +297,7 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		MetricsToken:       cfg.MetricsToken, // Wave 2: PULSE_METRICS_TOKEN gating
 		WebDir:             webDir,
 		CORSAllowedOrigins: cfg.CORSAllowedOrigins, // A1: PULSE_CORS_ALLOWED_ORIGINS
+		AllowedWSOrigins:   cfg.AllowedWSOrigins,   // C2: PULSE_ALLOWED_WS_ORIGINS
 	}
 	apiServer := api.New(apiCfg, metaStore, agg, qsvc, lic, logger)
 	// Wire ClickHouse connection for /healthz probes (D-W1-002).

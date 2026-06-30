@@ -527,3 +527,121 @@ func TestNormalizeWebRTCStats_SingleTrackNotHalved(t *testing.T) {
 		t.Errorf("packet_loss_pct = %v, want 4.0", got)
 	}
 }
+
+// ─── NormalizeSystemStats (real AMS 3.x shape) ───────────────────────────────
+//
+// Real AMS 3.x GET /rest/v2/system-status returns ONLY:
+//   {osName, osArch, javaVersion, processorCount}
+// There are NO cpu/mem/disk/network metrics. The old tests asserted fake-parsed
+// cpuUsage/jvmMemoryUsage/systemMemoryInfo/fileSystemInfo fields that don't exist
+// in production — those tests are replaced here with the honest real-shape tests.
+
+// TestNormalizeSystemStats_RealShape verifies that NormalizeSystemStats correctly
+// maps the real AMS 3.x system-status fields {osName, osArch, javaVersion, processorCount}
+// and a separately-fetched version string, and does NOT emit cpu_pct/mem_pct/disk_pct.
+func TestNormalizeSystemStats_RealShape(t *testing.T) {
+	stats := map[string]any{
+		"osName":         "Linux",
+		"osArch":         "amd64",
+		"javaVersion":    "17",
+		"processorCount": float64(8), // JSON numbers decode as float64
+	}
+
+	ev := NormalizeSystemStats(stats, "node-standalone", "3.0.3")
+
+	if ev.Type != domain.EventNodeStats {
+		t.Errorf("Type = %q, want %q", ev.Type, domain.EventNodeStats)
+	}
+	if ev.NodeID != "node-standalone" {
+		t.Errorf("NodeID = %q, want %q", ev.NodeID, "node-standalone")
+	}
+
+	// Real identity fields must be present.
+	if got, ok := ev.Data["os_name"].(string); !ok || got != "Linux" {
+		t.Errorf("os_name = %v, want %q", ev.Data["os_name"], "Linux")
+	}
+	if got, ok := ev.Data["os_arch"].(string); !ok || got != "amd64" {
+		t.Errorf("os_arch = %v, want %q", ev.Data["os_arch"], "amd64")
+	}
+	if got, ok := ev.Data["java_version"].(string); !ok || got != "17" {
+		t.Errorf("java_version = %v, want %q", ev.Data["java_version"], "17")
+	}
+	if got, ok := ev.Data["processor_count"].(int); !ok || got != 8 {
+		t.Errorf("processor_count = %v (%T), want 8", ev.Data["processor_count"], ev.Data["processor_count"])
+	}
+	if got, ok := ev.Data["version"].(string); !ok || got != "3.0.3" {
+		t.Errorf("version = %v, want %q", ev.Data["version"], "3.0.3")
+	}
+
+	// CRITICAL: cpu_pct / mem_pct / disk_pct / net_* must be ABSENT.
+	// AMS 3.x system-status does not carry these metrics — emitting zeros is dishonest.
+	for _, key := range []string{"cpu_pct", "mem_pct", "disk_pct", "net_in_mbps", "net_out_mbps", "jvm_heap_used_mb"} {
+		if v, exists := ev.Data[key]; exists {
+			t.Errorf("HONEST: Data[%q] must be absent (unavailable from AMS 3.x system-status); got %v", key, v)
+		}
+	}
+
+	t.Logf("PASS NormalizeSystemStats real shape: os=%s/%s java=%s cores=%v version=%s",
+		ev.Data["os_name"], ev.Data["os_arch"], ev.Data["java_version"],
+		ev.Data["processor_count"], ev.Data["version"])
+}
+
+// TestNormalizeSystemStats_EmptyMap verifies that an empty stats map does not
+// panic and returns a valid (empty-Data) EventNodeStats event.
+func TestNormalizeSystemStats_EmptyMap(t *testing.T) {
+	ev := NormalizeSystemStats(map[string]any{}, "standalone", "")
+	if ev.Type != domain.EventNodeStats {
+		t.Errorf("Type = %q, want %q", ev.Type, domain.EventNodeStats)
+	}
+	if ev.NodeID != "standalone" {
+		t.Errorf("NodeID = %q, want %q", ev.NodeID, "standalone")
+	}
+	// With empty input and empty version, Data must be empty (no fabricated zeros).
+	if len(ev.Data) != 0 {
+		t.Errorf("empty map + empty version: Data must be empty, got %v", ev.Data)
+	}
+	t.Log("PASS: empty map produces empty-Data EventNodeStats without panic")
+}
+
+// TestNormalizeSystemStats_WrongTypes verifies that wrong/unexpected types in the
+// stats map do not cause a panic; fields with wrong types are silently skipped.
+func TestNormalizeSystemStats_WrongTypes(t *testing.T) {
+	stats := map[string]any{
+		"osName":         12345,   // wrong type — expect string
+		"osArch":         nil,     // nil — skip
+		"processorCount": "eight", // wrong type — expect float64/int
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("NormalizeSystemStats panicked on wrong types: %v", r)
+		}
+	}()
+
+	ev := NormalizeSystemStats(stats, "node-bad", "")
+	if ev.Type != domain.EventNodeStats {
+		t.Errorf("Type = %q, want EventNodeStats", ev.Type)
+	}
+	// Wrong-typed fields must be absent (not zero-filled).
+	if _, ok := ev.Data["os_name"]; ok {
+		t.Errorf("os_name must be absent when wrong type, got %v", ev.Data["os_name"])
+	}
+	if _, ok := ev.Data["processor_count"]; ok {
+		t.Errorf("processor_count must be absent when wrong type, got %v", ev.Data["processor_count"])
+	}
+	t.Log("PASS: wrong types do not panic and are silently skipped")
+}
+
+// TestNormalizeSystemStats_VersionParam verifies that the version string from
+// the separate /rest/v2/version call is correctly written to Data["version"].
+func TestNormalizeSystemStats_VersionParam(t *testing.T) {
+	ev := NormalizeSystemStats(map[string]any{"osName": "Linux"}, "n1", "3.0.3")
+	if got, ok := ev.Data["version"].(string); !ok || got != "3.0.3" {
+		t.Errorf("version = %v, want %q", ev.Data["version"], "3.0.3")
+	}
+	// Empty version → absent key.
+	ev2 := NormalizeSystemStats(map[string]any{"osName": "Linux"}, "n1", "")
+	if _, ok := ev2.Data["version"]; ok {
+		t.Errorf("version key must be absent when version param is empty")
+	}
+}

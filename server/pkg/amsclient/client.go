@@ -539,3 +539,26 @@ func (c *Client) SystemStats(ctx context.Context) (map[string]any, error) {
 	}
 	return result, nil
 }
+
+// VersionDTO is the AMS REST v2 version response.
+// Real AMS 3.x GET /rest/v2/version returns: versionName, versionType, buildNumber.
+type VersionDTO struct {
+	VersionName string `json:"versionName"`
+	VersionType string `json:"versionType"`
+	BuildNumber string `json:"buildNumber"`
+}
+
+// GetVersion returns the AMS server version information.
+// Path: /rest/v2/version (AMS v3+ endpoint).
+// Returns (nil, nil) if the endpoint is unavailable (older AMS versions).
+func (c *Client) GetVersion(ctx context.Context) (*VersionDTO, error) {
+	var result VersionDTO
+	if err := c.getJSON(ctx, "/rest/v2/version", &result); err != nil {
+		var hse *httpStatusError
+		if errors.As(err, &hse) && (hse.Status == http.StatusNotFound || hse.Status == http.StatusMethodNotAllowed) {
+			return nil, nil // older AMS without /rest/v2/version endpoint
+		}
+		return nil, err
+	}
+	return &result, nil
+}

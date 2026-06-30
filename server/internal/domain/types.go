@@ -51,7 +51,7 @@ type ServerEvent struct {
 	StreamID string `json:"stream_id,omitempty"`
 
 	// Type-specific payload — one of the *Data structs below, marshalled as map.
-	Data       map[string]any  `json:"data,omitempty"`
+	Data       map[string]any   `json:"data,omitempty"`
 	Enrichment *EnrichmentBlock `json:"enrichment,omitempty"`
 }
 
@@ -84,10 +84,10 @@ type ProtocolViewerCounts struct {
 
 // StreamStatsData carries stream_stats payload.
 type StreamStatsData struct {
-	ViewerCount          int                  `json:"viewer_count"` // required
+	ViewerCount           int                   `json:"viewer_count"` // required
 	ViewerCountByProtocol *ProtocolViewerCounts `json:"viewer_count_by_protocol,omitempty"`
-	BitrateKbps          float64              `json:"bitrate_kbps,omitempty"`
-	SpeedReadKbps        float64              `json:"speed_read_kbps,omitempty"`
+	BitrateKbps           float64               `json:"bitrate_kbps,omitempty"`
+	SpeedReadKbps         float64               `json:"speed_read_kbps,omitempty"`
 }
 
 // WebRTCClientStatsData carries webrtc_client_stats payload.
@@ -100,20 +100,20 @@ type WebRTCClientStatsData struct {
 
 // IngestStatsData carries ingest_stats payload.
 type IngestStatsData struct {
-	BitrateKbps      float64 `json:"bitrate_kbps,omitempty"`
-	FPS              float64 `json:"fps,omitempty"`
+	BitrateKbps       float64 `json:"bitrate_kbps,omitempty"`
+	FPS               float64 `json:"fps,omitempty"`
 	KeyframeIntervalS float64 `json:"keyframe_interval_s,omitempty"`
-	PacketLossPct    float64 `json:"packet_loss_pct,omitempty"`
-	JitterMS         float64 `json:"jitter_ms,omitempty"`
+	PacketLossPct     float64 `json:"packet_loss_pct,omitempty"`
+	JitterMS          float64 `json:"jitter_ms,omitempty"`
 }
 
 // NodeStatsData carries node_stats payload.
 type NodeStatsData struct {
-	CPUPCT       float64 `json:"cpu_pct,omitempty"`
-	MemPCT       float64 `json:"mem_pct,omitempty"`
-	DiskPCT      float64 `json:"disk_pct,omitempty"`
-	NetInMbps    float64 `json:"net_in_mbps,omitempty"`
-	NetOutMbps   float64 `json:"net_out_mbps,omitempty"`
+	CPUPCT        float64 `json:"cpu_pct,omitempty"`
+	MemPCT        float64 `json:"mem_pct,omitempty"`
+	DiskPCT       float64 `json:"disk_pct,omitempty"`
+	NetInMbps     float64 `json:"net_in_mbps,omitempty"`
+	NetOutMbps    float64 `json:"net_out_mbps,omitempty"`
 	JVMHeapUsedMB float64 `json:"jvm_heap_used_mb,omitempty"`
 }
 
@@ -157,7 +157,7 @@ type GeoEnrichment struct {
 
 // ClientEnrichment holds UA-parsed client info.
 type ClientEnrichment struct {
-	Device  string `json:"device,omitempty"`  // desktop|mobile|tablet|tv|other
+	Device  string `json:"device,omitempty"` // desktop|mobile|tablet|tv|other
 	OS      string `json:"os,omitempty"`
 	Browser string `json:"browser,omitempty"`
 }
@@ -221,19 +221,19 @@ type ViewerSession struct {
 // AlertRule is a user-defined alerting rule.
 // Mirrors the alert_rules table in contracts/db/meta/0001_init.sql.
 type AlertRule struct {
-	ID          string         `json:"id"`
-	Name        string         `json:"name"`
-	Metric      string         `json:"metric"`
-	Condition   string         `json:"condition"` // gt|lt|eq|gte|lte
-	Threshold   float64        `json:"threshold"`
-	WindowS     int            `json:"window_s"`
-	Scope       AlertScope     `json:"scope"`
-	Severity    string         `json:"severity"` // info|warning|critical
-	ChannelIDs  []string       `json:"channel_ids"`
-	Enabled     bool           `json:"enabled"`
-	CooldownS   int            `json:"cooldown_s,omitempty"`
-	CreatedAt   int64          `json:"created_at"` // Unix epoch ms
-	UpdatedAt   int64          `json:"updated_at"` // Unix epoch ms
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	Metric     string     `json:"metric"`
+	Condition  string     `json:"condition"` // gt|lt|eq|gte|lte
+	Threshold  float64    `json:"threshold"`
+	WindowS    int        `json:"window_s"`
+	Scope      AlertScope `json:"scope"`
+	Severity   string     `json:"severity"` // info|warning|critical
+	ChannelIDs []string   `json:"channel_ids"`
+	Enabled    bool       `json:"enabled"`
+	CooldownS  int        `json:"cooldown_s,omitempty"`
+	CreatedAt  int64      `json:"created_at"` // Unix epoch ms
+	UpdatedAt  int64      `json:"updated_at"` // Unix epoch ms
 }
 
 // AlertScope limits an alert rule to a specific node/app/stream.
@@ -246,21 +246,21 @@ type AlertScope struct {
 // Notification is an alert delivery payload.
 // Contract: contracts/events/alert-notification.schema.json
 type Notification struct {
-	AlertID      string     `json:"alert_id"`
-	RuleID       string     `json:"rule_id"`
-	RuleName     string     `json:"rule_name"`
-	State        string     `json:"state"` // firing|resolved|test
-	Severity     string     `json:"severity"`
-	Metric       string     `json:"metric"`
-	Value        float64    `json:"value"`
-	Threshold    float64    `json:"threshold"`
-	Condition    string     `json:"condition"`
-	Scope        AlertScope `json:"scope"`
-	FiredAt      int64      `json:"fired_at"`      // Unix epoch ms
-	ResolvedAt   *int64     `json:"resolved_at,omitempty"`
-	CooldownUntil *int64   `json:"cooldown_until,omitempty"`
-	GroupKey     string     `json:"group_key,omitempty"`
-	Test         bool       `json:"test,omitempty"`
+	AlertID       string     `json:"alert_id"`
+	RuleID        string     `json:"rule_id"`
+	RuleName      string     `json:"rule_name"`
+	State         string     `json:"state"` // firing|resolved|test
+	Severity      string     `json:"severity"`
+	Metric        string     `json:"metric"`
+	Value         float64    `json:"value"`
+	Threshold     float64    `json:"threshold"`
+	Condition     string     `json:"condition"`
+	Scope         AlertScope `json:"scope"`
+	FiredAt       int64      `json:"fired_at"` // Unix epoch ms
+	ResolvedAt    *int64     `json:"resolved_at,omitempty"`
+	CooldownUntil *int64     `json:"cooldown_until,omitempty"`
+	GroupKey      string     `json:"group_key,omitempty"`
+	Test          bool       `json:"test,omitempty"`
 }
 
 // ─── Live snapshot types (BE-02 consumes via LiveProvider) ───────────────────
@@ -269,10 +269,10 @@ type Notification struct {
 type StreamHealth string
 
 const (
-	StreamHealthGood    StreamHealth = "good"
-	StreamHealthWarning StreamHealth = "warning"
+	StreamHealthGood     StreamHealth = "good"
+	StreamHealthWarning  StreamHealth = "warning"
 	StreamHealthCritical StreamHealth = "critical"
-	StreamHealthOffline StreamHealth = "offline"
+	StreamHealthOffline  StreamHealth = "offline"
 )
 
 // LiveStream holds real-time state for one active stream.
@@ -292,36 +292,51 @@ type LiveStream struct {
 
 	// Ingest health metrics (populated by ingest.HealthTracker, Wave 2).
 	// HealthScore is the weighted composite score (0.0–1.0); see ingest.ComputeHealthScore.
-	HealthScore      float64 `json:"health_score,omitempty"`
-	PacketLossPct    float64 `json:"packet_loss_pct,omitempty"`
-	JitterMS         float64 `json:"jitter_ms,omitempty"`
+	HealthScore       float64 `json:"health_score,omitempty"`
+	PacketLossPct     float64 `json:"packet_loss_pct,omitempty"`
+	JitterMS          float64 `json:"jitter_ms,omitempty"`
 	KeyframeIntervalS float64 `json:"keyframe_interval_s,omitempty"`
+
+	// Viewer-side WebRTC QoE metrics (populated from webrtc_client_stats events).
+	// Last-write-wins when multiple peer-stat events arrive for the same stream;
+	// the aggregator records the most recent poll value per stream, which is
+	// sufficient for the live dashboard and alert evaluator.
+	ViewerRTTMS    float64 `json:"viewer_rtt_ms,omitempty"`
+	ViewerJitterMS float64 `json:"viewer_jitter_ms,omitempty"`
+	ViewerLossPct  float64 `json:"viewer_loss_pct,omitempty"`
 }
 
 // LiveNodeStats holds real-time state for one cluster node.
 type LiveNodeStats struct {
-	NodeID    string  `json:"node_id"`
-	// Version is the AMS server version string (e.g. "2.8.3").
-	// Populated from ClusterNodeDTO.Version via discovery (VD-40).
-	Version   string  `json:"version,omitempty"`
-	CPUPCT    float64 `json:"cpu_pct"`
-	MemPCT    float64 `json:"mem_pct"`
-	DiskPCT   float64 `json:"disk_pct"`
-	NetIn     float64 `json:"net_in_mbps"`
-	NetOut    float64 `json:"net_out_mbps"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	NodeID string `json:"node_id"`
+	// Version is the AMS server version string (e.g. "3.0.3").
+	// Populated from ClusterNodeDTO.Version (cluster path) or GetVersion (standalone path).
+	Version   string    `json:"version,omitempty"`
+	CPUPCT    float64   `json:"cpu_pct"`
+	MemPCT    float64   `json:"mem_pct"`
+	DiskPCT   float64   `json:"disk_pct"`
+	NetIn     float64   `json:"net_in_mbps"`
+	NetOut    float64   `json:"net_out_mbps"`
+	UpdatedAt time.Time `json:"updated_at"`
 	// LastSeenAt is the wall-clock time when the last NodeStats event was received.
 	// Used by the aggregator to evict stale nodes (VD-30).
 	LastSeenAt time.Time `json:"last_seen_at,omitempty"`
+
+	// Identity fields from real AMS 3.x /rest/v2/system-status (standalone path).
+	// Absent for cluster nodes (ClusterNodeDTO does not carry OS identity).
+	OsName         string `json:"os_name,omitempty"`
+	OsArch         string `json:"os_arch,omitempty"`
+	JavaVersion    string `json:"java_version,omitempty"`
+	ProcessorCount int    `json:"processor_count,omitempty"`
 }
 
 // LiveSnapshot is the in-memory aggregate state served to the dashboard.
 // It covers totals, per-app, per-stream and per-node views.
 type LiveSnapshot struct {
 	// Totals
-	ActiveStreams    int     `json:"active_streams"`
-	TotalViewers    int     `json:"total_viewers"`
-	IngestBitrate   float64 `json:"ingest_bitrate_kbps"`
+	ActiveStreams int     `json:"active_streams"`
+	TotalViewers  int     `json:"total_viewers"`
+	IngestBitrate float64 `json:"ingest_bitrate_kbps"`
 
 	// Per-stream detail (map key = stream_id)
 	Streams map[string]*LiveStream `json:"streams"`
@@ -386,15 +401,15 @@ type ProbeConfig struct {
 // Written to ClickHouse probe_results by the runner; also passed to
 // ProbeConfigSource.RecordResult to update probes.last_* denorm fields.
 type ProbeResult struct {
-	ID          string    // UUID for this result row
-	ProbeID     string    // foreign key → ProbeConfig.ID
-	TS          time.Time // when the probe ran (UTC)
-	Success     bool      // true only on 2xx + parseable response
-	TTFBMs      uint32    // time-to-first-byte in milliseconds
-	ErrorCode   string    // "timeout" | "dns" | "http_4xx" | "http_5xx" | "parse" | "not_probed" | ""
-	ErrorMsg    string    // human-readable detail; empty on success
-	BitrateKbps    float32   // estimated kbps = segment_bytes / segment_duration_s; 0 on failure
-	SegmentTTFBMs  uint32    // TTFB of the first media segment in ms; 0 if not measured
+	ID            string    // UUID for this result row
+	ProbeID       string    // foreign key → ProbeConfig.ID
+	TS            time.Time // when the probe ran (UTC)
+	Success       bool      // true only on 2xx + parseable response
+	TTFBMs        uint32    // time-to-first-byte in milliseconds
+	ErrorCode     string    // "timeout" | "dns" | "http_4xx" | "http_5xx" | "parse" | "not_probed" | ""
+	ErrorMsg      string    // human-readable detail; empty on success
+	BitrateKbps   float32   // estimated kbps = segment_bytes / segment_duration_s; 0 on failure
+	SegmentTTFBMs uint32    // TTFB of the first media segment in ms; 0 if not measured
 }
 
 // ProbeConfigSource is the seam between the probe runner (BE-01) and the meta
