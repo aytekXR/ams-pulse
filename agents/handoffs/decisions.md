@@ -1267,3 +1267,22 @@ download to a versioned static binary — `clickhouse-common-static-26.6.1.1193-
 golang:1.25 repro + `gh run watch`. **No `ci.yml`/code change applied this session** — operator directed the fix to next
 session (this is a docs/handoff-only update). The scheduled `ams-version-matrix.yml` workflow is *separately* red (a
 different pre-existing issue, out of scope here).
+
+## D-039 · 2026-06-30 · CI fixed GREEN — the red was a flaky test, NOT the unpinned binary (corrects D-038)
+
+**Operator: "apply now + verify green."** D-038's conclusion ("self-healed, just pin the ClickHouse `master` binary")
+was **WRONG** — caught by faithful re-reproduction. Pulled the actual CI failure via `gh api .../jobs/<id>/logs`:
+`--- FAIL: TestQuery_QoeSummary_RealStartupP50 … VD-11 FAIL: startup_p50_ms is 0 (rollup_qoe_1h not being queried)`.
+The test polls only **15 s** for the `mv_qoe_1h → rollup_qoe_1h` materialized-view aggregation to yield a non-zero
+median; that's too short on the **2-vCPU** GitHub runner (CH service container runs alongside). My first repro passed
+because it ran on 6 unconstrained cores — a **false green** (the exact partial-repro trap D-028/the CI-repro memo warn
+about). Re-reproduced under CPU constraint: BOTH pinned `26.6.1.1193` and `master 26.7.1.281` FAIL → it's a **CPU/timing
+flake, not a version issue; pinning does not fix it.** Verified the fix: under a true 2-core cpuset, raising the poll to
+**90 s** passes **3/3** (exits in ~4-6 s once populated, so green runs aren't slowed).
+
+**Applied + verified green:** `fix(query) D-039` (commit `547e293`) bumps the deadline 15 s→90 s in
+`server/internal/query/query_integration_test.go`; pushed to `main`; **`ci` run 28429722100 = success, all 7 jobs**
+(`server` + the previously-skipped `docker-build` now green) — confirmed via `gh run watch`. Updated RESUME-PROMPT
+▶ START HERE / A2 / U2. `gh` is installed+authed on the VPS (U6 ✅), so CI is now directly readable/verifiable.
+Optional non-blocking hygiene noted for later: pin the `ci.yml` integration CH binary; gofmt the pre-existing
+struct-alignment nits in `query_integration_test.go` (CI does not gate on gofmt).

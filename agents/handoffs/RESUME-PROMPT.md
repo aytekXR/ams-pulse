@@ -12,29 +12,20 @@
 
 ## ▶ START HERE (next session — operator-directed 2026-06-29/30)
 
-**FIRST — get CI GREEN (it is currently RED; keep working on `main`).** Root cause (verified 2026-06-30, D-038):
-`.github/workflows/ci.yml` → `server` job → **"Integration tests"** step downloads ClickHouse from an **unpinned,
-rolling `master` URL** (`https://builds.clickhouse.com/master/amd64/clickhouse`; the comment claims "v26.6.1" but the
-URL is `master`). It's environmental — `git diff 1d7a26f(last-green D-034)..HEAD -- server/ contracts/ .github/` is
-EMPTY (every commit since is docs/deploy); the master binary rolled (26.6.1 → 26.7.1.281) and the 06-29 snapshot was
-broken. Reproduced faithfully (golang:1.25, repo-root mount, exact CI cmd): the CURRENT master PASSES all integration
-tests locally — i.e. it self-healed, but `master` is non-deterministic and will break again. **FIX — pin the binary**
-(replace the download step's URL; tarball verified reachable 200):
-```
-CH_VER=26.6.1.1193   # = the "v26.6.1" the comment intended; same 26.x line the harness is validated against
-curl -fsSL -o /tmp/ch.tgz \
-  https://github.com/ClickHouse/ClickHouse/releases/download/v${CH_VER}-stable/clickhouse-common-static-${CH_VER}-amd64.tgz
-tar -xf /tmp/ch.tgz -C /tmp
-cp "$(find /tmp -type f -name clickhouse -path '*/bin/*' | head -1)" /tmp/clickhouse
-chmod +x /tmp/clickhouse && /tmp/clickhouse --version
-```
-Also fix the misleading `v26.6.1` comment. **Verify loop:** (1) reproduce locally — golang:1.25 + repo-root mount,
-download the pinned binary, then `cd server && go test -tags integration ./... -timeout 300s` → all `ok`; (2) commit
-`ci.yml` by explicit path, push to `main`; (3) `gh run watch $(gh run list --branch main --workflow=ci.yml -L1 --json databaseId -q '.[0].databaseId')`
-→ confirm the whole `ci` workflow is green. `gh` is installed+authed now (U6 ✅), so read Actions directly. *(Separately,
-the scheduled `ams-version-matrix.yml` workflow is also red — a different, pre-existing issue; not part of this fix.)*
+**CI is GREEN ✅ (D-039, 2026-06-30; run 28429722100, all 7 jobs pass).** The `ci` workflow's only red job (`server` →
+"Integration tests") was a single **flaky test** — `TestQuery_QoeSummary_RealStartupP50` polled just **15s** for the
+`mv_qoe_1h → rollup_qoe_1h` materialized-view aggregation, too short on the **2-vCPU** GitHub runner (the CH service
+container runs alongside it). Fixed by raising the poll window to **90s** (commit `547e293`; the loop still exits in
+~4-6s once the rollup populates, so green runs are not slowed). **It was NOT the unpinned-`master` ClickHouse binary**
+(an earlier wrong hypothesis, D-038): pinning does NOT fix it — both 26.6.1 and master fail under CPU constraint, so the
+CH version is irrelevant. `gh` is installed+authed (U6 ✅) — read/verify CI directly with
+`gh run watch $(gh run list --branch main --workflow=ci.yml -L1 --json databaseId -q '.[0].databaseId')`.
+*Optional hygiene (non-blocking — NOT required for green):* `ci.yml` still downloads an unpinned `master` CH binary
+(pin it for determinism if desired — tarball `clickhouse-common-static-26.6.1.1193-amd64.tgz` is verified reachable);
+`query_integration_test.go` has pre-existing gofmt struct-alignment nits; the scheduled `ams-version-matrix.yml`
+workflow is separately red (a different, pre-existing issue).
 
-**THEN — run the `pulse-p1-gaps` workflow** — close the P0 silently-stubbed features, TDD red→green, one disjoint-scope
+**First action — run the `pulse-p1-gaps` workflow** — close the P0 silently-stubbed features, TDD red→green, one disjoint-scope
 author per item, then ORCH gate + commit-by-explicit-path:
 1. Alert **test-fire** must really call `Send()` (today returns 202, never sends).
 2. **Enforce** the 3 license gates `CheckDataAPI` (analytics), `CheckNodeLimit`, `CheckPrometheus` (monetization leak).
@@ -80,7 +71,7 @@ AMS web login is RESOLVED (D-036) — not a blocker.
 | # | Action | Why it's blocked / needed |
 |---|---|---|
 | U1 | ✅ **RESOLVED (D-034).** Self-hosted AMS on this VPS; per-app `remoteAllowedCIDR=0.0.0.0/0` so Pulse polls cleanly (200). No external allow-list dependency. | (was: 8/16 apps 403'd the VPS on test.antmedia.io). |
-| U2 | **Agent task now (no longer operator-blocked):** get the `ci` workflow GREEN — it's RED at the integration step (verified root cause + pinned-binary fix in ▶ START HERE). | `gh` is installed (U6 ✅) → the agent reads, fixes, and verifies CI itself. |
+| U2 | ✅ **RESOLVED (D-039, 2026-06-30).** `ci` workflow is GREEN (de-flaked `TestQuery_QoeSummary_RealStartupP50`, 15s→90s poll); verified via `gh` (run 28429722100, 7/7 jobs). | — |
 | U3 | **Activate a Pro+ Pulse license** on `beyondkaira.com` (`PULSE_LICENSE_KEY`, see §5). | QoE/beacon ingest (F3) is gated to Pro+ (`CheckBeaconIngest` 403 on Free). Without it `beacon_events` stays empty; QoE features/alerts can't be exercised in prod. *(This is a Pulse license — separate from the AMS license.)* |
 | U4 | **GitHub admin: run `.github/branch-protection.sh` + push a `v*` tag.** | Needs `gh` + repo-admin; gates `main` and exercises the GHCR release. Can't be done from the VPS. |
 | U5 | **Open `https://beyondkaira.com` AND `https://pulse.beyondkaira.com` in a browser; confirm the SPA renders with no CSP console errors on each** (Caddy serves both — apex via the catch-all, subdomain via its own block, so they can fail independently). | The agent can't run a real browser; CSP is browser-enforced. Report any violation → instant fix. |
@@ -273,7 +264,7 @@ health scoring, (4) AMS wire decode/normalize, (5) the query layer. Report cover
 | # | Assumption (currently unverified or known-false) | How to eliminate |
 |---|---|---|
 | A1 | ✅ Resolved (2026-06-29): `main` now **contains** `ams-integration` (`main..ams-integration` empty). | Retire the stale `ams-integration` ref + branch protection (U4). |
-| A2 | "CI is green." **KNOWN-FALSE (2026-06-30, D-038)** — `ci` is RED at the integration step (unpinned ClickHouse `master`); now readable via `gh` (U6 ✅, no longer an assumption). | Apply the pinned-binary fix (▶ START HERE) → `gh run watch` green. |
+| A2 | ✅ **VERIFIED GREEN (2026-06-30, D-039)** — `ci` all-green (run 28429722100) after de-flaking the QoE rollup test (15s→90s); readable via `gh` (U6 ✅), no longer an assumption. | Keep green: `gh run watch` after pushes. |
 | A3 | "Alerts fire and deliver." **UNVERIFIED** — test-fire is a stub, no retry, no e2e (verified gap §6.3). | Implement `Send()` + retry; add alert-fires→history e2e + a delivery test. |
 | A4 | "Coverage is adequate." **FALSE** — 3 pkgs 0%, no gate. | `pulse-test-backfill` + coverage gate (§7). |
 | A5 | "The 0.0% pkgs are covered by integration tests." Partially — only ~3 of ~12 query methods. | Add unit tests with a mock Conn (§6). |
