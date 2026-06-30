@@ -129,13 +129,13 @@ var enterpriseTierEntitlements = Entitlements{
 
 // claims is the parsed JSON payload from a license key.
 type claims struct {
-	Tier          string  `json:"tier"`
-	MaxNodes      *int    `json:"max_nodes"`
-	MaxStreams     *int    `json:"max_streams"`
-	RetentionDays *int    `json:"retention_days"`
-	DataAPI       bool    `json:"data_api"`
-	WhiteLabel    bool    `json:"white_label"`
-	ExpiresAt     *int64  `json:"expires_at"` // Unix epoch ms
+	Tier          string `json:"tier"`
+	MaxNodes      *int   `json:"max_nodes"`
+	MaxStreams    *int   `json:"max_streams"`
+	RetentionDays *int   `json:"retention_days"`
+	DataAPI       bool   `json:"data_api"`
+	WhiteLabel    bool   `json:"white_label"`
+	ExpiresAt     *int64 `json:"expires_at"` // Unix epoch ms
 }
 
 // Manager resolves and caches the active license.
@@ -345,9 +345,9 @@ func (m *Manager) CheckBeaconIngest() error {
 }
 
 // CheckPrometheus returns nil if the tier includes the Prometheus /metrics endpoint (F8).
-// Prometheus requires Business tier or higher (PRD §7.11: "Prometheus endpoint" is Business+).
-// Free and Pro tiers use the unauthenticated /metrics path; Business+ can use the secured endpoint.
-// This check gates Business-tier-gated routes that expose internal Prometheus data.
+// /metrics (Prometheus endpoint F8) requires Business+.
+// Free and Pro tiers are blocked by this gate (the handler returns 403 LICENSE_REQUIRED);
+// there is no unauthenticated /metrics fallback path.
 func (m *Manager) CheckPrometheus() error {
 	t := m.Tier()
 	if t != TierBusiness && t != TierEnterprise {

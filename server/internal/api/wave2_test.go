@@ -27,7 +27,8 @@ import (
 // ─── Test: Prometheus /metrics endpoint ──────────────────────────────────────
 
 func TestAPI_Metrics_ParsesWithExpfmt(t *testing.T) {
-	ts, _, cleanup := setupTestServer(t)
+	// /metrics requires Business+ tier (CheckPrometheus); use Business server.
+	ts, _, cleanup := setupBusinessServer(t)
 	defer cleanup()
 
 	resp, err := http.Get(ts.URL + "/metrics")
@@ -83,7 +84,11 @@ func TestAPI_Metrics_ParsesWithExpfmt(t *testing.T) {
 }
 
 func TestAPI_Metrics_Token_Gated(t *testing.T) {
-	// Build a server with MetricsToken set.
+	// /metrics requires Business+ tier (CheckPrometheus). Use a Business license
+	// so the tier gate passes, and then verify the MetricsToken gate.
+	licKey, licCleanup := makeTestBusinessLicense(t)
+	defer licCleanup()
+
 	ctx := context.Background()
 	ddlPath := metaDDLPath(t)
 	ddl, err := readFileDirect(ddlPath)
@@ -96,7 +101,10 @@ func TestAPI_Metrics_Token_Gated(t *testing.T) {
 	}
 	defer store.Close()
 
-	lic, _ := license.New("", "")
+	lic, err := license.New(licKey, "")
+	if err != nil {
+		t.Fatalf("license.New (business): %v", err)
+	}
 	live := &fakeLiveProvider{}
 	qsvc := query.New(live, nil, lic)
 	srv := api.New(api.Config{ListenAddr: ":0", MetricsToken: "scrape-secret"}, store, live, qsvc, lic, nil)
@@ -104,7 +112,7 @@ func TestAPI_Metrics_Token_Gated(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
-	// Without token → 401.
+	// Without token → 401 (tier passes, MetricsToken gate fires).
 	resp1, err := http.Get(ts.URL + "/metrics")
 	if err != nil {
 		t.Fatalf("GET /metrics (no token): %v", err)
@@ -125,7 +133,7 @@ func TestAPI_Metrics_Token_Gated(t *testing.T) {
 	if resp2.StatusCode != http.StatusOK {
 		t.Errorf("expected 200 with correct scrape token, got %d", resp2.StatusCode)
 	}
-	t.Logf("PASS: /metrics: 401 without token, 200 with correct token")
+	t.Logf("PASS: /metrics: 401 without token, 200 with correct token (business tier)")
 }
 
 // ─── Test: Tier gating (§7.11) ───────────────────────────────────────────────
@@ -268,7 +276,8 @@ func TestAPI_CreateUser_BcryptHash(t *testing.T) {
 // ─── Test: CSV export ────────────────────────────────────────────────────────
 
 func TestAPI_AudienceAnalytics_CSVFormat(t *testing.T) {
-	ts, token, cleanup := setupTestServer(t)
+	// Analytics endpoints require Pro+ tier (CheckDataAPI); use Business server.
+	ts, token, cleanup := setupBusinessServer(t)
 	defer cleanup()
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/analytics/audience?format=csv", nil)
@@ -380,10 +389,12 @@ func TestAPI_TestSource_ExistingSource_OK(t *testing.T) {
 
 // ─── Test: QoE tier gating ───────────────────────────────────────────────────
 
-func TestAPI_FreeTier_QoE_Accessible(t *testing.T) {
-	// Free tier: QoE endpoints return data (fail-open for reads).
-	// (F3: beacons and QoE are Pro+ only; but reading existing data is fail-open.)
-	ts, token, cleanup := setupTestServer(t)
+func TestAPI_ProTier_QoE_Accessible(t *testing.T) {
+	// QoE endpoint requires Pro+ tier (CheckDataAPI). Use Business server which
+	// is Pro+ (Data API is enabled on Business tier).
+	// Note: the former "fail-open" comment is superseded by the explicit
+	// CheckDataAPI gate introduced in A2.
+	ts, token, cleanup := setupBusinessServer(t)
 	defer cleanup()
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/qoe/summary", nil)
@@ -395,12 +406,11 @@ func TestAPI_FreeTier_QoE_Accessible(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	// Should return 200 (fail-open per ARCHITECTURE §6).
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		t.Errorf("expected 200 for qoe/summary (fail-open), got %d: %s", resp.StatusCode, body)
+		t.Errorf("expected 200 for qoe/summary on business tier, got %d: %s", resp.StatusCode, body)
 	}
-	t.Logf("PASS: /qoe/summary accessible on free tier (fail-open)")
+	t.Logf("PASS: /qoe/summary accessible on business (Pro+) tier")
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

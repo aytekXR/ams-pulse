@@ -201,7 +201,13 @@ func setupVD19Server(t *testing.T, conn clickhousego.Conn) (ts *httptest.Server,
 		t.Fatalf("CreateToken: %v", err)
 	}
 
-	lic, _ := license.New("", "")
+	// /analytics/geo and /analytics/devices are gated behind CheckDataAPI
+	// (Pro+) since D-041, so provision a Pro license here.
+	proKey, licCleanup := makeTestProLicense(t)
+	lic, err := license.New(proKey, "")
+	if err != nil {
+		t.Fatalf("license.New (pro): %v", err)
+	}
 	live := &vd19LiveProvider{}
 	// Wire real CH conn so GeoBreakdown / DeviceBreakdown queries real data.
 	qsvc := query.New(live, conn, lic)
@@ -212,6 +218,7 @@ func setupVD19Server(t *testing.T, conn clickhousego.Conn) (ts *httptest.Server,
 	cleanup = func() {
 		ts.Close()
 		store.Close()
+		licCleanup()
 	}
 	return ts, adminToken, cleanup
 }

@@ -392,6 +392,11 @@ func (m *mockNodeRoleDiscoverer) NodeRole(nodeID string) string {
 // The OLD code used !=, which is also functionally correct but enables timing attacks.
 // This test verifies the FUNCTIONAL gate still works correctly after the change.
 func TestGuard_VDS1_MetricsTokenConstantTime(t *testing.T) {
+	// /metrics now requires Business+ tier (CheckPrometheus). Use a Business
+	// license so the tier gate passes and the MetricsToken check can be tested.
+	licKey, licCleanup := makeTestBusinessLicense(t)
+	defer licCleanup()
+
 	ctx := context.Background()
 	ddlPath := metaDDLPath(t)
 	ddl, err := os.ReadFile(ddlPath)
@@ -402,14 +407,17 @@ func TestGuard_VDS1_MetricsTokenConstantTime(t *testing.T) {
 	ms.MigrateEmbedded(ctx, string(ddl))
 	defer ms.Close()
 
-	lic, _ := license.New("", "")
+	lic, err := license.New(licKey, "")
+	if err != nil {
+		t.Fatalf("license.New (business): %v", err)
+	}
 	live := &fakeLiveProvider{}
 	qsvc := query.New(live, nil, lic)
 	srv := api.New(api.Config{ListenAddr: ":0", MetricsToken: "correct-scrape-token"}, ms, live, qsvc, lic, nil)
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
-	// Wrong token → 401 (constant-time compare still returns 0 for wrong token).
+	// Wrong token → 401 (tier passes, constant-time compare returns 0 for wrong token).
 	req1, _ := http.NewRequest(http.MethodGet, ts.URL+"/metrics", nil)
 	req1.Header.Set("Authorization", "Bearer wrong-token")
 	resp1, _ := http.DefaultClient.Do(req1)
@@ -435,7 +443,7 @@ func TestGuard_VDS1_MetricsTokenConstantTime(t *testing.T) {
 		t.Errorf("VD-S1 FAIL: expected 401 for empty metrics token, got %d", resp3.StatusCode)
 	}
 
-	t.Logf("PASS VD-S1: /metrics constant-time auth: wrong→401, correct→200, empty→401")
+	t.Logf("PASS VD-S1: /metrics constant-time auth: wrong→401, correct→200, empty→401 (business tier)")
 }
 
 // ─── VD-S2: WebSocket no InsecureSkipVerify ──────────────────────────────────

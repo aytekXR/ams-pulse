@@ -35,7 +35,7 @@ type fakeHealthyLiveProvider struct{}
 
 func (f *fakeHealthyLiveProvider) CurrentSnapshot() *domain.LiveSnapshot {
 	return &domain.LiveSnapshot{
-		ActiveStreams:  1,
+		ActiveStreams: 1,
 		TotalViewers:  5,
 		IngestBitrate: 1500.0,
 		Streams: map[string]*domain.LiveStream{
@@ -84,20 +84,27 @@ func (f *fakeIngestTracker) Snapshot() map[string]ingest.PublisherState {
 }
 
 // setupHealthyTestServer creates an httptest.Server with a non-zero HealthScore snapshot.
+// Uses a Business-tier license so that CheckDataAPI passes for /qoe/ingest (Pro+ gate).
 func setupHealthyTestServer(t *testing.T) (ts *httptest.Server, adminToken string, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
 
+	licKey, licCleanup := makeTestBusinessLicense(t)
+
 	ddlPath := metaDDLPath(t)
 	ddl, err := os.ReadFile(ddlPath)
 	if err != nil {
+		licCleanup()
 		t.Skipf("meta DDL not found: %v", err)
 	}
 	store, err := meta.New(ctx, "sqlite", ":memory:", "vd20b-test-secret")
 	if err != nil {
+		licCleanup()
 		t.Fatalf("meta.New: %v", err)
 	}
 	if err := store.MigrateEmbedded(ctx, string(ddl)); err != nil {
+		store.Close()
+		licCleanup()
 		t.Fatalf("migrate: %v", err)
 	}
 
@@ -110,10 +117,17 @@ func setupHealthyTestServer(t *testing.T) (ts *httptest.Server, adminToken strin
 		Scopes:    []string{"admin"},
 		CreatedAt: 1000,
 	}); err != nil {
+		store.Close()
+		licCleanup()
 		t.Fatalf("CreateToken: %v", err)
 	}
 
-	lic, _ := license.New("", "")
+	lic, err := license.New(licKey, "")
+	if err != nil {
+		store.Close()
+		licCleanup()
+		t.Fatalf("license.New (business): %v", err)
+	}
 	live := &fakeHealthyLiveProvider{}
 	qsvc := query.New(live, nil, lic) // nil conn = ClickHouse not configured; IngestTimeseries returns []
 
@@ -128,6 +142,7 @@ func setupHealthyTestServer(t *testing.T) (ts *httptest.Server, adminToken strin
 	cleanup = func() {
 		ts.Close()
 		store.Close()
+		licCleanup()
 	}
 	return ts, adminToken, cleanup
 }

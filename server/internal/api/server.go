@@ -24,9 +24,9 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/csv"
 	"fmt"
 	"io"
 	"log/slog"
@@ -46,6 +46,8 @@ import (
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 
+	"github.com/pulse-analytics/pulse/server/internal/alert"
+	"github.com/pulse-analytics/pulse/server/internal/alert/channels"
 	"github.com/pulse-analytics/pulse/server/internal/collector/ingest"
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 	"github.com/pulse-analytics/pulse/server/internal/license"
@@ -111,13 +113,13 @@ type AnomalyDetector interface {
 // AnomalyFlagAPI is the API representation of an anomaly flag.
 // Mirrors the AnomalyFlag schema in contracts/openapi/pulse-api.yaml.
 type AnomalyFlagAPI struct {
-	ID       string          `json:"id"`
-	Metric   string          `json:"metric"`
+	ID       string            `json:"id"`
+	Metric   string            `json:"metric"`
 	Scope    domain.AlertScope `json:"scope"`
-	Observed float64         `json:"observed"`
-	Expected float64         `json:"expected"`
-	Sigma    float64         `json:"sigma"`
-	TS       int64           `json:"ts"`
+	Observed float64           `json:"observed"`
+	Expected float64           `json:"expected"`
+	Sigma    float64           `json:"sigma"`
+	TS       int64             `json:"ts"`
 }
 
 // Server hosts all HTTP surfaces of a Pulse node.
@@ -131,6 +133,12 @@ type Server struct {
 	lic     *license.Manager
 	logger  *slog.Logger
 	httpSrv *http.Server
+
+	// sourceMu serializes the count→CheckNodeLimit→create critical section in
+	// handleCreateSource so concurrent requests cannot race past the node-limit
+	// gate (D-041). Sufficient for the single-binary deployment; a multi-instance
+	// deployment would additionally need a DB-level constraint.
+	sourceMu sync.Mutex
 
 	// VD-10: event sink for main-port /ingest/beacon persistence (optional).
 	// When set, beacon events POSTed to the main API port are written to the sink
@@ -678,6 +686,10 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusTooManyRequests, "RATE_LIMITED", "metrics scrape rate limit exceeded")
 		return
 	}
+	if err := s.lic.CheckPrometheus(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
 	if s.cfg.MetricsToken != "" {
 		// VD-S1: use constant-time compare to prevent timing oracle attacks.
 		// ARCHITECTURE §6: all auth comparisons must be constant-time.
@@ -816,7 +828,7 @@ func (s *Server) handleLiveWS(w http.ResponseWriter, r *http.Request) {
 	// Use OriginPatterns to allow specific origins; empty slice = same-origin only.
 	// For development / API clients that use query-param token auth, allow all for now
 	// but remove the insecure flag so the library's default rejection applies.
-	// Production deployments should set PULSE_WS_ALLOWED_ORIGINS.
+	// Production deployments should set PULSE_ALLOWED_WS_ORIGINS.
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		OriginPatterns: s.wsAllowedOrigins(r),
 	})
@@ -906,6 +918,10 @@ func (s *Server) wsBroadcast(ctx context.Context, msg wsMessage) {
 // ─── Analytics ────────────────────────────────────────────────────────────────
 
 func (s *Server) handleAudienceAnalytics(w http.ResponseWriter, r *http.Request) {
+	if err := s.lic.CheckDataAPI(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
 	p, err := parseAudienceParams(r.URL.Query())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_PARAM", err.Error())
@@ -939,6 +955,10 @@ func (s *Server) handleAudienceAnalytics(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handleGeoAnalytics(w http.ResponseWriter, r *http.Request) {
+	if err := s.lic.CheckDataAPI(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
 	q := r.URL.Query()
 	from, to := parseTimeRange(q.Get("from"), q.Get("to"))
 	includeRegion := q.Get("region") == "true" || q.Get("region") == "1"
@@ -959,6 +979,10 @@ func (s *Server) handleGeoAnalytics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeviceAnalytics(w http.ResponseWriter, r *http.Request) {
+	if err := s.lic.CheckDataAPI(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
 	q := r.URL.Query()
 	from, to := parseTimeRange(q.Get("from"), q.Get("to"))
 
@@ -979,6 +1003,10 @@ func (s *Server) handleDeviceAnalytics(w http.ResponseWriter, r *http.Request) {
 // ─── QoE ──────────────────────────────────────────────────────────────────────
 
 func (s *Server) handleQoeSummary(w http.ResponseWriter, r *http.Request) {
+	if err := s.lic.CheckDataAPI(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
 	// VD-11: Query rollup_qoe_1h for real viewer-side QoE metrics.
 	// startup_p50_ms is now populated from quantile state; bitrate timeline
 	// uses the correct field name bitrate_kbps_p50 per the OpenAPI spec.
@@ -1014,6 +1042,11 @@ func (s *Server) handleQoeSummary(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleIngestHealth(w http.ResponseWriter, r *http.Request) {
+	// License gate: Ingest health (F4) requires Pro tier or higher.
+	if err := s.lic.CheckDataAPI(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
 	// VD-20b + VD-21: return health_score (non-zero when ingest_stats received)
 	// and per-stream timeseries + drop_events per OpenAPI IngestStream schema.
 	//
@@ -1233,13 +1266,110 @@ func (s *Server) handleDeleteAlertChannel(w http.ResponseWriter, r *http.Request
 
 func (s *Server) handleTestAlertChannel(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "channelId")
-	ch, err := s.store.GetAlertChannel(r.Context(), id)
-	if err != nil || ch == nil {
+	row, err := s.store.GetAlertChannel(r.Context(), id)
+	if err != nil || row == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "channel not found")
 		return
 	}
-	s.logger.Info("api: test fire channel", "channel_id", id, "type", ch.Type)
-	writeJSON(w, http.StatusAccepted, map[string]any{"accepted": true, "message": "test notification dispatched"})
+	ch, err := buildChannelFromRow(s.store, row)
+	if err != nil {
+		// Do NOT echo decrypt internals — just log and return generic message.
+		s.logger.Warn("test fire: channel config invalid", "channel_id", id, "error", err)
+		writeJSON(w, http.StatusOK, map[string]any{"accepted": false, "message": "channel configuration invalid"})
+		return
+	}
+	if err := alert.TestFireChannel(r.Context(), ch, "test", s.cfg.BaseURL); err != nil {
+		// SECURITY: Do NOT put err.Error() in the body — *url.Error includes the channel
+		// URL which may embed telegram bot tokens / slack webhook URLs (secret leak).
+		s.logger.Warn("test fire failed", "channel_id", id, "type", row.Type, "error", err)
+		msg := fmt.Sprintf("delivery failed for %s channel; check configuration and connectivity", row.Type)
+		writeJSON(w, http.StatusOK, map[string]any{"accepted": false, "message": msg})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"accepted": true, "message": "test notification delivered"})
+}
+
+// buildChannelFromRow constructs a channels.Channel from a stored AlertChannelRow.
+// It decrypts ConfigEnc (secret fields) and merges with ConfigPublic (non-secret
+// fields), then maps the unified config to the typed channels constructor for row.Type.
+func buildChannelFromRow(store *meta.Store, row *meta.AlertChannelRow) (channels.Channel, error) {
+	// Parse public (non-secret) config fields.
+	publicMap := map[string]any{}
+	if row.ConfigPublic != "" && row.ConfigPublic != "{}" && row.ConfigPublic != "null" {
+		if err := json.Unmarshal([]byte(row.ConfigPublic), &publicMap); err != nil {
+			return nil, fmt.Errorf("parse public config: %w", err)
+		}
+	}
+
+	// Decrypt and parse secret config fields.
+	secretMap := map[string]any{}
+	if row.ConfigEnc != "" {
+		decrypted, err := store.Decrypt(row.ConfigEnc)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt channel config: %w", err)
+		}
+		if err := json.Unmarshal([]byte(decrypted), &secretMap); err != nil {
+			return nil, fmt.Errorf("parse secret config: %w", err)
+		}
+	}
+
+	// Merge: secret fields override public in case of collision (should not happen).
+	merged := make(map[string]any, len(publicMap)+len(secretMap))
+	for k, v := range publicMap {
+		merged[k] = v
+	}
+	for k, v := range secretMap {
+		merged[k] = v
+	}
+
+	str := func(key string) string {
+		v, _ := merged[key].(string)
+		return v
+	}
+
+	switch row.Type {
+	case "webhook":
+		cfg := channels.WebhookConfig{
+			URL:    str("webhook_url"), // contract key: webhook_url (was "url" — FIXED)
+			Secret: str("webhook_secret"),
+		}
+		return channels.NewWebhookChannel(cfg), nil
+	case "slack":
+		cfg := channels.SlackConfig{
+			WebhookURL: str("slack_webhook_url"),
+			Channel:    str("slack_channel"), // contract key: slack_channel (was "channel" — FIXED)
+		}
+		return channels.NewSlackChannel(cfg), nil
+	case "email":
+		cfg := channels.EmailConfig{
+			// NOTE: email_to is the only address field in the contract.
+			// SMTP server config (SMTPAddr, From, Username, Password, STARTTLS) is
+			// global/env-level — not stored per-channel (known limitation, followup).
+			SMTPAddr: str("smtp_addr"),
+			From:     str("from"),
+			To:       str("email_to"), // contract key: email_to (was "to" — FIXED)
+			Username: str("username"),
+			Password: str("password"),
+		}
+		if v, ok := merged["starttls"].(bool); ok {
+			cfg.STARTTLS = v
+		}
+		return channels.NewEmailChannel(cfg), nil
+	case "telegram":
+		cfg := channels.TelegramConfig{
+			BotToken: str("telegram_bot_token"),
+			ChatID:   str("telegram_chat_id"), // contract key: telegram_chat_id (was "chat_id" — FIXED)
+		}
+		return channels.NewTelegramChannel(cfg), nil
+	case "pagerduty":
+		cfg := channels.PagerDutyConfig{
+			RoutingKey: str("pagerduty_routing_key"),
+			Severity:   str("pagerduty_severity"), // contract key: pagerduty_severity (was "severity" — FIXED)
+		}
+		return channels.NewPagerDutyChannel(cfg), nil
+	default:
+		return nil, fmt.Errorf("unknown channel type %q", row.Type)
+	}
 }
 
 // ─── Alert history ────────────────────────────────────────────────────────────
@@ -1314,6 +1444,21 @@ func (s *Server) handleListSources(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateSource(w http.ResponseWriter, r *http.Request) {
+	// Serialize the count→gate→create sequence so concurrent creates cannot all
+	// observe the same pre-create count and race past CheckNodeLimit (D-041 TOCTOU).
+	s.sourceMu.Lock()
+	defer s.sourceMu.Unlock()
+
+	// License gate: count existing sources; fail if adding one more would exceed MaxNodes.
+	existing, err := s.store.ListAMSSources(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		return
+	}
+	if err := s.lic.CheckNodeLimit(len(existing) + 1); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_JSON", "invalid request body")
