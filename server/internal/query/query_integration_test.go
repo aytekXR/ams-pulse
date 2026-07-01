@@ -453,14 +453,15 @@ func TestQuery_QoeSummary_RealStartupP50(t *testing.T) {
 		t.Fatalf("QoeSummary: %v", err)
 	}
 
-	// De-flake (was flaky ~20%): the rollup populated by mv_qoe_1h can briefly lag the
-	// INSERT/OPTIMIZE, yielding a transient startup_p50_ms=0. Poll (re-OPTIMIZE + re-query)
-	// until it is non-zero or a timeout elapses. In production the rollup is queried long
-	// after ingest, so this race never occurs — this only stabilizes the test. The deadline is
-	// 90s (was 15s, D-039): on a 2-vCPU CI runner with the CH service container also running, the
-	// mv_qoe_1h aggregation + OPTIMIZE FINAL can exceed 15s; the loop still exits as soon as p50≠0
-	// (~4-6s locally), so this only adds headroom for slow/contended CI and never slows a green run.
-	for deadline := time.Now().Add(90 * time.Second); result.Totals.StartupP50Ms == 0 && time.Now().Before(deadline); {
+	// Wait for the rollup to be populated + merged (OPTIMIZE FINAL), then read.
+	// D-042 removed the real root cause of the old flake: mv_qoe_1h used to compute the
+	// startup quantile over ALL event types, so the five heartbeat startup_ms=0 rows
+	// dragged the median to ~250 and it hovered at the 0 boundary — no amount of polling
+	// (15s→90s, D-039) fixed that because the value was legitimately near-0. Migration 0004
+	// switches to quantilesStateIf(event_type='startup_complete'), so once the rollup is
+	// present the value is deterministically ≈1000. This loop now only waits for the MV
+	// write + merge to become visible; 30s is ample headroom on a contended 2-vCPU runner.
+	for deadline := time.Now().Add(30 * time.Second); result.Totals.StartupP50Ms == 0 && time.Now().Before(deadline); {
 		_ = conn.Exec(ctx, fmt.Sprintf("OPTIMIZE TABLE %s.rollup_qoe_1h FINAL", dbName))
 		time.Sleep(300 * time.Millisecond)
 		result, err = qsvc.QoeSummary(ctx, query.QoeParams{From: from, To: to, Interval: "hour"})
@@ -469,12 +470,15 @@ func TestQuery_QoeSummary_RealStartupP50(t *testing.T) {
 		}
 	}
 
-	// VD-11 assertion: startup_p50_ms must be non-zero.
-	// The MV includes all matching event types (startup_complete + heartbeat), so the
-	// exact quantile depends on the mix. The critical assertion is that startup_p50_ms
-	// comes from rollup_qoe_1h rather than always being 0 (the pre-fix behavior).
-	if result.Totals.StartupP50Ms == 0 {
-		t.Error("VD-11 FAIL: startup_p50_ms is 0 (rollup_qoe_1h not being queried)")
+	// VD-11 assertion: startup_p50_ms must reflect ONLY the real startup_complete samples
+	// [500,800,1000,1200,1500] → median ≈ 1000. Since D-042 the MV computes the startup
+	// quantile with quantilesStateIf(event_type='startup_complete'), so the five heartbeat
+	// startup_ms=0 rows no longer dilute it. The value must land inside the real range; the
+	// pre-D-042 buggy MV produced ~250 (< 500), which this range check now catches.
+	if result.Totals.StartupP50Ms < 500 || result.Totals.StartupP50Ms > 1500 {
+		t.Errorf("VD-11 FAIL: startup_p50_ms=%.1f outside the real startup range [500,1500] — "+
+			"heartbeat zeros leaking into the startup quantile? (see mv_qoe_1h / migration 0004)",
+			result.Totals.StartupP50Ms)
 	} else {
 		t.Logf("startup_p50_ms=%.1f startup_p95_ms=%.1f", result.Totals.StartupP50Ms, result.Totals.StartupP95Ms)
 		// Startup_p95_ms must be >= p50.
