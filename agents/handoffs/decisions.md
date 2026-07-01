@@ -1419,3 +1419,37 @@ zeros) and the strengthened `[500,1500]` assertion now guards it — but it was 
 minute) — read the query, don't bump the timeout.** Pushed `a5b74a7`; **`ci` run 28543676845 = SUCCESS, all 7 jobs —
 its integration step ran at UTC 19:58 (minute 58, INSIDE the failing window), so this green is a live confirmation, not
 minute-luck.** The chronic QoE flake (D-038→D-042) is closed.
+
+## D-043 · 2026-07-01 · pulse-test-backfill Sub-workflow A (Go unit coverage) — 49.3%→55.6%, adversarially verified
+
+Ran Phase-2 **Sub-workflow A** (`PRODUCTION-READINESS.md` §"Phase 2") as a Workflow: 8 packages fanned out, each an
+author→adversarial-verify→conditional-repair pipeline. **8/8 authored, SOLID=6 / MIXED=2(repaired) / WEAK=0, no new
+deps, no production-code changes, full `-race` suite green (0 FAIL), gofmt+vet clean.** Total coverage **49.3%→55.6%**
+(+6.3pp). Per-package (plain non-integration `-race` run):
+
+| pkg | before→after | pkg | before→after |
+|---|---|---|---|
+| `internal/config` | 41.9→73.4 | `internal/collector/logtail` | 92.1 (repaired, no Δ) |
+| `internal/license` | 36.9→91.5 | `internal/collector/restpoller` | 74.7→81.9 |
+| `internal/store/meta` | 29.7→52.8 | `internal/query` | 6.7→11.8 (pure fns; full path stays integration) |
+| `internal/alert/channels` | 56.8→74.0 | `internal/store/clickhouse` | **0.0→14.1** (pure fns; lifted OFF 0.0%) |
+
+The doc's stale "3 packages at 0.0%" is resolved — `config`/`query`/`clickhouse` all now have plain-run coverage
+(`query` & `clickhouse` got new **non-integration** `*_test.go` for their Conn-free pure fns). Remaining 0.0% is only
+`internal/domain` (pure structs) and `store/clickhouse/migrations` (embed-only) — both justified.
+
+**The adversarial verify earned its keep** (this session's recurring false-green risk): it killed a hollow `logtail`
+test (`TestNew_Defaults` — asserted nothing that would fail on a regression) and **replaced `time.Sleep`-based goroutine
+sync with polling loops** (the exact timing-flake class behind D-039/D-042). The critical `restpoller` test
+`TestRestPoller_MultiApp_NoFalseEnd` (D-029 regression) includes a non-vacuous guard: it asserts app-B DOES emit
+`publish_end`, proving the app-A negative assertion isn't vacuous.
+
+**BUG FOUND (reported, NOT fixed — belongs in `pulse-prod-harden`):** `config.validate()` (`config.go:399-416`) checks
+only `server.listen`, `retention.raw_days`, `beacon.sample_rate` — it **never validates `cfg.SecretKey`**, so the server
+can start with no AES-GCM key (secrets stored unencrypted / zero-key). The finder correctly recorded it and skipped the
+would-fail assertion rather than paper over it. Fix + tier-boundary decision belongs with Phase-3 secrets work.
+
+**Still pending to fully close Phase 2:** (i) an **enforced CI coverage gate** (the mandate's "so CI cannot regress" —
+NOT yet added; coverage-raising is done, gate enforcement is not); (ii) **Sub-workflow B** (web `vitest --coverage` +
+thresholds + msw); (iii) **Sub-workflow C** (response-body↔OpenAPI conformance, `e2e.yml` extensions, Playwright
+skeleton). Committed `test(server) D-043` (`0483b3e`); push + CI watch next.

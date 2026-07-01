@@ -46,8 +46,12 @@ bump the timeout; **(c)** wall-clock-minute-dependent tests: run/repro inside th
    a signed test POST → 200.
 2. **Retire the stale `ams-integration` branch** (§3 Step B; `main` fully contains it) + apply branch protection + a `v*`
    tag (U4 — needs repo-admin).
-3. **Run `pulse-test-backfill`** (§6) — the 0%/low-coverage packages + the missing CI gates (coverage gate, Playwright,
-   response-body contract tests). This is the largest remaining lever for "production ready."
+3. **Finish `pulse-test-backfill`** (§6). **Sub-workflow A (Go unit coverage) is DONE (D-043, `0483b3e`): 49.3%→55.6%, 8
+   packages, adversarially verified, 0 WEAK.** REMAINING to close Phase 2: **(i)** enforced **CI coverage gate** (so CI
+   can't regress — coverage-raising is done, the gate is NOT); **(ii)** Sub-workflow **B** (web `vitest --coverage` +
+   thresholds + msw); **(iii)** Sub-workflow **C** (response-body↔OpenAPI conformance, `e2e.yml` extensions, Playwright).
+   Also **fix the `config.validate()` SecretKey bug** found by D-043 (server starts with no AES-GCM key — see D-043;
+   belongs with Phase-3 secrets).
 4. **U3 (operator): activate a Pro+ Pulse license** to unblock real QoE/beacon e2e (the `viewer_*` QoE fields now flow end
    to end through the API — D-041 item 4 — but real beacon data still needs the license).
 
