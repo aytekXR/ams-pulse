@@ -277,7 +277,13 @@ func TestVD24_IngestQoE_TimeseriesNonEmpty(t *testing.T) {
 		t.Fatalf("CreateToken: %v", err)
 	}
 
-	lic, _ := license.New("", "")
+	// GET /qoe/ingest is gated behind CheckDataAPI (Pro+) since D-041; provision a Pro license.
+	proKey, licCleanup := makeTestProLicense(t)
+	defer licCleanup()
+	lic, err := license.New(proKey, "")
+	if err != nil {
+		t.Fatalf("license.New (pro): %v", err)
+	}
 	live := &vd24LiveProvider{streamID: streamID, app: app, nodeID: nodeID}
 	// Wire real CH conn so IngestTimeseries queries real data.
 	qsvc := query.New(live, conn, lic)
