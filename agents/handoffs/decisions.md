@@ -1361,3 +1361,42 @@ again and was caught both times.
 = 60ms` and measured **68.8ms** under the CPU-contended whole-suite `-race` run. Re-ran isolated/unloaded `-count=3` → **3/3
 pass**. Same D-039 family (a too-tight timing budget on a contended runner). Queued for `pulse-test-backfill`/CI-hardening
 (loosen the budget like D-039 did 15s→90s) — a real future CI-red risk on the 2-vCPU runner, but out of D-041 scope.
+
+## D-042 · 2026-07-01 · CI red root-caused to a REAL QoE bug (startup-quantile dilution), not a flake — fixed in the MV
+
+**Operator: "still ci fails, take a look with gh."** Read the actual failure via `gh` (run 28431229085 on `4846a5e`, the
+`server` job's **Integration tests** step): `--- FAIL: TestQuery_QoeSummary_RealStartupP50 (92.45s) … startup_p50_ms is 0`.
+D-039 had raised this test's poll window 15s→90s believing it was a pure timing flake — **that diagnosis was incomplete**
+(the D-038/D-039 "guess-the-flake" trap again). Root cause found by reading the schema + test, not guessing:
+
+`mv_qoe_1h` / `mv_qoe_1d` computed the startup-time quantile as `quantilesState(0.5,0.95)(toFloat32(startup_ms))` over
+**every** matching event type (`startup_complete, heartbeat, rebuffer_end, error`) — but only `startup_complete` carries a
+real `startup_ms`; the rest are **0**. The test seeds 5 `startup_complete` (500,800,1000,1200,1500) + 5 `heartbeat`
+(startup_ms=0), so the median landed at ~250 and **hovered at the 0 boundary** — legitimately near-0, which is why *no*
+amount of polling (15s or 90s) ever fixed it. This is **also a real production bug**: the QoE dashboard's reported median
+startup time was diluted toward 0 by every heartbeat.
+
+**Fix — migration `0004_qoe_startup_quantile_fix.sql`:** drop+recreate both QoE MVs with
+`quantilesStateIf(toFloat32(startup_ms), event_type = 'startup_complete')` (the `-If` combinator keeps the state type
+`AggregateFunction(quantilesState(0.5,0.95), Float32)` so the existing rollup columns are compatible). Every other
+aggregate (rebuffer/error/watch/session/bitrate) and the broad `WHERE` are byte-for-byte unchanged. Already-aggregated
+rollup rows are immutable (not rewritten); new ingest is correct — historical backfill is an ops task (re-run the MV SELECT
+for the range). The test now pins `startup_p50_ms ∈ [500,1500]` (the old buggy ~250 is caught) and its poll window is cut
+90s→30s (only waits for MV write+merge now, not a near-0 value).
+
+**Verified against the CI-pinned `/tmp/clickhouse` 26.6.1.1193:** migration applies; `startup_p50_ms = 1000.0` (exact
+median); **5/5 pass under a 2-core cpuset** (the CI runner's constraint); full `query` + `store/clickhouse` integration
+suite green under the same constraint (no regression).
+
+**Second red, then GREEN — a missed D-041 gate regression surfaced on CI.** After pushing (`c9f2bed`), `ci` run
+28541473183 went red on a DIFFERENT integration test: `TestVD24_IngestQoE_TimeseriesNonEmpty` GETs `/qoe/ingest` with a
+**free** license and D-041's new `CheckDataAPI` gate now 403s it (same class as the `vd19` fix, missed for `vd24`). Root
+cause of the miss: **the unit `-race` gate never runs `-tags integration` api tests** — the `internal/api` package has
+integration-only tests (`vd19`, `vd24`) that only execute under the CI integration step; my local gate, the round-2
+author's `go test ./... -race`, and 3 adversarial skeptics (all `-run` subsets) never ran them. Fixed by provisioning a Pro
+license in `vd24` (`fix(api) D-042`, `6709343`). Then ran the LITERAL CI command `go test -tags integration ./... -timeout
+300s` under a 2-core cpuset with `/tmp/clickhouse` 26.6.1: **0 FAIL, every package `ok`**. Pushed; **`ci` run 28542172430 =
+SUCCESS, all 7 jobs** (server integration + docker-build green) — confirmed via `gh`. Memory [[faithful-ci-reproduction]]
+updated with both traps (the D-039 "just bump the timeout" misfix; unit `-race` silently skipping integration api tests).
+`internal/cluster`'s `TestDiscovery_NewNodeVisible` remains a separately-tracked timing flake (D-041 note, passed this run);
+the scheduled `ams-version-matrix` workflow is separately red (pre-existing, unrelated).

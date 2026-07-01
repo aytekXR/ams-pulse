@@ -28,8 +28,15 @@ gofmt struct-alignment nits; the scheduled `ams-version-matrix.yml` workflow is 
 **✅ `pulse-p1-gaps` is DONE (D-041, 2026-06-30).** All 4 P0 silently-stubbed features are closed, TDD + **two
 adversarial-verify rounds** (the verify caught round-1's green-but-false-positive tests — wrong contract keys, an invented
 AMS fixture, a secret-leaking error body; all fixed). Coverage 47.5%→49.2%, full `-race` suite green (23 pkgs, 0 FAIL),
-gofmt-ratchet clean, web `npm ci && vite build` (prod path) green. Details in **D-041** + §2/§4a below. **NOTE: D-041 is
-committed locally but NOT yet pushed** (operator to review; `git push origin main` when ready, then `gh run watch` CI).
+gofmt-ratchet clean, web `npm ci && vite build` (prod path) green. Details in **D-041** + §2/§4a below.
+
+**✅ PUSHED + CI GREEN (2026-07-01).** D-041 (4 commits) + **D-042** are on `origin/main` (HEAD `6709343`); `ci` run
+**28542172430 = success, all 7 jobs**. **D-042** fixed the CI red, which was a **real QoE bug** not a flake: `mv_qoe_1h`
+computed the startup quantile over all event types so heartbeat `startup_ms=0` rows diluted the reported median to ~0
+(migration `0004` → `quantilesStateIf(event_type='startup_complete')`); a second red then exposed a **missed D-041 gate
+regression** — `vd24` (integration-tagged) hit the new `/qoe/ingest` `CheckDataAPI` gate on a free tier (fixed → Pro).
+Lesson banked in memory: **after any API-handler/gate/query change, run `go test -tags integration ./...` with
+`/tmp/clickhouse` — the unit `-race` gate silently skips the `internal/api` integration tests (`vd19`/`vd24`).**
 
 **First action (next session) — pick up the remaining production-readiness backlog, in order:**
 1. **Wire the Caddy `/webhook/*` route** (§3 Step C) so AMS lifecycle webhooks reach `pulse:8092` (today 404). Verify with
