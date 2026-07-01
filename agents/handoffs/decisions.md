@@ -1416,4 +1416,6 @@ to the bucket's hour (`baseTime.Truncate(time.Hour).Add(-time.Hour)`), matching 
 `-1h`. **Migration 0004 (`quantilesStateIf`) is a genuine prod-metric bug fix (startup median must exclude heartbeat
 zeros) and the strengthened `[500,1500]` assertion now guards it — but it was NOT the flake driver.** Lesson banked:
 **a "timing flake" that never resolves with a longer wait is usually a deterministic per-condition bug (here, wall-clock
-minute) — read the query, don't bump the timeout.** Pushed `a5b74a7`; final `gh` watch pending.
+minute) — read the query, don't bump the timeout.** Pushed `a5b74a7`; **`ci` run 28543676845 = SUCCESS, all 7 jobs —
+its integration step ran at UTC 19:58 (minute 58, INSIDE the failing window), so this green is a live confirmation, not
+minute-luck.** The chronic QoE flake (D-038→D-042) is closed.

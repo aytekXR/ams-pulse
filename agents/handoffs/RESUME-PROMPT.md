@@ -33,8 +33,9 @@ time-window fix `a5b74a7`) are on `origin/main`. D-042 shipped **three** real fi
 `quantilesStateIf(event_type='startup_complete')` — the startup median must exclude heartbeat `startup_ms=0` rows (real
 dashboard-metric bug, guarded by the strengthened `[500,1500]` assertion); (2) `vd24` integration test upgraded to a Pro
 license after the D-041 `/qoe/ingest` `CheckDataAPI` gate 403'd it; (3) **the actual flake** — the wall-clock time-window
-boundary (above), proven red→green at UTC minute 45 + full `-tags integration ./...` suite green at minute 47–48. **Final
-CI watch on `a5b74a7` pending** (the prior run 28542172430 "green" was minute-luck). Lessons banked in memory
+boundary (above), proven red→green at UTC minute 45 + full `-tags integration ./...` suite green at minute 47–48. **CI
+CONFIRMED GREEN: `ci` run 28543676845 = success, all 7 jobs, integration ran at UTC 19:58 (minute 58 — inside the failing
+window, so a live confirmation not minute-luck).** Lessons banked in memory
 [[faithful-ci-reproduction]]: **(a)** after any API-handler/gate/query change, run `go test -tags integration ./...` with
 `/tmp/clickhouse` — the unit `-race` gate silently skips the `internal/api` integration tests (`vd19`/`vd24`); **(b)** a
 "timing flake" that never resolves with a longer wait is usually a deterministic per-condition bug — read the query, don't
