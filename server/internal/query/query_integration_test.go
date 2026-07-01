@@ -441,7 +441,14 @@ func TestQuery_QoeSummary_RealStartupP50(t *testing.T) {
 	fakeLive := &fakeLiveProviderQ{}
 	qsvc := query.New(fakeLive, conn, nil)
 
-	from := baseTime.Add(-30 * time.Minute)
+	// from MUST sit at/before the rollup bucket, which is toStartOfHour(baseTime) — i.e.
+	// up to 59min BEFORE baseTime. The old `baseTime-30min` was the true root cause of this
+	// test's chronic flake (misdiagnosed as timing in D-038/39/40): when the wall-clock minute
+	// was >30, toStartOfHour(baseTime) fell before baseTime-30min, so the query's `bucket >= from`
+	// filter dropped the only row → startup_p50_ms=0 forever (no poll can un-filter present data;
+	// that's why even a 92s poll failed at 19:37). Anchoring to the bucket's hour makes it
+	// wall-clock-independent. Verified vs ClickHouse: excluded at min-37, included after the fix.
+	from := baseTime.Truncate(time.Hour).Add(-time.Hour)
 	to := time.Now().UTC().Add(time.Hour)
 
 	result, err := qsvc.QoeSummary(ctx, query.QoeParams{
@@ -453,15 +460,12 @@ func TestQuery_QoeSummary_RealStartupP50(t *testing.T) {
 		t.Fatalf("QoeSummary: %v", err)
 	}
 
-	// Wait for the rollup to be populated + merged (OPTIMIZE FINAL), then read.
-	// D-042 removed the real root cause of the old flake: mv_qoe_1h used to compute the
-	// startup quantile over ALL event types, so the five heartbeat startup_ms=0 rows
-	// dragged the median to ~250 and it hovered at the 0 boundary — no amount of polling
-	// (15s→90s, D-039) fixed that because the value was legitimately near-0. Migration 0004
-	// switches to quantilesStateIf(event_type='startup_complete'), so once the rollup is
-	// present the value is deterministically ≈1000. This loop now only waits for the MV
-	// write + merge to become visible; 30s is ample headroom on a contended 2-vCPU runner.
-	for deadline := time.Now().Add(30 * time.Second); result.Totals.StartupP50Ms == 0 && time.Now().Before(deadline); {
+	// Short belt-and-suspenders wait for MV write + FINAL-merge visibility. The chronic flake
+	// was NOT population lag — it was the `from` time-window boundary above (now fixed), which is
+	// why the old 15s→90s poll (D-039) never helped. With `from` anchored to the bucket's hour and
+	// the MV firing synchronously on INSERT, the value is deterministically ≈1000; this loop should
+	// exit on the first iteration. Kept only to absorb any residual async-visibility jitter.
+	for deadline := time.Now().Add(15 * time.Second); result.Totals.StartupP50Ms == 0 && time.Now().Before(deadline); {
 		_ = conn.Exec(ctx, fmt.Sprintf("OPTIMIZE TABLE %s.rollup_qoe_1h FINAL", dbName))
 		time.Sleep(300 * time.Millisecond)
 		result, err = qsvc.QoeSummary(ctx, query.QoeParams{From: from, To: to, Interval: "hour"})
