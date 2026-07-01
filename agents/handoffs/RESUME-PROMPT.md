@@ -12,31 +12,33 @@
 
 ## ▶ START HERE (next session — operator-directed 2026-06-29/30)
 
-**CI is GREEN ✅ (D-039, 2026-06-30; run 28429722100, all 7 jobs pass).** The `ci` workflow's only red job (`server` →
-"Integration tests") was a single **flaky test** — `TestQuery_QoeSummary_RealStartupP50` polled just **15s** for the
-`mv_qoe_1h → rollup_qoe_1h` materialized-view aggregation, too short on the **2-vCPU** GitHub runner (the CH service
-container runs alongside it). Fixed by raising the poll window to **90s** (commit `547e293`; the loop still exits in
-~4-6s once the rollup populates, so green runs are not slowed). **It was NOT the unpinned-`master` ClickHouse binary**
-(an earlier wrong hypothesis, D-038): pinning does NOT fix it — both 26.6.1 and master fail under CPU constraint, so the
-CH version is irrelevant. `gh` is installed+authed (U6 ✅) — read/verify CI directly with
-`gh run watch $(gh run list --branch main --workflow=ci.yml -L1 --json databaseId -q '.[0].databaseId')`.
-**CI ClickHouse binary is now PINNED (D-040):** `ci.yml`'s integration step downloads
-`clickhouse-common-static-26.6.1.1193` (deterministic — was an unpinned rolling `master`); verified green end-to-end
-(run 28430661255, all 7 jobs). *Remaining optional hygiene (non-blocking):* `query_integration_test.go` has pre-existing
-gofmt struct-alignment nits; the scheduled `ams-version-matrix.yml` workflow is separately red (a different, pre-existing issue).
+**CI: the `TestQuery_QoeSummary_RealStartupP50` flake is FINALLY root-caused + fixed (D-042, `a5b74a7`) — see the block
+below.** ⚠️ The earlier "fixes" were all misdiagnoses: D-038 blamed the unpinned `master` CH binary (wrong); D-039 blamed
+a too-short 15s poll and bumped it to 90s (wrong — it failed even at 92s); this session first blamed MV startup-quantile
+dilution (a real but separate prod bug, migration `0004`). The ACTUAL flake was a **wall-clock time-window boundary**:
+the test queried `from = baseTime-30min` while the rollup bucket is `toStartOfHour(baseTime)`, so whenever the UTC minute
+was **>30** the only row was filtered out → `p50=0` (deterministic per-minute, not timing — no poll could fix it). CI was
+literal **minute-roulette**. `gh` is installed+authed (U6 ✅): verify with
+`gh run watch $(gh run list --branch main --workflow=ci.yml -L1 --json databaseId -q '.[0].databaseId') --exit-status`.
+CI ClickHouse binary is PINNED (D-040, `clickhouse-common-static-26.6.1.1193`). *Separately red (pre-existing, unrelated):*
+the scheduled `ams-version-matrix.yml` workflow.
 
 **✅ `pulse-p1-gaps` is DONE (D-041, 2026-06-30).** All 4 P0 silently-stubbed features are closed, TDD + **two
 adversarial-verify rounds** (the verify caught round-1's green-but-false-positive tests — wrong contract keys, an invented
 AMS fixture, a secret-leaking error body; all fixed). Coverage 47.5%→49.2%, full `-race` suite green (23 pkgs, 0 FAIL),
 gofmt-ratchet clean, web `npm ci && vite build` (prod path) green. Details in **D-041** + §2/§4a below.
 
-**✅ PUSHED + CI GREEN (2026-07-01).** D-041 (4 commits) + **D-042** are on `origin/main` (HEAD `6709343`); `ci` run
-**28542172430 = success, all 7 jobs**. **D-042** fixed the CI red, which was a **real QoE bug** not a flake: `mv_qoe_1h`
-computed the startup quantile over all event types so heartbeat `startup_ms=0` rows diluted the reported median to ~0
-(migration `0004` → `quantilesStateIf(event_type='startup_complete')`); a second red then exposed a **missed D-041 gate
-regression** — `vd24` (integration-tagged) hit the new `/qoe/ingest` `CheckDataAPI` gate on a free tier (fixed → Pro).
-Lesson banked in memory: **after any API-handler/gate/query change, run `go test -tags integration ./...` with
-`/tmp/clickhouse` — the unit `-race` gate silently skips the `internal/api` integration tests (`vd19`/`vd24`).**
+**✅ PUSHED (2026-07-01).** D-041 (4 commits) + **D-042** (migration `0004` MV fix, `vd24` Pro-license fix, docs, and the
+time-window fix `a5b74a7`) are on `origin/main`. D-042 shipped **three** real fixes en route to green: (1) migration `0004`
+`quantilesStateIf(event_type='startup_complete')` — the startup median must exclude heartbeat `startup_ms=0` rows (real
+dashboard-metric bug, guarded by the strengthened `[500,1500]` assertion); (2) `vd24` integration test upgraded to a Pro
+license after the D-041 `/qoe/ingest` `CheckDataAPI` gate 403'd it; (3) **the actual flake** — the wall-clock time-window
+boundary (above), proven red→green at UTC minute 45 + full `-tags integration ./...` suite green at minute 47–48. **Final
+CI watch on `a5b74a7` pending** (the prior run 28542172430 "green" was minute-luck). Lessons banked in memory
+[[faithful-ci-reproduction]]: **(a)** after any API-handler/gate/query change, run `go test -tags integration ./...` with
+`/tmp/clickhouse` — the unit `-race` gate silently skips the `internal/api` integration tests (`vd19`/`vd24`); **(b)** a
+"timing flake" that never resolves with a longer wait is usually a deterministic per-condition bug — read the query, don't
+bump the timeout; **(c)** wall-clock-minute-dependent tests: run/repro inside the failing window (UTC minute >30 here).
 
 **First action (next session) — pick up the remaining production-readiness backlog, in order:**
 1. **Wire the Caddy `/webhook/*` route** (§3 Step C) so AMS lifecycle webhooks reach `pulse:8092` (today 404). Verify with

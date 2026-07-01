@@ -1400,3 +1400,20 @@ SUCCESS, all 7 jobs** (server integration + docker-build green) — confirmed vi
 updated with both traps (the D-039 "just bump the timeout" misfix; unit `-race` silently skipping integration api tests).
 `internal/cluster`'s `TestDiscovery_NewNodeVisible` remains a separately-tracked timing flake (D-041 note, passed this run);
 the scheduled `ams-version-matrix` workflow is separately red (pre-existing, unrelated).
+
+**CORRECTION — that "GREEN" was minute-luck; the REAL root cause was a wall-clock time-window bug (fixed in `a5b74a7`).**
+Run 28542172430 passed only because it happened to run at UTC minute ≤30. The **very next** push (docs-only, `624c990`,
+identical code) went RED again on the SAME `TestQuery_QoeSummary_RealStartupP50` — `startup_p50_ms=0` at **19:37** (minute
+37). Reading the test (not guessing — the recurring D-038/39/40 trap once more) exposed the actual bug: the test sets
+`baseTime = now-2h` and events land in `toStartOfHour(baseTime)`, but `QoeSummary` was queried with `from = baseTime-30min`
+and filters `bucket >= from`. **When the wall-clock minute is >30, `toStartOfHour(baseTime)` sits before `baseTime-30min`,
+so the one rollup row is filtered out → `p50=0` for the entire poll window.** No poll ever un-filters present data — which
+is exactly why D-039's 15s→90s bump could not work and the HEAD run failed at *92s*. The test passed ~half of every hour
+(minute 0–30) and failed the other half; CI's red/green was pure minute-roulette. Verified against ClickHouse
+(`toStartOfHour(bt) >= bt-30min` = 0 at min-37, 1 at min-12) and proven **red→green at UTC minute 45** (old `from`→`p50=0`
+FAIL; new `from`→`p50=1000` PASS), plus the full `-tags integration ./...` suite green at minute 47–48. Fix: anchor `from`
+to the bucket's hour (`baseTime.Truncate(time.Hour).Add(-time.Hour)`), matching sibling tests in the same file already on
+`-1h`. **Migration 0004 (`quantilesStateIf`) is a genuine prod-metric bug fix (startup median must exclude heartbeat
+zeros) and the strengthened `[500,1500]` assertion now guards it — but it was NOT the flake driver.** Lesson banked:
+**a "timing flake" that never resolves with a longer wait is usually a deterministic per-condition bug (here, wall-clock
+minute) — read the query, don't bump the timeout.** Pushed `a5b74a7`; final `gh` watch pending.
