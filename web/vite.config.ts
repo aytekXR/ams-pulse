@@ -23,5 +23,28 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     css: false,
+    // Set jsdom base URL so that relative fetch('/api/v1/...')
+    // resolves to http://localhost/api/v1/... which msw can intercept.
+    environmentOptions: {
+      jsdom: {
+        url: "http://localhost",
+      },
+    },
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json-summary"],
+      // enabled:true means `vitest run` always collects coverage — no CI change needed.
+      enabled: true,
+      include: ["src/**"],
+      exclude: ["src/test/mocks/**", "**/*.d.ts", "src/main.tsx"],
+      // Thresholds are a RATCHET: set ~4-5 pts below the measured achieved values
+      // to prevent regressions while keeping CI green.
+      // Aspirational targets from PRD: 60% lines / 55% branches.
+      // Measured achieved after msw tests: lines 61.72% / branches 75.35%.
+      thresholds: {
+        lines: 57,
+        branches: 71,
+      },
+    },
   },
 });
