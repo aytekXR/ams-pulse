@@ -84,7 +84,7 @@ func (s *Service) LiveOverview(ctx context.Context, app, nodeID, tenant string) 
 			ao.Publishers++
 		}
 	}
-	var apps []AppOverview
+	apps := []AppOverview{} // non-nil: empty must serialize as [] not null (OpenAPI type: array)
 	for _, ao := range appMap {
 		apps = append(apps, *ao)
 	}
@@ -112,7 +112,7 @@ func (s *Service) LiveOverview(ctx context.Context, app, nodeID, tenant string) 
 	}
 
 	// Node health.
-	var nodes []NodeHealth
+	nodes := []NodeHealth{} // non-nil: empty must serialize as [] not null (OpenAPI type: array)
 	for nid, n := range snap.Nodes {
 		if nodeID != "" && nid != nodeID {
 			continue
@@ -316,7 +316,7 @@ func (s *Service) FleetNodes(ctx context.Context, limit int, cursor string) (*Fl
 		return &FleetNodeListResult{Items: []FleetNode{}, Meta: PaginatedMeta{}}, nil
 	}
 
-	var nodes []FleetNode
+	nodes := []FleetNode{} // non-nil: empty must serialize as [] not null (OpenAPI type: array)
 	for nid, n := range snap.Nodes {
 		// VD-39: use real role from cluster discovery instead of hardcoded "standalone".
 		// Falls back to "standalone" when discovery has not polled the node yet.

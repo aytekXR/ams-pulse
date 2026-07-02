@@ -3,11 +3,69 @@
 package query
 
 import (
+	"context"
+	"encoding/json"
 	"math"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/pulse-analytics/pulse/server/internal/domain"
 )
+
+// emptyLiveProvider returns a non-nil snapshot with zero streams/nodes — the case
+// that made LiveOverview/FleetNodes serialize apps/nodes as JSON null (nil slice).
+type emptyLiveProvider struct{}
+
+func (emptyLiveProvider) CurrentSnapshot() *domain.LiveSnapshot {
+	return &domain.LiveSnapshot{
+		Streams: map[string]*domain.LiveStream{},
+		Nodes:   map[string]*domain.LiveNodeStats{},
+	}
+}
+
+func (emptyLiveProvider) Subscribe() (<-chan *domain.LiveSnapshot, func()) {
+	ch := make(chan *domain.LiveSnapshot)
+	return ch, func() {}
+}
+
+// TestLiveOverview_EmptyArrays_SerializeAsBrackets_NotNull guards the D-045 fix:
+// with zero streams/nodes, LiveOverview.apps/nodes and FleetNodes.items MUST
+// serialize as [] (OpenAPI `type: array`), never null. Before the fix these were
+// nil slices (`var apps []AppOverview`) and json.Marshal encoded them as null,
+// violating the spec — caught by the response-body conformance test's empty path.
+func TestLiveOverview_EmptyArrays_SerializeAsBrackets_NotNull(t *testing.T) {
+	qsvc := New(emptyLiveProvider{}, nil, nil) // conn nil: these paths read the live snapshot, not ClickHouse
+
+	ov, err := qsvc.LiveOverview(context.Background(), "", "", "")
+	if err != nil {
+		t.Fatalf("LiveOverview: %v", err)
+	}
+	ovJSON, err := json.Marshal(ov)
+	if err != nil {
+		t.Fatalf("marshal LiveOverview: %v", err)
+	}
+	s := string(ovJSON)
+	if strings.Contains(s, `"apps":null`) || !strings.Contains(s, `"apps":[]`) {
+		t.Errorf("LiveOverview apps must serialize as [] not null: %s", s)
+	}
+	if strings.Contains(s, `"nodes":null`) || !strings.Contains(s, `"nodes":[]`) {
+		t.Errorf("LiveOverview nodes must serialize as [] not null: %s", s)
+	}
+
+	fleet, err := qsvc.FleetNodes(context.Background(), 50, "")
+	if err != nil {
+		t.Fatalf("FleetNodes: %v", err)
+	}
+	fleetJSON, err := json.Marshal(fleet)
+	if err != nil {
+		t.Fatalf("marshal FleetNodes: %v", err)
+	}
+	if fs := string(fleetJSON); strings.Contains(fs, `"items":null`) || !strings.Contains(fs, `"items":[]`) {
+		t.Errorf("FleetNodes items must serialize as [] not null: %s", fs)
+	}
+}
 
 // ─── jsonSafeFloat ────────────────────────────────────────────────────────────
 
