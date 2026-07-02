@@ -1,9 +1,19 @@
-# AMS compatibility matrix — integration tests against real Ant Media Server
-# containers. Direct mitigation for PRD §7.13 risk "AMS API/log format changes
-# across versions". Runs nightly + on collector/amsclient changes.
+# AMS compatibility matrix — verifies the collector normalizer + amsclient handle
+# the AMS REST v2 wire format across supported AMS versions. Direct mitigation for
+# PRD §7.13 risk "AMS API/log format changes across versions". Runs nightly + on
+# collector/amsclient changes.
 #
-# D-002 note: Docker unavailable on local dev machine; this workflow runs in CI
-# where Docker is available. Local verification uses qa/mock-ams instead.
+# D-044: rewritten. The previous version pulled `antmedia/ant-media-server-community:<ver>`
+# docker images and stood up ClickHouse — but (a) those public image tags no longer exist
+# (Docker Hub returns 404 for every tag AND the repo), so every leg silently fell back to
+# mock-ams, making the "version matrix" fictional; (b) it built `./server/cmd/pulse/` from the
+# repo ROOT where there is no go.mod (the module is at server/), so the build step failed
+# outright and the job had never actually run; (c) ClickHouse + `pulse migrate` were set up but
+# the collector matrix tests need neither. Per-version wire-format differences are covered
+# in-process by TestAMSVersionMatrix's built-in mock profiles (see
+# server/internal/collector/ams_version_matrix_test.go), so this workflow now runs those
+# (no Docker, no ClickHouse) plus a REST v2 contract smoke against the mock-ams binary.
+# When a pullable/authenticated real-AMS image becomes available, add a container-backed job.
 name: ams-version-matrix
 
 on:
@@ -13,186 +23,63 @@ on:
     paths:
       - "server/pkg/amsclient/**"
       - "server/internal/collector/**"
+      - "qa/mock-ams/**"
       - "contracts/events/ams-server-event.schema.json"
+      - ".github/workflows/ams-version-matrix.yml"
   workflow_dispatch:
-
-env:
-  # AMS community edition docker image (public, no auth required)
-  AMS_IMAGE: "antmedia/ant-media-server-community"
-  AMS_REST_PORT: 5080
 
 jobs:
   matrix-test:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # Supported AMS versions per PRD §7.13 compatibility matrix.
-        # QA-01 maintains this list: add new releases as they ship.
-        ams-version: ["2.10.0", "2.14.0", "3.0.2"]
-
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          # Match the version used in ci.yml (CGO_ENABLED=0 required throughout).
+          # Match ci.yml (project standardized on 1.25 — D-032).
           go-version: "1.25"
 
-      - name: Build pulse binary (CGO_ENABLED=0)
-        run: CGO_ENABLED=0 go build -o /tmp/pulse ./server/cmd/pulse/
-
-      - name: Build mock-ams (fallback if AMS docker unavailable)
-        run: CGO_ENABLED=0 go build -o /tmp/mock-ams ./qa/mock-ams/
-
-      - name: Pull AMS docker image
-        id: pull-ams
-        continue-on-error: true
-        env:
-          AMS_VER: ${{ matrix.ams-version }}
+      - name: Build binaries (module-local — pulse and mock-ams have separate go.mod)
         run: |
-          docker pull "${AMS_IMAGE}:${AMS_VER}" || echo "pull-failed=true" >> "$GITHUB_OUTPUT"
+          (cd server && CGO_ENABLED=0 go build -o /tmp/pulse ./cmd/pulse/) && echo "pulse built"
+          (cd qa/mock-ams && CGO_ENABLED=0 go build -o /tmp/mock-ams .) && echo "mock-ams built"
 
-      - name: Start AMS container
-        id: start-ams
-        if: steps.pull-ams.outputs.pull-failed != 'true'
-        env:
-          AMS_VER: ${{ matrix.ams-version }}
+      - name: AMS wire-format matrix tests (collector normalizer + amsclient, mock profiles)
         run: |
-          docker run -d \
-            --name ams-test \
-            -p "${AMS_REST_PORT}:5080" \
-            "${AMS_IMAGE}:${AMS_VER}"
-          # Wait up to 60s for AMS REST to become available
-          for _ in $(seq 1 30); do
-            if curl -sf "http://localhost:${AMS_REST_PORT}/rest/v2/applications" > /dev/null 2>&1; then
-              echo "AMS ${AMS_VER} REST ready"
-              echo "ams-running=true" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "AMS failed to start within 60s" >&2
-          docker logs ams-test || true
-          echo "ams-running=false" >> "$GITHUB_OUTPUT"
-          exit 1
+          cd server
+          CGO_ENABLED=0 go test \
+            -run 'TestAMSVersionMatrix|TestCollector' \
+            ./internal/collector/... ./pkg/amsclient/... \
+            -v -timeout 120s
 
-      - name: Start mock-ams (fallback)
-        id: start-mock
-        if: steps.pull-ams.outputs.pull-failed == 'true' || steps.start-ams.outputs.ams-running != 'true'
-        env:
-          AMS_VER: ${{ matrix.ams-version }}
+      - name: REST v2 contract smoke against mock-ams
         run: |
           /tmp/mock-ams -addr :5080 -scenario 1 &
-          sleep 2
-          echo "mock-running=true" >> "$GITHUB_OUTPUT"
-          echo "Using mock-ams instead of AMS ${AMS_VER}"
-
-      - name: Install ClickHouse
-        run: |
-          curl -fsSL https://clickhouse.com/ | sh
-          sudo mv /tmp/clickhouse /usr/local/bin/clickhouse || true
-          # Verify installation
-          which clickhouse || { echo "ClickHouse binary not found after install"; exit 1; }
-
-      - name: Start ClickHouse
-        run: |
-          mkdir -p /tmp/ch-ci/data
-          cat > /tmp/ch-ci/users.xml << 'XMLEOF'
-          <clickhouse>
-            <profiles><default></default></profiles>
-            <users>
-              <default>
-                <password></password><profile>default</profile>
-                <quota>default</quota><access_management>1</access_management>
-              </default>
-            </users>
-            <quotas><default></default></quotas>
-          </clickhouse>
-          XMLEOF
-          cat > /tmp/ch-ci/config.xml << 'XMLEOF'
-          <clickhouse>
-            <path>/tmp/ch-ci/data/</path>
-            <tcp_port>9000</tcp_port>
-            <http_port>8123</http_port>
-            <interserver_http_port>9009</interserver_http_port>
-            <listen_host>127.0.0.1</listen_host>
-            <logger><level>error</level></logger>
-            <users_config>/tmp/ch-ci/users.xml</users_config>
-          </clickhouse>
-          XMLEOF
-          clickhouse server --config-file /tmp/ch-ci/config.xml &
-          for _ in $(seq 1 20); do
-            clickhouse client --query "SELECT 1" > /dev/null 2>&1 && echo "ClickHouse ready" && break
+          MOCK_PID=$!
+          for _ in $(seq 1 15); do
+            curl -sf "http://localhost:5080/rest/v2/applications" > /dev/null 2>&1 && break
             sleep 1
           done
-
-      - name: pulse migrate
-        run: |
-          PULSE_CLICKHOUSE_DSN="clickhouse://localhost:9000/pulse" \
-          PULSE_MIGRATIONS_DIR="contracts/db/clickhouse" \
-            /tmp/pulse migrate
-
-      - name: Run AMS version matrix tests
-        run: |
-          # Run Go integration tests that verify collector normalizes AMS REST output.
-          # These tests use a live AMS (or mock) and assert domain events match contracts.
-          AMS_BASE_URL="http://localhost:5080" \
-          CGO_ENABLED=0 go test \
-            -tags integration \
-            -run "TestAMSVersionMatrix\|TestCollector" \
-            ./server/internal/collector/... \
-            ./server/pkg/amsclient/... \
-            -v -timeout 120s \
-          || echo "WARN: Integration tests not yet implemented (WO-105 gap — needs real AMS)"
-
-      - name: Verify REST v2 paths respond (smoke)
-        run: |
-          # Smoke-test the REST v2 paths that amsclient uses.
-          BASE="http://localhost:5080"
           FAIL=0
 
           echo "Testing /rest/v2/applications..."
-          if curl -sf "$BASE/rest/v2/applications" > /tmp/apps.json 2>&1; then
-            echo "PASS: /rest/v2/applications"
+          if curl -sf "http://localhost:5080/rest/v2/applications" | python3 -c "import sys,json; json.load(sys.stdin)" > /dev/null 2>&1; then
+            echo "PASS: /rest/v2/applications returns valid JSON"
           else
             echo "FAIL: /rest/v2/applications"
             FAIL=1
           fi
 
           echo "Testing /rest/v2/broadcasts/live/list..."
-          if curl -sf "$BASE/rest/v2/broadcasts/live/list?offset=0&size=10" > /tmp/broadcasts.json 2>&1; then
-            echo "PASS: /rest/v2/broadcasts/live/list"
-          else
-            echo "WARN: /rest/v2/broadcasts/live/list returned error (may need AMS running with live app)"
-          fi
+          curl -sf "http://localhost:5080/rest/v2/broadcasts/live/list?offset=0&size=10" > /dev/null 2>&1 \
+            && echo "PASS: /rest/v2/broadcasts/live/list" \
+            || echo "WARN: /rest/v2/broadcasts/live/list"
 
           echo "Testing /rest/v2/cluster/nodes..."
-          curl -sf "$BASE/rest/v2/cluster/nodes" > /tmp/nodes.json 2>&1 || \
-            echo "WARN: /rest/v2/cluster/nodes not available (single-node mode)"
+          curl -sf "http://localhost:5080/rest/v2/cluster/nodes" > /dev/null 2>&1 \
+            && echo "PASS: /rest/v2/cluster/nodes" \
+            || echo "WARN: /rest/v2/cluster/nodes"
 
-          [ $FAIL -eq 0 ] && echo "REST v2 smoke tests: PASS" || exit 1
-
-      - name: Validate response shapes against contracts
-        run: |
-          # Validate AMS REST responses against the expected amsclient DTO shapes.
-          # For now this is a structure check; future: ajv validation.
-          BASE="http://localhost:5080"
-
-          # Applications list: must be JSON object or array
-          APP_JSON=$(curl -sf "$BASE/rest/v2/applications" 2>/dev/null || echo 'null')
-          if echo "$APP_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); exit(0)" > /dev/null 2>&1; then
-            echo "PASS: /rest/v2/applications returns valid JSON"
-          else
-            echo "FAIL: /rest/v2/applications did not return JSON"
-            exit 1
-          fi
-
-      - name: Collect AMS container logs (on failure)
-        if: failure() && steps.start-ams.outputs.ams-running == 'true'
-        run: docker logs ams-test || true
-
-      - name: Stop AMS container
-        if: always() && steps.start-ams.outputs.ams-running == 'true'
-        run: docker stop ams-test || true
+          kill "$MOCK_PID" 2>/dev/null || true
+          [ $FAIL -eq 0 ] && echo "REST v2 contract smoke: PASS" || exit 1
