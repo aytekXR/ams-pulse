@@ -1453,3 +1453,47 @@ would-fail assertion rather than paper over it. Fix + tier-boundary decision bel
 NOT yet added; coverage-raising is done, gate enforcement is not); (ii) **Sub-workflow B** (web `vitest --coverage` +
 thresholds + msw); (iii) **Sub-workflow C** (response-body↔OpenAPI conformance, `e2e.yml` extensions, Playwright
 skeleton). Committed `test(server) D-043` (`0483b3e`); push + CI watch next.
+
+## D-044 · 2026-07-02 · Fixed the chronically-red ams-version-matrix workflow (had never actually run)
+
+Operator: "there are failing workflows such as ams matrix — solve them." The scheduled `ams-version-matrix` was red every
+night. Root cause (via `gh` logs): it built `CGO_ENABLED=0 go build ./server/cmd/pulse/` from the repo ROOT, but the Go
+module is at `server/go.mod` (there is NO root go.mod) → `go: cannot find main module` → the very first build step failed,
+so the job had **never once run to completion**. Compounding: (a) the `antmedia/ant-media-server-community:{2.10,2.14,3.0.2}`
+images 404 — the repo AND every tag are gone from Docker Hub, so the `continue-on-error` pull always fell through to
+mock-ams, making the "version matrix" fictional (3 identical mock legs); (b) it stood up ClickHouse + `pulse migrate`, but
+the collector matrix tests need neither; (c) `qa/mock-ams/go.mod` said `go 1.26.4` while the project is on 1.25 (D-032), so
+even after the path fix the mock-ams build would fail on the 1.25 toolchain.
+
+**Fix (rewrite):** build both modules in-place (`cd server && … ./cmd/pulse/`, `cd qa/mock-ams && … .`); drop the dead
+AMS-docker-pull + ClickHouse + migrate; run `TestAMSVersionMatrix|TestCollector` against the in-test mock profiles (the
+real per-version wire-format coverage lives there, not in a docker image), plus a REST-v2 contract smoke against the
+mock-ams binary; bump `qa/mock-ams/go.mod` to `go 1.25.0`. Verified locally (matrix tests ok; mock-ams serves
+/rest/v2/{applications,broadcasts,cluster/nodes}) and **GREEN in CI (run 28571747001, matrix-test success)** via
+workflow_dispatch. `e2e.yml`/`release.yml` are dormant (PR/tag-triggered), not failing. When a pullable/authed real-AMS
+image becomes available, add a container-backed leg. Committed `714692a`.
+
+## D-045 · 2026-07-02 · pulse-test-backfill Sub-workflows B + C-contract + coverage gates
+
+Continued Phase 2. Workflow with two adversarially-verified tracks (both SOLID/non-vacuous, recommendApply):
+
+**Sub-workflow B (web coverage gate + msw)** — added `@vitest/coverage-v8` + `msw`; `vite.config.ts` `coverage.enabled`
+with thresholds **lines≥57 / branches≥71** (ratchet ~4–5pts below achieved; PRD target 60/55 noted) so the existing
+`npm test` enforces with NO ci.yml change; msw `setupServer` wired into `src/test/setup.ts`; new msw-driven tests for
+LiveDashboard + AlertsPage. Faithful CI web-job repro (npm ci + gen:api + build + lint + test): **177/177 pass, 61.72%
+lines / 75.35% branches, thresholds held**. Committed `e839172`.
+
+**Sub-workflow C-contract (response-body↔OpenAPI conformance)** — `openapi_conformance_test.go` validates 6 CH-free
+endpoints against `pulse-api.yaml` via kin-openapi (already a dep), non-vacuous (fails on 0-path spec / <3 validated /
+body mismatch; `t.Fatal` not `t.Skip` on missing spec). **It caught a real client-facing bug** the existing per-endpoint
+conformance tests (tenants/anomalies/probes) missed: `LiveOverview.apps/nodes` and `FleetNodes.items` were nil slices
+(`var apps []T`) → `json.Marshal` encodes empty as `null`, violating the spec's `type: array`. Fixed to `[]T{}`; guarded
+by `TestLiveOverview_EmptyArrays_SerializeAsBrackets_NotNull` (empty provider → asserts `[]` not `null`). Committed
+`49cb56f`.
+
+**Go coverage floor gate** (the Phase-2 "CI cannot regress" mandate) — server unit step now emits `-coverprofile`; a new
+step fails CI if total < **55.0%** (current **55.9%**). Committed `77227fb`. Web self-enforces via `vite.config`.
+
+**Still open to fully close Phase 2:** Sub-workflow **C-e2e** (extend `e2e.yml` with alert-fires→history, beacon→qoe/summary,
+ingest-degrade→health_score) and **C-Playwright** (web/e2e skeleton, non-required job) — deferred (need the full compose
+stack / browser download); scoped in the next-session prompt. Also still open: the D-043 `config.validate()` SecretKey bug.

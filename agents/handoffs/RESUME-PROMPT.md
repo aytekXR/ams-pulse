@@ -46,12 +46,17 @@ bump the timeout; **(c)** wall-clock-minute-dependent tests: run/repro inside th
    a signed test POST → 200.
 2. **Retire the stale `ams-integration` branch** (§3 Step B; `main` fully contains it) + apply branch protection + a `v*`
    tag (U4 — needs repo-admin).
-3. **Finish `pulse-test-backfill`** (§6). **Sub-workflow A (Go unit coverage) is DONE (D-043, `0483b3e`): 49.3%→55.6%, 8
-   packages, adversarially verified, 0 WEAK.** REMAINING to close Phase 2: **(i)** enforced **CI coverage gate** (so CI
-   can't regress — coverage-raising is done, the gate is NOT); **(ii)** Sub-workflow **B** (web `vitest --coverage` +
-   thresholds + msw); **(iii)** Sub-workflow **C** (response-body↔OpenAPI conformance, `e2e.yml` extensions, Playwright).
-   Also **fix the `config.validate()` SecretKey bug** found by D-043 (server starts with no AES-GCM key — see D-043;
-   belongs with Phase-3 secrets).
+3. **Finish `pulse-test-backfill`** (§6). **DONE:** Sub-workflow **A** (Go unit coverage, D-043 `0483b3e`, 49.3%→55.6%);
+   Sub-workflow **B** (web coverage gate + msw, D-045 `e839172`, 61.72% lines / 75.35% branches, self-enforcing via
+   `vite.config` thresholds); Sub-workflow **C-contract** (response-body↔OpenAPI conformance, D-045 `49cb56f` — also fixed a
+   real nil-slice→null bug it caught); **Go coverage floor gate** (D-045 `77227fb`, ≥55%). **REMAINING to close Phase 2:**
+   **(i) C-e2e** — extend `e2e.yml` with alert-fires→`/alerts/history`, beacon POST→`/qoe/summary` field, ingest-degrade→
+   `health_score` drop (needs the compose stack; `e2e.yml` already stands it up + extracts the admin token); **(ii)
+   C-Playwright** — `web/e2e/` skeleton (unauth→/login, CSP header, 500-row table ≤25 DOM rows), non-required CI job.
+   Also **fix the `config.validate()` SecretKey bug** (D-043 — server starts with no AES-GCM key; belongs with Phase-3
+   secrets) and consider raising the coverage floor as it climbs. **NOTE: `ams-version-matrix` is now GREEN (D-044)** —
+   it had never actually run (built from the repo root where there's no go.mod); rewritten to mock-profile tests + mock-ams
+   REST smoke (public AMS community images 404).
 4. **U3 (operator): activate a Pro+ Pulse license** to unblock real QoE/beacon e2e (the `viewer_*` QoE fields now flow end
    to end through the API — D-041 item 4 — but real beacon data still needs the license).
 
