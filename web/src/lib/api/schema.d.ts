@@ -1148,7 +1148,7 @@ export interface components {
             id: string;
             rule_id: string;
             /** @enum {string} */
-            state: "firing" | "resolved";
+            state: "firing" | "resolved" | "delivery_failure";
             /** @enum {string} */
             severity: "info" | "warning" | "critical";
             /** @description Unix epoch ms */
@@ -2217,7 +2217,7 @@ export interface operations {
                 /** @description Filter by rule ID */
                 rule_id?: string;
                 /** @description Filter by state */
-                state?: "firing" | "resolved";
+                state?: "firing" | "resolved" | "delivery_failure";
             };
             header?: never;
             path?: never;

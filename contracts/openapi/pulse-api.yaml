@@ -503,7 +503,7 @@ paths:
           description: Filter by state
           schema:
             type: string
-            enum: [firing, resolved]
+            enum: [firing, resolved, delivery_failure]
       responses:
         "200":
           description: Paginated alert firing history
@@ -2137,7 +2137,7 @@ components:
           type: string
         state:
           type: string
-          enum: [firing, resolved]
+          enum: [firing, resolved, delivery_failure]
         severity:
           type: string
           enum: [info, warning, critical]

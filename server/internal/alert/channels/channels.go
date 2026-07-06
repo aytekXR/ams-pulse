@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/smtp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -324,7 +325,9 @@ func (s *SlackChannel) Send(ctx context.Context, payload []byte) error {
 // ─── Noop channel (for testing) ───────────────────────────────────────────────
 
 // NoopChannel discards all notifications. Used for testing.
+// It is safe for concurrent use (delivery goroutines call Send concurrently).
 type NoopChannel struct {
+	mu       sync.Mutex
 	Received [][]byte
 }
 
@@ -333,6 +336,8 @@ func (n *NoopChannel) Name() string { return "noop" }
 
 // Send records the payload without delivering it.
 func (n *NoopChannel) Send(_ context.Context, payload []byte) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	n.Received = append(n.Received, payload)
 	return nil
 }

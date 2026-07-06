@@ -35,6 +35,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
+	"math/rand"
+	"regexp"
 	"sync"
 	"time"
 
@@ -83,12 +86,12 @@ func (f *FakeClock) Advance(d time.Duration) {
 
 // ruleState tracks the evaluation state for one (rule, group_key) pair.
 type ruleState struct {
-	ruleID     string
-	groupKey   string
-	alertID    string // current firing instance ID
-	state      string // "pending" | "firing" | "resolved"
-	firedAt    time.Time
-	lastCheck  time.Time
+	ruleID        string
+	groupKey      string
+	alertID       string // current firing instance ID
+	state         string // "pending" | "firing" | "resolved"
+	firedAt       time.Time
+	lastCheck     time.Time
 	cooldownUntil time.Time
 	pendingSince  time.Time
 }
@@ -103,6 +106,17 @@ type Config struct {
 
 	// BaseURL is used to build dashboard_url in notifications.
 	BaseURL string
+
+	// RetryBaseDelay is the initial backoff delay before the first retry (default 500ms).
+	// Tests should set this to a small value (e.g. 1ms) to avoid sleeping.
+	RetryBaseDelay time.Duration
+
+	// RetryCap is the maximum backoff delay before any single retry (default 5s).
+	RetryCap time.Duration
+
+	// RetryMaxAttempts is the number of retries after the initial attempt (default 3).
+	// Total delivery attempts = 1 + RetryMaxAttempts.
+	RetryMaxAttempts int
 }
 
 // Evaluator runs alert rules against live aggregates.
@@ -122,6 +136,23 @@ type Evaluator struct {
 
 	// Notification sink for tests.
 	notifySink func([]byte)
+
+	// deliveryWg tracks all in-flight delivery goroutines so Stop() can wait
+	// for a bounded shutdown (all goroutines exit after ctx is cancelled).
+	deliveryWg sync.WaitGroup
+}
+
+// deliveryCtx carries the alert event data used if a delivery_failure must
+// be recorded. It is populated from the firing/resolved event context and
+// threaded through the async delivery goroutine.
+type deliveryCtx struct {
+	alertID   string
+	ruleID    string
+	severity  string
+	metric    string
+	value     float64
+	threshold float64
+	scopeJSON string
 }
 
 // New creates an Evaluator. If clock is nil, RealClock is used.
@@ -129,6 +160,15 @@ type Evaluator struct {
 func New(cfg Config, live domain.LiveProvider, store *meta.Store, registry *channels.Registry, clock Clock, logger *slog.Logger) *Evaluator {
 	if cfg.TickInterval <= 0 || cfg.TickInterval > 30*time.Second {
 		cfg.TickInterval = 5 * time.Second
+	}
+	if cfg.RetryBaseDelay <= 0 {
+		cfg.RetryBaseDelay = 500 * time.Millisecond
+	}
+	if cfg.RetryCap <= 0 {
+		cfg.RetryCap = 5 * time.Second
+	}
+	if cfg.RetryMaxAttempts <= 0 {
+		cfg.RetryMaxAttempts = 3
 	}
 	if clock == nil {
 		clock = RealClock{}
@@ -168,8 +208,12 @@ func (e *Evaluator) Start(ctx context.Context) {
 	go e.loop(ctx)
 }
 
-// Stop is a no-op (context cancellation stops the loop).
-func (e *Evaluator) Stop() {}
+// Stop waits for all in-flight delivery goroutines to finish.
+// Cancel the evaluator's context before calling Stop so that goroutines
+// blocked in backoff sleeps exit promptly rather than waiting out full delays.
+func (e *Evaluator) Stop() {
+	e.deliveryWg.Wait()
+}
 
 // TickOnce runs a single evaluation cycle synchronously (for tests).
 func (e *Evaluator) TickOnce(ctx context.Context) {
@@ -337,15 +381,15 @@ func (e *Evaluator) fire(ctx context.Context, rule meta.AlertRuleRow, scope doma
 	// Persist history.
 	if e.store != nil {
 		histRow := meta.AlertHistoryRow{
-			AlertID:    alertID,
-			RuleID:     rule.ID,
-			State:      "firing",
-			Severity:   rule.Severity,
-			TS:         now.UnixMilli(),
-			Metric:     rule.Metric,
-			Value:      value,
-			Threshold:  rule.Threshold,
-			ScopeJSON:  rule.ScopeJSON,
+			AlertID:       alertID,
+			RuleID:        rule.ID,
+			State:         "firing",
+			Severity:      rule.Severity,
+			TS:            now.UnixMilli(),
+			Metric:        rule.Metric,
+			Value:         value,
+			Threshold:     rule.Threshold,
+			ScopeJSON:     rule.ScopeJSON,
 			CooldownUntil: cooldownMS,
 		}
 		histRow.GroupKey = nullString(groupKey)
@@ -354,7 +398,16 @@ func (e *Evaluator) fire(ctx context.Context, rule meta.AlertRuleRow, scope doma
 		}
 	}
 
-	e.deliver(ctx, rule, payload)
+	dc := deliveryCtx{
+		alertID:   alertID,
+		ruleID:    rule.ID,
+		severity:  rule.Severity,
+		metric:    rule.Metric,
+		value:     value,
+		threshold: rule.Threshold,
+		scopeJSON: rule.ScopeJSON,
+	}
+	e.deliver(ctx, rule, payload, dc)
 }
 
 // resolve sends a resolved notification and persists history.
@@ -390,12 +443,28 @@ func (e *Evaluator) resolve(ctx context.Context, rule meta.AlertRuleRow, scope d
 		}
 	}
 
-	e.deliver(ctx, rule, payload)
+	dc := deliveryCtx{
+		alertID:   alertID,
+		ruleID:    rule.ID,
+		severity:  rule.Severity,
+		metric:    rule.Metric,
+		value:     value,
+		threshold: rule.Threshold,
+		scopeJSON: rule.ScopeJSON,
+	}
+	e.deliver(ctx, rule, payload, dc)
 }
 
 // deliver sends payload to all channels configured for the rule.
-func (e *Evaluator) deliver(ctx context.Context, rule meta.AlertRuleRow, payload []byte) {
-	// Call notify sink if set (for tests).
+//
+// The notifySink (test hook) is called synchronously before channel fanout so
+// that existing tests that inspect the sink do not observe ordering issues.
+//
+// Each channel is delivered in its own goroutine so that a slow or failing
+// channel never blocks the 5-second evaluate tick.  Goroutines are counted in
+// deliveryWg so Stop() can wait for a bounded shutdown.
+func (e *Evaluator) deliver(ctx context.Context, rule meta.AlertRuleRow, payload []byte, dc deliveryCtx) {
+	// Call notify sink synchronously (kept for backward compatibility with tests).
 	e.mu.Lock()
 	sink := e.notifySink
 	e.mu.Unlock()
@@ -403,16 +472,107 @@ func (e *Evaluator) deliver(ctx context.Context, rule meta.AlertRuleRow, payload
 		sink(payload)
 	}
 
-	// Deliver to registered channels.
+	// Deliver to registered channels — one goroutine per channel.
 	var channelIDs []string
 	_ = json.Unmarshal([]byte(rule.ChannelIDs), &channelIDs)
 	for _, id := range channelIDs {
-		if ch, ok := e.registry.Get(id); ok {
-			if err := ch.Send(ctx, payload); err != nil {
-				e.logger.Warn("alert: channel send failed", "channel_id", id, "error", err)
+		ch, ok := e.registry.Get(id)
+		if !ok {
+			continue
+		}
+		e.deliveryWg.Add(1)
+		go func(channelID string, ch channels.Channel) {
+			defer e.deliveryWg.Done()
+			e.retryDeliver(ctx, channelID, ch, payload, dc)
+		}(id, ch)
+	}
+}
+
+// retryDeliver attempts to send payload to one channel with exponential backoff
+// and +/-20% jitter.  On total failure (all 1+RetryMaxAttempts attempts
+// exhausted), it writes a delivery_failure alert_history row.
+// Backoff sleeps abort immediately when ctx is cancelled so shutdown is bounded.
+func (e *Evaluator) retryDeliver(ctx context.Context, channelID string, ch channels.Channel, payload []byte, dc deliveryCtx) {
+	var lastErr error
+	for attempt := 0; attempt <= e.cfg.RetryMaxAttempts; attempt++ {
+		if attempt > 0 {
+			// delay[n] = min(base * 2^(n-1), cap) * jitter   jitter∈[0.8,1.2)
+			rawDelay := time.Duration(float64(e.cfg.RetryBaseDelay) * math.Pow(2, float64(attempt-1)))
+			if rawDelay > e.cfg.RetryCap {
+				rawDelay = e.cfg.RetryCap
+			}
+			jitter := 0.8 + 0.4*rand.Float64()
+			delay := time.Duration(float64(rawDelay) * jitter)
+
+			select {
+			case <-ctx.Done():
+				return // abort: evaluator is shutting down
+			case <-time.After(delay):
 			}
 		}
+
+		if err := ch.Send(ctx, payload); err != nil {
+			lastErr = err
+			e.logger.Warn("alert: channel send failed",
+				"channel_id", channelID,
+				"attempt", attempt+1,
+				"of", e.cfg.RetryMaxAttempts+1,
+				"error", err)
+		} else {
+			return // delivered successfully
+		}
 	}
+
+	// All attempts exhausted — record the failure so operators can audit it.
+	if e.store != nil {
+		e.recordDeliveryFailure(ctx, channelID, lastErr, dc)
+	}
+}
+
+// recordDeliveryFailure inserts a delivery_failure alert_history row.
+// The scope JSON from the original firing is merged with channel_id and a
+// sanitised error string so operators can correlate the failure.
+func (e *Evaluator) recordDeliveryFailure(ctx context.Context, channelID string, lastErr error, dc deliveryCtx) {
+	scopeJSON := mergeScopeWithFailure(dc.scopeJSON, channelID, lastErr)
+	row := meta.AlertHistoryRow{
+		AlertID:   dc.alertID,
+		RuleID:    dc.ruleID,
+		State:     "delivery_failure",
+		Severity:  dc.severity,
+		TS:        time.Now().UnixMilli(),
+		Metric:    dc.metric,
+		Value:     dc.value,
+		Threshold: dc.threshold,
+		ScopeJSON: scopeJSON,
+	}
+	if err := e.store.CreateAlertHistory(ctx, row); err != nil {
+		e.logger.Warn("alert: persist delivery_failure history", "error", err)
+	}
+}
+
+// urlPattern matches http/https URLs to strip from error messages.
+var urlPattern = regexp.MustCompile(`https?://\S+`)
+
+// sanitizeError returns a safe error string with embedded URLs redacted so that
+// channel webhook tokens / credentials are not stored in alert_history.
+func sanitizeError(err error) string {
+	if err == nil {
+		return ""
+	}
+	return urlPattern.ReplaceAllString(err.Error(), "[REDACTED]")
+}
+
+// mergeScopeWithFailure merges {"channel_id":…, "error":…} into the existing
+// scope JSON object, preserving any existing fields (stream_id, app, …).
+func mergeScopeWithFailure(existingScopeJSON, channelID string, lastErr error) string {
+	m := make(map[string]any)
+	_ = json.Unmarshal([]byte(existingScopeJSON), &m)
+	m["channel_id"] = channelID
+	if lastErr != nil {
+		m["error"] = sanitizeError(lastErr)
+	}
+	b, _ := json.Marshal(m)
+	return string(b)
 }
 
 // ─── Metric evaluators ────────────────────────────────────────────────────────
@@ -654,20 +814,20 @@ func TestFireChannel(ctx context.Context, ch channels.Channel, ruleID, baseURL s
 	alertID := uuid.New().String()
 	now := time.Now()
 	n := map[string]any{
-		"version":       1,
-		"alert_id":      alertID,
-		"rule_id":       ruleID,
-		"state":         "firing",
-		"severity":      "info",
-		"ts":            now.UnixMilli(),
-		"title":         "Pulse test notification",
-		"metric":        "test_fire",
-		"value":         0.0,
-		"threshold":     0.0,
-		"scope":         map[string]any{},
-		"test":          true,
+		"version":        1,
+		"alert_id":       alertID,
+		"rule_id":        ruleID,
+		"state":          "firing",
+		"severity":       "info",
+		"ts":             now.UnixMilli(),
+		"title":          "Pulse test notification",
+		"metric":         "test_fire",
+		"value":          0.0,
+		"threshold":      0.0,
+		"scope":          map[string]any{},
+		"test":           true,
 		"cooldown_until": nil,
-		"group_key":     nil,
+		"group_key":      nil,
 	}
 	if baseURL != "" {
 		n["dashboard_url"] = baseURL + "/alerts"
