@@ -41,6 +41,16 @@
         }
     }
 
+    # AMS lifecycle webhooks — proxy /webhook/* to pulse:8092.
+    # NOTE: the pulse webhook listener is OFF unless BOTH PULSE_WEBHOOK_ADDR=:8092
+    # AND PULSE_WEBHOOK_SECRET are set (fail-closed, serve.go:199).
+    handle /webhook/* {
+        reverse_proxy pulse:8092 {
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
     # UI + API — proxy everything else to pulse:8090.
     handle {
         reverse_proxy pulse:8090 {
