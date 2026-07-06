@@ -1497,3 +1497,34 @@ step fails CI if total < **55.0%** (current **55.9%**). Committed `77227fb`. Web
 **Still open to fully close Phase 2:** Sub-workflow **C-e2e** (extend `e2e.yml` with alert-fires→history, beacon→qoe/summary,
 ingest-degrade→health_score) and **C-Playwright** (web/e2e skeleton, non-required job) — deferred (need the full compose
 stack / browser download); scoped in the next-session prompt. Also still open: the D-043 `config.validate()` SecretKey bug.
+
+## D-046 · 2026-07-06 · Wired Caddy /webhook/* route + dropped the brier project
+
+Operator: "we drop the brier project, feel free to update Caddyfile.prod." The operator's `Caddyfile.prod` had been
+uncommitted all along because it carried a separate `brier.<domain>` Next.js block (D-035 — kept out of every Pulse
+commit). With brier dropped, removed that block + the `Caddyfile.prod.bak-brier` file, and added the AMS lifecycle
+webhook route `handle /webhook/* { reverse_proxy pulse:8092 }` (before the catch-all) to BOTH `deploy/config/Caddyfile.prod`
+and the internal-TLS `deploy/config/Caddyfile`. Both pass `caddy validate`. Committed `d65f0e4` — `Caddyfile.prod` is now
+plain committable Pulse config and the working tree is finally clean. NOTE: this is only the routing half; the pulse
+webhook listener is fail-closed (`serve.go:199`) and stays OFF until `PULSE_WEBHOOK_ADDR=:8092` + `PULSE_WEBHOOK_SECRET`
+are set and port 8092 is exposed — completed as P1 item 1 of the production-readiness plan (D-047).
+
+## D-047 · 2026-07-06 · Production-readiness audit → next-session `pulse-prod-harden` plan
+
+Operator: "are we ready for production? prepare the next-session prompt to make it production-ready." Verdict: **live +
+functional, but NOT production-ready** — the remaining gaps are reliability + security hardening (Phase 3). To ground the
+next-session prompt in reality (not the stale 2026-06-22 PRODUCTION-READINESS.md), ran `pulse-prodready-audit` — 9
+read-only `Explore` agents, one per gap, each self-verifying its `file:line` citations against live code. **All 9 confirmed
+still-open**, now captured as verified work orders in the ▶ START HERE mission:
+
+- **P1 reliability:** (1) webhook path — 4 gaps, Caddy route done D-046, config-only remainder [S]; (2) alert-delivery
+  retry+failure recording — `evaluator.go:411` Send-once, silent miss [M]; (3) backups — NONE for CH or sqlite meta, runbook
+  cmd itself broken [M]; (4) ClickHouse graceful drain — `clickhouse.go:171-177` close+sleep drops events [S].
+- **P2 security/ops:** (5) Docker secrets `_FILE` — `config.go:355` plaintext env only [M]; (6) API token hashing — bare
+  unkeyed SHA-256 `server.go:2168` [M]; (7) `alert_history` pruning — insert-only unbounded `meta.go:555` [S]; (8) container
+  resource limits — none in any compose [S]; (9) `config.validate()` SecretKey — no check `config.go:399` (D-043) [S].
+
+Each work order has a verified location, acceptance criterion, TDD test plan, and effort estimate — the next session runs
+`pulse-prod-harden` as a Workflow, one disjoint-scope agent per order, adversarial-verify, ORCH gate+commit. Operator-only:
+U3 (Pro+ license → unblocks QoE e2e), set `PULSE_WEBHOOK_SECRET`, U4 (branch protection + `v*` tag), U5 (CSP check). The
+Phase-2 testing tail (C-e2e, C-Playwright) also remains. Full audit output archived in the run transcript.
