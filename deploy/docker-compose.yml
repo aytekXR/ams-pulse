@@ -26,6 +26,7 @@ services:
     expose:
       - "8090"    # UI + API — publish via an override (demo/CI) or a reverse proxy
       - "8091"    # Beacon ingest — publish via an override or TLS-terminating proxy
+      - "8092"    # Webhook ingest — active when PULSE_WEBHOOK_SECRET is set (hardened overlay)
     environment:
       # ── Core server ──────────────────────────────────────────────────────────
       PULSE_LISTEN_ADDR: ":8090"

@@ -62,6 +62,8 @@ services:
       PULSE_MIGRATIONS_DIR: "/contracts/db/clickhouse"
       PULSE_META_DDL_PATH: "/contracts/db/meta/0001_init.sql"
       PULSE_SECRET_KEY: "${PULSE_SECRET_KEY:?set PULSE_SECRET_KEY in deploy/.env}"
+      PULSE_WEBHOOK_ADDR: ":8092"
+      PULSE_WEBHOOK_SECRET: "${PULSE_WEBHOOK_SECRET:?PULSE_WEBHOOK_SECRET must be set}"
       PULSE_META_DSN: "/var/lib/pulse/pulse_meta.db"
       PULSE_LOG_LEVEL: "info"
       PULSE_RETENTION_DAYS: "90"
