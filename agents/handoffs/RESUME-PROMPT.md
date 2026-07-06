@@ -12,6 +12,12 @@
 
 ## ▶ START HERE (next session — MISSION: make Pulse production-ready)
 
+**▶ FIRST ACTION — run `pulse-prod-harden`, P1 first.** Orchestrate it as a Workflow (one disjoint-scope agent per work
+order → author → TDD red→green → adversarial verify → ORCH gate → ORCH commit by explicit path). Do the **P1 reliability**
+orders below strictly in order — (1) finish the webhook path → (2) alert-delivery retry → (3) backups → (4) ClickHouse
+graceful drain — then P2. Each order already has a verified `file:line`, acceptance criterion, TDD test, and effort estimate.
+Confirm CI green after each via `gh`. (State recap + binding rules follow.)
+
 **Goal: take Pulse from "live" to "production-ready."** It is deployed + functional on the self-hosted AMS
 (`beyondkaira.com`, D-034), **CI is green on all 7 jobs**, coverage gates enforce **≥55% Go / 57% web** (D-045), and the
 P0 functional gaps (D-041), the chronic CI flake (D-042), and the never-running `ams-version-matrix` (D-044) are all fixed.
