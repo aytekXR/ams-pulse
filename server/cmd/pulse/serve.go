@@ -20,6 +20,7 @@ import (
 	"github.com/pulse-analytics/pulse/server/internal/collector/restpoller"
 	"github.com/pulse-analytics/pulse/server/internal/collector/sessions"
 	webhooksrc "github.com/pulse-analytics/pulse/server/internal/collector/webhook"
+	"github.com/pulse-analytics/pulse/server/internal/config"
 	"github.com/pulse-analytics/pulse/server/internal/license"
 	"github.com/pulse-analytics/pulse/server/internal/prober"
 	"github.com/pulse-analytics/pulse/server/internal/query"
@@ -255,7 +256,19 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	if metaDSN == "" {
 		metaDSN = "pulse_meta.db" // default: file in working directory
 	}
-	metaSecretKey := os.Getenv("PULSE_SECRET_KEY")
+	metaSecretKey, err := config.GetSecret("PULSE_SECRET_KEY")
+	if err != nil {
+		return nil, fmt.Errorf("PULSE_SECRET_KEY: %w", err)
+	}
+	// Validate key length for non-:memory: DSNs, mirroring internal/config.validate.
+	// meta.New silently falls back to a persisted key file when the key is empty, which
+	// hides operator misconfiguration. Fail loudly here instead.
+	if metaDSN != ":memory:" && len(metaSecretKey) < 16 {
+		if metaSecretKey == "" {
+			return nil, fmt.Errorf("PULSE_SECRET_KEY must be set (min 16 bytes); generate with: openssl rand -hex 32")
+		}
+		return nil, fmt.Errorf("PULSE_SECRET_KEY is too short (%d bytes); minimum is 16 bytes; generate with: openssl rand -hex 32", len(metaSecretKey))
+	}
 	metaStore, err := meta.New(ctx, "sqlite", metaDSN, metaSecretKey)
 	if err != nil {
 		return nil, fmt.Errorf("meta store: %w", err)

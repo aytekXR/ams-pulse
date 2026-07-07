@@ -206,7 +206,9 @@ func Load(args []string) (*Config, error) {
 	}
 
 	// Apply env overrides.
-	applyEnv(cfg)
+	if err := applyEnv(cfg); err != nil {
+		return nil, err
+	}
 
 	// Validate.
 	if err := validate(cfg); err != nil {
@@ -286,7 +288,7 @@ func loadYAML(cfg *Config, configFile string) error {
 	return nil
 }
 
-func applyEnv(cfg *Config) {
+func applyEnv(cfg *Config) error {
 	// Server
 	if v := os.Getenv("PULSE_LISTEN_ADDR"); v != "" {
 		cfg.Server.Listen = v
@@ -352,11 +354,20 @@ func applyEnv(cfg *Config) {
 	if v := os.Getenv("PULSE_MIGRATIONS_DIR"); v != "" {
 		cfg.MigrationsDir = v
 	}
-	if v := os.Getenv("PULSE_SECRET_KEY"); v != "" {
-		cfg.SecretKey = v
+	// Secret vars — use GetSecret so ${NAME}_FILE is honoured.
+	secretKey, err := GetSecret("PULSE_SECRET_KEY")
+	if err != nil {
+		return err
 	}
-	if v := os.Getenv("PULSE_METRICS_TOKEN"); v != "" {
-		cfg.MetricsToken = v
+	if secretKey != "" {
+		cfg.SecretKey = secretKey
+	}
+	metricsToken, err := GetSecret("PULSE_METRICS_TOKEN")
+	if err != nil {
+		return err
+	}
+	if metricsToken != "" {
+		cfg.MetricsToken = metricsToken
 	}
 	if v := os.Getenv("PULSE_ALLOWED_WS_ORIGINS"); v != "" {
 		cfg.AllowedWSOrigins = nil
@@ -369,10 +380,16 @@ func applyEnv(cfg *Config) {
 	}
 
 	// AMS sources: resolve PULSE_AMS_<NAME>_TOKEN for each source.
+	// Use GetSecret so PULSE_AMS_<NAME>_TOKEN_FILE is honoured for named sources,
+	// consistent with the single-source PULSE_AMS_AUTH_TOKEN path below.
 	for i, src := range cfg.AMS.Sources {
 		if src.Name != "" {
 			envKey := "PULSE_AMS_" + strings.ToUpper(src.Name) + "_TOKEN"
-			if token := os.Getenv(envKey); token != "" {
+			token, getErr := GetSecret(envKey)
+			if getErr != nil {
+				return getErr
+			}
+			if token != "" {
 				cfg.AMS.Sources[i].Token = token
 			}
 		}
@@ -384,16 +401,24 @@ func applyEnv(cfg *Config) {
 		if amsURL == "" {
 			amsURL = "http://localhost:5080"
 		}
+		// Use GetSecret so PULSE_AMS_AUTH_TOKEN_FILE is honoured (bearer token
+		// can be delivered via Docker secrets just like the other credential vars).
+		amsAuthToken, getErr := GetSecret("PULSE_AMS_AUTH_TOKEN")
+		if getErr != nil {
+			return getErr
+		}
 		src := AMSSource{
 			Name:    "main",
 			RestURL: amsURL,
-			Token:   os.Getenv("PULSE_AMS_AUTH_TOKEN"),
+			Token:   amsAuthToken,
 		}
 		if nodeID := os.Getenv("PULSE_AMS_NODE_ID"); nodeID != "" {
 			_ = nodeID // stored at collector level not per-source
 		}
 		cfg.AMS.Sources = append(cfg.AMS.Sources, src)
 	}
+
+	return nil
 }
 
 func validate(cfg *Config) error {
@@ -407,6 +432,18 @@ func validate(cfg *Config) error {
 	}
 	if cfg.Beacon.SampleRate < 0 || cfg.Beacon.SampleRate > 1.0 {
 		errs = append(errs, "beacon.sample_rate must be between 0 and 1.0")
+	}
+
+	// Require PULSE_SECRET_KEY (>= 16 bytes) unless the meta DSN is ":memory:"
+	// (dev/test mode — e.g. `go test` or a bare `pulse diag`).
+	// In production, set PULSE_SECRET_KEY to a 32-byte random hex string:
+	//   openssl rand -hex 32
+	if cfg.Storage.MetaDSN != ":memory:" {
+		if len(cfg.SecretKey) == 0 {
+			errs = append(errs, "PULSE_SECRET_KEY must be set (min 16 bytes); generate with: openssl rand -hex 32")
+		} else if len(cfg.SecretKey) < 16 {
+			errs = append(errs, fmt.Sprintf("PULSE_SECRET_KEY is too short (%d bytes); minimum is 16 bytes; generate with: openssl rand -hex 32", len(cfg.SecretKey)))
+		}
 	}
 
 	if len(errs) > 0 {

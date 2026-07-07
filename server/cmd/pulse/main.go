@@ -30,6 +30,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pulse-analytics/pulse/server/internal/config"
 	"github.com/pulse-analytics/pulse/server/internal/reports"
 	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse"
 	"github.com/pulse-analytics/pulse/server/internal/store/meta"
@@ -174,7 +175,16 @@ func runMigrate(args []string) error {
 	if metaDSN == "" {
 		metaDSN = "pulse_meta.db"
 	}
-	metaSecretKey := os.Getenv("PULSE_SECRET_KEY")
+	metaSecretKey, secretErr := config.GetSecret("PULSE_SECRET_KEY")
+	if secretErr != nil {
+		return fmt.Errorf("PULSE_SECRET_KEY: %w", secretErr)
+	}
+	if metaDSN != ":memory:" && len(metaSecretKey) < 16 {
+		if metaSecretKey == "" {
+			return fmt.Errorf("PULSE_SECRET_KEY must be set (min 16 bytes); generate with: openssl rand -hex 32")
+		}
+		return fmt.Errorf("PULSE_SECRET_KEY is too short (%d bytes); minimum is 16 bytes; generate with: openssl rand -hex 32", len(metaSecretKey))
+	}
 	logger.Info("pulse migrate: running meta store migrations", "dsn", metaDSN)
 	metaStore, metaErr := meta.New(ctx, "sqlite", metaDSN, metaSecretKey)
 	if metaErr != nil {
@@ -294,7 +304,16 @@ func runReconcile(cfg EnvConfig) error {
 	if metaDSN == "" {
 		metaDSN = "pulse_meta.db"
 	}
-	metaSecretKey := os.Getenv("PULSE_SECRET_KEY")
+	metaSecretKey, secretErr := config.GetSecret("PULSE_SECRET_KEY")
+	if secretErr != nil {
+		return fmt.Errorf("PULSE_SECRET_KEY: %w", secretErr)
+	}
+	if metaDSN != ":memory:" && len(metaSecretKey) < 16 {
+		if metaSecretKey == "" {
+			return fmt.Errorf("PULSE_SECRET_KEY must be set (min 16 bytes); generate with: openssl rand -hex 32")
+		}
+		return fmt.Errorf("PULSE_SECRET_KEY is too short (%d bytes); minimum is 16 bytes; generate with: openssl rand -hex 32", len(metaSecretKey))
+	}
 	metaStore, err := meta.New(ctx, "sqlite", metaDSN, metaSecretKey)
 	if err != nil {
 		return fmt.Errorf("connect meta store: %w", err)

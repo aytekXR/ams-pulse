@@ -69,17 +69,84 @@ func TestValidate_RejectsInvalidSampleRate(t *testing.T) {
 }
 
 // TestValidate_AcceptsValidConfig confirms that validate returns nil for a
-// fully valid configuration.
+// fully valid configuration (SecretKey >= 16 bytes required for non-:memory: DSN).
 func TestValidate_AcceptsValidConfig(t *testing.T) {
 	cfg := &Config{
 		Server: ServerConfig{Listen: ":8090"},
 		Storage: StorageConfig{
+			MetaDSN:   "/var/lib/pulse/meta.db",
 			Retention: RetentionConfig{RawDays: 90},
 		},
-		Beacon: BeaconConfig{SampleRate: 0.5},
+		Beacon:    BeaconConfig{SampleRate: 0.5},
+		SecretKey: "thisis16byteskey", // exactly 16 bytes — minimum valid key
 	}
 	if err := validate(cfg); err != nil {
 		t.Fatalf("validate() returned unexpected error: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// validate() — SecretKey enforcement (Item 9)
+// ---------------------------------------------------------------------------
+
+// TestValidate_RejectsEmptySecretKey confirms that validate rejects an empty
+// PULSE_SECRET_KEY when the meta DSN is not ":memory:". This is a behavioral
+// red test — it MUST FAIL against the current implementation (which does not
+// check SecretKey) and MUST PASS after the fix is applied.
+func TestValidate_RejectsEmptySecretKey(t *testing.T) {
+	cfg := &Config{
+		Server: ServerConfig{Listen: ":8090"},
+		Storage: StorageConfig{
+			MetaDSN:   "/var/lib/pulse/meta.db",
+			Retention: RetentionConfig{RawDays: 90},
+		},
+		Beacon:    BeaconConfig{SampleRate: 1.0},
+		SecretKey: "", // empty — must be rejected outside :memory:
+	}
+	err := validate(cfg)
+	if err == nil {
+		t.Fatal("validate() returned nil; want error for empty PULSE_SECRET_KEY with non-:memory: DSN")
+	}
+	if !strings.Contains(err.Error(), "PULSE_SECRET_KEY") {
+		t.Errorf("error %q should mention PULSE_SECRET_KEY", err.Error())
+	}
+}
+
+// TestValidate_RejectsShortSecretKey confirms that a key of fewer than 16 bytes
+// is rejected. This is a behavioral red test.
+func TestValidate_RejectsShortSecretKey(t *testing.T) {
+	cfg := &Config{
+		Server: ServerConfig{Listen: ":8090"},
+		Storage: StorageConfig{
+			MetaDSN:   "/var/lib/pulse/meta.db",
+			Retention: RetentionConfig{RawDays: 90},
+		},
+		Beacon:    BeaconConfig{SampleRate: 1.0},
+		SecretKey: "only15byteskey!", // 15 bytes — too short
+	}
+	err := validate(cfg)
+	if err == nil {
+		t.Fatal("validate() returned nil; want error for 15-byte PULSE_SECRET_KEY")
+	}
+	if !strings.Contains(err.Error(), "PULSE_SECRET_KEY") {
+		t.Errorf("error %q should mention PULSE_SECRET_KEY", err.Error())
+	}
+}
+
+// TestValidate_AcceptsMemoryDSNWithEmptySecretKey confirms that the :memory:
+// meta DSN exempts the config from the SecretKey requirement (dev/test mode).
+func TestValidate_AcceptsMemoryDSNWithEmptySecretKey(t *testing.T) {
+	cfg := &Config{
+		Server: ServerConfig{Listen: ":8090"},
+		Storage: StorageConfig{
+			MetaDSN:   ":memory:",
+			Retention: RetentionConfig{RawDays: 90},
+		},
+		Beacon:    BeaconConfig{SampleRate: 1.0},
+		SecretKey: "", // empty — allowed when DSN is ":memory:"
+	}
+	if err := validate(cfg); err != nil {
+		t.Errorf("validate() returned error for :memory: DSN with empty SecretKey: %v", err)
 	}
 }
 
@@ -90,6 +157,7 @@ func TestValidate_SampleRateBoundary(t *testing.T) {
 		cfg := &Config{
 			Server: ServerConfig{Listen: ":8090"},
 			Storage: StorageConfig{
+				MetaDSN:   ":memory:", // exempt from SecretKey check in boundary tests
 				Retention: RetentionConfig{RawDays: 90},
 			},
 			Beacon: BeaconConfig{SampleRate: sr},
@@ -170,7 +238,9 @@ func TestApplyEnv_SecretKey(t *testing.T) {
 	t.Setenv("PULSE_SECRET_KEY", key)
 
 	cfg := &Config{}
-	applyEnv(cfg)
+	if err := applyEnv(cfg); err != nil {
+		t.Fatalf("applyEnv() unexpected error: %v", err)
+	}
 
 	if cfg.SecretKey != key {
 		t.Errorf("SecretKey = %q; want %q", cfg.SecretKey, key)
@@ -183,7 +253,9 @@ func TestApplyEnv_MetricsToken(t *testing.T) {
 	t.Setenv("PULSE_METRICS_TOKEN", "prometheus-scrape-token")
 
 	cfg := &Config{}
-	applyEnv(cfg)
+	if err := applyEnv(cfg); err != nil {
+		t.Fatalf("applyEnv() unexpected error: %v", err)
+	}
 
 	if cfg.MetricsToken != "prometheus-scrape-token" {
 		t.Errorf("MetricsToken = %q; want %q", cfg.MetricsToken, "prometheus-scrape-token")
@@ -197,7 +269,9 @@ func TestApplyEnv_PostgresDSN(t *testing.T) {
 	t.Setenv("PULSE_POSTGRES_DSN", dsn)
 
 	cfg := &Config{Storage: StorageConfig{Meta: "sqlite"}}
-	applyEnv(cfg)
+	if err := applyEnv(cfg); err != nil {
+		t.Fatalf("applyEnv() unexpected error: %v", err)
+	}
 
 	if cfg.Storage.Meta != "postgres" {
 		t.Errorf("Meta = %q after PULSE_POSTGRES_DSN; want %q", cfg.Storage.Meta, "postgres")
@@ -213,7 +287,9 @@ func TestApplyEnv_PollInterval(t *testing.T) {
 	t.Setenv("PULSE_POLL_INTERVAL", "30s")
 
 	cfg := &Config{}
-	applyEnv(cfg)
+	if err := applyEnv(cfg); err != nil {
+		t.Fatalf("applyEnv() unexpected error: %v", err)
+	}
 
 	if cfg.PollInterval != 30*time.Second {
 		t.Errorf("PollInterval = %v; want 30s", cfg.PollInterval)
@@ -227,7 +303,9 @@ func TestApplyEnv_PollInterval_Invalid(t *testing.T) {
 
 	before := 5 * time.Second
 	cfg := &Config{PollInterval: before}
-	applyEnv(cfg)
+	if err := applyEnv(cfg); err != nil {
+		t.Fatalf("applyEnv() unexpected error: %v", err)
+	}
 
 	if cfg.PollInterval != before {
 		t.Errorf("PollInterval = %v; want original %v after invalid env", cfg.PollInterval, before)
@@ -242,7 +320,9 @@ func TestApplyEnv_AnonymizeIP(t *testing.T) {
 		t.Run("set="+val, func(t *testing.T) {
 			t.Setenv("PULSE_ANONYMIZE_IP", val)
 			cfg := &Config{}
-			applyEnv(cfg)
+			if err := applyEnv(cfg); err != nil {
+				t.Fatalf("applyEnv() unexpected error: %v", err)
+			}
 			if !cfg.Beacon.AnonymizeIP {
 				t.Errorf("AnonymizeIP should be true for PULSE_ANONYMIZE_IP=%q", val)
 			}
@@ -253,7 +333,9 @@ func TestApplyEnv_AnonymizeIP(t *testing.T) {
 	t.Run("set=false", func(t *testing.T) {
 		t.Setenv("PULSE_ANONYMIZE_IP", "false")
 		cfg := &Config{Beacon: BeaconConfig{AnonymizeIP: true}}
-		applyEnv(cfg)
+		if err := applyEnv(cfg); err != nil {
+			t.Fatalf("applyEnv() unexpected error: %v", err)
+		}
 		if cfg.Beacon.AnonymizeIP {
 			t.Error("AnonymizeIP should be false for PULSE_ANONYMIZE_IP=false")
 		}
@@ -265,7 +347,9 @@ func TestApplyEnv_MigrationsDir(t *testing.T) {
 	t.Setenv("PULSE_MIGRATIONS_DIR", "/data/migrations")
 
 	cfg := &Config{}
-	applyEnv(cfg)
+	if err := applyEnv(cfg); err != nil {
+		t.Fatalf("applyEnv() unexpected error: %v", err)
+	}
 
 	if cfg.MigrationsDir != "/data/migrations" {
 		t.Errorf("MigrationsDir = %q; want %q", cfg.MigrationsDir, "/data/migrations")
@@ -279,7 +363,9 @@ func TestApplyEnv_ClickHouseAddr(t *testing.T) {
 	t.Setenv("PULSE_CLICKHOUSE_ADDR", "ch-prod:9000")
 
 	cfg := &Config{Storage: StorageConfig{ClickHouseAddr: "localhost:9000"}}
-	applyEnv(cfg)
+	if err := applyEnv(cfg); err != nil {
+		t.Fatalf("applyEnv() unexpected error: %v", err)
+	}
 
 	if cfg.Storage.ClickHouseAddr != "ch-prod:9000" {
 		t.Errorf("ClickHouseAddr = %q; want %q", cfg.Storage.ClickHouseAddr, "ch-prod:9000")
@@ -292,7 +378,9 @@ func TestApplyEnv_AllowedWSOrigins_CommaSplit(t *testing.T) {
 	t.Setenv("PULSE_ALLOWED_WS_ORIGINS", "https://a.com , https://b.com , ")
 
 	cfg := &Config{}
-	applyEnv(cfg)
+	if err := applyEnv(cfg); err != nil {
+		t.Fatalf("applyEnv() unexpected error: %v", err)
+	}
 
 	want := []string{"https://a.com", "https://b.com"}
 	if len(cfg.AllowedWSOrigins) != len(want) {
@@ -311,7 +399,9 @@ func TestApplyEnv_RetentionDays(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		t.Setenv("PULSE_RETENTION_DAYS", "180")
 		cfg := &Config{Storage: StorageConfig{Retention: RetentionConfig{RawDays: 90}}}
-		applyEnv(cfg)
+		if err := applyEnv(cfg); err != nil {
+			t.Fatalf("applyEnv() unexpected error: %v", err)
+		}
 		if cfg.Storage.Retention.RawDays != 180 {
 			t.Errorf("RawDays = %d; want 180", cfg.Storage.Retention.RawDays)
 		}
@@ -319,7 +409,9 @@ func TestApplyEnv_RetentionDays(t *testing.T) {
 	t.Run("invalid string is ignored", func(t *testing.T) {
 		t.Setenv("PULSE_RETENTION_DAYS", "bad")
 		cfg := &Config{Storage: StorageConfig{Retention: RetentionConfig{RawDays: 90}}}
-		applyEnv(cfg)
+		if err := applyEnv(cfg); err != nil {
+			t.Fatalf("applyEnv() unexpected error: %v", err)
+		}
 		if cfg.Storage.Retention.RawDays != 90 {
 			t.Errorf("RawDays = %d; want original 90 when env is invalid", cfg.Storage.Retention.RawDays)
 		}
@@ -364,7 +456,9 @@ storage:
 		t.Errorf("after YAML: Listen = %q; want :9090", cfg.Server.Listen)
 	}
 
-	applyEnv(cfg)
+	if err := applyEnv(cfg); err != nil {
+		t.Fatalf("applyEnv() unexpected error: %v", err)
+	}
 	// After env: listen=":7070" (env wins), ingest_listen=":9091" (YAML, no env set)
 	if cfg.Server.Listen != ":7070" {
 		t.Errorf("after env: Listen = %q; want :7070 (env should override YAML)", cfg.Server.Listen)

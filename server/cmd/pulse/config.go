@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pulse-analytics/pulse/server/internal/config"
 )
 
 // EnvConfig holds configuration loaded from environment variables.
@@ -159,20 +161,43 @@ type EnvConfig struct {
 // loadEnvConfig reads configuration from PULSE_* environment variables.
 func loadEnvConfig() (EnvConfig, error) {
 	cfg := EnvConfig{
-		ListenAddr:          envOrDefault("PULSE_LISTEN_ADDR", ":8090"),
-		ClickHouseDSN:       envOrDefault("PULSE_CLICKHOUSE_DSN", "clickhouse://localhost:9000/pulse"),
-		ClickHouseDatabase:  envOrDefault("PULSE_CLICKHOUSE_DATABASE", "pulse"),
-		MigrationsDir:       envOrDefault("PULSE_MIGRATIONS_DIR", ""),
-		AMSBaseURL:          envOrDefault("PULSE_AMS_URL", "http://localhost:5080"),
-		AMSNodeID:           envOrDefault("PULSE_AMS_NODE_ID", "standalone"),
-		AMSAuthToken:        os.Getenv("PULSE_AMS_AUTH_TOKEN"),
-		AMSLoginEmail:       os.Getenv("PULSE_AMS_LOGIN_EMAIL"),
-		AMSLoginPassword:    os.Getenv("PULSE_AMS_LOGIN_PASSWORD"),
-		LogTailPath:         os.Getenv("PULSE_LOG_TAIL_PATH"),
-		WebhookListenAddr:   os.Getenv("PULSE_WEBHOOK_ADDR"),
-		WebhookSharedSecret: os.Getenv("PULSE_WEBHOOK_SECRET"),
-		LogLevel:            envOrDefault("PULSE_LOG_LEVEL", "info"),
+		ListenAddr:         envOrDefault("PULSE_LISTEN_ADDR", ":8090"),
+		ClickHouseDSN:      envOrDefault("PULSE_CLICKHOUSE_DSN", "clickhouse://localhost:9000/pulse"),
+		ClickHouseDatabase: envOrDefault("PULSE_CLICKHOUSE_DATABASE", "pulse"),
+		MigrationsDir:      envOrDefault("PULSE_MIGRATIONS_DIR", ""),
+		AMSBaseURL:         envOrDefault("PULSE_AMS_URL", "http://localhost:5080"),
+		AMSNodeID:          envOrDefault("PULSE_AMS_NODE_ID", "standalone"),
+		// AMSAuthToken resolved below via GetSecret.
+		AMSLoginEmail:     os.Getenv("PULSE_AMS_LOGIN_EMAIL"),
+		LogTailPath:       os.Getenv("PULSE_LOG_TAIL_PATH"),
+		WebhookListenAddr: os.Getenv("PULSE_WEBHOOK_ADDR"),
+		LogLevel:          envOrDefault("PULSE_LOG_LEVEL", "info"),
 	}
+
+	// Secret vars: use GetSecret so ${NAME}_FILE is honoured.
+	amsAuthToken, err := config.GetSecret("PULSE_AMS_AUTH_TOKEN")
+	if err != nil {
+		return cfg, err
+	}
+	cfg.AMSAuthToken = amsAuthToken
+
+	amsPassword, err := config.GetSecret("PULSE_AMS_LOGIN_PASSWORD")
+	if err != nil {
+		return cfg, err
+	}
+	cfg.AMSLoginPassword = amsPassword
+
+	webhookSecret, err := config.GetSecret("PULSE_WEBHOOK_SECRET")
+	if err != nil {
+		return cfg, err
+	}
+	cfg.WebhookSharedSecret = webhookSecret
+
+	metricsToken, err := config.GetSecret("PULSE_METRICS_TOKEN")
+	if err != nil {
+		return cfg, err
+	}
+	cfg.MetricsToken = metricsToken
 
 	// Parse retention days.
 	cfg.RetentionDays = envInt("PULSE_RETENTION_DAYS", 90)
@@ -258,7 +283,7 @@ func loadEnvConfig() (EnvConfig, error) {
 
 	// Wave 2 product-plane config.
 	cfg.IngestListenAddr = os.Getenv("PULSE_INGEST_LISTEN_ADDR")
-	cfg.MetricsToken = os.Getenv("PULSE_METRICS_TOKEN")
+	// MetricsToken resolved via GetSecret above (supports _FILE convention).
 
 	// Wave 2 (WO-204): reports + S3 export config.
 	cfg.ReportsDir = envOrDefault("PULSE_REPORTS_DIR", "pulse-reports")

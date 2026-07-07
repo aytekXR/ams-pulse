@@ -44,6 +44,8 @@ func TestLoad_AllowedWSOrigins(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// Use in-memory DSN to exempt from PULSE_SECRET_KEY validation in tests.
+			t.Setenv("PULSE_META_DSN", ":memory:")
 			if tc.envVal != "" {
 				t.Setenv("PULSE_ALLOWED_WS_ORIGINS", tc.envVal)
 			} else {
