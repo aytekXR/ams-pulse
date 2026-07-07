@@ -20,6 +20,9 @@ pulse_secret.key
 *.db-journal
 *.sqlite
 
+# Docker file-based secrets (deploy/secrets/*.txt) — never commit
+/deploy/secrets/*.txt
+
 # Demo handout — contains a live admin token; never commit (share privately)
 /oguz-testing.md
 

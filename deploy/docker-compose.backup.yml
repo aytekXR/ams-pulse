@@ -58,6 +58,11 @@ services:
     image: clickhouse/clickhouse-server@sha256:1ffa82edee000a42c09313bd9f1293d94c570aee74babc1b3ca9983a35fa597b
     entrypoint: ["/bin/bash", "/scripts/pulse-backup.sh"]
     command: ["daemon"]
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.25"
     environment:
       CLICKHOUSE_HOST: "clickhouse"
       CLICKHOUSE_USER: "${CLICKHOUSE_USER:-default}"
