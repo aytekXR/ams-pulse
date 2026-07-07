@@ -1,0 +1,19 @@
+<!-- ClickHouse 24.8 config.d drop-in: backup disk + allow-list.
+     Syntax verified empirically against clickhouse/clickhouse-server@sha256:1ffa82e...
+     BACKUP DATABASE pulse TO Disk('backups', 'name.zip') succeeds with this config.
+     Mount read-only into the clickhouse service via docker-compose.backup.yml:
+       ./config/clickhouse-backups.xml:/etc/clickhouse-server/config.d/backups.xml:ro
+-->
+<clickhouse>
+  <storage_configuration>
+    <disks>
+      <backups>
+        <type>local</type>
+        <path>/backups/</path>
+      </backups>
+    </disks>
+  </storage_configuration>
+  <backups>
+    <allowed_disk>backups</allowed_disk>
+  </backups>
+</clickhouse>

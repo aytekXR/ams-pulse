@@ -1,0 +1,88 @@
+# Pulse — backup overlay (one concern: backups).
+#
+# Layers on top of the base compose file and optional overlays.
+# Adds:
+#   - clickhouse: config.d drop-in enabling the local 'backups' disk + a
+#     pulse-backups named volume mounted at /backups.
+#   - backup sidecar: runs pulse-backup.sh on a 24 h schedule. Uses the SAME
+#     digest-pinned ClickHouse image (ships clickhouse-client + bash; no new image).
+#
+# Usage — add to the stack:
+#
+#   docker compose -p pulse-prod \
+#     -f deploy/docker-compose.yml \
+#     -f deploy/docker-compose.hardened.yml \
+#     -f deploy/docker-compose.prod-tls.yml \
+#     -f deploy/docker-compose.real-ams.yml \
+#     -f deploy/docker-compose.backup.yml \
+#     --env-file deploy/.env \
+#     up -d
+#
+# Manual one-shot backup:
+#   docker compose exec backup /scripts/pulse-backup.sh once
+#
+# Restore ClickHouse:
+#   docker compose exec backup clickhouse-client \
+#     --host clickhouse --user $CLICKHOUSE_USER --password $CLICKHOUSE_PASSWORD \
+#     --query "RESTORE DATABASE pulse FROM Disk('backups', 'ch/pulse-YYYYMMDD-HHMMSS.zip')"
+#
+# Restore SQLite — see deploy/runbooks/backup-restore.md for full steps.
+
+services:
+
+  # ── ClickHouse: add backups disk config + shared backup volume ───────────────
+  # Note: ClickHouse 24.8 restricts the built-in 'default' user to localhost
+  # connections. For cross-container access (backup sidecar → clickhouse) a named
+  # user must be created. Set CLICKHOUSE_USER + CLICKHOUSE_PASSWORD — the image
+  # creates the user at first boot. The hardened overlay provides these for
+  # production; for isolated tests pass them as env vars (see runbook).
+  clickhouse:
+    environment:
+      CLICKHOUSE_USER: "${CLICKHOUSE_USER}"
+      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD}"
+    volumes:
+      # config.d drop-in: defines local 'backups' disk + allows BACKUP/RESTORE SQL
+      - ./config/clickhouse-backups.xml:/etc/clickhouse-server/config.d/backups.xml:ro
+      # Shared volume — backup sidecar reads/writes here; ClickHouse writes zips here
+      - pulse-backups:/backups
+
+  # ── Backup sidecar ────────────────────────────────────────────────────────────
+  # Uses the SAME digest-pinned ClickHouse image (ships clickhouse-client and bash).
+  # Runs pulse-backup.sh in "daemon" mode (one cycle every 24 h).
+  # Restart policy: on-failure — in daemon mode, the script handles backup errors
+  # internally (logs, continues), so it never exits on a mere backup failure.
+  # A restart only fires if bash itself crashes unexpectedly, which is not a
+  # silent failure (docker logs backup shows the crash). This avoids silently
+  # crash-looping the sidecar on expected transient errors (network blip, etc.).
+  backup:
+    image: clickhouse/clickhouse-server@sha256:1ffa82edee000a42c09313bd9f1293d94c570aee74babc1b3ca9983a35fa597b
+    entrypoint: ["/bin/bash", "/scripts/pulse-backup.sh"]
+    command: ["daemon"]
+    environment:
+      CLICKHOUSE_HOST: "clickhouse"
+      CLICKHOUSE_USER: "${CLICKHOUSE_USER:-default}"
+      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD:-}"
+      CLICKHOUSE_DATABASE: "${CLICKHOUSE_DATABASE:-pulse}"
+      PULSE_META_DB: "/var/lib/pulse/pulse_meta.db"
+      # ── Optional S3 push (OFF by default; set all three to enable) ───────────
+      # See deploy/runbooks/backup-restore.md §S3 for setup instructions.
+      # PULSE_BACKUP_S3_BUCKET: ""
+      # PULSE_BACKUP_S3_PREFIX: "pulse-backups/"
+      # PULSE_BACKUP_S3_REGION: "us-east-1"
+    volumes:
+      # Backup artifact storage (shared with clickhouse /backups)
+      - pulse-backups:/backups
+      # SQLite meta store — READ-ONLY: WAL mode allows reading without writes.
+      # The sidecar only copies files; it never writes to the meta store.
+      # WAL mode: pulse-data may contain pulse_meta.db + .db-wal + .db-shm;
+      # the sidecar copies all three (see consistency note in pulse-backup.sh).
+      - pulse-data:/var/lib/pulse:ro
+      # Backup scripts (read-only)
+      - ./scripts:/scripts:ro
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: on-failure
+
+volumes:
+  pulse-backups:

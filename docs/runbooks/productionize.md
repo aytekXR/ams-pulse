@@ -317,62 +317,98 @@ curl -m 10 https://pulse.example.com/api/v1/live/overview \
 
 ## 5. Backups and data retention
 
+> **Automated backups are now handled by `deploy/docker-compose.backup.yml`.**
+> Add that overlay to your compose command (see below). Manual steps are still
+> documented here for reference and for environments without the backup sidecar.
+> Full operator doc: `deploy/runbooks/backup-restore.md`.
+
+### Enabling the backup overlay
+
+Add `-f deploy/docker-compose.backup.yml` to your compose command:
+
+```sh
+docker compose -p pulse-prod \
+  -f deploy/docker-compose.yml \
+  -f deploy/docker-compose.hardened.yml \
+  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.real-ams.yml \
+  -f deploy/docker-compose.backup.yml \
+  --env-file deploy/.env \
+  up -d
+```
+
+This adds a `backup` sidecar that runs every 24 h and keeps the 7 most-recent
+artifacts for each store. Artifacts land in the `pulse-backups` named volume.
+
 ### ClickHouse backups
 
-**Backup** (requires ClickHouse running):
+The backup overlay configures a ClickHouse disk named `backups` at `/backups/`
+via `deploy/config/clickhouse-backups.xml`. The `BACKUP DATABASE` SQL command
+requires this disk to be configured — it does NOT work without the overlay.
+
+**Manual one-shot backup** (overlay must be active):
 
 ```sh
-docker compose exec clickhouse \
+docker compose -p pulse-prod \
+  -f deploy/docker-compose.yml \
+  -f deploy/docker-compose.backup.yml \
+  exec backup /scripts/pulse-backup.sh once
+```
+
+**Manual restore** (see `deploy/runbooks/backup-restore.md` for full steps):
+
+```sh
+docker compose -p pulse-prod exec backup \
   clickhouse-client \
+    --host clickhouse \
     --user "${CLICKHOUSE_USER}" \
     --password "${CLICKHOUSE_PASSWORD}" \
-    --query "BACKUP DATABASE pulse TO Disk('backups', 'pulse-$(date +%Y%m%d).zip')"
+    --query "RESTORE DATABASE pulse FROM Disk('backups', 'ch/pulse-YYYYMMDD-HHMMSS.zip')"
 ```
 
-For simpler volume-level snapshots, stop ClickHouse first to ensure a
-consistent state:
-
-```sh
-docker compose stop clickhouse
-# Snapshot the clickhouse-data Docker volume or the underlying host path
-# (typically /var/lib/docker/volumes/<project>_clickhouse-data/_data)
-docker compose start clickhouse
-```
-
-**Retention policy** (already configured in `contracts/db/clickhouse/`):
+**Data-retention TTL** (configured in `contracts/db/clickhouse/`):
 
 | Table type | TTL env var | Default |
 |---|---|---|
 | Raw events (`viewer_sessions`, etc.) | `PULSE_RETENTION_DAYS` | 90 days |
 | Rollup tables | `PULSE_ROLLUP_TTL_DAYS` | 395 days (~13 months) |
 
-Adjust these in `deploy/.env` and re-run `pulse migrate` to apply new TTL
-values to the DDL.
+Adjust these in `deploy/.env` and re-run `pulse migrate` to apply new TTL values.
 
 ### SQLite meta store backups
 
 The meta store lives at `/var/lib/pulse/pulse_meta.db` inside the `pulse-data`
 volume. It holds alert rules, API tokens, probe config, and user data — not
-time-series events.
+time-series events. It runs in WAL journal mode.
 
-**File-copy backup** (safe while pulse is running — SQLite WAL mode):
+The backup sidecar copies `pulse_meta.db` + `.db-wal` + `.db-shm` to the
+`pulse-backups` volume each cycle (no `sqlite3` binary is needed).
 
-```sh
-docker compose exec pulse \
-  sqlite3 /var/lib/pulse/pulse_meta.db ".backup /tmp/pulse_meta_backup.db"
-docker compose cp pulse:/tmp/pulse_meta_backup.db ./pulse_meta_backup_$(date +%Y%m%d).db
-```
-
-**Volume snapshot** (consistent, no sqlite3 required):
+**Manual restore** (stop pulse first to prevent write conflicts):
 
 ```sh
-docker compose stop pulse
-# Snapshot the pulse-data Docker volume
-docker compose start pulse
+docker compose -p pulse-prod stop pulse
+
+# IMPORTANT: clear the live WAL and SHM *before* overwriting the db file.
+# A crashed pulse may have left post-backup WAL frames on disk; if not removed
+# first, SQLite replays them onto the restored db and produces a state beyond
+# the backup point. (rm -f is idempotent — safe if files are absent.)
+docker run --rm \
+  -v pulse-prod_pulse-backups:/src:ro \
+  -v pulse-prod_pulse-data:/dst \
+  busybox sh -c "
+    rm -f /dst/pulse_meta.db-wal /dst/pulse_meta.db-shm
+    cp /src/meta/pulse_meta-YYYYMMDD-HHMMSS.db /dst/pulse_meta.db
+    [ -f /src/meta/pulse_meta-YYYYMMDD-HHMMSS.db-wal ] && \
+      cp /src/meta/pulse_meta-YYYYMMDD-HHMMSS.db-wal /dst/pulse_meta.db-wal || true
+    echo done
+  "
+
+docker compose -p pulse-prod start pulse
 ```
 
-**Recommended schedule:** daily meta backup, daily or weekly ClickHouse backup.
-Store backups off-host (S3, NFS, or remote rsync).
+**Recommended schedule:** daily (handled automatically by the backup overlay).
+For off-host storage (S3, NFS, rsync) see `deploy/runbooks/backup-restore.md §S3`.
 
 ---
 
