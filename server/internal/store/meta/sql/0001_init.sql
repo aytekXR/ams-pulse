@@ -36,13 +36,17 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- ── api_tokens ────────────────────────────────────────────────
 -- Bearer tokens for the REST API and ingest endpoint.
--- Raw token value is NEVER stored — only the SHA-256 hash.
+-- Raw token value is NEVER stored — only the keyed hash.
+-- hash_alg: 'hmac-sha256' (new; PULSE_SECRET_KEY required) | 'sha256' (legacy).
+-- New installs: HMAC-SHA256(HKDF(secret), token). Legacy rows keep 'sha256'.
+-- See server/internal/store/meta/meta.go HashToken() and LookupToken().
 CREATE TABLE IF NOT EXISTS api_tokens (
     id          TEXT      NOT NULL PRIMARY KEY,   -- UUID
     user_id     TEXT      REFERENCES users(id) ON DELETE CASCADE,
     kind        TEXT      NOT NULL,               -- 'api' | 'ingest'
     name        TEXT      NOT NULL,
-    token_hash  TEXT      NOT NULL UNIQUE,        -- SHA-256(raw_token)
+    token_hash  TEXT      NOT NULL UNIQUE,        -- keyed hash of raw_token (see hash_alg)
+    hash_alg    TEXT      NOT NULL DEFAULT 'sha256', -- 'hmac-sha256' | 'sha256'
     scopes      TEXT      NOT NULL DEFAULT '[]',  -- JSON array of scope strings
     expires_at  INTEGER,                          -- Unix epoch ms; NULL = non-expiring
     last_used_at INTEGER,

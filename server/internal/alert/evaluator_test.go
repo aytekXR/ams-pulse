@@ -711,3 +711,84 @@ done:
 		t.Errorf("expected latency ≤ %.0f s (tick+window), got %.0f s", maxByConstruction, latencyS)
 	}
 }
+
+// ─── Test: alert_history is bounded at cap after a firing loop ────────────────
+
+// TestEvaluator_HistoryBoundedAtCap verifies that repeated fire+resolve cycles
+// keep the alert_history row count bounded at the configured cap. This is the
+// evaluator-level integration test for item 7 (alert_history pruning).
+//
+// Design: store cap is set to 10; the rule fires and resolves 7 times = 14
+// history entries attempted. After auto-prune, the count must equal exactly 10.
+func TestEvaluator_HistoryBoundedAtCap(t *testing.T) {
+	const cap = 10
+	const cycles = 7 // fire+resolve cycles; 14 entries attempted total
+
+	store := openTestStore(t)
+	store.SetAlertHistoryCap(cap)
+
+	live := newFakeLive()
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	clock := alert.NewFakeClock(start)
+
+	ev, _ := newTestEvaluator(t, store, live, clock)
+
+	// Rule: window_s=0 so it fires on the very first tick condition is met.
+	// cooldown_s=0 so it fires again immediately after the stream comes back online.
+	ctx := context.Background()
+	rule := meta.AlertRuleRow{
+		Name:               "bounded-history-test",
+		Metric:             "stream_offline",
+		Operator:           "eq",
+		Threshold:          1,
+		WindowS:            0,
+		ScopeJSON:          `{"stream_id":"bounded-stream"}`,
+		Severity:           "critical",
+		CooldownS:          1, // 1s so the clock advancing 1s/tick clears it each cycle
+		Enabled:            true,
+		Muted:              false,
+		MaintenanceWindows: "[]",
+		ChannelIDs:         `["test-channel"]`,
+	}
+	created, err := store.CreateAlertRule(ctx, rule)
+	if err != nil {
+		t.Fatalf("CreateAlertRule: %v", err)
+	}
+	ruleID := created.ID
+
+	onlineSnap := &domain.LiveSnapshot{
+		Streams: map[string]*domain.LiveStream{
+			"bounded-stream": {StreamID: "bounded-stream", App: "live"},
+		},
+		Nodes: map[string]*domain.LiveNodeStats{},
+	}
+	offlineSnap := &domain.LiveSnapshot{
+		Streams: map[string]*domain.LiveStream{},
+		Nodes:   map[string]*domain.LiveNodeStats{},
+	}
+
+	// Fire+resolve cycles: stream goes offline (fires) then online (resolves).
+	for i := 0; i < cycles; i++ {
+		// Offline: condition met → evaluator fires.
+		live.setSnap(offlineSnap)
+		clock.Advance(time.Second)
+		ev.TickOnce(ctx)
+
+		// Online: condition no longer met → evaluator resolves.
+		live.setSnap(onlineSnap)
+		clock.Advance(time.Second)
+		ev.TickOnce(ctx)
+	}
+
+	hist, err := store.ListAlertHistory(ctx, ruleID, "", 0, 0, 0)
+	if err != nil {
+		t.Fatalf("ListAlertHistory: %v", err)
+	}
+	got := len(hist)
+
+	if got != cap {
+		t.Errorf("HistoryBoundedAtCap: want %d rows, got %d (cap=%d, cycles=%d)", cap, got, cap, cycles)
+	} else {
+		t.Logf("PASS: history bounded at %d rows after %d fire+resolve cycles (cap=%d)", got, cycles, cap)
+	}
+}

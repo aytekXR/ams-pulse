@@ -466,8 +466,7 @@ func (s *Server) bearerAuthMiddleware(next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing or invalid Authorization header")
 			return
 		}
-		hash := sha256Hex(token)
-		tok, err := s.store.GetTokenByHash(r.Context(), hash)
+		tok, err := s.store.LookupToken(r.Context(), token)
 		if err != nil || tok == nil {
 			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid token")
 			return
@@ -817,8 +816,7 @@ func (s *Server) handleLiveWS(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing token")
 		return
 	}
-	hash := sha256Hex(token)
-	tok, err := s.store.GetTokenByHash(r.Context(), hash)
+	tok, err := s.store.LookupToken(r.Context(), token)
 	if err != nil || tok == nil {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid token")
 		return
@@ -1674,7 +1672,7 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rawToken := "plt_" + newToken()
-	hash := sha256Hex(rawToken)
+	tokenHash, hashAlg := s.store.HashToken(rawToken)
 	var scopes []string
 	if sv, ok := body["scopes"].([]any); ok {
 		for _, v := range sv {
@@ -1683,12 +1681,12 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	tok := meta.APIToken{Kind: kind, Name: name, TokenHash: hash, Scopes: scopes, CreatedAt: time.Now().UnixMilli()}
+	tok := meta.APIToken{Kind: kind, Name: name, TokenHash: tokenHash, HashAlg: hashAlg, Scopes: scopes, CreatedAt: time.Now().UnixMilli()}
 	if err := s.store.CreateToken(r.Context(), tok); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
-	created, err := s.store.GetTokenByHash(r.Context(), hash)
+	created, err := s.store.LookupToken(r.Context(), rawToken)
 	if err != nil || created == nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "token created but not found")
 		return
@@ -1792,8 +1790,7 @@ func (s *Server) handleIngestBeacon(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing X-Pulse-Ingest-Token")
 		return
 	}
-	hash := sha256Hex(ingestToken)
-	tok, err := s.store.GetTokenByHash(r.Context(), hash)
+	tok, err := s.store.LookupToken(r.Context(), ingestToken)
 	if err != nil || tok == nil || tok.Kind != "ingest" {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid ingest token")
 		return
@@ -1892,8 +1889,8 @@ func (s *Server) bootstrapIfFirstRun(ctx context.Context) error {
 		return err
 	}
 	rawToken := "plt_" + newToken()
-	hash := sha256Hex(rawToken)
-	tok := meta.APIToken{Kind: "api", Name: "admin (bootstrap)", TokenHash: hash, Scopes: []string{"admin"}, CreatedAt: time.Now().UnixMilli()}
+	tokenHash, hashAlg := s.store.HashToken(rawToken)
+	tok := meta.APIToken{Kind: "api", Name: "admin (bootstrap)", TokenHash: tokenHash, HashAlg: hashAlg, Scopes: []string{"admin"}, CreatedAt: time.Now().UnixMilli()}
 	if err := s.store.CreateToken(ctx, tok); err != nil {
 		return fmt.Errorf("bootstrap: %w", err)
 	}
