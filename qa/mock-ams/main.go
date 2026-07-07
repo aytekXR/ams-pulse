@@ -17,9 +17,13 @@
 //
 // Control endpoints (test driver uses these):
 //
-//	POST /control/publish       {"stream_id":"x","viewers":N}
+//	POST /control/publish       {"stream_id":"x","viewers":N[,"bitrate":N]}
 //	POST /control/unpublish     {"stream_id":"x"}
 //	POST /control/set_viewers   {"stream_id":"x","viewers":N}
+//	POST /control/set_bitrate   {"stream_id":"x","bitrate":N}
+//	  bitrate is the raw AMS wire value in bits/sec (Pulse's normalize.go divides
+//	  by 1000 to produce kbps). Example: 2000000 → 2000 kbps seen by Pulse.
+//	  Returns 400 on bad JSON or missing stream_id; 404 if stream not found.
 //	GET  /truth/viewers/{id}    → {"stream_id":"x","viewers":N}  (truth for assertions)
 //	GET  /healthz               → {"status":"ok"}
 package main
@@ -131,6 +135,20 @@ func (s *State) SetViewers(id string, viewers int) {
 	}
 }
 
+// SetBitRate updates the BitRate field for a stream.
+// bitrate is the raw AMS wire value in bits/sec — Pulse's normalize.go divides by 1000
+// to produce kbps (e.g. pass 2000000 to produce 2000 kbps as seen by Pulse).
+// Returns false if the stream does not exist.
+func (s *State) SetBitRate(id string, bitrate float64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if b, ok := s.broadcasts[id]; ok {
+		b.BitRate = bitrate
+		return true
+	}
+	return false
+}
+
 // TruthViewers returns the true total viewer count for a stream (for assertions).
 func (s *State) TruthViewers(id string) int {
 	s.mu.RLock()
@@ -207,11 +225,13 @@ func (s *Server) routes() {
 		})
 	})
 
-	// GET /rest/v2/broadcasts/{app}/list (paged)
-	// amsclient.ListBroadcastsPaged / ListBroadcasts expects: []BroadcastDTO
-	s.mux.HandleFunc("/rest/v2/broadcasts/", func(w http.ResponseWriter, r *http.Request) {
+	// broadcastsHandler handles all /rest/v2/broadcasts/... sub-paths regardless of
+	// whether the URL includes the app prefix (/{app}/rest/v2/broadcasts/...) or not
+	// (/rest/v2/broadcasts/...). Path matching uses strings.Contains so it is
+	// insensitive to offset/size suffixes and app-name placement.
+	broadcastsHandler := func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		// Match /rest/v2/broadcasts/{app}/list or /rest/v2/broadcasts/{app}/list/0/200
+		// Match .../list or .../list/{offset}/{size}
 		if strings.Contains(path, "/list") {
 			broadcasts := s.state.List()
 			if broadcasts == nil {
@@ -220,12 +240,12 @@ func (s *Server) routes() {
 			writeJSON(w, broadcasts)
 			return
 		}
-		// Match /rest/v2/broadcasts/{app}/{streamID}/webrtc-client-stats/0/100
+		// Match .../{streamID}/webrtc-client-stats/0/100
 		if strings.Contains(path, "/webrtc-client-stats") {
 			writeJSON(w, []map[string]any{})
 			return
 		}
-		// Match /rest/v2/broadcasts/{app}/{streamID}/statistics
+		// Match .../{streamID}/broadcast-statistics
 		if strings.Contains(path, "/statistics") {
 			writeJSON(w, map[string]any{
 				"totalHLSWatchTime":      0,
@@ -236,7 +256,16 @@ func (s *Server) routes() {
 			return
 		}
 		writeJSON(w, []map[string]any{})
-	})
+	}
+
+	// App-prefixed route: /{app}/rest/v2/broadcasts/...
+	// amsclient (D-029+) calls /{app}/rest/v2/broadcasts/list/{offset}/{size} and
+	// /{app}/rest/v2/broadcasts/{streamID}/webrtc-client-stats/0/100.
+	s.mux.HandleFunc("/"+s.cfg.AppName+"/rest/v2/broadcasts/", broadcastsHandler)
+
+	// Legacy un-prefixed route: /rest/v2/broadcasts/...
+	// Kept for backward compatibility with older test drivers and direct curl usage.
+	s.mux.HandleFunc("/rest/v2/broadcasts/", broadcastsHandler)
 
 	// GET /rest/v2/cluster/nodes
 	// amsclient.ClusterNodes expects: []ClusterNodeDTO
@@ -274,17 +303,22 @@ func (s *Server) routes() {
 	})
 
 	// POST /control/publish — drive scenario streams.
+	// Optional "bitrate" field (bits/sec, AMS wire value) defaults to 2000 for backward compat.
 	s.mux.HandleFunc("/control/publish", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			StreamID string `json:"stream_id"`
-			Viewers  int    `json:"viewers"`
+			StreamID string  `json:"stream_id"`
+			Viewers  int     `json:"viewers"`
+			BitRate  float64 `json:"bitrate"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.StreamID == "" {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
 		s.state.Publish(body.StreamID, body.Viewers)
-		log.Printf("mock-ams: published %s viewers=%d", body.StreamID, body.Viewers)
+		if body.BitRate != 0 {
+			s.state.SetBitRate(body.StreamID, body.BitRate)
+		}
+		log.Printf("mock-ams: published %s viewers=%d bitrate=%.0f", body.StreamID, body.Viewers, body.BitRate)
 		writeJSON(w, map[string]string{"status": "ok"})
 	})
 
@@ -313,6 +347,26 @@ func (s *Server) routes() {
 			return
 		}
 		s.state.SetViewers(body.StreamID, body.Viewers)
+		writeJSON(w, map[string]string{"status": "ok"})
+	})
+
+	// POST /control/set_bitrate — update the AMS wire bitrate for a published stream.
+	// "bitrate" is in bits/sec (raw AMS wire value); Pulse's normalize.go divides by 1000
+	// to produce kbps. Example: {"stream_id":"s1","bitrate":2000000} → 2000 kbps in Pulse.
+	// 400 on bad JSON or missing stream_id; 404 if the stream does not exist.
+	s.mux.HandleFunc("/control/set_bitrate", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			StreamID string  `json:"stream_id"`
+			BitRate  float64 `json:"bitrate"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.StreamID == "" {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if !s.state.SetBitRate(body.StreamID, body.BitRate) {
+			http.Error(w, "stream not found", http.StatusNotFound)
+			return
+		}
 		writeJSON(w, map[string]string{"status": "ok"})
 	})
 }
