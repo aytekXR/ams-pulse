@@ -65,11 +65,18 @@ const (
 )
 
 // TokenStore is a minimal interface to validate ingest tokens.
-// Satisfied by *meta.Store.
+// Satisfied by *meta.Store (via the serve.go adapter).
+//
+// The store receives the RAW token from the transport layer and is responsible
+// for all hashing and hash-algorithm fallback internally. This keeps the
+// constant-time / HMAC concerns entirely inside the store (D-052 semantics:
+// HMAC-SHA256 first, plain-SHA-256 legacy fallback) and out of the transport.
 type TokenStore interface {
-	// GetIngestTokenByHash returns the token record for a given SHA-256 hex hash.
-	// Returns nil, nil if not found.
-	GetIngestTokenByHash(ctx context.Context, hash string) (tokenID string, ok bool, err error)
+	// LookupIngestToken resolves a raw ingest token value to its token record.
+	// It returns (tokenID, true, nil) on success and ("", false, nil) when the
+	// token is not found or is not of kind "ingest". Errors are infrastructure
+	// failures only; "not found" is expressed as ok=false.
+	LookupIngestToken(ctx context.Context, rawToken string) (tokenID string, ok bool, err error)
 }
 
 // LicenseChecker is a minimal interface for beacon entitlement checks.
@@ -103,11 +110,14 @@ func (m *MemTokenStore) AddToken(rawToken, id string) {
 	m.hashes[sha256Hex(rawToken)] = id
 }
 
-// GetIngestTokenByHash implements TokenStore.
-func (m *MemTokenStore) GetIngestTokenByHash(_ context.Context, hash string) (string, bool, error) {
+// LookupIngestToken implements TokenStore.
+// It hashes the raw token internally (SHA-256) and returns the stored ID.
+// MemTokenStore always stores hashes so both NewMemTokenStore and AddToken
+// semantics remain identical to callers.
+func (m *MemTokenStore) LookupIngestToken(_ context.Context, rawToken string) (string, bool, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	id, ok := m.hashes[hash]
+	id, ok := m.hashes[sha256Hex(rawToken)]
 	return id, ok, nil
 }
 
@@ -310,15 +320,17 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// ── 1. Token auth (constant-time via hash lookup) ──────────────────────
+	// ── 1. Token auth ─────────────────────────────────────────────────────
 	rawToken := r.Header.Get("X-Pulse-Ingest-Token")
 	if rawToken == "" {
 		writeBeaconError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing X-Pulse-Ingest-Token header")
 		return
 	}
-	// Constant-time: SHA-256 hash first, then map lookup — never compare raw token
-	hash := sha256Hex(rawToken)
-	tokenID, ok, err := h.store.GetIngestTokenByHash(r.Context(), hash)
+	// Pass the raw token to the store; all hashing and hash-algorithm
+	// selection (HMAC-SHA256 for new tokens, plain SHA-256 for legacy rows)
+	// is the store's responsibility (D-052 semantics). The token is never
+	// echoed in responses regardless of outcome.
+	tokenID, ok, err := h.store.LookupIngestToken(r.Context(), rawToken)
 	if err != nil || !ok {
 		// Never distinguish "not found" from "error" — always 401
 		writeBeaconError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid ingest token")

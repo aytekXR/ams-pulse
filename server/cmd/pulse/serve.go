@@ -57,18 +57,28 @@ func (b *anomalyDetectorBridge) ComputeFlags(ctx context.Context, sigmaThreshold
 	return out, nil
 }
 
-// metaIngestTokenStore adapts meta.Store to the beacon.TokenStore interface.
-// beacon.TokenStore requires GetIngestTokenByHash; meta.Store exposes GetTokenByHash.
+// metaIngestTokenStore adapts *meta.Store to the beacon.TokenStore interface.
+//
+// The beacon transport passes the RAW token from the X-Pulse-Ingest-Token
+// header; we forward it to meta.Store.LookupToken which encodes the D-052
+// semantics: HMAC-SHA256 lookup first (new tokens), plain SHA-256 fallback
+// for legacy rows. We do NOT pre-hash here — all hashing stays in the store.
 type metaIngestTokenStore struct {
 	store *meta.Store
 }
 
-func (m *metaIngestTokenStore) GetIngestTokenByHash(ctx context.Context, hash string) (string, bool, error) {
-	tok, err := m.store.GetTokenByHash(ctx, hash)
+// LookupIngestToken implements beacon.TokenStore.
+func (m *metaIngestTokenStore) LookupIngestToken(ctx context.Context, rawToken string) (string, bool, error) {
+	tok, err := m.store.LookupToken(ctx, rawToken)
 	if err != nil {
 		return "", false, err
 	}
 	if tok == nil || tok.Kind != "ingest" {
+		return "", false, nil
+	}
+	// Enforce token expiry — mirrors the check in api/server.go bearerAuthMiddleware.
+	// ExpiresAt is Unix epoch milliseconds; nil means the token never expires.
+	if tok.ExpiresAt != nil && *tok.ExpiresAt < time.Now().UnixMilli() {
 		return "", false, nil
 	}
 	return tok.ID, true, nil
