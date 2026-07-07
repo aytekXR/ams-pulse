@@ -23,6 +23,11 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     css: false,
+    // Playwright specs live in e2e/ and must never run under vitest —
+    // vitest's default include pattern would sweep *.spec.ts and fail on
+    // @playwright/test's test() (D-055 CI red). node_modules is excluded
+    // by default; restate it since `exclude` replaces the defaults.
+    exclude: ["node_modules/**", "e2e/**"],
     // Set jsdom base URL so that relative fetch('/api/v1/...')
     // resolves to http://localhost/api/v1/... which msw can intercept.
     environmentOptions: {
