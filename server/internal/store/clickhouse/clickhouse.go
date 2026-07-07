@@ -65,6 +65,12 @@ type Store struct {
 
 	done chan struct{}
 	once sync.Once
+
+	// wg tracks the three flusher goroutines started by Start().
+	// Close() waits on wg before closing the connection, guaranteeing that
+	// all in-flight and buffered events are inserted before the connection
+	// is torn down.
+	wg sync.WaitGroup
 }
 
 // Conn is the read accessor for BE-02's query plane.
@@ -162,17 +168,55 @@ func (s *Store) GetConn() Conn {
 
 // Start launches the background flush goroutines. Call once after New.
 func (s *Store) Start(ctx context.Context) {
+	s.wg.Add(3)
 	go s.runServerEventFlusher(ctx)
 	go s.runBeaconEventFlusher(ctx)
 	go s.runViewerSessionFlusher(ctx)
 }
 
-// Close shuts down the store, flushing pending batches.
+// Close shuts down the store gracefully.
+//
+// # Drain contract
+//
+// Close() signals the three flusher goroutines to stop (via the done channel),
+// waits for each of them to drain its channel buffer completely and flush the
+// final partial batch, then closes the underlying ClickHouse connection.
+// Callers are guaranteed that every event queued before Close() returns has
+// been handed to the ClickHouse driver.
+//
+// Context-cancel vs Close()
+//
+// The ctx passed to Start() provides a *fast exit* for normal operation: each
+// flusher flushes its current in-memory batch and exits WITHOUT draining the
+// channel. This keeps the stop path lean for restarts where a fresh process
+// will reprocess events. The full drain guarantee holds only when the shutdown
+// path calls Close().
+//
+// IMPORTANT — serve.go gap: Start is called with the signal-aware ctx
+// (cancelled by SIGTERM). When SIGTERM fires, flushers exit via ctx.Done()
+// before Stop/Close is called, defeating the drain. Fix: pass
+// context.Background() (or a dedicated, non-signal context) to store.Start()
+// so only Close() controls flusher lifetime. This is a one-line change in
+// serve.go (s.store.Start(context.Background())), reported here rather than
+// applied because the broader context-wiring pattern affects all sources.
+//
+// Safety
+//
+//   - Idempotent: subsequent calls are no-ops (once.Do).
+//   - Safe when Start was never called: wg counter is zero, wg.Wait returns
+//     immediately, no hang.
+//   - Safe when ctx was already cancelled before Close: flushers exited via
+//     ctx.Done() first, wg counter is already zero, wg.Wait returns promptly.
+//   - Events sent after Close begins may be dropped (non-blocking send with
+//     default case) but will never panic.
 func (s *Store) Close() {
 	s.once.Do(func() {
 		close(s.done)
-		// Give flusher goroutines a moment to finish.
-		time.Sleep(100 * time.Millisecond)
+		// Wait for all flusher goroutines to drain their channels and exit.
+		// If Start was never called the counter is zero and Wait returns
+		// immediately. If flushers already exited via ctx.Done(), the counter
+		// is also zero and Wait returns immediately.
+		s.wg.Wait()
 		_ = s.conn.Close()
 	})
 }
@@ -212,16 +256,18 @@ func (s *Store) OnViewerSession(sess domain.ViewerSession) {
 // ─── Flush goroutines ─────────────────────────────────────────────────────────
 
 func (s *Store) runServerEventFlusher(ctx context.Context) {
+	defer s.wg.Done()
+
 	ticker := time.NewTicker(s.cfg.FlushInterval)
 	defer ticker.Stop()
 
 	batch := make([]domain.ServerEvent, 0, s.cfg.BatchSize)
 
-	flush := func() {
+	flush := func(flushCtx context.Context) {
 		if len(batch) == 0 {
 			return
 		}
-		if err := s.insertServerEvents(ctx, batch); err != nil {
+		if err := s.insertServerEvents(flushCtx, batch); err != nil {
 			s.logger.Error("clickhouse: insert server_events failed", "error", err, "count", len(batch))
 		} else {
 			s.inserted.Add(int64(len(batch)))
@@ -229,36 +275,69 @@ func (s *Store) runServerEventFlusher(ctx context.Context) {
 		batch = batch[:0]
 	}
 
+	// drain consumes all events remaining in the channel and flushes them.
+	// Uses context.Background() so inserts succeed even if Start's ctx is cancelled.
+	drain := func() {
+		drainCtx := context.Background()
+		for {
+			select {
+			case ev := <-s.serverEventCh:
+				batch = append(batch, ev)
+				if len(batch) >= s.cfg.BatchSize {
+					flush(drainCtx)
+				}
+			default:
+				flush(drainCtx)
+				return
+			}
+		}
+	}
+
 	for {
+		// Priority check: if Close() has been called, enter drain regardless of
+		// whether ctx is also cancelled. This ensures the graceful-drain guarantee
+		// holds even when both done and ctx.Done() fire simultaneously.
 		select {
 		case <-s.done:
-			flush()
+			drain()
+			return
+		default:
+		}
+
+		select {
+		case <-s.done:
+			drain()
 			return
 		case <-ctx.Done():
-			flush()
+			// Fast exit: flush the current in-memory batch only; do not drain
+			// the channel (events buffered there may be re-queued by a new
+			// process or are acceptable to lose on a crash restart).
+			flush(ctx)
 			return
 		case ev := <-s.serverEventCh:
 			batch = append(batch, ev)
 			if len(batch) >= s.cfg.BatchSize {
-				flush()
+				flush(ctx)
 			}
 		case <-ticker.C:
-			flush()
+			flush(ctx)
 		}
 	}
 }
 
 func (s *Store) runBeaconEventFlusher(ctx context.Context) {
+	defer s.wg.Done()
+
 	ticker := time.NewTicker(s.cfg.FlushInterval)
 	defer ticker.Stop()
 
 	batch := make([]domain.BeaconEvent, 0, s.cfg.BatchSize)
 
-	flush := func() {
+	flush := func(flushCtx context.Context) {
 		if len(batch) == 0 {
 			return
 		}
-		if err := s.insertBeaconEvents(ctx, batch); err != nil {
+		if err := s.insertBeaconEvents(flushCtx, batch); err != nil {
 			s.logger.Error("clickhouse: insert beacon_events failed", "error", err, "count", len(batch))
 		} else {
 			s.inserted.Add(int64(len(batch)))
@@ -266,36 +345,61 @@ func (s *Store) runBeaconEventFlusher(ctx context.Context) {
 		batch = batch[:0]
 	}
 
+	drain := func() {
+		drainCtx := context.Background()
+		for {
+			select {
+			case ev := <-s.beaconEventCh:
+				batch = append(batch, ev)
+				if len(batch) >= s.cfg.BatchSize {
+					flush(drainCtx)
+				}
+			default:
+				flush(drainCtx)
+				return
+			}
+		}
+	}
+
 	for {
 		select {
 		case <-s.done:
-			flush()
+			drain()
+			return
+		default:
+		}
+
+		select {
+		case <-s.done:
+			drain()
 			return
 		case <-ctx.Done():
-			flush()
+			flush(ctx)
 			return
 		case ev := <-s.beaconEventCh:
 			batch = append(batch, ev)
 			if len(batch) >= s.cfg.BatchSize {
-				flush()
+				flush(ctx)
 			}
 		case <-ticker.C:
-			flush()
+			flush(ctx)
 		}
 	}
 }
 
 func (s *Store) runViewerSessionFlusher(ctx context.Context) {
+	defer s.wg.Done()
+
 	ticker := time.NewTicker(s.cfg.FlushInterval)
 	defer ticker.Stop()
 
 	batch := make([]domain.ViewerSession, 0, s.cfg.BatchSize)
 
-	flush := func() {
+	flush := func(flushCtx context.Context) {
 		if len(batch) == 0 {
 			return
 		}
-		if err := s.insertViewerSessions(ctx, batch); err != nil {
+		if err := s.insertViewerSessions(flushCtx, batch); err != nil {
 			s.logger.Error("clickhouse: insert viewer_sessions failed", "error", err, "count", len(batch))
 		} else {
 			s.inserted.Add(int64(len(batch)))
@@ -303,21 +407,44 @@ func (s *Store) runViewerSessionFlusher(ctx context.Context) {
 		batch = batch[:0]
 	}
 
+	drain := func() {
+		drainCtx := context.Background()
+		for {
+			select {
+			case sess := <-s.viewerSessCh:
+				batch = append(batch, sess)
+				if len(batch) >= s.cfg.BatchSize {
+					flush(drainCtx)
+				}
+			default:
+				flush(drainCtx)
+				return
+			}
+		}
+	}
+
 	for {
 		select {
 		case <-s.done:
-			flush()
+			drain()
+			return
+		default:
+		}
+
+		select {
+		case <-s.done:
+			drain()
 			return
 		case <-ctx.Done():
-			flush()
+			flush(ctx)
 			return
 		case sess := <-s.viewerSessCh:
 			batch = append(batch, sess)
 			if len(batch) >= s.cfg.BatchSize {
-				flush()
+				flush(ctx)
 			}
 		case <-ticker.C:
-			flush()
+			flush(ctx)
 		}
 	}
 }
@@ -455,8 +582,8 @@ func (s *Store) insertBeaconEvents(ctx context.Context, batch []domain.BeaconEve
 				boolToUint8(boolFromData(d, "fatal")),
 				float32(floatFromData(d, "from_kbps")),
 				float32(floatFromData(d, "to_kbps")),
-				strFromData(d, "from"),    // resolution_from
-				strFromData(d, "to"),      // resolution_to
+				strFromData(d, "from"), // resolution_from
+				strFromData(d, "to"),   // resolution_to
 				ev.PlayerKind,
 				ev.SDK,
 				ev.Tenant,

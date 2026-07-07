@@ -407,8 +407,11 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 // Start launches background services. Returns an error if any service fails
 // to start (not if a transient operational error occurs — those are logged).
 func (s *server) Start(ctx context.Context) error {
-	// Start ClickHouse flush goroutines.
-	s.store.Start(ctx)
+	// Start ClickHouse flush goroutines. Deliberately NOT the signal-aware ctx:
+	// on SIGTERM the flushers must keep running until Close() drains the queued
+	// events (graceful drain, D-051). Producers stop via ctx; the store stops
+	// via s.store.Close() in Shutdown.
+	s.store.Start(context.Background())
 
 	// Start stale-stream eviction loop.
 	go func() {
