@@ -10,43 +10,37 @@
 
 ---
 
-## ▶ START HERE (next session — production readiness: e2e backfill, then test backfill)
+## ▶ START HERE (next session — production readiness: test backfill)
 
-**Session 2026-07-07(b) result: `pulse-prod-harden` is COMPLETE AND DEPLOYED.** Verify with
-`git log --oneline -6` (all CI-green; final run 7/7 jobs):
-- **D-052 `80c3c14`+`380f852`+`aed70f8`** — all five P2 items, adversarially verified (`pulse-harden-p2-resume`
-  workflow: 19 agents, 5 per-item verifiers ×3 rounds, 2 fix rounds, 0 unresolved): secrets `_FILE` in BOTH config
-  layers + serve/migrate/`diag --reconcile` paths + opt-in `deploy/docker-compose.secrets.yml`; API tokens
-  HMAC-SHA256 with `api_tokens.hash_alg` (**legacy sha256 rows keep authenticating** — proven vs a real old-schema
-  DB and on live prod; ⚠️ rotating `PULSE_SECRET_KEY` invalidates hmac tokens); `alert_history` auto-prune (cap
-  1000 inside `CreateAlertHistory` — bounds every caller incl. delivery_failure + reports scheduler); resource
-  limits (pulse 512m/0.5, CH 2g/1.0, caddy 256m/0.5, backup 256m/0.25); SecretKey fail-closed (empty/<16-byte
-  rejected on every boot path; hardened overlay `:?`→`:-`, enforcement moved app-side).
-- **D-053 `501cac3`** — tree-wide gofmt (29 files) + ci.yml `gofmt -l` gate + coverage floor 55→**58** + CI migrate
-  smoke-test needed a dummy `PULSE_SECRET_KEY` (the D-052 guard correctly broke it).
-- **D-054 `611ae6b`** — **PROD ROLLED OUT** (image rebuilt; the backup overlay is now part of the standing prod
-  combo). Rollout first failed on the same guard class — `pulse-migrate` one-shot lacked `PULSE_SECRET_KEY`
-  (~2 min downtime, fixed). **§8 smoke ALL GREEN on live prod:** healthz ok; signed `/webhook/ams` → 200,
-  bad-sig → 401; legacy admin token authenticates; limits bound; backup sidecar first cycle produced dated
-  CH+sqlite artifacts; logs clean.
-Coverage 57.8% → **59.4%**. Detail: `decisions.md` D-052…D-054. Do NOT re-do any of this.
-⚠️ **Hard-won lesson (D-053+D-054):** when adding a startup guard (env requirement), update EVERY invocation env —
-ci.yml steps AND compose one-shots — in the SAME commit, and staging-verify (§8.7) before prod for any
-boot-behavior change; `config -q` does not boot the binary.
+**Session 2026-07-07(c) result: `pulse-e2e-backfill` is COMPLETE (D-055 + D-056).** Two workflows
+(13 + 7 agents), all verifiers green. Verify with `git log --oneline -6`:
+- **D-055 `001bcbe`+`3882952`+`a3cb351`** — e2e.yml now asserts A1 alert→history (fires in ~4s), A3
+  health_score 100→50 transition (new mock-ams `/control/set_bitrate`; equality assert, never unpublish),
+  A2 ephemeral-Pro-license beacon→`/qoe/summary` (`qa/licensegen`, ≤120s bounded poll, real ~10s);
+  Playwright skeleton `web/e2e/` (5 specs; CSP spec skipped → Caddy-fronted phase 2) + non-required
+  `web-e2e` ci job. ⚠️ Plan correction that MUST survive: normalize.go:79 divides wire bitrate by 1000 —
+  mock wire 2000000→health 100, 400000→50. On this VPS run Playwright via
+  `mcr.microsoft.com/playwright:v1.61.1-noble` (host lacks chromium libs, no sudo).
+- **D-056 `0240a29`** — the e2e's faithful repro EXPOSED two pre-existing bugs, both fixed: (1) beacon
+  ingest always-401 post-D-052 (adapter used plain-SHA-256 `GetTokenByHash`; now raw-token
+  `LookupIngestToken` → HMAC-aware `meta.LookupToken` + kind + NEW expiry guard, 6 TDD adapter tests);
+  (2) mock-ams still served pre-D-029 un-prefixed broadcast paths → every poll 404'd (even the OLD e2e
+  overview assert was silently broken; e2e only runs on PRs). ⚠️ **Prod runs the pre-D-056 image** — no live
+  impact (beacon is Pro+-gated, U3 pending); ship with the next prod rollout.
+Coverage 59.4% → **59.5%**; full -race suite 24 pkgs, 0 FAIL / 0 SKIP. Detail: `decisions.md` D-055/D-056.
+Do NOT re-do any of this. E2E-TEST-PLAN.md phase-2 leftovers: caddy-fronted CSP/Playwright job,
+delivery_failure e2e, promote web-e2e to required after ~2 weeks green.
 
-**▶ FIRST ACTION — run the `pulse-e2e-backfill` workflow** per **`agents/handoffs/E2E-TEST-PLAN.md`**
-(operator-requested 2026-07-07): A1 alert→history e2e (ingest_bitrate_floor vs mock-ams fixed 2000 kbps),
-A3 health-score 100→50 transition (add mock-ams `set_bitrate`), A2 `qa/licensegen` + beacon → `rollup_qoe_1h` →
-`/qoe/summary` (120s bounded poll), B Playwright skeleton (route-mocked, `vite preview`, non-required CI job).
-Key corrections baked in: there is NO `/login` route (AuthGate renders in-place) and CSP comes from Caddy, not Go.
+**▶ FIRST ACTION — run the `pulse-test-backfill` workflow** (§6): remaining coverage debt:
+`internal/query` **0%** (highest blast radius), `store/clickhouse` unit, `cmd/pulse` wiring, `license`
+37→≥85, `alert/channels` 57→≥80. `internal/config` is NO LONGER 0% (D-052 tests). Ratchet the ci.yml
+coverage floor (now 58) as totals climb. Response-body contract tests (kin-openapi) count toward this phase.
 
 **Then, in order:**
-1. **`pulse-test-backfill`** (§6) — remaining coverage debt: `internal/query` **0%** (highest blast radius),
-   `store/clickhouse` unit, `cmd/pulse` wiring, `license` 37→≥85, `alert/channels` 57→≥80. `internal/config` is
-   NO LONGER 0% (D-052 tests). Ratchet the ci.yml coverage floor (now 58) as totals climb.
-2. **B7 per-source webhook secret** (contract CR via INT-01) + remaining P3 security/feature backlog (§2, §4 phase 4).
-3. **Backup watch:** the sidecar's next unattended cycle is ~07:31 daily — confirm a second dated artifact set
+1. **B7 per-source webhook secret** (contract CR via INT-01) + remaining P3 security/feature backlog (§2, §4 phase 4).
+2. **Backup watch:** the sidecar's next unattended cycle is ~07:31 daily — confirm a second dated artifact set
    appears and keep-7 pruning behaves once 8 days of artifacts exist.
+3. **Next prod rollout** carries D-056 (beacon fix) — standing combo incl. backup overlay; §8.7 staging-verify first.
 
 ### Operator-only actions (surface every session)
 - **U3 — activate a Pro+ Pulse license.** Until then QoE/beacon data does NOT flow in prod; rebuffer/error-rate alerts
@@ -88,8 +82,8 @@ file + `decisions.md` (new D-0NN) each session. AMS web login is RESOLVED (D-036
   (`git rev-list --count main..ams-integration` = **0**; `ams-integration..main` = **5**). `ams-integration`
   (@ `4dd448a`) is now a **stale pointer to retire**. `main` is ahead of `origin/main` (the handoff commits D-036–D-037,
   push pending). Remaining branch work: delete the stale `ams-integration` ref + apply branch protection + a `v*` tag (U4).
-- **Go suite green / coverage 59.4%** as of 2026-07-07(b) (full `-race` + coverage, **repo-root mount**,
-  golang:1.25, after D-052…D-054; was 47.5% on 2026-06-28). Working tree is CLEAN — everything is committed and
+- **Go suite green / coverage 59.5%** as of 2026-07-07(c) (full `-race` + coverage, **repo-root mount**,
+  golang:1.25, after D-052…D-056; was 47.5% on 2026-06-28). Working tree is CLEAN — everything is committed and
   pushed; CI additionally enforces a `gofmt -l` gate and a 58% coverage floor (D-053).
 - **The prod image embeds the web UI** (multi-stage `deploy/docker/pulse.Dockerfile`: `npm ci && npm run build` →
   embedded in the Go binary), so a passing go-live build implies the web build passed.
@@ -133,8 +127,9 @@ AMS web-console login (D-036); `ams-integration` is now contained in `main` (bra
   (D-052). Remaining [P3]: B7 per-source webhook secret (contract CR).
 - **Feature completion (PRD) [P3]:** QoE/beacon e2e (needs U3); Postgres meta backend (HA); SSO/OIDC; mobile SDKs;
   native WebRTC/RTMP/DASH probes; white-label PDF logo.
-- **Testing [P0 for prod-readiness]:** 3 packages at 0.0%, 0 Playwright, no coverage gate, no response-body contract
-  tests, shallow e2e — full breakdown in §6.
+- **Testing [P0 for prod-readiness]:** `query` + `store/clickhouse` unit still ~0%, no response-body contract
+  tests. ✅ e2e deepened (D-055: alert→history, health transition, beacon→QoE) + Playwright skeleton +
+  coverage floor (D-053). Remaining breakdown in §6.
 
 ---
 
@@ -265,11 +260,9 @@ alert 72.
 **Priority (critical-business-logic-first):**
 1. `license` 37→≥85 **and ENFORCE** the 3 gates + alert test-fire real `Send()`.
 2. `query` 0→≥70 (mock-Conn unit) — analytics behind every chart.
-3. alert firing→delivery (`channels` 57→≥80) + **retry** + alert→history e2e. **[VERIFIED 2026-06-29 — real gap]**
-   Unmuting the `Stream offline` default rule + stopping the zombie RTMP test stream produced **NO** history entry in
-   130 s: `evalStreamOffline` reads the live snapshot and a vanished stream isn't in it. To *demonstrate* a visible
-   alert use a snapshot-present metric (e.g. `ingest_bitrate_floor` with a threshold above the live bitrate) or a
-   tracked/registered stream — and the firing→history path itself has no e2e. Fix + test this FIRST.
+3. alert firing→delivery (`channels` 57→≥80). ✅ The alert→history e2e gap is CLOSED (D-055, exactly the
+   snapshot-present-metric approach: `ingest_bitrate_floor` lt 99999 → firing history row ≤30s). Still open:
+   delivery_failure e2e (webhook channel at a dead URL → history row; E2E-TEST-PLAN phase 2) + channels unit depth.
 4. `config` 0→≥80 — all env vars + failure paths.
 5. `store/clickhouse` + `meta` — unit + expand integration to all query methods.
 6. AMS wire **fixture-replay regression** pinning D-029/D-031 (bps→kbps, FPS-redistribution, `terminated_unexpectedly`,
@@ -279,14 +272,15 @@ alert 72.
    unloaded). Loosen the budget like D-039 did — a real future CI-red risk.
 
 **CI gaps to close (`.github/workflows`) — the "see breakage in CI" asks:**
-- **ADD a coverage gate** — fail the build if total < floor OR any package regresses (ratchet). *(the #1 request)*
-- **ADD Playwright browser e2e** (`web/e2e/`, NEW — none today): SPA renders, auth redirect, CSP enforced, large-table
-  virtualization, zero console errors.
+- ✅ **Coverage gate** — DONE (D-053): floor 58, ratchet as totals climb. Per-package regression check still optional.
+- ✅ **Playwright browser e2e** — SKELETON DONE (D-055): `web/e2e/` 5 specs (auth gate in-place, dashboard zero
+  console errors, 500-row virtualization, 401→gate; CSP spec skipped). Phase 2: caddy-fronted CSP job, promote
+  `web-e2e` to required after ~2 weeks green.
 - **ADD response-body contract tests** (kin-openapi) in `internal/api`: assert real responses conform to
   `contracts/openapi/pulse-api.yaml` (CI only lints the spec today, never the responses).
 - **ADD web coverage threshold** (`vitest --coverage` gate).
-- **DEEPEN `e2e.yml`**: assert alert fires→delivered, beacon→QoE (after license), real-AMS fixture replay (today only
-  checks overview activity>0 vs mock-ams).
+- ✅ **e2e.yml DEEPENED** (D-055): alert fires→history, health 100→50 transition, beacon→QoE under an ephemeral
+  Pro license. Still open: delivery_failure e2e, real-AMS fixture replay.
 
 ---
 
@@ -356,11 +350,11 @@ health scoring, (4) AMS wire decode/normalize, (5) the query layer. Report cover
 |---|---|---|
 | A1 | ✅ Resolved (2026-06-29): `main` now **contains** `ams-integration` (`main..ams-integration` empty). | Retire the stale `ams-integration` ref + branch protection (U4). |
 | A2 | ✅ **VERIFIED GREEN (2026-06-30, D-039)** — `ci` all-green (run 28429722100) after de-flaking the QoE rollup test (15s→90s); readable via `gh` (U6 ✅), no longer an assumption. | Keep green: `gh run watch` after pushes. |
-| A3 | **test-fire DELIVERS (D-041)** — real `Send()` via `buildChannelFromRow`, verified to a httptest sink + adversarially. Still open: no **retry** (transient SMTP/Slack fail = silent miss); no alert-fires→history **e2e**. | Add delivery retry (`pulse-prod-harden`) + alert-fires→history e2e (`pulse-test-backfill`). |
+| A3 | ✅ Resolved: test-fire delivers (D-041); delivery retry (D-049); alert-fires→history **e2e in CI** (D-055, fired in ~4s live). Still open: delivery_failure e2e (phase 2). | Keep green via e2e.yml. |
 | A4 | "Coverage is adequate." **FALSE** — 3 pkgs 0%, no gate. | `pulse-test-backfill` + coverage gate (§7). |
 | A5 | "The 0.0% pkgs are covered by integration tests." Partially — only ~3 of ~12 query methods. | Add unit tests with a mock Conn (§6). |
-| A6 | "QoE/beacon works in prod." **UNVERIFIED** — needs Pro+ license. | U3 + beacon→qoe/summary e2e. |
-| A7 | "The SPA renders / CSP is correct." **UNVERIFIED** — no Playwright, no browser run. | U5 + Playwright CSP/render test. |
+| A6 | "QoE/beacon works in prod." **CI-VERIFIED under a mock Pro license** (D-055 beacon→rollup→qoe/summary e2e) and the always-401 bug it exposed is FIXED (D-056) — but prod still runs the pre-D-056 image AND has no license. | U3 + next prod rollout (carries D-056), then a live beacon smoke. |
+| A7 | "The SPA renders / CSP is correct." **HALF-VERIFIED**: render/zero-console-errors/virtualization/auth now asserted by Playwright (D-055, route-mocked). CSP still unverified (Caddy-served; not reachable from `vite preview`). | U5 manual check + caddy-fronted Playwright CSP job (phase 2). |
 | A8 | "Response bodies match the OpenAPI contract." **UNVERIFIED** — only spec-linting. | Response-body contract tests (kin-openapi). |
 | A9 | "The real-AMS wire format is fully characterized." Partial — fixtures from one capture. | Watch pulse logs for decode errors; add a fixture-replay contract test; re-capture periodically. |
 | A10 | "The teststream represents production load." **FALSE** — 1 low-bitrate publisher, 0 viewers. | Load/perf test (many streams/apps/viewers); VD-04 render-time at scale. |

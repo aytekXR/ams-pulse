@@ -1642,3 +1642,36 @@ bad-sig → 401; **legacy sha256 admin token authenticates** (D-052 HMAC back-co
 upgrade applied to the real prod meta DB at serve boot); limits bound exactly (512M/0.5, 2G/1.0, 256M/0.5,
 256M/0.25 via docker inspect); backup sidecar first cycle produced dated CH zip + sqlite artifacts (keep-7,
 daemon 24h); pulse logs clean. Live overview now shows total_publishers:2 (LiveApp).
+
+## D-055 · 2026-07-07 · e2e backfill: alert→history, health transition, beacon→QoE, Playwright skeleton
+
+Commits `001bcbe` (qa), `3882952` (web+ci), `a3cb351` (e2e.yml+deploy). Executed E2E-TEST-PLAN.md as the
+`pulse-e2e-backfill` workflow (13 agents: 3 authors + wire + 3 verifiers + 2 fix rounds) + a follow-up
+`pulse-e2e-bugfix` workflow (7 agents). e2e.yml now asserts: **A1** rule ingest_bitrate_floor lt 99999 →
+firing history row ≤30s (fired in ~4s live); **A3** health_score 100→50 transition on a dedicated stream via
+new mock-ams `/control/set_bitrate` (equality assert, no unpublish); **A2** ephemeral Pro license
+(`qa/licensegen`, fresh ed25519 pair per run, nothing persisted) → ingest-token mint → beacon POST 202
+accepted:1 → `/qoe/summary` ≤120s (real: ~10s). Playwright: `web/e2e/` 5 specs (auth-gate in-place — NO
+/login route; zero-console-error dashboard render; 500-stream virtualization; 401→gate; CSP skipped, Caddy
+serves it), non-required `web-e2e` ci job; on this VPS run via `mcr.microsoft.com/playwright:v1.61.1-noble`
+(host lacks chromium libs). **Plan correction found pre-dispatch:** the plan's A3 math ignored
+normalize.go:79 (wire bitrate ÷1000) — mock's hardcoded 2000 = 2 kbps, so baseline health was ALREADY 50;
+wire values 2000000/400000 give the 100→50 transition. Verified: full faithful step-by-step local repro of
+e2e.yml (all asserts green, logs clean, teardown ok) + Playwright green incl. a mutation test (sabotaged mock
+→ spec fails → restored byte-identical) + full -race suite 24 pkgs 0 FAIL/0 SKIP, coverage 59.5%.
+
+## D-056 · 2026-07-07 · Beacon ingest 401: D-052 HMAC regression + missing expiry guard (found by D-055 e2e)
+
+Commit `0240a29`. The deepened e2e's faithful repro exposed TWO pre-existing bugs. (1) **beacon ingest
+always 401 post-D-052**: `metaIngestTokenStore` looked ingest tokens up by plain SHA-256
+(`GetTokenByHash`) while D-052 stores new tokens HMAC-SHA256 — admin API got the HMAC-aware `LookupToken`,
+the beacon adapter didn't. Fix: `beacon.TokenStore` now takes the RAW token
+(`LookupIngestToken(ctx, rawToken)`); the serve.go adapter delegates to `meta.Store.LookupToken` (HMAC
+first, legacy sha256 fallback — D-052 semantics NOT re-implemented) + kind=ingest guard. Adversarial verify
+round also caught **missing expiry enforcement** on this path (expired ingest tokens were accepted) — same
+guard as bearerAuthMiddleware, now TDD-pinned (6 adapter tests: HMAC, legacy back-compat, wrong-kind,
+wrong-token, expired, future-expiry). Raw token never logged; 401 body is a fixed string. (2) **mock-ams
+pre-D-029 paths** (in D-055's qa commit): amsclient polls `/{app}/rest/v2/broadcasts/...` but the mock only
+served un-prefixed paths → every poll 404 → even the OLD e2e overview assert was silently broken (e2e runs
+on PRs only — nobody saw it). ⚠️ Prod runs the pre-D-056 image: no live impact (beacon ingest is Pro+-gated,
+U3 pending) — ship the fix with the next prod rollout.
