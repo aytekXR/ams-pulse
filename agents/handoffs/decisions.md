@@ -1659,6 +1659,13 @@ normalize.go:79 (wire bitrate ÷1000) — mock's hardcoded 2000 = 2 kbps, so bas
 wire values 2000000/400000 give the 100→50 transition. Verified: full faithful step-by-step local repro of
 e2e.yml (all asserts green, logs clean, teardown ok) + Playwright green incl. a mutation test (sabotaged mock
 → spec fails → restored byte-identical) + full -race suite 24 pkgs 0 FAIL/0 SKIP, coverage 59.5%.
+**Post-push CI red + fix `4717bd5`:** vitest's default include swept `web/e2e/*.spec.ts` → the `web` job's
+Test step failed (Playwright's `test()` refuses vitest); fixed with `exclude: ["node_modules/**","e2e/**"]`
+in vite.config.ts, full vitest suite re-verified green (14 files/177 tests). Lesson (D-053 class): the verify
+battery ran build/lint/playwright but not `npm run test` after adding the specs — reproduce EVERY ci step.
+Local-only trap: `web/node_modules.bak/` also matched vitest's sweep (default exclude misses the `.bak`
+name) → moved out of the repo to `~/web-node_modules.bak-moved-20260708` (operator: restore or delete).
+After the fix: ci run 28902954401 all 8 jobs green + dispatched e2e run 28901736560 green (3m38s).
 
 ## D-056 · 2026-07-07 · Beacon ingest 401: D-052 HMAC regression + missing expiry guard (found by D-055 e2e)
 
