@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:ui": "vitest --ui",
     "preview": "vite preview",
+    "test:e2e": "playwright test",
     "gen:api": "openapi-typescript ../contracts/openapi/pulse-api.yaml -o src/lib/api/schema.d.ts",
     "generate:api": "npm run gen:api"
   },
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.61.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

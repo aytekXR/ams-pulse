@@ -263,6 +263,51 @@ jobs:
           echo "NOTE(D-002): helm install/upgrade not run — no cluster available in dev env."
           echo "  QA-01 must validate chart on a real cluster before Helm AC is fully green."
 
+  # ── 8. Web e2e (Playwright) ──────────────────────────────────────────────────
+  # Chromium-only, API route-mocked via page.route — no backend needed.
+  # continue-on-error: true while stabilising; promote to required after 2 weeks green.
+  # D-042 reminder: a wait that never resolves is a deterministic bug — never bump timeouts.
+  web-e2e:
+    runs-on: ubuntu-latest
+    needs: contracts
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: cd web && npm ci --legacy-peer-deps
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('web/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browsers (chromium + system deps)
+        run: cd web && npx playwright install chromium --with-deps
+
+      - name: Build web UI
+        run: cd web && npm run build
+
+      - name: Run Playwright e2e tests
+        run: cd web && npx playwright test
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            web/playwright-report/
+            web/test-results/
+          retention-days: 14
+
   # ── 7. Compose ───────────────────────────────────────────────────────────────
   # Config-level validation of both the base file and the CI override.
   # A sibling agent authors deploy/docker-compose.ci.yml.
