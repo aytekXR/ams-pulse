@@ -1586,3 +1586,59 @@ item 6 landed-but-unverified, item 7 NOT started; ALL of it UNCOMMITTED + UNTEST
 this session is at `agents/handoffs/E2E-TEST-PLAN.md`. Also discovered: 33 pre-existing files fail
 `gofmt -l` under go1.25.11 and CI has NO gofmt step — scheduled as a dedicated style commit + ci.yml gate
 AFTER D-052.
+
+## D-052 · 2026-07-07 · P2 hardening batch complete (items 5-9 of pulse-prod-harden)
+
+Commits `80c3c14` (config/cmd) + `380f852` (store/meta,api,contracts) + `aed70f8` (deploy); CI green via
+D-053's run 28848826188 (the first run 28848441005 failed only on the CI migrate smoke-test env — see D-053).
+Resumed the stopped `pulse-harden-p2-batch` as workflow `pulse-harden-p2-resume` (19 agents: 1 author,
+5 adversarial verifiers ×3 rounds, 2 fixers, 1 gate; 0 unresolved refutations; full pre-edit baseline was
+green). Coverage 57.8% → **59.4%**.
+
+- **Item 5 — secrets `_FILE` convention:** `config.GetSecret` resolves `<NAME>_FILE` (file wins over env,
+  one trailing newline trimmed, missing file = hard error) in BOTH config layers, incl. named AMS sources
+  (`PULSE_AMS_<NAME>_TOKEN_FILE`) and the serve/migrate/`diag --reconcile` boot paths. Opt-in overlay
+  `deploy/docker-compose.secrets.yml` + gitignored `deploy/secrets/` (README tracked).
+- **Item 6 — API-token HMAC:** tokens stored as HMAC-SHA256(hmacKey, token) with `api_tokens.hash_alg`;
+  hmacKey domain-separated-SHA-256-derived from the cipher key; api delegates to `store.HashToken/LookupToken`
+  at all 5 token paths. **Legacy bare-sha256 rows still authenticate** — proven against a real old-schema DB
+  upgraded by the idempotent in-`Migrate` `PRAGMA table_info`→`ALTER TABLE` (the live prod admin token is such
+  a row; verified live post-rollout). Empty-cipher-key dev fallback keeps sha256. ⚠️ Documented caveat: rotating
+  `PULSE_SECRET_KEY` invalidates hmac-sha256 tokens (indistinguishable from a bad token).
+- **Item 7 — alert_history auto-prune:** `CreateAlertHistory` prunes per rule after every insert (exported
+  `PruneAlertHistory`, cap `AlertHistoryDefaultKeep=1000`, newest-by-ts kept, rowid tiebreak, COUNT-first
+  O(excess) design — 308ms at n=2000; the naive NOT-IN subquery was O(n²), 217s). Bounds evaluator
+  firing/resolved/delivery_failure + reports-scheduler paths; evaluator integration test pins boundedness.
+- **Item 8 — resource limits:** pulse 512m/0.5, clickhouse 2g/1.0, caddy 256m/0.5, backup 256m/0.25;
+  rendered + empirically bound (`HostConfig.Memory/NanoCpus`) + checked against live prod usage (max 909MiB CH).
+- **Item 9 — SecretKey validation:** `validate()` + serve/migrate/reconcile guards reject empty/<16-byte
+  `PULSE_SECRET_KEY` for non-`:memory:` DSNs with an actionable error (`meta.New` previously fell back
+  SILENTLY to a persisted key file). Verifiers caught: the serve path never called `validate()` (dead code),
+  `runReconcile` bypassed `GetSecret`, and the secrets overlay could not satisfy hardened's `:?` guards
+  (compose evaluates `:?` at parse time) → hardened now uses `:-` with **fail-closed enforcement app-side**
+  (serve refuses boot on bad key; webhook listener skipped fail-closed without its secret — D-048 property kept).
+
+## D-053 · 2026-07-07 · Tree-wide gofmt + CI gofmt gate + coverage floor 58 + migrate smoke key
+
+Commit `501cac3`, CI green (run 28848826188, all 7 jobs). 29 pre-existing files gofmt'd (go1.25 reflow,
+alignment-only — verified no code changes; full -race suite green after). ci.yml server job gains a
+`gofmt -l` gate; coverage floor ratcheted 55.0 → 58.0 (total 59.4%). Also fixed the D-052-induced CI red:
+the migrate smoke-test step had no `PULSE_SECRET_KEY`, so the new fail-closed guard correctly refused boot —
+step now sets a CI-only dummy key (locally reproduced against a scratch CH 24.8: fails without, migrates with).
+Lesson re-confirmed (memory updated): an ORCH gate must reproduce EVERY ci.yml step — the workflow gate ran
+unit/-race+web+compose but not the migrate smoke, and CI went red on the gap.
+
+## D-054 · 2026-07-07 · Prod rollout of D-048..D-053 + pulse-migrate guard fix
+
+Commit `611ae6b`, CI green. Rolled prod (`pulse-prod`, image rebuilt) to D-048..D-053 with the backup overlay
+now part of the standing combo. The rollout FAILED first: the `pulse-migrate` one-shot (hardened overlay,
+scratch `/tmp/pulse_meta.db` DSN = non-`:memory:`) predates D-052's fail-closed key guard → exit 1 → pulse and
+caddy (depends_on chain) never started; **~2 min public downtime**, fixed by adding `PULSE_SECRET_KEY` to the
+one-shot's env and re-upping. Same failure class as D-053's CI fix — a new startup guard must be propagated to
+EVERY invocation env (ci.yml steps + compose one-shots) in the SAME commit; a §8.7 staging-verify would have
+caught it pre-prod (skipped out of overconfidence in config -q; don't skip it for boot-behavior changes).
+**§8 smoke ALL GREEN on live prod:** `/healthz` ok (all components); signed `/webhook/ams` POST → 200,
+bad-sig → 401; **legacy sha256 admin token authenticates** (D-052 HMAC back-compat proven live, hash_alg
+upgrade applied to the real prod meta DB at serve boot); limits bound exactly (512M/0.5, 2G/1.0, 256M/0.5,
+256M/0.25 via docker inspect); backup sidecar first cycle produced dated CH zip + sqlite artifacts (keep-7,
+daemon 24h); pulse logs clean. Live overview now shows total_publishers:2 (LiveApp).

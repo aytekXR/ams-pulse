@@ -3,73 +3,59 @@
 > **This is the one handoff doc.** It supersedes the previous separate "next-session" prompt (merged 2026-06-29,
 > D-037); don't recreate a second handoff file — update THIS one + `decisions.md` each session.
 > Pulse = self-hosted analytics/QoE/alerting for Ant Media Server. Repo: `/home/aytek/repo/ams-pulse`
-> on VPS `161.97.172.146`. Full decision log: `agents/handoffs/decisions.md` (D-001…D-051 + session notes, binding).
+> on VPS `161.97.172.146`. Full decision log: `agents/handoffs/decisions.md` (D-001…D-054 + session notes, binding).
 > Detailed phase plan: `agents/handoffs/PRODUCTION-READINESS.md`. AMS operator guide:
 > `agents/handoffs/AMS-INTEGRATION.md`. Go-live runbook + rollback: `deploy/runbooks/real-ams-go-live.md`.
 > Operator creds/keys (gitignored, never commit): `oguz-testing.md`.
 
 ---
 
-## ▶ START HERE (next session — resume `pulse-prod-harden` MID-P2)
+## ▶ START HERE (next session — production readiness: e2e backfill, then test backfill)
 
-**Session 2026-07-07 result: P1 is DONE (all 4 orders implemented, adversarially verified, committed, CI-GREEN);
-P2 was cut mid-flight by a usage limit.** Verify with `git log --oneline -5`:
-- **D-048 `54aac48`** webhook path complete — expose 8092 + fail-closed `${PULSE_WEBHOOK_SECRET:?}` env +
-  `TestEndToEndWebhookTCPListener` (real TCP, mutation-proven). Real secret IS set in gitignored `deploy/.env`.
-- **D-049 `ff6510f`** alert-delivery retry (async per-channel, 1+3 attempts, 500ms·2^n cap 5s ±20% jitter,
-  ctx-abortable, Stop() bounded) + `delivery_failure` alert_history rows. **Contract CR applied:** state enum +=
-  `delivery_failure` (both places) + regenerated `web/src/lib/api/schema.d.ts`.
-- **D-050 `cf053c8`** backups — `docker-compose.backup.yml` sidecar + CH backups disk + `pulse-backup.sh` (keep-7)
-  + `deploy/runbooks/backup-restore.md`; restore PROVEN for both stores (incl. the stale-WAL doc bug verifiers caught).
-- **D-051 `0400373`** ClickHouse graceful drain (WaitGroup drain → conn.Close last) **+ serve.go one-liner**
-  `store.Start(context.Background())` — without it SIGTERM fast-exited flushers before Close and the drain was dead code.
-Coverage 47.5% → **57.8%** total. Detail: `decisions.md` D-048…D-051. Do NOT re-do any of this.
+**Session 2026-07-07(b) result: `pulse-prod-harden` is COMPLETE AND DEPLOYED.** Verify with
+`git log --oneline -6` (all CI-green; final run 7/7 jobs):
+- **D-052 `80c3c14`+`380f852`+`aed70f8`** — all five P2 items, adversarially verified (`pulse-harden-p2-resume`
+  workflow: 19 agents, 5 per-item verifiers ×3 rounds, 2 fix rounds, 0 unresolved): secrets `_FILE` in BOTH config
+  layers + serve/migrate/`diag --reconcile` paths + opt-in `deploy/docker-compose.secrets.yml`; API tokens
+  HMAC-SHA256 with `api_tokens.hash_alg` (**legacy sha256 rows keep authenticating** — proven vs a real old-schema
+  DB and on live prod; ⚠️ rotating `PULSE_SECRET_KEY` invalidates hmac tokens); `alert_history` auto-prune (cap
+  1000 inside `CreateAlertHistory` — bounds every caller incl. delivery_failure + reports scheduler); resource
+  limits (pulse 512m/0.5, CH 2g/1.0, caddy 256m/0.5, backup 256m/0.25); SecretKey fail-closed (empty/<16-byte
+  rejected on every boot path; hardened overlay `:?`→`:-`, enforcement moved app-side).
+- **D-053 `501cac3`** — tree-wide gofmt (29 files) + ci.yml `gofmt -l` gate + coverage floor 55→**58** + CI migrate
+  smoke-test needed a dummy `PULSE_SECRET_KEY` (the D-052 guard correctly broke it).
+- **D-054 `611ae6b`** — **PROD ROLLED OUT** (image rebuilt; the backup overlay is now part of the standing prod
+  combo). Rollout first failed on the same guard class — `pulse-migrate` one-shot lacked `PULSE_SECRET_KEY`
+  (~2 min downtime, fixed). **§8 smoke ALL GREEN on live prod:** healthz ok; signed `/webhook/ams` → 200,
+  bad-sig → 401; legacy admin token authenticates; limits bound; backup sidecar first cycle produced dated
+  CH+sqlite artifacts; logs clean.
+Coverage 57.8% → **59.4%**. Detail: `decisions.md` D-052…D-054. Do NOT re-do any of this.
+⚠️ **Hard-won lesson (D-053+D-054):** when adding a startup guard (env requirement), update EVERY invocation env —
+ci.yml steps AND compose one-shots — in the SAME commit, and staging-verify (§8.7) before prod for any
+boot-behavior change; `config -q` does not boot the binary.
 
-**▶ FIRST ACTION — finish P2 (items 5–9 below) as D-052.** The `pulse-harden-p2-batch` workflow was STOPPED after
-Wave 1. Its output sits **UNCOMMITTED + UNVERIFIED in the working tree** (`git status` — it COMPILES, tests NOT run):
-- Item 5 secrets `_FILE` — **landed:** `server/internal/config/secrets.go` (GetSecret) + tests + `cmd/pulse/config.go`
-  wiring + `deploy/docker-compose.secrets.yml` (opt-in overlay) + `deploy/secrets/` (gitignored) + `.env.example` docs.
-- Item 6 token HMAC — **landed but VERIFY DEEPLY:** `hash_alg` present in `meta.go` + BOTH `0001_init.sql` copies +
-  token_hmac tests (api+meta); `server/internal/api/server.go` was modified yet greps 0 for `hash_alg` — confirm where
-  the api-side hashing actually happens. ⚠️ **The live prod admin token is a legacy SHA-256 row — back-compat is
-  non-negotiable** (verify against a REAL old-schema DB: `git show 0400373:contracts/db/meta/0001_init.sql`).
-- Item 7 `alert_history` pruning — **NOT STARTED** (no `PruneAlertHistory` anywhere; Wave 2 never ran). Work order:
-  `PruneAlertHistory(ctx, ruleID, keep)` per-rule cap ~1000, called after insert on the evaluator recording path
-  (incl. the D-049 delivery_failure recorder). Test: N>keep → COUNT==keep, newest-by-ts kept, other rules untouched.
-- Items 8+9 — **landed:** resource limits (3 `resources:` blocks in hardened.yml + backup overlay); `validate()`
-  rejects empty/<16-byte SecretKey (+ updated `TestValidate_AcceptsValidConfig`).
-**Resume plan (new workflow — same-session resume is impossible):** (1) one author finishes item 7 on the existing
-tree; (2) run the FIVE per-item adversarial verifiers — their full prompts are in the stopped script, READ IT:
-`/home/aytek/.claude/projects/-home-aytek-repo-ams-pulse/4e5bc3e6-4ea6-4b48-8cd3-13c342dd454a/workflows/scripts/pulse-harden-p2-batch-wf_c0a5740c-995.js`
-(tell agents the tree already contains Wave-1 edits); (3) fix loop; (4) ORCH gate = full `-race` repo-root mount +
-coverage + web lint/tsc/vitest/build; (5) commit per scope by explicit path as D-052, push,
-`gh run watch $(gh run list --branch main --workflow=ci.yml -L1 --json databaseId -q '.[0].databaseId') --exit-status`.
+**▶ FIRST ACTION — run the `pulse-e2e-backfill` workflow** per **`agents/handoffs/E2E-TEST-PLAN.md`**
+(operator-requested 2026-07-07): A1 alert→history e2e (ingest_bitrate_floor vs mock-ams fixed 2000 kbps),
+A3 health-score 100→50 transition (add mock-ams `set_bitrate`), A2 `qa/licensegen` + beacon → `rollup_qoe_1h` →
+`/qoe/summary` (120s bounded poll), B Playwright skeleton (route-mocked, `vite preview`, non-required CI job).
+Key corrections baked in: there is NO `/login` route (AuthGate renders in-place) and CSP comes from Caddy, not Go.
 
 **Then, in order:**
-1. **Tree-wide gofmt + CI gofmt gate** — 33 pre-existing files fail `gofmt -l` (go1.25.11 doc-comment reflow) and CI
-   has NO gofmt step. One mechanical `style:` commit (in-container `gofmt -w` over server/) + a `gofmt -l` gate in the
-   ci.yml server job. AFTER D-052 lands (avoid conflicting with in-flight edits). Until then, gate gofmt only on
-   session-changed files.
-2. **Prod rollout** of D-048…D-052 (image rebuild needed for D-049/D-051 Go code; new env/overlays for the rest):
-   `sg docker -c "docker compose -p pulse-prod -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml -f deploy/docker-compose.prod-tls.yml -f deploy/docker-compose.real-ams.yml -f deploy/docker-compose.backup.yml --env-file deploy/.env up -d --build"`
-   then §8 smoke: `/healthz` ok (`--resolve beyondkaira.com:443:161.97.172.146`), signed POST `/webhook/ams` → 200,
-   backup sidecar first run produces dated artifacts, `docker inspect` shows memory/cpu limits, admin token still works
-   (legacy sha256 row!), logs clean. Staging-verify first (§8.7) if anything is in doubt.
-3. **e2e backfill** — the full grounded plan (requested by the operator 2026-07-07) is in
-   **`agents/handoffs/E2E-TEST-PLAN.md`**: A1 alert→history (ingest_bitrate_floor vs mock-ams fixed 2000 kbps),
-   A3 health-score 100→50 transition (add mock-ams `set_bitrate`), A2 `qa/licensegen` + beacon → `rollup_qoe_1h` →
-   `/qoe/summary` (120s bounded poll), B Playwright skeleton (route-mocked, `vite preview`, non-required CI job).
-   Key corrections baked in: there is NO `/login` route (AuthGate renders in-place) and CSP comes from Caddy, not Go.
-   Run as a `pulse-e2e-backfill` workflow.
+1. **`pulse-test-backfill`** (§6) — remaining coverage debt: `internal/query` **0%** (highest blast radius),
+   `store/clickhouse` unit, `cmd/pulse` wiring, `license` 37→≥85, `alert/channels` 57→≥80. `internal/config` is
+   NO LONGER 0% (D-052 tests). Ratchet the ci.yml coverage floor (now 58) as totals climb.
+2. **B7 per-source webhook secret** (contract CR via INT-01) + remaining P3 security/feature backlog (§2, §4 phase 4).
+3. **Backup watch:** the sidecar's next unattended cycle is ~07:31 daily — confirm a second dated artifact set
+   appears and keep-7 pruning behaves once 8 days of artifacts exist.
 
 ### Operator-only actions (surface every session)
 - **U3 — activate a Pro+ Pulse license.** Until then QoE/beacon data does NOT flow in prod; rebuffer/error-rate alerts
   run off the HealthScore proxy. (The e2e plan's mock license only covers CI.)
 - **U4 — branch protection + a `v*` tag** (repo-admin; also retire the stale `ams-integration` ref).
 - **U5 — open `beyondkaira.com` + `pulse.beyondkaira.com`**, confirm no CSP console errors.
-- **NEW: point AMS at the webhook** — configure the AMS app(s) to POST lifecycle webhooks to
-  `https://beyondkaira.com/webhook/ams` with the HMAC secret from `deploy/.env` (Pulse side is done; live after the
-  prod rollout). ~~Set PULSE_WEBHOOK_SECRET~~ — DONE this session.
+- **point AMS at the webhook** — configure the AMS app(s) to POST lifecycle webhooks to
+  `https://beyondkaira.com/webhook/ams` with the HMAC secret from `deploy/.env`. **The Pulse side is LIVE as of
+  D-054** (smoke-verified: signed → 200, bad-sig → 401); only the AMS-console configuration remains.
 
 **Binding (unchanged, hard-won):** Go ONLY in Docker `golang:1.25`, **mount the repo ROOT** (`-v <repo>:/repo -w /repo/server
 -e GOFLAGS=-buildvcs=false`) or ~90 api tests silently `t.Skip` → false green (D-028). Api integration tests need
@@ -87,9 +73,9 @@ file + `decisions.md` (new D-0NN) each session. AMS web login is RESOLVED (D-036
   `https://pulse.beyondkaira.com` (app) and `https://ams.beyondkaira.com` (AMS panel) — all real Let's Encrypt
   TLS via Caddy. Backend = operator-owned `antmedia` container (AMS Enterprise 3.0.3, `--network host`,
   `http://161.97.172.146:5080`), **NOT** test.antmedia.io. `/healthz` = ok (clickhouse/collector/meta_store);
-  `/api/v1/live/overview` → `total_publishers:1` (LiveApp `teststream` = a synthetic 2 Mbps publisher in container
-  `ams-teststream` — `docker rm -f ams-teststream` once real streams flow). The mock-ams seeded demo is **retired**.
-  [re-verified by curl 2026-06-29].
+  `/api/v1/live/overview` → `total_publishers:2` on LiveApp as of 2026-07-07(b) (one is the synthetic 2 Mbps
+  `ams-teststream` container — `docker rm -f ams-teststream` once real streams suffice). The mock-ams seeded demo
+  is **retired**. [re-verified by authed curl post-D-054 rollout].
 - **AMS web-console login RESOLVED (D-036, 2026-06-29).** The AMS console MD5-hashes the password client-side, but
   both admin accounts were REST-provisioned (D-034) with the plaintext password, so the browser's hashed submission
   never matched. Fixed by re-provisioning `aytek@` + `admin@` with `MD5(realpassword)`; both now web-login, Pulse
@@ -102,9 +88,9 @@ file + `decisions.md` (new D-0NN) each session. AMS web login is RESOLVED (D-036
   (`git rev-list --count main..ams-integration` = **0**; `ams-integration..main` = **5**). `ams-integration`
   (@ `4dd448a`) is now a **stale pointer to retire**. `main` is ahead of `origin/main` (the handoff commits D-036–D-037,
   push pending). Remaining branch work: delete the stale `ams-integration` ref + apply branch protection + a `v*` tag (U4).
-- **Go suite green / coverage 57.8%** as of 2026-07-07 (full `-race` + coverage, **repo-root mount**, golang:1.25,
-  after D-048…D-051; was 47.5% on 2026-06-28). NOTE: the working tree additionally carries the UNCOMMITTED P2
-  Wave-1 changes (see ▶ START HERE) — it compiles, but re-run the suite before editing.
+- **Go suite green / coverage 59.4%** as of 2026-07-07(b) (full `-race` + coverage, **repo-root mount**,
+  golang:1.25, after D-052…D-054; was 47.5% on 2026-06-28). Working tree is CLEAN — everything is committed and
+  pushed; CI additionally enforces a `gofmt -l` gate and a 58% coverage floor (D-053).
 - **The prod image embeds the web UI** (multi-stage `deploy/docker/pulse.Dockerfile`: `npm ci && npm run build` →
   embedded in the Go binary), so a passing go-live build implies the web build passed.
 
@@ -140,11 +126,11 @@ AMS web-console login (D-036); `ams-integration` is now contained in `main` (bra
   beacon data → blocked on U3; tracked under QoE/beacon e2e in phase 4 (§4).)*
 - ✅ **Webhook path — DONE (D-046 route + D-048 config/test).** Prod rollout + AMS-side webhook URL config pending.
 - **Branch cleanup [P2]:** retire the stale `ams-integration` pointer; branch protection + `v*` tag (U4).
-- **Reliability gaps — MOSTLY DONE 2026-07-07:** ✅ alert retry + delivery_failure (D-049); ✅ backups w/ verified
-  restore (D-050); ✅ CH graceful drain (D-051); resource limits + `alert_history` pruning are in the in-flight P2
-  batch (limits landed uncommitted; pruning NOT started — see ▶ START HERE).
-- **Security [P2–P3]:** secrets are plaintext env vars (B3 Docker secrets); API tokens SHA-256 (not bcrypt);
-  B7 per-source webhook secret (contract CR).
+- ✅ **Reliability gaps — DONE + DEPLOYED (D-049…D-054):** alert retry + delivery_failure; backups w/ verified
+  restore (sidecar live in prod); CH graceful drain; resource limits (bound, inspected); `alert_history`
+  auto-prune (cap 1000).
+- **Security:** ✅ B3 secrets `_FILE` + opt-in overlay (D-052); ✅ API tokens HMAC-SHA256 w/ legacy back-compat
+  (D-052). Remaining [P3]: B7 per-source webhook secret (contract CR).
 - **Feature completion (PRD) [P3]:** QoE/beacon e2e (needs U3); Postgres meta backend (HA); SSO/OIDC; mobile SDKs;
   native WebRTC/RTMP/DASH probes; white-label PDF logo.
 - **Testing [P0 for prod-readiness]:** 3 packages at 0.0%, 0 Playwright, no coverage gate, no response-body contract
@@ -159,9 +145,8 @@ AMS web-console login (D-036); `ams-integration` is now contained in `main` (bra
   (`git log main..ams-integration` empty). Remaining: **delete the stale `ams-integration` branch** (local + origin
   after a final diff confirms 0 unique commits), drop vestigial `AMS_LOGIN_*` from `deploy/.env.example`, add commented
   `PULSE_AMS_APPLICATIONS=` + `PULSE_INGEST_TARGET_BITRATE_KBPS=`.
-- **Step C — Wire the Caddy `/webhook/*` route** in `deploy/config/Caddyfile` + `Caddyfile.prod` (before the catch-all):
-  `handle /webhook/* { reverse_proxy pulse:8092 { header_up X-Forwarded-For {remote_host} } }`; confirm pulse `expose:`
-  includes the webhook port; restart caddy. Verify: POST a signed test event → 200.
+- **Step C — Caddy `/webhook/*` route** ✅ DONE (D-046 route + D-048 config + D-054 live smoke: signed POST → 200).
+  §3 is now fully retired — current next steps live in ▶ START HERE above.
 
 ---
 
@@ -173,9 +158,9 @@ Full detail + exact scopes/commands in **`agents/handoffs/PRODUCTION-READINESS.m
    `viewer_*`, `PULSE_ALLOWED_WS_ORIGINS` wired. Two adversarial-verify rounds.
 2. **`pulse-test-backfill`** — TDD coverage to every level + enforced gate (3 sub-workflows: Go unit, web coverage
    gate, e2e+contract). See §6/§7.
-3. **`pulse-prod-harden`** — B3 Docker secrets, alert retry, `alert_history` pruning, CH drain, resource limits,
-   Trivy/SBOM, request-ID middleware. (License-gate **enforcement** moves up to `pulse-p1-gaps`/phase 1; this phase
-   only deepens coverage of the gates per §6.)
+3. ✅ **`pulse-prod-harden`** — DONE + DEPLOYED (D-048…D-054): webhook path, alert retry, backups, CH drain,
+   B3 secrets `_FILE`, token HMAC, `alert_history` pruning, resource limits, SecretKey fail-closed. Still open
+   from the original list: Trivy/SBOM, request-ID middleware (fold into phase 2/4 as convenient).
 4. **`pulse-feature-complete`** — QoE/beacon e2e (after U3), AMS version surfacing, anomaly expansion, native probes,
    white-label PDF, B7 (contract CR), SSO/OIDC, mobile SDKs, backup sidecar, Postgres backend.
 
@@ -263,11 +248,12 @@ Implemented alert channels: **email, slack, pagerduty, telegram, webhook**.
 
 ## 6. TEST & CI HARDENING (so breakage is caught in CI) — orchestrate as workflows, TDD red→green
 
-Baseline coverage (2026-06-28): total **47.5%**, all pass, no races (repo-root mount, golang:1.25).
+Baseline coverage: total **59.4%** as of 2026-07-07(b) (was 47.5% on 2026-06-28); ci.yml enforces a 58% floor +
+gofmt gate (D-053) — ratchet the floor as coverage climbs.
 
 **ZERO unit coverage (write tests FIRST):**
 - `internal/query` **0%** — powers every dashboard chart + API read (highest blast radius). Unit-test with a mock Conn.
-- `internal/config` **0%** — env parsing / startup correctness. Every var + bad-input failure paths.
+- ~~`internal/config` 0%~~ ✅ covered by D-052 (secrets + validation tests); keep extending failure paths.
 - `internal/store/clickhouse` **0% unit** (integration covers only ~3/12 query methods) + `.../migrations` **0%**.
 - `cmd/pulse` **1.2%** — serve/migrate/diag wiring.
 
@@ -429,7 +415,8 @@ health scoring, (4) AMS wire decode/normalize, (5) the query layer. Report cover
   privileged container in the host netns (e.g. `docker run --rm --net=host --cap-add=NET_RAW corfr/tcpdump …`, D-036).
 - **Real-AMS prod ops** (run from repo root): `DC="-p pulse-prod -f deploy/docker-compose.yml -f
   deploy/docker-compose.hardened.yml -f deploy/docker-compose.prod-tls.yml -f deploy/docker-compose.real-ams.yml
-  --env-file deploy/.env"`. Status: `sg docker -c "docker compose $DC ps"`. Admin token: in `oguz-testing.md`
+  -f deploy/docker-compose.backup.yml --env-file deploy/.env"` (backup overlay is part of the standing combo
+  since D-054 — omitting it on `up -d` would REMOVE the backup sidecar). Status: `sg docker -c "docker compose $DC ps"`. Admin token: in `oguz-testing.md`
   (gitignored) — persisted in the `pulse-prod_pulse-data` volume; **never `down -v` that volume.** TLS check: always
   `--resolve beyondkaira.com:443:161.97.172.146` (VPS DNS is stale). Rollback: runbook §5.
 - `deploy/.env`, `*.db*`, `oguz-testing.md`, `web/pulse_secret.key` are gitignored — never commit.
