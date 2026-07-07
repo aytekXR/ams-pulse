@@ -52,6 +52,18 @@ jobs:
         with:
           go-version: "1.25"
 
+      # D-053: the tree is fully gofmt'd (go1.25 reflow); any gofmt -l output fails.
+      - name: gofmt gate
+        run: |
+          cd server
+          DIRTY=$(gofmt -l .)
+          if [ -n "$DIRTY" ]; then
+            echo "FAIL: files need gofmt (run gofmt -w with go1.25):"
+            echo "$DIRTY"
+            exit 1
+          fi
+          echo "OK: gofmt clean"
+
       # CGO_ENABLED=0 is required for vet + build (pure-Go modernc.org/sqlite).
       - name: Vet (CGO_ENABLED=0)
         run: cd server && CGO_ENABLED=0 go vet ./...
@@ -65,14 +77,15 @@ jobs:
         run: cd server && go test ./... -race -timeout 300s -coverprofile=/tmp/cover.out -covermode=atomic
 
       # D-045: coverage no-regression ratchet. Floor sits just below the current
-      # total (55.9% as of D-045) so accidental deletions/regressions fail CI.
+      # total (59.4% as of D-052; ratcheted 55→58 in D-053) so accidental
+      # deletions/regressions fail CI.
       # Raise FLOOR as coverage climbs (pulse-test-backfill). Non-integration run
       # (query & store/clickhouse full paths are covered separately by integration).
       - name: Coverage floor gate
         run: |
           cd server
           TOTAL=$(go tool cover -func=/tmp/cover.out | awk '/^total:/ {gsub("%","",$NF); print $NF}')
-          FLOOR=55.0
+          FLOOR=58.0
           awk -v t="$TOTAL" -v f="$FLOOR" 'BEGIN {
             if (t+0 < f+0) { printf "FAIL: total coverage %.1f%% < floor %.1f%%\n", t, f; exit 1 }
             printf "OK: total coverage %.1f%% >= floor %.1f%%\n", t, f
@@ -90,6 +103,9 @@ jobs:
         env:
           PULSE_CLICKHOUSE_DSN: "clickhouse://localhost:9000/pulse"
           PULSE_MIGRATIONS_DIR: "contracts/db/clickhouse"
+          # D-052 fail-closed guard: migrate refuses to boot without a >=16-byte
+          # secret key (non-:memory: meta DSN). CI-only dummy value, no secrets here.
+          PULSE_SECRET_KEY: "ci-migrate-smoke-dummy-key-0123456789abcdef"
         run: /tmp/pulse migrate
 
       # Integration tests self-manage a ClickHouse subprocess: they look for

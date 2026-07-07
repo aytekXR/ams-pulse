@@ -21,9 +21,9 @@ type captureSink struct {
 	session []domain.ViewerSession
 }
 
-func (c *captureSink) WriteServerEvent(ev domain.ServerEvent)     { c.server = append(c.server, ev) }
-func (c *captureSink) WriteBeaconEvent(ev domain.BeaconEvent)     { c.beacon = append(c.beacon, ev) }
-func (c *captureSink) WriteViewerSession(s domain.ViewerSession)  { c.session = append(c.session, s) }
+func (c *captureSink) WriteServerEvent(ev domain.ServerEvent)    { c.server = append(c.server, ev) }
+func (c *captureSink) WriteBeaconEvent(ev domain.BeaconEvent)    { c.beacon = append(c.beacon, ev) }
+func (c *captureSink) WriteViewerSession(s domain.ViewerSession) { c.session = append(c.session, s) }
 
 // TestKafka_NormalizeNodeStats verifies that a cpuUsage message becomes node_stats.
 func TestKafka_NormalizeNodeStats(t *testing.T) {
@@ -155,14 +155,14 @@ func TestKafka_NoBrokers(t *testing.T) {
 func TestKafka_ContractRoundTrip(t *testing.T) {
 	// Simulate what AMS publishes to Kafka: a JSON stats object.
 	payload := map[string]any{
-		"streamId":          "myStream",
-		"app":               "live",
-		"fps":               float64(25),
-		"bitrate":           float64(1500),
-		"keyFrameInterval":  float64(2.0),
-		"packetLost":        float64(0.1),
-		"jitter":            float64(5.0),
-		"timestamp":         float64(time.Now().UnixMilli()),
+		"streamId":         "myStream",
+		"app":              "live",
+		"fps":              float64(25),
+		"bitrate":          float64(1500),
+		"keyFrameInterval": float64(2.0),
+		"packetLost":       float64(0.1),
+		"jitter":           float64(5.0),
+		"timestamp":        float64(time.Now().UnixMilli()),
 	}
 
 	payloadBytes, _ := json.Marshal(payload)

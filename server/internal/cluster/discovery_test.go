@@ -43,8 +43,8 @@ type captureSink struct {
 	count atomic.Int32
 }
 
-func (c *captureSink) WriteServerEvent(_ domain.ServerEvent)  { c.count.Add(1) }
-func (c *captureSink) WriteBeaconEvent(_ domain.BeaconEvent)  {}
+func (c *captureSink) WriteServerEvent(_ domain.ServerEvent)     { c.count.Add(1) }
+func (c *captureSink) WriteBeaconEvent(_ domain.BeaconEvent)     {}
 func (c *captureSink) WriteViewerSession(_ domain.ViewerSession) {}
 
 // Compile-time assertion that captureSink satisfies domain.EventSink.

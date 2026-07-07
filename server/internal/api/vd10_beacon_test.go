@@ -39,7 +39,7 @@ type testEventSink struct {
 	beaconEvents []domain.BeaconEvent
 }
 
-func (s *testEventSink) WriteServerEvent(_ domain.ServerEvent)    {}
+func (s *testEventSink) WriteServerEvent(_ domain.ServerEvent)     {}
 func (s *testEventSink) WriteViewerSession(_ domain.ViewerSession) {}
 func (s *testEventSink) WriteBeaconEvent(ev domain.BeaconEvent) {
 	s.mu.Lock()

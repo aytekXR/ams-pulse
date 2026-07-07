@@ -37,7 +37,7 @@ type Scheduler struct {
 	accountant *Accountant
 	meta       *meta.Store
 	alertStore HistoryWriter // may be nil
-	s3         *S3Uploader         // may be nil
+	s3         *S3Uploader   // may be nil
 	logger     *slog.Logger
 	mu         sync.Mutex
 	stopCh     chan struct{}
@@ -263,7 +263,7 @@ func nextCronTime(cronExpr string, from time.Time) time.Time {
 	}
 
 	// Find the next time matching min/hour/weekday from `from`.
-	t := from.Add(time.Minute) // start from next minute
+	t := from.Add(time.Minute)      // start from next minute
 	for i := 0; i < 60*24*32; i++ { // search up to 32 days ahead
 		if (min < 0 || t.Minute() == min) &&
 			(hour < 0 || t.Hour() == hour) &&

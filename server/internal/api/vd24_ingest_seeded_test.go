@@ -164,7 +164,7 @@ type vd24LiveProvider struct {
 
 func (v *vd24LiveProvider) CurrentSnapshot() *domain.LiveSnapshot {
 	return &domain.LiveSnapshot{
-		ActiveStreams:  1,
+		ActiveStreams: 1,
 		TotalViewers:  3,
 		IngestBitrate: 1200.0,
 		Streams: map[string]*domain.LiveStream{
@@ -341,4 +341,3 @@ func TestVD24_IngestQoE_TimeseriesNonEmpty(t *testing.T) {
 
 	t.Logf("PASS VD-24: timeseries has %d bucket(s) from seeded ingest_stats (non-empty, real CH conn verified)", len(timeseries))
 }
-

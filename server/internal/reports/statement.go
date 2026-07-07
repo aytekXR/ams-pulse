@@ -31,10 +31,10 @@ const (
 
 // StatementOptions controls statement generation.
 type StatementOptions struct {
-	From        time.Time
-	To          time.Time
-	Format      StatementFormat
-	Whitelabel  *WhitelabelHeader // nil = no white-label block
+	From       time.Time
+	To         time.Time
+	Format     StatementFormat
+	Whitelabel *WhitelabelHeader // nil = no white-label block
 	// BusinessTier must be true for Business tier gating.
 	// White-label headers and scheduled PDF exports require Business tier (§7.12).
 	BusinessTier bool
@@ -241,10 +241,10 @@ func newMinimalPDF() *minimalPDF {
 	return &minimalPDF{}
 }
 
-func (p *minimalPDF) setTitle(t string) { p.title = t }
-func (p *minimalPDF) addHeaderLine(s string)         { p.headerLines = append(p.headerLines, s) }
-func (p *minimalPDF) addTableHeader(cols []string)    { p.tableHeader = cols }
-func (p *minimalPDF) addTableRow(row []string)        { p.tableRows = append(p.tableRows, row) }
+func (p *minimalPDF) setTitle(t string)            { p.title = t }
+func (p *minimalPDF) addHeaderLine(s string)       { p.headerLines = append(p.headerLines, s) }
+func (p *minimalPDF) addTableHeader(cols []string) { p.tableHeader = cols }
+func (p *minimalPDF) addTableRow(row []string)     { p.tableRows = append(p.tableRows, row) }
 
 // render produces a minimal valid PDF byte stream.
 // Structure: %PDF-1.4 header, objects, xref, startxref, %%EOF.

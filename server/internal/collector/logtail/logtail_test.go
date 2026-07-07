@@ -22,7 +22,7 @@ func (s *sinkCapture) WriteServerEvent(ev domain.ServerEvent) {
 	s.events = append(s.events, ev)
 	s.mu.Unlock()
 }
-func (s *sinkCapture) WriteBeaconEvent(_ domain.BeaconEvent)    {}
+func (s *sinkCapture) WriteBeaconEvent(_ domain.BeaconEvent)     {}
 func (s *sinkCapture) WriteViewerSession(_ domain.ViewerSession) {}
 
 func (s *sinkCapture) count() int {

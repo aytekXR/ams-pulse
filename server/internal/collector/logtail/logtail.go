@@ -233,9 +233,9 @@ func (t *Tailer) translateLogEvent(eventType string, raw map[string]json.RawMess
 	case "viewer_join", "viewerJoin":
 		ev.Type = domain.EventViewerJoin
 		ev.Data = map[string]any{
-			"viewer_id": jsonString(raw["viewerId"]),
-			"protocol":  normalizeLogPublishType(jsonString(raw["protocol"])),
-			"ip_hash":   hashIP(jsonString(raw["ip"])),
+			"viewer_id":  jsonString(raw["viewerId"]),
+			"protocol":   normalizeLogPublishType(jsonString(raw["protocol"])),
+			"ip_hash":    hashIP(jsonString(raw["ip"])),
 			"user_agent": jsonString(raw["userAgent"]),
 		}
 

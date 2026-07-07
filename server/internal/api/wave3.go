@@ -394,4 +394,3 @@ func probeResultToAPI(r domain.ProbeResult) map[string]any {
 	}
 	return m
 }
-

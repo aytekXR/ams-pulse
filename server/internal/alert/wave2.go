@@ -99,7 +99,7 @@ func (e *Evaluator) evalNodeUpDown(snap *domain.LiveSnapshot, scope domain.Alert
 			if _, present := snap.Nodes[scope.NodeID]; !present {
 				results = append(results, evalResult{
 					groupKey: scope.NodeID,
-					value:    1.0, // 1 = down
+					value:    1.0,  // 1 = down
 					ok:       true, // condition met (node is down)
 				})
 			} else {

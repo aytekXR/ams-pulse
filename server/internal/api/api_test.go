@@ -47,7 +47,7 @@ type fakeLiveProvider struct{}
 
 func (f *fakeLiveProvider) CurrentSnapshot() *domain.LiveSnapshot {
 	return &domain.LiveSnapshot{
-		ActiveStreams:  1,
+		ActiveStreams: 1,
 		TotalViewers:  42,
 		IngestBitrate: 1200.0,
 		Streams: map[string]*domain.LiveStream{

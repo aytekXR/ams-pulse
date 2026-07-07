@@ -247,7 +247,7 @@ func TestVD19_GeoAnalytics_NonEmptyRows(t *testing.T) {
 	// Seed >=2 distinct geo_country rows.
 	geoSeeds := []struct {
 		sid, stream, app, nodeID, country, device, protocol string
-		watchS                                               uint32
+		watchS                                              uint32
 		startedAt, endedAt, updatedAt                       time.Time
 	}{
 		{
@@ -354,27 +354,27 @@ func TestVD19_DeviceAnalytics_NonEmptyRows(t *testing.T) {
 	// Seed >=2 distinct client_device rows.
 	devSeeds := []struct {
 		sid, stream, app, nodeID, country, device, os, browser, protocol string
-		watchS                                                             uint32
-		startedAt, endedAt, updatedAt                                     time.Time
+		watchS                                                           uint32
+		startedAt, endedAt, updatedAt                                    time.Time
 	}{
 		{
 			sid: "dev-desktop-1", stream: "s1", app: "live", nodeID: "n1",
 			country: "US", device: "desktop", os: "linux", browser: "chrome", protocol: "hls",
-			watchS: 400,
+			watchS:    400,
 			startedAt: baseTime, endedAt: baseTime.Add(400 * time.Second),
 			updatedAt: baseTime.Add(400 * time.Second),
 		},
 		{
 			sid: "dev-desktop-2", stream: "s1", app: "live", nodeID: "n1",
 			country: "GB", device: "desktop", os: "windows", browser: "firefox", protocol: "hls",
-			watchS: 200,
+			watchS:    200,
 			startedAt: baseTime.Add(5 * time.Minute), endedAt: baseTime.Add(5*time.Minute + 200*time.Second),
 			updatedAt: baseTime.Add(5*time.Minute + 200*time.Second),
 		},
 		{
 			sid: "dev-mobile-1", stream: "s1", app: "live", nodeID: "n1",
 			country: "US", device: "mobile", os: "android", browser: "chrome", protocol: "hls",
-			watchS: 150,
+			watchS:    150,
 			startedAt: baseTime.Add(10 * time.Minute), endedAt: baseTime.Add(10*time.Minute + 150*time.Second),
 			updatedAt: baseTime.Add(10*time.Minute + 150*time.Second),
 		},

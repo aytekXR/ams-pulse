@@ -58,12 +58,13 @@ import (
 // DefaultSigma is the default number of standard deviations that triggers a flag.
 // See package-level doc for calibration math.
 // At σ=4.0 with MinSamples=30 and HysteresisTicks=10:
-//   P(|Z|>=4.0) ≈ 6.33e-5 per observation.
-//   raw flags/node/week (3 metrics, 10080 ticks) = 10080 × 6.33e-5 × 3 = 1.91
-//   with hysteresis renewal process: lambda_flags = lambda / (1 + lambda × cooldown)
-//   lambda = 10080 × 6.33e-5 = 0.638/week/metric
-//   lambda_flags = 0.638 / (1 + 0.638 × 10) ≈ 0.638/7.38 ≈ 0.086/week/metric
-//   across 3 metrics: 0.086 × 3 = 0.26/node/week < 1.0. PASSES PRD target.
+//
+//	P(|Z|>=4.0) ≈ 6.33e-5 per observation.
+//	raw flags/node/week (3 metrics, 10080 ticks) = 10080 × 6.33e-5 × 3 = 1.91
+//	with hysteresis renewal process: lambda_flags = lambda / (1 + lambda × cooldown)
+//	lambda = 10080 × 6.33e-5 = 0.638/week/metric
+//	lambda_flags = 0.638 / (1 + 0.638 × 10) ≈ 0.638/7.38 ≈ 0.086/week/metric
+//	across 3 metrics: 0.086 × 3 = 0.26/node/week < 1.0. PASSES PRD target.
 const DefaultSigma = 4.0
 
 // MinSamples is the minimum number of samples required before anomaly flagging.
@@ -110,13 +111,13 @@ type AnomalyBaselineRow struct {
 // AnomalyFlag is a computed flag (returned by GET /anomalies).
 // It matches the AnomalyFlag schema in contracts/openapi/pulse-api.yaml.
 type AnomalyFlag struct {
-	ID       string      `json:"id"`
-	Metric   string      `json:"metric"`
+	ID       string            `json:"id"`
+	Metric   string            `json:"metric"`
 	Scope    domain.AlertScope `json:"scope"`
-	Observed float64     `json:"observed"`
-	Expected float64     `json:"expected"`
-	Sigma    float64     `json:"sigma"`
-	TS       int64       `json:"ts"` // Unix epoch ms
+	Observed float64           `json:"observed"`
+	Expected float64           `json:"expected"`
+	Sigma    float64           `json:"sigma"`
+	TS       int64             `json:"ts"` // Unix epoch ms
 }
 
 // hysteresisKey is a composite key for the hysteresis map.

@@ -464,4 +464,3 @@ func TestAlertHistory_DefaultLimit_Works(t *testing.T) {
 		t.Errorf("expected 200, got %d: %s", resp.StatusCode, body)
 	}
 }
-

@@ -173,17 +173,17 @@ func TestQuery_GeoBreakdown_NonEmptyRows(t *testing.T) {
 	baseTime := time.Now().UTC().Add(-24 * time.Hour)
 
 	type sessionRow struct {
-		sessionID   string
-		streamID    string
-		app         string
-		nodeID      string
-		geoCountry  string
+		sessionID    string
+		streamID     string
+		app          string
+		nodeID       string
+		geoCountry   string
 		clientDevice string
-		protocol    string
-		watchTimeS  uint32
-		startedAt   time.Time
-		endedAt     time.Time
-		updatedAt   time.Time
+		protocol     string
+		watchTimeS   uint32
+		startedAt    time.Time
+		endedAt      time.Time
+		updatedAt    time.Time
 	}
 
 	seeds := []sessionRow{
@@ -291,16 +291,16 @@ func TestQuery_DeviceBreakdown_NonEmptyRows(t *testing.T) {
 	baseTime := time.Now().UTC().Add(-24 * time.Hour)
 
 	type devRow struct {
-		sessionID   string
-		streamID    string
-		geoCountry  string
-		clientDevice string
-		clientOS    string
+		sessionID     string
+		streamID      string
+		geoCountry    string
+		clientDevice  string
+		clientOS      string
 		clientBrowser string
-		protocol    string
-		watchTimeS  uint32
-		startedAt   time.Time
-		updatedAt   time.Time
+		protocol      string
+		watchTimeS    uint32
+		startedAt     time.Time
+		updatedAt     time.Time
 	}
 
 	seeds := []devRow{

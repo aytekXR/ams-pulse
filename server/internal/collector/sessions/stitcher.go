@@ -7,8 +7,9 @@
 // time (default 5 min).
 //
 // Event flow:
-//   collector → Fanout → Stitcher.OnServerEvent / OnBeaconEvent
-//       Stitcher writes ViewerSession upserts via EventSink
+//
+//	collector → Fanout → Stitcher.OnServerEvent / OnBeaconEvent
+//	    Stitcher writes ViewerSession upserts via EventSink
 //
 // The stitcher is Consumer-shaped so it plugs into the existing Fanout.
 package sessions
@@ -30,9 +31,9 @@ const (
 
 // sessionState tracks the mutable state of an in-flight viewer session.
 type sessionState struct {
-	sess      domain.ViewerSession
-	lastSeen  time.Time
-	closed    bool
+	sess     domain.ViewerSession
+	lastSeen time.Time
+	closed   bool
 }
 
 // Stitcher implements collector.Consumer and stitches viewer events into sessions.

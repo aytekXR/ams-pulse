@@ -398,13 +398,13 @@ func (h *Handler) getBucket(tokenID string) *tokenBucket {
 // ─── Beacon batch types (internal parse targets) ──────────────────────────────
 
 type beaconBatch struct {
-	Version   int           `json:"version"`
-	SessionID string        `json:"session_id"`
-	StreamID  string        `json:"stream_id"`
-	App       string        `json:"app"`
+	Version   int               `json:"version"`
+	SessionID string            `json:"session_id"`
+	StreamID  string            `json:"stream_id"`
+	App       string            `json:"app"`
 	Meta      map[string]string `json:"meta"`
-	Player    *beaconPlayer `json:"player"`
-	Events    []beaconItem  `json:"events"`
+	Player    *beaconPlayer     `json:"player"`
+	Events    []beaconItem      `json:"events"`
 }
 
 type beaconPlayer struct {

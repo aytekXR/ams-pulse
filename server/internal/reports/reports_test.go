@@ -321,8 +321,8 @@ func TestGuard_VD36_FiveFieldCronParsing(t *testing.T) {
 	from := time.Date(2026, 6, 14, 8, 0, 0, 0, time.UTC) // 14 Jun 2026, 08:00
 
 	cases := []struct {
-		cron    string
-		desc    string
+		cron string
+		desc string
 		// wantBefore: the result must be before this time (not the 1-month fallback).
 		wantBefore time.Time
 	}{

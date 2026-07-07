@@ -27,7 +27,7 @@ type testSink struct {
 	events []domain.BeaconEvent
 }
 
-func (s *testSink) WriteServerEvent(_ domain.ServerEvent)    {}
+func (s *testSink) WriteServerEvent(_ domain.ServerEvent)     {}
 func (s *testSink) WriteViewerSession(_ domain.ViewerSession) {}
 func (s *testSink) WriteBeaconEvent(e domain.BeaconEvent) {
 	s.mu.Lock()
@@ -266,8 +266,8 @@ func TestBeacon_RateLimit_429(t *testing.T) {
 	store := beacon.NewMemTokenStore(validToken)
 	sink := &testSink{}
 	cfg := beacon.Config{
-		RateLimitPerTokenRPS: 1,  // 1 req/s
-		RateBurst:            1,  // burst of 1 — will exhaust immediately
+		RateLimitPerTokenRPS: 1, // 1 req/s
+		RateBurst:            1, // burst of 1 — will exhaust immediately
 	}
 	h := beacon.New(cfg, store, sink, nil)
 
@@ -491,7 +491,7 @@ func newCaptureEnrichSink() *captureEnrichSink {
 	return &captureEnrichSink{ch: make(chan struct{}, 1)}
 }
 
-func (s *captureEnrichSink) WriteServerEvent(_ domain.ServerEvent)    {}
+func (s *captureEnrichSink) WriteServerEvent(_ domain.ServerEvent)     {}
 func (s *captureEnrichSink) WriteViewerSession(_ domain.ViewerSession) {}
 func (s *captureEnrichSink) WriteBeaconEvent(e domain.BeaconEvent) {
 	s.mu.Lock()

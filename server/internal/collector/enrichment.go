@@ -86,7 +86,7 @@ type mmdbRecord struct {
 		ISOCode string `maxminddb:"iso_code"`
 	} `maxminddb:"country"`
 	Subdivisions []struct {
-		ISOCode string `maxminddb:"iso_code"`
+		ISOCode string            `maxminddb:"iso_code"`
 		Names   map[string]string `maxminddb:"names"`
 	} `maxminddb:"subdivisions"`
 }
@@ -94,11 +94,11 @@ type mmdbRecord struct {
 // MMDBGeoResolver implements GeoResolver using a MaxMind DB file.
 // Thread-safe: the underlying Reader is goroutine-safe.
 type MMDBGeoResolver struct {
-	reader      *maxminddb.Reader
-	anonymize   bool
-	logger      *slog.Logger
+	reader    *maxminddb.Reader
+	anonymize bool
+	logger    *slog.Logger
 	// warnOnce ensures we only log the "no mmdb" message once.
-	warnOnce    sync.Once
+	warnOnce sync.Once
 }
 
 // NewMMDBGeoResolver creates a GeoResolver backed by a MaxMind-format mmdb file.
@@ -584,7 +584,10 @@ func mmdbCtrl(typeID, size int) []byte {
 // All required fields are included per the MaxMind DB spec.
 func mmdbEncodeMeta(nodeCount uint, recordSize int) []byte {
 	// Build field list with stable iteration order.
-	type kv struct{ k string; v []byte }
+	type kv struct {
+		k string
+		v []byte
+	}
 	fields := []kv{
 		{"binary_format_major_version", mmdbEncodeUint(2)},
 		{"binary_format_minor_version", mmdbEncodeUint(0)},

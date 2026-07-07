@@ -337,8 +337,8 @@ func TestCertExpiry_FakeChecker_NearExpiry(t *testing.T) {
 		Name:               "cert-expiry-rule",
 		Metric:             "cert_expiry",
 		Operator:           "lt",
-		Threshold:          30, // fire if < 30 days left
-		WindowS:            0,  // immediate (no window)
+		Threshold:          30,                                    // fire if < 30 days left
+		WindowS:            0,                                     // immediate (no window)
 		ScopeJSON:          `{"stream_id":"ams.example.com:443"}`, // host in stream_id convention
 		Severity:           "critical",
 		CooldownS:          86400,

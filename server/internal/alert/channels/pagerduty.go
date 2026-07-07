@@ -76,10 +76,10 @@ func (p *PagerDutyChannel) Send(ctx context.Context, payload []byte) error {
 		"event_action": action,
 		"dedup_key":    alertID, // idempotency: same alert_id = same PD incident
 		"payload": map[string]any{
-			"summary":   summary,
-			"severity":  pdSeverity,
-			"source":    "pulse-analytics",
-			"component": buildPDComponent(n),
+			"summary":        summary,
+			"severity":       pdSeverity,
+			"source":         "pulse-analytics",
+			"component":      buildPDComponent(n),
 			"custom_details": buildPDDetails(n),
 		},
 	}

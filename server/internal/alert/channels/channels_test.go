@@ -174,8 +174,8 @@ func TestPagerDutyChannel_Trigger_HTTPTest(t *testing.T) {
 		receivedBody, _ = io.ReadAll(r.Body)
 		w.WriteHeader(http.StatusAccepted)
 		json.NewEncoder(w).Encode(map[string]any{
-			"status":   "success",
-			"message":  "Event processed",
+			"status":    "success",
+			"message":   "Event processed",
 			"dedup_key": "alert-id-123",
 		})
 	}))

@@ -97,8 +97,8 @@ type rawRollupRow struct {
 
 // Accountant computes usage/billing figures from ClickHouse rollups.
 type Accountant struct {
-	conn     clickhouse.Conn  // nil = test/no-CH mode (uses in-memory data)
-	meta     *meta.Store
+	conn          clickhouse.Conn // nil = test/no-CH mode (uses in-memory data)
+	meta          *meta.Store
 	tenantMatcher *TenantMatcher
 }
 
@@ -506,8 +506,8 @@ type SyntheticSession struct {
 	App         string
 	StartedAt   time.Time
 	EndedAt     time.Time
-	WatchTimeS  float64  // effective watch time in seconds
-	BitrateKbps float64  // average ingest bitrate (for egress estimate)
+	WatchTimeS  float64 // effective watch time in seconds
+	BitrateKbps float64 // average ingest bitrate (for egress estimate)
 	MetaTags    map[string]string
 }
 

@@ -345,8 +345,8 @@ func TestTenant_FreeTier_Blocked_403(t *testing.T) {
 
 	tenantBody := map[string]any{"name": "T", "stream_pattern": "t/%"}
 	endpoints := []struct {
-		method string
-		path   string
+		method  string
+		path    string
 		hasBody bool
 	}{
 		{http.MethodGet, "/api/v1/admin/tenants", false},
@@ -440,7 +440,7 @@ func TestTenant_StreamPattern_ResolvesStream(t *testing.T) {
 	}{
 		{"live/stream1", "LiveCorp"},
 		{"live/another", "LiveCorp"},
-		{"other/stream", ""},   // unmatched → empty (unassigned)
+		{"other/stream", ""}, // unmatched → empty (unassigned)
 	}
 	for _, tc := range testCases {
 		got := matcher.Resolve(tc.streamID, nil)
@@ -631,4 +631,3 @@ func TestTenant_OpenAPI_DeleteConforms(t *testing.T) {
 	conformCheck(t, doc, req2, resp)
 	t.Logf("PASS: DELETE /api/v1/admin/tenants/%s → 204, conforms to OpenAPI spec (deleteTenant)", tenantID)
 }
-

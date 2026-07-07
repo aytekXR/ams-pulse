@@ -6,11 +6,12 @@
 // enough that the full SDK is unnecessary.
 //
 // Config:
-//   PULSE_S3_ENDPOINT  — S3-compatible endpoint URL (e.g. https://s3.amazonaws.com)
-//   PULSE_S3_BUCKET    — bucket name
-//   PULSE_S3_PREFIX    — object key prefix (e.g. "pulse-reports/")
-//   PULSE_S3_REGION    — AWS region (default: us-east-1)
-//   PULSE_S3_ACCESS_KEY_ID / PULSE_S3_SECRET_ACCESS_KEY — credentials via env ref
+//
+//	PULSE_S3_ENDPOINT  — S3-compatible endpoint URL (e.g. https://s3.amazonaws.com)
+//	PULSE_S3_BUCKET    — bucket name
+//	PULSE_S3_PREFIX    — object key prefix (e.g. "pulse-reports/")
+//	PULSE_S3_REGION    — AWS region (default: us-east-1)
+//	PULSE_S3_ACCESS_KEY_ID / PULSE_S3_SECRET_ACCESS_KEY — credentials via env ref
 //
 // Never store credentials plaintext in meta store: creds come from env vars only.
 // Config fields for endpoint/bucket/prefix/region are stored in schedule config JSON.
@@ -36,10 +37,10 @@ import (
 // S3Config holds S3-compatible upload configuration.
 // Credentials are always sourced from environment variables (never stored plaintext).
 type S3Config struct {
-	Endpoint        string // e.g. "https://s3.amazonaws.com" or "http://minio:9000"
-	Bucket          string // bucket name
-	Prefix          string // object key prefix
-	Region          string // AWS region (default: us-east-1)
+	Endpoint string // e.g. "https://s3.amazonaws.com" or "http://minio:9000"
+	Bucket   string // bucket name
+	Prefix   string // object key prefix
+	Region   string // AWS region (default: us-east-1)
 	// AccessKeyEnvRef and SecretKeyEnvRef name the env vars holding credentials.
 	// If empty, fall back to AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY.
 	AccessKeyEnvRef string
@@ -112,7 +113,7 @@ func (u *S3Uploader) uploadOnce(ctx context.Context, key, contentType string, da
 
 	// Build canonical request.
 	headers := map[string]string{
-		"host":                  hostFromURL(endpoint),
+		"host":                 hostFromURL(endpoint),
 		"x-amz-content-sha256": bodyHash,
 		"x-amz-date":           amzDate,
 		"content-type":         contentType,

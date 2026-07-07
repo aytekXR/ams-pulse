@@ -381,10 +381,10 @@ func TestAnomaly_ConstantBaseline_SmallDeviation_NoFlag(t *testing.T) {
 // where lambda_raw = ticks/week × P(|Z| >= sigma) per metric.
 func TestAnomaly_FalseAlarmRate_ModeledTarget(t *testing.T) {
 	// Parameters.
-	sigma := anomaly.DefaultSigma    // 4.0
-	minSamples := anomaly.MinSamples // 30
+	sigma := anomaly.DefaultSigma              // 4.0
+	minSamples := anomaly.MinSamples           // 30
 	hysteresisTicks := anomaly.HysteresisTicks // 10
-	tickIntervalS := 60 // seconds
+	tickIntervalS := 60                        // seconds
 
 	// Observations per node per week at 60 s tick.
 	secondsPerWeek := 7 * 24 * 3600

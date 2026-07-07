@@ -215,10 +215,10 @@ func TestAccountant_CHIntegration(t *testing.T) {
 	}
 
 	// Known truth totals (seconds).
-	const truthAlphaS = 3 * 600.0  // 1800 s = 30 min
-	const truthBetaS = 5 * 300.0   // 1500 s = 25 min
+	const truthAlphaS = 3 * 600.0                // 1800 s = 30 min
+	const truthBetaS = 5 * 300.0                 // 1500 s = 25 min
 	const truthTotalS = truthAlphaS + truthBetaS // 3300 s = 55 min
-	const truthTotalMin = truthTotalS / 60.0      // 55.0 min
+	const truthTotalMin = truthTotalS / 60.0     // 55.0 min
 
 	// Insert via direct INSERT INTO viewer_sessions.
 	// The mv_usage_1d MV will trigger on INSERT and populate rollup_usage_1d.

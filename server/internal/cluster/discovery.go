@@ -6,12 +6,13 @@
 // with a 30s interval, a new node is visible within 1 poll cycle = ≤ 30s ≤ 2 min).
 //
 // Origin/edge dedup rule:
-//   When a stream is served via edges, viewers are counted AT THE EDGE only.
-//   An origin node reports viewer_count = sum(edge viewers) which would
-//   double-count. Rule: for a stream that has at least one edge node reporting
-//   viewers, ignore the origin's viewer_count for that stream.
-//   Implementation: the fleet manager exposes IsEdgeStream(streamID) for the
-//   aggregator to call; streams with any edge viewer > 0 are "edge-served".
+//
+//	When a stream is served via edges, viewers are counted AT THE EDGE only.
+//	An origin node reports viewer_count = sum(edge viewers) which would
+//	double-count. Rule: for a stream that has at least one edge node reporting
+//	viewers, ignore the origin's viewer_count for that stream.
+//	Implementation: the fleet manager exposes IsEdgeStream(streamID) for the
+//	aggregator to call; streams with any edge viewer > 0 are "edge-served".
 //
 // Node domain events emitted:
 //   - node_stats (every poll, for each node) — routed to aggregator + ClickHouse
@@ -31,16 +32,16 @@ import (
 
 // NodeInfo holds the current state of a discovered cluster node.
 type NodeInfo struct {
-	NodeID     string
-	IP         string
-	Port       int
-	Role       string // "origin" | "edge"
-	Status     string // "ok" | "degraded" | "down"
-	Version    string
-	LastSeen   time.Time
-	CPUPct     float64
-	MemPct     float64
-	DiskPct    float64
+	NodeID        string
+	IP            string
+	Port          int
+	Role          string // "origin" | "edge"
+	Status        string // "ok" | "degraded" | "down"
+	Version       string
+	LastSeen      time.Time
+	CPUPct        float64
+	MemPct        float64
+	DiskPct       float64
 	ActiveStreams int
 }
 
@@ -65,8 +66,8 @@ type Config struct {
 
 // Discovery implements cluster fleet awareness (collector.Source).
 type Discovery struct {
-	mu      sync.RWMutex
-	nodes   map[string]*NodeInfo // key = nodeID
+	mu    sync.RWMutex
+	nodes map[string]*NodeInfo // key = nodeID
 
 	cfg    Config
 	client ClusterClient
