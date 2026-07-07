@@ -423,12 +423,13 @@ health scoring, (4) AMS wire decode/normalize, (5) the query layer. Report cover
   Vite + TS strict; recharts; no external fonts/CDNs. `go test -race` needs `CGO_ENABLED=1` + gcc.
 - **4 tiers** (free/pro/**business**/enterprise) in the contract enum + `internal/license/license.go` (D-014).
 - Deploy fixes live in `deploy/`. Base `docker-compose.yml` stays clean (`expose:`, no host ports); exposure in
-  overrides. Prod stack = `base + hardened + prod-tls + real-ams`.
+  overrides. Prod stack = `base + hardened + prod-tls + real-ams + backup` (5 overlays since D-054 — see §14).
 
 ## 14. ENVIRONMENT (VPS)
 
 - **Ubuntu 24.04 VPS `161.97.172.146`**, Docker 29 + Compose v5. **`go` is NOT on PATH** — run Go only in Docker
-  (`golang:1.25`). node 20 + npm 10 on PATH. **`gh` NOT installed.**
+  (`golang:1.25`). node 20 + npm 10 on PATH. **`gh` IS installed + authed as owner `aytekXR`** (U6, 2026-06-30 —
+  the old "`gh` NOT installed" note was stale, corrected D-057).
 - **⚠️ For `go test` mount the REPO ROOT** (`-v /home/aytek/repo/ams-pulse:/repo -w /repo/server -e
   GOFLAGS=-buildvcs=false`): a `server/`-only mount makes `metaDDLPath` escape the mount → `t.Skip` →
   skip-counts-as-pass false green (~90 api tests). Confirm **0 SKIP** for api.
