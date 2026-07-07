@@ -54,3 +54,10 @@ status
 
 # Real-AMS recon captures — contain third-party secrets (AMS licence key, RTSP creds). Never commit.
 agents/handoffs/real-ams-captures/
+
+# Playwright local artifacts (CI uploads its own copies)
+web/playwright-report/
+web/test-results/
+
+# licensegen local build artifact (CI uses `go run .`)
+qa/licensegen/licensegen

@@ -37,6 +37,9 @@ services:
       PULSE_CLICKHOUSE_DATABASE: "pulse"
       PULSE_MIGRATIONS_DIR: "/contracts/db/clickhouse"
       PULSE_META_DSN: "/tmp/pulse_meta.db"
+      # D-052 fail-closed guard: migrate refuses to boot without a >=16-byte key.
+      # Same pattern as deploy/docker-compose.hardened.yml line 133.
+      PULSE_SECRET_KEY: "${PULSE_SECRET_KEY:-}"
     volumes:
       - ../contracts:/contracts:ro
     depends_on:
@@ -55,6 +58,15 @@ services:
       PULSE_MIGRATIONS_DIR: "/contracts/db/clickhouse"
       PULSE_META_DDL_PATH: "/contracts/db/meta/0001_init.sql"
       PULSE_SECRET_KEY: "${PULSE_SECRET_KEY:?set PULSE_SECRET_KEY}"
+      # Ephemeral Pro license minted by the CI 'Mint ephemeral Pro license' step.
+      # license.go:168 — PULSE_LICENSE_PUBKEY overrides the embedded dev key.
+      # Default-empty so the stack boots without them (e.g. local dev / other CI jobs).
+      PULSE_LICENSE_KEY: "${PULSE_LICENSE_KEY:-}"
+      PULSE_LICENSE_PUBKEY: "${PULSE_LICENSE_PUBKEY:-}"
+      # Enables the dedicated beacon ingest listener on :8091 (serve.go:342).
+      # Without this, IngestListenAddr is empty and the port mapping 18091→8091
+      # has nothing listening inside the container — A2 curl gets ECONNREFUSED.
+      PULSE_INGEST_LISTEN_ADDR: ":8091"
     volumes:
       - ../contracts:/contracts:ro
     depends_on:
