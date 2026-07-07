@@ -1682,3 +1682,53 @@ pre-D-029 paths** (in D-055's qa commit): amsclient polls `/{app}/rest/v2/broadc
 served un-prefixed paths → every poll 404 → even the OLD e2e overview assert was silently broken (e2e runs
 on PRs only — nobody saw it). ⚠️ Prod runs the pre-D-056 image: no live impact (beacon ingest is Pro+-gated,
 U3 pending) — ship the fix with the next prod rollout.
+
+## D-057 · 2026-07-08 · Production-readiness ROADMAP: 7 TDD sessions, dockerization-first, session-prompt protocol
+
+Operator: "prepare a production-readiness plan as roadmap … make the app ready for production with TDD …
+ready as soon as ready with dockerization … divide the technical depth into sessions; each session's prompt
+ready before the session starts; each session writes the next session's prompt from the roadmap."
+
+Ran `pulse-roadmap-scout` (9 read-only verifiers: coverage / ci-workflows / dockerization / stubs / contracts /
+web / docs-runbooks / git-state / prod-live; ~429k tokens; full structured output archived in the session
+transcript). Verified deltas vs the standing docs — the reason the roadmap was rebuilt from evidence, not
+inherited:
+
+- **Coverage (fresh full `-race` run, repo-root mount, 0 FAIL/0 races): total 59.5%** — but RESUME §6's
+  priority table was stale: license **91.5** (doc said 37→≥85), channels 74.1, config 74.5, meta 61.9,
+  clickhouse unit 61.8, logtail 92.1 — already met. Real holes: `query` 18.5, `cmd/pulse` 13.5, `api` 55.9
+  (15 uncovered handlers), `webhook` 58.1, `reports` 58.8, `migrations` 0.0 (no test files), `domain` 0.0.
+- **Release pipeline = weakest GA dimension:** release.yml ungated by CI, single-arch, no Trivy/SBOM/cosign;
+  has NEVER run (zero tags); every build reports `dev/unknown` (no -ldflags: Dockerfile:24, Makefile:30);
+  Helm values.yaml:13 references `ghcr.io/pulse-analytics/pulse` — a never-published path (release publishes
+  `ghcr.io/aytekxr/ams-pulse`) → helm install = ErrImagePull. golang builder stage + caddy float on tags.
+- **GitHub:** `main` UNPROTECTED (protection API 404), stale `ams-integration` on local+origin; `gh` is authed
+  as owner → U4 is now agent-runnable.
+- **Contracts:** only 14/52 operations response-body-validated; `openAPISpec()` t.Skipf (api_test.go:83-85) and
+  `conformCheck` FindRoute t.Logf (api_test.go:183-188) are silent escape hatches.
+- **Prod:** healthy, logs clean, but container (created 07-07 09:30) predates D-056 (authored 23:43) — beacon
+  401 fix NOT live; backup cycle 2 due ~07:31 UTC 07-08 (unverified at audit time). One `webhook: invalid
+  signature` WARN from the AMS container at startup.
+- **Docs:** productionize.md P0-stale ×2 (3-overlay quick-ref vs 5-overlay reality; loopback-HTTPS step then
+  public curl); alerting.md claims unbounded history (wrong since D-052); ARCHITECTURE §6 claims sha256/bcrypt-
+  roadmap (bcrypt shipped, server.go:2176); missing LICENSE/SECURITY.md/CHANGELOG/upgrade/monitoring runbooks.
+- **Bonus code finds:** logtail collector implemented but wiring commented out (serve.go:200-204); per-source
+  webhook secret parsed but unused (config.go:283 vs serve.go:214-220); RequestID middleware is DONE
+  (server.go:326) — the old backlog item is closed. Zero `TODO()` markers remain tree-wide.
+
+**NEW plan of record: `agents/handoffs/ROADMAP.md`** — GA definition G1–G8; sessions S1–S7 (S1 release-eng +
+D-056 prod rollout ["dockerization first" — operator ordering override of the D-055 handoff's "next = test
+backfill"], S2 Go-core test backfill, S3 contracts+web backfill, S4 e2e/CI hardening, S5 honest features +
+security tail, S6 docs+Helm, S7 adversarial GA gate); coverage-ratchet + operator ledgers; **binding session
+protocol §6** — each session's prompt exists BEFORE the session (in `sessions/`), and a session is NOT done
+until it has written `SESSION-(N+1).md` (usage-limit cut → the successor file becomes the resume prompt,
+D-052 precedent). `sessions/SESSION-01.md` (ready-to-run) + `sessions/TEMPLATE.md` created;
+PRODUCTION-READINESS.md banner-marked superseded; RESUME-PROMPT ▶ START HERE re-pointed + stale §4/§6 annotated.
+
+Process note: the follow-up 3-critic adversarial workflow died on the session usage limit (0 results returned);
+the three highest-risk claims were verified INLINE instead: (1) branch-protection.sh contexts already match
+today's required jobs and `enforce_admins:false` keeps owner direct-pushes (the session workflow) working;
+(2) ci.yml docker-build runs on every push/PR → valid home for the `pulse version != dev` assert; (3) release.yml
+workflow_dispatch dry-run MUST tag via a raw/input version — semver metadata patterns are empty off-tag. All
+three folded into SESSION-01 (WO-2/WO-6). S7 re-runs the full 9-scout audit as the GA gate, which also
+compensates for the lost critic pass.

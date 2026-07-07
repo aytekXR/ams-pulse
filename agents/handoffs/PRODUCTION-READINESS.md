@@ -1,5 +1,10 @@
 # Pulse — Production-Readiness & Test-Coverage Brief (next-session prompt)
 
+> ⚠️ **SUPERSEDED (2026-07-08, D-057) by `agents/handoffs/ROADMAP.md`** — the session-divided
+> production-readiness plan of record. Keep this file for provenance; do NOT execute from it
+> (its coverage table, phase list and immediate steps are stale — Phases 1 & 3 are done,
+> the coverage numbers moved substantially).
+
 > Produced by the `pulse-completeness-and-test-audit` workflow (D-032, 2026-06-22). This is the paste-ready
 > next-session prompt: it answers "what is needed to complete the app fully", mandates testing at EVERY
 > level (TDD + coverage gate), and orchestrates each phase with Workflows. Repo:

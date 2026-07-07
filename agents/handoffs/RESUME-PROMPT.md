@@ -3,14 +3,43 @@
 > **This is the one handoff doc.** It supersedes the previous separate "next-session" prompt (merged 2026-06-29,
 > D-037); don't recreate a second handoff file — update THIS one + `decisions.md` each session.
 > Pulse = self-hosted analytics/QoE/alerting for Ant Media Server. Repo: `/home/aytek/repo/ams-pulse`
-> on VPS `161.97.172.146`. Full decision log: `agents/handoffs/decisions.md` (D-001…D-054 + session notes, binding).
-> Detailed phase plan: `agents/handoffs/PRODUCTION-READINESS.md`. AMS operator guide:
+> on VPS `161.97.172.146`. Full decision log: `agents/handoffs/decisions.md` (D-001…D-057 + session notes, binding).
+> **Plan of record: `agents/handoffs/ROADMAP.md`** (D-057; supersedes `PRODUCTION-READINESS.md`,
+> which is kept for provenance only). Session prompts: `agents/handoffs/sessions/`. AMS operator guide:
 > `agents/handoffs/AMS-INTEGRATION.md`. Go-live runbook + rollback: `deploy/runbooks/real-ams-go-live.md`.
 > Operator creds/keys (gitignored, never commit): `oguz-testing.md`.
 
 ---
 
-## ▶ START HERE (next session — production readiness: test backfill)
+## ▶ START HERE (next session — execute `sessions/SESSION-01.md`)
+
+**Session 2026-07-08 result: D-057 — production-readiness ROADMAP + session protocol.** A 9-scout
+verified audit (coverage/CI/docker/stubs/contracts/web/docs/git/prod-live) grounded a new
+**plan of record `agents/handoffs/ROADMAP.md`**: GA definition G1–G8, sessions **S1–S7**, coverage
+ratchet + operator ledgers, and a BINDING session protocol (§6): each session's prompt is written
+BEFORE it starts, and **every session ends by writing `sessions/SESSION-(N+1).md`** — a session
+without its successor prompt is not done. Operator directive: **dockerization/release first** —
+this overrides the previous "next = test backfill" handoff (test backfill is now S2/S3).
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-01.md` and execute it** (release
+engineering: version stamping, release.yml gate+multi-arch+Trivy+SBOM+cosign, Helm P0 image ref,
+digest pins + dependabot, **prod rollout carrying D-056**, branch protection + `v0.1.0` — U4 is
+now agent-runnable since `gh` is authed as owner). SESSION-01 includes the backup cycle-2 check.
+
+**Key audit deltas (2026-07-08) vs older numbers in this file:** §6's per-package priorities are
+STALE — license is **91.5** (not 37), channels 74.1, config 74.5, meta 61.9, clickhouse unit 61.8,
+logtail 92.1: those targets are MET. Real remaining holes: `query` 18.5, `cmd/pulse` 13.5, `api`
+55.9, `webhook` 58.1, `reports` 58.8, `migrations` 0 (no tests), `domain` 0. Release pipeline is
+the weakest GA dimension (ungated, single-arch, unscanned, unsigned, version reports `dev/unknown`,
+Helm references a never-published image path). `main` is UNPROTECTED (API 404), zero tags, stale
+`ams-integration` ref lives on. Prod healthy but **pre-D-056**. Docs carry 2 P0-stale operator
+instructions (productionize.md 3-overlay + loopback-HTTPS steps). Contract conformance: only
+14/52 operations response-validated; `openAPISpec()` t.Skipf + `conformCheck` FindRoute t.Logf are
+silent escape hatches. Full evidence: D-057 + ROADMAP §1.
+
+---
+
+## ▶ prior session context (2026-07-07(c) — e2e backfill, superseded by ROADMAP)
 
 **Session 2026-07-07(c) result: `pulse-e2e-backfill` is COMPLETE (D-055 + D-056).** Two workflows
 (13 + 7 agents), all verifiers green. Verify with `git log --oneline -6`:
@@ -31,16 +60,9 @@ Coverage 59.4% → **59.5%**; full -race suite 24 pkgs, 0 FAIL / 0 SKIP. Detail:
 Do NOT re-do any of this. E2E-TEST-PLAN.md phase-2 leftovers: caddy-fronted CSP/Playwright job,
 delivery_failure e2e, promote web-e2e to required after ~2 weeks green.
 
-**▶ FIRST ACTION — run the `pulse-test-backfill` workflow** (§6): remaining coverage debt:
-`internal/query` **0%** (highest blast radius), `store/clickhouse` unit, `cmd/pulse` wiring, `license`
-37→≥85, `alert/channels` 57→≥80. `internal/config` is NO LONGER 0% (D-052 tests). Ratchet the ci.yml
-coverage floor (now 58) as totals climb. Response-body contract tests (kin-openapi) count toward this phase.
-
-**Then, in order:**
-1. **B7 per-source webhook secret** (contract CR via INT-01) + remaining P3 security/feature backlog (§2, §4 phase 4).
-2. **Backup watch:** the sidecar's next unattended cycle is ~07:31 daily — confirm a second dated artifact set
-   appears and keep-7 pruning behaves once 8 days of artifacts exist.
-3. **Next prod rollout** carries D-056 (beacon fix) — standing combo incl. backup overlay; §8.7 staging-verify first.
+~~FIRST ACTION: pulse-test-backfill~~ **SUPERSEDED by D-057** — test backfill is ROADMAP S2/S3
+(with CORRECTED per-package numbers; the debt list that stood here was stale). B7 → S5; backup
+cycle-2 watch + the D-056-carrying prod rollout → SESSION-01 (WO-5).
 
 ### Operator-only actions (surface every session)
 - **U3 — activate a Pro+ Pulse license.** Until then QoE/beacon data does NOT flow in prod; rebuffer/error-rate alerts
@@ -147,7 +169,9 @@ AMS web-console login (D-036); `ams-integration` is now contained in `main` (bra
 
 ## 4. BACKLOG = WORKFLOW-DRIVEN PHASES (orchestrate EACH phase as a Workflow)
 
-Full detail + exact scopes/commands in **`agents/handoffs/PRODUCTION-READINESS.md`**. Sequence:
+> **D-057: this phase list is superseded by `ROADMAP.md` §3 (sessions S1–S7)** — kept for history.
+> Mapping: phase 2 → S2/S3, phase 4 → S5 + post-GA backlog; release/dockerization work (new) = S1;
+> e2e/CI hardening = S4; docs/Helm = S6; GA gate = S7.
 1. ✅ **`pulse-p1-gaps`** — DONE (D-041): alert test-fire real delivery, 3 license gates enforced (+`/qoe/ingest`, +TOCTOU
    mutex), standalone node honest identity (AMS 3.x has no standalone cpu/mem via REST), WebRTC viewer QoE surfaced as
    `viewer_*`, `PULSE_ALLOWED_WS_ORIGINS` wired. Two adversarial-verify rounds.
@@ -243,7 +267,11 @@ Implemented alert channels: **email, slack, pagerduty, telegram, webhook**.
 
 ## 6. TEST & CI HARDENING (so breakage is caught in CI) — orchestrate as workflows, TDD red→green
 
-Baseline coverage: total **59.4%** as of 2026-07-07(b) (was 47.5% on 2026-06-28); ci.yml enforces a 58% floor +
+> ⚠️ **D-057: the per-package numbers below are the 2026-07-07 baseline and several are now WRONG**
+> (license 91.5, channels 74.1, config 74.5, meta 61.9, clickhouse unit 61.8, logtail 92.1 as of the
+> 2026-07-08 audit). Use **ROADMAP §1/§4** as the current table; S2/S3 own this section's work.
+
+Baseline coverage: total **59.5%** as of 2026-07-08 (was 47.5% on 2026-06-28); ci.yml enforces a 58% floor +
 gofmt gate (D-053) — ratchet the floor as coverage climbs.
 
 **ZERO unit coverage (write tests FIRST):**
