@@ -8,7 +8,7 @@ clickhouse:
 
 pulse:
   image:
-    repository: ghcr.io/pulse-analytics/pulse
+    repository: ghcr.io/aytekxr/ams-pulse
     tag: "0.1.0"
   ams:
     url: "http://ams.example.com:5080"

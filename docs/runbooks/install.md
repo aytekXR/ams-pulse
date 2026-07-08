@@ -440,11 +440,23 @@ ClickHouse DDL migrations are append-only (no destructive changes).
 
 ## Path C: Helm (Kubernetes)
 
-> **D-002 limitation (authored-unexecuted):** `helm install` / `helm upgrade` have not
-> been run against a real cluster on this machine. `helm lint` passes and all three
-> template variants render without error (QA-01 WO-206 verified). Validate on a clean
-> cluster before production use. See `deploy/helm/pulse/README.md` for the full values
-> table and HA configuration.
+> **EXPERIMENTAL — do not use in production yet.**
+> The chart is missing features required for a production-grade install; these are
+> tracked under the S6 parity batch:
+>
+> - ClickHouse auth wiring (unauthenticated CH native port is network-policy-only today)
+> - Webhook port Service (port 8091 ingest vs webhook addr not surfaced separately)
+> - Backup CronJob equivalent (no automated CH or PVC snapshot)
+> - `PULSE_SECRET_KEY` is wired via `secretKeyRef` with `optional: true`; if the Secret
+>   key is absent the binary crashes at boot — supply the key before install
+>
+> **Canonical image:** `ghcr.io/aytekxr/ams-pulse` (published from tag `v0.1.0` onward).
+> Earlier tags do not exist on this registry.
+>
+> **Cluster-unvalidated (D-002):** `helm install` / `helm upgrade` have not been run
+> against a real cluster. `helm lint` passes and all three template variants render
+> without error (QA-01 WO-206 verified). Validate on a clean cluster before production
+> use. See `deploy/helm/pulse/README.md` for the full values table and HA configuration.
 
 ### Prerequisites
 

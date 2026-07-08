@@ -9,7 +9,7 @@ pulse:
   image:
     # Pin to a versioned digest in production.
     # Use 'docker pull pulse:X.Y.Z --format "{{.RepoDigests}}"' to get the digest.
-    repository: ghcr.io/pulse-analytics/pulse
+    repository: ghcr.io/aytekxr/ams-pulse
     tag: "0.1.0"
     pullPolicy: IfNotPresent
 

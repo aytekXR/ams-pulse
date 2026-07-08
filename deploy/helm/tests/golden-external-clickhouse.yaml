@@ -126,7 +126,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: pulse
-          image: "ghcr.io/pulse-analytics/pulse:0.1.0"
+          image: "ghcr.io/aytekxr/ams-pulse:0.1.0"
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false

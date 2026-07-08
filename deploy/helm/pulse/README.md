@@ -53,7 +53,7 @@ helm upgrade pulse ./deploy/helm/pulse -f my-values.yaml
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `pulse.image.repository` | `ghcr.io/pulse-analytics/pulse` | Pulse image |
+| `pulse.image.repository` | `ghcr.io/aytekxr/ams-pulse` | Pulse image |
 | `pulse.image.tag` | `0.1.0` | Image tag (pin to digest in production) |
 | `pulse.replicaCount` | `1` | Pulse replicas (use 1 with SQLite; N with postgres.enabled) |
 | `pulse.resources.requests.cpu` | `250m` | CPU request (2-vCPU tier) |
