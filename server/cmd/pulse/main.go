@@ -64,7 +64,7 @@ func main() {
 			os.Exit(1)
 		}
 	case "version":
-		fmt.Printf("pulse %s (commit %s, built %s)\n", Version, GitCommit, BuildDate)
+		fmt.Println(versionString())
 	case "diag":
 		if err := runDiag(args); err != nil {
 			fmt.Fprintf(os.Stderr, "pulse diag: %v\n", err)

@@ -196,18 +196,50 @@ jobs:
 
   # ── 5. Docker build ──────────────────────────────────────────────────────────
   # Prove the all-in-one Dockerfile builds end-to-end (build context = repo root).
+  # Version stamping: build-args inject VERSION/COMMIT/BUILD_DATE via ldflags so
+  # `pulse version` inside the container prints real values instead of dev/unknown.
   docker-build:
     runs-on: ubuntu-latest
     needs: [server, web, sdk]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build all-in-one image
+      - name: Compute version build-args
+        id: ver
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          {
+            echo "version=ci-${SHORT_SHA}"
+            echo "commit=${SHORT_SHA}"
+            echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build all-in-one image (version-stamped)
         run: |
           docker build \
             -f deploy/docker/pulse.Dockerfile \
+            --build-arg VERSION="${{ steps.ver.outputs.version }}" \
+            --build-arg COMMIT="${{ steps.ver.outputs.commit }}" \
+            --build-arg BUILD_DATE="${{ steps.ver.outputs.build_date }}" \
             -t ghcr.io/aytekxr/ams-pulse:ci \
             .
+
+      - name: Assert stamped version (mutation-proof vs dev/unknown)
+        # Runs `pulse version` via the real binary (not `pulse serve version`).
+        # If ldflags were removed the binary would report "pulse dev (commit unknown...)"
+        # and this step would fail — that is the mutation guard.
+        run: |
+          OUT="$(docker run --rm --entrypoint pulse ghcr.io/aytekxr/ams-pulse:ci version)"
+          echo "pulse version output: $OUT"
+          if [ -z "$OUT" ]; then
+            echo "FAIL: pulse version produced no output — nothing was validated"
+            exit 1
+          fi
+          if echo "$OUT" | grep -qE '\bdev\b|unknown'; then
+            echo "FAIL: version output contains 'dev' or 'unknown' — ldflags not applied"
+            exit 1
+          fi
+          echo "OK: version is stamped correctly"
 
   # ── 6. Helm ──────────────────────────────────────────────────────────────────
   # Lint + golden-file template diff.

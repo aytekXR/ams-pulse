@@ -14,14 +14,21 @@ COPY web/ ./
 RUN npm run build
 
 # --- server ---
-# golang:1.25-alpine — bumped from the 1.24 digest: server/go.mod requires go >= 1.25.0
-FROM golang:1.25-alpine AS server
+# golang:1.25-alpine — digest pinned 2026-07-08 via `docker image inspect golang:1.25-alpine --format '{{index .RepoDigests 0}}'`
+# Tag: golang:1.25-alpine  Go: go1.25.12
+# To refresh: docker pull golang:1.25-alpine && docker image inspect golang:1.25-alpine --format '{{index .RepoDigests 0}}'
+FROM golang@sha256:fbad852fde376e8420774087e2723d57f5ed1327a9b639e839638f42a46a7e62 AS server
 WORKDIR /src/server
 COPY server/go.mod server/go.sum* ./
 RUN go mod download || true
 COPY server/ ./
 COPY contracts/ /src/contracts/
-RUN CGO_ENABLED=0 go build -o /out/pulse ./cmd/pulse
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_DATE=unknown
+RUN CGO_ENABLED=0 go build \
+      -ldflags "-X main.Version=${VERSION} -X main.GitCommit=${COMMIT} -X main.BuildDate=${BUILD_DATE}" \
+      -o /out/pulse ./cmd/pulse
 
 # --- runtime ---
 # alpine:3.21

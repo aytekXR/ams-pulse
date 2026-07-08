@@ -24,10 +24,20 @@ help: ## List targets
 # Build
 # ---------------------------------------------------------------------------
 
+# Version stamping: these are evaluated lazily (= not :=) so that they are only
+# computed when build-server is actually invoked, not on every `make` invocation.
+# Lazy evaluation also means the shell is not run in environments where git/date
+# are unavailable (e.g. some CI image pre-checkout steps).
+VERSION = $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT  = $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+BUILD_DATE = $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+
+LDFLAGS = -X main.Version=$(VERSION) -X main.GitCommit=$(COMMIT) -X main.BuildDate=$(BUILD_DATE)
+
 build: build-server build-web build-sdk ## Build everything
 
-build-server: ## Build the pulse server binary
-	cd server && go build -o bin/pulse ./cmd/pulse
+build-server: ## Build the pulse server binary (version-stamped via ldflags)
+	cd server && go build -ldflags "$(LDFLAGS)" -o bin/pulse ./cmd/pulse
 
 build-web: web/node_modules/.package-lock.json ## Build the web dashboard
 	cd web && npm run build
