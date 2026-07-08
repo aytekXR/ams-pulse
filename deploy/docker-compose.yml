@@ -30,6 +30,10 @@ services:
     environment:
       # ── Core server ──────────────────────────────────────────────────────────
       PULSE_LISTEN_ADDR: ":8090"
+      # Dedicated beacon ingest listener — must match the exposed 8091 above and
+      # the Caddy /beacon/* upstream (Caddyfile.prod). Without it serve.go never
+      # binds 8091 and the public beacon URL 502s (found by D-058 staging verify).
+      PULSE_INGEST_LISTEN_ADDR: ":8091"
       PULSE_LOG_LEVEL: "info"
 
       # ── ClickHouse ───────────────────────────────────────────────────────────

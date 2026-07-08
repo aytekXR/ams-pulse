@@ -29,6 +29,9 @@ services:
       PULSE_CLICKHOUSE_DATABASE: "pulse"
       PULSE_MIGRATIONS_DIR: "/contracts/db/clickhouse"
       PULSE_META_DSN: "/tmp/pulse_meta.db"
+      # D-052 fail-closed guard: migrate refuses to boot on a non-:memory: meta
+      # DSN without a >=16-byte secret key (D-054 lesson — every invocation env).
+      PULSE_SECRET_KEY: "${PULSE_SECRET_KEY:?set PULSE_SECRET_KEY}"
     volumes:
       - ../contracts:/contracts:ro
     depends_on:
