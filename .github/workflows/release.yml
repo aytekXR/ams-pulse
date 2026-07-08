@@ -1,16 +1,39 @@
-# Pulse release workflow — build and push Docker image to GHCR on version tags.
-# Triggered by: git push tag v*  (e.g. v1.2.3, v0.1.0-rc.1)
-# Image: ghcr.io/aytekxr/ams-pulse  (lowercase owner required by GHCR)
+# Pulse release workflow — CI-gated, multi-arch, Trivy-scanned, SBOM/provenance, cosign-signed.
+#
+# What this pipeline guarantees:
+#   1. Released commit has a passing CI run (contracts + server + web + sdk + docker-build).
+#   2. Image is scanned by Trivy; any FIXABLE HIGH/CRITICAL CVE blocks the release.
+#   3. On tag push: multi-arch (amd64 + arm64) image pushed to GHCR with SBOM + provenance.
+#   4. On tag push: image signed with cosign keyless (Sigstore / GitHub OIDC).
+#
+# Dry-run (build + scan only, no push, no sign):
+#   gh workflow run release.yml -f version=0.0.0-dry
+#
+# Verify a released image:
+#   cosign verify \
+#     --certificate-identity-regexp 'github.com/aytekXR/ams-pulse' \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+#     ghcr.io/aytekxr/ams-pulse:vX.Y.Z
+
 name: release
 
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Image version tag (dry-run: build+scan only, no push/sign)"
+        required: false
+        default: "0.0.0-dry"
+        type: string
 
 permissions:
   contents: read
   packages: write
+  id-token: write  # cosign keyless: OIDC token for Sigstore
+  actions: read    # CI-gate: gh api query for workflow runs
 
 jobs:
   release:
@@ -19,6 +42,22 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      # ── CI gate ────────────────────────────────────────────────────────────────────
+      # Block the release unless this exact commit SHA has at least one successful
+      # 'ci' workflow run. Runs on BOTH tag push and workflow_dispatch.
+      # Mutation proof: if no ci run exists for the SHA → total_count=0 → exit 1.
+      - name: CI gate — require successful ci run for this SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          COUNT=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}&status=success&per_page=1" \
+            -q '.total_count')
+          [ "$COUNT" -ge 1 ] || { echo "FAIL: no successful ci run for ${GITHUB_SHA}"; exit 1; }
+          echo "CI gate: PASS (${COUNT} successful ci run(s) for ${GITHUB_SHA})"
+
+      # GHCR login is unconditional — dry-run still needs credentials for the
+      # local Trivy-scan build step (pulling base layers from GHCR if cached).
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -26,6 +65,43 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up QEMU (multi-arch cross-compile support)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── Version build args ─────────────────────────────────────────────────────────
+      # VERSION : tag name on tag push; inputs.version on dispatch.
+      # COMMIT  : first 8 hex chars of GITHUB_SHA.
+      # BUILD_DATE: ISO-8601 UTC timestamp.
+      # These map to the ARG VERSION / COMMIT / BUILD_DATE in pulse.Dockerfile,
+      # wired to -ldflags -X main.Version/GitCommit/BuildDate by the sibling author.
+      - name: Compute version build args
+        id: version
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="${{ inputs.version || '0.0.0-dry' }}"
+          fi
+          COMMIT="${GITHUB_SHA:0:8}"
+          BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          {
+            echo "VERSION=${VERSION}"
+            echo "COMMIT=${COMMIT}"
+            echo "BUILD_DATE=${BUILD_DATE}"
+          } >> "${GITHUB_OUTPUT}"
+          echo "Computed: VERSION=${VERSION} COMMIT=${COMMIT} BUILD_DATE=${BUILD_DATE}"
+
+      # ── Docker metadata ────────────────────────────────────────────────────────────
+      # TRAP 1 (workflow_dispatch): semver patterns only fire on tag refs; on a dispatch
+      #   run they produce ZERO tags and docker/build-push-action fails with an empty tag
+      #   list. Fix: add type=raw,value=<version>,enable=<dispatch-only> so buildx always
+      #   receives at least one tag.
+      # TRAP 2 (latest): enable={{is_default_branch}} NEVER fires on tag refs (the runner
+      #   checks out a detached HEAD, not a branch). Fix: use a raw tag enabled only for
+      #   non-prerelease v-tags (ref_name without '-', e.g. v0.1.0 → yes; v0.1.0-rc.1 → no).
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -35,13 +111,76 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
+            type=raw,value=${{ inputs.version || '0.0.0-dry' }},enable=${{ github.event_name == 'workflow_dispatch' }}
 
-      - name: Build and push Docker image
+      # ── Trivy scan (BEFORE any push) ───────────────────────────────────────────────
+      # Build amd64 image into the local Docker daemon (load: true, push: false),
+      # then scan it for vulnerabilities. Runs on BOTH tag push and dispatch (dry-run).
+      #
+      # exit-code: "1"    → any FIXABLE HIGH/CRITICAL CVE fails the job; blocks release.
+      # ignore-unfixed: true → CVEs with no upstream fix are reported but do NOT block.
+      - name: Build amd64 image for Trivy scan (local only, no push)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/docker/pulse.Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ghcr.io/aytekxr/ams-pulse:trivy-scan
+          build-args: |
+            VERSION=${{ steps.version.outputs.VERSION }}
+            COMMIT=${{ steps.version.outputs.COMMIT }}
+            BUILD_DATE=${{ steps.version.outputs.BUILD_DATE }}
+
+      - name: Trivy vulnerability scan (HIGH + CRITICAL, fixable only)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ghcr.io/aytekxr/ams-pulse:trivy-scan
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+
+      # ── Push multi-arch image (tag push only) ──────────────────────────────────────
+      # SKIPPED on workflow_dispatch (dry-run): if: github.ref_type == 'tag' ensures
+      # the push only happens on actual semver tag refs (v*).
+      # linux/amd64 + linux/arm64; provenance + SBOM attached to the manifest.
+      - name: Build and push multi-arch image
+        if: github.ref_type == 'tag'
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/pulse.Dockerfile
+          platforms: linux/amd64,linux/arm64
           push: true
+          provenance: true
+          sbom: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.VERSION }}
+            COMMIT=${{ steps.version.outputs.COMMIT }}
+            BUILD_DATE=${{ steps.version.outputs.BUILD_DATE }}
+
+      # ── cosign keyless signing (tag push only) ─────────────────────────────────────
+      # SKIPPED on workflow_dispatch (dry-run): same if condition as push step.
+      # Signs the immutable manifest digest (not the mutable tag name) using the
+      # GitHub Actions OIDC token — no long-lived key material stored anywhere.
+      #
+      # Verify a released image:
+      #   cosign verify \
+      #     --certificate-identity-regexp 'github.com/aytekXR/ams-pulse' \
+      #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      #     ghcr.io/aytekxr/ams-pulse:vX.Y.Z
+      - name: Install cosign
+        if: github.ref_type == 'tag'
+        uses: sigstore/cosign-installer@v3.6.0
+
+      - name: Sign image with cosign (keyless / Sigstore OIDC)
+        if: github.ref_type == 'tag'
+        run: |
+          cosign sign --yes \
+            "ghcr.io/aytekxr/ams-pulse@${{ steps.push.outputs.digest }}"
