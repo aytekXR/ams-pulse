@@ -1794,3 +1794,53 @@ died at job setup; (b) compose `up -d` uses a pre-built image tag (`pulse-prod-p
 first, then up WITHOUT --build, else the stamp is lost; (c) an ENTRYPOINT of ["pulse","serve"] makes naive
 `docker run <img> version` false-green — always `--entrypoint pulse`; (d) GHCR first push = private package;
 plan the visibility step INTO the release session, not after.
+
+---
+
+## D-059 — SESSION-02 executed: test backfill A (Go core) — coverage 59.4%→69.7%, floor 58→62, conformance harness honest, A11 retired (2026-07-08)
+
+Commits `d3f697c` `8db073a` `0b6cb00` `43d9fc9` `5c55176` `c80badf`. Executed `sessions/SESSION-02.md` as the
+`pulse-s2-test-backfill` workflow (12 agents: 5 disjoint-scope TDD authors in parallel → 5 **sequential**
+adversarial verifiers, each with an EXCLUSIVE source-mutation window so a mutation in `query`/`domain` can
+never poison another agent's concurrent build → 1 fix round + re-verify). Authors proved red via test-side
+wrong-expectation runs (parallel-safe); real source mutations were verify-phase-only. All 5 WOs CONFIRMED.
+
+**Per-package results (before→after, target):**
+- `internal/query` 18.5→**88.5%** (≥70): 75 mock-Conn tests (fakeConn/fakeRows w/ reflection scan, FIFO
+  queue for QoeSummary's QueryRow+Query flow). Verifier mutations: Geo scan-order swap, applyRetention
+  no-op, Device scan swap — all caught by failing tests, reverts fingerprint-verified.
+- `store/clickhouse/migrations` 0→**65.6% unit** (≥60) + integration: pure fns (splitStatements/
+  stripLeadingComments/substitute) table-tested; naive quoted-semicolon split behavior PINNED as documented.
+  **A11 RETIRED**: TestIntegration_Migrations_IdempotentRun applies all 4 files twice — second Run nil-error
+  no-op, schema_migrations count unchanged (4). Note: the integration test t.Skipf's without /tmp/clickhouse
+  (matches the existing harness convention; CI downloads the binary, SKIP≠PASS).
+- `cmd/pulse` 13.6→**43.0%** (≥40): extracted `beaconListenerConfig()` from newServer (mechanical,
+  behavior-preserving) → D-058 pins now live without a CH dep: (a) PULSE_INGEST_LISTEN_ADDR→listener config;
+  (b) **VD-15 pin: Config.License non-nil** — mutation `License: nil` fails the test. Ceiling documented:
+  newServer/Start/Stop/runServe need live CH TCP (no mock possible) — 0% by design.
+- `internal/api` 55.9→**74.3%** (≥65) + **harness honesty**: openAPISpec() missing-spec t.Skipf→t.Fatalf;
+  conformCheck FindRoute t.Logf→t.Errorf. **NO contract drift flushed out** — every exercised route is in
+  pulse-api.yaml (no INT-01 CR needed). 15 uncovered handlers backfilled (alert rules/channels update+delete,
+  sources, users, license activate w/ fresh-server pubkey pattern, report schedules CRUD, bootstrapIfFirstRun,
+  checkPassword, eviction, parseTimeRange). **0 SKIP verified** (-v grep '--- SKIP' + 'skipping conformance'
+  both empty, repo-root mount). Fix round: verifier REFUTED round 1 — 3 t.Skip escape hatches in the NEW
+  tests (ReportSchedules_CRUD, Bootstrap×2) → all t.Fatal; re-verify CONFIRMED.
+- `internal/domain` 0→**100%** (ServerEvent.Time() is the package's only statement); discovery de-flake:
+  budget testInterval*3→*5 with the bound DERIVED in-comment (1 poll + 4× -race scheduler jitter; 68.8ms
+  observed vs 60ms old budget, D-041/D-042) — still catches a hung loop; -count=5 and -count=10 green.
+
+**ORCH gates all green (2026-07-08):** full `-race` repo-root 25 pkgs 0 FAIL / 0 SKIP, total **69.7%**
+(target ≥64); gofmt -l . empty; CGO=0 vet+build OK; **ci.yml server job reproduced faithfully** — migrate
+smoke vs clickhouse-server:24.8 (isolated s2gate network, all 4 migrations applied), `-tags integration ./...`
+green incl. the new A11 test (network-namespace trick: `--network container:s2gate-ch` maps localhost:9000
+like the CI service container); docker-build job reproduced (image stamps `pulse ci-836373d`, no dev/unknown);
+FLOOR 58.0→62.0 (ROADMAP §4) mutation-checked (t=69.7: FLOOR=62 OK, FLOOR=99 exit 1). CI run 28922883994.
+
+**Operator ledger re-checked:** O7 still OPEN (GHCR pull denied; gh token lacks read:packages — verified this
+session). O8 GREW: **21 open dependabot PRs** now (vite 8 / vitest 4 / plugin-react 6 / eslint 10 /
+size-limit 12 majors + grouped minor-and-patch for web, sdk/beacon-js AND server gomod) — untouched per
+SESSION-02 instruction; S3/S4 can absorb the majors, the rest need owner review (protection requires 1 review).
+
+Process note: the author/verifier mutation-window split (parallel authors = test-side red only; sequential
+verifiers = exclusive source mutations) is the reusable pattern for multi-agent TDD on a shared tree — no
+worktrees needed, zero cross-WO build poisoning observed.

@@ -103,7 +103,15 @@ G2 met.** Evidence: D-058.
    AFTER items 1–4 land on main → watch the release run → `cosign verify` + pull the published image.
 **Exit:** G1 + G2 fully met.
 
-### S2 — Test backfill A: highest blast radius (Go core) — prompt written by S1
+### ✅ S2 — Test backfill A: highest blast radius (Go core) — DONE 2026-07-08 (D-059)
+**Result:** total 59.4→**69.7%** (exit bar was ≥64), FLOOR 58→62 (mutation-checked); query 18.5→88.5,
+migrations 0→65.6 unit + **A11 retired** (double-migrate idempotency integration-proven), cmd/pulse
+13.6→43.0 (beaconListenerConfig() extraction; VD-15 License-non-nil + listen-addr pins), api 55.9→74.3 +
+**conformance harness honest** (t.Fatalf/t.Errorf, no drift found → no CR, 0 SKIP), domain 0→100,
+discovery budget derived 3→5 cycles. 12-agent workflow, WO-4 fixed after 1 refute (3 t.Skip hatches).
+ci.yml server+docker-build steps reproduced locally; CI run 28922883994 green. Commits `d3f697c`…`c80badf`.
+
+### S2 (original plan, kept for provenance) — prompt: `sessions/SESSION-02.md`
 **Goal:** kill the biggest coverage holes; make the conformance harness honest.
 1. `internal/query` 18.5→≥70 via mock-Conn unit tests (AudienceAnalytics, Geo/DeviceBreakdown,
    QoeSummary, IngestTimeseries, QueryProbeResults, applyRetention, FleetNodes — all 0% today).
@@ -189,7 +197,8 @@ G2 met.** Evidence: D-058.
 |---|---|---|---|---|
 | 2026-07-08 (audit) | 59.5% | 58.0 | 61.7 / 75.4 / 48.3 (fn ungated) | baseline |
 | 2026-07-08 (after S1) | 59.4% | 58.0 | unchanged | infra session; −0.1 = 4 uncovered serve.go wiring lines (S2 covers) |
-| after S2 (target) | ≥64% | 62.0 | — | |
+| 2026-07-08 (after S2) | **69.7%** | **62.0** | unchanged | D-059; S2 target ≥64 beaten; G3's ≥70 nearly met already |
+| after S3 (target) | ≥68% (hold ≥69.7) | 66.0 | gates 60/71/45 | |
 | after S3 (target) | ≥68% | 66.0 | gates 60/71/45 | |
 | GA (G3) | ≥70% | ≥68.0 | ratchet to achieved−3 | |
 
@@ -203,8 +212,8 @@ G2 met.** Evidence: D-058.
 | O4 | After O3: confirm the `webhook: invalid signature` WARN does not recur (else the AMS-side secret is wrong) | OPEN |
 | O5 | Choose the project LICENSE (legal decision; agent drafts once chosen) | OPEN |
 | O6 | (was U4) Branch protection + `v*` tag | ✅ DONE by S1 (D-058): protection live (API 200), v0.1.0 released |
-| O7 | **Make `ghcr.io/aytekxr/ams-pulse` public** (package settings → Change visibility) or `gh auth refresh -s read:packages` — until then nobody (incl. the agent) can pull v0.1.0 or run `cosign verify` (commands in release.yml header); this is the last G1 bit | OPEN (NEW, D-058) |
-| O8 | Review the first dependabot PRs: caddy digest bump (CI+e2e green — mergeable); vite 8 / vitest 4 majors (e2e RED — hold or let S3/S4 absorb). Protection now requires 1 approval — dependabot PRs need owner review | OPEN (NEW, D-058) |
+| O7 | **Make `ghcr.io/aytekxr/ams-pulse` public** (package settings → Change visibility) or `gh auth refresh -s read:packages` — until then nobody (incl. the agent) can pull v0.1.0 or run `cosign verify` (commands in release.yml header); this is the last G1 bit | OPEN (re-verified still blocked 2026-07-08, D-059) |
+| O8 | Review the dependabot PRs — now **21 open** (majors: vite 8, vitest 4, plugin-react 6, eslint 10, size-limit 12; grouped minor-and-patch for web, sdk AND server gomod; caddy digest bump was CI+e2e green — mergeable). Protection requires 1 approval — dependabot PRs need owner review; S3/S4 can absorb the web-tooling majors | OPEN (grew, D-059) |
 
 ## 6. Session protocol (BINDING — the "prompts" contract)
 

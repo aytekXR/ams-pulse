@@ -11,32 +11,33 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-02.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-03.md`)
 
-**Session 2026-07-08(b) result: D-058 — S1 DONE: v0.1.0 released, prod current, main protected.**
-Release run 28911789088 all-green: CI-gated tag pipeline, Trivy pre-push, **multi-arch amd64+arm64**
-manifest `sha256:6b36a4c1…ea2353` (tags 0.1.0/0.1/0/latest) with SBOM+provenance, **cosign keyless
-signed (Rekor tlog 2110636506)**. Every build now stamps version/commit/date (ldflags end-to-end +
-a mutation-proof ci.yml assert). Helm image ref canonical; caddy+golang digest-pinned; dependabot
-live (its first PRs arrived within minutes — see O8). **Prod runs `1a701d6`** (D-055+D-056+D-058):
-smoke all green incl. webhook 200/401 and the **beacon public chain now LIVE** — staging-verify
-found 3 real bugs (beacon listener never enabled outside CI → prod /beacon 502'd; VD-15 license
-gate fail-open on the dedicated listener → Free-tier 202; /beacon needed handle_path) — all fixed,
-live red→green in D-058. Backup cycle 2 + keep-7 verified. `main` protected (7 contexts, strict,
-enforce_admins=false), `ams-integration` deleted, rollback tag `pulse-prod-pulse:pre-d058` standing.
-⚠️ Last G1 bit = **O7**: the GHCR package is PRIVATE (default) and the gh token lacks read:packages
-→ pull + `cosign verify` from the VPS blocked until the operator flips visibility (one click).
+**Session 2026-07-08(c) result: D-059 — S2 DONE: coverage 59.4→69.7%, floor 58→62, harness honest.**
+`pulse-s2-test-backfill` workflow (12 agents: 5 parallel TDD authors → 5 SEQUENTIAL adversarial
+verifiers w/ exclusive source-mutation windows → 1 fix round): query 18.5→**88.5**, migrations
+0→**65.6 unit + A11 RETIRED** (double-migrate = nil-error no-op, integration-proven), cmd/pulse
+13.6→**43.0** (extracted `beaconListenerConfig()`; **VD-15 pin: License non-nil**, addr pin),
+api 55.9→**74.3** + conformance harness HONEST (missing spec t.Fatalf; route-not-in-spec t.Errorf;
+**no drift flushed out — no CR needed**; 0 SKIP verified), domain 0→**100**, discovery budget
+3→5 cycles (derived, D-042-compliant). WO-4 refuted once (3 t.Skip hatches in new tests) → fixed
+→ re-confirmed. All ci.yml server+docker-build steps reproduced locally (migrate smoke vs CH 24.8,
+integration incl. A11, stamped image). CI run 28922883994 green. Commits `d3f697c`…`c80badf`.
+⚠️ **O7 still OPEN** (GHCR private; token lacks read:packages — re-verified). **O8 grew to 21
+open dependabot PRs** (majors: vite 8, vitest 4, plugin-react 6, eslint 10, size-limit 12).
 
-**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-02.md` and execute it** (S2 test
-backfill A: `query` 18.5→≥70, `migrations` 0→≥60 incl. A11 idempotency, `cmd/pulse` 13.6→≥40
-(includes the D-058 serve-wiring smoke), `api` 55.9→≥65, `domain` 0→covered, conformance-harness
-honesty (t.Skipf/t.Logf → fail loud), de-flake TestDiscovery_NewNodeVisible; FLOOR 58→62).
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-03.md` and execute it** (S3 test
+backfill B: response-body conformance for ALL remaining OpenAPI operations (G4), webhook
+58.1→≥65, reports 58.8→≥65, web `functions` threshold gated + 0%-page smoke tests, SDK coverage
+baseline; FLOOR 62→66).
 
-**Standing numbers (2026-07-08 post-S1):** coverage total **59.4%** (floor 58); per-package:
-domain 0.0, cmd/pulse 13.6, query 18.5, api 55.9, webhook 58.1, reports 58.8, migrations 0 (no
-test files). Contract conformance: 14/52 response-validated; `openAPISpec()` t.Skipf
-(api_test.go:83-85) + `conformCheck` FindRoute t.Logf (api_test.go:~183) still the escape hatches.
-Docs P0-stales (productionize.md) remain S6 scope. Full evidence: D-057 audit + D-058 results.
+**Standing numbers (2026-07-08 post-S2):** coverage total **69.7%** (floor 62); per-package:
+query 88.5, api 74.3, cmd/pulse 43.0, migrations 65.6 (unit), domain 100, cluster 89.0,
+webhook **58.1** (S3), reports **58.8** (S3), meta 61.9, clickhouse unit 61.8, prober 61.9.
+Conformance harness has NO escape hatches; 22 conformCheck call sites across 4 api test files —
+the D-057 "14/52 validated / 38 uncovered" list is STALE post-WO-4, re-count in S3. Web
+thresholds still lines 57 / branches 71, functions UNGATED (vite.config.ts:49-52). Docs
+P0-stales (productionize.md) remain S6 scope. Full evidence: D-059.
 
 ---
 
@@ -104,11 +105,12 @@ file + `decisions.md` (new D-0NN) each session. AMS web login is RESOLVED (D-036
   helm/compose, strict, 1 review, enforce_admins=false — owner direct pushes work; keep it that way while
   sessions push to main). `ams-integration` is DELETED (local+origin). Tag **v0.1.0** exists @ `1a701d6`;
   release pipeline proven (D-058). U4 is fully resolved.
-- **Go suite green / coverage 59.4%** as of 2026-07-08 (full `-race` + coverage, **repo-root mount**,
-  golang:1.25, after D-052…D-058; was 47.5% on 2026-06-28). Working tree is CLEAN — everything is committed and
-  pushed; CI additionally enforces a `gofmt -l` gate, a 58% coverage floor (D-053) and a stamped-version
-  docker-build assert (D-058). **Prod runs `1a701d6` (≥D-056) since 2026-07-08** — stamped `pulse 1a701d6`,
-  beacon public chain live (403 LICENSE_REQUIRED until O7/U3), rollback tag `pulse-prod-pulse:pre-d058`.
+- **Go suite green / coverage 69.7%** as of 2026-07-08 (full `-race` + coverage, **repo-root mount**,
+  golang:1.25, after D-052…D-059; was 47.5% on 2026-06-28). Working tree is CLEAN — everything is committed and
+  pushed; CI additionally enforces a `gofmt -l` gate, a **62%** coverage floor (D-053, ratcheted D-059) and a
+  stamped-version docker-build assert (D-058). **Prod runs `1a701d6` (≥D-056) since 2026-07-08** — stamped
+  `pulse 1a701d6`, beacon public chain live (403 LICENSE_REQUIRED until O7/U3), rollback tag
+  `pulse-prod-pulse:pre-d058`.
 - **The prod image embeds the web UI** (multi-stage `deploy/docker/pulse.Dockerfile`: `npm ci && npm run build` →
   embedded in the Go binary), so a passing go-live build implies the web build passed.
 
@@ -388,7 +390,7 @@ health scoring, (4) AMS wire decode/normalize, (5) the query layer. Report cover
 | A8 | "Response bodies match the OpenAPI contract." **UNVERIFIED** — only spec-linting. | Response-body contract tests (kin-openapi). |
 | A9 | "The real-AMS wire format is fully characterized." Partial — fixtures from one capture. | Watch pulse logs for decode errors; add a fixture-replay contract test; re-capture periodically. |
 | A10 | "The teststream represents production load." **FALSE** — 1 low-bitrate publisher, 0 viewers. | Load/perf test (many streams/apps/viewers); VD-04 render-time at scale. |
-| A11 | "Migrations are idempotent & safe." Assumed (`IF NOT EXISTS`). | Explicit migrate round-trip + re-run test. |
+| A11 | ✅ **RETIRED (D-059):** `TestIntegration_Migrations_IdempotentRun` applies all 4 migrations twice — second `Run` is a nil-error no-op, `schema_migrations` count unchanged. In CI on every push. | — |
 | A12 | "ClickHouse shutdown loses no events." **FALSE** — 100ms sleep, not drain. | Drain-on-close + a no-loss test. |
 | A13 | ✅ Moot (D-034): self-hosted AMS; `remoteAllowedCIDR=0.0.0.0/0` lets Pulse poll all apps (200). New apps default to 127.0.0.1 — open them. | — |
 
