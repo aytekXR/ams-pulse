@@ -37,7 +37,10 @@ www.{$PULSE_DOMAIN} {
     # for each name automatically on first request.
 
     # Beacon ingest — proxy /beacon/* to pulse:8091 so clients only need :443.
-    handle /beacon/* {
+    # handle_path STRIPS /beacon: the SDK posts to {ingestUrl}/ingest/beacon and
+    # the listener serves POST /ingest/beacon only, so ingestUrl for this deploy
+    # is https://<domain>/beacon (plain `handle` forwarded /beacon/... -> 404).
+    handle_path /beacon/* {
         reverse_proxy pulse:8091 {
             header_up X-Forwarded-For {remote_host}
             header_up X-Real-IP {remote_host}
