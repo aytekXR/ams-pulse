@@ -1,0 +1,30 @@
+# Pulse CSP e2e overlay — adds Caddy in front of pulse for Playwright CSP assertions.
+#
+# Layer on base + CI overlays:
+#   docker compose -p pulse-csp-e2e \
+#     -f deploy/docker-compose.yml \
+#     -f deploy/docker-compose.ci.yml \
+#     -f deploy/docker-compose.csp-e2e.yml \
+#     up -d --build
+#
+# Playwright (on the host runner) reaches Caddy at http://127.0.0.1:18080.
+# Caddy reaches pulse via the compose default network by service name (pulse:8090).
+#
+# No TLS: Caddyfile.ci uses 'http://localhost' so no caddy_data / caddy_config
+# volumes are needed (no ACME or internal-CA cert storage).
+
+services:
+  caddy:
+    # caddy:2-alpine — same pinned digest as deploy/docker-compose.hardened.yml (2026-07-08).
+    # To refresh: docker pull caddy:2-alpine && docker image inspect caddy:2-alpine --format '{{index .RepoDigests 0}}'
+    image: caddy@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    ports:
+      - "127.0.0.1:18080:80"   # HTTP caddy — loopback only; Playwright baseURL
+    volumes:
+      - ./config/Caddyfile.ci:/etc/caddy/Caddyfile:ro
+    depends_on:
+      pulse:
+        condition: service_healthy
+    networks:
+      - default
+    restart: unless-stopped
