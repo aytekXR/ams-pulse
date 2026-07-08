@@ -81,7 +81,7 @@ func openAPISpec(t *testing.T) *openapi3.T {
 	specPath = filepath.Clean(specPath)
 
 	if _, err := os.Stat(specPath); os.IsNotExist(err) {
-		t.Skipf("openapi spec not found at %s — skipping conformance test", specPath)
+		t.Fatalf("openapi spec not found at %s — spec must exist; a missing spec makes conformance vacuously true", specPath)
 	}
 
 	loader := openapi3.NewLoader()
@@ -181,8 +181,9 @@ func conformCheck(t *testing.T, doc *openapi3.T, req *http.Request, resp *http.R
 
 	route, pathParams, err := router.FindRoute(req)
 	if err != nil {
-		// Route not found in spec — skip conformance for this endpoint.
-		t.Logf("conformance: route not in spec (%s %s): %v — skipping schema check",
+		// Route not found in spec — this is a conformance violation: every production
+		// route must be described in the spec. Fail loud so the orchestrator can file a CR.
+		t.Errorf("conformance: route not in spec (%s %s): %v — add the route to contracts/openapi/pulse-api.yaml",
 			req.Method, req.URL.Path, err)
 		return
 	}
