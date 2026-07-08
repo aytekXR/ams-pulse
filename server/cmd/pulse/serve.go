@@ -294,9 +294,10 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	}
 
 	// HOOK(BE-02): Wire alert channel registry.
+	// The registry starts empty. The evaluator rebuilds it from the meta store
+	// on every tick (syncRegistryFromStore), so channels created, updated, or
+	// deleted via the API are reflected within one tick interval (≤5 s).
 	chanRegistry := channels.NewRegistry()
-	// Built-in channels are registered when alert channel configs are loaded
-	// from the meta store at startup (handled inside api.Server.Start).
 
 	// HOOK(BE-02): Wire alert evaluator.
 	alertEval := alert.New(alert.Config{
