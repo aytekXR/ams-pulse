@@ -24,6 +24,9 @@
 //	  bitrate is the raw AMS wire value in bits/sec (Pulse's normalize.go divides
 //	  by 1000 to produce kbps). Example: 2000000 → 2000 kbps seen by Pulse.
 //	  Returns 400 on bad JSON or missing stream_id; 404 if stream not found.
+//	POST /control/bulk_publish  {"count":N,"prefix":"str-","viewers_each":0}
+//	  Publishes N streams with IDs "<prefix>0001".."<prefix>000N" in a single call.
+//	  Returns {"status":"ok","count":N}. 400 on bad JSON or count <= 0.
 //	GET  /truth/viewers/{id}    → {"stream_id":"x","viewers":N}  (truth for assertions)
 //	GET  /healthz               → {"status":"ok"}
 package main
@@ -36,6 +39,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -237,7 +241,30 @@ func (s *Server) routes() {
 			if broadcasts == nil {
 				broadcasts = []Broadcast{}
 			}
-			writeJSON(w, broadcasts)
+			// Sort by StreamID for deterministic pagination across separate HTTP requests.
+			// Go map iteration is non-deterministic: without sorting, page 0/page 1/page 2
+			// each iterate in a different order and the union may not cover all streams.
+			sort.Slice(broadcasts, func(i, j int) bool {
+				return broadcasts[i].StreamID < broadcasts[j].StreamID
+			})
+			// Parse optional {offset}/{size} from path suffix: .../list/{offset}/{size}
+			// Default size=200 matches amsclient pageSize; bare /list keeps working.
+			offset, size := 0, 200
+			if parts := strings.SplitN(path, "/list/", 2); len(parts) == 2 {
+				fmt.Sscanf(parts[1], "%d/%d", &offset, &size)
+			}
+			if size <= 0 {
+				size = 200
+			}
+			if offset >= len(broadcasts) {
+				writeJSON(w, []Broadcast{})
+				return
+			}
+			end := offset + size
+			if end > len(broadcasts) {
+				end = len(broadcasts)
+			}
+			writeJSON(w, broadcasts[offset:end])
 			return
 		}
 		// Match .../{streamID}/webrtc-client-stats/0/100
@@ -368,6 +395,31 @@ func (s *Server) routes() {
 			return
 		}
 		writeJSON(w, map[string]string{"status": "ok"})
+	})
+
+	// POST /control/bulk_publish — seed N streams in a single HTTP call.
+	// Body: {"count":N,"prefix":"str-","viewers_each":0}
+	// Each stream is published with ID "<prefix><zero-padded-index>" (4 digits).
+	// Returns {"status":"ok","count":N}. 400 on bad JSON or count <= 0.
+	// Each Publish call acquires the state lock individually (no long-held bulk lock).
+	s.mux.HandleFunc("/control/bulk_publish", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Count       int    `json:"count"`
+			Prefix      string `json:"prefix"`
+			ViewersEach int    `json:"viewers_each"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Count <= 0 {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if body.Prefix == "" {
+			body.Prefix = "stream-"
+		}
+		for i := 1; i <= body.Count; i++ {
+			s.state.Publish(fmt.Sprintf("%s%04d", body.Prefix, i), body.ViewersEach)
+		}
+		log.Printf("mock-ams: bulk published %d streams (prefix=%q)", body.Count, body.Prefix)
+		writeJSON(w, map[string]any{"status": "ok", "count": body.Count})
 	})
 }
 
