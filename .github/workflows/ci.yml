@@ -77,15 +77,15 @@ jobs:
         run: cd server && go test ./... -race -timeout 300s -coverprofile=/tmp/cover.out -covermode=atomic
 
       # D-045: coverage no-regression ratchet. Floor sits just below the current
-      # total (59.4% as of D-052; ratcheted 55→58 in D-053) so accidental
-      # deletions/regressions fail CI.
-      # Raise FLOOR as coverage climbs (pulse-test-backfill). Non-integration run
+      # total (69.7% as of D-059; ratcheted 55→58 in D-053, 58→62 in D-059 per
+      # ROADMAP §4) so accidental deletions/regressions fail CI.
+      # Raise FLOOR as coverage climbs (S3 targets 66.0). Non-integration run
       # (query & store/clickhouse full paths are covered separately by integration).
       - name: Coverage floor gate
         run: |
           cd server
           TOTAL=$(go tool cover -func=/tmp/cover.out | awk '/^total:/ {gsub("%","",$NF); print $NF}')
-          FLOOR=58.0
+          FLOOR=62.0
           awk -v t="$TOTAL" -v f="$FLOOR" 'BEGIN {
             if (t+0 < f+0) { printf "FAIL: total coverage %.1f%% < floor %.1f%%\n", t, f; exit 1 }
             printf "OK: total coverage %.1f%% >= floor %.1f%%\n", t, f
