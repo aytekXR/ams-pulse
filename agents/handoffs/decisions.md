@@ -1844,3 +1844,68 @@ SESSION-02 instruction; S3/S4 can absorb the majors, the rest need owner review 
 Process note: the author/verifier mutation-window split (parallel authors = test-side red only; sequential
 verifiers = exclusive source mutations) is the reusable pattern for multi-agent TDD on a shared tree — no
 worktrees needed, zero cross-WO build poisoning observed.
+
+## D-060 — SESSION-03 executed: test backfill B (contracts + web) — G4 met (51/52), coverage 69.7%→73.2%, floor 62→66, web+SDK gated (2026-07-08)
+
+Commits `ee4288d` `6b063dd` `35f22eb` `ac49a2d` `9e7810a` `a5f4279` `2ffe075` (+ this docs commit).
+Executed `sessions/SESSION-03.md` as the `pulse-s3-test-backfill` workflow (10 agents: 5 parallel TDD
+authors → 5 sequential adversarial verifiers w/ exclusive source-mutation windows — D-059 pattern).
+**All 5 WOs CONFIRMED in verify round 1; zero fix rounds.** Scout pre-phase corrected the stale D-057
+count: pre-S3 conformance was actually **25/52** (21 conformCheck sites + 4 via the inline loop in
+openapi_conformance_test.go), not 14/52.
+
+**Per-WO results (before→after, target):**
+- **WO-1 `internal/api`** 74.3→**75.6%**: `conformance_s3_test.go` — 26 ops newly response-body-validated
+  → **51/52 validated + 1 documented waiver (GET /live/ws, WebSocket 101 — untestable via this harness)**.
+  G4 MET. /healthz + /metrics validated via spec-resolved `/api/v1/...` request paths (kin-openapi
+  gorillamux routes serverURL+path). **Error shapes validated for the FIRST time**: 49-entry 401 sweep +
+  403×3 (tier gates) + 404×3 + 422×3, all conformCheck'd against Error{code,message}. **NO contract
+  drift — no INT-01 CR needed.** Verifier mutations all caught: required-field drop (`muted`,
+  server.go:1914), 201→200 status swap, writeError `code`-key drop (failed all 48 sweep subtests).
+- **WO-2 `collector/webhook`** 58.1→**94.3%** (≥65): parseWebhook 27.3→100 (object+array forms, dual
+  unmarshal-failure), translateWebhook→100 (all action aliases + event/type fallback + app/appName),
+  jsonInt/jsonInt64/Name 0→100, normalizePublishType 40→100, handleWebhook 65→90 (wrong method,
+  empty-secret fail-closed, sink assertions). Mutations caught: action-map swap, normalize stub,
+  HMAC empty-secret bypass, jsonInt64 zeroing.
+- **WO-3 `internal/reports`** 58.8→**90.9%** (≥65): `accounting_conn_test.go` — fakeConn/fakeRows
+  adapted locally from D-059's query pattern (no cross-package test import). ComputeUsage 4.5→94.4,
+  Reconcile/AggregateByTenant 0→100, fetchConcurrencyPeaks covered via ComputeUsage, scheduler
+  Start/Stop/SetAlertStore/writeFailureAlert 0→90-100, ParseWhitelabelHeader→100. `-race -count=2`
+  clean. Mutations caught: GB-formula ×2, peaks nil (13-test cascade), grouping key, Reconcile early-return.
+- **WO-4 `web/`**: 7 smoke suites (App/Layout/ComingSoon/AnalyticsPage/OnboardingWizard/SettingsPage/
+  AlertChannelForm — all previously 0-2.3% lines, now 60-100%) + `src/test/coverage-gate.test.ts`.
+  Totals lines 61.72→**79.48** (gate 57→**76**), branches 75.57 (71→**72**), functions 46.57
+  (**gate 45 — NEW**; the 48.29 baseline was inflated by types.ts, a pure type-re-export file at 0%,
+  now coverage-excluded with justification). The guard test pins gate values AND the exact exclude
+  set (anti-gaming). 238/238 tests. Mutations caught: gate lowered, thresholds deleted, exclude
+  widened, Layout render broken.
+- **WO-5 `sdk/beacon-js`**: `@vitest/coverage-v8@^3` added (vitest stays ^3.2.0; lockfile moved
+  @vitest/* 3.2.6→3.2.7 via peer resolution only — no manifest ranges bumped, O8 PRs untouched).
+  Thresholds **62/73/70** at achieved−3 (65.55/76.87/73.77). Size 3.52 KB gzip (15 KB gate). 65/65
+  tests. Threshold-99 mutation fails the run — gate proven real. Known gap for a future WO:
+  webrtc.ts 20.1% lines (getStats path needs an RTCPeerConnection stub).
+
+**ORCH gates all green (2026-07-08):** full `-race` repo-root 25 pkgs **0 FAIL**, total **73.2%**
+(S3 target ≥68 beaten; **GA G3 ≥70 already exceeded**). The 2 suite SKIPs are the pre-existing
+`domain` SchemaFixtures npx-availability guard (golang:1.25 image has no node; they RUN in CI where
+npx exists) — documented, not new, not a CI blind spot. FLOOR 62.0→66.0 mutation-checked (t=73.2:
+FLOOR=66 OK, FLOOR=99 exit 1). **Faithful ci.yml repro on a pristine `git clone` at HEAD**: server job
+ALL steps (gofmt/vet/build/unit-race/floor/pulse-binary/migrate smoke vs clickhouse-server:24.8 via
+`--network container:` /integration incl. A11 w/ pinned /tmp/clickhouse 26.6.1.1193) + web job
+(node:22 — npm ci --legacy-peer-deps, gen:api NO-DRIFT, build, lint, test w/ new thresholds) + sdk job
+(node:22) + docker-build (stamped `pulse ci-2ffe075`, no dev/unknown). contracts/helm/compose untouched.
+CI run 28975573189 green.
+
+**The repro EXPOSED a pre-existing CI-red risk (D-042 class):** `TestAlertHistory_PruneTimingAt2000`
+(store/meta) asserted the prune DELETE < fixed 500ms wall-clock; under 4-way CPU contention it measured
+538ms (passes unloaded at ~100-340ms). CI runners run packages in parallel — this could red at any time.
+Fixed in `2ffe075`: budget now DERIVED — the single indexed DELETE of 1000 rows must beat the measured
+wall-clock of the 2000 individual insert transactions that precede it (both sides scale together under
+load → contention-immune; 500ms floor keeps the absolute intent on idle machines; observed prune 336ms
+vs 23.8s baseline — no headroom for an O(n²) regression). Re-repro under deliberate 3-way parallel load:
+green (meta 43s). Process note: run the timing-sensitive server repro CONCURRENTLY with the other job
+repros — the contention doubles as a free load-immunity check.
+
+**Operator ledger re-checked:** O7 still OPEN (GHCR: `gh api /users/aytekXR/packages` → 403 "need
+read:packages" — re-verified this session). O8 unchanged: **21 open dependabot PRs**, deliberately
+untouched (operator did not ask S3 to absorb the web-tooling majors).

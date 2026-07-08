@@ -11,33 +11,39 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-03.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-04.md`)
 
-**Session 2026-07-08(c) result: D-059 — S2 DONE: coverage 59.4→69.7%, floor 58→62, harness honest.**
-`pulse-s2-test-backfill` workflow (12 agents: 5 parallel TDD authors → 5 SEQUENTIAL adversarial
-verifiers w/ exclusive source-mutation windows → 1 fix round): query 18.5→**88.5**, migrations
-0→**65.6 unit + A11 RETIRED** (double-migrate = nil-error no-op, integration-proven), cmd/pulse
-13.6→**43.0** (extracted `beaconListenerConfig()`; **VD-15 pin: License non-nil**, addr pin),
-api 55.9→**74.3** + conformance harness HONEST (missing spec t.Fatalf; route-not-in-spec t.Errorf;
-**no drift flushed out — no CR needed**; 0 SKIP verified), domain 0→**100**, discovery budget
-3→5 cycles (derived, D-042-compliant). WO-4 refuted once (3 t.Skip hatches in new tests) → fixed
-→ re-confirmed. All ci.yml server+docker-build steps reproduced locally (migrate smoke vs CH 24.8,
-integration incl. A11, stamped image). CI run 28922883994 green. Commits `d3f697c`…`c80badf`.
-⚠️ **O7 still OPEN** (GHCR private; token lacks read:packages — re-verified). **O8 grew to 21
-open dependabot PRs** (majors: vite 8, vitest 4, plugin-react 6, eslint 10, size-limit 12).
+**Session 2026-07-08(d) result: D-060 — S3 DONE: G4 MET (51/52 ops conformance-validated),
+coverage 69.7→73.2%, floor 62→66, web functions gated, SDK gated.**
+`pulse-s3-test-backfill` workflow (10 agents: 5 parallel TDD authors → 5 SEQUENTIAL adversarial
+verifiers w/ exclusive mutation windows; **all 5 WOs CONFIRMED round 1, zero fix rounds**):
+api 74.3→**75.6** — **51/52 operations response-body-validated + 1 waived (GET /live/ws, WS 101)**;
+error shapes validated for the FIRST time (49-entry 401 sweep + 403/404/422 vs Error{code,message});
+**no contract drift — no CR needed**. webhook 58.1→**94.3**, reports 58.8→**90.9** (local
+fakeConn), web lines 61.72→**79.48** gates **76/72/45(new fn gate)** + threshold-drop guard
+pinning gates AND the exact exclude set, sdk gated **62/73/70** (+@vitest/coverage-v8, size
+3.52 KB). The faithful CI repro EXPOSED+FIXED a pre-existing D-042-class flake:
+`TestAlertHistory_PruneTimingAt2000` fixed 500ms budget → derived insert-baseline budget
+(observed 538ms under contention; now load-immune, proven under deliberate 3-way load). All 4
+touched ci.yml jobs reproduced green on a pristine clone (server incl. migrate smoke CH 24.8 +
+integration; web+sdk on node:22; docker-build stamped `ci-2ffe075`). CI run 28975573189 green.
+Commits `ee4288d`…`2ffe075`. ⚠️ **O7 still OPEN** (GHCR read:packages — re-verified). **O8: 21
+dependabot PRs** untouched.
 
-**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-03.md` and execute it** (S3 test
-backfill B: response-body conformance for ALL remaining OpenAPI operations (G4), webhook
-58.1→≥65, reports 58.8→≥65, web `functions` threshold gated + 0%-page smoke tests, SDK coverage
-baseline; FLOOR 62→66).
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-04.md` and execute it** (S4 e2e
+phase 2 + CI hardening: caddy-fronted Playwright CSP job, delivery_failure e2e, e2e.yml on
+main pushes, web-e2e promotion check, VD-04 500-stream measurement, fixture-replay suite,
+CodeQL; FLOOR 66→70 if total holds ≥73).
 
-**Standing numbers (2026-07-08 post-S2):** coverage total **69.7%** (floor 62); per-package:
-query 88.5, api 74.3, cmd/pulse 43.0, migrations 65.6 (unit), domain 100, cluster 89.0,
-webhook **58.1** (S3), reports **58.8** (S3), meta 61.9, clickhouse unit 61.8, prober 61.9.
-Conformance harness has NO escape hatches; 22 conformCheck call sites across 4 api test files —
-the D-057 "14/52 validated / 38 uncovered" list is STALE post-WO-4, re-count in S3. Web
-thresholds still lines 57 / branches 71, functions UNGATED (vite.config.ts:49-52). Docs
-P0-stales (productionize.md) remain S6 scope. Full evidence: D-059.
+**Standing numbers (2026-07-08 post-S3):** coverage total **73.2%** (floor 66; GA G3 ≥70 already
+exceeded); per-package: query 88.5, api 75.6, webhook 94.3, reports 90.9, logtail 92.1,
+license 91.5, cluster 89.0, ingest 85.1, restpoller 81.9, sessions 81.1, amsclient 76.8,
+anomaly 76.1, alert 74.1, channels 74.1, config 74.5, aggregator 69.6, beacon 68.6, migrations
+65.6 (unit), collector 65.7, meta 61.9, clickhouse unit 61.8, prober 61.9, cmd/pulse 43.0,
+domain 100. Conformance: **51/52 + 1 waived**; error shapes covered; harness has NO escape
+hatches (the suite's only 2 SKIPs are the pre-existing domain SchemaFixtures npx-guard — they
+run in CI). Web gates 76/72/45 + `coverage-gate.test.ts` guard; SDK gates 62/73/70 (webrtc.ts
+20.1% is the known gap). Docs P0-stales (productionize.md) remain S6 scope. Full evidence: D-060.
 
 ---
 
@@ -105,10 +111,10 @@ file + `decisions.md` (new D-0NN) each session. AMS web login is RESOLVED (D-036
   helm/compose, strict, 1 review, enforce_admins=false — owner direct pushes work; keep it that way while
   sessions push to main). `ams-integration` is DELETED (local+origin). Tag **v0.1.0** exists @ `1a701d6`;
   release pipeline proven (D-058). U4 is fully resolved.
-- **Go suite green / coverage 69.7%** as of 2026-07-08 (full `-race` + coverage, **repo-root mount**,
-  golang:1.25, after D-052…D-059; was 47.5% on 2026-06-28). Working tree is CLEAN — everything is committed and
-  pushed; CI additionally enforces a `gofmt -l` gate, a **62%** coverage floor (D-053, ratcheted D-059) and a
-  stamped-version docker-build assert (D-058). **Prod runs `1a701d6` (≥D-056) since 2026-07-08** — stamped
+- **Go suite green / coverage 73.2%** as of 2026-07-08 (full `-race` + coverage, **repo-root mount**,
+  golang:1.25, after D-052…D-060; was 47.5% on 2026-06-28). Working tree is CLEAN — everything is committed and
+  pushed; CI additionally enforces a `gofmt -l` gate, a **66%** coverage floor (D-053, ratcheted D-059/D-060)
+  and a stamped-version docker-build assert (D-058). **Prod runs `1a701d6` (≥D-056) since 2026-07-08** — stamped
   `pulse 1a701d6`, beacon public chain live (403 LICENSE_REQUIRED until O7/U3), rollback tag
   `pulse-prod-pulse:pre-d058`.
 - **The prod image embeds the web UI** (multi-stage `deploy/docker/pulse.Dockerfile`: `npm ci && npm run build` →

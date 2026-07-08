@@ -125,17 +125,18 @@ ci.yml server+docker-build steps reproduced locally; CI run 28922883994 green. C
 7. De-flake `TestDiscovery_NewNodeVisible` latency budget (RESUME §6.7, observed 68.8ms vs 60ms).
 **Exit:** total ≥ 64%, ci.yml FLOOR → 62.0; all new tests red→green documented; 0 SKIP.
 
-### S3 — Test backfill B: contracts + web — prompt written by S2
-**Goal:** G4 + the web half of G5.
-1. Response-body conformance for the 38 uncovered operations (list archived in D-057 scout
-   output; includes all /alerts/*, /analytics/*, /qoe/*, /reports/*, /admin/*, beacon, healthz).
-2. `collector/webhook` →≥65 (parseWebhook 27.3%, jsonInt* 0%) and `reports` →≥65 (ComputeUsage 4.5%,
-   Reconcile/AggregateByTenant/fetchConcurrencyPeaks 0%).
-3. Web: add `functions` threshold (start 45, ratchet); smoke tests for the 0% pages
-   (App, Layout, SettingsPage, OnboardingWizard, AnalyticsPage, AlertChannelForm); guard that
-   vite.config thresholds can't silently drop (assert in CI or a config test).
-4. SDK: coverage baseline + thresholds in `sdk/beacon-js`.
-**Exit:** G4 met; total Go ≥ 68%, FLOOR → 66.0; web functions gated; every page ≥ smoke-tested.
+### S3 — Test backfill B: contracts + web — ✅ DONE (D-060, 2026-07-08)
+**Goal:** G4 + the web half of G5. **All exit criteria MET, verified adversarially.**
+1. ✅ Response-body conformance: **51/52 operations validated + 1 waived** (GET /live/ws, WS 101).
+   The D-057 "38 uncovered" list was stale — the real pre-S3 state was 25/52; S3 added 26. Error
+   shapes (401 sweep ×49 + 403/404/422) validated for the first time. NO contract drift → no CR.
+2. ✅ `collector/webhook` 58.1→**94.3**; `reports` 58.8→**90.9** (local fakeConn pattern).
+3. ✅ Web: functions gate **45** (NEW) + lines 57→**76** / branches 71→**72**; all 0% pages
+   smoke-tested (now 60-100% lines); `coverage-gate.test.ts` pins gates + exact exclude set.
+4. ✅ SDK: baseline gated **62/73/70** (+@vitest/coverage-v8; size 3.52 KB green).
+**Exit actuals:** total Go **73.2%** (≥68 target beaten; G3's ≥70 exceeded), FLOOR → **66.0**.
+Bonus: pre-existing D-042-class flake `TestAlertHistory_PruneTimingAt2000` exposed by the
+faithful CI repro and fixed (derived insert-baseline budget, load-immune).
 
 ### S4 — E2E phase 2 + CI hardening — prompt written by S3
 **Goal:** the rest of G5; CI catches everything it can.
@@ -198,9 +199,9 @@ ci.yml server+docker-build steps reproduced locally; CI run 28922883994 green. C
 | 2026-07-08 (audit) | 59.5% | 58.0 | 61.7 / 75.4 / 48.3 (fn ungated) | baseline |
 | 2026-07-08 (after S1) | 59.4% | 58.0 | unchanged | infra session; −0.1 = 4 uncovered serve.go wiring lines (S2 covers) |
 | 2026-07-08 (after S2) | **69.7%** | **62.0** | unchanged | D-059; S2 target ≥64 beaten; G3's ≥70 nearly met already |
-| after S3 (target) | ≥68% (hold ≥69.7) | 66.0 | gates 60/71/45 | |
-| after S3 (target) | ≥68% | 66.0 | gates 60/71/45 | |
-| GA (G3) | ≥70% | ≥68.0 | ratchet to achieved−3 | |
+| 2026-07-08 (after S3) | **73.2%** | **66.0** | gates **76/72/45** + guard test | D-060; G4 met 51/52+1 waived; sdk gated 62/73/70; G3's ≥70 EXCEEDED |
+| after S4 (target) | ≥73% (hold) | 70.0 | hold | ratchet floor 66→70 if total holds ≥73 |
+| GA (G3) | ≥70% ✅ (73.2) | ≥68.0 | ratchet to achieved−3 | coverage half of G3 already met; floor ratchet remains |
 
 ## 5. Operator ledger (surface EVERY session — agent cannot do these)
 
@@ -212,8 +213,8 @@ ci.yml server+docker-build steps reproduced locally; CI run 28922883994 green. C
 | O4 | After O3: confirm the `webhook: invalid signature` WARN does not recur (else the AMS-side secret is wrong) | OPEN |
 | O5 | Choose the project LICENSE (legal decision; agent drafts once chosen) | OPEN |
 | O6 | (was U4) Branch protection + `v*` tag | ✅ DONE by S1 (D-058): protection live (API 200), v0.1.0 released |
-| O7 | **Make `ghcr.io/aytekxr/ams-pulse` public** (package settings → Change visibility) or `gh auth refresh -s read:packages` — until then nobody (incl. the agent) can pull v0.1.0 or run `cosign verify` (commands in release.yml header); this is the last G1 bit | OPEN (re-verified still blocked 2026-07-08, D-059) |
-| O8 | Review the dependabot PRs — now **21 open** (majors: vite 8, vitest 4, plugin-react 6, eslint 10, size-limit 12; grouped minor-and-patch for web, sdk AND server gomod; caddy digest bump was CI+e2e green — mergeable). Protection requires 1 approval — dependabot PRs need owner review; S3/S4 can absorb the web-tooling majors | OPEN (grew, D-059) |
+| O7 | **Make `ghcr.io/aytekxr/ams-pulse` public** (package settings → Change visibility) or `gh auth refresh -s read:packages` — until then nobody (incl. the agent) can pull v0.1.0 or run `cosign verify` (commands in release.yml header); this is the last G1 bit | OPEN (re-verified still blocked 2026-07-08(d), D-060) |
+| O8 | Review the dependabot PRs — **21 open** (majors: vite 8, vitest 4, plugin-react 6, eslint 10, size-limit 12; grouped minor-and-patch for web, sdk AND server gomod; caddy digest bump was CI+e2e green — mergeable). Protection requires 1 approval — dependabot PRs need owner review; S4 can absorb the web-tooling majors if the operator asks | OPEN (unchanged, D-060) |
 
 ## 6. Session protocol (BINDING — the "prompts" contract)
 
