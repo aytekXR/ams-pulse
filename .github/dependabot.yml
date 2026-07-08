@@ -1,0 +1,82 @@
+# Dependabot v2 — automatic dependency update PRs.
+# Weekly cadence; minor+patch updates are grouped per ecosystem so majors
+# surface as individual PRs and cannot be silently bundled with routine bumps.
+# open-pull-requests-limit caps concurrent PR noise to 5 per ecosystem.
+
+version: 2
+
+updates:
+
+  # Go modules — server/
+  - package-ecosystem: "gomod"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # npm — web UI
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # npm — beacon-js SDK (15 KB gate enforced by CI)
+  - package-ecosystem: "npm"
+    directory: "/sdk/beacon-js"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Docker — Dockerfiles under deploy/docker/
+  - package-ecosystem: "docker"
+    directory: "/deploy/docker"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # docker-compose — compose files under deploy/ (watches compose image digests).
+  # Distinct from the "docker" ecosystem above: docker-compose scans compose
+  # files only, so the two entries do not overlap on deploy/docker/pulse.Dockerfile.
+  - package-ecosystem: "docker-compose"
+    directory: "/deploy"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions — workflow files under .github/workflows/
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
