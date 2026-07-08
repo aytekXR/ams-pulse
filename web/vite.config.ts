@@ -41,14 +41,23 @@ export default defineConfig({
       // enabled:true means `vitest run` always collects coverage — no CI change needed.
       enabled: true,
       include: ["src/**"],
-      exclude: ["src/test/mocks/**", "**/*.d.ts", "src/main.tsx"],
-      // Thresholds are a RATCHET: set ~4-5 pts below the measured achieved values
-      // to prevent regressions while keeping CI green.
-      // Aspirational targets from PRD: 60% lines / 55% branches.
-      // Measured achieved after msw tests: lines 61.72% / branches 75.35%.
+      exclude: [
+        "src/test/mocks/**",
+        "**/*.d.ts",
+        "src/main.tsx",
+        // types.ts contains ONLY type re-exports (no runtime statements); instrumenting
+        // it is noise and keeps functions/lines at 0 despite 100% type coverage.
+        "src/lib/api/types.ts",
+      ],
+      // Thresholds are a RATCHET: set floor(achieved - 3) below the measured values
+      // to prevent regressions while keeping CI green. Never lower an existing gate.
+      // Measured achieved after WO-4 smoke tests (2026-07-08):
+      //   lines 79.48% → gate 76 | branches 75.57% → gate 72
+      //   functions 46.57% → gate max(45, floor(46.57-3)) = 45 (new)
       thresholds: {
-        lines: 57,
-        branches: 71,
+        lines: 76,
+        branches: 72,
+        functions: 45,
       },
     },
   },
