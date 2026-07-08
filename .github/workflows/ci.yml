@@ -77,19 +77,28 @@ jobs:
         run: cd server && go test ./... -race -timeout 300s -coverprofile=/tmp/cover.out -covermode=atomic
 
       # D-045: coverage no-regression ratchet. Floor sits just below the current
-      # total (73.2% as of D-060; ratcheted 55→58 in D-053, 58→62 in D-059,
-      # 62→66 in D-060 per ROADMAP §4) so accidental deletions/regressions fail CI.
-      # Raise FLOOR as coverage climbs (GA target ≥68). Non-integration run
-      # (query & store/clickhouse full paths are covered separately by integration).
+      # total (73.3% as of D-061; ratcheted 55→58 in D-053, 58→62 in D-059,
+      # 62→66 in D-060, 66→70 in D-061 per ROADMAP §4) so accidental
+      # deletions/regressions fail CI. Raise FLOOR as coverage climbs (GA target
+      # ≥68 — exceeded). Non-integration run (query & store/clickhouse full paths
+      # are covered separately by integration).
       - name: Coverage floor gate
         run: |
           cd server
           TOTAL=$(go tool cover -func=/tmp/cover.out | awk '/^total:/ {gsub("%","",$NF); print $NF}')
-          FLOOR=66.0
+          FLOOR=70.0
           awk -v t="$TOTAL" -v f="$FLOOR" 'BEGIN {
             if (t+0 < f+0) { printf "FAIL: total coverage %.1f%% < floor %.1f%%\n", t, f; exit 1 }
             printf "OK: total coverage %.1f%% >= floor %.1f%%\n", t, f
           }'
+
+      # qa/mock-ams and qa/licensegen each have their own go.mod and are NOT
+      # covered by `./...` in server/ — run them here so e2e infra changes are
+      # gated by their own unit tests (mock-ams pagination coverage from WO-4).
+      - name: qa modules unit tests
+        run: |
+          (cd qa/mock-ams && go test -race -count=1 -timeout 300s ./...)
+          (cd qa/licensegen && go test -race -count=1 -timeout 300s ./...)
 
       # ── Integration step ─────────────────────────────────────────────────────
       # Build the binary and smoke-test pulse migrate against the CH service container.
@@ -308,7 +317,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install dependencies
         run: cd web && npm ci --legacy-peer-deps
