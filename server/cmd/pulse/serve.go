@@ -349,17 +349,9 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	// When set, the beacon ingest endpoint is also available on a separate port
 	// for DMZ/edge deployment without exposing the full API.
 	var beaconSrv *beaconingest.Server
-	if cfg.IngestListenAddr != "" {
+	if bcfg, ok := beaconListenerConfig(cfg.IngestListenAddr, lic); ok {
 		ingestTokenStore := &metaIngestTokenStore{store: metaStore}
-		beaconSrv = beaconingest.NewServer(beaconingest.Config{
-			ListenAddr:           cfg.IngestListenAddr,
-			RateLimitPerTokenRPS: 100,
-			RateBurst:            200,
-			// VD-15: without this the dedicated listener is fail-open (nil = no
-			// license gate) and Free-tier deployments accept beacon ingest that
-			// the API-mux path 403s (found live by the D-058 staging verify).
-			License: lic,
-		}, ingestTokenStore, fanout, logger)
+		beaconSrv = beaconingest.NewServer(bcfg, ingestTokenStore, fanout, logger)
 		logger.Info("pulse: beacon ingest listener configured", "addr", cfg.IngestListenAddr)
 	}
 
@@ -549,4 +541,26 @@ func (s *server) Stop() {
 	}
 	s.store.Close()
 	s.logger.Info("pulse: stopped")
+}
+
+// ─── Beacon listener wiring ───────────────────────────────────────────────────
+
+// beaconListenerConfig builds the beaconingest.Config for the optional dedicated
+// beacon ingest listener (PULSE_INGEST_LISTEN_ADDR). Returns (cfg, true) when
+// listenAddr is non-empty; (zero, false) when no dedicated listener is needed.
+//
+// VD-15 invariant (D-058): License MUST be non-nil so the listener never operates
+// fail-open. When License is nil, beacon.Handler.Handle skips the license gate and
+// Free-tier users receive HTTP 202 instead of 403 — the live defect found during
+// D-058 staging verify. The caller (newServer) always passes the real *license.Manager.
+func beaconListenerConfig(listenAddr string, lic beaconingest.LicenseChecker) (beaconingest.Config, bool) {
+	if listenAddr == "" {
+		return beaconingest.Config{}, false
+	}
+	return beaconingest.Config{
+		ListenAddr:           listenAddr,
+		RateLimitPerTokenRPS: 100,
+		RateBurst:            200,
+		License:              lic,
+	}, true
 }
