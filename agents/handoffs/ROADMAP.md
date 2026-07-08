@@ -74,7 +74,16 @@ Sizing: one session ≈ one prior phase-sized effort (D-048..D-051 or D-055 scal
 the requirement; for infra/CI work where it can't, every change needs a falsifiable scripted
 verification (mutation-proof where practical, D-055 pattern).
 
-### S1 — Release engineering + D-056 prod rollout («dockerization first») — prompt: `sessions/SESSION-01.md`
+### ✅ S1 — Release engineering + D-056 prod rollout — DONE 2026-07-08 (D-058)
+**Result:** v0.1.0 released (run 28911789088: CI-gated, Trivy, multi-arch amd64+arm64, SBOM+provenance,
+cosign tlog 2110636506); `pulse version` stamped everywhere (+ mutation-proof ci assert); Helm ref canonical;
+caddy+golang digest-pinned; dependabot live (docker-compose ecosystem proven by its first caddy PR);
+prod runs `1a701d6` (D-056 live; beacon public chain fixed end-to-end — 3 staging-found bugs: missing
+PULSE_INGEST_LISTEN_ADDR, VD-15 fail-open on the dedicated listener, /beacon handle_path); backup cycle 2 +
+keep-7 verified; main protected; ams-integration deleted. **G1 met except GHCR package visibility (→O7);
+G2 met.** Evidence: D-058.
+
+### S1 (original plan, kept for provenance) — prompt: `sessions/SESSION-01.md`
 **Goal:** a stranger can pull a versioned, signed, scanned image; prod runs current main.
 1. Version stamping end-to-end: `-ldflags -X main.Version/GitCommit/BuildDate` in
    `deploy/docker/pulse.Dockerfile` (ARG-fed), Makefile, ci.yml docker-build, release.yml;
@@ -179,6 +188,7 @@ verification (mutation-proof where practical, D-055 pattern).
 | When | Go total | ci FLOOR | Web lines/branches/functions | Notes |
 |---|---|---|---|---|
 | 2026-07-08 (audit) | 59.5% | 58.0 | 61.7 / 75.4 / 48.3 (fn ungated) | baseline |
+| 2026-07-08 (after S1) | 59.4% | 58.0 | unchanged | infra session; −0.1 = 4 uncovered serve.go wiring lines (S2 covers) |
 | after S2 (target) | ≥64% | 62.0 | — | |
 | after S3 (target) | ≥68% | 66.0 | gates 60/71/45 | |
 | GA (G3) | ≥70% | ≥68.0 | ratchet to achieved−3 | |
@@ -192,7 +202,9 @@ verification (mutation-proof where practical, D-055 pattern).
 | O3 | Configure the AMS console to POST lifecycle webhooks to `https://beyondkaira.com/webhook/ams` with the HMAC secret from `deploy/.env` (Pulse side live since D-054) | OPEN |
 | O4 | After O3: confirm the `webhook: invalid signature` WARN does not recur (else the AMS-side secret is wrong) | OPEN |
 | O5 | Choose the project LICENSE (legal decision; agent drafts once chosen) | OPEN |
-| O6 | (was U4) Branch protection + `v*` tag — **agent-runnable since gh is authed as owner**; only needed from the operator if the token lacks admin scope | → S1 |
+| O6 | (was U4) Branch protection + `v*` tag | ✅ DONE by S1 (D-058): protection live (API 200), v0.1.0 released |
+| O7 | **Make `ghcr.io/aytekxr/ams-pulse` public** (package settings → Change visibility) or `gh auth refresh -s read:packages` — until then nobody (incl. the agent) can pull v0.1.0 or run `cosign verify` (commands in release.yml header); this is the last G1 bit | OPEN (NEW, D-058) |
+| O8 | Review the first dependabot PRs: caddy digest bump (CI+e2e green — mergeable); vite 8 / vitest 4 majors (e2e RED — hold or let S3/S4 absorb). Protection now requires 1 approval — dependabot PRs need owner review | OPEN (NEW, D-058) |
 
 ## 6. Session protocol (BINDING — the "prompts" contract)
 

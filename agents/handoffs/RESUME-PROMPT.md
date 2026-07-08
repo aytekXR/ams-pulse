@@ -11,31 +11,32 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-01.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-02.md`)
 
-**Session 2026-07-08 result: D-057 — production-readiness ROADMAP + session protocol.** A 9-scout
-verified audit (coverage/CI/docker/stubs/contracts/web/docs/git/prod-live) grounded a new
-**plan of record `agents/handoffs/ROADMAP.md`**: GA definition G1–G8, sessions **S1–S7**, coverage
-ratchet + operator ledgers, and a BINDING session protocol (§6): each session's prompt is written
-BEFORE it starts, and **every session ends by writing `sessions/SESSION-(N+1).md`** — a session
-without its successor prompt is not done. Operator directive: **dockerization/release first** —
-this overrides the previous "next = test backfill" handoff (test backfill is now S2/S3).
+**Session 2026-07-08(b) result: D-058 — S1 DONE: v0.1.0 released, prod current, main protected.**
+Release run 28911789088 all-green: CI-gated tag pipeline, Trivy pre-push, **multi-arch amd64+arm64**
+manifest `sha256:6b36a4c1…ea2353` (tags 0.1.0/0.1/0/latest) with SBOM+provenance, **cosign keyless
+signed (Rekor tlog 2110636506)**. Every build now stamps version/commit/date (ldflags end-to-end +
+a mutation-proof ci.yml assert). Helm image ref canonical; caddy+golang digest-pinned; dependabot
+live (its first PRs arrived within minutes — see O8). **Prod runs `1a701d6`** (D-055+D-056+D-058):
+smoke all green incl. webhook 200/401 and the **beacon public chain now LIVE** — staging-verify
+found 3 real bugs (beacon listener never enabled outside CI → prod /beacon 502'd; VD-15 license
+gate fail-open on the dedicated listener → Free-tier 202; /beacon needed handle_path) — all fixed,
+live red→green in D-058. Backup cycle 2 + keep-7 verified. `main` protected (7 contexts, strict,
+enforce_admins=false), `ams-integration` deleted, rollback tag `pulse-prod-pulse:pre-d058` standing.
+⚠️ Last G1 bit = **O7**: the GHCR package is PRIVATE (default) and the gh token lacks read:packages
+→ pull + `cosign verify` from the VPS blocked until the operator flips visibility (one click).
 
-**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-01.md` and execute it** (release
-engineering: version stamping, release.yml gate+multi-arch+Trivy+SBOM+cosign, Helm P0 image ref,
-digest pins + dependabot, **prod rollout carrying D-056**, branch protection + `v0.1.0` — U4 is
-now agent-runnable since `gh` is authed as owner). SESSION-01 includes the backup cycle-2 check.
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-02.md` and execute it** (S2 test
+backfill A: `query` 18.5→≥70, `migrations` 0→≥60 incl. A11 idempotency, `cmd/pulse` 13.6→≥40
+(includes the D-058 serve-wiring smoke), `api` 55.9→≥65, `domain` 0→covered, conformance-harness
+honesty (t.Skipf/t.Logf → fail loud), de-flake TestDiscovery_NewNodeVisible; FLOOR 58→62).
 
-**Key audit deltas (2026-07-08) vs older numbers in this file:** §6's per-package priorities are
-STALE — license is **91.5** (not 37), channels 74.1, config 74.5, meta 61.9, clickhouse unit 61.8,
-logtail 92.1: those targets are MET. Real remaining holes: `query` 18.5, `cmd/pulse` 13.5, `api`
-55.9, `webhook` 58.1, `reports` 58.8, `migrations` 0 (no tests), `domain` 0. Release pipeline is
-the weakest GA dimension (ungated, single-arch, unscanned, unsigned, version reports `dev/unknown`,
-Helm references a never-published image path). `main` is UNPROTECTED (API 404), zero tags, stale
-`ams-integration` ref lives on. Prod healthy but **pre-D-056**. Docs carry 2 P0-stale operator
-instructions (productionize.md 3-overlay + loopback-HTTPS steps). Contract conformance: only
-14/52 operations response-validated; `openAPISpec()` t.Skipf + `conformCheck` FindRoute t.Logf are
-silent escape hatches. Full evidence: D-057 + ROADMAP §1.
+**Standing numbers (2026-07-08 post-S1):** coverage total **59.4%** (floor 58); per-package:
+domain 0.0, cmd/pulse 13.6, query 18.5, api 55.9, webhook 58.1, reports 58.8, migrations 0 (no
+test files). Contract conformance: 14/52 response-validated; `openAPISpec()` t.Skipf
+(api_test.go:83-85) + `conformCheck` FindRoute t.Logf (api_test.go:~183) still the escape hatches.
+Docs P0-stales (productionize.md) remain S6 scope. Full evidence: D-057 audit + D-058 results.
 
 ---
 
@@ -99,14 +100,15 @@ file + `decisions.md` (new D-0NN) each session. AMS web login is RESOLVED (D-036
   stable** (3.0.3 == Docker Hub `latest`); trial license valid to 2026-07-12. Opened the newly-created `pulse-test`
   app's `remoteAllowedCIDR` 127.0.0.1→0.0.0.0/0 (logs clean — every new AMS app defaults to 127.0.0.1). Values in
   `oguz-testing.md`.
-- **Branch state (CORRECTED 2026-06-29) — the old "main is 7 behind / prod runs ams-integration" note is OBSOLETE.**
-  `main` @ `33efe35` is the working branch and is **ahead of / fully contains** `ams-integration`
-  (`git rev-list --count main..ams-integration` = **0**; `ams-integration..main` = **5**). `ams-integration`
-  (@ `4dd448a`) is now a **stale pointer to retire**. `main` is ahead of `origin/main` (the handoff commits D-036–D-037,
-  push pending). Remaining branch work: delete the stale `ams-integration` ref + apply branch protection + a `v*` tag (U4).
-- **Go suite green / coverage 59.5%** as of 2026-07-07(c) (full `-race` + coverage, **repo-root mount**,
-  golang:1.25, after D-052…D-056; was 47.5% on 2026-06-28). Working tree is CLEAN — everything is committed and
-  pushed; CI additionally enforces a `gofmt -l` gate and a 58% coverage floor (D-053).
+- **Branch state (D-058, 2026-07-08): `main` is PROTECTED** (contexts contracts/server/web/sdk/docker-build/
+  helm/compose, strict, 1 review, enforce_admins=false — owner direct pushes work; keep it that way while
+  sessions push to main). `ams-integration` is DELETED (local+origin). Tag **v0.1.0** exists @ `1a701d6`;
+  release pipeline proven (D-058). U4 is fully resolved.
+- **Go suite green / coverage 59.4%** as of 2026-07-08 (full `-race` + coverage, **repo-root mount**,
+  golang:1.25, after D-052…D-058; was 47.5% on 2026-06-28). Working tree is CLEAN — everything is committed and
+  pushed; CI additionally enforces a `gofmt -l` gate, a 58% coverage floor (D-053) and a stamped-version
+  docker-build assert (D-058). **Prod runs `1a701d6` (≥D-056) since 2026-07-08** — stamped `pulse 1a701d6`,
+  beacon public chain live (403 LICENSE_REQUIRED until O7/U3), rollback tag `pulse-prod-pulse:pre-d058`.
 - **The prod image embeds the web UI** (multi-stage `deploy/docker/pulse.Dockerfile`: `npm ci && npm run build` →
   embedded in the Go binary), so a passing go-live build implies the web build passed.
 
@@ -119,7 +121,7 @@ file + `decisions.md` (new D-0NN) each session. AMS web login is RESOLVED (D-036
 | U1 | ✅ **RESOLVED (D-034).** Self-hosted AMS on this VPS; per-app `remoteAllowedCIDR=0.0.0.0/0` so Pulse polls cleanly (200). No external allow-list dependency. | (was: 8/16 apps 403'd the VPS on test.antmedia.io). |
 | U2 | ✅ **RESOLVED (D-039, 2026-06-30).** `ci` workflow is GREEN (de-flaked `TestQuery_QoeSummary_RealStartupP50`, 15s→90s poll); verified via `gh` (run 28429722100, 7/7 jobs). | — |
 | U3 | **Activate a Pro+ Pulse license** on `beyondkaira.com` (`PULSE_LICENSE_KEY`, see §5). | QoE/beacon ingest (F3) is gated to Pro+ (`CheckBeaconIngest` 403 on Free). Without it `beacon_events` stays empty; QoE features/alerts can't be exercised in prod. *(This is a Pulse license — separate from the AMS license.)* |
-| U4 | **GitHub admin: run `.github/branch-protection.sh` + push a `v*` tag.** | Needs `gh` + repo-admin; gates `main` and exercises the GHCR release. Can't be done from the VPS. |
+| U4 | ✅ **RESOLVED (D-058, 2026-07-08).** Branch protection live (API 200) + v0.1.0 released (run 28911789088, cosign tlog 2110636506). NEW follow-ups: **O7** make the GHCR package public (or `gh auth refresh -s read:packages`) so pulls + `cosign verify` work; **O8** review the first dependabot PRs. | — |
 | U5 | **Open `https://beyondkaira.com` AND `https://pulse.beyondkaira.com` in a browser; confirm the SPA renders with no CSP console errors on each** (Caddy serves both — apex via the catch-all, subdomain via its own block, so they can fail independently). | The agent can't run a real browser; CSP is browser-enforced. Report any violation → instant fix. |
 | U6 | ✅ **DONE (2026-06-30).** `gh` is installed + authed (account `aytekXR`, ssh). The CI blind spot is gone — the agent now reads Actions directly (so it can also do U4). | — |
 

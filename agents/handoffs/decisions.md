@@ -1732,3 +1732,65 @@ today's required jobs and `enforce_admins:false` keeps owner direct-pushes (the 
 workflow_dispatch dry-run MUST tag via a raw/input version — semver metadata patterns are empty off-tag. All
 three folded into SESSION-01 (WO-2/WO-6). S7 re-runs the full 9-scout audit as the GA gate, which also
 compensates for the lost critic pass.
+
+## D-058 · 2026-07-08 · SESSION-01: release engineering + v0.1.0 + prod rollout (G1/G2)
+
+Commits `5d341c6` `703d8f6` `49014c1` `6d56259` `e7bcf51` `55edcd8` `d4cefd3` `1a701d6`; tag **v0.1.0**
+(@`1a701d6`). Executed `sessions/SESSION-01.md` as the `session01-release-eng` workflow (11 agents: 4
+disjoint-scope authors → 4 adversarial verifiers → 1 fix round → cross-WO integration check), then
+ORCH-sequential WO-5/WO-6. All gates green: full `-race` 24 pkgs 0 FAIL/0 SKIP, coverage **59.4%**
+(floor 58; −0.1 from 4 uncovered serve.go wiring lines), web/sdk/helm/compose/docker CI steps reproduced.
+
+**WO-1 version stamping:** `versionString()` helper TDD'd (red compile-fail captured); Dockerfile ARG
+VERSION/COMMIT/BUILD_DATE → `-ldflags -X main.*`; Makefile git-describe stamping; golang builder digest-pinned
+(go1.25.12); ci.yml docker-build passes build-args + NEW mutation-proof assert (`docker run --entrypoint pulse
+… version` fails on dev/unknown/empty — plain `docker run <img> version` would run `pulse serve version`).
+**WO-2 release.yml:** CI gate (gh api successful-ci-run-for-SHA, mutation: no run → total_count 0 → exit 1);
+qemu+buildx amd64+arm64; Trivy pre-push (exit-code 1, HIGH/CRITICAL, ignore-unfixed); push with
+provenance+sbom; cosign keyless (id-token:write); workflow_dispatch dry-run (raw `version` input — semver
+patterns are EMPTY off-tag); `latest` enable fixed (`ref_type=='tag' && !contains(ref_name,'-')` — the old
+`{{is_default_branch}}` NEVER fired on tags). Post-push fix `d4cefd3`: trivy-action tags are v-prefixed
+(`@0.28.0` → job-setup failure → `@v0.36.0`). **Dry-run 28911643107 PROVEN:** gate+scan ran, push+sign SKIPPED.
+**WO-3 Helm:** canonical `ghcr.io/aytekxr/ams-pulse` in values/tests/3 goldens (regenerated via
+alpine/helm:3.17.0, red golden-diff captured first); install.md Path C marked EXPERIMENTAL until S6.
+**WO-4:** caddy digest-pinned; `.github/dependabot.yml` (gomod, npm×2, docker, docker-compose, actions;
+weekly, grouped minor+patch). Dependabot ALIVE within minutes: caddy digest-bump PR (e2e green — the
+docker-compose ecosystem works) + vite/vitest major PRs (e2e red = majors correctly surface individually).
+
+**Staging verify (isolated pulse-realams) found 3 real bugs — all fixed + live-proven:**
+1. `realams-test.yml` pulse-migrate one-shot missed D-054's PULSE_SECRET_KEY propagation → D-052 fail-closed
+   guard exit 1 → pulse never started (the EXACT class §8.7 staging-verify exists to catch; it did).
+2. **Beacon listener never bound outside CI** — only docker-compose.ci.yml set PULSE_INGEST_LISTEN_ADDR, so
+   prod's Caddy `/beacon/*` upstream 502'd (dead public surface). Base compose now sets `:8091`.
+3. **Dedicated-listener license-gate bypass (VD-15)** — serve.go never set `beacon.Config.License`; nil =
+   fail-open → Free tier got 202 on :8091 while the API-mux path 403s. Live red→green: 202 pre-fix → 403
+   LICENSE_REQUIRED post-fix (staging logs). Side effect: e2e A2's cannot-false-green property is RESTORED
+   (fail-open would have masked a broken license loader with a false 202). Serve-wiring unit smoke → S2.
+4. (Caddyfile) `/beacon` route needed `handle_path` (strip): listener serves POST /ingest/beacon only; SDK
+   posts `${ingestUrl}/ingest/beacon` → public contract = `ingestUrl=https://<domain>/beacon`. caddy validate
+   green on the pinned image. NOTE: e2e's A2 Free-403 wording (beacon.go:307) was reasoning, not an assert —
+   on the dedicated listener the license gate fires BEFORE token auth, so Free-tier 403s bogus tokens too.
+
+**WO-5 prod rollout (pulse-prod, 5-overlay): ALL SMOKE GREEN.** Prod runs `pulse 1a701d6 (commit 1a701d6,
+built 2026-07-08T01:51:17Z)` — carries D-055/D-056/D-058. healthz ok via public TLS; admin token auths
+(overview: 1 publisher, standalone node up); webhook signed→200/bad-sig→401; **public beacon chain LIVE**
+(https://beyondkaira.com/beacon/ingest/beacon → 403 LICENSE_REQUIRED w/ correct JSON — was 502); limits bound
+(512M/0.5cpu); logs clean; migrate one-shot exit 0. Rollback: image tagged `pulse-prod-pulse:pre-d058`.
+**Backup cycle 2 verified** (manual `pulse-backup.sh once`): dated CH zip + sqlite pairs for 20260707-073113 +
+20260708-015233, count 2 ≤ keep-7, daemon untouched (next auto ~07:31 UTC).
+
+**WO-6:** `ams-integration` deleted local+origin (0 unique commits re-confirmed). Branch protection LIVE
+(API 200: contexts contracts/server/web/sdk/docker-build/helm/compose, strict, 1 review, enforce_admins=false
+— owner direct pushes still work; do NOT enable while sessions push to main). **v0.1.0 released: run
+28911789088 all steps success** — CI gate passed, Trivy passed, multi-arch (amd64+arm64) manifest
+`sha256:6b36a4c1191c363815214ac8d95bafe8d4ed80f95f040ffd3840fe9f26ea2353` pushed as 0.1.0/0.1/0/latest with
+SBOM+provenance, cosign keyless signed (**Rekor tlog index 2110636506**). ⚠️ Package is PRIVATE (GHCR default)
+and the gh token lacks read:packages → pull + local `cosign verify` from the VPS blocked → **NEW operator O7**:
+make ghcr.io/aytekxr/ams-pulse public (UI, one click) or `gh auth refresh -s read:packages`; then run the
+verify commands in release.yml's header. G1 = met except this visibility flip; G2 = met.
+
+Lessons: (a) action pins must be checked against REAL tags (`gh api repos/<a>/tags`) — @0.28.0 vs @v0.36.0
+died at job setup; (b) compose `up -d` uses a pre-built image tag (`pulse-prod-pulse`) — build with build-args
+first, then up WITHOUT --build, else the stamp is lost; (c) an ENTRYPOINT of ["pulse","serve"] makes naive
+`docker run <img> version` false-green — always `--entrypoint pulse`; (d) GHCR first push = private package;
+plan the visibility step INTO the release session, not after.
