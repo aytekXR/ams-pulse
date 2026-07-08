@@ -355,6 +355,10 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 			ListenAddr:           cfg.IngestListenAddr,
 			RateLimitPerTokenRPS: 100,
 			RateBurst:            200,
+			// VD-15: without this the dedicated listener is fail-open (nil = no
+			// license gate) and Free-tier deployments accept beacon ingest that
+			// the API-mux path 403s (found live by the D-058 staging verify).
+			License: lic,
 		}, ingestTokenStore, fanout, logger)
 		logger.Info("pulse: beacon ingest listener configured", "addr", cfg.IngestListenAddr)
 	}
