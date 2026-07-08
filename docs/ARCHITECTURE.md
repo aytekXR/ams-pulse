@@ -158,7 +158,7 @@ Wave-3-Plus re-gate: PASS_WITH_LIMITATIONS (2026-06-15, `qa/wave-3-plus/gate-rep
 | New stream on dashboard ≤ 10 s after publish | F1 | **1064 ms** | **1.50 s** (B-01) | Unchanged |
 | Viewer counts within ±2% of AMS REST (standalone) | F1 | **0.0%** | **0.0%** (B-02 runtime; VD-05 runtime test added V3b) | Unchanged |
 | Viewer counts within ±2% of AMS REST (cluster) | F1 | Not tested | Not tested | **0% double-count**: `IsEdgeStream()` implemented; edge viewer dedup active (VD-03 V3a) |
-| Dashboard < 2 s load at 500 concurrent streams | F1 | Virtualized, ≤20 DOM rows | ≤20 DOM rows (C-W2-02) | Unchanged — render time not measured; see known limitations |
+| Dashboard < 2 s load at 500 concurrent streams | F1 | Virtualized, ≤20 DOM rows | ≤20 DOM rows (C-W2-02) | **668 ms / 459 ms** (run1/run2; Playwright nav+grid-visible; budget 2 s; VD-04 CLOSED SESSION-04/WO-4) |
 | 13-month rollup queries < 3 s | F2 | DDL only | **126 ms** simple aggregate (C-W2-08) | **144 ms** simple aggregate + **145 ms** dimensional GROUP BY (3 geo × 2 device × 2 protocol, 12 rows; C9b `qa/wave-2/run-gate.sh`; VD-18 CLOSED) |
 | Beacon SDK < 15 KB gzip | F3 | Stub | **3.44 KB** gzip (C-W2-03) | **3.52 KB** (no regression; VD-09/12/13 fixes added code) |
 | Beacon SDK < 1% player CPU | F3 | Not measurable | Not measurable | Not measurable (deferred; VD-14) |
@@ -403,7 +403,7 @@ tech-debt closeout. Previously-deferred items closed in Wave-3-Plus are marked C
 
 | VD | Description | Severity | Status |
 |---|---|---|---|
-| VD-04 | Dashboard render time at 500 streams not measured — ≤20 DOM rows proxy only | Minor | OPEN — headless-browser measurement requires Phase-3 Playwright setup |
+| VD-04 | Dashboard render time at 500 streams | Minor | **CLOSED SESSION-04** — 668 ms / 459 ms (2 runs; Playwright real-stack chromium; budget 2 s; spec web/e2e/streams-render-500.spec.ts) |
 | VD-05 | Viewer count ±2% (standalone): runtime test added V3b; cluster double-count: edge dedup active (VD-03 V3a) | Minor | CLOSED |
 | VD-12 | `HlsAdapter` `rebuffer_end` emission | Major | CLOSED — Fixed V3a (SDK-01) |
 | VD-13 | `HlsAdapter` bitrate levels from `hls.levels[]` — ABR switches always 0→0 kbps | Minor | CLOSED — Fixed V3a (SDK-01) |
