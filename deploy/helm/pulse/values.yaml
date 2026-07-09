@@ -57,7 +57,6 @@ pulse:
     offlineFile: ""
 
   # Collector / ingest settings.
-  logTailPath: ""           # path to AMS analytics log inside the container; empty = disabled
   webhookAddr: ""           # address for webhook HTTP server; empty = disabled
   webhookSecret: ""         # set via secretRef.webhookSecret instead
 

@@ -94,10 +94,6 @@ spec:
               value: {{ $metaDSN | quote }}
             {{- end }}
             # ── Collector extras (optional) ──────────────────────────────
-            {{- if .Values.pulse.logTailPath }}
-            - name: PULSE_LOG_TAIL_PATH
-              value: {{ .Values.pulse.logTailPath | quote }}
-            {{- end }}
             {{- if .Values.pulse.webhookAddr }}
             - name: PULSE_WEBHOOK_ADDR
               value: {{ .Values.pulse.webhookAddr | quote }}

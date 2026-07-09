@@ -71,7 +71,6 @@ helm upgrade pulse ./deploy/helm/pulse -f my-values.yaml
 | `pulse.retentionDays` | `90` | `PULSE_RETENTION_DAYS` — raw event TTL |
 | `pulse.rollupTTLDays` | `395` | `PULSE_ROLLUP_TTL_DAYS` — rollup TTL (~13 months) |
 | `pulse.meta.dsn` | `""` | `PULSE_META_DSN` (auto: `/var/lib/pulse/pulse_meta.db`) |
-| `pulse.logTailPath` | `""` | `PULSE_LOG_TAIL_PATH` — AMS log file path in container |
 | `pulse.webhookAddr` | `""` | `PULSE_WEBHOOK_ADDR` — webhook HTTP listener |
 | `pulse.license.key` | `""` | `PULSE_LICENSE_KEY` (empty = Free tier) |
 | `pulse.license.offlineFile` | `""` | `PULSE_LICENSE_FILE` (air-gapped Enterprise) |

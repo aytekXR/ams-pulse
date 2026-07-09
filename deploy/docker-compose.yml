@@ -48,7 +48,6 @@ services:
       PULSE_AMS_NODE_ID: "standalone"
       PULSE_POLL_INTERVAL: "5s"
       # PULSE_AMS_APPLICATIONS: "live,vod"   # comma-separated; empty = all apps
-      # PULSE_LOG_TAIL_PATH: /var/log/antmedia/ant-media-server-analytics.log
 
       # ── Sensitive values — set via .env file or secrets manager ──────────────
       # PULSE_AMS_AUTH_TOKEN: ""         # AMS REST bearer token (required in prod)
@@ -76,8 +75,6 @@ services:
 
     volumes:
       - pulse-data:/var/lib/pulse         # SQLite meta store + secret key cache
-      # Mount the AMS analytics log read-only when Pulse runs on the AMS host:
-      # - /var/log/antmedia:/var/log/antmedia:ro
       # Mount MaxMind mmdb for geo enrichment (Wave 2):
       # - /etc/pulse/GeoLite2-City.mmdb:/var/lib/pulse/GeoLite2-City.mmdb:ro
     depends_on:
