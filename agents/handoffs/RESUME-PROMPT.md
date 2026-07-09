@@ -11,43 +11,51 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-08.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-09.md`)
 
-**Session 2026-07-09(d) result: D-064 — S7 DONE: GA-gate audit ran; verdict PUNCH-LIST-FIRST.**
-`pulse-s7-ga-gate` (11 agents: 9 audit scouts → solo A10 load phase → adversarial critic) +
-ORCH adjudication + in-session XS/S fixes.
-- **GATE-BLOCKER (→ S8 WO-A): prod runs `bc15d43` (v0.1.0-25) and the 4 D-062 FUNCTIONAL
-  commits are NOT in that image — honest-QoE alerts + B7 per-source webhooks are NOT live in
-  prod** (the D-062 rollout pre-dated the session's own commits). Rollout is agent-executable.
-- **A10 load smoke PASS** (recorded ARCH §4): 500 streams + 3k viewers, 15-min soak — pulse
-  18.6 MiB peak (3.6% of limit), CH 610 MiB (30%; **the D-062 memory WATCH: 0 hits**, also 0 in
-  prod 24h), API 9 ms avg, 0 errors. Follow-ups (non-blocking): pulse CPU bursts vs 0.5-vCPU
-  cap; 100 INFO/s health-degraded storm at 500 degraded streams; 27 cosmetic CH startup
-  parse errors.
-- **In-session fixes:** G4 — SIX D-028-class `t.Skipf("meta DDL not found")` hatches
-  (api_test.go, v3b_guard_test.go) → `t.Fatalf`, proven by 2 negative mutations (server-only
-  mount now FAILS loud); G7 — install.md:326 stale PULSE_LOG_TAIL_PATH row REMOVED (survived
-  S6; caught by the audit's DOC-TRUTH spot-check); ARCH §4 now formalizes the cmd/pulse-42.3%
-  exemption + the GET /live/ws conformance waiver + A10 numbers; GAP-206-01 closed;
-  monitoring.md backup-error prefix fixed; .env.example +PULSE_AMS_LOGIN_EMAIL.
-- **Adjudications:** critic's G6 finding REFUTED (e2e.yml:372-456 IS the full
-  license→beacon→rollup→alert-fires chain in one CI job); `enforce_admins=false` is BY DESIGN
-  (D-058) while sessions push to main — revisit at GA declaration.
-- **G-status after S7:** G1 ✅(−O7) · **G2 ❌ (prod currency — S8 WO-A)** · G3 ✅ · G4 ✅ ·
-  G5 ⏳(promotions ~2026-07-23) · G6 ✅ · G7 ✅(−LICENSE/O5) · G8 operator (U3/U5/O3).
-  **GA declaration expected at S8-close** if WO-A lands and the rest stays operator/time-owned.
-Gates: gofmt clean; 2 negative proofs; full `-race` 24 pkgs ok 0 FAIL (73.1% total, floor 70 —
-−0.1 vs S6 = rounding); ci+e2e+codeql watched post-push. Full evidence: D-064.
+**Session 2026-07-09(e) result: D-065 — S8 DONE: ★ GA DECLARED ★.** `pulse-s8-punch`
+(9 agents: 3 scouts → 3 TDD authors → 3 adversarial verifiers, ALL CONFIRMED round 1) +
+ORCH-driven WO-A prod rollout + gates.
+- **WO-A — G2 RESTORED: prod runs `v0.1.0-50-g5d77a05` (current main).** Staging-verified
+  first (isolated ci-overlay stack); `pre-d064` rollback tag + manual backup BEFORE swap;
+  stamped build; §8.8 smoke green + NEW spot-checks: B7 live (`/webhook/ams` good-sig 200 /
+  bad-sig 401, per-source 401 fail-closed), honest-QoE case-3 canary (`rebuffer_ratio lt
+  99999` → firing row ≤60s evaluating honest 0.0, zero `qoe_reader` WARNs, deleted after),
+  beacon 403 LICENSE_REQUIRED (U3 pending), `ams_sources.webhook_secret_enc` applied.
+  ⚠️ **SQLite WAL gotcha (runbook-recorded):** inspecting a copied `pulse_meta.db` WITHOUT
+  its -wal shows the OLD schema — copy db+wal+shm. Runbook doc lies fixed (container name
+  `pulse-prod-pulse-1`, stale tag table).
+- **Punch items (all verifier-CONFIRMED):** WO-B digest pins (hardened mock-ams golang,
+  helm busybox via `clickhouse.waitImage`, 3 goldens red-first ×2, GAP-206-03 closed);
+  WO-C health-degraded log → ONE aggregated INFO/tick (≤3 examples; zero → silent) +
+  **pulse CPU cap 0.5→1.0** (compose+helm, evidence memo: 147% O(N²) rebuildSnapshot
+  bursts, unknown P99 under CFS, nproc=6; the O(N²) loop itself = post-GA backlog);
+  WO-D `testutil.RequireClickHouseBin` (CI=true + missing /tmp/clickhouse → Fatalf, 8 sites,
+  negative proofs both ways) + CH CANNOT_PARSE_INPUT ×27 root-caused benign (real finding:
+  initdb.d mount of raw DDL = Code 62 + ZERO tables — anti-pattern warned in compose +
+  monitoring.md).
+- **WO-E promotions NOT DUE** (07-09 < ~07-23); job-level streaks INTACT: web-e2e 7/7 (ci),
+  csp-e2e 7/7 (e2e) → S9 executes the FULL-LIST PUT if streaks hold; CodeQL only w/ operator OK.
+- **WO-F: GA DECLARED (D-065 evidence table).** Remaining gaps ONLY operator (O5 LICENSE,
+  O7 GHCR, U3, U5, O3) or time (promotions; keep-7 cycle-8). CHANGELOG GA section written;
+  `RELEASE-NOTES-DRAFT.md` ready. **Tag v1.0.0-vs-v0.2.0 + push = OPERATOR (O13)** — then
+  release pipeline → cosign verify → prod rollout carrying the tag.
+Gates: gofmt clean; full `-race` 24 pkgs EXIT=0 (73.2%, **floor ratcheted 70→70.2** =
+achieved−3 at GA); helm lint + goldens; actionlint; compose parity from pristine copy;
+ci+e2e+codeql GREEN (first attempt had 0-step queue-CANCELLED jobs at 12:40Z — GitHub
+capacity blip, `gh run rerun --failed` fixed; 0-step cancels across independent workflows =
+infra, not code). Full evidence: D-065.
 
-**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-08.md` and execute it** (S8: WO-A
-prod rollout → punch items → promotions if ≥2026-07-23 → GA declaration; tag choice = operator).
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-09.md` and execute it** (S9:
+GA-closeout — promotions if ≥2026-07-23 + operator-unblocked items as they land + ROADMAP-v2
+seeding; the GA tag release when the operator says the word).
 
-**Standing numbers (2026-07-09 post-S7):** Go total **73.1%** (floor **70.0**); web 76/72/45;
-SDK 62/73/70 (3.52 KB); conformance 51/52 + 1 waived (now ARCH-§4-formalized). Prod
-**`v0.1.0-25-gbc15d43`** healthy but STALE (17 commits behind; D-062 features not live).
-Operator queue: U3 license, U5 browser/CSP, O3 AMS webhook config, **O5 LICENSE (last G7
-gap)**, O7 GHCR visibility, O8 21 dependabot PRs, O11 Slack rotation + other-session reset,
-**O12 NEW: enable secret-scanning + push-protection (repo is public, both OFF)**.
+**Standing numbers (2026-07-09 post-S8):** Go total **73.2%** (floor **70.2**); web 76/72/45;
+SDK 62/73/70 (3.52 KB); conformance 51/52 + 1 waived. Prod **`v0.1.0-50-g5d77a05`** = current
+main, healthy, smoke-green, honest-QoE + B7 LIVE. Operator queue: **O13 NEW — GA tag choice
+(v1.0.0 vs v0.2.0), the headline decision**, U3 license, U5 browser/CSP, O3 AMS webhook
+config, **O5 LICENSE (last G7 gap)**, O7 GHCR visibility, O8 21 dependabot PRs, O11 Slack
+rotation + other-session reset, O12 secret-scanning (all re-verified still open at S8 close).
 **Operator-facing checklist w/ click-paths: `agents/handoffs/OPERATOR-TODO.md` — REFRESH IT
 at every session close** (ledger of record stays ROADMAP §5).
 
@@ -117,13 +125,13 @@ file + `decisions.md` (new D-0NN) each session. AMS web login is RESOLVED (D-036
   helm/compose, strict, 1 review, enforce_admins=false — owner direct pushes work; keep it that way while
   sessions push to main). `ams-integration` is DELETED (local+origin). Tag **v0.1.0** exists @ `1a701d6`;
   release pipeline proven (D-058). U4 is fully resolved.
-- **Go suite green / coverage 73.2%** as of 2026-07-08 (full `-race` + coverage, **repo-root mount**,
-  golang:1.25, after D-052…D-060; was 47.5% on 2026-06-28). Working tree is CLEAN — everything is committed and
-  pushed; CI additionally enforces a `gofmt -l` gate, a **66%** coverage floor (D-053, ratcheted D-059/D-060)
-  and a stamped-version docker-build assert (D-058). **Prod runs `v0.1.0-25-gbc15d43` (≥D-061/D-062)
-  since 2026-07-09** — rule→channel alert delivery LIVE-PROVEN (D-062 WO-1 smoke), beacon public
-  chain live (403 LICENSE_REQUIRED until U3), rollback tags `pulse-prod-pulse:pre-d061` (1a701d6)
-  and `:pre-d058`.
+- **Go suite green / coverage 73.2%** as of 2026-07-09 (full `-race` + coverage, **repo-root mount**,
+  golang:1.25, after D-052…D-065; was 47.5% on 2026-06-28). Working tree is CLEAN — everything is committed and
+  pushed; CI additionally enforces a `gofmt -l` gate, a **70.2%** coverage floor (D-053, ratcheted through
+  D-065 = GA achieved−3) and a stamped-version docker-build assert (D-058). **Prod runs
+  `v0.1.0-50-g5d77a05` = CURRENT MAIN since 2026-07-09 (D-065 WO-A)** — honest-QoE + B7 live-verified,
+  beacon public chain live (403 LICENSE_REQUIRED until U3), rollback tags `pulse-prod-pulse:pre-d064`
+  (bc15d43), `:pre-d061` (1a701d6) and `:pre-d058`. **★ GA DECLARED (D-065) — tag choice = operator (O13).**
 - **The prod image embeds the web UI** (multi-stage `deploy/docker/pulse.Dockerfile`: `npm ci && npm run build` →
   embedded in the Go binary), so a passing go-live build implies the web build passed.
 

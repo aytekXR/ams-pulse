@@ -213,7 +213,21 @@ DDL skip-hatches ×6 → t.Fatalf (2 negative proofs), install.md stale PULSE_LO
 prefix, .env.example +1. Critic's G6 finding REFUTED (e2e.yml:372-456 = full chain). GA
 declaration deferred to S8-close. Evidence: D-064.
 
-### S8 — Punch-list + prod currency + promotions → GA declaration — prompt written by S7
+### ✅ S8 — Punch-list + prod currency → **GA DECLARED** — DONE 2026-07-09 (D-065)
+**Result: ★ GA DECLARED (D-065) ★.** WO-A rollout DONE — **G2 restored**: prod runs
+`v0.1.0-50-g5d77a05` (staging-verified first; pre-d064 rollback tag + backup; stamped build;
+§8.8 smoke green incl. NEW spot-checks: B7 fail-closed live, honest-QoE case-3 canary fired
+on 0.0 w/ zero WARNs, `webhook_secret_enc` applied — WAL gotcha documented). Punch items all
+verifier-CONFIRMED: WO-B digest pins (hardened golang, helm busybox `waitImage`, goldens
+red-first ×2); WO-C log-storm → 1 aggregated INFO/tick + **CPU cap 0.5→1.0** (compose+helm);
+WO-D CI-loud harness (8 skip sites → `RequireClickHouseBin`) + CH parse-errors root-caused
+benign (initdb.d anti-pattern documented). WO-E promotions NOT DUE (streaks 7/7+7/7 intact;
+due ~2026-07-23 → S9). Floor ratcheted 70→**70.2** (achieved−3). Remaining gaps are ONLY
+operator (O5/O7/U3/U5/O3) or time (promotions, keep-7 cycle-8). CHANGELOG GA section +
+`RELEASE-NOTES-DRAFT.md` prepared; **tag choice v1.0.0-vs-v0.2.0 + push = OPERATOR**.
+Evidence: D-065. Commits `c6ba362`…`5d77a05` + docs batch.
+
+### S8 (original plan, kept for provenance) — prompt written by S7
 **Goal:** land WO-A prod rollout (G2), the S/XS punch items, date-gated promotions; if every
 remaining gap is operator/time-owned → declare GA (tag = operator call).
 1. **WO-A [L]:** prod rollout to current main (staging-verify → `pre-d064` tag → stamped-build
@@ -248,7 +262,8 @@ remaining gap is operator/time-owned → declare GA (tag = operator call).
 | 2026-07-09 (after S5) | **73.2%** | **70.0** | hold (76/72/45) | D-062; −0.1 = logtail (92.1%-covered pkg) deleted; webhook 94.7, query 86.9, alert 73.8; no ratchet (<74) |
 | 2026-07-09 (after S6) | **73.2%** | **70.0** | hold (76/72/45) | D-063; docs/Helm session, no Go touched; closing -race re-run green; SDK size re-measured 3.52 KB / 65 tests |
 | 2026-07-09 (after S7) | **73.1%** | **70.0** | hold (76/72/45) | D-064; −0.1 = rounding (audit re-measure); test-only Go change (skip-hatches → Fatalf); A10 load numbers in ARCH §4 |
-| GA (G3) | ≥70% ✅ (73.2) | ≥68.0 | ratchet to achieved−3 | coverage half of G3 already met; floor ratchet remains |
+| 2026-07-09 (after S8) | **73.2%** | **70.2** | hold (76/72/45) | D-065 **GA DECLARED**; floor ratcheted to achieved−3 per the GA rule below — G3 fully closed |
+| GA (G3) | ≥70% ✅ (73.2) | ≥68.0 ✅ (70.2) | ✅ ratcheted at GA (D-065) | — |
 
 ## 5. Operator ledger (surface EVERY session — agent cannot do these)
 
@@ -267,7 +282,8 @@ remaining gap is operator/time-owned → declare GA (tag = operator call).
 | O8 | Review the dependabot PRs — **21 open** (majors: vite 8, vitest 4, plugin-react 6, eslint 10, size-limit 12; grouped minor-and-patch for web, sdk AND server gomod; caddy digest bump was CI+e2e green — mergeable). Protection requires 1 approval — dependabot PRs need owner review; S5 can absorb the web-tooling majors if the operator asks | OPEN (unchanged, re-checked D-061) |
 | O9 | ~~CodeQL blocked~~ ✅ CLOSED by S5 (D-062): operator made the repo PUBLIC → `codeql.yml` live (go/autobuild + js-ts/none). NOT a required context yet — promote after a bake period (S6/S7 call). NOTE: repo-level secret-scanning/push-protection still disabled — consider enabling now that the repo is public | ✅ DONE (D-062) |
 | O10 | ~~Prod rollout DUE~~ ✅ CLOSED by S5 WO-1 (D-062): prod runs `v0.1.0-25-gbc15d43`; rule→channel delivery live-proven (email-channel smoke, firing row ≤2s + mail received) | ✅ DONE (D-062) |
-| O12 | **Enable repo secret-scanning + push-protection** (Settings → Code security) — the repo is PUBLIC and both are OFF (`gh api repos/{owner}/{repo} --jq .security_and_analysis`, D-064); one click, prevents the next O11-class incident at the platform level | OPEN (NEW, D-064) |
+| O12 | **Enable repo secret-scanning + push-protection** (Settings → Code security) — the repo is PUBLIC and both are OFF (`gh api repos/{owner}/{repo} --jq .security_and_analysis`, D-064); one click, prevents the next O11-class incident at the platform level | OPEN (NEW, D-064; re-verified still off D-065) |
+| **O13** | **GA release tag: pick `v1.0.0` or `v0.2.0` and say the word** — GA is DECLARED (D-065); CHANGELOG section + `RELEASE-NOTES-DRAFT.md` are ready; the tag push triggers the S1 release pipeline, then a session rolls prod onto the tag | **OPEN (NEW, D-065 — the headline decision)** |
 | O11 | **Rotate the Slack CI-notification webhook** (it sat hardcoded in an unpushed commit + session transcripts — never public, but hygiene demands rotation; then `gh secret set SLACK_WEBHOOK_URL` with the new value) AND reset the concurrent session's local main onto origin (`git fetch && git reset --hard origin/main` — its `ee4fc00` content is contained in `bc15d43`) | OPEN (NEW, D-062) |
 
 ## 6. Session protocol (BINDING — the "prompts" contract)

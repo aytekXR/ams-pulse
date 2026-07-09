@@ -2273,3 +2273,103 @@ watched post-push.
 they are OFF; one click, gh api evidence). O5/O7/U3/U5/O3/O8(21 PRs)/O11 unchanged-OPEN.
 NOTE (no action): PULSE_AMS_URL is http:// → AMS bearer travels cleartext, but same-host
 (VPS-local) traffic only; revisit if AMS ever moves off-host.
+
+## D-065 — SESSION-08 executed: WO-A prod rollout (G2 RESTORED) + punch items + **GA DECLARED** (2026-07-09)
+
+Workflow `pulse-s8-punch` (9 agents: 3 scouts → 3 TDD authors → 3 adversarial verifiers, ALL
+CONFIRMED round 1) + ORCH follow-ups + ORCH-driven WO-A rollout + gates. Session commits:
+`c6ba362` (WO-C) · `c3c5118` (WO-D) · `0671a16` (ci comment) · `5d77a05` (WO-B deploy batch) +
+this docs/handoff batch.
+
+**WO-A — prod rollout to current main: DONE, G2 RESTORED.**
+- Staging-verify FIRST (D-054): isolated `pulse-s8staging` stack (pristine copy, base+ci
+  overlays + scratch webhook overlay, loopback 18090/18092): healthz ok, B7 fail-closed
+  (global bad-sig 401, per-source unknown-name 401, good-sig 200), boot logs clean, poller
+  recovered post mock-ams warm-up. Torn down with volumes (isolated project).
+- Pre-upgrade: rollback tag `pulse-prod-pulse:pre-d064` = 9ef6ea83140e (the bc15d43 image);
+  manual backup exit 0 (CH zip + SQLite w/ 4.1 MB WAL, ts=20260709-132327).
+- Stamped build: `pulse v0.1.0-50-g5d77a05 (commit 5d77a05, built 2026-07-09T13:23:47Z)` —
+  no dev/unknown. Swap `up -d` (no --build): migrate ran, pulse healthy, caddy recreated.
+- **§8.8 smoke transcript (all green):** healthz ok ×3; running version = v0.1.0-50-g5d77a05;
+  limits inspect memory=536870912 **cpus=1000000000 (the NEW 1.0 cap live)**; 0 ERROR/panic;
+  0 CH memory-WATCH hits since swap; live/overview 200 w/ total_publishers=2 (real AMS);
+  exactly 2 `invalid signature` WARNs = our deliberate bad-sig probes.
+- **NEW spot-checks (SESSION-08):** (a) B7 live: `/webhook/ams` good-sig 200 / bad-sig 401,
+  `/webhook/ams/<name>` bad-sig 401 fail-closed; (b) honest-QoE 3-case semantics on Free:
+  canary rule `rebuffer_ratio lt 99999` → **firing history row ≤60s (evaluated vs honest
+  0.0, case 3)**, 0 `qoe_reader` WARNs (reader configured), canary deleted (204);
+  (c) beacon chain → 403 LICENSE_REQUIRED (Free, awaits U3); (d) migrate leg:
+  `ams_sources.webhook_secret_enc` PRESENT post-boot (applySchemaUpgrades).
+- **⚠️ SQLite WAL verification gotcha (runbook-recorded):** `docker cp` of `pulse_meta.db`
+  ALONE showed the column MISSING — the ALTER sat un-checkpointed in the WAL; copying
+  db+wal+shm shows it PRESENT. First check was a false alarm; runbook §"Verifying a
+  meta-store schema upgrade" added.
+- **Runbook doc lies found (first real exercise, both fixed):** Step 6 `docker inspect
+  pulse-prod-pulse` inspects the IMAGE (no limits) — container is `pulse-prod-pulse-1`;
+  tags table stale → refreshed. cpus expectation updated for the 1.0 cap.
+
+**WO-B — image pinning: DONE (verifier CONFIRMED).** hardened mock-ams `golang:1.25` →
+digest `d7912ced…` (line 114, pulse.Dockerfile comment pattern); helm busybox:1.36 → new
+`clickhouse.waitImage` values block w/ digest `73aaf090…` (GAP-206-03 closed); 3 goldens
+red-first regen ×2 (busybox pin, then the cpu-cap parity change) on alpine/helm:3.17.0;
+lint 0 failed; compose config -q green from pristine copy (prod 5-overlay + dev). Floating
+tags REMAIN by scope decision: docker-compose.ci.yml:20 + override.yml:12 (CI/dev only).
+
+**WO-C — 500-stream observability: DONE (verifier CONFIRMED).** Per-stream `ingest: health
+degraded` INFO → Debug; `SweepStale` now emits ONE aggregated INFO/tick (`count` + ≤3
+example stream IDs; zero degraded → no line) via `logDegradedLocked` — kills the ~100
+INFO/s A10 log storm. TDD red (5 per-stream lines, 0 agg) → green (-race, pkg ok). CPU-cap
+review: **RAISED 0.5 → 1.0 vCPU** (compose hardened + helm values parity) on the WO-C
+evidence memo: poll-boundary O(N²) `rebuildSnapshot` bursts hit 147% of a core; CFS at 0.5
+= up to ~65 ms goroutine freezes per 100 ms period with UNKNOWN P99 (9 ms avg masks it);
+host nproc=6 so 1.0 = 16.7% of host; alert evaluator tick (5s, own goroutine) unaffected
+either way. The O(N²) rebuild loop itself = post-GA backlog item.
+
+**WO-D — test-harness tail: DONE (verifier CONFIRMED).** New `testutil.RequireClickHouseBin`
+(//go:build integration) replaces 8 inline `t.Skipf` sites across 6 files: **CI=true +
+missing /tmp/clickhouse → t.Fatalf** ("did the 'Download ClickHouse binary' step in ci.yml
+fail?"), local dev keeps skip. Negative proofs: FAIL loud w/ CI=true, SKIP w/o, -race
+variant, vet + build -tags integration clean; ci.yml provisions the binary BEFORE the
+integration step so the guard only fires on real download failure (D-028-class defence).
+CH `CANNOT_PARSE_INPUT` ×27 (D-064 A10): NOT reproducible on a bare CH 24.8.14.39 start →
+most likely startup-window wire-format probes under load; **no DDL loss** (runner fails
+loud). REAL finding: mounting `contracts/db/clickhouse/` as `/docker-entrypoint-initdb.d/`
+aborts on `{db}` (Code 62 SYNTAX_ERROR) and applies ZERO tables — anti-pattern warning
+added to docker-compose.yml (clickhouse service) + monitoring.md "Known benign ClickHouse
+startup messages" section.
+
+**WO-E — promotions: NOT DUE, recorded.** 2026-07-09 < ~2026-07-23. Job-level streaks
+INTACT: web-e2e 7/7 green (ci.yml runs since streak restart 2026-07-09), csp-e2e 7/7 green
+(e2e.yml runs). CodeQL green streak continues. → SESSION-09 executes the FULL-LIST PUT
+(+web-e2e +csp-e2e, drop continue-on-error) if ≥2026-07-23 and streaks hold; CodeQL only
+with operator OK.
+
+**WO-F — GA VERDICT: ★ GA DECLARED (2026-07-09) ★** — every remaining gap is operator- or
+time-owned:
+| Gate | Status | Remaining owner |
+|---|---|---|
+| G1 Release | ✅ | O7 GHCR visibility (operator click) |
+| G2 Prod currency | ✅ **restored this session** (v0.1.0-50-g5d77a05, smoke green) | — |
+| G3 Server tests | ✅ 73.2% / floor **70.2** (ratcheted achieved−3 this session) | — |
+| G4 Contracts | ✅ 51/52 + 1 formalized waiver | — |
+| G5 Web/E2E | ✅ except promotions | time (~2026-07-23, S9) |
+| G6 Features honest | ✅ + **live-verified in prod today** | — |
+| G7 Docs | ✅ | O5 LICENSE (operator legal pick) |
+| G8 Operator | — | U3 license, U5 browser/CSP, O3 AMS webhook |
+CHANGELOG: [Unreleased] → GA release section (version = tag pending operator choice);
+release-notes draft at `agents/handoffs/RELEASE-NOTES-DRAFT.md`. **Tag (v1.0.0 vs v0.2.0)
++ push = OPERATOR** via the S1 release pipeline; no tag pushed this session.
+
+**Gates (all green):** gofmt -l empty; full `-race` 24 pkgs EXIT=0, 0 FAIL, **total 73.2%**;
+helm lint + 3 goldens red-first ×2; actionlint 0 (ci.yml touched ×2: WO-D comment truth +
+floor 70.0→70.2); compose parity pristine-copy (5-overlay + dev); staging before prod;
+rollback tag before swap. Push `ce808a2..5d77a05` → first run: helm/compose/e2e/codeql jobs
+**queue-cancelled at 12:40Z with 0 steps (GitHub capacity blip; server/docker-build/web-e2e
+all green)** → `gh run rerun --failed` ×3 → **ci 29018865052 + e2e 29018865131 + codeql
+29018865054 ALL GREEN**. (Lesson: 0-step "cancelled" across independent workflows = infra,
+not code; rerun --failed, don't debug the diff.)
+
+**Ledger (re-verified at close):** O5 LICENSE absent · O7 GHCR anon pull still UNAUTHORIZED ·
+O8 still 21 dependabot PRs · O12 secret-scanning+push-protection still disabled · U3 key
+still commented in deploy/.env · U5/O3/O11 unchanged-OPEN. **NEW operator decision ACTIVE:
+GA tag choice (v1.0.0 vs v0.2.0) — material prepared, awaiting the word.**

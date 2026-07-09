@@ -10,9 +10,19 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ## [Unreleased]
 
-Post-v0.1.0 changes from SESSION-02 through SESSION-05.
-Coverage ratchets and test-quality improvements are noted as operator-visible
-because they gate the release of the next versioned package.
+Nothing yet — next changes land here.
+
+---
+
+## [GA release — version pending operator tag choice (v1.0.0 or v0.2.0)] - 2026-07-09
+
+**GA declared 2026-07-09 (D-065).** All gate criteria met; remaining items are
+operator-owned (LICENSE choice, GHCR visibility, Pulse license activation, AMS
+webhook console config) or time-gated (CI job promotions ~2026-07-23). The
+release tag has NOT been pushed yet — the version number is the operator's call;
+rename this heading when the tag lands. Post-v0.1.0 changes from SESSION-02
+through SESSION-08. Coverage ratchets and test-quality improvements are noted as
+operator-visible because they gate the release of the next versioned package.
 
 ### Added
 
@@ -36,6 +46,30 @@ because they gate the release of the next versioned package.
   migration; webhook package coverage 94.7% (D-062).
 - Slack notifications CI step via `${{ secrets.SLACK_WEBHOOK_URL }}` (D-062; the
   literal URL was intercepted before public push and rewritten to the secrets ref).
+- Docs GA batch (D-063): `SECURITY.md`, upgrade/rollback + monitoring runbooks,
+  docs truth pass (productionize, alerting, install, ARCHITECTURE §6); Helm
+  parity batch (canonical image ref, ClickHouse auth Secret, backup CronJob,
+  `optional: false` secret refs, NOTES.txt) — chart remains explicitly
+  experimental.
+- A10 load smoke recorded (D-064): 500 streams + 3,000 viewers, 15-minute soak —
+  pulse 18.6 MiB peak, ClickHouse 610 MiB, API 9 ms avg, 0 errors; numbers in
+  `docs/ARCHITECTURE.md` §4.
+- CI-loud integration harness (D-065): `testutil.RequireClickHouseBin` — a
+  missing ClickHouse test binary now fails CI loudly instead of silently
+  skipping (kept as skip for local dev).
+
+### Changed (GA punch list, D-064/D-065)
+
+- pulse container CPU limit 0.5 → 1.0 vCPU (compose hardened overlay + Helm
+  values): A10 measured 147%-of-a-core poll-boundary bursts CFS-throttled at
+  0.5 (D-065).
+- Health-degraded logging aggregated: one INFO line per sweep with count and up
+  to 3 example stream IDs (was one line per degraded stream per tick — ~100
+  lines/s at 500 degraded streams); per-stream detail moved to DEBUG (D-065).
+- Go coverage floor ratcheted 66 → 70 (D-061) → 70.2 (GA achieved−3, D-065).
+- Remaining floating base images digest-pinned: hardened-overlay mock-ams
+  builder (`golang:1.25`), Helm busybox initContainer via `clickhouse.waitImage`
+  (D-065).
 
 ### Fixed
 
@@ -44,6 +78,12 @@ because they gate the release of the next versioned package.
   meta store. `syncRegistryFromStore()` now runs every tick (D-061).
 - Mock-AMS pagination: off-by-one at ≥200 streams; non-deterministic Go map
   iteration causing 30–60 stream gaps in the union of pages across requests (D-061).
+- Six D-028-class `t.Skipf("meta DDL not found")` hatches in the API conformance
+  suite converted to `t.Fatalf` — a broken test mount now fails loudly instead
+  of silently voiding ~90 tests (D-064).
+- Upgrade runbook truth (first real exercise, D-065): resource-limit inspect
+  targeted the image instead of the container; stale rollback-tag table;
+  SQLite-WAL schema-verification gotcha documented.
 
 ### Removed
 
