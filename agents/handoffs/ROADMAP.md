@@ -177,7 +177,18 @@ Item 5 (O4 invalid-signature WARN) still awaits AMS-side webhook config (O3).
    webhook is configured.
 **Exit:** G6 met; contract CR merged + regenerated types byte-stable.
 
-### S6 — Docs + Helm GA batch — prompt written by S5
+### S6 — Docs + Helm GA batch — ✅ DONE (D-063, 2026-07-09)
+**Result: G7 MET except LICENSE (O5 — operator legal call; the only gap).** Docs truth pass
+(productionize/real-ams-go-live/alerting/AMS-INTEGRATION + WO-6: ARCHITECTURE §6, install.md
+4-tier table + env-only config truth, beacon-sdk re-measured); NEW SECURITY.md + CHANGELOG.md +
+upgrade-rollback.md + monitoring.md; Helm parity batch (image ref, CH auth, backup CronJob,
+optional:false, NOTES.txt — still explicitly EXPERIMENTAL, decision recorded). Promotion
+recorded NOT DUE: both clocks end ~2026-07-23 (web-e2e streak restarted 2026-07-09 by the
+`ba56c6e` spec-gating red — deterministic, fixed `ecfc25c`); CodeQL bake day 0. Process
+incident: subagent `git restore` destroyed concurrent uncommitted work → recovered byte-exact
+from transcripts; new binding rule in RESUME §12. Commits `bcdd3b8`…`352b7d7`. Evidence: D-063.
+
+### S6 (original plan, kept for provenance) — prompt: `sessions/SESSION-06.md`
 **Goal:** G7; nothing in docs lies to an operator.
 1. Fix the P0s: productionize.md 5-overlay reality (quick-ref + step 1e + upgrade section),
    secrets `_FILE` section; then the P1/P2 batch: alerting.md prune cap + retry/delivery_failure
@@ -212,6 +223,7 @@ Item 5 (O4 invalid-signature WARN) still awaits AMS-side webhook config (O3).
 | 2026-07-08 (after S3) | **73.2%** | **66.0** | gates **76/72/45** + guard test | D-060; G4 met 51/52+1 waived; sdk gated 62/73/70; G3's ≥70 EXCEEDED |
 | 2026-07-09 (after S4) | **73.3%** | **70.0** | hold (76/72/45) | D-061; ratchet done; alert 73.3 (new sync source), api 75.9, collector 66.5 |
 | 2026-07-09 (after S5) | **73.2%** | **70.0** | hold (76/72/45) | D-062; −0.1 = logtail (92.1%-covered pkg) deleted; webhook 94.7, query 86.9, alert 73.8; no ratchet (<74) |
+| 2026-07-09 (after S6) | **73.2%** | **70.0** | hold (76/72/45) | D-063; docs/Helm session, no Go touched; closing -race re-run green; SDK size re-measured 3.52 KB / 65 tests |
 | GA (G3) | ≥70% ✅ (73.2) | ≥68.0 | ratchet to achieved−3 | coverage half of G3 already met; floor ratchet remains |
 
 ## 5. Operator ledger (surface EVERY session — agent cannot do these)
@@ -222,9 +234,9 @@ Item 5 (O4 invalid-signature WARN) still awaits AMS-side webhook config (O3).
 | O2 (=U5) | Open `https://beyondkaira.com` + `https://pulse.beyondkaira.com`, confirm SPA renders, zero CSP console errors (S4 automates CSP in CI, but one human check of prod is still wanted) | OPEN |
 | O3 | Configure the AMS console to POST lifecycle webhooks to `https://beyondkaira.com/webhook/ams` with the HMAC secret from `deploy/.env` (Pulse side live since D-054) | OPEN |
 | O4 | After O3: confirm the `webhook: invalid signature` WARN does not recur (else the AMS-side secret is wrong) | OPEN |
-| O5 | Choose the project LICENSE (legal decision; agent drafts once chosen) | OPEN |
+| O5 | Choose the project LICENSE (legal decision; agent drafts once chosen) — **now the ONLY G7 gap** (SECURITY.md/CHANGELOG/runbooks shipped by S6, D-063) | OPEN |
 | O6 | (was U4) Branch protection + `v*` tag | ✅ DONE by S1 (D-058): protection live (API 200), v0.1.0 released |
-| O7 | **Make `ghcr.io/aytekxr/ams-pulse` public** (package settings → Change visibility) or `gh auth refresh -s read:packages` — until then nobody (incl. the agent) can pull v0.1.0 or run `cosign verify` (commands in release.yml header); this is the last G1 bit | OPEN (re-verified still blocked 2026-07-08(d), D-060) |
+| O7 | **Make `ghcr.io/aytekxr/ams-pulse` public** (package settings → Change visibility) or `gh auth refresh -s read:packages` — until then nobody (incl. the agent) can pull v0.1.0 or run `cosign verify` (commands in release.yml header); this is the last G1 bit | OPEN (re-verified still blocked 2026-07-09, D-063: anonymous pull token DENIED) |
 | O8 | Review the dependabot PRs — **21 open** (majors: vite 8, vitest 4, plugin-react 6, eslint 10, size-limit 12; grouped minor-and-patch for web, sdk AND server gomod; caddy digest bump was CI+e2e green — mergeable). Protection requires 1 approval — dependabot PRs need owner review; S5 can absorb the web-tooling majors if the operator asks | OPEN (unchanged, re-checked D-061) |
 | O9 | ~~CodeQL blocked~~ ✅ CLOSED by S5 (D-062): operator made the repo PUBLIC → `codeql.yml` live (go/autobuild + js-ts/none). NOT a required context yet — promote after a bake period (S6/S7 call). NOTE: repo-level secret-scanning/push-protection still disabled — consider enabling now that the repo is public | ✅ DONE (D-062) |
 | O10 | ~~Prod rollout DUE~~ ✅ CLOSED by S5 WO-1 (D-062): prod runs `v0.1.0-25-gbc15d43`; rule→channel delivery live-proven (email-channel smoke, firing row ≤2s + mail received) | ✅ DONE (D-062) |

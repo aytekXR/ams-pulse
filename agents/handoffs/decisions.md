@@ -2126,3 +2126,82 @@ assert, green FIRST TRY in real CI) SUCCESS on `dfe7092`. codeql first run FAILE
 bake should catch: "Go does not support the none build mode" (CodeQL 2.26.0; the js-ts leg
 passed) → fix `5dacb7d`: per-language matrix include (go/autobuild + js-ts/none) + setup-go 1.25
 for the autobuild leg → **codeql SUCCESS**; ci + e2e re-green on `5dacb7d`.
+
+## D-063 — SESSION-06 executed: docs + Helm GA batch — G7 met except LICENSE (O5), promotion recorded not-due (2026-07-09)
+
+Commits `bcdd3b8` `f1a624b` `58e318f` `8627f05` `cc6b71c` `fff3315` `352b7d7` (+ this handoff
+commit). Workflows: `pulse-s6-docs-helm` (19 agents: 4× scout→author→adversarial-verify/fix
+pipelines + WO-5 promotion auditor + cross-doc critic + critic-repair) → `pulse-s6-tail`
+(6 agents: leftover-findings fixer + WO-6 stale-batch author, each adversarially verified;
+stopped mid-run on operator rate-limit warning, RESUMED from journal cache — resume worked
+exactly as designed). Doc sessions are TDD-inverted (D-057): every operator-actionable claim
+command-verified by author AND re-derived by an adversarial verifier; the verify rounds were
+load-bearing — see the caught-lies list below.
+
+**Per-WO:**
+- **WO-1 (`f1a624b` + `cc6b71c` half):** productionize.md quick-ref/1e/2e/3-token/4b all →
+  5-overlay reality + `--env-file`; NEW `_FILE` variants table (GetSecret-backed:
+  PULSE_AMS_AUTH_TOKEN, PULSE_AMS_LOGIN_PASSWORD, PULSE_WEBHOOK_SECRET, PULSE_METRICS_TOKEN,
+  PULSE_SECRET_KEY, per-source PULSE_AMS_<NAME>_TOKEN; **PULSE_LICENSE_KEY exempt** —
+  os.Getenv, config.go:338); D-058 stamped-build (build w/ VERSION/COMMIT/BUILD_DATE args THEN
+  `up -d` WITHOUT `--build`); AMS_UPSTREAM documented (prod-tls.yml:35 default). real-ams-go-live.md
+  marked HISTORICAL (sections 0–7 provenance note), DC/DC_MOCK +backup overlay, §3-D/§5 stamped-build,
+  dangling §8/§14 refs resolved.
+- **WO-2 (`58e318f` + `cc6b71c` half):** alerting.md — prune cap 1000, retry/delivery_failure
+  (D-049/D-061), sync-on-tick ~5s no-restart, per-channel config-key tables from factory.go
+  (verifier caught 2 blockers: unknown-name 401 self-contradiction; STARTTLS default wrong),
+  honest-QoE **3-case semantics** (nil reader → rules skipped + 1 WARN/tick w/ verbatim
+  `(D-062: G6)` string; reader error → stream skipped + 1 WARN; **no data → QoEForStream (0,0,nil)
+  → evaluates normally vs 0.0, NOT skipped, NOT silent** — round-2 verifier killed the "silently
+  skipped" claim). AMS-INTEGRATION.md §4.5 B7 per-source URLs (startup-only load, cross-source
+  isolation, webhook_secret_set) + §3.2 was a **4-overlay DC + `up -d --build`** (critic caught) → fixed.
+- **WO-3 (`8627f05` + `fff3315`):** NEW upgrade-rollback.md (5-overlay, stamped-build, pre-dNNN
+  tags, migrations frozen → restore-from-backup, never `down -v` pulse-data), NEW monitoring.md
+  (backup daemon keep-7, alert_history cap, disk, real metric names, CH memory WATCH signature
+  `Memory limit (total) exceeded 1.80 GiB` greppable, WARN taxonomy w/ verbatim `pulse: webhook:`
+  prefixes), NEW SECURITY.md (report → aytek@beyondkaira.com; HMAC webhook global+B7; token
+  HMAC-SHA256 D-052; _FILE; CSP — verifier blocker: named wrong Caddyfile + false CI-parity claim,
+  fixed to Caddyfile.prod:78 truth; function-name citations over line numbers), NEW CHANGELOG.md
+  (Keep-a-Changelog; [0.1.0] 2026-07-08 backfill + [Unreleased] D-059…D-062). LICENSE NOT drafted (O5).
+- **WO-4 (`bcdd3b8`):** helm parity — ghcr.io/aytekxr/ams-pulse image ref, CH auth via Secret,
+  backup CronJob mirroring the compose sidecar (+script ConfigMap+PVC), `optional: false` secret
+  refs, NOTES.txt (smoke + B7 URL shape), README honesty; 3 goldens regenerated red-diff-first;
+  lint+goldens ORCH-re-verified on alpine/helm:3.17.0 (CI-faithful) NO DRIFT. install.md Path C
+  stays EXPERIMENTAL (D-002 waiver).
+- **WO-5 promotion audit (no file changes):** **NOT DUE** (2026-07-09 < 2026-07-23), recorded
+  with evidence: web-e2e job-level 19/20 green since 2026-07-07 — **streak BROKEN once** at
+  `ba56c6e` run 28984417114 (2026-07-09T00:06): deterministic, D-061's csp.spec.ts +
+  streams-render-500.spec.ts ran ungated inside plain web-e2e (no caddy/stack/token → ECONNREFUSED),
+  fixed by `ecfc25c` playwright testIgnore — NOT a flake; job green streak restarts 2026-07-09 →
+  **both clocks now end ~2026-07-23**. csp-e2e 7/7 green since introduction (continue-on-error
+  still on). CodeQL first green `5dacb7d` 2026-07-09, bake_days=0 → S7 + operator agreement.
+  Required contexts unchanged (contracts/server/web/sdk/docker-build/helm/compose).
+- **WO-6 (`352b7d7`):** ARCHITECTURE.md §6 "Token passwords use SHA-256, bcrypt is roadmap" →
+  truth (user passwords bcrypt server.go:2111/2127 w/ legacy sha256: back-compat; tokens
+  HMAC-SHA256 meta.go HashToken) + Last-updated; install.md tier table 3→4 columns, every cell
+  from license.go (NOTE: **business MaxNodes=5 < pro 10 is PRD §7.11 by-design** — $299 multi-tenant
+  tier; do NOT "fix" in S7 without an operator product decision) + Prometheus row (Business+);
+  install.md "YAML planned for Wave 3" → truth: **parser exists (internal/config Load) but is NOT
+  wired** — main.go HOOK(BE-02) uses loadEnvConfig() in all 3 paths; env-only, pulse.yaml silently
+  ignored (wo6's first attempt claimed "implemented" — verifier killed it; wiring = S7/post-GA call);
+  beacon-sdk.md numbers re-MEASURED (3.52 KB gzip via size-limit, 65 tests green — ORCH re-ran both).
+
+**⚠️ PROCESS INCIDENT (binding lesson):** the wo6 verifier flagged concurrent UNCOMMITTED work
+(alerting.md, real-ams-go-live.md — WO-1/WO-2/tail-fixer edits awaiting ORCH commit) as wo6
+"out-of-scope edits"; the wo6 fixer then `git restore`d both files, **destroying ~180 lines of
+verified uncommitted work**. Recovered **byte-exact** by replaying all 19 Edit tool calls from the
+agent transcripts (journal `agent-*.jsonl`) in timestamp order — 19/19 anchors matched. NEW RULE
+(added to RESUME §12): workflow subagents must NEVER `git restore`/`git checkout --` shared-tree
+files; scope violations are REPORTED and ORCH decides. Commit-early per scope also mitigates.
+
+**ORCH gates (all green 2026-07-09):** helm lint 0 fail + 3 goldens no-drift (alpine/helm:3.17.0);
+full `-race` 24 pkgs 0 FAIL / 2 domain npx skips, **total 73.2%** (floor 70 holds; no Go touched);
+link-check 8 touched docs 0 dead; secret scans clean (only the T00000000 placeholder Slack URL);
+SDK size/test re-measured. Push `770c892..352b7d7` → ci 28993029934 + e2e 28993029982 + codeql
+28993029935 [watch in progress at handoff-write time; result recorded in RESUME].
+
+**Ledger (re-checked 2026-07-09):** O7 GHCR package STILL PRIVATE (anonymous pull token DENIED).
+O8 STILL 21 dependabot PRs. O11 OPEN — operator: rotate the Slack webhook + reset the other
+session's local main (repo half done since D-062: secret set, rewritten commit pushed).
+O5 OPEN (LICENSE choice) — **the only G7 gap**; SECURITY.md/CHANGELOG/runbooks/Helm-experimental
+all shipped. G7 otherwise MET.

@@ -11,56 +11,56 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-06.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-07.md`)
 
-**Session 2026-07-09(b) result: D-062 — S5 DONE: honest features + security tail; prod ROLLED
-(rule→channel alert delivery now WORKS IN PROD — proven live); B7 shipped; logtail DELETED;
-CodeQL LIVE (O9 closed).** `pulse-s5-scout` (5 scouts) → WO-1 by ORCH → `pulse-s5-implement`
-(11 agents: 5 parallel TDD authors → integrator → 5 SEQUENTIAL adversarial verifiers).
-- **WO-1 prod rollout:** `1a701d6` → **`v0.1.0-25-gbc15d43`** (rollback tag `pre-d061`; build
-  w/ explicit build-args THEN up -d without --build). Delivery smoke on FREE tier (webhook
-  channels are Business-gated — scout caught it): email channel → SMTP-sink container; firing
-  row on the FIRST 2s poll + full alert mail received. Same D-061 registry seam, type-agnostic.
-- **WO-2 honest QoE alerts:** HealthScore proxy REMOVED (G6); `alert.QoEReader` →
-  `query.QoEForStream` → rollup_qoe_1h (beacon_events-fed; viewer_sessions is NOT in this path —
-  session-doc claim was wrong). e2e A2 now asserts a rebuffer_ratio rule FIRES from injected
-  rebuffer events (green in real CI first try). Wiring pinned by `wireAlertQoEReader` +
-  serve_wiring_test pin (verifier-added).
-- **WO-3 B7:** `/webhook/ams/{name}` per-source HMAC (cross-source isolation, no fallback when a
-  per-source secret exists; unknown name → SharedSecret else 401 fail-closed); contract CR:
-  `ams_sources.webhook_secret_enc` + `webhook_secret_set` read field; legacy route byte-identical.
-  Secrets load at startup — rotation needs restart. AMS-INTEGRATION.md per-source URL docs → S6.
-- **WO-4 logtail DELETED** (D-062 rationale: log4j-prefixed real logs = 100% parse failure; 0/3
-  real event types matched; volume topology wrong; REST+webhook cover it). helm logTailPath
-  removed, goldens ×3 no-drift.
-- **WO-5:** Caddyfile.prod `{$AMS_UPSTREAM}` (compose default = old hard-coded value → prod
-  no-op, parity verified); .env.example +8 code-verified vars.
-- **WO-6 CodeQL:** repo went PUBLIC (operator) → O9 unblocked; first run caught build-mode
-  none unsupported for Go → go/autobuild + js-ts/none matrix (`5dacb7d`). NOT a required context.
-- **⚠️ Pre-session P0 intercept:** a CONCURRENT operator session committed a LIVE Slack webhook
-  URL hardcoded in 4 workflows (unpushed, repo now public!) — rewritten unpushed to secrets ref
-  (`bc15d43`), value moved to `gh secret set SLACK_WEBHOOK_URL`, original on local
-  `backup/slack-notify-original` (never push). **O11 NEW: operator rotates that Slack webhook +
-  resets the other session's local main onto origin.**
-Gates: full -race 24 pkgs 0 FAIL / 2 domain npx skips, total **73.2%** (floor 70, no ratchet);
-full `-tags integration` 24/24 ok; web 238/238 + gen:api byte-stable; helm goldens ×3; actionlint
-0; ci `dfe7092` + e2e (new A2 assert) GREEN on main; codeql green from `5dacb7d` (verify).
-Commits `bc15d43`, `6865dba`…`dfe7092`, `5dacb7d` + docs. Full evidence: D-062.
+**Session 2026-07-09(c) result: D-063 — S6 DONE: docs + Helm GA batch; G7 MET except LICENSE
+(O5, operator legal call). Nothing in docs lies to an operator** (every claim command-verified
+by its author AND adversarially re-derived). `pulse-s6-docs-helm` (19 agents: 4 scout→author→
+verify/fix pipelines + WO-5 promotion auditor + cross-doc critic) → `pulse-s6-tail` (6 agents;
+survived an operator rate-limit stop via journal-cache resume).
+- **Docs truth pass:** productionize.md + real-ams-go-live.md → 5-overlay / stamped-build /
+  `_FILE` truth (PULSE_LICENSE_KEY has NO _FILE); alerting.md → honest-QoE **3-case** semantics
+  (nil reader → skip+WARN; reader error → stream skip+WARN; **no data → evaluates vs 0.0, NOT
+  skipped, NOT silent** — a verifier killed the "silently skipped" claim), factory.go channel-key
+  tables; AMS-INTEGRATION §4.5 B7 per-source URLs (+its §3.2 DC was 4-overlay + `up -d --build` —
+  the cross-doc critic caught it; also 4 FAKE metric names in productionize.md).
+- **NEW docs:** SECURITY.md, CHANGELOG.md (Keep-a-Changelog: v0.1.0 + Unreleased), deploy/runbooks/
+  upgrade-rollback.md + monitoring.md (CH memory-WATCH signature greppable). LICENSE NOT drafted (O5).
+- **WO-6 stale batch:** ARCHITECTURE §6 bcrypt/HMAC truth; install.md 4-tier table cell-by-cell
+  from license.go (**business MaxNodes=5 < pro 10 is PRD §7.11 BY-DESIGN — do not "fix"**) +
+  env-only config truth (YAML parser exists but UNWIRED — main.go HOOK(BE-02); pulse.yaml is
+  silently ignored); beacon-sdk.md re-MEASURED (3.52 KB gzip, 65 tests).
+- **Helm parity (`bcdd3b8`):** ghcr.io/aytekxr/ams-pulse ref, CH auth via Secret, backup CronJob
+  (compose-sidecar mirror), `optional: false`, NOTES.txt; goldens ×3 regenerated red-diff-first;
+  chart stays EXPERIMENTAL (D-002 waiver — no cluster).
+- **Promotion (WO-5): NOT DUE** (2026-07-09 < 2026-07-23), recorded w/ job-level evidence:
+  web-e2e streak broke ONCE at `ba56c6e` run 28984417114 — deterministic D-061 spec-gating gap
+  (csp/render-500 specs ran ungated in plain web-e2e), fixed `ecfc25c`, NOT a flake → green
+  streak restarts 2026-07-09; csp-e2e 7/7; CodeQL first green `5dacb7d`, bake day 0. **Both
+  clocks end ~2026-07-23 → the session running on/after that date promotes web-e2e + csp-e2e
+  (FULL-LIST PUT; drop csp continue-on-error); CodeQL only ≥1wk green + operator OK.**
+- **⚠️ Process incident → NEW §12 rule:** the wo6 fixer `git restore`d two files carrying
+  OTHER agents' uncommitted verified work (false-positive "out-of-scope" flag on a shared dirty
+  tree) — recovered BYTE-EXACT by replaying all 19 Edit calls from agent transcripts. Subagents
+  never revert shared-tree files; ORCH commits early per scope.
+Gates: helm lint + 3 goldens no-drift (alpine/helm:3.17.0, CI-faithful); full `-race` 24 pkgs
+0 FAIL / 2 domain npx skips, total **73.2%** (floor 70, no Go touched); link-check 8 docs 0 dead;
+secret scans clean. Commits `bcdd3b8` `f1a624b` `58e318f` `8627f05` `cc6b71c` `fff3315` `352b7d7`
++ handoff. ci 28993029934 + e2e 28993029982 + codeql 28993029935 on `352b7d7`: all GREEN
+(`gh run watch --exit-status` ×3 = 0). Full evidence: D-063.
 
-**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-06.md` and execute it** (S6 docs+Helm
-GA batch; **both promotion clocks END ~2026-07-23** — if streaks held, promote web-e2e + csp-e2e
-into required contexts, full-list PUT).
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-07.md` and execute it** (S7 GA gate:
+9-scout re-audit vs G1–G8, A10 load smoke, promotion duty if ≥2026-07-23, GA declaration or
+punch list; tag v1.0.0-vs-v0.2.0 is an operator call).
 
-**Standing numbers (2026-07-09 post-S5):** coverage total **73.2%** (floor **70.0**); moved
-per-package vs D-061: webhook 94.7 (B7 tests), query 86.9 (−1.6, QoEForStream additions), alert
-73.8 (+0.5), api 76.0, meta 66.9, cmd/pulse 42.3 (+wiring pin), collector/aggregator etc.
-unchanged; logtail (92.1) REMOVED from the tree. Conformance 51/52 + 1 waived. Web gates
-76/72/45 + guard; SDK gates 62/73/70 (webrtc.ts 20.1% still the known gap). The suite's only 2
-SKIPs remain the domain SchemaFixtures npx-guard. CodeGraph in use — `codegraph sync` run at
-close (§12). Docs P0-stales (productionize.md) = S6 scope, plus NEW S6 doc items from D-062:
-B7 per-source webhook URLs in AMS-INTEGRATION.md, alerting.md honest-QoE + registry-sync
-semantics, runbook §3-D stale `--build` pattern. Prod: **`v0.1.0-25-gbc15d43`**, healthy, alert
-delivery live (email-channel proven; webhook variant awaits U3 license).
+**Standing numbers (2026-07-09 post-S6):** Go total **73.2%** (floor **70.0**, unchanged — no Go
+touched); web 76/72/45 + guard; SDK 62/73/70 (size 3.52 KB re-measured, webrtc.ts 20.1% still the
+known gap); conformance 51/52 + 1 waived; only 2 skips (domain npx). Prod **`v0.1.0-25-gbc15d43`**
+healthy — docs/Helm session, NO rollout needed. G-status: G1 ✅(−O7) G2 ✅ G3 ✅ G4 ✅ G5 partial
+(promotion clocks) G6 ✅ **G7 ✅ except LICENSE (O5)** G8 operator. Operator queue: U3 license,
+U5 browser/CSP check, O3 AMS-side webhook config (→O4), O5 LICENSE pick, O7 GHCR visibility
+(re-verified still private 2026-07-09), O8 21 dependabot PRs, O11 Slack-webhook rotation + other
+session's local reset.
 
 ---
 
@@ -450,6 +450,11 @@ health scoring, (4) AMS wire decode/normalize, (5) the query layer. Report cover
   ORCH-approved CR applied by INT-01 (OpenAPI + event schemas + migrations).
 - **⚠️ Workflow/fork agents have Write+commit access** — a reviewer fork once auto-committed during a concurrent ORCH
   edit (D-030 process note). Scope reviewer agents read-only when ORCH is editing the same files.
+- **⚠️ Subagents NEVER revert shared-tree files (D-063):** no `git restore` / `git checkout --` /
+  `git stash` inside workflow agents — concurrent agents' UNCOMMITTED work shares the tree, and a
+  verifier reading `git status` cannot tell foreign work from scope violations. Violations are
+  REPORTED; ORCH decides and reverts. ORCH also commits early per scope to shrink the window.
+  (A wo6 fixer once destroyed two files of verified work; recovered only via transcript-replay.)
 
 ## 13. HARD RULES (CLAUDE.md / ARCHITECTURE §3)
 
