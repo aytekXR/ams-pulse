@@ -78,7 +78,7 @@ data:
       </profiles>
       <users>
         <default>
-          <!-- No password for cluster-internal access; NetworkPolicy restricts external access. -->
+          <!-- DEVELOPMENT/TEST ONLY: no password. Set clickhouse.auth.existingSecret in production. -->
           <password></password>
           <profile>default</profile>
           <quota>default</quota>
@@ -173,6 +173,7 @@ spec:
       protocol: TCP
 ---
 # Source: pulse/templates/service.yaml
+---
 # Beacon ingest Service — THE ONLY INTERNET-FACING SERVICE in this chart.
 # Players send QoE beacons directly to this endpoint.
 # SECURITY: always terminate TLS at a load balancer or ingress in front of this service.
@@ -416,3 +417,6 @@ spec:
         resources:
           requests:
             storage: 20Gi
+---
+# Source: pulse/templates/ingress.yaml
+---

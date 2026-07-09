@@ -7,11 +7,23 @@
 # ---------------------------------------------------------------------------
 pulse:
   image:
-    # Pin to a versioned digest in production.
-    # Use 'docker pull pulse:X.Y.Z --format "{{.RepoDigests}}"' to get the digest.
+    # Canonical image: ghcr.io/aytekxr/ams-pulse (published by release.yml on every semver tag).
+    # Tags produced: {{version}}, {{major}}.{{minor}}, {{major}}, 'latest' (non-prerelease only).
+    # Images are cosign-signed (keyless/Sigstore OIDC) at the manifest digest.
     repository: ghcr.io/aytekxr/ams-pulse
     tag: "0.1.0"
     pullPolicy: IfNotPresent
+    # Digest pinning (recommended for production): set to the manifest digest to get
+    # an immutable pull regardless of tag movement.
+    # When set, the rendered image reference is repo:tag@digest (tag is preserved for
+    # readability; Kubernetes uses the digest for the actual pull).
+    #
+    # To obtain the digest after a release:
+    #   docker pull ghcr.io/aytekxr/ams-pulse:0.1.0
+    #   docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/aytekxr/ams-pulse:0.1.0
+    # Or from the cosign SBOM attestation:
+    #   cosign verify ghcr.io/aytekxr/ams-pulse:0.1.0 | jq -r '.[0].critical.image.docker-manifest-digest'
+    digest: ""   # e.g. sha256:abc123...
 
   replicaCount: 1
 
@@ -57,6 +69,10 @@ pulse:
     offlineFile: ""
 
   # Collector / ingest settings.
+  # Webhook server (B7 per-source webhooks, PULSE_WEBHOOK_ADDR).
+  # Set to ":8092" to enable; keep in sync with webhookService.port.
+  # Routes served: /webhook/ams  and  /webhook/ams/{source_name}
+  # Secret rotation (per-source secrets stored in the meta store) requires a pod restart.
   webhookAddr: ""           # address for webhook HTTP server; empty = disabled
   webhookSecret: ""         # set via secretRef.webhookSecret instead
 
@@ -72,18 +88,19 @@ pulse:
   extraEnv: []
 
   # Reference to an existing Secret that provides sensitive values.
-  # All keys are optional — only set the ones you use.
+  # IMPORTANT: PULSE_SECRET_KEY is required — the binary crashes at boot without it
+  # (secretKeyRef optional: false; pod will fail to schedule if the key is absent).
   #
   # secretRef:
   #   name: pulse-secrets
-  # Keys expected in that Secret (all optional):
-  #   PULSE_AMS_AUTH_TOKEN
-  #   PULSE_SECRET_KEY
-  #   PULSE_WEBHOOK_SECRET
-  #   PULSE_METRICS_TOKEN
-  #   PULSE_POSTGRES_DSN   (if postgres.enabled=true)
-  #   PULSE_S3_EXPORT_KEY_ID
-  #   PULSE_S3_EXPORT_SECRET_KEY
+  # Keys expected in that Secret:
+  #   PULSE_SECRET_KEY          (REQUIRED) 32-byte hex AES-256-GCM key
+  #   PULSE_AMS_AUTH_TOKEN      (optional) AMS REST bearer token
+  #   PULSE_WEBHOOK_SECRET      (optional) HMAC-SHA256 global webhook secret
+  #   PULSE_METRICS_TOKEN       (optional) Prometheus scrape token (Wave 2)
+  #   PULSE_POSTGRES_DSN        (required when postgres.enabled=true)
+  #   PULSE_S3_EXPORT_KEY_ID    (optional, when s3Export.enabled=true)
+  #   PULSE_S3_EXPORT_SECRET_KEY (optional, when s3Export.enabled=true)
   secretRef: {}
 
   # Volume mounts for the pulse container (e.g., AMS log, mmdb, custom config).
@@ -168,6 +185,34 @@ ingressIngest:
   tls: []
 
 # ---------------------------------------------------------------------------
+# Webhook Service (B7 per-source webhooks)
+# Pulse binds PULSE_WEBHOOK_ADDR (:8092 by default) for AMS webhook callbacks.
+# Routes: /webhook/ams  and  /webhook/ams/{source_name}
+# Enable this Service when pulse.webhookAddr is set so AMS (or an ingress)
+# can reach the webhook listener.  Keep webhookService.port in sync with the
+# port number in pulse.webhookAddr.
+# ---------------------------------------------------------------------------
+webhookService:
+  enabled: false            # set true when pulse.webhookAddr is set
+  type: ClusterIP
+  port: 8092
+  annotations: {}
+
+# ---------------------------------------------------------------------------
+# Ingress for webhook (optional — for external AMS webhook callbacks)
+# ---------------------------------------------------------------------------
+ingressWebhook:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: webhook.pulse.example.com
+      paths:
+        - path: /webhook/ams
+          pathType: Prefix
+  tls: []
+
+# ---------------------------------------------------------------------------
 # ClickHouse — bundled single-replica StatefulSet (low-footprint, 2-vCPU tuning)
 # Decision: bundled StatefulSet over bitnami/clickhouse sub-chart (see Chart.yaml).
 # ---------------------------------------------------------------------------
@@ -177,6 +222,31 @@ clickhouse:
 
   # External DSN override (only used when enabled=false).
   externalDSN: ""
+
+  # ClickHouse authentication — REQUIRED for production.
+  # SECURITY: the default ClickHouse image ships the 'default' user with an empty
+  # password accessible on port 9000 to anyone with network access. In production
+  # you MUST set existingSecret to wire a named user with a strong password.
+  # Parity with compose: docker-compose.hardened.yml sets CLICKHOUSE_USER +
+  # CLICKHOUSE_PASSWORD; the ClickHouse image creates the named user at first boot.
+  #
+  # Create the Secret before install:
+  #   CH_PASS=$(openssl rand -hex 16)
+  #   kubectl create secret generic pulse-clickhouse-secret \
+  #     --from-literal=CLICKHOUSE_USER=pulse \
+  #     --from-literal=CLICKHOUSE_PASSWORD="${CH_PASS}" \
+  #     --from-literal=PULSE_CLICKHOUSE_DSN="clickhouse://pulse:${CH_PASS}@pulse-clickhouse:9000/pulse"
+  #
+  # Required Secret keys:
+  #   CLICKHOUSE_USER       — named user the image creates at first boot (e.g. pulse)
+  #   CLICKHOUSE_PASSWORD   — strong random password (min 16 chars)
+  #   PULSE_CLICKHOUSE_DSN  — full authenticated DSN for the pulse binary
+  #                           format: clickhouse://USER:PASS@<release>-clickhouse:9000/<database>
+  #
+  # When existingSecret is empty the 'default' user (no password) is used.
+  # This is acceptable only for isolated dev/test clusters with NetworkPolicy.
+  auth:
+    existingSecret: ""   # REQUIRED for production; empty = unauthenticated (dev/test only)
 
   image:
     # clickhouse/clickhouse-server:24.8
@@ -276,3 +346,60 @@ mmdb:
   claimName: ""
   mountPath: "/var/lib/pulse/GeoLite2-City.mmdb"
   subPath: "GeoLite2-City.mmdb"
+
+# ---------------------------------------------------------------------------
+# Backup CronJob — mirrors the compose backup sidecar (docker-compose.backup.yml).
+# Runs pulse-backup.sh in "once" mode on the configured schedule.
+#
+# DISABLED BY DEFAULT — parity with compose: the backup overlay is opt-in
+# (docker-compose.backup.yml is not included in the base stack).
+# Enable when you have:
+#   1. clickhouse.auth.existingSecret set (named CH user for clickhouse-client auth)
+#   2. A backup PVC provisioned (or set backup.persistence.existingClaim)
+#
+# What it backs up:
+#   - ClickHouse: BACKUP DATABASE pulse TO Disk('backups', ...) (zip archive)
+#   - SQLite meta store: file copy with WAL consistency (see pulse-backup.sh header)
+#
+# S3 push: NOT enabled by default. The ClickHouse image does not ship aws-cli.
+# To enable S3 push, build a custom sidecar image on top of the CH base image
+# that adds aws-cli, then set backup.image.repository + digest accordingly and
+# set PULSE_BACKUP_S3_BUCKET / PULSE_BACKUP_S3_PREFIX / PULSE_BACKUP_S3_REGION
+# via backup.extraEnv.
+#
+# NOTE: ClickHouse requires the 'backups' disk to be enabled (this chart wires it
+# automatically via the clickhouse ConfigMap when backup.enabled=true).
+# ---------------------------------------------------------------------------
+backup:
+  enabled: false   # Set true to deploy the CronJob + wire the backup disk in ClickHouse
+
+  # Cron schedule (default: 02:00 UTC daily).
+  schedule: "0 2 * * *"
+
+  # Image: same digest-pinned ClickHouse image as the compose sidecar.
+  # Ships clickhouse-client + bash (no additional image needed for local backups).
+  # IMPORTANT: use the digest (not just tag) to guarantee the same binary as the
+  # script was tested against. aws-cli is NOT in this image (see S3 note above).
+  image:
+    repository: clickhouse/clickhouse-server
+    # Digest matches the compose sidecar image (docker-compose.backup.yml):
+    #   clickhouse/clickhouse-server@sha256:1ffa82edee000a42c09313bd9f1293d94c570aee74babc1b3ca9983a35fa597b
+    digest: "sha256:1ffa82edee000a42c09313bd9f1293d94c570aee74babc1b3ca9983a35fa597b"
+    pullPolicy: IfNotPresent
+
+  # PVC for backup artifacts (shared read-write with the ClickHouse StatefulSet).
+  # When existingClaim is empty a new PVC named <release>-backups is created.
+  persistence:
+    existingClaim: ""
+    storageClass: ""         # "" = cluster default
+    size: 10Gi
+    accessMode: ReadWriteOnce
+
+  # Extra env vars for the backup container (e.g., S3 credentials, custom BACKUP_DIR).
+  # Format: list of {name, value} or {name, valueFrom}.
+  extraEnv: []
+
+  resources:
+    limits:
+      cpu: "250m"
+      memory: "256Mi"
