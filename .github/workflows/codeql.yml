@@ -1,0 +1,53 @@
+# Pulse CodeQL — static analysis for Go and JavaScript/TypeScript.
+# Runs on every push/PR to main, weekly on Mondays, and on demand.
+name: codeql
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '31 3 * * 1'
+  workflow_dispatch:
+
+# Principle of least privilege: read-only at the top level; the analyze
+# job elevates only what it needs to upload SARIF results.
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [go, javascript-typescript]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # build-mode: none — CodeQL extracts both Go and javascript-typescript
+      # without invoking the build system.  This avoids autobuild fragility
+      # caused by the server/ sub-module layout (no go.work at repo root) and
+      # the npm workspaces (web/, sdk/beacon-js) that each have their own
+      # package.json.  Both languages are fully supported by build-mode: none
+      # on current CodeQL v3 runners.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
