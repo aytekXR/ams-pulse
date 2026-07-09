@@ -1,4 +1,13 @@
-# Operator TODO — the items only YOU can do (updated by SESSION-11 start, 2026-07-09)
+# Operator TODO — the items only YOU can do (updated during SESSION-11, 2026-07-10)
+
+## ⏰ TIME-CRITICAL — AMS trial license expires 2026-07-12 (~2 days)
+
+Your AMS Enterprise 3.0.3 trial license (see oguz-testing.md) is valid only to
+**2026-07-12T12:09Z**. After that the real AMS may stop serving streams / reject REST calls —
+which affects BOTH production Pulse polling AND the WO-F clean-install live test.
+**Action: renew/replace the AMS license before 07-12**, or expect prod `live/overview` to go
+empty and poll errors in pulse logs. (Pulse itself is unaffected — this is the AMS-side license,
+not the Pulse license U3.)
 
 > **Audience: the human operator.** Ledger of record: `ROADMAP.md` §5 + `ROADMAP-V2.md` §4; this
 > file is the actionable view, refreshed at every session close. When you finish an item, just
