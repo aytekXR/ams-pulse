@@ -58,7 +58,7 @@ review while the repo has a single human collaborator: GitHub forbids self-appro
 Flip becomes possible when EITHER (a) a second trusted reviewer/bot-approver exists, or
 (b) the operator drops `required_approving_review_count` to 0 and sessions move to a
 PR-first cadence (PR-CI still gates via the 7 required contexts). Operator question filed
-in OPERATOR-TODO.md; next revisit: S12 or on operator request, whichever first.
+in docs/operator-expected.md; next revisit: S12 or on operator request, whichever first.
 
 ---
 

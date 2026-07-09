@@ -4,9 +4,9 @@
 > D-037); don't recreate a second handoff file — update THIS one + `decisions.md` each session.
 > Pulse = self-hosted analytics/QoE/alerting for Ant Media Server. Repo: `/home/aytek/repo/ams-pulse`
 > on VPS `161.97.172.146`. Full decision log: `agents/handoffs/decisions.md` (D-001…D-057 + session notes, binding).
-> **Plan of record: `agents/handoffs/ROADMAP.md`** (D-057; supersedes `PRODUCTION-READINESS.md`,
-> which is kept for provenance only). Session prompts: `agents/handoffs/sessions/`. AMS operator guide:
-> `agents/handoffs/AMS-INTEGRATION.md`. Go-live runbook + rollback: `deploy/runbooks/real-ams-go-live.md`.
+> **Plan of record: `agents/handoffs/ROADMAP.md`** (D-057; superseded `PRODUCTION-READINESS.md`,
+> deleted by operator directive D-069). Session prompts: `agents/handoffs/sessions/`. AMS operator guide:
+> `docs/AMS-INTEGRATION.md`. Go-live runbook + rollback: `deploy/runbooks/real-ams-go-live.md`.
 > Operator creds/keys (gitignored, never commit): `oguz-testing.md`.
 
 ---
@@ -41,9 +41,16 @@ disjoint-scope TDD authors + 3 independent adversarial verifiers — all CONFIRM
   operator "PR-first". **WO-B keep-7 cycle-8 (≥07-16) and WO-F promotions (≥07-23) SKIPPED on
   date gates** — both carried into SESSION-11 (WO-D/WO-E there).
 
+**Same-day D-069 (docs audit, operator-directed):** OPERATOR-TODO → `docs/operator-expected.md`;
+AMS-INTEGRATION + prd-report → `docs/`; PRODUCTION-READINESS / RELEASE-NOTES-DRAFT / DEVLOG /
+IMPLEMENTATION_LOG **deleted**; NEW `docs/product.md` (product + distilled PRD + brand-kit
+prompt); README + install.md de-staled (real repo URL, GHCR image, D-002 waiver retired);
+**SESSION-11 gained WO-F: clean-install RELEASE test vs the real AMS** (install.md accuracy test).
+
 **▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-11.md` and execute it** (S11:
-white-label PDF logo, anomaly expansion w/ contract CR, SSO/OIDC phase 1, + date-gated
-carry-overs keep-7 cycle-8 (≥07-16) and CI promotions (≥07-23)). **Plan of record: `ROADMAP-V2.md`.**
+white-label PDF logo, anomaly expansion w/ contract CR, SSO/OIDC phase 1, clean-install release
+test (WO-F), + date-gated carry-overs keep-7 cycle-8 (≥07-16) and CI promotions (≥07-23)).
+**Plan of record: `ROADMAP-V2.md`.**
 
 **Standing numbers (2026-07-09 post-S10/D-068):** Go total **73.5%** (floor **70.2**); web
 **62.13/57.6/51** (gates 59/54/45 — vitest-4 re-baseline); sdk **66.06/45.79/70.42** (gates
@@ -52,7 +59,7 @@ pre-D-068 image, next rollout carries the O(N²) fix. **Dependabot queue: ZERO**
 `docs/dependabot-policy.md`). Operator queue: **O7 GHCR visibility (the ONE remaining click)**
 + 2 questions (CodeQL required yes/no ~07-23; PR-first cadence yes/no) + optional U3 (minting
 now self-serve, docs/licensing.md §3) / D-V2-1 unsigned-webhook decision / O11 / `gh auth
-refresh -s workflow`. **Operator-facing checklist: `agents/handoffs/OPERATOR-TODO.md` —
+refresh -s workflow`. **Operator-facing checklist: `docs/operator-expected.md` —
 REFRESHED at this close** (ledger of record: ROADMAP §5 + ROADMAP-V2 §4). CH-startup-flake
 watch stands (2nd occurrence ⇒ 60→180s ×4 copies).
 
@@ -155,7 +162,7 @@ bps→kbps, FPS-redistribution, QoE fields, `terminated_unexpectedly`, WebRTC si
 per-app paths + multi-app keying (D-029); `golang:1.26`→`1.25` (D-032); subdomains + Caddy TLS (D-034/D-035);
 AMS web-console login (D-036); `ams-integration` is now contained in `main` (branch divergence resolved).
 
-**MISSING / NOT DONE (actionable backlog — detail in `PRODUCTION-READINESS.md`):**
+**MISSING / NOT DONE (actionable backlog — was detailed in `PRODUCTION-READINESS.md`, deleted D-069 — see ROADMAP.md):**
 - ✅ **Silently-stubbed features — DONE (D-041):** alert test-fire now delivers (real `Send` via `buildChannelFromRow`,
   contract keys, `200 {accepted,message}`, sanitized error body); 3 license gates enforced (+`/qoe/ingest`, +TOCTOU
   mutex); standalone node card shows real identity (os/cores/java/version — AMS 3.x exposes **no** standalone cpu/mem via

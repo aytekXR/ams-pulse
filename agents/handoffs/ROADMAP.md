@@ -1,7 +1,7 @@
 # Pulse — Production-Readiness ROADMAP (session-divided, TDD-enforced)
 
-> **Plan of record** as of 2026-07-08 (D-057). Supersedes `PRODUCTION-READINESS.md` (2026-06-22 —
-> keep for provenance, do not execute from it). Built on a 9-scout verified audit (coverage, CI,
+> **Plan of record** as of 2026-07-08 (D-057). Superseded `PRODUCTION-READINESS.md` (2026-06-22; the stale file was deleted by
+> operator directive, D-069). Built on a 9-scout verified audit (coverage, CI,
 > dockerization, stubs, contracts, web, docs, git/GitHub, live prod) — every claim below has
 > file:line or command-output evidence recorded in D-057; nothing is inherited from stale docs.
 >
@@ -275,7 +275,7 @@ remaining gap is operator/time-owned → declare GA (tag = operator call).
 
 ## 5. Operator ledger (surface EVERY session — agent cannot do these)
 
-> Operator-facing actionable view (click-paths, commands): `agents/handoffs/OPERATOR-TODO.md`
+> Operator-facing actionable view (click-paths, commands): `docs/operator-expected.md`
 > — sessions refresh it at close; THIS table stays the ledger of record.
 
 | # | Action | Status |

@@ -603,7 +603,7 @@ Drop this into a fresh Claude Code session at the repo root
 
 ```
 You are picking up the Pulse real-AMS integration. Read CLAUDE.md, then
-agents/handoffs/RESUME-PROMPT.md, then agents/handoffs/AMS-INTEGRATION.md
+agents/handoffs/RESUME-PROMPT.md, then docs/AMS-INTEGRATION.md
 before doing anything else. Those three files are the ground truth for state,
 operating protocol, and integration facts.
 

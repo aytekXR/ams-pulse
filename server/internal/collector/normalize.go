@@ -193,7 +193,7 @@ func NormalizeWebRTCStats(
 // domain.ServerEvent of type node_stats for a standalone (non-cluster) AMS node.
 //
 // REAL AMS 3.x system-status shape (confirmed by agents/handoffs/real-ams-captures/
-// system-status.json and AMS-INTEGRATION.md): ONLY {osName, osArch, javaVersion,
+// system-status.json and docs/AMS-INTEGRATION.md): ONLY {osName, osArch, javaVersion,
 // processorCount} — NO cpu/mem/disk/network metrics. The old parsing of cpuUsage/
 // jvmMemoryUsage/systemMemoryInfo/fileSystemInfo was reading non-existent fields
 // and emitting all-zeros to ClickHouse. This rewrite maps the REAL fields and does

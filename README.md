@@ -13,21 +13,26 @@ Customer data never leaves the customer's infrastructure.
 
 ## Quick start
 
+**Released image:** `ghcr.io/aytekxr/ams-pulse` — cosign-signed, multi-arch (amd64/arm64),
+SBOM + provenance, published by a CI-gated tag pipeline.
+Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.2.0**).
+
 **Docker Compose (supported production path):**
 
 ```sh
-git clone https://github.com/your-org/pulse.git && cd pulse
-cp deploy/config/pulse.example.yaml deploy/config/pulse.yaml
-# edit deploy/config/pulse.yaml — set your AMS rest_url
-export PULSE_AMS_AUTH_TOKEN=your_ams_token
-export PULSE_SECRET_KEY=$(openssl rand -hex 32)
-make up
-# UI on http://localhost:8090
+git clone https://github.com/aytekXR/ams-pulse.git && cd ams-pulse
+cp deploy/.env.example deploy/.env
+# edit deploy/.env — PULSE_SECRET_KEY (openssl rand -hex 32), your AMS URL + token
+docker compose -p pulse-hardened \
+  -f deploy/docker-compose.yml \
+  -f deploy/docker-compose.hardened.yml \
+  --env-file deploy/.env \
+  up -d --build
 ```
 
-> The Docker Compose path was authored and validated by analysis; Docker was not
-> available on the build machine (D-002). The local binary path is QA-verified
-> (< 2 min to live dashboard). See [docs/runbooks/install.md](docs/runbooks/install.md).
+> Full walkthrough (incl. TLS/Caddy exposure, real-AMS wiring, backups — production runs
+> 5 compose overlays): [docs/runbooks/install.md](docs/runbooks/install.md) and
+> [docs/runbooks/productionize.md](docs/runbooks/productionize.md).
 
 **Local binary (QA-verified):**
 
@@ -56,7 +61,8 @@ PULSE_SECRET_KEY=$(openssl rand -hex 32) \
 
 ## Feature status
 
-Last updated: Wave-3-Plus (2026-06-15). QA gate: PASS_WITH_LIMITATIONS.
+Last updated: **v0.2.0 GA (2026-07-09, D-065/D-066)** — all 10 PRD features shipped; prod
+live behind Caddy TLS against a real AMS 3.0.3. Product one-pager: [docs/product.md](docs/product.md).
 
 | Feature | PRD ref | Status | Notes |
 |---|---|---|---|
@@ -81,8 +87,8 @@ Last updated: Wave-3-Plus (2026-06-15). QA gate: PASS_WITH_LIMITATIONS.
 
 - Dashboard render time at 500 streams: virtualization confirmed (≤20 DOM rows), wall-clock not measured — Phase-3 Playwright benchmark (VD-04).
 - Player CPU <1% budget: not measurable in jsdom/vitest; Phase-3 real-browser profiler needed (VD-14).
-- AMS Kafka / log-tail source: no broker available in CI (D-007.5 waiver); REST poller path fully functional and QA-verified. Kafka `lag` + `parse_errors` are surfaced in `/healthz` (Wave-3-Plus).
-- Docker Compose not tested on build machine (D-002 waiver); local binary path is QA-verified.
+- AMS Kafka / log-tail source: no broker available in CI (D-007.5 waiver); REST poller path fully functional and QA-verified. Kafka `lag` + `parse_errors` are surfaced in `/healthz` (Wave-3-Plus). The logtail collector was removed in D-062 (honest-features pass).
+- Docker Compose path exercised continuously since D-058: CI `docker-build` is a required merge context and staging smokes run on a pristine compose copy each deploy session (the original D-002 waiver is retired).
 
 ---
 
@@ -149,7 +155,13 @@ Cluster fleet discovery ──────────────────�
 
 | Document | Description |
 |---|---|
+| [docs/product.md](docs/product.md) | Product one-pager: what Pulse is, distilled PRD, brand-kit design prompt |
+| [docs/prd-report.md](docs/prd-report.md) | Full PRD (§7) + AMS marketplace/market analysis (§§1–6) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Component diagram, boundaries, performance budgets, Wave-2 implementation status, ingest health score formula |
+| [docs/AMS-INTEGRATION.md](docs/AMS-INTEGRATION.md) | AMS integration guide: ingest paths, wire-format facts, operator setup against a real AMS |
+| [docs/licensing.md](docs/licensing.md) | Repo license (PolyForm NC) + product license keys: tiers, minting (`-privkey`/`-expires`), vendor key ceremony |
+| [docs/dependabot-policy.md](docs/dependabot-policy.md) | Dependency-update policy: cadence per bump class, merge mechanics, co-upgrade clusters |
+| [docs/operator-expected.md](docs/operator-expected.md) | Live checklist of actions only the human operator can do (refreshed every session) |
 | [docs/runbooks/install.md](docs/runbooks/install.md) | Install guide: Docker Compose + QA-verified local binary + Helm (Kubernetes) |
 | [docs/runbooks/alerting.md](docs/runbooks/alerting.md) | Alert rule semantics, channel setup (Email/Slack/Telegram/PD/Webhook), maintenance windows, HMAC verification |
 | [docs/runbooks/reports.md](docs/runbooks/reports.md) | Usage reports: tenant mapping, egress estimation, schedule setup, S3 export, reconciliation |

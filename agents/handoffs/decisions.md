@@ -2599,3 +2599,56 @@ first; FULL-LIST PUT; GET-diff proof; drop continue-on-error; CodeQL only with e
 **Carry to S11:** WO-B (≥07-16), WO-F (≥07-23), CH-startup-flake watch (occurrence #1 recorded
 D-067 — 2nd occurrence ⇒ 60→180s in all 4 harness copies), U3 live beacon smoke when the operator
 sets PULSE_LICENSE_KEY (minting now unblocked by WO-C), prod rollout note from WO-D above.
+
+## D-069 — Operator-directed repo-docs audit: moves to docs/, 4 deletions, docs/product.md NEW, README/install.md de-staled, S11 gains the clean-install release-test WO (2026-07-09)
+
+**Operator directive (verbatim intent):** audit all md files (live/updated/required?); informative
+ones belong under docs/; deprecated ones DELETED; new product+PRD+brandkit file; operator items as
+docs/operator-expected.md; SESSION-11 extended with a clean-install release test, ideally against
+the real AMS, via Workflow. Executed inline (docs-only → no orchestration workflows, per the
+operator's standing rule).
+
+**Audit result (~150 tracked .md files) — dispositions:**
+- **MOVED to docs/ (informative → docs, all live refs updated):**
+  `agents/handoffs/AMS-INTEGRATION.md` → `docs/AMS-INTEGRATION.md`;
+  `agents/handoffs/OPERATOR-TODO.md` → `docs/operator-expected.md` (operator-requested name);
+  `prd-report.md` → `docs/prd-report.md`. Refs updated in RESUME-PROMPT, ROADMAP, ROADMAP-V2,
+  SESSION-11, CLAUDE.md, ORCH-00 charter, ARCHITECTURE.md, normalize.go comment. Historical refs
+  in decisions.md/old session prompts left as-is (history is immutable).
+- **DELETED (deprecated/superseded — operator directive overrides the D-057 keep-for-provenance):**
+  `agents/handoffs/PRODUCTION-READINESS.md` (superseded by ROADMAP, D-057);
+  `agents/handoffs/RELEASE-NOTES-DRAFT.md` (executed — notes live on the v0.2.0 GitHub release;
+  next release starts from CHANGELOG [Unreleased]); `DEVLOG.md` + `IMPLEMENTATION_LOG.md`
+  (stale 2026-06-16 build logs, superseded by decisions.md).
+- **KEPT as immutable execution history (NOT deprecated — the audit trail):** decisions.md,
+  sessions/SESSION-01..11 + TEMPLATE, wave-0/1/2/3 + wave-realams + validation work orders and
+  reports, qa/wave-* gate reports. Rationale: referenced throughout decisions.md; deleting the
+  trail breaks provenance. Operator may direct a purge/archive separately.
+- **KEPT, live:** README/CHANGELOG/SECURITY/CLAUDE.md; docs/** (ARCHITECTURE, licensing,
+  dependabot-policy, adr/0001-0008, guides ×3, runbooks ×6); deploy/runbooks ×5 +
+  deploy/secrets/README + helm READMEs; component READMEs (server testdata, web, sdk, contracts,
+  agents, web feature stubs).
+- **STALE CONTENT FIXED NOW:** README quick-start (placeholder `your-org` URL → real repo;
+  D-002 "Docker unavailable" waiver retired — compose is CI-required + staging-smoked since
+  D-058; released-image block added: ghcr.io/aytekxr/ams-pulse v0.2.0, cosign/multi-arch/SBOM;
+  compose command aligned to deploy/.env.example wording; feature-status header stamped v0.2.0
+  GA; docs table gained product/prd/AMS-INTEGRATION/licensing/dependabot-policy/
+  operator-expected rows); install.md header (path table + D-002 language + clone URLs).
+  ⚠ install.md STEP-LEVEL truth (e.g. step 2 pulse.example.yaml copy vs "config is env-var-only"
+  overview) is deliberately NOT blind-rewritten — it is the object of the S11 WO-F test.
+- **NEW `docs/product.md`:** product one-pager (what/who/positioning, F1–F10 tier table),
+  distilled PRD (problem/UVP/numeric acceptance criteria/non-goals/business model), and a
+  paste-ready brand-kit design prompt (ops-tool personality, mark directions, dark-first color
+  system w/ semantic+CVD constraints, typography, deliverables, self-hosted font constraint).
+
+**SESSION-11 extended (operator directive): WO-F [M] clean-install RELEASE test** — authed GHCR
+pull + cosign verify of the released image; clean install strictly per install.md Path A on a
+pristine copy (unique -p, released image pinned, no --build); every divergence = doc bug fixed in
+the WO; PRD §7.12 ≤15-min budget asserted; live verification against the REAL AMS
+(161.97.172.146:5080, oguz-testing.md creds) — healthz + authed live/overview + 2 clean poll
+cycles; down -v teardown. Mission exit (f) added; S11 decisions entry renumbered D-070.
+
+**Not changed:** contracts, code behavior (normalize.go edit is a comment path only), CI
+workflows. Gates: docs-only + one comment line → no test-suite rerun required beyond CI on push.
+D-068 addendum earlier this day: ROADMAP §4/§5 ledger sync (O8 closed, U3 self-serve, ratchet
+pointer to V2 §5).

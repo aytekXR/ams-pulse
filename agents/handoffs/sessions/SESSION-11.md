@@ -20,7 +20,9 @@ flow change = phase 2); (d) WO-B carry-over: keep-7 backup cycle-8 pruning obser
 `gh api .../runs/<id>/jobs` — continue-on-error makes workflow-level lie; FULL-LIST PUT: contracts,
 server, web, sdk, docker-build, helm, compose + web-e2e + csp-e2e; GET-diff proof; drop
 continue-on-error; actionlint + faithful step repro; CodeQL required ONLY with explicit operator
-OK — check OPERATOR-TODO for the answer).
+OK — check docs/operator-expected.md for the answer); (f) NEW WO-F: clean-install RELEASE test
+green — released image pulled + cosign-verified, installed strictly per install.md on a pristine
+stack, verified live against the REAL AMS, and install.md corrected wherever reality diverges.
 
 ## Work orders (sizes from ROADMAP-V2 §3 S11)
 
@@ -39,6 +41,28 @@ OK — check OPERATOR-TODO for the answer).
    cycle 8, count ≤7, restore-verify still green. Record in decisions.md.
 5. **WO-E [S, date-gated ≥2026-07-23]** CI promotions carry-over (S10 WO-F, ROADMAP-V2 §2.7) —
    spec in Mission (e) above.
+6. **WO-F [M]** Clean-install RELEASE test against the REAL AMS (operator directive, D-069) —
+   orchestrate as a Workflow (infra testing, not docs-only). Test the RELEASED ARTIFACT, not a
+   local build:
+   (a) **Authed pull + signature:** `gh auth token | docker login ghcr.io -u aytekXR
+   --password-stdin`; pull `ghcr.io/aytekxr/ams-pulse:v0.2.0` (or newest tag); `cosign verify`
+   (keyless, identity = the release workflow — commands in release.yml header). If the package
+   is still private (O7 unclicked), note that anonymous users cannot reproduce — record vs O7.
+   (b) **Clean install strictly per `docs/runbooks/install.md` Path A** on a pristine copy
+   (D-061 pattern: `git ls-files -co --exclude-standard -z | tar` to scratch; unique
+   `-p pulse-s11install`; NEVER the real `deploy/.env`), with the compose image pinned to the
+   pulled release tag instead of `--build`. **Every step that fails or diverges from the doc is
+   a DOC BUG — fix install.md in this WO** (doc-accuracy test). Known suspect recorded D-069:
+   step 2 copies `deploy/config/pulse.example.yaml` while the Overview says config is
+   env-var-only — resolve whichever is true. Assert the PRD §7.12 budget: install → live
+   dashboard ≤ 15 min (record the actual time).
+   (c) **Real-AMS verification:** point the clean install at the operator's live AMS
+   (`http://161.97.172.146:5080`; creds in gitignored `oguz-testing.md`; per-app
+   `remoteAllowedCIDR` already open, D-034): `/healthz` all-ok; authed `/api/v1/live/overview`
+   returns the real publishers; ≥2 poll cycles with zero 401/403/decode errors in pulse logs.
+   This is also the first real-wire exercise of the D-068 O(N²)-fixed image.
+   (d) **Teardown** `down -v` (never touch `pulse-prod_*` volumes). Evidence (timings,
+   endpoints, log excerpts) → decisions.md D-070.
 
 ## Preconditions (re-verify cheaply; note drift in decisions.md)
 
@@ -69,7 +93,7 @@ OK — check OPERATOR-TODO for the answer).
 
 1. Commits per scope; push; `gh run watch` ci AND e2e AND codeql green.
 1b. `codegraph sync` + `codegraph status`.
-2. decisions.md D-069 (per-WO evidence incl. skipped-trigger records).
+2. decisions.md D-070 (per-WO evidence incl. skipped-trigger records).
 3. RESUME-PROMPT ▶ START HERE → SESSION-12; ROADMAP-V2 §3/§4/§5 ledgers updated.
-4. REFRESH `agents/handoffs/OPERATOR-TODO.md` + PushNotification at completion.
+4. REFRESH `docs/operator-expected.md` + PushNotification at completion.
 5. Write `sessions/SESSION-12.md` from ROADMAP-V2 §3 S12.

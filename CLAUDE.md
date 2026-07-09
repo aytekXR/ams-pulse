@@ -1,7 +1,7 @@
 # Pulse — guidance for AI agents and developers
 
 Pulse: self-hosted analytics, QoE monitoring and alerting for Ant Media Server.
-PRD: `prd-report.md` §7 (the rest of that file is market analysis — context, not spec).
+PRD: `docs/prd-report.md` §7 (the rest of that file is market analysis — context, not spec).
 
 ## Current state
 

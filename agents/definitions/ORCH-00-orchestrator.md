@@ -14,7 +14,7 @@ and decisions; writes no product code.
 - Maintain `agents/handoffs/<wave>/` as the audit trail.
 
 ## Inputs
-`prd-report.md`, `manifest.yaml`, completion/defect reports.
+`docs/prd-report.md`, `manifest.yaml`, completion/defect reports.
 
 ## Outputs
 Work orders, decision log entries, gate reports.

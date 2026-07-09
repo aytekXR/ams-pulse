@@ -16,25 +16,25 @@ Three install paths are available:
 
 | Path | Status | Recommended for |
 |---|---|---|
-| **Path A: Docker Compose** | Authored; unexecuted per D-002 | Single-server production |
+| **Path A: Docker Compose** | Supported production path — runs the live production deployment; CI `docker-build` is a required merge context and staging smokes exercise it every deploy session | Single-server production |
 | **Path B: Local binary** | QA-verified (< 2 min) | Dev, bare-metal, ClickHouse managed separately |
-| **Path C: Helm** | Authored and lint-verified; cluster validation deferred D-002 | Kubernetes / clustered AMS |
+| **Path C: Helm** | Authored, lint- and golden-file-verified in CI; marked experimental until a cluster install is validated | Kubernetes / clustered AMS |
 
 **Primary install path — Docker Compose:**  
-One command brings up both containers. This is the supported production path
-(PRD §7.10). It is authored from `deploy/` and validated by analysis; the Docker Compose
-`make up` command is **authored-but-unexecuted-here** per decision D-002
-(Docker not available on the build machine). The local binary path below is the
-QA-verified equivalent and exercises identical code.
+One command brings up the stack. This is the supported production path (PRD §7.10) and
+what the live production deployment runs (base + hardened + TLS + real-AMS + backup
+overlays; see `productionize.md`). Released images: `ghcr.io/aytekxr/ams-pulse`
+(cosign-signed, multi-arch, from `v0.1.0` onward). The historical D-002
+"Docker unavailable on the build machine" waiver is retired.
 
 ---
 
 ## Path A: Docker Compose (supported production path)
 
-> **Note:** This path is authored and designed for production. The commands below
-> are correct per `deploy/docker-compose.yml` and the Dockerfile, but were not
-> executed during Wave 1 development (D-002: Docker not available on the build
-> machine). Treat as the supported install path for your server environment.
+> **Note:** This is the supported production path — it is what the live production
+> deployment runs. A full clean-install verification of the step-by-step below (fresh
+> machine, released image, real AMS) is scheduled as a SESSION-11 work order (D-069);
+> any step that diverges will be corrected there.
 
 ### Prerequisites
 
@@ -48,8 +48,8 @@ QA-verified equivalent and exercises identical code.
 **1. Clone / download Pulse**
 
 ```sh
-git clone https://github.com/your-org/pulse.git
-cd pulse
+git clone https://github.com/aytekXR/ams-pulse.git
+cd ams-pulse
 ```
 
 **2. Copy and edit the config file**
