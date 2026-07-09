@@ -114,7 +114,7 @@ services:
   mock-ams:
     # golang:1.25
     # Digest pinned 2026-07-09; to refresh: docker pull golang:1.25 && docker image inspect golang:1.25 --format '{{index .RepoDigests 0}}'
-    image: golang@sha256:d7912cedddfa15b2900a8dfb7187df0af5ec2cb424a371139b5b352fd3e6b740
+    image: golang@sha256:079e59808d2d252516e27e3f3a9c003740dee7f75e55aa71528766d52bcfc16a
     working_dir: /src/qa/mock-ams
     command: ["go", "run", ".", "-addr", ":9090", "-app", "live"]
     volumes:

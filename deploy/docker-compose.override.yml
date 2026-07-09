@@ -9,7 +9,7 @@ services:
       CLICKHOUSE_SKIP_USER_SETUP: "1"
 
   mock-ams:
-    image: golang:1.25
+    image: golang:1.26
     working_dir: /src/qa/mock-ams
     command: ["go", "run", ".", "-addr", ":9090", "-app", "live"]
     volumes:
