@@ -203,7 +203,30 @@ from transcripts; new binding rule in RESUME §12. Commits `bcdd3b8`…`352b7d7`
    stays waived per D-002 unless a cluster appears).
 **Exit:** G7 met (Helm "installable-or-marked-experimental" decision recorded).
 
-### S7 — GA gate + post-GA backlog seeding — prompt written by S6
+### S7 — GA gate + post-GA backlog seeding — ✅ DONE (D-064, 2026-07-09)
+**Result: verdict PUNCH-LIST-FIRST.** 9-scout audit + A10 load smoke (PASS: 500 streams/3k
+viewers 15-min, pulse 18.6 MiB peak, CH 610 MiB, WATCH 0 hits, 9 ms API — numbers in ARCH §4)
++ adversarial critic. **Gate-blocker found: prod runs `bc15d43` (v0.1.0-25) WITHOUT the D-062
+functional commits — honest QoE + B7 are not live** → S8 WO-A rollout. In-session fixes: G4
+DDL skip-hatches ×6 → t.Fatalf (2 negative proofs), install.md stale PULSE_LOG_TAIL_PATH
+(G7), ARCH §4 waivers formalized (cmd/pulse 42.3, /live/ws) + GAP-206-01 closed, monitoring.md
+prefix, .env.example +1. Critic's G6 finding REFUTED (e2e.yml:372-456 = full chain). GA
+declaration deferred to S8-close. Evidence: D-064.
+
+### S8 — Punch-list + prod currency + promotions → GA declaration — prompt written by S7
+**Goal:** land WO-A prod rollout (G2), the S/XS punch items, date-gated promotions; if every
+remaining gap is operator/time-owned → declare GA (tag = operator call).
+1. **WO-A [L]:** prod rollout to current main (staging-verify → `pre-d064` tag → stamped-build
+   → 5-overlay swap → §8.8 smoke incl. honest-QoE + B7 spot-checks).
+2. WO-B [S]: pin mock-ams (hardened) + helm busybox (GAP-206-03). WO-C [S]: health-degraded
+   log-storm rate-limit + pulse CPU-cap review. WO-D [XS]: A11 skip defence; CH startup
+   parse-errors investigation.
+3. WO-E [time]: if ≥2026-07-23 — promote web-e2e + csp-e2e (FULL-LIST PUT, drop
+   continue-on-error); CodeQL only with operator OK.
+4. GA verdict: if gaps are only operator/time → declare GA in decisions.md; CHANGELOG release
+   section; tag v1.0.0-vs-v0.2.0 is the OPERATOR's call via the S1 pipeline.
+
+### S7 (original plan, kept for provenance) — prompt: `sessions/SESSION-07.md`
 **Goal:** adversarial GA audit; declare GA or produce the punch list.
 1. Re-run the 9-scout audit (same dimensions as D-057); diff against §2 G1–G8; every unmet
    criterion becomes a work order.
@@ -224,6 +247,7 @@ from transcripts; new binding rule in RESUME §12. Commits `bcdd3b8`…`352b7d7`
 | 2026-07-09 (after S4) | **73.3%** | **70.0** | hold (76/72/45) | D-061; ratchet done; alert 73.3 (new sync source), api 75.9, collector 66.5 |
 | 2026-07-09 (after S5) | **73.2%** | **70.0** | hold (76/72/45) | D-062; −0.1 = logtail (92.1%-covered pkg) deleted; webhook 94.7, query 86.9, alert 73.8; no ratchet (<74) |
 | 2026-07-09 (after S6) | **73.2%** | **70.0** | hold (76/72/45) | D-063; docs/Helm session, no Go touched; closing -race re-run green; SDK size re-measured 3.52 KB / 65 tests |
+| 2026-07-09 (after S7) | **73.1%** | **70.0** | hold (76/72/45) | D-064; −0.1 = rounding (audit re-measure); test-only Go change (skip-hatches → Fatalf); A10 load numbers in ARCH §4 |
 | GA (G3) | ≥70% ✅ (73.2) | ≥68.0 | ratchet to achieved−3 | coverage half of G3 already met; floor ratchet remains |
 
 ## 5. Operator ledger (surface EVERY session — agent cannot do these)
@@ -240,6 +264,7 @@ from transcripts; new binding rule in RESUME §12. Commits `bcdd3b8`…`352b7d7`
 | O8 | Review the dependabot PRs — **21 open** (majors: vite 8, vitest 4, plugin-react 6, eslint 10, size-limit 12; grouped minor-and-patch for web, sdk AND server gomod; caddy digest bump was CI+e2e green — mergeable). Protection requires 1 approval — dependabot PRs need owner review; S5 can absorb the web-tooling majors if the operator asks | OPEN (unchanged, re-checked D-061) |
 | O9 | ~~CodeQL blocked~~ ✅ CLOSED by S5 (D-062): operator made the repo PUBLIC → `codeql.yml` live (go/autobuild + js-ts/none). NOT a required context yet — promote after a bake period (S6/S7 call). NOTE: repo-level secret-scanning/push-protection still disabled — consider enabling now that the repo is public | ✅ DONE (D-062) |
 | O10 | ~~Prod rollout DUE~~ ✅ CLOSED by S5 WO-1 (D-062): prod runs `v0.1.0-25-gbc15d43`; rule→channel delivery live-proven (email-channel smoke, firing row ≤2s + mail received) | ✅ DONE (D-062) |
+| O12 | **Enable repo secret-scanning + push-protection** (Settings → Code security) — the repo is PUBLIC and both are OFF (`gh api repos/{owner}/{repo} --jq .security_and_analysis`, D-064); one click, prevents the next O11-class incident at the platform level | OPEN (NEW, D-064) |
 | O11 | **Rotate the Slack CI-notification webhook** (it sat hardcoded in an unpushed commit + session transcripts — never public, but hygiene demands rotation; then `gh secret set SLACK_WEBHOOK_URL` with the new value) AND reset the concurrent session's local main onto origin (`git fetch && git reset --hard origin/main` — its `ee4fc00` content is contained in `bc15d43`) | OPEN (NEW, D-062) |
 
 ## 6. Session protocol (BINDING — the "prompts" contract)

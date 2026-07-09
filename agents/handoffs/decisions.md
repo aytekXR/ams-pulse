@@ -2205,3 +2205,71 @@ O8 STILL 21 dependabot PRs. O11 OPEN — operator: rotate the Slack webhook + re
 session's local main (repo half done since D-062: secret set, rewritten commit pushed).
 O5 OPEN (LICENSE choice) — **the only G7 gap**; SECURITY.md/CHANGELOG/runbooks/Helm-experimental
 all shipped. G7 otherwise MET.
+
+## D-064 — SESSION-07 executed: GA-gate audit — verdict PUNCH-LIST-FIRST (prod currency is the gate-blocker); A10 load smoke PASS; small agent items fixed in-session (2026-07-09)
+
+Workflow `pulse-s7-ga-gate` (11 agents: 9 read-only audit scouts on the D-057 dimensions →
+solo-phase A10 load agent → adversarial completeness critic). Then ORCH adjudicated the critic,
+executed the XS/S agent punch items in-session, and gated.
+
+**Audit result vs G1–G8 (evidence per scout in the workflow journal):**
+- **G1 ✅** except O7 (GHCR package private — anonymous pull token DENIED, re-verified) and the
+  recorded-by-design `enforce_admins=false` (D-058: owner pushes to main while agent sessions
+  drive it; revisit at GA declaration). release.yml: CI-gated, Trivy HIGH/CRIT, multi-arch,
+  SBOM+provenance, cosign — all quoted; v0.1.0 tag + green release run verified; actionlint 0
+  on all 5 workflows; protection strict w/ 7 contexts + 1 review.
+- **G2 ❌ THE GATE-BLOCKER: prod runs `bc15d43` (v0.1.0-25) — 17 commits behind, and the 4
+  D-062 FUNCTIONAL commits (8b4e4c7 QoEReader wiring + B7 startup load, b94155f B7, 6865dba/
+  5c8fe96 honest QoE) are NOT ancestors of the prod image.** The D-062 rollout pre-dated the
+  session's own work commits. Honest-QoE alerts + B7 per-source webhooks are NOT live in prod.
+  → S8 WO-A prod rollout (agent-executable, runbook exists). Backups: cycles green, keep-7
+  configured but pruning not yet exercised (3/8 cycles — time-gated).
+- **G3 ✅** — full `-race` 24 pkgs 0 FAIL, 2 expected npx skips, total 73.1% (floor 70;
+  73.2→73.1 = rounding); A11 integration-proven. cmd/pulse 42.3% exemption now FORMALIZED in
+  ARCHITECTURE §4 (this session).
+- **G4 ✅ after in-session fix** — 51/52 + 1 waived (waiver now formalized in ARCH §4); found
+  SIX D-028-class `t.Skipf("meta DDL not found")` hatches (api_test.go:108/454/559,
+  v3b_guard_test.go:67/404/504) that silently void the api suite under a broken mount →
+  ALL converted to `t.Fatalf` with TWO negative proofs (server-only mount now FAILS loud on
+  both the spec path and the DDL path — transcripts in this session).
+- **G5 ⏳ time-gated** — everything met except the web-e2e + csp-e2e promotions (clocks end
+  ~2026-07-23; job-level streaks intact since 2026-07-09). VD-04 numbers stand.
+- **G6 ✅ — critic finding REFUTED by ORCH:** the critic claimed no single CI test chains
+  license→beacon→rollup→alert; e2e.yml:372-456 does EXACTLY that (Pro-licensed batch w/
+  rebuffer_end accepted==3 → rollup_qoe_1h → rebuffer_ratio rule gt 0.0 → firing row poll).
+  Adjudication recorded; G6 stays met.
+- **G7 ✅ after in-session fix** except LICENSE (O5) — the audit's DOC-TRUTH spot-check caught
+  ONE stale operator instruction that survived S6: install.md:326 still documented
+  PULSE_LOG_TAIL_PATH (logtail deleted D-062; zero server references) → row REMOVED. Also
+  fixed: monitoring.md backup-error prefix (`[pulse-backup] ERROR:` not a timestamp),
+  GAP-206-01 closed (image published since v0.1.0), .env.example +PULSE_AMS_LOGIN_EMAIL.
+- **G8 = operator:** U3 (tier:free live-verified), U5, O3 (0 webhook POSTs in 24h Caddy logs).
+
+**A10 load smoke: PASS (recorded in ARCHITECTURE §4).** Isolated stack, 500 streams + 3,000
+viewers, 15-min soak, 16 samples: pulse mem peak 18.6 MiB (3.6% of 512 MiB limit); CH peak
+610 MiB (30% of 2 GiB; **the D-062 memory WATCH never triggered — 0 hits**, also 0 in prod
+24h); /live/overview avg 9.0 ms; 222,762 events ingested, 0 steady-state insert errors, 0 pulse
+ERRORs. Non-blocking follow-ups → punch list: pulse CPU bursts ~147% of a core at poll
+boundaries vs the 0.5-vCPU hardened cap (throttled; latency unaffected); ~100 INFO/s
+health-degraded log storm at 500 degraded mock streams; 27 migration-time CH
+CANNOT_PARSE_INPUT startup errors (cosmetic, investigate).
+
+**PUNCH LIST → SESSION-08 (S8 added to ROADMAP §3):**
+- **WO-A [L, blocks G2/GA]: prod rollout to current main** (staging-verify → pre-d064 rollback
+  tag → stamped-build → 5-overlay swap → §8.8 smoke incl. honest-QoE + B7 spot-checks).
+- WO-B [S]: pin mock-ams (hardened overlay, golang:1.25 floating) + helm busybox:1.36
+  (GAP-206-03); WO-C [S]: health-degraded log-storm rate-limit + pulse CPU-cap review;
+- WO-D [XS]: A11 t.Skipf defence-in-depth; CH startup parse-errors investigation [XS].
+- WO-E [time]: promotions if ≥2026-07-23 (FULL-LIST PUT web-e2e+csp-e2e, drop continue-on-error;
+  CodeQL 4-green streak — promote only w/ operator OK).
+- GA declaration: expected at S8-close IF WO-A lands and every remaining gap is operator/time.
+
+**In-session commits (this session):** conformance hatch fix (server/internal/api ×2 files),
+ARCHITECTURE §4 (A10 numbers + waivers + GAP-206-01), install.md, monitoring.md, .env.example.
+Gates: gofmt clean; negative proofs ×2; full `-race` repo-root 24 pkgs ok / 0 FAIL (73.1%, floor 70); ci+e2e+codeql
+watched post-push.
+
+**Ledger:** NEW **O12 — enable repo secret-scanning + push-protection** (repo is PUBLIC and
+they are OFF; one click, gh api evidence). O5/O7/U3/U5/O3/O8(21 PRs)/O11 unchanged-OPEN.
+NOTE (no action): PULSE_AMS_URL is http:// → AMS bearer travels cleartext, but same-host
+(VPS-local) traffic only; revisit if AMS ever moves off-host.

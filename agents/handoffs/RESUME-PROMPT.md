@@ -11,56 +11,43 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-07.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-08.md`)
 
-**Session 2026-07-09(c) result: D-063 — S6 DONE: docs + Helm GA batch; G7 MET except LICENSE
-(O5, operator legal call). Nothing in docs lies to an operator** (every claim command-verified
-by its author AND adversarially re-derived). `pulse-s6-docs-helm` (19 agents: 4 scout→author→
-verify/fix pipelines + WO-5 promotion auditor + cross-doc critic) → `pulse-s6-tail` (6 agents;
-survived an operator rate-limit stop via journal-cache resume).
-- **Docs truth pass:** productionize.md + real-ams-go-live.md → 5-overlay / stamped-build /
-  `_FILE` truth (PULSE_LICENSE_KEY has NO _FILE); alerting.md → honest-QoE **3-case** semantics
-  (nil reader → skip+WARN; reader error → stream skip+WARN; **no data → evaluates vs 0.0, NOT
-  skipped, NOT silent** — a verifier killed the "silently skipped" claim), factory.go channel-key
-  tables; AMS-INTEGRATION §4.5 B7 per-source URLs (+its §3.2 DC was 4-overlay + `up -d --build` —
-  the cross-doc critic caught it; also 4 FAKE metric names in productionize.md).
-- **NEW docs:** SECURITY.md, CHANGELOG.md (Keep-a-Changelog: v0.1.0 + Unreleased), deploy/runbooks/
-  upgrade-rollback.md + monitoring.md (CH memory-WATCH signature greppable). LICENSE NOT drafted (O5).
-- **WO-6 stale batch:** ARCHITECTURE §6 bcrypt/HMAC truth; install.md 4-tier table cell-by-cell
-  from license.go (**business MaxNodes=5 < pro 10 is PRD §7.11 BY-DESIGN — do not "fix"**) +
-  env-only config truth (YAML parser exists but UNWIRED — main.go HOOK(BE-02); pulse.yaml is
-  silently ignored); beacon-sdk.md re-MEASURED (3.52 KB gzip, 65 tests).
-- **Helm parity (`bcdd3b8`):** ghcr.io/aytekxr/ams-pulse ref, CH auth via Secret, backup CronJob
-  (compose-sidecar mirror), `optional: false`, NOTES.txt; goldens ×3 regenerated red-diff-first;
-  chart stays EXPERIMENTAL (D-002 waiver — no cluster).
-- **Promotion (WO-5): NOT DUE** (2026-07-09 < 2026-07-23), recorded w/ job-level evidence:
-  web-e2e streak broke ONCE at `ba56c6e` run 28984417114 — deterministic D-061 spec-gating gap
-  (csp/render-500 specs ran ungated in plain web-e2e), fixed `ecfc25c`, NOT a flake → green
-  streak restarts 2026-07-09; csp-e2e 7/7; CodeQL first green `5dacb7d`, bake day 0. **Both
-  clocks end ~2026-07-23 → the session running on/after that date promotes web-e2e + csp-e2e
-  (FULL-LIST PUT; drop csp continue-on-error); CodeQL only ≥1wk green + operator OK.**
-- **⚠️ Process incident → NEW §12 rule:** the wo6 fixer `git restore`d two files carrying
-  OTHER agents' uncommitted verified work (false-positive "out-of-scope" flag on a shared dirty
-  tree) — recovered BYTE-EXACT by replaying all 19 Edit calls from agent transcripts. Subagents
-  never revert shared-tree files; ORCH commits early per scope.
-Gates: helm lint + 3 goldens no-drift (alpine/helm:3.17.0, CI-faithful); full `-race` 24 pkgs
-0 FAIL / 2 domain npx skips, total **73.2%** (floor 70, no Go touched); link-check 8 docs 0 dead;
-secret scans clean. Commits `bcdd3b8` `f1a624b` `58e318f` `8627f05` `cc6b71c` `fff3315` `352b7d7`
-+ handoff. ci 28993029934 + e2e 28993029982 + codeql 28993029935 on `352b7d7`: all GREEN
-(`gh run watch --exit-status` ×3 = 0). Full evidence: D-063.
+**Session 2026-07-09(d) result: D-064 — S7 DONE: GA-gate audit ran; verdict PUNCH-LIST-FIRST.**
+`pulse-s7-ga-gate` (11 agents: 9 audit scouts → solo A10 load phase → adversarial critic) +
+ORCH adjudication + in-session XS/S fixes.
+- **GATE-BLOCKER (→ S8 WO-A): prod runs `bc15d43` (v0.1.0-25) and the 4 D-062 FUNCTIONAL
+  commits are NOT in that image — honest-QoE alerts + B7 per-source webhooks are NOT live in
+  prod** (the D-062 rollout pre-dated the session's own commits). Rollout is agent-executable.
+- **A10 load smoke PASS** (recorded ARCH §4): 500 streams + 3k viewers, 15-min soak — pulse
+  18.6 MiB peak (3.6% of limit), CH 610 MiB (30%; **the D-062 memory WATCH: 0 hits**, also 0 in
+  prod 24h), API 9 ms avg, 0 errors. Follow-ups (non-blocking): pulse CPU bursts vs 0.5-vCPU
+  cap; 100 INFO/s health-degraded storm at 500 degraded streams; 27 cosmetic CH startup
+  parse errors.
+- **In-session fixes:** G4 — SIX D-028-class `t.Skipf("meta DDL not found")` hatches
+  (api_test.go, v3b_guard_test.go) → `t.Fatalf`, proven by 2 negative mutations (server-only
+  mount now FAILS loud); G7 — install.md:326 stale PULSE_LOG_TAIL_PATH row REMOVED (survived
+  S6; caught by the audit's DOC-TRUTH spot-check); ARCH §4 now formalizes the cmd/pulse-42.3%
+  exemption + the GET /live/ws conformance waiver + A10 numbers; GAP-206-01 closed;
+  monitoring.md backup-error prefix fixed; .env.example +PULSE_AMS_LOGIN_EMAIL.
+- **Adjudications:** critic's G6 finding REFUTED (e2e.yml:372-456 IS the full
+  license→beacon→rollup→alert-fires chain in one CI job); `enforce_admins=false` is BY DESIGN
+  (D-058) while sessions push to main — revisit at GA declaration.
+- **G-status after S7:** G1 ✅(−O7) · **G2 ❌ (prod currency — S8 WO-A)** · G3 ✅ · G4 ✅ ·
+  G5 ⏳(promotions ~2026-07-23) · G6 ✅ · G7 ✅(−LICENSE/O5) · G8 operator (U3/U5/O3).
+  **GA declaration expected at S8-close** if WO-A lands and the rest stays operator/time-owned.
+Gates: gofmt clean; 2 negative proofs; full `-race` 24 pkgs ok 0 FAIL (73.1% total, floor 70 —
+−0.1 vs S6 = rounding); ci+e2e+codeql watched post-push. Full evidence: D-064.
 
-**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-07.md` and execute it** (S7 GA gate:
-9-scout re-audit vs G1–G8, A10 load smoke, promotion duty if ≥2026-07-23, GA declaration or
-punch list; tag v1.0.0-vs-v0.2.0 is an operator call).
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-08.md` and execute it** (S8: WO-A
+prod rollout → punch items → promotions if ≥2026-07-23 → GA declaration; tag choice = operator).
 
-**Standing numbers (2026-07-09 post-S6):** Go total **73.2%** (floor **70.0**, unchanged — no Go
-touched); web 76/72/45 + guard; SDK 62/73/70 (size 3.52 KB re-measured, webrtc.ts 20.1% still the
-known gap); conformance 51/52 + 1 waived; only 2 skips (domain npx). Prod **`v0.1.0-25-gbc15d43`**
-healthy — docs/Helm session, NO rollout needed. G-status: G1 ✅(−O7) G2 ✅ G3 ✅ G4 ✅ G5 partial
-(promotion clocks) G6 ✅ **G7 ✅ except LICENSE (O5)** G8 operator. Operator queue: U3 license,
-U5 browser/CSP check, O3 AMS-side webhook config (→O4), O5 LICENSE pick, O7 GHCR visibility
-(re-verified still private 2026-07-09), O8 21 dependabot PRs, O11 Slack-webhook rotation + other
-session's local reset.
+**Standing numbers (2026-07-09 post-S7):** Go total **73.1%** (floor **70.0**); web 76/72/45;
+SDK 62/73/70 (3.52 KB); conformance 51/52 + 1 waived (now ARCH-§4-formalized). Prod
+**`v0.1.0-25-gbc15d43`** healthy but STALE (17 commits behind; D-062 features not live).
+Operator queue: U3 license, U5 browser/CSP, O3 AMS webhook config, **O5 LICENSE (last G7
+gap)**, O7 GHCR visibility, O8 21 dependabot PRs, O11 Slack rotation + other-session reset,
+**O12 NEW: enable secret-scanning + push-protection (repo is public, both OFF)**.
 
 ---
 
