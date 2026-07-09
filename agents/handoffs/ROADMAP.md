@@ -252,6 +252,9 @@ remaining gap is operator/time-owned → declare GA (tag = operator call).
 
 ## 5. Operator ledger (surface EVERY session — agent cannot do these)
 
+> Operator-facing actionable view (click-paths, commands): `agents/handoffs/OPERATOR-TODO.md`
+> — sessions refresh it at close; THIS table stays the ledger of record.
+
 | # | Action | Status |
 |---|---|---|
 | O1 (=U3) | Activate a Pro+ Pulse license in prod (`PULSE_LICENSE_KEY`) — until then QoE/beacon data does not flow in prod (CI covers it with the mock license) | OPEN |

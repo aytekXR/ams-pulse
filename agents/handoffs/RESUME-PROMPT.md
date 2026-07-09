@@ -48,6 +48,8 @@ SDK 62/73/70 (3.52 KB); conformance 51/52 + 1 waived (now ARCH-§4-formalized). 
 Operator queue: U3 license, U5 browser/CSP, O3 AMS webhook config, **O5 LICENSE (last G7
 gap)**, O7 GHCR visibility, O8 21 dependabot PRs, O11 Slack rotation + other-session reset,
 **O12 NEW: enable secret-scanning + push-protection (repo is public, both OFF)**.
+**Operator-facing checklist w/ click-paths: `agents/handoffs/OPERATOR-TODO.md` — REFRESH IT
+at every session close** (ledger of record stays ROADMAP §5).
 
 ---
 

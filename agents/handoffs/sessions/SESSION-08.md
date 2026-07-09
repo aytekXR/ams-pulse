@@ -69,10 +69,12 @@ release material, do not push a tag without their word.
   verify, prod rollout carrying the tag).
 
 ### Operator asks to surface at session start:
-U3 Pro+ license · U5 browser/CSP check · O3 AMS-console webhook config (→O4 re-check) ·
-**O5 LICENSE pick (last G7 gap)** · O7 GHCR package visibility · O8 21 dependabot PRs ·
-O11 Slack rotation + other-session reset · **O12 enable secret-scanning + push-protection** ·
-GA tag choice (v1.0.0 vs v0.2.0) once WO-F recommends declaration.
+The operator works from `agents/handoffs/OPERATOR-TODO.md` IN PARALLEL with this session —
+do NOT re-ask items mid-session; re-verify each at close and refresh that file + ROADMAP §5.
+Items: U3 Pro+ license (if the key lands in deploy/.env before WO-A, the rollout restart picks
+it up — then live-verify beacon/QoE) · U5 browser/CSP · O3 AMS webhook (→O4 re-check) ·
+**O5 LICENSE (last G7 gap)** · O7 GHCR visibility · O8 21 PRs · O11 Slack rotation ·
+**O12 secret-scanning** · GA tag choice (v1.0.0 vs v0.2.0) once WO-F recommends declaration.
 
 ## Gates (ORCH, before any commit)
 
