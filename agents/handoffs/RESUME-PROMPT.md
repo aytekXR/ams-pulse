@@ -11,62 +11,51 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-09.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-10.md`)
 
-**Session 2026-07-09(e) result: D-065 — S8 DONE: ★ GA DECLARED ★.** `pulse-s8-punch`
-(9 agents: 3 scouts → 3 TDD authors → 3 adversarial verifiers, ALL CONFIRMED round 1) +
-ORCH-driven WO-A prod rollout + gates.
-- **WO-A — G2 RESTORED: prod runs `v0.1.0-50-g5d77a05` (current main).** Staging-verified
-  first (isolated ci-overlay stack); `pre-d064` rollback tag + manual backup BEFORE swap;
-  stamped build; §8.8 smoke green + NEW spot-checks: B7 live (`/webhook/ams` good-sig 200 /
-  bad-sig 401, per-source 401 fail-closed), honest-QoE case-3 canary (`rebuffer_ratio lt
-  99999` → firing row ≤60s evaluating honest 0.0, zero `qoe_reader` WARNs, deleted after),
-  beacon 403 LICENSE_REQUIRED (U3 pending), `ams_sources.webhook_secret_enc` applied.
-  ⚠️ **SQLite WAL gotcha (runbook-recorded):** inspecting a copied `pulse_meta.db` WITHOUT
-  its -wal shows the OLD schema — copy db+wal+shm. Runbook doc lies fixed (container name
-  `pulse-prod-pulse-1`, stale tag table).
-- **Punch items (all verifier-CONFIRMED):** WO-B digest pins (hardened mock-ams golang,
-  helm busybox via `clickhouse.waitImage`, 3 goldens red-first ×2, GAP-206-03 closed);
-  WO-C health-degraded log → ONE aggregated INFO/tick (≤3 examples; zero → silent) +
-  **pulse CPU cap 0.5→1.0** (compose+helm, evidence memo: 147% O(N²) rebuildSnapshot
-  bursts, unknown P99 under CFS, nproc=6; the O(N²) loop itself = post-GA backlog);
-  WO-D `testutil.RequireClickHouseBin` (CI=true + missing /tmp/clickhouse → Fatalf, 8 sites,
-  negative proofs both ways) + CH CANNOT_PARSE_INPUT ×27 root-caused benign (real finding:
-  initdb.d mount of raw DDL = Code 62 + ZERO tables — anti-pattern warned in compose +
-  monitoring.md).
-- **WO-E promotions NOT DUE** (07-09 < ~07-23); job-level streaks INTACT: web-e2e 7/7 (ci),
-  csp-e2e 7/7 (e2e) → S9 executes the FULL-LIST PUT if streaks hold; CodeQL only w/ operator OK.
-- **WO-F: GA DECLARED (D-065 evidence table).** Remaining gaps ONLY operator (O5 LICENSE,
-  O7 GHCR, U3, U5, O3) or time (promotions; keep-7 cycle-8). CHANGELOG GA section written;
-  `RELEASE-NOTES-DRAFT.md` ready. **Tag v1.0.0-vs-v0.2.0 + push = OPERATOR (O13)** — then
-  release pipeline → cosign verify → prod rollout carrying the tag.
-Gates: gofmt clean; full `-race` 24 pkgs EXIT=0 (73.2%, **floor ratcheted 70→70.2** =
-achieved−3 at GA); helm lint + goldens; actionlint; compose parity from pristine copy;
-ci+e2e+codeql GREEN (first attempt had 0-step queue-CANCELLED jobs at 12:40Z — GitHub
-capacity blip, `gh run rerun --failed` fixed; 0-step cancels across independent workflows =
-infra, not code). Full evidence: D-065.
+**Session 2026-07-09(f) result: D-067 — S9 DONE: dependabot queue CLOSED (20+1 PRs absorbed),
+release dry-run proven, digest prod refresh, ROADMAP-V2 seeded.** 3 workflows (10 triage
+scouts, 10 scratch-checkout pre-verifiers, 3 author+adversarial-verifier fix pairs) + 4
+Monitor-driven serialized merge loops + staging-smoke agent.
+- **Batch 1 actions ×5 merged** (#8 buildx4, #9 cosign-installer 4.1.2, #10 login4, #12 qemu4,
+  #11 setup-go6); **release.yml dry-run GREEN post-merge (run 29028802644)** — pipeline proven.
+- **Batch 2 digests ×5 merged** (alpine/node/golang in pulse.Dockerfile; caddy; clickhouse);
+  staging boot-smoke PASS (pristine `pulse-s9smoke`, healthz ok via caddy TLS); **PROD
+  refreshed:** clickhouse/backup/caddy recreated on the new digests (pulse untouched =
+  v0.2.0); ingest errors confined to the 30s restart window; authed overview real data.
+- **Batch 3 majors: co-upgrade clusters, NOT one-at-a-time** (pre-verify proved each fails
+  alone). Web landed as ONE unit riding #22: vite 8.1.3 + vitest 4.1.10 + coverage-v8 4.1.10
+  + plugin-react 6.0.3 + `vite.config.ts` imports `vitest/config` + explicit react dedupe;
+  #21/#19/#20/#18 auto-closed superseded. Sdk: #17 (+coverage-v8 co-bump pushed to PR) and
+  #16 (+size-limit CLI 12 alignment) merged; #15/#13/#14/#25 merged after dependabot rebases.
+- ⚠ **COVERAGE GATES RE-BASELINED (vitest-4 rolldown instrumentation reads lower on identical
+  code):** web gates 76/72/45 → **59/54/45** (achieved 62.13/57.6/51; guard test updated);
+  sdk gates 62/73/70 → **63/43/67** (achieved 66.06/45.79/70.42 — lines RATCHETED UP).
+  Enforcement PROVEN (99% thresholds hard-fail). Go floor 70.2 untouched. Never compare
+  coverage across instrumentation engines.
+- ⚠ **PR-automation lessons (BINDING):** gh token lacks `workflow` scope → `@dependabot
+  rebase` for workflow-touching PRs; API update-branch corrupts lockfile PRs (EUSAGE desync,
+  PR #15) → `@dependabot rebase` for pristine dependabot PRs; **NEVER `@dependabot rebase` a
+  PR carrying session-pushed commits** (force-push destroys them — API update only); repo has
+  no auto-merge → poll + `gh pr merge --squash`. **CH-startup flake occurrence #1** recorded
+  (`TestQuery_GeoBreakdown_NonEmptyRows`, 60s budget query_integration_test.go:86, PR #8 run
+  29025705314, rerun green) — **2nd occurrence ⇒ bump 60→180s in all 4 harness copies**.
+- WO-A promotions SKIPPED (date gate ≥2026-07-23) → S10 WO-F; WO-D triggers all unfired
+  (U3/O7/O11 re-verified); licensegen `-privkey` formally deferred D-066 → S10 WO-C.
 
-**SAME-DAY CONTINUATION (D-066): the operator answered — ★ v0.2.0 GA SHIPPED ★.**
-Tag v0.2.0 @ `4657512` → release run 29023647495 GREEN (Trivy/SBOM/cosign) → prod rolled
-onto the tag (`pulse v0.2.0`, smoke green, `pre-v0.2.0` rollback tag). **LICENSE =
-PolyForm Noncommercial 1.0.0** (O5 ✅ — G7 FULLY met; SDK stays MIT; product-key minting
-documented in `docs/licensing.md`). O12 secret-scanning ENABLED (agent-run). **O3
-CLOSED-N/A: AMS 3.0.3 webhooks are UNSIGNED** (live-verified, 182 settings, no HMAC field)
-— REST polling stays the AMS ingest; AMS-INTEGRATION §4.5 corrected. U5 CLOSED (headless
-Chromium: both prod URLs 0 console errors). O11 risk-accepted + stale branch deleted.
-O8: #4 closed + dependabot golang-ignore rule; 20 PRs → S9 absorption WO. Full: D-066.
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-10.md` and execute it** (S10:
+enforce_admins revisit, keep-7 cycle-8 verification (date ≥2026-07-16), licensegen
+`-privkey`/`-expires` TDD, O(N²) rebuildSnapshot fix + benchmark, dependabot steady-state
+policy, promotions carry-over if ≥2026-07-23). **Plan of record for post-GA: `ROADMAP-V2.md`.**
 
-**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-09.md` and execute it** (S9:
-promotions if ≥2026-07-23, dependabot absorption ×3 verified batches, ROADMAP-v2 seeding,
-conditional operator triggers U3/O7/O11).
-
-**Standing numbers (2026-07-09 post-S8/D-066):** Go total **73.2%** (floor **70.2**); web
-76/72/45; SDK 62/73/70 (3.52 KB); conformance 51/52 + 1 waived. Prod **`pulse v0.2.0`
-(commit 4657512)**, healthy, smoke-green, honest-QoE + B7 LIVE. Operator queue is down to:
-**O7 GHCR visibility (the ONE remaining click)** + U3 license key (optional feature
-unlock; minting guide `docs/licensing.md`) + optional O11 rotation + O8 majors via S9.
-**Operator-facing checklist w/ click-paths: `agents/handoffs/OPERATOR-TODO.md` — REFRESH IT
-at every session close** (ledger of record stays ROADMAP §5).
+**Standing numbers (2026-07-09 post-S9/D-067):** Go total **73.2%** (floor **70.2**); web
+**62.13/57.6/51** (gates 59/54/45 — vitest-4 re-baseline); sdk **66.06/45.79/70.42** (gates
+63/43/67; 3.52 KB). Prod **`pulse v0.2.0` (commit 4657512) + refreshed caddy/clickhouse/backup
+digests**, healthy, smoke-green. **Dependabot queue: ZERO.** Operator queue: **O7 GHCR
+visibility (the ONE remaining click)** + U3 license key (optional) + O11 rotation (optional) +
+NEW optional `gh auth refresh -s workflow` + standing question: CodeQL as required context
+(yes/no, due ~07-23). **Operator-facing checklist: `agents/handoffs/OPERATOR-TODO.md` —
+REFRESHED at this close** (ledger of record: ROADMAP §5 + ROADMAP-V2 §4).
 
 ---
 

@@ -9,6 +9,8 @@
 > FIRST ("ready as soon as ready with dockerization"); work divided into sessions; **each
 > session's prompt is written BEFORE the session starts, and every session ends by writing the
 > next session's prompt** from this roadmap + what actually happened (§6 protocol).
+>
+> **Post-GA continuation:** `agents/handoffs/ROADMAP-V2.md` — v2 plan seeded at D-066 / SESSION-09 WO-C (2026-07-09).
 
 ---
 

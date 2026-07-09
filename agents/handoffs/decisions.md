@@ -2433,3 +2433,91 @@ actionlint n/a); ci+e2e+codeql green pre-tag; release run green; prod smoke gree
 feature unlock (key still commented; docs/licensing.md explains minting). G1 ✅(−O7) ·
 G2 ✅ (v0.2.0 live) · G3 ✅ (73.2/70.2) · G4 ✅ · G5 ⏳(~07-23) · G6 ✅ · **G7 ✅ FULL** ·
 G8: U5 ✅, O3 N/A, U3 optional.
+
+## D-067 — SESSION-09 executed: dependabot absorption COMPLETE (20+1 PRs), release-pipeline dry-run proof, digest prod refresh, ROADMAP-V2 seeded; promotions date-gated → S10 (2026-07-09)
+
+Orchestration: 3 Workflows (10 light triage scouts batch-1/2; 10 heavy pre-verify agents,
+one scratch checkout + faithful ci.yml gate reproduction per batch-3 PR; 3 author +
+adversarial-verifier pairs for the co-upgrade fixes) + 4 Monitor-driven serialized merge
+loops + staging-smoke agent + ROADMAP-v2 author/verifier pair. All merges gated by required
+PR contexts at up-to-date branch; ORCH pushed carrier commits and merged with owner-authed gh.
+
+**WO-A (CI promotions): SKIPPED — date gate closed** (2026-07-09 < 2026-07-23). Streaks not
+re-measured (not due). Carried to S10 WO-F verbatim (SESSION-10.md).
+
+**WO-D conditional triggers: ALL UNFIRED (verified, recorded):** U3 — `deploy/.env:32` still
+`# PULSE_LICENSE_KEY=`; O7 — GHCR anon manifest pull HTTP 403 (~14:25Z); O11 — SLACK_WEBHOOK_URL
+updated 2026-07-09T00:53:48Z which PREDATES the D-066 risk-acceptance ⇒ no rotation happened.
+
+**WO-B — dependabot absorption: the queue is CLOSED (was 20 open + 1 trailing).**
+- **Batch 1, actions ×5 (#8 buildx→4, #9 cosign-installer 3.6.0→4.1.2, #10 login→4,
+  #12 qemu→4, #11 setup-go→6): MERGED.** Triage proved no breaking change touches our usage
+  (cosign-installer v4 installs cosign 3.x, `cosign sign --yes <digest>` unchanged; explicit
+  go-version pins neutralize setup-go v6 toolchain change; Node-24 runner requirement satisfied
+  by hosted runners). **Release pipeline PROOF after merge: `gh workflow run release.yml -f
+  version=0.0.0-dry` → run 29028802644 GREEN** (CI-gate → build → Trivy; no push/sign).
+- **Batch 2, digests ×5 (#2 alpine, #23 node, #24 golang → pulse.Dockerfile; #5 caddy →
+  hardened+csp-e2e; #6 clickhouse → base+backup): MERGED** + staging boot-smoke PASS on
+  pristine-copy stack `pulse-s9smoke` (base+hardened, `tls internal`; healthz all-ok both
+  direct and via caddy; webhook fail-closed confirmed; full `down -v` teardown). **PROD
+  REFRESH executed:** pulled + recreated ONLY clickhouse/backup/caddy (pulse untouched =
+  v0.2.0); ingest errors confined to the 16:18:16–16:18:46Z restart window then 0 ERROR/60s;
+  healthz ok; pulse.beyondkaira.com 200; authed `/live/overview` real data (1 publisher).
+- **Batch 3, majors: pre-verify exposed two co-upgrade clusters that CANNOT merge one-PR-at-
+  a-time** (the SESSION-09 assumption was wrong; evidence: wf_6ac69553 journal):
+  - **web cluster** — vitest 4 crashes with coverage-v8 3 (`fetchCache` TypeError); coverage-v8
+    4 fails on vitest 3 (no `BaseCoverageProvider` export); plugin-react 6 requires vite ^8
+    (imports `vite/internal`); vite 8 drops `test` from UserConfig types. Landed as ONE
+    verified unit riding **#22 (carrier)**: vite 8.1.3 + vitest 4.1.10 + coverage-v8 4.1.10 +
+    plugin-react 6.0.3 + `vite.config.ts` import from `vitest/config` + explicit
+    `resolve.dedupe [react,react-dom]` (plugin-react ≥5 dropped auto-dedupe) + coverage.exclude
+    `**/*.md` (rolldown parses everything matched by include) + AlertsPage test
+    `userEvent.setup({delay:null})` (rolldown slower; 5s timeout boundary). Author + independent
+    adversarial verifier both green (238/238 tests). **#21/#19/#20 auto-closed** superseded;
+    **#18 auto-closed** "updatable in another way" — the lockfile regen already carried
+    react-virtual 3.14.2 / react-router-dom 7.17.0 / recharts 3.8.1 / msw 2.14.6.
+  - **sdk** — #17 (vitest 4) required coverage-v8 ^4.1.10 co-bump (exact peer pin → ERESOLVE);
+    pushed to the PR + thresholds re-baselined; MERGED. #16 + size-limit CLI ^12.1.0 alignment
+    commit (kills the dual 11-CLI/12-preset install; peer satisfied); MERGED, gate MEASURES
+    3.52 kB. #15 eslint 10 and #13 ts-eslint 8.63.0 MERGED after `@dependabot rebase`
+    regeneration; #14 go minors (clickhouse-go 2.47.0, chi 5.3.1, modernc.org/sqlite 1.53.0)
+    MERGED — pre-verified by full docker `-race` repo-root run (0 FAIL / 0 unexpected SKIP,
+    floor 70.2 held).
+  - **#25** (web minor group ×7 — dependabot's regenerated successor to #18, filed 16:19Z):
+    absorbed same-session by the same loop.
+- **⚠ COVERAGE GATES RE-BASELINED (binding):** vitest 4's rolldown/v8 instrumentation reads
+  systematically lower on identical code. Web gates 76/72/45 → **59/54/45** (achieved
+  62.13/57.6/51; guard test `web/src/test/coverage-gate.test.ts` pins gates + exclude list).
+  SDK gates 62/73/70 → **63/43/67** (achieved 66.06/45.79/70.42 — lines RATCHETED UP 62→63;
+  branch drop = v8 branch-granularity change, not test regression). Enforcement PROVEN both
+  packages (99% thresholds → hard fail). Go floor 70.2 untouched. Do NOT compare pre/post
+  numbers across instrumentation engines.
+
+**WO-C: ROADMAP-V2.md seeded** (357 lines: §1 v0.2.0 state, §2 thirteen backlog items,
+§3 S10–S13, §4 D-V2 operator ledger, §5 ratchet carry-forward) + 2-line ROADMAP.md pointer.
+Adversarially verified: 13/13 spec items, all facts match D-065/D-066, rebuildSnapshot symbol
+confirmed via codegraph (aggregator.go:459). Verifier's single "scope defect" was REFUTED
+(it diffed HEAD~1 and blamed D-066's own hunks; true working-tree diff = exactly +2 lines).
+**Traceability:** D-066's "licensegen -privkey extension = S9 WO" is formally DEFERRED to
+S10 WO-C (ROADMAP-V2 §2.3; SESSION-10.md).
+
+**Process lessons (S10 must follow — also in SESSION-10.md preconditions):**
+1. gh token LACKS `workflow` scope → update-branch API 403s on PRs touching
+   `.github/workflows/*` → use `@dependabot rebase`. Optional operator fix:
+   `gh auth refresh -s workflow`.
+2. API update-branch textually merges package-lock.json → EUSAGE desync (PR #15: "Missing:
+   esbuild@0.28.1 from lock file"). Pristine dependabot PRs: `@dependabot rebase` (regenerates
+   the lock). Carrier PRs with session-pushed commits: API update ONLY — dependabot rebase
+   force-pushes and would destroy the commits.
+3. Repo has NO auto-merge → poll `gh pr checks --required` + `gh pr merge --squash` loops.
+4. **CH-startup flake occurrence #1:** `TestQuery_GeoBreakdown_NonEmptyRows` "timeout waiting
+   for ClickHouse" (60s budget, query_integration_test.go:86) on PR #8 run 29025705314;
+   rerun green; same 60s pattern in api/vd24, api/vd19, reports/accounting harnesses.
+   **Second occurrence ⇒ bump 60→180s in all four copies, one TDD-gated commit (D-039
+   precedent) — do not just rerun a third time.**
+
+**Standing numbers (2026-07-09 post-S9):** Go total 73.2% / floor 70.2 (unchanged); web
+62.13/57.6/51 (gates 59/54/45); sdk 66.06/45.79/70.42 (gates 63/43/67), 3.52 KB; prod
+**pulse v0.2.0 (4657512)** + D-067-refreshed caddy/clickhouse/backup digests, healthy,
+smoke-green. **Ledger: O8 ✅ CLOSED** (queue zero; steady-state policy = S10 WO-E); O7 = the
+one click; U3 optional; O11 optional; NEW optional: gh `workflow` scope refresh.
