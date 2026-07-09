@@ -46,16 +46,25 @@ ci+e2e+codeql GREEN (first attempt had 0-step queue-CANCELLED jobs at 12:40Z —
 capacity blip, `gh run rerun --failed` fixed; 0-step cancels across independent workflows =
 infra, not code). Full evidence: D-065.
 
-**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-09.md` and execute it** (S9:
-GA-closeout — promotions if ≥2026-07-23 + operator-unblocked items as they land + ROADMAP-v2
-seeding; the GA tag release when the operator says the word).
+**SAME-DAY CONTINUATION (D-066): the operator answered — ★ v0.2.0 GA SHIPPED ★.**
+Tag v0.2.0 @ `4657512` → release run 29023647495 GREEN (Trivy/SBOM/cosign) → prod rolled
+onto the tag (`pulse v0.2.0`, smoke green, `pre-v0.2.0` rollback tag). **LICENSE =
+PolyForm Noncommercial 1.0.0** (O5 ✅ — G7 FULLY met; SDK stays MIT; product-key minting
+documented in `docs/licensing.md`). O12 secret-scanning ENABLED (agent-run). **O3
+CLOSED-N/A: AMS 3.0.3 webhooks are UNSIGNED** (live-verified, 182 settings, no HMAC field)
+— REST polling stays the AMS ingest; AMS-INTEGRATION §4.5 corrected. U5 CLOSED (headless
+Chromium: both prod URLs 0 console errors). O11 risk-accepted + stale branch deleted.
+O8: #4 closed + dependabot golang-ignore rule; 20 PRs → S9 absorption WO. Full: D-066.
 
-**Standing numbers (2026-07-09 post-S8):** Go total **73.2%** (floor **70.2**); web 76/72/45;
-SDK 62/73/70 (3.52 KB); conformance 51/52 + 1 waived. Prod **`v0.1.0-50-g5d77a05`** = current
-main, healthy, smoke-green, honest-QoE + B7 LIVE. Operator queue: **O13 NEW — GA tag choice
-(v1.0.0 vs v0.2.0), the headline decision**, U3 license, U5 browser/CSP, O3 AMS webhook
-config, **O5 LICENSE (last G7 gap)**, O7 GHCR visibility, O8 21 dependabot PRs, O11 Slack
-rotation + other-session reset, O12 secret-scanning (all re-verified still open at S8 close).
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-09.md` and execute it** (S9:
+promotions if ≥2026-07-23, dependabot absorption ×3 verified batches, ROADMAP-v2 seeding,
+conditional operator triggers U3/O7/O11).
+
+**Standing numbers (2026-07-09 post-S8/D-066):** Go total **73.2%** (floor **70.2**); web
+76/72/45; SDK 62/73/70 (3.52 KB); conformance 51/52 + 1 waived. Prod **`pulse v0.2.0`
+(commit 4657512)**, healthy, smoke-green, honest-QoE + B7 LIVE. Operator queue is down to:
+**O7 GHCR visibility (the ONE remaining click)** + U3 license key (optional feature
+unlock; minting guide `docs/licensing.md`) + optional O11 rotation + O8 majors via S9.
 **Operator-facing checklist w/ click-paths: `agents/handoffs/OPERATOR-TODO.md` — REFRESH IT
 at every session close** (ledger of record stays ROADMAP §5).
 

@@ -226,6 +226,11 @@ due ~2026-07-23 → S9). Floor ratcheted 70→**70.2** (achieved−3). Remaining
 operator (O5/O7/U3/U5/O3) or time (promotions, keep-7 cycle-8). CHANGELOG GA section +
 `RELEASE-NOTES-DRAFT.md` prepared; **tag choice v1.0.0-vs-v0.2.0 + push = OPERATOR**.
 Evidence: D-065. Commits `c6ba362`…`5d77a05` + docs batch.
+**Same-day addendum (D-066): v0.2.0 SHIPPED.** Operator chose the tag + a noncommercial
+license (PolyForm NC 1.0.0 — G7 FULL) and delegated the O-item decisions: O12 enabled,
+O3 closed-N/A (AMS 3.0.3 hooks unsigned — live-verified), U5 closed (headless-Chromium 0
+errors), O11 risk-accepted, O8 → #4 closed + S9 absorption WO. Release run 29023647495
+green; prod = `pulse v0.2.0`. Remaining: O7 click, U3 optional, S9 promotions/dependabot.
 
 ### S8 (original plan, kept for provenance) — prompt written by S7
 **Goal:** land WO-A prod rollout (G2), the S/XS punch items, date-gated promotions; if every
@@ -273,18 +278,19 @@ remaining gap is operator/time-owned → declare GA (tag = operator call).
 | # | Action | Status |
 |---|---|---|
 | O1 (=U3) | Activate a Pro+ Pulse license in prod (`PULSE_LICENSE_KEY`) — until then QoE/beacon data does not flow in prod (CI covers it with the mock license) | OPEN |
-| O2 (=U5) | Open `https://beyondkaira.com` + `https://pulse.beyondkaira.com`, confirm SPA renders, zero CSP console errors (S4 automates CSP in CI, but one human check of prod is still wanted) | OPEN |
-| O3 | Configure the AMS console to POST lifecycle webhooks to `https://beyondkaira.com/webhook/ams` with the HMAC secret from `deploy/.env` (Pulse side live since D-054) | OPEN |
-| O4 | After O3: confirm the `webhook: invalid signature` WARN does not recur (else the AMS-side secret is wrong) | OPEN |
-| O5 | Choose the project LICENSE (legal decision; agent drafts once chosen) — **now the ONLY G7 gap** (SECURITY.md/CHANGELOG/runbooks shipped by S6, D-063) | OPEN |
+| O2 (=U5) | Browser/CSP check of prod | ✅ CLOSED (D-066): real headless-Chromium from the VPS — both prod URLs HTTP 200, SPA rendered, 0 console errors / 0 CSP violations. Optional human glance remains welcome. |
+| O3 | ~~Configure the AMS console to POST lifecycle webhooks~~ | ✅ CLOSED-N/A (D-066): AMS 3.0.3 has NO webhook-signing fields (verified live, 182 settings) — unsigned hooks would only 401 vs Pulse's fail-closed HMAC. REST polling stays the supported ingest (≤10 s budget met). AMS-INTEGRATION §4.5 corrected. |
+| O4 | ~~After O3: invalid-signature WARN recheck~~ | MOOT (O3 closed-N/A, D-066) |
+| O5 | Choose the project LICENSE | ✅ DONE (D-066): operator chose noncommercial → **PolyForm NC 1.0.0** at root LICENSE (SDK stays MIT); README/CHANGELOG/docs/licensing.md updated. **G7 fully met.** |
 | O6 | (was U4) Branch protection + `v*` tag | ✅ DONE by S1 (D-058): protection live (API 200), v0.1.0 released |
 | O7 | **Make `ghcr.io/aytekxr/ams-pulse` public** (package settings → Change visibility) or `gh auth refresh -s read:packages` — until then nobody (incl. the agent) can pull v0.1.0 or run `cosign verify` (commands in release.yml header); this is the last G1 bit | OPEN (re-verified still blocked 2026-07-09, D-063: anonymous pull token DENIED) |
-| O8 | Review the dependabot PRs — **21 open** (majors: vite 8, vitest 4, plugin-react 6, eslint 10, size-limit 12; grouped minor-and-patch for web, sdk AND server gomod; caddy digest bump was CI+e2e green — mergeable). Protection requires 1 approval — dependabot PRs need owner review; S5 can absorb the web-tooling majors if the operator asks | OPEN (unchanged, re-checked D-061) |
+| O8 | Dependabot PRs | DELEGATED (D-066): operator said "decide for me" → #4 (golang 1.26) CLOSED w/ dependabot ignore rule (D-032 pin); remaining **20** deferred to the S9 absorption WO with real verification (merging blind pre-release risked the pipeline — actions bumps touch release.yml, untestable pre-tag). |
 | O9 | ~~CodeQL blocked~~ ✅ CLOSED by S5 (D-062): operator made the repo PUBLIC → `codeql.yml` live (go/autobuild + js-ts/none). NOT a required context yet — promote after a bake period (S6/S7 call). NOTE: repo-level secret-scanning/push-protection still disabled — consider enabling now that the repo is public | ✅ DONE (D-062) |
 | O10 | ~~Prod rollout DUE~~ ✅ CLOSED by S5 WO-1 (D-062): prod runs `v0.1.0-25-gbc15d43`; rule→channel delivery live-proven (email-channel smoke, firing row ≤2s + mail received) | ✅ DONE (D-062) |
-| O12 | **Enable repo secret-scanning + push-protection** (Settings → Code security) — the repo is PUBLIC and both are OFF (`gh api repos/{owner}/{repo} --jq .security_and_analysis`, D-064); one click, prevents the next O11-class incident at the platform level | OPEN (NEW, D-064; re-verified still off D-065) |
-| **O13** | **GA release tag: pick `v1.0.0` or `v0.2.0` and say the word** — GA is DECLARED (D-065); CHANGELOG section + `RELEASE-NOTES-DRAFT.md` are ready; the tag push triggers the S1 release pipeline, then a session rolls prod onto the tag | **OPEN (NEW, D-065 — the headline decision)** |
-| O11 | **Rotate the Slack CI-notification webhook** (it sat hardcoded in an unpushed commit + session transcripts — never public, but hygiene demands rotation; then `gh secret set SLACK_WEBHOOK_URL` with the new value) AND reset the concurrent session's local main onto origin (`git fetch && git reset --hard origin/main` — its `ee4fc00` content is contained in `bc15d43`) | OPEN (NEW, D-062) |
+| O12 | Enable repo secret-scanning + push-protection | ✅ DONE (D-066): agent-enabled via `gh api PATCH` on operator instruction; both `enabled`, API-verified. |
+| O13 | GA release tag | ✅ DONE (D-066): operator chose **v0.2.0**; tag pushed at `4657512`, release run 29023647495; prod rolled onto the tag. |
+| O14 | **Make GHCR package public** = O7 (renumber-free alias) — THE one remaining click | see O7 |
+| O11 | Slack webhook rotation + stale-branch reset | RISK-ACCEPTED + half-closed (D-066): exposure was never public (unpushed commit + local transcripts) → rotation is now optional operator policy (2-min task: regenerate webhook → `gh secret set SLACK_WEBHOOK_URL`); the stale local `backup/slack-notify-original` branch was DELETED by the agent. |
 
 ## 6. Session protocol (BINDING — the "prompts" contract)
 
