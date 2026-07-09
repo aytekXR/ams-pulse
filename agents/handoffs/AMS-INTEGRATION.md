@@ -342,16 +342,24 @@ needed to pick up new `handle` blocks on the same hostname):
 sg docker -c "docker compose $DC restart caddy"
 ```
 
-### 4.5 Configure AMS to POST webhooks
+### 4.5 Configure a sender to POST webhooks
 
-Two routes are available (both listen on the same `PULSE_WEBHOOK_ADDR` port):
+> **⚠️ AMS 3.0.3 REALITY CHECK (D-066, verified against the live console REST):**
+> AMS application settings expose `listenerHookURL` (plus retry/content-type
+> knobs) but **NO field for an HMAC secret or a custom signature header** — AMS
+> lifecycle webhooks are UNSIGNED. Pulse's webhook listener is fail-closed on
+> `X-Ams-Signature` HMAC by design, so pointing `listenerHookURL` at Pulse would
+> yield only 401s and WARN noise. **Do not configure it.** The REST poller (5 s
+> interval) is the supported AMS ingest and already meets the ≤10 s visibility
+> budget. The webhook path is for HMAC-capable senders (custom middleware, a
+> signing proxy, or a future AMS version that signs hooks).
 
 **Shared route (legacy, all sources):**
 
-In AMS Management Console > Settings > Webhooks:
+For any sender that CAN sign requests:
 - **Webhook URL:** `https://your-domain/webhook/ams`
 - **Webhook secret:** the value of `PULSE_WEBHOOK_SECRET`
-- **Header name:** `X-Ams-Signature`
+- **Header name:** `X-Ams-Signature` (value `sha256=<hex(HMAC-SHA256(body, secret))>`)
 
 **Per-source route (B7, multi-source deployments):**
 

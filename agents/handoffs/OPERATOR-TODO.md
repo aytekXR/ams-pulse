@@ -1,83 +1,49 @@
-# Operator TODO — the items only YOU can do (updated by SESSION-07, D-064, 2026-07-09)
+# Operator TODO — the items only YOU can do (updated by SESSION-08 close, D-066, 2026-07-09)
 
-> **Audience: the human operator.** Work these in parallel while an agent session runs — none
-> of them conflict with agent work. The ledger of record is `ROADMAP.md` §5; this file is the
-> actionable view and is refreshed at every session close. When you finish an item, just tell
-> the agent (or do nothing — every session start re-verifies each item automatically).
+> **Audience: the human operator.** The ledger of record is `ROADMAP.md` §5; this file is the
+> actionable view, refreshed at every session close. When you finish an item, just tell the
+> agent (or do nothing — every session start re-verifies each item automatically).
 > **Never commit secret VALUES anywhere; `deploy/.env` and `oguz-testing.md` are gitignored.**
 
-## 🔴 High priority — these gate the GA declaration
+## ✅ What your 2026-07-09 decisions triggered (all executed same-session)
 
-### O5 — Choose the project LICENSE  *(the LAST G7 gap; legal decision)*
-- Decide the license for this repo. Considerations: the SDK is already MIT
-  (`sdk/beacon-js/LICENSE`); the server has commercial tiers (free/pro/business/enterprise),
-  so candidates people commonly pick here: Apache-2.0 (permissive), AGPL-3.0 (copyleft,
-  protects the SaaS angle), BUSL-1.1 (source-available with commercial restriction).
-- **Your action:** pick one and tell the agent — it drafts the LICENSE file same-session.
+| Decision | Result |
+|---|---|
+| **O13 tag = v0.2.0** | Tag pushed; release pipeline run `29023647495` (CI-gated, Trivy, SBOM, cosign) — prod rolled onto the tag after it went green. GA is shipped. |
+| **O5 license = noncommercial** | **PolyForm Noncommercial 1.0.0** at root `LICENSE` (SDK stays MIT); README + CHANGELOG + `docs/licensing.md` updated. Rationale: purpose-built noncommercial code license; you retain full commercial/dual-licensing rights — matches the paid-tier model. |
+| **O12 secret-scanning** | ENABLED (+ push-protection) via API, verified. |
+| **O3 AMS webhook** | **Closed as not-applicable:** live inspection of AMS 3.0.3 settings (182 fields) shows NO HMAC/signature-header support — unsigned hooks would only 401 against Pulse's fail-closed listener. REST polling (5 s) remains the supported ingest and meets the ≤10 s budget. `AMS-INTEGRATION.md` §4.5 corrected. O4 is moot. |
+| **U5 browser/CSP** | Closed via real headless-Chromium check from the VPS: both `beyondkaira.com` and `pulse.beyondkaira.com` → HTTP 200, SPA rendered, **0 console errors / 0 CSP violations**. (Optional: one human glance whenever convenient.) |
+| **O11 Slack webhook** | Risk ACCEPTED + recorded (exposure was never public: unpushed commit + local transcripts). Stale local branch `backup/slack-notify-original` deleted. Rotate later only if your policy demands — 2-min task, instructions in ROADMAP §5. |
+| **O8 dependabot (21 PRs)** | Verdict: PR **#4 CLOSED** (golang 1.26 — violates the D-032 pin; dependabot now ignores golang version bumps). The remaining 20 are deferred to a SESSION-09 absorption work order with real verification — merging blind before the release would have risked the pipeline. |
 
-### O12 — Enable secret-scanning + push-protection  *(NEW, D-064; repo is PUBLIC, both are OFF)*
-- Click path: GitHub → `aytekXR/ams-pulse` → Settings → Advanced Security →
-  enable **Secret scanning**, then **Push protection**.
-- Or paste this in a session prompt (runs as you): `! gh api -X PATCH repos/aytekXR/ams-pulse -f 'security_and_analysis[secret_scanning][status]=enabled' -f 'security_and_analysis[secret_scanning_push_protection][status]=enabled'`
-- Why: platform-level guard against the next O11-class incident (a live webhook URL once sat
-  in a local commit on this public repo).
+## 🔴 The ONE remaining click
 
-### U3 — Activate a Pro+ Pulse license in prod
-- Obtain the license key (this is a **Pulse** license, separate from the AMS one).
-- Add to `deploy/.env` on the VPS: `PULSE_LICENSE_KEY=<key>` (never commit it).
-- Timing tip: SESSION-08 starts with a prod rollout (WO-A) — if the key is in `deploy/.env`
-  before/while that runs, the restart picks it up for free and the session can live-verify the
-  QoE/beacon chain immediately after.
-- Why: beacon/QoE ingest is 403 `LICENSE_REQUIRED` on Free — no viewer QoE data flows in prod
-  until this lands; rebuffer/error-rate alerts have nothing to read.
-
-## 🟡 Medium priority
-
-### O7 — Make the GHCR package public  *(last G1 bit)*
+### O7 — Make the GHCR package public
 - Click path: github.com/aytekXR → Packages → `ams-pulse` → Package settings →
   Danger zone → **Change visibility → Public**.
-- Verify (agent re-checks too): `docker pull ghcr.io/aytekxr/ams-pulse:v0.1.0` from any
-  unauthenticated machine, and `cosign verify` per the header comment in
-  `.github/workflows/release.yml`.
+- There is NO API for this (verified — visibility change is UI-only), so it stays with you.
+- Until then: nobody can `docker pull ghcr.io/aytekxr/ams-pulse:v0.2.0` anonymously and
+  `cosign verify` fails for outsiders. Everything else about the release is done.
 
-### O3 — Point the AMS console at the Pulse webhook
-- AMS console → each application (e.g. LiveApp) → webhook/listener settings → URL
-  `https://beyondkaira.com/webhook/ams`, HMAC secret = `PULSE_WEBHOOK_SECRET` from
-  `deploy/.env`.
-- Optional (B7, per-source isolation): use `https://beyondkaira.com/webhook/ams/<source_name>`
-  with that source's own secret — full instructions in `AMS-INTEGRATION.md` §4.5.
-- The Pulse side has been live since D-054; 24h of Caddy logs show **zero** webhook traffic,
-  so nothing is configured on the AMS side yet. After you set it: the agent re-checks that the
-  old `webhook: invalid signature` WARN does not recur (O4).
+## 🟡 When you're ready (feature unlock, not a blocker)
 
-### O11 — Rotate the Slack CI webhook + reset the other session's clone
-- Rotate: api.slack.com/apps → your app → Incoming Webhooks → regenerate the webhook, then:
-  `gh secret set SLACK_WEBHOOK_URL` (paste the new URL when prompted).
-- In the OTHER Claude session's working copy (if it still exists):
-  `git fetch && git reset --hard origin/main` (its unpushed `ee4fc00` content is already
-  contained in `bc15d43`; the local branch `backup/slack-notify-original` must never be pushed).
+### U3 — Activate a Pro+ Pulse license in prod
+- `deploy/.env` line 32 has the commented placeholder — set `PULSE_LICENSE_KEY=<key>`
+  and tell a session; it restarts pulse and live-verifies the beacon → QoE chain.
+- **Minting your own keys:** the vendor-key ceremony + minting + distribution procedure is
+  now documented in `docs/licensing.md` (you generate an ed25519 keypair offline; keys are
+  signed claims; deployments carry `PULSE_LICENSE_PUBKEY`).
 
-## 🟢 Low priority
+## 🟢 Optional / your policy call
 
-### U5 — Browser + CSP check of prod
-- Open `https://beyondkaira.com` AND `https://pulse.beyondkaira.com` in a real browser,
-  open DevTools (F12) → Console, confirm the SPA renders on both with **zero CSP violation
-  messages**. Report anything red — a fix is usually same-day.
-
-### O8 — Review the dependabot PRs (21 open)
-- `gh pr list --author app/dependabot` — branch protection requires 1 approving review, which
-  only you can give. The caddy digest bump was already CI+e2e green (mergeable as-is). The
-  major bumps (vite 8, vitest 4, eslint 10, size-limit 12, plugin-react 6) are riskier — you
-  can ask a session to absorb/verify them as a work order instead of merging blind.
-
-## ⏭ Decision coming up (SESSION-08 will ask — you can pre-decide)
-
-- **GA release tag: `v1.0.0` or `v0.2.0`?** SESSION-08 prepares the release material and will
-  NOT push any tag without your explicit word. The tag triggers the full release pipeline
-  (CI-gated, Trivy, SBOM, cosign) and a prod rollout carrying it.
+- **O11 rotation** (if policy demands): api.slack.com/apps → regenerate webhook →
+  `gh secret set SLACK_WEBHOOK_URL`.
+- **O8 majors**: a future session absorbs vite 8 / vitest 4 / eslint 10 / size-limit 12 /
+  plugin-react 6 with full verification (SESSION-09 WO).
 
 ---
-*Status snapshot (2026-07-09, post-D-064): G1 ✅ except O7 · G2 ❌ (prod rollout = agent's S8
-WO-A, not yours) · G3–G4 ✅ · G5 time-gated (~2026-07-23) · G6 ✅ · G7 ✅ except O5 · G8 = U3 +
-U5 + O3 above. Once the agent lands S8 WO-A and the promotion clocks expire, YOUR list here is
-exactly what separates the project from GA.*
+*Status snapshot (2026-07-09, post-D-066): **GA SHIPPED as v0.2.0.** G1 ✅ except O7 ·
+G2 ✅ · G3 ✅ (73.2%, floor 70.2) · G4 ✅ · G5 promotions land ~2026-07-23 (agent-owned) ·
+G6 ✅ · G7 ✅ **fully** (LICENSE landed) · G8: U3 optional-unlock, U5 ✅, O3 N/A.
+Your list is down to: O7 (one click) + U3 (when you want QoE data flowing).*

@@ -46,11 +46,12 @@ sg docker -c "docker tag pulse-prod-pulse:latest pulse-prod-pulse:pre-d063"
 sg docker -c "docker images pulse-prod-pulse"   # confirm the new tag
 ```
 
-**Tags that exist today and the commits they map to:**
+**Tags that exist today and the commits they map to (refreshed D-065):**
 
 | Tag | `pulse version` output | Built |
 |---|---|---|
-| `latest` | `pulse v0.1.0-25-gbc15d43 (commit bc15d43, built 2026-07-09T00:56:07Z)` | 2026-07-09 |
+| `latest` | `pulse v0.1.0-50-g5d77a05 (commit 5d77a05, built 2026-07-09T13:23:47Z)` | 2026-07-09 |
+| `pre-d064` | `pulse v0.1.0-25-gbc15d43 (commit bc15d43, built 2026-07-09T00:56:07Z)` | 2026-07-09 |
 | `pre-d061` | `pulse 1a701d6 (commit 1a701d6, built 2026-07-08T01:51:17Z)` | 2026-07-08 |
 | `pre-d058` | `pulse dev (commit unknown, built unknown)` | 2026-07-07 |
 | `prev` | `pulse dev (commit unknown, built unknown)` | 2026-06-15 |
@@ -127,8 +128,10 @@ curl -sf -X POST \
   -d "${BODY}"
 # Expected HTTP 200
 
-# Resource limits (inspect, not trust compose YAML):
-sg docker -c "docker inspect pulse-prod-pulse \
+# Resource limits (inspect, not trust compose YAML).
+# NOTE: the CONTAINER is pulse-prod-pulse-1 (compose v2 naming); pulse-prod-pulse
+# is the IMAGE name — docker inspect on it returns the image, not the limits.
+sg docker -c "docker inspect pulse-prod-pulse-1 \
   --format 'memory={{.HostConfig.Memory}} cpus={{.HostConfig.NanoCpus}}'"
 # Expected: memory=536870912 cpus=1000000000  (cpu cap 0.5 → 1.0 since D-065)
 
@@ -167,6 +170,21 @@ curl -sf --max-time 10 \
 ```
 
 ---
+
+## Verifying a meta-store schema upgrade (SQLite WAL gotcha)
+
+`applySchemaUpgrades` runs at every `pulse serve` boot (additive `ALTER TABLE`s).
+To verify a column landed, do NOT inspect a copy of `pulse_meta.db` alone — the
+ALTER may still sit un-checkpointed in the WAL and the bare file shows the OLD
+schema (observed D-065). Copy all three files, then inspect:
+
+```sh
+for f in pulse_meta.db pulse_meta.db-wal pulse_meta.db-shm; do
+  sg docker -c "docker cp pulse-prod-pulse-1:/var/lib/pulse/$f /tmp/check-$f"
+done
+python3 -c "import sqlite3; print([r[1] for r in sqlite3.connect('/tmp/check-pulse_meta.db').execute('PRAGMA table_info(ams_sources)')])"
+rm -f /tmp/check-pulse_meta.db*
+```
 
 ## ClickHouse DDL stance
 
