@@ -97,7 +97,9 @@ describe("AlertsPage (msw)", () => {
   });
 
   it("POSTs to /alerts/rules and receives the created rule on form submit", async () => {
-    const user = userEvent.setup();
+    // delay: null removes per-keystroke artificial delay (vitest 4 / rolldown runs
+    // noticeably slower than vitest 3 / esbuild; without this the 5 s timeout fires).
+    const user = userEvent.setup({ delay: null });
     let capturedBody: unknown;
 
     // Override the default POST handler to capture the request body.
