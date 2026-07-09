@@ -8,6 +8,8 @@
 #   - DNS A record for $PULSE_DOMAIN → 161.97.172.146 (propagated).
 #   - deploy/.env has PULSE_DOMAIN, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD,
 #     PULSE_SECRET_KEY (copy from deploy/.env.example).
+#   - Optional: set AMS_UPSTREAM in deploy/.env to override the Caddy upstream
+#     for ams.{PULSE_DOMAIN} (default: 161.97.172.146:5080).
 #   - Host :80 and :443 free (stop the demo: `docker compose -p pulse down`).
 #
 # Bring up (mock AMS):
@@ -30,6 +32,7 @@ services:
       - "0.0.0.0:443:443"   # public HTTPS
     environment:
       PULSE_DOMAIN: "${PULSE_DOMAIN:?set PULSE_DOMAIN to your real domain, e.g. beyondkaira.com}"
+      AMS_UPSTREAM: "${AMS_UPSTREAM:-161.97.172.146:5080}"
     volumes: !override
       - ./config/Caddyfile.prod:/etc/caddy/Caddyfile:ro
       - caddy_data:/data       # persists the issued Let's Encrypt certs across restarts
