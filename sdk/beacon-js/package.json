@@ -27,7 +27,7 @@
     "@typescript-eslint/parser": "^8.61.0",
     "@vitest/coverage-v8": "^4.1.10",
     "ajv": "^8.20.0",
-    "eslint": "^9.28.0",
+    "eslint": "^10.6.0",
     "jsdom": "^29.1.1",
     "size-limit": "^12.1.0",
     "tsup": "^8.5.0",
