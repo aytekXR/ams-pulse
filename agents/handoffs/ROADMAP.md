@@ -138,8 +138,14 @@ ci.yml server+docker-build steps reproduced locally; CI run 28922883994 green. C
 Bonus: pre-existing D-042-class flake `TestAlertHistory_PruneTimingAt2000` exposed by the
 faithful CI repro and fixed (derived insert-baseline budget, load-immune).
 
-### S4 — E2E phase 2 + CI hardening — prompt written by S3
-**Goal:** the rest of G5; CI catches everything it can.
+### S4 — E2E phase 2 + CI hardening — ✅ DONE (D-061, 2026-07-09)
+**Result:** items 1-5 done (csp-e2e job + CSP spec un-skipped → A7 CI half closed; A4
+delivery_failure e2e — which EXPOSED+FIXED the P0 registry gap: rule→channel delivery never
+worked in prod paths; e2e on main pushes + node 22 (promotion documented, clock ends
+~2026-07-21); VD-04 measured+CLOSED 668/459 ms @ 500 streams; fixture-replay suite live).
+Item 6 CodeQL = BLOCKED → operator item O9 (private repo, no GHAS). Floor 66→70.
+⚠️ Prod rollout carrying the registry fix is DUE → S5 WO-1.
+**Goal (original):** the rest of G5; CI catches everything it can.
 1. Caddy-fronted Playwright job: full compose incl. caddy in CI → CSP spec un-skipped, header +
    zero-console-violation assert (closes A7).
 2. delivery_failure e2e (webhook channel at a dead URL → history row; E2E-TEST-PLAN phase 2).
@@ -200,7 +206,7 @@ faithful CI repro and fixed (derived insert-baseline budget, load-immune).
 | 2026-07-08 (after S1) | 59.4% | 58.0 | unchanged | infra session; −0.1 = 4 uncovered serve.go wiring lines (S2 covers) |
 | 2026-07-08 (after S2) | **69.7%** | **62.0** | unchanged | D-059; S2 target ≥64 beaten; G3's ≥70 nearly met already |
 | 2026-07-08 (after S3) | **73.2%** | **66.0** | gates **76/72/45** + guard test | D-060; G4 met 51/52+1 waived; sdk gated 62/73/70; G3's ≥70 EXCEEDED |
-| after S4 (target) | ≥73% (hold) | 70.0 | hold | ratchet floor 66→70 if total holds ≥73 |
+| 2026-07-09 (after S4) | **73.3%** | **70.0** | hold (76/72/45) | D-061; ratchet done; alert 73.3 (new sync source), api 75.9, collector 66.5 |
 | GA (G3) | ≥70% ✅ (73.2) | ≥68.0 | ratchet to achieved−3 | coverage half of G3 already met; floor ratchet remains |
 
 ## 5. Operator ledger (surface EVERY session — agent cannot do these)
@@ -214,7 +220,9 @@ faithful CI repro and fixed (derived insert-baseline budget, load-immune).
 | O5 | Choose the project LICENSE (legal decision; agent drafts once chosen) | OPEN |
 | O6 | (was U4) Branch protection + `v*` tag | ✅ DONE by S1 (D-058): protection live (API 200), v0.1.0 released |
 | O7 | **Make `ghcr.io/aytekxr/ams-pulse` public** (package settings → Change visibility) or `gh auth refresh -s read:packages` — until then nobody (incl. the agent) can pull v0.1.0 or run `cosign verify` (commands in release.yml header); this is the last G1 bit | OPEN (re-verified still blocked 2026-07-08(d), D-060) |
-| O8 | Review the dependabot PRs — **21 open** (majors: vite 8, vitest 4, plugin-react 6, eslint 10, size-limit 12; grouped minor-and-patch for web, sdk AND server gomod; caddy digest bump was CI+e2e green — mergeable). Protection requires 1 approval — dependabot PRs need owner review; S4 can absorb the web-tooling majors if the operator asks | OPEN (unchanged, D-060) |
+| O8 | Review the dependabot PRs — **21 open** (majors: vite 8, vitest 4, plugin-react 6, eslint 10, size-limit 12; grouped minor-and-patch for web, sdk AND server gomod; caddy digest bump was CI+e2e green — mergeable). Protection requires 1 approval — dependabot PRs need owner review; S5 can absorb the web-tooling majors if the operator asks | OPEN (unchanged, re-checked D-061) |
+| O9 | **CodeQL blocked**: repo is PRIVATE with no GHAS — make the repo public (CodeQL free) OR enable GHAS; then the next session adds `.github/workflows/codeql.yml` (paste-ready sketch in SESSION-05.md) | OPEN (NEW, D-061) |
+| O10 | **Prod rollout DUE** — prod runs the pre-D-061 image, so rule→channel alert delivery is STILL BROKEN in prod (registry gap, D-061; test-fire works). S5 WO-1 ships it; operator just needs to be aware until then | OPEN (NEW, D-061) |
 
 ## 6. Session protocol (BINDING — the "prompts" contract)
 

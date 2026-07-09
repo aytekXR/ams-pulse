@@ -1909,3 +1909,120 @@ repros — the contention doubles as a free load-immunity check.
 **Operator ledger re-checked:** O7 still OPEN (GHCR: `gh api /users/aytekXR/packages` → 403 "need
 read:packages" — re-verified this session). O8 unchanged: **21 open dependabot PRs**, deliberately
 untouched (operator did not ask S3 to absorb the web-tooling majors).
+
+## D-061 — SESSION-04 executed: e2e phase 2 + CI hardening — P0 registry bug found+fixed, VD-04 closed, floor 66→70 (2026-07-09)
+
+Commits `9f477bd` `2b25d70` `0daa650` `413c74c` `a53349e` `ba56c6e` + the two CI-caught assert
+fixes below (+ this docs commit). CI run 28984417114 GREEN (all 7 required jobs; floor 70 + qa
+modules live). **The FIRST main-push e2e run (28984417104) immediately earned its keep — it
+caught TWO defects the local verify missed, both subset-repro gaps (D-026 class):**
+1. e2e job RED on the new WO-4 count step: it demanded all 500 vd04 items inside a 500-capped
+   page that also held the 2 A1/A3 e2e streams (arithmetically impossible — page showed 498).
+   The verifier had reproduced only the NEW steps on a fresh stack (no A1/A3 streams). Fixed:
+   assert overview total_publishers ≥502 (the FULL set survived poller pagination — the real
+   regression target), a full 500-item page at the cap, and ≥498 vd04 rows in it.
+2. ci web-e2e job RED (non-required): the DEFAULT playwright config picked up the two NEW
+   dedicated-config specs (csp.spec.ts, streams-render-500.spec.ts) against vite preview — the
+   old csp spec was tolerated only because it self-skipped. Fixed: testIgnore for both in
+   playwright.config.ts (they run ONLY under their csp/realstack configs). The 4 original specs
+   passed under node 22, so the node bump itself is fine. NOTE: this red breaks the web-e2e
+   promotion streak — restart the 2-week clock from 2026-07-09.
+csp-e2e was GREEN on its very first CI run. **Fix push `ecfc25c` → ALL GREEN: ci 28984815218
+(8/8 jobs incl. web-e2e) + e2e 28984815214 (e2e + csp-e2e); CI-side VD-04 = 426/196 ms; A4
+delivery_failure PASS in real CI; overview 502 / page 500 / vd04 498 exactly as derived.**
+Workflows: `pulse-s4-scout` (5 read-only scouts) →
+`pulse-s4-implement` (9 agents: 4 parallel TDD authors → 4 SEQUENTIAL adversarial verifiers w/
+exclusive mutation/stack windows → integrator). Verdicts: wo2+integration CONFIRMED,
+wo5/wo4/wo1 FIXED_THEN_CONFIRMED (each verifier fix below).
+
+**HEADLINE — scouting exposed a P0 production bug, fixed + proven this session:** `serve.go:297`
+created an EMPTY channel registry and NOTHING populated it from the meta store (the old comment
+claimed api.Server.Start did — that code never existed). `evaluator.deliver()` silently skips
+registry misses → **rule-triggered alert delivery NEVER worked outside unit tests**; D-049's
+retry/delivery_failure machinery was live but unreachable (D-041 fixed only the test-fire path).
+Fix (TDD, red first): `Evaluator.syncRegistryFromStore()` on every tick — register/replace from
+store, remove store-synced IDs that disappeared (`syncedChannelIDs` preserves manually-registered
+test fakes); decrypt-failure/unknown-type → log+skip. Channel construction extracted to shared
+`alert.BuildChannelFromRow` (api test-fire handler delegates; no import cycle). 4 new tests
+(store-only channel delivered / update propagates / delete stops delivery / corrupt row skipped);
+verifier mutation (sync disabled) reddens all 4. **Live-stack proof: first-ever prod-path
+end-to-end delivery** — sink container received the real alert POST (`state:firing,
+metric:ingest_bitrate_floor, value:2, threshold:99999`) within one 5s tick; dead-URL channel
+produced the delivery_failure row in ~8s; A2 beacon still 202 under the business-tier license.
+⚠️ **Prod runs the pre-D-061 image → rule→channel delivery is still broken in prod until the
+next rollout (SESSION-05 WO-1).**
+
+**Per-WO:**
+- **WO-2 e2e**: license mint pro→**business** (webhook channels Business-gated, license.go:118);
+  new **A4** step: dead-URL (`http://127.0.0.1:9/`, instant ECONNREFUSED) webhook channel + rule →
+  delivery_failure row within a DERIVED 30s budget (≤5s tick + 4 attempts + ≤4.2s backoff ≈ ≤9.2s
+  worst case). Live-sink counterproof: successful delivery produces NO row → step cannot
+  false-green. (Stale schema comment `-- firing | resolved` at 0001_init.sql:154 noted — the code
+  also writes `delivery_failure`; migration files are frozen, comment fix deferred to a future CR.)
+- **WO-5 replay suite**: `collector/normalize_realcapture_test.go` — 8 table-driven tests over the
+  REAL AMS 3.0.3 captures pinning D-029/D-031: bps→kbps (624016→624.016 AND 622312→622.312, two
+  captures with distinct values), fps-key-absent, terminated_unexpectedly, WebRTC single-track
+  (synthetic fixture — the real capture is an empty array, pinned as its own decode case),
+  system-status fields, app-name fallback. Verify-phase mutations: /1024 caught ×2;
+  fps-always-emitted caught; **terminated_unexpectedly removal initially SURVIVED → verifier added
+  the missing pinning test → caught** (adversarial round earned its keep); single-track break
+  caught by the pre-existing unit test. Verifier also fixed a t.Skipf→t.Fatalf violation (no
+  escape hatches, D-028). normalize.go pristine after all mutations (git-diff-verified).
+- **WO-4 VD-04/A10**: TWO mock-ams bugs fixed: (1) `/list` ignored offset/size →
+  `ListBroadcastsPaged` (pageSize 200) infinite-loops at ≥200 streams; (2) VERIFIER-FOUND: Go map
+  iteration gave each page request a different order → union of pages dropped/duplicated streams
+  (real stack showed only 293-467 of 500 arrive) → sort by StreamID before slicing.
+  `/control/bulk_publish` added. New REAL-stack Playwright spec `streams-render-500.spec.ts`
+  (structure asserts HARD: grid, aria-rowcount 501, ≤35 DOM rows, footer "500 streams"; timing
+  SOFT by ORCH decision — wall-clock gates on shared runners are D-042-class flake risk).
+  **VD-04 MEASURED + CLOSED: 668/459/342/292 ms (2 invocations × 2 runs, local VPS, chromium in
+  playwright:v1.61.1-noble, real API) vs 2000 ms budget; CI (run 28984815214, GitHub runner):
+  426/196 ms.** ARCHITECTURE §4+§11 updated.
+  useLiveDashboard already fetched limit=500 — no FE change.
+- **WO-1 csp-e2e**: `Caddyfile.ci` (HTTP-only: CSP byte-identical to Caddyfile EXCEPT connect-src
+  `'self' ws://localhost:18080` — a portless host-source matches only the scheme default, so
+  `ws://localhost` would block the SPA's WS; HSTS omitted; `handle_errors` mirrors headers because
+  Caddy's header directive skips the error pipeline), compose overlay (caddy pinned to the
+  hardened digest, 127.0.0.1:18080:80), `playwright.csp.config.ts`, csp.spec.ts implemented (was
+  fully skipped): EXACT-equality CSP header assert + parity headers + zero securitypolicyviolation
+  DOM events + zero CSP console errors on auth-gate AND mocked-dashboard pages, via
+  `http://localhost:18080` so window.location.host matches the ws source. Mutation: CSP line
+  dropped from the stack copy → test 1 red; restored → 3/3 green. New `csp-e2e` job
+  (continue-on-error — **bake clock starts 2026-07-09**). **A7's CI half CLOSED** (O2/U5 human
+  prod check still open). Verifier fix: web/package.json gained the missing `"typecheck"` script.
+- **WO-3**: e2e.yml `on: push: branches [main]` (D-056 lesson); web-e2e node 20→22; NEW ci step
+  `qa modules unit tests` (qa/mock-ams + qa/licensegen have their own go.mod — were never
+  CI-tested; mock-ams pagination now gates). **web-e2e promotion NOT taken**: 7/7 job-level green
+  since 2026-07-07T22:02Z (runs 28901737365/28903394901/28907051612/28910421114/28912724141/
+  28923302745/28976122295) but the 2-week mark is ~2026-07-21 — and superseded same-session: the
+  web-e2e red above (our spec-pickup bug) RESTARTS its clock from 2026-07-09, aligning both
+  clocks (web-e2e + csp-e2e) at ~2026-07-23. actionlint: 0 findings.
+- **WO-6 CodeQL: CANCELLED-BLOCKED** — repo is PRIVATE with security_and_analysis=null; code
+  scanning API 403 "not enabled". Default setup AND workflow-file both require GHAS on private
+  repos (the workflow would fail at analyze/upload). → **NEW operator item O9**: make the repo
+  public OR enable GHAS; paste-ready codeql.yml sketch preserved in SESSION-05.md.
+
+**ORCH gates (all green, 2026-07-09):** full `-race` repo-root 25 pkgs 0 FAIL, only the 2
+expected domain npx skips, total **73.3%** → **FLOOR 66.0→70.0** (awk mutation check: FLOOR=70
+exit 0 / FLOOR=99 exit 1). Web: gen:api NO-DRIFT, build, lint, typecheck, vitest gates 76/72/45.
+Integration: literal CI command, --cpuset-cpus=0,1, /tmp/clickhouse 26.6.1.1193 — green (api
+fresh 18.6s). **Pristine-clone repro at ba56c6e**: server job ALL steps (gofmt/vet/build/
+unit-race 25 pkgs/floor 73.2≥70/qa modules/pulse binary/migrate smoke vs CH 24.8 all 4
+migrations/integration -count=1 under 2 cores) + web job (node:22: npm ci, NO-DRIFT, build, lint,
+238/238) + docker-build (stamped `pulse ci-ba56c6e`, no dev/unknown). SDK untouched (zero diffs).
+**Watch item:** one web unit test failed ONCE on the pristine clone under 3-way docker load
+(238-passed re-runs ×2; test name lost to a tail-pipe — ORCH process note: never pipe a gate
+through tail without capturing the log); zero web/src changes this session; if it recurs in CI,
+capture the name and treat as D-042 class.
+
+**Process/infra notes:** compose auto-loads `deploy/.env` from the -f dir → local stacks must run
+from a pristine working-tree copy (`git ls-files -co --exclude-standard -z | tar …`) — now in the
+verify-window protocol. **CodeGraph installed by the operator (2026-07-09)**: local index in
+`.codegraph/` (self-gitignored; marker committed this session), CLI `~/.local/bin/codegraph` —
+from SESSION-05 on, agents query the graph (`explore`/`node`/`callers`) BEFORE grep/file sweeps,
+and the closing protocol runs `codegraph sync` after the last commit.
+
+**Operator ledger re-checked (2026-07-09):** O7 still OPEN (GHCR 403 read:packages). O8: 21
+dependabot PRs unchanged. **O9 NEW** (CodeQL needs repo-public-or-GHAS). **Prod rollout DUE**
+(carries D-056+D-058+D-061; until then prod rule→channel alert delivery remains broken —
+test-fire works, D-041).

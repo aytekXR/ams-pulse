@@ -11,39 +11,44 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-04.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-05.md`)
 
-**Session 2026-07-08(d) result: D-060 — S3 DONE: G4 MET (51/52 ops conformance-validated),
-coverage 69.7→73.2%, floor 62→66, web functions gated, SDK gated.**
-`pulse-s3-test-backfill` workflow (10 agents: 5 parallel TDD authors → 5 SEQUENTIAL adversarial
-verifiers w/ exclusive mutation windows; **all 5 WOs CONFIRMED round 1, zero fix rounds**):
-api 74.3→**75.6** — **51/52 operations response-body-validated + 1 waived (GET /live/ws, WS 101)**;
-error shapes validated for the FIRST time (49-entry 401 sweep + 403/404/422 vs Error{code,message});
-**no contract drift — no CR needed**. webhook 58.1→**94.3**, reports 58.8→**90.9** (local
-fakeConn), web lines 61.72→**79.48** gates **76/72/45(new fn gate)** + threshold-drop guard
-pinning gates AND the exact exclude set, sdk gated **62/73/70** (+@vitest/coverage-v8, size
-3.52 KB). The faithful CI repro EXPOSED+FIXED a pre-existing D-042-class flake:
-`TestAlertHistory_PruneTimingAt2000` fixed 500ms budget → derived insert-baseline budget
-(observed 538ms under contention; now load-immune, proven under deliberate 3-way load). All 4
-touched ci.yml jobs reproduced green on a pristine clone (server incl. migrate smoke CH 24.8 +
-integration; web+sdk on node:22; docker-build stamped `ci-2ffe075`). CI run 28975573189 green.
-Commits `ee4288d`…`2ffe075`. ⚠️ **O7 still OPEN** (GHCR read:packages — re-verified). **O8: 21
-dependabot PRs** untouched.
+**Session 2026-07-09 result: D-061 — S4 DONE: e2e phase 2 + CI hardening; a P0 PROD BUG found+
+fixed (alert channel registry never populated → rule→channel delivery NEVER worked outside unit
+tests); VD-04 measured+closed (668/459 ms @ 500 streams vs 2 s budget); floor 66→70.**
+`pulse-s4-scout` (5 read-only scouts) → `pulse-s4-implement` (9 agents: 4 parallel TDD authors →
+4 SEQUENTIAL adversarial verifiers w/ exclusive mutation/stack windows → integrator). Registry
+fix = sync-on-tick from the meta store + shared `alert.BuildChannelFromRow` factory; live-stack
+proof: **first-ever prod-path delivery** (sink received the real alert POST in one 5s tick) +
+delivery_failure row in ~8s for a dead URL. e2e.yml: license pro→business, NEW A4
+delivery_failure step, VD-04 500-stream steps, NEW `csp-e2e` caddy-fronted Playwright job
+(A7's CI half CLOSED; bake clock from 2026-07-09), **on: push main** (this session's push was
+the first main-push e2e). Replay suite pins D-029/D-031 wire semantics from the real captures
+(a surviving mutant exposed+closed in verify). mock-ams: pagination fixed (infinite loop ≥200
+streams) + verifier-found map-order bug (pages overlapped → only ~300-467/500 arrived) + bulk
+publish. ci.yml: FLOOR 66→**70** (mutation-checked), qa-modules test step, web-e2e node 22.
+web-e2e promotion NOT taken — and its streak RESTARTED 2026-07-09 (the first main-push run
+caught our own spec-pickup bug in the default playwright config; fixed same session — both
+web-e2e and csp-e2e clocks now end ~2026-07-23). **WO-6 CodeQL
+CANCELLED-BLOCKED → O9** (private repo, no GHAS). Pristine-clone repro green (server ALL steps
+incl. migrate smoke CH 24.8 + integration; web node:22 238/238; docker-build stamped
+`ci-ba56c6e`). Commits `9f477bd`…`ba56c6e`+docs. ⚠️ **PROD ROLLOUT DUE — prod runs the
+pre-D-061 image, so prod rule→channel alert delivery is STILL BROKEN until SESSION-05 WO-1
+ships it.** O7 still OPEN; O8: 21 dependabot PRs; **O9 NEW** (CodeQL).
 
-**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-04.md` and execute it** (S4 e2e
-phase 2 + CI hardening: caddy-fronted Playwright CSP job, delivery_failure e2e, e2e.yml on
-main pushes, web-e2e promotion check, VD-04 500-stream measurement, fixture-replay suite,
-CodeQL; FLOOR 66→70 if total holds ≥73).
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-05.md` and execute it** (S5 honest
+features + security tail: prod rollout carrying D-061, rebuffer/error-rate alerts off real QoE
+data, B7 per-source webhook secret CR, logtail wire-or-delete, Caddyfile.prod env var +
+.env.example completeness).
 
-**Standing numbers (2026-07-08 post-S3):** coverage total **73.2%** (floor 66; GA G3 ≥70 already
-exceeded); per-package: query 88.5, api 75.6, webhook 94.3, reports 90.9, logtail 92.1,
-license 91.5, cluster 89.0, ingest 85.1, restpoller 81.9, sessions 81.1, amsclient 76.8,
-anomaly 76.1, alert 74.1, channels 74.1, config 74.5, aggregator 69.6, beacon 68.6, migrations
-65.6 (unit), collector 65.7, meta 61.9, clickhouse unit 61.8, prober 61.9, cmd/pulse 43.0,
-domain 100. Conformance: **51/52 + 1 waived**; error shapes covered; harness has NO escape
-hatches (the suite's only 2 SKIPs are the pre-existing domain SchemaFixtures npx-guard — they
-run in CI). Web gates 76/72/45 + `coverage-gate.test.ts` guard; SDK gates 62/73/70 (webrtc.ts
-20.1% is the known gap). Docs P0-stales (productionize.md) remain S6 scope. Full evidence: D-060.
+**Standing numbers (2026-07-09 post-S4):** coverage total **73.3%** (floor **70.0**); moved
+per-package vs D-060: api 75.9 (+0.3), collector 66.5 (+0.8), alert 73.3 (−0.8, new sync source
+covered by 4 new tests), clickhouse-unit ±0.2 run-noise; all others unchanged — full table in
+D-060, deltas in D-061. Conformance 51/52 + 1 waived. Web gates 76/72/45 + guard; SDK gates
+62/73/70 (webrtc.ts 20.1% still the known gap). The suite's only 2 SKIPs remain the domain
+SchemaFixtures npx-guard. **CodeGraph is installed (2026-07-09)** — agents query it before
+grep (`codegraph explore/node/callers`); closing protocol runs `codegraph sync` (see §12).
+Docs P0-stales (productionize.md) remain S6 scope. Full evidence: D-061.
 
 ---
 
@@ -417,6 +422,14 @@ health scoring, (4) AMS wire decode/normalize, (5) the query layer. Report cover
 - **Orchestrate with the Workflow tool.** One phase = one Workflow: ORCH writes the plan + pre-approved CRs to
   `decisions.md`, fans out to disjoint-scope agents, then **independently gates**. Background work is harness-tracked —
   you're re-invoked on completion; don't poll-spin.
+- **CodeGraph (operator-installed 2026-07-09, D-061).** Local index `.codegraph/` + CLI `~/.local/bin/codegraph`.
+  Scouts/authors query the graph BEFORE grep/file sweeps: `codegraph explore "<question>"`,
+  `codegraph node <sym>`, `codegraph callers <sym>` (blast radius). Put this in every agent work order
+  (subagents use the CLI via Bash). **Closing protocol: `codegraph sync` after the last commit** (+
+  `codegraph status` to confirm; stale lock → `codegraph unlock`).
+- **Local compose stacks NEVER run from the real repo** — compose auto-loads `deploy/.env` (prod secrets) from
+  the `-f` dir. Use a pristine working-tree copy:
+  `git ls-files -co --exclude-standard -z | tar --null -T - -cf - | tar -C <scratch> -xf -` + unique `-p` name (D-061).
 - **Anti-stall (D-016):** NEVER run `pulse serve`/`clickhouse server` in the foreground inside an agent. Use
   `docker compose up -d` (detached) + health polling; CH unit work via the integration harness. `timeout` on builds,
   `-timeout` on `go test`, vitest `run` not watch, `curl -m`. Long local repros: Bash `run_in_background: true`.
