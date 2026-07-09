@@ -11,44 +11,56 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-05.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-06.md`)
 
-**Session 2026-07-09 result: D-061 — S4 DONE: e2e phase 2 + CI hardening; a P0 PROD BUG found+
-fixed (alert channel registry never populated → rule→channel delivery NEVER worked outside unit
-tests); VD-04 measured+closed (668/459 ms @ 500 streams vs 2 s budget); floor 66→70.**
-`pulse-s4-scout` (5 read-only scouts) → `pulse-s4-implement` (9 agents: 4 parallel TDD authors →
-4 SEQUENTIAL adversarial verifiers w/ exclusive mutation/stack windows → integrator). Registry
-fix = sync-on-tick from the meta store + shared `alert.BuildChannelFromRow` factory; live-stack
-proof: **first-ever prod-path delivery** (sink received the real alert POST in one 5s tick) +
-delivery_failure row in ~8s for a dead URL. e2e.yml: license pro→business, NEW A4
-delivery_failure step, VD-04 500-stream steps, NEW `csp-e2e` caddy-fronted Playwright job
-(A7's CI half CLOSED; bake clock from 2026-07-09), **on: push main** (this session's push was
-the first main-push e2e). Replay suite pins D-029/D-031 wire semantics from the real captures
-(a surviving mutant exposed+closed in verify). mock-ams: pagination fixed (infinite loop ≥200
-streams) + verifier-found map-order bug (pages overlapped → only ~300-467/500 arrived) + bulk
-publish. ci.yml: FLOOR 66→**70** (mutation-checked), qa-modules test step, web-e2e node 22.
-web-e2e promotion NOT taken — and its streak RESTARTED 2026-07-09 (the first main-push run
-caught our own spec-pickup bug in the default playwright config; fixed same session — both
-web-e2e and csp-e2e clocks now end ~2026-07-23). **WO-6 CodeQL
-CANCELLED-BLOCKED → O9** (private repo, no GHAS). Pristine-clone repro green (server ALL steps
-incl. migrate smoke CH 24.8 + integration; web node:22 238/238; docker-build stamped
-`ci-ba56c6e`). Commits `9f477bd`…`ba56c6e`+docs. ⚠️ **PROD ROLLOUT DUE — prod runs the
-pre-D-061 image, so prod rule→channel alert delivery is STILL BROKEN until SESSION-05 WO-1
-ships it.** O7 still OPEN; O8: 21 dependabot PRs; **O9 NEW** (CodeQL).
+**Session 2026-07-09(b) result: D-062 — S5 DONE: honest features + security tail; prod ROLLED
+(rule→channel alert delivery now WORKS IN PROD — proven live); B7 shipped; logtail DELETED;
+CodeQL LIVE (O9 closed).** `pulse-s5-scout` (5 scouts) → WO-1 by ORCH → `pulse-s5-implement`
+(11 agents: 5 parallel TDD authors → integrator → 5 SEQUENTIAL adversarial verifiers).
+- **WO-1 prod rollout:** `1a701d6` → **`v0.1.0-25-gbc15d43`** (rollback tag `pre-d061`; build
+  w/ explicit build-args THEN up -d without --build). Delivery smoke on FREE tier (webhook
+  channels are Business-gated — scout caught it): email channel → SMTP-sink container; firing
+  row on the FIRST 2s poll + full alert mail received. Same D-061 registry seam, type-agnostic.
+- **WO-2 honest QoE alerts:** HealthScore proxy REMOVED (G6); `alert.QoEReader` →
+  `query.QoEForStream` → rollup_qoe_1h (beacon_events-fed; viewer_sessions is NOT in this path —
+  session-doc claim was wrong). e2e A2 now asserts a rebuffer_ratio rule FIRES from injected
+  rebuffer events (green in real CI first try). Wiring pinned by `wireAlertQoEReader` +
+  serve_wiring_test pin (verifier-added).
+- **WO-3 B7:** `/webhook/ams/{name}` per-source HMAC (cross-source isolation, no fallback when a
+  per-source secret exists; unknown name → SharedSecret else 401 fail-closed); contract CR:
+  `ams_sources.webhook_secret_enc` + `webhook_secret_set` read field; legacy route byte-identical.
+  Secrets load at startup — rotation needs restart. AMS-INTEGRATION.md per-source URL docs → S6.
+- **WO-4 logtail DELETED** (D-062 rationale: log4j-prefixed real logs = 100% parse failure; 0/3
+  real event types matched; volume topology wrong; REST+webhook cover it). helm logTailPath
+  removed, goldens ×3 no-drift.
+- **WO-5:** Caddyfile.prod `{$AMS_UPSTREAM}` (compose default = old hard-coded value → prod
+  no-op, parity verified); .env.example +8 code-verified vars.
+- **WO-6 CodeQL:** repo went PUBLIC (operator) → O9 unblocked; first run caught build-mode
+  none unsupported for Go → go/autobuild + js-ts/none matrix (`5dacb7d`). NOT a required context.
+- **⚠️ Pre-session P0 intercept:** a CONCURRENT operator session committed a LIVE Slack webhook
+  URL hardcoded in 4 workflows (unpushed, repo now public!) — rewritten unpushed to secrets ref
+  (`bc15d43`), value moved to `gh secret set SLACK_WEBHOOK_URL`, original on local
+  `backup/slack-notify-original` (never push). **O11 NEW: operator rotates that Slack webhook +
+  resets the other session's local main onto origin.**
+Gates: full -race 24 pkgs 0 FAIL / 2 domain npx skips, total **73.2%** (floor 70, no ratchet);
+full `-tags integration` 24/24 ok; web 238/238 + gen:api byte-stable; helm goldens ×3; actionlint
+0; ci `dfe7092` + e2e (new A2 assert) GREEN on main; codeql green from `5dacb7d` (verify).
+Commits `bc15d43`, `6865dba`…`dfe7092`, `5dacb7d` + docs. Full evidence: D-062.
 
-**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-05.md` and execute it** (S5 honest
-features + security tail: prod rollout carrying D-061, rebuffer/error-rate alerts off real QoE
-data, B7 per-source webhook secret CR, logtail wire-or-delete, Caddyfile.prod env var +
-.env.example completeness).
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-06.md` and execute it** (S6 docs+Helm
+GA batch; **both promotion clocks END ~2026-07-23** — if streaks held, promote web-e2e + csp-e2e
+into required contexts, full-list PUT).
 
-**Standing numbers (2026-07-09 post-S4):** coverage total **73.3%** (floor **70.0**); moved
-per-package vs D-060: api 75.9 (+0.3), collector 66.5 (+0.8), alert 73.3 (−0.8, new sync source
-covered by 4 new tests), clickhouse-unit ±0.2 run-noise; all others unchanged — full table in
-D-060, deltas in D-061. Conformance 51/52 + 1 waived. Web gates 76/72/45 + guard; SDK gates
-62/73/70 (webrtc.ts 20.1% still the known gap). The suite's only 2 SKIPs remain the domain
-SchemaFixtures npx-guard. **CodeGraph is installed (2026-07-09)** — agents query it before
-grep (`codegraph explore/node/callers`); closing protocol runs `codegraph sync` (see §12).
-Docs P0-stales (productionize.md) remain S6 scope. Full evidence: D-061.
+**Standing numbers (2026-07-09 post-S5):** coverage total **73.2%** (floor **70.0**); moved
+per-package vs D-061: webhook 94.7 (B7 tests), query 86.9 (−1.6, QoEForStream additions), alert
+73.8 (+0.5), api 76.0, meta 66.9, cmd/pulse 42.3 (+wiring pin), collector/aggregator etc.
+unchanged; logtail (92.1) REMOVED from the tree. Conformance 51/52 + 1 waived. Web gates
+76/72/45 + guard; SDK gates 62/73/70 (webrtc.ts 20.1% still the known gap). The suite's only 2
+SKIPs remain the domain SchemaFixtures npx-guard. CodeGraph in use — `codegraph sync` run at
+close (§12). Docs P0-stales (productionize.md) = S6 scope, plus NEW S6 doc items from D-062:
+B7 per-source webhook URLs in AMS-INTEGRATION.md, alerting.md honest-QoE + registry-sync
+semantics, runbook §3-D stale `--build` pattern. Prod: **`v0.1.0-25-gbc15d43`**, healthy, alert
+delivery live (email-channel proven; webhook variant awaits U3 license).
 
 ---
 
@@ -119,9 +131,10 @@ file + `decisions.md` (new D-0NN) each session. AMS web login is RESOLVED (D-036
 - **Go suite green / coverage 73.2%** as of 2026-07-08 (full `-race` + coverage, **repo-root mount**,
   golang:1.25, after D-052…D-060; was 47.5% on 2026-06-28). Working tree is CLEAN — everything is committed and
   pushed; CI additionally enforces a `gofmt -l` gate, a **66%** coverage floor (D-053, ratcheted D-059/D-060)
-  and a stamped-version docker-build assert (D-058). **Prod runs `1a701d6` (≥D-056) since 2026-07-08** — stamped
-  `pulse 1a701d6`, beacon public chain live (403 LICENSE_REQUIRED until O7/U3), rollback tag
-  `pulse-prod-pulse:pre-d058`.
+  and a stamped-version docker-build assert (D-058). **Prod runs `v0.1.0-25-gbc15d43` (≥D-061/D-062)
+  since 2026-07-09** — rule→channel alert delivery LIVE-PROVEN (D-062 WO-1 smoke), beacon public
+  chain live (403 LICENSE_REQUIRED until U3), rollback tags `pulse-prod-pulse:pre-d061` (1a701d6)
+  and `:pre-d058`.
 - **The prod image embeds the web UI** (multi-stage `deploy/docker/pulse.Dockerfile`: `npm ci && npm run build` →
   embedded in the Go binary), so a passing go-live build implies the web build passed.
 
@@ -466,6 +479,8 @@ health scoring, (4) AMS wire decode/normalize, (5) the query layer. Report cover
   (gitignored) — persisted in the `pulse-prod_pulse-data` volume; **never `down -v` that volume.** TLS check: always
   `--resolve beyondkaira.com:443:161.97.172.146` (VPS DNS is stale). Rollback: runbook §5.
 - `deploy/.env`, `*.db*`, `oguz-testing.md`, `web/pulse_secret.key` are gitignored — never commit.
-- ⚠️ The working tree may carry an **uncommitted** `deploy/config/Caddyfile.prod` change + an untracked
-  `Caddyfile.prod.bak-brier` — that's the operator's **separate `brier.<domain>` project** (a Next.js app on host:3000),
-  NOT Pulse (noted in D-035). Leave it uncommitted; never fold it into a Pulse commit (commit by explicit path).
+- ~~brier Caddyfile warning~~ RETIRED (D-062 verified): D-046 removed the brier block + `.bak-brier`
+  file; `deploy/config/Caddyfile.prod` is clean, tracked, and uses `{$AMS_UPSTREAM}` since D-062.
+- ⚠️ **Concurrent-session hazard (learned D-062):** the operator may run a second Claude session in
+  this repo. If HEAD moves or the tree dirties mid-session with work you didn't do, STOP and inspect
+  before committing/pushing — a foreign unpushed commit once carried a hardcoded live secret (O11).

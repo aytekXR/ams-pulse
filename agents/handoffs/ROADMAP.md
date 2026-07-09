@@ -37,7 +37,7 @@
 | Stubs still open | rebuffer_ratio/error_rate proxy from HealthScore (`alert/wave2.go:57-71`); B7 single shared webhook secret (`serve.go:214-220`); logtail collector implemented but wiring commented out (`serve.go:200-204`); probes non-HLS = `not_probed`; Postgres meta / SSO / PDF logo / mobile SDKs absent. RequestID is CLOSED (server.go:326). Zero `TODO()` markers remain. |
 | Docs | 2 P0-stale: productionize.md teaches a 3-overlay prod start (reality: 5 overlays + `--env-file`) and a loopback-only HTTPS step then curls the public URL. Missing for GA: LICENSE, SECURITY.md, CHANGELOG, upgrade/rollback runbook, monitoring-Pulse runbook. Stale claims in alerting.md (unbounded history — wrong since D-052), ARCHITECTURE.md §6 (bcrypt "roadmap" — shipped), install.md (3-tier table, "planned for Wave 3"). |
 | Git/GitHub | Clean, synced, CI green. `main` **unprotected** (API 404); no tags; stale `ams-integration` ref on local+origin. `gh` authed as owner `aytekXR` → protection + tag are now agent-runnable (U4 unblocked). |
-| Live prod | `/healthz` all ok; logs clean (14 lines/24h). **Runs pre-D-056 image** (container 2026-07-07 09:30, fix authored 23:43) → beacon ingest still 401s in prod. Backup cycle 2 due ~07:31 UTC 2026-07-08 — confirm in S1. One `webhook: invalid signature` WARN from the AMS container (likely AMS-side HMAC misconfig — operator item O4). |
+| Live prod | `/healthz` all ok. **Runs `v0.1.0-25-gbc15d43` since 2026-07-09 (D-062)** — rule→channel alert delivery live-proven; beacon chain live (403 LICENSE_REQUIRED until U3). Rollback tags `pre-d061`/`pre-d058`. WATCH: intermittent CH "Memory limit exceeded 1.80 GiB" on server_events inserts seen pre-swap (did not recur post-swap). O4 `webhook: invalid signature` WARN still awaits AMS-side config (O3). |
 
 ## 2. GA definition — "production-ready" means ALL of:
 
@@ -158,7 +158,11 @@ Item 6 CodeQL = BLOCKED → operator item O9 (private repo, no GHAS). Floor 66�
 6. CodeQL workflow (Go + JS/TS).
 **Exit:** G5 met; e2e.yml green on main; branch-protection contexts updated.
 
-### S5 — Honest features + security tail — prompt written by S4
+### S5 — Honest features + security tail — ✅ DONE (D-062, 2026-07-09)
+**G6 MET**: rebuffer_ratio/error_rate read rollup_qoe_1h (proxy removed, e2e-proven in CI);
+B7 shipped (contract CR merged, types byte-stable); logtail DELETED with rationale. Plus:
+prod rollout (delivery live-proven), CodeQL live (O9), Slack-webhook secret intercept (O11).
+Item 5 (O4 invalid-signature WARN) still awaits AMS-side webhook config (O3).
 **Goal:** G6; no silently-approximated metric.
 1. rebuffer_ratio/error_rate alerts read `rollup_qoe_1h`/`viewer_sessions` instead of the
    HealthScore proxy (`alert/wave2.go:57-71`); e2e-provable TODAY under the D-055 mock Pro
@@ -207,6 +211,7 @@ Item 6 CodeQL = BLOCKED → operator item O9 (private repo, no GHAS). Floor 66�
 | 2026-07-08 (after S2) | **69.7%** | **62.0** | unchanged | D-059; S2 target ≥64 beaten; G3's ≥70 nearly met already |
 | 2026-07-08 (after S3) | **73.2%** | **66.0** | gates **76/72/45** + guard test | D-060; G4 met 51/52+1 waived; sdk gated 62/73/70; G3's ≥70 EXCEEDED |
 | 2026-07-09 (after S4) | **73.3%** | **70.0** | hold (76/72/45) | D-061; ratchet done; alert 73.3 (new sync source), api 75.9, collector 66.5 |
+| 2026-07-09 (after S5) | **73.2%** | **70.0** | hold (76/72/45) | D-062; −0.1 = logtail (92.1%-covered pkg) deleted; webhook 94.7, query 86.9, alert 73.8; no ratchet (<74) |
 | GA (G3) | ≥70% ✅ (73.2) | ≥68.0 | ratchet to achieved−3 | coverage half of G3 already met; floor ratchet remains |
 
 ## 5. Operator ledger (surface EVERY session — agent cannot do these)
@@ -221,8 +226,9 @@ Item 6 CodeQL = BLOCKED → operator item O9 (private repo, no GHAS). Floor 66�
 | O6 | (was U4) Branch protection + `v*` tag | ✅ DONE by S1 (D-058): protection live (API 200), v0.1.0 released |
 | O7 | **Make `ghcr.io/aytekxr/ams-pulse` public** (package settings → Change visibility) or `gh auth refresh -s read:packages` — until then nobody (incl. the agent) can pull v0.1.0 or run `cosign verify` (commands in release.yml header); this is the last G1 bit | OPEN (re-verified still blocked 2026-07-08(d), D-060) |
 | O8 | Review the dependabot PRs — **21 open** (majors: vite 8, vitest 4, plugin-react 6, eslint 10, size-limit 12; grouped minor-and-patch for web, sdk AND server gomod; caddy digest bump was CI+e2e green — mergeable). Protection requires 1 approval — dependabot PRs need owner review; S5 can absorb the web-tooling majors if the operator asks | OPEN (unchanged, re-checked D-061) |
-| O9 | **CodeQL blocked**: repo is PRIVATE with no GHAS — make the repo public (CodeQL free) OR enable GHAS; then the next session adds `.github/workflows/codeql.yml` (paste-ready sketch in SESSION-05.md) | OPEN (NEW, D-061) |
-| O10 | **Prod rollout DUE** — prod runs the pre-D-061 image, so rule→channel alert delivery is STILL BROKEN in prod (registry gap, D-061; test-fire works). S5 WO-1 ships it; operator just needs to be aware until then | OPEN (NEW, D-061) |
+| O9 | ~~CodeQL blocked~~ ✅ CLOSED by S5 (D-062): operator made the repo PUBLIC → `codeql.yml` live (go/autobuild + js-ts/none). NOT a required context yet — promote after a bake period (S6/S7 call). NOTE: repo-level secret-scanning/push-protection still disabled — consider enabling now that the repo is public | ✅ DONE (D-062) |
+| O10 | ~~Prod rollout DUE~~ ✅ CLOSED by S5 WO-1 (D-062): prod runs `v0.1.0-25-gbc15d43`; rule→channel delivery live-proven (email-channel smoke, firing row ≤2s + mail received) | ✅ DONE (D-062) |
+| O11 | **Rotate the Slack CI-notification webhook** (it sat hardcoded in an unpushed commit + session transcripts — never public, but hygiene demands rotation; then `gh secret set SLACK_WEBHOOK_URL` with the new value) AND reset the concurrent session's local main onto origin (`git fetch && git reset --hard origin/main` — its `ee4fc00` content is contained in `bc15d43`) | OPEN (NEW, D-062) |
 
 ## 6. Session protocol (BINDING — the "prompts" contract)
 
