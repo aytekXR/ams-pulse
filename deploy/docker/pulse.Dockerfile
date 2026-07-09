@@ -17,7 +17,7 @@ RUN npm run build
 # golang:1.25-alpine — digest pinned 2026-07-08 via `docker image inspect golang:1.25-alpine --format '{{index .RepoDigests 0}}'`
 # Tag: golang:1.25-alpine  Go: go1.25.12
 # To refresh: docker pull golang:1.25-alpine && docker image inspect golang:1.25-alpine --format '{{index .RepoDigests 0}}'
-FROM golang@sha256:fbad852fde376e8420774087e2723d57f5ed1327a9b639e839638f42a46a7e62 AS server
+FROM golang@sha256:079e59808d2d252516e27e3f3a9c003740dee7f75e55aa71528766d52bcfc16a AS server
 WORKDIR /src/server
 COPY server/go.mod server/go.sum* ./
 RUN go mod download || true
