@@ -2373,3 +2373,63 @@ not code; rerun --failed, don't debug the diff.)
 O8 still 21 dependabot PRs · O12 secret-scanning+push-protection still disabled · U3 key
 still commented in deploy/.env · U5/O3/O11 unchanged-OPEN. **NEW operator decision ACTIVE:
 GA tag choice (v1.0.0 vs v0.2.0) — material prepared, awaiting the word.**
+
+## D-066 — SESSION-08 continuation: operator decisions executed — **v0.2.0 GA SHIPPED**; LICENSE = PolyForm NC 1.0.0; O3 closed-N/A; U5/O11/O12 closed (2026-07-09)
+
+Operator message (verbatim intent): tag = v0.2.0; choose a NONCOMMERCIAL license; explain
+Pulse license minting/distribution; "decide for me" on O12 + O7/O3/U5/O11/O8. All executed
+same-session, solo ORCH (no Workflow — ops + docs only, per the operator's own directive).
+
+**★ v0.2.0 RELEASE SHIPPED ★**
+- LICENSE committed FIRST (`7adbcc3`): **PolyForm Noncommercial 1.0.0** verbatim from the
+  canonical polyformproject.org text (choice rationale: purpose-built noncommercial CODE
+  license; the vendor keeps dual-licensing/commercial rights — matches the paid-tier model;
+  BUSL rejected as "non-compete", not "non-commercial"). SDK stays MIT. README License
+  section + CHANGELOG [0.2.0] Licensing subsection + NEW `docs/licensing.md` (product-key
+  mechanics: ed25519 claims format, vendor key ceremony, minting, PULSE_LICENSE_PUBKEY
+  distribution, activation×3 paths, fail-open-to-Free, revocation-by-expiry; licensegen
+  -privkey extension = S9 WO). **O5 CLOSED; G7 fully met.**
+- ci+e2e+codeql GREEN at `4657512` → tag **v0.2.0** pushed → release run **29023647495
+  GREEN** (CI-gate, Trivy, multi-arch, SBOM+provenance, cosign). GH release created w/
+  notes from RELEASE-NOTES-DRAFT (now trimmed to the live release).
+- Prod rollout onto the tag: `pre-v0.2.0` rollback tag + backup (ts=20260709-140605) BEFORE
+  swap; stamped build `pulse v0.2.0 (commit 4657512, built 2026-07-09T14:06:07Z)`; up -d;
+  smoke: healthz ok, version=v0.2.0, cpus=1000000000, 0 ERROR/panic. **O13 CLOSED.**
+- cosign verify by outsiders still blocked: GHCR package private (anon pull token
+  UNAUTHORIZED re-verified) — **O7 = the ONE remaining operator click.**
+
+**"Decide for me" outcomes:**
+- **O12 secret-scanning: ENABLED** (+ push-protection) via `gh api PATCH`, response-verified
+  both `enabled`.
+- **O3 AMS webhook: CLOSED-N/A.** Authed live GET of AMS 3.0.3 LiveApp settings (182
+  fields): `listenerHookURL` + retry/content-type knobs exist, **NO HMAC-secret or
+  signature-header field** — AMS lifecycle hooks are UNSIGNED; configuring them would only
+  401 against Pulse's fail-closed listener (that WAS the O4 WARN). REST polling (5 s)
+  remains the supported AMS ingest (≤10 s PRD budget met). AMS-INTEGRATION §4.5 corrected
+  (it described nonexistent console fields — doc lie). O4 moot. Optional post-GA WO seeded:
+  unsigned-ingest mode w/ IP allowlist (operator product call).
+- **U5 browser/CSP: CLOSED (automated).** Headless Chromium (playwright-core 1.61.1 host
+  modules + mcr v1.61.1-noble browsers, --add-host pins to the VPS): BOTH prod URLs
+  HTTP 200, `#root` populated, **0 console errors / 0 CSP violations**.
+- **O11: RISK-ACCEPTED** (webhook URL exposure was never public — unpushed commit + local
+  transcripts only); rotation downgraded to optional operator policy. Stale local branch
+  `backup/slack-notify-original` (ee4fc00) DELETED.
+- **O8 (21 PRs): #4 CLOSED** (golang 1.25→1.26 violates the D-032 pin) + dependabot
+  `ignore` rules for golang version bumps in both docker ecosystems (`4657512`). Remaining
+  **20 deferred to S9 absorption WO** with real verification — rationale: the actions bumps
+  (#8-12) touch release.yml paths PR-CI can't exercise; merging blind minutes before the
+  first GA release run was the wrong risk. S9 absorbs in 3 verified batches (actions +
+  release dry-run; digests + staging smoke; web/sdk majors TDD).
+- **O7: no API exists** for package-visibility change (verified: PATCH 404, GET needs
+  read:packages) — stays the operator's single click.
+
+Commits: `7adbcc3` (docs: LICENSE+licensing.md+README+CHANGELOG+AMS-INTEGRATION),
+`4657512` (ci: dependabot ignore) + this handoff batch. Gates: docs-only after the punch
+gates of D-065 (no Go touched post-ratchet; ci.yml dependabot.yml change is config-only,
+actionlint n/a); ci+e2e+codeql green pre-tag; release run green; prod smoke green.
+
+**Ledger after D-066:** O5 ✅ · O12 ✅ · O13 ✅ (v0.2.0) · O3/O4 ✅-N/A · U5 ✅ · O11 ✅
+(risk-accepted) · O8 → S9 WO (20 PRs) · **O7 = the only remaining click** · U3 = optional
+feature unlock (key still commented; docs/licensing.md explains minting). G1 ✅(−O7) ·
+G2 ✅ (v0.2.0 live) · G3 ✅ (73.2/70.2) · G4 ✅ · G5 ⏳(~07-23) · G6 ✅ · **G7 ✅ FULL** ·
+G8: U5 ✅, O3 N/A, U3 optional.
