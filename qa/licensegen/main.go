@@ -1,11 +1,19 @@
-// Command licensegen mints an ephemeral test Pulse license for CI.
+// Command licensegen mints a Pulse license key for CI or production use.
 //
 // Usage:
 //
-//	go run . [-tier free|pro|business|enterprise] >> "$GITHUB_ENV"
+//	go run . [-tier free|pro|business|enterprise] [-privkey <path>] [-expires <days>] >> "$GITHUB_ENV"
 //
-// It generates a fresh ed25519 key pair at runtime, signs a JSON claims blob,
-// and prints exactly two GITHUB_ENV-compatible lines to stdout:
+// Without -privkey it generates a fresh ed25519 key pair at runtime (CI mode).
+// With -privkey it loads the hex-encoded 64-byte private key from <path> and
+// derives the matching public key from it (production minting mode).
+//
+// Without -expires the license is perpetual (no expires_at claim).
+// With -expires <days> (positive integer) it sets expires_at to
+// time.Now().UTC() + days*24h, expressed as Unix epoch milliseconds.
+//
+// It signs a JSON claims blob and prints exactly two GITHUB_ENV-compatible
+// lines to stdout:
 //
 //	PULSE_LICENSE_KEY=<base64(claimsJSON)>.<base64(ed25519sig)>
 //	PULSE_LICENSE_PUBKEY=<hex-encoded-public-key>
@@ -22,6 +30,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 )
 
 // tierClaims returns the JSON-serialisable claims map for a given tier.
@@ -76,19 +86,62 @@ func tierClaims(tier string) (map[string]any, error) {
 
 func run() error {
 	tierFlag := flag.String("tier", "pro", "license tier: free|pro|business|enterprise")
+	privkeyFlag := flag.String("privkey", "", "path to a file containing the hex-encoded ed25519 private key (128 hex chars = 64 bytes seed||pub)")
+	expiresFlag := flag.Int("expires", 0, "license validity in days (positive integer); omit for perpetual")
 	flag.Parse()
 
 	tier := *tierFlag
+
+	// Detect whether -expires was explicitly supplied on the command line.
+	// flag.Visit only iterates flags that were actually set; this is the only
+	// reliable way to distinguish "not passed" from "passed with default value".
+	expiresExplicit := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "expires" {
+			expiresExplicit = true
+		}
+	})
+	if expiresExplicit && *expiresFlag <= 0 {
+		return fmt.Errorf("-expires must be a positive integer, got %d", *expiresFlag)
+	}
 
 	claims, err := tierClaims(tier)
 	if err != nil {
 		return err
 	}
 
-	// Generate a fresh ed25519 key pair — nothing is persisted.
-	pubKey, privKey, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		return fmt.Errorf("generate key pair: %w", err)
+	// Set expires_at only when -expires was explicitly provided.
+	if expiresExplicit {
+		expiresAt := time.Now().UTC().Add(time.Duration(*expiresFlag) * 24 * time.Hour).UnixMilli()
+		claims["expires_at"] = expiresAt
+	}
+
+	var pubKey ed25519.PublicKey
+	var privKey ed25519.PrivateKey
+
+	if *privkeyFlag != "" {
+		// Load hex-encoded private key from file; derive the public key from it.
+		raw, readErr := os.ReadFile(*privkeyFlag)
+		if readErr != nil {
+			return fmt.Errorf("privkey: cannot read file %q: %w", *privkeyFlag, readErr)
+		}
+		privKeyBytes, hexErr := hex.DecodeString(strings.TrimSpace(string(raw)))
+		if hexErr != nil {
+			return fmt.Errorf("privkey: invalid hex in file %q: %w", *privkeyFlag, hexErr)
+		}
+		if len(privKeyBytes) != ed25519.PrivateKeySize {
+			return fmt.Errorf("privkey: wrong key length in file %q: got %d bytes, want %d (ed25519.PrivateKeySize)",
+				*privkeyFlag, len(privKeyBytes), ed25519.PrivateKeySize)
+		}
+		privKey = ed25519.PrivateKey(privKeyBytes)
+		pubKey = privKey.Public().(ed25519.PublicKey)
+	} else {
+		// Generate a fresh ed25519 key pair — nothing is persisted (CI mode).
+		var genErr error
+		pubKey, privKey, genErr = ed25519.GenerateKey(nil)
+		if genErr != nil {
+			return fmt.Errorf("generate key pair: %w", genErr)
+		}
 	}
 
 	// Marshal claims to canonical JSON.
@@ -106,7 +159,7 @@ func run() error {
 	licenseKey := claimsB64 + "." + sigB64
 	pubKeyHex := hex.EncodeToString(pubKey)
 
-	// Diagnostics to stderr (claims JSON is not secret — the key is ephemeral).
+	// Diagnostics to stderr (claims JSON is not secret — the key is ephemeral in CI).
 	fmt.Fprintf(os.Stderr, "licensegen: tier=%s claims=%s\n", tier, claimsJSON)
 
 	// Emit exactly two lines to stdout for GITHUB_ENV consumption.

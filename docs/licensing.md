@@ -60,12 +60,6 @@ fmt.Println("PUBLIC  (deploy everywhere):", hex.EncodeToString(pub))}
 EOF
 ```
 
-> **Post-GA work order (S9+):** extend `qa/licensegen` with `-privkey` /
-> `-expires` flags so customer keys are minted from the persistent vendor key
-> instead of an ephemeral one. Until then, mint with a small Go snippet that
-> signs the claims JSON with the stored private key (same 10 lines as
-> licensegen's `run()`, minus the key generation).
-
 ### 2.2 Minting a customer key
 
 Sign the claims JSON with the vendor private key; emit
@@ -95,3 +89,103 @@ The customer then activates by any of:
   (`e2e.yml` mints ephemeral ones per run).
 - Rotating the vendor keypair invalidates all outstanding keys — plan for
   overlap (accept old+new) only via a code change (post-GA backlog if needed).
+
+## 3. Vendor key ceremony (production minting)
+
+### 3a. Generate the production keypair — OFFLINE
+
+Run this one-liner on an air-gapped or dedicated operator machine. It prints
+the 128-hex private key (64 bytes: seed||pub) and the 64-hex public key (32
+bytes). Nothing is written to disk by the tool; you pipe or copy the output
+yourself.
+
+```sh
+go run - <<'EOF'
+package main
+import ("crypto/ed25519";"encoding/hex";"fmt")
+func main() {
+    pub, priv, _ := ed25519.GenerateKey(nil)
+    fmt.Println("PRIVATE (128 hex, keep offline):", hex.EncodeToString(priv))
+    fmt.Println("PUBLIC  (64 hex, deploy everywhere):", hex.EncodeToString(pub))
+}
+EOF
+```
+
+### 3b. Store the private key
+
+Store the 128-hex private key string in an **encrypted vault or offline
+medium** (hardware token, encrypted USB, password manager secret). It must
+never appear in:
+
+- any git repository (source or config),
+- any CI secret or environment variable,
+- any server deploy config or container image.
+
+A leaked private key lets anyone forge perpetual enterprise licenses with no
+way to revoke them short of rolling the public key.
+
+### 3c. Deploy the public key
+
+Copy the 64-hex PUBLIC key to every Pulse deployment:
+
+```sh
+# deploy/.env  (docker-compose) or the Helm secret
+PULSE_LICENSE_PUBKEY=<64-hex-public-key>
+```
+
+The server reads this at startup and uses it as the sole verification key
+(overriding the embedded dev key).
+
+### 3d. Mint a customer key
+
+On the operator machine (where the private key file is accessible), run:
+
+```sh
+cd qa/licensegen
+go run . -tier pro -privkey /secure/path/vendor.priv -expires 365
+```
+
+- `-privkey` reads the 128-hex key from the file, signs with it, and prints
+  the matching public key as `PULSE_LICENSE_PUBKEY` (confirm it matches 3c).
+- `-expires 365` sets `expires_at` to now+365 days (Unix epoch ms). For
+  perpetual licenses, omit `-expires`.
+- Stdout is exactly two `KEY=value` lines; append `>> license.env` or copy
+  `PULSE_LICENSE_KEY` to the customer's delivery channel.
+
+The private key file is read at mint time on the operator machine and is never
+transmitted to or stored on any server.
+
+### 3e. Verify activation
+
+Have the customer (or test yourself with `curl`):
+
+```sh
+# Activate
+curl -s -X POST https://<pulse-host>/api/v1/license/activate \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"key":"<PULSE_LICENSE_KEY value>"}'
+
+# Confirm
+curl -s https://<pulse-host>/api/v1/license \
+  -H "Authorization: Bearer <admin-token>"
+# → {"tier":"pro","valid":true,"expires_at":"2027-07-09T..."}
+```
+
+A `valid: true` response with the correct `tier` and `expires_at` confirms the
+key was accepted by the deployed public key.
+
+### 3f. Key rotation
+
+There is no certificate revocation list (CRL). Existing keys remain valid
+until their `expires_at`. To rotate the vendor keypair:
+
+1. Generate a new keypair (step 3a).
+2. Roll `PULSE_LICENSE_PUBKEY` to the new public key on **all** Pulse nodes
+   before re-minting any keys (a node still holding the old public key will
+   reject new keys signed by the new private key).
+3. Re-mint all active customer licenses with the new private key.
+4. Securely delete or archive the old private key.
+
+Because old keys expire naturally, prefer short expiries (1 year) for
+subscriptions so rotation windows stay manageable.
