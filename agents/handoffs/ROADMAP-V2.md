@@ -50,6 +50,15 @@ it stays off (e.g. orchestrator still batches docs commits).
 **Action:** `gh api PATCH /repos/aytekXR/ams-pulse/branches/main/protection` with
 `enforce_admins: true`; verify via GET (`enforce_admins.enabled = true`). Or commit a prose
 rationale to decisions.md if deferring further.
+**RESOLVED S10 (D-068, 2026-07-09): stays `false` — rationale committed, revisit re-armed.**
+Sessions (running as the repo owner) still push directly to `main` per the binding
+Verify→Commit→Handoff flow (RESUME-PROMPT §11), and the protection requires 1 approving
+review while the repo has a single human collaborator: GitHub forbids self-approval, so
+`enforce_admins=true` today would deadlock ALL session pushes (no one can approve the PR).
+Flip becomes possible when EITHER (a) a second trusted reviewer/bot-approver exists, or
+(b) the operator drops `required_approving_review_count` to 0 and sessions move to a
+PR-first cadence (PR-CI still gates via the 7 required contexts). Operator question filed
+in OPERATOR-TODO.md; next revisit: S12 or on operator request, whichever first.
 
 ---
 
@@ -273,7 +282,14 @@ See SESSION-09.md for WO-A (CI promotions, date-gated), WO-B (dependabot 20 PRs)
 
 ---
 
-### S10 — housekeeping + O(N²) fix + licensegen flags
+### S10 — housekeeping + O(N²) fix + licensegen flags ✅ DONE (D-068, 2026-07-09)
+**Result:** WO-A rationale committed (enforce_admins stays false — self-approval deadlock;
+re-arm S12/operator); WO-C licensegen -privkey/-expires TDD-green + licensing.md §3 (minting
+self-serve); WO-D O(N²) rebuildSnapshot → O(1) incremental deltas (~688× @1k, linear ratios
+5.4×/2.1×, allocs/event 1021→1, equivalence+alloc guards; cap reverted 0.5/500m + goldens);
+WO-E docs/dependabot-policy.md; WO-B (≥07-16) + WO-F (≥07-23) date-gated → S11 WO-D/WO-E.
+Commits: 03f9965 / 2d475a2 / 760eda9 + close. Prompt: `sessions/SESSION-10.md`.
+
 **Goal:** Close the maintenance tail left open at GA; fix the rebuildSnapshot algorithmic
 problem before stream counts grow; enable production license key minting.
 
@@ -345,7 +361,7 @@ WebRTC probe returns a real result (not `not_probed`) for a WebRTC stream in CI.
 |---|---|---|---|
 | D-V2-1 | **Unsigned-webhook ingest (§2.6):** build an optional IP-allowlisted unsigned mode vs keep REST-polling-only | **OPEN** | O3 closed-N/A (D-066): AMS 3.0.3 hooks unsigned — verified live. No build commitment. Agent awaits "build" or "wontfix". |
 | D-V2-2 | **CodeQL as required CI context:** promote CodeQL to a required branch-protection context | **OPEN — operator OK needed** | Streak green since D-062 (O9 closed). Evidence ready to share. Needs explicit OK given GHAS nuances even on the now-public repo. |
-| D-V2-3 | **enforce_admins flip (§2.1):** flip `enforce_admins` to `true` once sessions stop pushing directly to main | **OPEN — due S10** | Currently `false`. One-liner once dev cadence normalises to PRs. Operator decision only if there is a reason to keep it off. |
+| D-V2-3 | **enforce_admins flip (§2.1):** flip `enforce_admins` to `true` once sessions stop pushing directly to main | **RESOLVED-DEFERRED (D-068, S10)** | Stays `false`: 1-review requirement + solo owner = self-approval impossible → flip would deadlock session pushes (§2.1 rationale). Re-arm: S12, or operator says "PR-first" (then drop reviews to 0 or add a reviewer). |
 | D-V2-4 | **U3 — activate Pro+ license in prod:** set `PULSE_LICENSE_KEY` in `deploy/.env` | **OPEN — optional feature unlock** | Until then QoE/beacon data does not flow in prod; CI covers it with the mock license (G6 met). Minting instructions in docs/licensing.md. |
 | D-V2-5 | **O7 — GHCR package public:** make `ghcr.io/aytekxr/ams-pulse` public | **OPEN — one UI click** | The single remaining G1 gap. No API path (PATCH 404, D-066 verified). Must be done via GitHub package settings → "Change visibility". |
 
@@ -356,4 +372,5 @@ WebRTC probe returns a real result (not `not_probed`) for a WebRTC stream in CI.
 | When | Go total | CI floor | Web lines / branches / functions | Notes |
 |---|---|---|---|---|
 | 2026-07-09 GA (v0.2.0, D-065) | **73.2%** | **70.2** | 76 / 72 / 45 | Baseline for v2 plan; floor = achieved−3 per GA rule |
+| 2026-07-09 S10 (D-068) | **73.5%** | **70.2** | 62.13 / 57.6 / 51 (gates 59/54/45) | Web numbers = vitest-4 re-baseline (D-067); sdk 66.06/45.79/70.42 (gates 63/43/67) |
 | *(update each session at close)* | | | | |

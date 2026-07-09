@@ -11,51 +11,50 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-10.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-11.md`)
 
-**Session 2026-07-09(f) result: D-067 — S9 DONE: dependabot queue CLOSED (20+1 PRs absorbed),
-release dry-run proven, digest prod refresh, ROADMAP-V2 seeded.** 3 workflows (10 triage
-scouts, 10 scratch-checkout pre-verifiers, 3 author+adversarial-verifier fix pairs) + 4
-Monitor-driven serialized merge loops + staging-smoke agent.
-- **Batch 1 actions ×5 merged** (#8 buildx4, #9 cosign-installer 4.1.2, #10 login4, #12 qemu4,
-  #11 setup-go6); **release.yml dry-run GREEN post-merge (run 29028802644)** — pipeline proven.
-- **Batch 2 digests ×5 merged** (alpine/node/golang in pulse.Dockerfile; caddy; clickhouse);
-  staging boot-smoke PASS (pristine `pulse-s9smoke`, healthz ok via caddy TLS); **PROD
-  refreshed:** clickhouse/backup/caddy recreated on the new digests (pulse untouched =
-  v0.2.0); ingest errors confined to the 30s restart window; authed overview real data.
-- **Batch 3 majors: co-upgrade clusters, NOT one-at-a-time** (pre-verify proved each fails
-  alone). Web landed as ONE unit riding #22: vite 8.1.3 + vitest 4.1.10 + coverage-v8 4.1.10
-  + plugin-react 6.0.3 + `vite.config.ts` imports `vitest/config` + explicit react dedupe;
-  #21/#19/#20/#18 auto-closed superseded. Sdk: #17 (+coverage-v8 co-bump pushed to PR) and
-  #16 (+size-limit CLI 12 alignment) merged; #15/#13/#14/#25 merged after dependabot rebases.
-- ⚠ **COVERAGE GATES RE-BASELINED (vitest-4 rolldown instrumentation reads lower on identical
-  code):** web gates 76/72/45 → **59/54/45** (achieved 62.13/57.6/51; guard test updated);
-  sdk gates 62/73/70 → **63/43/67** (achieved 66.06/45.79/70.42 — lines RATCHETED UP).
-  Enforcement PROVEN (99% thresholds hard-fail). Go floor 70.2 untouched. Never compare
-  coverage across instrumentation engines.
-- ⚠ **PR-automation lessons (BINDING):** gh token lacks `workflow` scope → `@dependabot
-  rebase` for workflow-touching PRs; API update-branch corrupts lockfile PRs (EUSAGE desync,
-  PR #15) → `@dependabot rebase` for pristine dependabot PRs; **NEVER `@dependabot rebase` a
-  PR carrying session-pushed commits** (force-push destroys them — API update only); repo has
-  no auto-merge → poll + `gh pr merge --squash`. **CH-startup flake occurrence #1** recorded
-  (`TestQuery_GeoBreakdown_NonEmptyRows`, 60s budget query_integration_test.go:86, PR #8 run
-  29025705314, rerun green) — **2nd occurrence ⇒ bump 60→180s in all 4 harness copies**.
-- WO-A promotions SKIPPED (date gate ≥2026-07-23) → S10 WO-F; WO-D triggers all unfired
-  (U3/O7/O11 re-verified); licensegen `-privkey` formally deferred D-066 → S10 WO-C.
+**Session 2026-07-09(g) result: D-068 — S10 DONE: O(N²) rebuildSnapshot ELIMINATED (~688×
+faster @1k streams, CPU cap reverted 1.0→0.5), licensegen `-privkey`/`-expires` TDD-green
+(production minting unblocked), `docs/dependabot-policy.md` committed, enforce_admins
+rationale committed; WO-B/WO-F date-gated → S11.** 2 workflows (3 read-only scouts; 3
+disjoint-scope TDD authors + 3 independent adversarial verifiers — all CONFIRMED).
+- **O(N²) fix (WO-D):** per-event `rebuildSnapshot`/`copySnapshot` full scans replaced by
+  `snapRemoveStream`/`snapAddStream` O(1) deltas + leading-edge ≤1/s subscriber coalescing;
+  full rebuild retained only for New/EvictStale/EvictStaleNodes. Benchmarks (new
+  `aggregator_bench_test.go`): BEFORE 6.72ms/175.3ms/684.4ms per cycle @100/500/1k (26×
+  superlinear), AFTER 88.8µs/480.7µs/993.8µs (5.4×/2.1× = linear); allocs/event 1021→1;
+  equivalence + AllocsPerRun(≤64) CI-stable guards pin it. Cap mitigation reverted (compose
+  0.5 / helm 500m / 3 goldens via alpine/helm:3.17.0 / runbook). ⚠ **Prod still runs the
+  pre-fix v0.2.0 image** — 0.5 cap is safe at prod's ~2 streams; fix ships next rollout;
+  don't run a high-stream prod on the old image.
+- **licensegen (WO-C):** `-privkey <hex-file>` (64-byte seed||pub, validated) + `-expires
+  <days>` (`flag.Visit`-guarded; expires_at UnixMilli; server already enforces). 8 new tests,
+  12/12 -race green; stdout 2-line contract + e2e/ci invocations untouched. docs/licensing.md
+  **§3 vendor key ceremony** added (offline keygen → vault → pubkey-only deploy → mint →
+  activate/verify → rotation); §2.1 post-GA footnote removed. **U3 minting is now self-serve.**
+- **Dependabot steady-state (WO-E):** `docs/dependabot-policy.md` — cadence per bump class,
+  merge mechanics (pristine → `@dependabot rebase`; carrier → API update ONLY; workflow-touching
+  → dependabot rebase; no auto-merge → poll+squash serial), batch-absorption order, co-upgrade
+  cluster registry. **Future dependabot PRs follow this doc.**
+- **enforce_admins (WO-A): stays `false`** — 1-review requirement + solo owner = self-approval
+  impossible → flip would deadlock session pushes (ROADMAP-V2 §2.1/§4 D-V2-3). Re-arm S12 or
+  operator "PR-first". **WO-B keep-7 cycle-8 (≥07-16) and WO-F promotions (≥07-23) SKIPPED on
+  date gates** — both carried into SESSION-11 (WO-D/WO-E there).
 
-**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-10.md` and execute it** (S10:
-enforce_admins revisit, keep-7 cycle-8 verification (date ≥2026-07-16), licensegen
-`-privkey`/`-expires` TDD, O(N²) rebuildSnapshot fix + benchmark, dependabot steady-state
-policy, promotions carry-over if ≥2026-07-23). **Plan of record for post-GA: `ROADMAP-V2.md`.**
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-11.md` and execute it** (S11:
+white-label PDF logo, anomaly expansion w/ contract CR, SSO/OIDC phase 1, + date-gated
+carry-overs keep-7 cycle-8 (≥07-16) and CI promotions (≥07-23)). **Plan of record: `ROADMAP-V2.md`.**
 
-**Standing numbers (2026-07-09 post-S9/D-067):** Go total **73.2%** (floor **70.2**); web
+**Standing numbers (2026-07-09 post-S10/D-068):** Go total **73.5%** (floor **70.2**); web
 **62.13/57.6/51** (gates 59/54/45 — vitest-4 re-baseline); sdk **66.06/45.79/70.42** (gates
-63/43/67; 3.52 KB). Prod **`pulse v0.2.0` (commit 4657512) + refreshed caddy/clickhouse/backup
-digests**, healthy, smoke-green. **Dependabot queue: ZERO.** Operator queue: **O7 GHCR
-visibility (the ONE remaining click)** + U3 license key (optional) + O11 rotation (optional) +
-NEW optional `gh auth refresh -s workflow` + standing question: CodeQL as required context
-(yes/no, due ~07-23). **Operator-facing checklist: `agents/handoffs/OPERATOR-TODO.md` —
-REFRESHED at this close** (ledger of record: ROADMAP §5 + ROADMAP-V2 §4).
+63/43/67; 3.52 KB). Prod **`pulse v0.2.0` (commit 4657512) + D-067 digests**, healthy —
+pre-D-068 image, next rollout carries the O(N²) fix. **Dependabot queue: ZERO** (policy:
+`docs/dependabot-policy.md`). Operator queue: **O7 GHCR visibility (the ONE remaining click)**
++ 2 questions (CodeQL required yes/no ~07-23; PR-first cadence yes/no) + optional U3 (minting
+now self-serve, docs/licensing.md §3) / D-V2-1 unsigned-webhook decision / O11 / `gh auth
+refresh -s workflow`. **Operator-facing checklist: `agents/handoffs/OPERATOR-TODO.md` —
+REFRESHED at this close** (ledger of record: ROADMAP §5 + ROADMAP-V2 §4). CH-startup-flake
+watch stands (2nd occurrence ⇒ 60→180s ×4 copies).
 
 ---
 

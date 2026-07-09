@@ -2521,3 +2521,81 @@ S10 WO-C (ROADMAP-V2 §2.3; SESSION-10.md).
 **pulse v0.2.0 (4657512)** + D-067-refreshed caddy/clickhouse/backup digests, healthy,
 smoke-green. **Ledger: O8 ✅ CLOSED** (queue zero; steady-state policy = S10 WO-E); O7 = the
 one click; U3 optional; O11 optional; NEW optional: gh `workflow` scope refresh.
+
+## D-068 — SESSION-10 executed: O(N²) rebuildSnapshot fixed (~688× @1k streams), licensegen -privkey/-expires, dependabot policy, enforce_admins rationale; WO-B/WO-F date-gated → S11 (2026-07-09)
+
+**Session shape:** 2 Workflows — s10-scout (3 read-only scouts) + s10-author-verify (3 disjoint-scope
+TDD authors, WO-D on opus, each followed by an independent adversarial verifier; all 3 CONFIRMED).
+Preconditions re-verified at open: ci+e2e+codeql GREEN at 32bd7d7; dependabot queue 0 PRs; tree clean.
+
+**WO-A — enforce_admins stays `false`; rationale committed (ROADMAP-V2 §2.1 + §4 D-V2-3 RESOLVED-DEFERRED).**
+Sessions run as the repo owner and push directly to main (binding §11 flow), and protection requires
+1 approving review while the repo has a single human collaborator — GitHub forbids self-approval, so
+flipping enforce_admins today would deadlock ALL session pushes. Re-arm: S12, or the operator says
+"PR-first" (then drop required reviews to 0 or add a second reviewer). Question filed in OPERATOR-TODO.
+
+**WO-B — SKIPPED (date gate):** keep-7 backup cycle-8 pruning check triggers ~2026-07-16; today is
+2026-07-09. Carried to SESSION-11 as a date-gated WO. No drift observed (backup sidecar running).
+
+**WO-C — `qa/licensegen` -privkey/-expires DONE, TDD red→green (12/12 -race green).**
+RED captured: 'flag provided but not defined: -privkey/-expires' (3 failing tests); 8 new tests
+(valid/missing/malformed privkey ×2, expires +30d value-window/zero/negative, both-flags compose,
+no-flags backcompat). Implementation: hex ed25519 64-byte (seed||pub, 128 hex) key file load with
+length/hex validation; `flag.Visit` distinguishes explicit `-expires` from default (bare runs can
+NEVER hit the ≤0 rejection); expires_at = now+days·24h UnixMilli (server activate() already enforces
+it — license.go:389); stdout stays EXACTLY 2 lines (diagnostics → stderr); e2e.yml/ci.yml invocations
+untouched (verified by diff). docs/licensing.md: §3 vendor key ceremony (3a-3f: offline keygen,
+vault-only private key, PULSE_LICENSE_PUBKEY deploy, mint cmd, activate/verify via API, rotation =
+no-CRL overlap) + the fulfilled §2.1 post-GA footnote REMOVED. Verifier CONFIRMED all 11 checks incl.
+adversarial mints with its own keypair (sig verify OK) and expires_at delta ≈29.9999997 days.
+
+**WO-D — O(N²) rebuildSnapshot ELIMINATED (the D-065 mitigation is now a real fix); CPU cap reverted.**
+- BEFORE (measured, new additive bench harness on old code — profile-first satisfied):
+  BenchmarkPollCycle 100/500/1000 = 6.72ms / 175.3ms / 684.4ms per cycle; ratio 500vs100 = 26×
+  (O(N²) confirmed); 1021 allocs/event at N=1000 (3 N-sized maps per event).
+- Design: `snapRemoveStream`/`snapAddStream` O(1) delta helpers applied by every stream-mutating
+  handler BEFORE map deletes (publish_end ordering critical); nodes O(1); UpdateIngestHealth on the
+  delta path; rebuildSnapshot RETAINED only for New()/EvictStale()/EvictStaleNodes(); subscriber
+  notification leading-edge rate-limited ≤1 copySnapshot/s (single isolated events still push
+  immediately → subscription tests unchanged; trailing quiet-period flush = next eviction tick,
+  honestly documented after a verifier minor); bare-StreamID snap.Streams keying + deep-copy-out
+  invariant + public API all preserved.
+- AFTER: 88.8µs / 480.7µs / 993.8µs per cycle (76× / 365× / 688× faster); ratios 5.4× (<7) and
+  2.1× (<3) = linear; 1 alloc/event. New `aggregator_bench_test.go`: BenchmarkPollCycle100/500/1000,
+  seeded incremental-vs-full-rebuild EQUIVALENCE test, `TestPollCycle_AllocsPerEvent_Bounded`
+  (AllocsPerRun ≤64 at N=1000 — orders-of-magnitude, CI-stable under -race; was 1021, now 1).
+  All 11 aggregator tests + 8/8 collector packages -race green.
+- Cap revert (D-065 mitigation): compose hardened cpus "1.0"→"0.5"; helm 1000m→500m; all 3 helm
+  goldens regenerated with alpine/helm:3.17.0 (exact CI version) — golden diff gate PASS locally;
+  runbook expected-cpus restored to 500000000. ⚠ Prod (pulse v0.2.0 image = pre-fix) picks up the
+  0.5 cap at its next `up -d`: SAFE at current prod load (N≈2 streams; the burst needs hundreds),
+  and the fixed image ships with the next rollout — do not `up -d` a 500-stream prod on the old
+  image after this commit.
+- Verifier CONFIRMED: independent bench re-run (ratios 5.21×/2.12×), full delta-accounting audit
+  (ordering, old-App subtraction, no double-count, keying, UpdatedAt, no shared-map escape, sink
+  deadlock guard) — no correctness defects; 1 minor comment-freshness claim fixed by ORCH.
+- ARCHITECTURE.md §4 A10 row + §7 live-aggregates paragraph updated with measured numbers.
+
+**WO-E — `docs/dependabot-policy.md` NEW (steady-state policy).** 6 sections: bump classes
+(digest/patch ≤1wk + staging smoke for docker digests; minors ≤2wk with -race/coverage gates at the
+vitest-4 baselines; majors = session WO with pre-verify-all + co-upgrade-cluster carrier PRs +
+release dry-run for actions majors; golang = BLOCKED by D-032 pin, digest refreshes OK), merge
+mechanics (pristine PR → @dependabot rebase; carrier PR → API update-branch ONLY; workflow-touching
+→ @dependabot rebase due to missing gh workflow scope; no auto-merge → poll+squash, serial), gates
+table, batch-absorption order, known clusters (web vite+vitest+coverage-v8+plugin-react; sdk
+vitest+coverage-v8) + update-after-each-major instruction. Verifier CONFIRMED (every claim traced to
+D-066/D-067/dependabot.yml); 2 minors fixed/waived by ORCH (--no-deps wording aligned to D-067
+evidence; 207 lines vs ~200 cosmetic).
+
+**WO-F — SKIPPED (date gate):** CI promotions (web-e2e/csp-e2e required + optional CodeQL) gate at
+≥2026-07-23; today 2026-07-09. Carried to SESSION-11 with the same spec (JOB-level streak re-measure
+first; FULL-LIST PUT; GET-diff proof; drop continue-on-error; CodeQL only with explicit operator OK).
+
+**ORCH gates:** go vet clean; gofmt clean (server + licensegen, gated on output emptiness); full
+-race repo-root-mount suite 24 pkgs 0 FAIL / 2 SKIP (both expected: schema-fixture tests skip on npx-less golang:1.25 container, covered in CI); coverage total **73.5%**
+(floor 70.2 held); licensegen module -race green. Commits: 03f9965 (WO-C), 2d475a2 (WO-D),
+760eda9 (WO-E), + this close commit. CI post-push: ci 29040597172, e2e 29040597139, codeql 29040597135 — all GREEN.
+
+**Carry to S11:** WO-B (≥07-16), WO-F (≥07-23), CH-startup-flake watch (occurrence #1 recorded
+D-067 — 2nd occurrence ⇒ 60→180s in all 4 harness copies), U3 live beacon smoke when the operator
+sets PULSE_LICENSE_KEY (minting now unblocked by WO-C), prod rollout note from WO-D above.
