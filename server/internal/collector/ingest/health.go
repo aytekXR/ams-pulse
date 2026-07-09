@@ -212,9 +212,10 @@ func (h *HealthTracker) onIngestStats(ev domain.ServerEvent) {
 	snap := *pub
 	h.mu.Unlock()
 
-	// Log drops for ops visibility.
+	// Log per-stream detail at DEBUG level; one aggregated INFO line per sweep
+	// tick is emitted by logDegradedLocked (called from SweepStale).
 	if health == domain.StreamHealthCritical || health == domain.StreamHealthWarning {
-		h.logger.Info("ingest: health degraded",
+		h.logger.Debug("ingest: health degraded",
 			"stream", ev.StreamID,
 			"app", ev.App,
 			"node", ev.NodeID,
@@ -257,7 +258,31 @@ func (h *HealthTracker) SweepStale() int {
 			count++
 		}
 	}
+	h.logDegradedLocked()
 	return count
+}
+
+// logDegradedLocked emits one aggregated INFO line for currently-tracked
+// publishers whose health is Warning or Critical. Call with h.mu held.
+// Emits nothing when the count is zero.
+func (h *HealthTracker) logDegradedLocked() {
+	var examples []string
+	total := 0
+	for _, pub := range h.publishers {
+		if pub.Health == domain.StreamHealthWarning || pub.Health == domain.StreamHealthCritical {
+			total++
+			if len(examples) < 3 {
+				examples = append(examples, pub.StreamID)
+			}
+		}
+	}
+	if total == 0 {
+		return
+	}
+	h.logger.Info("ingest: degraded streams",
+		"count", total,
+		"examples", examples,
+	)
 }
 
 // Snapshot returns a copy of all publisher states.

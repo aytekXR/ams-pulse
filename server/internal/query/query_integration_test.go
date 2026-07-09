@@ -30,6 +30,7 @@ import (
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 	"github.com/pulse-analytics/pulse/server/internal/query"
 	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse/migrations"
+	"github.com/pulse-analytics/pulse/server/internal/testutil"
 )
 
 // queryFreePort finds a free TCP port.
@@ -48,10 +49,7 @@ func queryFreePort(t *testing.T) int {
 // and returns the TCP port and a cleanup func.
 func startClickHouse(t *testing.T, tmpDir string) (tcpPort int) {
 	t.Helper()
-	chBin := "/tmp/clickhouse"
-	if _, err := os.Stat(chBin); err != nil {
-		t.Skipf("clickhouse binary not found at %s: %v", chBin, err)
-	}
+	chBin := testutil.RequireClickHouseBin(t)
 
 	tcpPort = queryFreePort(t)
 	httpPort := queryFreePort(t)
@@ -507,6 +505,94 @@ func TestQuery_QoeSummary_RealStartupP50(t *testing.T) {
 
 	t.Logf("PASS VD-11: QoeSummary returns real startup_p50_ms=%.1f from rollup_qoe_1h",
 		result.Totals.StartupP50Ms)
+}
+
+// ─── D-062: QoEForStream from rollup_qoe_1h ──────────────────────────────
+
+// TestQuery_QoEForStream_RebufferRatio seeds beacon_events with one rebuffer_end
+// (rebuffer_ms=5000) and one heartbeat (watch_ms=10000) for stream "int-stream".
+// After OPTIMIZE TABLE rollup_qoe_1h FINAL, asserts QoEForStream returns
+// rebuffer_ratio ≈ 0.5 and error_rate = 0.
+//
+// Derivation: rollup_qoe_1h MV (0001_init.sql:406-425):
+//
+//	rebuffer_ratio = sumMerge(rebuffer_total_ms) / sumMerge(watch_time_ms)
+//	              = 5000 / 10000 = 0.5
+//	error_rate    = sumMerge(error_count) / countMerge(session_count)
+//	              = 0 / 2 = 0
+func TestQuery_QoEForStream_RebufferRatio(t *testing.T) {
+	tmpDir := t.TempDir()
+	tcpPort := startClickHouse(t, tmpDir)
+
+	const dbName = "pulse_query_qoe_stream_test"
+	runMigrations(t, tcpPort, dbName)
+
+	dsn := fmt.Sprintf("clickhouse://127.0.0.1:%d/%s", tcpPort, dbName)
+	opts, _ := clickhousego.ParseDSN(dsn)
+	conn, err := clickhousego.Open(opts)
+	if err != nil {
+		t.Fatalf("open conn: %v", err)
+	}
+	defer conn.Close()
+
+	ctx := context.Background()
+
+	// Base time 30 min ago so both rows land in the current hour bucket.
+	baseTime := time.Now().UTC().Add(-30 * time.Minute)
+
+	// Seed: rebuffer_end with rebuffer_ms=5000.
+	if err := conn.Exec(ctx, fmt.Sprintf(`
+		INSERT INTO %s.beacon_events
+			(version, session_id, stream_id, app, ts, event_type, rebuffer_ms)
+		VALUES (1, 'int-sess-reb', 'int-stream', 'live', ?, 'rebuffer_end', 5000)`,
+		dbName), baseTime,
+	); err != nil {
+		t.Fatalf("insert rebuffer_end: %v", err)
+	}
+
+	// Seed: heartbeat with watch_ms=10000.
+	if err := conn.Exec(ctx, fmt.Sprintf(`
+		INSERT INTO %s.beacon_events
+			(version, session_id, stream_id, app, ts, event_type, watch_ms)
+		VALUES (1, 'int-sess-hb', 'int-stream', 'live', ?, 'heartbeat', 10000)`,
+		dbName), baseTime.Add(time.Minute),
+	); err != nil {
+		t.Fatalf("insert heartbeat: %v", err)
+	}
+
+	// Merge aggregate states so sumMerge / countMerge return consolidated results.
+	_ = conn.Exec(ctx, fmt.Sprintf("OPTIMIZE TABLE %s.rollup_qoe_1h FINAL", dbName))
+
+	fakeLive := &fakeLiveProviderQ{}
+	qsvc := query.New(fakeLive, conn, nil)
+
+	// lookback of 2h covers toStartOfHour(baseTime) regardless of current minute.
+	rebuf, errRate, err := qsvc.QoEForStream(ctx, "int-stream", "live", 2*time.Hour)
+	if err != nil {
+		t.Fatalf("QoEForStream: %v", err)
+	}
+
+	// Short retry loop for residual async-visibility jitter after OPTIMIZE FINAL.
+	for deadline := time.Now().Add(15 * time.Second); rebuf == 0 && time.Now().Before(deadline); {
+		_ = conn.Exec(ctx, fmt.Sprintf("OPTIMIZE TABLE %s.rollup_qoe_1h FINAL", dbName))
+		time.Sleep(300 * time.Millisecond)
+		rebuf, errRate, err = qsvc.QoEForStream(ctx, "int-stream", "live", 2*time.Hour)
+		if err != nil {
+			t.Fatalf("QoEForStream (poll): %v", err)
+		}
+	}
+
+	// rebuffer_ratio = 5000ms / 10000ms = 0.5; allow [0.4, 0.6] for float rounding.
+	if rebuf < 0.4 || rebuf > 0.6 {
+		t.Errorf("D-062 FAIL: QoEForStream rebuffer_ratio=%.4f, expected ~0.5 (range [0.4,0.6])", rebuf)
+	} else {
+		t.Logf("PASS D-062: QoEForStream rebuffer_ratio=%.4f (expected ~0.5)", rebuf)
+	}
+	if errRate != 0 {
+		t.Errorf("D-062 FAIL: QoEForStream error_rate=%.4f, expected 0 (no error events seeded)", errRate)
+	} else {
+		t.Logf("PASS D-062: QoEForStream error_rate=%.4f (expected 0)", errRate)
+	}
 }
 
 // ─── Fake live provider for query tests ──────────────────────────────────

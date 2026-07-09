@@ -11,33 +11,62 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-03.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-09.md`)
 
-**Session 2026-07-08(c) result: D-059 — S2 DONE: coverage 59.4→69.7%, floor 58→62, harness honest.**
-`pulse-s2-test-backfill` workflow (12 agents: 5 parallel TDD authors → 5 SEQUENTIAL adversarial
-verifiers w/ exclusive source-mutation windows → 1 fix round): query 18.5→**88.5**, migrations
-0→**65.6 unit + A11 RETIRED** (double-migrate = nil-error no-op, integration-proven), cmd/pulse
-13.6→**43.0** (extracted `beaconListenerConfig()`; **VD-15 pin: License non-nil**, addr pin),
-api 55.9→**74.3** + conformance harness HONEST (missing spec t.Fatalf; route-not-in-spec t.Errorf;
-**no drift flushed out — no CR needed**; 0 SKIP verified), domain 0→**100**, discovery budget
-3→5 cycles (derived, D-042-compliant). WO-4 refuted once (3 t.Skip hatches in new tests) → fixed
-→ re-confirmed. All ci.yml server+docker-build steps reproduced locally (migrate smoke vs CH 24.8,
-integration incl. A11, stamped image). CI run 28922883994 green. Commits `d3f697c`…`c80badf`.
-⚠️ **O7 still OPEN** (GHCR private; token lacks read:packages — re-verified). **O8 grew to 21
-open dependabot PRs** (majors: vite 8, vitest 4, plugin-react 6, eslint 10, size-limit 12).
+**Session 2026-07-09(e) result: D-065 — S8 DONE: ★ GA DECLARED ★.** `pulse-s8-punch`
+(9 agents: 3 scouts → 3 TDD authors → 3 adversarial verifiers, ALL CONFIRMED round 1) +
+ORCH-driven WO-A prod rollout + gates.
+- **WO-A — G2 RESTORED: prod runs `v0.1.0-50-g5d77a05` (current main).** Staging-verified
+  first (isolated ci-overlay stack); `pre-d064` rollback tag + manual backup BEFORE swap;
+  stamped build; §8.8 smoke green + NEW spot-checks: B7 live (`/webhook/ams` good-sig 200 /
+  bad-sig 401, per-source 401 fail-closed), honest-QoE case-3 canary (`rebuffer_ratio lt
+  99999` → firing row ≤60s evaluating honest 0.0, zero `qoe_reader` WARNs, deleted after),
+  beacon 403 LICENSE_REQUIRED (U3 pending), `ams_sources.webhook_secret_enc` applied.
+  ⚠️ **SQLite WAL gotcha (runbook-recorded):** inspecting a copied `pulse_meta.db` WITHOUT
+  its -wal shows the OLD schema — copy db+wal+shm. Runbook doc lies fixed (container name
+  `pulse-prod-pulse-1`, stale tag table).
+- **Punch items (all verifier-CONFIRMED):** WO-B digest pins (hardened mock-ams golang,
+  helm busybox via `clickhouse.waitImage`, 3 goldens red-first ×2, GAP-206-03 closed);
+  WO-C health-degraded log → ONE aggregated INFO/tick (≤3 examples; zero → silent) +
+  **pulse CPU cap 0.5→1.0** (compose+helm, evidence memo: 147% O(N²) rebuildSnapshot
+  bursts, unknown P99 under CFS, nproc=6; the O(N²) loop itself = post-GA backlog);
+  WO-D `testutil.RequireClickHouseBin` (CI=true + missing /tmp/clickhouse → Fatalf, 8 sites,
+  negative proofs both ways) + CH CANNOT_PARSE_INPUT ×27 root-caused benign (real finding:
+  initdb.d mount of raw DDL = Code 62 + ZERO tables — anti-pattern warned in compose +
+  monitoring.md).
+- **WO-E promotions NOT DUE** (07-09 < ~07-23); job-level streaks INTACT: web-e2e 7/7 (ci),
+  csp-e2e 7/7 (e2e) → S9 executes the FULL-LIST PUT if streaks hold; CodeQL only w/ operator OK.
+- **WO-F: GA DECLARED (D-065 evidence table).** Remaining gaps ONLY operator (O5 LICENSE,
+  O7 GHCR, U3, U5, O3) or time (promotions; keep-7 cycle-8). CHANGELOG GA section written;
+  `RELEASE-NOTES-DRAFT.md` ready. **Tag v1.0.0-vs-v0.2.0 + push = OPERATOR (O13)** — then
+  release pipeline → cosign verify → prod rollout carrying the tag.
+Gates: gofmt clean; full `-race` 24 pkgs EXIT=0 (73.2%, **floor ratcheted 70→70.2** =
+achieved−3 at GA); helm lint + goldens; actionlint; compose parity from pristine copy;
+ci+e2e+codeql GREEN (first attempt had 0-step queue-CANCELLED jobs at 12:40Z — GitHub
+capacity blip, `gh run rerun --failed` fixed; 0-step cancels across independent workflows =
+infra, not code). Full evidence: D-065.
 
-**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-03.md` and execute it** (S3 test
-backfill B: response-body conformance for ALL remaining OpenAPI operations (G4), webhook
-58.1→≥65, reports 58.8→≥65, web `functions` threshold gated + 0%-page smoke tests, SDK coverage
-baseline; FLOOR 62→66).
+**SAME-DAY CONTINUATION (D-066): the operator answered — ★ v0.2.0 GA SHIPPED ★.**
+Tag v0.2.0 @ `4657512` → release run 29023647495 GREEN (Trivy/SBOM/cosign) → prod rolled
+onto the tag (`pulse v0.2.0`, smoke green, `pre-v0.2.0` rollback tag). **LICENSE =
+PolyForm Noncommercial 1.0.0** (O5 ✅ — G7 FULLY met; SDK stays MIT; product-key minting
+documented in `docs/licensing.md`). O12 secret-scanning ENABLED (agent-run). **O3
+CLOSED-N/A: AMS 3.0.3 webhooks are UNSIGNED** (live-verified, 182 settings, no HMAC field)
+— REST polling stays the AMS ingest; AMS-INTEGRATION §4.5 corrected. U5 CLOSED (headless
+Chromium: both prod URLs 0 console errors). O11 risk-accepted + stale branch deleted.
+O8: #4 closed + dependabot golang-ignore rule; 20 PRs → S9 absorption WO. Full: D-066.
 
-**Standing numbers (2026-07-08 post-S2):** coverage total **69.7%** (floor 62); per-package:
-query 88.5, api 74.3, cmd/pulse 43.0, migrations 65.6 (unit), domain 100, cluster 89.0,
-webhook **58.1** (S3), reports **58.8** (S3), meta 61.9, clickhouse unit 61.8, prober 61.9.
-Conformance harness has NO escape hatches; 22 conformCheck call sites across 4 api test files —
-the D-057 "14/52 validated / 38 uncovered" list is STALE post-WO-4, re-count in S3. Web
-thresholds still lines 57 / branches 71, functions UNGATED (vite.config.ts:49-52). Docs
-P0-stales (productionize.md) remain S6 scope. Full evidence: D-059.
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-09.md` and execute it** (S9:
+promotions if ≥2026-07-23, dependabot absorption ×3 verified batches, ROADMAP-v2 seeding,
+conditional operator triggers U3/O7/O11).
+
+**Standing numbers (2026-07-09 post-S8/D-066):** Go total **73.2%** (floor **70.2**); web
+76/72/45; SDK 62/73/70 (3.52 KB); conformance 51/52 + 1 waived. Prod **`pulse v0.2.0`
+(commit 4657512)**, healthy, smoke-green, honest-QoE + B7 LIVE. Operator queue is down to:
+**O7 GHCR visibility (the ONE remaining click)** + U3 license key (optional feature
+unlock; minting guide `docs/licensing.md`) + optional O11 rotation + O8 majors via S9.
+**Operator-facing checklist w/ click-paths: `agents/handoffs/OPERATOR-TODO.md` — REFRESH IT
+at every session close** (ledger of record stays ROADMAP §5).
 
 ---
 
@@ -105,12 +134,13 @@ file + `decisions.md` (new D-0NN) each session. AMS web login is RESOLVED (D-036
   helm/compose, strict, 1 review, enforce_admins=false — owner direct pushes work; keep it that way while
   sessions push to main). `ams-integration` is DELETED (local+origin). Tag **v0.1.0** exists @ `1a701d6`;
   release pipeline proven (D-058). U4 is fully resolved.
-- **Go suite green / coverage 69.7%** as of 2026-07-08 (full `-race` + coverage, **repo-root mount**,
-  golang:1.25, after D-052…D-059; was 47.5% on 2026-06-28). Working tree is CLEAN — everything is committed and
-  pushed; CI additionally enforces a `gofmt -l` gate, a **62%** coverage floor (D-053, ratcheted D-059) and a
-  stamped-version docker-build assert (D-058). **Prod runs `1a701d6` (≥D-056) since 2026-07-08** — stamped
-  `pulse 1a701d6`, beacon public chain live (403 LICENSE_REQUIRED until O7/U3), rollback tag
-  `pulse-prod-pulse:pre-d058`.
+- **Go suite green / coverage 73.2%** as of 2026-07-09 (full `-race` + coverage, **repo-root mount**,
+  golang:1.25, after D-052…D-065; was 47.5% on 2026-06-28). Working tree is CLEAN — everything is committed and
+  pushed; CI additionally enforces a `gofmt -l` gate, a **70.2%** coverage floor (D-053, ratcheted through
+  D-065 = GA achieved−3) and a stamped-version docker-build assert (D-058). **Prod runs
+  `v0.1.0-50-g5d77a05` = CURRENT MAIN since 2026-07-09 (D-065 WO-A)** — honest-QoE + B7 live-verified,
+  beacon public chain live (403 LICENSE_REQUIRED until U3), rollback tags `pulse-prod-pulse:pre-d064`
+  (bc15d43), `:pre-d061` (1a701d6) and `:pre-d058`. **★ GA DECLARED (D-065) — tag choice = operator (O13).**
 - **The prod image embeds the web UI** (multi-stage `deploy/docker/pulse.Dockerfile`: `npm ci && npm run build` →
   embedded in the Go binary), so a passing go-live build implies the web build passed.
 
@@ -411,6 +441,14 @@ health scoring, (4) AMS wire decode/normalize, (5) the query layer. Report cover
 - **Orchestrate with the Workflow tool.** One phase = one Workflow: ORCH writes the plan + pre-approved CRs to
   `decisions.md`, fans out to disjoint-scope agents, then **independently gates**. Background work is harness-tracked —
   you're re-invoked on completion; don't poll-spin.
+- **CodeGraph (operator-installed 2026-07-09, D-061).** Local index `.codegraph/` + CLI `~/.local/bin/codegraph`.
+  Scouts/authors query the graph BEFORE grep/file sweeps: `codegraph explore "<question>"`,
+  `codegraph node <sym>`, `codegraph callers <sym>` (blast radius). Put this in every agent work order
+  (subagents use the CLI via Bash). **Closing protocol: `codegraph sync` after the last commit** (+
+  `codegraph status` to confirm; stale lock → `codegraph unlock`).
+- **Local compose stacks NEVER run from the real repo** — compose auto-loads `deploy/.env` (prod secrets) from
+  the `-f` dir. Use a pristine working-tree copy:
+  `git ls-files -co --exclude-standard -z | tar --null -T - -cf - | tar -C <scratch> -xf -` + unique `-p` name (D-061).
 - **Anti-stall (D-016):** NEVER run `pulse serve`/`clickhouse server` in the foreground inside an agent. Use
   `docker compose up -d` (detached) + health polling; CH unit work via the integration harness. `timeout` on builds,
   `-timeout` on `go test`, vitest `run` not watch, `curl -m`. Long local repros: Bash `run_in_background: true`.
@@ -418,6 +456,11 @@ health scoring, (4) AMS wire decode/normalize, (5) the query layer. Report cover
   ORCH-approved CR applied by INT-01 (OpenAPI + event schemas + migrations).
 - **⚠️ Workflow/fork agents have Write+commit access** — a reviewer fork once auto-committed during a concurrent ORCH
   edit (D-030 process note). Scope reviewer agents read-only when ORCH is editing the same files.
+- **⚠️ Subagents NEVER revert shared-tree files (D-063):** no `git restore` / `git checkout --` /
+  `git stash` inside workflow agents — concurrent agents' UNCOMMITTED work shares the tree, and a
+  verifier reading `git status` cannot tell foreign work from scope violations. Violations are
+  REPORTED; ORCH decides and reverts. ORCH also commits early per scope to shrink the window.
+  (A wo6 fixer once destroyed two files of verified work; recovered only via transcript-replay.)
 
 ## 13. HARD RULES (CLAUDE.md / ARCHITECTURE §3)
 
@@ -447,6 +490,8 @@ health scoring, (4) AMS wire decode/normalize, (5) the query layer. Report cover
   (gitignored) — persisted in the `pulse-prod_pulse-data` volume; **never `down -v` that volume.** TLS check: always
   `--resolve beyondkaira.com:443:161.97.172.146` (VPS DNS is stale). Rollback: runbook §5.
 - `deploy/.env`, `*.db*`, `oguz-testing.md`, `web/pulse_secret.key` are gitignored — never commit.
-- ⚠️ The working tree may carry an **uncommitted** `deploy/config/Caddyfile.prod` change + an untracked
-  `Caddyfile.prod.bak-brier` — that's the operator's **separate `brier.<domain>` project** (a Next.js app on host:3000),
-  NOT Pulse (noted in D-035). Leave it uncommitted; never fold it into a Pulse commit (commit by explicit path).
+- ~~brier Caddyfile warning~~ RETIRED (D-062 verified): D-046 removed the brier block + `.bak-brier`
+  file; `deploy/config/Caddyfile.prod` is clean, tracked, and uses `{$AMS_UPSTREAM}` since D-062.
+- ⚠️ **Concurrent-session hazard (learned D-062):** the operator may run a second Claude session in
+  this repo. If HEAD moves or the tree dirties mid-session with work you didn't do, STOP and inspect
+  before committing/pushing — a foreign unpushed commit once carried a hardcoded live secret (O11).

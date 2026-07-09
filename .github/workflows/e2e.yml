@@ -19,6 +19,8 @@
 name: e2e
 
 on:
+  push:
+    branches: [main]
   pull_request: {}
   workflow_dispatch: {}
 
@@ -33,20 +35,22 @@ jobs:
       - name: Generate ephemeral secret key
         run: echo "PULSE_SECRET_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
 
-      # ── Mint ephemeral Pro license ──────────────────────────────────────────────
-      - name: Mint ephemeral Pro license
+      # ── Mint ephemeral Business license ─────────────────────────────────────────
+      - name: Mint ephemeral Business license
         run: |
           # license.go:168: PULSE_LICENSE_PUBKEY overrides the embedded dev key at runtime.
           # qa/licensegen/main.go: stdout = two GITHUB_ENV lines (PULSE_LICENSE_KEY +
           # PULSE_LICENSE_PUBKEY); stderr = go build output + claims JSON diagnostics → log.
           # golang:1.25 for Go-version determinism; no sg prefix needed on GitHub runners.
           # The two vars are passed into the pulse container via deploy/docker-compose.ci.yml.
+          # Business tier required: webhook channels gate on Business+ (license.go:118).
+          # A2 beacon step still works — CheckBeaconIngest gates on non-free only.
           docker run --rm \
             -v "${GITHUB_WORKSPACE}:/repo" \
             -w /repo/qa/licensegen \
             -e GOFLAGS=-buildvcs=false \
             golang:1.25 \
-            go run . -tier pro \
+            go run . -tier business \
             >> "$GITHUB_ENV"
           echo "PULSE_LICENSE_KEY and PULSE_LICENSE_PUBKEY written to GITHUB_ENV."
 
@@ -365,15 +369,26 @@ jobs:
           [ -n "$INGEST_TOKEN" ] || { echo "FAIL: empty token in response"; exit 1; }
           echo "Ingest token minted (prefix): ${INGEST_TOKEN:0:10}..."
 
-          # One startup_complete event (the rollup MV filters this type; session_start is skipped).
+          # Three events in one batch (MV filters startup_complete, heartbeat, rebuffer_end):
+          #   startup_complete → populates startup_ms_state (startup_p50_ms assertion below)
+          #   rebuffer_end     → rebuffer_ms=5000 → rebuffer_total_ms in rollup_qoe_1h
+          #   heartbeat        → watch_ms=10000   → watch_time_ms in rollup_qoe_1h
+          # rebuffer_ratio = 5000/10000 = 0.5 > threshold 0.0 → rebuffer alert fires (below).
+          # app field set to "live" to match mock-ams app name so QoEForStream app filter hits.
           # session_id must be a UUID; ts is epoch ms generated at runtime, never hardcoded.
           BEACON_BODY=$(python3 -c "
           import uuid, json, time
+          now_ms = int(time.time() * 1000)
           payload = {
               'version': 1,
               'session_id': str(uuid.uuid4()),
               'stream_id': 'e2e-stream-1',
-              'events': [{'type': 'startup_complete', 'ts': int(time.time() * 1000), 'data': {'startup_ms': 100}}]
+              'app': 'live',
+              'events': [
+                  {'type': 'startup_complete', 'ts': now_ms,        'data': {'startup_ms': 100}},
+                  {'type': 'rebuffer_end',     'ts': now_ms + 1000, 'data': {'duration_ms': 5000}},
+                  {'type': 'heartbeat',        'ts': now_ms + 2000, 'data': {'watch_ms': 10000}}
+              ]
           }
           print(json.dumps(payload))
           ")
@@ -396,10 +411,10 @@ jobs:
           d = json.load(sys.stdin)
           acc = d.get('accepted', -1)
           print(f'accepted={acc}')
-          if int(acc) != 1:
-              print(f'FAIL: expected accepted==1, got {acc}')
+          if int(acc) != 3:
+              print(f'FAIL: expected accepted==3 (startup_complete+rebuffer_end+heartbeat), got {acc}')
               sys.exit(1)
-          print('PASS: beacon accepted==1')
+          print('PASS: beacon accepted==3')
           "
 
           # Poll for startup_p50_ms > 0 in /qoe/summary (rollup latency up to 120 s per D-039).
@@ -430,6 +445,184 @@ jobs:
           done
           echo "PASS: A2 — startup_p50_ms > 0 in QoE summary — beacon ingest and rollup confirmed."
 
+          # D-062: Create rebuffer_ratio alert rule and poll for it firing via the honest QoE reader.
+          # Budget: ~2 s CH batch flush + ~5 s evaluator tick + margin = 60 s budget at 5 s interval.
+          # threshold 0.0 fires on any non-zero rebuffer_ratio; the seeded ratio is 5000/10000=0.5.
+          # window_s:0 evaluates immediately; cooldown_s:1 minimum; severity:warning.
+          HTTP_STATUS=$(curl -m 5 -s \
+            -X POST \
+            -H "Authorization: Bearer ${PULSE_ADMIN_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"name":"e2e rebuffer honest","metric":"rebuffer_ratio","operator":"gt","threshold":0.0,"window_s":0,"cooldown_s":1,"severity":"warning"}' \
+            -o /tmp/rebuf_rule.json \
+            -w "%{http_code}" \
+            http://127.0.0.1:18090/api/v1/alerts/rules)
+          REBUF_RULE_BODY=$(cat /tmp/rebuf_rule.json)
+          echo "Create rebuffer_ratio rule ($HTTP_STATUS): $REBUF_RULE_BODY"
+          [ "$HTTP_STATUS" = "201" ] || { echo "FAIL: expected 201 for rebuffer rule, got $HTTP_STATUS"; exit 1; }
+
+          echo "Polling /api/v1/alerts/history?state=firing for rebuffer_ratio (60 s, 5 s interval) ..."
+          deadline=$(( $(date +%s) + 60 ))
+          LAST_REBUF_HIST=""
+          while true; do
+            LAST_REBUF_HIST=$(curl -m 5 -s \
+              -H "Authorization: Bearer ${PULSE_ADMIN_TOKEN}" \
+              "http://127.0.0.1:18090/api/v1/alerts/history?state=firing")
+            FOUND=$(echo "$LAST_REBUF_HIST" | python3 -c "
+          import sys, json
+          try:
+              d = json.load(sys.stdin)
+              items = d.get('items', [])
+              if any(it.get('metric') == 'rebuffer_ratio' for it in items):
+                  print('yes')
+              else:
+                  print('no')
+          except Exception:
+              print('no')
+          ")
+            echo "  rebuffer_ratio history check: $FOUND"
+            [ "$FOUND" = "yes" ] && break
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "TIMEOUT: no rebuffer_ratio alert in firing history after 60 s"
+              echo "Last /alerts/history response: $LAST_REBUF_HIST"
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "PASS: A2 D-062 — rebuffer_ratio alert fired via honest QoEReader (value 0.5 > threshold 0.0)."
+
+      # ── A4: webhook delivery_failure for dead-URL channel ───────────────────────
+      - name: A4 — webhook delivery_failure recorded for dead-URL channel
+        run: |
+          # Proof that the P1 registry-sync fix works end-to-end:
+          # - Create a webhook channel pointing at port 9 (discard, instantly ECONNREFUSED).
+          # - Create a rule that fires immediately (ingest_bitrate_floor lt 99999;
+          #   e2e-stream-1 bitrate from mock-ams ≈2 kbps which is < 99999).
+          # - Poll /alerts/history?state=delivery_failure until the row appears.
+          #
+          # Timing derivation (evaluator.go:162-171, 499-505, webhook.go:44):
+          #   ≤5 s tick + 4 attempts×~1 ms (ECONNREFUSED, no timeout wait) +
+          #   max backoff (600+1200+2400 ms) = ≤9.2 s worst case.
+          #   30 s budget at 2 s interval = 14 poll iterations — comfortable headroom.
+          #
+          # Config key is "webhook_url" (server.go:1331 — was "url", FIXED).
+          # Webhook channels require Business tier (license.go:118).
+          HTTP_STATUS=$(curl -m 5 -s \
+            -X POST \
+            -H "Authorization: Bearer ${PULSE_ADMIN_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"type":"webhook","name":"e2e-dead-webhook","config":{"webhook_url":"http://127.0.0.1:9/"}}' \
+            -o /tmp/df_channel.json \
+            -w "%{http_code}" \
+            http://127.0.0.1:18090/api/v1/alerts/channels)
+          CHANNEL_BODY=$(cat /tmp/df_channel.json)
+          echo "Create channel ($HTTP_STATUS): $CHANNEL_BODY"
+          [ "$HTTP_STATUS" = "201" ] || { echo "FAIL: expected 201, got $HTTP_STATUS"; exit 1; }
+          CHANNEL_ID=$(echo "$CHANNEL_BODY" | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])")
+          [ -n "$CHANNEL_ID" ] || { echo "FAIL: empty channel id"; exit 1; }
+
+          # Create rule: ingest_bitrate_floor lt 99999 fires immediately
+          # (e2e-stream-1 still live from A1; mock-ams bitrate ≈2 kbps < 99999).
+          # window_s:0 fires on the first evaluator tick (≤5 s); cooldown_s:1 minimum.
+          HTTP_STATUS=$(curl -m 5 -s \
+            -X POST \
+            -H "Authorization: Bearer ${PULSE_ADMIN_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"name\":\"e2e delivery fail\",\"metric\":\"ingest_bitrate_floor\",\"operator\":\"lt\",\"threshold\":99999,\"window_s\":0,\"cooldown_s\":1,\"channel_ids\":[\"${CHANNEL_ID}\"]}" \
+            -o /tmp/df_rule.json \
+            -w "%{http_code}" \
+            http://127.0.0.1:18090/api/v1/alerts/rules)
+          RULE_BODY=$(cat /tmp/df_rule.json)
+          echo "Create rule ($HTTP_STATUS): $RULE_BODY"
+          [ "$HTTP_STATUS" = "201" ] || { echo "FAIL: expected 201, got $HTTP_STATUS"; exit 1; }
+          DF_RULE_ID=$(echo "$RULE_BODY" | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])")
+          [ -n "$DF_RULE_ID" ] || { echo "FAIL: empty rule id"; exit 1; }
+
+          # Poll for delivery_failure row (30 s budget, 2 s interval).
+          # Assert on state only — error strings are sanitized (evaluator.go:558-562).
+          echo "Polling /api/v1/alerts/history?state=delivery_failure&rule_id=${DF_RULE_ID} (30 s, 2 s) ..."
+          deadline=$(( $(date +%s) + 30 ))
+          LAST_HIST=""
+          while true; do
+            LAST_HIST=$(curl -m 5 -s \
+              -H "Authorization: Bearer ${PULSE_ADMIN_TOKEN}" \
+              "http://127.0.0.1:18090/api/v1/alerts/history?state=delivery_failure&rule_id=${DF_RULE_ID}")
+            FOUND=$(echo "$LAST_HIST" | python3 -c "
+          import sys, json
+          try:
+              d = json.load(sys.stdin)
+              items = d.get('items', [])
+              print('yes' if any(it.get('state') == 'delivery_failure' for it in items) else 'no')
+          except Exception:
+              print('no')
+          ")
+            echo "  delivery_failure check: $FOUND"
+            [ "$FOUND" = "yes" ] && break
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "TIMEOUT: no delivery_failure row after 30 s"
+              echo "Last /alerts/history response: $LAST_HIST"
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "PASS: A4 — delivery_failure row confirmed for dead-URL webhook channel."
+
+      # ── WO-4: 500-stream render measurement (VD-04/A10) ────────────────────────────
+      - name: WO-4 — seed 500 streams via mock-ams bulk_publish
+        run: |
+          curl -m 15 -sf \
+            -X POST \
+            -H 'Content-Type: application/json' \
+            -d '{"count":500,"prefix":"vd04-stream-","viewers_each":0}' \
+            http://127.0.0.1:19090/control/bulk_publish
+          echo "500 streams seeded."
+
+      - name: WO-4 — wait 15 s for restpoller propagation
+        run: sleep 15
+
+      - name: WO-4 — assert 500 vd04 streams flow through poller → API
+        run: |
+          # The stack has 502 live streams here: 500 vd04 + e2e-stream-1 (A1) +
+          # e2e-stream-degrade (A3). /live/streams caps a page at 500 (query.go),
+          # so a page can NEVER contain all 500 vd04 items alongside the 2 e2e
+          # streams — the first run of this step demanded that and failed 498≠500.
+          # Correct asserts:
+          #   1. /live/overview total_publishers >= 502 — the FULL set survived
+          #      poller pagination (the regression this step really guards: the
+          #      pre-D-061 mock-ams page bug silently dropped streams).
+          #   2. The streams page is full at the 500 cap.
+          #   3. >=498 of the page rows are vd04 (2 slots legitimately held by
+          #      the A1/A3 streams).
+          OVERVIEW=$(curl -m 10 -s \
+            -H "Authorization: Bearer ${PULSE_ADMIN_TOKEN}" \
+            "http://127.0.0.1:18090/api/v1/live/overview")
+          PUBS=$(echo "$OVERVIEW" | python3 -c "import sys,json; print(json.load(sys.stdin).get('total_publishers',0))")
+          echo "overview total_publishers: $PUBS"
+          [ "$PUBS" -ge 502 ] || { echo "FAIL: expected >=502 publishers (500 vd04 + 2 e2e), got $PUBS — poller dropped streams"; exit 1; }
+          RESP=$(curl -m 10 -s \
+            -H "Authorization: Bearer ${PULSE_ADMIN_TOKEN}" \
+            "http://127.0.0.1:18090/api/v1/live/streams?limit=500")
+          TOTAL=$(echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('items',[])))")
+          VD04=$(echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(sum(1 for s in d.get('items',[]) if s.get('stream_id','').startswith('vd04-stream-')))")
+          echo "streams page: total=$TOTAL vd04=$VD04"
+          [ "$TOTAL" = "500" ] || { echo "FAIL: expected a full 500-item page at the cap, got $TOTAL"; exit 1; }
+          [ "$VD04" -ge 498 ] || { echo "FAIL: expected >=498 vd04 items in the page, got $VD04"; exit 1; }
+          echo "PASS: 502 publishers via overview; full 500-item page ($VD04 vd04)."
+
+      - name: WO-4 — VD-04 Playwright render measurement
+        env:
+          PULSE_BASE_URL: http://127.0.0.1:18090
+          PULSE_ADMIN_TOKEN: ${{ env.PULSE_ADMIN_TOKEN }}
+        run: |
+          cd web
+          npm ci --legacy-peer-deps
+          npx playwright install chromium --with-deps
+          npx playwright test \
+            --config playwright.realstack.config.ts \
+            e2e/streams-render-500.spec.ts \
+            --reporter=list 2>&1 | tee /tmp/pw-vd04.log
+          grep -E 'render_ms=' /tmp/pw-vd04.log || true
+
       # ── Teardown — always runs ───────────────────────────────────────────────
       - name: Dump compose logs on failure
         if: failure()
@@ -448,3 +641,148 @@ jobs:
             -f deploy/docker-compose.yml \
             -f deploy/docker-compose.ci.yml \
             down -v
+
+  csp-e2e:
+    runs-on: ubuntu-latest
+    # Bake period — promote to required after 2 weeks green (same policy as web-e2e).
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate ephemeral secret key
+        run: echo "PULSE_SECRET_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+
+      # License is not required — auth gate renders without it; dashboard is
+      # mocked via page.route().  Add the license mint step if future specs
+      # exercise real API endpoints (they will 403 LICENSE_REQUIRED without it).
+
+      - name: Build and start CSP stack (pulse + caddy)
+        run: |
+          docker compose \
+            -p pulse-csp-e2e \
+            -f deploy/docker-compose.yml \
+            -f deploy/docker-compose.ci.yml \
+            -f deploy/docker-compose.csp-e2e.yml \
+            up -d --build
+
+      - name: Wait for pulse + caddy healthy via /healthz (up to 150 s)
+        run: |
+          echo "Polling http://127.0.0.1:18080/healthz through Caddy ..."
+          deadline=$(( $(date +%s) + 150 ))
+          while true; do
+            if curl -m 5 -sf http://127.0.0.1:18080/healthz; then
+              echo ""
+              echo "Caddy + pulse are healthy"
+              break
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "TIMEOUT: /healthz through Caddy never succeeded after 150 s"
+              docker compose \
+                -p pulse-csp-e2e \
+                -f deploy/docker-compose.yml \
+                -f deploy/docker-compose.ci.yml \
+                -f deploy/docker-compose.csp-e2e.yml \
+                logs --no-color
+              exit 1
+            fi
+            sleep 5
+          done
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install web dependencies
+        run: cd web && npm ci --legacy-peer-deps
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-csp-${{ hashFiles('web/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-playwright-csp-
+
+      - name: Install Playwright browsers (chromium + system deps)
+        run: cd web && npx playwright install chromium --with-deps
+
+      - name: Run CSP Playwright tests
+        env:
+          # Use localhost (not 127.0.0.1) so window.location.host == localhost:18080,
+          # which matches the CSP connect-src 'ws://localhost:18080' directive.
+          CADDY_BASE_URL: "http://localhost:18080"
+        run: cd web && npx playwright test --config playwright.csp.config.ts
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-csp-report
+          path: |
+            web/playwright-report/
+            web/test-results/
+          retention-days: 14
+
+      - name: Dump compose logs on failure
+        if: failure()
+        run: |
+          docker compose \
+            -p pulse-csp-e2e \
+            -f deploy/docker-compose.yml \
+            -f deploy/docker-compose.ci.yml \
+            -f deploy/docker-compose.csp-e2e.yml \
+            logs --no-color
+
+      - name: Tear down stack and remove volumes
+        if: always()
+        run: |
+          docker compose \
+            -p pulse-csp-e2e \
+            -f deploy/docker-compose.yml \
+            -f deploy/docker-compose.ci.yml \
+            -f deploy/docker-compose.csp-e2e.yml \
+            down -v
+
+  slack-notify:
+    name: Slack notification
+    runs-on: ubuntu-latest
+    needs: [e2e, csp-e2e]
+    if: always()
+    steps:
+      - name: Notify Slack on success
+        if: ${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || github.event.pull_request.title || '' }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          MSG=$(printf '%s' "$COMMIT_MESSAGE" | head -n1)
+          MSG=${MSG:-"(no commit message)"}
+          TEXT=$(printf '✅ Build succeeded\n\nRepo: %s\nWorkflow: %s\nTime: %s\nCommit: %s - %s' \
+            "${GITHUB_REPOSITORY##*/}" "$GITHUB_WORKFLOW" "$(date -u '+%Y-%m-%d %H:%M UTC')" \
+            "${GITHUB_SHA:0:7}" "$MSG")
+          jq -n --arg text "$TEXT" '{text: $text}' \
+            | curl -sf -X POST -H 'Content-type: application/json' --data @- \
+              "$SLACK_WEBHOOK_URL" \
+            || echo "::warning::Slack success notification failed"
+
+      - name: Notify Slack on failure
+        if: ${{ contains(needs.*.result, 'failure') }}
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || github.event.pull_request.title || '' }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          NEEDS_JSON: ${{ toJson(needs) }}
+        run: |
+          MSG=$(printf '%s' "$COMMIT_MESSAGE" | head -n1)
+          MSG=${MSG:-"(no commit message)"}
+          FAILED_JOBS=$(printf '%s' "$NEEDS_JSON" | jq -r '[to_entries[] | select(.value.result == "failure") | .key] | join(", ")')
+          TEXT=$(printf '❌ Build failed\n\nRepo: %s\nWorkflow: %s\nJob: %s\nBranch: %s\nActor: %s\nCommit: %s - %s\nRun: %s\nTime: %s' \
+            "${GITHUB_REPOSITORY##*/}" "$GITHUB_WORKFLOW" "$FAILED_JOBS" "$GITHUB_REF_NAME" "$GITHUB_ACTOR" \
+            "${GITHUB_SHA:0:7}" "$MSG" \
+            "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            "$(date -u '+%Y-%m-%d %H:%M UTC')")
+          jq -n --arg text "$TEXT" '{text: $text}' \
+            | curl -sf -X POST -H 'Content-type: application/json' --data @- \
+              "$SLACK_WEBHOOK_URL" \
+            || echo "::warning::Slack failure notification failed"

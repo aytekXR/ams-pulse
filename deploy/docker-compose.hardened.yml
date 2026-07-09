@@ -34,7 +34,7 @@ services:
   caddy:
     # caddy:2-alpine
     # Digest pinned 2026-07-08; to refresh: docker pull caddy:2-alpine && docker image inspect caddy:2-alpine --format '{{index .RepoDigests 0}}'
-    image: caddy@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    image: caddy@sha256:af5fdcd76f2db5e4e974ee92f96ee8c0fc3edb55bd4ba5032547cbf3f65e486d
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:80"    # HTTP → Caddy handles redirect to HTTPS
@@ -64,7 +64,10 @@ services:
       resources:
         limits:
           memory: 512m
-          cpus: "0.5"
+          # 0.5 → 1.0 (D-065): A10 measured 147%-of-a-core bursts at poll
+          # boundaries with 500 streams — CFS-throttled at 0.5 with unknown P99
+          # impact. Host has 6 cores; 1.0 keeps throttling out of the burst path.
+          cpus: "1.0"
     environment:
       PULSE_CLICKHOUSE_DSN: "clickhouse://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@clickhouse:9000/pulse"
       PULSE_CLICKHOUSE_DATABASE: "pulse"
@@ -109,7 +112,9 @@ services:
 
   # ── Mock AMS (self-contained; real-ams override replaces this) ───────────────
   mock-ams:
-    image: golang:1.25
+    # golang:1.25
+    # Digest pinned 2026-07-09; to refresh: docker pull golang:1.25 && docker image inspect golang:1.25 --format '{{index .RepoDigests 0}}'
+    image: golang@sha256:d7912cedddfa15b2900a8dfb7187df0af5ec2cb424a371139b5b352fd3e6b740
     working_dir: /src/qa/mock-ams
     command: ["go", "run", ".", "-addr", ":9090", "-app", "live"]
     volumes:

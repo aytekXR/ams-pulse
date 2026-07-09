@@ -166,42 +166,76 @@ func (s *Store) MigrateEmbedded(ctx context.Context, ddl string) error {
 // Current upgrades:
 //   - api_tokens.hash_alg (added in P2 hardening): stores 'hmac-sha256' or
 //     'sha256' so auth can use the correct hash algorithm on lookup.
+//   - ams_sources.webhook_secret_enc (added in B7, D-062): AES-256-GCM
+//     encrypted per-source HMAC secret for /webhook/ams/{name} dispatch.
+//
+// Note: these upgrades are SQLite-specific. Postgres schemas are managed via
+// dedicated migration tooling; the function returns nil early for Postgres
+// (matching the hash_alg precedent).
 func (s *Store) applySchemaUpgrades(ctx context.Context) error {
-	// Check for hash_alg column in api_tokens using PRAGMA table_info.
-	// This is SQLite-specific; Postgres support is a future TODO.
+	// SQLite-specific PRAGMA-based upgrades only.
 	if s.backend != "sqlite" {
 		return nil
 	}
-	rows, err := s.db.QueryContext(ctx, "PRAGMA table_info(api_tokens)")
-	if err != nil {
-		// Table may not exist yet on a fresh DB before the DDL runs.
-		// This is harmless — the DDL will create it with the column.
-		return nil
-	}
-	hasHashAlg := false
-	for rows.Next() {
-		var cid int
-		var name, ctype string
-		var notNull int
-		var dflt sql.NullString
-		var pk int
-		if scanErr := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); scanErr != nil {
-			continue
-		}
-		if name == "hash_alg" {
-			hasHashAlg = true
-		}
-	}
-	_ = rows.Close()
 
-	if !hasHashAlg {
-		// Add the column. DEFAULT 'sha256' labels all existing rows as legacy.
-		_, err := s.db.ExecContext(ctx,
-			`ALTER TABLE api_tokens ADD COLUMN hash_alg TEXT NOT NULL DEFAULT 'sha256'`)
-		if err != nil {
-			return fmt.Errorf("schema upgrade: add api_tokens.hash_alg: %w", err)
+	// ── api_tokens.hash_alg ──────────────────────────────────────────────────
+	// Check for hash_alg column in api_tokens using PRAGMA table_info.
+	// Table may not exist yet on a fresh DB before the DDL runs; harmless.
+	rows, err := s.db.QueryContext(ctx, "PRAGMA table_info(api_tokens)")
+	if err == nil {
+		hasHashAlg := false
+		for rows.Next() {
+			var cid int
+			var name, ctype string
+			var notNull int
+			var dflt sql.NullString
+			var pk int
+			if scanErr := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); scanErr != nil {
+				continue
+			}
+			if name == "hash_alg" {
+				hasHashAlg = true
+			}
+		}
+		_ = rows.Close()
+		if !hasHashAlg {
+			// DEFAULT 'sha256' labels all existing rows as legacy.
+			if _, err := s.db.ExecContext(ctx,
+				`ALTER TABLE api_tokens ADD COLUMN hash_alg TEXT NOT NULL DEFAULT 'sha256'`); err != nil {
+				return fmt.Errorf("schema upgrade: add api_tokens.hash_alg: %w", err)
+			}
 		}
 	}
+
+	// ── ams_sources.webhook_secret_enc (B7) ──────────────────────────────────
+	// Check for webhook_secret_enc column in ams_sources.
+	rows2, err := s.db.QueryContext(ctx, "PRAGMA table_info(ams_sources)")
+	if err == nil {
+		hasWebhookSecretEnc := false
+		for rows2.Next() {
+			var cid int
+			var name, ctype string
+			var notNull int
+			var dflt sql.NullString
+			var pk int
+			if scanErr := rows2.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); scanErr != nil {
+				continue
+			}
+			if name == "webhook_secret_enc" {
+				hasWebhookSecretEnc = true
+			}
+		}
+		_ = rows2.Close()
+		if !hasWebhookSecretEnc {
+			// NULL default: existing rows have no per-source secret (fall through
+			// to SharedSecret on the /webhook/ams/{name} route).
+			if _, err := s.db.ExecContext(ctx,
+				`ALTER TABLE ams_sources ADD COLUMN webhook_secret_enc TEXT`); err != nil {
+				return fmt.Errorf("schema upgrade: add ams_sources.webhook_secret_enc: %w", err)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -869,6 +903,7 @@ type AMSSourceRow struct {
 	LogPath          sql.NullString
 	KafkaBrokers     sql.NullString // JSON
 	WebhookPath      sql.NullString
+	WebhookSecretEnc sql.NullString // AES-256-GCM encrypted per-source HMAC secret (B7)
 	Enabled          bool
 	CreatedAt        int64
 	UpdatedAt        int64
@@ -885,11 +920,11 @@ func (s *Store) CreateAMSSource(ctx context.Context, src AMSSourceRow) (AMSSourc
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO ams_sources
 		 (id, name, source_type, rest_url, rest_user, credential_enc, credential_env_ref,
-		  log_path, kafka_brokers, webhook_path, enabled, created_at, updated_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		  log_path, kafka_brokers, webhook_path, webhook_secret_enc, enabled, created_at, updated_at)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		src.ID, src.Name, src.SourceType, src.RestURL, src.RestUser,
 		src.CredentialEnc, src.CredentialEnvRef, src.LogPath, src.KafkaBrokers,
-		src.WebhookPath, boolToInt(src.Enabled), src.CreatedAt, src.UpdatedAt)
+		src.WebhookPath, src.WebhookSecretEnc, boolToInt(src.Enabled), src.CreatedAt, src.UpdatedAt)
 	return src, err
 }
 
@@ -897,7 +932,7 @@ func (s *Store) CreateAMSSource(ctx context.Context, src AMSSourceRow) (AMSSourc
 func (s *Store) GetAMSSource(ctx context.Context, id string) (*AMSSourceRow, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, name, source_type, rest_url, rest_user, credential_enc, credential_env_ref,
-		        log_path, kafka_brokers, webhook_path, enabled, created_at, updated_at
+		        log_path, kafka_brokers, webhook_path, webhook_secret_enc, enabled, created_at, updated_at
 		 FROM ams_sources WHERE id=?`, id)
 	return scanAMSSource(row)
 }
@@ -906,7 +941,7 @@ func (s *Store) GetAMSSource(ctx context.Context, id string) (*AMSSourceRow, err
 func (s *Store) ListAMSSources(ctx context.Context) ([]AMSSourceRow, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, name, source_type, rest_url, rest_user, credential_enc, credential_env_ref,
-		        log_path, kafka_brokers, webhook_path, enabled, created_at, updated_at
+		        log_path, kafka_brokers, webhook_path, webhook_secret_enc, enabled, created_at, updated_at
 		 FROM ams_sources ORDER BY created_at`)
 	if err != nil {
 		return nil, err
@@ -928,10 +963,11 @@ func (s *Store) UpdateAMSSource(ctx context.Context, src AMSSourceRow) error {
 	src.UpdatedAt = nowMS()
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE ams_sources SET name=?, source_type=?, rest_url=?, rest_user=?, credential_enc=?,
-		  credential_env_ref=?, log_path=?, kafka_brokers=?, webhook_path=?, enabled=?, updated_at=?
+		  credential_env_ref=?, log_path=?, kafka_brokers=?, webhook_path=?, webhook_secret_enc=?,
+		  enabled=?, updated_at=?
 		 WHERE id=?`,
 		src.Name, src.SourceType, src.RestURL, src.RestUser, src.CredentialEnc,
-		src.CredentialEnvRef, src.LogPath, src.KafkaBrokers, src.WebhookPath,
+		src.CredentialEnvRef, src.LogPath, src.KafkaBrokers, src.WebhookPath, src.WebhookSecretEnc,
 		boolToInt(src.Enabled), src.UpdatedAt, src.ID)
 	return err
 }
@@ -947,7 +983,7 @@ func scanAMSSource(row scanner) (*AMSSourceRow, error) {
 	var enabled int
 	if err := row.Scan(&src.ID, &src.Name, &src.SourceType, &src.RestURL, &src.RestUser,
 		&src.CredentialEnc, &src.CredentialEnvRef, &src.LogPath, &src.KafkaBrokers,
-		&src.WebhookPath, &enabled, &src.CreatedAt, &src.UpdatedAt); err != nil {
+		&src.WebhookPath, &src.WebhookSecretEnc, &enabled, &src.CreatedAt, &src.UpdatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}

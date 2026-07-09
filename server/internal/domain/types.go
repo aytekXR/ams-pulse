@@ -30,7 +30,6 @@ const (
 // Source identifies which AMS data-collection pathway produced an event.
 const (
 	SourceRestPoll  = "rest_poll"
-	SourceLogTail   = "log_tail"
 	SourceKafka     = "kafka"
 	SourceWebhook   = "webhook"
 	SourceHostAgent = "host_agent"

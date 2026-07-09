@@ -851,6 +851,28 @@ func (s *Service) QoeSummary(ctx context.Context, p QoeParams) (*QoeSummaryResul
 	}, nil
 }
 
+// ─── D-062: Per-stream QoE for alert evaluator ───────────────────────────────
+
+// QoEForStream returns the rebuffer ratio and error rate for a single stream
+// over the given lookback window by delegating to QoeSummary.
+// Falls back to (0, 0, nil) when ClickHouse is not configured (conn == nil) —
+// the caller (alert evaluator) treats this as "no data" and skips the stream.
+func (s *Service) QoEForStream(ctx context.Context, streamID, app string, lookback time.Duration) (rebufferRatio, errorRate float64, err error) {
+	if s.conn == nil {
+		// Documented fall-through: no CH → no QoE data; return zero values, no error.
+		return 0, 0, nil
+	}
+	res, err := s.QoeSummary(ctx, QoeParams{
+		From:   time.Now().UTC().Add(-lookback),
+		Stream: streamID,
+		App:    app,
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	return res.Totals.RebufferRatio, res.Totals.ErrorRate, nil
+}
+
 // ─── VD-21: Ingest timeseries ────────────────────────────────────────────────
 
 // IngestBucket is one timeseries point for GET /qoe/ingest.

@@ -25,6 +25,7 @@ import (
 	clickhousego "github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/pulse-analytics/pulse/server/internal/reports"
 	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse/migrations"
+	"github.com/pulse-analytics/pulse/server/internal/testutil"
 )
 
 // TestAccountant_CHIntegration starts a real ClickHouse instance, runs migrations,
@@ -36,10 +37,7 @@ import (
 // This test exercises the real Accountant.conn code path (NOT the nil-conn
 // shortcut that bypasses ClickHouse). It is the regression guard for D-W2-002.
 func TestAccountant_CHIntegration(t *testing.T) {
-	chBin := "/tmp/clickhouse"
-	if _, err := os.Stat(chBin); err != nil {
-		t.Skipf("clickhouse binary not found at %s: %v", chBin, err)
-	}
+	chBin := testutil.RequireClickHouseBin(t)
 
 	// ── 1. Start ClickHouse ──────────────────────────────────────────────────
 	tcpPort := integFreePort(t)

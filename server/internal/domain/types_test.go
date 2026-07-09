@@ -148,7 +148,6 @@ func TestSourceConstants_NonEmptyAndDistinct(t *testing.T) {
 	}
 	entries := []srcEntry{
 		{"SourceRestPoll", domain.SourceRestPoll},
-		{"SourceLogTail", domain.SourceLogTail},
 		{"SourceKafka", domain.SourceKafka},
 		{"SourceWebhook", domain.SourceWebhook},
 		{"SourceHostAgent", domain.SourceHostAgent},

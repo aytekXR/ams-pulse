@@ -28,11 +28,17 @@ package main
 
 import (
 	"context"
+	"os"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/pulse-analytics/pulse/server/internal/alert"
+	"github.com/pulse-analytics/pulse/server/internal/alert/channels"
 	anomaly "github.com/pulse-analytics/pulse/server/internal/anomaly"
 	beaconingest "github.com/pulse-analytics/pulse/server/internal/collector/beacon"
 	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/pulse-analytics/pulse/server/internal/store/meta"
 )
 
 // ─── Beacon listener config helpers ──────────────────────────────────────────
@@ -155,5 +161,105 @@ func TestAnomalyBridge_ComputeFlags_NilSnapshot(t *testing.T) {
 	}
 	if len(flags) != 0 {
 		t.Errorf("anomalyDetectorBridge.ComputeFlags: len=%d, want 0 for nil snapshot", len(flags))
+	}
+}
+
+// ─── D-062 wiring pin: wireAlertQoEReader ────────────────────────────────────
+
+// qoeWiringFakeLive is a minimal LiveProvider that returns one active stream.
+// Used by TestWireAlertQoEReader_ReaderWired to exercise the QoE evaluation path.
+type qoeWiringFakeLive struct{}
+
+func (l *qoeWiringFakeLive) CurrentSnapshot() *domain.LiveSnapshot {
+	return &domain.LiveSnapshot{
+		Streams: map[string]*domain.LiveStream{
+			"s1": {StreamID: "s1", App: "live", Active: true},
+		},
+		Nodes: map[string]*domain.LiveNodeStats{},
+	}
+}
+
+func (l *qoeWiringFakeLive) Subscribe() (<-chan *domain.LiveSnapshot, func()) {
+	ch := make(chan *domain.LiveSnapshot, 1)
+	return ch, func() { close(ch) }
+}
+
+// TestWireAlertQoEReader_ReaderWired is the D-062 wiring-seam pin.
+//
+// It verifies that wireAlertQoEReader (serve.go) correctly wires the QoE reader
+// to the alert evaluator: with a FakeQoEReader returning 0.0, a
+// "rebuffer_ratio >=0" rule FIRES (0.0 >= 0.0 = true); without the reader the
+// rule is silently skipped and no notification fires.
+//
+// Compile-time catch: if wireAlertQoEReader is deleted from serve.go this file
+// fails to compile — that is the m3 RED (analogous to beaconListenerConfig / VD-15).
+func TestWireAlertQoEReader_ReaderWired(t *testing.T) {
+	ctx := context.Background()
+
+	// Minimal in-memory meta store.
+	store, err := meta.New(ctx, "sqlite", ":memory:", "test-secret-key")
+	if err != nil {
+		t.Fatalf("meta.New: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+	ddlBytes, readErr := os.ReadFile("../../../contracts/db/meta/0001_init.sql")
+	if readErr != nil {
+		t.Skipf("meta DDL not found (run from repo root): %v", readErr)
+	}
+	if err := store.MigrateEmbedded(ctx, string(ddlBytes)); err != nil {
+		t.Fatalf("MigrateEmbedded: %v", err)
+	}
+
+	// Rule: rebuffer_ratio >= 0.0 — fires when reader returns 0.0 (0.0 >= 0.0 = true).
+	// Without a reader (nil) the rule is silently skipped → no notification.
+	_, err = store.CreateAlertRule(ctx, meta.AlertRuleRow{
+		Name: "wiring-pin-rebuf-gte0", Metric: "rebuffer_ratio", Operator: "gte",
+		Threshold: 0.0, WindowS: 5, ScopeJSON: "{}", Severity: "warning",
+		CooldownS: 300, Enabled: true, Muted: false,
+		MaintenanceWindows: "[]", ChannelIDs: `["c1"]`,
+	})
+	if err != nil {
+		t.Fatalf("CreateAlertRule: %v", err)
+	}
+
+	noop := &channels.NoopChannel{}
+	reg := channels.NewRegistry()
+	reg.Register("c1", noop)
+
+	clock := alert.NewFakeClock(time.Now().UTC())
+	ev := alert.New(alert.Config{
+		TickInterval: 5 * time.Second,
+		BaseURL:      "http://localhost",
+	}, &qoeWiringFakeLive{}, store, reg, clock, nil)
+
+	// D-062 wiring: FakeQoEReader returns 0.0 rebuffer_ratio.
+	// 0.0 >= 0.0 is true → rule fires → notification sent.
+	wireAlertQoEReader(ev, &alert.FakeQoEReader{RebufferRatio: 0.0})
+
+	var mu sync.Mutex
+	var notifs [][]byte
+	ev.SetNotifySink(func(p []byte) {
+		mu.Lock()
+		notifs = append(notifs, p)
+		mu.Unlock()
+	})
+
+	// Three ticks so the window (5s) elapses: tick1 sets pendingSince, tick2 fires.
+	for i := 0; i < 3; i++ {
+		clock.Advance(5 * time.Second)
+		ev.TickOnce(ctx)
+	}
+
+	mu.Lock()
+	n := len(notifs)
+	mu.Unlock()
+
+	// D-062 wiring pin: with reader wired, rebuffer_ratio=0.0 >= 0.0 fires.
+	// Without wireAlertQoEReader (or if it forgets to call SetQoEReader), n=0.
+	if n == 0 {
+		t.Error("D-062 wiring pin FAIL: rebuffer_ratio rule did not fire — " +
+			"wireAlertQoEReader did not call SetQoEReader, or was not called from serve.go")
+	} else {
+		t.Logf("PASS D-062 wiring pin: rebuffer_ratio rule fired (reader=FakeQoEReader{0.0}, threshold=0.0)")
 	}
 }

@@ -19,6 +19,36 @@ spec:
       targetPort: api
       protocol: TCP
 ---
+{{- if .Values.webhookService.enabled }}
+---
+# Webhook Service — exposes the AMS webhook listener (B7 per-source webhooks).
+# Pulse binds PULSE_WEBHOOK_ADDR (default :8092) separately from the API/UI port.
+# Routes: /webhook/ams  and  /webhook/ams/{source_name}
+# Secret rotation for per-source webhook secrets requires a pod restart.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pulse.fullname" . }}-webhook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pulse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pulse-webhook
+  {{- with .Values.webhookService.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.webhookService.type }}
+  selector:
+    {{- include "pulse.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: pulse
+  ports:
+    - name: webhook
+      port: {{ .Values.webhookService.port }}
+      targetPort: webhook
+      protocol: TCP
+{{- end }}
+---
 {{- if .Values.ingestService.enabled }}
 # Beacon ingest Service — THE ONLY INTERNET-FACING SERVICE in this chart.
 # Players send QoE beacons directly to this endpoint.

@@ -26,6 +26,24 @@ spec:
         - name: clickhouse
           image: "{{ .Values.clickhouse.image.repository }}:{{ .Values.clickhouse.image.tag }}"
           imagePullPolicy: {{ .Values.clickhouse.image.pullPolicy }}
+          {{- if .Values.clickhouse.auth.existingSecret }}
+          # ClickHouse auth: named user created at first boot from these env vars.
+          # Parity with docker-compose.hardened.yml which sets CLICKHOUSE_USER + CLICKHOUSE_PASSWORD.
+          # SECURITY: remove the default empty-password user by providing a named user here.
+          env:
+            - name: CLICKHOUSE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouse.auth.existingSecret }}
+                  key: CLICKHOUSE_USER
+                  optional: false
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouse.auth.existingSecret }}
+                  key: CLICKHOUSE_PASSWORD
+                  optional: false
+          {{- end }}
           ports:
             - name: native
               containerPort: 9000
@@ -42,6 +60,15 @@ spec:
             - name: config
               mountPath: /etc/clickhouse-server/users.xml
               subPath: users.xml
+            {{- if .Values.backup.enabled }}
+            # Backup disk config — enables BACKUP DATABASE ... TO Disk('backups', ...) SQL.
+            - name: config
+              mountPath: /etc/clickhouse-server/config.d/backup-config.xml
+              subPath: backup-config.xml
+            # Shared backup volume — the CronJob writes here; ClickHouse BACKUP writes here.
+            - name: backups
+              mountPath: /backups
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /ping
@@ -64,6 +91,11 @@ spec:
         - name: config
           configMap:
             name: {{ include "pulse.fullname" . }}-clickhouse-config
+        {{- if .Values.backup.enabled }}
+        - name: backups
+          persistentVolumeClaim:
+            claimName: {{ .Values.backup.persistence.existingClaim | default (printf "%s-backups" (include "pulse.fullname" .)) }}
+        {{- end }}
   {{- if .Values.clickhouse.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:

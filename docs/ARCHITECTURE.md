@@ -3,7 +3,7 @@
 Authoritative technical-design document. PRD: `prd-report.md` §7. Decisions with
 trade-offs get an ADR in `docs/adr/`.
 
-Last updated: Wave-3-Plus complete (2026-06-15). QA gate: PASS_WITH_LIMITATIONS.
+Last updated: D-062 complete (2026-07-09). QA gate: PASS_WITH_LIMITATIONS.
 
 ## 1. System context
 
@@ -158,7 +158,7 @@ Wave-3-Plus re-gate: PASS_WITH_LIMITATIONS (2026-06-15, `qa/wave-3-plus/gate-rep
 | New stream on dashboard ≤ 10 s after publish | F1 | **1064 ms** | **1.50 s** (B-01) | Unchanged |
 | Viewer counts within ±2% of AMS REST (standalone) | F1 | **0.0%** | **0.0%** (B-02 runtime; VD-05 runtime test added V3b) | Unchanged |
 | Viewer counts within ±2% of AMS REST (cluster) | F1 | Not tested | Not tested | **0% double-count**: `IsEdgeStream()` implemented; edge viewer dedup active (VD-03 V3a) |
-| Dashboard < 2 s load at 500 concurrent streams | F1 | Virtualized, ≤20 DOM rows | ≤20 DOM rows (C-W2-02) | Unchanged — render time not measured; see known limitations |
+| Dashboard < 2 s load at 500 concurrent streams | F1 | Virtualized, ≤20 DOM rows | ≤20 DOM rows (C-W2-02) | **668 ms / 459 ms** (run1/run2; Playwright nav+grid-visible; budget 2 s; VD-04 CLOSED SESSION-04/WO-4) |
 | 13-month rollup queries < 3 s | F2 | DDL only | **126 ms** simple aggregate (C-W2-08) | **144 ms** simple aggregate + **145 ms** dimensional GROUP BY (3 geo × 2 device × 2 protocol, 12 rows; C9b `qa/wave-2/run-gate.sh`; VD-18 CLOSED) |
 | Beacon SDK < 15 KB gzip | F3 | Stub | **3.44 KB** gzip (C-W2-03) | **3.52 KB** (no regression; VD-09/12/13 fixes added code) |
 | Beacon SDK < 1% player CPU | F3 | Not measurable | Not measurable | Not measurable (deferred; VD-14) |
@@ -186,6 +186,25 @@ Wave-3-Plus re-gate: PASS_WITH_LIMITATIONS (2026-06-15, `qa/wave-3-plus/gate-rep
 
 These are CI-verifiable targets; QA-01 owns regression checks against them.
 See `qa/budgets/run-budget-tests.sh` for the budget regression suite.
+
+### A10 load smoke (SESSION-07, D-064 — isolated stack, mock-ams, 2026-07-09)
+
+500 streams + 3,000 viewers sustained 15 min (16 samples @ ~60 s): pulse mem peak **18.6 MiB**
+(3.6% of the 512 MiB hardened limit), CH mem peak **610 MiB** (30% of 2 GiB; the D-062
+"Memory limit (total) exceeded 1.80 GiB" WATCH **never triggered**, count 0); `/live/overview`
+latency avg **9.0 ms** (max 14.4 ms); 222,762 `server_events` rows ingested, **0** steady-state
+CH insert errors, **0** pulse ERRORs. Known follow-ups (non-blocking, punch list D-064): pulse
+CPU bursts to ~147% of one core at poll boundaries vs the 0.5-vCPU hardened cap (throttled,
+latency unaffected); ~100 INFO health-degraded lines/s at 500 degraded mock streams.
+
+### Testing waivers (GA audit, D-064)
+
+- **`cmd/pulse` per-package coverage (42.3%) is EXEMPT from the ≥60% per-package bar** —
+  assembly/wiring package; the agreed target is ≥40 via serve/migrate/diag wiring smoke
+  (ROADMAP S2/WO-3, D-059); boot paths are further pinned by `serve_wiring_test.go` and e2e.
+- **`GET /live/ws` is the 1 of 52 OpenAPI operations WAIVED from response-body conformance** —
+  it upgrades to a WebSocket (101, no HTTP response body to validate); the WS envelope is
+  asserted separately (§7 message envelope + api ws tests). Recorded D-060; formalized here.
 
 ## 5. Technology choices
 
@@ -225,7 +244,10 @@ Additional Wave-1 library decisions:
 - WebSocket `/live/ws`: cross-origin policy enforced via `AllowedWSOrigins` config;
   `InsecureSkipVerify` removed (VD-S2 V3b). Configure `PULSE_ALLOWED_WS_ORIGINS` for
   non-same-origin dashboard deployments.
-- Token passwords use SHA-256. bcrypt migration is a Phase-3 roadmap item.
+- User passwords are stored with bcrypt (`hashPassword`, server/internal/api/server.go:2111);
+  `checkPassword` (:2127) accepts legacy `sha256:` hashes for back-compat. API tokens are stored
+  as HMAC-SHA256 when `PULSE_SECRET_KEY` is set, falling back to plain SHA-256 for legacy tokens
+  (`HashToken`, server/internal/store/meta/meta.go:419).
 - **Beacon ingest body cap:** 64 KB (authoritative; both hardened handler and
   main-port handler enforce this limit; VD-S4 / VD-10 V3a).
 
@@ -382,7 +404,7 @@ Configurable via: `PULSE_INGEST_TARGET_BITRATE_KBPS` (default 2000),
 | GAP-2-003 | Kafka `Lag()` / `ParseErrors()` not surfaced in `/healthz` component detail | BE-02 | **CLOSED Wave-3-Plus** — kafka component (status/lag/parse_errors) in `/healthz`; `TestAPI_Healthz_KafkaStats` PASS (VD-27) |
 | GAP-2-004 | Pro tier beacon write gating not API-enforced (fails-open for any valid ingest token) | BE-02 | **Fixed V3b** — `CheckBeaconIngest()` enforces Pro+ (VD-15) |
 | GAP-2-005 | `/qoe/summary` QoE data is live-snapshot proxy, not from `rollup_qoe_1h` | BE-02 | **Fixed V3a** — queries `rollup_qoe_1h`; `startup_p50_ms` non-zero (VD-11) |
-| GAP-206-01 | Helm chart image `ghcr.io/pulse-analytics/pulse:0.1.0` not yet published | INFRA-01 | Open — Phase-3 roadmap |
+| GAP-206-01 | ~~Helm chart image not yet published~~ CLOSED (D-058 canonical ref + D-063 parity): chart defaults to `ghcr.io/aytekxr/ams-pulse`, published by release.yml since v0.1.0. Remaining: package visibility is operator item O7 | INFRA-01 | Closed D-063 (O7 pending) |
 | GAP-206-02 | Postgres Secret `pulse-postgres-secret` must be created manually before Helm install | DOC-01 (documented in install runbook) | — |
 | GAP-206-03 | Helm `busybox:1.36` initContainer image unpinned | INFRA-01 | Open — Phase-3 roadmap |
 
@@ -403,7 +425,7 @@ tech-debt closeout. Previously-deferred items closed in Wave-3-Plus are marked C
 
 | VD | Description | Severity | Status |
 |---|---|---|---|
-| VD-04 | Dashboard render time at 500 streams not measured — ≤20 DOM rows proxy only | Minor | OPEN — headless-browser measurement requires Phase-3 Playwright setup |
+| VD-04 | Dashboard render time at 500 streams | Minor | **CLOSED SESSION-04** — 668 ms / 459 ms (2 runs; Playwright real-stack chromium; budget 2 s; spec web/e2e/streams-render-500.spec.ts) |
 | VD-05 | Viewer count ±2% (standalone): runtime test added V3b; cluster double-count: edge dedup active (VD-03 V3a) | Minor | CLOSED |
 | VD-12 | `HlsAdapter` `rebuffer_end` emission | Major | CLOSED — Fixed V3a (SDK-01) |
 | VD-13 | `HlsAdapter` bitrate levels from `hls.levels[]` — ABR switches always 0→0 kbps | Minor | CLOSED — Fixed V3a (SDK-01) |

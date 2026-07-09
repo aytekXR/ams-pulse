@@ -1287,87 +1287,11 @@ func (s *Server) handleTestAlertChannel(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]any{"accepted": true, "message": "test notification delivered"})
 }
 
-// buildChannelFromRow constructs a channels.Channel from a stored AlertChannelRow.
-// It decrypts ConfigEnc (secret fields) and merges with ConfigPublic (non-secret
-// fields), then maps the unified config to the typed channels constructor for row.Type.
+// buildChannelFromRow delegates to the shared alert.BuildChannelFromRow factory.
+// The factory lives in the alert package so the evaluator and the API handler
+// share a single implementation (no duplication, no import cycle).
 func buildChannelFromRow(store *meta.Store, row *meta.AlertChannelRow) (channels.Channel, error) {
-	// Parse public (non-secret) config fields.
-	publicMap := map[string]any{}
-	if row.ConfigPublic != "" && row.ConfigPublic != "{}" && row.ConfigPublic != "null" {
-		if err := json.Unmarshal([]byte(row.ConfigPublic), &publicMap); err != nil {
-			return nil, fmt.Errorf("parse public config: %w", err)
-		}
-	}
-
-	// Decrypt and parse secret config fields.
-	secretMap := map[string]any{}
-	if row.ConfigEnc != "" {
-		decrypted, err := store.Decrypt(row.ConfigEnc)
-		if err != nil {
-			return nil, fmt.Errorf("decrypt channel config: %w", err)
-		}
-		if err := json.Unmarshal([]byte(decrypted), &secretMap); err != nil {
-			return nil, fmt.Errorf("parse secret config: %w", err)
-		}
-	}
-
-	// Merge: secret fields override public in case of collision (should not happen).
-	merged := make(map[string]any, len(publicMap)+len(secretMap))
-	for k, v := range publicMap {
-		merged[k] = v
-	}
-	for k, v := range secretMap {
-		merged[k] = v
-	}
-
-	str := func(key string) string {
-		v, _ := merged[key].(string)
-		return v
-	}
-
-	switch row.Type {
-	case "webhook":
-		cfg := channels.WebhookConfig{
-			URL:    str("webhook_url"), // contract key: webhook_url (was "url" — FIXED)
-			Secret: str("webhook_secret"),
-		}
-		return channels.NewWebhookChannel(cfg), nil
-	case "slack":
-		cfg := channels.SlackConfig{
-			WebhookURL: str("slack_webhook_url"),
-			Channel:    str("slack_channel"), // contract key: slack_channel (was "channel" — FIXED)
-		}
-		return channels.NewSlackChannel(cfg), nil
-	case "email":
-		cfg := channels.EmailConfig{
-			// NOTE: email_to is the only address field in the contract.
-			// SMTP server config (SMTPAddr, From, Username, Password, STARTTLS) is
-			// global/env-level — not stored per-channel (known limitation, followup).
-			SMTPAddr: str("smtp_addr"),
-			From:     str("from"),
-			To:       str("email_to"), // contract key: email_to (was "to" — FIXED)
-			Username: str("username"),
-			Password: str("password"),
-		}
-		if v, ok := merged["starttls"].(bool); ok {
-			cfg.STARTTLS = v
-		}
-		return channels.NewEmailChannel(cfg), nil
-	case "telegram":
-		cfg := channels.TelegramConfig{
-			BotToken: str("telegram_bot_token"),
-			ChatID:   str("telegram_chat_id"), // contract key: telegram_chat_id (was "chat_id" — FIXED)
-		}
-		return channels.NewTelegramChannel(cfg), nil
-	case "pagerduty":
-		cfg := channels.PagerDutyConfig{
-			RoutingKey: str("pagerduty_routing_key"),
-			Severity:   str("pagerduty_severity"), // contract key: pagerduty_severity (was "severity" — FIXED)
-		}
-		return channels.NewPagerDutyChannel(cfg), nil
-	default:
-		return nil, fmt.Errorf("unknown channel type %q", row.Type)
-	}
+	return alert.BuildChannelFromRow(store, row)
 }
 
 // ─── Alert history ────────────────────────────────────────────────────────────
@@ -2045,11 +1969,12 @@ func alertChannelFromAPI(body map[string]any, store *meta.Store) (meta.AlertChan
 
 func amsSourceToAPI(src meta.AMSSourceRow) map[string]any {
 	m := map[string]any{
-		"id":             src.ID,
-		"name":           src.Name,
-		"type":           src.SourceType,
-		"credential_set": src.CredentialEnc.Valid && src.CredentialEnc.String != "",
-		"created_at":     src.CreatedAt,
+		"id":                 src.ID,
+		"name":               src.Name,
+		"type":               src.SourceType,
+		"credential_set":     src.CredentialEnc.Valid && src.CredentialEnc.String != "",
+		"webhook_secret_set": src.WebhookSecretEnc.Valid && src.WebhookSecretEnc.String != "",
+		"created_at":         src.CreatedAt,
 	}
 	if src.RestURL.Valid {
 		m["rest_url"] = src.RestURL.String
@@ -2100,6 +2025,14 @@ func amsSourceFromAPI(body map[string]any, store *meta.Store) (meta.AMSSourceRow
 			return row, fmt.Errorf("encrypt credential: %w", err)
 		}
 		row.CredentialEnc = sql.NullString{String: enc, Valid: true}
+	}
+	// B7: per-source webhook HMAC secret (write-only; stored encrypted).
+	if v, ok := body["webhook_secret"].(string); ok && v != "" {
+		enc, err := store.Encrypt(v)
+		if err != nil {
+			return row, fmt.Errorf("encrypt webhook_secret: %w", err)
+		}
+		row.WebhookSecretEnc = sql.NullString{String: enc, Valid: true}
 	}
 	return row, nil
 }

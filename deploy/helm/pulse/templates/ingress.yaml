@@ -75,3 +75,47 @@ spec:
           {{- end }}
     {{- end }}
 {{- end }}
+---
+{{- if .Values.ingressWebhook.enabled -}}
+# Webhook ingress — routes AMS webhook callbacks to the webhook Service.
+# B7 per-source webhook paths:
+#   /webhook/ams              — global webhook endpoint
+#   /webhook/ams/{source}     — per-source webhook endpoint
+# Requires: webhookService.enabled=true and pulse.webhookAddr set.
+# Per-source secret rotation requires a pod restart (no live reload).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "pulse.fullname" . }}-webhook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pulse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pulse-webhook
+  {{- with .Values.ingressWebhook.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingressWebhook.className }}
+  ingressClassName: {{ .Values.ingressWebhook.className }}
+  {{- end }}
+  {{- if .Values.ingressWebhook.tls }}
+  tls:
+    {{- toYaml .Values.ingressWebhook.tls | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingressWebhook.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "pulse.fullname" $ }}-webhook
+                port:
+                  name: webhook
+          {{- end }}
+    {{- end }}
+{{- end }}
