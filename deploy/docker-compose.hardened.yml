@@ -34,7 +34,7 @@ services:
   caddy:
     # caddy:2-alpine
     # Digest pinned 2026-07-08; to refresh: docker pull caddy:2-alpine && docker image inspect caddy:2-alpine --format '{{index .RepoDigests 0}}'
-    image: caddy@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    image: caddy@sha256:af5fdcd76f2db5e4e974ee92f96ee8c0fc3edb55bd4ba5032547cbf3f65e486d
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:80"    # HTTP → Caddy handles redirect to HTTPS
