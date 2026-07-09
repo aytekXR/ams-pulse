@@ -7,6 +7,7 @@ interface Props {
   onCancel: () => void;
 }
 
+// All metrics supported by threshold rules.
 const METRICS = [
   "viewer_count",
   "ingest_bitrate_kbps",
@@ -19,15 +20,37 @@ const METRICS = [
   "rebuffer_ratio",
 ];
 
+// Anomaly rules: only metrics tracked by the Welford Detector.
+// Detector tracks: viewers (-> "viewer_count"), cpu_pct, mem_pct.
+// window_s must be 3600 (anomaly.go:229 hardcoded Detector window).
+const ANOMALY_METRICS = ["viewer_count", "cpu_pct", "mem_pct"];
+
 const OPERATORS = ["gt", "lt", "gte", "lte", "eq"] as const;
 const SEVERITIES = ["info", "warning", "critical"] as const;
 const WINDOWS = [60, 300, 600, 1800, 3600];
 
 export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
+  // S11 WO-B: rule type state (threshold | anomaly).
+  const [ruleType, setRuleType] = useState<"threshold" | "anomaly">(
+    initial?.rule_type ?? "threshold",
+  );
+  const [sigma, setSigma] = useState(String(initial?.sigma ?? "4.0"));
+  const [minSamples, setMinSamples] = useState(String(initial?.min_samples ?? "30"));
+
   const [name, setName] = useState(initial?.name ?? "");
-  const [metric, setMetric] = useState(initial?.metric ?? METRICS[0]);
-  const [operator, setOperator] = useState<"gt" | "lt" | "gte" | "lte" | "eq">(initial?.operator ?? "gt");
+  // In anomaly mode, metric is restricted to ANOMALY_METRICS.
+  const [metric, setMetric] = useState(() => {
+    const m = initial?.metric ?? METRICS[0];
+    if (initial?.rule_type === "anomaly" && !ANOMALY_METRICS.includes(m)) {
+      return ANOMALY_METRICS[0];
+    }
+    return m;
+  });
+  const [operator, setOperator] = useState<"gt" | "lt" | "gte" | "lte" | "eq">(
+    initial?.operator ?? "gt",
+  );
   const [threshold, setThreshold] = useState(String(initial?.threshold ?? ""));
+  // In anomaly mode, window_s is forced to 3600 (server rejects other values).
   const [windowS, setWindowS] = useState(initial?.window_s ?? 300);
   const [severity, setSeverity] = useState(initial?.severity ?? "warning");
   const [cooldownS, setCooldownS] = useState(String(initial?.cooldown_s ?? "300"));
@@ -42,10 +65,33 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Handle rule type switch: enforce constraints when switching to anomaly.
+  const handleRuleTypeChange = (newType: "threshold" | "anomaly") => {
+    setRuleType(newType);
+    if (newType === "anomaly") {
+      // Lock window to 3600 (only valid window for anomaly rules).
+      setWindowS(3600);
+      // Restrict metric to anomaly-supported metrics.
+      if (!ANOMALY_METRICS.includes(metric)) {
+        setMetric(ANOMALY_METRICS[0]);
+      }
+    }
+  };
+
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
     if (!name.trim()) errs.name = "Name is required";
-    if (!threshold.trim() || isNaN(Number(threshold))) errs.threshold = "Valid number required";
+
+    if (ruleType === "threshold") {
+      if (!threshold.trim() || isNaN(Number(threshold)))
+        errs.threshold = "Valid number required";
+    } else {
+      // anomaly mode: validate sigma is a positive number.
+      const sigmaNum = Number(sigma);
+      if (!sigma.trim() || isNaN(sigmaNum) || sigmaNum <= 0)
+        errs.sigma = "Sigma must be a positive number";
+    }
+
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -63,9 +109,15 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
       await onSave({
         name: name.trim(),
         metric,
-        operator,
-        threshold: Number(threshold),
-        window_s: windowS,
+        rule_type: ruleType,
+        // Anomaly fields: send configured values for anomaly; defaults for threshold.
+        sigma: ruleType === "anomaly" ? Number(sigma) || 4.0 : 4.0,
+        min_samples: ruleType === "anomaly" ? Number(minSamples) || 30 : 30,
+        // Threshold fields: send configured values for threshold; neutral values for anomaly.
+        operator: ruleType === "threshold" ? operator : "gt",
+        threshold: ruleType === "threshold" ? Number(threshold) : 0,
+        // Anomaly rules must use window_s=3600 (Detector window).
+        window_s: ruleType === "anomaly" ? 3600 : windowS,
         severity,
         cooldown_s: Number(cooldownS) || 300,
         enabled,
@@ -105,6 +157,20 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
     <form onSubmit={(e) => void handleSubmit(e)} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>{initial ? "Edit rule" : "New alert rule"}</h3>
 
+      {/* Rule type -- S11 WO-B: anomaly mode switch */}
+      <div style={fieldStyle}>
+        <label style={labelStyle}>Rule type</label>
+        <select
+          aria-label="Rule type"
+          style={inputStyle}
+          value={ruleType}
+          onChange={(e) => handleRuleTypeChange(e.target.value as "threshold" | "anomaly")}
+        >
+          <option value="threshold">threshold</option>
+          <option value="anomaly">anomaly</option>
+        </select>
+      </div>
+
       <div style={fieldStyle}>
         <label style={labelStyle}>Name *</label>
         <input
@@ -120,26 +186,69 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
         <div style={fieldStyle}>
           <label style={labelStyle}>Metric</label>
           <select style={inputStyle} value={metric} onChange={(e) => setMetric(e.target.value)}>
-            {METRICS.map((m) => <option key={m} value={m}>{m}</option>)}
+            {(ruleType === "anomaly" ? ANOMALY_METRICS : METRICS).map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
           </select>
         </div>
-        <div style={fieldStyle}>
-          <label style={labelStyle}>Operator</label>
-          <select style={inputStyle} value={operator} onChange={(e) => setOperator(e.target.value as "gt" | "lt" | "gte" | "lte" | "eq")}>
-            {OPERATORS.map((o) => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </div>
-        <div style={fieldStyle}>
-          <label style={labelStyle}>Threshold *</label>
-          <input
-            style={{ ...inputStyle, borderColor: errors.threshold ? "var(--color-error)" : "var(--color-border)" }}
-            type="number"
-            value={threshold}
-            onChange={(e) => setThreshold(e.target.value)}
-            placeholder="0"
-          />
-          {errors.threshold && <span style={{ fontSize: 11, color: "var(--color-error)" }}>{errors.threshold}</span>}
-        </div>
+
+        {ruleType === "threshold" ? (
+          <>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Operator</label>
+              <select
+                style={inputStyle}
+                value={operator}
+                onChange={(e) => setOperator(e.target.value as "gt" | "lt" | "gte" | "lte" | "eq")}
+              >
+                {OPERATORS.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Threshold *</label>
+              <input
+                style={{ ...inputStyle, borderColor: errors.threshold ? "var(--color-error)" : "var(--color-border)" }}
+                type="number"
+                value={threshold}
+                onChange={(e) => setThreshold(e.target.value)}
+                placeholder="0"
+              />
+              {errors.threshold && (
+                <span style={{ fontSize: 11, color: "var(--color-error)" }}>{errors.threshold}</span>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Anomaly mode: sigma and min_samples replace operator+threshold */}
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Sigma</label>
+              <input
+                aria-label="Sigma"
+                style={{ ...inputStyle, borderColor: errors.sigma ? "var(--color-error)" : "var(--color-border)" }}
+                type="number"
+                step="0.1"
+                value={sigma}
+                onChange={(e) => setSigma(e.target.value)}
+                placeholder="4.0"
+              />
+              {errors.sigma && (
+                <span style={{ fontSize: 11, color: "var(--color-error)" }}>{errors.sigma}</span>
+              )}
+            </div>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Min Samples</label>
+              <input
+                aria-label="Min Samples"
+                style={inputStyle}
+                type="number"
+                value={minSamples}
+                onChange={(e) => setMinSamples(e.target.value)}
+                placeholder="30"
+              />
+            </div>
+          </>
+        )}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
@@ -150,8 +259,15 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
           </select>
         </div>
         <div style={fieldStyle}>
-          <label style={labelStyle}>Window</label>
-          <select style={inputStyle} value={windowS} onChange={(e) => setWindowS(Number(e.target.value))}>
+          <label style={labelStyle}>
+            Window{ruleType === "anomaly" ? " (locked 3600 s)" : ""}
+          </label>
+          <select
+            style={{ ...inputStyle, opacity: ruleType === "anomaly" ? 0.6 : 1 }}
+            value={ruleType === "anomaly" ? 3600 : windowS}
+            onChange={(e) => setWindowS(Number(e.target.value))}
+            disabled={ruleType === "anomaly"}
+          >
             {WINDOWS.map((w) => <option key={w} value={w}>{w}s ({Math.round(w / 60)}m)</option>)}
           </select>
         </div>
@@ -170,7 +286,7 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
       {/* Scope (optional) */}
       <details style={{ background: "var(--color-surface-2)", borderRadius: 6, padding: "12px" }}>
         <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--color-muted)", fontWeight: 500 }}>
-          Scope (optional — leave blank to match all)
+          Scope (optional -- leave blank to match all)
         </summary>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 12 }}>
           <div style={fieldStyle}>
@@ -197,7 +313,7 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
         </div>
       </details>
 
-      {/* enabled / muted — distinct controls per CR-2 */}
+      {/* enabled / muted -- distinct controls per CR-2 */}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
           <input

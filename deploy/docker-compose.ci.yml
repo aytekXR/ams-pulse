@@ -67,6 +67,10 @@ services:
       # Without this, IngestListenAddr is empty and the port mapping 18091→8091
       # has nothing listening inside the container — A2 curl gets ECONNREFUSED.
       PULSE_INGEST_LISTEN_ADDR: ":8091"
+      # S11 WO-B: accelerate the Anomaly Detector tick for CI so baselines build
+      # within 2 ticks (2×5 s = 10 s) before the A5 anomaly alert test.
+      # Production default is 60 s (anomaly.go:172).
+      PULSE_ANOMALY_TICK_S: "5"
     volumes:
       - ../contracts:/contracts:ro
     depends_on:

@@ -567,6 +567,78 @@ jobs:
           done
           echo "PASS: A4 — delivery_failure row confirmed for dead-URL webhook channel."
 
+      # ── A5: Anomaly alert fires → /alerts/history ─────────────────────────────────
+      # Cannot-false-green: baseline mean ≈ 10 viewers (seeded at step "Seed a broadcasting
+      # stream in mock-ams"), spike to 10000. Effective stddev floor = StddevRelEpsilon×mean
+      # = 0.05×10 = 0.5 (anomaly.go:82,88). z = (10000-10)/0.5 = 19980 >> sigma=0.5 → fires.
+      # Only passes when: rule creation (201) + evaluator loads rule + anomaly baseline reader
+      # returns row with SampleCount≥2 + z-score > 0.5 + fire() + history API returns firing row.
+      # Timing: PULSE_ANOMALY_TICK_S=5 (deploy/docker-compose.ci.yml pulse.environment);
+      # by this step the stream has been live for 5+ minutes → baseline is already established.
+      # 15 s sleep is a safety buffer (3 extra Detector ticks). D-042: do not reduce.
+      # Metric alias: alert rule metric "viewer_count" maps to Detector baseline key "viewers"
+      # (server/internal/alert/wave3.go metricAliases). window_s=3600 must match Detector
+      # hardcoded window (anomaly.go:229).
+      - name: A5 — seed viewer anomaly baseline, spike viewers, assert history
+        run: |
+          echo "Waiting 15 s for anomaly baseline to warm up (3 Detector ticks @ 5 s) ..."
+          sleep 15
+
+          # Create anomaly rule: viewer_count, sigma=0.5 (very sensitive), min_samples=2.
+          # window_s=3600 matches Detector hardcoded windowS=3600 (anomaly.go:229).
+          # operator and threshold are required fields but ignored by the evaluator for anomaly rules.
+          HTTP_STATUS=$(curl -m 5 -s \
+            -X POST \
+            -H "Authorization: Bearer ${PULSE_ADMIN_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"name":"e2e anomaly","metric":"viewer_count","rule_type":"anomaly","window_s":3600,"sigma":0.5,"min_samples":2,"severity":"warning","operator":"gt","threshold":0}' \
+            -o /tmp/anomaly_rule.json \
+            -w "%{http_code}" \
+            http://127.0.0.1:18090/api/v1/alerts/rules)
+          echo "Create anomaly rule ($HTTP_STATUS): $(cat /tmp/anomaly_rule.json)"
+          [ "$HTTP_STATUS" = "201" ] || { echo "FAIL: expected 201"; exit 1; }
+
+          # Spike viewers to 10000 via mock-ams control API.
+          # e2e-stream-1 was seeded at viewers=10 earlier in the workflow.
+          # /control/set_viewers updates viewer counts without re-publishing.
+          # mock-ams port 19090 (deploy/docker-compose.ci.yml mock-ams.ports).
+          curl -m 5 -sf \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"stream_id":"e2e-stream-1","viewers":10000}' \
+            http://127.0.0.1:19090/control/set_viewers
+          echo "Spiked e2e-stream-1 viewers to 10000."
+
+          echo "Polling /api/v1/alerts/history?state=firing for viewer_count anomaly (30 s, 2 s interval) ..."
+          deadline=$(( $(date +%s) + 30 ))
+          LAST_ANOM_HIST=""
+          while true; do
+            LAST_ANOM_HIST=$(curl -m 5 -s \
+              -H "Authorization: Bearer ${PULSE_ADMIN_TOKEN}" \
+              "http://127.0.0.1:18090/api/v1/alerts/history?state=firing")
+            FOUND=$(echo "$LAST_ANOM_HIST" | python3 -c "
+          import sys, json
+          try:
+              d = json.load(sys.stdin)
+              items = d.get('items', [])
+              if any(it.get('metric') == 'viewer_count' for it in items):
+                  print('yes')
+              else:
+                  print('no')
+          except Exception:
+              print('no')
+          ")
+            echo "  anomaly history check: $FOUND"
+            [ "$FOUND" = "yes" ] && break
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "TIMEOUT: no viewer_count anomaly alert in history after 30 s"
+              echo "Last /alerts/history response: $LAST_ANOM_HIST"
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "PASS: A5 — viewer_count anomaly alert found in firing history."
+
       # ── WO-4: 500-stream render measurement (VD-04/A10) ────────────────────────────
       - name: WO-4 — seed 500 streams via mock-ams bulk_publish
         run: |
