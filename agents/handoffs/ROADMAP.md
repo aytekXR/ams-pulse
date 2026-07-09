@@ -271,6 +271,7 @@ remaining gap is operator/time-owned → declare GA (tag = operator call).
 | 2026-07-09 (after S7) | **73.1%** | **70.0** | hold (76/72/45) | D-064; −0.1 = rounding (audit re-measure); test-only Go change (skip-hatches → Fatalf); A10 load numbers in ARCH §4 |
 | 2026-07-09 (after S8) | **73.2%** | **70.2** | hold (76/72/45) | D-065 **GA DECLARED**; floor ratcheted to achieved−3 per the GA rule below — G3 fully closed |
 | GA (G3) | ≥70% ✅ (73.2) | ≥68.0 ✅ (70.2) | ✅ ratcheted at GA (D-065) | — |
+| **post-GA** | 73.5% (S10/D-068) | 70.2 | web re-baselined 59/54/45 under vitest 4 (D-067) | **ledger continues in ROADMAP-V2 §5** — update THERE each session |
 
 ## 5. Operator ledger (surface EVERY session — agent cannot do these)
 
@@ -279,14 +280,14 @@ remaining gap is operator/time-owned → declare GA (tag = operator call).
 
 | # | Action | Status |
 |---|---|---|
-| O1 (=U3) | Activate a Pro+ Pulse license in prod (`PULSE_LICENSE_KEY`) — until then QoE/beacon data does not flow in prod (CI covers it with the mock license) | OPEN |
+| O1 (=U3) | Activate a Pro+ Pulse license in prod (`PULSE_LICENSE_KEY`) — until then QoE/beacon data does not flow in prod (CI covers it with the mock license) | OPEN — now SELF-SERVE: mint your own key per docs/licensing.md §3 (`licensegen -privkey/-expires`, D-068) |
 | O2 (=U5) | Browser/CSP check of prod | ✅ CLOSED (D-066): real headless-Chromium from the VPS — both prod URLs HTTP 200, SPA rendered, 0 console errors / 0 CSP violations. Optional human glance remains welcome. |
 | O3 | ~~Configure the AMS console to POST lifecycle webhooks~~ | ✅ CLOSED-N/A (D-066): AMS 3.0.3 has NO webhook-signing fields (verified live, 182 settings) — unsigned hooks would only 401 vs Pulse's fail-closed HMAC. REST polling stays the supported ingest (≤10 s budget met). AMS-INTEGRATION §4.5 corrected. |
 | O4 | ~~After O3: invalid-signature WARN recheck~~ | MOOT (O3 closed-N/A, D-066) |
 | O5 | Choose the project LICENSE | ✅ DONE (D-066): operator chose noncommercial → **PolyForm NC 1.0.0** at root LICENSE (SDK stays MIT); README/CHANGELOG/docs/licensing.md updated. **G7 fully met.** |
 | O6 | (was U4) Branch protection + `v*` tag | ✅ DONE by S1 (D-058): protection live (API 200), v0.1.0 released |
 | O7 | **Make `ghcr.io/aytekxr/ams-pulse` public** (package settings → Change visibility) or `gh auth refresh -s read:packages` — until then nobody (incl. the agent) can pull v0.1.0 or run `cosign verify` (commands in release.yml header); this is the last G1 bit | OPEN (re-verified still blocked 2026-07-09, D-063: anonymous pull token DENIED) |
-| O8 | Dependabot PRs | DELEGATED (D-066): operator said "decide for me" → #4 (golang 1.26) CLOSED w/ dependabot ignore rule (D-032 pin); remaining **20** deferred to the S9 absorption WO with real verification (merging blind pre-release risked the pipeline — actions bumps touch release.yml, untestable pre-tag). |
+| O8 | Dependabot PRs | ✅ CLOSED (D-067): S9 absorbed all 20+1 PRs (queue ZERO); steady-state policy committed `docs/dependabot-policy.md` (D-068) — future PRs follow it. |
 | O9 | ~~CodeQL blocked~~ ✅ CLOSED by S5 (D-062): operator made the repo PUBLIC → `codeql.yml` live (go/autobuild + js-ts/none). NOT a required context yet — promote after a bake period (S6/S7 call). NOTE: repo-level secret-scanning/push-protection still disabled — consider enabling now that the repo is public | ✅ DONE (D-062) |
 | O10 | ~~Prod rollout DUE~~ ✅ CLOSED by S5 WO-1 (D-062): prod runs `v0.1.0-25-gbc15d43`; rule→channel delivery live-proven (email-channel smoke, firing row ≤2s + mail received) | ✅ DONE (D-062) |
 | O12 | Enable repo secret-scanning + push-protection | ✅ DONE (D-066): agent-enabled via `gh api PATCH` on operator instruction; both `enabled`, API-verified. |
