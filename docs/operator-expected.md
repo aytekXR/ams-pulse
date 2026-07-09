@@ -1,4 +1,4 @@
-# Operator TODO — the items only YOU can do (updated by SESSION-10 close, D-068, 2026-07-09)
+# Operator TODO — the items only YOU can do (updated by SESSION-11 start, 2026-07-09)
 
 > **Audience: the human operator.** Ledger of record: `ROADMAP.md` §5 + `ROADMAP-V2.md` §4; this
 > file is the actionable view, refreshed at every session close. When you finish an item, just
@@ -15,7 +15,7 @@
 | **enforce_admins** | Stays `false`, rationale committed: with 1 required review and you as the only human, GitHub's no-self-approval rule means flipping it would deadlock all session pushes. See the question below. |
 | **Date-gated skips** | Backup keep-7 cycle-8 check (≥07-16) and CI promotions (≥07-23) recorded + carried to SESSION-11. |
 
-## 🔴 The ONE remaining click
+## 🔴 The ONE remaining click — now BLOCKS a work order (SESSION-11 WO-F)
 
 ### O7 — Make the GHCR package public
 - Click path: github.com/aytekXR → Packages → `ams-pulse` → Package settings →
@@ -23,6 +23,14 @@
 - There is NO API for this (verified — UI-only), so it stays with you.
 - Until then: nobody can `docker pull ghcr.io/aytekxr/ams-pulse:v0.2.0` anonymously and
   `cosign verify` fails for outsiders.
+- **NEW (S11): this now blocks the clean-install RELEASE test (WO-F, your D-069 directive).**
+  Verified 2026-07-09: anonymous GHCR manifest → 401, the agent's gh token has no
+  `read:packages` scope, and no `ghcr.io/aytekxr/ams-pulse` image exists locally — so the
+  released artifact cannot be pulled or cosign-verified at all. **Either** of these unblocks it:
+  1. Click O7 (above) — also fixes it for outside users, OR
+  2. Type `! gh auth refresh -s read:packages` in a session (interactive, ~1 min) — unblocks
+     the agent only; outsiders still can't pull until O7.
+  Until one happens, WO-F is recorded BLOCKED-on-operator and carried forward.
 
 ## 🟠 Two standing questions (answer whenever, not blocking)
 
