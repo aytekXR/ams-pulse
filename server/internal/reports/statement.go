@@ -7,9 +7,12 @@ package reports
 
 import (
 	"bytes"
+	"compress/zlib"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"image/jpeg"
+	"image/png"
 	"strconv"
 	"time"
 )
@@ -38,6 +41,10 @@ type StatementOptions struct {
 	// BusinessTier must be true for Business tier gating.
 	// White-label headers and scheduled PDF exports require Business tier (§7.12).
 	BusinessTier bool
+	// LogoPath is the filesystem path to a PNG or JPEG logo for PDF exports.
+	// Empty = use the embedded default Pulse waveform mark.
+	// Set from PULSE_REPORT_LOGO_PATH; validated at boot by ValidateLogoPath.
+	LogoPath string
 }
 
 // GeneratedStatement is the output of statement generation.
@@ -152,6 +159,7 @@ func generateCSV(report *UsageReport, opts StatementOptions, now time.Time) (*Ge
 func generatePDF(report *UsageReport, opts StatementOptions, now time.Time) (*GeneratedStatement, error) {
 	pdf := newMinimalPDF()
 	pdf.setTitle("Pulse Usage Statement")
+	pdf.setLogo(ResolveLogo(opts.LogoPath))
 
 	// White-label header block.
 	if opts.Whitelabel != nil && opts.Whitelabel.Name != "" {
@@ -235,6 +243,7 @@ type minimalPDF struct {
 	headerLines []string
 	tableHeader []string
 	tableRows   [][]string
+	logoBytes   []byte // raw PNG or JPEG bytes; nil = no logo
 }
 
 func newMinimalPDF() *minimalPDF {
@@ -246,12 +255,67 @@ func (p *minimalPDF) addHeaderLine(s string)       { p.headerLines = append(p.he
 func (p *minimalPDF) addTableHeader(cols []string) { p.tableHeader = cols }
 func (p *minimalPDF) addTableRow(row []string)     { p.tableRows = append(p.tableRows, row) }
 
+// setLogo stores logo bytes for embedding in the PDF.
+// Pass nil or empty to omit the logo (no XObject emitted).
+func (p *minimalPDF) setLogo(b []byte) { p.logoBytes = b }
+
 // render produces a minimal valid PDF byte stream.
 // Structure: %PDF-1.4 header, objects, xref, startxref, %%EOF.
+// When logoBytes is set, a sixth PDF object (image XObject) is emitted and the
+// Page resource dictionary includes /XObject << /Logo 6 0 R >>.
 func (p *minimalPDF) render() ([]byte, error) {
+	// Resolve logo: validate format (PNG/JPEG magic bytes); fall back to default on mismatch.
+	logoBytes := p.logoBytes
+	if len(logoBytes) > 0 && !isPNG(logoBytes) && !isJPEG(logoBytes) {
+		logoBytes = defaultLogoBytes
+	}
+
+	// Encode logo into a PDF image XObject stream.
+	var imgW, imgH int
+	var imgStream []byte
+	var imgFilter string
+	hasLogo := false
+	if len(logoBytes) > 0 {
+		var encErr error
+		imgW, imgH, imgStream, imgFilter, encErr = encodeLogoXObject(logoBytes)
+		if encErr == nil && imgW > 0 && imgH > 0 {
+			hasLogo = true
+		}
+		// Encode error: continue without logo (never crash).
+	}
+
+	// Compute rendered logo dimensions (aspect-ratio preserved, max 120×40 pt).
+	const maxLogoW, maxLogoH = 120.0, 40.0
+	var rendW, rendH float64
+	if hasLogo {
+		scaleW := maxLogoW / float64(imgW)
+		scaleH := maxLogoH / float64(imgH)
+		scale := scaleW
+		if scaleH < scaleW {
+			scale = scaleH
+		}
+		rendW = scale * float64(imgW)
+		rendH = scale * float64(imgH)
+	}
+
 	// Build content stream (plain text layout using PDF text operators).
 	var content bytes.Buffer
-	yPos := 750.0
+
+	// Logo placement: 120×40 pt box anchored at (50, 742) on 612×792 page.
+	// PDF coordinate origin is bottom-left; y=742 + 40 = 782 → near top of page.
+	if hasLogo {
+		fmt.Fprintf(&content, "q\n")
+		fmt.Fprintf(&content, "%.4f 0 0 %.4f 50 742 cm\n", rendW, rendH)
+		fmt.Fprintf(&content, "/Logo Do\n")
+		fmt.Fprintf(&content, "Q\n")
+	}
+
+	// Text starts at 730 (below logo bottom at 742) when logo present;
+	// otherwise keep legacy 750 so non-logo PDFs are unchanged.
+	yPos := 730.0
+	if !hasLogo {
+		yPos = 750.0
+	}
 	lineH := 12.0
 
 	fmt.Fprintf(&content, "BT\n")
@@ -293,8 +357,7 @@ func (p *minimalPDF) render() ([]byte, error) {
 	var pdf bytes.Buffer
 	objOffsets := make([]int, 0, 6)
 
-	header := "%PDF-1.4\n"
-	pdf.WriteString(header)
+	pdf.WriteString("%PDF-1.4\n")
 
 	// Object 1: Catalog.
 	objOffsets = append(objOffsets, pdf.Len())
@@ -304,9 +367,13 @@ func (p *minimalPDF) render() ([]byte, error) {
 	objOffsets = append(objOffsets, pdf.Len())
 	pdf.WriteString("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n")
 
-	// Object 3: Page.
+	// Object 3: Page — include /XObject resource dict only when logo is present.
 	objOffsets = append(objOffsets, pdf.Len())
-	fmt.Fprintf(&pdf, "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n")
+	if hasLogo {
+		fmt.Fprintf(&pdf, "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> /XObject << /Logo 6 0 R >> >> >>\nendobj\n")
+	} else {
+		fmt.Fprintf(&pdf, "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n")
+	}
 
 	// Object 4: Content stream.
 	objOffsets = append(objOffsets, pdf.Len())
@@ -317,6 +384,15 @@ func (p *minimalPDF) render() ([]byte, error) {
 	// Object 5: Font (Helvetica built-in).
 	objOffsets = append(objOffsets, pdf.Len())
 	pdf.WriteString("5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n")
+
+	// Object 6: Image XObject (only when logo is present).
+	if hasLogo {
+		objOffsets = append(objOffsets, pdf.Len())
+		fmt.Fprintf(&pdf, "6 0 obj\n<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /%s /Length %d >>\nstream\n",
+			imgW, imgH, imgFilter, len(imgStream))
+		pdf.Write(imgStream)
+		pdf.WriteString("\nendstream\nendobj\n")
+	}
 
 	// xref table.
 	xrefOffset := pdf.Len()
@@ -332,6 +408,73 @@ func (p *minimalPDF) render() ([]byte, error) {
 	fmt.Fprintf(&pdf, "startxref\n%d\n%%%%EOF\n", xrefOffset)
 
 	return pdf.Bytes(), nil
+}
+
+// encodeLogoXObject converts logo bytes (PNG or JPEG) to a PDF image XObject stream.
+// PNG: decoded to raw DeviceRGB, alpha-composited on white, zlib-compressed (FlateDecode).
+// JPEG: passed through raw (DCTDecode); only the config is decoded to obtain w,h.
+// Returns (width, height, compressedStream, filterName, error).
+func encodeLogoXObject(logoBytes []byte) (w, h int, stream []byte, filter string, err error) {
+	if isPNG(logoBytes) {
+		img, decErr := png.Decode(bytes.NewReader(logoBytes))
+		if decErr != nil {
+			return 0, 0, nil, "", decErr
+		}
+		bounds := img.Bounds()
+		w, h = bounds.Dx(), bounds.Dy()
+
+		// Convert RGBA → DeviceRGB with alpha composited on white.
+		rgb := make([]byte, w*h*3)
+		for py := 0; py < h; py++ {
+			for px := 0; px < w; px++ {
+				r, g, b, a := img.At(bounds.Min.X+px, bounds.Min.Y+py).RGBA()
+				// RGBA values from RGBA() are pre-multiplied and in [0, 65535].
+				// Un-premultiply, then composite on white (1 - alpha).
+				af := float64(a) / 0xFFFF
+				var rf, gf, bf float64
+				if af > 0 {
+					rf = float64(r)/0xFFFF/af*af + (1 - af)
+					gf = float64(g)/0xFFFF/af*af + (1 - af)
+					bf = float64(b)/0xFFFF/af*af + (1 - af)
+				} else {
+					rf, gf, bf = 1, 1, 1 // fully transparent → white
+				}
+				idx := (py*w + px) * 3
+				rgb[idx] = clampByte(rf * 255)
+				rgb[idx+1] = clampByte(gf * 255)
+				rgb[idx+2] = clampByte(bf * 255)
+			}
+		}
+
+		// Zlib-compress the raw RGB bytes.
+		var buf bytes.Buffer
+		zw := zlib.NewWriter(&buf)
+		_, _ = zw.Write(rgb)
+		_ = zw.Close()
+		return w, h, buf.Bytes(), "FlateDecode", nil
+	}
+
+	if isJPEG(logoBytes) {
+		cfg, decErr := jpeg.DecodeConfig(bytes.NewReader(logoBytes))
+		if decErr != nil {
+			return 0, 0, nil, "", decErr
+		}
+		// Raw JPEG bytes pass through as DCTDecode — no re-encoding needed.
+		return cfg.Width, cfg.Height, logoBytes, "DCTDecode", nil
+	}
+
+	return 0, 0, nil, "", fmt.Errorf("encodeLogoXObject: unsupported format (not PNG or JPEG)")
+}
+
+// clampByte rounds v to the nearest byte value in [0, 255].
+func clampByte(v float64) byte {
+	if v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return byte(v + 0.5)
 }
 
 func escapePDFString(s string) string {

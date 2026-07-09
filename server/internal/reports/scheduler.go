@@ -29,6 +29,10 @@ type SchedulerConfig struct {
 
 	// S3 config (optional; empty = no S3 upload).
 	S3 S3Config
+
+	// LogoPath is the filesystem path for the PDF logo override.
+	// Corresponds to PULSE_REPORT_LOGO_PATH. Empty = embedded default waveform.
+	LogoPath string
 }
 
 // Scheduler runs report export jobs on their cron schedules.
@@ -173,6 +177,7 @@ func (s *Scheduler) runSchedule(ctx context.Context, sched meta.ReportScheduleRo
 		To:         to,
 		Format:     format,
 		Whitelabel: wlHeader,
+		LogoPath:   s.cfg.LogoPath,
 	}
 
 	stmt, err := GenerateStatement(report, opts)
