@@ -6,7 +6,7 @@
 
 # --- web UI ---
 # node:22-alpine
-FROM node@sha256:9385cd9f3001dfc3431e8ead12c43e9e1f87cc1b9b5c6cfd0f73865d405b27c4 AS web
+FROM node@sha256:926d6cafec97f338577041890465522f70fe74aa6fe4b021a4fd7f87a5996b25 AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json* ./
 RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
@@ -32,7 +32,7 @@ RUN CGO_ENABLED=0 go build \
 
 # --- runtime ---
 # alpine:3.21
-FROM alpine@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+FROM alpine@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 # Create the meta-store/secret-key dir owned by the non-root pulse user so a fresh
 # pulse-data named volume inherits pulse:pulse ownership (else SQLITE_CANTOPEN at /var/lib/pulse).
 RUN adduser -D -H pulse && mkdir -p /var/lib/pulse && chown pulse:pulse /var/lib/pulse
