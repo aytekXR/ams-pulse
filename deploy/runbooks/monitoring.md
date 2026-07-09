@@ -168,6 +168,30 @@ Source: `agents/handoffs/decisions.md` D-062 WATCH note.
 
 ---
 
+## Known benign ClickHouse startup messages
+
+ClickHouse 24.8 may log `CANNOT_PARSE_INPUT` (Code 27) entries during first-boot
+startup under concurrent-connection load (27 were observed in the D-064 A10 load
+test). These are internal wire-protocol format probes from connections arriving
+before the server is fully initialized — they do NOT indicate Pulse DDL failures
+(the migration runner returns an error on any failed SQL statement, and CI's
+integration harness fails loudly on migration errors).
+
+To distinguish from real problems:
+
+```sh
+sg docker -c "docker compose -p pulse-prod logs clickhouse | grep -c CANNOT_PARSE_INPUT"
+# Startup-window-only occurrences with no matching pulse-migrate error = cosmetic.
+```
+
+Any `SYNTAX_ERROR` (Code 62) in ClickHouse startup logs is NOT benign: it means
+the `/docker-entrypoint-initdb.d/` anti-pattern was used (raw DDL with `{db}`
+placeholders fed to ClickHouse directly) — ClickHouse aborts on the first
+statement and NO tables are created. Schema must only be applied via the
+`pulse-migrate` container. (D-065 WO-D root-cause.)
+
+---
+
 ## WARN log taxonomy
 
 ### Expected — transient, self-recovering

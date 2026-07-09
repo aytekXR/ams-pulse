@@ -130,7 +130,7 @@ curl -sf -X POST \
 # Resource limits (inspect, not trust compose YAML):
 sg docker -c "docker inspect pulse-prod-pulse \
   --format 'memory={{.HostConfig.Memory}} cpus={{.HostConfig.NanoCpus}}'"
-# Expected: memory=536870912 cpus=500000000
+# Expected: memory=536870912 cpus=1000000000  (cpu cap 0.5 → 1.0 since D-065)
 
 # Logs clean (no ERROR, no unexpected WARN):
 sg docker -c "docker compose ${DC_ARGS} logs pulse --tail 50" | grep -iE 'ERROR|panic'

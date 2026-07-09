@@ -91,6 +91,11 @@ services:
   clickhouse:
     # clickhouse/clickhouse-server:24.8
     # Digest pinned 2026-06-11 via registry HTTP API (no Docker daemon).
+    # ⚠️ NEVER mount contracts/db/clickhouse/ as /docker-entrypoint-initdb.d/:
+    # the DDL contains {db} placeholders that only the pulse-migrate runner
+    # substitutes; raw ClickHouse aborts on the first statement (Code 62
+    # SYNTAX_ERROR) and applies NO tables at all (D-065 WO-D). Schema is applied
+    # exclusively by the pulse-migrate one-shot container.
     image: clickhouse/clickhouse-server@sha256:1ffa82edee000a42c09313bd9f1293d94c570aee74babc1b3ca9983a35fa597b
     volumes:
       - clickhouse-data:/var/lib/clickhouse

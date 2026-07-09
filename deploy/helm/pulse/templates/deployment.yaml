@@ -33,7 +33,11 @@ spec:
       initContainers:
         # Wait for ClickHouse to be ready before starting pulse.
         - name: wait-clickhouse
-          image: busybox:1.36
+          {{- if .Values.clickhouse.waitImage.digest }}
+          image: "{{ .Values.clickhouse.waitImage.repository }}:{{ .Values.clickhouse.waitImage.tag }}@{{ .Values.clickhouse.waitImage.digest }}"
+          {{- else }}
+          image: "{{ .Values.clickhouse.waitImage.repository }}:{{ .Values.clickhouse.waitImage.tag }}"
+          {{- end }}
           command:
             - sh
             - -c

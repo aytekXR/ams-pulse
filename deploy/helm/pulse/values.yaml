@@ -28,12 +28,14 @@ pulse:
   replicaCount: 1
 
   # Resources: tuned for a 2-vCPU / 2 GB VM (ARCHITECTURE §3.6 Free-tier budget).
+  # CPU limit 500m → 1000m (D-065, compose parity): A10 measured 147%-of-a-core
+  # poll-boundary bursts at 500 streams; 500m CFS-throttles the burst path.
   resources:
     requests:
       cpu: "250m"
       memory: "256Mi"
     limits:
-      cpu: "500m"
+      cpu: "1000m"
       memory: "512Mi"
 
   # HTTP API + UI port.
@@ -253,6 +255,15 @@ clickhouse:
     # Pin to digest in production.
     repository: clickhouse/clickhouse-server
     tag: "24.8"
+    pullPolicy: IfNotPresent
+
+  # wait-for-clickhouse init container image (only rendered when clickhouse.enabled=true).
+  # busybox:1.36
+  # Digest pinned 2026-07-09; to refresh: docker pull busybox:1.36 && docker image inspect busybox:1.36 --format '{{index .RepoDigests 0}}'
+  waitImage:
+    repository: busybox
+    tag: "1.36"
+    digest: "sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662"
     pullPolicy: IfNotPresent
 
   # Resources: tuned for 2-vCPU / 1 GB ClickHouse footprint.
