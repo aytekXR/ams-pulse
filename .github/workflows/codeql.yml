@@ -46,7 +46,7 @@ jobs:
 
       # Go autobuild compiles the modules, so it needs the toolchain matching
       # go.mod (go 1.25.0) — the runner default can lag behind.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         if: matrix.language == 'go'
         with:
           go-version: "1.25"
