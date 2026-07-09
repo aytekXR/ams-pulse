@@ -369,15 +369,26 @@ jobs:
           [ -n "$INGEST_TOKEN" ] || { echo "FAIL: empty token in response"; exit 1; }
           echo "Ingest token minted (prefix): ${INGEST_TOKEN:0:10}..."
 
-          # One startup_complete event (the rollup MV filters this type; session_start is skipped).
+          # Three events in one batch (MV filters startup_complete, heartbeat, rebuffer_end):
+          #   startup_complete → populates startup_ms_state (startup_p50_ms assertion below)
+          #   rebuffer_end     → rebuffer_ms=5000 → rebuffer_total_ms in rollup_qoe_1h
+          #   heartbeat        → watch_ms=10000   → watch_time_ms in rollup_qoe_1h
+          # rebuffer_ratio = 5000/10000 = 0.5 > threshold 0.0 → rebuffer alert fires (below).
+          # app field set to "live" to match mock-ams app name so QoEForStream app filter hits.
           # session_id must be a UUID; ts is epoch ms generated at runtime, never hardcoded.
           BEACON_BODY=$(python3 -c "
           import uuid, json, time
+          now_ms = int(time.time() * 1000)
           payload = {
               'version': 1,
               'session_id': str(uuid.uuid4()),
               'stream_id': 'e2e-stream-1',
-              'events': [{'type': 'startup_complete', 'ts': int(time.time() * 1000), 'data': {'startup_ms': 100}}]
+              'app': 'live',
+              'events': [
+                  {'type': 'startup_complete', 'ts': now_ms,        'data': {'startup_ms': 100}},
+                  {'type': 'rebuffer_end',     'ts': now_ms + 1000, 'data': {'duration_ms': 5000}},
+                  {'type': 'heartbeat',        'ts': now_ms + 2000, 'data': {'watch_ms': 10000}}
+              ]
           }
           print(json.dumps(payload))
           ")
@@ -400,10 +411,10 @@ jobs:
           d = json.load(sys.stdin)
           acc = d.get('accepted', -1)
           print(f'accepted={acc}')
-          if int(acc) != 1:
-              print(f'FAIL: expected accepted==1, got {acc}')
+          if int(acc) != 3:
+              print(f'FAIL: expected accepted==3 (startup_complete+rebuffer_end+heartbeat), got {acc}')
               sys.exit(1)
-          print('PASS: beacon accepted==1')
+          print('PASS: beacon accepted==3')
           "
 
           # Poll for startup_p50_ms > 0 in /qoe/summary (rollup latency up to 120 s per D-039).
@@ -433,6 +444,52 @@ jobs:
             sleep 5
           done
           echo "PASS: A2 — startup_p50_ms > 0 in QoE summary — beacon ingest and rollup confirmed."
+
+          # D-062: Create rebuffer_ratio alert rule and poll for it firing via the honest QoE reader.
+          # Budget: ~2 s CH batch flush + ~5 s evaluator tick + margin = 60 s budget at 5 s interval.
+          # threshold 0.0 fires on any non-zero rebuffer_ratio; the seeded ratio is 5000/10000=0.5.
+          # window_s:0 evaluates immediately; cooldown_s:1 minimum; severity:warning.
+          HTTP_STATUS=$(curl -m 5 -s \
+            -X POST \
+            -H "Authorization: Bearer ${PULSE_ADMIN_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"name":"e2e rebuffer honest","metric":"rebuffer_ratio","operator":"gt","threshold":0.0,"window_s":0,"cooldown_s":1,"severity":"warning"}' \
+            -o /tmp/rebuf_rule.json \
+            -w "%{http_code}" \
+            http://127.0.0.1:18090/api/v1/alerts/rules)
+          REBUF_RULE_BODY=$(cat /tmp/rebuf_rule.json)
+          echo "Create rebuffer_ratio rule ($HTTP_STATUS): $REBUF_RULE_BODY"
+          [ "$HTTP_STATUS" = "201" ] || { echo "FAIL: expected 201 for rebuffer rule, got $HTTP_STATUS"; exit 1; }
+
+          echo "Polling /api/v1/alerts/history?state=firing for rebuffer_ratio (60 s, 5 s interval) ..."
+          deadline=$(( $(date +%s) + 60 ))
+          LAST_REBUF_HIST=""
+          while true; do
+            LAST_REBUF_HIST=$(curl -m 5 -s \
+              -H "Authorization: Bearer ${PULSE_ADMIN_TOKEN}" \
+              "http://127.0.0.1:18090/api/v1/alerts/history?state=firing")
+            FOUND=$(echo "$LAST_REBUF_HIST" | python3 -c "
+          import sys, json
+          try:
+              d = json.load(sys.stdin)
+              items = d.get('items', [])
+              if any(it.get('metric') == 'rebuffer_ratio' for it in items):
+                  print('yes')
+              else:
+                  print('no')
+          except Exception:
+              print('no')
+          ")
+            echo "  rebuffer_ratio history check: $FOUND"
+            [ "$FOUND" = "yes" ] && break
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "TIMEOUT: no rebuffer_ratio alert in firing history after 60 s"
+              echo "Last /alerts/history response: $LAST_REBUF_HIST"
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "PASS: A2 D-062 — rebuffer_ratio alert fired via honest QoEReader (value 0.5 > threshold 0.0)."
 
       # ── A4: webhook delivery_failure for dead-URL channel ───────────────────────
       - name: A4 — webhook delivery_failure recorded for dead-URL channel
