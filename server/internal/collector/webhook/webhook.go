@@ -25,8 +25,16 @@ type Config struct {
 	NodeID string
 
 	// SharedSecret is the HMAC-SHA256 secret used to validate AMS webhook
-	// requests. If empty, signature validation is skipped (warn on startup).
+	// requests on the legacy /webhook/ams route. If empty, all requests on
+	// that route are rejected (fail-closed).
 	SharedSecret string
+
+	// SourceSecrets maps source name → decrypted per-source HMAC secret (B7).
+	// Used exclusively by /webhook/ams/{name}: if a name is present, its secret
+	// is validated with NO SharedSecret fallback (cross-source isolation). If the
+	// name is absent from the map, SharedSecret is used as fallback.
+	// Populated at startup from the meta store; secret rotation requires restart.
+	SourceSecrets map[string]string
 
 	// ListenAddr is the address for the webhook HTTP server (e.g. ":8091").
 	// If empty, the handler is embedded rather than standalone.
@@ -51,7 +59,12 @@ func New(cfg Config, sink domain.EventSink, logger *slog.Logger) *Handler {
 	}
 	h := &Handler{cfg: cfg, sink: sink, logger: logger}
 	mux := http.NewServeMux()
+	// Legacy route: validates against SharedSecret ONLY; per-source secrets
+	// never apply here, preserving backward compatibility.
 	mux.HandleFunc("/webhook/ams", h.handleWebhook)
+	// Per-source route (B7): dispatches using SourceSecrets[name] with
+	// SharedSecret fallback for unknown source names.
+	mux.HandleFunc("/webhook/ams/", h.handleWebhookPerSource)
 	h.server = &http.Server{
 		Addr:         cfg.ListenAddr,
 		Handler:      mux,
@@ -97,8 +110,39 @@ func (h *Handler) HTTPHandler() http.Handler {
 	return h.server.Handler
 }
 
-// handleWebhook is the HTTP handler for AMS webhook POST requests.
+// handleWebhook is the HTTP handler for the legacy /webhook/ams route.
+// It validates exclusively against SharedSecret; per-source secrets never apply.
+// Behavior is byte-for-byte identical to the pre-B7 implementation.
 func (h *Handler) handleWebhook(w http.ResponseWriter, r *http.Request) {
+	h.handleWebhookWithSecret(w, r, h.cfg.SharedSecret)
+}
+
+// handleWebhookPerSource is the HTTP handler for /webhook/ams/{name}.
+// Secret selection (B7 design):
+//   - If SourceSecrets[name] exists → validate against it ONLY (no SharedSecret
+//     fallback — cross-source isolation is the security goal of B7).
+//   - If no entry for name → fall back to SharedSecret if non-empty, else 401
+//     (fail-closed; NOT 404 — do not leak which source names exist).
+func (h *Handler) handleWebhookPerSource(w http.ResponseWriter, r *http.Request) {
+	// Extract {name} from the URL path ("/webhook/ams/" prefix is 13 chars).
+	name := r.URL.Path[len("/webhook/ams/"):]
+
+	var secret string
+	if s, ok := h.cfg.SourceSecrets[name]; ok {
+		// Per-source secret exists — use it exclusively.
+		secret = s
+	} else {
+		// Unknown source name — fall back to SharedSecret (may be empty →
+		// validateHMAC returns false → 401).
+		secret = h.cfg.SharedSecret
+	}
+	h.handleWebhookWithSecret(w, r, secret)
+}
+
+// handleWebhookWithSecret reads the body, validates the HMAC against secret,
+// parses the payload and forwards events to the sink.
+// Both /webhook/ams and /webhook/ams/{name} delegate here.
+func (h *Handler) handleWebhookWithSecret(w http.ResponseWriter, r *http.Request, secret string) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -110,11 +154,10 @@ func (h *Handler) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate HMAC signature. Fail-closed: an empty shared secret makes
-	// validateHMAC reject every request (defense-in-depth — the serve.go wiring
-	// already refuses to start this listener without a secret).
+	// Validate HMAC signature. Fail-closed: an empty secret makes validateHMAC
+	// reject every request (defense-in-depth).
 	sig := r.Header.Get("X-Ams-Signature")
-	if !validateHMAC(body, sig, h.cfg.SharedSecret) {
+	if !validateHMAC(body, sig, secret) {
 		h.logger.Warn("webhook: invalid signature", "remote", r.RemoteAddr)
 		http.Error(w, "invalid signature", http.StatusUnauthorized)
 		return

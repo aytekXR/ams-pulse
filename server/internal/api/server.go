@@ -1969,11 +1969,12 @@ func alertChannelFromAPI(body map[string]any, store *meta.Store) (meta.AlertChan
 
 func amsSourceToAPI(src meta.AMSSourceRow) map[string]any {
 	m := map[string]any{
-		"id":             src.ID,
-		"name":           src.Name,
-		"type":           src.SourceType,
-		"credential_set": src.CredentialEnc.Valid && src.CredentialEnc.String != "",
-		"created_at":     src.CreatedAt,
+		"id":                 src.ID,
+		"name":               src.Name,
+		"type":               src.SourceType,
+		"credential_set":     src.CredentialEnc.Valid && src.CredentialEnc.String != "",
+		"webhook_secret_set": src.WebhookSecretEnc.Valid && src.WebhookSecretEnc.String != "",
+		"created_at":         src.CreatedAt,
 	}
 	if src.RestURL.Valid {
 		m["rest_url"] = src.RestURL.String
@@ -2024,6 +2025,14 @@ func amsSourceFromAPI(body map[string]any, store *meta.Store) (meta.AMSSourceRow
 			return row, fmt.Errorf("encrypt credential: %w", err)
 		}
 		row.CredentialEnc = sql.NullString{String: enc, Valid: true}
+	}
+	// B7: per-source webhook HMAC secret (write-only; stored encrypted).
+	if v, ok := body["webhook_secret"].(string); ok && v != "" {
+		enc, err := store.Encrypt(v)
+		if err != nil {
+			return row, fmt.Errorf("encrypt webhook_secret: %w", err)
+		}
+		row.WebhookSecretEnc = sql.NullString{String: enc, Valid: true}
 	}
 	return row, nil
 }
