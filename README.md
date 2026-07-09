@@ -80,7 +80,6 @@ Last updated: Wave-3-Plus (2026-06-15). QA gate: PASS_WITH_LIMITATIONS.
 ### Known limitations (Phase-3 / deferred)
 
 - Dashboard render time at 500 streams: virtualization confirmed (≤20 DOM rows), wall-clock not measured — Phase-3 Playwright benchmark (VD-04).
-- `rebuffer_ratio` / `error_rate` alert rules: computed from live ingest health heuristic proxy; full ClickHouse `rollup_qoe_1h` query is Phase-3.
 - Player CPU <1% budget: not measurable in jsdom/vitest; Phase-3 real-browser profiler needed (VD-14).
 - AMS Kafka / log-tail source: no broker available in CI (D-007.5 waiver); REST poller path fully functional and QA-verified. Kafka `lag` + `parse_errors` are surfaced in `/healthz` (Wave-3-Plus).
 - Docker Compose not tested on build machine (D-002 waiver); local binary path is QA-verified.
@@ -166,6 +165,11 @@ Cluster fleet discovery ──────────────────�
 | [contracts/README.md](contracts/README.md) | Contract surface, codegen commands, CI validation |
 | [contracts/openapi/pulse-api.yaml](contracts/openapi/pulse-api.yaml) | Full OpenAPI 3.1 spec (32 paths, 46 operations, 66 schemas) |
 | [agents/README.md](agents/README.md) | Multi-agent build workflow |
+| [deploy/runbooks/upgrade-rollback.md](deploy/runbooks/upgrade-rollback.md) | Upgrade + rollback: 5-overlay compose command, stamped-build pattern, rollback tags, ClickHouse DDL stance |
+| [deploy/runbooks/monitoring.md](deploy/runbooks/monitoring.md) | Monitoring: backup daemon health, alert_history cap, CH disk, Prometheus metrics, WARN log taxonomy |
+| [deploy/runbooks/backup-restore.md](deploy/runbooks/backup-restore.md) | Backup sidecar, manual backup, ClickHouse + SQLite restore steps |
+| [SECURITY.md](SECURITY.md) | Security policy: report channel, supported versions, webhook HMAC, token storage, CSP, license gates |
+| [CHANGELOG.md](CHANGELOG.md) | Changelog: operator-meaningful changes by version (Keep a Changelog format) |
 
 ---
 
