@@ -14,15 +14,20 @@ Nothing yet — next changes land here.
 
 ---
 
-## [GA release — version pending operator tag choice (v1.0.0 or v0.2.0)] - 2026-07-09
+## [0.2.0] - 2026-07-09
 
-**GA declared 2026-07-09 (D-065).** All gate criteria met; remaining items are
-operator-owned (LICENSE choice, GHCR visibility, Pulse license activation, AMS
-webhook console config) or time-gated (CI job promotions ~2026-07-23). The
-release tag has NOT been pushed yet — the version number is the operator's call;
-rename this heading when the tag lands. Post-v0.1.0 changes from SESSION-02
-through SESSION-08. Coverage ratchets and test-quality improvements are noted as
-operator-visible because they gate the release of the next versioned package.
+**GA release** (declared D-065; tag chosen by the operator, D-066). Post-v0.1.0
+changes from SESSION-02 through SESSION-08. Coverage ratchets and test-quality
+improvements are noted as operator-visible because they gate the release of the
+next versioned package.
+
+### Licensing
+
+- Repository licensed under **PolyForm Noncommercial 1.0.0** (root `LICENSE`,
+  operator decision D-066): noncommercial use, modification, and sharing are
+  free; commercial use requires a vendor license. The beacon SDK remains MIT
+  (`sdk/beacon-js/LICENSE`). Product license-key mechanics documented in
+  `docs/licensing.md`.
 
 ### Added
 

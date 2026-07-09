@@ -215,3 +215,12 @@ sqlite3 :memory: < contracts/db/meta/0001_init.sql        # meta DDL
 - **V3a/V3b fix-loop (complete, 2026-06-15):** Beacon round-trip end-to-end (SDK header, main-port sink, Pro+ gate, geo enrichment); geo/device analytics; QoE rollup queries; ingest health non-zero; alerting muted/group_by/node_down; 4-tier license model (Business tier); report tier gates; 5-field cron; security hardening (CT compare, WS origin, token kind). See `docs/ARCHITECTURE.md` for full defect list.
 - **Wave-3-Plus (complete, 2026-06-15):** True windowed peak concurrency in billing (`rollup_concurrency_1d`, maxState/maxMerge; VD-38); alert detect→notify wall-clock test passes at 201 ms (VD-31); 13-month dimensional GROUP BY query at 145 ms (VD-18/C9b); HLS probe segment TTFB (`segment_ttfb_ms`) and master-playlist variant-following for real bitrate; anomaly epsilon floor — constant-baseline deviations now flagged; Kafka lag + parse_errors in `/healthz`.
 - **Post-MVP (Phase 3):** Mobile beacons, SSO, white-label PDF, air-gapped licensing, distributed probe network, native RTMP/WebRTC/DASH probing, multi-window anomaly baselines, headless render-time benchmarks.
+
+---
+
+## License
+
+- **Server, web UI, and deployment tooling:** [PolyForm Noncommercial 1.0.0](LICENSE) —
+  free for noncommercial use, modification, and distribution; commercial use
+  requires a vendor license (see `docs/licensing.md`).
+- **Beacon SDK** (`sdk/beacon-js/`): MIT.
