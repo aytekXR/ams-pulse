@@ -28,14 +28,15 @@ pulse:
   replicaCount: 1
 
   # Resources: tuned for a 2-vCPU / 2 GB VM (ARCHITECTURE §3.6 Free-tier budget).
-  # CPU limit 500m → 1000m (D-065, compose parity): A10 measured 147%-of-a-core
-  # poll-boundary bursts at 500 streams; 500m CFS-throttles the burst path.
+  # CPU limit 1000m → 500m (S10/D-068): D-065 cap mitigation reverted. The O(N²)
+  # rebuildSnapshot hot path is eliminated; O(1)-per-event incremental maintenance
+  # reduces poll-cycle CPU by ~365× at 500 streams (ARCHITECTURE §4 A10 budget).
   resources:
     requests:
       cpu: "250m"
       memory: "256Mi"
     limits:
-      cpu: "1000m"
+      cpu: "500m"
       memory: "512Mi"
 
   # HTTP API + UI port.

@@ -133,7 +133,7 @@ curl -sf -X POST \
 # is the IMAGE name — docker inspect on it returns the image, not the limits.
 sg docker -c "docker inspect pulse-prod-pulse-1 \
   --format 'memory={{.HostConfig.Memory}} cpus={{.HostConfig.NanoCpus}}'"
-# Expected: memory=536870912 cpus=1000000000  (cpu cap 0.5 → 1.0 since D-065)
+# Expected: memory=536870912 cpus=500000000  (cpu cap restored to 0.5; D-065 mitigation reverted by S10/D-068)
 
 # Logs clean (no ERROR, no unexpected WARN):
 sg docker -c "docker compose ${DC_ARGS} logs pulse --tail 50" | grep -iE 'ERROR|panic'

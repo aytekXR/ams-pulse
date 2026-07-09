@@ -368,7 +368,7 @@ spec:
               mountPath: /var/lib/pulse
           resources:
             limits:
-              cpu: 1000m
+              cpu: 500m
               memory: 512Mi
             requests:
               cpu: 250m

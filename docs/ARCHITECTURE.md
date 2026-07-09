@@ -197,6 +197,26 @@ CH insert errors, **0** pulse ERRORs. Known follow-ups (non-blocking, punch list
 CPU bursts to ~147% of one core at poll boundaries vs the 0.5-vCPU hardened cap (throttled,
 latency unaffected); ~100 INFO health-degraded lines/s at 500 degraded mock streams.
 
+**D-064 CPU burst follow-up resolved — S10/D-068**: The O(N²) `rebuildSnapshot` hot path has
+been replaced by O(1)-per-event incremental maintenance (see §7). CPU cap reverted to 0.5 vCPU
+(compose/Helm). Performance budget row added to the table below.
+
+### A10 incremental-snapshot performance budget (S10/D-068)
+
+Measured on docker golang:1.25, AMD EPYC 6-core VPS (noise caveat: wall-clock varies ±20% with
+CI load; alloc counts are hardware-independent). All numbers are minimum of 3 × 2 s -benchtime runs.
+Engine: `go test -bench=BenchmarkPollCycle -benchmem -count=3 -benchtime=2s`.
+
+| Streams (N) | BEFORE ns/cycle | AFTER ns/cycle | Speedup | BEFORE allocs/cycle | AFTER allocs/cycle |
+|---|---|---|---|---|---|
+| 100 | 6,723,373 | 88,839 | **~76×** | 11,700 | 100 |
+| 500 | 175,311,990 | 480,675 | **~365×** | 258,507 | 500 |
+| 1000 | 684,370,553 | 993,813 | **~688×** | 1,021,017 | 1,001 |
+
+Complexity check (AFTER): 500vs100 ratio = **5.4×** (< 7× linear bound ✓);
+1000vs500 ratio = **2.1×** (< 3× linear bound ✓).
+AllocsPerRun guard: `TestPollCycle_AllocsPerEvent_Bounded` — 1.0 allocs/event at N=1000 (bound ≤ 64).
+
 ### Testing waivers (GA audit, D-064)
 
 - **`cmd/pulse` per-package coverage (42.3%) is EXEMPT from the ≥60% per-package bar** —
@@ -261,6 +281,17 @@ The `internal/collector/aggregator.Aggregator` maintains a `LiveSnapshot` in mem
 - Deep-copied for lock-free reads (no reader contention during updates).
 - Distributed to WebSocket subscribers via `Subscribe() (<-chan *LiveSnapshot, func())`.
 - Stale stream eviction runs periodically (streams not updated in >2 poll intervals).
+
+**Incremental snapshot maintenance (S10/D-068):** The original `rebuildSnapshot` scanned all N
+streams on every event (O(N) per event → O(N²) per poll cycle). It is replaced by O(1)-per-event
+incremental maintenance using `snapRemoveStream` / `snapAddStream` delta helpers. Each event
+handler subtracts the stream's old contributions (ActiveStreams, TotalViewers, IngestBitrate,
+AppViewers, Streams map entry) before mutation and adds the new contributions after — all O(1)
+pointer and integer operations. `rebuildSnapshot` is retained only for the three infrequent
+non-hot paths: `New()`, `EvictStale()`, `EvictStaleNodes()`. Subscriber notification uses
+leading-edge rate-limiting (≤1 `copySnapshot` per second per burst); max staleness is ~1 s under
+continuous events or the next eviction tick otherwise. See §4 A10 budget table for before/after
+numbers.
 
 This design satisfies the ≤10 s stream visibility budget and keeps dashboard latency
 independent of ClickHouse query performance. Historical analytics (`/api/v1/analytics/*`)

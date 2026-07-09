@@ -13,6 +13,18 @@
 // double-count. The aggregator consults an optional EdgeStreamChecker.
 // When IsEdgeStream(streamID) is true and the reporting node's role is "origin",
 // the viewer_count from that node is skipped for TotalViewers aggregation.
+//
+// Incremental snapshot (S10/D-068):
+// rebuildSnapshot (O(N) full scan) has been replaced by O(1)-per-event incremental
+// maintenance. Each event handler calls snapRemoveStream / snapAddStream to apply
+// only the delta to the in-flight snapshot. rebuildSnapshot is kept for the three
+// rare, non-hot paths: New(), EvictStale(), EvictStaleNodes(). Subscriber
+// notification is leading-edge rate-limited to ≤1 push/second per event burst;
+// max staleness is ~1 s while events keep arriving (in production the restpoller
+// emits every ≤5 s, so the practical bound is one poll interval). A trailing
+// dirty update after a burst followed by total event silence is only flushed by
+// the next EvictStale/EvictStaleNodes tick — acceptable because no events means
+// nothing user-visible changed except staleness eviction, which flushes.
 package aggregator
 
 import (
@@ -38,13 +50,18 @@ const (
 	// DefaultStaleThreshold is how long to keep a stream in the live map
 	// without an update before emitting an offline transition event.
 	DefaultStaleThreshold = 3 * time.Minute
+
+	// notifyRateLimit is the minimum interval between subscriber pushes when
+	// events arrive continuously (leading-edge coalescing window).
+	// Max staleness under continuous load: ~notifyRateLimit.
+	notifyRateLimit = time.Second
 )
 
 // Aggregator implements both domain.LiveProvider and collector.Consumer.
 // It is goroutine-safe.
 type Aggregator struct {
 	mu       sync.RWMutex
-	streams  map[string]*domain.LiveStream    // key = nodeID+"/"+streamID
+	streams  map[string]*domain.LiveStream    // key = nodeID+"/"+app+"/"+streamID
 	nodes    map[string]*domain.LiveNodeStats // key = nodeID
 	snapshot *domain.LiveSnapshot
 
@@ -62,6 +79,13 @@ type Aggregator struct {
 	// (previously onIngestStats hardcoded the defaults, ignoring config).
 	targetBitrateKbps float64
 	targetFPS         float64
+
+	// S10/D-068: incremental notify rate-limiting.
+	// Leading-edge: the first event after a ≥1 s gap fires immediately; events
+	// within the window set snapDirty so the next tick or the next out-of-window
+	// event delivers a consolidated push. Max staleness: ~1 s.
+	lastNotifyAt time.Time
+	snapDirty    bool
 }
 
 // New creates an Aggregator.
@@ -131,7 +155,9 @@ func (a *Aggregator) OnServerEvent(ev domain.ServerEvent) {
 		a.onWebRTCClientStats(ev)
 	}
 
-	a.rebuildSnapshot()
+	// Snapshot is updated incrementally by each handler above (O(1) per event).
+	// notifySubs is leading-edge rate-limited: first event after a ≥1 s gap fires
+	// immediately; events within the window set snapDirty for the next flush.
 	a.notifySubs()
 }
 
@@ -192,8 +218,9 @@ func (a *Aggregator) EvictStaleNodes(nodeStaleThreshold time.Duration) {
 			delete(a.nodes, nodeID)
 		}
 	}
+	// Full rebuild after bulk node removal; this is an infrequent eviction tick.
 	a.rebuildSnapshot()
-	a.notifySubs()
+	a.notifySubsForced()
 }
 
 // ─── EvictStale removes streams with no updates for staleThreshold ────────────
@@ -234,8 +261,9 @@ func (a *Aggregator) EvictStale() {
 			delete(a.streams, key)
 		}
 	}
+	// Full rebuild after bulk stream removal; this is an infrequent eviction tick.
 	a.rebuildSnapshot()
-	a.notifySubs()
+	a.notifySubsForced()
 	a.mu.Unlock()
 
 	// Emit eviction events to the sink only AFTER releasing a.mu: the sink fans
@@ -255,7 +283,7 @@ func (a *Aggregator) onPublishStart(ev domain.ServerEvent) {
 		pt = pt2
 	}
 	startedAt := time.UnixMilli(ev.TS).UTC()
-	a.streams[key] = &domain.LiveStream{
+	s := &domain.LiveStream{
 		StreamID:    ev.StreamID,
 		App:         ev.App,
 		NodeID:      ev.NodeID,
@@ -265,21 +293,36 @@ func (a *Aggregator) onPublishStart(ev domain.ServerEvent) {
 		LastSeenAt:  startedAt,
 		Health:      domain.StreamHealthGood,
 	}
+	// If a stream with the same compound key already exists in the map (restart
+	// without an intervening publish_end), remove its old contribution first.
+	if old, ok := a.streams[key]; ok {
+		a.snapRemoveStream(old)
+	}
+	a.streams[key] = s
+	a.snapAddStream(s)
+	a.snapshot.UpdatedAt = time.Now()
 }
 
 func (a *Aggregator) onPublishEnd(ev domain.ServerEvent) {
 	key := ev.NodeID + "/" + ev.App + "/" + ev.StreamID
 	if s, ok := a.streams[key]; ok {
+		// CRITICAL: subtract BEFORE mutating Active/Health and deleting from map.
+		// onPublishEnd must read the old viewer/bitrate values (D-068 design note).
+		a.snapRemoveStream(s)
 		s.Active = false
 		s.Health = domain.StreamHealthOffline
 		delete(a.streams, key)
+		a.snapshot.UpdatedAt = time.Now()
 	}
 }
 
 func (a *Aggregator) onStreamStats(ev domain.ServerEvent) {
 	key := ev.NodeID + "/" + ev.App + "/" + ev.StreamID
 	s, ok := a.streams[key]
-	if !ok {
+	if ok {
+		// Existing stream: subtract old contributions before updating fields.
+		a.snapRemoveStream(s)
+	} else {
 		// New stream discovered via stats (start event may have been missed).
 		s = &domain.LiveStream{
 			StreamID:  ev.StreamID,
@@ -326,6 +369,10 @@ func (a *Aggregator) onStreamStats(ev domain.ServerEvent) {
 			}
 		}
 	}
+
+	// Add updated contributions (covers both new-stream and existing-stream paths).
+	a.snapAddStream(s)
+	a.snapshot.UpdatedAt = time.Now()
 }
 
 func (a *Aggregator) onNodeStats(ev domain.ServerEvent) {
@@ -371,6 +418,9 @@ func (a *Aggregator) onNodeStats(ev domain.ServerEvent) {
 		ns.ProcessorCount = v
 	}
 	a.nodes[ev.NodeID] = ns
+	// O(1): update snapshot node map in-place (no rebuild needed).
+	a.snapshot.Nodes[ev.NodeID] = ns
+	a.snapshot.UpdatedAt = time.Now()
 }
 
 func (a *Aggregator) onIngestStats(ev domain.ServerEvent) {
@@ -379,6 +429,9 @@ func (a *Aggregator) onIngestStats(ev domain.ServerEvent) {
 	if !ok {
 		return
 	}
+	// Subtract old IngestBitrate contribution before updating the field.
+	a.snapRemoveStream(s)
+
 	// fps is absent on the AMS REST path (currentFPS omitted); use the -1
 	// "unavailable" sentinel for scoring so the FPS weight is redistributed rather
 	// than scoring a phantom 0 fps. s.FPS keeps its display value (0). D-029v.
@@ -409,6 +462,10 @@ func (a *Aggregator) onIngestStats(ev domain.ServerEvent) {
 	)
 	s.HealthScore = score
 	s.Health = ingest.ScoreToHealth(score)
+
+	// Re-add with the new IngestBitrate.
+	a.snapAddStream(s)
+	a.snapshot.UpdatedAt = time.Now()
 }
 
 // onWebRTCClientStats updates the live stream's viewer-side QoE metrics from a
@@ -437,6 +494,10 @@ func (a *Aggregator) onWebRTCClientStats(ev domain.ServerEvent) {
 	if v, ok := ev.Data["packet_loss_pct"].(float64); ok {
 		s.ViewerLossPct = v
 	}
+	// No aggregate counter changes; a.snapshot.Streams[s.StreamID] already holds
+	// the pointer to s, so the field updates above are immediately visible to
+	// copySnapshot callers. Just refresh the timestamp.
+	a.snapshot.UpdatedAt = time.Now()
 }
 
 // UpdateIngestHealth sets the health score for a stream from the ingest health tracker.
@@ -449,13 +510,54 @@ func (a *Aggregator) UpdateIngestHealth(nodeID, app, streamID string, score floa
 	if s, ok := a.streams[key]; ok {
 		s.HealthScore = score
 		s.Health = health
-		a.rebuildSnapshot()
+		// HealthScore/Health are pointer-tracked through snap.Streams; no
+		// aggregate counter changes, so no snapRemove/snapAdd needed.
+		a.snapshot.UpdatedAt = time.Now()
 		a.notifySubs()
 	}
 }
 
+// ─── Incremental snapshot helpers (called with lock held) ────────────────────
+
+// snapRemoveStream subtracts s's contributions from the live snapshot.
+// MUST be called BEFORE any mutation of the fields it reads (Active, ViewerCount,
+// IngestBitrate, App, StreamID) and BEFORE deleting s from a.streams.
+func (a *Aggregator) snapRemoveStream(s *domain.LiveStream) {
+	if !s.Active {
+		return
+	}
+	a.snapshot.ActiveStreams--
+	a.snapshot.TotalViewers -= s.ViewerCount
+	a.snapshot.IngestBitrate -= s.IngestBitrate
+	delete(a.snapshot.Streams, s.StreamID)
+	a.snapshot.AppViewers[s.App] -= s.ViewerCount
+	if a.snapshot.AppViewers[s.App] <= 0 {
+		delete(a.snapshot.AppViewers, s.App)
+	}
+}
+
+// snapAddStream adds s's contributions to the live snapshot.
+// MUST be called AFTER all field mutations so the new values are reflected.
+func (a *Aggregator) snapAddStream(s *domain.LiveStream) {
+	if !s.Active {
+		return
+	}
+	a.snapshot.ActiveStreams++
+	a.snapshot.TotalViewers += s.ViewerCount
+	a.snapshot.IngestBitrate += s.IngestBitrate
+	// Bare StreamID key — preserved from the original rebuildSnapshot behaviour.
+	// Last-write-wins when two nodes host the same bare StreamID in the same cycle
+	// (edge/origin pair or cross-app same ID); same semantics as the old rebuild scan.
+	a.snapshot.Streams[s.StreamID] = s
+	a.snapshot.AppViewers[s.App] += s.ViewerCount
+}
+
 // ─── Snapshot builder (called with lock held) ────────────────────────────────
 
+// rebuildSnapshot performs a full O(N) rebuild of a.snapshot from a.streams and
+// a.nodes. Retained for the three non-hot paths: New(), EvictStale(),
+// EvictStaleNodes(). All per-event paths use incremental snapRemoveStream /
+// snapAddStream instead (S10/D-068).
 func (a *Aggregator) rebuildSnapshot() {
 	snap := &domain.LiveSnapshot{
 		Streams:    make(map[string]*domain.LiveStream, len(a.streams)),
@@ -481,12 +583,40 @@ func (a *Aggregator) rebuildSnapshot() {
 	a.snapshot = snap
 }
 
-// notifySubs pushes a copy of the snapshot to all subscribers (lock held).
-// Slow subscribers are dropped (non-blocking send).
+// ─── Subscriber notification (called with lock held) ─────────────────────────
+
+// notifySubs pushes a deep copy of the snapshot to all subscribers with
+// leading-edge rate-limiting: the first call after a ≥1 s gap fires immediately;
+// calls within the 1 s window set snapDirty=true so the next out-of-window call
+// delivers the accumulated state. No goroutine is spawned; slow subscribers are
+// dropped via the non-blocking send (buffered chan cap 16).
 func (a *Aggregator) notifySubs() {
 	if len(a.subs) == 0 {
 		return
 	}
+	now := time.Now()
+	if now.Sub(a.lastNotifyAt) < notifyRateLimit {
+		// Still within the coalescing window — mark dirty for next flush.
+		a.snapDirty = true
+		return
+	}
+	a.doNotifySubs(now)
+}
+
+// notifySubsForced unconditionally pushes a snapshot to all subscribers.
+// Used by EvictStale and EvictStaleNodes, where the snapshot has just been
+// fully rebuilt and freshness matters regardless of the rate-limit window.
+func (a *Aggregator) notifySubsForced() {
+	if len(a.subs) == 0 {
+		return
+	}
+	a.doNotifySubs(time.Now())
+}
+
+// doNotifySubs performs the actual snapshot copy and fan-out (lock held).
+func (a *Aggregator) doNotifySubs(now time.Time) {
+	a.lastNotifyAt = now
+	a.snapDirty = false
 	snap := copySnapshot(a.snapshot)
 	for ch := range a.subs {
 		select {

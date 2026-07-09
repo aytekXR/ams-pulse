@@ -64,10 +64,12 @@ services:
       resources:
         limits:
           memory: 512m
-          # 0.5 → 1.0 (D-065): A10 measured 147%-of-a-core bursts at poll
-          # boundaries with 500 streams — CFS-throttled at 0.5 with unknown P99
-          # impact. Host has 6 cores; 1.0 keeps throttling out of the burst path.
-          cpus: "1.0"
+          # 1.0 → 0.5 (S10/D-068): the O(N²) rebuildSnapshot hot path that caused
+          # 147%-of-a-core bursts at 500 streams has been eliminated. Incremental
+          # O(1)-per-event snapshot maintenance (see ARCHITECTURE.md §4 A10 budget
+          # and §7) reduces poll-cycle CPU by ~365× at 500 streams. D-065 cap
+          # mitigation reverted; 0.5 vCPU restored.
+          cpus: "0.5"
     environment:
       PULSE_CLICKHOUSE_DSN: "clickhouse://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@clickhouse:9000/pulse"
       PULSE_CLICKHOUSE_DATABASE: "pulse"
