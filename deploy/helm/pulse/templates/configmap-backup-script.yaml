@@ -1,0 +1,18 @@
+{{- if .Values.backup.enabled -}}
+# ConfigMap carrying the pulse-backup.sh script for the backup CronJob.
+# Source: deploy/scripts/pulse-backup.sh (copied into deploy/helm/pulse/files/ for chart packaging).
+# Script modes:
+#   once   — single backup cycle (used by CronJob)
+#   daemon — 24h sleep loop (used by compose sidecar; NOT used by CronJob)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "pulse.fullname" . }}-backup-script
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pulse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+data:
+  pulse-backup.sh: |
+{{ .Files.Get "files/pulse-backup.sh" | indent 4 }}
+{{- end }}

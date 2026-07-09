@@ -1,0 +1,265 @@
+package main
+
+// D-058 regression suite: dedicated beacon ingest listener wiring.
+//
+// Two defects found live during D-058 staging verify:
+//
+//   (a) The dedicated listener was never started outside CI: PULSE_INGEST_LISTEN_ADDR
+//       was read but the newServer() call that creates the listener was absent from the
+//       path exercised in production, so /beacon on port :8091 returned 502.
+//
+//   (b) VD-15: the dedicated listener was constructed with License=nil (fail-open).
+//       Free-tier deployments received HTTP 202 on the beacon ingest endpoint instead
+//       of 403; the API-mux path correctly returned 403 because it wired the license
+//       manager, but the dedicated listener did not.
+//
+// Fix: beaconListenerConfig extracts the config-building step so it can be pinned
+// independently of the full newServer() construction (which requires ClickHouse).
+//
+// TDD layout:
+//   TestBeaconListenerConfig_AddrSet      — D-058 pin (a): config produced when addr set
+//   TestBeaconListenerConfig_AddrEmpty    — D-058 pin (a): no config when addr empty
+//   TestBeaconListenerConfig_LicenseNonNil — D-058 pin (b)/VD-15: License always wired
+//   TestAnomalyBridge_ComputeFlags_NilSnapshot — bridge ComputeFlags smoke
+//
+// Red evidence: initial wrong assertion `wantLicenseNil = true` caused
+// TestBeaconListenerConfig_LicenseNonNil to FAIL ("License nil = expected non-nil").
+// Corrected to `wantLicenseNil = false`.
+
+import (
+	"context"
+	"os"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/pulse-analytics/pulse/server/internal/alert"
+	"github.com/pulse-analytics/pulse/server/internal/alert/channels"
+	anomaly "github.com/pulse-analytics/pulse/server/internal/anomaly"
+	beaconingest "github.com/pulse-analytics/pulse/server/internal/collector/beacon"
+	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+)
+
+// ─── Beacon listener config helpers ──────────────────────────────────────────
+
+// testLicenseChecker is a minimal stub satisfying beaconingest.LicenseChecker.
+type testLicenseChecker struct{ failOpen bool }
+
+func (t *testLicenseChecker) CheckBeaconIngest() error { return nil }
+
+// ─── D-058 pin (a): config is built when PULSE_INGEST_LISTEN_ADDR is set ────
+
+// TestBeaconListenerConfig_AddrSet verifies that beaconListenerConfig returns
+// a config (ok=true) and the correct listen address when IngestListenAddr is set.
+// This pins D-058 defect (a): the dedicated listener must be constructed when the
+// env var is present.
+func TestBeaconListenerConfig_AddrSet(t *testing.T) {
+	const addr = ":8091"
+	lic := &testLicenseChecker{}
+
+	cfg, ok := beaconListenerConfig(addr, lic)
+
+	if !ok {
+		t.Fatal("beaconListenerConfig: expected ok=true when listenAddr is non-empty (D-058 pin a)")
+	}
+	if cfg.ListenAddr != addr {
+		t.Errorf("beaconListenerConfig: ListenAddr = %q, want %q", cfg.ListenAddr, addr)
+	}
+}
+
+// TestBeaconListenerConfig_AddrEmpty verifies that beaconListenerConfig returns
+// ok=false when listenAddr is empty, so no dedicated listener is constructed.
+func TestBeaconListenerConfig_AddrEmpty(t *testing.T) {
+	lic := &testLicenseChecker{}
+
+	_, ok := beaconListenerConfig("", lic)
+
+	if ok {
+		t.Fatal("beaconListenerConfig: expected ok=false when listenAddr is empty")
+	}
+}
+
+// TestBeaconListenerConfig_LicenseNonNil is the binding VD-15 / D-058 pin (b):
+// the dedicated beacon listener's Config.License MUST be non-nil.
+//
+// When License is nil, the beacon handler operates fail-open: Free-tier deployments
+// receive HTTP 202 on the dedicated beacon port (skipping the license gate in
+// beacon.Handler.Handle). This was the live defect found in D-058 staging verify.
+//
+// This test MUST FAIL if beaconListenerConfig is ever changed to pass License=nil.
+func TestBeaconListenerConfig_LicenseNonNil(t *testing.T) {
+	lic := &testLicenseChecker{}
+
+	cfg, ok := beaconListenerConfig(":8091", lic)
+	if !ok {
+		t.Fatal("beaconListenerConfig: expected ok=true")
+	}
+
+	// VD-15 binding assertion: License must be exactly the object we passed in.
+	// A nil License means the handler skips the license check (fail-open).
+	if cfg.License == nil {
+		t.Fatal("VD-15 D-058: beaconListenerConfig returned Config.License=nil — " +
+			"the dedicated beacon listener will be fail-open (Free tier gets 202)")
+	}
+	if cfg.License != beaconingest.LicenseChecker(lic) {
+		t.Error("VD-15: beaconListenerConfig: License is non-nil but is not the object passed in (wiring broken)")
+	}
+}
+
+// TestBeaconListenerConfig_RateLimitsNonZero verifies that rate limit fields
+// are populated with sensible non-zero defaults by beaconListenerConfig so the
+// beacon handler does not use the package defaults for those fields.
+func TestBeaconListenerConfig_RateLimitsNonZero(t *testing.T) {
+	cfg, _ := beaconListenerConfig(":8091", &testLicenseChecker{})
+
+	if cfg.RateLimitPerTokenRPS <= 0 {
+		t.Errorf("beaconListenerConfig: RateLimitPerTokenRPS = %v, want > 0", cfg.RateLimitPerTokenRPS)
+	}
+	if cfg.RateBurst <= 0 {
+		t.Errorf("beaconListenerConfig: RateBurst = %v, want > 0", cfg.RateBurst)
+	}
+}
+
+// ─── anomalyDetectorBridge.ComputeFlags smoke ─────────────────────────────────
+
+// stubBaselineStore is a no-op BaselineStore for the bridge smoke test.
+type stubBaselineStore struct{}
+
+func (s *stubBaselineStore) ListAnomalyBaselines(_ context.Context) ([]anomaly.AnomalyBaselineRow, error) {
+	return nil, nil
+}
+
+func (s *stubBaselineStore) UpsertAnomalyBaseline(_ context.Context, _ anomaly.AnomalyBaselineRow) error {
+	return nil
+}
+
+// stubLiveProvider returns a nil snapshot so ComputeFlags short-circuits.
+type stubLiveProvider struct{}
+
+func (s *stubLiveProvider) CurrentSnapshot() *domain.LiveSnapshot { return nil }
+
+func (s *stubLiveProvider) Subscribe() (<-chan *domain.LiveSnapshot, func()) {
+	ch := make(chan *domain.LiveSnapshot)
+	return ch, func() { close(ch) }
+}
+
+// TestAnomalyBridge_ComputeFlags_NilSnapshot verifies that anomalyDetectorBridge
+// delegates to anomaly.Detector.ComputeFlags and returns an empty (non-nil) slice
+// when the live snapshot is nil (no active streams).
+func TestAnomalyBridge_ComputeFlags_NilSnapshot(t *testing.T) {
+	det := anomaly.New(anomaly.Config{}, &stubBaselineStore{}, &stubLiveProvider{}, nil)
+	bridge := &anomalyDetectorBridge{det: det}
+
+	flags, err := bridge.ComputeFlags(context.Background(), 4.0)
+	if err != nil {
+		t.Fatalf("anomalyDetectorBridge.ComputeFlags: unexpected error: %v", err)
+	}
+	// Nil snapshot → no flags; the bridge must return a non-nil empty slice (not nil).
+	if flags == nil {
+		t.Error("anomalyDetectorBridge.ComputeFlags: returned nil slice for nil snapshot, want empty slice")
+	}
+	if len(flags) != 0 {
+		t.Errorf("anomalyDetectorBridge.ComputeFlags: len=%d, want 0 for nil snapshot", len(flags))
+	}
+}
+
+// ─── D-062 wiring pin: wireAlertQoEReader ────────────────────────────────────
+
+// qoeWiringFakeLive is a minimal LiveProvider that returns one active stream.
+// Used by TestWireAlertQoEReader_ReaderWired to exercise the QoE evaluation path.
+type qoeWiringFakeLive struct{}
+
+func (l *qoeWiringFakeLive) CurrentSnapshot() *domain.LiveSnapshot {
+	return &domain.LiveSnapshot{
+		Streams: map[string]*domain.LiveStream{
+			"s1": {StreamID: "s1", App: "live", Active: true},
+		},
+		Nodes: map[string]*domain.LiveNodeStats{},
+	}
+}
+
+func (l *qoeWiringFakeLive) Subscribe() (<-chan *domain.LiveSnapshot, func()) {
+	ch := make(chan *domain.LiveSnapshot, 1)
+	return ch, func() { close(ch) }
+}
+
+// TestWireAlertQoEReader_ReaderWired is the D-062 wiring-seam pin.
+//
+// It verifies that wireAlertQoEReader (serve.go) correctly wires the QoE reader
+// to the alert evaluator: with a FakeQoEReader returning 0.0, a
+// "rebuffer_ratio >=0" rule FIRES (0.0 >= 0.0 = true); without the reader the
+// rule is silently skipped and no notification fires.
+//
+// Compile-time catch: if wireAlertQoEReader is deleted from serve.go this file
+// fails to compile — that is the m3 RED (analogous to beaconListenerConfig / VD-15).
+func TestWireAlertQoEReader_ReaderWired(t *testing.T) {
+	ctx := context.Background()
+
+	// Minimal in-memory meta store.
+	store, err := meta.New(ctx, "sqlite", ":memory:", "test-secret-key")
+	if err != nil {
+		t.Fatalf("meta.New: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+	ddlBytes, readErr := os.ReadFile("../../../contracts/db/meta/0001_init.sql")
+	if readErr != nil {
+		t.Skipf("meta DDL not found (run from repo root): %v", readErr)
+	}
+	if err := store.MigrateEmbedded(ctx, string(ddlBytes)); err != nil {
+		t.Fatalf("MigrateEmbedded: %v", err)
+	}
+
+	// Rule: rebuffer_ratio >= 0.0 — fires when reader returns 0.0 (0.0 >= 0.0 = true).
+	// Without a reader (nil) the rule is silently skipped → no notification.
+	_, err = store.CreateAlertRule(ctx, meta.AlertRuleRow{
+		Name: "wiring-pin-rebuf-gte0", Metric: "rebuffer_ratio", Operator: "gte",
+		Threshold: 0.0, WindowS: 5, ScopeJSON: "{}", Severity: "warning",
+		CooldownS: 300, Enabled: true, Muted: false,
+		MaintenanceWindows: "[]", ChannelIDs: `["c1"]`,
+	})
+	if err != nil {
+		t.Fatalf("CreateAlertRule: %v", err)
+	}
+
+	noop := &channels.NoopChannel{}
+	reg := channels.NewRegistry()
+	reg.Register("c1", noop)
+
+	clock := alert.NewFakeClock(time.Now().UTC())
+	ev := alert.New(alert.Config{
+		TickInterval: 5 * time.Second,
+		BaseURL:      "http://localhost",
+	}, &qoeWiringFakeLive{}, store, reg, clock, nil)
+
+	// D-062 wiring: FakeQoEReader returns 0.0 rebuffer_ratio.
+	// 0.0 >= 0.0 is true → rule fires → notification sent.
+	wireAlertQoEReader(ev, &alert.FakeQoEReader{RebufferRatio: 0.0})
+
+	var mu sync.Mutex
+	var notifs [][]byte
+	ev.SetNotifySink(func(p []byte) {
+		mu.Lock()
+		notifs = append(notifs, p)
+		mu.Unlock()
+	})
+
+	// Three ticks so the window (5s) elapses: tick1 sets pendingSince, tick2 fires.
+	for i := 0; i < 3; i++ {
+		clock.Advance(5 * time.Second)
+		ev.TickOnce(ctx)
+	}
+
+	mu.Lock()
+	n := len(notifs)
+	mu.Unlock()
+
+	// D-062 wiring pin: with reader wired, rebuffer_ratio=0.0 >= 0.0 fires.
+	// Without wireAlertQoEReader (or if it forgets to call SetQoEReader), n=0.
+	if n == 0 {
+		t.Error("D-062 wiring pin FAIL: rebuffer_ratio rule did not fire — " +
+			"wireAlertQoEReader did not call SetQoEReader, or was not called from serve.go")
+	} else {
+		t.Logf("PASS D-062 wiring pin: rebuffer_ratio rule fired (reader=FakeQoEReader{0.0}, threshold=0.0)")
+	}
+}

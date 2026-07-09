@@ -1,0 +1,23 @@
+{{- if and .Values.backup.enabled (not .Values.backup.persistence.existingClaim) -}}
+# PVC for backup artifacts — shared between the backup CronJob and the ClickHouse StatefulSet.
+# ClickHouse writes BACKUP DATABASE ... TO Disk('backups', ...) zip archives here.
+# The CronJob writes SQLite meta store copies here.
+# When backup.persistence.existingClaim is set this PVC is not created.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "pulse.fullname" . }}-backups
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pulse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  accessModes:
+    - {{ .Values.backup.persistence.accessMode }}
+  {{- if .Values.backup.persistence.storageClass }}
+  storageClassName: {{ .Values.backup.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.backup.persistence.size }}
+{{- end }}

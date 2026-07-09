@@ -37,7 +37,10 @@ www.{$PULSE_DOMAIN} {
     # for each name automatically on first request.
 
     # Beacon ingest — proxy /beacon/* to pulse:8091 so clients only need :443.
-    handle /beacon/* {
+    # handle_path STRIPS /beacon: the SDK posts to {ingestUrl}/ingest/beacon and
+    # the listener serves POST /ingest/beacon only, so ingestUrl for this deploy
+    # is https://<domain>/beacon (plain `handle` forwarded /beacon/... -> 404).
+    handle_path /beacon/* {
         reverse_proxy pulse:8091 {
             header_up X-Forwarded-For {remote_host}
             header_up X-Real-IP {remote_host}
@@ -83,13 +86,15 @@ www.{$PULSE_DOMAIN} {
     }
 }
 
-# ── Ant Media Server panel — ams.<domain> → host:5080 ────────────────────────
+# ── Ant Media Server panel — ams.<domain> → {$AMS_UPSTREAM} ─────────────────
 # AMS runs as the 'antmedia' container with --network host, serving plain HTTP on
 # :5080. Caddy terminates TLS here so the panel password is encrypted in transit.
-# Upstream is the VPS public IP (AMS binds 0.0.0.0; reachable from this container,
-# same path the Pulse collector uses). WebSocket upgrades are proxied automatically.
+# Upstream is {$AMS_UPSTREAM} (default 161.97.172.146:5080; set AMS_UPSTREAM in
+# deploy/.env — injected into this container via the environment: block in
+# docker-compose.prod-tls.yml; consumed only by this ams.<domain> reverse_proxy).
+# WebSocket upgrades are proxied automatically.
 ams.{$PULSE_DOMAIN} {
-    reverse_proxy 161.97.172.146:5080 {
+    reverse_proxy {$AMS_UPSTREAM} {
         header_up X-Forwarded-For {remote_host}
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-Proto https

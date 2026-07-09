@@ -60,7 +60,12 @@ data:
       </profiles>
       <users>
         <default>
-          <!-- No password for cluster-internal access; NetworkPolicy restricts external access. -->
+          {{- if .Values.clickhouse.auth.existingSecret }}
+          <!-- Named user provisioned via CLICKHOUSE_USER + CLICKHOUSE_PASSWORD env vars at first boot. -->
+          <!-- The default user is kept here for internal readiness probes only; access is restricted. -->
+          {{- else }}
+          <!-- DEVELOPMENT/TEST ONLY: no password. Set clickhouse.auth.existingSecret in production. -->
+          {{- end }}
           <password></password>
           <profile>default</profile>
           <quota>default</quota>
@@ -74,4 +79,22 @@ data:
         <default></default>
       </quotas>
     </clickhouse>
+  {{- if .Values.backup.enabled }}
+  backup-config.xml: |
+    <!-- ClickHouse backup disk config — enables BACKUP DATABASE ... TO Disk('backups', ...) SQL. -->
+    <!-- Mirrors deploy/config/clickhouse-backups.xml from the compose backup overlay. -->
+    <clickhouse>
+      <storage_configuration>
+        <disks>
+          <backups>
+            <type>local</type>
+            <path>/backups/</path>
+          </backups>
+        </disks>
+      </storage_configuration>
+      <backups>
+        <allowed_disk>backups</allowed_disk>
+      </backups>
+    </clickhouse>
+  {{- end }}
 {{- end }}

@@ -26,15 +26,13 @@ import (
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse"
 	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse/migrations"
+	"github.com/pulse-analytics/pulse/server/internal/testutil"
 )
 
 // TestIntegration_BatchInsert starts a ClickHouse server, runs migrations,
 // inserts 10k synthetic events via the batcher, and verifies counts and TTL.
 func TestIntegration_BatchInsert(t *testing.T) {
-	chBin := "/tmp/clickhouse"
-	if _, err := os.Stat(chBin); err != nil {
-		t.Skipf("clickhouse binary not found at %s: %v", chBin, err)
-	}
+	chBin := testutil.RequireClickHouseBin(t)
 
 	// 1. Find free TCP ports using a stable range to avoid race with OS reuse.
 	tcpPort := freePort(t)
@@ -397,10 +395,7 @@ func max(a, b int) int {
 // The caller must close the store and verify connection; the server is cleaned up by t.Cleanup.
 func startClickHouseForProbes(t *testing.T, dbName string) (*clickhouse.Store, clickhousego.Conn, string) {
 	t.Helper()
-	chBin := "/tmp/clickhouse"
-	if _, err := os.Stat(chBin); err != nil {
-		t.Skipf("clickhouse binary not found at %s: %v", chBin, err)
-	}
+	chBin := testutil.RequireClickHouseBin(t)
 
 	tcpPort := freePort(t)
 	httpPort := freePort(t)
@@ -640,10 +635,7 @@ func TestIntegration_ProbeResults(t *testing.T) {
 // and the materialized views (mv_audience_1h, mv_audience_1d) populate correctly.
 // Also verifies beacon_events populate the mv_qoe_1h rollup.
 func TestIntegration_ViewerSessionsAndRollups(t *testing.T) {
-	chBin := "/tmp/clickhouse"
-	if _, err := os.Stat(chBin); err != nil {
-		t.Skipf("clickhouse binary not found at %s: %v", chBin, err)
-	}
+	chBin := testutil.RequireClickHouseBin(t)
 
 	tcpPort := freePort(t)
 	httpPort := freePort(t)

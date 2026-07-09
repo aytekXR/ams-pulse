@@ -81,7 +81,7 @@ func openAPISpec(t *testing.T) *openapi3.T {
 	specPath = filepath.Clean(specPath)
 
 	if _, err := os.Stat(specPath); os.IsNotExist(err) {
-		t.Skipf("openapi spec not found at %s — skipping conformance test", specPath)
+		t.Fatalf("openapi spec not found at %s — spec must exist; a missing spec makes conformance vacuously true", specPath)
 	}
 
 	loader := openapi3.NewLoader()
@@ -105,7 +105,9 @@ func setupTestServer(t *testing.T) (ts *httptest.Server, adminToken string, clea
 	ddlPath := metaDDLPath(t)
 	ddl, err := os.ReadFile(ddlPath)
 	if err != nil {
-		t.Skipf("meta DDL not found: %v", err)
+		// D-064: fail loud, never skip — a missing DDL means a broken mount
+		// (server-only mount, D-028 class) and a skip here is a false green.
+		t.Fatalf("meta DDL not found (repo-root mount required, D-028/D-064): %v", err)
 	}
 	store, err := meta.New(ctx, "sqlite", ":memory:", "api-test-secret")
 	if err != nil {
@@ -181,8 +183,9 @@ func conformCheck(t *testing.T, doc *openapi3.T, req *http.Request, resp *http.R
 
 	route, pathParams, err := router.FindRoute(req)
 	if err != nil {
-		// Route not found in spec — skip conformance for this endpoint.
-		t.Logf("conformance: route not in spec (%s %s): %v — skipping schema check",
+		// Route not found in spec — this is a conformance violation: every production
+		// route must be described in the spec. Fail loud so the orchestrator can file a CR.
+		t.Errorf("conformance: route not in spec (%s %s): %v — add the route to contracts/openapi/pulse-api.yaml",
 			req.Method, req.URL.Path, err)
 		return
 	}
@@ -450,7 +453,9 @@ func TestAPI_Healthz_ClickHouseDown_Returns503(t *testing.T) {
 	ddlPath := metaDDLPath(t)
 	ddl, err := os.ReadFile(ddlPath)
 	if err != nil {
-		t.Skipf("meta DDL not found: %v", err)
+		// D-064: fail loud, never skip — a missing DDL means a broken mount
+		// (server-only mount, D-028 class) and a skip here is a false green.
+		t.Fatalf("meta DDL not found (repo-root mount required, D-028/D-064): %v", err)
 	}
 	store2, err := meta.New(ctx, "sqlite", ":memory:", "test-secret2")
 	if err != nil {
@@ -555,7 +560,9 @@ func TestAPI_Healthz_KafkaStats(t *testing.T) {
 	ddlPath := metaDDLPath(t)
 	ddl, err := os.ReadFile(ddlPath)
 	if err != nil {
-		t.Skipf("meta DDL not found: %v", err)
+		// D-064: fail loud, never skip — a missing DDL means a broken mount
+		// (server-only mount, D-028 class) and a skip here is a false green.
+		t.Fatalf("meta DDL not found (repo-root mount required, D-028/D-064): %v", err)
 	}
 	store, err := meta.New(ctx, "sqlite", ":memory:", "kafka-test-secret")
 	if err != nil {

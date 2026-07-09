@@ -12,6 +12,7 @@
     "test:ui": "vitest --ui",
     "preview": "vite preview",
     "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit",
     "gen:api": "openapi-typescript ../contracts/openapi/pulse-api.yaml -o src/lib/api/schema.d.ts",
     "generate:api": "npm run gen:api"
   },

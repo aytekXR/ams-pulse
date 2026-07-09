@@ -1423,6 +1423,8 @@ export interface components {
             rest_user?: string | null;
             /** @description True if a credential (password/secret) is stored */
             credential_set?: boolean;
+            /** @description True if a per-source webhook HMAC secret is stored (B7) */
+            webhook_secret_set?: boolean;
             /** @description Path to AMS analytics log file */
             log_path?: string | null;
             /** @description Kafka broker addresses (secrets never echoed) */

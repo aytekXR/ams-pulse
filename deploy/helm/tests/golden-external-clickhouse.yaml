@@ -62,6 +62,7 @@ spec:
       protocol: TCP
 ---
 # Source: pulse/templates/service.yaml
+---
 # Beacon ingest Service — THE ONLY INTERNET-FACING SERVICE in this chart.
 # Players send QoE beacons directly to this endpoint.
 # SECURITY: always terminate TLS at a load balancer or ingress in front of this service.
@@ -180,12 +181,13 @@ spec:
                   name: pulse-secrets
                   key: PULSE_AMS_AUTH_TOKEN
                   optional: true
+            # REQUIRED — binary crashes at boot without this key.
             - name: PULSE_SECRET_KEY
               valueFrom:
                 secretKeyRef:
                   name: pulse-secrets
                   key: PULSE_SECRET_KEY
-                  optional: true
+                  optional: false
             - name: PULSE_WEBHOOK_SECRET
               valueFrom:
                 secretKeyRef:
@@ -220,7 +222,7 @@ spec:
               mountPath: /var/lib/pulse
           resources:
             limits:
-              cpu: 500m
+              cpu: 1000m
               memory: 512Mi
             requests:
               cpu: 250m
@@ -229,3 +231,6 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: pulse-data
+---
+# Source: pulse/templates/ingress.yaml
+---

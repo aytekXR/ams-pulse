@@ -59,17 +59,17 @@ jobs:
       # GHCR login is unconditional — dry-run still needs credentials for the
       # local Trivy-scan build step (pulling base layers from GHCR if cached).
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up QEMU (multi-arch cross-compile support)
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # ── Version build args ─────────────────────────────────────────────────────────
       # VERSION : tag name on tag push; inputs.version on dispatch.
@@ -135,7 +135,7 @@ jobs:
             BUILD_DATE=${{ steps.version.outputs.BUILD_DATE }}
 
       - name: Trivy vulnerability scan (HIGH + CRITICAL, fixable only)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ghcr.io/aytekxr/ams-pulse:trivy-scan
           format: table
@@ -177,10 +177,44 @@ jobs:
       #     ghcr.io/aytekxr/ams-pulse:vX.Y.Z
       - name: Install cosign
         if: github.ref_type == 'tag'
-        uses: sigstore/cosign-installer@v3.6.0
+        uses: sigstore/cosign-installer@v4.1.2
 
       - name: Sign image with cosign (keyless / Sigstore OIDC)
         if: github.ref_type == 'tag'
         run: |
           cosign sign --yes \
             "ghcr.io/aytekxr/ams-pulse@${{ steps.push.outputs.digest }}"
+
+      - name: Notify Slack on success
+        if: success()
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || github.event.pull_request.title || '' }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          MSG=$(printf '%s' "$COMMIT_MESSAGE" | head -n1)
+          MSG=${MSG:-"(no commit message)"}
+          TEXT=$(printf '✅ Build succeeded\n\nRepo: %s\nWorkflow: %s\nTime: %s\nCommit: %s - %s' \
+            "${GITHUB_REPOSITORY##*/}" "$GITHUB_WORKFLOW" "$(date -u '+%Y-%m-%d %H:%M UTC')" \
+            "${GITHUB_SHA:0:7}" "$MSG")
+          jq -n --arg text "$TEXT" '{text: $text}' \
+            | curl -sf -X POST -H 'Content-type: application/json' --data @- \
+              "$SLACK_WEBHOOK_URL" \
+            || echo "::warning::Slack success notification failed"
+
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || github.event.pull_request.title || '' }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          MSG=$(printf '%s' "$COMMIT_MESSAGE" | head -n1)
+          MSG=${MSG:-"(no commit message)"}
+          TEXT=$(printf '❌ Build failed\n\nRepo: %s\nWorkflow: %s\nJob: %s\nBranch: %s\nActor: %s\nCommit: %s - %s\nRun: %s\nTime: %s' \
+            "${GITHUB_REPOSITORY##*/}" "$GITHUB_WORKFLOW" "$GITHUB_JOB" "$GITHUB_REF_NAME" "$GITHUB_ACTOR" \
+            "${GITHUB_SHA:0:7}" "$MSG" \
+            "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            "$(date -u '+%Y-%m-%d %H:%M UTC')")
+          jq -n --arg text "$TEXT" '{text: $text}' \
+            | curl -sf -X POST -H 'Content-type: application/json' --data @- \
+              "$SLACK_WEBHOOK_URL" \
+            || echo "::warning::Slack failure notification failed"

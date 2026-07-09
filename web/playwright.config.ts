@@ -10,6 +10,14 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./e2e",
+  /**
+   * Specs owned by DEDICATED configs — they need a real backend and MUST NOT
+   * run against vite preview (D-061: the first main-push web-e2e run picked
+   * them up and failed):
+   *   csp.spec.ts               → playwright.csp.config.ts (Caddy on :18080)
+   *   streams-render-500.spec.ts → playwright.realstack.config.ts (real stack)
+   */
+  testIgnore: ["**/csp.spec.ts", "**/streams-render-500.spec.ts"],
   timeout: 30_000,
   expect: { timeout: 10_000 },
   fullyParallel: true,

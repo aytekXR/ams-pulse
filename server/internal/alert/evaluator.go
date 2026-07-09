@@ -134,12 +134,21 @@ type Evaluator struct {
 	// Wave 2: TLS cert expiry checker (nil = cert_expiry rules skipped).
 	certChecker CertExpiryChecker
 
+	// D-062: QoE reader for rebuffer_ratio / error_rate from ClickHouse rollups.
+	// nil = these rules are skipped with a WARN log (one per tick).
+	qoeReader QoEReader
+
 	// Notification sink for tests.
 	notifySink func([]byte)
 
 	// deliveryWg tracks all in-flight delivery goroutines so Stop() can wait
 	// for a bounded shutdown (all goroutines exit after ctx is cancelled).
 	deliveryWg sync.WaitGroup
+
+	// syncedChannelIDs is the set of channel IDs most recently synced from the
+	// meta store by syncRegistryFromStore. Used to remove deleted channels from
+	// the registry without touching manually-registered channels (e.g. test fakes).
+	syncedChannelIDs map[string]bool
 }
 
 // deliveryCtx carries the alert event data used if a delivery_failure must
@@ -203,6 +212,15 @@ func (e *Evaluator) SetCertChecker(checker CertExpiryChecker) {
 	e.certChecker = checker
 }
 
+// SetQoEReader wires the ClickHouse QoE reader for rebuffer_ratio and error_rate rules.
+// If not set, those rules are skipped with a WARN log (at most one per tick).
+// Call after New, before Start (D-062).
+func (e *Evaluator) SetQoEReader(reader QoEReader) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.qoeReader = reader
+}
+
 // Start runs the evaluator loop until ctx is cancelled.
 func (e *Evaluator) Start(ctx context.Context) {
 	go e.loop(ctx)
@@ -236,6 +254,13 @@ func (e *Evaluator) loop(ctx context.Context) {
 }
 
 func (e *Evaluator) evaluate(ctx context.Context) {
+	// Sync-on-tick: rebuild the channel registry from the meta store before each
+	// evaluation cycle. This ensures that channels created, updated, or deleted via
+	// the API are reflected within one tick interval (≤5 s). The rebuild is cheap
+	// because channel counts are small, and it is self-healing: a misconfigured or
+	// deleted channel is handled gracefully (logged + skipped) without crashing the tick.
+	e.syncRegistryFromStore(ctx)
+
 	rules, err := e.store.ListAlertRules(ctx)
 	if err != nil {
 		e.logger.Warn("alert evaluator: list rules failed", "error", err)
@@ -264,6 +289,52 @@ func (e *Evaluator) evaluate(ctx context.Context) {
 	}
 }
 
+// syncRegistryFromStore updates the channel registry from the meta store.
+// Called at the start of every evaluation tick (sync-on-tick pattern).
+//
+// Design notes:
+//   - Incremental sync: only channels previously synced from the store are
+//     removed when they disappear. Channels manually registered before the first
+//     sync (e.g. test fakes injected via reg.Register) are never removed.
+//   - Decrypt failure or unknown type: logged + skipped; other channels still delivered.
+//   - Channels removed from the store are removed from the registry on the next tick,
+//     causing deliver() to skip them (no delivery_failure row for deleted channels).
+func (e *Evaluator) syncRegistryFromStore(ctx context.Context) {
+	storedChannels, err := e.store.ListAlertChannels(ctx)
+	if err != nil {
+		e.logger.Warn("alert evaluator: list channels failed — registry not updated", "error", err)
+		return
+	}
+
+	if e.syncedChannelIDs == nil {
+		e.syncedChannelIDs = make(map[string]bool)
+	}
+
+	// Build the desired set from the store.
+	desiredIDs := make(map[string]bool, len(storedChannels))
+	for i := range storedChannels {
+		row := &storedChannels[i]
+		desiredIDs[row.ID] = true
+		built, err := BuildChannelFromRow(e.store, row)
+		if err != nil {
+			e.logger.Warn("alert evaluator: skip channel (build error)",
+				"channel_id", row.ID, "type", row.Type, "error", err)
+			continue
+		}
+		e.registry.Register(row.ID, built)
+	}
+
+	// Remove channels that were previously synced from the store but are now gone.
+	// We only remove IDs we previously added — never touching manually-registered ones.
+	for id := range e.syncedChannelIDs {
+		if !desiredIDs[id] {
+			e.registry.Remove(id)
+		}
+	}
+
+	e.syncedChannelIDs = desiredIDs
+}
+
 func (e *Evaluator) evaluateRule(ctx context.Context, rule meta.AlertRuleRow, snap *domain.LiveSnapshot, now time.Time) {
 	// Parse scope from JSON.
 	var scope domain.AlertScope
@@ -284,7 +355,7 @@ func (e *Evaluator) evaluateRule(ctx context.Context, rule meta.AlertRuleRow, sn
 		evals = e.evalNodeMetric(snap, scope, rule, "disk_pct")
 	// Wave 2: new metric types.
 	case "rebuffer_ratio", "error_rate", "ingest_bitrate_floor":
-		evals = e.evalQoEMetric(snap, scope, rule)
+		evals = e.evalQoEMetric(ctx, snap, scope, rule)
 	case "node_down", "node_degraded":
 		evals = e.evalNodeUpDown(snap, scope, rule)
 	case "cert_expiry":

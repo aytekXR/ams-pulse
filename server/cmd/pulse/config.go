@@ -59,9 +59,6 @@ type EnvConfig struct {
 	// PollInterval is the AMS REST poll interval.
 	PollInterval time.Duration
 
-	// LogTailPath is the path to the AMS analytics log file (empty = disabled).
-	LogTailPath string
-
 	// WebhookListenAddr is the address for the webhook HTTP server (empty = disabled).
 	WebhookListenAddr string
 
@@ -169,7 +166,6 @@ func loadEnvConfig() (EnvConfig, error) {
 		AMSNodeID:          envOrDefault("PULSE_AMS_NODE_ID", "standalone"),
 		// AMSAuthToken resolved below via GetSecret.
 		AMSLoginEmail:     os.Getenv("PULSE_AMS_LOGIN_EMAIL"),
-		LogTailPath:       os.Getenv("PULSE_LOG_TAIL_PATH"),
 		WebhookListenAddr: os.Getenv("PULSE_WEBHOOK_ADDR"),
 		LogLevel:          envOrDefault("PULSE_LOG_LEVEL", "info"),
 	}

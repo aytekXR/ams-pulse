@@ -323,7 +323,6 @@ noted default; the binary runs correctly without it.
 | `PULSE_LISTEN_ADDR` | `:8090` | HTTP listen address for UI + API |
 | `PULSE_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
 | `PULSE_POLL_INTERVAL` | `5s` | AMS REST poll interval (e.g. `2s`, `10s`) |
-| `PULSE_LOG_TAIL_PATH` | — | Full path to AMS analytics log file (optional) |
 | `PULSE_WEBHOOK_ADDR` | — | Address for the AMS webhook receiver (optional) |
 | `PULSE_WEBHOOK_SECRET` | — | HMAC shared secret for webhook validation |
 | `PULSE_LICENSE_KEY` | — | License key (empty = Free tier) |
@@ -357,10 +356,12 @@ noted default; the binary runs correctly without it.
 
 ### YAML config file
 
-> **Note:** The Wave-2 binary continues to use environment variables as the primary
-> configuration mechanism. The schema below is the planned YAML format; it is the
-> authoritative reference for `deploy/config/pulse.example.yaml`. Full YAML config
-> file wiring is planned for Wave 3.
+> **Note:** the shipped binary reads configuration from **environment variables only** —
+> `pulse serve|migrate|diag` all use the env loader; a YAML config file is **not consumed**
+> (a `--config`/`pulse.yaml` parser exists in `server/internal/config` but is not wired into
+> the binary entry point, `server/cmd/pulse/main.go` HOOK(BE-02)). If you create `pulse.yaml`,
+> it is silently ignored. The schema below documents `deploy/config/pulse.example.yaml` as a
+> reference for the env-var equivalents above.
 
 ```yaml
 server:
@@ -441,22 +442,41 @@ ClickHouse DDL migrations are append-only (no destructive changes).
 ## Path C: Helm (Kubernetes)
 
 > **EXPERIMENTAL — do not use in production yet.**
-> The chart is missing features required for a production-grade install; these are
-> tracked under the S6 parity batch:
+> The chart has not been deployed to a real cluster (D-002 waiver). Template-render
+> and lint pass locally (`helm lint`, `helm template` golden-file tests).
+> Validate on a clean cluster before production use.
 >
-> - ClickHouse auth wiring (unauthenticated CH native port is network-policy-only today)
-> - Webhook port Service (port 8091 ingest vs webhook addr not surfaced separately)
-> - Backup CronJob equivalent (no automated CH or PVC snapshot)
-> - `PULSE_SECRET_KEY` is wired via `secretKeyRef` with `optional: true`; if the Secret
->   key is absent the binary crashes at boot — supply the key before install
+> **S6 parity batch — shipped in this session (chart now has):**
+> - ClickHouse auth via `clickhouse.auth.existingSecret` — wire `CLICKHOUSE_USER` /
+>   `CLICKHOUSE_PASSWORD` / `PULSE_CLICKHOUSE_DSN` through a K8s Secret (parity with
+>   `docker-compose.hardened.yml`). Empty `existingSecret` = unauthenticated default
+>   user (dev/test only; must be protected by NetworkPolicy).
+> - Webhook Service (`webhookService.enabled`) + Ingress (`ingressWebhook.enabled`)
+>   for AMS webhook callbacks on port 8092.
+>   Routes: `/webhook/ams` and `/webhook/ams/{source_name}` (B7 per-source webhooks).
+>   Per-source secret rotation requires a pod restart (no live reload).
+> - Backup CronJob (`backup.enabled=false` by default, same opt-in posture as compose).
+>   Mirrors `docker-compose.backup.yml` / `pulse-backup.sh`: ClickHouse BACKUP SQL +
+>   SQLite meta store file copy; retention=7; digest-pinned CH image.
+> - `PULSE_SECRET_KEY` wired with `optional: false` — pod fails to schedule (not
+>   crash at runtime) if the Secret key is absent.
+> - Digest pinning via `pulse.image.digest` (recommended for production).
+> - `NOTES.txt` post-install smoke test in `helm install` output.
 >
-> **Canonical image:** `ghcr.io/aytekxr/ams-pulse` (published from tag `v0.1.0` onward).
-> Earlier tags do not exist on this registry.
+> **Remaining gap (chart still EXPERIMENTAL):**
+> - `helm install` / `helm upgrade` not run against a real cluster (D-002).
+>   QA-01 must validate on a clean cluster before removing the EXPERIMENTAL marker.
+> - S3 push in the backup CronJob requires a custom sidecar image (aws-cli not in the
+>   ClickHouse base image); documented in `backup.extraEnv` and README.
+>
+> **Canonical image:** `ghcr.io/aytekxr/ams-pulse` (cosign-signed from `v0.1.0` onward).
+> Earlier tags do not exist on this registry. Pin to digest in production via
+> `pulse.image.digest`.
 >
 > **Cluster-unvalidated (D-002):** `helm install` / `helm upgrade` have not been run
 > against a real cluster. `helm lint` passes and all three template variants render
-> without error (QA-01 WO-206 verified). Validate on a clean cluster before production
-> use. See `deploy/helm/pulse/README.md` for the full values table and HA configuration.
+> without error. Validate on a clean cluster before production use.
+> See `deploy/helm/pulse/README.md` for the full values table and HA configuration.
 
 ### Prerequisites
 
@@ -567,15 +587,16 @@ kubectl exec deploy/pulse -- pulse migrate  # apply new DDL if any
 
 Pulse starts in Free tier when no license key is configured:
 
-| Limit | Free | Pro | Enterprise |
-|---|---|---|---|
-| AMS source nodes | 1 | 10 | Unlimited |
-| Notification channels | Email only | Email + Slack + Telegram | All (+ PagerDuty, webhook) |
-| Data retention | 7 days (raw) | 90 days | Unlimited |
-| Data API (/metrics), CSV export | No | Yes | Yes |
-| Usage reports + scheduled exports | No | No | Yes |
-| White-label PDF | No | No | Yes |
-| Beacon ingest (QoE) | Read fail-open | Yes | Yes |
+| Limit | Free | Pro | Business | Enterprise |
+|---|---|---|---|---|
+| AMS source nodes | 1 | 10 | 5 | Unlimited |
+| Notification channels | Email only | Email, Slack, Telegram | Email, Slack, Telegram, PagerDuty, Webhook | All |
+| Data retention | 7 days | 90 days | 13 months | Unlimited |
+| Data API, CSV export | No | Yes | Yes | Yes |
+| Usage reports + scheduled exports | No | No | Yes | Yes |
+| White-label PDF | No | No | No | Yes |
+| Beacon ingest (QoE) | No (403 LICENSE_REQUIRED) | Yes | Yes | Yes |
+| Prometheus `/metrics` endpoint | No (403 LICENSE_REQUIRED) | No (403 LICENSE_REQUIRED) | Yes | Yes |
 
 Upgrading: set `PULSE_LICENSE_KEY` in your environment or YAML config.
 The license check **fails open for reads** — you can always read already-collected

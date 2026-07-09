@@ -1732,3 +1732,704 @@ today's required jobs and `enforce_admins:false` keeps owner direct-pushes (the 
 workflow_dispatch dry-run MUST tag via a raw/input version — semver metadata patterns are empty off-tag. All
 three folded into SESSION-01 (WO-2/WO-6). S7 re-runs the full 9-scout audit as the GA gate, which also
 compensates for the lost critic pass.
+
+## D-058 · 2026-07-08 · SESSION-01: release engineering + v0.1.0 + prod rollout (G1/G2)
+
+Commits `5d341c6` `703d8f6` `49014c1` `6d56259` `e7bcf51` `55edcd8` `d4cefd3` `1a701d6`; tag **v0.1.0**
+(@`1a701d6`). Executed `sessions/SESSION-01.md` as the `session01-release-eng` workflow (11 agents: 4
+disjoint-scope authors → 4 adversarial verifiers → 1 fix round → cross-WO integration check), then
+ORCH-sequential WO-5/WO-6. All gates green: full `-race` 24 pkgs 0 FAIL/0 SKIP, coverage **59.4%**
+(floor 58; −0.1 from 4 uncovered serve.go wiring lines), web/sdk/helm/compose/docker CI steps reproduced.
+
+**WO-1 version stamping:** `versionString()` helper TDD'd (red compile-fail captured); Dockerfile ARG
+VERSION/COMMIT/BUILD_DATE → `-ldflags -X main.*`; Makefile git-describe stamping; golang builder digest-pinned
+(go1.25.12); ci.yml docker-build passes build-args + NEW mutation-proof assert (`docker run --entrypoint pulse
+… version` fails on dev/unknown/empty — plain `docker run <img> version` would run `pulse serve version`).
+**WO-2 release.yml:** CI gate (gh api successful-ci-run-for-SHA, mutation: no run → total_count 0 → exit 1);
+qemu+buildx amd64+arm64; Trivy pre-push (exit-code 1, HIGH/CRITICAL, ignore-unfixed); push with
+provenance+sbom; cosign keyless (id-token:write); workflow_dispatch dry-run (raw `version` input — semver
+patterns are EMPTY off-tag); `latest` enable fixed (`ref_type=='tag' && !contains(ref_name,'-')` — the old
+`{{is_default_branch}}` NEVER fired on tags). Post-push fix `d4cefd3`: trivy-action tags are v-prefixed
+(`@0.28.0` → job-setup failure → `@v0.36.0`). **Dry-run 28911643107 PROVEN:** gate+scan ran, push+sign SKIPPED.
+**WO-3 Helm:** canonical `ghcr.io/aytekxr/ams-pulse` in values/tests/3 goldens (regenerated via
+alpine/helm:3.17.0, red golden-diff captured first); install.md Path C marked EXPERIMENTAL until S6.
+**WO-4:** caddy digest-pinned; `.github/dependabot.yml` (gomod, npm×2, docker, docker-compose, actions;
+weekly, grouped minor+patch). Dependabot ALIVE within minutes: caddy digest-bump PR (e2e green — the
+docker-compose ecosystem works) + vite/vitest major PRs (e2e red = majors correctly surface individually).
+
+**Staging verify (isolated pulse-realams) found 3 real bugs — all fixed + live-proven:**
+1. `realams-test.yml` pulse-migrate one-shot missed D-054's PULSE_SECRET_KEY propagation → D-052 fail-closed
+   guard exit 1 → pulse never started (the EXACT class §8.7 staging-verify exists to catch; it did).
+2. **Beacon listener never bound outside CI** — only docker-compose.ci.yml set PULSE_INGEST_LISTEN_ADDR, so
+   prod's Caddy `/beacon/*` upstream 502'd (dead public surface). Base compose now sets `:8091`.
+3. **Dedicated-listener license-gate bypass (VD-15)** — serve.go never set `beacon.Config.License`; nil =
+   fail-open → Free tier got 202 on :8091 while the API-mux path 403s. Live red→green: 202 pre-fix → 403
+   LICENSE_REQUIRED post-fix (staging logs). Side effect: e2e A2's cannot-false-green property is RESTORED
+   (fail-open would have masked a broken license loader with a false 202). Serve-wiring unit smoke → S2.
+4. (Caddyfile) `/beacon` route needed `handle_path` (strip): listener serves POST /ingest/beacon only; SDK
+   posts `${ingestUrl}/ingest/beacon` → public contract = `ingestUrl=https://<domain>/beacon`. caddy validate
+   green on the pinned image. NOTE: e2e's A2 Free-403 wording (beacon.go:307) was reasoning, not an assert —
+   on the dedicated listener the license gate fires BEFORE token auth, so Free-tier 403s bogus tokens too.
+
+**WO-5 prod rollout (pulse-prod, 5-overlay): ALL SMOKE GREEN.** Prod runs `pulse 1a701d6 (commit 1a701d6,
+built 2026-07-08T01:51:17Z)` — carries D-055/D-056/D-058. healthz ok via public TLS; admin token auths
+(overview: 1 publisher, standalone node up); webhook signed→200/bad-sig→401; **public beacon chain LIVE**
+(https://beyondkaira.com/beacon/ingest/beacon → 403 LICENSE_REQUIRED w/ correct JSON — was 502); limits bound
+(512M/0.5cpu); logs clean; migrate one-shot exit 0. Rollback: image tagged `pulse-prod-pulse:pre-d058`.
+**Backup cycle 2 verified** (manual `pulse-backup.sh once`): dated CH zip + sqlite pairs for 20260707-073113 +
+20260708-015233, count 2 ≤ keep-7, daemon untouched (next auto ~07:31 UTC).
+
+**WO-6:** `ams-integration` deleted local+origin (0 unique commits re-confirmed). Branch protection LIVE
+(API 200: contexts contracts/server/web/sdk/docker-build/helm/compose, strict, 1 review, enforce_admins=false
+— owner direct pushes still work; do NOT enable while sessions push to main). **v0.1.0 released: run
+28911789088 all steps success** — CI gate passed, Trivy passed, multi-arch (amd64+arm64) manifest
+`sha256:6b36a4c1191c363815214ac8d95bafe8d4ed80f95f040ffd3840fe9f26ea2353` pushed as 0.1.0/0.1/0/latest with
+SBOM+provenance, cosign keyless signed (**Rekor tlog index 2110636506**). ⚠️ Package is PRIVATE (GHCR default)
+and the gh token lacks read:packages → pull + local `cosign verify` from the VPS blocked → **NEW operator O7**:
+make ghcr.io/aytekxr/ams-pulse public (UI, one click) or `gh auth refresh -s read:packages`; then run the
+verify commands in release.yml's header. G1 = met except this visibility flip; G2 = met.
+
+Lessons: (a) action pins must be checked against REAL tags (`gh api repos/<a>/tags`) — @0.28.0 vs @v0.36.0
+died at job setup; (b) compose `up -d` uses a pre-built image tag (`pulse-prod-pulse`) — build with build-args
+first, then up WITHOUT --build, else the stamp is lost; (c) an ENTRYPOINT of ["pulse","serve"] makes naive
+`docker run <img> version` false-green — always `--entrypoint pulse`; (d) GHCR first push = private package;
+plan the visibility step INTO the release session, not after.
+
+---
+
+## D-059 — SESSION-02 executed: test backfill A (Go core) — coverage 59.4%→69.7%, floor 58→62, conformance harness honest, A11 retired (2026-07-08)
+
+Commits `d3f697c` `8db073a` `0b6cb00` `43d9fc9` `5c55176` `c80badf`. Executed `sessions/SESSION-02.md` as the
+`pulse-s2-test-backfill` workflow (12 agents: 5 disjoint-scope TDD authors in parallel → 5 **sequential**
+adversarial verifiers, each with an EXCLUSIVE source-mutation window so a mutation in `query`/`domain` can
+never poison another agent's concurrent build → 1 fix round + re-verify). Authors proved red via test-side
+wrong-expectation runs (parallel-safe); real source mutations were verify-phase-only. All 5 WOs CONFIRMED.
+
+**Per-package results (before→after, target):**
+- `internal/query` 18.5→**88.5%** (≥70): 75 mock-Conn tests (fakeConn/fakeRows w/ reflection scan, FIFO
+  queue for QoeSummary's QueryRow+Query flow). Verifier mutations: Geo scan-order swap, applyRetention
+  no-op, Device scan swap — all caught by failing tests, reverts fingerprint-verified.
+- `store/clickhouse/migrations` 0→**65.6% unit** (≥60) + integration: pure fns (splitStatements/
+  stripLeadingComments/substitute) table-tested; naive quoted-semicolon split behavior PINNED as documented.
+  **A11 RETIRED**: TestIntegration_Migrations_IdempotentRun applies all 4 files twice — second Run nil-error
+  no-op, schema_migrations count unchanged (4). Note: the integration test t.Skipf's without /tmp/clickhouse
+  (matches the existing harness convention; CI downloads the binary, SKIP≠PASS).
+- `cmd/pulse` 13.6→**43.0%** (≥40): extracted `beaconListenerConfig()` from newServer (mechanical,
+  behavior-preserving) → D-058 pins now live without a CH dep: (a) PULSE_INGEST_LISTEN_ADDR→listener config;
+  (b) **VD-15 pin: Config.License non-nil** — mutation `License: nil` fails the test. Ceiling documented:
+  newServer/Start/Stop/runServe need live CH TCP (no mock possible) — 0% by design.
+- `internal/api` 55.9→**74.3%** (≥65) + **harness honesty**: openAPISpec() missing-spec t.Skipf→t.Fatalf;
+  conformCheck FindRoute t.Logf→t.Errorf. **NO contract drift flushed out** — every exercised route is in
+  pulse-api.yaml (no INT-01 CR needed). 15 uncovered handlers backfilled (alert rules/channels update+delete,
+  sources, users, license activate w/ fresh-server pubkey pattern, report schedules CRUD, bootstrapIfFirstRun,
+  checkPassword, eviction, parseTimeRange). **0 SKIP verified** (-v grep '--- SKIP' + 'skipping conformance'
+  both empty, repo-root mount). Fix round: verifier REFUTED round 1 — 3 t.Skip escape hatches in the NEW
+  tests (ReportSchedules_CRUD, Bootstrap×2) → all t.Fatal; re-verify CONFIRMED.
+- `internal/domain` 0→**100%** (ServerEvent.Time() is the package's only statement); discovery de-flake:
+  budget testInterval*3→*5 with the bound DERIVED in-comment (1 poll + 4× -race scheduler jitter; 68.8ms
+  observed vs 60ms old budget, D-041/D-042) — still catches a hung loop; -count=5 and -count=10 green.
+
+**ORCH gates all green (2026-07-08):** full `-race` repo-root 25 pkgs 0 FAIL / 0 SKIP, total **69.7%**
+(target ≥64); gofmt -l . empty; CGO=0 vet+build OK; **ci.yml server job reproduced faithfully** — migrate
+smoke vs clickhouse-server:24.8 (isolated s2gate network, all 4 migrations applied), `-tags integration ./...`
+green incl. the new A11 test (network-namespace trick: `--network container:s2gate-ch` maps localhost:9000
+like the CI service container); docker-build job reproduced (image stamps `pulse ci-836373d`, no dev/unknown);
+FLOOR 58.0→62.0 (ROADMAP §4) mutation-checked (t=69.7: FLOOR=62 OK, FLOOR=99 exit 1). CI run 28922883994.
+
+**Operator ledger re-checked:** O7 still OPEN (GHCR pull denied; gh token lacks read:packages — verified this
+session). O8 GREW: **21 open dependabot PRs** now (vite 8 / vitest 4 / plugin-react 6 / eslint 10 /
+size-limit 12 majors + grouped minor-and-patch for web, sdk/beacon-js AND server gomod) — untouched per
+SESSION-02 instruction; S3/S4 can absorb the majors, the rest need owner review (protection requires 1 review).
+
+Process note: the author/verifier mutation-window split (parallel authors = test-side red only; sequential
+verifiers = exclusive source mutations) is the reusable pattern for multi-agent TDD on a shared tree — no
+worktrees needed, zero cross-WO build poisoning observed.
+
+## D-060 — SESSION-03 executed: test backfill B (contracts + web) — G4 met (51/52), coverage 69.7%→73.2%, floor 62→66, web+SDK gated (2026-07-08)
+
+Commits `ee4288d` `6b063dd` `35f22eb` `ac49a2d` `9e7810a` `a5f4279` `2ffe075` (+ this docs commit).
+Executed `sessions/SESSION-03.md` as the `pulse-s3-test-backfill` workflow (10 agents: 5 parallel TDD
+authors → 5 sequential adversarial verifiers w/ exclusive source-mutation windows — D-059 pattern).
+**All 5 WOs CONFIRMED in verify round 1; zero fix rounds.** Scout pre-phase corrected the stale D-057
+count: pre-S3 conformance was actually **25/52** (21 conformCheck sites + 4 via the inline loop in
+openapi_conformance_test.go), not 14/52.
+
+**Per-WO results (before→after, target):**
+- **WO-1 `internal/api`** 74.3→**75.6%**: `conformance_s3_test.go` — 26 ops newly response-body-validated
+  → **51/52 validated + 1 documented waiver (GET /live/ws, WebSocket 101 — untestable via this harness)**.
+  G4 MET. /healthz + /metrics validated via spec-resolved `/api/v1/...` request paths (kin-openapi
+  gorillamux routes serverURL+path). **Error shapes validated for the FIRST time**: 49-entry 401 sweep +
+  403×3 (tier gates) + 404×3 + 422×3, all conformCheck'd against Error{code,message}. **NO contract
+  drift — no INT-01 CR needed.** Verifier mutations all caught: required-field drop (`muted`,
+  server.go:1914), 201→200 status swap, writeError `code`-key drop (failed all 48 sweep subtests).
+- **WO-2 `collector/webhook`** 58.1→**94.3%** (≥65): parseWebhook 27.3→100 (object+array forms, dual
+  unmarshal-failure), translateWebhook→100 (all action aliases + event/type fallback + app/appName),
+  jsonInt/jsonInt64/Name 0→100, normalizePublishType 40→100, handleWebhook 65→90 (wrong method,
+  empty-secret fail-closed, sink assertions). Mutations caught: action-map swap, normalize stub,
+  HMAC empty-secret bypass, jsonInt64 zeroing.
+- **WO-3 `internal/reports`** 58.8→**90.9%** (≥65): `accounting_conn_test.go` — fakeConn/fakeRows
+  adapted locally from D-059's query pattern (no cross-package test import). ComputeUsage 4.5→94.4,
+  Reconcile/AggregateByTenant 0→100, fetchConcurrencyPeaks covered via ComputeUsage, scheduler
+  Start/Stop/SetAlertStore/writeFailureAlert 0→90-100, ParseWhitelabelHeader→100. `-race -count=2`
+  clean. Mutations caught: GB-formula ×2, peaks nil (13-test cascade), grouping key, Reconcile early-return.
+- **WO-4 `web/`**: 7 smoke suites (App/Layout/ComingSoon/AnalyticsPage/OnboardingWizard/SettingsPage/
+  AlertChannelForm — all previously 0-2.3% lines, now 60-100%) + `src/test/coverage-gate.test.ts`.
+  Totals lines 61.72→**79.48** (gate 57→**76**), branches 75.57 (71→**72**), functions 46.57
+  (**gate 45 — NEW**; the 48.29 baseline was inflated by types.ts, a pure type-re-export file at 0%,
+  now coverage-excluded with justification). The guard test pins gate values AND the exact exclude
+  set (anti-gaming). 238/238 tests. Mutations caught: gate lowered, thresholds deleted, exclude
+  widened, Layout render broken.
+- **WO-5 `sdk/beacon-js`**: `@vitest/coverage-v8@^3` added (vitest stays ^3.2.0; lockfile moved
+  @vitest/* 3.2.6→3.2.7 via peer resolution only — no manifest ranges bumped, O8 PRs untouched).
+  Thresholds **62/73/70** at achieved−3 (65.55/76.87/73.77). Size 3.52 KB gzip (15 KB gate). 65/65
+  tests. Threshold-99 mutation fails the run — gate proven real. Known gap for a future WO:
+  webrtc.ts 20.1% lines (getStats path needs an RTCPeerConnection stub).
+
+**ORCH gates all green (2026-07-08):** full `-race` repo-root 25 pkgs **0 FAIL**, total **73.2%**
+(S3 target ≥68 beaten; **GA G3 ≥70 already exceeded**). The 2 suite SKIPs are the pre-existing
+`domain` SchemaFixtures npx-availability guard (golang:1.25 image has no node; they RUN in CI where
+npx exists) — documented, not new, not a CI blind spot. FLOOR 62.0→66.0 mutation-checked (t=73.2:
+FLOOR=66 OK, FLOOR=99 exit 1). **Faithful ci.yml repro on a pristine `git clone` at HEAD**: server job
+ALL steps (gofmt/vet/build/unit-race/floor/pulse-binary/migrate smoke vs clickhouse-server:24.8 via
+`--network container:` /integration incl. A11 w/ pinned /tmp/clickhouse 26.6.1.1193) + web job
+(node:22 — npm ci --legacy-peer-deps, gen:api NO-DRIFT, build, lint, test w/ new thresholds) + sdk job
+(node:22) + docker-build (stamped `pulse ci-2ffe075`, no dev/unknown). contracts/helm/compose untouched.
+CI run 28975573189 green.
+
+**The repro EXPOSED a pre-existing CI-red risk (D-042 class):** `TestAlertHistory_PruneTimingAt2000`
+(store/meta) asserted the prune DELETE < fixed 500ms wall-clock; under 4-way CPU contention it measured
+538ms (passes unloaded at ~100-340ms). CI runners run packages in parallel — this could red at any time.
+Fixed in `2ffe075`: budget now DERIVED — the single indexed DELETE of 1000 rows must beat the measured
+wall-clock of the 2000 individual insert transactions that precede it (both sides scale together under
+load → contention-immune; 500ms floor keeps the absolute intent on idle machines; observed prune 336ms
+vs 23.8s baseline — no headroom for an O(n²) regression). Re-repro under deliberate 3-way parallel load:
+green (meta 43s). Process note: run the timing-sensitive server repro CONCURRENTLY with the other job
+repros — the contention doubles as a free load-immunity check.
+
+**Operator ledger re-checked:** O7 still OPEN (GHCR: `gh api /users/aytekXR/packages` → 403 "need
+read:packages" — re-verified this session). O8 unchanged: **21 open dependabot PRs**, deliberately
+untouched (operator did not ask S3 to absorb the web-tooling majors).
+
+## D-061 — SESSION-04 executed: e2e phase 2 + CI hardening — P0 registry bug found+fixed, VD-04 closed, floor 66→70 (2026-07-09)
+
+Commits `9f477bd` `2b25d70` `0daa650` `413c74c` `a53349e` `ba56c6e` + the two CI-caught assert
+fixes below (+ this docs commit). CI run 28984417114 GREEN (all 7 required jobs; floor 70 + qa
+modules live). **The FIRST main-push e2e run (28984417104) immediately earned its keep — it
+caught TWO defects the local verify missed, both subset-repro gaps (D-026 class):**
+1. e2e job RED on the new WO-4 count step: it demanded all 500 vd04 items inside a 500-capped
+   page that also held the 2 A1/A3 e2e streams (arithmetically impossible — page showed 498).
+   The verifier had reproduced only the NEW steps on a fresh stack (no A1/A3 streams). Fixed:
+   assert overview total_publishers ≥502 (the FULL set survived poller pagination — the real
+   regression target), a full 500-item page at the cap, and ≥498 vd04 rows in it.
+2. ci web-e2e job RED (non-required): the DEFAULT playwright config picked up the two NEW
+   dedicated-config specs (csp.spec.ts, streams-render-500.spec.ts) against vite preview — the
+   old csp spec was tolerated only because it self-skipped. Fixed: testIgnore for both in
+   playwright.config.ts (they run ONLY under their csp/realstack configs). The 4 original specs
+   passed under node 22, so the node bump itself is fine. NOTE: this red breaks the web-e2e
+   promotion streak — restart the 2-week clock from 2026-07-09.
+csp-e2e was GREEN on its very first CI run. **Fix push `ecfc25c` → ALL GREEN: ci 28984815218
+(8/8 jobs incl. web-e2e) + e2e 28984815214 (e2e + csp-e2e); CI-side VD-04 = 426/196 ms; A4
+delivery_failure PASS in real CI; overview 502 / page 500 / vd04 498 exactly as derived.**
+Workflows: `pulse-s4-scout` (5 read-only scouts) →
+`pulse-s4-implement` (9 agents: 4 parallel TDD authors → 4 SEQUENTIAL adversarial verifiers w/
+exclusive mutation/stack windows → integrator). Verdicts: wo2+integration CONFIRMED,
+wo5/wo4/wo1 FIXED_THEN_CONFIRMED (each verifier fix below).
+
+**HEADLINE — scouting exposed a P0 production bug, fixed + proven this session:** `serve.go:297`
+created an EMPTY channel registry and NOTHING populated it from the meta store (the old comment
+claimed api.Server.Start did — that code never existed). `evaluator.deliver()` silently skips
+registry misses → **rule-triggered alert delivery NEVER worked outside unit tests**; D-049's
+retry/delivery_failure machinery was live but unreachable (D-041 fixed only the test-fire path).
+Fix (TDD, red first): `Evaluator.syncRegistryFromStore()` on every tick — register/replace from
+store, remove store-synced IDs that disappeared (`syncedChannelIDs` preserves manually-registered
+test fakes); decrypt-failure/unknown-type → log+skip. Channel construction extracted to shared
+`alert.BuildChannelFromRow` (api test-fire handler delegates; no import cycle). 4 new tests
+(store-only channel delivered / update propagates / delete stops delivery / corrupt row skipped);
+verifier mutation (sync disabled) reddens all 4. **Live-stack proof: first-ever prod-path
+end-to-end delivery** — sink container received the real alert POST (`state:firing,
+metric:ingest_bitrate_floor, value:2, threshold:99999`) within one 5s tick; dead-URL channel
+produced the delivery_failure row in ~8s; A2 beacon still 202 under the business-tier license.
+⚠️ **Prod runs the pre-D-061 image → rule→channel delivery is still broken in prod until the
+next rollout (SESSION-05 WO-1).**
+
+**Per-WO:**
+- **WO-2 e2e**: license mint pro→**business** (webhook channels Business-gated, license.go:118);
+  new **A4** step: dead-URL (`http://127.0.0.1:9/`, instant ECONNREFUSED) webhook channel + rule →
+  delivery_failure row within a DERIVED 30s budget (≤5s tick + 4 attempts + ≤4.2s backoff ≈ ≤9.2s
+  worst case). Live-sink counterproof: successful delivery produces NO row → step cannot
+  false-green. (Stale schema comment `-- firing | resolved` at 0001_init.sql:154 noted — the code
+  also writes `delivery_failure`; migration files are frozen, comment fix deferred to a future CR.)
+- **WO-5 replay suite**: `collector/normalize_realcapture_test.go` — 8 table-driven tests over the
+  REAL AMS 3.0.3 captures pinning D-029/D-031: bps→kbps (624016→624.016 AND 622312→622.312, two
+  captures with distinct values), fps-key-absent, terminated_unexpectedly, WebRTC single-track
+  (synthetic fixture — the real capture is an empty array, pinned as its own decode case),
+  system-status fields, app-name fallback. Verify-phase mutations: /1024 caught ×2;
+  fps-always-emitted caught; **terminated_unexpectedly removal initially SURVIVED → verifier added
+  the missing pinning test → caught** (adversarial round earned its keep); single-track break
+  caught by the pre-existing unit test. Verifier also fixed a t.Skipf→t.Fatalf violation (no
+  escape hatches, D-028). normalize.go pristine after all mutations (git-diff-verified).
+- **WO-4 VD-04/A10**: TWO mock-ams bugs fixed: (1) `/list` ignored offset/size →
+  `ListBroadcastsPaged` (pageSize 200) infinite-loops at ≥200 streams; (2) VERIFIER-FOUND: Go map
+  iteration gave each page request a different order → union of pages dropped/duplicated streams
+  (real stack showed only 293-467 of 500 arrive) → sort by StreamID before slicing.
+  `/control/bulk_publish` added. New REAL-stack Playwright spec `streams-render-500.spec.ts`
+  (structure asserts HARD: grid, aria-rowcount 501, ≤35 DOM rows, footer "500 streams"; timing
+  SOFT by ORCH decision — wall-clock gates on shared runners are D-042-class flake risk).
+  **VD-04 MEASURED + CLOSED: 668/459/342/292 ms (2 invocations × 2 runs, local VPS, chromium in
+  playwright:v1.61.1-noble, real API) vs 2000 ms budget; CI (run 28984815214, GitHub runner):
+  426/196 ms.** ARCHITECTURE §4+§11 updated.
+  useLiveDashboard already fetched limit=500 — no FE change.
+- **WO-1 csp-e2e**: `Caddyfile.ci` (HTTP-only: CSP byte-identical to Caddyfile EXCEPT connect-src
+  `'self' ws://localhost:18080` — a portless host-source matches only the scheme default, so
+  `ws://localhost` would block the SPA's WS; HSTS omitted; `handle_errors` mirrors headers because
+  Caddy's header directive skips the error pipeline), compose overlay (caddy pinned to the
+  hardened digest, 127.0.0.1:18080:80), `playwright.csp.config.ts`, csp.spec.ts implemented (was
+  fully skipped): EXACT-equality CSP header assert + parity headers + zero securitypolicyviolation
+  DOM events + zero CSP console errors on auth-gate AND mocked-dashboard pages, via
+  `http://localhost:18080` so window.location.host matches the ws source. Mutation: CSP line
+  dropped from the stack copy → test 1 red; restored → 3/3 green. New `csp-e2e` job
+  (continue-on-error — **bake clock starts 2026-07-09**). **A7's CI half CLOSED** (O2/U5 human
+  prod check still open). Verifier fix: web/package.json gained the missing `"typecheck"` script.
+- **WO-3**: e2e.yml `on: push: branches [main]` (D-056 lesson); web-e2e node 20→22; NEW ci step
+  `qa modules unit tests` (qa/mock-ams + qa/licensegen have their own go.mod — were never
+  CI-tested; mock-ams pagination now gates). **web-e2e promotion NOT taken**: 7/7 job-level green
+  since 2026-07-07T22:02Z (runs 28901737365/28903394901/28907051612/28910421114/28912724141/
+  28923302745/28976122295) but the 2-week mark is ~2026-07-21 — and superseded same-session: the
+  web-e2e red above (our spec-pickup bug) RESTARTS its clock from 2026-07-09, aligning both
+  clocks (web-e2e + csp-e2e) at ~2026-07-23. actionlint: 0 findings.
+- **WO-6 CodeQL: CANCELLED-BLOCKED** — repo is PRIVATE with security_and_analysis=null; code
+  scanning API 403 "not enabled". Default setup AND workflow-file both require GHAS on private
+  repos (the workflow would fail at analyze/upload). → **NEW operator item O9**: make the repo
+  public OR enable GHAS; paste-ready codeql.yml sketch preserved in SESSION-05.md.
+
+**ORCH gates (all green, 2026-07-09):** full `-race` repo-root 25 pkgs 0 FAIL, only the 2
+expected domain npx skips, total **73.3%** → **FLOOR 66.0→70.0** (awk mutation check: FLOOR=70
+exit 0 / FLOOR=99 exit 1). Web: gen:api NO-DRIFT, build, lint, typecheck, vitest gates 76/72/45.
+Integration: literal CI command, --cpuset-cpus=0,1, /tmp/clickhouse 26.6.1.1193 — green (api
+fresh 18.6s). **Pristine-clone repro at ba56c6e**: server job ALL steps (gofmt/vet/build/
+unit-race 25 pkgs/floor 73.2≥70/qa modules/pulse binary/migrate smoke vs CH 24.8 all 4
+migrations/integration -count=1 under 2 cores) + web job (node:22: npm ci, NO-DRIFT, build, lint,
+238/238) + docker-build (stamped `pulse ci-ba56c6e`, no dev/unknown). SDK untouched (zero diffs).
+**Watch item:** one web unit test failed ONCE on the pristine clone under 3-way docker load
+(238-passed re-runs ×2; test name lost to a tail-pipe — ORCH process note: never pipe a gate
+through tail without capturing the log); zero web/src changes this session; if it recurs in CI,
+capture the name and treat as D-042 class.
+
+**Process/infra notes:** compose auto-loads `deploy/.env` from the -f dir → local stacks must run
+from a pristine working-tree copy (`git ls-files -co --exclude-standard -z | tar …`) — now in the
+verify-window protocol. **CodeGraph installed by the operator (2026-07-09)**: local index in
+`.codegraph/` (self-gitignored; marker committed this session), CLI `~/.local/bin/codegraph` —
+from SESSION-05 on, agents query the graph (`explore`/`node`/`callers`) BEFORE grep/file sweeps,
+and the closing protocol runs `codegraph sync` after the last commit.
+
+**Operator ledger re-checked (2026-07-09):** O7 still OPEN (GHCR 403 read:packages). O8: 21
+dependabot PRs unchanged. **O9 NEW** (CodeQL needs repo-public-or-GHAS). **Prod rollout DUE**
+(carries D-056+D-058+D-061; until then prod rule→channel alert delivery remains broken —
+test-fire works, D-041).
+
+## D-062 — SESSION-05 executed: honest features + security tail — prod delivery LIVE, B7 shipped, logtail deleted, CodeQL on (2026-07-09)
+
+Commits `6865dba` `5c8fe96` `b94155f` `7760c73` `8b4e4c7` `2e41dbd` `dfe7092` (+ `bc15d43`
+pre-session, + this docs commit). Workflows: `pulse-s5-scout` (5 read-only scouts, codegraph-first)
+→ `pulse-s5-implement` (11 agents: 5 parallel TDD authors → integrator → 5 SEQUENTIAL adversarial
+verifiers w/ exclusive mutation/stack windows). Verdicts: wo3/wo4/wo5/wo6 CONFIRMED, wo2
+FIXED_THEN_CONFIRMED (verifier closed the wiring-mutation hole itself).
+
+**HEADLINE 1 — prod rollout (WO-1): rule→channel alert delivery WORKS IN PROD for the first
+time.** Prod rolled `1a701d6` → **`v0.1.0-25-gbc15d43`** (5-overlay, rollback tag
+`pulse-prod-pulse:pre-d061` = a2740dbd taken first; built with explicit build-args THEN `up -d`
+without `--build` — D-058 lesson b; stamp asserted pre-swap). healthz ok; publishers=1; migrate
+DSN masked ×2; no new WARN/ERROR. **Delivery smoke:** prod is Free tier and webhook channels are
+Business-gated (license.go:90/:277 — scout caught this BEFORE it burned the session), so the smoke
+used the Free-legal **email channel** — same D-061 registry seam (sync-on-tick →
+BuildChannelFromRow → Send, channel-type-agnostic): disposable SMTP sink container on
+pulse-prod_default; channel `{email_to, smtp_addr:"smoke-smtp:1025", starttls:false}` 201; rule
+`ingest_bitrate_floor lt 99999` 201; **firing history row on the FIRST 2s poll; sink logged the
+full alert email ("FIRING: ingest_bitrate_floor lt 99999", value 2067) + MESSAGE_RECEIVED**.
+Cleanup: rule/channel DELETE 204/204, sink stopped. Webhook-channel prod variant stays blocked on
+U3; CI covers that path (D-061 A1/A4). WATCH: pre-swap logs showed an intermittent CH
+"Memory limit (total) exceeded 1.80 GiB" on server_events inserts (pre-existing; did NOT recur in
+the post-swap window).
+
+**HEADLINE 2 — pre-session P0 SECURITY intercept:** a CONCURRENT operator Claude session
+committed `ee4fc00` "add Slack notifications" with a **LIVE Slack webhook URL hardcoded ×8 in 4
+workflow files** — unpushed, repo now PUBLIC. Scout transcripts audited (zero Write/Edit calls —
+not ours; wo5 scout merely observed the dirty tree). Handled: commit REWRITTEN unpushed →
+`bc15d43` (URL → `${{ secrets.SLACK_WEBHOOK_URL }}`; real value stored via `gh secret set`;
+actionlint 0), pushed immediately to win any race with the unsafe version; original kept LOCALLY
+on `backup/slack-notify-original` (never push). ci 28986292555 + e2e 28986292559 GREEN on it
+(first slack-notify runs worked). **OPERATOR: rotate the Slack webhook** (sat in a local commit +
+transcripts; never public) **and reset the other session's local main** onto origin.
+
+**Per-WO:**
+- **WO-2 honest QoE alerts** (`6865dba`+`5c8fe96`+serve wiring in `8b4e4c7`): HealthScore proxy
+  REMOVED from rebuffer_ratio/error_rate (G6 — the SESSION-05 doc's "viewer_sessions" mention was
+  wrong: mv_qoe_1h reads beacon_events only; rollup_qoe_1h is the sole source). New
+  `alert.QoEReader` seam (+FakeQoEReader), `query.QoEForStream` → QoeSummary; nil-reader/error →
+  stream skipped + ≤1 WARN/tick; ingest_bitrate_floor untouched. Tests: 4 new unit guards +
+  VD-32 migrated + CH integration (rebuffer_ratio=0.5000 exact from rebuffer_end 5000ms +
+  heartbeat 10000ms) + e2e A2 extension (rule gt 0.0 → firing row; live-proven on isolated stack
+  in ~10s). Mutations: reader-bypass caught (integration red), proxy-resurrection caught (3 unit
+  tests red), wiring-deletion caught (verifier EXTRACTED `wireAlertQoEReader` + pin test in
+  serve_wiring_test.go — compile-breaks if unwired). Lookback hardcoded 1h (future: per-rule).
+- **WO-3 B7** (`b94155f`+`8b4e4c7`): contract CR (ORCH-approved): `ams_sources.webhook_secret_enc`
+  (both DDL copies byte-identical + applySchemaUpgrades ALTER, hash_alg pattern; Postgres = manual,
+  documented), Source read schema + `webhook_secret_set` (SourceWrite.webhook_secret pre-existed —
+  scout correction), gen:api regen byte-stable. `/webhook/ams/{name}`: per-source secret ONLY when
+  present (cross-source isolation), unknown name → SharedSecret fallback else 401 fail-closed
+  (NOT 404 — no name-existence leak); legacy route byte-identical (pre-existing tests unmodified).
+  serve.go loads+decrypts secrets at startup (rotation needs restart — documented). 7 new webhook
+  tests + meta CRUD/upgrade + api tests; mutations M1 (fallback-despite-per-source), M2 (404 leak),
+  M3 (ALTER dropped) all caught. webhook pkg coverage 94.7%.
+- **WO-4 logtail DELETED** (`7760c73`+`8b4e4c7`): scout live-proof on the prod AMS container:
+  every analytics line log4j-prefixed → processLine json.Unmarshal fails 100%; real event types
+  publishStats/viewerCount/keyFrameStats (20541/20541/3356 occurrences) match NONE of the 9 parser
+  cases; logs live in the antmedia_data VOLUME (compose comment's host path never existed); REST
+  poller + webhook cover the data. "Wiring is cheaper" (SESSION-05) was FALSE — it needed a parser
+  rework + topology change. Removed: pkg (6 files), SourceLogTail, serve.go hook block (200-205),
+  config.go LogTailPath, compose stubs, helm logTailPath (3 goldens re-rendered NO DRIFT),
+  collector doc line. Inverse-mutation (fake import) build-fails as expected. SQL comment mentions
+  stay (migrations frozen, D-061). server/cover.out is a stale local artifact (untracked, harmless).
+- **WO-5 deploy honesty** (`2e41dbd`): Caddyfile.prod `reverse_proxy {$AMS_UPSTREAM}` + compose
+  default `${AMS_UPSTREAM:-161.97.172.146:5080}` (prod parity verified: resolves to the old
+  hard-coded value → next `up -d` is a behavior NO-OP). .env.example +8 vars, every comment
+  code-verified (PULSE_BASE_URL = BE-02-only note; PULSE_LICENSE_KEY has NO _FILE support —
+  os.Getenv at serve.go:236). caddy validate green on pinned digest. Scout STALE-corrections:
+  PULSE_METRICS_TOKEN already present (7 missing, not 8); NO AMS_LOGIN_* lines exist in
+  .env.example; RESUME-PROMPT §14 brier warning retired (D-046 cleaned it). NOTE: `caddy validate`
+  exits 0 even with AMS_UPSTREAM unset (empty upstream accepted at validate time) — the compose
+  `:-` default is the real guard.
+- **WO-6 CodeQL** (`dfe7092`): **O9's blocker RESOLVED by the operator — repo is PUBLIC**
+  (verified `private:false`; secret-scanning/push-protection still disabled — consider enabling).
+  codeql.yml: go + javascript-typescript matrix, build-mode none, push:main/PR/weekly cron/dispatch,
+  default suite, NOT a required context (bake first). actionlint 0.
+
+**ORCH gates (all green, 2026-07-09):** gofmt (1 finding — verifier's pin test unformatted —
+fixed with --user gofmt -w, then clean), vet, build; full `-race` 24 pkgs 0 FAIL / 2 expected
+domain npx skips, **total 73.2%** (floor 70 HOLDS; −0.1 = logtail test-mass removal; NO ratchet —
+<74 per session rule); full `-tags integration ./...` vs /tmp/clickhouse 26.6.1.1193 cpuset 0,1:
+24/24 ok (incl. new QoEForStream + api vd19/vd24); web build/lint/typecheck OK, vitest 238/238,
+gen:api regen byte-stable; helm goldens ×3 NO DRIFT; actionlint (e2e.yml, codeql.yml) 0. e2e-job
+delta live-replicated by the wo2 verifier on an isolated stack (equivalent of the pristine repro
+for the only touched job); ci.yml untouched this session. Push `dfe7092` → watching ci + e2e +
+codeql (first run).
+
+**Ledger (re-checked 2026-07-09):** O7 GHCR package STILL PRIVATE (anonymous pull token DENIED;
+repo-public flip did NOT cascade to the package — operator: one-click package visibility or
+`gh auth refresh -s read:packages`). O8: 21 dependabot PRs. O9 → CLOSED by WO-6 (workflow live;
+promote to required only after bake). O10 (prod rollout) → CLOSED by WO-1. NEW O11: rotate the
+Slack webhook + reset the concurrent session's local main. Promotion clocks (web-e2e, csp-e2e)
+END ~2026-07-23 — not taken (correct per plan); SESSION-06 should re-check.
+
+**CI results (post-push):** ci 28989064826 + e2e 28989064843 (incl. the NEW A2 rebuffer_ratio
+assert, green FIRST TRY in real CI) SUCCESS on `dfe7092`. codeql first run FAILED exactly as a
+bake should catch: "Go does not support the none build mode" (CodeQL 2.26.0; the js-ts leg
+passed) → fix `5dacb7d`: per-language matrix include (go/autobuild + js-ts/none) + setup-go 1.25
+for the autobuild leg → **codeql SUCCESS**; ci + e2e re-green on `5dacb7d`.
+
+## D-063 — SESSION-06 executed: docs + Helm GA batch — G7 met except LICENSE (O5), promotion recorded not-due (2026-07-09)
+
+Commits `bcdd3b8` `f1a624b` `58e318f` `8627f05` `cc6b71c` `fff3315` `352b7d7` (+ this handoff
+commit). Workflows: `pulse-s6-docs-helm` (19 agents: 4× scout→author→adversarial-verify/fix
+pipelines + WO-5 promotion auditor + cross-doc critic + critic-repair) → `pulse-s6-tail`
+(6 agents: leftover-findings fixer + WO-6 stale-batch author, each adversarially verified;
+stopped mid-run on operator rate-limit warning, RESUMED from journal cache — resume worked
+exactly as designed). Doc sessions are TDD-inverted (D-057): every operator-actionable claim
+command-verified by author AND re-derived by an adversarial verifier; the verify rounds were
+load-bearing — see the caught-lies list below.
+
+**Per-WO:**
+- **WO-1 (`f1a624b` + `cc6b71c` half):** productionize.md quick-ref/1e/2e/3-token/4b all →
+  5-overlay reality + `--env-file`; NEW `_FILE` variants table (GetSecret-backed:
+  PULSE_AMS_AUTH_TOKEN, PULSE_AMS_LOGIN_PASSWORD, PULSE_WEBHOOK_SECRET, PULSE_METRICS_TOKEN,
+  PULSE_SECRET_KEY, per-source PULSE_AMS_<NAME>_TOKEN; **PULSE_LICENSE_KEY exempt** —
+  os.Getenv, config.go:338); D-058 stamped-build (build w/ VERSION/COMMIT/BUILD_DATE args THEN
+  `up -d` WITHOUT `--build`); AMS_UPSTREAM documented (prod-tls.yml:35 default). real-ams-go-live.md
+  marked HISTORICAL (sections 0–7 provenance note), DC/DC_MOCK +backup overlay, §3-D/§5 stamped-build,
+  dangling §8/§14 refs resolved.
+- **WO-2 (`58e318f` + `cc6b71c` half):** alerting.md — prune cap 1000, retry/delivery_failure
+  (D-049/D-061), sync-on-tick ~5s no-restart, per-channel config-key tables from factory.go
+  (verifier caught 2 blockers: unknown-name 401 self-contradiction; STARTTLS default wrong),
+  honest-QoE **3-case semantics** (nil reader → rules skipped + 1 WARN/tick w/ verbatim
+  `(D-062: G6)` string; reader error → stream skipped + 1 WARN; **no data → QoEForStream (0,0,nil)
+  → evaluates normally vs 0.0, NOT skipped, NOT silent** — round-2 verifier killed the "silently
+  skipped" claim). AMS-INTEGRATION.md §4.5 B7 per-source URLs (startup-only load, cross-source
+  isolation, webhook_secret_set) + §3.2 was a **4-overlay DC + `up -d --build`** (critic caught) → fixed.
+- **WO-3 (`8627f05` + `fff3315`):** NEW upgrade-rollback.md (5-overlay, stamped-build, pre-dNNN
+  tags, migrations frozen → restore-from-backup, never `down -v` pulse-data), NEW monitoring.md
+  (backup daemon keep-7, alert_history cap, disk, real metric names, CH memory WATCH signature
+  `Memory limit (total) exceeded 1.80 GiB` greppable, WARN taxonomy w/ verbatim `pulse: webhook:`
+  prefixes), NEW SECURITY.md (report → aytek@beyondkaira.com; HMAC webhook global+B7; token
+  HMAC-SHA256 D-052; _FILE; CSP — verifier blocker: named wrong Caddyfile + false CI-parity claim,
+  fixed to Caddyfile.prod:78 truth; function-name citations over line numbers), NEW CHANGELOG.md
+  (Keep-a-Changelog; [0.1.0] 2026-07-08 backfill + [Unreleased] D-059…D-062). LICENSE NOT drafted (O5).
+- **WO-4 (`bcdd3b8`):** helm parity — ghcr.io/aytekxr/ams-pulse image ref, CH auth via Secret,
+  backup CronJob mirroring the compose sidecar (+script ConfigMap+PVC), `optional: false` secret
+  refs, NOTES.txt (smoke + B7 URL shape), README honesty; 3 goldens regenerated red-diff-first;
+  lint+goldens ORCH-re-verified on alpine/helm:3.17.0 (CI-faithful) NO DRIFT. install.md Path C
+  stays EXPERIMENTAL (D-002 waiver).
+- **WO-5 promotion audit (no file changes):** **NOT DUE** (2026-07-09 < 2026-07-23), recorded
+  with evidence: web-e2e job-level 19/20 green since 2026-07-07 — **streak BROKEN once** at
+  `ba56c6e` run 28984417114 (2026-07-09T00:06): deterministic, D-061's csp.spec.ts +
+  streams-render-500.spec.ts ran ungated inside plain web-e2e (no caddy/stack/token → ECONNREFUSED),
+  fixed by `ecfc25c` playwright testIgnore — NOT a flake; job green streak restarts 2026-07-09 →
+  **both clocks now end ~2026-07-23**. csp-e2e 7/7 green since introduction (continue-on-error
+  still on). CodeQL first green `5dacb7d` 2026-07-09, bake_days=0 → S7 + operator agreement.
+  Required contexts unchanged (contracts/server/web/sdk/docker-build/helm/compose).
+- **WO-6 (`352b7d7`):** ARCHITECTURE.md §6 "Token passwords use SHA-256, bcrypt is roadmap" →
+  truth (user passwords bcrypt server.go:2111/2127 w/ legacy sha256: back-compat; tokens
+  HMAC-SHA256 meta.go HashToken) + Last-updated; install.md tier table 3→4 columns, every cell
+  from license.go (NOTE: **business MaxNodes=5 < pro 10 is PRD §7.11 by-design** — $299 multi-tenant
+  tier; do NOT "fix" in S7 without an operator product decision) + Prometheus row (Business+);
+  install.md "YAML planned for Wave 3" → truth: **parser exists (internal/config Load) but is NOT
+  wired** — main.go HOOK(BE-02) uses loadEnvConfig() in all 3 paths; env-only, pulse.yaml silently
+  ignored (wo6's first attempt claimed "implemented" — verifier killed it; wiring = S7/post-GA call);
+  beacon-sdk.md numbers re-MEASURED (3.52 KB gzip via size-limit, 65 tests green — ORCH re-ran both).
+
+**⚠️ PROCESS INCIDENT (binding lesson):** the wo6 verifier flagged concurrent UNCOMMITTED work
+(alerting.md, real-ams-go-live.md — WO-1/WO-2/tail-fixer edits awaiting ORCH commit) as wo6
+"out-of-scope edits"; the wo6 fixer then `git restore`d both files, **destroying ~180 lines of
+verified uncommitted work**. Recovered **byte-exact** by replaying all 19 Edit tool calls from the
+agent transcripts (journal `agent-*.jsonl`) in timestamp order — 19/19 anchors matched. NEW RULE
+(added to RESUME §12): workflow subagents must NEVER `git restore`/`git checkout --` shared-tree
+files; scope violations are REPORTED and ORCH decides. Commit-early per scope also mitigates.
+
+**ORCH gates (all green 2026-07-09):** helm lint 0 fail + 3 goldens no-drift (alpine/helm:3.17.0);
+full `-race` 24 pkgs 0 FAIL / 2 domain npx skips, **total 73.2%** (floor 70 holds; no Go touched);
+link-check 8 touched docs 0 dead; secret scans clean (only the T00000000 placeholder Slack URL);
+SDK size/test re-measured. Push `770c892..352b7d7` → ci 28993029934 + e2e 28993029982 + codeql
+28993029935 [watch in progress at handoff-write time; result recorded in RESUME].
+
+**Ledger (re-checked 2026-07-09):** O7 GHCR package STILL PRIVATE (anonymous pull token DENIED).
+O8 STILL 21 dependabot PRs. O11 OPEN — operator: rotate the Slack webhook + reset the other
+session's local main (repo half done since D-062: secret set, rewritten commit pushed).
+O5 OPEN (LICENSE choice) — **the only G7 gap**; SECURITY.md/CHANGELOG/runbooks/Helm-experimental
+all shipped. G7 otherwise MET.
+
+## D-064 — SESSION-07 executed: GA-gate audit — verdict PUNCH-LIST-FIRST (prod currency is the gate-blocker); A10 load smoke PASS; small agent items fixed in-session (2026-07-09)
+
+Workflow `pulse-s7-ga-gate` (11 agents: 9 read-only audit scouts on the D-057 dimensions →
+solo-phase A10 load agent → adversarial completeness critic). Then ORCH adjudicated the critic,
+executed the XS/S agent punch items in-session, and gated.
+
+**Audit result vs G1–G8 (evidence per scout in the workflow journal):**
+- **G1 ✅** except O7 (GHCR package private — anonymous pull token DENIED, re-verified) and the
+  recorded-by-design `enforce_admins=false` (D-058: owner pushes to main while agent sessions
+  drive it; revisit at GA declaration). release.yml: CI-gated, Trivy HIGH/CRIT, multi-arch,
+  SBOM+provenance, cosign — all quoted; v0.1.0 tag + green release run verified; actionlint 0
+  on all 5 workflows; protection strict w/ 7 contexts + 1 review.
+- **G2 ❌ THE GATE-BLOCKER: prod runs `bc15d43` (v0.1.0-25) — 17 commits behind, and the 4
+  D-062 FUNCTIONAL commits (8b4e4c7 QoEReader wiring + B7 startup load, b94155f B7, 6865dba/
+  5c8fe96 honest QoE) are NOT ancestors of the prod image.** The D-062 rollout pre-dated the
+  session's own work commits. Honest-QoE alerts + B7 per-source webhooks are NOT live in prod.
+  → S8 WO-A prod rollout (agent-executable, runbook exists). Backups: cycles green, keep-7
+  configured but pruning not yet exercised (3/8 cycles — time-gated).
+- **G3 ✅** — full `-race` 24 pkgs 0 FAIL, 2 expected npx skips, total 73.1% (floor 70;
+  73.2→73.1 = rounding); A11 integration-proven. cmd/pulse 42.3% exemption now FORMALIZED in
+  ARCHITECTURE §4 (this session).
+- **G4 ✅ after in-session fix** — 51/52 + 1 waived (waiver now formalized in ARCH §4); found
+  SIX D-028-class `t.Skipf("meta DDL not found")` hatches (api_test.go:108/454/559,
+  v3b_guard_test.go:67/404/504) that silently void the api suite under a broken mount →
+  ALL converted to `t.Fatalf` with TWO negative proofs (server-only mount now FAILS loud on
+  both the spec path and the DDL path — transcripts in this session).
+- **G5 ⏳ time-gated** — everything met except the web-e2e + csp-e2e promotions (clocks end
+  ~2026-07-23; job-level streaks intact since 2026-07-09). VD-04 numbers stand.
+- **G6 ✅ — critic finding REFUTED by ORCH:** the critic claimed no single CI test chains
+  license→beacon→rollup→alert; e2e.yml:372-456 does EXACTLY that (Pro-licensed batch w/
+  rebuffer_end accepted==3 → rollup_qoe_1h → rebuffer_ratio rule gt 0.0 → firing row poll).
+  Adjudication recorded; G6 stays met.
+- **G7 ✅ after in-session fix** except LICENSE (O5) — the audit's DOC-TRUTH spot-check caught
+  ONE stale operator instruction that survived S6: install.md:326 still documented
+  PULSE_LOG_TAIL_PATH (logtail deleted D-062; zero server references) → row REMOVED. Also
+  fixed: monitoring.md backup-error prefix (`[pulse-backup] ERROR:` not a timestamp),
+  GAP-206-01 closed (image published since v0.1.0), .env.example +PULSE_AMS_LOGIN_EMAIL.
+- **G8 = operator:** U3 (tier:free live-verified), U5, O3 (0 webhook POSTs in 24h Caddy logs).
+
+**A10 load smoke: PASS (recorded in ARCHITECTURE §4).** Isolated stack, 500 streams + 3,000
+viewers, 15-min soak, 16 samples: pulse mem peak 18.6 MiB (3.6% of 512 MiB limit); CH peak
+610 MiB (30% of 2 GiB; **the D-062 memory WATCH never triggered — 0 hits**, also 0 in prod
+24h); /live/overview avg 9.0 ms; 222,762 events ingested, 0 steady-state insert errors, 0 pulse
+ERRORs. Non-blocking follow-ups → punch list: pulse CPU bursts ~147% of a core at poll
+boundaries vs the 0.5-vCPU hardened cap (throttled; latency unaffected); ~100 INFO/s
+health-degraded log storm at 500 degraded mock streams; 27 migration-time CH
+CANNOT_PARSE_INPUT startup errors (cosmetic, investigate).
+
+**PUNCH LIST → SESSION-08 (S8 added to ROADMAP §3):**
+- **WO-A [L, blocks G2/GA]: prod rollout to current main** (staging-verify → pre-d064 rollback
+  tag → stamped-build → 5-overlay swap → §8.8 smoke incl. honest-QoE + B7 spot-checks).
+- WO-B [S]: pin mock-ams (hardened overlay, golang:1.25 floating) + helm busybox:1.36
+  (GAP-206-03); WO-C [S]: health-degraded log-storm rate-limit + pulse CPU-cap review;
+- WO-D [XS]: A11 t.Skipf defence-in-depth; CH startup parse-errors investigation [XS].
+- WO-E [time]: promotions if ≥2026-07-23 (FULL-LIST PUT web-e2e+csp-e2e, drop continue-on-error;
+  CodeQL 4-green streak — promote only w/ operator OK).
+- GA declaration: expected at S8-close IF WO-A lands and every remaining gap is operator/time.
+
+**In-session commits (this session):** conformance hatch fix (server/internal/api ×2 files),
+ARCHITECTURE §4 (A10 numbers + waivers + GAP-206-01), install.md, monitoring.md, .env.example.
+Gates: gofmt clean; negative proofs ×2; full `-race` repo-root 24 pkgs ok / 0 FAIL (73.1%, floor 70); ci+e2e+codeql
+watched post-push.
+
+**Ledger:** NEW **O12 — enable repo secret-scanning + push-protection** (repo is PUBLIC and
+they are OFF; one click, gh api evidence). O5/O7/U3/U5/O3/O8(21 PRs)/O11 unchanged-OPEN.
+NOTE (no action): PULSE_AMS_URL is http:// → AMS bearer travels cleartext, but same-host
+(VPS-local) traffic only; revisit if AMS ever moves off-host.
+
+## D-065 — SESSION-08 executed: WO-A prod rollout (G2 RESTORED) + punch items + **GA DECLARED** (2026-07-09)
+
+Workflow `pulse-s8-punch` (9 agents: 3 scouts → 3 TDD authors → 3 adversarial verifiers, ALL
+CONFIRMED round 1) + ORCH follow-ups + ORCH-driven WO-A rollout + gates. Session commits:
+`c6ba362` (WO-C) · `c3c5118` (WO-D) · `0671a16` (ci comment) · `5d77a05` (WO-B deploy batch) +
+this docs/handoff batch.
+
+**WO-A — prod rollout to current main: DONE, G2 RESTORED.**
+- Staging-verify FIRST (D-054): isolated `pulse-s8staging` stack (pristine copy, base+ci
+  overlays + scratch webhook overlay, loopback 18090/18092): healthz ok, B7 fail-closed
+  (global bad-sig 401, per-source unknown-name 401, good-sig 200), boot logs clean, poller
+  recovered post mock-ams warm-up. Torn down with volumes (isolated project).
+- Pre-upgrade: rollback tag `pulse-prod-pulse:pre-d064` = 9ef6ea83140e (the bc15d43 image);
+  manual backup exit 0 (CH zip + SQLite w/ 4.1 MB WAL, ts=20260709-132327).
+- Stamped build: `pulse v0.1.0-50-g5d77a05 (commit 5d77a05, built 2026-07-09T13:23:47Z)` —
+  no dev/unknown. Swap `up -d` (no --build): migrate ran, pulse healthy, caddy recreated.
+- **§8.8 smoke transcript (all green):** healthz ok ×3; running version = v0.1.0-50-g5d77a05;
+  limits inspect memory=536870912 **cpus=1000000000 (the NEW 1.0 cap live)**; 0 ERROR/panic;
+  0 CH memory-WATCH hits since swap; live/overview 200 w/ total_publishers=2 (real AMS);
+  exactly 2 `invalid signature` WARNs = our deliberate bad-sig probes.
+- **NEW spot-checks (SESSION-08):** (a) B7 live: `/webhook/ams` good-sig 200 / bad-sig 401,
+  `/webhook/ams/<name>` bad-sig 401 fail-closed; (b) honest-QoE 3-case semantics on Free:
+  canary rule `rebuffer_ratio lt 99999` → **firing history row ≤60s (evaluated vs honest
+  0.0, case 3)**, 0 `qoe_reader` WARNs (reader configured), canary deleted (204);
+  (c) beacon chain → 403 LICENSE_REQUIRED (Free, awaits U3); (d) migrate leg:
+  `ams_sources.webhook_secret_enc` PRESENT post-boot (applySchemaUpgrades).
+- **⚠️ SQLite WAL verification gotcha (runbook-recorded):** `docker cp` of `pulse_meta.db`
+  ALONE showed the column MISSING — the ALTER sat un-checkpointed in the WAL; copying
+  db+wal+shm shows it PRESENT. First check was a false alarm; runbook §"Verifying a
+  meta-store schema upgrade" added.
+- **Runbook doc lies found (first real exercise, both fixed):** Step 6 `docker inspect
+  pulse-prod-pulse` inspects the IMAGE (no limits) — container is `pulse-prod-pulse-1`;
+  tags table stale → refreshed. cpus expectation updated for the 1.0 cap.
+
+**WO-B — image pinning: DONE (verifier CONFIRMED).** hardened mock-ams `golang:1.25` →
+digest `d7912ced…` (line 114, pulse.Dockerfile comment pattern); helm busybox:1.36 → new
+`clickhouse.waitImage` values block w/ digest `73aaf090…` (GAP-206-03 closed); 3 goldens
+red-first regen ×2 (busybox pin, then the cpu-cap parity change) on alpine/helm:3.17.0;
+lint 0 failed; compose config -q green from pristine copy (prod 5-overlay + dev). Floating
+tags REMAIN by scope decision: docker-compose.ci.yml:20 + override.yml:12 (CI/dev only).
+
+**WO-C — 500-stream observability: DONE (verifier CONFIRMED).** Per-stream `ingest: health
+degraded` INFO → Debug; `SweepStale` now emits ONE aggregated INFO/tick (`count` + ≤3
+example stream IDs; zero degraded → no line) via `logDegradedLocked` — kills the ~100
+INFO/s A10 log storm. TDD red (5 per-stream lines, 0 agg) → green (-race, pkg ok). CPU-cap
+review: **RAISED 0.5 → 1.0 vCPU** (compose hardened + helm values parity) on the WO-C
+evidence memo: poll-boundary O(N²) `rebuildSnapshot` bursts hit 147% of a core; CFS at 0.5
+= up to ~65 ms goroutine freezes per 100 ms period with UNKNOWN P99 (9 ms avg masks it);
+host nproc=6 so 1.0 = 16.7% of host; alert evaluator tick (5s, own goroutine) unaffected
+either way. The O(N²) rebuild loop itself = post-GA backlog item.
+
+**WO-D — test-harness tail: DONE (verifier CONFIRMED).** New `testutil.RequireClickHouseBin`
+(//go:build integration) replaces 8 inline `t.Skipf` sites across 6 files: **CI=true +
+missing /tmp/clickhouse → t.Fatalf** ("did the 'Download ClickHouse binary' step in ci.yml
+fail?"), local dev keeps skip. Negative proofs: FAIL loud w/ CI=true, SKIP w/o, -race
+variant, vet + build -tags integration clean; ci.yml provisions the binary BEFORE the
+integration step so the guard only fires on real download failure (D-028-class defence).
+CH `CANNOT_PARSE_INPUT` ×27 (D-064 A10): NOT reproducible on a bare CH 24.8.14.39 start →
+most likely startup-window wire-format probes under load; **no DDL loss** (runner fails
+loud). REAL finding: mounting `contracts/db/clickhouse/` as `/docker-entrypoint-initdb.d/`
+aborts on `{db}` (Code 62 SYNTAX_ERROR) and applies ZERO tables — anti-pattern warning
+added to docker-compose.yml (clickhouse service) + monitoring.md "Known benign ClickHouse
+startup messages" section.
+
+**WO-E — promotions: NOT DUE, recorded.** 2026-07-09 < ~2026-07-23. Job-level streaks
+INTACT: web-e2e 7/7 green (ci.yml runs since streak restart 2026-07-09), csp-e2e 7/7 green
+(e2e.yml runs). CodeQL green streak continues. → SESSION-09 executes the FULL-LIST PUT
+(+web-e2e +csp-e2e, drop continue-on-error) if ≥2026-07-23 and streaks hold; CodeQL only
+with operator OK.
+
+**WO-F — GA VERDICT: ★ GA DECLARED (2026-07-09) ★** — every remaining gap is operator- or
+time-owned:
+| Gate | Status | Remaining owner |
+|---|---|---|
+| G1 Release | ✅ | O7 GHCR visibility (operator click) |
+| G2 Prod currency | ✅ **restored this session** (v0.1.0-50-g5d77a05, smoke green) | — |
+| G3 Server tests | ✅ 73.2% / floor **70.2** (ratcheted achieved−3 this session) | — |
+| G4 Contracts | ✅ 51/52 + 1 formalized waiver | — |
+| G5 Web/E2E | ✅ except promotions | time (~2026-07-23, S9) |
+| G6 Features honest | ✅ + **live-verified in prod today** | — |
+| G7 Docs | ✅ | O5 LICENSE (operator legal pick) |
+| G8 Operator | — | U3 license, U5 browser/CSP, O3 AMS webhook |
+CHANGELOG: [Unreleased] → GA release section (version = tag pending operator choice);
+release-notes draft at `agents/handoffs/RELEASE-NOTES-DRAFT.md`. **Tag (v1.0.0 vs v0.2.0)
++ push = OPERATOR** via the S1 release pipeline; no tag pushed this session.
+
+**Gates (all green):** gofmt -l empty; full `-race` 24 pkgs EXIT=0, 0 FAIL, **total 73.2%**;
+helm lint + 3 goldens red-first ×2; actionlint 0 (ci.yml touched ×2: WO-D comment truth +
+floor 70.0→70.2); compose parity pristine-copy (5-overlay + dev); staging before prod;
+rollback tag before swap. Push `ce808a2..5d77a05` → first run: helm/compose/e2e/codeql jobs
+**queue-cancelled at 12:40Z with 0 steps (GitHub capacity blip; server/docker-build/web-e2e
+all green)** → `gh run rerun --failed` ×3 → **ci 29018865052 + e2e 29018865131 + codeql
+29018865054 ALL GREEN**. (Lesson: 0-step "cancelled" across independent workflows = infra,
+not code; rerun --failed, don't debug the diff.)
+
+**Ledger (re-verified at close):** O5 LICENSE absent · O7 GHCR anon pull still UNAUTHORIZED ·
+O8 still 21 dependabot PRs · O12 secret-scanning+push-protection still disabled · U3 key
+still commented in deploy/.env · U5/O3/O11 unchanged-OPEN. **NEW operator decision ACTIVE:
+GA tag choice (v1.0.0 vs v0.2.0) — material prepared, awaiting the word.**
+
+## D-066 — SESSION-08 continuation: operator decisions executed — **v0.2.0 GA SHIPPED**; LICENSE = PolyForm NC 1.0.0; O3 closed-N/A; U5/O11/O12 closed (2026-07-09)
+
+Operator message (verbatim intent): tag = v0.2.0; choose a NONCOMMERCIAL license; explain
+Pulse license minting/distribution; "decide for me" on O12 + O7/O3/U5/O11/O8. All executed
+same-session, solo ORCH (no Workflow — ops + docs only, per the operator's own directive).
+
+**★ v0.2.0 RELEASE SHIPPED ★**
+- LICENSE committed FIRST (`7adbcc3`): **PolyForm Noncommercial 1.0.0** verbatim from the
+  canonical polyformproject.org text (choice rationale: purpose-built noncommercial CODE
+  license; the vendor keeps dual-licensing/commercial rights — matches the paid-tier model;
+  BUSL rejected as "non-compete", not "non-commercial"). SDK stays MIT. README License
+  section + CHANGELOG [0.2.0] Licensing subsection + NEW `docs/licensing.md` (product-key
+  mechanics: ed25519 claims format, vendor key ceremony, minting, PULSE_LICENSE_PUBKEY
+  distribution, activation×3 paths, fail-open-to-Free, revocation-by-expiry; licensegen
+  -privkey extension = S9 WO). **O5 CLOSED; G7 fully met.**
+- ci+e2e+codeql GREEN at `4657512` → tag **v0.2.0** pushed → release run **29023647495
+  GREEN** (CI-gate, Trivy, multi-arch, SBOM+provenance, cosign). GH release created w/
+  notes from RELEASE-NOTES-DRAFT (now trimmed to the live release).
+- Prod rollout onto the tag: `pre-v0.2.0` rollback tag + backup (ts=20260709-140605) BEFORE
+  swap; stamped build `pulse v0.2.0 (commit 4657512, built 2026-07-09T14:06:07Z)`; up -d;
+  smoke: healthz ok, version=v0.2.0, cpus=1000000000, 0 ERROR/panic. **O13 CLOSED.**
+- cosign verify by outsiders still blocked: GHCR package private (anon pull token
+  UNAUTHORIZED re-verified) — **O7 = the ONE remaining operator click.**
+
+**"Decide for me" outcomes:**
+- **O12 secret-scanning: ENABLED** (+ push-protection) via `gh api PATCH`, response-verified
+  both `enabled`.
+- **O3 AMS webhook: CLOSED-N/A.** Authed live GET of AMS 3.0.3 LiveApp settings (182
+  fields): `listenerHookURL` + retry/content-type knobs exist, **NO HMAC-secret or
+  signature-header field** — AMS lifecycle hooks are UNSIGNED; configuring them would only
+  401 against Pulse's fail-closed listener (that WAS the O4 WARN). REST polling (5 s)
+  remains the supported AMS ingest (≤10 s PRD budget met). AMS-INTEGRATION §4.5 corrected
+  (it described nonexistent console fields — doc lie). O4 moot. Optional post-GA WO seeded:
+  unsigned-ingest mode w/ IP allowlist (operator product call).
+- **U5 browser/CSP: CLOSED (automated).** Headless Chromium (playwright-core 1.61.1 host
+  modules + mcr v1.61.1-noble browsers, --add-host pins to the VPS): BOTH prod URLs
+  HTTP 200, `#root` populated, **0 console errors / 0 CSP violations**.
+- **O11: RISK-ACCEPTED** (webhook URL exposure was never public — unpushed commit + local
+  transcripts only); rotation downgraded to optional operator policy. Stale local branch
+  `backup/slack-notify-original` (ee4fc00) DELETED.
+- **O8 (21 PRs): #4 CLOSED** (golang 1.25→1.26 violates the D-032 pin) + dependabot
+  `ignore` rules for golang version bumps in both docker ecosystems (`4657512`). Remaining
+  **20 deferred to S9 absorption WO** with real verification — rationale: the actions bumps
+  (#8-12) touch release.yml paths PR-CI can't exercise; merging blind minutes before the
+  first GA release run was the wrong risk. S9 absorbs in 3 verified batches (actions +
+  release dry-run; digests + staging smoke; web/sdk majors TDD).
+- **O7: no API exists** for package-visibility change (verified: PATCH 404, GET needs
+  read:packages) — stays the operator's single click.
+
+Commits: `7adbcc3` (docs: LICENSE+licensing.md+README+CHANGELOG+AMS-INTEGRATION),
+`4657512` (ci: dependabot ignore) + this handoff batch. Gates: docs-only after the punch
+gates of D-065 (no Go touched post-ratchet; ci.yml dependabot.yml change is config-only,
+actionlint n/a); ci+e2e+codeql green pre-tag; release run green; prod smoke green.
+
+**Ledger after D-066:** O5 ✅ · O12 ✅ · O13 ✅ (v0.2.0) · O3/O4 ✅-N/A · U5 ✅ · O11 ✅
+(risk-accepted) · O8 → S9 WO (20 PRs) · **O7 = the only remaining click** · U3 = optional
+feature unlock (key still commented; docs/licensing.md explains minting). G1 ✅(−O7) ·
+G2 ✅ (v0.2.0 live) · G3 ✅ (73.2/70.2) · G4 ✅ · G5 ⏳(~07-23) · G6 ✅ · **G7 ✅ FULL** ·
+G8: U5 ✅, O3 N/A, U3 optional.

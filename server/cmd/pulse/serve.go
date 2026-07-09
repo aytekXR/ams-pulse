@@ -197,29 +197,9 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	)
 	sources = append(sources, poller)
 
-	// HOOK(BE-02/Wave2): logtail and webhook sources are wired here when
-	// their config is provided. They are fully implemented; just need config.
-	// if cfg.LogTailPath != "" {
-	//     tailer := logtail.New(logtail.Config{...}, fanout, logger)
-	//     sources = append(sources, tailer)
-	// }
-
-	// A5/B1: Wire webhook source when PULSE_WEBHOOK_ADDR is set.
-	// B2 fail-closed: refuse to start the listener when the shared secret is
-	// absent — an unauthenticated endpoint would be an open injection point.
-	if cfg.WebhookListenAddr != "" {
-		if cfg.WebhookSharedSecret == "" {
-			logger.Error("pulse: webhook listener skipped — PULSE_WEBHOOK_SECRET must be set when PULSE_WEBHOOK_ADDR is configured (fail-closed)")
-		} else {
-			wh := webhooksrc.New(webhooksrc.Config{
-				NodeID:       cfg.AMSNodeID,
-				SharedSecret: cfg.WebhookSharedSecret,
-				ListenAddr:   cfg.WebhookListenAddr,
-			}, fanout, logger)
-			sources = append(sources, wh)
-			logger.Info("pulse: webhook source configured", "addr", cfg.WebhookListenAddr)
-		}
-	}
+	// A5/B1/B7: webhook source wired below after metaStore is available
+	// so that per-source HMAC secrets can be loaded from ams_sources. See
+	// the block that follows the metaStore migration section.
 
 	// Wave 2: Kafka source (when brokers are configured).
 	// D-005 declared edit (BE-02-A): hoisted to function scope so kafkaSource is
@@ -249,8 +229,8 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	// VD-03: Wire cluster discovery into aggregator for origin/edge viewer dedup.
 	agg.SetEdgeChecker(clusterDiscovery)
 
-	// 6. Collector supervisor.
-	col := collector.New(logger, sources...)
+	// 6. Collector supervisor is created after the webhook wiring block below
+	// (moved to after metaStore so SourceSecrets can be populated — B7).
 
 	// HOOK(BE-02): Wire license manager.
 	lic, err := license.New(os.Getenv("PULSE_LICENSE_KEY"), os.Getenv("PULSE_LICENSE_FILE"))
@@ -293,10 +273,53 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		}
 	}
 
+	// A5/B1/B7: Wire webhook source when PULSE_WEBHOOK_ADDR is set.
+	// Placed here (after metaStore) so per-source HMAC secrets can be loaded.
+	// B2 fail-closed: refuse to start when the shared secret is absent.
+	// B7 limitation: SourceSecrets is loaded once at startup; rotating a
+	// per-source secret requires a process restart to take effect.
+	if cfg.WebhookListenAddr != "" {
+		if cfg.WebhookSharedSecret == "" {
+			logger.Error("pulse: webhook listener skipped — PULSE_WEBHOOK_SECRET must be set when PULSE_WEBHOOK_ADDR is configured (fail-closed)")
+		} else {
+			// B7: build per-source HMAC secret map from meta store.
+			sourceSecrets := make(map[string]string)
+			if srcs, listErr := metaStore.ListAMSSources(ctx); listErr != nil {
+				logger.Warn("pulse: webhook: could not load per-source secrets", "error", listErr)
+			} else {
+				for _, src := range srcs {
+					if src.WebhookSecretEnc.Valid && src.WebhookSecretEnc.String != "" {
+						plain, decErr := metaStore.Decrypt(src.WebhookSecretEnc.String)
+						if decErr != nil {
+							logger.Warn("pulse: webhook: decrypt per-source secret failed, skipping",
+								"source", src.Name, "error", decErr)
+							continue
+						}
+						sourceSecrets[src.Name] = plain
+					}
+				}
+			}
+			wh := webhooksrc.New(webhooksrc.Config{
+				NodeID:        cfg.AMSNodeID,
+				SharedSecret:  cfg.WebhookSharedSecret,
+				SourceSecrets: sourceSecrets,
+				ListenAddr:    cfg.WebhookListenAddr,
+			}, fanout, logger)
+			sources = append(sources, wh)
+			logger.Info("pulse: webhook source configured",
+				"addr", cfg.WebhookListenAddr,
+				"per_source_secrets", len(sourceSecrets))
+		}
+	}
+
+	// 6. Collector supervisor (moved after webhook B7 wiring).
+	col := collector.New(logger, sources...)
+
 	// HOOK(BE-02): Wire alert channel registry.
+	// The registry starts empty. The evaluator rebuilds it from the meta store
+	// on every tick (syncRegistryFromStore), so channels created, updated, or
+	// deleted via the API are reflected within one tick interval (≤5 s).
 	chanRegistry := channels.NewRegistry()
-	// Built-in channels are registered when alert channel configs are loaded
-	// from the meta store at startup (handled inside api.Server.Start).
 
 	// HOOK(BE-02): Wire alert evaluator.
 	alertEval := alert.New(alert.Config{
@@ -349,13 +372,9 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	// When set, the beacon ingest endpoint is also available on a separate port
 	// for DMZ/edge deployment without exposing the full API.
 	var beaconSrv *beaconingest.Server
-	if cfg.IngestListenAddr != "" {
+	if bcfg, ok := beaconListenerConfig(cfg.IngestListenAddr, lic); ok {
 		ingestTokenStore := &metaIngestTokenStore{store: metaStore}
-		beaconSrv = beaconingest.NewServer(beaconingest.Config{
-			ListenAddr:           cfg.IngestListenAddr,
-			RateLimitPerTokenRPS: 100,
-			RateBurst:            200,
-		}, ingestTokenStore, fanout, logger)
+		beaconSrv = beaconingest.NewServer(bcfg, ingestTokenStore, fanout, logger)
 		logger.Info("pulse: beacon ingest listener configured", "addr", cfg.IngestListenAddr)
 	}
 
@@ -363,6 +382,7 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	// Wired to the evaluator to enable TLS cert monitoring.
 	certChecker := alert.NewCertChecker(10 * time.Second)
 	alertEval.SetCertChecker(certChecker)
+	wireAlertQoEReader(alertEval, qsvc) // D-062: honest rebuffer_ratio/error_rate from ClickHouse rollup_qoe_1h
 
 	// Wave 2 (BE-02, WO-204): Report accountant, scheduler, and generator.
 	// Accountant queries ClickHouse rollup tables for usage figures.
@@ -545,4 +565,40 @@ func (s *server) Stop() {
 	}
 	s.store.Close()
 	s.logger.Info("pulse: stopped")
+}
+
+// ─── Alert evaluator QoE wiring ───────────────────────────────────────────────
+
+// wireAlertQoEReader wires the ClickHouse QoE reader to the alert evaluator so
+// rebuffer_ratio and error_rate rules receive honest values from rollup_qoe_1h.
+// Without this call the evaluator silently skips QoE rules each tick.
+//
+// D-062 wiring pin: serve_wiring_test.go calls this function directly; deleting
+// it causes the test file to fail to compile (analogous to beaconListenerConfig).
+func wireAlertQoEReader(eval *alert.Evaluator, reader alert.QoEReader) {
+	if reader != nil {
+		eval.SetQoEReader(reader)
+	}
+}
+
+// ─── Beacon listener wiring ───────────────────────────────────────────────────
+
+// beaconListenerConfig builds the beaconingest.Config for the optional dedicated
+// beacon ingest listener (PULSE_INGEST_LISTEN_ADDR). Returns (cfg, true) when
+// listenAddr is non-empty; (zero, false) when no dedicated listener is needed.
+//
+// VD-15 invariant (D-058): License MUST be non-nil so the listener never operates
+// fail-open. When License is nil, beacon.Handler.Handle skips the license gate and
+// Free-tier users receive HTTP 202 instead of 403 — the live defect found during
+// D-058 staging verify. The caller (newServer) always passes the real *license.Manager.
+func beaconListenerConfig(listenAddr string, lic beaconingest.LicenseChecker) (beaconingest.Config, bool) {
+	if listenAddr == "" {
+		return beaconingest.Config{}, false
+	}
+	return beaconingest.Config{
+		ListenAddr:           listenAddr,
+		RateLimitPerTokenRPS: 100,
+		RateBurst:            200,
+		License:              lic,
+	}, true
 }

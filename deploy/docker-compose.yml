@@ -30,6 +30,10 @@ services:
     environment:
       # ── Core server ──────────────────────────────────────────────────────────
       PULSE_LISTEN_ADDR: ":8090"
+      # Dedicated beacon ingest listener — must match the exposed 8091 above and
+      # the Caddy /beacon/* upstream (Caddyfile.prod). Without it serve.go never
+      # binds 8091 and the public beacon URL 502s (found by D-058 staging verify).
+      PULSE_INGEST_LISTEN_ADDR: ":8091"
       PULSE_LOG_LEVEL: "info"
 
       # ── ClickHouse ───────────────────────────────────────────────────────────
@@ -44,7 +48,6 @@ services:
       PULSE_AMS_NODE_ID: "standalone"
       PULSE_POLL_INTERVAL: "5s"
       # PULSE_AMS_APPLICATIONS: "live,vod"   # comma-separated; empty = all apps
-      # PULSE_LOG_TAIL_PATH: /var/log/antmedia/ant-media-server-analytics.log
 
       # ── Sensitive values — set via .env file or secrets manager ──────────────
       # PULSE_AMS_AUTH_TOKEN: ""         # AMS REST bearer token (required in prod)
@@ -72,8 +75,6 @@ services:
 
     volumes:
       - pulse-data:/var/lib/pulse         # SQLite meta store + secret key cache
-      # Mount the AMS analytics log read-only when Pulse runs on the AMS host:
-      # - /var/log/antmedia:/var/log/antmedia:ro
       # Mount MaxMind mmdb for geo enrichment (Wave 2):
       # - /etc/pulse/GeoLite2-City.mmdb:/var/lib/pulse/GeoLite2-City.mmdb:ro
     depends_on:
@@ -90,6 +91,11 @@ services:
   clickhouse:
     # clickhouse/clickhouse-server:24.8
     # Digest pinned 2026-06-11 via registry HTTP API (no Docker daemon).
+    # ⚠️ NEVER mount contracts/db/clickhouse/ as /docker-entrypoint-initdb.d/:
+    # the DDL contains {db} placeholders that only the pulse-migrate runner
+    # substitutes; raw ClickHouse aborts on the first statement (Code 62
+    # SYNTAX_ERROR) and applies NO tables at all (D-065 WO-D). Schema is applied
+    # exclusively by the pulse-migrate one-shot container.
     image: clickhouse/clickhouse-server@sha256:1ffa82edee000a42c09313bd9f1293d94c570aee74babc1b3ca9983a35fa597b
     volumes:
       - clickhouse-data:/var/lib/clickhouse
