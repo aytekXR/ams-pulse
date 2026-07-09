@@ -3,7 +3,7 @@
 Authoritative technical-design document. PRD: `prd-report.md` §7. Decisions with
 trade-offs get an ADR in `docs/adr/`.
 
-Last updated: Wave-3-Plus complete (2026-06-15). QA gate: PASS_WITH_LIMITATIONS.
+Last updated: D-062 complete (2026-07-09). QA gate: PASS_WITH_LIMITATIONS.
 
 ## 1. System context
 
@@ -225,7 +225,10 @@ Additional Wave-1 library decisions:
 - WebSocket `/live/ws`: cross-origin policy enforced via `AllowedWSOrigins` config;
   `InsecureSkipVerify` removed (VD-S2 V3b). Configure `PULSE_ALLOWED_WS_ORIGINS` for
   non-same-origin dashboard deployments.
-- Token passwords use SHA-256. bcrypt migration is a Phase-3 roadmap item.
+- User passwords are stored with bcrypt (`hashPassword`, server/internal/api/server.go:2111);
+  `checkPassword` (:2127) accepts legacy `sha256:` hashes for back-compat. API tokens are stored
+  as HMAC-SHA256 when `PULSE_SECRET_KEY` is set, falling back to plain SHA-256 for legacy tokens
+  (`HashToken`, server/internal/store/meta/meta.go:419).
 - **Beacon ingest body cap:** 64 KB (authoritative; both hardened handler and
   main-port handler enforce this limit; VD-S4 / VD-10 V3a).
 
