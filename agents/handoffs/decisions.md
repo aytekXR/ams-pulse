@@ -2652,3 +2652,57 @@ cycles; down -v teardown. Mission exit (f) added; S11 decisions entry renumbered
 workflows. Gates: docs-only + one comment line → no test-suite rerun required beyond CI on push.
 D-068 addendum earlier this day: ROADMAP §4/§5 ledger sync (O8 closed, U3 self-serve, ratchet
 pointer to V2 §5).
+
+## D-070 — SESSION-11 (2026-07-09): S11 execution — plan of record + pre-approved CRs (opened at dispatch; evidence appended at close)
+
+**Scouted by 4 read-only agents (wf_c168236d-dc1, CodeGraph-first). ORCH rulings on scout
+open questions — BINDING for this session's authors:**
+
+- **Scope partition (3 WOs collide on `cmd/pulse/{config.go,serve.go}`):** authors NEVER touch
+  `server/cmd/pulse/` or `server/internal/config/`; each returns an exact wiring fragment; ONE
+  serial wiring author applies all fragments after the parallel authors finish. Contracts single
+  writer: ONE INT-01 pass applies BOTH CRs (WO-B anomaly + WO-C OIDC) in one unit. go.mod/go.sum:
+  WO-C is the sole writer this session (go-oidc/v3 + x/oauth2). decisions.md appends are
+  ORCH-serialized.
+- **CR-1 (pre-approved, WO-B):** `AlertRule`/`AlertRuleWrite` gain optional `rule_type`
+  (enum threshold|anomaly, default threshold), `sigma` (default 4.0), `min_samples` (default 30);
+  `operator`/`threshold` STAY required (documented as ignored for anomaly). NEW migration
+  `contracts/db/meta/0002_anomaly_alert_rule.sql` (rule_type TEXT NOT NULL DEFAULT 'threshold',
+  sigma REAL NULL, min_samples INTEGER NULL). `alert-notification.schema.json` gains OPTIONAL
+  `expected` + `sigma_multiplier` (backward-compatible; freeze policy: optional-add allowed via
+  this pre-approval).
+- **CR-2 (pre-approved, WO-C):** new `auth` tag + `/auth/oidc/login` (302/501),
+  `/auth/oidc/callback` (302/400/401/403/501), `/auth/oidc/logout` (204/501) — all `security: []`.
+  No meta migration (sessions reuse `api_tokens` kind=api + HttpOnly `pulse_session` cookie;
+  `bearerAuthMiddleware` falls back to the cookie when Authorization absent).
+- **WO-B rulings:** anomaly metrics phase 1 = EXACTLY the Detector's baselines — `viewer_count`
+  (streams; alias→`viewers`), `cpu_pct`, `mem_pct` (nodes; evalAnomalyMetric iterates BOTH);
+  any other metric on rule_type=anomaly → 400 VALIDATION (test-pinned). window_s must be 3600
+  (Detector hardcodes windowS=3600) → 400 otherwise. Detector extension (ingest_bitrate_kbps)
+  = S12+ backlog, NOT S11 (`server/internal/anomaly/` stays untouched/unscoped). e2e A4
+  (~+45s) approved; `PULSE_ANOMALY_TICK_S` env approved (CI=5s).
+- **WO-C rulings:** deps go-oidc/v3 + x/oauth2 APPROVED (pure-Go, CGO=0 verified by author);
+  PKCE S256 IN phase 1; `PULSE_OIDC_DEFAULT_ROLE` defaults EMPTY = fail-closed 403 (operator
+  opts into viewer); user key `oidc:<sub>`; logout endpoint IN phase 1; cookie `pulse_session`
+  HttpOnly SameSite=Lax (+Secure when redirect URL is https); injected-verifier seam for tests;
+  UNIQUE-race on first-login CreateUser handled by re-fetch.
+- **WO-A rulings:** accept PNG+JPEG by magic bytes, anything else → WARN+fallback (never crash);
+  default asset = committed real PNG (pulse-waveform mark, stdlib-generated), pinned by a
+  decode test; placement fit-in 120×40pt box at (50,742) aspect-preserved; read at generation
+  time per spec (no caching); PDF validity gated via poppler `pdfinfo` in docker.
+- **WO-F ruling:** release-artifact steps (pull+cosign+15-min install run) BLOCKED on operator
+  (O7 or `gh auth refresh -s read:packages`) — logged in docs/operator-expected.md (b6633a9);
+  runnable step list preserved in the scout report + SESSION-12 carry. The 6 STATICALLY
+  code-verified install.md bugs (dead pulse.example.yaml step; missing PULSE_AMS_URL/login
+  env vars; build-vs-image gap; override.yml auto-load port-80 collision; -p-less logs cmd;
+  pulse-migrate unmentioned) ARE fixed this session (DOC-01) — each re-verified against code
+  by the author before editing. ⚠ AMS trial license expires 2026-07-12: the live half of WO-F
+  should run before then or needs a renewed license.
+- **WO-D/WO-E:** date-gated skips recorded — today 07-09 < 07-16/07-23. Evidence: backup volume
+  `pulse-prod_pulse-backups` holds 7 CH zips + 7 meta .db (oldest pulse-20260707-073113) —
+  ALREADY at keep-7 boundary; first real prune expected NEXT cycle (~07-10), earlier than the
+  nominal 07-16 estimate. S12 can verify pruning immediately.
+- **Numeric target (ARCHITECTURE §4, WO-B):** anomaly rule evaluation adds ≤50 ms per 5-second
+  evaluator tick at 500 active streams (batch baseline read + O(1) z-score per stream).
+
+*(evidence + verdicts appended at session close below)*
