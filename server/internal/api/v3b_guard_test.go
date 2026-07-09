@@ -64,7 +64,9 @@ func setupBusinessServer(t *testing.T) (ts *httptest.Server, adminToken string, 
 	ddl, err := os.ReadFile(ddlPath)
 	if err != nil {
 		licCleanup()
-		t.Skipf("meta DDL not found: %v", err)
+		// D-064: fail loud, never skip — a missing DDL means a broken mount
+		// (server-only mount, D-028 class) and a skip here is a false green.
+		t.Fatalf("meta DDL not found (repo-root mount required, D-028/D-064): %v", err)
 	}
 	ms, err := meta.New(ctx, "sqlite", ":memory:", "business-test-secret")
 	if err != nil {
@@ -401,7 +403,9 @@ func TestGuard_VDS1_MetricsTokenConstantTime(t *testing.T) {
 	ddlPath := metaDDLPath(t)
 	ddl, err := os.ReadFile(ddlPath)
 	if err != nil {
-		t.Skipf("meta DDL not found: %v", err)
+		// D-064: fail loud, never skip — a missing DDL means a broken mount
+		// (server-only mount, D-028 class) and a skip here is a false green.
+		t.Fatalf("meta DDL not found (repo-root mount required, D-028/D-064): %v", err)
 	}
 	ms, _ := meta.New(ctx, "sqlite", ":memory:", "s1-test-secret")
 	ms.MigrateEmbedded(ctx, string(ddl))
@@ -501,7 +505,9 @@ func TestGuard_VDS3_IngestTokenRejectedOnAPIRoutes(t *testing.T) {
 	ddlPath := metaDDLPath(t)
 	ddl, err := os.ReadFile(ddlPath)
 	if err != nil {
-		t.Skipf("meta DDL not found: %v", err)
+		// D-064: fail loud, never skip — a missing DDL means a broken mount
+		// (server-only mount, D-028 class) and a skip here is a false green.
+		t.Fatalf("meta DDL not found (repo-root mount required, D-028/D-064): %v", err)
 	}
 	ms, err := meta.New(ctx, "sqlite", ":memory:", "s3-test-secret")
 	if err != nil {

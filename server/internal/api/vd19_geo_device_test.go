@@ -42,15 +42,13 @@ import (
 	"github.com/pulse-analytics/pulse/server/internal/query"
 	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse/migrations"
 	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/pulse-analytics/pulse/server/internal/testutil"
 )
 
 // startCHForVD19 starts a ClickHouse server for VD-19 tests and returns the TCP port.
 func startCHForVD19(t *testing.T, tmpDir string) int {
 	t.Helper()
-	chBin := "/tmp/clickhouse"
-	if _, err := os.Stat(chBin); err != nil {
-		t.Skipf("clickhouse binary not found at %s: %v", chBin, err)
-	}
+	chBin := testutil.RequireClickHouseBin(t)
 
 	tcpPort := vd19FreePort(t)
 	httpPort := vd19FreePort(t)

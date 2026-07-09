@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -167,4 +168,115 @@ func TestAppPrefixedWebRTCClientStats(t *testing.T) {
 		t.Fatalf("decode webrtc stats: %v", err)
 	}
 	// stats may be empty — any valid JSON array is acceptable
+}
+
+// TestPagination_500Streams verifies that the /list route correctly paginates when there
+// are 500 streams: page 0 → 200 items, page 200 → 200 items, page 400 → 100 items,
+// page 500 → 0 items. This is the TDD red test for the pagination fix (BLOCKING bug:
+// without the fix, every page returns all 500 items and ListBroadcastsPaged loops forever).
+func TestPagination_500Streams(t *testing.T) {
+	ts, state := newTestServer(t)
+	defer ts.Close()
+
+	// Publish 500 streams via state directly (bypasses HTTP control endpoint).
+	for i := 1; i <= 500; i++ {
+		state.Publish(fmt.Sprintf("pg-stream-%04d", i), 0)
+	}
+
+	cases := []struct {
+		offset  int
+		size    int
+		wantLen int
+	}{
+		{0, 200, 200},
+		{200, 200, 200},
+		{400, 200, 100},
+		{500, 200, 0},
+	}
+
+	for _, tc := range cases {
+		url := fmt.Sprintf("%s/live/rest/v2/broadcasts/list/%d/%d", ts.URL, tc.offset, tc.size)
+		resp, err := http.Get(url)
+		if err != nil {
+			t.Fatalf("GET %s: %v", url, err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("offset=%d size=%d: want 200, got %d", tc.offset, tc.size, resp.StatusCode)
+		}
+		var broadcasts []Broadcast
+		if err := json.NewDecoder(resp.Body).Decode(&broadcasts); err != nil {
+			t.Fatalf("offset=%d size=%d: decode: %v", tc.offset, tc.size, err)
+		}
+		if len(broadcasts) != tc.wantLen {
+			t.Errorf("offset=%d size=%d: want %d items, got %d", tc.offset, tc.size, tc.wantLen, len(broadcasts))
+		}
+	}
+}
+
+// TestBulkPublish verifies POST /control/bulk_publish: seeds N streams in one call,
+// returns 200 with {"status":"ok","count":N}, and the /list endpoint reflects all streams.
+// Bad body returns 400.
+func TestBulkPublish(t *testing.T) {
+	ts, _ := newTestServer(t)
+	defer ts.Close()
+
+	t.Run("happy path", func(t *testing.T) {
+		payload := `{"count":10,"prefix":"bulk-","viewers_each":0}`
+		resp, err := http.Post(ts.URL+"/control/bulk_publish", "application/json", bytes.NewBufferString(payload))
+		if err != nil {
+			t.Fatalf("POST /control/bulk_publish: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("want 200, got %d", resp.StatusCode)
+		}
+
+		var result map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if result["status"] != "ok" {
+			t.Errorf("want status=ok, got %v", result["status"])
+		}
+		if int(result["count"].(float64)) != 10 {
+			t.Errorf("want count=10, got %v", result["count"])
+		}
+
+		// Verify streams appear in list.
+		listResp, err := http.Get(ts.URL + "/live/rest/v2/broadcasts/list/0/200")
+		if err != nil {
+			t.Fatalf("GET /list: %v", err)
+		}
+		defer listResp.Body.Close()
+		var broadcasts []Broadcast
+		if err := json.NewDecoder(listResp.Body).Decode(&broadcasts); err != nil {
+			t.Fatalf("decode list: %v", err)
+		}
+		if len(broadcasts) != 10 {
+			t.Errorf("want 10 streams in list, got %d", len(broadcasts))
+		}
+	})
+
+	t.Run("bad json returns 400", func(t *testing.T) {
+		resp, err := http.Post(ts.URL+"/control/bulk_publish", "application/json", bytes.NewBufferString("{bad json"))
+		if err != nil {
+			t.Fatalf("POST /control/bulk_publish: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("want 400 for bad JSON, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("zero count returns 400", func(t *testing.T) {
+		resp, err := http.Post(ts.URL+"/control/bulk_publish", "application/json", bytes.NewBufferString(`{"count":0,"prefix":"x-"}`))
+		if err != nil {
+			t.Fatalf("POST /control/bulk_publish: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("want 400 for count=0, got %d", resp.StatusCode)
+		}
+	})
 }

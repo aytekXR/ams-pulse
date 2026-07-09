@@ -155,17 +155,27 @@ DC="-p pulse-prod \
   -f deploy/docker-compose.hardened.yml \
   -f deploy/docker-compose.prod-tls.yml \
   -f deploy/docker-compose.real-ams.yml \
+  -f deploy/docker-compose.backup.yml \
   --env-file deploy/.env"
 ```
 
-Bring up (or restart with the new overlay):
+Bring up (or restart with the new overlay). Use the stamped-build two-step
+(D-058) — `--build` mixed into `up -d` loses `VERSION`/`COMMIT`/`BUILD_DATE` stamps:
 
 ```bash
-sg docker -c "docker compose $DC up -d --build pulse"
+# 1. Build the pulse image with explicit version stamps:
+sg docker -c "docker compose $DC build \
+  --build-arg VERSION=$(git describe --tags --always) \
+  --build-arg COMMIT=$(git rev-parse --short HEAD) \
+  --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  pulse"
+
+# 2. Start WITHOUT --build — uses the pre-built stamped image:
+sg docker -c "docker compose $DC up -d pulse"
 ```
 
-Using `--build pulse` rebuilds only the Pulse image (not Caddy/ClickHouse) and
-restarts it with the new environment. Omit `--build` if the image has not changed.
+If the Pulse image has not changed (env-only restart), omit step 1 and run only
+step 2.
 
 ### 3.3 Confirm Pulse started against the real AMS
 
@@ -217,6 +227,7 @@ Request fields accepted by `amsSourceFromAPI` (`server.go:1857–1893`):
 | `rest_password` | Basic-auth password — stored AES-GCM encrypted in the meta store | No |
 | `log_path` | Path to AMS analytics log file (logtail source, not yet wired) | No |
 | `credential_env_ref` | Name of an env var holding the credential (alternative to `rest_password`) | No |
+| `webhook_secret` | Per-source HMAC secret for `/webhook/ams/{name}` (B7, D-062) — write-only, stored AES-GCM encrypted; reading back shows `webhook_secret_set: true/false` | No |
 
 The response includes an `id` field. Save it as `SOURCE_ID`.
 
@@ -280,8 +291,9 @@ PULSE_WEBHOOK_SECRET=your-strong-random-secret
 
 ### 4.2 The webhook listener and its path
 
-The webhook handler registers at path `/webhook/ams` on the webhook listener port
-(`webhook.go:54`). With `PULSE_WEBHOOK_ADDR=:8091`, AMS should POST events to:
+The webhook handler registers two paths on the webhook listener port
+(legacy: `webhook.go:64`; per-source: `webhook.go:67`). With `PULSE_WEBHOOK_ADDR=:8091`,
+AMS should POST events to the shared path:
 
 ```
 http://<pulse-host>:8091/webhook/ams
@@ -330,12 +342,38 @@ needed to pick up new `handle` blocks on the same hostname):
 sg docker -c "docker compose $DC restart caddy"
 ```
 
-### 4.5 Configure AMS to POST webhooks
+### 4.5 Configure a sender to POST webhooks
 
-In AMS Management Console > Settings > Webhooks:
+> **⚠️ AMS 3.0.3 REALITY CHECK (D-066, verified against the live console REST):**
+> AMS application settings expose `listenerHookURL` (plus retry/content-type
+> knobs) but **NO field for an HMAC secret or a custom signature header** — AMS
+> lifecycle webhooks are UNSIGNED. Pulse's webhook listener is fail-closed on
+> `X-Ams-Signature` HMAC by design, so pointing `listenerHookURL` at Pulse would
+> yield only 401s and WARN noise. **Do not configure it.** The REST poller (5 s
+> interval) is the supported AMS ingest and already meets the ≤10 s visibility
+> budget. The webhook path is for HMAC-capable senders (custom middleware, a
+> signing proxy, or a future AMS version that signs hooks).
+
+**Shared route (legacy, all sources):**
+
+For any sender that CAN sign requests:
 - **Webhook URL:** `https://your-domain/webhook/ams`
 - **Webhook secret:** the value of `PULSE_WEBHOOK_SECRET`
+- **Header name:** `X-Ams-Signature` (value `sha256=<hex(HMAC-SHA256(body, secret))>`)
+
+**Per-source route (B7, multi-source deployments):**
+
+Use a distinct URL per AMS source: `https://your-domain/webhook/ams/{source_name}`.
+Set the per-source secret via the API (see section 7, B7). Example for a source
+named `production-eu`:
+- **Webhook URL:** `https://your-domain/webhook/ams/production-eu`
+- **Webhook secret:** the per-source secret set via `PUT /api/v1/admin/sources/{id}` with `{"webhook_secret": "..."}`
 - **Header name:** `X-Ams-Signature`
+
+When a per-source secret is configured for a source name, only that secret is
+accepted on the per-source URL — the global `PULSE_WEBHOOK_SECRET` is not
+accepted for that source. See section 7 (B7) for auth semantics and the startup-only
+load limitation.
 
 AMS sends events for stream start, stream stop, and recording-ready. The webhook
 handler maps them to domain events via the `action`, `event`, and `type` fields
@@ -482,19 +520,55 @@ the test even though the stored credential is correct. Fix: decrypt
 to `SetBasicAuth`. This is a straightforward change within the existing
 `handleTestSource` function; no contract change required.
 
-### B7 — Per-source webhook HMAC secret (contract change required — needs CR via ORCH)
+### B7 — Per-source webhook HMAC secret (shipped D-062)
 
-Currently there is one global webhook secret (`PULSE_WEBHOOK_SECRET`) shared across
-all AMS sources. A multi-source deployment needs per-source HMAC secrets so that
-one compromised AMS node cannot inject events on behalf of another. This requires:
-- A `webhook_secret` column on the `ams_sources` meta table
-- A new field in the `POST /api/v1/admin/sources` and `PUT .../admin/sources/{id}`
-  request body (contract change)
-- The webhook handler selecting the secret by matching the incoming `nodeId` or
-  `app` field to a registered source
+Per-source webhook secrets are implemented and live. A multi-source deployment can
+assign a distinct HMAC secret to each AMS source so that one compromised node cannot
+inject events for another.
 
-**This is a contract change.** It must be submitted to ORCH as a CR and applied by
-INT-01 before implementation (`contracts/openapi/pulse-api.yaml` + migration SQL).
+**How it works:**
+
+- **Storage:** `ams_sources.webhook_secret_enc TEXT` (AES-256-GCM encrypted,
+  `contracts/db/meta/0001_init.sql:88`).
+- **Write field:** `SourceWrite.webhook_secret` — nullable string, write-only, stored
+  encrypted (`contracts/openapi/pulse-api.yaml:2672`).
+- **Read flag:** `SourceRead.webhook_secret_set` — boolean, `true` when a per-source
+  secret is stored; the secret value is never echoed back (`pulse-api.yaml:2631`).
+- **Routes:**
+  - Legacy: `POST /webhook/ams` — uses the global `PULSE_WEBHOOK_SECRET` (`webhook.go:64`).
+  - Per-source: `POST /webhook/ams/{source_name}` — uses the per-source secret for that
+    name, with no fallback to the global secret (`webhook.go:67`).
+- **Auth semantics:**
+  - If `SourceSecrets[name]` is set: per-source secret is used **exclusively** — the
+    global `PULSE_WEBHOOK_SECRET` is NOT accepted for that source.
+  - If the source name is unknown: falls back to `PULSE_WEBHOOK_SECRET`; if that is
+    also empty, responds 401 (fail-closed).
+  - Unknown source names never return 404 — to avoid leaking which source names exist
+    (returns 200 when SharedSecret is valid, 401 when it is empty or the HMAC is wrong).
+- **Startup-only load:** `SourceSecrets` is built once at startup from the meta store
+  (`serve.go:286–301`). **Rotating a per-source secret requires a `pulse` process
+  restart** to take effect (B7 limitation, `serve.go:279–280`).
+
+**Set a per-source secret via the API:**
+
+```bash
+curl -s -X PUT https://your-domain/api/v1/admin/sources/${SOURCE_ID} \
+  -H "Authorization: Bearer plt_<your-admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"webhook_secret": "your-strong-per-source-secret"}'
+```
+
+**Concrete operator example — configure AMS to POST to the per-source URL:**
+
+In AMS Management Console > Settings > Webhooks for the source named `production-eu`:
+- **Webhook URL:** `https://beyondkaira.com/webhook/ams/production-eu`
+- **Webhook secret:** the value you set in `webhook_secret` above
+- **Header name:** `X-Ams-Signature`
+
+Pulse will validate the HMAC using the per-source secret stored for `production-eu`.
+A different AMS instance (e.g. `production-us`) must use its own per-source URL
+(`/webhook/ams/production-us`) and its own secret; its requests on
+`/webhook/ams/production-eu` will be rejected.
 
 ### B3 — Secrets via Docker secrets rather than env vars (medium, deploy)
 
@@ -548,7 +622,7 @@ TASKS — run as an ORCH workflow with Verify + Commit + Handoff flows:
    - Add PULSE_AMS_URL, PULSE_AMS_AUTH_TOKEN, PULSE_AMS_NODE_ID,
      PULSE_AMS_APPLICATIONS to deploy/.env.
    - Restart the pulse service:
-       DC="-p pulse-prod -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml -f deploy/docker-compose.prod-tls.yml -f deploy/docker-compose.real-ams.yml --env-file deploy/.env"
+       DC="-p pulse-prod -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml -f deploy/docker-compose.prod-tls.yml -f deploy/docker-compose.real-ams.yml -f deploy/docker-compose.backup.yml --env-file deploy/.env"
        sg docker -c "docker compose $DC up -d pulse"
    - Confirm no 401/403 errors in pulse logs within 30 s.
 
@@ -582,9 +656,10 @@ TASKS — run as an ORCH workflow with Verify + Commit + Handoff flows:
    - A2: add per-token rate limit to main-port /ingest/beacon handler. Wire the
      same token-bucket limiter used by the dedicated beacon server.
    - A7: add per-IP rate limit (10 req/s) to handleMetrics in server.go.
-   - B7 is a contract change — do NOT implement in this session. File a CR with
-     ORCH (log in decisions.md, note: needs AMSSource.webhook_secret column +
-     API field + migration). Mark as pending CR.
+   - B7 is implemented and shipped (D-062). Per-source webhook secrets are live:
+     see section 4.5 for the full operator guide. No further work is required
+     unless rotating per-source secrets without a restart (currently needs a
+     restart — see B7 limitation note in section 7).
    - B3 (Docker secrets migration) is a deploy change — ORCH should assess
      scope before starting; flag for next ORCH session if time allows.
 
@@ -600,7 +675,7 @@ CONSTRAINTS (binding — from CLAUDE.md and RESUME-PROMPT.md):
   - AMS wire formats ONLY in server/pkg/amsclient + server/internal/collector.
   - Never run pulse serve or clickhouse server in the foreground inside an agent.
   - Use docker compose up -d (detached) for deploys.
-  - Contracts are frozen (D-004) — B7 needs a CR, do not touch API YAML directly.
+  - Contracts are frozen (D-004) — B7 contract fields are already in pulse-api.yaml (webhook_secret_set at line 2631, SourceWrite.webhook_secret at line 2672); no further contract changes are needed for B7.
   - CGO_ENABLED=0 for the binary build; CGO_ENABLED=1 + gcc for go test -race.
   - go is NOT on the VPS PATH — run Go commands inside golang:1.25 images.
 ```

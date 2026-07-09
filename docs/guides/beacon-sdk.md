@@ -1,7 +1,7 @@
 # Pulse Beacon SDK Integration Guide
 
 **PRD ref:** F3 (QoE beacon SDK) · **Status: Shipped (Wave 2)**  
-**Budget:** SDK < 15 KB gzip (measured: **3.44 KB**) · < 1% player CPU · flush ≤ 10 s
+**Budget:** SDK < 15 KB gzip (measured: **3.52 KB**) · < 1% player CPU · flush ≤ 10 s
 
 ---
 
@@ -13,7 +13,7 @@ changes, watch time) to your own Pulse collector. **Viewer data never leaves you
 infrastructure.**
 
 The SDK is MIT-licensed and published from `sdk/beacon-js/`. It has been measured
-at 3.44 KB gzipped with 56 tests green.
+at 3.52 KB gzipped with 65 tests green.
 
 ---
 

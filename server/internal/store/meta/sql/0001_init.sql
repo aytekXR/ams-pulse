@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS ams_sources (
     log_path        TEXT,              -- path to AMS analytics log file
     kafka_brokers   TEXT,              -- JSON array of broker host:port strings
     webhook_path    TEXT,              -- HTTP path Pulse listens on for webhooks
+    webhook_secret_enc TEXT,           -- AES-256-GCM encrypted per-source HMAC secret (B7)
     enabled         INTEGER NOT NULL DEFAULT 1,
     created_at      INTEGER NOT NULL,
     updated_at      INTEGER NOT NULL

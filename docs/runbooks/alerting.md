@@ -74,18 +74,20 @@ A disabled rule's `muted` state is not surfaced — it has no effect until the r
 | `node_cpu` | Live aggregator | CPU % per node (0–100). AMS returns 0–100 directly; Pulse passes it through unchanged. |
 | `node_mem` | Live aggregator | Memory % per node |
 | `node_disk` | Live aggregator | Disk % per node |
-| `rebuffer_ratio` | Live health proxy | QoE rebuffer ratio (live snapshot proxy; Wave 3: full ClickHouse query) |
-| `error_rate` | Live health proxy | QoE error rate (live snapshot proxy; Wave 3: full ClickHouse query) |
+| `rebuffer_ratio` | ClickHouse `rollup_qoe_1h` | QoE rebuffer ratio from beacon-fed hourly rollup (D-062). Requires beacon ingest data (Pro+ license, U3). Rule is skipped with a WARN log when the QoE reader is not configured or ClickHouse returns an error. A value of 0.0 means no buffering events in the window (evaluated normally against the threshold). |
+| `error_rate` | ClickHouse `rollup_qoe_1h` | QoE error rate from beacon-fed hourly rollup (D-062). Same beacon/license/skip semantics as `rebuffer_ratio`. |
 | `ingest_bitrate_floor` | Ingest health tracker | Fires when ingest health score indicates bitrate < 50% of target (`S_bitrate < 0.5`) |
 | `node_down` | Fleet discovery | Fires when a cluster node is absent from the live snapshot (not seen within `3 × PollInterval`). Use a scope `node_id` to target a specific node, or leave scope empty to monitor all nodes. |
 | `node_degraded` | Fleet discovery | Fires when a cluster node transitions to `status=degraded` |
 | `cert_expiry` | TLS dial to host | Fires when TLS certificate days_left < threshold (e.g. `threshold: 30`) |
 
-> **Known limitation:** `rebuffer_ratio` and `error_rate` alert metrics are computed
-> from the live ingest health heuristic (`(1−HealthScore)×0.1` and `(1−HealthScore)×0.05`
-> respectively), not from a direct ClickHouse `rollup_qoe_1h` time-window query. A full
-> ClickHouse-backed implementation is a Phase-3 roadmap item. The heuristic does fire
-> correctly once HealthScore is non-zero (VD-20 V3a fix).
+> **QoE metrics (`rebuffer_ratio`, `error_rate`) — what you need:**
+> These rules read the `rollup_qoe_1h` ClickHouse aggregate table via the QoE reader
+> (D-062). For data to appear there, player-side beacons must be active — which requires
+> a Pro+ license (U3). Without a configured QoE reader or when ClickHouse is unreachable,
+> the evaluator skips every stream for those rules and emits one WARN log per tick
+> (`alert: qoe_reader not configured — rebuffer_ratio/error_rate rules skipped this tick (D-062: G6)`).
+> The legacy HealthScore proxy (`(1−HealthScore)×0.1` / `×0.05`) was removed in D-062.
 
 ### Scope filtering
 
@@ -159,26 +161,33 @@ Supported on all tiers.
 {
   "type": "email",
   "name": "Ops team",
-  "email_to": "ops@example.com",
-  "smtp_addr": "smtp.example.com:587",
-  "smtp_user": "alerts@example.com",
-  "smtp_password_env_ref": "SMTP_PASSWORD"
+  "config": {
+    "email_to": "ops@example.com",
+    "smtp_addr": "smtp.example.com:587",
+    "from": "alerts@example.com",
+    "username": "alerts@example.com",
+    "password": "your-smtp-password",
+    "starttls": true
+  }
 }
 ```
 
 **Implementation details:**
-- Uses STARTTLS on port 587 by default. TLS errors are non-fatal against local SMTP servers.
-- `smtp_password_env_ref` stores the env var name — Pulse resolves it from the process
-  environment at send time, never storing the password in the meta store in plaintext.
+- STARTTLS is **disabled by default** (`starttls: false`); add `"starttls": true` to enable it. TLS errors are non-fatal against local SMTP servers.
+- `password` is stored in the channel config (public portion — not encrypted). Avoid using
+  shared SMTP accounts; prefer a dedicated alerts credential with send-only permissions.
 - Free tier: email is the only supported channel type.
 
-**SMTP config reference:**
+**Email config keys** (source of truth: `server/internal/alert/factory.go`):
 
-| Setting | Default | Notes |
-|---|---|---|
-| `smtp_addr` | `localhost:587` | `host:port` |
-| `smtp_user` | — | Optional; required for services that require SMTP AUTH |
-| STARTTLS | enabled | Disabled automatically if the server does not support it |
+| Key | Required | Default | Notes |
+|---|---|---|---|
+| `email_to` | Yes | — | Recipient address |
+| `smtp_addr` | No | `localhost:587` | `host:port` |
+| `from` | No | `pulse-alerts@localhost` | Sender address |
+| `username` | No | — | SMTP AUTH username |
+| `password` | No | — | SMTP AUTH password |
+| `starttls` | No | `false` | Enable STARTTLS (bool) |
 
 ### Slack (incoming webhook)
 
@@ -194,10 +203,19 @@ Supported on Pro tier and above.
 {
   "type": "slack",
   "name": "Slack #alerts",
-  "slack_webhook_url": "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX",
-  "slack_channel": "#alerts"
+  "config": {
+    "slack_webhook_url": "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX",
+    "slack_channel": "#alerts"
+  }
 }
 ```
+
+**Slack config keys** (source of truth: `server/internal/alert/factory.go`):
+
+| Key | Required | Notes |
+|---|---|---|
+| `slack_webhook_url` | Yes | Incoming webhook URL (stored encrypted) |
+| `slack_channel` | No | Channel name for display only (not used to route the message) |
 
 Pulse formats notifications as Slack messages with state emoji, metric name, value,
 threshold, scope, and a dashboard deep-link (if `PULSE_BASE_URL` is set).
@@ -224,14 +242,21 @@ Supported on Pro tier and above.
   "name": "Ops Telegram",
   "config": {
     "telegram_bot_token": "<SENSITIVE — stored encrypted>",
-    "chat_id": "-100123456789"
+    "telegram_chat_id": "-100123456789"
   }
 }
 ```
 
-`telegram_bot_token` is the Bot API token from @BotFather. `chat_id` is the
+`telegram_bot_token` is the Bot API token from @BotFather. `telegram_chat_id` is the
 group or channel ID (negative number for groups/channels, positive for DMs).
 The bot must be added to the group/channel before it can send messages.
+
+**Telegram config keys** (source of truth: `server/internal/alert/factory.go`):
+
+| Key | Required | Notes |
+|---|---|---|
+| `telegram_bot_token` | Yes | Bot API token (stored encrypted) |
+| `telegram_chat_id` | Yes | Group/channel ID; negative for groups/channels, positive for DMs |
 
 Pulse sends HTML-formatted messages via the Bot API `sendMessage` method.
 
@@ -246,7 +271,7 @@ Supported on Business tier and above.
   "name": "On-call PagerDuty",
   "config": {
     "pagerduty_routing_key": "<SENSITIVE — stored encrypted>",
-    "severity": "critical"
+    "pagerduty_severity": "critical"
   }
 }
 ```
@@ -255,6 +280,13 @@ Supported on Business tier and above.
 service. Pulse sends `event_action=trigger` when an alert fires and
 `event_action=resolve` when it clears. The `dedup_key` is set to the Pulse
 alert ID for reliable trigger/resolve pairing.
+
+**PagerDuty config keys** (source of truth: `server/internal/alert/factory.go`):
+
+| Key | Required | Notes |
+|---|---|---|
+| `pagerduty_routing_key` | Yes | Events API v2 integration key (stored encrypted) |
+| `pagerduty_severity` | No | Override severity string sent to PagerDuty (e.g. `critical`, `error`, `warning`, `info`) |
 
 ### Webhook (generic HTTP + HMAC)
 
@@ -266,12 +298,18 @@ Supported on Business tier and above.
   "type": "webhook",
   "name": "SIEM integration",
   "config": {
-    "url": "https://siem.example.com/pulse/alerts",
-    "webhook_secret": "<SENSITIVE — stored encrypted>",
-    "headers": {"X-Source": "pulse"}
+    "webhook_url": "https://siem.example.com/pulse/alerts",
+    "webhook_secret": "<SENSITIVE — stored encrypted>"
   }
 }
 ```
+
+**Webhook config keys** (source of truth: `server/internal/alert/factory.go`):
+
+| Key | Required | Notes |
+|---|---|---|
+| `webhook_url` | Yes | Target URL for POST requests |
+| `webhook_secret` | No | HMAC-SHA256 signing secret; when set, adds `X-Pulse-Signature` header (stored encrypted) |
 
 Pulse POSTs the `alert-notification` JSON payload to the configured URL.
 When `webhook_secret` is set, a signature header is added:
@@ -330,6 +368,40 @@ Response:
 
 A `test: true` flag is set in the notification payload so recipients can identify
 test messages. Email subject prefixed `[Pulse TEST]`; Slack message prefixed `:test_tube:`.
+
+---
+
+## Delivery reliability
+
+### Retry policy
+
+Each channel send is retried up to **3 times** after the initial attempt (4 total) with
+exponential backoff and ±20% jitter:
+
+| Setting | Value |
+|---|---|
+| Initial attempt | 1 |
+| Retries after failure | 3 (`RetryMaxAttempts`) |
+| Total attempts | 4 |
+| Base delay | 500 ms |
+| Backoff cap | 5 s |
+| Backoff formula | `min(500ms × 2^(n−1), 5s) × jitter` where `jitter ∈ [0.8, 1.2)` |
+
+A `delivery_failure` row is written to alert history **only when all 4 attempts are
+exhausted**. A single send failure followed by a successful retry produces no history
+row. Retries are aborted cleanly on evaluator shutdown.
+
+Source of truth: `server/internal/alert/evaluator.go` (`retryDeliver`, `RetryMaxAttempts=3`,
+`RetryBaseDelay=500ms`, `RetryCap=5s`).
+
+### Rule and channel changes take effect within one tick
+
+The evaluator rebuilds the channel registry from the meta store at the **start of every
+tick** (sync-on-tick, D-061). Creating, updating, or deleting a rule or channel via the
+API or UI takes effect within the next tick interval (default **5 s**). No process restart
+is needed.
+
+Source of truth: `server/internal/alert/evaluator.go:evaluate()` → `syncRegistryFromStore()`.
 
 ---
 
@@ -471,7 +543,11 @@ All fired and resolved notifications are persisted in the meta store
 History entries include: `alert_id`, `rule_id`, `state`, `severity`, `ts`, `metric`,
 `value`, `threshold`, `scope`, `group_key`, `cooldown_until`.
 
-History is retained indefinitely in the meta store. History TTL is a Phase-3 roadmap item.
+History is retained up to **1000 rows per rule** in the meta store. After every insert,
+`CreateAlertHistory` automatically prunes older rows for the same `rule_id`, keeping the
+newest 1000 (D-054, `AlertHistoryDefaultKeep=1000`, `meta.go:45`). A calendar-based TTL
+(e.g. delete rows older than N days) remains a Phase-3 roadmap item, but unbounded growth
+is not possible.
 
 ---
 
@@ -479,7 +555,7 @@ History is retained indefinitely in the meta store. History TTL is a Phase-3 roa
 
 | Issue | Severity | Status |
 |---|---|---|
-| QoE metrics (`rebuffer_ratio`, `error_rate`) use live ingest health proxy (`(1-HealthScore)*0.1`), not a direct ClickHouse `rollup_qoe_1h` query | Minor | Phase-3 roadmap |
-| Alert history has no TTL — grows unbounded in the meta store | Minor | Phase-3 roadmap |
+| Alert history has no calendar TTL — oldest rows beyond the per-rule cap of 1000 are deleted immediately on insert, but no time-based expiry is implemented | Minor | Phase-3 roadmap |
 | `node_down` alert requires `scope.node_id` to target a specific node; without scope it checks node absence globally from the snapshot | Minor | By design — use scope to target individual nodes |
 | `node_degraded` alert metric is a placeholder — `status=degraded` transition is not yet implemented in the aggregator | Minor | Phase-3 roadmap |
+| `rebuffer_ratio` and `error_rate` rules require a configured ClickHouse QoE reader wired at startup (D-062). When the reader is **not configured** (`qoeReader == nil` — ClickHouse absent or `PULSE_CLICKHOUSE_DSN` unset), all such rules are **skipped for that tick** and at most one WARN is emitted: `alert: qoe_reader not configured — rebuffer_ratio/error_rate rules skipped this tick (D-062: G6)`. When the reader **errors** on a per-stream call, only the affected stream is skipped (at most one WARN per tick: `alert: qoe_reader error — stream skipped for this tick`). When `rollup_qoe_1h` simply has **no data** (e.g. no beacon ingest yet), `QoEForStream` returns `(0, 0, nil)` and the rule **evaluates normally against 0.0** — a `gt` threshold greater than 0 will never fire, but evaluation is not skipped and no WARN is logged. | Info | By design — see [Supported metrics](#supported-metrics) |

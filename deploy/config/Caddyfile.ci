@@ -1,0 +1,93 @@
+# Pulse — CI-only HTTP Caddy config (no TLS, no ACME).
+# Used by deploy/docker-compose.csp-e2e.yml.
+#
+# DEVIATIONS FROM deploy/config/Caddyfile (each is intentional):
+#
+#   1. Site address is 'http://localhost' instead of '{$PULSE_DOMAIN:localhost}'.
+#      The 'http://' prefix forces plain HTTP — Caddy does not start an ACME
+#      challenge or the internal CA.  Without it, 'localhost' alone triggers
+#      Caddy's automatic TLS-internal CA (same as 'tls internal').
+#
+#   2. 'tls internal' is absent — it would conflict with the http:// prefix and
+#      is meaningless over plain HTTP.
+#
+#   3. 'Strict-Transport-Security' is omitted — HSTS over HTTP is meaningless
+#      (browsers ignore it) and could break local dev if accidentally cached.
+#
+#   4. CSP connect-src uses 'ws://localhost:18080' instead of
+#      'wss://{$PULSE_DOMAIN:localhost}'.  Two reasons:
+#        a. The SPA's LiveSocket connects to ws://<window.location.host>/live/ws
+#           when served over HTTP.  The explicit port 18080 is required because
+#           a host-source without a port matches only the scheme default
+#           (ws:// default = 80), so 'ws://localhost' would BLOCK the SPA's
+#           WebSocket on port 18080.
+#        b. No env-var expansion needed — CI always runs on port 18080.
+#
+#   5. A 'handle_errors' block mirrors the security headers so they appear on
+#      error responses (502, 503, etc.) from the reverse proxy.  Caddy's header
+#      directive at the site level does not run for error responses that Caddy
+#      itself generates (the error pipeline bypasses the normal handler chain).
+#
+# The CSP value below is the CANONICAL CI value asserted by exact equality
+# in web/e2e/csp.spec.ts (Test 1).  Changing it here MUST break that test
+# (mutation sentinel — cannot-false-green).
+
+http://localhost {
+    # Beacon ingest — proxy /beacon/* to pulse:8091 so clients only need one port.
+    handle /beacon/* {
+        reverse_proxy pulse:8091 {
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # AMS lifecycle webhooks — proxy /webhook/* to pulse:8092.
+    handle /webhook/* {
+        reverse_proxy pulse:8092 {
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # UI + API — proxy everything else to pulse:8090.
+    handle {
+        reverse_proxy pulse:8090 {
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
+            # Pass the original Host so pulse can construct correct deep-link URLs.
+            header_up Host {host}
+        }
+    }
+
+    # Security headers — applied to all successful proxy responses.
+    # NOTE: HSTS omitted (deviation #3 above).
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws://localhost:18080; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    }
+
+    # Mirror security headers onto error responses (502, 503, etc.).
+    # Caddy's regular header directive does not fire on error-pipeline responses
+    # (deviation #5 above); handle_errors runs its own handler chain.
+    handle_errors {
+        header {
+            X-Content-Type-Options "nosniff"
+            X-Frame-Options "DENY"
+            Referrer-Policy "strict-origin-when-cross-origin"
+            -Server
+            Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws://localhost:18080; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+            Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        }
+        respond "{err.status_code} {err.status_text}" {err.status_code}
+    }
+
+    log {
+        output stdout
+        format json
+        level INFO
+    }
+}

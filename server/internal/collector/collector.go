@@ -6,7 +6,6 @@
 //
 //	restpoller — polls AMS REST v2 at a configurable interval (the universal
 //	             fallback; works on every AMS version — PRD Appendix A.5)
-//	logtail    — tails ant-media-server-analytics.log (JSON, v2.10+)
 //	kafka      — consumes the native AMS Kafka producer feed when enabled
 //	webhook    — receives AMS publish/unpublish/recording webhooks
 //	beacon     — public HTTPS ingest endpoint for the player QoE SDK

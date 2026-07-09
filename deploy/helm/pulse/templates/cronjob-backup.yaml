@@ -1,0 +1,112 @@
+{{- if .Values.backup.enabled -}}
+# Backup CronJob — mirrors the compose backup sidecar (docker-compose.backup.yml).
+# Runs pulse-backup.sh in "once" mode on the configured schedule (default: 02:00 UTC daily).
+#
+# Prerequisites (check before enabling):
+#   1. clickhouse.auth.existingSecret must be set (named CH user for clickhouse-client auth).
+#   2. ClickHouse backup disk is automatically enabled when backup.enabled=true
+#      (backup-config.xml is mounted into the CH StatefulSet via configmap-clickhouse).
+#   3. A backup PVC is created automatically (or set backup.persistence.existingClaim).
+#
+# What is backed up:
+#   - ClickHouse: BACKUP DATABASE pulse TO Disk('backups', 'ch/pulse-<ts>.zip')
+#   - SQLite meta store: file copy with WAL consistency (see script header for details)
+#
+# S3 push: NOT enabled by default. The ClickHouse image does NOT ship aws-cli.
+#   To enable: inject PULSE_BACKUP_S3_BUCKET/PREFIX/REGION via backup.extraEnv and
+#   use a custom sidecar image that adds aws-cli (see deploy/runbooks/backup-restore.md).
+#
+# Retention: KEEP_COUNT=7 (7 newest backups per artifact type — hardcoded in script).
+#
+# NOT cluster-validated (D-002): template renders correctly; validate before production use.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "pulse.fullname" . }}-backup
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pulse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "pulse.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: backup
+        spec:
+          # Script chowns /backups/ch to UID 101 (ClickHouse server user) before backup.
+          # This requires running as root; the chown is safe because the container
+          # owns only the backup PVC (no access to host filesystem).
+          securityContext:
+            runAsUser: 0
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: "{{ .Values.backup.image.repository }}@{{ .Values.backup.image.digest }}"
+              imagePullPolicy: {{ .Values.backup.image.pullPolicy }}
+              command: ["/bin/bash", "/scripts/pulse-backup.sh"]
+              args: ["once"]
+              env:
+                - name: CLICKHOUSE_HOST
+                  value: {{ include "pulse.fullname" . }}-clickhouse
+                - name: CLICKHOUSE_DATABASE
+                  value: {{ .Values.pulse.clickhouse.database | quote }}
+                - name: PULSE_META_DB
+                  value: "/var/lib/pulse/pulse_meta.db"
+                - name: BACKUP_DIR
+                  value: "/backups"
+                {{- if .Values.clickhouse.auth.existingSecret }}
+                - name: CLICKHOUSE_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.clickhouse.auth.existingSecret }}
+                      key: CLICKHOUSE_USER
+                      optional: false
+                - name: CLICKHOUSE_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.clickhouse.auth.existingSecret }}
+                      key: CLICKHOUSE_PASSWORD
+                      optional: false
+                {{- end }}
+                {{- with .Values.backup.extraEnv }}
+                {{- toYaml . | nindent 16 }}
+                {{- end }}
+              resources:
+                {{- toYaml .Values.backup.resources | nindent 16 }}
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+                {{- if not .Values.postgres.enabled }}
+                # SQLite meta store — read-only; WAL mode allows safe file-copy backup.
+                - name: pulse-data
+                  mountPath: /var/lib/pulse
+                  readOnly: true
+                {{- end }}
+                - name: backup-script
+                  mountPath: /scripts
+                  readOnly: true
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: {{ .Values.backup.persistence.existingClaim | default (printf "%s-backups" (include "pulse.fullname" .)) }}
+            {{- if not .Values.postgres.enabled }}
+            - name: pulse-data
+              {{- if .Values.pulse.persistence.enabled }}
+              persistentVolumeClaim:
+                claimName: {{ include "pulse.fullname" . }}-data
+              {{- else }}
+              emptyDir: {}
+              {{- end }}
+            {{- end }}
+            - name: backup-script
+              configMap:
+                name: {{ include "pulse.fullname" . }}-backup-script
+                defaultMode: 0755
+{{- end }}
