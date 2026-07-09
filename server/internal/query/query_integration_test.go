@@ -30,6 +30,7 @@ import (
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 	"github.com/pulse-analytics/pulse/server/internal/query"
 	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse/migrations"
+	"github.com/pulse-analytics/pulse/server/internal/testutil"
 )
 
 // queryFreePort finds a free TCP port.
@@ -48,10 +49,7 @@ func queryFreePort(t *testing.T) int {
 // and returns the TCP port and a cleanup func.
 func startClickHouse(t *testing.T, tmpDir string) (tcpPort int) {
 	t.Helper()
-	chBin := "/tmp/clickhouse"
-	if _, err := os.Stat(chBin); err != nil {
-		t.Skipf("clickhouse binary not found at %s: %v", chBin, err)
-	}
+	chBin := testutil.RequireClickHouseBin(t)
 
 	tcpPort = queryFreePort(t)
 	httpPort := queryFreePort(t)

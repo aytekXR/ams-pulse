@@ -1,5 +1,15 @@
 # Real-AMS Go-Live Runbook
 
+> **HISTORICAL — this runbook describes the D-031/D-062 go-live (2026-06-21) that
+> swapped `beyondkaira.com` from MOCK-AMS + seeded demo data to the live
+> `test.antmedia.io`. That swap is complete (SESSION-05, D-062). For current
+> production operations, use the 5-overlay commands in
+> `docs/runbooks/productionize.md`. Sections 0–7 below are kept for provenance.**
+>
+> **Note on cross-references:** this file has sections 0–7 only. References to
+> "§8" (post-swap smoke) should be read as §4; "§14" (5-overlay DC command) should
+> be read as section 3 below or the Quick Reference in `docs/runbooks/productionize.md`.
+
 **Target:** swap `beyondkaira.com` from MOCK-AMS + seeded demo data to the live
 `test.antmedia.io` (AMS 3.0.3 Enterprise).
 **Branch:** `ams-integration` (contains the D-030 wire fixes + D-031 deploy-prep fixes).
@@ -68,9 +78,9 @@ No further code changes are required for the swap.
 ```bash
 cd /home/aytek/repo/ams-pulse
 # Real-AMS compose set:
-export DC="-p pulse-prod -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml -f deploy/docker-compose.prod-tls.yml -f deploy/docker-compose.real-ams.yml --env-file deploy/.env"
-# Mock-ams (rollback) compose set:
-export DC_MOCK="-p pulse-prod -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml -f deploy/docker-compose.prod-tls.yml --env-file deploy/.env"
+export DC="-p pulse-prod -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml -f deploy/docker-compose.prod-tls.yml -f deploy/docker-compose.real-ams.yml -f deploy/docker-compose.backup.yml --env-file deploy/.env"
+# Mock-ams (rollback) compose set — omits real-ams overlay but keeps backup sidecar:
+export DC_MOCK="-p pulse-prod -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml -f deploy/docker-compose.prod-tls.yml -f deploy/docker-compose.backup.yml --env-file deploy/.env"
 ```
 
 ### 3-A. Pre-flight (all must pass)
@@ -115,12 +125,22 @@ sg docker -c "docker compose $DC run --rm pulse-migrate"        # applies 0001_i
 
 ### 3-D. Deploy pulse wired to real AMS
 
+Stamped-build procedure (D-058): build with explicit ARGs first, then `up -d` WITHOUT
+`--build`. Mixing `--build` into `up -d` rebuilds in-place and loses the
+`VERSION`/`COMMIT`/`BUILD_DATE` stamps.
+
 ```bash
-sg docker -c "docker compose $DC up -d --build pulse"
+# Build with explicit stamps FIRST:
+sg docker -c "docker compose $DC build \
+  --build-arg VERSION=$(git describe --tags --always) \
+  --build-arg COMMIT=$(git rev-parse --short HEAD) \
+  --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  pulse"
+# Then start WITHOUT --build — uses the pre-built stamped image:
+sg docker -c "docker compose $DC up -d pulse"
 ```
 
-Builds from the `ams-integration` tree (ships D-030 + the Phase-0 fixes), profiles
-out mock-ams, wires the `PULSE_AMS_*` env. ClickHouse, Caddy and the
+Profiles out mock-ams, wires the `PULSE_AMS_*` env. ClickHouse, Caddy and the
 `pulse-prod_pulse-data` volume (token, alert rules) are untouched.
 
 ---
@@ -152,8 +172,14 @@ empty-state link points at `aytekXR/ams-pulse` (not `your-org`).
 ## 5. Rollback (fast, no volume loss)
 
 ```bash
-# Re-point pulse at mock-ams (drop the real-ams overlay; NEVER add -v):
-sg docker -c "docker compose $DC_MOCK up -d --build pulse"
+# Re-point pulse at mock-ams (drop the real-ams overlay; NEVER add -v).
+# Build without --build mixed into up -d (D-058 stamped-build):
+sg docker -c "docker compose $DC_MOCK build \
+  --build-arg VERSION=$(git describe --tags --always) \
+  --build-arg COMMIT=$(git rev-parse --short HEAD) \
+  --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  pulse"
+sg docker -c "docker compose $DC_MOCK up -d pulse"
 # Restore the seeded-demo liveness sidecar — exact run command is in oguz-testing.md (gitignored).
 # Verify demo data returns within ~15 s:
 curl -s --resolve beyondkaira.com:443:161.97.172.146 https://beyondkaira.com/api/v1/live/overview -H "Authorization: Bearer $TOK"

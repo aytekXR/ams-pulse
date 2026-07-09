@@ -1,0 +1,95 @@
+** EXPERIMENTAL — cluster-unvalidated (D-002) **
+This chart has been lint-validated locally but has NOT been deployed to a real
+Kubernetes cluster. Validate on a clean cluster before production use.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Pulse {{ .Chart.AppVersion }} — post-install smoke test
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Wait for pods to be ready:
+   kubectl rollout status deployment/{{ include "pulse.fullname" . }} -n {{ .Release.Namespace }}
+
+2. Port-forward the API + UI:
+   kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "pulse.fullname" . }} 8090:{{ .Values.pulse.service.apiPort }}
+
+3. Health check (keep port-forward running in another terminal):
+   curl -sf http://localhost:8090/healthz && echo "OK"
+
+4. Login bootstrap (first-run admin credentials are logged at startup):
+   kubectl logs -n {{ .Release.Namespace }} deploy/{{ include "pulse.fullname" . }} | grep -Ei "admin|password|token|login"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Webhook (B7 per-source webhooks)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{{- if .Values.pulse.webhookAddr }}
+Webhook listener is ENABLED ({{ .Values.pulse.webhookAddr }}).
+
+Webhook URL shape (configure this in AMS → Webhook settings):
+  Global:     http[s]://<webhook-host>/webhook/ams
+  Per-source: http[s]://<webhook-host>/webhook/ams/<source_name>
+
+{{- if .Values.webhookService.enabled }}
+Webhook Service: {{ include "pulse.fullname" . }}-webhook (port {{ .Values.webhookService.port }})
+{{- if .Values.ingressWebhook.enabled }}
+Webhook Ingress: {{ (index .Values.ingressWebhook.hosts 0).host }} (see ingressWebhook.hosts)
+{{- else }}
+To expose externally: set ingressWebhook.enabled=true or use port-forward:
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "pulse.fullname" . }}-webhook 8092:{{ .Values.webhookService.port }}
+{{- end }}
+{{- else }}
+NOTE: webhookService.enabled=false — the webhook port is NOT exposed as a Service.
+Set webhookService.enabled=true to expose port {{ .Values.webhookService.port }} to AMS.
+{{- end }}
+
+IMPORTANT — secret rotation: per-source webhook secrets (B7) are stored in the
+meta store and read at startup. Changing a per-source secret requires a pod restart:
+  kubectl rollout restart deployment/{{ include "pulse.fullname" . }} -n {{ .Release.Namespace }}
+{{- else }}
+Webhook listener is DISABLED (pulse.webhookAddr is empty).
+To enable: set pulse.webhookAddr=":8092" and webhookService.enabled=true.
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ClickHouse auth
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{{- if .Values.clickhouse.enabled }}
+{{- if .Values.clickhouse.auth.existingSecret }}
+ClickHouse auth: named user wired from Secret "{{ .Values.clickhouse.auth.existingSecret }}".
+The ClickHouse image creates the named user at first boot from CLICKHOUSE_USER + CLICKHOUSE_PASSWORD.
+Verify: kubectl exec -n {{ .Release.Namespace }} sts/{{ include "pulse.fullname" . }}-clickhouse -- \
+  clickhouse-client --user <user> --password <pass> --query "SELECT 1"
+{{- else }}
+WARNING: clickhouse.auth.existingSecret is not set.
+ClickHouse is running with the default user (no password) — acceptable only for
+isolated dev/test clusters with NetworkPolicy. Set clickhouse.auth.existingSecret
+before production use (see deploy/helm/pulse/README.md → ClickHouse auth).
+{{- end }}
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Backup
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{{- if .Values.backup.enabled }}
+Backup CronJob: {{ include "pulse.fullname" . }}-backup
+Schedule:       {{ .Values.backup.schedule }} (UTC)
+Retention:      7 newest backups per artifact type
+Backup PVC:     {{ .Values.backup.persistence.existingClaim | default (printf "%s-backups" (include "pulse.fullname" .)) }}
+
+Manual one-shot backup:
+  kubectl create job -n {{ .Release.Namespace }} --from=cronjob/{{ include "pulse.fullname" . }}-backup pulse-backup-manual
+
+View backup logs:
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=backup --tail=50
+{{- else }}
+Backup CronJob is DISABLED (backup.enabled=false).
+To enable: set backup.enabled=true and ensure clickhouse.auth.existingSecret is set.
+See deploy/helm/pulse/README.md → Backup for prerequisites.
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Apply ClickHouse DDL migrations after install:
+  kubectl exec -n {{ .Release.Namespace }} deploy/{{ include "pulse.fullname" . }} -- pulse migrate
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

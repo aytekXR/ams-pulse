@@ -48,7 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.25"
 
@@ -86,7 +86,7 @@ jobs:
         run: |
           cd server
           TOTAL=$(go tool cover -func=/tmp/cover.out | awk '/^total:/ {gsub("%","",$NF); print $NF}')
-          FLOOR=70.0
+          FLOOR=70.2
           awk -v t="$TOTAL" -v f="$FLOOR" 'BEGIN {
             if (t+0 < f+0) { printf "FAIL: total coverage %.1f%% < floor %.1f%%\n", t, f; exit 1 }
             printf "OK: total coverage %.1f%% >= floor %.1f%%\n", t, f
@@ -118,8 +118,9 @@ jobs:
         run: /tmp/pulse migrate
 
       # Integration tests self-manage a ClickHouse subprocess: they look for
-      # /tmp/clickhouse and skip (not fail) if absent. Download v26.6.1 so they
-      # run on every push/PR (replaces the old nightly/label-gated approach).
+      # /tmp/clickhouse via testutil.RequireClickHouseBin — absent + CI=true
+      # fails LOUD (D-065 WO-D, D-028-class defence); absent locally still skips.
+      # Download v26.6.1 so they run on every push/PR.
       # The tests do NOT use PULSE_CLICKHOUSE_DSN — they start CH on random ports.
       - name: Download ClickHouse binary for integration tests
         # PINNED to a specific release (D-040) for DETERMINISTIC CI. The old

@@ -54,6 +54,11 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      # D-032: the Go toolchain is pinned to 1.25 (1.26 broke the test harness);
+      # version bumps are a deliberate decision, digest bumps stay welcome.
+      - dependency-name: "golang"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   # docker-compose — compose files under deploy/ (watches compose image digests).
   # Distinct from the "docker" ecosystem above: docker-compose scans compose
@@ -68,6 +73,10 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      # D-032 pin — same rationale as the docker ecosystem above.
+      - dependency-name: "golang"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   # GitHub Actions — workflow files under .github/workflows/
   - package-ecosystem: "github-actions"

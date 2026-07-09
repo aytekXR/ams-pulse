@@ -37,7 +37,7 @@
 | Stubs still open | rebuffer_ratio/error_rate proxy from HealthScore (`alert/wave2.go:57-71`); B7 single shared webhook secret (`serve.go:214-220`); logtail collector implemented but wiring commented out (`serve.go:200-204`); probes non-HLS = `not_probed`; Postgres meta / SSO / PDF logo / mobile SDKs absent. RequestID is CLOSED (server.go:326). Zero `TODO()` markers remain. |
 | Docs | 2 P0-stale: productionize.md teaches a 3-overlay prod start (reality: 5 overlays + `--env-file`) and a loopback-only HTTPS step then curls the public URL. Missing for GA: LICENSE, SECURITY.md, CHANGELOG, upgrade/rollback runbook, monitoring-Pulse runbook. Stale claims in alerting.md (unbounded history — wrong since D-052), ARCHITECTURE.md §6 (bcrypt "roadmap" — shipped), install.md (3-tier table, "planned for Wave 3"). |
 | Git/GitHub | Clean, synced, CI green. `main` **unprotected** (API 404); no tags; stale `ams-integration` ref on local+origin. `gh` authed as owner `aytekXR` → protection + tag are now agent-runnable (U4 unblocked). |
-| Live prod | `/healthz` all ok; logs clean (14 lines/24h). **Runs pre-D-056 image** (container 2026-07-07 09:30, fix authored 23:43) → beacon ingest still 401s in prod. Backup cycle 2 due ~07:31 UTC 2026-07-08 — confirm in S1. One `webhook: invalid signature` WARN from the AMS container (likely AMS-side HMAC misconfig — operator item O4). |
+| Live prod | `/healthz` all ok. **Runs `v0.1.0-25-gbc15d43` since 2026-07-09 (D-062)** — rule→channel alert delivery live-proven; beacon chain live (403 LICENSE_REQUIRED until U3). Rollback tags `pre-d061`/`pre-d058`. WATCH: intermittent CH "Memory limit exceeded 1.80 GiB" on server_events inserts seen pre-swap (did not recur post-swap). O4 `webhook: invalid signature` WARN still awaits AMS-side config (O3). |
 
 ## 2. GA definition — "production-ready" means ALL of:
 
@@ -158,7 +158,11 @@ Item 6 CodeQL = BLOCKED → operator item O9 (private repo, no GHAS). Floor 66�
 6. CodeQL workflow (Go + JS/TS).
 **Exit:** G5 met; e2e.yml green on main; branch-protection contexts updated.
 
-### S5 — Honest features + security tail — prompt written by S4
+### S5 — Honest features + security tail — ✅ DONE (D-062, 2026-07-09)
+**G6 MET**: rebuffer_ratio/error_rate read rollup_qoe_1h (proxy removed, e2e-proven in CI);
+B7 shipped (contract CR merged, types byte-stable); logtail DELETED with rationale. Plus:
+prod rollout (delivery live-proven), CodeQL live (O9), Slack-webhook secret intercept (O11).
+Item 5 (O4 invalid-signature WARN) still awaits AMS-side webhook config (O3).
 **Goal:** G6; no silently-approximated metric.
 1. rebuffer_ratio/error_rate alerts read `rollup_qoe_1h`/`viewer_sessions` instead of the
    HealthScore proxy (`alert/wave2.go:57-71`); e2e-provable TODAY under the D-055 mock Pro
@@ -173,7 +177,18 @@ Item 6 CodeQL = BLOCKED → operator item O9 (private repo, no GHAS). Floor 66�
    webhook is configured.
 **Exit:** G6 met; contract CR merged + regenerated types byte-stable.
 
-### S6 — Docs + Helm GA batch — prompt written by S5
+### S6 — Docs + Helm GA batch — ✅ DONE (D-063, 2026-07-09)
+**Result: G7 MET except LICENSE (O5 — operator legal call; the only gap).** Docs truth pass
+(productionize/real-ams-go-live/alerting/AMS-INTEGRATION + WO-6: ARCHITECTURE §6, install.md
+4-tier table + env-only config truth, beacon-sdk re-measured); NEW SECURITY.md + CHANGELOG.md +
+upgrade-rollback.md + monitoring.md; Helm parity batch (image ref, CH auth, backup CronJob,
+optional:false, NOTES.txt — still explicitly EXPERIMENTAL, decision recorded). Promotion
+recorded NOT DUE: both clocks end ~2026-07-23 (web-e2e streak restarted 2026-07-09 by the
+`ba56c6e` spec-gating red — deterministic, fixed `ecfc25c`); CodeQL bake day 0. Process
+incident: subagent `git restore` destroyed concurrent uncommitted work → recovered byte-exact
+from transcripts; new binding rule in RESUME §12. Commits `bcdd3b8`…`352b7d7`. Evidence: D-063.
+
+### S6 (original plan, kept for provenance) — prompt: `sessions/SESSION-06.md`
 **Goal:** G7; nothing in docs lies to an operator.
 1. Fix the P0s: productionize.md 5-overlay reality (quick-ref + step 1e + upgrade section),
    secrets `_FILE` section; then the P1/P2 batch: alerting.md prune cap + retry/delivery_failure
@@ -188,7 +203,49 @@ Item 6 CodeQL = BLOCKED → operator item O9 (private repo, no GHAS). Floor 66�
    stays waived per D-002 unless a cluster appears).
 **Exit:** G7 met (Helm "installable-or-marked-experimental" decision recorded).
 
-### S7 — GA gate + post-GA backlog seeding — prompt written by S6
+### S7 — GA gate + post-GA backlog seeding — ✅ DONE (D-064, 2026-07-09)
+**Result: verdict PUNCH-LIST-FIRST.** 9-scout audit + A10 load smoke (PASS: 500 streams/3k
+viewers 15-min, pulse 18.6 MiB peak, CH 610 MiB, WATCH 0 hits, 9 ms API — numbers in ARCH §4)
++ adversarial critic. **Gate-blocker found: prod runs `bc15d43` (v0.1.0-25) WITHOUT the D-062
+functional commits — honest QoE + B7 are not live** → S8 WO-A rollout. In-session fixes: G4
+DDL skip-hatches ×6 → t.Fatalf (2 negative proofs), install.md stale PULSE_LOG_TAIL_PATH
+(G7), ARCH §4 waivers formalized (cmd/pulse 42.3, /live/ws) + GAP-206-01 closed, monitoring.md
+prefix, .env.example +1. Critic's G6 finding REFUTED (e2e.yml:372-456 = full chain). GA
+declaration deferred to S8-close. Evidence: D-064.
+
+### ✅ S8 — Punch-list + prod currency → **GA DECLARED** — DONE 2026-07-09 (D-065)
+**Result: ★ GA DECLARED (D-065) ★.** WO-A rollout DONE — **G2 restored**: prod runs
+`v0.1.0-50-g5d77a05` (staging-verified first; pre-d064 rollback tag + backup; stamped build;
+§8.8 smoke green incl. NEW spot-checks: B7 fail-closed live, honest-QoE case-3 canary fired
+on 0.0 w/ zero WARNs, `webhook_secret_enc` applied — WAL gotcha documented). Punch items all
+verifier-CONFIRMED: WO-B digest pins (hardened golang, helm busybox `waitImage`, goldens
+red-first ×2); WO-C log-storm → 1 aggregated INFO/tick + **CPU cap 0.5→1.0** (compose+helm);
+WO-D CI-loud harness (8 skip sites → `RequireClickHouseBin`) + CH parse-errors root-caused
+benign (initdb.d anti-pattern documented). WO-E promotions NOT DUE (streaks 7/7+7/7 intact;
+due ~2026-07-23 → S9). Floor ratcheted 70→**70.2** (achieved−3). Remaining gaps are ONLY
+operator (O5/O7/U3/U5/O3) or time (promotions, keep-7 cycle-8). CHANGELOG GA section +
+`RELEASE-NOTES-DRAFT.md` prepared; **tag choice v1.0.0-vs-v0.2.0 + push = OPERATOR**.
+Evidence: D-065. Commits `c6ba362`…`5d77a05` + docs batch.
+**Same-day addendum (D-066): v0.2.0 SHIPPED.** Operator chose the tag + a noncommercial
+license (PolyForm NC 1.0.0 — G7 FULL) and delegated the O-item decisions: O12 enabled,
+O3 closed-N/A (AMS 3.0.3 hooks unsigned — live-verified), U5 closed (headless-Chromium 0
+errors), O11 risk-accepted, O8 → #4 closed + S9 absorption WO. Release run 29023647495
+green; prod = `pulse v0.2.0`. Remaining: O7 click, U3 optional, S9 promotions/dependabot.
+
+### S8 (original plan, kept for provenance) — prompt written by S7
+**Goal:** land WO-A prod rollout (G2), the S/XS punch items, date-gated promotions; if every
+remaining gap is operator/time-owned → declare GA (tag = operator call).
+1. **WO-A [L]:** prod rollout to current main (staging-verify → `pre-d064` tag → stamped-build
+   → 5-overlay swap → §8.8 smoke incl. honest-QoE + B7 spot-checks).
+2. WO-B [S]: pin mock-ams (hardened) + helm busybox (GAP-206-03). WO-C [S]: health-degraded
+   log-storm rate-limit + pulse CPU-cap review. WO-D [XS]: A11 skip defence; CH startup
+   parse-errors investigation.
+3. WO-E [time]: if ≥2026-07-23 — promote web-e2e + csp-e2e (FULL-LIST PUT, drop
+   continue-on-error); CodeQL only with operator OK.
+4. GA verdict: if gaps are only operator/time → declare GA in decisions.md; CHANGELOG release
+   section; tag v1.0.0-vs-v0.2.0 is the OPERATOR's call via the S1 pipeline.
+
+### S7 (original plan, kept for provenance) — prompt: `sessions/SESSION-07.md`
 **Goal:** adversarial GA audit; declare GA or produce the punch list.
 1. Re-run the 9-scout audit (same dimensions as D-057); diff against §2 G1–G8; every unmet
    criterion becomes a work order.
@@ -207,22 +264,33 @@ Item 6 CodeQL = BLOCKED → operator item O9 (private repo, no GHAS). Floor 66�
 | 2026-07-08 (after S2) | **69.7%** | **62.0** | unchanged | D-059; S2 target ≥64 beaten; G3's ≥70 nearly met already |
 | 2026-07-08 (after S3) | **73.2%** | **66.0** | gates **76/72/45** + guard test | D-060; G4 met 51/52+1 waived; sdk gated 62/73/70; G3's ≥70 EXCEEDED |
 | 2026-07-09 (after S4) | **73.3%** | **70.0** | hold (76/72/45) | D-061; ratchet done; alert 73.3 (new sync source), api 75.9, collector 66.5 |
-| GA (G3) | ≥70% ✅ (73.2) | ≥68.0 | ratchet to achieved−3 | coverage half of G3 already met; floor ratchet remains |
+| 2026-07-09 (after S5) | **73.2%** | **70.0** | hold (76/72/45) | D-062; −0.1 = logtail (92.1%-covered pkg) deleted; webhook 94.7, query 86.9, alert 73.8; no ratchet (<74) |
+| 2026-07-09 (after S6) | **73.2%** | **70.0** | hold (76/72/45) | D-063; docs/Helm session, no Go touched; closing -race re-run green; SDK size re-measured 3.52 KB / 65 tests |
+| 2026-07-09 (after S7) | **73.1%** | **70.0** | hold (76/72/45) | D-064; −0.1 = rounding (audit re-measure); test-only Go change (skip-hatches → Fatalf); A10 load numbers in ARCH §4 |
+| 2026-07-09 (after S8) | **73.2%** | **70.2** | hold (76/72/45) | D-065 **GA DECLARED**; floor ratcheted to achieved−3 per the GA rule below — G3 fully closed |
+| GA (G3) | ≥70% ✅ (73.2) | ≥68.0 ✅ (70.2) | ✅ ratcheted at GA (D-065) | — |
 
 ## 5. Operator ledger (surface EVERY session — agent cannot do these)
+
+> Operator-facing actionable view (click-paths, commands): `agents/handoffs/OPERATOR-TODO.md`
+> — sessions refresh it at close; THIS table stays the ledger of record.
 
 | # | Action | Status |
 |---|---|---|
 | O1 (=U3) | Activate a Pro+ Pulse license in prod (`PULSE_LICENSE_KEY`) — until then QoE/beacon data does not flow in prod (CI covers it with the mock license) | OPEN |
-| O2 (=U5) | Open `https://beyondkaira.com` + `https://pulse.beyondkaira.com`, confirm SPA renders, zero CSP console errors (S4 automates CSP in CI, but one human check of prod is still wanted) | OPEN |
-| O3 | Configure the AMS console to POST lifecycle webhooks to `https://beyondkaira.com/webhook/ams` with the HMAC secret from `deploy/.env` (Pulse side live since D-054) | OPEN |
-| O4 | After O3: confirm the `webhook: invalid signature` WARN does not recur (else the AMS-side secret is wrong) | OPEN |
-| O5 | Choose the project LICENSE (legal decision; agent drafts once chosen) | OPEN |
+| O2 (=U5) | Browser/CSP check of prod | ✅ CLOSED (D-066): real headless-Chromium from the VPS — both prod URLs HTTP 200, SPA rendered, 0 console errors / 0 CSP violations. Optional human glance remains welcome. |
+| O3 | ~~Configure the AMS console to POST lifecycle webhooks~~ | ✅ CLOSED-N/A (D-066): AMS 3.0.3 has NO webhook-signing fields (verified live, 182 settings) — unsigned hooks would only 401 vs Pulse's fail-closed HMAC. REST polling stays the supported ingest (≤10 s budget met). AMS-INTEGRATION §4.5 corrected. |
+| O4 | ~~After O3: invalid-signature WARN recheck~~ | MOOT (O3 closed-N/A, D-066) |
+| O5 | Choose the project LICENSE | ✅ DONE (D-066): operator chose noncommercial → **PolyForm NC 1.0.0** at root LICENSE (SDK stays MIT); README/CHANGELOG/docs/licensing.md updated. **G7 fully met.** |
 | O6 | (was U4) Branch protection + `v*` tag | ✅ DONE by S1 (D-058): protection live (API 200), v0.1.0 released |
-| O7 | **Make `ghcr.io/aytekxr/ams-pulse` public** (package settings → Change visibility) or `gh auth refresh -s read:packages` — until then nobody (incl. the agent) can pull v0.1.0 or run `cosign verify` (commands in release.yml header); this is the last G1 bit | OPEN (re-verified still blocked 2026-07-08(d), D-060) |
-| O8 | Review the dependabot PRs — **21 open** (majors: vite 8, vitest 4, plugin-react 6, eslint 10, size-limit 12; grouped minor-and-patch for web, sdk AND server gomod; caddy digest bump was CI+e2e green — mergeable). Protection requires 1 approval — dependabot PRs need owner review; S5 can absorb the web-tooling majors if the operator asks | OPEN (unchanged, re-checked D-061) |
-| O9 | **CodeQL blocked**: repo is PRIVATE with no GHAS — make the repo public (CodeQL free) OR enable GHAS; then the next session adds `.github/workflows/codeql.yml` (paste-ready sketch in SESSION-05.md) | OPEN (NEW, D-061) |
-| O10 | **Prod rollout DUE** — prod runs the pre-D-061 image, so rule→channel alert delivery is STILL BROKEN in prod (registry gap, D-061; test-fire works). S5 WO-1 ships it; operator just needs to be aware until then | OPEN (NEW, D-061) |
+| O7 | **Make `ghcr.io/aytekxr/ams-pulse` public** (package settings → Change visibility) or `gh auth refresh -s read:packages` — until then nobody (incl. the agent) can pull v0.1.0 or run `cosign verify` (commands in release.yml header); this is the last G1 bit | OPEN (re-verified still blocked 2026-07-09, D-063: anonymous pull token DENIED) |
+| O8 | Dependabot PRs | DELEGATED (D-066): operator said "decide for me" → #4 (golang 1.26) CLOSED w/ dependabot ignore rule (D-032 pin); remaining **20** deferred to the S9 absorption WO with real verification (merging blind pre-release risked the pipeline — actions bumps touch release.yml, untestable pre-tag). |
+| O9 | ~~CodeQL blocked~~ ✅ CLOSED by S5 (D-062): operator made the repo PUBLIC → `codeql.yml` live (go/autobuild + js-ts/none). NOT a required context yet — promote after a bake period (S6/S7 call). NOTE: repo-level secret-scanning/push-protection still disabled — consider enabling now that the repo is public | ✅ DONE (D-062) |
+| O10 | ~~Prod rollout DUE~~ ✅ CLOSED by S5 WO-1 (D-062): prod runs `v0.1.0-25-gbc15d43`; rule→channel delivery live-proven (email-channel smoke, firing row ≤2s + mail received) | ✅ DONE (D-062) |
+| O12 | Enable repo secret-scanning + push-protection | ✅ DONE (D-066): agent-enabled via `gh api PATCH` on operator instruction; both `enabled`, API-verified. |
+| O13 | GA release tag | ✅ DONE (D-066): operator chose **v0.2.0**; tag pushed at `4657512`, release run 29023647495; prod rolled onto the tag. |
+| O14 | **Make GHCR package public** = O7 (renumber-free alias) — THE one remaining click | see O7 |
+| O11 | Slack webhook rotation + stale-branch reset | RISK-ACCEPTED + half-closed (D-066): exposure was never public (unpushed commit + local transcripts) → rotation is now optional operator policy (2-min task: regenerate webhook → `gh secret set SLACK_WEBHOOK_URL`); the stale local `backup/slack-notify-original` branch was DELETED by the agent. |
 
 ## 6. Session protocol (BINDING — the "prompts" contract)
 

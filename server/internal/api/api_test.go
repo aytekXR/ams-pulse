@@ -105,7 +105,9 @@ func setupTestServer(t *testing.T) (ts *httptest.Server, adminToken string, clea
 	ddlPath := metaDDLPath(t)
 	ddl, err := os.ReadFile(ddlPath)
 	if err != nil {
-		t.Skipf("meta DDL not found: %v", err)
+		// D-064: fail loud, never skip — a missing DDL means a broken mount
+		// (server-only mount, D-028 class) and a skip here is a false green.
+		t.Fatalf("meta DDL not found (repo-root mount required, D-028/D-064): %v", err)
 	}
 	store, err := meta.New(ctx, "sqlite", ":memory:", "api-test-secret")
 	if err != nil {
@@ -451,7 +453,9 @@ func TestAPI_Healthz_ClickHouseDown_Returns503(t *testing.T) {
 	ddlPath := metaDDLPath(t)
 	ddl, err := os.ReadFile(ddlPath)
 	if err != nil {
-		t.Skipf("meta DDL not found: %v", err)
+		// D-064: fail loud, never skip — a missing DDL means a broken mount
+		// (server-only mount, D-028 class) and a skip here is a false green.
+		t.Fatalf("meta DDL not found (repo-root mount required, D-028/D-064): %v", err)
 	}
 	store2, err := meta.New(ctx, "sqlite", ":memory:", "test-secret2")
 	if err != nil {
@@ -556,7 +560,9 @@ func TestAPI_Healthz_KafkaStats(t *testing.T) {
 	ddlPath := metaDDLPath(t)
 	ddl, err := os.ReadFile(ddlPath)
 	if err != nil {
-		t.Skipf("meta DDL not found: %v", err)
+		// D-064: fail loud, never skip — a missing DDL means a broken mount
+		// (server-only mount, D-028 class) and a skip here is a false green.
+		t.Fatalf("meta DDL not found (repo-root mount required, D-028/D-064): %v", err)
 	}
 	store, err := meta.New(ctx, "sqlite", ":memory:", "kafka-test-secret")
 	if err != nil {

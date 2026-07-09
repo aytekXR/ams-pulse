@@ -29,23 +29,33 @@ jobs:
 
     strategy:
       fail-fast: false
+      # Per-language build modes: the Go extractor does NOT support
+      # build-mode none (proven by the first run, 2026-07-09: "Go does not
+      # support the none build mode") — it needs autobuild, which locates and
+      # builds every go.mod in the tree (server/, qa/mock-ams, qa/licensegen).
+      # javascript-typescript extracts without a build.
       matrix:
-        language: [go, javascript-typescript]
+        include:
+          - language: go
+            build-mode: autobuild
+          - language: javascript-typescript
+            build-mode: none
 
     steps:
       - uses: actions/checkout@v4
 
-      # build-mode: none — CodeQL extracts both Go and javascript-typescript
-      # without invoking the build system.  This avoids autobuild fragility
-      # caused by the server/ sub-module layout (no go.work at repo root) and
-      # the npm workspaces (web/, sdk/beacon-js) that each have their own
-      # package.json.  Both languages are fully supported by build-mode: none
-      # on current CodeQL v3 runners.
+      # Go autobuild compiles the modules, so it needs the toolchain matching
+      # go.mod (go 1.25.0) — the runner default can lag behind.
+      - uses: actions/setup-go@v6
+        if: matrix.language == 'go'
+        with:
+          go-version: "1.25"
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-          build-mode: none
+          build-mode: ${{ matrix.build-mode }}
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v3
