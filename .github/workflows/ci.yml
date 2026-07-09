@@ -118,8 +118,9 @@ jobs:
         run: /tmp/pulse migrate
 
       # Integration tests self-manage a ClickHouse subprocess: they look for
-      # /tmp/clickhouse and skip (not fail) if absent. Download v26.6.1 so they
-      # run on every push/PR (replaces the old nightly/label-gated approach).
+      # /tmp/clickhouse via testutil.RequireClickHouseBin — absent + CI=true
+      # fails LOUD (D-065 WO-D, D-028-class defence); absent locally still skips.
+      # Download v26.6.1 so they run on every push/PR.
       # The tests do NOT use PULSE_CLICKHOUSE_DSN — they start CH on random ports.
       - name: Download ClickHouse binary for integration tests
         # PINNED to a specific release (D-040) for DETERMINISTIC CI. The old
