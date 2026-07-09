@@ -187,6 +187,25 @@ Wave-3-Plus re-gate: PASS_WITH_LIMITATIONS (2026-06-15, `qa/wave-3-plus/gate-rep
 These are CI-verifiable targets; QA-01 owns regression checks against them.
 See `qa/budgets/run-budget-tests.sh` for the budget regression suite.
 
+### A10 load smoke (SESSION-07, D-064 — isolated stack, mock-ams, 2026-07-09)
+
+500 streams + 3,000 viewers sustained 15 min (16 samples @ ~60 s): pulse mem peak **18.6 MiB**
+(3.6% of the 512 MiB hardened limit), CH mem peak **610 MiB** (30% of 2 GiB; the D-062
+"Memory limit (total) exceeded 1.80 GiB" WATCH **never triggered**, count 0); `/live/overview`
+latency avg **9.0 ms** (max 14.4 ms); 222,762 `server_events` rows ingested, **0** steady-state
+CH insert errors, **0** pulse ERRORs. Known follow-ups (non-blocking, punch list D-064): pulse
+CPU bursts to ~147% of one core at poll boundaries vs the 0.5-vCPU hardened cap (throttled,
+latency unaffected); ~100 INFO health-degraded lines/s at 500 degraded mock streams.
+
+### Testing waivers (GA audit, D-064)
+
+- **`cmd/pulse` per-package coverage (42.3%) is EXEMPT from the ≥60% per-package bar** —
+  assembly/wiring package; the agreed target is ≥40 via serve/migrate/diag wiring smoke
+  (ROADMAP S2/WO-3, D-059); boot paths are further pinned by `serve_wiring_test.go` and e2e.
+- **`GET /live/ws` is the 1 of 52 OpenAPI operations WAIVED from response-body conformance** —
+  it upgrades to a WebSocket (101, no HTTP response body to validate); the WS envelope is
+  asserted separately (§7 message envelope + api ws tests). Recorded D-060; formalized here.
+
 ## 5. Technology choices
 
 See ADRs: [0001 tech stack](adr/0001-tech-stack.md),
@@ -385,7 +404,7 @@ Configurable via: `PULSE_INGEST_TARGET_BITRATE_KBPS` (default 2000),
 | GAP-2-003 | Kafka `Lag()` / `ParseErrors()` not surfaced in `/healthz` component detail | BE-02 | **CLOSED Wave-3-Plus** — kafka component (status/lag/parse_errors) in `/healthz`; `TestAPI_Healthz_KafkaStats` PASS (VD-27) |
 | GAP-2-004 | Pro tier beacon write gating not API-enforced (fails-open for any valid ingest token) | BE-02 | **Fixed V3b** — `CheckBeaconIngest()` enforces Pro+ (VD-15) |
 | GAP-2-005 | `/qoe/summary` QoE data is live-snapshot proxy, not from `rollup_qoe_1h` | BE-02 | **Fixed V3a** — queries `rollup_qoe_1h`; `startup_p50_ms` non-zero (VD-11) |
-| GAP-206-01 | Helm chart image `ghcr.io/pulse-analytics/pulse:0.1.0` not yet published | INFRA-01 | Open — Phase-3 roadmap |
+| GAP-206-01 | ~~Helm chart image not yet published~~ CLOSED (D-058 canonical ref + D-063 parity): chart defaults to `ghcr.io/aytekxr/ams-pulse`, published by release.yml since v0.1.0. Remaining: package visibility is operator item O7 | INFRA-01 | Closed D-063 (O7 pending) |
 | GAP-206-02 | Postgres Secret `pulse-postgres-secret` must be created manually before Helm install | DOC-01 (documented in install runbook) | — |
 | GAP-206-03 | Helm `busybox:1.36` initContainer image unpinned | INFRA-01 | Open — Phase-3 roadmap |
 

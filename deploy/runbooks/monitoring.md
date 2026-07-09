@@ -25,7 +25,7 @@ sg docker -c "docker compose -p pulse-prod \
 | Log line | Meaning |
 |---|---|
 | `[pulse-backup] HH:MM:SS Backup cycle complete (ts=<ts>)` | Cycle fully succeeded |
-| `[pulse-backup] HH:MM:SS Backup cycle COMPLETED WITH ERRORS (ts=<ts>) — check logs above` | At least one store failed; read the preceding ERROR lines |
+| `[pulse-backup] ERROR: Backup cycle COMPLETED WITH ERRORS (ts=<ts>) — check logs above` | At least one store failed; read the preceding ERROR lines (the error path uses the `ERROR:` prefix via `err()`, not a timestamp) |
 
 A failed cycle does NOT crash the daemon or the stack. Fix the root cause (disk full,
 ClickHouse unreachable) then run a manual one-shot:

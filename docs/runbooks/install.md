@@ -323,7 +323,6 @@ noted default; the binary runs correctly without it.
 | `PULSE_LISTEN_ADDR` | `:8090` | HTTP listen address for UI + API |
 | `PULSE_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
 | `PULSE_POLL_INTERVAL` | `5s` | AMS REST poll interval (e.g. `2s`, `10s`) |
-| `PULSE_LOG_TAIL_PATH` | — | Full path to AMS analytics log file (optional) |
 | `PULSE_WEBHOOK_ADDR` | — | Address for the AMS webhook receiver (optional) |
 | `PULSE_WEBHOOK_SECRET` | — | HMAC shared secret for webhook validation |
 | `PULSE_LICENSE_KEY` | — | License key (empty = Free tier) |
