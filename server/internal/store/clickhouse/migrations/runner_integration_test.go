@@ -25,6 +25,7 @@ import (
 	"time"
 
 	clickhousego "github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/pulse-analytics/pulse/server/internal/testutil"
 )
 
 // TestIntegration_Migrations_IdempotentRun exercises the full Run() path
@@ -37,10 +38,7 @@ import (
 //  4. Apply migrations again (second run) — A11: MUST return nil (no-op).
 //  5. Verify migration count is unchanged (no duplicate rows).
 func TestIntegration_Migrations_IdempotentRun(t *testing.T) {
-	chBin := "/tmp/clickhouse"
-	if _, err := os.Stat(chBin); err != nil {
-		t.Skipf("clickhouse binary not found at %s: %v", chBin, err)
-	}
+	chBin := testutil.RequireClickHouseBin(t)
 
 	tcpPort := migFreePort(t)
 	httpPort := migFreePort(t)
