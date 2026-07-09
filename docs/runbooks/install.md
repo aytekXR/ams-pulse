@@ -52,38 +52,43 @@ git clone https://github.com/aytekXR/ams-pulse.git
 cd ams-pulse
 ```
 
-**2. Copy and edit the config file**
+**2. Review the configuration reference (optional)**
+
+`deploy/config/pulse.example.yaml` is a fully annotated reference for every
+configuration option and its environment-variable equivalent.
+
+> **Important:** `deploy/config/pulse.example.yaml` is reference documentation only —
+> it is **not consumed at runtime**. The shipped binary reads configuration from
+> **environment variables only**. A `--config` YAML parser exists in
+> `server/internal/config` but is not yet wired into the binary entry point
+> (`HOOK(BE-02)` in `server/cmd/pulse/main.go`). If you create or edit `pulse.yaml`,
+> the binary silently ignores it. Set your AMS URL and credentials in the environment
+> (step 3 below).
+
+**3. Set required environment variables**
 
 ```sh
-cp deploy/config/pulse.example.yaml deploy/config/pulse.yaml
-```
+# AMS REST base URL — required (the default http://localhost:5080 only works if
+# AMS runs on the same host as Pulse):
+export PULSE_AMS_URL=http://YOUR_AMS_HOST:5080
 
-Edit `deploy/config/pulse.yaml`:
+# AMS credentials for cookie-session auth (AMS Enterprise Edition uses
+# email + password login; these are the operative credentials):
+export PULSE_AMS_LOGIN_EMAIL=your-ams-admin@example.com
+export PULSE_AMS_LOGIN_PASSWORD=your-ams-password
 
-```yaml
-ams:
-  sources:
-    - name: main
-      rest_url: http://YOUR_AMS_HOST:5080
-      # AMS REST credentials go in the environment, not here — see step 3.
-```
-
-All other keys have sane defaults. The full config surface is documented
-in `deploy/config/pulse.example.yaml`.
-
-**3. Set credentials in the environment**
-
-```sh
-# AMS REST API bearer token (AMS admin token or dedicated read token):
-export PULSE_AMS_AUTH_TOKEN=your_ams_token_here
+# AMS bearer token — optional; only needed if your AMS uses token-based auth
+# instead of cookie-session. Leave unset for AMS Enterprise Edition:
+# export PULSE_AMS_AUTH_TOKEN=
 
 # 32-byte hex key for encrypting secrets at rest (generate once, keep safe):
 export PULSE_SECRET_KEY=$(openssl rand -hex 32)
 ```
 
-> `PULSE_AMS_AUTH_TOKEN` is the single bearer token used to authenticate to the
-> AMS REST API. When the config system is upgraded to Wave-2 multi-source YAML,
-> per-source env vars (`PULSE_AMS_<NAME>_TOKEN`) will be introduced.
+> AMS Enterprise Edition authenticates via cookie-session (email + password login).
+> `PULSE_AMS_LOGIN_EMAIL` and `PULSE_AMS_LOGIN_PASSWORD` are the operative credentials.
+> `PULSE_AMS_AUTH_TOKEN` is optional and only needed when bearer-token auth is used
+> instead of cookie-session.
 
 **4. Start the stack**
 
@@ -91,6 +96,69 @@ export PULSE_SECRET_KEY=$(openssl rand -hex 32)
 make up
 # or: cd deploy && docker compose up -d
 ```
+
+> **Warning — `docker-compose.override.yml` auto-loads from `deploy/`:** Docker Compose
+> v2 automatically merges `docker-compose.override.yml` when you run `docker compose`
+> from the `deploy/` directory without explicit `-f` flags. This dev/CI overlay binds
+> `0.0.0.0:80:8090` on the host. If another service (Nginx, Caddy, an existing Pulse
+> stack, etc.) already holds port 80, `compose up` will fail with a port conflict.
+>
+> To suppress the override and avoid the port 80 binding, pass compose files explicitly
+> (run from the repo root):
+>
+> ```sh
+> docker compose \
+>   -f deploy/docker-compose.yml \
+>   -f deploy/docker-compose.real-ams.yml \
+>   up -d
+> ```
+>
+> When using explicit `-f` flags without the override, the one-shot `pulse-migrate`
+> container is not included. Apply schema migrations before the first start:
+>
+> ```sh
+> docker compose \
+>   -f deploy/docker-compose.yml \
+>   -f deploy/docker-compose.real-ams.yml \
+>   run --rm pulse pulse migrate
+> docker compose \
+>   -f deploy/docker-compose.yml \
+>   -f deploy/docker-compose.real-ams.yml \
+>   up -d
+> ```
+
+> **Note — base compose builds from source:** The base `docker-compose.yml` has no
+> `image:` key for the Pulse service; it builds the binary from the local source tree
+> on every `compose up`. To use a pre-built released image instead, pull it first and
+> create a small image-pin override file:
+>
+> ```sh
+> # Pull the released image:
+> docker pull ghcr.io/aytekxr/ams-pulse:vX.Y.Z
+> ```
+>
+> Create `deploy/docker-compose.image-pin.yml` (do not commit this file):
+> ```yaml
+> services:
+>   pulse:
+>     image: ghcr.io/aytekxr/ams-pulse:vX.Y.Z
+>   pulse-migrate:
+>     image: ghcr.io/aytekxr/ams-pulse:vX.Y.Z
+> ```
+>
+> Then start the stack **without** `--build`:
+> ```sh
+> docker compose \
+>   -f deploy/docker-compose.yml \
+>   -f deploy/docker-compose.real-ams.yml \
+>   -f deploy/docker-compose.image-pin.yml \
+>   up -d
+> ```
+
+**Schema migrations:** When using the default `make up` / `cd deploy && docker compose
+up -d` path, the stack includes a one-shot **`pulse-migrate`** container (from
+`docker-compose.override.yml`) that automatically applies ClickHouse and meta-store
+schema before Pulse starts. No separate migration step is needed for the default path.
 
 ClickHouse takes ~10 s to become healthy (the healthcheck retries up to 12 times
 at 10 s intervals). Pulse will wait for it via the `depends_on: clickhouse: condition: service_healthy` in the Compose file.
@@ -102,7 +170,11 @@ Navigate to `http://your-server:8090` in a browser.
 On first run, the bootstrap token is printed to the Pulse container logs:
 
 ```sh
+# Run from the deploy/ directory when using the default compose path:
 docker compose logs pulse | grep "FIRST RUN"
+# If you ran with a custom project name (-p flag) or from outside deploy/,
+# pass the same -p flag and/or -f flags used in step 4:
+# docker compose -p <project-name> logs pulse | grep "FIRST RUN"
 # pulse: FIRST RUN — generated admin token: plt_<hex>
 #        Save this token; it will not be shown again.
 ```
@@ -313,7 +385,9 @@ noted default; the binary runs correctly without it.
 | Variable | Default | Description |
 |---|---|---|
 | `PULSE_AMS_URL` | `http://localhost:5080` | AMS REST base URL |
-| `PULSE_AMS_AUTH_TOKEN` | — | AMS bearer token for the REST API |
+| `PULSE_AMS_LOGIN_EMAIL` | — | AMS admin email for cookie-session auth (AMS Enterprise Edition) |
+| `PULSE_AMS_LOGIN_PASSWORD` | — | AMS admin password for cookie-session auth (AMS Enterprise Edition) |
+| `PULSE_AMS_AUTH_TOKEN` | — | AMS bearer token for the REST API (optional for cookie-session setups) |
 | `PULSE_AMS_NODE_ID` | `standalone` | AMS node identifier emitted in events |
 | `PULSE_AMS_APPLICATIONS` | all | Comma-separated AMS app names to poll (empty = all) |
 | `PULSE_CLICKHOUSE_DSN` | `clickhouse://localhost:9000/pulse` | ClickHouse native-protocol DSN |
