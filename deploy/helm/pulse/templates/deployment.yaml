@@ -33,7 +33,11 @@ spec:
       initContainers:
         # Wait for ClickHouse to be ready before starting pulse.
         - name: wait-clickhouse
-          image: busybox:1.36
+          {{- if .Values.clickhouse.waitImage.digest }}
+          image: "{{ .Values.clickhouse.waitImage.repository }}:{{ .Values.clickhouse.waitImage.tag }}@{{ .Values.clickhouse.waitImage.digest }}"
+          {{- else }}
+          image: "{{ .Values.clickhouse.waitImage.repository }}:{{ .Values.clickhouse.waitImage.tag }}"
+          {{- end }}
           command:
             - sh
             - -c
@@ -47,7 +51,11 @@ spec:
       {{- end }}
       containers:
         - name: pulse
+          {{- if .Values.pulse.image.digest }}
+          image: "{{ .Values.pulse.image.repository }}:{{ .Values.pulse.image.tag }}@{{ .Values.pulse.image.digest }}"
+          {{- else }}
           image: "{{ .Values.pulse.image.repository }}:{{ .Values.pulse.image.tag }}"
+          {{- end }}
           imagePullPolicy: {{ .Values.pulse.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.pulse.securityContext | nindent 12 }}
@@ -59,13 +67,33 @@ spec:
             - name: ingest
               containerPort: 8091
               protocol: TCP
+            {{- if .Values.pulse.webhookAddr }}
+            # Webhook port (B7 per-source webhooks) — enabled when PULSE_WEBHOOK_ADDR is set.
+            # Routes: /webhook/ams  and  /webhook/ams/{source_name}
+            # Keep this port in sync with webhookService.port (default 8092).
+            - name: webhook
+              containerPort: {{ .Values.webhookService.port }}
+              protocol: TCP
+            {{- end }}
           env:
             # ── Core server ──────────────────────────────────────────────
             - name: PULSE_LISTEN_ADDR
               value: {{ .Values.pulse.listenAddr | quote }}
             # ── ClickHouse ───────────────────────────────────────────────
+            {{- if and .Values.clickhouse.enabled .Values.clickhouse.auth.existingSecret }}
+            # Authenticated DSN from Secret (key: PULSE_CLICKHOUSE_DSN).
+            # The ClickHouse StatefulSet reads CLICKHOUSE_USER + CLICKHOUSE_PASSWORD
+            # from the same Secret to create the named user at first boot.
+            - name: PULSE_CLICKHOUSE_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouse.auth.existingSecret }}
+                  key: PULSE_CLICKHOUSE_DSN
+                  optional: false
+            {{- else }}
             - name: PULSE_CLICKHOUSE_DSN
               value: {{ include "pulse.clickhouseDSN" . | quote }}
+            {{- end }}
             - name: PULSE_CLICKHOUSE_DATABASE
               value: {{ .Values.pulse.clickhouse.database | quote }}
             {{- if .Values.pulse.clickhouse.migrationsDir }}
@@ -94,10 +122,6 @@ spec:
               value: {{ $metaDSN | quote }}
             {{- end }}
             # ── Collector extras (optional) ──────────────────────────────
-            {{- if .Values.pulse.logTailPath }}
-            - name: PULSE_LOG_TAIL_PATH
-              value: {{ .Values.pulse.logTailPath | quote }}
-            {{- end }}
             {{- if .Values.pulse.webhookAddr }}
             - name: PULSE_WEBHOOK_ADDR
               value: {{ .Values.pulse.webhookAddr | quote }}
@@ -122,12 +146,13 @@ spec:
                   name: {{ .Values.pulse.secretRef.name }}
                   key: PULSE_AMS_AUTH_TOKEN
                   optional: true
+            # REQUIRED — binary crashes at boot without this key.
             - name: PULSE_SECRET_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.pulse.secretRef.name }}
                   key: PULSE_SECRET_KEY
-                  optional: true
+                  optional: false
             - name: PULSE_WEBHOOK_SECRET
               valueFrom:
                 secretKeyRef:

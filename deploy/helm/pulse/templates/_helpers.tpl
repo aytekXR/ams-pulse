@@ -62,13 +62,29 @@ Create the name of the service account to use.
 
 {{/*
 ClickHouse DSN — auto-computed when bundled; override with externalDSN.
+When clickhouse.auth.existingSecret is set the DSN comes from the Secret
+(key: PULSE_CLICKHOUSE_DSN) and this helper returns empty so the deployment
+uses the secretKeyRef path instead of an inline plaintext value.
 */}}
 {{- define "pulse.clickhouseDSN" -}}
 {{- if .Values.clickhouse.enabled }}
+{{- if .Values.clickhouse.auth.existingSecret }}
+{{- /* DSN injected from Secret — return empty to signal secretKeyRef path */ -}}
+{{- "" -}}
+{{- else }}
 {{- printf "clickhouse://%s-clickhouse:9000/%s" (include "pulse.fullname" .) .Values.pulse.clickhouse.database }}
+{{- end }}
 {{- else }}
 {{- .Values.clickhouse.externalDSN }}
 {{- end }}
+{{- end }}
+
+{{/*
+ClickHouse Secret name for auth (user/password/DSN).
+Returns empty when auth is not configured.
+*/}}
+{{- define "pulse.clickhouseAuthSecret" -}}
+{{- .Values.clickhouse.auth.existingSecret }}
 {{- end }}
 
 {{/*

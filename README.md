@@ -80,7 +80,6 @@ Last updated: Wave-3-Plus (2026-06-15). QA gate: PASS_WITH_LIMITATIONS.
 ### Known limitations (Phase-3 / deferred)
 
 - Dashboard render time at 500 streams: virtualization confirmed (≤20 DOM rows), wall-clock not measured — Phase-3 Playwright benchmark (VD-04).
-- `rebuffer_ratio` / `error_rate` alert rules: computed from live ingest health heuristic proxy; full ClickHouse `rollup_qoe_1h` query is Phase-3.
 - Player CPU <1% budget: not measurable in jsdom/vitest; Phase-3 real-browser profiler needed (VD-14).
 - AMS Kafka / log-tail source: no broker available in CI (D-007.5 waiver); REST poller path fully functional and QA-verified. Kafka `lag` + `parse_errors` are surfaced in `/healthz` (Wave-3-Plus).
 - Docker Compose not tested on build machine (D-002 waiver); local binary path is QA-verified.
@@ -166,6 +165,11 @@ Cluster fleet discovery ──────────────────�
 | [contracts/README.md](contracts/README.md) | Contract surface, codegen commands, CI validation |
 | [contracts/openapi/pulse-api.yaml](contracts/openapi/pulse-api.yaml) | Full OpenAPI 3.1 spec (32 paths, 46 operations, 66 schemas) |
 | [agents/README.md](agents/README.md) | Multi-agent build workflow |
+| [deploy/runbooks/upgrade-rollback.md](deploy/runbooks/upgrade-rollback.md) | Upgrade + rollback: 5-overlay compose command, stamped-build pattern, rollback tags, ClickHouse DDL stance |
+| [deploy/runbooks/monitoring.md](deploy/runbooks/monitoring.md) | Monitoring: backup daemon health, alert_history cap, CH disk, Prometheus metrics, WARN log taxonomy |
+| [deploy/runbooks/backup-restore.md](deploy/runbooks/backup-restore.md) | Backup sidecar, manual backup, ClickHouse + SQLite restore steps |
+| [SECURITY.md](SECURITY.md) | Security policy: report channel, supported versions, webhook HMAC, token storage, CSP, license gates |
+| [CHANGELOG.md](CHANGELOG.md) | Changelog: operator-meaningful changes by version (Keep a Changelog format) |
 
 ---
 
@@ -211,3 +215,12 @@ sqlite3 :memory: < contracts/db/meta/0001_init.sql        # meta DDL
 - **V3a/V3b fix-loop (complete, 2026-06-15):** Beacon round-trip end-to-end (SDK header, main-port sink, Pro+ gate, geo enrichment); geo/device analytics; QoE rollup queries; ingest health non-zero; alerting muted/group_by/node_down; 4-tier license model (Business tier); report tier gates; 5-field cron; security hardening (CT compare, WS origin, token kind). See `docs/ARCHITECTURE.md` for full defect list.
 - **Wave-3-Plus (complete, 2026-06-15):** True windowed peak concurrency in billing (`rollup_concurrency_1d`, maxState/maxMerge; VD-38); alert detect→notify wall-clock test passes at 201 ms (VD-31); 13-month dimensional GROUP BY query at 145 ms (VD-18/C9b); HLS probe segment TTFB (`segment_ttfb_ms`) and master-playlist variant-following for real bitrate; anomaly epsilon floor — constant-baseline deviations now flagged; Kafka lag + parse_errors in `/healthz`.
 - **Post-MVP (Phase 3):** Mobile beacons, SSO, white-label PDF, air-gapped licensing, distributed probe network, native RTMP/WebRTC/DASH probing, multi-window anomaly baselines, headless render-time benchmarks.
+
+---
+
+## License
+
+- **Server, web UI, and deployment tooling:** [PolyForm Noncommercial 1.0.0](LICENSE) —
+  free for noncommercial use, modification, and distribution; commercial use
+  requires a vendor license (see `docs/licensing.md`).
+- **Beacon SDK** (`sdk/beacon-js/`): MIT.

@@ -17,8 +17,11 @@ Encrypt when a real domain is pointed at the server.
 > **Turnkey path (recommended).** Add the pre-staged production overlay
 > `deploy/docker-compose.prod-tls.yml` (with `deploy/config/Caddyfile.prod`) — it
 > binds Caddy on `0.0.0.0:80/443` and uses real Let's Encrypt (no `tls internal`),
-> so you do NOT hand-edit the hardened files. Compose order:
-> `-f docker-compose.yml -f docker-compose.hardened.yml -f docker-compose.prod-tls.yml`.
+> so you do NOT hand-edit the hardened files. The canonical **5-overlay** compose
+> ordering is: base + hardened + prod-tls + real-ams + backup (D-054); see step 1e
+> and the Quick Reference for the full command. **Omitting
+> `-f deploy/docker-compose.backup.yml` on `up -d` silently removes the backup
+> sidecar** (real-ams overlay: §4; backup overlay: §5).
 > Stop anything holding host `:80` first (e.g. the demo: `docker compose -p pulse down`).
 
 ### Steps
@@ -68,9 +71,13 @@ and restricts pulse to `expose` only (no host ports).
 
 ```sh
 cd /path/to/pulse
-docker compose \
+docker compose -p pulse-prod \
   -f deploy/docker-compose.yml \
   -f deploy/docker-compose.hardened.yml \
+  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.real-ams.yml \
+  -f deploy/docker-compose.backup.yml \
+  --env-file deploy/.env \
   up -d
 ```
 
@@ -151,18 +158,26 @@ ClickHouse image enforces the credentials from `CLICKHOUSE_USER` and
 Run migrations against the authenticated instance:
 
 ```sh
-docker compose \
+docker compose -p pulse-prod \
   -f deploy/docker-compose.yml \
   -f deploy/docker-compose.hardened.yml \
+  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.real-ams.yml \
+  -f deploy/docker-compose.backup.yml \
+  --env-file deploy/.env \
   run --rm pulse-migrate
 ```
 
 Then start the full stack:
 
 ```sh
-docker compose \
+docker compose -p pulse-prod \
   -f deploy/docker-compose.yml \
   -f deploy/docker-compose.hardened.yml \
+  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.real-ams.yml \
+  -f deploy/docker-compose.backup.yml \
+  --env-file deploy/.env \
   up -d
 ```
 
@@ -198,6 +213,27 @@ PULSE_SECRET_KEY=<output-of-openssl>
 **Never commit `deploy/.env` to git.** It is listed in `.gitignore`.
 A `deploy/.env.example` template with placeholder values is the committable form.
 
+### Docker secrets / `_FILE` variants (D-052)
+
+Several secret variables are resolved via `config.GetSecret()`, which checks for a
+`${NAME}_FILE` companion first: if that env var exists, Pulse reads the secret value
+from the file path it contains (compatible with Docker secrets mounted at
+`/run/secrets/<name>`). Variables with `_FILE` support:
+
+| Variable | `_FILE` supported? |
+|---|---|
+| `PULSE_SECRET_KEY` | Yes |
+| `PULSE_AMS_AUTH_TOKEN` | Yes |
+| `PULSE_AMS_LOGIN_PASSWORD` | Yes |
+| `PULSE_WEBHOOK_SECRET` | Yes |
+| `PULSE_METRICS_TOKEN` | Yes |
+| `PULSE_AMS_<NAME>_TOKEN` (per-source) | Yes |
+| **`PULSE_LICENSE_KEY`** | **No** — read via plain `os.Getenv`; no `_FILE` variant is honoured |
+
+For `PULSE_LICENSE_KEY`, set the value directly in `deploy/.env` or pass it as a
+plain environment variable. Docker secrets via a `_FILE` path will **not** work for
+this variable.
+
 ### Rotating the AMS token
 
 When an AMS REST token is rotated:
@@ -207,10 +243,13 @@ When an AMS REST token is rotated:
 3. Restart the pulse service to pick up the new value:
 
 ```sh
-docker compose \
+docker compose -p pulse-prod \
   -f deploy/docker-compose.yml \
   -f deploy/docker-compose.hardened.yml \
+  -f deploy/docker-compose.prod-tls.yml \
   -f deploy/docker-compose.real-ams.yml \
+  -f deploy/docker-compose.backup.yml \
+  --env-file deploy/.env \
   up -d pulse
 ```
 
@@ -267,15 +306,25 @@ PULSE_AMS_URL=http://your-ams-host:5080    # AMS REST base URL (no trailing slas
 PULSE_AMS_AUTH_TOKEN=<ams-rest-token>      # AMS admin or dedicated read token
 PULSE_AMS_NODE_ID=node-01                  # Label for this node in Pulse events
 PULSE_AMS_APPLICATIONS=live,vod            # Comma-separated; empty = all apps
+
+# AMS_UPSTREAM: host:port that Caddyfile.prod reverse-proxies for the AMS web
+# console (ams.<PULSE_DOMAIN>). Injected into the caddy container via the
+# environment: block in docker-compose.prod-tls.yml.
+# Default (from docker-compose.prod-tls.yml): 161.97.172.146:5080.
+# Override in deploy/.env only if your AMS host differs:
+# AMS_UPSTREAM=your-ams-host:5080
 ```
 
 **4b. Start with the real-ams override**
 
 ```sh
-docker compose \
+docker compose -p pulse-prod \
   -f deploy/docker-compose.yml \
   -f deploy/docker-compose.hardened.yml \
+  -f deploy/docker-compose.prod-tls.yml \
   -f deploy/docker-compose.real-ams.yml \
+  -f deploy/docker-compose.backup.yml \
+  --env-file deploy/.env \
   up -d
 ```
 
@@ -476,14 +525,17 @@ scrape_configs:
       insecure_skip_verify: false  # Caddy provisions a valid cert
 ```
 
-**Key metrics to alert on:**
+**Key metrics to alert on** (the 7 metrics registered by `/metrics` — see `deploy/runbooks/monitoring.md` for full details):
 
-| Metric | Description |
-|---|---|
-| `pulse_collector_errors_total` | AMS poll errors (spike = AMS unreachable) |
-| `pulse_clickhouse_write_errors_total` | CH write failures |
-| `pulse_active_streams` | Current active stream count |
-| `pulse_ingest_health_score` | Per-stream health score (0–100) |
+| Metric | Labels | Description |
+|---|---|---|
+| `pulse_live_viewers` | — | Current live viewer count |
+| `pulse_live_streams` | — | Current active stream count |
+| `pulse_live_publishers` | — | Current publishing stream count |
+| `pulse_ingest_bitrate_kbps` | — | Aggregate ingest bitrate (kbps) |
+| `pulse_node_cpu_pct` | `node` | Node CPU utilization percent |
+| `pulse_node_mem_pct` | `node` | Node memory utilization percent |
+| `pulse_alerts_firing` | — | Total firing alert count |
 
 ---
 
@@ -492,42 +544,68 @@ scrape_configs:
 ```sh
 # From the repo root, after filling in deploy/.env:
 
-docker compose \
+docker compose -p pulse-prod \
   -f deploy/docker-compose.yml \
   -f deploy/docker-compose.hardened.yml \
+  -f deploy/docker-compose.prod-tls.yml \
   -f deploy/docker-compose.real-ams.yml \
+  -f deploy/docker-compose.backup.yml \
+  --env-file deploy/.env \
   up -d
 
 # Watch logs:
-docker compose logs -f pulse
+docker compose -p pulse-prod logs -f pulse
 
 # Verify:
 curl -m 10 https://pulse.example.com/healthz
 ```
 
-The three-file compose ordering is canonical:
+The five-file compose ordering is canonical (all files under `deploy/`):
 1. `docker-compose.yml` — base (services, volumes, healthchecks; no host ports)
 2. `docker-compose.hardened.yml` — TLS via Caddy, CH auth, no plain-HTTP exposure
-3. `docker-compose.real-ams.yml` — disables mock-ams, wires real AMS credentials
+3. `docker-compose.prod-tls.yml` — binds Caddy on 0.0.0.0:80/443, real Let's Encrypt
+4. `docker-compose.real-ams.yml` — disables mock-ams, wires real AMS credentials
+5. `docker-compose.backup.yml` — backup sidecar (24 h cycle, 7-copy retention)
 
-For upgrades:
+**Omitting `-f deploy/docker-compose.backup.yml` on `up -d` silently removes the
+backup sidecar.**
+
+For upgrades — stamped-build procedure (D-058): build with explicit ARGs first,
+then `up -d` WITHOUT `--build`. Mixing `--build` into `up -d` rebuilds in-place and
+loses the `VERSION`/`COMMIT`/`BUILD_DATE` stamps.
 
 ```sh
-docker compose \
+# 1. Build the pulse image with explicit version stamps:
+docker compose -p pulse-prod \
   -f deploy/docker-compose.yml \
   -f deploy/docker-compose.hardened.yml \
+  -f deploy/docker-compose.prod-tls.yml \
   -f deploy/docker-compose.real-ams.yml \
-  pull
+  -f deploy/docker-compose.backup.yml \
+  --env-file deploy/.env \
+  build \
+  --build-arg VERSION=$(git describe --tags --always) \
+  --build-arg COMMIT=$(git rev-parse --short HEAD) \
+  --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  pulse
 
-docker compose \
+# 2. Start WITHOUT --build — uses the pre-built stamped image:
+docker compose -p pulse-prod \
   -f deploy/docker-compose.yml \
   -f deploy/docker-compose.hardened.yml \
+  -f deploy/docker-compose.prod-tls.yml \
   -f deploy/docker-compose.real-ams.yml \
+  -f deploy/docker-compose.backup.yml \
+  --env-file deploy/.env \
   up -d
 
-# Run migrations after image update:
-docker compose \
+# 3. Run migrations after image update:
+docker compose -p pulse-prod \
   -f deploy/docker-compose.yml \
   -f deploy/docker-compose.hardened.yml \
+  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.real-ams.yml \
+  -f deploy/docker-compose.backup.yml \
+  --env-file deploy/.env \
   run --rm pulse-migrate
 ```

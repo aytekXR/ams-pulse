@@ -10,6 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net"
@@ -851,17 +852,18 @@ func TestGuard_VD30_NodeDownFiresOnAbsence(t *testing.T) {
 	}
 }
 
-// ─── Guard test VD-32: rebuffer_ratio >5% fires with real HealthScore ────────
+// ─── Guard test VD-32: rebuffer_ratio >5% fires via FakeQoEReader (D-062) ────
 
 // TestGuard_VD32_RebufferRatioFires verifies that a rebuffer_ratio > 0.05 rule
-// fires when a stream has HealthScore < 0.5 (heuristic: (1-HS)*0.1 > 0.05).
-// This test would FAIL on the old behavior when HealthScore was always 0.
+// fires when FakeQoEReader returns 0.1. Updated in D-062: uses the honest
+// QoEReader seam instead of the HealthScore proxy. HealthScore=0 proves the
+// old proxy (which returned 0 for HS=0) is gone.
 func TestGuard_VD32_RebufferRatioFires(t *testing.T) {
 	store := openTestStore(t)
 	ctx := context.Background()
 
 	// Rule: rebuffer_ratio > 0.05 (5% rebuffer rate).
-	// With HealthScore=0.4: (1-0.4)*0.1 = 0.06 > 0.05 → fires.
+	// FakeQoEReader returns 0.1 > 0.05 → fires.
 	row := meta.AlertRuleRow{
 		Name:               "rebuffer-ratio-guard-rule",
 		Metric:             "rebuffer_ratio",
@@ -888,7 +890,7 @@ func TestGuard_VD32_RebufferRatioFires(t *testing.T) {
 				StreamID:    "degraded-stream",
 				App:         "live",
 				Active:      true,
-				HealthScore: 0.4, // rebuffer_ratio = (1-0.4)*0.1 = 0.06 > 0.05
+				HealthScore: 0, // zero HS — old proxy yields 0; honest reader provides the real value
 			},
 		},
 		Nodes: map[string]*domain.LiveNodeStats{},
@@ -896,6 +898,9 @@ func TestGuard_VD32_RebufferRatioFires(t *testing.T) {
 
 	clock := alert.NewFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 	ev, _ := newTestEvaluator(t, store, live, clock)
+
+	// Wire an honest QoE reader returning rebuffer_ratio=0.1 > threshold 0.05.
+	ev.SetQoEReader(&alert.FakeQoEReader{RebufferRatio: 0.1})
 
 	var notifMu sync.Mutex
 	var notifs []map[string]any
@@ -918,15 +923,228 @@ func TestGuard_VD32_RebufferRatioFires(t *testing.T) {
 	n := len(notifs)
 	notifMu.Unlock()
 
-	// Guard: rebuffer_ratio > 5% fires when HealthScore=0.4 (non-zero).
-	// Old behavior: HealthScore=0 → rebuffer_ratio=0 → never fired.
+	// Guard: rebuffer_ratio > 5% fires via honest QoEReader (value=0.1).
+	// Old proxy with HealthScore=0 yielded 0 → never fired; this proves it's gone.
 	if n == 0 {
-		t.Errorf("VD-32 guard FAIL: rebuffer_ratio alert did not fire (HealthScore=0.4, expected ratio=0.06 > threshold=0.05)")
+		t.Errorf("VD-32 guard FAIL: rebuffer_ratio alert did not fire (FakeQoEReader{RebufferRatio:0.1}, threshold 0.05)")
 	} else {
 		notifMu.Lock()
 		notif := notifs[0]
 		notifMu.Unlock()
-		t.Logf("PASS VD-32: rebuffer_ratio fired: value=%v > threshold=0.05", notif["value"])
+		t.Logf("PASS VD-32: rebuffer_ratio fired via honest reader: value=%v > threshold=0.05", notif["value"])
+	}
+}
+
+// ─── D-062: Honest QoE reader tests (A/B/C/D) ───────────────────────────────
+
+// TestD062_A_RebufferRatioFires verifies that rebuffer_ratio gt 0.05 fires when
+// FakeQoEReader returns 0.1 and HealthScore=0 (old proxy would yield 0).
+func TestD062_A_RebufferRatioFires(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+
+	_, err := store.CreateAlertRule(ctx, meta.AlertRuleRow{
+		Name: "d062-a-rebuf", Metric: "rebuffer_ratio", Operator: "gt", Threshold: 0.05,
+		WindowS: 5, ScopeJSON: "{}", Severity: "warning", CooldownS: 300,
+		Enabled: true, Muted: false, MaintenanceWindows: "[]", ChannelIDs: `["test-channel"]`,
+	})
+	if err != nil {
+		t.Fatalf("CreateAlertRule: %v", err)
+	}
+
+	live := newFakeLive()
+	live.setSnap(&domain.LiveSnapshot{
+		Streams: map[string]*domain.LiveStream{
+			"s1": {StreamID: "s1", App: "live", Active: true, HealthScore: 0},
+		},
+		Nodes: map[string]*domain.LiveNodeStats{},
+	})
+
+	clock := alert.NewFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	ev, _ := newTestEvaluator(t, store, live, clock)
+	ev.SetQoEReader(&alert.FakeQoEReader{RebufferRatio: 0.1})
+
+	var mu sync.Mutex
+	var notifs []map[string]any
+	ev.SetNotifySink(func(p []byte) {
+		var n map[string]any
+		_ = json.Unmarshal(p, &n)
+		mu.Lock()
+		notifs = append(notifs, n)
+		mu.Unlock()
+	})
+
+	for i := 0; i < 3; i++ {
+		clock.Advance(5 * time.Second)
+		ev.TickOnce(ctx)
+	}
+
+	mu.Lock()
+	n := len(notifs)
+	mu.Unlock()
+	if n == 0 {
+		t.Errorf("D-062-A FAIL: rebuffer_ratio alert did not fire (FakeQoEReader{RebufferRatio:0.1}, HealthScore=0, threshold=0.05)")
+	} else {
+		t.Logf("PASS D-062-A: rebuffer_ratio fired with honest reader value=0.1 > threshold=0.05")
+	}
+}
+
+// TestD062_B_ErrorRateFires verifies that error_rate gt 0.01 fires when
+// FakeQoEReader returns ErrorRate=0.02.
+func TestD062_B_ErrorRateFires(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+
+	_, err := store.CreateAlertRule(ctx, meta.AlertRuleRow{
+		Name: "d062-b-errrate", Metric: "error_rate", Operator: "gt", Threshold: 0.01,
+		WindowS: 5, ScopeJSON: "{}", Severity: "warning", CooldownS: 300,
+		Enabled: true, Muted: false, MaintenanceWindows: "[]", ChannelIDs: `["test-channel"]`,
+	})
+	if err != nil {
+		t.Fatalf("CreateAlertRule: %v", err)
+	}
+
+	live := newFakeLive()
+	live.setSnap(&domain.LiveSnapshot{
+		Streams: map[string]*domain.LiveStream{
+			"s1": {StreamID: "s1", App: "live", Active: true, HealthScore: 0},
+		},
+		Nodes: map[string]*domain.LiveNodeStats{},
+	})
+
+	clock := alert.NewFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	ev, _ := newTestEvaluator(t, store, live, clock)
+	ev.SetQoEReader(&alert.FakeQoEReader{ErrorRate: 0.02})
+
+	var mu sync.Mutex
+	var notifs []map[string]any
+	ev.SetNotifySink(func(p []byte) {
+		var n map[string]any
+		_ = json.Unmarshal(p, &n)
+		mu.Lock()
+		notifs = append(notifs, n)
+		mu.Unlock()
+	})
+
+	for i := 0; i < 3; i++ {
+		clock.Advance(5 * time.Second)
+		ev.TickOnce(ctx)
+	}
+
+	mu.Lock()
+	n := len(notifs)
+	mu.Unlock()
+	if n == 0 {
+		t.Errorf("D-062-B FAIL: error_rate alert did not fire (FakeQoEReader{ErrorRate:0.02}, threshold=0.01)")
+	} else {
+		t.Logf("PASS D-062-B: error_rate fired with honest reader value=0.02 > threshold=0.01")
+	}
+}
+
+// TestD062_C_ZeroReaderNoFire verifies that when QoEReader returns 0.0 for both
+// metrics, a threshold > 0 rule does NOT fire. Zero is a legitimate reading.
+func TestD062_C_ZeroReaderNoFire(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+
+	_, err := store.CreateAlertRule(ctx, meta.AlertRuleRow{
+		Name: "d062-c-zero", Metric: "rebuffer_ratio", Operator: "gt", Threshold: 0.05,
+		WindowS: 5, ScopeJSON: "{}", Severity: "warning", CooldownS: 300,
+		Enabled: true, Muted: false, MaintenanceWindows: "[]", ChannelIDs: `["test-channel"]`,
+	})
+	if err != nil {
+		t.Fatalf("CreateAlertRule: %v", err)
+	}
+
+	live := newFakeLive()
+	live.setSnap(&domain.LiveSnapshot{
+		Streams: map[string]*domain.LiveStream{
+			"s1": {StreamID: "s1", App: "live", Active: true, HealthScore: 0.4},
+		},
+		Nodes: map[string]*domain.LiveNodeStats{},
+	})
+
+	clock := alert.NewFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	ev, _ := newTestEvaluator(t, store, live, clock)
+	// Zero is a legitimate reading — threshold=0.05 is not exceeded.
+	ev.SetQoEReader(&alert.FakeQoEReader{RebufferRatio: 0, ErrorRate: 0})
+
+	var mu sync.Mutex
+	var notifs []map[string]any
+	ev.SetNotifySink(func(p []byte) {
+		var n map[string]any
+		_ = json.Unmarshal(p, &n)
+		mu.Lock()
+		notifs = append(notifs, n)
+		mu.Unlock()
+	})
+
+	for i := 0; i < 3; i++ {
+		clock.Advance(5 * time.Second)
+		ev.TickOnce(ctx)
+	}
+
+	mu.Lock()
+	n := len(notifs)
+	mu.Unlock()
+	if n > 0 {
+		t.Errorf("D-062-C FAIL: rebuffer_ratio alert fired with reader value=0 (threshold=0.05); got %d notifs", n)
+	} else {
+		t.Logf("PASS D-062-C: zero reader value correctly does not fire (0 <= threshold 0.05)")
+	}
+}
+
+// TestD062_D_ReaderErrorNoFireNoPanic verifies that when QoEReader returns an
+// error the stream is skipped — no notification and no panic.
+func TestD062_D_ReaderErrorNoFireNoPanic(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+
+	_, err := store.CreateAlertRule(ctx, meta.AlertRuleRow{
+		Name: "d062-d-err", Metric: "rebuffer_ratio", Operator: "gt", Threshold: 0.0,
+		WindowS: 5, ScopeJSON: "{}", Severity: "warning", CooldownS: 300,
+		Enabled: true, Muted: false, MaintenanceWindows: "[]", ChannelIDs: `["test-channel"]`,
+	})
+	if err != nil {
+		t.Fatalf("CreateAlertRule: %v", err)
+	}
+
+	live := newFakeLive()
+	live.setSnap(&domain.LiveSnapshot{
+		Streams: map[string]*domain.LiveStream{
+			"s1": {StreamID: "s1", App: "live", Active: true},
+		},
+		Nodes: map[string]*domain.LiveNodeStats{},
+	})
+
+	clock := alert.NewFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	ev, _ := newTestEvaluator(t, store, live, clock)
+	// Reader always errors — stream must be skipped silently.
+	ev.SetQoEReader(&alert.FakeQoEReader{Err: errors.New("clickhouse unavailable")})
+
+	var mu sync.Mutex
+	var notifs []map[string]any
+	ev.SetNotifySink(func(p []byte) {
+		var n map[string]any
+		_ = json.Unmarshal(p, &n)
+		mu.Lock()
+		notifs = append(notifs, n)
+		mu.Unlock()
+	})
+
+	// Should not panic; assert no notification fired.
+	for i := 0; i < 3; i++ {
+		clock.Advance(5 * time.Second)
+		ev.TickOnce(ctx)
+	}
+
+	mu.Lock()
+	n := len(notifs)
+	mu.Unlock()
+	if n > 0 {
+		t.Errorf("D-062-D FAIL: alert fired when QoEReader returned an error (got %d notifs, expected 0)", n)
+	} else {
+		t.Logf("PASS D-062-D: reader error silently skips stream — no notification, no panic")
 	}
 }
 

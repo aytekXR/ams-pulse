@@ -23,18 +23,45 @@ import (
 	"github.com/pulse-analytics/pulse/server/internal/store/meta"
 )
 
+// ─── Wave 2: QoE reader interface (D-062) ────────────────────────────────────
+
+// QoEReader queries per-stream QoE metrics from ClickHouse aggregate rollups.
+// Implemented by query.Service; use FakeQoEReader in tests.
+//
+// conn == nil → (0, 0, nil) fall-through: caller must treat (0, 0, nil) as
+// "no data" and evaluate normally; 0.0 is a legitimate rebuffer_ratio/error_rate.
+type QoEReader interface {
+	QoEForStream(ctx context.Context, streamID, app string, lookback time.Duration) (rebufferRatio, errorRate float64, err error)
+}
+
+// FakeQoEReader returns fixed values for testing.
+// Set Err to simulate a reader error (stream is skipped, no panic).
+type FakeQoEReader struct {
+	RebufferRatio float64
+	ErrorRate     float64
+	Err           error
+}
+
+// QoEForStream returns the pre-configured values for tests.
+func (f *FakeQoEReader) QoEForStream(_ context.Context, _, _ string, _ time.Duration) (float64, float64, error) {
+	return f.RebufferRatio, f.ErrorRate, f.Err
+}
+
 // ─── Wave 2: New metric evaluators ───────────────────────────────────────────
 
 // evalQoEMetric evaluates QoE-derived metrics:
-//   - rebuffer_ratio: from BeaconEvents / QoE aggregates
-//   - error_rate: from beacon error events
-//   - ingest_bitrate_floor: from HealthTracker / LiveStream.HealthScore
+//   - rebuffer_ratio: from rollup_qoe_1h via QoEReader (D-062: proxy removed, G6)
+//   - error_rate: from rollup_qoe_1h via QoEReader (D-062: proxy removed, G6)
+//   - ingest_bitrate_floor: from live snapshot IngestBitrate (real poller data)
 //
-// These run against the live snapshot. Per-session QoE metrics require
-// ClickHouse aggregate queries; this implementation uses the live state
-// (health score proxy) as a fast-path, with ClickHouse as a future enhancement.
-func (e *Evaluator) evalQoEMetric(snap *domain.LiveSnapshot, scope domain.AlertScope, rule meta.AlertRuleRow) []evalResult {
+// For rebuffer_ratio and error_rate: qoeReader == nil OR a reader error causes
+// the affected stream to be skipped for this tick. At most one WARN log is
+// emitted per tick per condition. A value of 0.0 from the reader is a
+// legitimate reading (evaluated normally; will not exceed gt thresholds > 0).
+func (e *Evaluator) evalQoEMetric(ctx context.Context, snap *domain.LiveSnapshot, scope domain.AlertScope, rule meta.AlertRuleRow) []evalResult {
 	var results []evalResult
+	var warnedNil, warnedErr bool
+
 	for sid, s := range snap.Streams {
 		if scope.App != "" && s.App != scope.App {
 			continue
@@ -48,20 +75,34 @@ func (e *Evaluator) evalQoEMetric(snap *domain.LiveSnapshot, scope domain.AlertS
 
 		var val float64
 		switch rule.Metric {
-		case "rebuffer_ratio":
-			// Proxy: HealthScore < 0.8 implies some QoE degradation; rebuffer_ratio
-			// is estimated as (1 - HealthScore) * 0.1 (calibrated heuristic).
-			// Full implementation: query rollup_qoe_1h for rebuffer_ratio.
-			if s.HealthScore > 0 {
-				val = (1.0 - s.HealthScore) * 0.1
+		case "rebuffer_ratio", "error_rate":
+			// D-062: values come from ClickHouse aggregate rollups via QoEReader.
+			// HealthScore proxy formulas are removed (ROADMAP G6: no silently-approximated metrics).
+			e.mu.Lock()
+			reader := e.qoeReader
+			e.mu.Unlock()
+			if reader == nil {
+				if !warnedNil {
+					e.logger.Warn("alert: qoe_reader not configured — rebuffer_ratio/error_rate rules skipped this tick (D-062: G6)")
+					warnedNil = true
+				}
+				continue
 			}
-		case "error_rate":
-			// Proxy: same health-based estimate; full impl queries ClickHouse.
-			if s.HealthScore > 0 {
-				val = (1.0 - s.HealthScore) * 0.05
+			rebuf, errRate, err := reader.QoEForStream(ctx, sid, s.App, 1*time.Hour)
+			if err != nil {
+				if !warnedErr {
+					e.logger.Warn("alert: qoe_reader error — stream skipped for this tick", "error", err)
+					warnedErr = true
+				}
+				continue
+			}
+			if rule.Metric == "rebuffer_ratio" {
+				val = rebuf
+			} else {
+				val = errRate
 			}
 		case "ingest_bitrate_floor":
-			// Direct: use ingest bitrate from health tracker.
+			// Direct: use ingest bitrate from the live health tracker (real poller data).
 			val = s.IngestBitrate
 		default:
 			continue

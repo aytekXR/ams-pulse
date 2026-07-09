@@ -2628,6 +2628,9 @@ components:
         credential_set:
           type: boolean
           description: True if a credential (password/secret) is stored
+        webhook_secret_set:
+          type: boolean
+          description: True if a per-source webhook HMAC secret is stored (B7)
         log_path:
           type: [string, 'null']
           description: Path to AMS analytics log file

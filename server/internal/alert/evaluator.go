@@ -134,6 +134,10 @@ type Evaluator struct {
 	// Wave 2: TLS cert expiry checker (nil = cert_expiry rules skipped).
 	certChecker CertExpiryChecker
 
+	// D-062: QoE reader for rebuffer_ratio / error_rate from ClickHouse rollups.
+	// nil = these rules are skipped with a WARN log (one per tick).
+	qoeReader QoEReader
+
 	// Notification sink for tests.
 	notifySink func([]byte)
 
@@ -206,6 +210,15 @@ func (e *Evaluator) SetCertChecker(checker CertExpiryChecker) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.certChecker = checker
+}
+
+// SetQoEReader wires the ClickHouse QoE reader for rebuffer_ratio and error_rate rules.
+// If not set, those rules are skipped with a WARN log (at most one per tick).
+// Call after New, before Start (D-062).
+func (e *Evaluator) SetQoEReader(reader QoEReader) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.qoeReader = reader
 }
 
 // Start runs the evaluator loop until ctx is cancelled.
@@ -342,7 +355,7 @@ func (e *Evaluator) evaluateRule(ctx context.Context, rule meta.AlertRuleRow, sn
 		evals = e.evalNodeMetric(snap, scope, rule, "disk_pct")
 	// Wave 2: new metric types.
 	case "rebuffer_ratio", "error_rate", "ingest_bitrate_floor":
-		evals = e.evalQoEMetric(snap, scope, rule)
+		evals = e.evalQoEMetric(ctx, snap, scope, rule)
 	case "node_down", "node_degraded":
 		evals = e.evalNodeUpDown(snap, scope, rule)
 	case "cert_expiry":

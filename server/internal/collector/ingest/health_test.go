@@ -4,7 +4,11 @@
 package ingest
 
 import (
+	"bytes"
+	"fmt"
+	"log/slog"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -328,4 +332,94 @@ func TestComputeHealthScore_FPSUnavailableLowBitrate(t *testing.T) {
 	if h := ScoreToHealth(score); h != domain.StreamHealthWarning {
 		t.Errorf("624 kbps vs 2000 target: health = %v (score %.3f), want Warning", h, score)
 	}
+}
+
+// ─── Aggregated degraded-stream log tests (WO-C) ─────────────────────────────
+
+// TestLogDegradedSummary_OneLinePerTick verifies that N degraded streams produce
+// exactly one aggregated INFO line per SweepStale tick, not N per-stream INFO
+// lines. The per-stream detail must be demoted to DEBUG (invisible at Info level).
+func TestLogDegradedSummary_OneLinePerTick(t *testing.T) {
+	var buf bytes.Buffer
+	// slog.NewTextHandler with nil opts defaults to LevelInfo; Debug calls are dropped.
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	tracker := New(Config{SourceGoneTimeout: time.Minute}, logger)
+
+	now := time.Now().UnixMilli()
+	// Feed 5 degraded streams (1 kbps bitrate → Critical health).
+	for i := 0; i < 5; i++ {
+		tracker.OnServerEvent(domain.ServerEvent{
+			Type:     domain.EventIngestStats,
+			TS:       now,
+			NodeID:   "n1",
+			App:      "live",
+			StreamID: fmt.Sprintf("s%d", i),
+			Data: map[string]any{
+				"bitrate_kbps": float64(1),
+			},
+		})
+	}
+
+	// Trigger the per-tick aggregated summary.
+	tracker.SweepStale()
+
+	output := buf.String()
+	aggLines := countDegradedSummaryLines(output)
+	if aggLines != 1 {
+		t.Errorf("want exactly 1 aggregated INFO line, got %d; output:\n%s", aggLines, output)
+	}
+	perStreamLines := countPerStreamInfoLines(output)
+	if perStreamLines != 0 {
+		t.Errorf("want 0 per-stream INFO lines (must be demoted to DEBUG), got %d; output:\n%s", perStreamLines, output)
+	}
+}
+
+// TestLogDegradedSummary_ZeroDegraded verifies that zero degraded streams produce
+// zero aggregated summary log lines.
+func TestLogDegradedSummary_ZeroDegraded(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	tracker := New(Config{SourceGoneTimeout: time.Minute}, logger)
+
+	now := time.Now().UnixMilli()
+	for i := 0; i < 3; i++ {
+		tracker.OnServerEvent(domain.ServerEvent{
+			Type:     domain.EventIngestStats,
+			TS:       now,
+			NodeID:   "n1",
+			App:      "live",
+			StreamID: fmt.Sprintf("healthy%d", i),
+			Data: map[string]any{
+				"bitrate_kbps": float64(2000),
+				"fps":          float64(30),
+			},
+		})
+	}
+
+	tracker.SweepStale()
+
+	output := buf.String()
+	if strings.Contains(output, "ingest: degraded streams") {
+		t.Errorf("want no degraded summary for all-healthy streams, got:\n%s", output)
+	}
+}
+
+func countDegradedSummaryLines(s string) int {
+	n := 0
+	for _, line := range strings.Split(s, "\n") {
+		if strings.Contains(line, "ingest: degraded streams") {
+			n++
+		}
+	}
+	return n
+}
+
+func countPerStreamInfoLines(s string) int {
+	n := 0
+	for _, line := range strings.Split(s, "\n") {
+		if strings.Contains(line, "ingest: health degraded") {
+			n++
+		}
+	}
+	return n
 }

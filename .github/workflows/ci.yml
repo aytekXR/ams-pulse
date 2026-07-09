@@ -48,7 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.25"
 
@@ -86,7 +86,7 @@ jobs:
         run: |
           cd server
           TOTAL=$(go tool cover -func=/tmp/cover.out | awk '/^total:/ {gsub("%","",$NF); print $NF}')
-          FLOOR=70.0
+          FLOOR=70.2
           awk -v t="$TOTAL" -v f="$FLOOR" 'BEGIN {
             if (t+0 < f+0) { printf "FAIL: total coverage %.1f%% < floor %.1f%%\n", t, f; exit 1 }
             printf "OK: total coverage %.1f%% >= floor %.1f%%\n", t, f
@@ -118,8 +118,9 @@ jobs:
         run: /tmp/pulse migrate
 
       # Integration tests self-manage a ClickHouse subprocess: they look for
-      # /tmp/clickhouse and skip (not fail) if absent. Download v26.6.1 so they
-      # run on every push/PR (replaces the old nightly/label-gated approach).
+      # /tmp/clickhouse via testutil.RequireClickHouseBin — absent + CI=true
+      # fails LOUD (D-065 WO-D, D-028-class defence); absent locally still skips.
+      # Download v26.6.1 so they run on every push/PR.
       # The tests do NOT use PULSE_CLICKHOUSE_DSN — they start CH on random ports.
       - name: Download ClickHouse binary for integration tests
         # PINNED to a specific release (D-040) for DETERMINISTIC CI. The old
@@ -374,3 +375,45 @@ jobs:
             -f deploy/docker-compose.ci.yml \
             config --quiet
           echo "docker compose (CI override): PASS"
+
+  slack-notify:
+    name: Slack notification
+    runs-on: ubuntu-latest
+    needs: [contracts, server, web, sdk, docker-build, helm, web-e2e, compose]
+    if: always()
+    steps:
+      - name: Notify Slack on success
+        if: ${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || github.event.pull_request.title || '' }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          MSG=$(printf '%s' "$COMMIT_MESSAGE" | head -n1)
+          MSG=${MSG:-"(no commit message)"}
+          TEXT=$(printf '✅ Build succeeded\n\nRepo: %s\nWorkflow: %s\nTime: %s\nCommit: %s - %s' \
+            "${GITHUB_REPOSITORY##*/}" "$GITHUB_WORKFLOW" "$(date -u '+%Y-%m-%d %H:%M UTC')" \
+            "${GITHUB_SHA:0:7}" "$MSG")
+          jq -n --arg text "$TEXT" '{text: $text}' \
+            | curl -sf -X POST -H 'Content-type: application/json' --data @- \
+              "$SLACK_WEBHOOK_URL" \
+            || echo "::warning::Slack success notification failed"
+
+      - name: Notify Slack on failure
+        if: ${{ contains(needs.*.result, 'failure') }}
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || github.event.pull_request.title || '' }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          NEEDS_JSON: ${{ toJson(needs) }}
+        run: |
+          MSG=$(printf '%s' "$COMMIT_MESSAGE" | head -n1)
+          MSG=${MSG:-"(no commit message)"}
+          FAILED_JOBS=$(printf '%s' "$NEEDS_JSON" | jq -r '[to_entries[] | select(.value.result == "failure") | .key] | join(", ")')
+          TEXT=$(printf '❌ Build failed\n\nRepo: %s\nWorkflow: %s\nJob: %s\nBranch: %s\nActor: %s\nCommit: %s - %s\nRun: %s\nTime: %s' \
+            "${GITHUB_REPOSITORY##*/}" "$GITHUB_WORKFLOW" "$FAILED_JOBS" "$GITHUB_REF_NAME" "$GITHUB_ACTOR" \
+            "${GITHUB_SHA:0:7}" "$MSG" \
+            "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            "$(date -u '+%Y-%m-%d %H:%M UTC')")
+          jq -n --arg text "$TEXT" '{text: $text}' \
+            | curl -sf -X POST -H 'Content-type: application/json' --data @- \
+              "$SLACK_WEBHOOK_URL" \
+            || echo "::warning::Slack failure notification failed"
