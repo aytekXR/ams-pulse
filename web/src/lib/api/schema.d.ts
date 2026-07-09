@@ -561,6 +561,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/oidc/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Initiate OIDC authorization code flow
+         * @description Redirects the browser to the configured OIDC provider's authorization
+         *     endpoint. Requires `PULSE_OIDC_ISSUER` to be set; returns 501 otherwise.
+         *     Sets a short-lived `pulse_oidc_state` cookie (HttpOnly, 10-minute max-age)
+         *     containing the HMAC-signed state+nonce to prevent CSRF. Uses PKCE S256
+         *     to protect the authorization code exchange (code_challenge_method=S256).
+         *     **Phase 1:** UI login button deferred to phase 2; this endpoint can be
+         *     navigated to directly.
+         */
+        get: operations["oidcLogin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * OIDC authorization code callback
+         * @description Receives the authorization code from the OIDC provider, exchanges it for
+         *     tokens, validates the id_token (iss/aud/exp/sig/nonce), maps groups to
+         *     roles, creates a short-lived session token, and sets the `pulse_session`
+         *     cookie (HttpOnly, SameSite=Lax). Then redirects to `/`.
+         *     State parameter is verified against the `pulse_oidc_state` cookie to
+         *     prevent CSRF.
+         */
+        get: operations["oidcCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/oidc/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke OIDC session
+         * @description Deletes the session token from the token store and clears the
+         *     `pulse_session` cookie. Idempotent — returns 204 even when no session
+         *     cookie is present. Requires `PULSE_OIDC_ISSUER` to be set; returns 501
+         *     otherwise.
+         */
+        post: operations["oidcLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/sources": {
         parameters: {
             query?: never;
@@ -1010,6 +1084,30 @@ export interface components {
             name: string;
             /** @description Metric name, e.g. rebuffer_ratio, bitrate_kbps, viewer_count */
             metric: string;
+            /**
+             * @description Rule evaluation mode.
+             *     `threshold` (default): classic operator+threshold comparison.
+             *     `anomaly`: fires when the metric deviates beyond `sigma` standard
+             *     deviations from its rolling Welford baseline (stored in
+             *     anomaly_baselines). For anomaly rules, `operator` and `threshold`
+             *     are ignored by the evaluator. Supported anomaly metrics are exactly
+             *     `viewer_count`, `cpu_pct`, and `mem_pct`; `window_s` must be 3600
+             *     (the Detector window). Unsupported metric or window value returns 400.
+             * @default threshold
+             * @enum {string}
+             */
+            rule_type: "threshold" | "anomaly";
+            /**
+             * Format: float
+             * @description Anomaly rules: sigma multiplier for baseline deviation detection. Default: 4.0 (DefaultSigma).
+             * @default 4
+             */
+            sigma: number;
+            /**
+             * @description Anomaly rules: minimum baseline sample_count required before the rule can fire. Default: 30 (MinSamples).
+             * @default 30
+             */
+            min_samples: number;
             /** @enum {string} */
             operator: "gt" | "lt" | "gte" | "lte" | "eq";
             /** Format: float */
@@ -1050,6 +1148,30 @@ export interface components {
             /** @description Human-readable display name for the alert rule */
             name: string;
             metric: string;
+            /**
+             * @description Rule evaluation mode.
+             *     `threshold` (default): classic operator+threshold comparison.
+             *     `anomaly`: fires when the metric deviates beyond `sigma` standard
+             *     deviations from its rolling Welford baseline (stored in
+             *     anomaly_baselines). For anomaly rules, `operator` and `threshold`
+             *     are ignored by the evaluator. Supported anomaly metrics are exactly
+             *     `viewer_count`, `cpu_pct`, and `mem_pct`; `window_s` must be 3600
+             *     (the Detector window). Unsupported metric or window value returns 400.
+             * @default threshold
+             * @enum {string}
+             */
+            rule_type: "threshold" | "anomaly";
+            /**
+             * Format: float
+             * @description Anomaly rules: sigma multiplier for baseline deviation detection. Default: 4.0 (DefaultSigma).
+             * @default 4
+             */
+            sigma: number;
+            /**
+             * @description Anomaly rules: minimum baseline sample_count required before the rule can fire. Default: 30 (MinSamples).
+             * @default 30
+             */
+            min_samples: number;
             /** @enum {string} */
             operator: "gt" | "lt" | "gte" | "lte" | "eq";
             /** Format: float */
@@ -2730,6 +2852,125 @@ export interface operations {
                 };
             };
             403: components["responses"]["Forbidden"];
+        };
+    };
+    oidcLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to OIDC provider authorization endpoint */
+            302: {
+                headers: {
+                    Location?: string;
+                    /** @description pulse_oidc_state cookie (HttpOnly, 10-minute TTL) */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description OIDC not configured (PULSE_OIDC_ISSUER unset) */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    oidcCallback: {
+        parameters: {
+            query: {
+                /** @description Authorization code from the OIDC provider */
+                code: string;
+                /** @description State value that must match the pulse_oidc_state cookie */
+                state: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Login successful; redirect to SPA root with session cookie set */
+            302: {
+                headers: {
+                    Location?: string;
+                    /** @description pulse_session cookie (HttpOnly, SameSite=Lax) */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or mismatched state, or missing code */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description id_token validation failed (bad signature, expired, wrong issuer/audience) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No group claim matches any role mapping and no default role configured */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description OIDC not configured */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    oidcLogout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session token revoked and pulse_session cookie cleared (idempotent) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description OIDC not configured */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listSources: {

@@ -58,6 +58,8 @@ tags:
     description: "Health and metrics endpoints — unauthenticated or scrape-token"
   - name: admin
     description: "Configuration: sources, users, tokens, license, tenants"
+  - name: auth
+    description: "SSO/OIDC login flow — phase 1 (server side)"
 
 paths:
 
@@ -938,6 +940,127 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "403": { $ref: "#/components/responses/Forbidden" }
+
+  # ─────────────────────────────────────────────────────────────
+  # OIDC / SSO auth (non-versioned, no bearer auth required)
+  # ─────────────────────────────────────────────────────────────
+
+  /auth/oidc/login:
+    get:
+      operationId: oidcLogin
+      tags: [auth]
+      summary: Initiate OIDC authorization code flow
+      description: |
+        Redirects the browser to the configured OIDC provider's authorization
+        endpoint. Requires `PULSE_OIDC_ISSUER` to be set; returns 501 otherwise.
+        Sets a short-lived `pulse_oidc_state` cookie (HttpOnly, 10-minute max-age)
+        containing the HMAC-signed state+nonce to prevent CSRF. Uses PKCE S256
+        to protect the authorization code exchange (code_challenge_method=S256).
+        **Phase 1:** UI login button deferred to phase 2; this endpoint can be
+        navigated to directly.
+      security: []
+      responses:
+        "302":
+          description: Redirect to OIDC provider authorization endpoint
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+            Set-Cookie:
+              description: pulse_oidc_state cookie (HttpOnly, 10-minute TTL)
+              schema:
+                type: string
+        "501":
+          description: OIDC not configured (PULSE_OIDC_ISSUER unset)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/oidc/callback:
+    get:
+      operationId: oidcCallback
+      tags: [auth]
+      summary: OIDC authorization code callback
+      description: |
+        Receives the authorization code from the OIDC provider, exchanges it for
+        tokens, validates the id_token (iss/aud/exp/sig/nonce), maps groups to
+        roles, creates a short-lived session token, and sets the `pulse_session`
+        cookie (HttpOnly, SameSite=Lax). Then redirects to `/`.
+        State parameter is verified against the `pulse_oidc_state` cookie to
+        prevent CSRF.
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Authorization code from the OIDC provider
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+          description: State value that must match the pulse_oidc_state cookie
+      responses:
+        "302":
+          description: Login successful; redirect to SPA root with session cookie set
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+            Set-Cookie:
+              description: pulse_session cookie (HttpOnly, SameSite=Lax)
+              schema:
+                type: string
+        "400":
+          description: Missing or mismatched state, or missing code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: id_token validation failed (bad signature, expired, wrong issuer/audience)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: No group claim matches any role mapping and no default role configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: OIDC not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/oidc/logout:
+    post:
+      operationId: oidcLogout
+      tags: [auth]
+      summary: Revoke OIDC session
+      description: |
+        Deletes the session token from the token store and clears the
+        `pulse_session` cookie. Idempotent — returns 204 even when no session
+        cookie is present. Requires `PULSE_OIDC_ISSUER` to be set; returns 501
+        otherwise.
+      security: []
+      responses:
+        "204":
+          description: Session token revoked and pulse_session cookie cleared (idempotent)
+        "501":
+          description: OIDC not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   # ─────────────────────────────────────────────────────────────
   # Admin
@@ -1910,6 +2033,28 @@ components:
         metric:
           type: string
           description: Metric name, e.g. rebuffer_ratio, bitrate_kbps, viewer_count
+        rule_type:
+          type: string
+          enum: [threshold, anomaly]
+          default: threshold
+          description: |
+            Rule evaluation mode.
+            `threshold` (default): classic operator+threshold comparison.
+            `anomaly`: fires when the metric deviates beyond `sigma` standard
+            deviations from its rolling Welford baseline (stored in
+            anomaly_baselines). For anomaly rules, `operator` and `threshold`
+            are ignored by the evaluator. Supported anomaly metrics are exactly
+            `viewer_count`, `cpu_pct`, and `mem_pct`; `window_s` must be 3600
+            (the Detector window). Unsupported metric or window value returns 400.
+        sigma:
+          type: number
+          format: float
+          default: 4.0
+          description: "Anomaly rules: sigma multiplier for baseline deviation detection. Default: 4.0 (DefaultSigma)."
+        min_samples:
+          type: integer
+          default: 30
+          description: "Anomaly rules: minimum baseline sample_count required before the rule can fire. Default: 30 (MinSamples)."
         operator:
           type: string
           enum: ["gt", "lt", "gte", "lte", "eq"]
@@ -1968,6 +2113,28 @@ components:
           description: Human-readable display name for the alert rule
         metric:
           type: string
+        rule_type:
+          type: string
+          enum: [threshold, anomaly]
+          default: threshold
+          description: |
+            Rule evaluation mode.
+            `threshold` (default): classic operator+threshold comparison.
+            `anomaly`: fires when the metric deviates beyond `sigma` standard
+            deviations from its rolling Welford baseline (stored in
+            anomaly_baselines). For anomaly rules, `operator` and `threshold`
+            are ignored by the evaluator. Supported anomaly metrics are exactly
+            `viewer_count`, `cpu_pct`, and `mem_pct`; `window_s` must be 3600
+            (the Detector window). Unsupported metric or window value returns 400.
+        sigma:
+          type: number
+          format: float
+          default: 4.0
+          description: "Anomaly rules: sigma multiplier for baseline deviation detection. Default: 4.0 (DefaultSigma)."
+        min_samples:
+          type: integer
+          default: 30
+          description: "Anomaly rules: minimum baseline sample_count required before the rule can fire. Default: 30 (MinSamples)."
         operator:
           type: string
           enum: ["gt", "lt", "gte", "lte", "eq"]

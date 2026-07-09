@@ -81,6 +81,14 @@
     "dashboard_url": {
       "type": "string",
       "description": "Deep link to the relevant dashboard page (URI)"
+    },
+    "expected": {
+      "type": "number",
+      "description": "Anomaly rules: baseline mean (expected value). Used in place of threshold for anomaly notifications."
+    },
+    "sigma_multiplier": {
+      "type": "number",
+      "description": "Anomaly rules: configured sigma threshold that was breached."
     }
   }
 }
