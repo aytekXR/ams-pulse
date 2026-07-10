@@ -25,10 +25,10 @@ Player beacons ►│ collector/beacon ─────┤        ├─► sessi
   (:8091 ingest)│                       │        ├─► ingest.HealthTracker (health score, F4)      │
                 │ cluster/discovery ────┘        ├─► alert/evaluator ─► channels ──────────────────► Slack/Email/PD/TG/webhook
                 │  (fleet nodes, F7)             └─► live aggregates ─► api (WS push)             │
-                │ prober.Runner (F10) ──────────────────────────────────────────────────────────► probe_results (CH, 90-day TTL)
-                │  (synthetic probes; 60 s refresh; 4-worker pool; HLS full / others minimal)     │
+                │ prober.Runner (F10) ──────────────────────────────────────────────────────────► probe_results (CH, {retention_days} TTL)
+                │  (synthetic probes; 60 s refresh; 4-worker pool; HLS+DASH full; WebRTC ICE; RTMP handshake)     │
                 │ anomaly.Detector tick (F9) ───────────────────────────────────────────────────► anomaly_baselines (meta)
-                │  (Welford baselines; σ=4.0; minSamples=30; hysteresis=10; 0.259 FA/node-week)   │
+                │  (Welford baselines; σ=4.0; minSamples=30; hysteresis=10; ≈0.346 FA/node-week bound)   │
                 │ query ◄── store reads ◄─────────────────────────────────────────────────────────│
                 │ api: REST (/api/v1) · WS (/live/ws) · /metrics · /healthz · static UI           │
                 │ reports/scheduler ─► CSV/PDF exports (F6) · S3 upload                           │
@@ -69,7 +69,7 @@ Last updated: Wave 3-MVP complete (2026-06-14). QA gate: **PASS_WITH_LIMITATIONS
 
 | Component | Package | Status |
 |---|---|---|
-| Probe runner | `internal/prober` | **Shipped** (F10 MVP + D-072/D-073) — HLS full; dash full (MPD+segment); webrtc phase-1 signaling; rtmp phase-1 TCP handshake; 4-worker pool; 60 s config refresh |
+| Probe runner | `internal/prober` | **Shipped** (F10 MVP + D-072/D-073/D-074) — HLS full; dash full (MPD+segment); webrtc phase-2a signaling+ICE (`ice_state`); rtmp phase-1 TCP handshake; 4-worker pool; 60 s config refresh |
 | Probe results store | `internal/store/clickhouse` | **Shipped** (F10) — `InsertProbeResult` + `QueryProbeResults`; `{retention_days}`-configurable TTL (D-073, default 90) |
 | Probe CRUD + API | `internal/api` | **Shipped** (F10) — `POST/GET/PUT/DELETE /probes`; `GET /probes/{id}/results`; Pro+ tier gate |
 | Anomaly detector | `internal/anomaly` | **Shipped** (F9 MVP) — Welford online baselines; σ=4.0; 0.259 FA/node-week; `GET /anomalies`; Enterprise-only |
@@ -77,8 +77,8 @@ Last updated: Wave 3-MVP complete (2026-06-14). QA gate: **PASS_WITH_LIMITATIONS
 | Web UI — probes | `web/src/features/probes` | **Shipped** (F10) — CRUD form; results panel with TTFB+bitrate charts; 4-level synthetic labeling; Pro+ gate |
 
 Minimal-but-working scope (D-001):
-- F9: 3 metrics (viewers, cpu_pct, mem_pct); 1-hour rolling window; on-read flag computation.
-- F10: HLS + DASH probes fully implemented; webrtc = phase-1 signaling (D-072), rtmp = phase-1 handshake (D-073); only unknown protocols are reachability stubs (`error_code=not_probed`).
+- F9: 5 metrics (viewers, cpu_pct, mem_pct, ingest_bitrate_kbps, disk_pct — D-074); 1-hour rolling window; on-read flag computation.
+- F10: HLS + DASH probes fully implemented; webrtc = phase-2a signaling+ICE (D-072/D-074), rtmp = phase-1 handshake (D-073); only unknown protocols are reachability stubs (`error_code=not_probed`).
 
 Wave-3-Plus enhancements (closed in D-018):
 - F10: `segment_ttfb_ms` stored separately from manifest TTFB; master-playlist probes follow first variant for real bitrate measurement.

@@ -172,7 +172,7 @@ the URL is reachable over HTTP — it says nothing about playback quality.
 |---|---|---|---|
 | `hls` | **Full** — manifest parse (media and master playlists); segment fetch; manifest TTFB, segment TTFB, bitrate; parse/4xx/5xx/timeout/DNS errors | None | — |
 | `rtmp` | **Handshake (phase 1, D-073)** — stdlib TCP C0/C1→S0/S1/S2→C2 with strict S2-echo validation; `connect_time_ms`, `signaling_state=handshake_complete`; `rtmp_timeout`/`rtmp_refused`/`rtmp_error` | No AMF0 connect / media measurement | AMF0 `connect` + `_result` round-trip |
-| `webrtc` | **Signaling (phase 1, D-072)** — WS dial + play command; success on `takeConfiguration`/offer; `connect_time_ms`, `signaling_state=offer_received`; `ws_timeout`/`ws_refused`/`ws_error` | No ICE/DTLS/SRTP media path | pion media path + rtt/jitter/loss (S14) |
+| `webrtc` | **Signaling + ICE (phase 2a, D-074)** — WS dial + play → offer (`signaling_state=offer_received`, `connect_time_ms`); then pion answer + trickle ICE → `ice_state=connected\|failed\|timeout` (`ice_failed`/`ice_timeout` error codes; ICE never flips success) | No media decode / RTCP stats | RTCP receiver stats rtt/jitter/loss (phase 2b, S15) |
 | `dash` | **Full (D-073)** — MPD parse (SegmentTemplate incl. `$Number%0Nd$`, SegmentList, chained BaseURL); segment fetch; manifest TTFB, segment TTFB, timescale-adjusted bitrate; same error codes as HLS | Fixtures spec-derived (real-AMS DASH muxing disabled — see D-073) | Live AMS MPD fixture capture when operator enables DASH |
 
 ---
@@ -307,6 +307,8 @@ The 403 response body:
 | `not_probed` | Protocol stub (unknown/non-enum protocols only, e.g. `srt` — hls/webrtc/rtmp/dash all have real probes) |
 | `ws_timeout` / `ws_refused` / `ws_error` | WebRTC signaling failures (D-072) |
 | `rtmp_timeout` / `rtmp_refused` / `rtmp_error` | RTMP handshake failures (D-073) |
+| `segment_too_large` | Segment body exceeded the 32 MiB cap — bitrate NOT computed from a truncated read (D-074) |
+| `ice_failed` / `ice_timeout` | WebRTC ICE negotiation failed / probe deadline before ICE terminal state; probe success is unaffected (D-074) |
 
 ---
 
@@ -323,8 +325,7 @@ The 403 response body:
 
 ## Phase-3 roadmap
 
-- Native RTMP client for RTMP probes.
-- WHIP/WHEP HTTP signaling + STUN reachability for WebRTC probes.
-- DASH manifest parsing (mirrors HLS).
+- Native RTMP client for RTMP probes (AMF0 `connect` round-trip).
+- WebRTC RTCP receiver stats — rtt/jitter/loss (phase 2b; ICE landed D-074).
 - Distributed probe network (run probes from multiple locations).
 - Multi-node edge deduplication.

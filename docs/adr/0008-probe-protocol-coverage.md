@@ -97,3 +97,17 @@ via pion) is planned for S14 (D-073 triage).
 - `probeReachability`/`not_probed` now applies ONLY to unknown/non-enum
   protocol strings; the `executeProbe` switch has dedicated cases for all
   four contract protocols, confirming the incremental-enhancement design.
+
+### Amended — D-074 (2026-07-10): WebRTC phase-2a ICE media-path check
+
+`probeWebRTC` now continues past the offer into pion ICE negotiation
+(`continueWebRTCICE`, github.com/pion/webrtc/v4 — pure Go, CGO=0 verified):
+SDP answer + trickle `takeCandidate` exchange over the SAME AMS WS session →
+new `ice_state` field (`connected` | `failed` | `timeout`; CH migration 0007;
+key omitted when ICE was not attempted). New error codes `ice_failed` /
+`ice_timeout`. ICE outcome NEVER flips `Success` — signaling success is the
+success criterion, ICE is a bonus measurement (mirrors the HLS
+manifest-vs-segment semantics). The WHIP/WHEP+STUN idea above is now fully
+retired: both signaling AND media-path validation ride AMS's own WS protocol.
+RTCP receiver stats (rtt/jitter/loss) remain phase-2b (CH 0008 reserved,
+D-074 pre-declared yield).
