@@ -371,6 +371,80 @@ func TestProbeDASH_Segment404(t *testing.T) {
 	}
 }
 
+// TestProbeDASH_SegmentBodyTooLarge verifies that a DASH segment body exceeding
+// segBodyCapBytes bytes is reported as segment_too_large (Success=true because
+// the MPD was parseable) with BitrateKbps=0 and SegmentTTFBMs>0.
+//
+// The httptest handler streams cap+1 bytes in 1 MB chunks so the test never
+// allocates 32 MB at once.
+func TestProbeDASH_SegmentBodyTooLarge(t *testing.T) {
+	const capBytes = 32 << 20  // mirrors segBodyCapBytes in prober.go
+	const chunkBytes = 1 << 20 // 1 MB per write, avoids large single alloc
+
+	var srv *httptest.Server
+	mux := http.NewServeMux()
+	mux.HandleFunc("/manifest.mpd", func(w http.ResponseWriter, r *http.Request) {
+		// Valid MPD pointing at /seg_large.m4s (SegmentList, 2 s per segment).
+		const mpd = `<?xml version="1.0"?>
+<MPD>
+  <Period>
+    <AdaptationSet>
+      <Representation id="1">
+        <SegmentList timescale="1" duration="2">
+          <SegmentURL media="seg_large.m4s"/>
+        </SegmentList>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>`
+		w.Header().Set("Content-Type", "application/dash+xml")
+		_, _ = w.Write([]byte(mpd))
+	})
+	mux.HandleFunc("/seg_large.m4s", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "video/mp4")
+		buf := make([]byte, chunkBytes)
+		// Write capBytes/chunkBytes full chunks (= capBytes bytes total).
+		for i := 0; i < capBytes/chunkBytes; i++ {
+			if _, err := w.Write(buf); err != nil {
+				return
+			}
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		}
+		// Write the +1 byte that pushes the total past the cap.
+		_, _ = w.Write([]byte{0})
+	})
+	srv = httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	r := dashTestRunner()
+	// Generous timeout: must transfer cap+1 bytes over loopback.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	result := r.probeDASH(ctx, dashConfig(srv.URL+"/manifest.mpd"), dashResult())
+
+	t.Logf("SegmentBodyTooLarge result: success=%v code=%q ttfb_ms=%d seg_ttfb_ms=%d bitrate=%.4f msg=%q",
+		result.Success, result.ErrorCode, result.TTFBMs, result.SegmentTTFBMs, result.BitrateKbps, result.ErrorMsg)
+
+	if !result.Success {
+		t.Errorf("expected Success=true (manifest OK), got false: code=%q msg=%q",
+			result.ErrorCode, result.ErrorMsg)
+	}
+	if result.ErrorCode != "segment_too_large" {
+		t.Errorf("expected ErrorCode=segment_too_large, got %q", result.ErrorCode)
+	}
+	if result.BitrateKbps != 0 {
+		t.Errorf("expected BitrateKbps=0, got %.4f", result.BitrateKbps)
+	}
+	if result.SegmentTTFBMs == 0 {
+		t.Errorf("expected SegmentTTFBMs > 0 (TTFB recorded before body read), got 0")
+	}
+	t.Logf("PASS: Success=true, ErrorCode=segment_too_large, BitrateKbps=0, SegmentTTFBMs=%d",
+		result.SegmentTTFBMs)
+}
+
 // TestProbeDASH_NoSegmentInfo verifies that a valid MPD XML document containing
 // a Representation but no SegmentTemplate or SegmentList returns
 // Success=false, ErrorCode="parse".

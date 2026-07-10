@@ -534,11 +534,12 @@ func TestIntegration_ProbeResults(t *testing.T) {
 			r.BitrateKbps = 0
 		}
 		if i == 1 {
-			// One WebRTC signaling result exercises the migration-0005 columns
-			// end-to-end (D-072 verifier finding: they were never round-tripped).
+			// One WebRTC signaling + ICE result exercises migration-0005 and
+			// migration-0007 columns end-to-end (D-072 / D-074 verifier findings).
 			ct := uint32(42)
 			r.ConnectTimeMs = &ct
 			r.SignalingState = "offer_received"
+			r.IceState = "connected" // phase-2a ice_state (CH migration 0007)
 		}
 		if err := store.InsertProbeResult(insertCtx, r); err != nil {
 			t.Fatalf("InsertProbeResult[%d]: %v", i, err)
@@ -603,7 +604,7 @@ func TestIntegration_ProbeResults(t *testing.T) {
 			expectedFails++
 		}
 	}
-	// WebRTC columns (0005) round-trip: exactly the i==1 result carries them.
+	// WebRTC columns (migration 0005 + 0007) round-trip: exactly i==1 carries them.
 	foundWebRTC := false
 	for _, r := range results {
 		if r.ID == expectedIDs[1] {
@@ -614,8 +615,13 @@ func TestIntegration_ProbeResults(t *testing.T) {
 			if r.SignalingState != "offer_received" {
 				t.Errorf("webrtc signaling_state round-trip failed: got %q", r.SignalingState)
 			}
-		} else if r.ConnectTimeMs != nil || r.SignalingState != "" {
-			t.Errorf("non-webrtc result %s unexpectedly has webrtc fields (%v, %q)", r.ID, r.ConnectTimeMs, r.SignalingState)
+			// ice_state round-trip (migration 0007 / D-074 WO-B).
+			if r.IceState != "connected" {
+				t.Errorf("webrtc ice_state round-trip failed: got %q, want connected", r.IceState)
+			}
+		} else if r.ConnectTimeMs != nil || r.SignalingState != "" || r.IceState != "" {
+			t.Errorf("non-webrtc result %s unexpectedly has webrtc fields (connect_time_ms=%v, signaling_state=%q, ice_state=%q)",
+				r.ID, r.ConnectTimeMs, r.SignalingState, r.IceState)
 		}
 	}
 	if !foundWebRTC {

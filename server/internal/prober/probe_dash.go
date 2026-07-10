@@ -193,11 +193,23 @@ func (r *Runner) probeDASH(ctx context.Context, p domain.ProbeConfig, result dom
 	// Record segment TTFB on successful 2xx response.
 	result.SegmentTTFBMs = segTTFBMs
 
-	segBytes, err := io.ReadAll(segResp.Body)
+	segBytes, err := io.ReadAll(io.LimitReader(segResp.Body, segBodyCapBytes+1))
 	if err != nil {
 		result.Success = true
 		result.ErrorCode = "read"
 		result.ErrorMsg = fmt.Sprintf("read segment: %v", err)
+		return result
+	}
+
+	// Enforce the segment body cap: a segment larger than segBodyCapBytes is
+	// flagged as segment_too_large.  BitrateKbps stays 0 — a bitrate computed
+	// from a truncated body would be meaningless.  Success=true because the
+	// manifest was valid ("segment is bonus measurement" invariant, D-074 WO-F).
+	if len(segBytes) > segBodyCapBytes {
+		result.Success = true
+		result.ErrorCode = "segment_too_large"
+		result.ErrorMsg = fmt.Sprintf("segment body exceeds %d-byte cap (%d bytes read via LimitReader)",
+			segBodyCapBytes, len(segBytes))
 		return result
 	}
 

@@ -405,7 +405,7 @@ type ProbeResult struct {
 	TS            time.Time // when the probe ran (UTC)
 	Success       bool      // true only on 2xx + parseable response
 	TTFBMs        uint32    // time-to-first-byte in milliseconds
-	ErrorCode     string    // "timeout" | "dns" | "http_4xx" | "http_5xx" | "parse" | "not_probed" | "ws_timeout" | "ws_refused" | "ws_error" | "rtmp_timeout" | "rtmp_refused" | "rtmp_error" | ""
+	ErrorCode     string    // "timeout" | "dns" | "http_4xx" | "http_5xx" | "parse" | "not_probed" | "ws_timeout" | "ws_refused" | "ws_error" | "rtmp_timeout" | "rtmp_refused" | "rtmp_error" | "segment_too_large" | "ice_failed" | "ice_timeout" | ""
 	ErrorMsg      string    // human-readable detail; empty on success
 	BitrateKbps   float32   // estimated kbps = segment_bytes / segment_duration_s (HLS/DASH); 0 on failure
 	SegmentTTFBMs uint32    // TTFB of the first media segment in ms (HLS/DASH); 0 if not measured
@@ -415,8 +415,15 @@ type ProbeResult struct {
 	//                 RTMP: TCP dial → S2 handshake byte fully read in ms; nil if not applicable.
 	// SignalingState — WebRTC: "offer_received" on success, "ws_*" on failure;
 	//                  RTMP: "handshake_complete" on success, "rtmp_*" on failure; "" for HLS/DASH.
+	// IceState — WebRTC phase-2a: terminal ICE state as seen by the probe ANSWERER.
+	//             "connected" (ICEConnectionStateConnected or Completed),
+	//             "failed"    (ICEConnectionStateFailed; ErrorCode="ice_failed"),
+	//             "timeout"   (ctx deadline before ICE terminal state; ErrorCode="ice_timeout").
+	//             Empty string = not applicable (HLS/DASH/RTMP) or ICE not attempted.
+	//             INT-01-signed via the D-074 pre-approved CR (CH migration 0007).
 	ConnectTimeMs  *uint32 // nil = not applicable (HLS/DASH, or connection failed before measurement point)
 	SignalingState string  // "offer_received" | "handshake_complete" | "ws_*" | "rtmp_*" | ""
+	IceState       string  // "connected" | "failed" | "timeout" | "" (empty = not applicable / ICE not attempted)
 }
 
 // ProbeConfigSource is the seam between the probe runner (BE-01) and the meta

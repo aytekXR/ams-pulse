@@ -7,9 +7,13 @@
 // Protocol coverage:
 //   - HLS (minimum, fully working): GET manifest + first segment; measures TTFB,
 //     parses #EXTM3U, fetches first media URI, computes bitrate_kbps.
-//   - WebRTC (phase-1 signaling-only): dials wss?://{host}/{app}/websocket?streamId=<id>,
-//     sends play command, measures time to first takeConfiguration/offer message.
-//     streamId MUST be present as a query param; missing → ws_error.
+//   - WebRTC (phase-2a ICE path): dials wss?://{host}/{app}/websocket?streamId=<id>,
+//     sends play command, measures time to first takeConfiguration/offer (signaling),
+//     then continues into full ICE negotiation via pion (pure-Go, no external STUN).
+//     Outcome: success=true + signaling_state="offer_received" once the offer is parsed;
+//     ice_state="connected"|"failed"|"timeout" records the terminal ICE state.
+//     ICE errors additionally set error_code="ice_failed"|"ice_timeout".
+//     streamId MUST be present as a URL query param; missing → ws_error.
 //   - RTMP (phase-1 handshake): stdlib-only TCP C0/C1 → S0/S1/S2 → C2 with strict
 //     S2-echo validation; measures connect_time_ms (dial → S2 fully read);
 //     signaling_state=handshake_complete; errors rtmp_timeout/rtmp_refused/rtmp_error.
@@ -19,7 +23,7 @@
 //   - Unknown protocols (e.g. srt): minimal-but-honest reachability check —
 //     records a "not_probed" error_code. No faked success.
 //
-// Remaining roadmap: WebRTC media path (pion, phase 2 — S14).
+// Remaining roadmap: WebRTC RTCP receiver stats (pion phase-2b — S14 yield to S15).
 package prober
 
 import (
@@ -42,6 +46,14 @@ import (
 
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 )
+
+// segBodyCapBytes is the maximum number of bytes read from a media segment body
+// (HLS or DASH).  Any segment body larger than this cap is reported as
+// error_code="segment_too_large" with Success=true (the manifest was OK) and
+// BitrateKbps=0 — truncation never silently corrupts the bitrate computation.
+// 32 MiB provides 2× headroom over the worst-case 6 s × 20 Mbps = 15 MB
+// segment and is 640× the largest test fixture (D-074, WO-F).
+const segBodyCapBytes = 32 << 20
 
 // ResultStore is the ClickHouse writer the runner depends on.
 // Implemented by store/clickhouse.Store.InsertProbeResult.
@@ -309,7 +321,8 @@ func (r *Runner) executeProbe(ctx context.Context, p domain.ProbeConfig) {
 		// HLS: full manifest + first-segment check.
 		result = r.probeHLS(probeCtx, p, result)
 	case "webrtc":
-		// WebRTC phase-1: signaling-only check via nhooyr.io/websocket.
+		// WebRTC phase-2a (D-074): signaling via nhooyr.io/websocket, then
+		// pion ICE negotiation (continueWebRTCICE) annotating ice_state.
 		// URL convention: ws(s)://host/{app}/websocket?streamId=<id>
 		result = r.probeWebRTC(probeCtx, p, result)
 	case "rtmp":
@@ -505,11 +518,23 @@ func (r *Runner) probeHLS(ctx context.Context, p domain.ProbeConfig, result doma
 	// Record segment TTFB on successful 2xx response.
 	result.SegmentTTFBMs = segTTFBMs
 
-	segBytes, err := io.ReadAll(segResp.Body)
+	segBytes, err := io.ReadAll(io.LimitReader(segResp.Body, segBodyCapBytes+1))
 	if err != nil {
 		result.Success = true
 		result.ErrorCode = "read"
 		result.ErrorMsg = fmt.Sprintf("read segment: %v", err)
+		return result
+	}
+
+	// Enforce the segment body cap: a segment larger than segBodyCapBytes is
+	// flagged as segment_too_large.  BitrateKbps stays 0 — a bitrate computed
+	// from a truncated body would be meaningless.  Success=true because the
+	// manifest was valid ("segment is bonus measurement" invariant, D-074 WO-F).
+	if len(segBytes) > segBodyCapBytes {
+		result.Success = true
+		result.ErrorCode = "segment_too_large"
+		result.ErrorMsg = fmt.Sprintf("segment body exceeds %d-byte cap (%d bytes read via LimitReader)",
+			segBodyCapBytes, len(segBytes))
 		return result
 	}
 
@@ -647,15 +672,28 @@ func (r *Runner) probeReachability(ctx context.Context, p domain.ProbeConfig, re
 	return result
 }
 
-// wsSignalingMsg is the minimal shape of an AMS WS signaling message we parse.
-// AMS sends: {"command":"takeConfiguration","type":"offer","sdp":"...","streamId":"..."}
-// We only look at command + type; other fields are ignored.
+// wsSignalingMsg is the AMS WS signaling message shape parsed by the WebRTC probe.
+//
+// Phase-1 fields (signaling): Command, Type.
+// Phase-2a fields (ICE via trickle): StreamID, SDP (takeConfiguration/offer+answer),
+// Label (SDPMLineIndex, int), ID (SDPMid, string), Candidate (ICE candidate string).
+//
+// AMS wire shapes (from real-AMS-captures/webrtc-signaling-play-offer.json):
+//
+//	takeConfiguration: {"command":"takeConfiguration","streamId":"...","type":"offer","sdp":"..."}
+//	takeCandidate:     {"command":"takeCandidate","streamId":"...","label":1,"id":"1","candidate":"candidate:..."}
 type wsSignalingMsg struct {
-	Command string `json:"command"`
-	Type    string `json:"type,omitempty"`
+	Command    string `json:"command"`
+	Type       string `json:"type,omitempty"`
+	StreamID   string `json:"streamId,omitempty"`
+	SDP        string `json:"sdp,omitempty"`
+	Label      int    `json:"label,omitempty"`
+	ID         string `json:"id,omitempty"`
+	Candidate  string `json:"candidate,omitempty"`
+	Definition string `json:"definition,omitempty"` // notification/error detail (e.g. subtrackAdded, highResourceUsage)
 }
 
-// probeWebRTC performs a WebRTC signaling-only probe (phase 1).
+// probeWebRTC performs a WebRTC signaling + ICE probe (phase 2a, D-074).
 //
 // URL convention (D-072 ruling): ws(s)://host/{app}/websocket?streamId=<id>
 // The streamId query parameter is REQUIRED. Missing → Success=false, error_code=ws_error.
@@ -666,6 +704,10 @@ type wsSignalingMsg struct {
 //  3. Send AMS play command JSON.
 //  4. Read first server message; success iff command==takeConfiguration && type==offer.
 //  5. Set ConnectTimeMs = elapsed ms from dial start to first parseable message.
+//  6. On signaling success, continue into pion ICE negotiation
+//     (continueWebRTCICE): answer + trickle candidates → ice_state
+//     connected|failed|timeout. ICE outcome never flips Success
+//     (bonus-measurement semantics, D-074).
 func (r *Runner) probeWebRTC(ctx context.Context, p domain.ProbeConfig, result domain.ProbeResult) domain.ProbeResult {
 	// Validate streamId in URL query params.
 	rawURL := p.URL
@@ -741,68 +783,91 @@ func (r *Runner) probeWebRTC(ctx context.Context, p domain.ProbeConfig, result d
 		return result
 	}
 
-	// Read first server message.
-	var rawMsg json.RawMessage
-	if err := wsjson.Read(ctx, conn, &rawMsg); err != nil {
-		errStr := err.Error()
-		var code string
-		var sigState string
-		// Check both the error string and the context state.
-		// nhooyr.io/websocket may return a CloseError on ctx cancellation instead of
-		// propagating the context error directly; always defer to ctx.Err() first.
-		switch {
-		case ctx.Err() != nil && (ctx.Err() == context.DeadlineExceeded ||
-			strings.Contains(ctx.Err().Error(), "deadline exceeded")):
-			code = "ws_timeout"
-			sigState = "ws_timeout"
-		case strings.Contains(errStr, "context deadline exceeded") ||
-			strings.Contains(errStr, "deadline exceeded") ||
-			strings.Contains(errStr, "StatusGoingAway") ||
-			strings.Contains(errStr, "timeout"):
-			code = "ws_timeout"
-			sigState = "ws_timeout"
-		default:
-			code = "ws_error"
-			sigState = "ws_error"
+	// Read server messages until the signaling response arrives. Real AMS
+	// 3.0.3 sends notification messages (e.g. subtrackAdded) BEFORE
+	// takeConfiguration — live-evidenced D-074; the probe must skip them or
+	// it fails against every real AMS with a live stream. The ctx deadline
+	// (TimeoutS) bounds the loop.
+	for {
+		var rawMsg json.RawMessage
+		if err := wsjson.Read(ctx, conn, &rawMsg); err != nil {
+			errStr := err.Error()
+			var code string
+			var sigState string
+			// Check both the error string and the context state.
+			// nhooyr.io/websocket may return a CloseError on ctx cancellation instead of
+			// propagating the context error directly; always defer to ctx.Err() first.
+			switch {
+			case ctx.Err() != nil && (ctx.Err() == context.DeadlineExceeded ||
+				strings.Contains(ctx.Err().Error(), "deadline exceeded")):
+				code = "ws_timeout"
+				sigState = "ws_timeout"
+			case strings.Contains(errStr, "context deadline exceeded") ||
+				strings.Contains(errStr, "deadline exceeded") ||
+				strings.Contains(errStr, "StatusGoingAway") ||
+				strings.Contains(errStr, "timeout"):
+				code = "ws_timeout"
+				sigState = "ws_timeout"
+			default:
+				code = "ws_error"
+				sigState = "ws_error"
+			}
+			result.Success = false
+			result.ErrorCode = code
+			result.ErrorMsg = fmt.Sprintf("ws read: %v", err)
+			result.SignalingState = sigState
+			return result
 		}
-		result.Success = false
-		result.ErrorCode = code
-		result.ErrorMsg = fmt.Sprintf("ws read: %v", err)
-		result.SignalingState = sigState
-		return result
-	}
 
-	elapsed := uint32(time.Since(dialStart).Milliseconds())
-	if elapsed == 0 {
-		elapsed = 1 // floor at 1ms (same pattern as HLS TTFB)
-	}
+		// Parse message: success iff command==takeConfiguration && type==offer.
+		var msg wsSignalingMsg
+		if err := json.Unmarshal(rawMsg, &msg); err != nil {
+			result.Success = false
+			result.ErrorCode = "ws_error"
+			result.ErrorMsg = fmt.Sprintf("ws parse signaling message: %v", err)
+			result.SignalingState = "ws_error"
+			return result
+		}
 
-	// Parse message: success iff command==takeConfiguration && type==offer.
-	var msg wsSignalingMsg
-	if err := json.Unmarshal(rawMsg, &msg); err != nil {
+		// Informational messages (subtrackAdded, play_started, …) are not the
+		// signaling response — keep reading.
+		if msg.Command == "notification" {
+			continue
+		}
+
+		if msg.Command == "takeConfiguration" && msg.Type == "offer" {
+			// ConnectTimeMs = dial start → offer received (notifications
+			// skipped above do not count as the signaling response).
+			elapsed := uint32(time.Since(dialStart).Milliseconds())
+			if elapsed == 0 {
+				elapsed = 1 // floor at 1ms (same pattern as HLS TTFB)
+			}
+			ct := elapsed
+			result.Success = true
+			result.ErrorCode = ""
+			result.ErrorMsg = ""
+			result.ConnectTimeMs = &ct
+			result.SignalingState = "offer_received"
+			// Phase-2a: continue into ICE negotiation on the same WS connection.
+			// continueWebRTCICE is defined in probe_webrtc_ice.go; it fills
+			// result.IceState (and result.ErrorCode on ICE failure/timeout).
+			// Success stays true regardless of ICE outcome — signaling succeeded.
+			result = continueWebRTCICE(ctx, conn, streamID, msg.SDP, result)
+			return result
+		}
+
+		// A non-notification message that is not the offer (e.g. an AMS
+		// error command) is terminal for the signaling check.
 		result.Success = false
 		result.ErrorCode = "ws_error"
-		result.ErrorMsg = fmt.Sprintf("ws parse first message: %v", err)
+		if msg.Command == "error" && msg.Definition != "" {
+			result.ErrorMsg = fmt.Sprintf("ams error: %s", msg.Definition)
+		} else {
+			result.ErrorMsg = fmt.Sprintf("unexpected signaling message: command=%q type=%q", msg.Command, msg.Type)
+		}
 		result.SignalingState = "ws_error"
 		return result
 	}
-
-	if msg.Command == "takeConfiguration" && msg.Type == "offer" {
-		ct := elapsed
-		result.Success = true
-		result.ErrorCode = ""
-		result.ErrorMsg = ""
-		result.ConnectTimeMs = &ct
-		result.SignalingState = "offer_received"
-		return result
-	}
-
-	// Received a first message but it was not the offer (e.g., error command).
-	result.Success = false
-	result.ErrorCode = "ws_error"
-	result.ErrorMsg = fmt.Sprintf("unexpected first message: command=%q type=%q", msg.Command, msg.Type)
-	result.SignalingState = "ws_error"
-	return result
 }
 
 // classifyHTTPError maps a Go net/http error to a probe error_code string.

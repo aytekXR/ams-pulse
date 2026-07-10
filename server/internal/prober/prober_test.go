@@ -276,6 +276,94 @@ func TestHLSProbe_Success(t *testing.T) {
 		result.TTFBMs, result.BitrateKbps)
 }
 
+// TestHLSProbe_SegmentBodyTooLarge verifies that a segment body exceeding the
+// 32 MB cap is reported as segment_too_large (Success=true because the manifest
+// was valid) with BitrateKbps=0 and SegmentTTFBMs>0.
+//
+// The httptest handler streams cap+1 bytes in 1 MB chunks so the test never
+// allocates 32 MB at once.
+func TestHLSProbe_SegmentBodyTooLarge(t *testing.T) {
+	const capBytes = 32 << 20  // mirrors segBodyCapBytes in prober.go
+	const chunkBytes = 1 << 20 // 1 MB per write, avoids large single alloc
+	const segDurS = 6.0
+
+	var srv *httptest.Server
+	mux := http.NewServeMux()
+	mux.HandleFunc("/playlist.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		manifest := fmt.Sprintf(
+			"#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXTINF:%.3f,\n%s/seg.ts\n#EXT-X-ENDLIST\n",
+			segDurS, srv.URL,
+		)
+		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+		_, _ = w.Write([]byte(manifest))
+	})
+	mux.HandleFunc("/seg.ts", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "video/MP2T")
+		buf := make([]byte, chunkBytes)
+		// Write capBytes/chunkBytes full chunks (= capBytes bytes total).
+		for i := 0; i < capBytes/chunkBytes; i++ {
+			if _, err := w.Write(buf); err != nil {
+				return
+			}
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		}
+		// Write the +1 byte that pushes the total past the cap.
+		_, _ = w.Write([]byte{0})
+	})
+	srv = httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	source := &fakeSource{
+		probes: []domain.ProbeConfig{
+			{
+				ID:        "probe-hls-toolarge",
+				Name:      "test-hls-toolarge",
+				URL:       srv.URL + "/playlist.m3u8",
+				Protocol:  "hls",
+				IntervalS: 60,
+				TimeoutS:  30, // generous: must transfer cap+1 bytes over loopback
+				Enabled:   true,
+			},
+		},
+	}
+	store := &fakeStore{}
+	clock := NewFakeClock(time.Now())
+	r := prober.New(prober.Config{Workers: 1, MaxJitterFraction: 0}, source, store, nil, clock)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	go func() { _ = r.Run(ctx) }()
+
+	results := waitForResults(store, 1, 45*time.Second)
+	cancel()
+
+	if len(results) == 0 {
+		t.Fatal("expected at least one probe result; got none")
+	}
+	result := results[0]
+	t.Logf("SegmentBodyTooLarge result: success=%v code=%q ttfb_ms=%d seg_ttfb_ms=%d bitrate=%.4f msg=%q",
+		result.Success, result.ErrorCode, result.TTFBMs, result.SegmentTTFBMs, result.BitrateKbps, result.ErrorMsg)
+
+	if !result.Success {
+		t.Errorf("expected Success=true (manifest OK), got false: code=%q msg=%q",
+			result.ErrorCode, result.ErrorMsg)
+	}
+	if result.ErrorCode != "segment_too_large" {
+		t.Errorf("expected ErrorCode=segment_too_large, got %q", result.ErrorCode)
+	}
+	if result.BitrateKbps != 0 {
+		t.Errorf("expected BitrateKbps=0 (truncated; no valid bitrate), got %.4f", result.BitrateKbps)
+	}
+	if result.SegmentTTFBMs == 0 {
+		t.Errorf("expected SegmentTTFBMs > 0 (TTFB recorded before body read), got 0")
+	}
+	t.Logf("PASS: Success=true, ErrorCode=segment_too_large, BitrateKbps=0, SegmentTTFBMs=%d",
+		result.SegmentTTFBMs)
+}
+
 // TestHLSProbe_HTTP500 verifies that a 500 origin returns success=false with
 // error_code="http_5xx".
 func TestHLSProbe_HTTP500(t *testing.T) {
@@ -552,9 +640,12 @@ func TestProbe_DASHDispatch(t *testing.T) {
 
 // buildWSSignalingServer creates an httptest.Server with a WebSocket handler at
 // /{app}/websocket that speaks the minimal AMS signaling protocol.
-// On receiving {"command":"play",...} it replies with a takeConfiguration/offer.
+// On receiving {"command":"play",...} it replies with a takeConfiguration/offer,
+// then blocks until the client closes the WS (or the request context is done).
+// This keeps the connection alive so phase-2a's continueWebRTCICE can attempt
+// ICE exchange (which will time out because this server sends no candidates).
 // If silent=true the server accepts the WS connection but never sends anything
-// (used to test ws_timeout).
+// (used to test ws_timeout — the probe never reaches the ICE phase).
 func buildWSSignalingServer(t *testing.T, silent bool, offerSDP string) *httptest.Server {
 	t.Helper()
 
@@ -599,14 +690,32 @@ func buildWSSignalingServer(t *testing.T, silent bool, offerSDP string) *httptes
 			"sdp":      sdpForOffer,
 		}
 		_ = wsjson.Write(req.Context(), conn, offer)
+
+		// Keep the WS open until the probe closes it (its context deadline fires
+		// and the probe calls conn.Close) or the request context is cancelled.
+		// This ensures phase-2a's continueWebRTCICE can send its answer + candidates
+		// even though this server ignores them (no ICE connectivity → ice_timeout).
+		// Draining incoming messages prevents the OS buffer from filling.
+		for {
+			var discard json.RawMessage
+			if err := wsjson.Read(req.Context(), conn, &discard); err != nil {
+				return // probe closed WS or context expired
+			}
+		}
 	}))
 	t.Cleanup(srv.Close)
 	return srv
 }
 
-// TestProbe_WebRTC_SignalingOnly verifies the happy path for a WebRTC probe:
-// mock WS server speaks AMS signaling → success=true, connect_time_ms>0,
-// signaling_state=offer_received, error_code="".
+// TestProbe_WebRTC_SignalingOnly verifies signaling + ICE-timeout behavior:
+//   - mock WS server speaks AMS signaling, keeps WS open but sends no ICE candidates.
+//   - Phase-1 signaling succeeds: Success=true, connect_time_ms>0,
+//     signaling_state=offer_received.
+//   - Phase-2a ICE times out (TimeoutS=2, no server candidates): ice_state=timeout,
+//     error_code=ice_timeout.  Success stays true (signaling succeeded).
+//
+// The full ICE-connected happy path is in TestProbeWebRTC_ICEHappyPath
+// (probe_webrtc_ice_test.go), which uses a real pion OFFERER.
 func TestProbe_WebRTC_SignalingOnly(t *testing.T) {
 	srv := buildWSSignalingServer(t, false, "")
 
@@ -621,7 +730,7 @@ func TestProbe_WebRTC_SignalingOnly(t *testing.T) {
 				URL:       wsURL,
 				Protocol:  "webrtc",
 				IntervalS: 60,
-				TimeoutS:  5,
+				TimeoutS:  2, // short: ICE times out quickly (no server candidates)
 				Enabled:   true,
 			},
 		},
@@ -630,27 +739,27 @@ func TestProbe_WebRTC_SignalingOnly(t *testing.T) {
 	clock := NewFakeClock(time.Now())
 	r := prober.New(prober.Config{Workers: 1, MaxJitterFraction: 0}, source, store, nil, clock)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// Outer harness: 30s/20s (TimeoutS=2 is the behavior under test; outer waits
+	// bound scheduler+goroutine latency on -race runs, D-039/D-042 class).
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	go func() { _ = r.Run(ctx) }()
 
-	results := waitForResults(store, 1, 5*time.Second)
+	results := waitForResults(store, 1, 20*time.Second)
 	cancel()
 
 	if len(results) == 0 {
 		t.Fatal("expected at least one probe result; got none")
 	}
 	result := results[0]
-	t.Logf("WebRTC result: success=%v error_code=%q signaling_state=%q connect_time_ms=%v",
-		result.Success, result.ErrorCode, result.SignalingState, result.ConnectTimeMs)
+	t.Logf("WebRTC result: success=%v error_code=%q signaling_state=%q ice_state=%q connect_time_ms=%v",
+		result.Success, result.ErrorCode, result.SignalingState, result.IceState, result.ConnectTimeMs)
 
+	// Phase-1 signaling assertions (unchanged from pre-phase-2a).
 	if !result.Success {
-		t.Errorf("expected Success=true, got false: error_code=%q error_msg=%q",
+		t.Errorf("expected Success=true (signaling succeeded), got false: error_code=%q error_msg=%q",
 			result.ErrorCode, result.ErrorMsg)
-	}
-	if result.ErrorCode != "" {
-		t.Errorf("expected empty ErrorCode on success, got %q", result.ErrorCode)
 	}
 	if result.SignalingState != "offer_received" {
 		t.Errorf("expected signaling_state=offer_received, got %q", result.SignalingState)
@@ -660,8 +769,30 @@ func TestProbe_WebRTC_SignalingOnly(t *testing.T) {
 	} else if *result.ConnectTimeMs == 0 {
 		t.Error("expected ConnectTimeMs > 0")
 	}
-	t.Logf("PASS: success=true, signaling_state=%q, connect_time_ms=%v",
-		result.SignalingState, *result.ConnectTimeMs)
+	// Phase-2a ICE assertions: the minimal test SDP ("v=0\r\n...") may be
+	// rejected by pion's strict WebRTC SDP parser (missing ice-ufrag/fingerprint),
+	// causing continueWebRTCICE to return early with IceState="" (ICE not
+	// attempted).  If pion accepts it, ICE times out because the server sends no
+	// candidates → IceState="timeout".  Both outcomes are valid for this regression
+	// test which focuses on the SIGNALING layer.  The full ICE outcome is covered
+	// by TestProbeWebRTC_ICEHappyPath and TestProbeWebRTC_ICETimeout.
+	switch result.IceState {
+	case "timeout":
+		if result.ErrorCode != "ice_timeout" {
+			t.Errorf("IceState=timeout but ErrorCode=%q, want ice_timeout", result.ErrorCode)
+		}
+		t.Logf("ICE timed out (SDP accepted by pion, no server candidates): ice_state=timeout")
+	case "":
+		// ICE not attempted: pion rejected the minimal test SDP (missing WebRTC fields).
+		if result.ErrorCode != "" {
+			t.Errorf("IceState='' but ErrorCode=%q, want '' (ICE not attempted)", result.ErrorCode)
+		}
+		t.Logf("ICE not attempted (minimal SDP rejected by pion): ice_state=''")
+	default:
+		t.Errorf("unexpected IceState=%q (want timeout or '')", result.IceState)
+	}
+	t.Logf("PASS: success=true, signaling_state=%q, ice_state=%q, error_code=%q",
+		result.SignalingState, result.IceState, result.ErrorCode)
 }
 
 // TestProbe_WebRTC_WsTimeout verifies that a WS server that accepts then stays
@@ -827,43 +958,66 @@ func TestProbe_WebRTC_MissingStreamID(t *testing.T) {
 // This is a table-driven unit test — it does NOT start any servers.
 func TestProbe_WebRTC_FixtureReplay(t *testing.T) {
 	// Captured from real AMS 3.0.3 WebRTC signaling (see
-	// agents/handoffs/real-ams-captures/webrtc-signaling-play-offer.json).
+	// agents/handoffs/real-ams-captures/webrtc-signaling-play-offer.json and
+	// the D-074 live capture: real AMS sends notification messages, e.g.
+	// subtrackAdded, BEFORE takeConfiguration — the probe must skip them).
 	cases := []struct {
-		name      string
-		msg       string
-		wantOK    bool
-		wantState string
+		name            string
+		msgs            []string
+		wantOK          bool
+		wantState       string
+		wantMsgContains string
 	}{
 		{
 			name:      "real_ams_offer",
-			msg:       `{"command":"takeConfiguration","streamId":"teststream","type":"offer","sdp":"v=0\r\n"}`,
+			msgs:      []string{`{"command":"takeConfiguration","streamId":"teststream","type":"offer","sdp":"v=0\r\n"}`},
+			wantOK:    true,
+			wantState: "offer_received",
+		},
+		{
+			// D-074 live-captured sequence: notification precedes the offer.
+			name: "notification_then_offer",
+			msgs: []string{
+				`{"trackId":"teststream","definition":"subtrackAdded","command":"notification","mainTrack":"teststream"}`,
+				`{"command":"takeConfiguration","streamId":"teststream","type":"offer","sdp":"v=0\r\n"}`,
+			},
 			wantOK:    true,
 			wantState: "offer_received",
 		},
 		{
 			name:      "answer_not_offer",
-			msg:       `{"command":"takeConfiguration","streamId":"teststream","type":"answer","sdp":"v=0\r\n"}`,
+			msgs:      []string{`{"command":"takeConfiguration","streamId":"teststream","type":"answer","sdp":"v=0\r\n"}`},
 			wantOK:    false,
 			wantState: "ws_error",
 		},
 		{
-			name:      "error_command",
-			msg:       `{"command":"error","definition":"highResourceUsage"}`,
-			wantOK:    false,
-			wantState: "ws_error",
+			name:            "error_command",
+			msgs:            []string{`{"command":"error","definition":"highResourceUsage"}`},
+			wantOK:          false,
+			wantState:       "ws_error",
+			wantMsgContains: "highResourceUsage",
 		},
 		{
 			name:      "take_candidate",
-			msg:       `{"command":"takeCandidate","streamId":"teststream","label":1,"id":"1","candidate":"candidate:..."}`,
+			msgs:      []string{`{"command":"takeCandidate","streamId":"teststream","label":1,"id":"1","candidate":"candidate:..."}`},
 			wantOK:    false,
 			wantState: "ws_error",
+		},
+		{
+			// Notifications alone are NOT a signaling response: the probe
+			// must keep reading until the deadline → ws_timeout.
+			name:      "notification_only_times_out",
+			msgs:      []string{`{"trackId":"teststream","definition":"subtrackAdded","command":"notification","mainTrack":"teststream"}`},
+			wantOK:    false,
+			wantState: "ws_timeout",
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Build a WS server that sends exactly tc.msg as the first message.
-			rawMsg := tc.msg
+			// Build a WS server that sends tc.msgs in order, then holds the
+			// connection open (blocking read) until the client disconnects.
+			rawMsgs := tc.msgs
 			var srv *httptest.Server
 			srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				conn, err := websocket.Accept(w, req, &websocket.AcceptOptions{InsecureSkipVerify: true})
@@ -874,8 +1028,14 @@ func TestProbe_WebRTC_FixtureReplay(t *testing.T) {
 				// Read play command (discard).
 				var dummy json.RawMessage
 				_ = wsjson.Read(req.Context(), conn, &dummy)
-				// Send fixture message as raw JSON.
-				_ = conn.Write(req.Context(), websocket.MessageText, []byte(rawMsg))
+				// Send fixture messages as raw JSON, in order.
+				for _, m := range rawMsgs {
+					_ = conn.Write(req.Context(), websocket.MessageText, []byte(m))
+				}
+				// Hold the connection open until the probe disconnects (mirrors
+				// a real server that goes quiet rather than closing).
+				var hold json.RawMessage
+				_ = wsjson.Read(req.Context(), conn, &hold)
 			}))
 			t.Cleanup(srv.Close)
 
@@ -895,12 +1055,17 @@ func TestProbe_WebRTC_FixtureReplay(t *testing.T) {
 			clock := NewFakeClock(time.Now())
 			runner := prober.New(prober.Config{Workers: 1, MaxJitterFraction: 0}, source, store, nil, clock)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 			defer cancel()
 
 			go func() { _ = runner.Run(ctx) }()
 
-			results := waitForResults(store, 1, 5*time.Second)
+			// The wait budget must STRICTLY dominate the probe's own deadline
+			// (TimeoutS=5): the notification_only_times_out case stores its
+			// result at ~5.0s, so a 5s wait races the store write and loses
+			// under whole-suite -race CPU contention (D-042 class — budget
+			// inversion, not flakiness). 8s = probe 5s + 3s scheduler margin.
+			results := waitForResults(store, 1, 8*time.Second)
 			cancel()
 
 			if len(results) == 0 {
@@ -915,6 +1080,9 @@ func TestProbe_WebRTC_FixtureReplay(t *testing.T) {
 			}
 			if res.SignalingState != tc.wantState {
 				t.Errorf("expected SignalingState=%q, got %q", tc.wantState, res.SignalingState)
+			}
+			if tc.wantMsgContains != "" && !strings.Contains(res.ErrorMsg, tc.wantMsgContains) {
+				t.Errorf("expected ErrorMsg to contain %q, got %q", tc.wantMsgContains, res.ErrorMsg)
 			}
 			if tc.wantOK {
 				if res.ConnectTimeMs == nil {

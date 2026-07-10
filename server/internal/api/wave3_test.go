@@ -678,3 +678,173 @@ func TestLicense_CheckProbes_CheckAnomalies(t *testing.T) {
 	}
 	t.Logf("PASS: enterprise tier allows probes and anomalies")
 }
+
+// ─── ice_state API mapping test ──────────────────────────────────────────────
+
+// fakeProbeResultQuerier is a minimal ProbeResultQuerier for testing.
+type fakeProbeResultQuerier struct {
+	results []domain.ProbeResult
+}
+
+func (f *fakeProbeResultQuerier) QueryProbeResults(
+	_ context.Context, _ string, _, _ time.Time, _ int,
+) ([]domain.ProbeResult, error) {
+	return f.results, nil
+}
+
+// TestProbeResultToAPI_IceStateMapping pins the probeResultToAPI ice_state
+// omission semantics via the GET /probes/{id}/results HTTP endpoint:
+//   - "ice_state" key is ABSENT when IceState is empty (non-WebRTC probes).
+//   - "ice_state" key is PRESENT with the correct value when non-empty.
+func TestProbeResultToAPI_IceStateMapping(t *testing.T) {
+	licKey, licCleanup := makeTestEnterpriseLicense(t)
+	defer licCleanup()
+	lic, _ := license.New(licKey, "")
+
+	ctx := context.Background()
+	ddlPath := metaDDLPath(t)
+	ddl, err := os.ReadFile(ddlPath)
+	if err != nil {
+		t.Skipf("meta DDL not found: %v", err)
+	}
+	mstore, err := meta.New(ctx, "sqlite", ":memory:", "ice-map-test")
+	if err != nil {
+		t.Fatalf("meta.New: %v", err)
+	}
+	defer mstore.Close()
+	if err := mstore.MigrateEmbedded(ctx, string(ddl)); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	adminToken := "plt_ice_map_test"
+	tokenHash := hashToken(adminToken)
+	if err := mstore.CreateToken(ctx, meta.APIToken{
+		Kind:      "api",
+		Name:      "ice-map-admin",
+		TokenHash: tokenHash,
+		Scopes:    []string{"admin"},
+		CreatedAt: 1000,
+	}); err != nil {
+		t.Fatalf("CreateToken: %v", err)
+	}
+
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	ct := uint32(42)
+
+	// Two results: one without IceState (HLS), one with IceState="connected" (WebRTC).
+	fakeQuerier := &fakeProbeResultQuerier{
+		results: []domain.ProbeResult{
+			{
+				ID:          "result-hls-001",
+				ProbeID:     "probe-ice-map",
+				TS:          now,
+				Success:     true,
+				TTFBMs:      80,
+				BitrateKbps: 1500,
+				// IceState: "" (absent for HLS)
+			},
+			{
+				ID:             "result-webrtc-001",
+				ProbeID:        "probe-ice-map",
+				TS:             now.Add(time.Minute),
+				Success:        true,
+				ConnectTimeMs:  &ct,
+				SignalingState: "offer_received",
+				IceState:       "connected",
+			},
+		},
+	}
+
+	live := &fakeLiveProvider{}
+	qsvc := query.New(live, nil, lic)
+	qsvc.SetProbeResultQuerier(fakeQuerier)
+
+	srv := api.New(api.Config{ListenAddr: ":0"}, mstore, live, qsvc, lic, nil)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	// Create a probe so GET /probes/{id}/results passes the existence check.
+	probeBody := map[string]any{
+		"name":       "ICE State Mapping Test Probe",
+		"url":        "wss://example.com/live/websocket?streamId=test",
+		"protocol":   "webrtc",
+		"interval_s": 60,
+		"timeout_s":  10,
+		"enabled":    true,
+	}
+	probeBodyBytes, _ := json.Marshal(probeBody)
+	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/probes", bytes.NewReader(probeBodyBytes))
+	createReq.Header.Set("Authorization", authHeader(adminToken))
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("POST /probes: %v", err)
+	}
+	if createResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(createResp.Body)
+		createResp.Body.Close()
+		t.Fatalf("POST /probes: expected 201, got %d: %s", createResp.StatusCode, body)
+	}
+	var probeResp map[string]any
+	if err := json.NewDecoder(createResp.Body).Decode(&probeResp); err != nil {
+		t.Fatalf("decode POST /probes response: %v", err)
+	}
+	createResp.Body.Close()
+	probeID, _ := probeResp["id"].(string)
+	if probeID == "" {
+		t.Fatalf("no probe id in response: %v", probeResp)
+	}
+
+	// GET /probes/{id}/results with the real probe ID.
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/probes/"+probeID+"/results", nil)
+	req.Header.Set("Authorization", authHeader(adminToken))
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /probes/.../results: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var envelope struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(envelope.Items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(envelope.Items))
+	}
+
+	// Item 0: HLS result — ice_state key must be ABSENT.
+	hlsItem := envelope.Items[0]
+	if _, ok := hlsItem["ice_state"]; ok {
+		t.Errorf("HLS result: ice_state key should be absent, got %v", hlsItem["ice_state"])
+	}
+	t.Logf("PASS: HLS result has no ice_state key (absent for non-WebRTC probes)")
+
+	// Item 1: WebRTC result — ice_state key must be PRESENT with value "connected".
+	webrtcItem := envelope.Items[1]
+	iceStateRaw, ok := webrtcItem["ice_state"]
+	if !ok {
+		t.Errorf("WebRTC result: ice_state key should be present, got absent")
+	} else if iceState, _ := iceStateRaw.(string); iceState != "connected" {
+		t.Errorf("WebRTC result: ice_state=%q, want connected", iceState)
+	}
+	t.Logf("PASS: WebRTC result has ice_state=%v (present and correct)", iceStateRaw)
+
+	// Verify signaling_state: present for all results but nil for non-WebRTC
+	// (it is always in the map, set to nil for HLS/DASH/RTMP probes — distinct
+	// from ice_state which is key-ABSENT when empty).
+	if hlsItem["signaling_state"] != nil {
+		t.Errorf("HLS result: signaling_state should be nil, got %v", hlsItem["signaling_state"])
+	}
+	if ss, ok := webrtcItem["signaling_state"].(string); !ok || ss != "offer_received" {
+		t.Errorf("WebRTC result: signaling_state=%v, want offer_received", webrtcItem["signaling_state"])
+	}
+	t.Logf("PASS: signaling_state nil for HLS, offer_received for WebRTC")
+}

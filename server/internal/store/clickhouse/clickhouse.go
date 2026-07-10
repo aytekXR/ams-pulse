@@ -655,8 +655,11 @@ func (s *Store) InsertProbeResult(ctx context.Context, r domain.ProbeResult) err
 	// Explicit column list: the Append below is positional, and a bare INSERT
 	// binds to the table's physical column order — a future ADD COLUMN ... AFTER
 	// would silently misalign values (D-072 verifier finding).
+	// Explicit column list guards against physical-order drift (D-072 positional
+	// hazard): ice_state is appended here AND in the Append call below atomically.
+	// CH migration 0007 adds ice_state LowCardinality(String) DEFAULT '' to this table.
 	b, err := s.conn.PrepareBatch(ctx, fmt.Sprintf(
-		"INSERT INTO %s.probe_results (id, probe_id, ts, success, ttfb_ms, error_code, error_msg, bitrate_kbps, segment_ttfb_ms, connect_time_ms, signaling_state)", s.db))
+		"INSERT INTO %s.probe_results (id, probe_id, ts, success, ttfb_ms, error_code, error_msg, bitrate_kbps, segment_ttfb_ms, connect_time_ms, signaling_state, ice_state)", s.db))
 	if err != nil {
 		return fmt.Errorf("probe_results: prepare batch: %w", err)
 	}
@@ -681,6 +684,7 @@ func (s *Store) InsertProbeResult(ctx context.Context, r domain.ProbeResult) err
 		r.SegmentTTFBMs,
 		connectTimeMs,
 		r.SignalingState,
+		r.IceState, // ice_state: "connected"|"failed"|"timeout"|"" (D-074 CH-0007)
 	); err != nil {
 		return fmt.Errorf("probe_results: append: %w", err)
 	}
@@ -696,7 +700,7 @@ func (s *Store) QueryProbeResults(ctx context.Context, probeID string, from, to 
 	}
 	query := fmt.Sprintf(
 		`SELECT id, probe_id, ts, success, ttfb_ms, error_code, error_msg, bitrate_kbps, segment_ttfb_ms,
-		        connect_time_ms, signaling_state
+		        connect_time_ms, signaling_state, ice_state
 		 FROM %s.probe_results
 		 WHERE probe_id = ?
 		   AND ts >= ? AND ts < ?
@@ -718,11 +722,12 @@ func (s *Store) QueryProbeResults(ctx context.Context, probeID string, from, to 
 			ts             time.Time
 			connectTimeMs  uint32
 			signalingState string
+			iceState       string
 		)
 		if err := rows.Scan(
 			&r.ID, &r.ProbeID, &ts, &successU8,
 			&r.TTFBMs, &r.ErrorCode, &r.ErrorMsg, &r.BitrateKbps, &r.SegmentTTFBMs,
-			&connectTimeMs, &signalingState,
+			&connectTimeMs, &signalingState, &iceState,
 		); err != nil {
 			return nil, fmt.Errorf("probe_results: scan: %w", err)
 		}
@@ -734,6 +739,7 @@ func (s *Store) QueryProbeResults(ctx context.Context, probeID string, from, to 
 			r.ConnectTimeMs = &ct
 		}
 		r.SignalingState = signalingState
+		r.IceState = iceState // "" when not applicable (CH DEFAULT '')
 		results = append(results, r)
 	}
 	return results, rows.Err()

@@ -401,5 +401,11 @@ func probeResultToAPI(r domain.ProbeResult) map[string]any {
 	if r.SignalingState != "" {
 		m["signaling_state"] = r.SignalingState
 	}
+	// WebRTC phase-2a ICE field: absent for non-WebRTC probes and when ICE was
+	// not attempted (empty string).  Present when ICE was attempted and reached
+	// a terminal state: "connected" | "failed" | "timeout".
+	if r.IceState != "" {
+		m["ice_state"] = r.IceState
+	}
 	return m
 }

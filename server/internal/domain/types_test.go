@@ -307,6 +307,53 @@ func TestProbeResult_Fields(t *testing.T) {
 			if !r.TS.Equal(now) {
 				t.Errorf("TS = %v, want %v", r.TS, now)
 			}
+			// IceState zero value is empty string (not applicable for HLS/DASH/RTMP).
+			if r.IceState != "" {
+				t.Errorf("default IceState = %q, want ''", r.IceState)
+			}
+		})
+	}
+}
+
+// TestProbeResult_IceState verifies the IceState field semantics for WebRTC probes.
+// D-074 binding: "connected"|"failed"|"timeout"|"" (empty = not applicable / ICE not attempted).
+func TestProbeResult_IceState(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		iceState  string
+		errorCode string
+	}{
+		{"not_applicable", "", ""},
+		{"connected", "connected", ""},
+		{"failed", "failed", "ice_failed"},
+		{"timeout", "timeout", "ice_timeout"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			r := domain.ProbeResult{
+				ID:             "webrtc-result-uuid",
+				ProbeID:        "webrtc-probe-uuid",
+				TS:             time.Now().UTC(),
+				Success:        true, // signaling always succeeds even when ICE fails
+				SignalingState: "offer_received",
+				IceState:       tc.iceState,
+				ErrorCode:      tc.errorCode,
+			}
+			if r.IceState != tc.iceState {
+				t.Errorf("IceState = %q, want %q", r.IceState, tc.iceState)
+			}
+			if r.ErrorCode != tc.errorCode {
+				t.Errorf("ErrorCode = %q, want %q", r.ErrorCode, tc.errorCode)
+			}
+			// Success must stay true regardless of ICE outcome (D-074 semantics).
+			if !r.Success {
+				t.Error("Success must be true when signaling succeeded, even on ICE failure")
+			}
 		})
 	}
 }
