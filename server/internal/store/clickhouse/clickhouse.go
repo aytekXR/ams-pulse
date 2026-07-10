@@ -656,10 +656,15 @@ func (s *Store) InsertProbeResult(ctx context.Context, r domain.ProbeResult) err
 	// binds to the table's physical column order — a future ADD COLUMN ... AFTER
 	// would silently misalign values (D-072 verifier finding).
 	// Explicit column list guards against physical-order drift (D-072 positional
-	// hazard): ice_state is appended here AND in the Append call below atomically.
-	// CH migration 0007 adds ice_state LowCardinality(String) DEFAULT '' to this table.
+	// hazard): every column appended here must appear in the Append call below
+	// at the same position, atomically.
+	// CH migration 0007 adds ice_state LowCardinality(String) DEFAULT ''.
+	// CH migration 0008 adds rtt_ms, jitter_ms, loss_pct Nullable(Float32) (D-075 WO-B).
+	// clickhouse-go v2 maps nil *float32 → NULL for Nullable(Float32) columns via
+	// the reflect-based AppendRow nil-pointer check in lib/column/nullable.go — verified
+	// against clickhouse-go v2.47.0 source (nullable.go:AppendRow, ScanRow).
 	b, err := s.conn.PrepareBatch(ctx, fmt.Sprintf(
-		"INSERT INTO %s.probe_results (id, probe_id, ts, success, ttfb_ms, error_code, error_msg, bitrate_kbps, segment_ttfb_ms, connect_time_ms, signaling_state, ice_state)", s.db))
+		"INSERT INTO %s.probe_results (id, probe_id, ts, success, ttfb_ms, error_code, error_msg, bitrate_kbps, segment_ttfb_ms, connect_time_ms, signaling_state, ice_state, rtt_ms, jitter_ms, loss_pct)", s.db))
 	if err != nil {
 		return fmt.Errorf("probe_results: prepare batch: %w", err)
 	}
@@ -685,6 +690,9 @@ func (s *Store) InsertProbeResult(ctx context.Context, r domain.ProbeResult) err
 		connectTimeMs,
 		r.SignalingState,
 		r.IceState, // ice_state: "connected"|"failed"|"timeout"|"" (D-074 CH-0007)
+		r.RttMs,    // rtt_ms:    Nullable(Float32); nil → NULL (D-075 CH-0008)
+		r.JitterMs, // jitter_ms: Nullable(Float32); nil → NULL (D-075 CH-0008)
+		r.LossPct,  // loss_pct:  Nullable(Float32); nil → NULL (D-075 CH-0008)
 	); err != nil {
 		return fmt.Errorf("probe_results: append: %w", err)
 	}
@@ -700,7 +708,8 @@ func (s *Store) QueryProbeResults(ctx context.Context, probeID string, from, to 
 	}
 	query := fmt.Sprintf(
 		`SELECT id, probe_id, ts, success, ttfb_ms, error_code, error_msg, bitrate_kbps, segment_ttfb_ms,
-		        connect_time_ms, signaling_state, ice_state
+		        connect_time_ms, signaling_state, ice_state,
+		        rtt_ms, jitter_ms, loss_pct
 		 FROM %s.probe_results
 		 WHERE probe_id = ?
 		   AND ts >= ? AND ts < ?
@@ -723,11 +732,16 @@ func (s *Store) QueryProbeResults(ctx context.Context, probeID string, from, to 
 			connectTimeMs  uint32
 			signalingState string
 			iceState       string
+			// Nullable(Float32) columns — nil when NULL in CH (D-075 CH-0008).
+			rttMs    *float32
+			jitterMs *float32
+			lossPct  *float32
 		)
 		if err := rows.Scan(
 			&r.ID, &r.ProbeID, &ts, &successU8,
 			&r.TTFBMs, &r.ErrorCode, &r.ErrorMsg, &r.BitrateKbps, &r.SegmentTTFBMs,
 			&connectTimeMs, &signalingState, &iceState,
+			&rttMs, &jitterMs, &lossPct,
 		); err != nil {
 			return nil, fmt.Errorf("probe_results: scan: %w", err)
 		}
@@ -740,6 +754,10 @@ func (s *Store) QueryProbeResults(ctx context.Context, probeID string, from, to 
 		}
 		r.SignalingState = signalingState
 		r.IceState = iceState // "" when not applicable (CH DEFAULT '')
+		// True NULL → nil pointer (no sentinel reconstruction — Nullable is exact, D-075).
+		r.RttMs = rttMs
+		r.JitterMs = jitterMs
+		r.LossPct = lossPct
 		results = append(results, r)
 	}
 	return results, rows.Err()

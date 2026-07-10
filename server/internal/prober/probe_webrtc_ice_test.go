@@ -1,4 +1,4 @@
-// Package prober_test — phase-2a ICE tests for the WebRTC probe.
+// Package prober_test — phase-2a/2b ICE tests for the WebRTC probe.
 //
 // TDD red→green: this file is written BEFORE probe_webrtc_ice.go exists.
 // Tests are in the external test package (prober_test) and drive the runner
@@ -11,19 +11,20 @@ package prober_test
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	pionrtp "github.com/pion/rtp"
 	webrtc "github.com/pion/webrtc/v4"
 	nhws "nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 	"github.com/pulse-analytics/pulse/server/internal/prober"
-
-	"net/http"
-	"net/http/httptest"
 )
 
 // ─── ICE signaling message shape (mirrors prober.wsSignalingMsg but local) ──
@@ -48,9 +49,16 @@ type iceMsg struct {
 //  3. Handles the client's answer + trickle takeCandidate messages.
 //  4. Emits its own trickle takeCandidate messages to the client.
 //
+// When sendRTP is true, the offerer starts the shared-spec deterministic RTP
+// goroutine on PeerConnectionStateConnected:
+//
+//	PT=96 (VP8), Marker=true, SeqNo starts 1, Timestamp starts 0 +2700/pkt
+//	(90 kHz @ 30 ms), 30 ms ticker, ~2 s window (~66 packets),
+//	Payload = 64 bytes [0..63].  SSRC from RTPSender.GetParameters().
+//
 // Because both peers run on localhost (Docker or host loopback), ICE completes
 // with host candidates only — no external STUN required.
-func buildICEHappyPathServer(t *testing.T) *httptest.Server {
+func buildICEHappyPathServer(t *testing.T, sendRTP bool) *httptest.Server {
 	t.Helper()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -99,9 +107,66 @@ func buildICEHappyPathServer(t *testing.T) *httptest.Server {
 			t.Logf("ICE server: NewTrackLocalStaticRTP: %v", err)
 			return
 		}
-		if _, err := offerer.AddTrack(videoTrack); err != nil {
+		rtpSender, err := offerer.AddTrack(videoTrack)
+		if err != nil {
 			t.Logf("ICE server: AddTrack: %v", err)
 			return
+		}
+
+		// Shared-spec RTP sender goroutine (phase-2b, D-075).
+		// Starts on PeerConnectionStateConnected (DTLS done → SRTP ready).
+		// sync.Once guards against re-entry on rapid state transitions.
+		if sendRTP {
+			var rtpOnce sync.Once
+			offerer.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+				if state != webrtc.PeerConnectionStateConnected {
+					return
+				}
+				rtpOnce.Do(func() {
+					go func() {
+						// SSRC must be read lazily inside the goroutine, after negotiation.
+						params := rtpSender.GetParameters()
+						var ssrc uint32
+						if len(params.Encodings) > 0 {
+							ssrc = uint32(params.Encodings[0].SSRC)
+						}
+						ticker := time.NewTicker(30 * time.Millisecond)
+						defer ticker.Stop()
+						end := time.After(2 * time.Second) // ~66 packets @ 30 ms/pkt
+						var seqNo uint16 = 1
+						var ts uint32
+						for {
+							select {
+							case <-ctx.Done():
+								return
+							case <-end:
+								return
+							case <-ticker.C:
+								payload := make([]byte, 64)
+								for i := range payload {
+									payload[i] = byte(i)
+								}
+								pkt := &pionrtp.Packet{
+									Header: pionrtp.Header{
+										Version:        2,
+										PayloadType:    96,
+										Marker:         true,
+										SequenceNumber: seqNo,
+										Timestamp:      ts,
+										SSRC:           ssrc,
+									},
+									Payload: payload,
+								}
+								if err := videoTrack.WriteRTP(pkt); err != nil {
+									return // io.ErrClosedPipe after pc.Close() is expected
+								}
+								seqNo++
+								ts += 2700
+							}
+						}
+					}()
+				})
+			})
 		}
 
 		// offerSentCh is closed after the offer is written to the WS.
@@ -209,7 +274,7 @@ func buildICEHappyPathServer(t *testing.T) *httptest.Server {
 //   - ICE connects on loopback (host candidates, no STUN).
 //   - Result: Success=true, IceState="connected", ErrorCode="".
 func TestProbeWebRTC_ICEHappyPath(t *testing.T) {
-	srv := buildICEHappyPathServer(t)
+	srv := buildICEHappyPathServer(t, false /* sendRTP=false: phase-2a ICE path only */)
 
 	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/live/websocket?streamId=ice-happy-stream"
 
@@ -434,4 +499,180 @@ func TestProbeResultToAPI_IceStateOmission(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ─── Test 4: RTP stats (phase-2b, D-075) ──────────────────────────────────────
+
+// TestProbeWebRTC_RTPStats verifies that after ICE connects and RTP flows for ~2s
+// the probe collects RttMs, JitterMs, and LossPct (all non-nil, in-range).
+//
+// D-074 budget-inversion arithmetic (domination requirement):
+//
+//	TimeoutS = 10  → probe context deadline = 10 s
+//	rtpStatsHold  = 2 s (within the probe context)
+//	Total probe   ≤ 10 s
+//	waitForResults = 60 s  >> 10 s probe deadline  ✓
+//	outer ctx     = 90 s  >> 60 s waitForResults   ✓
+func TestProbeWebRTC_RTPStats(t *testing.T) {
+	// sendRTP=true: offerer starts the shared-spec deterministic RTP goroutine
+	// on PeerConnectionStateConnected.
+	srv := buildICEHappyPathServer(t, true /* sendRTP */)
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/live/websocket?streamId=rtp-stats-stream"
+
+	source := &fakeSource{
+		probes: []domain.ProbeConfig{
+			{
+				ID:        "probe-rtp-stats",
+				Name:      "test-rtp-stats",
+				URL:       wsURL,
+				Protocol:  "webrtc",
+				IntervalS: 60,
+				// TimeoutS=10: must be >= 4s to allow ICE (~1s) + hold (2s).
+				// Comment (D-075 binding): meaningful WebRTC probes need TimeoutS >= 4s.
+				TimeoutS: 10,
+				Enabled:  true,
+			},
+		},
+	}
+	store := &fakeStore{}
+	clock := NewFakeClock(time.Now())
+	r := prober.New(prober.Config{Workers: 1, MaxJitterFraction: 0}, source, store, nil, clock)
+
+	// Outer ctx = 90s >> waitForResults 60s >> probe 10s (D-074 budget-inversion).
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	go func() { _ = r.Run(ctx) }()
+
+	// 60s budget strictly dominates the 10s probe deadline (D-074).
+	results := waitForResults(store, 1, 60*time.Second)
+	cancel()
+
+	if len(results) == 0 {
+		t.Fatal("expected at least one probe result; got none")
+	}
+	result := results[0]
+	t.Logf("RTP stats: success=%v error_code=%q ice_state=%q rtt_ms=%v jitter_ms=%v loss_pct=%v",
+		result.Success, result.ErrorCode, result.IceState,
+		result.RttMs, result.JitterMs, result.LossPct)
+
+	// ICE path assertions (unchanged from phase-2a).
+	if !result.Success {
+		t.Errorf("expected Success=true, got false: error_code=%q", result.ErrorCode)
+	}
+	if result.IceState != "connected" {
+		t.Errorf("expected IceState=connected, got %q", result.IceState)
+	}
+
+	// Phase-2b assertions: all three stats pointers must be non-nil and in range.
+	if result.RttMs == nil {
+		t.Error("expected RttMs != nil after RTP stats hold")
+	} else if *result.RttMs < 0 {
+		t.Errorf("RttMs must be >= 0, got %f", *result.RttMs)
+	}
+	if result.JitterMs == nil {
+		t.Error("expected JitterMs != nil after RTP stats hold")
+	} else if *result.JitterMs < 0 {
+		t.Errorf("JitterMs must be >= 0, got %f", *result.JitterMs)
+	}
+	if result.LossPct == nil {
+		t.Error("expected LossPct != nil after RTP stats hold")
+	} else {
+		if *result.LossPct < 0 {
+			t.Errorf("LossPct must be >= 0, got %f", *result.LossPct)
+		}
+		if *result.LossPct > 100 {
+			t.Errorf("LossPct must be <= 100, got %f", *result.LossPct)
+		}
+	}
+	t.Logf("PASS: ice_state=connected, rtt_ms=%v, jitter_ms=%v, loss_pct=%v",
+		result.RttMs, result.JitterMs, result.LossPct)
+}
+
+// ─── Test 5: ctx expiry during the stats hold ────────────────────────────────
+
+// TestProbeWebRTC_CtxExpiredDuringHold verifies the hold-exit path:
+// when the probe context expires while waiting for the stats hold, the probe
+// returns IceState="connected" with RttMs/JitterMs/LossPct all nil.
+//
+// Mechanism: SetTestRTPStatsHoldOverride sets the hold to 30 s so the
+// 8 s probe context (TimeoutS=8) reliably expires mid-hold.  ICE on loopback
+// connects in <100 ms, so even under heavy -race contention the connected
+// path is taken long before ctx fires (TimeoutS widened 4→8 s, D-075
+// verifier finding — the happy path must never lose to scheduler starvation).
+//
+// MUST NOT be t.Parallel(): the hold override must not leak into other tests.
+//
+// D-074 budget-inversion: TimeoutS=8 → probe ≤ 8 s; waitForResults=30 s >> 8 s;
+// outer ctx=60 s >> 30 s.
+func TestProbeWebRTC_CtxExpiredDuringHold(t *testing.T) {
+	// Override the hold to 30 s; restore via t.Cleanup.
+	// The probe context (TimeoutS=8) fires before the 30 s override expires.
+	prober.SetTestRTPStatsHoldOverride(30 * time.Second)
+	t.Cleanup(func() { prober.SetTestRTPStatsHoldOverride(0) })
+
+	// sendRTP=true so the offerer sends packets; stats would be collectible if
+	// the hold completed, but the ctx fires first.
+	srv := buildICEHappyPathServer(t, true /* sendRTP */)
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/live/websocket?streamId=hold-expiry-stream"
+
+	source := &fakeSource{
+		probes: []domain.ProbeConfig{
+			{
+				ID:        "probe-hold-expiry",
+				Name:      "test-hold-expiry",
+				URL:       wsURL,
+				Protocol:  "webrtc",
+				IntervalS: 60,
+				// TimeoutS=8: ICE (<1 s loopback) + hold starts; ctx fires before
+				// the 30 s override hold finishes → stats absent.
+				TimeoutS: 8,
+				Enabled:  true,
+			},
+		},
+	}
+	store := &fakeStore{}
+	clock := NewFakeClock(time.Now())
+	r := prober.New(prober.Config{Workers: 1, MaxJitterFraction: 0}, source, store, nil, clock)
+
+	// Outer ctx = 60s >> waitForResults 30s >> probe 8s (D-074).
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	go func() { _ = r.Run(ctx) }()
+
+	// 30s budget strictly dominates the 8s probe deadline (D-074).
+	results := waitForResults(store, 1, 30*time.Second)
+	cancel()
+
+	if len(results) == 0 {
+		t.Fatal("expected at least one probe result; got none")
+	}
+	result := results[0]
+	t.Logf("hold-expiry: success=%v error_code=%q ice_state=%q rtt_ms=%v jitter_ms=%v loss_pct=%v",
+		result.Success, result.ErrorCode, result.IceState,
+		result.RttMs, result.JitterMs, result.LossPct)
+
+	// ICE connected before ctx expired.
+	if !result.Success {
+		t.Errorf("expected Success=true, got false: error_code=%q error_msg=%q",
+			result.ErrorCode, result.ErrorMsg)
+	}
+	if result.IceState != "connected" {
+		t.Errorf("expected IceState=connected (ICE completed before ctx expired), got %q", result.IceState)
+	}
+
+	// Stats must be nil: ctx fired during the hold, stats were not collected.
+	if result.RttMs != nil {
+		t.Errorf("expected RttMs=nil (ctx expired during hold), got %v", *result.RttMs)
+	}
+	if result.JitterMs != nil {
+		t.Errorf("expected JitterMs=nil (ctx expired during hold), got %v", *result.JitterMs)
+	}
+	if result.LossPct != nil {
+		t.Errorf("expected LossPct=nil (ctx expired during hold), got %v", *result.LossPct)
+	}
+	t.Logf("PASS: ice_state=connected, stats all nil (ctx fired during hold)")
 }

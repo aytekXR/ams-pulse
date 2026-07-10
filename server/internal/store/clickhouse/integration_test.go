@@ -324,6 +324,18 @@ func TestIntegration_BatchInsert(t *testing.T) {
 	_ = ttlExpr
 }
 
+// approxEqualF32 returns true if the absolute difference between got and want
+// is within tol. Used for float32 round-trip assertions (float32 has ~7 decimal
+// digits of precision; values like 12.5, 2.1, 0.5 are exactly representable or
+// within 1 ULP, so a tolerance of 0.01 is more than sufficient).
+func approxEqualF32(got, want, tol float32) bool {
+	diff := got - want
+	if diff < 0 {
+		diff = -diff
+	}
+	return diff <= tol
+}
+
 // freePort finds an available TCP port.
 func freePort(t *testing.T) int {
 	t.Helper()
@@ -534,12 +546,26 @@ func TestIntegration_ProbeResults(t *testing.T) {
 			r.BitrateKbps = 0
 		}
 		if i == 1 {
-			// One WebRTC signaling + ICE result exercises migration-0005 and
-			// migration-0007 columns end-to-end (D-072 / D-074 verifier findings).
+			// One WebRTC signaling + ICE result exercises migration-0005, 0007, and 0008
+			// columns end-to-end (D-072 / D-074 / D-075 verifier findings).
 			ct := uint32(42)
 			r.ConnectTimeMs = &ct
 			r.SignalingState = "offer_received"
 			r.IceState = "connected" // phase-2a ice_state (CH migration 0007)
+			// Phase-2b RTP stats (CH migration 0008, D-075 WO-B): rtt_ms/jitter_ms/loss_pct.
+			rtt := float32(12.5)
+			r.RttMs = &rtt
+			jitter := float32(2.1)
+			r.JitterMs = &jitter
+			loss := float32(0.5)
+			r.LossPct = &loss
+		}
+		if i == 2 {
+			// LossPct=0.0 pins that stored 0.0 round-trips as non-nil 0.0.
+			// Nullable(Float32) is the only unambiguous "not measured" sentinel because
+			// 0.0 is a valid measurement (zero loss) — D-075.
+			lossZero := float32(0.0)
+			r.LossPct = &lossZero
 		}
 		if err := store.InsertProbeResult(insertCtx, r); err != nil {
 			t.Fatalf("InsertProbeResult[%d]: %v", i, err)
@@ -604,10 +630,13 @@ func TestIntegration_ProbeResults(t *testing.T) {
 			expectedFails++
 		}
 	}
-	// WebRTC columns (migration 0005 + 0007) round-trip: exactly i==1 carries them.
+	// WebRTC columns (migration 0005 + 0007 + 0008) round-trip.
+	// i==1: full WebRTC stats; i==2: LossPct=0.0 (Nullable sentinel test).
 	foundWebRTC := false
+	foundLossPctZero := false
 	for _, r := range results {
-		if r.ID == expectedIDs[1] {
+		switch r.ID {
+		case expectedIDs[1]:
 			foundWebRTC = true
 			if r.ConnectTimeMs == nil || *r.ConnectTimeMs != 42 {
 				t.Errorf("webrtc connect_time_ms round-trip failed: got %v, want 42", r.ConnectTimeMs)
@@ -619,13 +648,51 @@ func TestIntegration_ProbeResults(t *testing.T) {
 			if r.IceState != "connected" {
 				t.Errorf("webrtc ice_state round-trip failed: got %q, want connected", r.IceState)
 			}
-		} else if r.ConnectTimeMs != nil || r.SignalingState != "" || r.IceState != "" {
-			t.Errorf("non-webrtc result %s unexpectedly has webrtc fields (connect_time_ms=%v, signaling_state=%q, ice_state=%q)",
-				r.ID, r.ConnectTimeMs, r.SignalingState, r.IceState)
+			// rtt_ms round-trip (migration 0008 / D-075 WO-B).
+			if r.RttMs == nil || !approxEqualF32(*r.RttMs, 12.5, 0.01) {
+				t.Errorf("webrtc rtt_ms round-trip failed: got %v, want ~12.5", r.RttMs)
+			}
+			// jitter_ms round-trip (migration 0008 / D-075 WO-B).
+			if r.JitterMs == nil || !approxEqualF32(*r.JitterMs, 2.1, 0.01) {
+				t.Errorf("webrtc jitter_ms round-trip failed: got %v, want ~2.1", r.JitterMs)
+			}
+			// loss_pct round-trip (migration 0008 / D-075 WO-B).
+			if r.LossPct == nil || !approxEqualF32(*r.LossPct, 0.5, 0.001) {
+				t.Errorf("webrtc loss_pct round-trip failed: got %v, want ~0.5", r.LossPct)
+			}
+		case expectedIDs[2]:
+			// Verify LossPct=0.0 round-trips as non-nil 0.0 (Nullable vs sentinel — D-075).
+			foundLossPctZero = true
+			if r.LossPct == nil {
+				t.Errorf("loss_pct zero round-trip: got nil, want non-nil 0.0")
+			} else if *r.LossPct != 0.0 {
+				t.Errorf("loss_pct zero round-trip: got %v, want 0.0", *r.LossPct)
+			}
+			if r.RttMs != nil {
+				t.Errorf("i==2 rtt_ms should be nil (not set), got %v", r.RttMs)
+			}
+			if r.JitterMs != nil {
+				t.Errorf("i==2 jitter_ms should be nil (not set), got %v", r.JitterMs)
+			}
+			if r.ConnectTimeMs != nil || r.SignalingState != "" || r.IceState != "" {
+				t.Errorf("i==2 should not carry WebRTC state fields (connect_time_ms=%v, signaling_state=%q, ice_state=%q)",
+					r.ConnectTimeMs, r.SignalingState, r.IceState)
+			}
+		default:
+			// All other rows: none of the extended WebRTC / RTP-stats fields should be set.
+			if r.ConnectTimeMs != nil || r.SignalingState != "" || r.IceState != "" ||
+				r.RttMs != nil || r.JitterMs != nil || r.LossPct != nil {
+				t.Errorf("non-webrtc result %s unexpectedly has webrtc/rtp fields "+
+					"(connect_time_ms=%v, signaling_state=%q, ice_state=%q, rtt_ms=%v, jitter_ms=%v, loss_pct=%v)",
+					r.ID, r.ConnectTimeMs, r.SignalingState, r.IceState, r.RttMs, r.JitterMs, r.LossPct)
+			}
 		}
 	}
 	if !foundWebRTC {
-		t.Error("webrtc fixture result not returned by QueryProbeResults")
+		t.Error("webrtc fixture result (i==1) not returned by QueryProbeResults")
+	}
+	if !foundLossPctZero {
+		t.Error("loss_pct=0.0 fixture result (i==2) not returned by QueryProbeResults")
 	}
 
 	if failCount != expectedFails {
