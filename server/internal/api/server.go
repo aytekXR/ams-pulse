@@ -34,6 +34,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -468,6 +470,10 @@ func (s *Server) mountWebUI(r chi.Router) {
 
 	// SPA fallback: serve index.html for unmatched GETs that are not API,
 	// ingest, or operational paths (those keep their own handlers / 404s).
+	// Real files under webDir (favicon.svg, /icons/*, /logo/*, site.webmanifest —
+	// the brandkit build's root-level assets) are served as themselves FIRST:
+	// before D-076b every such path returned index.html as text/html, so the
+	// browser rendered a broken tab icon (found live at the v0.3.0 accept).
 	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
 		p := req.URL.Path
 		if req.Method != http.MethodGet ||
@@ -476,6 +482,12 @@ func (s *Server) mountWebUI(r chi.Router) {
 			p == "/healthz" || p == "/metrics" {
 			http.NotFound(w, req)
 			return
+		}
+		if clean := path.Clean("/" + p); clean != "/" && !strings.Contains(clean, "..") {
+			if fi, err := os.Stat(filepath.Join(webDir, filepath.FromSlash(clean))); err == nil && !fi.IsDir() {
+				fileServer.ServeHTTP(w, req)
+				return
+			}
 		}
 		http.ServeFile(w, req, indexPath)
 	})

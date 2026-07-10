@@ -125,7 +125,7 @@ export function AuthGate({ children }: Props) {
               type="password"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="pulse_tok_…"
+              placeholder="plt_…"
               autoFocus
               style={{
                 display: "block",
