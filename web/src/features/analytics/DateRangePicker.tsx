@@ -48,7 +48,7 @@ export function DateRangePicker({ value, onChange }: Props) {
           style={{
             background: value.label === preset.label ? "var(--color-accent)" : "var(--color-surface-2)",
             border: "1px solid var(--color-border)",
-            color: value.label === preset.label ? "#fff" : "var(--color-muted)",
+            color: value.label === preset.label ? "var(--color-on-signal)" : "var(--color-muted)",
             borderRadius: 6,
             padding: "6px 12px",
             cursor: "pointer",
@@ -64,7 +64,7 @@ export function DateRangePicker({ value, onChange }: Props) {
         style={{
           background: value.label === "Custom" ? "var(--color-accent)" : "var(--color-surface-2)",
           border: "1px solid var(--color-border)",
-          color: value.label === "Custom" ? "#fff" : "var(--color-muted)",
+          color: value.label === "Custom" ? "var(--color-on-signal)" : "var(--color-muted)",
           borderRadius: 6,
           padding: "6px 12px",
           cursor: "pointer",
@@ -119,7 +119,7 @@ export function DateRangePicker({ value, onChange }: Props) {
             style={{
               background: "var(--color-accent)",
               border: "none",
-              color: "#fff",
+              color: "var(--color-on-signal)",
               borderRadius: 4,
               padding: "4px 10px",
               cursor: "pointer",

@@ -63,10 +63,11 @@ export function AuthGate({ children }: Props) {
           padding: "2.5rem 2rem",
           width: "100%",
           maxWidth: 400,
-          boxShadow: "0 4px 32px rgba(0,0,0,0.4)",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.5)",
         }}
       >
         <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <img src="/logo/pulse-mark.svg" alt="Pulse" width="40" height="40" style={{ marginBottom: 12 }} />
           <h1 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 700 }}>Pulse</h1>
           <p style={{ margin: 0, fontSize: 14, color: "var(--color-muted)" }}>
             Enter your API token to continue
@@ -106,7 +107,7 @@ export function AuthGate({ children }: Props) {
             style={{
               marginTop: 4,
               background: "var(--color-accent)",
-              color: "#fff",
+              color: "var(--color-on-signal)",
               border: "none",
               borderRadius: 6,
               padding: "10px",

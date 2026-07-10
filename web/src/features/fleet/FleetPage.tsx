@@ -92,14 +92,14 @@ function NodeCard({ node }: NodeCardProps) {
       {node.cpu_pct != null && (
         <div>
           <div style={{ fontSize: 11, color: "var(--color-muted)", marginBottom: 3 }}>CPU</div>
-          <LoadBar value={node.cpu_pct} color={node.cpu_pct > 80 ? "#f87171" : node.cpu_pct > 60 ? "#fbbf24" : "#4ade80"} />
+          <LoadBar value={node.cpu_pct} color={node.cpu_pct > 80 ? "#FF5C68" : node.cpu_pct > 60 ? "#FFB224" : "#2CE5A7"} />
         </div>
       )}
 
       {node.mem_pct != null && (
         <div>
           <div style={{ fontSize: 11, color: "var(--color-muted)", marginBottom: 3 }}>Memory</div>
-          <LoadBar value={node.mem_pct} color={node.mem_pct > 85 ? "#f87171" : node.mem_pct > 70 ? "#fbbf24" : "#60a5fa"} />
+          <LoadBar value={node.mem_pct} color={node.mem_pct > 85 ? "#FF5C68" : node.mem_pct > 70 ? "#FFB224" : "#58A6FF"} />
         </div>
       )}
 
@@ -156,7 +156,7 @@ export function FleetPage() {
             width: 7,
             height: 7,
             borderRadius: "50%",
-            background: loading ? "var(--color-warning, #fbbf24)" : "var(--color-success, #4ade80)",
+            background: loading ? "var(--color-warning, #FFB224)" : "var(--color-success, #2CE5A7)",
             display: "inline-block",
           }} />
           <span style={{ fontSize: 12, color: "var(--color-muted)" }}>
@@ -266,12 +266,12 @@ export function FleetPage() {
                   <td style={{ padding: "10px 14px", color: "var(--color-muted)", fontSize: 12 }}>{node.version ?? "—"}</td>
                   <td style={{ padding: "10px 14px", minWidth: 100 }}>
                     {node.cpu_pct != null ? (
-                      <LoadBar value={node.cpu_pct} color={node.cpu_pct > 80 ? "#f87171" : node.cpu_pct > 60 ? "#fbbf24" : "#4ade80"} />
+                      <LoadBar value={node.cpu_pct} color={node.cpu_pct > 80 ? "#FF5C68" : node.cpu_pct > 60 ? "#FFB224" : "#2CE5A7"} />
                     ) : "—"}
                   </td>
                   <td style={{ padding: "10px 14px", minWidth: 100 }}>
                     {node.mem_pct != null ? (
-                      <LoadBar value={node.mem_pct} color={node.mem_pct > 85 ? "#f87171" : node.mem_pct > 70 ? "#fbbf24" : "#60a5fa"} />
+                      <LoadBar value={node.mem_pct} color={node.mem_pct > 85 ? "#FF5C68" : node.mem_pct > 70 ? "#FFB224" : "#58A6FF"} />
                     ) : "—"}
                   </td>
                   <td style={{ padding: "10px 14px", fontSize: 12, color: "var(--color-muted)" }}>

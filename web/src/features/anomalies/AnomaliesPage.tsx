@@ -71,7 +71,7 @@ function TierUpsell({ tier }: TierUpsellProps) {
         style={{
           display: "inline-block",
           background: "var(--color-accent)",
-          color: "#fff",
+          color: "var(--color-on-signal)",
           borderRadius: 6,
           padding: "10px 20px",
           fontSize: 13,
@@ -139,7 +139,7 @@ function AnomalyRow({ flag }: AnomalyRowProps) {
     <tr
       style={{
         borderBottom: "1px solid var(--color-border)",
-        background: severity === "error" ? "rgba(248,113,113,0.04)" : "transparent",
+        background: severity === "error" ? "rgba(255,92,104,0.04)" : "transparent",
       }}
     >
       {/* Metric */}
@@ -192,9 +192,9 @@ function AnomalyRow({ flag }: AnomalyRowProps) {
           textAlign: "right",
           color:
             delta > 0
-              ? "#f87171"
+              ? "#FF5C68"
               : delta < 0
-                ? "#60a5fa"
+                ? "#58A6FF"
                 : "var(--color-muted)",
           fontFamily: "var(--font-mono)",
         }}
@@ -211,10 +211,10 @@ function AnomalyRow({ flag }: AnomalyRowProps) {
             fontFamily: "var(--font-mono)",
             color:
               severity === "error"
-                ? "#f87171"
+                ? "#FF5C68"
                 : severity === "warning"
-                  ? "#fbbf24"
-                  : "#60a5fa",
+                  ? "#FFB224"
+                  : "#58A6FF",
           }}
           title={`${sigmaAbs.toFixed(2)}σ deviation`}
         >
@@ -370,7 +370,7 @@ export function AnomaliesPage() {
           disabled={loading}
           style={{
             background: "var(--color-accent)",
-            color: "#fff",
+            color: "var(--color-on-signal)",
             border: "none",
             borderRadius: 6,
             padding: "6px 14px",

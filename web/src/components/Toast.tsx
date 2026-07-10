@@ -28,9 +28,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const colors: Record<ToastItem["kind"], string> = {
-    success: "#2a6e3f",
-    error: "#7a2020",
-    info: "#1c3a5e",
+    success: "rgba(44,229,167,0.12)",
+    error:   "rgba(255,92,104,0.12)",
+    info:    "rgba(88,166,255,0.12)",
   };
 
   return (
@@ -54,11 +54,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             role="status"
             style={{
               background: colors[item.kind],
-              color: "#fff",
+              color: "var(--color-text)",
               borderRadius: 6,
               padding: "10px 16px",
               fontSize: 14,
-              boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+              boxShadow: "0 24px 64px rgba(0,0,0,0.5)",
               maxWidth: 360,
             }}
           >

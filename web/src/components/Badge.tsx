@@ -4,12 +4,12 @@ interface Props {
 }
 
 const variantStyles: Record<NonNullable<Props["variant"]>, { bg: string; color: string }> = {
-  default: { bg: "var(--color-accent)", color: "#fff" },
-  success: { bg: "#1a4d2e", color: "#4ade80" },
-  warning: { bg: "#3d2c00", color: "#fbbf24" },
-  error: { bg: "#3d0000", color: "#f87171" },
-  info: { bg: "#0f2744", color: "#60a5fa" },
-  muted: { bg: "var(--color-surface-2)", color: "var(--color-muted)" },
+  default: { bg: "var(--color-accent)", color: "var(--color-on-signal)" },
+  success: { bg: "rgba(44,229,167,0.12)", color: "#2CE5A7" },
+  warning: { bg: "rgba(255,178,36,0.12)", color: "#FFB224" },
+  error:   { bg: "rgba(255,92,104,0.1)",  color: "#FF5C68" },
+  info:    { bg: "rgba(88,166,255,0.1)",  color: "#58A6FF" },
+  muted:   { bg: "var(--color-surface-2)", color: "var(--color-muted)" },
 };
 
 export function Badge({ label, variant = "default" }: Props) {

@@ -143,26 +143,28 @@ describe("FleetPage rendering", () => {
 
 // ─── Health color logic (pure unit test) ─────────────────────────────────────
 
+// ─── cpuColor mirrors the inline ternary in FleetPage.tsx LoadBar calls ────────
+// Updated atomically with FleetPage.tsx to brandkit STATUS_COLORS (D-071 trap fix).
 function cpuColor(pct: number): string {
-  if (pct > 80) return "#f87171"; // red
-  if (pct > 60) return "#fbbf24"; // yellow
-  return "#4ade80"; // green
+  if (pct > 80) return "#FF5C68"; // critical
+  if (pct > 60) return "#FFB224"; // warning
+  return "#2CE5A7"; // healthy
 }
 
 describe("Fleet node health color logic", () => {
-  it("returns red for cpu > 80", () => {
-    expect(cpuColor(85)).toBe("#f87171");
-    expect(cpuColor(100)).toBe("#f87171");
+  it("returns critical red for cpu > 80", () => {
+    expect(cpuColor(85)).toBe("#FF5C68");
+    expect(cpuColor(100)).toBe("#FF5C68");
   });
 
-  it("returns yellow for cpu > 60 and <= 80", () => {
-    expect(cpuColor(65)).toBe("#fbbf24");
-    expect(cpuColor(80)).toBe("#fbbf24");
+  it("returns warning amber for cpu > 60 and <= 80", () => {
+    expect(cpuColor(65)).toBe("#FFB224");
+    expect(cpuColor(80)).toBe("#FFB224");
   });
 
-  it("returns green for cpu <= 60", () => {
-    expect(cpuColor(60)).toBe("#4ade80");
-    expect(cpuColor(0)).toBe("#4ade80");
-    expect(cpuColor(45)).toBe("#4ade80");
+  it("returns healthy green for cpu <= 60", () => {
+    expect(cpuColor(60)).toBe("#2CE5A7");
+    expect(cpuColor(0)).toBe("#2CE5A7");
+    expect(cpuColor(45)).toBe("#2CE5A7");
   });
 });

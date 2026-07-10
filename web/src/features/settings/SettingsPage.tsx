@@ -245,7 +245,7 @@ export function SettingsPage() {
                   style={{
                     background: "var(--color-accent)",
                     border: "none",
-                    color: "#fff",
+                    color: "var(--color-on-signal)",
                     borderRadius: 6,
                     padding: "7px 14px",
                     cursor: "pointer",
@@ -298,7 +298,7 @@ export function SettingsPage() {
                   style={{
                     background: "var(--color-accent)",
                     border: "none",
-                    color: "#fff",
+                    color: "var(--color-on-signal)",
                     borderRadius: 6,
                     padding: "7px 14px",
                     cursor: "pointer",
@@ -358,7 +358,7 @@ export function SettingsPage() {
                   style={{
                     background: "var(--color-accent)",
                     border: "none",
-                    color: "#fff",
+                    color: "var(--color-on-signal)",
                     borderRadius: 6,
                     padding: "7px 14px",
                     cursor: "pointer",
@@ -374,8 +374,8 @@ export function SettingsPage() {
               {/* Newly created token (shown once) */}
               {newIngestToken && (
                 <div style={{
-                  background: "#0f2744",
-                  border: "1px solid #60a5fa",
+                  background: "rgba(88,166,255,0.08)",
+                  border: "1px solid rgba(88,166,255,0.25)",
                   borderRadius: 8,
                   padding: 16,
                   display: "flex",
@@ -383,12 +383,12 @@ export function SettingsPage() {
                   gap: 12,
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontWeight: 700, color: "#60a5fa", fontSize: 13 }}>
+                    <span style={{ fontWeight: 700, color: "#58A6FF", fontSize: 13 }}>
                       Token created — copy it now, it won't be shown again
                     </span>
                     <button
                       onClick={() => setNewIngestToken(null)}
-                      style={{ marginLeft: "auto", background: "none", border: "none", color: "#60a5fa", cursor: "pointer", fontSize: 18, lineHeight: 1 }}
+                      style={{ marginLeft: "auto", background: "none", border: "none", color: "#58A6FF", cursor: "pointer", fontSize: 18, lineHeight: 1 }}
                     >
                       ×
                     </button>
@@ -555,7 +555,7 @@ export function SettingsPage() {
                       style={{
                         background: "var(--color-accent)",
                         border: "none",
-                        color: "#fff",
+                        color: "var(--color-on-signal)",
                         borderRadius: 6,
                         padding: "7px 14px",
                         cursor: "pointer",
@@ -636,7 +636,7 @@ export function SettingsPage() {
                     style={{
                       background: "var(--color-accent)",
                       border: "none",
-                      color: "#fff",
+                      color: "var(--color-on-signal)",
                       borderRadius: 6,
                       padding: "8px 16px",
                       cursor: "pointer",

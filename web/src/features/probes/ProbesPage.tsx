@@ -86,7 +86,7 @@ function TierUpsell({ tier }: TierUpsellProps) {
         style={{
           display: "inline-block",
           background: "var(--color-accent)",
-          color: "#fff",
+          color: "var(--color-on-signal)",
           borderRadius: 6,
           padding: "10px 20px",
           fontSize: 13,
@@ -107,9 +107,9 @@ function SyntheticBadge() {
     <span
       style={{
         display: "inline-block",
-        background: "#1c3a5e",
-        color: "#60a5fa",
-        border: "1px solid #2a5282",
+        background: "rgba(88,166,255,0.1)",
+        color: "#58A6FF",
+        border: "1px solid rgba(88,166,255,0.25)",
         borderRadius: 4,
         padding: "2px 8px",
         fontSize: 10,
@@ -356,12 +356,12 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
         <div
           role="alert"
           style={{
-            background: "var(--color-error-bg, #2d1a1a)",
-            border: "1px solid var(--color-error, #e05252)",
+            background: "var(--color-error-bg, rgba(255,92,104,0.1))",
+            border: "1px solid var(--color-error, #FF5C68)",
             borderRadius: 4,
             padding: "8px 12px",
             fontSize: 13,
-            color: "var(--color-error, #e05252)",
+            color: "var(--color-error, #FF5C68)",
           }}
         >
           {formError}
@@ -374,7 +374,7 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
           disabled={saving}
           style={{
             background: "var(--color-accent)",
-            color: "#fff",
+            color: "var(--color-on-signal)",
             border: "none",
             borderRadius: 6,
             padding: "8px 18px",
@@ -411,9 +411,9 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
 
 function ttfbColor(ttfb: number | null): string {
   if (ttfb == null) return "var(--color-muted)";
-  if (ttfb < 200) return "#4ade80";
-  if (ttfb < 500) return "#fbbf24";
-  return "#f87171";
+  if (ttfb < 200) return "#2CE5A7";
+  if (ttfb < 500) return "#FFB224";
+  return "#FF5C68";
 }
 
 interface ProbeResultsChartData {
@@ -478,8 +478,8 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
       {/* ── SYNTHETIC LABEL — PRD F10 acceptance criterion ─────────────────── */}
       <div
         style={{
-          background: "rgba(28, 58, 94, 0.3)",
-          borderBottom: "1px solid #2a5282",
+          background: "var(--color-surface-2)",
+          borderBottom: "1px solid var(--color-border-strong)",
           padding: "10px 16px",
           display: "flex",
           alignItems: "center",
@@ -487,7 +487,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
         }}
       >
         <SyntheticBadge />
-        <span style={{ fontSize: 13, fontWeight: 600, color: "#60a5fa" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#58A6FF" }}>
           Synthetic Probe Results
         </span>
         <span style={{ fontSize: 12, color: "var(--color-muted)", marginLeft: 4 }}>
@@ -573,11 +573,11 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                   />
                   <Legend wrapperStyle={{ fontSize: 11, color: "var(--color-muted)" }} />
                   {/* 500ms warning threshold */}
-                  <ReferenceLine y={500} stroke="#fbbf24" strokeDasharray="4 2" />
+                  <ReferenceLine y={500} stroke="#FFB224" strokeDasharray="4 2" />
                   <Line
                     type="monotone"
                     dataKey="ttfb_ms"
-                    stroke="#60a5fa"
+                    stroke="#58A6FF"
                     strokeWidth={2}
                     dot={false}
                     connectNulls={false}
@@ -586,7 +586,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                   <Line
                     type="monotone"
                     dataKey="segment_ttfb_ms"
-                    stroke="#a78bfa"
+                    stroke="#A78BFA"
                     strokeWidth={2}
                     dot={false}
                     connectNulls={false}
@@ -647,7 +647,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                     <Line
                       type="monotone"
                       dataKey="bitrate_kbps"
-                      stroke="#4ade80"
+                      stroke="#2CE5A7"
                       strokeWidth={2}
                       dot={false}
                       name="Bitrate (kbps)"
@@ -713,7 +713,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                       key={r.id}
                       style={{
                         borderBottom: "1px solid var(--color-border)",
-                        background: r.success ? "transparent" : "rgba(248,113,113,0.04)",
+                        background: r.success ? "transparent" : "rgba(255,92,104,0.04)",
                       }}
                     >
                       <td style={{ padding: "6px 10px", color: "var(--color-muted)", whiteSpace: "nowrap" }}>
@@ -765,7 +765,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                       <td
                         style={{
                           padding: "6px 10px",
-                          color: "#f87171",
+                          color: "#FF5C68",
                           fontSize: 11,
                           maxWidth: 200,
                           overflow: "hidden",
@@ -804,7 +804,7 @@ function DeleteConfirm({ probeName, onConfirm, onCancel, deleting }: DeleteConfi
       aria-label="Confirm probe deletion"
       style={{
         background: "var(--color-surface)",
-        border: "1px solid #7a2020",
+        border: "1px solid rgba(255,92,104,0.4)",
         borderRadius: 8,
         padding: 16,
         maxWidth: 400,
@@ -823,9 +823,9 @@ function DeleteConfirm({ probeName, onConfirm, onCancel, deleting }: DeleteConfi
           onClick={onConfirm}
           disabled={deleting}
           style={{
-            background: "#7a2020",
-            color: "#fff",
-            border: "none",
+            background: "rgba(255,92,104,0.1)",
+            color: "#FF5C68",
+            border: "1px solid rgba(255,92,104,0.4)",
             borderRadius: 6,
             padding: "6px 14px",
             fontSize: 13,
@@ -878,7 +878,7 @@ function ProbeRow({
     <tr
       style={{
         borderBottom: "1px solid var(--color-border)",
-        background: showingResults ? "rgba(28,58,94,0.15)" : "transparent",
+        background: showingResults ? "rgba(88,166,255,0.08)" : "transparent",
       }}
     >
       {/* Name */}
@@ -942,9 +942,9 @@ function ProbeRow({
           <button
             onClick={() => onViewResults(probe)}
             style={{
-              background: showingResults ? "rgba(28,58,94,0.5)" : "none",
-              color: "#60a5fa",
-              border: "1px solid #2a5282",
+              background: showingResults ? "rgba(88,166,255,0.15)" : "none",
+              color: "#58A6FF",
+              border: "1px solid rgba(88,166,255,0.25)",
               borderRadius: 4,
               padding: "3px 9px",
               fontSize: 11,
@@ -975,8 +975,8 @@ function ProbeRow({
             onClick={() => onDelete(probe)}
             style={{
               background: "none",
-              color: "#f87171",
-              border: "1px solid #7a2020",
+              color: "#FF5C68",
+              border: "1px solid rgba(255,92,104,0.4)",
               borderRadius: 4,
               padding: "3px 9px",
               fontSize: 11,
@@ -1171,7 +1171,7 @@ export function ProbesPage() {
           }}
           style={{
             background: "var(--color-accent)",
-            color: "#fff",
+            color: "var(--color-on-signal)",
             border: "none",
             borderRadius: 6,
             padding: "6px 14px",
@@ -1187,12 +1187,12 @@ export function ProbesPage() {
       {/* Probes-are-synthetic notice */}
       <div
         style={{
-          background: "rgba(28, 58, 94, 0.15)",
-          border: "1px solid #2a5282",
+          background: "rgba(88,166,255,0.08)",
+          border: "1px solid rgba(88,166,255,0.25)",
           borderRadius: 6,
           padding: "8px 14px",
           fontSize: 12,
-          color: "#90cdf4",
+          color: "#58A6FF",
           marginBottom: 16,
           display: "flex",
           alignItems: "center",
@@ -1257,7 +1257,7 @@ export function ProbesPage() {
               onClick={() => setShowForm(true)}
               style={{
                 background: "var(--color-accent)",
-                color: "#fff",
+                color: "var(--color-on-signal)",
                 border: "none",
                 borderRadius: 6,
                 padding: "8px 18px",

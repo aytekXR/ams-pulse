@@ -1,17 +1,10 @@
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import type { ProtocolMix } from "@/lib/api/types";
+import { PROTOCOL_COLORS } from "@/lib/chartColors";
 
 interface Props {
   data: ProtocolMix;
 }
-
-const PROTOCOL_COLORS: Record<string, string> = {
-  webrtc: "#60a5fa",
-  hls: "#34d399",
-  rtmp: "#f87171",
-  dash: "#fbbf24",
-  other: "#8b949e",
-};
 
 export function ProtocolDonut({ data }: Props) {
   const entries = Object.entries(data ?? {})
@@ -42,7 +35,7 @@ export function ProtocolDonut({ data }: Props) {
           {entries.map((entry) => (
             <Cell
               key={entry.name}
-              fill={PROTOCOL_COLORS[entry.name.toLowerCase()] ?? "#8b949e"}
+              fill={PROTOCOL_COLORS[entry.name.toLowerCase()] ?? "#7C93AD"}
             />
           ))}
         </Pie>

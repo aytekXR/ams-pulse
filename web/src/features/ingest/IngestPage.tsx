@@ -94,12 +94,12 @@ function StreamDetail({ stream, onClose }: StreamDetailProps) {
       {/* Drop events */}
       {dropTimes.length > 0 && (
         <div style={{
-          background: "var(--color-error-bg, #2d1a1a)",
-          border: "1px solid var(--color-error, #e05252)",
+          background: "var(--color-error-bg, rgba(255,92,104,0.1))",
+          border: "1px solid var(--color-error, #FF5C68)",
           borderRadius: 6,
           padding: "10px 14px",
         }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-error, #e05252)", marginBottom: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-error, #FF5C68)", marginBottom: 6 }}>
             Drop Events ({dropTimes.length})
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -109,7 +109,7 @@ function StreamDetail({ stream, onClose }: StreamDetailProps) {
                 borderRadius: 4,
                 padding: "2px 8px",
                 fontSize: 11,
-                color: "var(--color-error, #e05252)",
+                color: "var(--color-error, #FF5C68)",
               }}>
                 {d.ts} — {d.reason}
               </span>
@@ -134,10 +134,10 @@ function StreamDetail({ stream, onClose }: StreamDetailProps) {
                 <Tooltip contentStyle={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 6, color: "var(--color-text)" }} />
                 <Legend wrapperStyle={{ fontSize: 11, color: "var(--color-muted)" }} />
                 {dropTimes.map((d, i) => (
-                  <ReferenceLine key={i} x={d.ts} yAxisId="bitrate" stroke="var(--color-error, #e05252)" strokeDasharray="3 3" label={{ value: "drop", fontSize: 9, fill: "var(--color-error, #e05252)" }} />
+                  <ReferenceLine key={i} x={d.ts} yAxisId="bitrate" stroke="var(--color-error, #FF5C68)" strokeDasharray="3 3" label={{ value: "drop", fontSize: 9, fill: "var(--color-error, #FF5C68)" }} />
                 ))}
-                <Line yAxisId="bitrate" type="monotone" dataKey="bitrate" stroke="#60a5fa" dot={false} strokeWidth={2} name="Bitrate" />
-                <Line yAxisId="fps" type="monotone" dataKey="fps" stroke="#34d399" dot={false} strokeWidth={2} name="FPS" />
+                <Line yAxisId="bitrate" type="monotone" dataKey="bitrate" stroke="#58A6FF" dot={false} strokeWidth={2} name="Bitrate" />
+                <Line yAxisId="fps" type="monotone" dataKey="fps" stroke="#2CE5A7" dot={false} strokeWidth={2} name="FPS" />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -155,9 +155,9 @@ function StreamDetail({ stream, onClose }: StreamDetailProps) {
                 <Tooltip contentStyle={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 6, color: "var(--color-text)" }} />
                 <Legend wrapperStyle={{ fontSize: 11, color: "var(--color-muted)" }} />
                 {/* Threshold indicators */}
-                <ReferenceLine yAxisId="loss" y={1} stroke="var(--color-warning, #fbbf24)" strokeDasharray="4 2" label={{ value: "1% threshold", fontSize: 9, fill: "var(--color-warning, #fbbf24)" }} />
-                <Line yAxisId="loss" type="monotone" dataKey="pkt_loss" stroke="#f87171" dot={false} strokeWidth={2} name="Packet Loss %" />
-                <Line yAxisId="jitter" type="monotone" dataKey="jitter" stroke="#fbbf24" dot={false} strokeWidth={2} name="Jitter ms" />
+                <ReferenceLine yAxisId="loss" y={1} stroke="var(--color-warning, #FFB224)" strokeDasharray="4 2" label={{ value: "1% threshold", fontSize: 9, fill: "var(--color-warning, #FFB224)" }} />
+                <Line yAxisId="loss" type="monotone" dataKey="pkt_loss" stroke="#FF5C68" dot={false} strokeWidth={2} name="Packet Loss %" />
+                <Line yAxisId="jitter" type="monotone" dataKey="jitter" stroke="#FFB224" dot={false} strokeWidth={2} name="Jitter ms" />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -208,7 +208,7 @@ export function IngestPage() {
             width: 7,
             height: 7,
             borderRadius: "50%",
-            background: loading ? "var(--color-warning, #fbbf24)" : "var(--color-success, #4ade80)",
+            background: loading ? "var(--color-warning, #FFB224)" : "var(--color-success, #2CE5A7)",
             display: "inline-block",
           }} />
           <span style={{ fontSize: 12, color: "var(--color-muted)" }}>
@@ -294,7 +294,7 @@ export function IngestPage() {
                           <div style={{
                             width: `${s.health_score}%`,
                             height: "100%",
-                            background: s.health_score >= 80 ? "#4ade80" : s.health_score >= 50 ? "#fbbf24" : "#f87171",
+                            background: s.health_score >= 80 ? "#2CE5A7" : s.health_score >= 50 ? "#FFB224" : "#FF5C68",
                             borderRadius: 3,
                           }} />
                         </div>
@@ -303,7 +303,7 @@ export function IngestPage() {
                     </td>
                     <td style={{ padding: "10px 14px", color: "var(--color-muted)", fontSize: 12 }}>
                       {(s.drop_events ?? []).length > 0 ? (
-                        <span style={{ color: "var(--color-error, #e05252)", fontWeight: 600 }}>
+                        <span style={{ color: "var(--color-error, #FF5C68)", fontWeight: 600 }}>
                           {s.drop_events!.length} drop{s.drop_events!.length > 1 ? "s" : ""}
                         </span>
                       ) : "—"}

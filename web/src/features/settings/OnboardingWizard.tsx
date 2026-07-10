@@ -125,7 +125,7 @@ export function OnboardingWizard({ onComplete }: Props) {
               border: `1px solid ${i <= stepIdx ? "var(--color-accent)" : "var(--color-border)"}`,
               fontSize: 12,
               fontWeight: 600,
-              color: i <= stepIdx ? "#fff" : "var(--color-muted)",
+              color: i <= stepIdx ? "var(--color-on-signal)" : "var(--color-muted)",
             }}>
               {i + 1}
             </div>
@@ -156,7 +156,7 @@ export function OnboardingWizard({ onComplete }: Props) {
             style={{
               background: "var(--color-accent)",
               border: "none",
-              color: "#fff",
+              color: "var(--color-on-signal)",
               borderRadius: 8,
               padding: "12px",
               cursor: "pointer",
@@ -248,7 +248,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                 style={{
                   background: "var(--color-accent)",
                   border: "none",
-                  color: "#fff",
+                  color: "var(--color-on-signal)",
                   borderRadius: 6,
                   padding: "8px 20px",
                   cursor: "pointer",
@@ -276,7 +276,7 @@ export function OnboardingWizard({ onComplete }: Props) {
               style={{
                 background: "var(--color-accent)",
                 border: "none",
-                color: "#fff",
+                color: "var(--color-on-signal)",
                 borderRadius: 8,
                 padding: "10px 20px",
                 cursor: "pointer",
@@ -289,7 +289,7 @@ export function OnboardingWizard({ onComplete }: Props) {
           )}
           {testStatus === "testing" && <LoadingSpinner label="Testing connection…" />}
           {testStatus === "ok" && (
-            <div style={{ background: "#0f2d1f", border: "1px solid var(--color-success)", borderRadius: 8, padding: "12px 16px", color: "var(--color-success)", fontSize: 13 }}>
+            <div style={{ background: "rgba(44,229,167,0.1)", border: "1px solid var(--color-success)", borderRadius: 8, padding: "12px 16px", color: "var(--color-success)", fontSize: 13 }}>
               {testMessage}
             </div>
           )}
@@ -318,7 +318,7 @@ export function OnboardingWizard({ onComplete }: Props) {
               style={{
                 background: testStatus === "ok" ? "var(--color-success)" : "var(--color-surface-2)",
                 border: `1px solid ${testStatus === "ok" ? "var(--color-success)" : "var(--color-border)"}`,
-                color: testStatus === "ok" ? "#fff" : "var(--color-muted)",
+                color: testStatus === "ok" ? "var(--color-on-signal)" : "var(--color-muted)",
                 borderRadius: 6,
                 padding: "8px 20px",
                 cursor: "pointer",
@@ -346,7 +346,7 @@ export function OnboardingWizard({ onComplete }: Props) {
             style={{
               background: "var(--color-accent)",
               border: "none",
-              color: "#fff",
+              color: "var(--color-on-signal)",
               borderRadius: 8,
               padding: "12px",
               cursor: "pointer",

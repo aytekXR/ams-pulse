@@ -182,9 +182,9 @@ export function AnalyticsPage() {
                         }}
                       />
                       <Legend wrapperStyle={{ fontSize: 12, color: "var(--color-muted)" }} />
-                      <Line type="monotone" dataKey="views" stroke="#60a5fa" dot={false} strokeWidth={2} name="Views" />
-                      <Line type="monotone" dataKey="uniques" stroke="#34d399" dot={false} strokeWidth={2} name="Uniques" />
-                      <Line type="monotone" dataKey="peak" stroke="#fbbf24" dot={false} strokeWidth={2} name="Peak concurrent" />
+                      <Line type="monotone" dataKey="views" stroke="#58A6FF" dot={false} strokeWidth={2} name="Views" />
+                      <Line type="monotone" dataKey="uniques" stroke="#2CE5A7" dot={false} strokeWidth={2} name="Uniques" />
+                      <Line type="monotone" dataKey="peak" stroke="#FFB224" dot={false} strokeWidth={2} name="Peak concurrent" />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>

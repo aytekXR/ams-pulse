@@ -163,9 +163,7 @@ export function Layout({ children, wsConnected, overview: _overview, tier }: Lay
             borderBottom: "1px solid var(--color-border)",
           }}
         >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2" aria-hidden>
-            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-          </svg>
+          <img src="/logo/pulse-mark.svg" alt="" width="22" height="22" aria-hidden />
           <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: "-0.01em" }}>Pulse</span>
         </div>
 
@@ -184,8 +182,10 @@ export function Layout({ children, wsConnected, overview: _overview, tier }: Lay
                   alignItems: "center",
                   gap: 10,
                   padding: "8px 16px",
+                  paddingLeft: isActive ? 14 : 16,
                   color: isActive ? "var(--color-text)" : "var(--color-muted)",
-                  background: isActive ? "var(--color-surface-2)" : "transparent",
+                  background: isActive ? "rgba(44,229,167,0.1)" : "transparent",
+                  borderLeft: isActive ? "2px solid #2CE5A7" : "2px solid transparent",
                   textDecoration: "none",
                   fontSize: 13,
                   fontWeight: isActive ? 600 : 400,

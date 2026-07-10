@@ -145,7 +145,7 @@ export function QoePage() {
               style={{
                 display: "inline-block",
                 background: "var(--color-accent)",
-                color: "#fff",
+                color: "var(--color-on-signal)",
                 borderRadius: 6,
                 padding: "8px 16px",
                 fontSize: 13,
@@ -178,7 +178,7 @@ export function QoePage() {
               </div>
               <div style={cardStyle}>
                 <div style={labelStyle}>Error Rate</div>
-                <div style={{ ...valueStyle, color: totals.error_rate > 0.01 ? "var(--color-error, #e05252)" : "inherit" }}>
+                <div style={{ ...valueStyle, color: totals.error_rate > 0.01 ? "var(--color-error, #FF5C68)" : "inherit" }}>
                   {(totals.error_rate * 100).toFixed(2)}<span style={{ fontSize: 14, color: "var(--color-muted)", marginLeft: 4 }}>%</span>
                 </div>
               </div>
@@ -205,8 +205,8 @@ export function QoePage() {
                     }}
                   />
                   <Legend wrapperStyle={{ fontSize: 12, color: "var(--color-muted)" }} />
-                  <Line type="monotone" dataKey="p50" stroke="#60a5fa" dot={false} strokeWidth={2} name="Bitrate p50" />
-                  <Line type="monotone" dataKey="p95" stroke="#fbbf24" dot={false} strokeWidth={2} name="Bitrate p95" strokeDasharray="4 2" />
+                  <Line type="monotone" dataKey="p50" stroke="#58A6FF" dot={false} strokeWidth={2} name="Bitrate p50" />
+                  <Line type="monotone" dataKey="p95" stroke="#FFB224" dot={false} strokeWidth={2} name="Bitrate p95" strokeDasharray="4 2" />
                 </LineChart>
               </ResponsiveContainer>
             </div>

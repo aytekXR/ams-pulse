@@ -62,7 +62,7 @@ function TierUpsell({ featureName, tier }: TierUpsellProps) {
         style={{
           display: "inline-block",
           background: "var(--color-accent)",
-          color: "#fff",
+          color: "var(--color-on-signal)",
           borderRadius: 6,
           padding: "10px 20px",
           fontSize: 13,
@@ -253,7 +253,7 @@ function ScheduleForm({ initial, onSave, onCancel }: ScheduleFormProps) {
           style={{
             background: "var(--color-accent)",
             border: "none",
-            color: "#fff",
+            color: "var(--color-on-signal)",
             borderRadius: 6,
             padding: "7px 14px",
             cursor: "pointer",
@@ -437,7 +437,7 @@ function TenantForm({ initial, onSave, onCancel }: TenantFormProps) {
           style={{
             background: "var(--color-accent)",
             border: "none",
-            color: "#fff",
+            color: "var(--color-on-signal)",
             borderRadius: 6,
             padding: "7px 14px",
             cursor: "pointer",
@@ -476,7 +476,7 @@ function DeleteConfirm({ tenant, onConfirm, onCancel, deleting }: DeleteConfirmP
         gap: 14,
       }}
     >
-      <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "var(--color-error, #e05252)" }}>
+      <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "var(--color-error, #FF5C68)" }}>
         Delete tenant
       </h3>
       <p style={{ margin: 0, fontSize: 13, color: "var(--color-muted)" }}>
@@ -504,9 +504,9 @@ function DeleteConfirm({ tenant, onConfirm, onCancel, deleting }: DeleteConfirmP
           onClick={onConfirm}
           disabled={deleting}
           style={{
-            background: "var(--color-error, #e05252)",
-            border: "none",
-            color: "#fff",
+            background: "rgba(255,92,104,0.1)",
+            border: "1px solid rgba(255,92,104,0.4)",
+            color: "#FF5C68",
             borderRadius: 6,
             padding: "7px 14px",
             cursor: "pointer",
@@ -594,7 +594,7 @@ function TenantsTab({ onToast }: TenantsTabProps) {
           style={{
             background: "var(--color-accent)",
             border: "none",
-            color: "#fff",
+            color: "var(--color-on-signal)",
             borderRadius: 6,
             padding: "7px 14px",
             cursor: "pointer",
@@ -711,8 +711,8 @@ function TenantsTab({ onToast }: TenantsTabProps) {
                       aria-label={`Delete ${tenant.name}`}
                       style={{
                         background: "none",
-                        border: "1px solid var(--color-error, #e05252)",
-                        color: "var(--color-error, #e05252)",
+                        border: "1px solid var(--color-error, #FF5C68)",
+                        color: "var(--color-error, #FF5C68)",
                         borderRadius: 4,
                         padding: "3px 8px",
                         cursor: "pointer",
@@ -1003,7 +1003,7 @@ export function ReportsPage() {
                   style={{
                     background: "var(--color-accent)",
                     border: "none",
-                    color: "#fff",
+                    color: "var(--color-on-signal)",
                     borderRadius: 6,
                     padding: "7px 14px",
                     cursor: "pointer",
@@ -1065,7 +1065,7 @@ export function ReportsPage() {
                             </button>
                             <button
                               onClick={() => void deleteSchedule(sched.id)}
-                              style={{ background: "none", border: "1px solid var(--color-error, #e05252)", color: "var(--color-error, #e05252)", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 11 }}
+                              style={{ background: "none", border: "1px solid var(--color-error, #FF5C68)", color: "var(--color-error, #FF5C68)", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 11 }}
                             >
                               Delete
                             </button>

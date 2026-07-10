@@ -142,7 +142,7 @@ export function AlertsPage() {
   const btnStyle: React.CSSProperties = {
     background: "var(--color-accent)",
     border: "none",
-    color: "#fff",
+    color: "var(--color-on-signal)",
     borderRadius: 6,
     padding: "7px 14px",
     cursor: "pointer",

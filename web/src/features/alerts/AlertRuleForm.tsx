@@ -357,7 +357,7 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
           style={{
             background: "var(--color-accent)",
             border: "none",
-            color: "#fff",
+            color: "var(--color-on-signal)",
             borderRadius: 6,
             padding: "8px 20px",
             cursor: "pointer",
