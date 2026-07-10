@@ -660,6 +660,11 @@ func (s *Store) InsertProbeResult(ctx context.Context, r domain.ProbeResult) err
 	if r.Success {
 		successByte = 1
 	}
+	// connect_time_ms: ClickHouse column is UInt32 DEFAULT 0; use 0 when nil (non-WebRTC).
+	var connectTimeMs uint32
+	if r.ConnectTimeMs != nil {
+		connectTimeMs = *r.ConnectTimeMs
+	}
 	if err := b.Append(
 		r.ID,
 		r.ProbeID,
@@ -670,6 +675,8 @@ func (s *Store) InsertProbeResult(ctx context.Context, r domain.ProbeResult) err
 		r.ErrorMsg,
 		r.BitrateKbps,
 		r.SegmentTTFBMs,
+		connectTimeMs,
+		r.SignalingState,
 	); err != nil {
 		return fmt.Errorf("probe_results: append: %w", err)
 	}
@@ -684,7 +691,8 @@ func (s *Store) QueryProbeResults(ctx context.Context, probeID string, from, to 
 		limit = 100
 	}
 	query := fmt.Sprintf(
-		`SELECT id, probe_id, ts, success, ttfb_ms, error_code, error_msg, bitrate_kbps, segment_ttfb_ms
+		`SELECT id, probe_id, ts, success, ttfb_ms, error_code, error_msg, bitrate_kbps, segment_ttfb_ms,
+		        connect_time_ms, signaling_state
 		 FROM %s.probe_results
 		 WHERE probe_id = ?
 		   AND ts >= ? AND ts < ?
@@ -701,18 +709,27 @@ func (s *Store) QueryProbeResults(ctx context.Context, probeID string, from, to 
 	var results []domain.ProbeResult
 	for rows.Next() {
 		var (
-			r         domain.ProbeResult
-			successU8 uint8
-			ts        time.Time
+			r              domain.ProbeResult
+			successU8      uint8
+			ts             time.Time
+			connectTimeMs  uint32
+			signalingState string
 		)
 		if err := rows.Scan(
 			&r.ID, &r.ProbeID, &ts, &successU8,
 			&r.TTFBMs, &r.ErrorCode, &r.ErrorMsg, &r.BitrateKbps, &r.SegmentTTFBMs,
+			&connectTimeMs, &signalingState,
 		); err != nil {
 			return nil, fmt.Errorf("probe_results: scan: %w", err)
 		}
 		r.TS = ts.UTC()
 		r.Success = successU8 != 0
+		// Reconstruct nullable ConnectTimeMs: 0 in DB means nil (not applicable).
+		if connectTimeMs > 0 {
+			ct := connectTimeMs
+			r.ConnectTimeMs = &ct
+		}
+		r.SignalingState = signalingState
 		results = append(results, r)
 	}
 	return results, rows.Err()

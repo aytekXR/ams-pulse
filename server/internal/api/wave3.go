@@ -376,6 +376,8 @@ func probeResultToAPI(r domain.ProbeResult) map[string]any {
 		"success":         r.Success,
 		"ttfb_ms":         nil,
 		"segment_ttfb_ms": nil,
+		"connect_time_ms": nil,
+		"signaling_state": nil,
 	}
 	if r.Success || r.TTFBMs > 0 {
 		m["ttfb_ms"] = r.TTFBMs
@@ -391,6 +393,13 @@ func probeResultToAPI(r domain.ProbeResult) map[string]any {
 	}
 	if r.BitrateKbps > 0 {
 		m["bitrate_kbps"] = r.BitrateKbps
+	}
+	// WebRTC phase-1 signaling fields (non-nil only for WebRTC probes).
+	if r.ConnectTimeMs != nil {
+		m["connect_time_ms"] = *r.ConnectTimeMs
+	}
+	if r.SignalingState != "" {
+		m["signaling_state"] = r.SignalingState
 	}
 	return m
 }

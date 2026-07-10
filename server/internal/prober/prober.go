@@ -7,7 +7,10 @@
 // Protocol coverage:
 //   - HLS (minimum, fully working): GET manifest + first segment; measures TTFB,
 //     parses #EXTM3U, fetches first media URI, computes bitrate_kbps.
-//   - WebRTC / RTMP / DASH: minimal-but-honest reachability check — performs an
+//   - WebRTC (phase-1 signaling-only): dials wss?://{host}/{app}/websocket?streamId=<id>,
+//     sends play command, measures time to first takeConfiguration/offer message.
+//     streamId MUST be present as a query param; missing → ws_error.
+//   - RTMP / DASH: minimal-but-honest reachability check — performs an
 //     HTTP GET against the URL and records a "not_probed" error_code.
 //     No faked success. Phase-3 roadmap: native protocol clients.
 //
@@ -17,6 +20,7 @@ package prober
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -27,6 +31,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"nhooyr.io/websocket"
+	"nhooyr.io/websocket/wsjson"
+
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 )
 
@@ -295,8 +302,12 @@ func (r *Runner) executeProbe(ctx context.Context, p domain.ProbeConfig) {
 	case "hls", "":
 		// HLS: full manifest + first-segment check.
 		result = r.probeHLS(probeCtx, p, result)
+	case "webrtc":
+		// WebRTC phase-1: signaling-only check via nhooyr.io/websocket.
+		// URL convention: ws(s)://host/{app}/websocket?streamId=<id>
+		result = r.probeWebRTC(probeCtx, p, result)
 	default:
-		// webrtc / rtmp / dash: minimal honest check — attempt HTTP reachability
+		// rtmp / dash: minimal honest check — attempt HTTP reachability
 		// but mark as not-yet-probed with a documented error_code.
 		result = r.probeReachability(probeCtx, p, result)
 	}
@@ -620,6 +631,159 @@ func (r *Runner) probeReachability(ctx context.Context, p domain.ProbeConfig, re
 	result.Success = false
 	result.ErrorCode = "not_probed"
 	result.ErrorMsg = fmt.Sprintf("protocol=%s: full probing not yet implemented (Phase 3); HTTP %d received", p.Protocol, resp.StatusCode)
+	return result
+}
+
+// wsSignalingMsg is the minimal shape of an AMS WS signaling message we parse.
+// AMS sends: {"command":"takeConfiguration","type":"offer","sdp":"...","streamId":"..."}
+// We only look at command + type; other fields are ignored.
+type wsSignalingMsg struct {
+	Command string `json:"command"`
+	Type    string `json:"type,omitempty"`
+}
+
+// probeWebRTC performs a WebRTC signaling-only probe (phase 1).
+//
+// URL convention (D-072 ruling): ws(s)://host/{app}/websocket?streamId=<id>
+// The streamId query parameter is REQUIRED. Missing → Success=false, error_code=ws_error.
+//
+// Steps:
+//  1. Parse streamId from URL query string.
+//  2. Dial WebSocket endpoint; classify refused/timeout/other.
+//  3. Send AMS play command JSON.
+//  4. Read first server message; success iff command==takeConfiguration && type==offer.
+//  5. Set ConnectTimeMs = elapsed ms from dial start to first parseable message.
+func (r *Runner) probeWebRTC(ctx context.Context, p domain.ProbeConfig, result domain.ProbeResult) domain.ProbeResult {
+	// Validate streamId in URL query params.
+	// Minimal URL parsing without full net/url import: find '?' and scan for streamId=.
+	// We DO need net/url — but it is part of stdlib and already imported indirectly via net/http.
+	// Rather than add another import, do a simple string split.
+	rawURL := p.URL
+	streamID := ""
+	if idx := strings.Index(rawURL, "?"); idx >= 0 {
+		query := rawURL[idx+1:]
+		for _, kv := range strings.Split(query, "&") {
+			if strings.HasPrefix(kv, "streamId=") {
+				streamID = strings.TrimPrefix(kv, "streamId=")
+			}
+		}
+	}
+	if streamID == "" {
+		result.Success = false
+		result.ErrorCode = "ws_error"
+		result.ErrorMsg = "webrtc probe URL must include ?streamId=<id>; convention: ws(s)://host/{app}/websocket?streamId=<id>"
+		result.SignalingState = "ws_error"
+		return result
+	}
+
+	// Remove query string from WS dial URL — nhooyr.io/websocket accepts the full URL
+	// including query params, so pass rawURL directly.
+	dialStart := time.Now()
+
+	conn, _, err := websocket.Dial(ctx, rawURL, &websocket.DialOptions{
+		CompressionMode: websocket.CompressionDisabled,
+	})
+	if err != nil {
+		errStr := err.Error()
+		var code string
+		var sigState string
+		switch {
+		case strings.Contains(errStr, "connection refused"):
+			code = "ws_refused"
+			sigState = "ws_refused"
+		case strings.Contains(errStr, "context deadline exceeded") ||
+			strings.Contains(errStr, "deadline exceeded") ||
+			strings.Contains(errStr, "timeout"):
+			code = "ws_timeout"
+			sigState = "ws_timeout"
+		default:
+			code = "ws_error"
+			sigState = "ws_error"
+		}
+		result.Success = false
+		result.ErrorCode = code
+		result.ErrorMsg = fmt.Sprintf("ws dial: %v", err)
+		result.SignalingState = sigState
+		return result
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "probe done")
+
+	// Send AMS play command.
+	playCmd := map[string]interface{}{
+		"command":   "play",
+		"streamId":  streamID,
+		"token":     "",
+		"trackList": []interface{}{},
+	}
+	if err := wsjson.Write(ctx, conn, playCmd); err != nil {
+		result.Success = false
+		result.ErrorCode = "ws_error"
+		result.ErrorMsg = fmt.Sprintf("ws write play: %v", err)
+		result.SignalingState = "ws_error"
+		return result
+	}
+
+	// Read first server message.
+	var rawMsg json.RawMessage
+	if err := wsjson.Read(ctx, conn, &rawMsg); err != nil {
+		errStr := err.Error()
+		var code string
+		var sigState string
+		// Check both the error string and the context state.
+		// nhooyr.io/websocket may return a CloseError on ctx cancellation instead of
+		// propagating the context error directly; always defer to ctx.Err() first.
+		switch {
+		case ctx.Err() != nil && (ctx.Err() == context.DeadlineExceeded ||
+			strings.Contains(ctx.Err().Error(), "deadline exceeded")):
+			code = "ws_timeout"
+			sigState = "ws_timeout"
+		case strings.Contains(errStr, "context deadline exceeded") ||
+			strings.Contains(errStr, "deadline exceeded") ||
+			strings.Contains(errStr, "StatusGoingAway") ||
+			strings.Contains(errStr, "timeout"):
+			code = "ws_timeout"
+			sigState = "ws_timeout"
+		default:
+			code = "ws_error"
+			sigState = "ws_error"
+		}
+		result.Success = false
+		result.ErrorCode = code
+		result.ErrorMsg = fmt.Sprintf("ws read: %v", err)
+		result.SignalingState = sigState
+		return result
+	}
+
+	elapsed := uint32(time.Since(dialStart).Milliseconds())
+	if elapsed == 0 {
+		elapsed = 1 // floor at 1ms (same pattern as HLS TTFB)
+	}
+
+	// Parse message: success iff command==takeConfiguration && type==offer.
+	var msg wsSignalingMsg
+	if err := json.Unmarshal(rawMsg, &msg); err != nil {
+		result.Success = false
+		result.ErrorCode = "ws_error"
+		result.ErrorMsg = fmt.Sprintf("ws parse first message: %v", err)
+		result.SignalingState = "ws_error"
+		return result
+	}
+
+	if msg.Command == "takeConfiguration" && msg.Type == "offer" {
+		ct := elapsed
+		result.Success = true
+		result.ErrorCode = ""
+		result.ErrorMsg = ""
+		result.ConnectTimeMs = &ct
+		result.SignalingState = "offer_received"
+		return result
+	}
+
+	// Received a first message but it was not the offer (e.g., error command).
+	result.Success = false
+	result.ErrorCode = "ws_error"
+	result.ErrorMsg = fmt.Sprintf("unexpected first message: command=%q type=%q", msg.Command, msg.Type)
+	result.SignalingState = "ws_error"
 	return result
 }
 

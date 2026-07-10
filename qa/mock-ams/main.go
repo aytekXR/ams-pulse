@@ -15,6 +15,12 @@
 //	GET /rest/v2/cluster/nodes              → []ClusterNodeDTO
 //	GET /rest/v2/broadcasts/{app}/{id}/webrtc-client-stats/0/100 → []WebRTCStatsDTO
 //
+// WebRTC signaling (WO-B, phase-1):
+//
+//	GET /{app}/websocket (WS upgrade)  — on {"command":"play","streamId":"..."}
+//	                                      replies with takeConfiguration/offer.
+//	                                      Enables real probe results in CI.
+//
 // Control endpoints (test driver uses these):
 //
 //	POST /control/publish       {"stream_id":"x","viewers":N[,"bitrate":N]}
@@ -32,6 +38,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -43,6 +50,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"nhooyr.io/websocket"
+	"nhooyr.io/websocket/wsjson"
 )
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -314,6 +324,78 @@ func (s *Server) routes() {
 			},
 		})
 	})
+
+	// WebRTC signaling handler — WO-B phase 1.
+	// Handles WS upgrade on /{app}/websocket (any app prefix, e.g. /live/websocket).
+	// Path pattern: "/{app}/websocket" where {app} matches the configured AppName.
+	// On {"command":"play","streamId":"..."} → replies with takeConfiguration/offer.
+	// SDP is minimal but syntactically valid (trimmed from real-AMS fixture).
+	// Deterministic and instant — designed for CI probe assertions.
+	wsSignalingHandler := func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+			InsecureSkipVerify: true, // CI/local: no cert verification needed
+		})
+		if err != nil {
+			log.Printf("mock-ams: ws accept error: %v", err)
+			return
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "done")
+
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		// Read the play command.
+		var playMsg map[string]json.RawMessage
+		if err := wsjson.Read(ctx, conn, &playMsg); err != nil {
+			log.Printf("mock-ams: ws read error: %v", err)
+			return
+		}
+
+		// Extract command and streamId.
+		var cmd, streamID string
+		if raw, ok := playMsg["command"]; ok {
+			_ = json.Unmarshal(raw, &cmd)
+		}
+		if raw, ok := playMsg["streamId"]; ok {
+			_ = json.Unmarshal(raw, &streamID)
+		}
+
+		if cmd != "play" {
+			log.Printf("mock-ams: ws unexpected command %q (expected play)", cmd)
+			return
+		}
+
+		// Reply with AMS-shaped takeConfiguration/offer.
+		// SDP is minimal but RFC-4566 compliant (from real-AMS capture,
+		// see agents/handoffs/real-ams-captures/webrtc-signaling-play-offer.json).
+		offer := map[string]interface{}{
+			"command":  "takeConfiguration",
+			"streamId": streamID,
+			"type":     "offer",
+			"sdp": "v=0\r\n" +
+				"o=- 4611731400430051336 2 IN IP4 127.0.0.1\r\n" +
+				"s=-\r\n" +
+				"t=0 0\r\n" +
+				"a=group:BUNDLE 0\r\n" +
+				"m=video 9 UDP/TLS/RTP/SAVPF 96\r\n" +
+				"c=IN IP4 0.0.0.0\r\n" +
+				"a=rtcp:9 IN IP4 0.0.0.0\r\n" +
+				"a=ice-ufrag:mock\r\n" +
+				"a=ice-pwd:mockpassword12345678901\r\n" +
+				"a=fingerprint:sha-256 00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00\r\n" +
+				"a=setup:actpass\r\n" +
+				"a=mid:0\r\n" +
+				"a=recvonly\r\n" +
+				"a=rtcp-mux\r\n" +
+				"a=rtpmap:96 VP8/90000\r\n",
+		}
+		if err := wsjson.Write(ctx, conn, offer); err != nil {
+			log.Printf("mock-ams: ws write offer error: %v", err)
+			return
+		}
+		log.Printf("mock-ams: ws signaling: sent takeConfiguration/offer for streamId=%q", streamID)
+	}
+	s.mux.HandleFunc("/"+s.cfg.AppName+"/websocket", wsSignalingHandler)
 
 	// Health check for mock itself.
 	s.mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {

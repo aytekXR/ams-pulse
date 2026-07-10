@@ -2,6 +2,7 @@ package prober_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"nhooyr.io/websocket"
+	"nhooyr.io/websocket/wsjson"
 
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 	"github.com/pulse-analytics/pulse/server/internal/prober"
@@ -374,8 +378,9 @@ func TestHLSProbe_Timeout(t *testing.T) {
 	t.Logf("PASS: success=false, error_code=%q", result.ErrorCode)
 }
 
-// TestProbe_NotProbed verifies that webrtc/rtmp/dash probes return
+// TestProbe_NotProbed verifies that rtmp/dash probes return
 // success=false with error_code="not_probed" (honest minimal stub).
+// webrtc is now a real probe (probeWebRTC) — it no longer falls here.
 func TestProbe_NotProbed(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -383,7 +388,7 @@ func TestProbe_NotProbed(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	for _, proto := range []string{"webrtc", "rtmp", "dash"} {
+	for _, proto := range []string{"rtmp", "dash"} {
 		proto := proto
 		t.Run(proto, func(t *testing.T) {
 			source := &fakeSource{
@@ -427,6 +432,387 @@ func TestProbe_NotProbed(t *testing.T) {
 				t.Errorf("[%s] expected error_msg to mention Phase 3, got %q", proto, result.ErrorMsg)
 			}
 			t.Logf("PASS [%s]: success=false, error_code=not_probed (honest stub)", proto)
+		})
+	}
+}
+
+// ─── WebRTC probe tests ───────────────────────────────────────────────────────
+
+// buildWSSignalingServer creates an httptest.Server with a WebSocket handler at
+// /{app}/websocket that speaks the minimal AMS signaling protocol.
+// On receiving {"command":"play",...} it replies with a takeConfiguration/offer.
+// If silent=true the server accepts the WS connection but never sends anything
+// (used to test ws_timeout).
+func buildWSSignalingServer(t *testing.T, silent bool, offerSDP string) *httptest.Server {
+	t.Helper()
+
+	// Minimal SDP offer used in tests — just enough for parse check.
+	if offerSDP == "" {
+		offerSDP = "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=recvonly\r\n"
+	}
+
+	sdpForOffer := offerSDP
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		conn, err := websocket.Accept(w, req, &websocket.AcceptOptions{
+			InsecureSkipVerify: true,
+		})
+		if err != nil {
+			return
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "done")
+
+		if silent {
+			// Block forever (ctx will be cancelled by the probe timeout).
+			<-req.Context().Done()
+			return
+		}
+
+		// Read the play command.
+		var playMsg map[string]json.RawMessage
+		if err := wsjson.Read(req.Context(), conn, &playMsg); err != nil {
+			return
+		}
+
+		// Extract streamId from play message.
+		var streamID string
+		if raw, ok := playMsg["streamId"]; ok {
+			_ = json.Unmarshal(raw, &streamID)
+		}
+
+		// Reply with takeConfiguration/offer.
+		offer := map[string]interface{}{
+			"command":  "takeConfiguration",
+			"streamId": streamID,
+			"type":     "offer",
+			"sdp":      sdpForOffer,
+		}
+		_ = wsjson.Write(req.Context(), conn, offer)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// TestProbe_WebRTC_SignalingOnly verifies the happy path for a WebRTC probe:
+// mock WS server speaks AMS signaling → success=true, connect_time_ms>0,
+// signaling_state=offer_received, error_code="".
+func TestProbe_WebRTC_SignalingOnly(t *testing.T) {
+	srv := buildWSSignalingServer(t, false, "")
+
+	// Derive ws:// URL from the httptest server URL and add ?streamId=.
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/live/websocket?streamId=test-stream-1"
+
+	source := &fakeSource{
+		probes: []domain.ProbeConfig{
+			{
+				ID:        "probe-webrtc-ok",
+				Name:      "test-webrtc-ok",
+				URL:       wsURL,
+				Protocol:  "webrtc",
+				IntervalS: 60,
+				TimeoutS:  5,
+				Enabled:   true,
+			},
+		},
+	}
+	store := &fakeStore{}
+	clock := NewFakeClock(time.Now())
+	r := prober.New(prober.Config{Workers: 1, MaxJitterFraction: 0}, source, store, nil, clock)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	go func() { _ = r.Run(ctx) }()
+
+	results := waitForResults(store, 1, 5*time.Second)
+	cancel()
+
+	if len(results) == 0 {
+		t.Fatal("expected at least one probe result; got none")
+	}
+	result := results[0]
+	t.Logf("WebRTC result: success=%v error_code=%q signaling_state=%q connect_time_ms=%v",
+		result.Success, result.ErrorCode, result.SignalingState, result.ConnectTimeMs)
+
+	if !result.Success {
+		t.Errorf("expected Success=true, got false: error_code=%q error_msg=%q",
+			result.ErrorCode, result.ErrorMsg)
+	}
+	if result.ErrorCode != "" {
+		t.Errorf("expected empty ErrorCode on success, got %q", result.ErrorCode)
+	}
+	if result.SignalingState != "offer_received" {
+		t.Errorf("expected signaling_state=offer_received, got %q", result.SignalingState)
+	}
+	if result.ConnectTimeMs == nil {
+		t.Error("expected ConnectTimeMs != nil on success")
+	} else if *result.ConnectTimeMs == 0 {
+		t.Error("expected ConnectTimeMs > 0")
+	}
+	t.Logf("PASS: success=true, signaling_state=%q, connect_time_ms=%v",
+		result.SignalingState, *result.ConnectTimeMs)
+}
+
+// TestProbe_WebRTC_WsTimeout verifies that a WS server that accepts then stays
+// silent returns success=false, error_code=ws_timeout.
+func TestProbe_WebRTC_WsTimeout(t *testing.T) {
+	srv := buildWSSignalingServer(t, true, "")
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/live/websocket?streamId=silent-stream"
+
+	source := &fakeSource{
+		probes: []domain.ProbeConfig{
+			{
+				ID:        "probe-webrtc-timeout",
+				Name:      "test-webrtc-timeout",
+				URL:       wsURL,
+				Protocol:  "webrtc",
+				IntervalS: 60,
+				TimeoutS:  1, // 1s → triggers timeout
+				Enabled:   true,
+			},
+		},
+	}
+	store := &fakeStore{}
+	clock := NewFakeClock(time.Now())
+	r := prober.New(prober.Config{Workers: 1, MaxJitterFraction: 0}, source, store, nil, clock)
+
+	// Generous harness budgets (30s/20s): the probe's own 1s timeout is the
+	// behavior under test; the outer waits only bound scheduler+goroutine
+	// latency, which can exceed several seconds on a CPU-contended -race run
+	// (D-039/D-042 class — observed once at 6s during the S12 full-suite gate).
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	go func() { _ = r.Run(ctx) }()
+
+	results := waitForResults(store, 1, 20*time.Second)
+	cancel()
+
+	if len(results) == 0 {
+		t.Fatal("expected at least one probe result; got none")
+	}
+	result := results[0]
+	t.Logf("WsTimeout result: success=%v error_code=%q signaling_state=%q",
+		result.Success, result.ErrorCode, result.SignalingState)
+
+	if result.Success {
+		t.Error("expected Success=false on WS timeout")
+	}
+	if result.ErrorCode != "ws_timeout" {
+		t.Errorf("expected error_code=ws_timeout, got %q", result.ErrorCode)
+	}
+	if result.ConnectTimeMs != nil {
+		t.Errorf("expected ConnectTimeMs=nil on timeout, got %v", result.ConnectTimeMs)
+	}
+	t.Logf("PASS: success=false, error_code=ws_timeout, signaling_state=%q", result.SignalingState)
+}
+
+// TestProbe_WebRTC_WsRefused verifies that a connection refused returns
+// success=false, error_code=ws_refused.
+func TestProbe_WebRTC_WsRefused(t *testing.T) {
+	// Use a port that is not listening (httptest.Server was closed).
+	srv := buildWSSignalingServer(t, false, "")
+	closedURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/live/websocket?streamId=refused-stream"
+	srv.Close() // close BEFORE the probe runs
+
+	source := &fakeSource{
+		probes: []domain.ProbeConfig{
+			{
+				ID:        "probe-webrtc-refused",
+				Name:      "test-webrtc-refused",
+				URL:       closedURL,
+				Protocol:  "webrtc",
+				IntervalS: 60,
+				TimeoutS:  5,
+				Enabled:   true,
+			},
+		},
+	}
+	store := &fakeStore{}
+	clock := NewFakeClock(time.Now())
+	r := prober.New(prober.Config{Workers: 1, MaxJitterFraction: 0}, source, store, nil, clock)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	go func() { _ = r.Run(ctx) }()
+
+	results := waitForResults(store, 1, 5*time.Second)
+	cancel()
+
+	if len(results) == 0 {
+		t.Fatal("expected at least one probe result; got none")
+	}
+	result := results[0]
+	t.Logf("WsRefused result: success=%v error_code=%q signaling_state=%q",
+		result.Success, result.ErrorCode, result.SignalingState)
+
+	if result.Success {
+		t.Error("expected Success=false on refused connection")
+	}
+	// ws_refused or ws_error are both acceptable — OS may return ECONNREFUSED or EHOSTUNREACH
+	if result.ErrorCode != "ws_refused" && result.ErrorCode != "ws_error" {
+		t.Errorf("expected error_code=ws_refused or ws_error, got %q", result.ErrorCode)
+	}
+	t.Logf("PASS: success=false, error_code=%q", result.ErrorCode)
+}
+
+// TestProbe_WebRTC_MissingStreamID verifies that a WebRTC probe URL without
+// ?streamId= returns success=false, error_code=ws_error with a descriptive message.
+func TestProbe_WebRTC_MissingStreamID(t *testing.T) {
+	srv := buildWSSignalingServer(t, false, "")
+	// URL without streamId query param.
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/live/websocket"
+
+	source := &fakeSource{
+		probes: []domain.ProbeConfig{
+			{
+				ID:        "probe-webrtc-missing-id",
+				Name:      "test-webrtc-missing-id",
+				URL:       wsURL,
+				Protocol:  "webrtc",
+				IntervalS: 60,
+				TimeoutS:  5,
+				Enabled:   true,
+			},
+		},
+	}
+	store := &fakeStore{}
+	clock := NewFakeClock(time.Now())
+	r := prober.New(prober.Config{Workers: 1, MaxJitterFraction: 0}, source, store, nil, clock)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	go func() { _ = r.Run(ctx) }()
+
+	results := waitForResults(store, 1, 5*time.Second)
+	cancel()
+
+	if len(results) == 0 {
+		t.Fatal("expected at least one probe result; got none")
+	}
+	result := results[0]
+	t.Logf("MissingStreamID result: success=%v error_code=%q msg=%q",
+		result.Success, result.ErrorCode, result.ErrorMsg)
+
+	if result.Success {
+		t.Error("expected Success=false on missing streamId")
+	}
+	if result.ErrorCode != "ws_error" {
+		t.Errorf("expected error_code=ws_error, got %q", result.ErrorCode)
+	}
+	if !strings.Contains(result.ErrorMsg, "streamId") {
+		t.Errorf("expected error_msg to mention streamId, got %q", result.ErrorMsg)
+	}
+	if result.ConnectTimeMs != nil {
+		t.Errorf("expected ConnectTimeMs=nil, got %v", result.ConnectTimeMs)
+	}
+	t.Logf("PASS: success=false, error_code=ws_error, mentions streamId")
+}
+
+// TestProbe_WebRTC_FixtureReplay feeds the captured real-AMS offer message bytes
+// through the parser to pin the parse logic against the actual wire format.
+// This is a table-driven unit test — it does NOT start any servers.
+func TestProbe_WebRTC_FixtureReplay(t *testing.T) {
+	// Captured from real AMS 3.0.3 WebRTC signaling (see
+	// agents/handoffs/real-ams-captures/webrtc-signaling-play-offer.json).
+	cases := []struct {
+		name      string
+		msg       string
+		wantOK    bool
+		wantState string
+	}{
+		{
+			name:      "real_ams_offer",
+			msg:       `{"command":"takeConfiguration","streamId":"teststream","type":"offer","sdp":"v=0\r\n"}`,
+			wantOK:    true,
+			wantState: "offer_received",
+		},
+		{
+			name:      "answer_not_offer",
+			msg:       `{"command":"takeConfiguration","streamId":"teststream","type":"answer","sdp":"v=0\r\n"}`,
+			wantOK:    false,
+			wantState: "ws_error",
+		},
+		{
+			name:      "error_command",
+			msg:       `{"command":"error","definition":"highResourceUsage"}`,
+			wantOK:    false,
+			wantState: "ws_error",
+		},
+		{
+			name:      "take_candidate",
+			msg:       `{"command":"takeCandidate","streamId":"teststream","label":1,"id":"1","candidate":"candidate:..."}`,
+			wantOK:    false,
+			wantState: "ws_error",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Build a WS server that sends exactly tc.msg as the first message.
+			rawMsg := tc.msg
+			var srv *httptest.Server
+			srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				conn, err := websocket.Accept(w, req, &websocket.AcceptOptions{InsecureSkipVerify: true})
+				if err != nil {
+					return
+				}
+				defer conn.Close(websocket.StatusNormalClosure, "done")
+				// Read play command (discard).
+				var dummy json.RawMessage
+				_ = wsjson.Read(req.Context(), conn, &dummy)
+				// Send fixture message as raw JSON.
+				_ = conn.Write(req.Context(), websocket.MessageText, []byte(rawMsg))
+			}))
+			t.Cleanup(srv.Close)
+
+			wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/live/websocket?streamId=fixture-stream"
+			source := &fakeSource{
+				probes: []domain.ProbeConfig{{
+					ID:        "probe-fixture-" + tc.name,
+					Name:      tc.name,
+					URL:       wsURL,
+					Protocol:  "webrtc",
+					IntervalS: 60,
+					TimeoutS:  5,
+					Enabled:   true,
+				}},
+			}
+			store := &fakeStore{}
+			clock := NewFakeClock(time.Now())
+			runner := prober.New(prober.Config{Workers: 1, MaxJitterFraction: 0}, source, store, nil, clock)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			go func() { _ = runner.Run(ctx) }()
+
+			results := waitForResults(store, 1, 5*time.Second)
+			cancel()
+
+			if len(results) == 0 {
+				t.Fatal("expected at least one probe result; got none")
+			}
+			res := results[0]
+			t.Logf("[%s] success=%v code=%q state=%q", tc.name, res.Success, res.ErrorCode, res.SignalingState)
+
+			if res.Success != tc.wantOK {
+				t.Errorf("expected Success=%v, got %v (error_code=%q msg=%q)",
+					tc.wantOK, res.Success, res.ErrorCode, res.ErrorMsg)
+			}
+			if res.SignalingState != tc.wantState {
+				t.Errorf("expected SignalingState=%q, got %q", tc.wantState, res.SignalingState)
+			}
+			if tc.wantOK {
+				if res.ConnectTimeMs == nil {
+					t.Error("expected ConnectTimeMs != nil on success")
+				}
+				if res.ErrorCode != "" {
+					t.Errorf("expected empty ErrorCode on success, got %q", res.ErrorCode)
+				}
+			}
+			t.Logf("PASS [%s]", tc.name)
 		})
 	}
 }
