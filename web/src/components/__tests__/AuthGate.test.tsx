@@ -54,7 +54,7 @@ describe("AuthGate — 401 redirect fix", () => {
       </AuthGate>
     );
     expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/pulse_tok/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/plt_/i)).toBeInTheDocument();
   });
 
   it("shows validation error when submitting empty token", async () => {
@@ -80,7 +80,7 @@ describe("AuthGate — 401 redirect fix", () => {
       </AuthGate>
     );
 
-    const input = screen.getByPlaceholderText(/pulse_tok/i);
+    const input = screen.getByPlaceholderText(/plt_/i);
     fireEvent.change(input, { target: { value: "plt_newtoken" } });
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
