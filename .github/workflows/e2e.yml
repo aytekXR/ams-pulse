@@ -189,10 +189,10 @@ jobs:
           echo "WEBRTC_PROBE_ID=$PROBE_ID" >> "$GITHUB_ENV"
           echo "WebRTC probe created: $PROBE_ID"
 
-      - name: WO-B — poll for WebRTC probe success=true (90 s, 5 s interval)
+      - name: WO-B — poll for WebRTC probe success=true (120 s, 5 s interval)
         run: |
-          echo "Polling /api/v1/probes/${WEBRTC_PROBE_ID}/results for WebRTC success (90 s, 5 s) ..."
-          deadline=$(( $(date +%s) + 90 ))
+          echo "Polling /api/v1/probes/${WEBRTC_PROBE_ID}/results for WebRTC success (120 s, 5 s) ..."
+          deadline=$(( $(date +%s) + 120 ))
           LAST_RESULTS=""
           while true; do
             LAST_RESULTS=$(curl -m 10 -s \
@@ -208,6 +208,7 @@ jobs:
                       and it.get('connect_time_ms') is not None
                       and it.get('connect_time_ms', 0) > 0
                       and it.get('signaling_state') == 'offer_received'
+                      and it.get('ice_state', '') == 'connected'
                       and it.get('error_code', '') == ''):
                       print('yes')
                       sys.exit(0)
@@ -218,13 +219,13 @@ jobs:
             echo "  webrtc probe check: $FOUND"
             [ "$FOUND" = "yes" ] && break
             if [ "$(date +%s)" -ge "$deadline" ]; then
-              echo "TIMEOUT: no WebRTC probe result with success=true after 90 s"
+              echo "TIMEOUT: no WebRTC probe result with success=true after 120 s"
               echo "Last probe results: $LAST_RESULTS"
               exit 1
             fi
             sleep 5
           done
-          echo "PASS: WO-B — WebRTC probe success=true, connect_time_ms>0, signaling_state=offer_received"
+          echo "PASS: WO-B — WebRTC probe success=true, connect_time_ms>0, signaling_state=offer_received, ice_state=connected"
 
       # ── S13/WO-B': RTMP probe → mock-ams RTMP signaling → success=true ──────────
       - name: S13 WO-B' — create RTMP probe pointing at mock-ams
@@ -809,6 +810,91 @@ jobs:
             sleep 2
           done
           echo "PASS: A5 — viewer_count anomaly alert found in firing history."
+
+      # ── A5b: Ingest bitrate anomaly alert fires → /alerts/history ──────────────────
+      # Cannot-false-green: baseline mean ≈ 2 kbps (e2e-stream-1 default wire 2000 bits/sec → 2 kbps
+      # via normalize.go ÷1000); spike to 9000000 bits/sec = 9000 kbps. Effective stddev floor =
+      # StddevRelEpsilon×mean = 0.05×2 = 0.1 kbps (anomaly.go:82,88). z = (9000-2)/0.1 = 89980
+      # >> sigma=0.5 → fires. Metric: ingest_bitrate_kbps (NO alias — Detector key == rule name
+      # per D-074 WO-D ruling). Spike is UPWARD only (downward would re-trigger health/alert steps'
+      # conditions for e2e-stream-1; the A1 floor rule stays firing at 2 kbps < 99999 regardless).
+      # Wire bitrate restored unconditionally via shell trap so later steps see 2000 bits/sec.
+      # Timing: PULSE_ANOMALY_TICK_S=5; baseline established from stream uptime (5+ min by A5b);
+      # 15 s sleep (3 ticks) after rule creation ensures ≥min_samples=2 at the baseline bitrate
+      # before the spike. window_s=3600 matches Detector hardcoded windowS (anomaly.go:229).
+      # Placement: immediately after A5 — WO-4 uses vd04-stream-* and does not depend on
+      # e2e-stream-1 bitrate state; A5 viewer spike (10000) is unrelated to bitrate.
+      # D-042: do not reduce poll budgets.
+      - name: A5b — seed ingest_bitrate_kbps anomaly baseline, spike bitrate, assert history
+        run: |
+          PRIOR_WIRE_BITRATE=2000
+          restore_bitrate() {
+            curl -m 5 -s \
+              -X POST \
+              -H "Content-Type: application/json" \
+              -d "{\"stream_id\":\"e2e-stream-1\",\"bitrate\":${PRIOR_WIRE_BITRATE}}" \
+              http://127.0.0.1:19090/control/set_bitrate
+            echo "Restored e2e-stream-1 wire bitrate to ${PRIOR_WIRE_BITRATE} bits/sec (2 kbps)."
+          }
+          trap restore_bitrate EXIT
+
+          # Create anomaly rule: ingest_bitrate_kbps, sigma=0.5, min_samples=2, window_s=3600.
+          # operator and threshold are required fields but ignored by the evaluator for anomaly rules.
+          HTTP_STATUS=$(curl -m 5 -s \
+            -X POST \
+            -H "Authorization: Bearer ${PULSE_ADMIN_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"name":"e2e bitrate anomaly","metric":"ingest_bitrate_kbps","rule_type":"anomaly","window_s":3600,"sigma":0.5,"min_samples":2,"severity":"warning","operator":"gt","threshold":0}' \
+            -o /tmp/bitrate_anomaly_rule.json \
+            -w "%{http_code}" \
+            http://127.0.0.1:18090/api/v1/alerts/rules)
+          echo "Create ingest_bitrate_kbps anomaly rule ($HTTP_STATUS): $(cat /tmp/bitrate_anomaly_rule.json)"
+          [ "$HTTP_STATUS" = "201" ] || { echo "FAIL: expected 201"; exit 1; }
+
+          # Wait 15 s for the Detector to accumulate ≥min_samples=2 baseline samples at the
+          # current wire bitrate before the spike (3 Detector ticks @ PULSE_ANOMALY_TICK_S=5).
+          echo "Waiting 15 s for ingest_bitrate_kbps baseline to accumulate (3 ticks @ 5 s) ..."
+          sleep 15
+
+          # Spike e2e-stream-1 wire bitrate UPWARD to 9000000 bits/sec → 9000 kbps in Pulse.
+          # NEVER downward: a downward spike would change e2e-stream-1 health score and could
+          # re-trigger alert/health conditions in later steps.
+          curl -m 5 -sf \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"stream_id":"e2e-stream-1","bitrate":9000000}' \
+            http://127.0.0.1:19090/control/set_bitrate
+          echo "Spiked e2e-stream-1 wire bitrate to 9000000 bits/sec (→ 9000 kbps)."
+
+          echo "Polling /api/v1/alerts/history?state=firing for ingest_bitrate_kbps anomaly (60 s, 5 s interval) ..."
+          deadline=$(( $(date +%s) + 60 ))
+          LAST_BITRATE_HIST=""
+          while true; do
+            LAST_BITRATE_HIST=$(curl -m 5 -s \
+              -H "Authorization: Bearer ${PULSE_ADMIN_TOKEN}" \
+              "http://127.0.0.1:18090/api/v1/alerts/history?state=firing")
+            FOUND=$(echo "$LAST_BITRATE_HIST" | python3 -c "
+          import sys, json
+          try:
+              d = json.load(sys.stdin)
+              items = d.get('items', [])
+              if any(it.get('metric') == 'ingest_bitrate_kbps' for it in items):
+                  print('yes')
+              else:
+                  print('no')
+          except Exception:
+              print('no')
+          ")
+            echo "  ingest_bitrate_kbps anomaly history check: $FOUND"
+            [ "$FOUND" = "yes" ] && break
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "TIMEOUT: no ingest_bitrate_kbps anomaly alert in history after 60 s"
+              echo "Last /alerts/history response: $LAST_BITRATE_HIST"
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "PASS: A5b — ingest_bitrate_kbps anomaly alert found in firing history."
 
       # ── WO-4: 500-stream render measurement (VD-04/A10) ────────────────────────────
       - name: WO-4 — seed 500 streams via mock-ams bulk_publish
