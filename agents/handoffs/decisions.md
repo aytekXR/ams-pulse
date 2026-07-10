@@ -3523,3 +3523,9 @@ LAST → browser-accept ping.
 - **Protection flip (LAST action, evidence below):** enforce_admins=true, required
   reviews 1→0, contexts 7→9 (+`Analyze (go)`, +`Analyze (javascript-typescript)`),
   strict kept. GET-diff proof appended post-flip.
+
+**D-076 PROTECTION FLIP — EXECUTED + GET-diff proof (2026-07-11, after CI green at 902f82f):**
+- BEFORE: `{"contexts":["contracts","server","web","sdk","docker-build","helm","compose"],"enforce_admins":false,"reviews":1,"strict":true}`
+- AFTER:  `{"contexts":[...7...,"Analyze (go)","Analyze (javascript-typescript)"],"enforce_admins":true,"reviews":0,"strict":true}` (force_push/deletions false, unchanged)
+- This entry itself landed via the FIRST PR under the new flow (validating PR-first is
+  not deadlocked: branch → PR → 9 contexts → merge with 0 reviews, enforce_admins on).
