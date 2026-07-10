@@ -19,7 +19,7 @@ services:
   mock-ams:
     image: golang:1.25
     working_dir: /src/qa/mock-ams
-    command: ["go", "run", ".", "-addr", ":9090", "-app", "live"]
+    command: ["go", "run", ".", "-addr", ":9090", "-app", "live", "-rtmp-addr", ":11935"]
     volumes:
       - ../:/src:ro
       - go-build-cache:/root/.cache/go-build
