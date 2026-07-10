@@ -208,7 +208,7 @@ jobs:
                       and it.get('connect_time_ms') is not None
                       and it.get('connect_time_ms', 0) > 0
                       and it.get('signaling_state') == 'offer_received'
-                      and it.get('error_code', 'not_probed') != 'not_probed'):
+                      and it.get('error_code', '') == ''):
                       print('yes')
                       sys.exit(0)
               print('no')

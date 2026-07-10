@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -833,4 +834,20 @@ func TestPG_Ping(t *testing.T) {
 		t.Fatalf("Ping: %v", err)
 	}
 	t.Log("PASS: Ping")
+}
+
+// TestPG_MigrateDDLPathRejected pins the D-072 verifier fix: the file-path DDL
+// override (PULSE_META_DDL_PATH) is sqlite-only — applying an arbitrary file to
+// the postgres backend must be refused loudly instead of corrupting the schema
+// (the sqlite DDL's 32-bit INTEGER epoch-ms columns would overflow at runtime).
+func TestPG_MigrateDDLPathRejected(t *testing.T) {
+	s := openPGStore(t)
+	err := s.Migrate(context.Background(), "/any/path/whatsoever.sql")
+	if err == nil {
+		t.Fatal("expected Migrate(ddlPath) to be rejected for the postgres backend; got nil")
+	}
+	if !strings.Contains(err.Error(), "sqlite-only") {
+		t.Errorf("error should say the override is sqlite-only, got: %v", err)
+	}
+	t.Logf("PASS: Migrate(ddlPath) rejected for postgres: %v", err)
 }

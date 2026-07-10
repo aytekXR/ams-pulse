@@ -26,6 +26,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -655,16 +656,21 @@ type wsSignalingMsg struct {
 //  5. Set ConnectTimeMs = elapsed ms from dial start to first parseable message.
 func (r *Runner) probeWebRTC(ctx context.Context, p domain.ProbeConfig, result domain.ProbeResult) domain.ProbeResult {
 	// Validate streamId in URL query params.
-	// Minimal URL parsing without full net/url import: find '?' and scan for streamId=.
-	// We DO need net/url — but it is part of stdlib and already imported indirectly via net/http.
-	// Rather than add another import, do a simple string split.
 	rawURL := p.URL
 	streamID := ""
 	if idx := strings.Index(rawURL, "?"); idx >= 0 {
 		query := rawURL[idx+1:]
 		for _, kv := range strings.Split(query, "&") {
 			if strings.HasPrefix(kv, "streamId=") {
-				streamID = strings.TrimPrefix(kv, "streamId=")
+				raw := strings.TrimPrefix(kv, "streamId=")
+				// Percent-decode so encoded IDs (spaces, slashes, non-ASCII)
+				// reach AMS as their real value; keep the raw form if decoding
+				// fails (malformed escape) rather than dropping the probe.
+				if dec, decErr := url.QueryUnescape(raw); decErr == nil {
+					streamID = dec
+				} else {
+					streamID = raw
+				}
 			}
 		}
 	}

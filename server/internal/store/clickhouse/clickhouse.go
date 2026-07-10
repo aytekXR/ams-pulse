@@ -652,7 +652,11 @@ func (s *Store) Metrics() (inserted, dropped int64) {
 // Called synchronously by the probe runner after each check (results are low
 // frequency — one per probe per interval — so batching is not needed).
 func (s *Store) InsertProbeResult(ctx context.Context, r domain.ProbeResult) error {
-	b, err := s.conn.PrepareBatch(ctx, fmt.Sprintf("INSERT INTO %s.probe_results", s.db))
+	// Explicit column list: the Append below is positional, and a bare INSERT
+	// binds to the table's physical column order — a future ADD COLUMN ... AFTER
+	// would silently misalign values (D-072 verifier finding).
+	b, err := s.conn.PrepareBatch(ctx, fmt.Sprintf(
+		"INSERT INTO %s.probe_results (id, probe_id, ts, success, ttfb_ms, error_code, error_msg, bitrate_kbps, segment_ttfb_ms, connect_time_ms, signaling_state)", s.db))
 	if err != nil {
 		return fmt.Errorf("probe_results: prepare batch: %w", err)
 	}

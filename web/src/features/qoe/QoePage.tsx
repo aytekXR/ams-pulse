@@ -172,7 +172,7 @@ export function QoePage() {
               </div>
               <div style={cardStyle}>
                 <div style={labelStyle}>Rebuffer Ratio</div>
-                <div style={{ ...valueStyle, color: totals.rebuffer_ratio > 0.05 ? "var(--color-warning, #fbbf24)" : "inherit" }}>
+                <div style={{ ...valueStyle, color: totals.rebuffer_ratio > 0.05 ? "var(--color-warning, #FFB224)" : "inherit" }}>
                   {(totals.rebuffer_ratio * 100).toFixed(1)}<span style={{ fontSize: 14, color: "var(--color-muted)", marginLeft: 4 }}>%</span>
                 </div>
               </div>

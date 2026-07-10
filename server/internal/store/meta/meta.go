@@ -132,6 +132,13 @@ func New(ctx context.Context, backend, dsn, secretKey string) (*Store, error) {
 // For the Postgres backend, applySchemaUpgrades is a no-op (returns nil early);
 // schema evolution is handled exclusively via numbered migration files.
 func (s *Store) Migrate(ctx context.Context, ddlPath string) error {
+	// File-path DDL override is a SQLite-only escape hatch. Applying an
+	// arbitrary file to Postgres is a footgun (the sqlite DDL's 32-bit INTEGER
+	// epoch-ms columns and INSERT OR IGNORE would corrupt or fail) — the
+	// postgres backend migrates exclusively via the embedded PG DDL.
+	if s.backend == "postgres" {
+		return fmt.Errorf("meta migrate: PULSE_META_DDL_PATH is sqlite-only; the postgres backend uses embedded migrations — unset PULSE_META_DDL_PATH")
+	}
 	data, err := os.ReadFile(ddlPath)
 	if err != nil {
 		return fmt.Errorf("meta migrate: read ddl %s: %w", ddlPath, err)

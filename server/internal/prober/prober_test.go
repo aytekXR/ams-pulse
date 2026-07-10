@@ -1027,3 +1027,77 @@ func TestHLSProbe_MasterFollowsVariant(t *testing.T) {
 	t.Logf("PASS: master→variant→segment: success=true, bitrate=%.1f kbps, seg_ttfb_ms=%d",
 		result.BitrateKbps, result.SegmentTTFBMs)
 }
+
+// TestProbe_WebRTC_EncodedStreamID verifies that a percent-encoded streamId in
+// the probe URL reaches the AMS play command DECODED (D-072 verifier finding:
+// the raw query value was previously forwarded verbatim).
+func TestProbe_WebRTC_EncodedStreamID(t *testing.T) {
+	received := make(chan string, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		conn, err := websocket.Accept(w, req, &websocket.AcceptOptions{InsecureSkipVerify: true})
+		if err != nil {
+			return
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "done")
+
+		var play struct {
+			Command  string `json:"command"`
+			StreamID string `json:"streamId"`
+		}
+		if err := wsjson.Read(req.Context(), conn, &play); err != nil {
+			return
+		}
+		received <- play.StreamID
+
+		offer := map[string]interface{}{
+			"command":  "takeConfiguration",
+			"streamId": play.StreamID,
+			"type":     "offer",
+			"sdp":      "v=0\r\n",
+		}
+		_ = wsjson.Write(req.Context(), conn, offer)
+	}))
+	defer srv.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/live/websocket?streamId=enc%20oded%2Fid"
+
+	source := &fakeSource{
+		probes: []domain.ProbeConfig{
+			{
+				ID:        "probe-webrtc-encoded",
+				Name:      "test-webrtc-encoded",
+				URL:       wsURL,
+				Protocol:  "webrtc",
+				IntervalS: 60,
+				TimeoutS:  5,
+				Enabled:   true,
+			},
+		},
+	}
+	store := &fakeStore{}
+	clock := NewFakeClock(time.Now())
+	r := prober.New(prober.Config{Workers: 1, MaxJitterFraction: 0}, source, store, nil, clock)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	go func() { _ = r.Run(ctx) }()
+
+	results := waitForResults(store, 1, 20*time.Second)
+	cancel()
+
+	if len(results) == 0 {
+		t.Fatal("expected a probe result; got none")
+	}
+	if !results[0].Success {
+		t.Errorf("expected success, got error_code=%q msg=%q", results[0].ErrorCode, results[0].ErrorMsg)
+	}
+
+	select {
+	case got := <-received:
+		if got != "enc oded/id" {
+			t.Errorf("play streamId = %q, want %q (percent-decoded)", got, "enc oded/id")
+		}
+	default:
+		t.Fatal("signaling server never received a play command")
+	}
+}

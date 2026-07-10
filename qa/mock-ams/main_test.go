@@ -2,11 +2,17 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
+
+	"nhooyr.io/websocket"
+	"nhooyr.io/websocket/wsjson"
 )
 
 // newTestServer creates a test server and returns the httptest.Server and State.
@@ -279,4 +285,56 @@ func TestBulkPublish(t *testing.T) {
 			t.Fatalf("want 400 for count=0, got %d", resp.StatusCode)
 		}
 	})
+}
+
+// TestWSSignaling_HappyPath verifies the WO-B WebSocket signaling handler:
+// upgrade on /{app}/websocket, read a play command, reply with a
+// takeConfiguration/offer message carrying a non-empty SDP (D-072 verifier
+// finding: the handler previously had zero test coverage).
+func TestWSSignaling_HappyPath(t *testing.T) {
+	ts, _ := newTestServer(t)
+	defer ts.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/live/websocket"
+	conn, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatalf("ws dial %s: %v", wsURL, err)
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "done")
+
+	play := map[string]interface{}{
+		"command":   "play",
+		"streamId":  "ws-test-stream",
+		"token":     "",
+		"trackList": []string{},
+	}
+	if err := wsjson.Write(ctx, conn, play); err != nil {
+		t.Fatalf("write play: %v", err)
+	}
+
+	var reply struct {
+		Command  string `json:"command"`
+		StreamID string `json:"streamId"`
+		Type     string `json:"type"`
+		SDP      string `json:"sdp"`
+	}
+	if err := wsjson.Read(ctx, conn, &reply); err != nil {
+		t.Fatalf("read offer: %v", err)
+	}
+
+	if reply.Command != "takeConfiguration" {
+		t.Errorf("command = %q, want takeConfiguration", reply.Command)
+	}
+	if reply.Type != "offer" {
+		t.Errorf("type = %q, want offer", reply.Type)
+	}
+	if reply.StreamID != "ws-test-stream" {
+		t.Errorf("streamId = %q, want ws-test-stream", reply.StreamID)
+	}
+	if !strings.HasPrefix(reply.SDP, "v=0") {
+		t.Errorf("sdp does not look like SDP: %q", reply.SDP)
+	}
 }

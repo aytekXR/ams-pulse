@@ -7,7 +7,10 @@ import _ "embed"
 // columns). Both files are applied in order by MigrateEmbedded when
 // backend == "postgres".
 //
-// Source files are kept in sync with the contracts directory:
+// Source files are kept in sync with the contracts directory. They are exact
+// copies EXCEPT for two provenance comment lines prepended to each embedded
+// file (lines 2-3: "Embedded copy of ..." + "Sync command: ..."); when
+// re-syncing, copy the contracts file and re-add those two header lines:
 //
 //	cp contracts/db/meta/postgres/0001_init.sql \
 //	   server/internal/store/meta/sql/postgres_0001_init.sql
