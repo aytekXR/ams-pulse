@@ -26,19 +26,26 @@ type fakeFailChannel struct {
 	mu        sync.Mutex
 	calls     int
 	callTimes []time.Time
-	failFirst int  // number of calls that return an error (0 = always succeed)
-	failAll   bool // if true, every Send returns an error
+	failFirst int           // number of calls that return an error (0 = always succeed)
+	failAll   bool          // if true, every Send returns an error
+	sendDelay time.Duration // per-Send sleep; lets tests make synchronous delivery measurably slow
 }
 
 func (f *fakeFailChannel) Name() string { return "fake-fail" }
 
 func (f *fakeFailChannel) Send(_ context.Context, _ []byte) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
+	delay := f.sendDelay
 	f.calls++
+	n := f.calls
 	f.callTimes = append(f.callTimes, time.Now())
-	if f.failAll || f.calls <= f.failFirst {
-		return fmt.Errorf("simulated send failure #%d", f.calls)
+	fail := f.failAll || n <= f.failFirst
+	f.mu.Unlock()
+	if delay > 0 {
+		time.Sleep(delay) // outside the mutex so Calls()/CallTimes() never block on it
+	}
+	if fail {
+		return fmt.Errorf("simulated send failure #%d", n)
 	}
 	return nil
 }
@@ -179,7 +186,11 @@ func TestDelivery_AllFail_RecordsDeliveryFailure(t *testing.T) {
 	clock := alert.NewFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 
 	const chID = "always-fail-ch"
-	fake := &fakeFailChannel{failAll: true}
+	// sendDelay makes SYNCHRONOUS delivery measurably slow: 4 attempts × 500ms ≥ 2s,
+	// so the 1s budget below discriminates sync vs async even under whole-suite -race
+	// CPU contention (worst observed TickOnce overhead ~110ms — D-075 gate finding; the
+	// old instant-Send fake + 100ms budget measured only scheduler noise, D-042 class).
+	fake := &fakeFailChannel{failAll: true, sendDelay: 500 * time.Millisecond}
 	ev := newRetryEvaluator(t, store, live, clock, chID, fake, fastRetryCfg())
 	createOfflineRuleForChannel(t, store, chID)
 
@@ -192,8 +203,8 @@ func TestDelivery_AllFail_RecordsDeliveryFailure(t *testing.T) {
 	ev.TickOnce(ctx)
 	elapsed := time.Since(start)
 
-	if elapsed > 100*time.Millisecond {
-		t.Errorf("TickOnce took %v; expected <100ms — delivery should be non-blocking", elapsed)
+	if elapsed > time.Second {
+		t.Errorf("TickOnce took %v; expected <1s — delivery should be non-blocking (sync would take ≥2s)", elapsed)
 	}
 	t.Logf("TickOnce returned in %v (async check passed)", elapsed)
 
