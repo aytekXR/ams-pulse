@@ -238,6 +238,12 @@ expansion (§2.8) for non-HLS streams.
 or native WebRTC stack), then RTMP, then DASH. Each protocol adds: probe implementation,
 probe result schema extension (contract CR), CI fixture from `real-ams-captures/`.
 **Size:** [L] per protocol.
+**⚠ RE-SCOPED at S12 (D-072 ruling, scout-verified):** headless-browser probing is
+REJECTED outright (violates the single-binary CGO=0 deployment model); WebRTC lands in
+two slices instead: **phase 1 (S12) = signaling-only** — pure-Go WS dial → `play` →
+offer, real `connect_time_ms` + `signaling_state`, fixture self-captured from the real
+AMS, [M] — and **phase 2 (S13) = pion media path** (ICE/DTLS/SRTP, rtt/jitter/loss,
+[L], new pion deps). RTMP/DASH sizing unchanged.
 
 ---
 

@@ -7,7 +7,14 @@
 
 ## ⚡ TL;DR — expected from you right now (2026-07-10)
 
-**Nothing blocks the next session (S12).** Your open items, all non-blocking:
+> **S12 IS RUNNING (mid-session status 2026-07-10 ~11:30Z): NOTHING is required from
+> you.** Done so far: clean-install release test PASSED (≈3 min vs the 15-min budget;
+> 7 install-doc bugs found + fixed), WO-D skipped on its date gate, enforce_admins
+> rationale re-recorded (no PR-first answer yet — still fine). In flight: Postgres meta
+> backend, WebRTC signaling probe, and your brandkit UI re-theme. After the session
+> closes you'll be asked for ONE thing: a browser look at the re-branded UI (U5 pattern).
+
+**Nothing blocks the current session (S12).** Your open items, all non-blocking:
 
 | Priority | Item | What to say/do |
 |---|---|---|
