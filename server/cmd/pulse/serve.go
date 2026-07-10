@@ -33,6 +33,33 @@ import (
 	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
 )
 
+// resolveMetaBackend determines the meta store backend name and DSN from
+// environment variables, with a PULSE_POSTGRES_DSN convenience override.
+//
+// Resolution order (last wins):
+//  1. PULSE_META_DSN for the DSN (default: "pulse_meta.db").
+//  2. PULSE_META for the backend (default: "sqlite").
+//  3. PULSE_POSTGRES_DSN non-empty → backend="postgres", dsn=PULSE_POSTGRES_DSN
+//     (convenience override; sets both without requiring PULSE_META separately).
+//
+// The function accepts getenv to make it fully unit-testable without touching
+// the real environment (see meta_backend_test.go).
+func resolveMetaBackend(getenv func(string) string) (backend, dsn string) {
+	dsn = getenv("PULSE_META_DSN")
+	if dsn == "" {
+		dsn = "pulse_meta.db"
+	}
+	backend = getenv("PULSE_META")
+	if backend == "" {
+		backend = "sqlite"
+	}
+	if pgDSN := getenv("PULSE_POSTGRES_DSN"); pgDSN != "" {
+		dsn = pgDSN
+		backend = "postgres"
+	}
+	return backend, dsn
+}
+
 // anomalyDetectorBridge adapts *anomaly.Detector to the api.AnomalyDetector interface.
 // The anomaly package uses anomaly.AnomalyFlag; the api package uses api.AnomalyFlagAPI.
 // These are structurally identical; the bridge converts between them.
@@ -244,11 +271,10 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	}
 	logger.Info("pulse: license loaded", "tier", lic.Tier(), "valid", lic.Valid())
 
-	// HOOK(BE-02): Wire meta store (SQLite).
-	metaDSN := os.Getenv("PULSE_META_DSN")
-	if metaDSN == "" {
-		metaDSN = "pulse_meta.db" // default: file in working directory
-	}
+	// HOOK(BE-02): Wire meta store. Backend selected by PULSE_META (default: sqlite);
+	// PULSE_POSTGRES_DSN is a convenience override that sets backend=postgres + DSN
+	// in one step without requiring PULSE_META to be set separately.
+	metaBackend, metaDSN := resolveMetaBackend(os.Getenv)
 	metaSecretKey, err := config.GetSecret("PULSE_SECRET_KEY")
 	if err != nil {
 		return nil, fmt.Errorf("PULSE_SECRET_KEY: %w", err)
@@ -262,7 +288,7 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		}
 		return nil, fmt.Errorf("PULSE_SECRET_KEY is too short (%d bytes); minimum is 16 bytes; generate with: openssl rand -hex 32", len(metaSecretKey))
 	}
-	metaStore, err := meta.New(ctx, "sqlite", metaDSN, metaSecretKey)
+	metaStore, err := meta.New(ctx, metaBackend, metaDSN, metaSecretKey)
 	if err != nil {
 		return nil, fmt.Errorf("meta store: %w", err)
 	}

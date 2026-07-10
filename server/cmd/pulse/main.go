@@ -171,10 +171,7 @@ func runMigrate(args []string) error {
 	// Runs unconditionally (does not require ClickHouse). The DDL is embedded in
 	// the binary (meta.EmbeddedDDL) so PULSE_META_DDL_PATH is not required for a
 	// working binary; the env var acts as an override for custom schemas.
-	metaDSN := os.Getenv("PULSE_META_DSN")
-	if metaDSN == "" {
-		metaDSN = "pulse_meta.db"
-	}
+	metaBackend, metaDSN := resolveMetaBackend(os.Getenv)
 	metaSecretKey, secretErr := config.GetSecret("PULSE_SECRET_KEY")
 	if secretErr != nil {
 		return fmt.Errorf("PULSE_SECRET_KEY: %w", secretErr)
@@ -185,8 +182,8 @@ func runMigrate(args []string) error {
 		}
 		return fmt.Errorf("PULSE_SECRET_KEY is too short (%d bytes); minimum is 16 bytes; generate with: openssl rand -hex 32", len(metaSecretKey))
 	}
-	logger.Info("pulse migrate: running meta store migrations", "dsn", metaDSN)
-	metaStore, metaErr := meta.New(ctx, "sqlite", metaDSN, metaSecretKey)
+	logger.Info("pulse migrate: running meta store migrations", "dsn", metaDSN, "backend", metaBackend)
+	metaStore, metaErr := meta.New(ctx, metaBackend, metaDSN, metaSecretKey)
 	if metaErr != nil {
 		logger.Error("pulse migrate: meta store open failed", "error", metaErr)
 		errs = append(errs, fmt.Errorf("meta store open: %w", metaErr))
@@ -300,10 +297,7 @@ func runReconcile(cfg EnvConfig) error {
 	defer chStore.Close()
 
 	// Connect to meta store (for tenant mapping).
-	metaDSN := os.Getenv("PULSE_META_DSN")
-	if metaDSN == "" {
-		metaDSN = "pulse_meta.db"
-	}
+	metaBackend, metaDSN := resolveMetaBackend(os.Getenv)
 	metaSecretKey, secretErr := config.GetSecret("PULSE_SECRET_KEY")
 	if secretErr != nil {
 		return fmt.Errorf("PULSE_SECRET_KEY: %w", secretErr)
@@ -314,7 +308,7 @@ func runReconcile(cfg EnvConfig) error {
 		}
 		return fmt.Errorf("PULSE_SECRET_KEY is too short (%d bytes); minimum is 16 bytes; generate with: openssl rand -hex 32", len(metaSecretKey))
 	}
-	metaStore, err := meta.New(ctx, "sqlite", metaDSN, metaSecretKey)
+	metaStore, err := meta.New(ctx, metaBackend, metaDSN, metaSecretKey)
 	if err != nil {
 		return fmt.Errorf("connect meta store: %w", err)
 	}
