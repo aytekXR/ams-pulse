@@ -3451,3 +3451,75 @@ verified) · e2e.yml yaml+ast parse + per-key static cross-check.
 - Livecheck pattern: throwaway `//go:build livecheck` test written into the PRISTINE
   COPY only (never the real tree), env-gated URL, run on the idle box after the
   verify fleet drains.
+
+## D-076 — SESSION-15b (2026-07-11): OPERATOR ANSWER BATCH — v0.3.0 ship + U3 + CodeQL + PR-first (opened at dispatch; evidence appended at close)
+
+**Operator answered ALL FOUR standing questions + U3 in one message (2026-07-11):**
+1. **U3:** "key is in deploy/.env, verify it" — both `PULSE_LICENSE_KEY` and
+   `PULSE_LICENSE_PUBKEY` confirmed present (presence-only check, values never read).
+2. **"Let's proceed with v0.3.0"** → D-V2-6 RESOLVED-SHIP. Rollout fires this session.
+3. **CodeQL: "decide for me — enable if meaningful + low maintenance."**
+   **ORCH DECISION: ENABLE as required.** Evidence: 29 consecutive green runs since
+   D-062 (~3 days of heavy push traffic), zero config churn, GitHub-native (no new
+   deps), scans Go+JS on an internet-exposed prod service. Overhead risk (upstream
+   CodeQL outage blocking merges) mitigated: owner retains admin over protection
+   settings. Exact check-run contexts: `Analyze (go)` + `Analyze (javascript-typescript)`.
+   The BROADER e2e/web-e2e/csp-e2e promotions stay date-gated ≥07-23 (S16) — only the
+   operator-authorized CodeQL joins now.
+4. **PR-first: "switch going forward"** → D-V2-3 RESOLVED-FLIP. Per the standing §2.1
+   analysis: `enforce_admins=true` + required reviews **1→0** (solo owner cannot
+   self-approve; contexts remain the gate). Flip executes as the LAST action of this
+   session (after the final handoff push) so the flip itself doesn't strand the
+   session's own commits. From S16 on: sessions branch → push branch (SSH) → PR →
+   contexts green → merge (merge-commit to preserve per-scope commits; squash for
+   single-commit PRs).
+5. **Mobile SDKs: "leave out for now, revisit later"** → D-V2-7 DEFERRED (not a hard
+   no; §2.12 stays on the roadmap marked deferred-until-operator-revisits; S16 WO-F CUT).
+6. **DASH muxing fixture: "skip for now"** → the optional capture item is CLOSED-SKIPPED
+   (probes stay pinned on spec-derived fixtures; re-open only if the operator enables
+   DASH muxing later).
+
+**Execution plan (sequential ops, ORCH-driven — no fan-out):** CHANGELOG [0.3.0]
+(`ab9a5e1`) → CI green at commit → tag v0.3.0 → release workflow green → pre-swap
+safety (rollback tag `pulse-prod-pulse:pre-v0.3.0` on f7a8720c + fresh backup
+ts=20260710-221024) → 5-overlay `up -d --build` swap (also applies CH 0006–0008 via
+pulse-migrate and picks up the license env) → §8.8 smoke → U3 live-verify (tier +
+beacon→qoe/summary) → GH release notes → ledgers/operator-expected → protection flip
+LAST → browser-accept ping.
+
+**D-076 CLOSE EVIDENCE (2026-07-11):**
+- **★ Trivy gate EARNED ITS KEEP:** first v0.3.0 tag BLOCKED by the release pipeline —
+  go-jose/v4 4.0.5 CVE-2026-34986 (HIGH, DoS via crafted JWE; OIDC verification stack).
+  Fixed 4.0.5→4.1.4 (`f2aac13`), api -race green, CHANGELOG +Security; tag deleted +
+  re-cut at the fix. **No vulnerable image was ever published** (scan precedes push/sign).
+- **Release run 29127951225 GREEN** (Trivy/multi-arch/SBOM/cosign);
+  GH release published: github.com/aytekXR/ams-pulse/releases/tag/v0.3.0.
+- **Prod rollout (runbook 3-step, stamped):** build w/ VERSION=v0.3.0 COMMIT=f2aac13 →
+  `up -d` (pulse-migrate one-shot GREEN first — CH 0006/0007/0008 applied, DSN masked) →
+  belt-and-braces `run --rm pulse-migrate` GREEN. Smoke: healthz ok · startup log
+  `version=v0.3.0` · apex 200 + app 200 · webhook bad-sig 401 (fail-closed alive) ·
+  0 ERROR/panic. Rollback: image `pulse-prod-pulse:pre-v0.3.0` (f7a8720c) + backup
+  ts=20260710-221024 stand.
+- **★ U3 — TWO live-only root causes found & fixed:**
+  1. **Prod overlays never passed the license envs** — only docker-compose.ci.yml mapped
+     PULSE_LICENSE_KEY/PUBKEY; the base has them commented and `--env-file` only
+     interpolates. Container had ZERO license vars → silent Free tier. Fixed:
+     real-ams.yml now maps both (committed this session).
+  2. **The operator's PULSE_LICENSE_KEY held the ed25519 PRIVATE key (128-hex)**, not a
+     minted `<b64(claims)>.<b64(sig)>` license. ORCH minted **enterprise, perpetual**
+     from it (qa/licensegen in docker; no values ever printed/logged), swapped it into
+     deploy/.env, shredded scratch key material. Original .env preserved at
+     **deploy/.env.bak-d076** (gitignored, 0600) — OPERATOR ACTION: vault the private
+     key offline, then delete that file.
+- **U3 LIVE-VERIFIED end-to-end at the public edge:** startup log
+  `license loaded tier=enterprise valid=true` on v0.3.0 → admin mint 201 →
+  `POST /beacon/ingest/beacon` **202 {accepted:2}** (Free tier would 403) →
+  `/api/v1/qoe/summary` **totals.startup_p50_ms=123** (the exact posted value).
+  QoE/beacon, probes, data API, anomaly detector (enterprise) now ALL live in prod.
+- **Operator push-budget directive (mid-session):** max 2 pushes/session — batch
+  commits, push only for required CI evidence + at close. Saved to agent memory.
+  CONSEQUENCE: no post-CI stamp commit this session; the close push's CI run IDs are
+  verified live and re-checked at S16 preflight.
+- **Protection flip (LAST action, evidence below):** enforce_admins=true, required
+  reviews 1→0, contexts 7→9 (+`Analyze (go)`, +`Analyze (javascript-typescript)`),
+  strict kept. GET-diff proof appended post-flip.

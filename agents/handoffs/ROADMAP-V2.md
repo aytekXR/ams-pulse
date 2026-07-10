@@ -549,6 +549,16 @@ beacon-QoE anomaly metrics (§2.14 revisit).)*
 
 ---
 
+### S15b — operator answer batch ✅ DONE (D-076, 2026-07-11)
+**Result:** v0.3.0 SHIPPED + LIVE (first tag blocked by the Trivy gate — go-jose
+CVE-2026-34986 fixed same session); U3 RESOLVED (two live-only root causes: missing
+prod env wiring + private-key-instead-of-license; enterprise perpetual minted; chain
+verified beacon 202 → qoe/summary); CodeQL → required; PR-first FLIPPED
+(enforce_admins=true, reviews 0, 9 contexts); mobile SDKs deferred; DASH fixture
+skipped; NEW binding operator directive: **max 2 pushes/session**. Ledger: D-076.
+
+---
+
 ### S16 — CI promotions (date gate OPENS 2026-07-23) + brandkit phase 2 + probe-stats UI (planned at S15 close, D-075)
 
 Execute `sessions/SESSION-16.md`. Check operator answers FIRST (v0.3.0 / CodeQL /
@@ -581,12 +591,12 @@ beacon-QoE anomaly metrics (§2.14 revisit); RTMP AMF0 connect round-trip (§2.1
 | # | Decision | Status | Notes |
 |---|---|---|---|
 | D-V2-1 | **Unsigned-webhook ingest (§2.6):** build an optional IP-allowlisted unsigned mode vs keep REST-polling-only | **OPEN** | O3 closed-N/A (D-066): AMS 3.0.3 hooks unsigned — verified live. No build commitment. Agent awaits "build" or "wontfix". |
-| D-V2-2 | **CodeQL as required CI context:** promote CodeQL to a required branch-protection context | **OPEN — operator OK needed** | Streak green since D-062 (O9 closed). Evidence ready to share. Needs explicit OK given GHAS nuances even on the now-public repo. |
-| D-V2-3 | **enforce_admins flip (§2.1):** flip `enforce_admins` to `true` once sessions stop pushing directly to main | **RESOLVED-DEFERRED (D-068, S10)** | Stays `false`: 1-review requirement + solo owner = self-approval impossible → flip would deadlock session pushes (§2.1 rationale). Re-arm: re-checked S12 (D-072) + S13 (D-073, live gh evidence, unchanged) → next at S14 WO-G, or operator says "PR-first" (then drop reviews to 0 or add a reviewer). |
-| D-V2-4 | **U3 — activate Pro+ license in prod:** set `PULSE_LICENSE_KEY` in `deploy/.env` | **OPEN — optional feature unlock** | Until then QoE/beacon data does not flow in prod; CI covers it with the mock license (G6 met). Minting instructions in docs/licensing.md. |
+| D-V2-2 | **CodeQL as required CI context:** promote CodeQL to a required branch-protection context | **RESOLVED-ENABLED (D-076, 2026-07-11)** | Operator said "decide for me"; ORCH enabled: 29-run green streak since D-062, zero maintenance, Go+JS scanning on an exposed prod service. Contexts `Analyze (go)` + `Analyze (javascript-typescript)` required as of the D-076 protection flip. |
+| D-V2-3 | **enforce_admins flip (§2.1):** flip `enforce_admins` to `true` once sessions stop pushing directly to main | **RESOLVED-FLIPPED (D-076, 2026-07-11)** | Operator said "PR-first going forward": enforce_admins=true + required reviews 1→0 (solo owner can't self-approve; contexts are the gate). Sessions from S16 on: branch → PR → contexts green → merge. |
+| D-V2-4 | **U3 — activate Pro+ license in prod:** set `PULSE_LICENSE_KEY` in `deploy/.env` | **RESOLVED (D-076, 2026-07-11)** | Operator minted + placed the key; live-verify evidence (tier + beacon→QoE chain) in decisions.md D-076. |
 | D-V2-5 | **O7 — GHCR package public:** make `ghcr.io/aytekxr/ams-pulse` public | **DOWNGRADED to optional (2026-07-10)** | Operator granted `read:packages` instead → S12 WO-E unblocked (pull + cosign verified live: image tag `0.2.0` — NO v prefix, doc bug fixed; Rekor 2128354996). Package stays private: only outside users can't pull/verify until the one UI click (no API path, D-066). |
-| D-V2-6 | **Ship v0.3.0:** tag + prod rollout carrying D-068 O(N²) fix, D-070 S11 features, D-072 Postgres/WebRTC-probe/brandkit UI, D-073 RTMP/DASH probes + TTL fix, D-074 WebRTC ICE + OIDC SPA login + anomaly metrics | **OPEN (asked S12/S13, re-asked S14)** | WO-E stays staged every session until "ship v0.3.0". Post-rollout: operator browser-accept of the re-branded UI (U5 pattern). |
-| D-V2-7 | **Mobile SDKs needed?** native iOS/Android beacon SDKs (§2.12) | **OPEN (asked S12, re-asked S13)** | S14 WO-H fires only on explicit "yes"; "no" cuts §2.12 from the roadmap. |
+| D-V2-6 | **Ship v0.3.0:** tag + prod rollout carrying D-068…D-075 | **RESOLVED-SHIPPED (D-076, 2026-07-11)** | Operator: "Let's proceed with v0.3.0." Tag at `ab9a5e1`; rollout + smoke evidence in decisions.md D-076. Browser-accept of the re-branded UI pinged post-rollout. |
+| D-V2-7 | **Mobile SDKs needed?** native iOS/Android beacon SDKs (§2.12) | **DEFERRED (D-076, 2026-07-11)** | Operator: "leave them out for now, we'll revisit later." §2.12 stays on the roadmap marked deferred; the iOS work order is CUT from session plans until the operator re-opens it. |
 
 ---
 

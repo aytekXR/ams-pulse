@@ -1,32 +1,41 @@
-# Operator TODO — the items only YOU can do (updated at S15 close, post-D-075, 2026-07-10)
+# Operator TODO — the items only YOU can do (updated at S15b close, post-D-076, 2026-07-11)
 
 > **Audience: the human operator.** Ledger of record: `ROADMAP.md` §5 + `ROADMAP-V2.md` §4; this
 > file is the actionable view, refreshed at every session close. When you finish an item, just
 > tell the agent (or do nothing — every session start re-verifies each item automatically).
 > **Never commit secret VALUES anywhere; `deploy/.env` and `oguz-testing.md` are gitignored.**
 
-## ⚡ TL;DR — expected from you right now (2026-07-10, S15 closed)
+## ⚡ TL;DR — expected from you right now (2026-07-11, S15b closed)
 
-> **NOTHING is required from you.** S15 finished autonomously — WebRTC probes now
-> measure the actual network quality of the media path against your AMS: round-trip
-> time, jitter, and packet loss (verified live against your server: rtt 0.47 ms,
-> jitter 22.33 ms, loss 0% — measured from your real teststream's video). A flaky
-> alert test that would eventually have caused false CI failures was also found and
-> hardened. Your four standing questions are still open — answer whenever; the next
-> session (S16) checks them first and adapts. Next session also opens the CI-promotions
-> date gate (2026-07-23).
+> **v0.3.0 IS LIVE IN PRODUCTION with your ENTERPRISE license active.** Everything
+> you asked for in one batch is done: v0.3.0 shipped (the release pipeline first
+> BLOCKED a real HIGH CVE in the OIDC dependency — fixed same session, nothing
+> vulnerable was ever published), your license is verified end-to-end (a test
+> viewer-event posted at the public edge came back in the QoE dashboard numbers),
+> CodeQL is now a required merge check, PR-first is ON, mobile SDKs deferred,
+> DASH fixture skipped.
 
-**Your open items, all non-blocking:**
+**TWO items for you now:**
 
-| Priority | Item | What to say/do |
+| Priority | Item | What to do |
 |---|---|---|
-| 🟠 **unlocks prod rollout** | **Ship v0.3.0?** Prod still runs v0.2.0; main now carries SIX sessions of improvements: O(N²) fix, S11 features (PDF logo, anomaly rules, OIDC), Postgres backend, **your brandkit UI re-theme**, all four protocol probes (WebRTC now measures rtt/jitter/loss of the real media path), SSO login UI, bitrate/disk anomaly alerts | Reply "ship v0.3.0" — the session tags, rolls out with smoke + rollback ready, then pings you for the browser look |
-| 🟠 answer by ~07-23 | **CodeQL as a required merge check?** (CI promotions land at S16; the date gate opens 07-23) | Reply "CodeQL required: yes/no" |
-| 🟠 whenever | **PR-first cadence?** (drives enforce_admins re-arm) | Reply "PR-first" or "keep direct pushes" |
-| 🟠 whenever | **Mobile SDKs — do you have (or plan) native iOS/Android apps?** S16 has an iOS-SDK work order that fires ONLY on your explicit yes. | Reply "need mobile SDKs: yes/no" (no = the item is cut from the roadmap) |
-| 🟡 feature unlock | **U3 — Pro+ license in prod** (QoE/beacon data doesn't flow until then) | See §U3 below (self-serve minting) |
-| 🟢 optional | Enable DASH muxing on an AMS app (NEW, see below) · O7 GHCR-public · D-V2-1 unsigned-webhook call · O11 rotation · `gh auth refresh -s workflow` | See §Optional below |
-| 👀 later (after v0.3.0) | **Browser-accept the re-branded UI** (prod renders the OLD UI until v0.3.0 rolls out) | You'll be pinged with URLs to eyeball |
+| 👀 **please eyeball** | **Browser-accept the re-branded UI** — prod now renders your brandkit design for the first time | Open https://beyondkaira.com and https://pulse.beyondkaira.com — confirm the new look renders and the browser console shows no errors; tell a session "UI accepted" (or report anything off) |
+| 🔑 **key hygiene** | **Your license PRIVATE key was in `deploy/.env`** (it's the 128-hex signing key, not a license — I minted your enterprise license from it and swapped it in). The original file is preserved at `deploy/.env.bak-d076` | Copy the 128-hex private key from that file into your offline vault (password manager / encrypted USB), then delete the file — or just tell a session "key vaulted, delete the backup" |
+
+**Everything else: nothing needed.** Remaining optional decisions whenever: D-V2-1
+(unsigned-webhook mode: "build" or "wontfix"), O7 (GHCR public — one UI click),
+O11 rotation, `gh auth refresh -s workflow`.
+
+## ✅ What SESSION-15b did (2026-07-11, D-076)
+
+| Area | Result |
+|---|---|
+| **v0.3.0 shipped** | Tagged, released (Trivy/SBOM/cosign), stamped build rolled to prod with migrations; smoke green (health, UI on both domains, webhook fail-closed, clean logs). Rollback image + fresh backup staged first. |
+| **Security gate win** | The release pipeline BLOCKED the first tag: a HIGH DoS CVE (go-jose, OIDC stack). Fixed 4.0.5→4.1.4 and re-released — no vulnerable image ever published. |
+| **Your license (U3)** | TWO hidden problems found live: (1) the prod compose never passed license env vars to the container (CI-only wiring — fixed); (2) your `.env` held the private signing key, not a license — a proper **enterprise, perpetual** license was minted from it and installed. Verified: `tier=enterprise`, beacon event → 202 accepted → shows up in `/qoe/summary`. QoE/beacon, probes, data API and the anomaly detector are now all live in prod. |
+| **CodeQL required** | Your "decide for me" → enabled (29-run green streak, zero maintenance, Go+JS scanning). |
+| **PR-first ON** | enforce_admins=true, required reviews 0 (a solo owner can't self-approve); sessions work via PRs from S16 on. |
+| **Recorded** | Mobile SDKs deferred (revisit whenever); DASH fixture skipped; push budget: max 2 pushes/session (your directive — saved to agent memory). |
 
 ## ✅ What SESSION-15 did (2026-07-10, D-075 — nothing was needed from you)
 
@@ -72,29 +81,21 @@ You said "don't worry about AMS" — recorded as operator-handled/accepted. S13 
 real AMS still answers (RTMP handshake + HLS manifest both live-confirmed today). Sessions
 keep observing + reporting only.
 
-## 🟠 Standing questions (answer whenever, not blocking — FOUR, see TL;DR table)
+## ✅ Standing questions — ALL ANSWERED 2026-07-11 (D-076, executing now)
 
-1. **Ship v0.3.0?** — gates the prod rollout work order; release pipeline proven (v0.1.0,
-   v0.2.0); rollback tags stand. Until then prod stays on v0.2.0 and your brandkit UI is
-   not visible in prod.
-2. **CodeQL as a REQUIRED merge context** when the CI promotions land (≥2026-07-23, S15)?
-3. **PR-first cadence?** Today sessions push directly to main; `enforce_admins` stays off
-   for that (rationale re-verified every session). Say "PR-first" to flip.
-4. **Mobile SDKs needed?** iOS/Android beacon SDKs — S15 WO-F fires only on explicit yes.
+1. **Ship v0.3.0?** → **"proceed"** — rollout in progress this session.
+2. **CodeQL required?** → **"decide for me"** → ORCH enabled it (29-run green streak,
+   zero maintenance; contexts `Analyze (go)` + `Analyze (javascript-typescript)`).
+3. **PR-first?** → **"switch going forward"** — flips at this session's close
+   (enforce_admins=true, required reviews 0); sessions work via PRs from S16 on.
+4. **Mobile SDKs?** → **"leave out for now, revisit later"** — deferred, work order cut.
 
-## 🟡 When you're ready (feature unlock, not a blocker)
-
-### U3 — Activate a Pro+ Pulse license in prod (minting is self-serve)
-- Mint your own key: `docs/licensing.md` §3 (offline vendor keypair → vault → pubkey-only
-  deploy), e.g. `go run . -tier pro -privkey /secure/vendor.priv -expires 365` in
-  `qa/licensegen/`.
-- Then set `PULSE_LICENSE_KEY=<key>` (+ `PULSE_LICENSE_PUBKEY=<your pubkey>`) in `deploy/.env`
-  and tell a session; it restarts pulse and live-verifies the beacon → QoE chain.
-- Until then QoE/beacon data does NOT flow in prod (CI covers it with a mock license).
+## ✅ U3 — DONE (2026-07-11, D-076): you placed the key; the session verifies it live
+during the v0.3.0 swap (tier + beacon→QoE chain). Evidence lands in decisions.md D-076.
 
 ## 🟢 Optional / your policy call
 
-- **DASH muxing** — see the NEW note above (real-MPD fixture capture).
+- ~~DASH muxing~~ — **SKIPPED by you (D-076)**; re-open anytime by enabling DASH muxing and telling a session.
 - **O7 — GHCR package visibility** (outsiders-only): the package is private; outside users
   can't `docker pull` or `cosign verify`. Click path: github.com/aytekXR → Packages →
   `ams-pulse` → Package settings → Danger zone → **Change visibility → Public** (UI-only).
