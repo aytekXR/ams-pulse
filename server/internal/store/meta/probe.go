@@ -49,7 +49,7 @@ func (s *Store) CreateProbe(ctx context.Context, p ProbeRow) (ProbeRow, error) {
 	if p.IntervalS == 0 {
 		p.IntervalS = 60
 	}
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`INSERT INTO probes (id, name, url, protocol, interval_s, timeout_s, enabled, created_at, updated_at)
 		 VALUES (?,?,?,?,?,?,?,?,?)`,
 		p.ID, p.Name, p.URL, p.Protocol, p.IntervalS, p.TimeoutS,
@@ -59,7 +59,7 @@ func (s *Store) CreateProbe(ctx context.Context, p ProbeRow) (ProbeRow, error) {
 
 // GetProbe fetches a probe by ID.
 func (s *Store) GetProbe(ctx context.Context, id string) (*ProbeRow, error) {
-	row := s.db.QueryRowContext(ctx,
+	row := s.queryRowContext(ctx,
 		`SELECT id, name, url, protocol, interval_s, timeout_s, enabled,
 		        last_result_id, last_success, last_run_at, created_at, updated_at
 		 FROM probes WHERE id=?`, id)
@@ -68,7 +68,7 @@ func (s *Store) GetProbe(ctx context.Context, id string) (*ProbeRow, error) {
 
 // ListProbes returns all probe rows ordered by created_at.
 func (s *Store) ListProbes(ctx context.Context) ([]ProbeRow, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.queryContext(ctx,
 		`SELECT id, name, url, protocol, interval_s, timeout_s, enabled,
 		        last_result_id, last_success, last_run_at, created_at, updated_at
 		 FROM probes ORDER BY created_at`)
@@ -90,7 +90,7 @@ func (s *Store) ListProbes(ctx context.Context) ([]ProbeRow, error) {
 // UpdateProbe updates a probe by ID.
 func (s *Store) UpdateProbe(ctx context.Context, p ProbeRow) error {
 	p.UpdatedAt = nowMS()
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`UPDATE probes SET name=?, url=?, protocol=?, interval_s=?, timeout_s=?, enabled=?, updated_at=?
 		 WHERE id=?`,
 		p.Name, p.URL, p.Protocol, p.IntervalS, p.TimeoutS, boolToInt(p.Enabled), p.UpdatedAt, p.ID)
@@ -99,7 +99,7 @@ func (s *Store) UpdateProbe(ctx context.Context, p ProbeRow) error {
 
 // DeleteProbe removes a probe by ID.
 func (s *Store) DeleteProbe(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM probes WHERE id=?`, id)
+	_, err := s.execContext(ctx, `DELETE FROM probes WHERE id=?`, id)
 	return err
 }
 
@@ -136,7 +136,7 @@ func NewProbeConfigSource(store *Store) *MetaProbeConfigSource {
 // ListEnabled returns all probes where enabled = 1.
 // Implements domain.ProbeConfigSource.
 func (s *MetaProbeConfigSource) ListEnabled(ctx context.Context) ([]domain.ProbeConfig, error) {
-	rows, err := s.store.db.QueryContext(ctx,
+	rows, err := s.store.queryContext(ctx,
 		`SELECT id, name, url, protocol, interval_s, timeout_s
 		 FROM probes WHERE enabled = 1 ORDER BY created_at`)
 	if err != nil {
@@ -164,7 +164,7 @@ func (s *MetaProbeConfigSource) RecordResult(ctx context.Context, r domain.Probe
 		lastSuccess = 1
 	}
 	lastRunAtMS := r.TS.UnixMilli()
-	_, err := s.store.db.ExecContext(ctx,
+	_, err := s.store.execContext(ctx,
 		`UPDATE probes SET last_result_id=?, last_success=?, last_run_at=?, updated_at=?
 		 WHERE id=?`,
 		r.ID, lastSuccess, lastRunAtMS, nowMS(), r.ProbeID)

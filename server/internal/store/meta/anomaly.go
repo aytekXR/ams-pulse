@@ -14,7 +14,7 @@ import (
 // ListAnomalyBaselines returns all rows from the anomaly_baselines table.
 // Implements anomaly.BaselineStore.
 func (s *Store) ListAnomalyBaselines(ctx context.Context) ([]anomaly.AnomalyBaselineRow, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.queryContext(ctx,
 		`SELECT id, metric, scope, window_s, mean, stddev, sample_count, last_updated
 		 FROM anomaly_baselines ORDER BY metric, scope, window_s`)
 	if err != nil {
@@ -39,7 +39,7 @@ func (s *Store) UpsertAnomalyBaseline(ctx context.Context, row anomaly.AnomalyBa
 	if row.ID == "" {
 		row.ID = newUUID()
 	}
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`INSERT INTO anomaly_baselines (id, metric, scope, window_s, mean, stddev, sample_count, last_updated)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(metric, scope, window_s) DO UPDATE SET
@@ -55,7 +55,7 @@ func (s *Store) UpsertAnomalyBaseline(ctx context.Context, row anomaly.AnomalyBa
 // GetAnomalyBaseline fetches a single baseline by (metric, scope, window_s).
 // Returns nil, nil when not found.
 func (s *Store) GetAnomalyBaseline(ctx context.Context, metric, scope string, windowS int) (*anomaly.AnomalyBaselineRow, error) {
-	row := s.db.QueryRowContext(ctx,
+	row := s.queryRowContext(ctx,
 		`SELECT id, metric, scope, window_s, mean, stddev, sample_count, last_updated
 		 FROM anomaly_baselines WHERE metric=? AND scope=? AND window_s=?`,
 		metric, scope, windowS)
@@ -72,6 +72,6 @@ func (s *Store) GetAnomalyBaseline(ctx context.Context, metric, scope string, wi
 
 // DeleteAnomalyBaseline removes a baseline by ID.
 func (s *Store) DeleteAnomalyBaseline(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM anomaly_baselines WHERE id=?`, id)
+	_, err := s.execContext(ctx, `DELETE FROM anomaly_baselines WHERE id=?`, id)
 	return err
 }

@@ -35,7 +35,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	_ "modernc.org/sqlite" // pure-Go SQLite driver
+	_ "github.com/jackc/pgx/v5/stdlib" // pure-Go Postgres driver; registers "pgx" driver name
+	_ "modernc.org/sqlite"             // pure-Go SQLite driver
 )
 
 // AlertHistoryDefaultKeep is the default maximum number of alert_history rows
@@ -83,9 +84,20 @@ func New(ctx context.Context, backend, dsn, secretKey string) (*Store, error) {
 		db.SetMaxOpenConns(1)
 		backend = "sqlite"
 	case "postgres":
-		// Note: postgres driver requires github.com/lib/pq or pgx as a separate dep.
-		// Wave 1 implements SQLite only; Postgres is a stub that returns an error.
-		return nil, fmt.Errorf("meta store: postgres backend not wired in wave 1 (DSN=%q); set PULSE_META=sqlite", dsn)
+		// PULSE_SECRET_KEY is mandatory for Postgres: filepath.Dir of a postgres://
+		// DSN is not a valid filesystem path, so key-file generation is impossible.
+		// Fail loudly here rather than silently writing an ephemeral key that will
+		// be lost on next restart.
+		if secretKey == "" {
+			return nil, fmt.Errorf("meta store: PULSE_SECRET_KEY is required for the postgres meta backend (cannot auto-generate a key file from a postgres:// DSN)")
+		}
+		db, err = sql.Open("pgx", dsn)
+		if err != nil {
+			return nil, fmt.Errorf("meta store: open postgres %s: %w", dsn, err)
+		}
+		db.SetMaxOpenConns(10)
+		db.SetMaxIdleConns(5)
+		db.SetConnMaxLifetime(5 * time.Minute)
 	default:
 		return nil, fmt.Errorf("meta store: unknown backend %q (supported: sqlite, postgres)", backend)
 	}
@@ -111,11 +123,14 @@ func New(ctx context.Context, backend, dsn, secretKey string) (*Store, error) {
 	return s, nil
 }
 
-// Migrate applies the DDL from contracts/db/meta/0001_init.sql idempotently.
-// All CREATE TABLE statements use IF NOT EXISTS so re-running is safe.
-// After applying the DDL, applySchemaUpgrades runs idempotent ALTER TABLE
-// statements so that existing databases (e.g. prod) gain new columns on next
-// startup without requiring a separate migration command.
+// Migrate applies the DDL from the given path idempotently.
+// All CREATE TABLE / ALTER TABLE statements use IF NOT EXISTS so re-running is
+// safe. After applying the DDL, applySchemaUpgrades runs idempotent ALTER TABLE
+// statements so that existing SQLite databases (e.g. prod) gain new columns on
+// next startup without requiring a separate migration command.
+//
+// For the Postgres backend, applySchemaUpgrades is a no-op (returns nil early);
+// schema evolution is handled exclusively via numbered migration files.
 func (s *Store) Migrate(ctx context.Context, ddlPath string) error {
 	data, err := os.ReadFile(ddlPath)
 	if err != nil {
@@ -129,7 +144,7 @@ func (s *Store) Migrate(ctx context.Context, ddlPath string) error {
 		if stmt == "" || strings.HasPrefix(stmt, "--") {
 			continue
 		}
-		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
+		if _, err := s.execContext(ctx, stmt); err != nil {
 			// Tolerate PRAGMA errors on postgres-compat statements.
 			if strings.Contains(err.Error(), "PRAGMA") || strings.Contains(err.Error(), "foreign_keys") {
 				continue
@@ -140,16 +155,27 @@ func (s *Store) Migrate(ctx context.Context, ddlPath string) error {
 	return s.applySchemaUpgrades(ctx)
 }
 
-// MigrateEmbedded runs the embedded meta DDL from a string (used in tests).
-// Also runs applySchemaUpgrades for the same idempotent upgrade logic.
+// MigrateEmbedded applies the embedded meta DDL idempotently.
+//
+// Backend routing:
+//   - "postgres": the passed ddl string is IGNORED; EmbeddedDDLPostgres
+//     (0001_init + 0002_anomaly_alert_rule, both in PG syntax) is applied
+//     instead. This ensures callers that pass the SQLite EmbeddedDDL constant
+//     still get a correct PG schema automatically.
+//   - "sqlite" (default): the passed ddl string is used as-is, then
+//     applySchemaUpgrades runs idempotent ALTER TABLE statements for columns
+//     added in later migrations.
 func (s *Store) MigrateEmbedded(ctx context.Context, ddl string) error {
+	if s.backend == "postgres" {
+		ddl = EmbeddedDDLPostgres
+	}
 	stmts := splitSQL(ddl)
 	for _, stmt := range stmts {
 		stmt = strings.TrimSpace(stmt)
 		if stmt == "" || strings.HasPrefix(stmt, "--") {
 			continue
 		}
-		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
+		if _, err := s.execContext(ctx, stmt); err != nil {
 			if strings.Contains(err.Error(), "PRAGMA") || strings.Contains(err.Error(), "foreign_keys") {
 				continue
 			}
@@ -184,7 +210,7 @@ func (s *Store) applySchemaUpgrades(ctx context.Context) error {
 	// ── api_tokens.hash_alg ──────────────────────────────────────────────────
 	// Check for hash_alg column in api_tokens using PRAGMA table_info.
 	// Table may not exist yet on a fresh DB before the DDL runs; harmless.
-	rows, err := s.db.QueryContext(ctx, "PRAGMA table_info(api_tokens)")
+	rows, err := s.queryContext(ctx, "PRAGMA table_info(api_tokens)")
 	if err == nil {
 		hasHashAlg := false
 		for rows.Next() {
@@ -203,7 +229,7 @@ func (s *Store) applySchemaUpgrades(ctx context.Context) error {
 		_ = rows.Close()
 		if !hasHashAlg {
 			// DEFAULT 'sha256' labels all existing rows as legacy.
-			if _, err := s.db.ExecContext(ctx,
+			if _, err := s.execContext(ctx,
 				`ALTER TABLE api_tokens ADD COLUMN hash_alg TEXT NOT NULL DEFAULT 'sha256'`); err != nil {
 				return fmt.Errorf("schema upgrade: add api_tokens.hash_alg: %w", err)
 			}
@@ -212,7 +238,7 @@ func (s *Store) applySchemaUpgrades(ctx context.Context) error {
 
 	// ── ams_sources.webhook_secret_enc (B7) ──────────────────────────────────
 	// Check for webhook_secret_enc column in ams_sources.
-	rows2, err := s.db.QueryContext(ctx, "PRAGMA table_info(ams_sources)")
+	rows2, err := s.queryContext(ctx, "PRAGMA table_info(ams_sources)")
 	if err == nil {
 		hasWebhookSecretEnc := false
 		for rows2.Next() {
@@ -232,7 +258,7 @@ func (s *Store) applySchemaUpgrades(ctx context.Context) error {
 		if !hasWebhookSecretEnc {
 			// NULL default: existing rows have no per-source secret (fall through
 			// to SharedSecret on the /webhook/ams/{name} route).
-			if _, err := s.db.ExecContext(ctx,
+			if _, err := s.execContext(ctx,
 				`ALTER TABLE ams_sources ADD COLUMN webhook_secret_enc TEXT`); err != nil {
 				return fmt.Errorf("schema upgrade: add ams_sources.webhook_secret_enc: %w", err)
 			}
@@ -244,7 +270,7 @@ func (s *Store) applySchemaUpgrades(ctx context.Context) error {
 	// min_samples. We add them here too so that databases initialised via
 	// MigrateEmbedded (which runs only the 0001 DDL embed) also get the columns
 	// after applySchemaUpgrades — no separate migration runner needed.
-	rows3, err := s.db.QueryContext(ctx, "PRAGMA table_info(alert_rules)")
+	rows3, err := s.queryContext(ctx, "PRAGMA table_info(alert_rules)")
 	if err == nil {
 		hasRuleType, hasSigma, hasMinSamples := false, false, false
 		for rows3.Next() {
@@ -267,19 +293,19 @@ func (s *Store) applySchemaUpgrades(ctx context.Context) error {
 		}
 		_ = rows3.Close()
 		if !hasRuleType {
-			if _, err := s.db.ExecContext(ctx,
+			if _, err := s.execContext(ctx,
 				`ALTER TABLE alert_rules ADD COLUMN rule_type TEXT NOT NULL DEFAULT 'threshold'`); err != nil {
 				return fmt.Errorf("schema upgrade: add alert_rules.rule_type: %w", err)
 			}
 		}
 		if !hasSigma {
-			if _, err := s.db.ExecContext(ctx,
+			if _, err := s.execContext(ctx,
 				`ALTER TABLE alert_rules ADD COLUMN sigma REAL`); err != nil {
 				return fmt.Errorf("schema upgrade: add alert_rules.sigma: %w", err)
 			}
 		}
 		if !hasMinSamples {
-			if _, err := s.db.ExecContext(ctx,
+			if _, err := s.execContext(ctx,
 				`ALTER TABLE alert_rules ADD COLUMN min_samples INTEGER`); err != nil {
 				return fmt.Errorf("schema upgrade: add alert_rules.min_samples: %w", err)
 			}
@@ -317,7 +343,7 @@ func (s *Store) CreateUser(ctx context.Context, u User) error {
 		u.ID = newUUID()
 	}
 	now := nowMS()
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`INSERT INTO users (id, username, pw_hash, role, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
 		u.ID, u.Username, u.PwHash, u.Role, now, now)
@@ -326,7 +352,7 @@ func (s *Store) CreateUser(ctx context.Context, u User) error {
 
 // GetUserByUsername fetches a user by username.
 func (s *Store) GetUserByUsername(ctx context.Context, username string) (*User, error) {
-	row := s.db.QueryRowContext(ctx,
+	row := s.queryRowContext(ctx,
 		`SELECT id, username, pw_hash, role, created_at, updated_at FROM users WHERE username = ?`,
 		username)
 	var u User
@@ -341,7 +367,7 @@ func (s *Store) GetUserByUsername(ctx context.Context, username string) (*User, 
 
 // ListUsers returns all users.
 func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.queryContext(ctx,
 		`SELECT id, username, pw_hash, role, created_at, updated_at FROM users ORDER BY created_at`)
 	if err != nil {
 		return nil, err
@@ -361,13 +387,13 @@ func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
 // CountUsers returns the number of users in the store.
 func (s *Store) CountUsers(ctx context.Context) (int, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&n)
+	err := s.queryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&n)
 	return n, err
 }
 
 // UpdateUser updates an existing user.
 func (s *Store) UpdateUser(ctx context.Context, id, username, role string) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`UPDATE users SET username=?, role=?, updated_at=? WHERE id=?`,
 		username, role, nowMS(), id)
 	return err
@@ -375,7 +401,7 @@ func (s *Store) UpdateUser(ctx context.Context, id, username, role string) error
 
 // DeleteUser deletes a user by ID.
 func (s *Store) DeleteUser(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM users WHERE id=?`, id)
+	_, err := s.execContext(ctx, `DELETE FROM users WHERE id=?`, id)
 	return err
 }
 
@@ -411,7 +437,7 @@ func (s *Store) CreateToken(ctx context.Context, t APIToken) error {
 	if t.UserID != "" {
 		userID = t.UserID
 	}
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`INSERT INTO api_tokens (id, user_id, kind, name, token_hash, hash_alg, scopes, expires_at, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.ID, userID, t.Kind, t.Name, t.TokenHash, hashAlg, string(scopesJSON), t.ExpiresAt, t.CreatedAt)
@@ -422,7 +448,7 @@ func (s *Store) CreateToken(ctx context.Context, t APIToken) error {
 // Callers that have a raw token should use LookupToken instead, which handles
 // both HMAC-SHA256 (new tokens) and plain SHA-256 (legacy tokens) transparently.
 func (s *Store) GetTokenByHash(ctx context.Context, hash string) (*APIToken, error) {
-	row := s.db.QueryRowContext(ctx,
+	row := s.queryRowContext(ctx,
 		`SELECT id, user_id, kind, name, token_hash, hash_alg, scopes, expires_at, last_used_at, created_at
 		 FROM api_tokens WHERE token_hash = ?`, hash)
 	return scanAPIToken(row)
@@ -483,7 +509,7 @@ func (s *Store) ListTokens(ctx context.Context, kind string) ([]APIToken, error)
 		args = append(args, kind)
 	}
 	q += " ORDER BY created_at DESC"
-	rows, err := s.db.QueryContext(ctx, q, args...)
+	rows, err := s.queryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -502,19 +528,19 @@ func (s *Store) ListTokens(ctx context.Context, kind string) ([]APIToken, error)
 // TouchToken updates last_used_at for a token.
 func (s *Store) TouchToken(ctx context.Context, id string) {
 	now := nowMS()
-	_, _ = s.db.ExecContext(ctx, `UPDATE api_tokens SET last_used_at=? WHERE id=?`, now, id)
+	_, _ = s.execContext(ctx, `UPDATE api_tokens SET last_used_at=? WHERE id=?`, now, id)
 }
 
 // DeleteToken removes a token by ID (revoke).
 func (s *Store) DeleteToken(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM api_tokens WHERE id=?`, id)
+	_, err := s.execContext(ctx, `DELETE FROM api_tokens WHERE id=?`, id)
 	return err
 }
 
 // CountTokens returns the number of tokens.
 func (s *Store) CountTokens(ctx context.Context) (int, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM api_tokens`).Scan(&n)
+	err := s.queryRowContext(ctx, `SELECT COUNT(*) FROM api_tokens`).Scan(&n)
 	return n, err
 }
 
@@ -590,7 +616,7 @@ func (s *Store) CreateAlertRule(ctx context.Context, r AlertRuleRow) (AlertRuleR
 	if r.RuleType == "" {
 		r.RuleType = "threshold"
 	}
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`INSERT INTO alert_rules
 		 (id, name, metric, operator, threshold, window_s, scope, severity, cooldown_s, group_by,
 		  enabled, muted, maintenance_windows, channel_ids, created_at, updated_at,
@@ -605,7 +631,7 @@ func (s *Store) CreateAlertRule(ctx context.Context, r AlertRuleRow) (AlertRuleR
 
 // GetAlertRule fetches a rule by ID.
 func (s *Store) GetAlertRule(ctx context.Context, id string) (*AlertRuleRow, error) {
-	row := s.db.QueryRowContext(ctx,
+	row := s.queryRowContext(ctx,
 		`SELECT id, name, metric, operator, threshold, window_s, scope, severity, cooldown_s, group_by,
 		        enabled, muted, maintenance_windows, channel_ids, created_at, updated_at,
 		        COALESCE(rule_type,'threshold'), COALESCE(sigma,0), COALESCE(min_samples,0)
@@ -615,7 +641,7 @@ func (s *Store) GetAlertRule(ctx context.Context, id string) (*AlertRuleRow, err
 
 // ListAlertRules returns all alert rules.
 func (s *Store) ListAlertRules(ctx context.Context) ([]AlertRuleRow, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.queryContext(ctx,
 		`SELECT id, name, metric, operator, threshold, window_s, scope, severity, cooldown_s, group_by,
 		        enabled, muted, maintenance_windows, channel_ids, created_at, updated_at,
 		        COALESCE(rule_type,'threshold'), COALESCE(sigma,0), COALESCE(min_samples,0)
@@ -642,7 +668,7 @@ func (s *Store) UpdateAlertRule(ctx context.Context, r AlertRuleRow) error {
 	if r.RuleType == "" {
 		r.RuleType = "threshold"
 	}
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`UPDATE alert_rules SET name=?, metric=?, operator=?, threshold=?, window_s=?, scope=?,
 		  severity=?, cooldown_s=?, group_by=?, enabled=?, muted=?, maintenance_windows=?, channel_ids=?,
 		  updated_at=?, rule_type=?, sigma=?, min_samples=? WHERE id=?`,
@@ -654,7 +680,7 @@ func (s *Store) UpdateAlertRule(ctx context.Context, r AlertRuleRow) error {
 
 // DeleteAlertRule removes a rule by ID.
 func (s *Store) DeleteAlertRule(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM alert_rules WHERE id=?`, id)
+	_, err := s.execContext(ctx, `DELETE FROM alert_rules WHERE id=?`, id)
 	return err
 }
 
@@ -699,7 +725,7 @@ func (s *Store) CreateAlertChannel(ctx context.Context, c AlertChannelRow) (Aler
 	if c.ConfigPublic == "" {
 		c.ConfigPublic = "{}"
 	}
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`INSERT INTO alert_channels (id, type, name, config_enc, config_public, created_at, updated_at)
 		 VALUES (?,?,?,?,?,?,?)`,
 		c.ID, c.Type, c.Name, c.ConfigEnc, c.ConfigPublic, c.CreatedAt, c.UpdatedAt)
@@ -708,7 +734,7 @@ func (s *Store) CreateAlertChannel(ctx context.Context, c AlertChannelRow) (Aler
 
 // GetAlertChannel fetches a channel by ID.
 func (s *Store) GetAlertChannel(ctx context.Context, id string) (*AlertChannelRow, error) {
-	row := s.db.QueryRowContext(ctx,
+	row := s.queryRowContext(ctx,
 		`SELECT id, type, name, config_enc, config_public, created_at, updated_at
 		 FROM alert_channels WHERE id=?`, id)
 	return scanAlertChannel(row)
@@ -716,7 +742,7 @@ func (s *Store) GetAlertChannel(ctx context.Context, id string) (*AlertChannelRo
 
 // ListAlertChannels returns all channels.
 func (s *Store) ListAlertChannels(ctx context.Context) ([]AlertChannelRow, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.queryContext(ctx,
 		`SELECT id, type, name, config_enc, config_public, created_at, updated_at
 		 FROM alert_channels ORDER BY created_at`)
 	if err != nil {
@@ -737,7 +763,7 @@ func (s *Store) ListAlertChannels(ctx context.Context) ([]AlertChannelRow, error
 // UpdateAlertChannel updates a channel by ID.
 func (s *Store) UpdateAlertChannel(ctx context.Context, c AlertChannelRow) error {
 	c.UpdatedAt = nowMS()
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`UPDATE alert_channels SET type=?, name=?, config_enc=?, config_public=?, updated_at=?
 		 WHERE id=?`,
 		c.Type, c.Name, c.ConfigEnc, c.ConfigPublic, c.UpdatedAt, c.ID)
@@ -746,7 +772,7 @@ func (s *Store) UpdateAlertChannel(ctx context.Context, c AlertChannelRow) error
 
 // DeleteAlertChannel removes a channel by ID.
 func (s *Store) DeleteAlertChannel(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM alert_channels WHERE id=?`, id)
+	_, err := s.execContext(ctx, `DELETE FROM alert_channels WHERE id=?`, id)
 	return err
 }
 
@@ -791,7 +817,7 @@ func (s *Store) CreateAlertHistory(ctx context.Context, h AlertHistoryRow) error
 	if h.ScopeJSON == "" {
 		h.ScopeJSON = "{}"
 	}
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`INSERT INTO alert_history
 		 (id, alert_id, rule_id, state, severity, ts, metric, value, threshold,
 		  scope, cooldown_until, group_key, test)
@@ -813,22 +839,31 @@ func (s *Store) CreateAlertHistory(ctx context.Context, h AlertHistoryRow) error
 }
 
 // PruneAlertHistory deletes all but the newest `keep` rows for the given
-// rule_id, ordered by ts DESC, rowid DESC (deterministic tiebreak for equal ts).
+// rule_id. Keep-newest semantics: rows with the lowest ts values are removed
+// first; equal-ts tiebreak is backend-specific (see below).
 //
 // keep <= 0 is a safe no-op — no rows are deleted. This prevents accidental
 // mass-deletion if the cap is misconfigured.
 //
 // Implementation: COUNT the rows first; skip the DELETE entirely when no
 // pruning is needed (common path: first `keep` inserts). When excess rows exist,
-// DELETE them by selecting the oldest `excess` rowids via ts ASC, rowid ASC.
-// This keeps each prune O(excess) rather than O(n²) over the fill phase.
+// DELETE the oldest `excess` rows. O(excess) per call.
 // At n=2000 and keep=1000 on :memory: SQLite this completes in well under 10 ms.
+//
+// TIEBREAK DIVERGENCE (ts equal):
+//   - SQLite: uses rowid (implicit auto-increment integer) — exact insertion
+//     order. Test TestAlertHistory_PruneEqualTsDeterministic verifies this and
+//     is SQLite-only (no //go:build tag, runs in the default test pass).
+//   - Postgres: uses (ts ASC, id ASC) where id is a UUID (text). UUID ordering
+//     does NOT guarantee insertion order for UUIDv4 random values. The
+//     keep-newest semantic (drop oldest ts) is preserved; equal-ts order is
+//     non-deterministic. No parity with the SQLite rowid tiebreak test.
 func (s *Store) PruneAlertHistory(ctx context.Context, ruleID string, keep int) error {
 	if keep <= 0 {
 		return nil
 	}
 	var total int
-	if err := s.db.QueryRowContext(ctx,
+	if err := s.queryRowContext(ctx,
 		"SELECT COUNT(*) FROM alert_history WHERE rule_id = ?", ruleID).Scan(&total); err != nil {
 		return err
 	}
@@ -836,15 +871,29 @@ func (s *Store) PruneAlertHistory(ctx context.Context, ruleID string, keep int) 
 	if excess <= 0 {
 		return nil
 	}
-	_, err := s.db.ExecContext(ctx,
-		`DELETE FROM alert_history
-		 WHERE rowid IN (
-		     SELECT rowid FROM alert_history
-		     WHERE rule_id = ?
-		     ORDER BY ts ASC, rowid ASC
-		     LIMIT ?
-		 )`,
-		ruleID, excess)
+
+	var deleteSQL string
+	if s.backend == "postgres" {
+		// Postgres has no rowid pseudo-column. Use id (UUID) as tiebreak.
+		// Keep-newest semantics preserved: lowest ts rows are pruned first.
+		deleteSQL = `DELETE FROM alert_history
+		             WHERE id IN (
+		                 SELECT id FROM alert_history
+		                 WHERE rule_id = ?
+		                 ORDER BY ts ASC, id ASC
+		                 LIMIT ?
+		             )`
+	} else {
+		// SQLite: rowid reflects exact insertion order — deterministic tiebreak.
+		deleteSQL = `DELETE FROM alert_history
+		             WHERE rowid IN (
+		                 SELECT rowid FROM alert_history
+		                 WHERE rule_id = ?
+		                 ORDER BY ts ASC, rowid ASC
+		                 LIMIT ?
+		             )`
+	}
+	_, err := s.execContext(ctx, deleteSQL, ruleID, excess)
 	return err
 }
 
@@ -874,7 +923,7 @@ func (s *Store) ListAlertHistory(ctx context.Context, ruleID, state string, from
 	if limit > 0 {
 		q += fmt.Sprintf(" LIMIT %d", limit)
 	}
-	rows, err := s.db.QueryContext(ctx, q, args...)
+	rows, err := s.queryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -912,7 +961,7 @@ type LicenseRow struct {
 
 // GetLicense fetches the singleton license row, or creates a free-tier default.
 func (s *Store) GetLicense(ctx context.Context) (*LicenseRow, error) {
-	row := s.db.QueryRowContext(ctx,
+	row := s.queryRowContext(ctx,
 		`SELECT id, license_key, tier, signature, claims, offline_path, valid, expires_at, activated_at, updated_at
 		 FROM license WHERE id='singleton'`)
 	var l LicenseRow
@@ -920,7 +969,8 @@ func (s *Store) GetLicense(ctx context.Context) (*LicenseRow, error) {
 	err := row.Scan(&l.ID, &l.LicenseKey, &l.Tier, &l.Signature, &l.ClaimsJSON,
 		&l.OfflinePath, &valid, &l.ExpiresAt, &l.ActivatedAt, &l.UpdatedAt)
 	if err == sql.ErrNoRows {
-		// Bootstrap free tier.
+		// Bootstrap free tier. Use ON CONFLICT DO NOTHING (portable: SQLite 3.24+
+		// and PostgreSQL) instead of INSERT OR IGNORE to work on both backends.
 		now := nowMS()
 		l = LicenseRow{
 			ID:         "singleton",
@@ -929,9 +979,10 @@ func (s *Store) GetLicense(ctx context.Context) (*LicenseRow, error) {
 			Valid:      true,
 			UpdatedAt:  now,
 		}
-		_, err2 := s.db.ExecContext(ctx,
-			`INSERT OR IGNORE INTO license (id, tier, claims, valid, updated_at)
-			 VALUES ('singleton', 'free', '{}', 1, ?)`, now)
+		_, err2 := s.execContext(ctx,
+			`INSERT INTO license (id, tier, claims, valid, updated_at)
+			 VALUES ('singleton', 'free', '{}', 1, ?)
+			 ON CONFLICT (id) DO NOTHING`, now)
 		return &l, err2
 	}
 	if err != nil {
@@ -944,7 +995,7 @@ func (s *Store) GetLicense(ctx context.Context) (*LicenseRow, error) {
 // UpsertLicense updates or inserts the singleton license row.
 func (s *Store) UpsertLicense(ctx context.Context, l LicenseRow) error {
 	l.UpdatedAt = nowMS()
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`INSERT INTO license (id, license_key, tier, signature, claims, offline_path, valid, expires_at, activated_at, updated_at)
 		 VALUES ('singleton', ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET
@@ -986,7 +1037,7 @@ func (s *Store) CreateAMSSource(ctx context.Context, src AMSSourceRow) (AMSSourc
 	now := nowMS()
 	src.CreatedAt = now
 	src.UpdatedAt = now
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`INSERT INTO ams_sources
 		 (id, name, source_type, rest_url, rest_user, credential_enc, credential_env_ref,
 		  log_path, kafka_brokers, webhook_path, webhook_secret_enc, enabled, created_at, updated_at)
@@ -999,7 +1050,7 @@ func (s *Store) CreateAMSSource(ctx context.Context, src AMSSourceRow) (AMSSourc
 
 // GetAMSSource fetches a source by ID.
 func (s *Store) GetAMSSource(ctx context.Context, id string) (*AMSSourceRow, error) {
-	row := s.db.QueryRowContext(ctx,
+	row := s.queryRowContext(ctx,
 		`SELECT id, name, source_type, rest_url, rest_user, credential_enc, credential_env_ref,
 		        log_path, kafka_brokers, webhook_path, webhook_secret_enc, enabled, created_at, updated_at
 		 FROM ams_sources WHERE id=?`, id)
@@ -1008,7 +1059,7 @@ func (s *Store) GetAMSSource(ctx context.Context, id string) (*AMSSourceRow, err
 
 // ListAMSSources returns all sources.
 func (s *Store) ListAMSSources(ctx context.Context) ([]AMSSourceRow, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.queryContext(ctx,
 		`SELECT id, name, source_type, rest_url, rest_user, credential_enc, credential_env_ref,
 		        log_path, kafka_brokers, webhook_path, webhook_secret_enc, enabled, created_at, updated_at
 		 FROM ams_sources ORDER BY created_at`)
@@ -1030,7 +1081,7 @@ func (s *Store) ListAMSSources(ctx context.Context) ([]AMSSourceRow, error) {
 // UpdateAMSSource updates a source by ID.
 func (s *Store) UpdateAMSSource(ctx context.Context, src AMSSourceRow) error {
 	src.UpdatedAt = nowMS()
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`UPDATE ams_sources SET name=?, source_type=?, rest_url=?, rest_user=?, credential_enc=?,
 		  credential_env_ref=?, log_path=?, kafka_brokers=?, webhook_path=?, webhook_secret_enc=?,
 		  enabled=?, updated_at=?
@@ -1043,7 +1094,7 @@ func (s *Store) UpdateAMSSource(ctx context.Context, src AMSSourceRow) error {
 
 // DeleteAMSSource removes a source by ID.
 func (s *Store) DeleteAMSSource(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM ams_sources WHERE id=?`, id)
+	_, err := s.execContext(ctx, `DELETE FROM ams_sources WHERE id=?`, id)
 	return err
 }
 
@@ -1083,7 +1134,7 @@ func (s *Store) CreateTenant(ctx context.Context, t TenantRow) (TenantRow, error
 	now := nowMS()
 	t.CreatedAt = now
 	t.UpdatedAt = now
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`INSERT INTO tenants (id, name, stream_pattern, meta_tag_key, meta_tag_value, created_at, updated_at)
 		 VALUES (?,?,?,?,?,?,?)`,
 		t.ID, t.Name, t.StreamPattern, t.MetaTagKey, t.MetaTagValue, t.CreatedAt, t.UpdatedAt)
@@ -1092,7 +1143,7 @@ func (s *Store) CreateTenant(ctx context.Context, t TenantRow) (TenantRow, error
 
 // GetTenant fetches a tenant by ID.
 func (s *Store) GetTenant(ctx context.Context, id string) (*TenantRow, error) {
-	row := s.db.QueryRowContext(ctx,
+	row := s.queryRowContext(ctx,
 		`SELECT id, name, stream_pattern, meta_tag_key, meta_tag_value, created_at, updated_at
 		 FROM tenants WHERE id=?`, id)
 	return scanTenant(row)
@@ -1100,7 +1151,7 @@ func (s *Store) GetTenant(ctx context.Context, id string) (*TenantRow, error) {
 
 // GetTenantByName fetches a tenant by name.
 func (s *Store) GetTenantByName(ctx context.Context, name string) (*TenantRow, error) {
-	row := s.db.QueryRowContext(ctx,
+	row := s.queryRowContext(ctx,
 		`SELECT id, name, stream_pattern, meta_tag_key, meta_tag_value, created_at, updated_at
 		 FROM tenants WHERE name=?`, name)
 	return scanTenant(row)
@@ -1108,7 +1159,7 @@ func (s *Store) GetTenantByName(ctx context.Context, name string) (*TenantRow, e
 
 // ListTenants returns all tenants.
 func (s *Store) ListTenants(ctx context.Context) ([]TenantRow, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.queryContext(ctx,
 		`SELECT id, name, stream_pattern, meta_tag_key, meta_tag_value, created_at, updated_at
 		 FROM tenants ORDER BY created_at`)
 	if err != nil {
@@ -1129,7 +1180,7 @@ func (s *Store) ListTenants(ctx context.Context) ([]TenantRow, error) {
 // UpdateTenant updates a tenant by ID.
 func (s *Store) UpdateTenant(ctx context.Context, t TenantRow) error {
 	t.UpdatedAt = nowMS()
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`UPDATE tenants SET name=?, stream_pattern=?, meta_tag_key=?, meta_tag_value=?, updated_at=?
 		 WHERE id=?`,
 		t.Name, t.StreamPattern, t.MetaTagKey, t.MetaTagValue, t.UpdatedAt, t.ID)
@@ -1138,7 +1189,7 @@ func (s *Store) UpdateTenant(ctx context.Context, t TenantRow) error {
 
 // DeleteTenant removes a tenant by ID.
 func (s *Store) DeleteTenant(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM tenants WHERE id=?`, id)
+	_, err := s.execContext(ctx, `DELETE FROM tenants WHERE id=?`, id)
 	return err
 }
 
@@ -1180,7 +1231,7 @@ func (s *Store) CreateReportSchedule(ctx context.Context, r ReportScheduleRow) (
 	if r.ScopeJSON == "" {
 		r.ScopeJSON = "{}"
 	}
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`INSERT INTO report_schedules
 		 (id, cron, format, scope, tenant_mapping, whitelabel_header, last_run_at, next_run_at, created_at, updated_at)
 		 VALUES (?,?,?,?,?,?,?,?,?,?)`,
@@ -1191,7 +1242,7 @@ func (s *Store) CreateReportSchedule(ctx context.Context, r ReportScheduleRow) (
 
 // GetReportSchedule fetches a schedule by ID.
 func (s *Store) GetReportSchedule(ctx context.Context, id string) (*ReportScheduleRow, error) {
-	row := s.db.QueryRowContext(ctx,
+	row := s.queryRowContext(ctx,
 		`SELECT id, cron, format, scope, tenant_mapping, whitelabel_header, last_run_at, next_run_at, created_at, updated_at
 		 FROM report_schedules WHERE id=?`, id)
 	return scanReportSchedule(row)
@@ -1199,7 +1250,7 @@ func (s *Store) GetReportSchedule(ctx context.Context, id string) (*ReportSchedu
 
 // ListReportSchedules returns all schedules.
 func (s *Store) ListReportSchedules(ctx context.Context) ([]ReportScheduleRow, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.queryContext(ctx,
 		`SELECT id, cron, format, scope, tenant_mapping, whitelabel_header, last_run_at, next_run_at, created_at, updated_at
 		 FROM report_schedules ORDER BY created_at`)
 	if err != nil {
@@ -1220,7 +1271,7 @@ func (s *Store) ListReportSchedules(ctx context.Context) ([]ReportScheduleRow, e
 // UpdateReportSchedule updates a schedule by ID.
 func (s *Store) UpdateReportSchedule(ctx context.Context, r ReportScheduleRow) error {
 	r.UpdatedAt = nowMS()
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`UPDATE report_schedules SET cron=?, format=?, scope=?, tenant_mapping=?, whitelabel_header=?,
 		  last_run_at=?, next_run_at=?, updated_at=? WHERE id=?`,
 		r.Cron, r.Format, r.ScopeJSON, r.TenantMapping, r.WhitelabelHeader,
@@ -1230,13 +1281,13 @@ func (s *Store) UpdateReportSchedule(ctx context.Context, r ReportScheduleRow) e
 
 // DeleteReportSchedule removes a schedule by ID.
 func (s *Store) DeleteReportSchedule(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM report_schedules WHERE id=?`, id)
+	_, err := s.execContext(ctx, `DELETE FROM report_schedules WHERE id=?`, id)
 	return err
 }
 
 // ListDueReportSchedules returns schedules whose next_run_at <= now (Unix ms).
 func (s *Store) ListDueReportSchedules(ctx context.Context, nowMS int64) ([]ReportScheduleRow, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.queryContext(ctx,
 		`SELECT id, cron, format, scope, tenant_mapping, whitelabel_header, last_run_at, next_run_at, created_at, updated_at
 		 FROM report_schedules WHERE next_run_at IS NOT NULL AND next_run_at <= ?
 		 ORDER BY next_run_at`, nowMS)
@@ -1257,7 +1308,7 @@ func (s *Store) ListDueReportSchedules(ctx context.Context, nowMS int64) ([]Repo
 
 // MarkScheduleRan updates last_run_at and next_run_at for a completed schedule.
 func (s *Store) MarkScheduleRan(ctx context.Context, id string, lastRunAt, nextRunAt int64) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.execContext(ctx,
 		`UPDATE report_schedules SET last_run_at=?, next_run_at=?, updated_at=? WHERE id=?`,
 		lastRunAt, nextRunAt, nowMS(), id)
 	return err
