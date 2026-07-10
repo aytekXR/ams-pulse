@@ -3022,3 +3022,75 @@ wiring author) → adversarial verify workflow → ORCH gates → per-scope comm
 CI watch → closing protocol.
 
 *(rulings + evidence appended below as the session progresses)*
+
+### D-073 ORCH RULINGS (post-scout, BINDING for this session's authors)
+
+**Scout workflow `pulse-s13-scout` DONE** (4 read-only scouts, 372k tok, digests in
+scratchpad `scout-{arch,rtmp,dash,pion}.txt`; every fact file:line-cited).
+
+- **WO-D RE-GATED to S14 (triage record).** Scout evidence: pion/webrtc is a COLD-START
+  dep in TWO separate modules (server/go.sum has zero pion/dtls/srtp/ice/rtp entries;
+  qa/mock-ams/go.mod has exactly one dep); mock-ams wsSignalingHandler CLOSES the WS right
+  after sending the offer (main.go:334-397) → a pion ICE/DTLS/SRTP answerer is a ~300-400
+  LOC rewrite ([M] on its own); the S12 fixture is explicitly "partially-captured"
+  (server→client shapes only — no client answer/candidate shapes); rtt/jitter/loss/
+  resolution/fps = 5 new contract fields + CH migration 0007 + explicit-INSERT-list +
+  domain changes across 3 scopes. SESSION-13 exit (d) is satisfied via this re-gate.
+  S14 pickup spec: phase-2a slice = ICE-connected only (single new field `ice_state`,
+  CH 0007), phase-2b = stats; fixture capture needs a live ICE+DTLS session.
+- **WO-B rulings (RTMP):** stdlib-only pure-Go handshake (net + io + encoding/binary +
+  crypto/rand) — ZERO new deps in both modules. Phase-1 success = S2 fully read
+  (C0/C1 → S0/S1/S2 → C2); NO AMF0 connect this phase (slice pattern). REUSE
+  `ConnectTimeMs` for handshake time (dial-start → S2 read, 1ms floor — contract CR
+  widens the description; NO new CH column, avoiding the positional-append hazard);
+  `SignalingState='handshake_complete'` on success; error codes `rtmp_timeout|
+  rtmp_refused|rtmp_error` (symmetric with ws_*; failure also mirrored into
+  SignalingState like phase 1 does). New file `probe_rtmp.go` + `probe_rtmp_test.go`
+  ONLY (no prober.go edits — serial wiring). mock-ams: `-rtmp-addr` flag (default ""
+  = disabled) + net.Listener goroutine, validates C0 version byte 0x03 + exact C1
+  length, replies spec-correct S0/S1/S2 (S2 echoes C1 ts+random), reads C2, then
+  closes; CI uses container-internal port 11935 (NO host publish needed — pulse
+  reaches mock-ams on the compose network, WO-B WebRTC precedent ws://mock-ams:9090).
+- **WO-C rulings (DASH):** new file `probe_dash.go` + `probe_dash_test.go` ONLY.
+  NO contract schema change — TTFBMs/BitrateKbps/SegmentTTFBMs are protocol-neutral
+  (scout-verified in domain + CH + OpenAPI). Success = manifest 2xx + parses as MPD
+  (segment fetch is bonus measurement — EXACT mirror of HLS semantics at
+  prober.go:460-512). Parser: stdlib encoding/xml; MUST handle SegmentTemplate
+  ($Number$ + $RepresentationID$ substitution, @startNumber default 1, @timescale
+  tick→seconds conversion for duration/bitrate) AND SegmentList/SegmentURL AND
+  BaseURL/relative resolution; reuse HLS error-code family (parse/http_4xx/http_5xx/
+  timeout/dns/conn_refused/network/read). mock-ams route follows the AMS convention
+  `/{app}/streams/{streamId}.mpd` + one segment (convention VERIFIED live:
+  `/LiveApp/streams/teststream.m3u8` → 200 on the real AMS). **Live-capture gap
+  RECORDED:** the real AMS returns 404 for `.mpd` (DASH muxing disabled per-app;
+  verified 2026-07-10 read-only) — enabling it would mutate prod AMS config =
+  operator-only; fixtures are SPEC-DERIVED (DASH-IF) and marked so in test comments;
+  optional operator note added to operator-expected.md (enable DASH → a session
+  captures a real fixture).
+- **WO-F rulings (TTL):** CH migration `0006_probe_results_ttl.sql`:
+  `ALTER TABLE {db}.probe_results MODIFY TTL toDate(ts) + toIntervalDay({retention_days});`
+  — runner substitution VERIFIED (runner.go:216 ReplaceAll {db}/{retention_days}/
+  {rollup_ttl_days}; schema_migrations tracks by filename → applied once). ALSO fix
+  `0001_init.sql:225` hardcoded `toIntervalDay(90)` → `toIntervalDay({retention_days})`
+  (fresh-install consistency; existing installs skip 0001 by name so the content change
+  is safe; author must confirm no checksum-pinning test). Integration test: run
+  migrations with RetentionDays≠90 and assert SHOW CREATE TABLE probe_results carries it.
+- **Pre-approved contract CR (INT-01 single writer):** pulse-api.yaml DESCRIPTION-ONLY
+  changes — error_code gains rtmp_timeout|rtmp_refused|rtmp_error; connect_time_ms
+  description widened to protocol-neutral connection-establishment time (WebRTC: WS
+  dial→first signaling msg; RTMP: TCP dial→S2); signaling_state gains
+  handshake_complete|rtmp_*. NO type/required changes. Plus CH 0006 + 0001 TTL fix
+  above. gen:api re-run + drift check; redocly + ajv.
+- **Scope partition (serial-wiring surface, binding):** protocol authors write NEW FILES
+  ONLY; `prober.go` (executeProbe switch + NotProbed-test flip), shared-file edits and
+  the WO-F integration test go to ONE serial wiring author AFTER both protocol authors
+  land; mock-ams (both protocols) = ONE QA author; e2e.yml + docker-compose.ci.yml =
+  ONE infra author. **NOBODY touches domain/types.go, clickhouse.go, wave3.go this
+  session** (reuse verdict makes them no-change files) — an author who believes they
+  must touch one STOPS and reports. e2e poll conditions: omission semantics BINDING —
+  `.get(key, default)` only; NOTE bitrate_kbps is OMITTED when 0 and error_code is
+  OMITTED on success.
+- **WO-G evidence (done at open):** re-verified live via gh api: enforce_admins=false,
+  strict=true, 7 contexts, 1 review — unchanged from D-072; PR-first still unanswered →
+  rationale RE-RECORDED verbatim (direct-push cadence stands; flip would deadlock on
+  self-approval). Next revisit: operator answer or S14 promotions pickup.
