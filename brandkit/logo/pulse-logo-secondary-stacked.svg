@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="132" viewBox="0 0 160 132">
+  
+  <rect x="48" y="0" width="64" height="64" rx="16" fill="#10161D"></rect>
+  <path d="M60 32 H70 L75 18 L84 46 L89 32 H100" fill="none" stroke="#2CE5A7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
+  <text x="80" y="106" text-anchor="middle" font-family="&#39;IBM Plex Sans&#39;,&#39;Helvetica Neue&#39;,Helvetica,Arial,sans-serif" font-size="28" font-weight="600" letter-spacing="-0.4" fill="#E8EEF4">pulse</text>
+</svg>

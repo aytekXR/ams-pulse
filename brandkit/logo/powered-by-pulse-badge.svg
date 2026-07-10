@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="150" height="28" viewBox="0 0 150 28">
+  
+  <rect x="0.5" y="0.5" width="149" height="27" rx="6" fill="none" stroke="#8296A8" stroke-opacity="0.5"></rect>
+  <path d="M9 14 H13 L15 9.5 L18 18.5 L20 14 H24" fill="none" stroke="#8296A8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+  <text x="32" y="18.5" font-family="&#39;IBM Plex Sans&#39;,&#39;Helvetica Neue&#39;,Helvetica,Arial,sans-serif" font-size="12" font-weight="500" fill="#8296A8">powered by pulse</text>
+</svg>

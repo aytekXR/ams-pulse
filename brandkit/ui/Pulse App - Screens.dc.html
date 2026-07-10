@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>Pulse — Product UI Screens</title>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="icon" href="../logo/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; background: #06090D; font-family: 'IBM Plex Sans', 'Helvetica Neue', sans-serif; color: #E8EEF4; }
+    a { color: #2CE5A7; text-decoration: none; }
+    a:hover { color: #4FEDB9; }
+  </style>
+</helmet>
+
+<div style="padding: 48px; display: flex; flex-direction: column; gap: 56px">
+
+  <!-- ================= LOGIN ================= -->
+  <div data-screen-label="Login">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">01 · LOGIN — 1280×800</p>
+    <div style="width: 1280px; height: 800px; border-radius: 16px; border: 1px solid #1E2833; overflow: hidden; background: #0A0E14; display: grid; grid-template-columns: 1fr 460px">
+      <div style="position: relative; background: #0D1219; border-right: 1px solid #1E2833; display: flex; flex-direction: column; justify-content: space-between; padding: 48px">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <img src="../logo/pulse-mark.svg" alt="" style="width: 36px; height: 36px; border-radius: 9px">
+          <span style="font-weight: 600; font-size: 18px; letter-spacing: -0.01em">pulse</span>
+        </div>
+        <div>
+          <svg width="560" height="140" viewBox="0 0 560 140" fill="none" style="margin-bottom: 32px">
+            <line x1="0" y1="70" x2="560" y2="70" stroke="#2CE5A7" stroke-opacity="0.12" stroke-width="2"></line>
+            <path d="M0 70 H160 L200 26 L268 116 L306 70 H560" stroke="#2CE5A7" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+          <h1 style="margin: 0 0 16px; font-size: 40px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; max-width: 480px">Know your stream is OK.</h1>
+          <p style="margin: 0; font-size: 16px; line-height: 1.6; color: #9FB0C0; max-width: 440px">Real-time analytics, QoE monitoring and alerting for Ant Media Server — on your own infrastructure.</p>
+        </div>
+        <div style="display: flex; gap: 24px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80">
+          <span>≤10 S VISIBILITY</span><span>READ-ONLY</span><span>NO PHONE-HOME</span>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; justify-content: center; padding: 64px">
+        <h2 style="margin: 0 0 6px; font-size: 24px; font-weight: 700; letter-spacing: -0.01em">Sign in</h2>
+        <p style="margin: 0 0 32px; font-size: 14px; color: #9FB0C0">pulse.your-domain.com · v0.2.0</p>
+        <div style="display: flex; flex-direction: column; gap: 18px">
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <label style="font-size: 13px; font-weight: 500; color: #9FB0C0">Email</label>
+            <input value="ops@beyondkaira.com" style="height: 42px; padding: 0 14px; border-radius: 8px; border: 1px solid #2B3947; background: #0D1219; color: #E8EEF4; font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; outline: none" style-focus="border-color: #2CE5A7; box-shadow: 0 0 0 3px rgba(44,229,167,0.15)">
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <div style="display: flex; justify-content: space-between"><label style="font-size: 13px; font-weight: 500; color: #9FB0C0">Password</label><a href="#" style="font-size: 12px">Forgot?</a></div>
+            <input type="password" value="••••••••••••" style="height: 42px; padding: 0 14px; border-radius: 8px; border: 1px solid #2B3947; background: #0D1219; color: #E8EEF4; font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; outline: none" style-focus="border-color: #2CE5A7; box-shadow: 0 0 0 3px rgba(44,229,167,0.15)">
+          </div>
+          <button style="height: 44px; border-radius: 8px; border: none; background: #2CE5A7; color: #0A0E14; font-family: 'IBM Plex Sans', sans-serif; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 8px" style-hover="background: #4FEDB9">Sign in</button>
+          <div style="display: flex; align-items: center; gap: 12px; margin: 6px 0"><div style="flex: 1; height: 1px; background: #1E2833"></div><span style="font-size: 12px; color: #5C6F80">or</span><div style="flex: 1; height: 1px; background: #1E2833"></div></div>
+          <button style="height: 44px; border-radius: 8px; border: 1px solid #2B3947; background: transparent; color: #E8EEF4; font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer" style-hover="background: #10161D">Use API token</button>
+          <p style="margin: 16px 0 0; font-size: 12px; line-height: 1.6; color: #5C6F80">First run? Your admin token was printed once to stderr as <span style="font-family: 'IBM Plex Mono', monospace">plt_…</span> — it is never stored in plain text.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= DASHBOARD ================= -->
+  <div data-screen-label="Dashboard">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">02 · LIVE DASHBOARD — 1280×800</p>
+    <div style="width: 1280px; height: 800px; border-radius: 16px; border: 1px solid #1E2833; overflow: hidden; background: #0A0E14; display: flex">
+      <div style="width: 60px; flex-shrink: 0; background: #0D1219; border-right: 1px solid #1E2833; display: flex; flex-direction: column; align-items: center; padding: 14px 0; gap: 6px">
+        <img src="../logo/pulse-mark.svg" alt="" style="width: 32px; height: 32px; border-radius: 8px; margin-bottom: 14px">
+        <div style="width: 38px; height: 38px; border-radius: 8px; background: rgba(44,229,167,0.12); color: #2CE5A7; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center; cursor: pointer" style-hover="color: #E8EEF4; background: #131B24"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12 h4 l2 -5 l4 10 l2 -5 h4"></path></svg></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center; cursor: pointer" style-hover="color: #E8EEF4; background: #131B24"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19 V10 M10 19 V5 M16 19 v-7 M22 19 H2"></path></svg></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative" style-hover="color: #E8EEF4; background: #131B24"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8 a6 6 0 0 1 12 0 c0 7 3 9 3 9 H3 c0 0 3 -2 3 -9"></path><path d="M10 21 a2 2 0 0 0 4 0"></path></svg><span style="position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: #FF5C68; border: 2px solid #0D1219"></span></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center; cursor: pointer" style-hover="color: #E8EEF4; background: #131B24"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="2" y="14" width="20" height="7" rx="2"></rect><rect x="2" y="3" width="20" height="7" rx="2"></rect><path d="M6 6.5 h0.01 M6 17.5 h0.01"></path></svg></div>
+        <div style="flex: 1"></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center; cursor: pointer" style-hover="color: #E8EEF4; background: #131B24"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2 v3 M12 19 v3 M2 12 h3 M19 12 h3 M4.9 4.9 l2.1 2.1 M17 17 l2.1 2.1 M19.1 4.9 L17 7 M7 17 l-2.1 2.1"></path></svg></div>
+        <div style="width: 32px; height: 32px; border-radius: 50%; background: #1E2833; color: #9FB0C0; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">AK</div>
+      </div>
+      <div style="flex: 1; display: flex; flex-direction: column; min-width: 0">
+        <div style="height: 56px; flex-shrink: 0; border-bottom: 1px solid #1E2833; display: flex; align-items: center; justify-content: space-between; padding: 0 24px">
+          <div style="display: flex; align-items: center; gap: 14px">
+            <h1 style="margin: 0; font-size: 17px; font-weight: 600">Overview</h1>
+            <span style="display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px; border-radius: 99px; background: rgba(44,229,167,0.1); color: #2CE5A7; font-size: 12px; font-weight: 600"><span style="width: 7px; height: 7px; border-radius: 50%; background: #2CE5A7"></span>Live · WS connected</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 14px">
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80">last update 09:41:32 · 2.1 s ago</span>
+            <div style="display: flex; background: #0D1219; border: 1px solid #1E2833; border-radius: 8px; padding: 3px; gap: 2px; font-size: 12px; font-weight: 500">
+              <span style="padding: 4px 11px; border-radius: 6px; background: #1E2833">Live</span>
+              <span style="padding: 4px 11px; border-radius: 6px; color: #9FB0C0; cursor: pointer">24h</span>
+              <span style="padding: 4px 11px; border-radius: 6px; color: #9FB0C0; cursor: pointer">7d</span>
+            </div>
+          </div>
+        </div>
+        <div style="flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: column; gap: 20px">
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px">
+            <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 20px"><p style="margin: 0 0 8px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80; letter-spacing: 0.08em">CONCURRENT VIEWERS</p><p style="margin: 0; font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1">12,847</p><p style="margin: 8px 0 0; font-size: 12px; color: #2CE5A7">▲ 8.2% past hour</p></div>
+            <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 20px"><p style="margin: 0 0 8px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80; letter-spacing: 0.08em">ACTIVE STREAMS</p><p style="margin: 0; font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1">342</p><p style="margin: 8px 0 0; font-size: 12px; color: #9FB0C0">328 healthy · <span style="color: #FFB224">13 warn</span> · <span style="color: #FF5C68">1 critical</span></p></div>
+            <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 20px"><p style="margin: 0 0 8px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80; letter-spacing: 0.08em">CLUSTER NODES</p><p style="margin: 0; font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1">6<span style="font-size: 16px; font-weight: 500; color: #9FB0C0"> /6 up</span></p><p style="margin: 8px 0 0; font-size: 12px; color: #9FB0C0">2 origin · 4 edge</p></div>
+            <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 20px"><p style="margin: 0 0 8px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80; letter-spacing: 0.08em">QOE · STARTUP P50</p><p style="margin: 0; font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1">250<span style="font-size: 16px; font-weight: 500; color: #9FB0C0"> ms</span></p><p style="margin: 8px 0 0; font-size: 12px; color: #9FB0C0">rebuffer ratio 0.8%</p></div>
+          </div>
+          <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px">
+            <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 20px">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 14px"><p style="margin: 0; font-weight: 600; font-size: 14px">Concurrent viewers</p><div style="display: flex; gap: 14px; font-size: 12px; color: #9FB0C0"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 2px; background: #2CE5A7"></span>HLS</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 2px; background: #58A6FF"></span>WebRTC</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 2px; background: #A78BFA"></span>DASH</span></div></div>
+              <svg width="100%" height="150" viewBox="0 0 700 150" preserveAspectRatio="none">
+                <line x1="0" y1="37" x2="700" y2="37" stroke="#161E27" stroke-width="1"></line><line x1="0" y1="75" x2="700" y2="75" stroke="#161E27" stroke-width="1"></line><line x1="0" y1="112" x2="700" y2="112" stroke="#161E27" stroke-width="1"></line>
+                <polyline points="0,120 50,112 100,116 150,98 200,104 250,80 300,88 350,60 400,70 450,44 500,54 550,30 600,40 650,24 700,30" fill="none" stroke="#2CE5A7" stroke-width="2"></polyline>
+                <polyline points="0,138 50,134 100,136 150,128 200,131 250,120 300,124 350,110 400,115 450,100 500,106 550,92 600,97 650,86 700,90" fill="none" stroke="#58A6FF" stroke-width="2"></polyline>
+                <polyline points="0,146 50,145 100,145 150,142 200,143 250,139 300,141 350,136 400,138 450,133 500,135 550,130 600,132 650,128 700,129" fill="none" stroke="#A78BFA" stroke-width="2"></polyline>
+                <circle cx="700" cy="30" r="4" fill="#2CE5A7"></circle>
+              </svg>
+              <div style="display: flex; justify-content: space-between; margin-top: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80"><span>-60 min</span><span>-45</span><span>-30</span><span>-15</span><span>now</span></div>
+            </div>
+            <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 20px; display: flex; flex-direction: column">
+              <p style="margin: 0 0 14px; font-weight: 600; font-size: 14px">Firing alerts</p>
+              <div style="display: flex; flex-direction: column; gap: 10px; flex: 1">
+                <div style="display: flex; gap: 12px; padding: 12px; border-radius: 10px; background: #0D1219; border: 1px solid #1E2833; border-left: 3px solid #FF5C68">
+                  <div style="flex: 1"><p style="margin: 0; font-size: 13px; font-weight: 600">node_down · edge-05</p><p style="margin: 3px 0 0; font-size: 12px; color: #9FB0C0">absent from cluster · firing 2 m 14 s</p></div>
+                  <span style="font-size: 12px; color: #2CE5A7; font-weight: 600; cursor: pointer">View</span>
+                </div>
+                <div style="display: flex; gap: 12px; padding: 12px; border-radius: 10px; background: #0D1219; border: 1px solid #1E2833; border-left: 3px solid #FFB224">
+                  <div style="flex: 1"><p style="margin: 0; font-size: 13px; font-weight: 600">ingest_bitrate_floor</p><p style="margin: 3px 0 0; font-size: 12px; color: #9FB0C0">live/edge-03-cam2 · 45 s below 50% target</p></div>
+                  <span style="font-size: 12px; color: #2CE5A7; font-weight: 600; cursor: pointer">View</span>
+                </div>
+                <div style="margin-top: auto; padding-top: 10px; border-top: 1px solid #161E27; display: flex; justify-content: space-between; font-size: 12px; color: #5C6F80"><span>14 resolved today</span><a href="#">Alert history →</a></div>
+              </div>
+            </div>
+          </div>
+          <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; overflow: hidden; flex: 1">
+            <div style="padding: 14px 20px; border-bottom: 1px solid #1E2833; display: flex; justify-content: space-between; align-items: center">
+              <p style="margin: 0; font-weight: 600; font-size: 14px">Live streams <span style="color: #5C6F80; font-weight: 400">· 342</span></p>
+              <input placeholder="filter: app, node, stream id…" style="height: 30px; width: 240px; padding: 0 12px; border-radius: 6px; border: 1px solid #1E2833; background: #0A0E14; color: #E8EEF4; font-family: 'IBM Plex Sans', sans-serif; font-size: 12px; outline: none">
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px">
+              <thead><tr style="border-bottom: 1px solid #1E2833"><th style="text-align: left; padding: 9px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; color: #5C6F80; letter-spacing: 0.08em">STREAM</th><th style="text-align: left; padding: 9px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; color: #5C6F80; letter-spacing: 0.08em">NODE</th><th style="text-align: left; padding: 9px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; color: #5C6F80; letter-spacing: 0.08em">PROTOCOL</th><th style="text-align: right; padding: 9px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; color: #5C6F80; letter-spacing: 0.08em">VIEWERS</th><th style="text-align: right; padding: 9px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; color: #5C6F80; letter-spacing: 0.08em">BITRATE</th><th style="text-align: right; padding: 9px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; color: #5C6F80; letter-spacing: 0.08em">HEALTH</th></tr></thead>
+              <tbody>
+                <tr style="border-bottom: 1px solid #131B24; cursor: pointer" style-hover="background: #131B24"><td style="padding: 0 20px; height: 38px; font-family: 'IBM Plex Mono', monospace"><span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #2CE5A7"></span>live/event-keynote</span></td><td style="padding: 0 20px; color: #9FB0C0">origin-01</td><td style="padding: 0 20px; color: #9FB0C0">RTMP → HLS</td><td style="padding: 0 20px; text-align: right; font-variant-numeric: tabular-nums">6,110</td><td style="padding: 0 20px; text-align: right; font-variant-numeric: tabular-nums; color: #9FB0C0">5,900 kbps</td><td style="padding: 0 20px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: #2CE5A7">97</td></tr>
+                <tr style="border-bottom: 1px solid #131B24; cursor: pointer" style-hover="background: #131B24"><td style="padding: 0 20px; height: 38px; font-family: 'IBM Plex Mono', monospace"><span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #2CE5A7"></span>live/worship-main</span></td><td style="padding: 0 20px; color: #9FB0C0">origin-01</td><td style="padding: 0 20px; color: #9FB0C0">RTMP → HLS</td><td style="padding: 0 20px; text-align: right; font-variant-numeric: tabular-nums">3,204</td><td style="padding: 0 20px; text-align: right; font-variant-numeric: tabular-nums; color: #9FB0C0">4,120 kbps</td><td style="padding: 0 20px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: #2CE5A7">98</td></tr>
+                <tr style="border-bottom: 1px solid #131B24; cursor: pointer; background: rgba(255,178,36,0.04)" style-hover="background: rgba(255,178,36,0.08)"><td style="padding: 0 20px; height: 38px; font-family: 'IBM Plex Mono', monospace"><span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; background: #FFB224; transform: rotate(45deg)"></span>live/edge-03-cam2</span></td><td style="padding: 0 20px; color: #9FB0C0">edge-03</td><td style="padding: 0 20px; color: #9FB0C0">WebRTC</td><td style="padding: 0 20px; text-align: right; font-variant-numeric: tabular-nums">922</td><td style="padding: 0 20px; text-align: right; font-variant-numeric: tabular-nums; color: #FFB224">980 kbps</td><td style="padding: 0 20px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: #FFB224">64</td></tr>
+                <tr style="border-bottom: 1px solid #131B24; cursor: pointer" style-hover="background: #131B24"><td style="padding: 0 20px; height: 38px; font-family: 'IBM Plex Mono', monospace"><span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #2CE5A7"></span>live/lecture-cs101</span></td><td style="padding: 0 20px; color: #9FB0C0">edge-02</td><td style="padding: 0 20px; color: #9FB0C0">HLS</td><td style="padding: 0 20px; text-align: right; font-variant-numeric: tabular-nums">1,847</td><td style="padding: 0 20px; text-align: right; font-variant-numeric: tabular-nums; color: #9FB0C0">2,480 kbps</td><td style="padding: 0 20px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: #2CE5A7">91</td></tr>
+                <tr style="cursor: pointer" style-hover="background: #131B24"><td style="padding: 0 20px; height: 38px; font-family: 'IBM Plex Mono', monospace"><span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #2CE5A7"></span>live/gaming-arena-2</span></td><td style="padding: 0 20px; color: #9FB0C0">edge-01</td><td style="padding: 0 20px; color: #9FB0C0">WebRTC</td><td style="padding: 0 20px; text-align: right; font-variant-numeric: tabular-nums">764</td><td style="padding: 0 20px; text-align: right; font-variant-numeric: tabular-nums; color: #9FB0C0">3,340 kbps</td><td style="padding: 0 20px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: #2CE5A7">95</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= STREAM DETAIL (MAIN WORKFLOW) ================= -->
+  <div data-screen-label="Stream Detail">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">03 · MAIN WORKFLOW — INVESTIGATE A DEGRADED STREAM — 1280×800</p>
+    <div style="width: 1280px; height: 800px; border-radius: 16px; border: 1px solid #1E2833; overflow: hidden; background: #0A0E14; display: flex">
+      <div style="width: 60px; flex-shrink: 0; background: #0D1219; border-right: 1px solid #1E2833; display: flex; flex-direction: column; align-items: center; padding: 14px 0; gap: 6px">
+        <img src="../logo/pulse-mark.svg" alt="" style="width: 32px; height: 32px; border-radius: 8px; margin-bottom: 14px">
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; background: rgba(44,229,167,0.12); color: #2CE5A7; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12 h4 l2 -5 l4 10 l2 -5 h4"></path></svg></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19 V10 M10 19 V5 M16 19 v-7 M22 19 H2"></path></svg></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center; position: relative"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8 a6 6 0 0 1 12 0 c0 7 3 9 3 9 H3 c0 0 3 -2 3 -9"></path><path d="M10 21 a2 2 0 0 0 4 0"></path></svg><span style="position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: #FF5C68; border: 2px solid #0D1219"></span></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="2" y="14" width="20" height="7" rx="2"></rect><rect x="2" y="3" width="20" height="7" rx="2"></rect><path d="M6 6.5 h0.01 M6 17.5 h0.01"></path></svg></div>
+        <div style="flex: 1"></div>
+        <div style="width: 32px; height: 32px; border-radius: 50%; background: #1E2833; color: #9FB0C0; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">AK</div>
+      </div>
+      <div style="flex: 1; display: flex; flex-direction: column; min-width: 0">
+        <div style="height: 56px; flex-shrink: 0; border-bottom: 1px solid #1E2833; display: flex; align-items: center; justify-content: space-between; padding: 0 24px">
+          <div style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: #9FB0C0">
+            <span>Streams</span><span style="color: #3A4A5A">/</span><span style="color: #E8EEF4; font-family: 'IBM Plex Mono', monospace; font-size: 14px">live/edge-03-cam2</span>
+            <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 99px; background: rgba(255,178,36,0.12); color: #FFB224; font-size: 12px; font-weight: 600"><span style="width: 7px; height: 7px; background: #FFB224; display: inline-block; transform: rotate(45deg)"></span>Degraded</span>
+          </div>
+          <div style="display: flex; gap: 10px">
+            <button style="height: 32px; padding: 0 14px; border-radius: 8px; border: 1px solid #2B3947; background: transparent; color: #E8EEF4; font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer">Mute alerts</button>
+            <button style="height: 32px; padding: 0 14px; border-radius: 8px; border: none; background: #2CE5A7; color: #0A0E14; font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer">Add probe</button>
+          </div>
+        </div>
+        <div style="flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: column; gap: 20px">
+          <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 20px">
+            <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 18px"><p style="margin: 0 0 6px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80; letter-spacing: 0.08em">VIEWERS</p><p style="margin: 0; font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1">922</p></div>
+            <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 18px"><p style="margin: 0 0 6px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80; letter-spacing: 0.08em">INGEST BITRATE</p><p style="margin: 0; font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; color: #FFB224">980<span style="font-size: 13px; font-weight: 500; color: #9FB0C0"> kbps</span></p><p style="margin: 6px 0 0; font-size: 11px; color: #FFB224">49% of 2,000 target</p></div>
+            <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 18px"><p style="margin: 0 0 6px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80; letter-spacing: 0.08em">STARTUP P50</p><p style="margin: 0; font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1">412<span style="font-size: 13px; font-weight: 500; color: #9FB0C0"> ms</span></p></div>
+            <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 18px"><p style="margin: 0 0 6px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80; letter-spacing: 0.08em">REBUFFER RATIO</p><p style="margin: 0; font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; color: #FFB224">4.2<span style="font-size: 13px; font-weight: 500; color: #9FB0C0"> %</span></p></div>
+            <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 18px"><p style="margin: 0 0 6px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80; letter-spacing: 0.08em">HEALTH SCORE</p><p style="margin: 0; font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; color: #FFB224">64<span style="font-size: 13px; font-weight: 500; color: #9FB0C0"> /100</span></p></div>
+          </div>
+          <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; flex: 1; min-height: 0">
+            <div style="display: flex; flex-direction: column; gap: 20px; min-height: 0">
+              <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 20px; flex: 1">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 12px"><p style="margin: 0; font-weight: 600; font-size: 14px">Ingest bitrate — last 30 min</p><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #FFB224">drop detected 09:38:12</span></div>
+                <svg width="100%" height="140" viewBox="0 0 660 140" preserveAspectRatio="none">
+                  <line x1="0" y1="35" x2="660" y2="35" stroke="#161E27"></line><line x1="0" y1="70" x2="660" y2="70" stroke="#161E27"></line><line x1="0" y1="105" x2="660" y2="105" stroke="#161E27"></line>
+                  <line x1="0" y1="70" x2="660" y2="70" stroke="#FFB224" stroke-width="1" stroke-dasharray="4 5" stroke-opacity="0.6"></line>
+                  <polyline points="0,30 60,28 120,32 180,26 240,30 300,28 360,34 420,30 440,88 480,96 520,90 560,98 600,94 660,96" fill="none" stroke="#2CE5A7" stroke-width="2"></polyline>
+                  <rect x="430" y="10" width="230" height="120" fill="#FFB224" fill-opacity="0.05"></rect>
+                  <circle cx="660" cy="96" r="4" fill="#FFB224"></circle>
+                </svg>
+                <div style="display: flex; justify-content: space-between; margin-top: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80"><span>09:15</span><span>09:25</span><span>09:35</span><span>09:45 now</span></div>
+              </div>
+              <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; overflow: hidden">
+                <p style="margin: 0; padding: 12px 20px; border-bottom: 1px solid #1E2833; font-weight: 600; font-size: 14px">Event log</p>
+                <div style="padding: 12px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 2; color: #9FB0C0">
+                  <div><span style="color: #5C6F80">09:38:27</span> <span style="color: #FFB224">WARN</span> alert firing: ingest_bitrate_floor (S_bitrate 0.49)</div>
+                  <div><span style="color: #5C6F80">09:38:12</span> <span style="color: #FFB224">WARN</span> ingest degradation: bitrate 980 kbps &lt; 50% of target</div>
+                  <div><span style="color: #5C6F80">09:37:58</span> INFO webrtc-client-stats: packetLostRatio 0.031 → 3.1%</div>
+                  <div><span style="color: #5C6F80">09:12:04</span> <span style="color: #2CE5A7">OK</span> publish_started · node edge-03 · protocol WebRTC</div>
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 20px">
+              <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 20px">
+                <p style="margin: 0 0 16px; font-weight: 600; font-size: 14px">Health components <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 400; color: #5C6F80">F4 formula</span></p>
+                <div style="display: flex; flex-direction: column; gap: 13px; font-size: 12px">
+                  <div><div style="display: flex; justify-content: space-between; margin-bottom: 5px"><span style="color: #9FB0C0">Bitrate <span style="color: #5C6F80">· w 0.35</span></span><span style="font-variant-numeric: tabular-nums; color: #FFB224">0.49</span></div><div style="height: 5px; border-radius: 3px; background: #1E2833"><div style="width: 49%; height: 100%; border-radius: 3px; background: #FFB224"></div></div></div>
+                  <div><div style="display: flex; justify-content: space-between; margin-bottom: 5px"><span style="color: #9FB0C0">FPS <span style="color: #5C6F80">· w 0.25</span></span><span style="font-variant-numeric: tabular-nums; color: #2CE5A7">0.93</span></div><div style="height: 5px; border-radius: 3px; background: #1E2833"><div style="width: 93%; height: 100%; border-radius: 3px; background: #2CE5A7"></div></div></div>
+                  <div><div style="display: flex; justify-content: space-between; margin-bottom: 5px"><span style="color: #9FB0C0">Keyframe <span style="color: #5C6F80">· w 0.20</span></span><span style="font-variant-numeric: tabular-nums; color: #2CE5A7">1.00</span></div><div style="height: 5px; border-radius: 3px; background: #1E2833"><div style="width: 100%; height: 100%; border-radius: 3px; background: #2CE5A7"></div></div></div>
+                  <div><div style="display: flex; justify-content: space-between; margin-bottom: 5px"><span style="color: #9FB0C0">Packet loss <span style="color: #5C6F80">· w 0.12</span></span><span style="font-variant-numeric: tabular-nums; color: #2CE5A7">0.69</span></div><div style="height: 5px; border-radius: 3px; background: #1E2833"><div style="width: 69%; height: 100%; border-radius: 3px; background: #2CE5A7"></div></div></div>
+                  <div><div style="display: flex; justify-content: space-between; margin-bottom: 5px"><span style="color: #9FB0C0">Jitter <span style="color: #5C6F80">· w 0.08</span></span><span style="font-variant-numeric: tabular-nums; color: #2CE5A7">0.88</span></div><div style="height: 5px; border-radius: 3px; background: #1E2833"><div style="width: 88%; height: 100%; border-radius: 3px; background: #2CE5A7"></div></div></div>
+                </div>
+              </div>
+              <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 20px; flex: 1">
+                <p style="margin: 0 0 14px; font-weight: 600; font-size: 14px">Session</p>
+                <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px">
+                  <div style="display: flex; justify-content: space-between"><span style="color: #5C6F80">Node</span><span style="font-family: 'IBM Plex Mono', monospace">edge-03</span></div>
+                  <div style="display: flex; justify-content: space-between"><span style="color: #5C6F80">Protocol</span><span>WebRTC</span></div>
+                  <div style="display: flex; justify-content: space-between"><span style="color: #5C6F80">Resolution</span><span style="font-variant-numeric: tabular-nums">1280×720 · 28 fps</span></div>
+                  <div style="display: flex; justify-content: space-between"><span style="color: #5C6F80">Uptime</span><span style="font-variant-numeric: tabular-nums">33 m 41 s</span></div>
+                  <div style="display: flex; justify-content: space-between"><span style="color: #5C6F80">RTT</span><span style="font-variant-numeric: tabular-nums">84 ms</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= ANALYTICS ================= -->
+  <div data-screen-label="Analytics">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">04 · HISTORICAL ANALYTICS — 1280×800</p>
+    <div style="width: 1280px; height: 800px; border-radius: 16px; border: 1px solid #1E2833; overflow: hidden; background: #0A0E14; display: flex">
+      <div style="width: 60px; flex-shrink: 0; background: #0D1219; border-right: 1px solid #1E2833; display: flex; flex-direction: column; align-items: center; padding: 14px 0; gap: 6px">
+        <img src="../logo/pulse-mark.svg" alt="" style="width: 32px; height: 32px; border-radius: 8px; margin-bottom: 14px">
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12 h4 l2 -5 l4 10 l2 -5 h4"></path></svg></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; background: rgba(44,229,167,0.12); color: #2CE5A7; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19 V10 M10 19 V5 M16 19 v-7 M22 19 H2"></path></svg></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8 a6 6 0 0 1 12 0 c0 7 3 9 3 9 H3 c0 0 3 -2 3 -9"></path><path d="M10 21 a2 2 0 0 0 4 0"></path></svg></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="2" y="14" width="20" height="7" rx="2"></rect><rect x="2" y="3" width="20" height="7" rx="2"></rect><path d="M6 6.5 h0.01 M6 17.5 h0.01"></path></svg></div>
+        <div style="flex: 1"></div>
+        <div style="width: 32px; height: 32px; border-radius: 50%; background: #1E2833; color: #9FB0C0; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">AK</div>
+      </div>
+      <div style="flex: 1; display: flex; flex-direction: column; min-width: 0">
+        <div style="height: 56px; flex-shrink: 0; border-bottom: 1px solid #1E2833; display: flex; align-items: center; justify-content: space-between; padding: 0 24px">
+          <div style="display: flex; align-items: center; gap: 4px; border-bottom: none">
+            <h1 style="margin: 0 16px 0 0; font-size: 17px; font-weight: 600">Analytics</h1>
+            <span style="padding: 6px 12px; font-size: 13px; font-weight: 600; border-bottom: 2px solid #2CE5A7">Audience</span>
+            <span style="padding: 6px 12px; font-size: 13px; color: #9FB0C0; cursor: pointer">QoE</span>
+            <span style="padding: 6px 12px; font-size: 13px; color: #9FB0C0; cursor: pointer">Geo</span>
+            <span style="padding: 6px 12px; font-size: 13px; color: #9FB0C0; cursor: pointer">Devices</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px">
+            <div style="display: flex; background: #0D1219; border: 1px solid #1E2833; border-radius: 8px; padding: 3px; gap: 2px; font-size: 12px; font-weight: 500">
+              <span style="padding: 4px 11px; border-radius: 6px; color: #9FB0C0; cursor: pointer">7d</span>
+              <span style="padding: 4px 11px; border-radius: 6px; color: #9FB0C0; cursor: pointer">30d</span>
+              <span style="padding: 4px 11px; border-radius: 6px; background: #1E2833">13 mo</span>
+            </div>
+            <button style="height: 32px; padding: 0 14px; border-radius: 8px; border: 1px solid #2B3947; background: transparent; color: #E8EEF4; font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer">Export CSV</button>
+          </div>
+        </div>
+        <div style="flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: column; gap: 20px">
+          <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 20px">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 12px">
+              <div><p style="margin: 0 0 4px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80; letter-spacing: 0.08em">TOTAL WATCH TIME · 13 MONTHS</p><p style="margin: 0; font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em">1.84M <span style="font-size: 15px; font-weight: 500; color: #9FB0C0">hours</span></p></div>
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80; align-self: flex-start">query 145 ms · rollup_1d</span>
+            </div>
+            <svg width="100%" height="170" viewBox="0 0 1140 170" preserveAspectRatio="none">
+              <line x1="0" y1="42" x2="1140" y2="42" stroke="#161E27"></line><line x1="0" y1="85" x2="1140" y2="85" stroke="#161E27"></line><line x1="0" y1="127" x2="1140" y2="127" stroke="#161E27"></line>
+              <path d="M0 140 L88 132 L176 136 L264 118 L352 124 L440 100 L528 108 L616 84 L704 92 L792 62 L880 74 L968 46 L1056 56 L1140 38 V170 H0 Z" fill="#2CE5A7" fill-opacity="0.08"></path>
+              <polyline points="0,140 88,132 176,136 264,118 352,124 440,100 528,108 616,84 704,92 792,62 880,74 968,46 1056,56 1140,38" fill="none" stroke="#2CE5A7" stroke-width="2"></polyline>
+            </svg>
+            <div style="display: flex; justify-content: space-between; margin-top: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80"><span>JUL 25</span><span>SEP</span><span>NOV</span><span>JAN 26</span><span>MAR</span><span>MAY</span><span>JUL 26</span></div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; flex: 1">
+            <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 20px">
+              <p style="margin: 0 0 16px; font-weight: 600; font-size: 14px">Viewers by country</p>
+              <div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px">
+                <div><div style="display: flex; justify-content: space-between; margin-bottom: 5px"><span style="color: #9FB0C0">United States</span><span style="font-variant-numeric: tabular-nums">418k</span></div><div style="height: 6px; border-radius: 3px; background: #1E2833"><div style="width: 84%; height: 100%; border-radius: 3px; background: #2CE5A7"></div></div></div>
+                <div><div style="display: flex; justify-content: space-between; margin-bottom: 5px"><span style="color: #9FB0C0">Germany</span><span style="font-variant-numeric: tabular-nums">229k</span></div><div style="height: 6px; border-radius: 3px; background: #1E2833"><div style="width: 46%; height: 100%; border-radius: 3px; background: #58A6FF"></div></div></div>
+                <div><div style="display: flex; justify-content: space-between; margin-bottom: 5px"><span style="color: #9FB0C0">Türkiye</span><span style="font-variant-numeric: tabular-nums">183k</span></div><div style="height: 6px; border-radius: 3px; background: #1E2833"><div style="width: 37%; height: 100%; border-radius: 3px; background: #A78BFA"></div></div></div>
+                <div><div style="display: flex; justify-content: space-between; margin-bottom: 5px"><span style="color: #9FB0C0">Brazil</span><span style="font-variant-numeric: tabular-nums">112k</span></div><div style="height: 6px; border-radius: 3px; background: #1E2833"><div style="width: 22%; height: 100%; border-radius: 3px; background: #F06BB2"></div></div></div>
+                <div><div style="display: flex; justify-content: space-between; margin-bottom: 5px"><span style="color: #9FB0C0">India</span><span style="font-variant-numeric: tabular-nums">98k</span></div><div style="height: 6px; border-radius: 3px; background: #1E2833"><div style="width: 20%; height: 100%; border-radius: 3px; background: #38D6E0"></div></div></div>
+                <div><div style="display: flex; justify-content: space-between; margin-bottom: 5px"><span style="color: #9FB0C0">Other</span><span style="font-variant-numeric: tabular-nums">61k</span></div><div style="height: 6px; border-radius: 3px; background: #1E2833"><div style="width: 12%; height: 100%; border-radius: 3px; background: #7C93AD"></div></div></div>
+              </div>
+            </div>
+            <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 20px">
+              <p style="margin: 0 0 16px; font-weight: 600; font-size: 14px">Devices</p>
+              <div style="display: flex; align-items: center; gap: 24px">
+                <svg width="120" height="120" viewBox="0 0 120 120">
+                  <circle cx="60" cy="60" r="48" fill="none" stroke="#1E2833" stroke-width="16"></circle>
+                  <circle cx="60" cy="60" r="48" fill="none" stroke="#2CE5A7" stroke-width="16" stroke-dasharray="163 302" transform="rotate(-90 60 60)"></circle>
+                  <circle cx="60" cy="60" r="48" fill="none" stroke="#58A6FF" stroke-width="16" stroke-dasharray="90 302" stroke-dashoffset="-163" transform="rotate(-90 60 60)"></circle>
+                  <circle cx="60" cy="60" r="48" fill="none" stroke="#A78BFA" stroke-width="16" stroke-dasharray="33 302" stroke-dashoffset="-253" transform="rotate(-90 60 60)"></circle>
+                  <text x="60" y="58" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="20" font-weight="700" fill="#E8EEF4">54%</text>
+                  <text x="60" y="74" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#5C6F80">MOBILE</text>
+                </svg>
+                <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px">
+                  <span style="display: flex; align-items: center; gap: 8px; color: #9FB0C0"><span style="width: 9px; height: 9px; border-radius: 2px; background: #2CE5A7"></span>Mobile · 54%</span>
+                  <span style="display: flex; align-items: center; gap: 8px; color: #9FB0C0"><span style="width: 9px; height: 9px; border-radius: 2px; background: #58A6FF"></span>Desktop · 30%</span>
+                  <span style="display: flex; align-items: center; gap: 8px; color: #9FB0C0"><span style="width: 9px; height: 9px; border-radius: 2px; background: #A78BFA"></span>TV / STB · 11%</span>
+                  <span style="display: flex; align-items: center; gap: 8px; color: #9FB0C0"><span style="width: 9px; height: 9px; border-radius: 2px; background: #7C93AD"></span>Other · 5%</span>
+                </div>
+              </div>
+            </div>
+            <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 20px">
+              <p style="margin: 0 0 16px; font-weight: 600; font-size: 14px">Top streams · watch hours</p>
+              <div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px">
+                <div style="display: flex; justify-content: space-between"><span style="font-family: 'IBM Plex Mono', monospace">live/event-keynote</span><span style="font-variant-numeric: tabular-nums; color: #9FB0C0">214k h</span></div>
+                <div style="display: flex; justify-content: space-between"><span style="font-family: 'IBM Plex Mono', monospace">live/worship-main</span><span style="font-variant-numeric: tabular-nums; color: #9FB0C0">187k h</span></div>
+                <div style="display: flex; justify-content: space-between"><span style="font-family: 'IBM Plex Mono', monospace">live/lecture-cs101</span><span style="font-variant-numeric: tabular-nums; color: #9FB0C0">122k h</span></div>
+                <div style="display: flex; justify-content: space-between"><span style="font-family: 'IBM Plex Mono', monospace">live/gaming-arena-2</span><span style="font-variant-numeric: tabular-nums; color: #9FB0C0">96k h</span></div>
+                <div style="display: flex; justify-content: space-between"><span style="font-family: 'IBM Plex Mono', monospace">live/city-council</span><span style="font-variant-numeric: tabular-nums; color: #9FB0C0">71k h</span></div>
+                <a href="#" style="font-size: 12px; margin-top: 4px">All 1,204 streams →</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SETTINGS ================= -->
+  <div data-screen-label="Settings">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">05 · SETTINGS — SOURCES &amp; LICENSE — 1280×800</p>
+    <div style="width: 1280px; height: 800px; border-radius: 16px; border: 1px solid #1E2833; overflow: hidden; background: #0A0E14; display: flex">
+      <div style="width: 60px; flex-shrink: 0; background: #0D1219; border-right: 1px solid #1E2833; display: flex; flex-direction: column; align-items: center; padding: 14px 0; gap: 6px">
+        <img src="../logo/pulse-mark.svg" alt="" style="width: 32px; height: 32px; border-radius: 8px; margin-bottom: 14px">
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12 h4 l2 -5 l4 10 l2 -5 h4"></path></svg></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19 V10 M10 19 V5 M16 19 v-7 M22 19 H2"></path></svg></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8 a6 6 0 0 1 12 0 c0 7 3 9 3 9 H3 c0 0 3 -2 3 -9"></path><path d="M10 21 a2 2 0 0 0 4 0"></path></svg></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="2" y="14" width="20" height="7" rx="2"></rect><rect x="2" y="3" width="20" height="7" rx="2"></rect><path d="M6 6.5 h0.01 M6 17.5 h0.01"></path></svg></div>
+        <div style="flex: 1"></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; background: rgba(44,229,167,0.12); color: #2CE5A7; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2 v3 M12 19 v3 M2 12 h3 M19 12 h3 M4.9 4.9 l2.1 2.1 M17 17 l2.1 2.1 M19.1 4.9 L17 7 M7 17 l-2.1 2.1"></path></svg></div>
+        <div style="width: 32px; height: 32px; border-radius: 50%; background: #1E2833; color: #9FB0C0; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">AK</div>
+      </div>
+      <div style="width: 220px; flex-shrink: 0; border-right: 1px solid #1E2833; padding: 24px 12px; display: flex; flex-direction: column; gap: 2px">
+        <p style="margin: 0 12px 14px; font-size: 17px; font-weight: 600">Settings</p>
+        <span style="padding: 8px 12px; border-radius: 8px; background: rgba(44,229,167,0.1); color: #2CE5A7; font-size: 14px; font-weight: 500">AMS sources</span>
+        <span style="padding: 8px 12px; border-radius: 8px; color: #9FB0C0; font-size: 14px; cursor: pointer" style-hover="background: #131B24; color: #E8EEF4">Alert rules</span>
+        <span style="padding: 8px 12px; border-radius: 8px; color: #9FB0C0; font-size: 14px; cursor: pointer" style-hover="background: #131B24; color: #E8EEF4">Channels</span>
+        <span style="padding: 8px 12px; border-radius: 8px; color: #9FB0C0; font-size: 14px; cursor: pointer" style-hover="background: #131B24; color: #E8EEF4">Probes</span>
+        <span style="padding: 8px 12px; border-radius: 8px; color: #9FB0C0; font-size: 14px; cursor: pointer" style-hover="background: #131B24; color: #E8EEF4">Reports &amp; billing</span>
+        <span style="padding: 8px 12px; border-radius: 8px; color: #9FB0C0; font-size: 14px; cursor: pointer" style-hover="background: #131B24; color: #E8EEF4">Data &amp; privacy</span>
+        <span style="padding: 8px 12px; border-radius: 8px; color: #9FB0C0; font-size: 14px; cursor: pointer" style-hover="background: #131B24; color: #E8EEF4">License</span>
+        <span style="padding: 8px 12px; border-radius: 8px; color: #9FB0C0; font-size: 14px; cursor: pointer" style-hover="background: #131B24; color: #E8EEF4">Users &amp; tokens</span>
+      </div>
+      <div style="flex: 1; overflow: hidden; padding: 32px; display: flex; gap: 24px; min-width: 0">
+        <div style="flex: 1.4; display: flex; flex-direction: column; gap: 20px">
+          <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 24px">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px">
+              <p style="margin: 0; font-weight: 600; font-size: 15px">Production AMS</p>
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 99px; background: rgba(44,229,167,0.12); color: #2CE5A7; font-size: 12px; font-weight: 600"><span style="width: 7px; height: 7px; border-radius: 50%; background: #2CE5A7"></span>Connected</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 16px">
+              <div style="display: flex; flex-direction: column; gap: 6px">
+                <label style="font-size: 13px; font-weight: 500; color: #9FB0C0">REST URL</label>
+                <input value="https://ams-origin-01:5443" style="height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #2B3947; background: #0A0E14; color: #E8EEF4; font-family: 'IBM Plex Mono', monospace; font-size: 13px; outline: none">
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px">
+                <div style="display: flex; flex-direction: column; gap: 6px">
+                  <label style="font-size: 13px; font-weight: 500; color: #9FB0C0">Applications</label>
+                  <input value="live, vod" style="height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #2B3947; background: #0A0E14; color: #E8EEF4; font-family: 'IBM Plex Mono', monospace; font-size: 13px; outline: none">
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 6px">
+                  <label style="font-size: 13px; font-weight: 500; color: #9FB0C0">Poll interval</label>
+                  <select style="height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #2B3947; background: #0A0E14; color: #E8EEF4; font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; outline: none"><option>5 seconds (default)</option></select>
+                </div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 6px">
+                <label style="font-size: 13px; font-weight: 500; color: #9FB0C0">Webhook secret <span style="color: #5C6F80; font-weight: 400">· per-source, stored AES-256-GCM</span></label>
+                <input type="password" value="••••••••••••••••" style="height: 38px; padding: 0 12px; border-radius: 8px; border: 1px solid #2B3947; background: #0A0E14; color: #E8EEF4; font-family: 'IBM Plex Mono', monospace; font-size: 13px; outline: none">
+              </div>
+              <div style="display: flex; gap: 10px; align-items: center">
+                <button style="height: 36px; padding: 0 16px; border-radius: 8px; border: none; background: #2CE5A7; color: #0A0E14; font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer">Save changes</button>
+                <button style="height: 36px; padding: 0 16px; border-radius: 8px; border: 1px solid #2B3947; background: transparent; color: #E8EEF4; font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer">Test connection</button>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #2CE5A7">HTTP 200 · 42 ms</span>
+              </div>
+            </div>
+          </div>
+          <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 24px">
+            <p style="margin: 0 0 6px; font-weight: 600; font-size: 15px">Data &amp; privacy</p>
+            <p style="margin: 0 0 18px; font-size: 13px; color: #9FB0C0">All data stays on this deployment. There is no telemetry and no phone-home.</p>
+            <div style="display: flex; flex-direction: column; gap: 14px; font-size: 14px">
+              <label style="display: flex; align-items: center; gap: 12px; cursor: pointer"><span style="width: 36px; height: 20px; border-radius: 10px; background: #2CE5A7; position: relative; display: inline-block"><span style="position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; border-radius: 50%; background: #0A0E14"></span></span>Anonymize viewer IPs <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">geo degrades to country · GDPR/KVKK</span></label>
+              <label style="display: flex; align-items: center; gap: 12px; cursor: pointer; color: #9FB0C0"><span style="width: 36px; height: 20px; border-radius: 10px; background: #2B3947; position: relative; display: inline-block"><span style="position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #5C6F80"></span></span>S3 report export <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">Business+</span></label>
+            </div>
+          </div>
+        </div>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 20px">
+          <div style="background: #10161D; border: 1px solid #2CE5A7; border-radius: 12px; padding: 24px; position: relative; overflow: hidden">
+            <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: #2CE5A7"></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px">
+              <p style="margin: 0; font-weight: 600; font-size: 15px">License</p>
+              <span style="padding: 3px 12px; border-radius: 99px; background: rgba(44,229,167,0.12); color: #2CE5A7; font-size: 12px; font-weight: 700; letter-spacing: 0.04em">PRO</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px">
+              <div style="display: flex; justify-content: space-between"><span style="color: #5C6F80">Licensee</span><span>Beyond Kaira GmbH</span></div>
+              <div style="display: flex; justify-content: space-between"><span style="color: #5C6F80">Key</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px">plk_ed25519·9f3a…c41e</span></div>
+              <div style="display: flex; justify-content: space-between"><span style="color: #5C6F80">Valid until</span><span style="font-variant-numeric: tabular-nums">2027-07-01</span></div>
+              <div style="display: flex; justify-content: space-between"><span style="color: #5C6F80">Verification</span><span style="color: #2CE5A7">offline · ed25519 ✓</span></div>
+            </div>
+            <div style="margin-top: 18px; padding-top: 16px; border-top: 1px solid #1E2833; display: flex; flex-direction: column; gap: 8px; font-size: 13px">
+              <div style="display: flex; justify-content: space-between; color: #9FB0C0"><span>Beacon QoE SDK</span><span style="color: #2CE5A7">✓ included</span></div>
+              <div style="display: flex; justify-content: space-between; color: #9FB0C0"><span>Synthetic probes</span><span style="color: #2CE5A7">✓ included</span></div>
+              <div style="display: flex; justify-content: space-between; color: #9FB0C0"><span>Billing reports</span><span style="color: #5C6F80">Business</span></div>
+              <div style="display: flex; justify-content: space-between; color: #9FB0C0"><span>Anomaly detection</span><span style="color: #5C6F80">Enterprise</span></div>
+            </div>
+            <button style="margin-top: 18px; width: 100%; height: 36px; border-radius: 8px; border: 1px solid #2B3947; background: transparent; color: #E8EEF4; font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer">Upgrade to Business</button>
+          </div>
+          <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 24px">
+            <p style="margin: 0 0 14px; font-weight: 600; font-size: 15px">Deployment</p>
+            <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px">
+              <div style="display: flex; justify-content: space-between"><span style="color: #5C6F80">Version</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px">v0.2.0 · ga</span></div>
+              <div style="display: flex; justify-content: space-between"><span style="color: #5C6F80">Mode</span><span>Docker Compose · all-in-one</span></div>
+              <div style="display: flex; justify-content: space-between"><span style="color: #5C6F80">ClickHouse</span><span style="color: #2CE5A7">healthy · 610 MiB</span></div>
+              <div style="display: flex; justify-content: space-between"><span style="color: #5C6F80">Meta store</span><span>SQLite · encrypted</span></div>
+              <div style="display: flex; justify-content: space-between"><span style="color: #5C6F80">Retention</span><span style="font-variant-numeric: tabular-nums">90 d raw · 395 d rollups</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= USERS ================= -->
+  <div data-screen-label="Users and Tokens">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">06 · USER &amp; TOKEN MANAGEMENT — 1280×800</p>
+    <div style="width: 1280px; height: 800px; border-radius: 16px; border: 1px solid #1E2833; overflow: hidden; background: #0A0E14; display: flex">
+      <div style="width: 60px; flex-shrink: 0; background: #0D1219; border-right: 1px solid #1E2833; display: flex; flex-direction: column; align-items: center; padding: 14px 0; gap: 6px">
+        <img src="../logo/pulse-mark.svg" alt="" style="width: 32px; height: 32px; border-radius: 8px; margin-bottom: 14px">
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12 h4 l2 -5 l4 10 l2 -5 h4"></path></svg></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19 V10 M10 19 V5 M16 19 v-7 M22 19 H2"></path></svg></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8 a6 6 0 0 1 12 0 c0 7 3 9 3 9 H3 c0 0 3 -2 3 -9"></path><path d="M10 21 a2 2 0 0 0 4 0"></path></svg></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; color: #5C6F80; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="2" y="14" width="20" height="7" rx="2"></rect><rect x="2" y="3" width="20" height="7" rx="2"></rect><path d="M6 6.5 h0.01 M6 17.5 h0.01"></path></svg></div>
+        <div style="flex: 1"></div>
+        <div style="width: 38px; height: 38px; border-radius: 8px; background: rgba(44,229,167,0.12); color: #2CE5A7; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2 v3 M12 19 v3 M2 12 h3 M19 12 h3 M4.9 4.9 l2.1 2.1 M17 17 l2.1 2.1 M19.1 4.9 L17 7 M7 17 l-2.1 2.1"></path></svg></div>
+        <div style="width: 32px; height: 32px; border-radius: 50%; background: #1E2833; color: #9FB0C0; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">AK</div>
+      </div>
+      <div style="flex: 1; display: flex; flex-direction: column; min-width: 0">
+        <div style="height: 56px; flex-shrink: 0; border-bottom: 1px solid #1E2833; display: flex; align-items: center; justify-content: space-between; padding: 0 24px">
+          <h1 style="margin: 0; font-size: 17px; font-weight: 600">Users &amp; tokens</h1>
+          <button style="height: 32px; padding: 0 14px; border-radius: 8px; border: none; background: #2CE5A7; color: #0A0E14; font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer">Invite user</button>
+        </div>
+        <div style="flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: column; gap: 20px">
+          <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; overflow: hidden">
+            <p style="margin: 0; padding: 14px 20px; border-bottom: 1px solid #1E2833; font-weight: 600; font-size: 14px">Users <span style="color: #5C6F80; font-weight: 400">· 4</span></p>
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px">
+              <thead><tr style="border-bottom: 1px solid #1E2833"><th style="text-align: left; padding: 9px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; color: #5C6F80; letter-spacing: 0.08em">USER</th><th style="text-align: left; padding: 9px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; color: #5C6F80; letter-spacing: 0.08em">ROLE</th><th style="text-align: left; padding: 9px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; color: #5C6F80; letter-spacing: 0.08em">LAST ACTIVE</th><th style="text-align: right; padding: 9px 20px"></th></tr></thead>
+              <tbody>
+                <tr style="border-bottom: 1px solid #131B24"><td style="padding: 0 20px; height: 44px"><span style="display: inline-flex; align-items: center; gap: 10px"><span style="width: 28px; height: 28px; border-radius: 50%; background: #1E2833; color: #9FB0C0; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center">AK</span><span>Aytek K. <span style="color: #5C6F80">· ops@beyondkaira.com</span></span></span></td><td style="padding: 0 20px"><span style="padding: 2px 10px; border-radius: 99px; background: rgba(44,229,167,0.12); color: #2CE5A7; font-size: 11px; font-weight: 600">ADMIN</span></td><td style="padding: 0 20px; color: #9FB0C0">2 min ago</td><td style="padding: 0 20px; text-align: right; color: #5C6F80; cursor: pointer">•••</td></tr>
+                <tr style="border-bottom: 1px solid #131B24"><td style="padding: 0 20px; height: 44px"><span style="display: inline-flex; align-items: center; gap: 10px"><span style="width: 28px; height: 28px; border-radius: 50%; background: #1E2833; color: #9FB0C0; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center">MS</span><span>Mira S. <span style="color: #5C6F80">· noc@beyondkaira.com</span></span></span></td><td style="padding: 0 20px"><span style="padding: 2px 10px; border-radius: 99px; background: rgba(88,166,255,0.12); color: #58A6FF; font-size: 11px; font-weight: 600">OPERATOR</span></td><td style="padding: 0 20px; color: #9FB0C0">1 h ago</td><td style="padding: 0 20px; text-align: right; color: #5C6F80; cursor: pointer">•••</td></tr>
+                <tr style="border-bottom: 1px solid #131B24"><td style="padding: 0 20px; height: 44px"><span style="display: inline-flex; align-items: center; gap: 10px"><span style="width: 28px; height: 28px; border-radius: 50%; background: #1E2833; color: #9FB0C0; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center">JT</span><span>Jonas T. <span style="color: #5C6F80">· jonas@client-agency.io</span></span></span></td><td style="padding: 0 20px"><span style="padding: 2px 10px; border-radius: 99px; background: rgba(167,139,250,0.12); color: #A78BFA; font-size: 11px; font-weight: 600">VIEWER</span></td><td style="padding: 0 20px; color: #9FB0C0">yesterday</td><td style="padding: 0 20px; text-align: right; color: #5C6F80; cursor: pointer">•••</td></tr>
+                <tr><td style="padding: 0 20px; height: 44px"><span style="display: inline-flex; align-items: center; gap: 10px"><span style="width: 28px; height: 28px; border-radius: 50%; background: #1E2833; color: #9FB0C0; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center">RB</span><span>Rana B. <span style="color: #5C6F80">· billing@beyondkaira.com</span></span></span></td><td style="padding: 0 20px"><span style="padding: 2px 10px; border-radius: 99px; background: rgba(167,139,250,0.12); color: #A78BFA; font-size: 11px; font-weight: 600">VIEWER</span></td><td style="padding: 0 20px; color: #9FB0C0">3 d ago</td><td style="padding: 0 20px; text-align: right; color: #5C6F80; cursor: pointer">•••</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; overflow: hidden; flex: 1">
+            <div style="padding: 14px 20px; border-bottom: 1px solid #1E2833; display: flex; justify-content: space-between; align-items: center">
+              <p style="margin: 0; font-weight: 600; font-size: 14px">API &amp; ingest tokens</p>
+              <button style="height: 30px; padding: 0 12px; border-radius: 6px; border: 1px solid #2B3947; background: transparent; color: #E8EEF4; font-family: 'IBM Plex Sans', sans-serif; font-size: 12px; font-weight: 500; cursor: pointer">Create token</button>
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px">
+              <thead><tr style="border-bottom: 1px solid #1E2833"><th style="text-align: left; padding: 9px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; color: #5C6F80; letter-spacing: 0.08em">TOKEN</th><th style="text-align: left; padding: 9px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; color: #5C6F80; letter-spacing: 0.08em">KIND</th><th style="text-align: left; padding: 9px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; color: #5C6F80; letter-spacing: 0.08em">SCOPE</th><th style="text-align: left; padding: 9px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; color: #5C6F80; letter-spacing: 0.08em">LAST USED</th><th style="text-align: right; padding: 9px 20px"></th></tr></thead>
+              <tbody>
+                <tr style="border-bottom: 1px solid #131B24"><td style="padding: 0 20px; height: 40px; font-family: 'IBM Plex Mono', monospace; font-size: 12px">plt_9f3a1c…&nbsp;<span style="color: #5C6F80">grafana-scraper</span></td><td style="padding: 0 20px"><span style="padding: 2px 9px; border-radius: 99px; background: #1E2833; color: #9FB0C0; font-size: 11px; font-weight: 600">api</span></td><td style="padding: 0 20px; color: #9FB0C0">/metrics read</td><td style="padding: 0 20px; color: #9FB0C0">14 s ago</td><td style="padding: 0 20px; text-align: right"><span style="font-size: 12px; color: #FF5C68; cursor: pointer">Revoke</span></td></tr>
+                <tr style="border-bottom: 1px solid #131B24"><td style="padding: 0 20px; height: 40px; font-family: 'IBM Plex Mono', monospace; font-size: 12px">pli_884be2…&nbsp;<span style="color: #5C6F80">player-beacon-prod</span></td><td style="padding: 0 20px"><span style="padding: 2px 9px; border-radius: 99px; background: rgba(44,229,167,0.12); color: #2CE5A7; font-size: 11px; font-weight: 600">ingest</span></td><td style="padding: 0 20px; color: #9FB0C0">beacon only · rate-limited</td><td style="padding: 0 20px; color: #9FB0C0">now</td><td style="padding: 0 20px; text-align: right"><span style="font-size: 12px; color: #FF5C68; cursor: pointer">Revoke</span></td></tr>
+                <tr><td style="padding: 0 20px; height: 40px; font-family: 'IBM Plex Mono', monospace; font-size: 12px">plt_02dd71…&nbsp;<span style="color: #5C6F80">ci-budget-tests</span></td><td style="padding: 0 20px"><span style="padding: 2px 9px; border-radius: 99px; background: #1E2833; color: #9FB0C0; font-size: 11px; font-weight: 600">api</span></td><td style="padding: 0 20px; color: #9FB0C0">read-only</td><td style="padding: 0 20px; color: #9FB0C0">2 d ago</td><td style="padding: 0 20px; text-align: right"><span style="font-size: 12px; color: #FF5C68; cursor: pointer">Revoke</span></td></tr>
+              </tbody>
+            </table>
+            <div style="margin: 16px 20px; padding: 12px 16px; border-radius: 10px; background: rgba(44,229,167,0.06); border: 1px solid rgba(44,229,167,0.25); display: flex; align-items: center; gap: 12px">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: #2CE5A7; flex-shrink: 0"></span>
+              <p style="margin: 0; font-size: 12px; line-height: 1.6; color: #9FB0C0">Tokens are shown once at creation and stored hashed (HMAC-SHA256). Ingest tokens are rejected on admin routes — <span style="font-family: 'IBM Plex Mono', monospace; color: #E8EEF4">403 WRONG_TOKEN_KIND</span>.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= STATES ================= -->
+  <div data-screen-label="Error and Empty States">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">07 · ERROR, EMPTY &amp; GATED STATES</p>
+    <div style="display: flex; gap: 32px">
+      <div style="width: 500px; height: 420px; border-radius: 16px; border: 1px solid #1E2833; background: #0A0E14; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 40px; box-sizing: border-box">
+        <svg width="72" height="44" viewBox="0 0 72 44" fill="none"><path d="M2 22 H20 L26 8 L36 36 L42 22 H50" stroke="#FF5C68" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path><path d="M54 22 H70" stroke="#3A4A5A" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 7"></path></svg>
+        <p style="margin: 0; font-size: 18px; font-weight: 600">Can't reach ClickHouse</p>
+        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #9FB0C0; text-align: center; max-width: 340px">Live data keeps flowing from in-memory aggregates. Historical queries are paused until the store reconnects.</p>
+        <p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80">/healthz → 503 · clickhouse: connection refused</p>
+        <div style="display: flex; gap: 10px">
+          <button style="height: 34px; padding: 0 16px; border-radius: 8px; border: none; background: #2CE5A7; color: #0A0E14; font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer">Retry now</button>
+          <button style="height: 34px; padding: 0 16px; border-radius: 8px; border: 1px solid #2B3947; background: transparent; color: #E8EEF4; font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer">View runbook</button>
+        </div>
+      </div>
+      <div style="width: 500px; height: 420px; border-radius: 16px; border: 1px solid #1E2833; background: #0A0E14; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 40px; box-sizing: border-box">
+        <svg width="72" height="44" viewBox="0 0 72 44" fill="none"><path d="M2 22 H70" stroke="#3A4A5A" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 8"></path><circle cx="36" cy="22" r="5" stroke="#2CE5A7" stroke-width="2.5"></circle></svg>
+        <p style="margin: 0; font-size: 18px; font-weight: 600">No streams yet</p>
+        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #9FB0C0; text-align: center; max-width: 340px">Pulse is connected and polling every 5 s. The moment anything publishes to AMS, it appears here — within 10 seconds.</p>
+        <div style="padding: 10px 16px; border-radius: 8px; background: #10161D; border: 1px solid #1E2833; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9FB0C0">rtmp://ams-origin-01/live/<span style="color: #2CE5A7">your-stream</span></div>
+        <button style="height: 34px; padding: 0 16px; border-radius: 8px; border: 1px solid #2B3947; background: transparent; color: #E8EEF4; font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer">Read the publish guide</button>
+      </div>
+      <div style="width: 500px; height: 420px; border-radius: 16px; border: 1px solid #1E2833; background: #0A0E14; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 40px; box-sizing: border-box">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#8296A8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"></rect><path d="M8 11 V7 a4 4 0 0 1 8 0 v4"></path></svg>
+        <p style="margin: 0; font-size: 18px; font-weight: 600">Anomaly detection is an Enterprise feature</p>
+        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #9FB0C0; text-align: center; max-width: 360px">Welford baselines flag σ-deviations in viewers, CPU and memory with &lt;1 false alarm per node-week. Your data is already being collected — unlocking is instant.</p>
+        <p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80">403 LICENSE_REQUIRED · current tier: pro</p>
+        <button style="height: 34px; padding: 0 16px; border-radius: 8px; border: none; background: #2CE5A7; color: #0A0E14; font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer">Compare tiers</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MOBILE ================= -->
+  <div data-screen-label="Mobile">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">08 · MOBILE — RESPONSIVE LAYOUTS — 390×780</p>
+    <div style="display: flex; gap: 32px">
+      <div style="width: 390px; height: 780px; border-radius: 28px; border: 1px solid #1E2833; overflow: hidden; background: #0A0E14; display: flex; flex-direction: column">
+        <div style="height: 52px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #1E2833">
+          <div style="display: flex; align-items: center; gap: 10px"><img src="../logo/pulse-mark.svg" alt="" style="width: 26px; height: 26px; border-radius: 7px"><span style="font-weight: 600; font-size: 15px">Overview</span></div>
+          <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 99px; background: rgba(44,229,167,0.1); color: #2CE5A7; font-size: 11px; font-weight: 600"><span style="width: 6px; height: 6px; border-radius: 50%; background: #2CE5A7"></span>Live</span>
+        </div>
+        <div style="flex: 1; overflow: hidden; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+            <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 16px"><p style="margin: 0 0 6px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80">VIEWERS</p><p style="margin: 0; font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1">12,847</p></div>
+            <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 16px"><p style="margin: 0 0 6px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80">STREAMS</p><p style="margin: 0; font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1">342</p></div>
+          </div>
+          <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 16px">
+            <p style="margin: 0 0 10px; font-weight: 600; font-size: 13px">Viewers — last hour</p>
+            <svg width="100%" height="72" viewBox="0 0 330 72" preserveAspectRatio="none">
+              <polyline points="0,58 25,54 50,56 75,46 100,50 125,38 150,42 175,28 200,33 225,20 250,26 275,14 300,19 330,10" fill="none" stroke="#2CE5A7" stroke-width="2"></polyline>
+              <circle cx="330" cy="10" r="3.5" fill="#2CE5A7"></circle>
+            </svg>
+          </div>
+          <div style="display: flex; gap: 12px; padding: 12px 14px; border-radius: 12px; background: #0D1219; border: 1px solid #1E2833; border-left: 3px solid #FF5C68">
+            <div style="flex: 1"><p style="margin: 0; font-size: 13px; font-weight: 600">node_down · edge-05</p><p style="margin: 2px 0 0; font-size: 11px; color: #9FB0C0">firing 2 m 14 s</p></div>
+            <span style="font-size: 12px; color: #2CE5A7; font-weight: 600; align-self: center">View</span>
+          </div>
+          <p style="margin: 4px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80; letter-spacing: 0.08em">LIVE STREAMS</p>
+          <div style="display: flex; flex-direction: column; gap: 8px">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: 12px; background: #10161D; border: 1px solid #1E2833; min-height: 44px; box-sizing: border-box"><span style="width: 7px; height: 7px; border-radius: 50%; background: #2CE5A7; flex-shrink: 0"></span><div style="flex: 1; min-width: 0"><p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px">live/event-keynote</p></div><span style="font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 600">6,110</span></div>
+            <div style="display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: 12px; background: #10161D; border: 1px solid #1E2833; min-height: 44px; box-sizing: border-box"><span style="width: 7px; height: 7px; border-radius: 50%; background: #2CE5A7; flex-shrink: 0"></span><div style="flex: 1; min-width: 0"><p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px">live/worship-main</p></div><span style="font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 600">3,204</span></div>
+            <div style="display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: 12px; background: #10161D; border: 1px solid #1E2833; min-height: 44px; box-sizing: border-box"><span style="width: 8px; height: 8px; background: #FFB224; transform: rotate(45deg); flex-shrink: 0"></span><div style="flex: 1; min-width: 0"><p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px">live/edge-03-cam2</p></div><span style="font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 600; color: #FFB224">922</span></div>
+          </div>
+        </div>
+        <div style="height: 64px; flex-shrink: 0; border-top: 1px solid #1E2833; background: #0D1219; display: flex; align-items: stretch">
+          <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #2CE5A7"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg><span style="font-size: 10px; font-weight: 600">Overview</span></div>
+          <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #5C6F80"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12 h4 l2 -5 l4 10 l2 -5 h4"></path></svg><span style="font-size: 10px; font-weight: 500">Streams</span></div>
+          <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #5C6F80; position: relative"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8 a6 6 0 0 1 12 0 c0 7 3 9 3 9 H3 c0 0 3 -2 3 -9"></path><path d="M10 21 a2 2 0 0 0 4 0"></path></svg><span style="font-size: 10px; font-weight: 500">Alerts</span><span style="position: absolute; top: 10px; right: 34%; width: 7px; height: 7px; border-radius: 50%; background: #FF5C68"></span></div>
+          <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #5C6F80"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2 v3 M12 19 v3 M2 12 h3 M19 12 h3 M4.9 4.9 l2.1 2.1 M17 17 l2.1 2.1 M19.1 4.9 L17 7 M7 17 l-2.1 2.1"></path></svg><span style="font-size: 10px; font-weight: 500">Settings</span></div>
+        </div>
+      </div>
+      <div style="width: 390px; height: 780px; border-radius: 28px; border: 1px solid #1E2833; overflow: hidden; background: #0A0E14; display: flex; flex-direction: column">
+        <div style="height: 52px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 20px; border-bottom: 1px solid #1E2833">
+          <span style="color: #9FB0C0; font-size: 18px">‹</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px">live/edge-03-cam2</span>
+          <span style="display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 99px; background: rgba(255,178,36,0.12); color: #FFB224; font-size: 11px; font-weight: 600; margin-left: auto"><span style="width: 6px; height: 6px; background: #FFB224; display: inline-block; transform: rotate(45deg)"></span>Degraded</span>
+        </div>
+        <div style="flex: 1; overflow: hidden; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+            <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 16px"><p style="margin: 0 0 6px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80">HEALTH</p><p style="margin: 0; font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; color: #FFB224">64<span style="font-size: 13px; color: #9FB0C0"> /100</span></p></div>
+            <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 16px"><p style="margin: 0 0 6px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80">BITRATE</p><p style="margin: 0; font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; color: #FFB224">980<span style="font-size: 13px; color: #9FB0C0"> kbps</span></p></div>
+          </div>
+          <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 16px">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px"><p style="margin: 0; font-weight: 600; font-size: 13px">Ingest — 30 min</p><span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #FFB224">drop 09:38</span></div>
+            <svg width="100%" height="80" viewBox="0 0 330 80" preserveAspectRatio="none">
+              <line x1="0" y1="40" x2="330" y2="40" stroke="#FFB224" stroke-dasharray="3 4" stroke-opacity="0.5"></line>
+              <polyline points="0,18 40,16 80,19 120,15 160,18 200,17 210,50 240,56 270,52 300,57 330,55" fill="none" stroke="#2CE5A7" stroke-width="2"></polyline>
+              <circle cx="330" cy="55" r="3.5" fill="#FFB224"></circle>
+            </svg>
+          </div>
+          <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 16px">
+            <p style="margin: 0 0 12px; font-weight: 600; font-size: 13px">Health components</p>
+            <div style="display: flex; flex-direction: column; gap: 10px; font-size: 12px">
+              <div><div style="display: flex; justify-content: space-between; margin-bottom: 4px"><span style="color: #9FB0C0">Bitrate</span><span style="color: #FFB224; font-variant-numeric: tabular-nums">0.49</span></div><div style="height: 4px; border-radius: 2px; background: #1E2833"><div style="width: 49%; height: 100%; border-radius: 2px; background: #FFB224"></div></div></div>
+              <div><div style="display: flex; justify-content: space-between; margin-bottom: 4px"><span style="color: #9FB0C0">FPS</span><span style="color: #2CE5A7; font-variant-numeric: tabular-nums">0.93</span></div><div style="height: 4px; border-radius: 2px; background: #1E2833"><div style="width: 93%; height: 100%; border-radius: 2px; background: #2CE5A7"></div></div></div>
+              <div><div style="display: flex; justify-content: space-between; margin-bottom: 4px"><span style="color: #9FB0C0">Keyframe</span><span style="color: #2CE5A7; font-variant-numeric: tabular-nums">1.00</span></div><div style="height: 4px; border-radius: 2px; background: #1E2833"><div style="width: 100%; height: 100%; border-radius: 2px; background: #2CE5A7"></div></div></div>
+              <div><div style="display: flex; justify-content: space-between; margin-bottom: 4px"><span style="color: #9FB0C0">Loss</span><span style="color: #2CE5A7; font-variant-numeric: tabular-nums">0.69</span></div><div style="height: 4px; border-radius: 2px; background: #1E2833"><div style="width: 69%; height: 100%; border-radius: 2px; background: #2CE5A7"></div></div></div>
+            </div>
+          </div>
+          <button style="height: 44px; border-radius: 10px; border: none; background: #2CE5A7; color: #0A0E14; font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer">Acknowledge alert</button>
+          <button style="height: 44px; border-radius: 10px; border: 1px solid #2B3947; background: transparent; color: #E8EEF4; font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer">Mute for 30 min</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</x-dc>
+</body>
+</html>

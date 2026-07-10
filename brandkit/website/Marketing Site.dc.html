@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>Pulse — Real-time analytics for Ant Media Server</title>
+  <link rel="icon" href="../logo/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; background: #0A0E14; font-family: 'IBM Plex Sans', 'Helvetica Neue', sans-serif; color: #E8EEF4; }
+    a { color: #2CE5A7; text-decoration: none; }
+    a:hover { color: #4FEDB9; }
+    ::selection { background: #2CE5A7; color: #0A0E14; }
+  </style>
+</helmet>
+
+<!-- NAV -->
+<nav style="position: sticky; top: 0; z-index: 50; background: rgba(10,14,20,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid #1E2833" data-screen-label="Nav">
+  <div style="max-width: 1160px; margin: 0 auto; padding: 0 32px; height: 64px; display: flex; align-items: center; justify-content: space-between">
+    <div style="display: flex; align-items: center; gap: 11px">
+      <img src="../logo/pulse-mark.svg" alt="Pulse" style="width: 32px; height: 32px; border-radius: 8px">
+      <span style="font-weight: 600; font-size: 17px; letter-spacing: -0.01em">pulse</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80; padding: 2px 8px; border: 1px solid #1E2833; border-radius: 99px; margin-left: 4px">for Ant Media Server</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 28px; font-size: 14px; font-weight: 500">
+      <a href="#features" style="color: #9FB0C0">Features</a>
+      <a href="#how" style="color: #9FB0C0">How it works</a>
+      <a href="#ams" style="color: #9FB0C0">AMS integration</a>
+      <a href="#pricing" style="color: #9FB0C0">Pricing</a>
+      <a href="#faq" style="color: #9FB0C0">FAQ</a>
+      <a href="#contact" style="display: inline-flex; align-items: center; height: 36px; padding: 0 16px; border-radius: 8px; background: #2CE5A7; color: #0A0E14; font-weight: 600" style-hover="background: #4FEDB9">Deploy free</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<header style="border-bottom: 1px solid #1E2833; background: radial-gradient(80% 60% at 50% 0%, #10161D 0%, #0A0E14 100%)" data-screen-label="Hero">
+  <div style="max-width: 1160px; margin: 0 auto; padding: 104px 32px 96px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 28px">
+    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #2CE5A7; letter-spacing: 0.12em; border: 1px solid rgba(44,229,167,0.3); padding: 6px 14px; border-radius: 99px">SELF-HOSTED · READ-ONLY · v0.2.0 GA</span>
+    <h1 style="margin: 0; font-size: 64px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.05; max-width: 880px">Know your stream is OK.</h1>
+    <p style="margin: 0; font-size: 19px; line-height: 1.6; color: #9FB0C0; max-width: 660px">Pulse answers <em style="color: #E8EEF4">who is watching, where, on what device, with what quality — and is anything broken right now</em> — for every Ant Media Server deployment. On your infrastructure. Never ours.</p>
+    <div style="display: flex; gap: 14px; margin-top: 4px">
+      <a href="#pricing" style="display: inline-flex; align-items: center; height: 46px; padding: 0 24px; border-radius: 8px; background: #2CE5A7; color: #0A0E14; font-weight: 600; font-size: 15px" style-hover="background: #4FEDB9">Deploy free in 10 minutes</a>
+      <a href="#how" style="display: inline-flex; align-items: center; height: 46px; padding: 0 24px; border-radius: 8px; border: 1px solid #2B3947; color: #E8EEF4; font-weight: 500; font-size: 15px" style-hover="background: #10161D; color: #E8EEF4">See how it works</a>
+    </div>
+    <div style="margin-top: 28px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; background: #0D1219; border: 1px solid #1E2833; border-radius: 8px; padding: 12px 20px">
+      <span style="color: #2CE5A7">$</span> docker compose up -d <span style="color: #3A4A5A"># pulse + clickhouse · single Go binary · no AMS changes</span>
+    </div>
+    <!-- product shot -->
+    <div style="margin-top: 40px; width: 100%; max-width: 960px; border-radius: 16px; border: 1px solid #1E2833; background: #0D1219; overflow: hidden; box-shadow: 0 40px 120px rgba(0,0,0,0.5)">
+      <div style="height: 40px; border-bottom: 1px solid #1E2833; display: flex; align-items: center; justify-content: space-between; padding: 0 18px">
+        <div style="display: flex; align-items: center; gap: 9px"><img src="../logo/pulse-mark.svg" alt="" style="width: 20px; height: 20px; border-radius: 5px"><span style="font-size: 12px; font-weight: 600">Overview</span></div>
+        <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: #2CE5A7"><span style="width: 6px; height: 6px; border-radius: 50%; background: #2CE5A7"></span>Live · WS connected</span>
+      </div>
+      <div style="padding: 20px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; text-align: left">
+        <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 10px; padding: 16px"><p style="margin: 0 0 6px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80">CONCURRENT VIEWERS</p><p style="margin: 0; font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1">12,847</p></div>
+        <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 10px; padding: 16px"><p style="margin: 0 0 6px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80">ACTIVE STREAMS</p><p style="margin: 0; font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1">342</p></div>
+        <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 10px; padding: 16px"><p style="margin: 0 0 6px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80">STARTUP P50</p><p style="margin: 0; font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1">250<span style="font-size: 14px; color: #9FB0C0"> ms</span></p></div>
+        <div style="grid-column: 1 / -1; background: #10161D; border: 1px solid #1E2833; border-radius: 10px; padding: 16px">
+          <svg width="100%" height="90" viewBox="0 0 880 90" preserveAspectRatio="none">
+            <line x1="0" y1="30" x2="880" y2="30" stroke="#161E27"></line><line x1="0" y1="60" x2="880" y2="60" stroke="#161E27"></line>
+            <polyline points="0,72 63,66 126,69 189,58 252,62 315,47 378,52 441,36 504,42 567,26 630,32 693,18 756,24 819,14 880,18" fill="none" stroke="#2CE5A7" stroke-width="2"></polyline>
+            <polyline points="0,83 63,80 126,82 189,76 252,78 315,71 378,74 441,65 504,68 567,59 630,63 693,54 756,57 819,50 880,53" fill="none" stroke="#58A6FF" stroke-width="2"></polyline>
+            <circle cx="880" cy="18" r="4" fill="#2CE5A7"></circle>
+          </svg>
+        </div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 40px; margin-top: 32px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; flex-wrap: wrap; justify-content: center">
+      <span>≤10 S STREAM VISIBILITY</span><span>≤5 S ALERT DELIVERY</span><span>3.5 KB BEACON SDK</span><span>13-MONTH ANALYTICS &lt;3 S</span><span>NO PHONE-HOME</span>
+    </div>
+  </div>
+</header>
+
+<!-- PROBLEM / SOLUTION -->
+<section style="border-bottom: 1px solid #1E2833" data-screen-label="Solution">
+  <div style="max-width: 1160px; margin: 0 auto; padding: 96px 32px">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #2CE5A7; letter-spacing: 0.12em">THE GAP</p>
+    <h2 style="margin: 0 0 48px; font-size: 40px; font-weight: 700; letter-spacing: -0.02em; max-width: 720px">AMS ships no analytics. Operators fly blind or build Grafana stacks that measure servers, not viewers.</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px">
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 32px">
+        <p style="margin: 0 0 10px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #FF5C68; letter-spacing: 0.1em">WITHOUT PULSE</p>
+        <ul style="margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.9; color: #9FB0C0">
+          <li>Weeks wiring Prometheus + Grafana by hand</li>
+          <li>Server CPU graphs, but no idea what viewers experience</li>
+          <li>Customers report outages before you see them</li>
+          <li>Billing reconciliation by spreadsheet</li>
+        </ul>
+      </div>
+      <div style="background: #10161D; border: 1px solid rgba(44,229,167,0.35); border-radius: 12px; padding: 32px; position: relative; overflow: hidden">
+        <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: #2CE5A7"></div>
+        <p style="margin: 0 0 10px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #2CE5A7; letter-spacing: 0.1em">WITH PULSE</p>
+        <ul style="margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.9; color: #E8EEF4">
+          <li>Turnkey: install → first dashboard in ≤10 minutes</li>
+          <li>Viewer-perceived QoE: startup time, rebuffering, bitrate</li>
+          <li>Alerts reach Slack/PagerDuty within seconds of degradation</li>
+          <li>Per-tenant usage reports, ±1% billing reconciliation</li>
+        </ul>
+      </div>
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 32px">
+        <p style="margin: 0 0 10px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9FB0C0; letter-spacing: 0.1em">WHY IT'S SAFE</p>
+        <ul style="margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.9; color: #9FB0C0">
+          <li><strong style="color: #E8EEF4">Read-only:</strong> polls AMS REST, never writes</li>
+          <li><strong style="color: #E8EEF4">Upgrade-tolerant:</strong> survives AMS version changes</li>
+          <li><strong style="color: #E8EEF4">Sovereign:</strong> data never leaves your servers</li>
+          <li><strong style="color: #E8EEF4">Cheap:</strong> runs in a 2-vCPU sidecar budget</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features" style="border-bottom: 1px solid #1E2833" data-screen-label="Features">
+  <div style="max-width: 1160px; margin: 0 auto; padding: 96px 32px">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #2CE5A7; letter-spacing: 0.12em">FEATURES — ALL TEN, SHIPPED</p>
+    <h2 style="margin: 0 0 48px; font-size: 40px; font-weight: 700; letter-spacing: -0.02em">One binary. The whole observability story.</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px">
+      <sc-for list="{{ features }}" as="f" hint-placeholder-count="6">
+        <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 26px; display: flex; flex-direction: column; gap: 10px" style-hover="border-color: #2B3947">
+          <div style="display: flex; justify-content: space-between; align-items: center">
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #2CE5A7">{{ f.id }}</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80; border: 1px solid #1E2833; border-radius: 99px; padding: 2px 8px">{{ f.tier }}</span>
+          </div>
+          <p style="margin: 0; font-weight: 600; font-size: 16px">{{ f.name }}</p>
+          <p style="margin: 0; font-size: 13px; line-height: 1.65; color: #9FB0C0">{{ f.desc }}</p>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how" style="border-bottom: 1px solid #1E2833; background: #0D1219" data-screen-label="How it works">
+  <div style="max-width: 1160px; margin: 0 auto; padding: 96px 32px">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #2CE5A7; letter-spacing: 0.12em">HOW IT WORKS</p>
+    <h2 style="margin: 0 0 48px; font-size: 40px; font-weight: 700; letter-spacing: -0.02em">A read-only sidecar, next to AMS</h2>
+    <div style="border: 1px solid #1E2833; border-radius: 16px; background: #0A0E14; padding: 48px; margin-bottom: 40px">
+      <svg width="100%" height="180" viewBox="0 0 1040 180" fill="none">
+        <rect x="20" y="55" width="180" height="70" rx="10" stroke="#3A4A5A" stroke-width="1.5"></rect>
+        <text x="110" y="86" text-anchor="middle" font-family="IBM Plex Sans, sans-serif" font-size="14" font-weight="600" fill="#E8EEF4">Ant Media Server</text>
+        <text x="110" y="106" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#5C6F80">unmodified</text>
+        <line x1="200" y1="75" x2="330" y2="75" stroke="#3A4A5A" stroke-width="1.5" stroke-dasharray="4 5"></line>
+        <text x="265" y="66" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#8296A8">REST poll ≤5 s</text>
+        <line x1="200" y1="105" x2="330" y2="105" stroke="#3A4A5A" stroke-width="1.5" stroke-dasharray="4 5"></line>
+        <text x="265" y="122" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#8296A8">webhooks · kafka</text>
+        <rect x="330" y="30" width="240" height="120" rx="12" stroke="#2CE5A7" stroke-width="1.5"></rect>
+        <path d="M362 90 h36 l14 -30 l24 58 l14 -28 h40" stroke="#2CE5A7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
+        <text x="450" y="136" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#2CE5A7">pulse · single Go binary</text>
+        <line x1="570" y1="60" x2="700" y2="60" stroke="#3A4A5A" stroke-width="1.5" stroke-dasharray="4 5"></line>
+        <rect x="700" y="35" width="150" height="50" rx="10" stroke="#3A4A5A" stroke-width="1.5"></rect>
+        <text x="775" y="64" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#8296A8">ClickHouse</text>
+        <line x1="570" y1="120" x2="700" y2="120" stroke="#3A4A5A" stroke-width="1.5" stroke-dasharray="4 5"></line>
+        <rect x="700" y="95" width="150" height="50" rx="10" stroke="#3A4A5A" stroke-width="1.5"></rect>
+        <text x="775" y="124" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#8296A8">Slack · PagerDuty</text>
+        <line x1="850" y1="60" x2="920" y2="60" stroke="#3A4A5A" stroke-width="1.5" stroke-dasharray="4 5"></line>
+        <rect x="920" y="35" width="100" height="50" rx="10" stroke="#3A4A5A" stroke-width="1.5"></rect>
+        <text x="970" y="64" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#8296A8">Dashboard</text>
+        <line x1="110" y1="125" x2="110" y2="160" stroke="#3A4A5A" stroke-width="1.5" stroke-dasharray="4 5"></line>
+        <text x="230" y="164" font-family="IBM Plex Mono, monospace" font-size="10" fill="#5C6F80">player beacons (3.5 KB MIT SDK) → :8091 ingest, token-gated</text>
+      </svg>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px">
+      <div style="border-left: 2px solid #2CE5A7; padding: 4px 0 4px 20px"><p style="margin: 0 0 6px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #2CE5A7">STEP 1</p><p style="margin: 0 0 6px; font-weight: 600">docker compose up -d</p><p style="margin: 0; font-size: 13px; line-height: 1.6; color: #9FB0C0">Pulse + ClickHouse start on your host. Helm chart available for Kubernetes.</p></div>
+      <div style="border-left: 2px solid #2CE5A7; padding: 4px 0 4px 20px"><p style="margin: 0 0 6px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #2CE5A7">STEP 2</p><p style="margin: 0 0 6px; font-weight: 600">Point it at AMS</p><p style="margin: 0; font-size: 13px; line-height: 1.6; color: #9FB0C0">One URL + token. Read-only REST polling begins; streams appear within 10 s.</p></div>
+      <div style="border-left: 2px solid #2CE5A7; padding: 4px 0 4px 20px"><p style="margin: 0 0 6px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #2CE5A7">STEP 3</p><p style="margin: 0 0 6px; font-weight: 600">Drop in the beacon</p><p style="margin: 0; font-size: 13px; line-height: 1.6; color: #9FB0C0">One script tag in your player adds viewer-side QoE: startup, rebuffer, bitrate.</p></div>
+      <div style="border-left: 2px solid #2CE5A7; padding: 4px 0 4px 20px"><p style="margin: 0 0 6px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #2CE5A7">STEP 4</p><p style="margin: 0 0 6px; font-weight: 600">Route the alerts</p><p style="margin: 0; font-size: 13px; line-height: 1.6; color: #9FB0C0">Email, Slack, Telegram, PagerDuty or webhooks — with grouping, mute and maintenance windows.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- AMS INTEGRATION -->
+<section id="ams" style="border-bottom: 1px solid #1E2833" data-screen-label="AMS Integration">
+  <div style="max-width: 1160px; margin: 0 auto; padding: 96px 32px; display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 56px; align-items: center">
+    <div>
+      <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #2CE5A7; letter-spacing: 0.12em">BUILT FOR THE AMS ECOSYSTEM</p>
+      <h2 style="margin: 0 0 20px; font-size: 40px; font-weight: 700; letter-spacing: -0.02em">Not a bolt-on. A module.</h2>
+      <p style="margin: 0 0 24px; font-size: 16px; line-height: 1.7; color: #9FB0C0">Pulse speaks AMS natively — applications, broadcasts, WebRTC client stats, cluster nodes — across v2.8 through 3.x, standalone or clustered. It tolerates version variance and needs zero changes to your streaming stack.</p>
+      <ul style="margin: 0; padding-left: 18px; font-size: 14px; line-height: 2; color: #9FB0C0">
+        <li>Auto-discovers AMS applications and cluster nodes (≤30 s)</li>
+        <li>Origin/edge aware — viewer counts deduplicated across the cluster</li>
+        <li>Per-source webhook secrets for multi-AMS fleets</li>
+        <li>Cookie-session and bearer auth, TLS-verified</li>
+        <li>Works with the AMS marketplace: OEMs and agencies can white-label</li>
+      </ul>
+    </div>
+    <div style="background: #0D1219; border: 1px solid #1E2833; border-radius: 16px; padding: 28px; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; line-height: 2; color: #9FB0C0">
+      <p style="margin: 0 0 8px; color: #5C6F80"># deploy/.env — the entire integration</p>
+      <p style="margin: 0"><span style="color: #58A6FF">PULSE_AMS_URL</span>=https://ams-origin-01:5443</p>
+      <p style="margin: 0"><span style="color: #58A6FF">PULSE_AMS_AUTH_TOKEN</span>=•••••••</p>
+      <p style="margin: 0"><span style="color: #58A6FF">PULSE_AMS_APPLICATIONS</span>=live,vod</p>
+      <p style="margin: 0"><span style="color: #58A6FF">PULSE_POLL_INTERVAL</span>=5s</p>
+      <p style="margin: 16px 0 0; color: #5C6F80"># then</p>
+      <p style="margin: 0"><span style="color: #2CE5A7">$</span> docker compose up -d</p>
+      <p style="margin: 0; color: #2CE5A7">✓ pulse: all services started</p>
+      <p style="margin: 0; color: #2CE5A7">✓ 342 streams visible · 1.5 s</p>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing" style="border-bottom: 1px solid #1E2833; background: #0D1219" data-screen-label="Pricing">
+  <div style="max-width: 1160px; margin: 0 auto; padding: 96px 32px">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #2CE5A7; letter-spacing: 0.12em">PRICING</p>
+    <h2 style="margin: 0 0 16px; font-size: 40px; font-weight: 700; letter-spacing: -0.02em">Start free. Pay for depth.</h2>
+    <p style="margin: 0 0 48px; font-size: 16px; color: #9FB0C0; max-width: 620px">All tiers are self-hosted with offline ed25519 license keys — no phone-home, ever. Noncommercial self-hosting is free.</p>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px">
+      <div style="background: #0A0E14; border: 1px solid #1E2833; border-radius: 14px; padding: 30px; display: flex; flex-direction: column; gap: 18px">
+        <div><p style="margin: 0 0 4px; font-weight: 700; font-size: 18px">Free</p><p style="margin: 0; font-size: 13px; color: #9FB0C0">Solo operators</p></div>
+        <p style="margin: 0; font-size: 34px; font-weight: 700">$0</p>
+        <ul style="margin: 0; padding-left: 16px; font-size: 13px; line-height: 2; color: #9FB0C0; flex: 1"><li>Live dashboard + fleet view</li><li>Historical analytics (13 mo)</li><li>Ingest health scoring</li><li>Email alerts</li></ul>
+        <a href="#contact" style="display: inline-flex; align-items: center; justify-content: center; height: 40px; border-radius: 8px; border: 1px solid #2B3947; color: #E8EEF4; font-weight: 500; font-size: 14px" style-hover="background: #10161D; color: #E8EEF4">Deploy now</a>
+      </div>
+      <div style="background: #0A0E14; border: 1px solid rgba(44,229,167,0.4); border-radius: 14px; padding: 30px; display: flex; flex-direction: column; gap: 18px; position: relative; overflow: hidden">
+        <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: #2CE5A7"></div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start"><div><p style="margin: 0 0 4px; font-weight: 700; font-size: 18px">Pro</p><p style="margin: 0; font-size: 13px; color: #9FB0C0">Production streams</p></div><span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #2CE5A7; border: 1px solid rgba(44,229,167,0.35); border-radius: 99px; padding: 3px 9px">POPULAR</span></div>
+        <p style="margin: 0; font-size: 34px; font-weight: 700">$99<span style="font-size: 14px; font-weight: 500; color: #9FB0C0"> /node /mo</span></p>
+        <ul style="margin: 0; padding-left: 16px; font-size: 13px; line-height: 2; color: #9FB0C0; flex: 1"><li>Everything in Free</li><li>Player QoE beacon SDK</li><li>Synthetic HLS probes</li><li>Slack + Telegram alerts</li><li>Data API + Prometheus</li></ul>
+        <a href="#contact" style="display: inline-flex; align-items: center; justify-content: center; height: 40px; border-radius: 8px; background: #2CE5A7; color: #0A0E14; font-weight: 600; font-size: 14px" style-hover="background: #4FEDB9">Get a key</a>
+      </div>
+      <div style="background: #0A0E14; border: 1px solid #1E2833; border-radius: 14px; padding: 30px; display: flex; flex-direction: column; gap: 18px">
+        <div><p style="margin: 0 0 4px; font-weight: 700; font-size: 18px">Business</p><p style="margin: 0; font-size: 13px; color: #9FB0C0">Platforms &amp; agencies</p></div>
+        <p style="margin: 0; font-size: 34px; font-weight: 700">$299<span style="font-size: 14px; font-weight: 500; color: #9FB0C0"> /node /mo</span></p>
+        <ul style="margin: 0; padding-left: 16px; font-size: 13px; line-height: 2; color: #9FB0C0; flex: 1"><li>Everything in Pro</li><li>Usage &amp; billing reports (±1%)</li><li>Multi-tenant CSV/PDF + S3</li><li>PagerDuty + webhook channels</li></ul>
+        <a href="#contact" style="display: inline-flex; align-items: center; justify-content: center; height: 40px; border-radius: 8px; border: 1px solid #2B3947; color: #E8EEF4; font-weight: 500; font-size: 14px" style-hover="background: #10161D; color: #E8EEF4">Get a key</a>
+      </div>
+      <div style="background: #0A0E14; border: 1px solid #1E2833; border-radius: 14px; padding: 30px; display: flex; flex-direction: column; gap: 18px">
+        <div><p style="margin: 0 0 4px; font-weight: 700; font-size: 18px">Enterprise</p><p style="margin: 0; font-size: 13px; color: #9FB0C0">OEM &amp; broadcast</p></div>
+        <p style="margin: 0; font-size: 34px; font-weight: 700">Custom</p>
+        <ul style="margin: 0; padding-left: 16px; font-size: 13px; line-height: 2; color: #9FB0C0; flex: 1"><li>Everything in Business</li><li>Anomaly detection (σ-baselines)</li><li>White-label &amp; OEM embedding</li><li>Priority support · roadmap input</li></ul>
+        <a href="#contact" style="display: inline-flex; align-items: center; justify-content: center; height: 40px; border-radius: 8px; border: 1px solid #2B3947; color: #E8EEF4; font-weight: 500; font-size: 14px" style-hover="background: #10161D; color: #E8EEF4">Talk to us</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq" style="border-bottom: 1px solid #1E2833" data-screen-label="FAQ">
+  <div style="max-width: 860px; margin: 0 auto; padding: 96px 32px">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #2CE5A7; letter-spacing: 0.12em">FAQ</p>
+    <h2 style="margin: 0 0 40px; font-size: 40px; font-weight: 700; letter-spacing: -0.02em">Questions operators actually ask</h2>
+    <div style="display: flex; flex-direction: column">
+      <sc-for list="{{ faqs }}" as="q" hint-placeholder-count="4">
+        <details style="border-bottom: 1px solid #1E2833; padding: 22px 0">
+          <summary style="font-size: 16px; font-weight: 600; cursor: pointer; list-style: none">{{ q.q }}</summary>
+          <p style="margin: 14px 0 0; font-size: 14px; line-height: 1.7; color: #9FB0C0">{{ q.a }}</p>
+        </details>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<!-- CONTACT / CTA -->
+<section id="contact" data-screen-label="Contact">
+  <div style="max-width: 1160px; margin: 0 auto; padding: 96px 32px; display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 56px">
+    <div>
+      <svg width="240" height="60" viewBox="0 0 240 60" fill="none" style="margin-bottom: 24px">
+        <line x1="0" y1="30" x2="240" y2="30" stroke="#2CE5A7" stroke-opacity="0.12" stroke-width="2"></line>
+        <path d="M0 30 H70 L88 10 L118 50 L134 30 H240" stroke="#2CE5A7" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+      <h2 style="margin: 0 0 16px; font-size: 40px; font-weight: 700; letter-spacing: -0.02em">See every viewer.<br>Tonight.</h2>
+      <p style="margin: 0 0 28px; font-size: 16px; line-height: 1.7; color: #9FB0C0; max-width: 420px">The free tier needs no key, no signup, no phone-home. Ten minutes from <span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px">docker compose up</span> to your first live dashboard.</p>
+      <div style="display: flex; gap: 14px">
+        <a href="#" style="display: inline-flex; align-items: center; height: 46px; padding: 0 24px; border-radius: 8px; background: #2CE5A7; color: #0A0E14; font-weight: 600; font-size: 15px" style-hover="background: #4FEDB9">Read the install guide</a>
+        <a href="#" style="display: inline-flex; align-items: center; height: 46px; padding: 0 24px; border-radius: 8px; border: 1px solid #2B3947; color: #E8EEF4; font-weight: 500; font-size: 15px" style-hover="background: #10161D; color: #E8EEF4">GitHub</a>
+      </div>
+    </div>
+    <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 16px; padding: 36px">
+      <p style="margin: 0 0 6px; font-weight: 600; font-size: 18px">Talk to the team</p>
+      <p style="margin: 0 0 24px; font-size: 13px; color: #9FB0C0">License keys, OEM embedding, or a question the docs don't answer.</p>
+      <div style="display: flex; flex-direction: column; gap: 16px">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px">
+          <div style="display: flex; flex-direction: column; gap: 6px"><label style="font-size: 13px; font-weight: 500; color: #9FB0C0">Name</label><input style="height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid #2B3947; background: #0A0E14; color: #E8EEF4; font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; outline: none" style-focus="border-color: #2CE5A7"></div>
+          <div style="display: flex; flex-direction: column; gap: 6px"><label style="font-size: 13px; font-weight: 500; color: #9FB0C0">Work email</label><input style="height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid #2B3947; background: #0A0E14; color: #E8EEF4; font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; outline: none" style-focus="border-color: #2CE5A7"></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px"><label style="font-size: 13px; font-weight: 500; color: #9FB0C0">Deployment</label><select style="height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid #2B3947; background: #0A0E14; color: #E8EEF4; font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; outline: none"><option>Single AMS node</option><option>AMS cluster (2–10 nodes)</option><option>Fleet (10+ nodes / multi-region)</option><option>OEM / embedding Pulse in a product</option></select></div>
+        <div style="display: flex; flex-direction: column; gap: 6px"><label style="font-size: 13px; font-weight: 500; color: #9FB0C0">Message</label><textarea rows="4" style="padding: 12px; border-radius: 8px; border: 1px solid #2B3947; background: #0A0E14; color: #E8EEF4; font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; outline: none; resize: vertical" style-focus="border-color: #2CE5A7"></textarea></div>
+        <button style="height: 44px; border-radius: 8px; border: none; background: #2CE5A7; color: #0A0E14; font-family: 'IBM Plex Sans', sans-serif; font-size: 15px; font-weight: 600; cursor: pointer" style-hover="background: #4FEDB9">Send</button>
+        <p style="margin: 0; font-size: 12px; color: #5C6F80">Replies within one business day. No newsletter, no drip campaign.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer style="border-top: 1px solid #1E2833; background: #0D1219" data-screen-label="Footer">
+  <div style="max-width: 1160px; margin: 0 auto; padding: 48px 32px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 24px">
+    <div style="display: flex; align-items: center; gap: 11px">
+      <img src="../logo/pulse-mark.svg" alt="Pulse" style="width: 28px; height: 28px; border-radius: 7px">
+      <span style="font-weight: 600; font-size: 15px">pulse</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">· real-time analytics for Ant Media Server</span>
+    </div>
+    <div style="display: flex; gap: 28px; font-size: 13px; color: #9FB0C0">
+      <a href="#features" style="color: #9FB0C0">Features</a>
+      <a href="#pricing" style="color: #9FB0C0">Pricing</a>
+      <a href="#" style="color: #9FB0C0">Docs</a>
+      <a href="#" style="color: #9FB0C0">Status</a>
+      <a href="#" style="color: #9FB0C0">GitHub</a>
+    </div>
+    <p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">© 2026 · PolyForm Noncommercial · beacon SDK MIT</p>
+  </div>
+</footer>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      features: [
+        { id: 'F1', tier: 'FREE', name: 'Live ops dashboard', desc: 'Streams, viewers, nodes with ≤10 s visibility over WebSocket push. Usable at 500 concurrent streams.' },
+        { id: 'F2', tier: 'FREE', name: 'Historical analytics', desc: 'Geo and device breakdowns with 13-month rollups. Dimensional queries answer in under 3 seconds.' },
+        { id: 'F3', tier: 'PRO', name: 'Player QoE beacon', desc: '3.5 KB MIT-licensed JS SDK: startup time, rebuffering, bitrate switches and errors from real viewers.' },
+        { id: 'F4', tier: 'FREE', name: 'Ingest health', desc: 'A 0–100 health score per stream from bitrate, FPS, keyframe cadence, loss and jitter. Degradation flagged ≤15 s.' },
+        { id: 'F5', tier: 'FREE', name: 'Alerting', desc: 'Email, Slack, Telegram, PagerDuty and webhooks — with grouping, muting and maintenance windows.' },
+        { id: 'F6', tier: 'BUSINESS', name: 'Usage & billing reports', desc: 'Per-tenant CSV/PDF statements with S3 export and ±1% reconciliation against true windowed peaks.' },
+        { id: 'F7', tier: 'FREE', name: 'Cluster fleet view', desc: 'Origin and edge nodes auto-discovered within 30 s, with per-node roles, versions and health.' },
+        { id: 'F8', tier: 'PRO', name: 'Data API + Prometheus', desc: 'The full REST/WS API the dashboard itself uses, plus a /metrics scrape endpoint for existing stacks.' },
+        { id: 'F9', tier: 'ENTERPRISE', name: 'Anomaly detection', desc: 'Welford online baselines flag σ-deviations in viewers, CPU and memory — under 1 false alarm per node-week.' },
+        { id: 'F10', tier: 'PRO', name: 'Synthetic probes', desc: 'HLS probing from the outside in: manifest and segment TTFB, measured bitrate, reachability for WebRTC/RTMP/DASH.' }
+      ],
+      faqs: [
+        { q: 'Will Pulse ever write to or modify my AMS deployment?', a: 'No. Pulse is read-only by architecture: it polls the AMS REST API, tails logs, and receives webhooks. It never issues a mutating call, survives AMS upgrades, and cannot break a production streaming stack.' },
+        { q: 'Where does viewer data go?', a: 'Nowhere. Events are stored in a ClickHouse instance on your own infrastructure; config lives in an encrypted SQLite/Postgres meta store beside it. There is no SaaS backend, no telemetry, and no phone-home — license keys verify offline via ed25519.' },
+        { q: 'What does installation actually involve?', a: 'Docker Compose or Helm. One Go binary plus ClickHouse, configured with a handful of environment variables. The acceptance criterion we test against: install to first live dashboard in under 10 minutes.' },
+        { q: 'We already run Prometheus and Grafana. Why Pulse?', a: 'Keep them — Pulse ships a /metrics endpoint. Grafana measures your servers; Pulse measures your audience: who is watching, on what device, with what startup time and rebuffer ratio, deduplicated across origin and edge nodes.' },
+        { q: 'How does the free tier stay free?', a: 'The free tier needs no license key and runs within a 2-vCPU sidecar budget. Paid tiers add depth — QoE beacons, probes, billing reports, anomaly detection — priced per AMS node. Noncommercial self-hosting is free under PolyForm Noncommercial.' },
+        { q: 'Does the player beacon slow down my player?', a: 'The SDK is 3.5 KB gzipped with a hard 15 KB budget, MIT-licensed and white-labelable. It batches events and posts to a rate-limited, token-authenticated ingest endpoint that is isolated from the admin API.' },
+        { q: 'GDPR / KVKK — can we anonymize viewers?', a: 'Yes. Set PULSE_ANONYMIZE_IP=true and IPs are anonymized before geo lookup and storage; geo resolution degrades gracefully to country level. Data retention windows are configurable (90 d raw, 13 mo rollups by default).' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

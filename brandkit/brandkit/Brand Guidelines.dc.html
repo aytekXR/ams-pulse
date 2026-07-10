@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>Pulse — Brand Guidelines</title>
+  <link rel="icon" href="../logo/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; background: #0A0E14; font-family: 'IBM Plex Sans', 'Helvetica Neue', sans-serif; color: #E8EEF4; }
+    a { color: #2CE5A7; text-decoration: none; }
+    a:hover { color: #4FEDB9; text-decoration: underline; }
+    ::selection { background: #2CE5A7; color: #0A0E14; }
+  </style>
+</helmet>
+
+<div style="max-width: 1060px; margin: 0 auto; padding: 0 48px 120px">
+
+  <!-- ============ COVER ============ -->
+  <header style="min-height: 82vh; display: flex; flex-direction: column; justify-content: center; gap: 40px; border-bottom: 1px solid #1E2833" data-screen-label="Cover">
+    <div style="display: flex; align-items: center; gap: 16px">
+      <img src="../logo/pulse-mark.svg" alt="Pulse mark" style="width: 56px; height: 56px; border-radius: 14px; border: 1px solid #1E2833">
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #5C6F80; letter-spacing: 0.12em">BRAND GUIDELINES · V1.0 · JULY 2026</span>
+    </div>
+    <h1 style="margin: 0; font-size: 76px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.02">pulse<span style="color: #2CE5A7">.</span><br><span style="color: #9FB0C0; font-weight: 500; font-size: 40px; letter-spacing: -0.02em">The instrument panel of a live-streaming operation.</span></h1>
+    <p style="margin: 0; max-width: 620px; font-size: 18px; line-height: 1.65; color: #9FB0C0">Pulse is self-hosted real-time analytics, QoE monitoring and alerting for Ant Media Server. This document defines how the brand looks, speaks, and behaves — in the product, on the web, and everywhere in between.</p>
+  </header>
+
+  <!-- ============ 01 STRATEGY ============ -->
+  <section style="padding: 96px 0; border-bottom: 1px solid #1E2833" data-screen-label="01 Strategy">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #2CE5A7; letter-spacing: 0.12em">01 — STRATEGY &amp; POSITIONING</p>
+    <h2 style="margin: 0 0 40px; font-size: 40px; font-weight: 700; letter-spacing: -0.02em">Calm precision under pressure</h2>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 40px">
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 32px">
+        <p style="margin: 0 0 8px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">POSITIONING STATEMENT</p>
+        <p style="margin: 0; font-size: 20px; line-height: 1.55; font-weight: 500">See every viewer, every stream, every node — in real time, on your own infrastructure.</p>
+      </div>
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 32px">
+        <p style="margin: 0 0 8px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">WHO IT IS FOR</p>
+        <p style="margin: 0; font-size: 15px; line-height: 1.65; color: #9FB0C0">Streaming engineers, NOC operators and platform teams running self-hosted Ant Media Server — people on call who must answer <em style="color: #E8EEF4">"is the stream OK?"</em> for paying customers, without shipping viewer data to a third party.</p>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 40px">
+      <div style="border-left: 2px solid #2CE5A7; padding: 4px 0 4px 20px">
+        <p style="margin: 0 0 6px; font-weight: 600; font-size: 16px">Read-only, by design</p>
+        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #9FB0C0">Pulse never touches the streaming stack. It observes. The brand is equally non-intrusive: quiet surfaces, one signal color.</p>
+      </div>
+      <div style="border-left: 2px solid #2CE5A7; padding: 4px 0 4px 20px">
+        <p style="margin: 0 0 6px; font-weight: 600; font-size: 16px">Data never leaves</p>
+        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #9FB0C0">Self-hosted, no phone-home. The brand signals sovereignty: dark, contained, technical — never cloud-fluffy.</p>
+      </div>
+      <div style="border-left: 2px solid #2CE5A7; padding: 4px 0 4px 20px">
+        <p style="margin: 0 0 6px; font-weight: 600; font-size: 16px">Part of the AMS ecosystem</p>
+        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #9FB0C0">Pulse is a module, not an island. It presents as an intelligent extension of Ant Media Server — the analytics organ of the stack.</p>
+      </div>
+    </div>
+    <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 32px">
+      <p style="margin: 0 0 16px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">PERSONALITY — 4 TRAITS, EACH WITH A BOUNDARY</p>
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px">
+        <div><p style="margin: 0; font-weight: 600; color: #2CE5A7">Precise</p><p style="margin: 4px 0 0; font-size: 13px; color: #9FB0C0; line-height: 1.55">but never pedantic</p></div>
+        <div><p style="margin: 0; font-weight: 600; color: #2CE5A7">Calm</p><p style="margin: 4px 0 0; font-size: 13px; color: #9FB0C0; line-height: 1.55">but never passive</p></div>
+        <div><p style="margin: 0; font-weight: 600; color: #2CE5A7">Technical</p><p style="margin: 4px 0 0; font-size: 13px; color: #9FB0C0; line-height: 1.55">but never cryptic</p></div>
+        <div><p style="margin: 0; font-weight: 600; color: #2CE5A7">Confident</p><p style="margin: 4px 0 0; font-size: 13px; color: #9FB0C0; line-height: 1.55">but never flashy</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 02 LOGO ============ -->
+  <section style="padding: 96px 0; border-bottom: 1px solid #1E2833" data-screen-label="02 Logo">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #2CE5A7; letter-spacing: 0.12em">02 — LOGO</p>
+    <h2 style="margin: 0 0 16px; font-size: 40px; font-weight: 700; letter-spacing: -0.02em">The signal line</h2>
+    <p style="margin: 0 0 40px; max-width: 640px; font-size: 16px; line-height: 1.65; color: #9FB0C0">One continuous stroke: a heartbeat that is also a bitrate sparkline. It reads at 16&nbsp;px, animates naturally, and degrades gracefully to a neutral badge for white-label use.</p>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px">
+      <figure style="margin: 0; background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 48px; display: flex; flex-direction: column; align-items: center; gap: 24px">
+        <img src="../logo/pulse-logo-primary-dark.svg" alt="Primary lockup on dark" style="height: 56px">
+        <figcaption style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80">PRIMARY — DARK SURFACES</figcaption>
+      </figure>
+      <figure style="margin: 0; background: #F7F9FA; border-radius: 12px; padding: 48px; display: flex; flex-direction: column; align-items: center; gap: 24px">
+        <img src="../logo/pulse-logo-primary-light.svg" alt="Primary lockup on light" style="height: 56px">
+        <figcaption style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #6B7B88">PRIMARY — LIGHT SURFACES</figcaption>
+      </figure>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-bottom: 40px">
+      <figure style="margin: 0; background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 28px; display: flex; flex-direction: column; align-items: center; gap: 18px">
+        <img src="../logo/pulse-logo-secondary-stacked.svg" alt="Stacked lockup" style="height: 88px">
+        <figcaption style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">SECONDARY · STACKED</figcaption>
+      </figure>
+      <figure style="margin: 0; background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 28px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px">
+        <img src="../logo/pulse-mark.svg" alt="Mark only" style="width: 72px; height: 72px; border-radius: 18px">
+        <figcaption style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">MARK ONLY</figcaption>
+      </figure>
+      <figure style="margin: 0; background: #1E2833; border-radius: 12px; padding: 28px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px">
+        <img src="../logo/pulse-logo-mono-white.svg" alt="Monochrome white" style="height: 34px">
+        <figcaption style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8296A8">MONO · WHITE</figcaption>
+      </figure>
+      <figure style="margin: 0; background: #F7F9FA; border-radius: 12px; padding: 28px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px">
+        <img src="../logo/pulse-logo-mono-black.svg" alt="Monochrome black" style="height: 34px">
+        <figcaption style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6B7B88">MONO · BLACK</figcaption>
+      </figure>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px">
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 28px; display: flex; flex-direction: column; align-items: center; gap: 16px">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <img src="../logo/png/favicon-16.png" alt="16px favicon" style="width: 16px; height: 16px">
+          <img src="../logo/png/favicon-32.png" alt="32px favicon" style="width: 32px; height: 32px">
+          <img src="../logo/png/favicon-48.png" alt="48px favicon" style="width: 48px; height: 48px">
+        </div>
+        <p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">FAVICON 16 / 32 / 48</p>
+      </div>
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 28px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px">
+        <img src="../logo/powered-by-pulse-badge.svg" alt="powered by pulse badge" style="height: 28px">
+        <p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">WHITE-LABEL SDK BADGE</p>
+      </div>
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 28px">
+        <p style="margin: 0 0 10px; font-weight: 600; font-size: 14px">Clear space &amp; minimums</p>
+        <p style="margin: 0; font-size: 13px; line-height: 1.65; color: #9FB0C0">Clear space = height of the mark's tile on all sides. Minimum sizes: lockup 24&nbsp;px tall, mark 16&nbsp;px, favicon uses the simplified 3-point line.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 03 COLOR ============ -->
+  <section style="padding: 96px 0; border-bottom: 1px solid #1E2833" data-screen-label="03 Color">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #2CE5A7; letter-spacing: 0.12em">03 — COLOR</p>
+    <h2 style="margin: 0 0 16px; font-size: 40px; font-weight: 700; letter-spacing: -0.02em">Dark base, one signal</h2>
+    <p style="margin: 0 0 40px; max-width: 640px; font-size: 16px; line-height: 1.65; color: #9FB0C0">Dashboard-first and dark-mode primary. Signal Green means one thing everywhere: <strong style="color: #E8EEF4">live and healthy</strong>. Semantic colors are reserved for state — never decoration.</p>
+
+    <p style="margin: 0 0 16px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">BASE — DARK THEME (PRIMARY)</p>
+    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 32px">
+      <div style="border: 1px solid #1E2833; border-radius: 10px; overflow: hidden"><div style="height: 84px; background: #0A0E14"></div><div style="padding: 12px 14px; background: #10161D"><p style="margin: 0; font-size: 13px; font-weight: 600">Ink 0 · bg</p><p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">#0A0E14 · 10 14 20</p></div></div>
+      <div style="border: 1px solid #1E2833; border-radius: 10px; overflow: hidden"><div style="height: 84px; background: #10161D"></div><div style="padding: 12px 14px; background: #10161D; border-top: 1px solid #1E2833"><p style="margin: 0; font-size: 13px; font-weight: 600">Ink 1 · surface</p><p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">#10161D · 16 22 29</p></div></div>
+      <div style="border: 1px solid #1E2833; border-radius: 10px; overflow: hidden"><div style="height: 84px; background: #161E27"></div><div style="padding: 12px 14px; background: #10161D"><p style="margin: 0; font-size: 13px; font-weight: 600">Ink 2 · raised</p><p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">#161E27 · 22 30 39</p></div></div>
+      <div style="border: 1px solid #1E2833; border-radius: 10px; overflow: hidden"><div style="height: 84px; background: #1E2833"></div><div style="padding: 12px 14px; background: #10161D"><p style="margin: 0; font-size: 13px; font-weight: 600">Ink 3 · border</p><p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">#1E2833 · 30 40 51</p></div></div>
+      <div style="border: 1px solid #1E2833; border-radius: 10px; overflow: hidden"><div style="height: 84px; background: #E8EEF4"></div><div style="padding: 12px 14px; background: #10161D"><p style="margin: 0; font-size: 13px; font-weight: 600">Text primary</p><p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">#E8EEF4 · 232 238 244</p></div></div>
+    </div>
+
+    <p style="margin: 0 0 16px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">SIGNAL — THE BRAND ACCENT</p>
+    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 16px; margin-bottom: 32px">
+      <div style="border-radius: 10px; overflow: hidden; border: 1px solid #1E2833"><div style="height: 84px; background: #2CE5A7; display: flex; align-items: center; padding: 0 20px"><span style="color: #0A0E14; font-weight: 700; font-size: 15px">Signal Green — live, healthy, primary action</span></div><div style="padding: 12px 14px; background: #10161D"><p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">#2CE5A7 · 44 229 167 · 12.9:1 on Ink 0 (AAA)</p></div></div>
+      <div style="border-radius: 10px; overflow: hidden; border: 1px solid #1E2833"><div style="height: 84px; background: #4FEDB9"></div><div style="padding: 12px 14px; background: #10161D"><p style="margin: 0; font-size: 13px; font-weight: 600">Signal · hover</p><p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">#4FEDB9</p></div></div>
+      <div style="border-radius: 10px; overflow: hidden; border: 1px solid #1E2833"><div style="height: 84px; background: #0BA678"></div><div style="padding: 12px 14px; background: #10161D"><p style="margin: 0; font-size: 13px; font-weight: 600">Signal · light theme</p><p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">#0BA678</p></div></div>
+    </div>
+
+    <p style="margin: 0 0 16px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">SEMANTIC — STATE ONLY (DARK / LIGHT VALUES)</p>
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px">
+      <div style="border: 1px solid #1E2833; border-radius: 10px; overflow: hidden"><div style="height: 64px; background: #2CE5A7"></div><div style="padding: 12px 14px; background: #10161D"><p style="margin: 0; font-size: 13px; font-weight: 600">Healthy</p><p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">#2CE5A7 / #0BA678</p></div></div>
+      <div style="border: 1px solid #1E2833; border-radius: 10px; overflow: hidden"><div style="height: 64px; background: #FFB224"></div><div style="padding: 12px 14px; background: #10161D"><p style="margin: 0; font-size: 13px; font-weight: 600">Warning</p><p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">#FFB224 / #B45309</p></div></div>
+      <div style="border: 1px solid #1E2833; border-radius: 10px; overflow: hidden"><div style="height: 64px; background: #FF5C68"></div><div style="padding: 12px 14px; background: #10161D"><p style="margin: 0; font-size: 13px; font-weight: 600">Critical</p><p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">#FF5C68 / #DC2626</p></div></div>
+      <div style="border: 1px solid #1E2833; border-radius: 10px; overflow: hidden"><div style="height: 64px; background: #8296A8"></div><div style="padding: 12px 14px; background: #10161D"><p style="margin: 0; font-size: 13px; font-weight: 600">Neutral / offline</p><p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">#8296A8 / #64748B</p></div></div>
+    </div>
+    <p style="margin: 0 0 32px; font-size: 13px; line-height: 1.6; color: #9FB0C0; max-width: 720px">States are always paired with a shape or label — dot, triangle, text — never color alone, so deuteranopia/protanopia viewers can distinguish healthy from critical. Warning amber and critical red differ in lightness as well as hue.</p>
+
+    <p style="margin: 0 0 16px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">DATA VISUALIZATION — 8 CATEGORICAL SERIES</p>
+    <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 12px; margin-bottom: 32px">
+      <div style="text-align: center"><div style="height: 56px; border-radius: 8px; background: #2CE5A7"></div><p style="margin: 8px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80">#2CE5A7</p></div>
+      <div style="text-align: center"><div style="height: 56px; border-radius: 8px; background: #58A6FF"></div><p style="margin: 8px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80">#58A6FF</p></div>
+      <div style="text-align: center"><div style="height: 56px; border-radius: 8px; background: #A78BFA"></div><p style="margin: 8px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80">#A78BFA</p></div>
+      <div style="text-align: center"><div style="height: 56px; border-radius: 8px; background: #F06BB2"></div><p style="margin: 8px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80">#F06BB2</p></div>
+      <div style="text-align: center"><div style="height: 56px; border-radius: 8px; background: #FFB224"></div><p style="margin: 8px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80">#FFB224</p></div>
+      <div style="text-align: center"><div style="height: 56px; border-radius: 8px; background: #38D6E0"></div><p style="margin: 8px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80">#38D6E0</p></div>
+      <div style="text-align: center"><div style="height: 56px; border-radius: 8px; background: #C4B26A"></div><p style="margin: 8px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80">#C4B26A</p></div>
+      <div style="text-align: center"><div style="height: 56px; border-radius: 8px; background: #7C93AD"></div><p style="margin: 8px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5C6F80">#7C93AD</p></div>
+    </div>
+
+    <p style="margin: 0 0 16px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">LIGHT THEME BASE</p>
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px">
+      <div style="border: 1px solid #1E2833; border-radius: 10px; overflow: hidden"><div style="height: 64px; background: #F7F9FA"></div><div style="padding: 12px 14px; background: #10161D"><p style="margin: 0; font-size: 13px; font-weight: 600">Paper · bg</p><p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">#F7F9FA</p></div></div>
+      <div style="border: 1px solid #1E2833; border-radius: 10px; overflow: hidden"><div style="height: 64px; background: #FFFFFF"></div><div style="padding: 12px 14px; background: #10161D"><p style="margin: 0; font-size: 13px; font-weight: 600">Surface</p><p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">#FFFFFF</p></div></div>
+      <div style="border: 1px solid #1E2833; border-radius: 10px; overflow: hidden"><div style="height: 64px; background: #D7DEE5"></div><div style="padding: 12px 14px; background: #10161D"><p style="margin: 0; font-size: 13px; font-weight: 600">Border</p><p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">#D7DEE5</p></div></div>
+      <div style="border: 1px solid #1E2833; border-radius: 10px; overflow: hidden"><div style="height: 64px; background: #10181F"></div><div style="padding: 12px 14px; background: #10161D"><p style="margin: 0; font-size: 13px; font-weight: 600">Text primary</p><p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80">#10181F</p></div></div>
+    </div>
+  </section>
+
+  <!-- ============ 04 TYPOGRAPHY ============ -->
+  <section style="padding: 96px 0; border-bottom: 1px solid #1E2833" data-screen-label="04 Typography">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #2CE5A7; letter-spacing: 0.12em">04 — TYPOGRAPHY</p>
+    <h2 style="margin: 0 0 16px; font-size: 40px; font-weight: 700; letter-spacing: -0.02em">Two families, one job each</h2>
+    <p style="margin: 0 0 40px; max-width: 640px; font-size: 16px; line-height: 1.65; color: #9FB0C0">IBM Plex Sans for interface and prose; IBM Plex Mono for tokens, IDs, logs and axis labels. Both are OFL-licensed and self-hostable — a hard requirement for a no-phone-home product. No third family, ever.</p>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px">
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 32px">
+        <p style="margin: 0 0 20px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">IBM PLEX SANS — UI &amp; PROSE</p>
+        <p style="margin: 0; font-size: 44px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1">Ingest health degraded on edge-03</p>
+        <p style="margin: 18px 0 0; font-size: 15px; line-height: 1.65; color: #9FB0C0">Weights 400 / 500 / 600 / 700. High x-height keeps dense tables legible at 13&nbsp;px.</p>
+      </div>
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 32px">
+        <p style="margin: 0 0 20px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">IBM PLEX MONO — TOKENS, IDS, LOGS</p>
+        <p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 15px; line-height: 1.8; color: #E8EEF4">plt_9f3a1c…&nbsp;&nbsp;<span style="color: #2CE5A7">200 OK</span><br>stream_id: live/edge-03-cam2<br><span style="color: #FFB224">WARN</span> rebuffer_ratio 4.2%</p>
+        <p style="margin: 18px 0 0; font-size: 15px; line-height: 1.65; color: #9FB0C0">Weights 400 / 500. Anything a user might copy-paste is set in mono.</p>
+      </div>
+    </div>
+    <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 32px; margin-bottom: 32px">
+      <p style="margin: 0 0 20px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">METRIC DISPLAY STYLE — TABULAR NUMERALS, UNIT SUFFIX AT 40%</p>
+      <div style="display: flex; gap: 64px; align-items: baseline; flex-wrap: wrap">
+        <p style="margin: 0; font-size: 64px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em">12,847<span style="font-size: 24px; font-weight: 500; color: #9FB0C0; margin-left: 6px">viewers</span></p>
+        <p style="margin: 0; font-size: 64px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em">248<span style="font-size: 24px; font-weight: 500; color: #9FB0C0; margin-left: 6px">ms</span></p>
+        <p style="margin: 0; font-size: 64px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; color: #2CE5A7">99.2<span style="font-size: 24px; font-weight: 500; color: #9FB0C0; margin-left: 6px">%</span></p>
+      </div>
+      <p style="margin: 20px 0 0; font-size: 13px; color: #9FB0C0">Always <span style="font-family: 'IBM Plex Mono', monospace">font-variant-numeric: tabular-nums</span> on metrics so digits never jitter as values update.</p>
+    </div>
+    <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 32px">
+      <p style="margin: 0 0 20px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">TYPE SCALE (1.25 RATIO, 4PX BASELINE)</p>
+      <div style="display: flex; flex-direction: column; gap: 14px">
+        <div style="display: flex; align-items: baseline; gap: 24px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80; width: 160px">display · 44/48 · 700</span><span style="font-size: 44px; font-weight: 700; letter-spacing: -0.02em">Display</span></div>
+        <div style="display: flex; align-items: baseline; gap: 24px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80; width: 160px">h1 · 32/40 · 700</span><span style="font-size: 32px; font-weight: 700; letter-spacing: -0.02em">Page title</span></div>
+        <div style="display: flex; align-items: baseline; gap: 24px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80; width: 160px">h2 · 22/28 · 600</span><span style="font-size: 22px; font-weight: 600">Section heading</span></div>
+        <div style="display: flex; align-items: baseline; gap: 24px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80; width: 160px">h3 · 16/24 · 600</span><span style="font-size: 16px; font-weight: 600">Card title</span></div>
+        <div style="display: flex; align-items: baseline; gap: 24px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80; width: 160px">body · 14/22 · 400</span><span style="font-size: 14px; color: #9FB0C0">Body copy and table cells</span></div>
+        <div style="display: flex; align-items: baseline; gap: 24px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80; width: 160px">caption · 12/16 · 500</span><span style="font-size: 12px; font-weight: 500; color: #9FB0C0">Captions, timestamps, axis labels</span></div>
+        <div style="display: flex; align-items: baseline; gap: 24px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5C6F80; width: 160px">label · 11/16 · 500 mono</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 500; color: #5C6F80; letter-spacing: 0.1em">OVERLINE LABEL</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 05 ICONOGRAPHY & ILLUSTRATION ============ -->
+  <section style="padding: 96px 0; border-bottom: 1px solid #1E2833" data-screen-label="05 Iconography">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #2CE5A7; letter-spacing: 0.12em">05 — ICONOGRAPHY &amp; ILLUSTRATION</p>
+    <h2 style="margin: 0 0 40px; font-size: 40px; font-weight: 700; letter-spacing: -0.02em">Drawn like the logo: one stroke</h2>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px">
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 32px">
+        <p style="margin: 0 0 20px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">ICON STYLE</p>
+        <div style="display: flex; gap: 24px; margin-bottom: 24px; align-items: center">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#E8EEF4" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7 v5 l3 3"></path></svg>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#E8EEF4" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"></rect><path d="M8 14 l3 -4 l2 3 l3 -5"></path></svg>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#E8EEF4" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12 h4 l2 -5 l4 10 l2 -5 h4"></path></svg>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#E8EEF4" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 l9 5 v8 l-9 5 l-9 -5 V8 z"></path><path d="M12 12 l9 -4 M12 12 v9 M12 12 L3 8"></path></svg>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2CE5A7" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8 a6 6 0 0 1 12 0 c0 7 3 9 3 9 H3 c0 0 3 -2 3 -9"></path><path d="M10 21 a2 2 0 0 0 4 0"></path></svg>
+        </div>
+        <ul style="margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.8; color: #9FB0C0">
+          <li>24×24 grid, 1.75&nbsp;px stroke, round caps and joins — matching the logo's line language</li>
+          <li>Outline only; filled shapes reserved for state dots and badges</li>
+          <li>Default color is text color; Signal Green only when the icon itself means "live/healthy"</li>
+          <li>Recommended base set: Lucide (ISC license, self-hostable), customized to 1.75&nbsp;px</li>
+        </ul>
+      </div>
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 32px">
+        <p style="margin: 0 0 20px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">ILLUSTRATION STYLE — "SCHEMATIC"</p>
+        <div style="border: 1px solid #1E2833; border-radius: 8px; background: #0A0E14; padding: 24px; margin-bottom: 24px">
+          <svg width="100%" height="120" viewBox="0 0 420 120" fill="none">
+            <rect x="10" y="34" width="92" height="52" rx="8" stroke="#3A4A5A" stroke-width="1.5"></rect>
+            <text x="56" y="64" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#8296A8">AMS</text>
+            <line x1="102" y1="60" x2="168" y2="60" stroke="#3A4A5A" stroke-width="1.5" stroke-dasharray="4 5"></line>
+            <rect x="168" y="22" width="120" height="76" rx="10" stroke="#2CE5A7" stroke-width="1.5"></rect>
+            <path d="M186 60 h20 l8 -18 l14 34 l8 -16 h24" stroke="#2CE5A7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            <line x1="288" y1="60" x2="348" y2="60" stroke="#3A4A5A" stroke-width="1.5" stroke-dasharray="4 5"></line>
+            <circle cx="374" cy="60" r="22" stroke="#3A4A5A" stroke-width="1.5"></circle>
+            <circle cx="374" cy="60" r="5" fill="#2CE5A7"></circle>
+          </svg>
+        </div>
+        <ul style="margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.8; color: #9FB0C0">
+          <li>Technical schematics, not scenes: nodes, flows, dashed connections on the dark base</li>
+          <li>Neutral slate strokes; Signal Green marks the live path or Pulse itself</li>
+          <li>No mascots, no people, no isometric 3D, no gradient blobs</li>
+          <li>Real product UI is the preferred "illustration" wherever possible</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 06 SPACING & LAYOUT ============ -->
+  <section style="padding: 96px 0; border-bottom: 1px solid #1E2833" data-screen-label="06 Spacing">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #2CE5A7; letter-spacing: 0.12em">06 — SPACING &amp; LAYOUT</p>
+    <h2 style="margin: 0 0 40px; font-size: 40px; font-weight: 700; letter-spacing: -0.02em">4px grid, density with air</h2>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px">
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 32px">
+        <p style="margin: 0 0 20px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">SPACING SCALE (PX)</p>
+        <div style="display: flex; flex-direction: column; gap: 12px">
+          <div style="display: flex; align-items: center; gap: 16px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; width: 100px">4 · hairline</span><div style="height: 12px; width: 4px; background: #2CE5A7; border-radius: 2px"></div></div>
+          <div style="display: flex; align-items: center; gap: 16px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; width: 100px">8 · tight</span><div style="height: 12px; width: 8px; background: #2CE5A7; border-radius: 2px"></div></div>
+          <div style="display: flex; align-items: center; gap: 16px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; width: 100px">12 · control</span><div style="height: 12px; width: 12px; background: #2CE5A7; border-radius: 2px"></div></div>
+          <div style="display: flex; align-items: center; gap: 16px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; width: 100px">16 · element</span><div style="height: 12px; width: 16px; background: #2CE5A7; border-radius: 2px"></div></div>
+          <div style="display: flex; align-items: center; gap: 16px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; width: 100px">24 · card pad</span><div style="height: 12px; width: 24px; background: #2CE5A7; border-radius: 2px"></div></div>
+          <div style="display: flex; align-items: center; gap: 16px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; width: 100px">32 · group</span><div style="height: 12px; width: 32px; background: #2CE5A7; border-radius: 2px"></div></div>
+          <div style="display: flex; align-items: center; gap: 16px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; width: 100px">48 · section</span><div style="height: 12px; width: 48px; background: #2CE5A7; border-radius: 2px"></div></div>
+          <div style="display: flex; align-items: center; gap: 16px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; width: 100px">96 · page block</span><div style="height: 12px; width: 96px; background: #2CE5A7; border-radius: 2px"></div></div>
+        </div>
+      </div>
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 32px">
+        <p style="margin: 0 0 20px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">LAYOUT RULES</p>
+        <ul style="margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.9; color: #9FB0C0">
+          <li><strong style="color: #E8EEF4">App shell:</strong> 240&nbsp;px fixed sidebar · fluid content · 12-col grid, 24&nbsp;px gutters</li>
+          <li><strong style="color: #E8EEF4">Card radius 12&nbsp;px, controls 8&nbsp;px</strong>, pills fully rounded — nothing else</li>
+          <li><strong style="color: #E8EEF4">Elevation by border + tone,</strong> not shadow: raised surfaces get Ink&nbsp;2 fill and Ink&nbsp;3 border; shadows only on overlays</li>
+          <li><strong style="color: #E8EEF4">Tables:</strong> 40&nbsp;px rows, 13&nbsp;px text, numeric columns right-aligned in tabular figures</li>
+          <li><strong style="color: #E8EEF4">Marketing:</strong> 1160&nbsp;px max content width, 96&nbsp;px section rhythm</li>
+          <li><strong style="color: #E8EEF4">Touch targets ≥ 44&nbsp;px</strong> on mobile layouts</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 07 VOICE ============ -->
+  <section style="padding: 96px 0; border-bottom: 1px solid #1E2833" data-screen-label="07 Voice">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #2CE5A7; letter-spacing: 0.12em">07 — VOICE &amp; MESSAGING</p>
+    <h2 style="margin: 0 0 16px; font-size: 40px; font-weight: 700; letter-spacing: -0.02em">Technical, direct, no hype</h2>
+    <p style="margin: 0 0 40px; max-width: 640px; font-size: 16px; line-height: 1.65; color: #9FB0C0">Write like a good runbook: lead with the fact, quantify everything, never exclaim. The reader is an engineer at 3&nbsp;a.m. — respect their time.</p>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px">
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 32px">
+        <p style="margin: 0 0 16px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #2CE5A7; letter-spacing: 0.1em">✓ WE SAY</p>
+        <ul style="margin: 0; padding-left: 18px; font-size: 14px; line-height: 2; color: #E8EEF4">
+          <li>"Stream visible on the dashboard ≤10&nbsp;s after publish."</li>
+          <li>"Alert fired. edge-03 ingest bitrate below 50% of target for 45&nbsp;s."</li>
+          <li>"Installs in minutes. Never modifies AMS."</li>
+          <li>"Your data stays on your infrastructure. All of it."</li>
+        </ul>
+      </div>
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 32px">
+        <p style="margin: 0 0 16px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #FF5C68; letter-spacing: 0.1em">✗ WE NEVER SAY</p>
+        <ul style="margin: 0; padding-left: 18px; font-size: 14px; line-height: 2; color: #9FB0C0">
+          <li>"Supercharge your streaming empire! 🚀"</li>
+          <li>"Oops! Something went wrong 😢"</li>
+          <li>"Revolutionary AI-powered insights platform"</li>
+          <li>"Unlock the power of next-gen observability"</li>
+        </ul>
+      </div>
+    </div>
+    <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 32px">
+      <p style="margin: 0 0 16px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80; letter-spacing: 0.1em">MESSAGE HIERARCHY</p>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px">
+        <div><p style="margin: 0 0 6px; font-size: 13px; color: #5C6F80">Tagline</p><p style="margin: 0; font-size: 16px; font-weight: 600">Know your stream is OK.</p></div>
+        <div><p style="margin: 0 0 6px; font-size: 13px; color: #5C6F80">One-liner</p><p style="margin: 0; font-size: 15px; line-height: 1.6">Real-time analytics, QoE monitoring and alerting for Ant Media Server — self-hosted, read-only, live in minutes.</p></div>
+        <div><p style="margin: 0 0 6px; font-size: 13px; color: #5C6F80">Proof points</p><p style="margin: 0; font-size: 15px; line-height: 1.6">≤10&nbsp;s visibility · ≤5&nbsp;s alerting · 3.5&nbsp;KB beacon SDK · zero AMS modification · no phone-home</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 08 USAGE ============ -->
+  <section style="padding: 96px 0" data-screen-label="08 Usage">
+    <p style="margin: 0 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #2CE5A7; letter-spacing: 0.12em">08 — USAGE RULES</p>
+    <h2 style="margin: 0 0 40px; font-size: 40px; font-weight: 700; letter-spacing: -0.02em">Do / Don't</h2>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px">
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 24px"><p style="margin: 0 0 8px; color: #2CE5A7; font-weight: 600; font-size: 14px">✓ Do</p><p style="margin: 0; font-size: 13px; line-height: 1.65; color: #9FB0C0">Use the dark lockup on Ink surfaces and the light lockup on paper. Keep one tile-height of clear space.</p></div>
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 24px"><p style="margin: 0 0 8px; color: #2CE5A7; font-weight: 600; font-size: 14px">✓ Do</p><p style="margin: 0; font-size: 13px; line-height: 1.65; color: #9FB0C0">Pair "Pulse" with AMS context on first mention: "Pulse for Ant Media Server."</p></div>
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 24px"><p style="margin: 0 0 8px; color: #2CE5A7; font-weight: 600; font-size: 14px">✓ Do</p><p style="margin: 0; font-size: 13px; line-height: 1.65; color: #9FB0C0">Use the neutral "powered by pulse" badge in white-labeled player SDKs.</p></div>
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 24px"><p style="margin: 0 0 8px; color: #FF5C68; font-weight: 600; font-size: 14px">✗ Don't</p><p style="margin: 0; font-size: 13px; line-height: 1.65; color: #9FB0C0">Recolor the signal line, add gradients to the mark, rotate it, or set the wordmark in another typeface.</p></div>
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 24px"><p style="margin: 0 0 8px; color: #FF5C68; font-weight: 600; font-size: 14px">✗ Don't</p><p style="margin: 0; font-size: 13px; line-height: 1.65; color: #9FB0C0">Use Signal Green decoratively, or for anything other than "live / healthy / primary action."</p></div>
+      <div style="background: #10161D; border: 1px solid #1E2833; border-radius: 12px; padding: 24px"><p style="margin: 0 0 8px; color: #FF5C68; font-weight: 600; font-size: 14px">✗ Don't</p><p style="margin: 0; font-size: 13px; line-height: 1.65; color: #9FB0C0">Use emoji, exclamation marks, or hype language anywhere in product or marketing copy.</p></div>
+    </div>
+    <footer style="margin-top: 80px; padding-top: 32px; border-top: 1px solid #1E2833; display: flex; justify-content: space-between; align-items: center">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <img src="../logo/pulse-mark.svg" alt="" style="width: 28px; height: 28px; border-radius: 7px">
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80">PULSE BRAND GUIDELINES · V1.0</span>
+      </div>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5C6F80">FONTS: IBM PLEX (OFL) · SELF-HOST IN PRODUCTION</span>
+    </footer>
+  </section>
+</div>
+
+</x-dc>
+</body>
+</html>
