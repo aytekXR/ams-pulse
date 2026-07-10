@@ -227,7 +227,7 @@ TDD.
 
 ---
 
-### 2.11  Native WebRTC / RTMP / DASH probes  [L per protocol] — ⚙ WebRTC PHASE 1 ✅ S12 (D-072) · RTMP PHASE 1 (handshake) + DASH (full MPD+segment) ✅ S13 (D-073) · **WebRTC PHASE 2a (pion ICE) ✅ S14 (D-074, 2026-07-10: ice_state connected|failed|timeout + CH 0007, live-verified ICE-connected vs real AMS 3.0.3 in 0.2s; PLUS the notification-skip signaling fix — real AMS sends subtrackAdded BEFORE the offer, the D-072 parse failed live-only, now fixed + mock mirrors it)** · phase-2b (RTCP rtt/jitter/loss, CH 0008) → S15 (D-074 pre-declared yield; triage in ledger)
+### 2.11  Native WebRTC / RTMP / DASH probes  [L per protocol] — ⚙ WebRTC PHASE 1 ✅ S12 (D-072) · RTMP PHASE 1 (handshake) + DASH (full MPD+segment) ✅ S13 (D-073) · **WebRTC PHASE 2a (pion ICE) ✅ S14 (D-074, 2026-07-10: ice_state connected|failed|timeout + CH 0007, live-verified ICE-connected vs real AMS 3.0.3 in 0.2s; PLUS the notification-skip signaling fix — real AMS sends subtrackAdded BEFORE the offer, the D-072 parse failed live-only, now fixed + mock mirrors it)** · **phase-2b (rtt/jitter/loss) ✅ S15 (D-075, 2026-07-10: rtt_ms/jitter_ms/loss_pct Nullable(Float32) CH 0008, key-absent semantics, ~2s ctx-bounded post-connect hold, pc.GetStats(); live vs real AMS 3.0.3: rtt 0.47 ms / jitter 22.33 ms / loss 0 in 2.2 s; remaining F10 tail = RTMP AMF0 connect + probe-stats UI surface)**
 
 **Why:** Current QoE probes are HLS-only; non-HLS streams return `not_probed` (stub from
 ROADMAP.md §1 audit). AMS supports WebRTC, RTMP, and DASH. Full QoE measurement requires
@@ -520,7 +520,13 @@ anomaly→BE-02) · WO-F ✅ (32MB cap) · WO-G ✅ re-recorded · WO-A skip ×3
 WO-H gated (operator). Phase-2b → S15. Coverage 74.4/62.96-59.04-52.05. 3 workflows,
 14 agents, ~1.31M tok; verify: CONFIRMED_OK + PARTIAL×2, zero functional must-fix.
 
-### S15 — CI promotions (gate OPEN ≥07-23) + pion phase-2b + carries (planned at S14 close, D-074)
+### S15 — pion phase-2b + carries ✅ DONE (D-075, 2026-07-10)
+**Result:** WO-B phase-2b LANDED + LIVE-EVIDENCED (rtt_ms=0.47/jitter_ms=22.33/loss_pct=0
+vs real AMS in 2.2 s); verify CONFIRMED_OK + PARTIAL×2, zero functional must-fix, ~20
+findings fixed same-session (incl. probes.md MUST-FIX + the alert async-guard contention
+flake caught at gate); WO-A skip carry ×4 (07-10 < 07-23 — gate OPEN by S16); WO-C/WO-F
+did NOT fire (operator answers still open); WO-D brandkit-2 → S16; Go 74.5 (floor 70.2).
+Prompt: `sessions/SESSION-15.md`; ledger: decisions.md D-075.
 
 Execute `sessions/SESSION-15.md`. Check operator answers FIRST (v0.3.0 / CodeQL /
 PR-first / mobile-SDK — all four still open at S14 close).
@@ -533,13 +539,37 @@ PR-first / mobile-SDK — all four still open at S14 close).
    contract CR rtt_ms/jitter_ms/loss_pct; CH **0008**; e2e asserts stats present.
    FIRST to yield if hot (same rule as S14).
 3. **WO-C [M, operator-gated "ship v0.3.0"]** prod rollout — now carries D-068+D-070+
-   D-072+D-073+**D-074**; §8.8 smoke + runbook; post-rollout operator browser-accept.
+   D-072+D-073+D-074+**D-075**; §8.8 smoke + runbook; post-rollout operator browser-accept.
 4. **WO-D [S]** brandkit phase 2 (light theme, §2.15 backlog) — if time permits.
 5. **WO-E [XS]** enforce_admins/PR-first re-check (standing).
 6. **WO-F [L, operator-gated]** iOS beacon SDK phase 1 — ONLY on explicit yes.
 
 *(Backlog-if-light: DASH live-fixture capture if operator enables DASH muxing; post-U3
 beacon-QoE anomaly metrics (§2.14 revisit).)*
+
+---
+
+### S16 — CI promotions (date gate OPENS 2026-07-23) + brandkit phase 2 + probe-stats UI (planned at S15 close, D-075)
+
+Execute `sessions/SESSION-16.md`. Check operator answers FIRST (v0.3.0 / CodeQL /
+PR-first / mobile-SDK — all four still open at S15 close).
+
+1. **WO-A [S, gate ≥07-23]** CI promotions (§2.7) — the date gate OPENS 2026-07-23;
+   JOB-level streak re-measure; FULL-LIST PUT; GET-diff proof; CodeQL only with explicit
+   operator OK; also assess web-e2e → required (green since D-055, ~2 weeks by 07-21).
+   (Carry ×4: S12/S13/S14/S15.)
+2. **WO-B [S–M]** brandkit phase 2 (§2.15 backlog): light theme, density, motion —
+   tokens.json is authoritative; WCAG table binding.
+3. **WO-C [S]** probe-stats UI surface (D-075 verifier backlog): ProbesPage results
+   panel shows ice_state badge + rtt_ms/jitter_ms/loss_pct for WebRTC probes (types
+   already generated; key-absent = render dash).
+4. **WO-D [XS]** enforce_admins/PR-first re-check (standing rationale-or-flip).
+5. **WO-E [M, operator-gated "ship v0.3.0"]** prod rollout — carries D-068+D-070+D-072+
+   D-073+D-074+D-075; §8.8 smoke + runbook; post-rollout operator browser-accept.
+6. **WO-F [L, operator-gated]** iOS beacon SDK phase 1 — ONLY on explicit yes.
+
+*(Backlog-if-light: DASH live-fixture capture if operator enables DASH muxing; post-U3
+beacon-QoE anomaly metrics (§2.14 revisit); RTMP AMF0 connect round-trip (§2.11 tail).)*
 
 ---
 
@@ -569,4 +599,5 @@ beacon-QoE anomaly metrics (§2.14 revisit).)*
 | 2026-07-10 S11 (D-070) | **73.9%** | **70.2** | 79.69 / 76.25 / 47.33 (gates 59/54/45) | api 76.1, reports 90.1, query 87.5, meta 67.7; sdk untouched (66.06/45.79/70.42, 3.52 KB) |
 | 2026-07-10 S13 (D-073) | **74.0%** | **70.2** | 62.68 / 58.78 / 51.54 (gates 59/54/45) | prober 70.1 (new rtmp+dash probes fully tested); web untouched (schema.d.ts JSDoc only — numbers are the vitest-4 rebaseline, the S11 row's 79.69 was the notation artifact); sdk untouched |
 | 2026-07-10 S14 (D-074) | **74.4%** | **70.2** | 62.96 / 59.04 / 52.05 (gates 59/54/45) | prober 72.6 (ICE tests), anomaly 81.6, api 76.9, domain 100; sdk untouched (66.06/45.79/70.42, 3.52 KB) |
+| 2026-07-10 S15 (D-075) | **74.5%** | **70.2** | 62.96 / 59.04 / 52.05 (gates 59/54/45) | prober 72.8 (RTP-stats tests), api 77.1, anomaly 81.6, domain 100; web untouched (schema.d.ts types/JSDoc only); sdk untouched (66.06/45.79/70.42, 3.52 KB) |
 | *(update each session at close)* | | | | |

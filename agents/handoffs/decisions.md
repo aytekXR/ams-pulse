@@ -3363,3 +3363,91 @@ endpoint) · gen:api regen-idempotent · yaml parses.
   to say local-only).
 - `ams-teststream` container was found Exited(1) (~2h) — restarted; still the synthetic
   publisher until real streams suffice.
+
+## D-075 — SESSION-15 (2026-07-10, fourth session today): pion phase-2b RTP stats (rtt/jitter/loss)
+
+**Open at HEAD `4255203` (== origin/main, tree clean).** Executing `sessions/SESSION-15.md`
+(ROADMAP-V2 §3 S15). Preflight verified live at open: ci+e2e+codeql all `success` at HEAD;
+dependabot queue ZERO; `ams-teststream` Up; U3 key still absent from `deploy/.env`;
+`docs/operator-expected.md` answers checked FIRST — **all four switches still unanswered**
+(ship-v0.3.0 / CodeQL / PR-first / mobile-SDK) → WO-C rollout + WO-F iOS did NOT fire.
+
+**Result: S15 DONE — WO-B pion phase-2b LANDED + LIVE-EVIDENCED.** Commits
+`86c9497..cf1417c` + close docs:
+- **Contract CR (`86c9497`):** OpenAPI ProbeResult +`rtt_ms`/`jitter_ms`/`loss_pct`
+  (`[number,null]`, key-OMITTED wording matching ice_state); **CH 0008**
+  `Nullable(Float32)` ×3 — deliberate deviation from the table's sentinel-default
+  pattern because 0.0 is a VALID measurement (loss/jitter on loopback); domain
+  `*float32` (nil = not measured); web types regen (types-only, coverage-exempt).
+- **Prober + store (`44b6b8d`):** connected-case 2s ctx-bounded hold → `pc.GetStats()`:
+  RTT from nominated ICE pair (s→ms, only >0), inbound-RTP jitter (s→ms), loss
+  clamped 0–100 only when received+lost>0; OnTrack drain registered BEFORE
+  SetRemoteDescription; ctx-during-hold ⇒ connected + stats ABSENT; failed/timeout
+  never hold; Success NEVER flips. **SPIKE settled the mechanism:** pion v4
+  `NewAPI(WithMediaEngine)` auto-registers default interceptors (incl. stats) when no
+  registry is supplied — plain `pc.GetStats()` suffices, `pion/interceptor` stays
+  indirect; `pion/rtp` → direct (test RTP). Store vertical ATOMIC per D-072 (15-col
+  INSERT list + Append + SELECT/Scan `*float32`); integration test ran LIVE vs real
+  CH v26.6.1 (CI-pinned): 12.5/2.1/0.5 round-trip + **LossPct=0.0 non-nil pin** +
+  nil-on-non-WebRTC-rows.
+- **API (`82a4ba3`):** pointer-gated emits (absent when nil, present incl. 0.0 —
+  nil-vs-zero pinned by 4 table-driven red→green cases).
+- **mock-ams (`0fd4a6c`):** `-webrtc-ice` sends ~2s deterministic VP8 RTP (30ms tick,
+  ~66 pkts, PT96, ts+2700, 64B payload[i]=i, SSRC lazily from the captured RTPSender)
+  on **PeerConnectionStateConnected** (post-DTLS — ICE-connected would race SRTP),
+  sync.Once + ctx-bounded; TestWSSignaling_RTPSend 41≥40 pkts; phase-2a pinned tests
+  byte-unchanged.
+- **e2e (`e0ed553`):** same WebRTC step asserts the three keys is-not-None on the SAME
+  connected item (no numeric thresholds — loopback 0 legit); budgets UNCHANGED
+  (120s/5s ≫ timeout_s=10 ≫ ~2.2s actual); three-way key cross-check
+  e2e↔wave3↔OpenAPI verified.
+- **★ Gate find → fix (`3eeecdf`):** full-suite -race caught `TestDelivery_AllFail_...`
+  TickOnce 109.8ms vs 100ms budget — CONTENTION FLAKE (6.5ms idle; D-042
+  read-the-scheduler), in a package this session never touched. Old guard (instant
+  fake Sends + 100ms) measured only scheduler noise; strengthened: `sendDelay=500ms`
+  ×4 attempts ⇒ sync ≥2s vs 1s budget — now discriminates for real and cannot flake.
+- **Docs sweep (`cf1417c`):** probes.md MUST-FIX (a section still said webrtc/rtmp/dash
+  are reachability-only stubs — contradicted shipped code AND the matrix in the same
+  file); ADR 0008 D-075 amendment (reservation fulfilled); ARCHITECTURE/README
+  de-staled (incl. shipped SSO/PDF removed from Post-MVP).
+
+**LIVE-EVIDENCED (pristine-copy livecheck test, real AMS 3.0.3, idle box):**
+`success=true signaling_state=offer_received ice_state=connected error_code=""`
+**`rtt_ms=0.47 jitter_ms=22.33 loss_pct=0` in 2.2s** — real H264 RTP from
+`ams-teststream`; jitter is a genuine non-zero real-media measurement.
+
+**WO dispositions:** WO-A CI promotions **skip carry ×4** (07-10 < 07-23; gate OPEN by
+S16 if run on schedule) · WO-B phase-2b LANDED (above) · WO-C v0.3.0 did NOT fire
+(unanswered; now carries D-068+D-070+D-072+D-073+D-074+**D-075**) · WO-D brandkit
+phase 2 did NOT fire (session not light) → S16 WO · WO-E re-recorded (protection
+verified via API: enforce_admins=false, strict, 7 contexts, 1 review — unchanged;
+rationale stands while sessions push to main) · WO-F iOS did NOT fire (unanswered).
+
+**Workflows:** `s15-scout` (4 read-only scouts, 374k tok) → `s15-impl` (contract-first
++ 5 parallel disjoint-scope authors, 445k tok, 0 errors, TDD red→green each) →
+`s15-verify` (3 adversarial verifiers, 253k tok: **CONFIRMED_OK (correctness — zero
+findings, full 15-column vertical checked layer by layer) + PARTIAL ×2** — zero
+functional must-fix; 1 doc MUST-FIX + 16 should-fix + 2 test-robustness items ALL
+fixed same-session by the ORCH fix pass: TimeoutS 4→8 in CtxExpiredDuringHold,
+atomic hold-override, OMITTED and→or ×3, mock comments, 0008 header, README/ARCH/
+probes staleness).
+
+**ORCH gates (all green before push):** gofmt empty (both modules) · CGO=0 build+vet
+(both) · full `-race` 24/24 pkgs 0 FAIL/**0 SKIP**, **Go total 74.5%** (floor 70.2;
+prober 72.8, api 77.1, anomaly 81.6, domain 100) · store integration LIVE vs real CH ·
+web lint/typecheck/**264/264** + thresholds (62.96/59.04/52.05 vs 59/54/45)/build ·
+redocly valid (5 pre-existing warnings) + ajv 3/3 · gen:api regen-idempotent (hash-
+verified) · e2e.yml yaml+ast parse + per-key static cross-check.
+
+**Process notes:**
+- **Budget checks are load-bearing only if they discriminate.** The alert guard failed
+  under gate contention because a 100ms budget over instant fakes can only measure the
+  scheduler. When a latency assertion exists to prove async-ness, make the synchronous
+  path measurably slow (sleep in the fake) so the budget separates the two behaviors —
+  then contention can't produce false reds and a regression can't produce false greens.
+- pion v4 auto-registers default interceptors under `NewAPI` with NO registry — do not
+  cargo-cult `WithInterceptorRegistry` for stats; `pc.GetStats()` already has
+  inbound-RTP + ICE-pair stats.
+- Livecheck pattern: throwaway `//go:build livecheck` test written into the PRISTINE
+  COPY only (never the real tree), env-gated URL, run on the idle box after the
+  verify fleet drains.

@@ -11,7 +11,47 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-15.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-16.md`)
+
+**Session 2026-07-10(d) result: D-075 — S15 DONE (pion phase-2b RTP stats).**
+- **WO-B phase-2b LANDED + LIVE-EVIDENCED:** probe holds ~2s after `ice_state=connected`
+  and reports `rtt_ms`/`jitter_ms`/`loss_pct` (CH **0008** `Nullable(Float32)` — 0.0 is a
+  valid measurement, key-absent = not measured; pointers nil on failed/timeout/hold-expiry;
+  Success never flips). Mechanism settled by spike: pion v4 `NewAPI` auto-registers default
+  interceptors — plain `pc.GetStats()`. mock-ams `-webrtc-ice` sends ~2s deterministic VP8
+  RTP post-DTLS (sync.Once, ctx-bounded). e2e asserts the three keys is-not-None (budgets
+  unchanged). Store vertical ATOMIC per D-072, proven live vs real CH v26.6.1 incl.
+  LossPct=0.0 non-nil pin. **Live vs real AMS 3.0.3: rtt_ms=0.47 jitter_ms=22.33
+  loss_pct=0 in 2.2s** (pristine-copy livecheck, idle box).
+- **Gate find:** alert async-delivery guard was a contention flake (109.8ms vs 100ms,
+  6.5ms idle) — strengthened to discriminate (500ms fake sends ⇒ sync ≥2s vs 1s budget).
+- **Verify:** CONFIRMED_OK (correctness, zero findings) + PARTIAL×2 — zero functional
+  must-fix; probes.md MUST-FIX (stale "reachability-only stubs" section) + ~19 more
+  findings fixed same-session (TimeoutS 4→8, atomic hold-override, OMITTED wording,
+  README/ARCH/ADR staleness).
+- **Dispositions:** WO-A promotions skip carry ×4 (07-10 < 07-23 — **gate OPEN by S16**);
+  WO-C v0.3.0 + WO-F iOS did NOT fire (operator answers still open); WO-D brandkit-2 →
+  S16 WO-B; WO-E protection re-check unchanged. Workflows: 4 scouts / 6 impl / 3
+  verifiers, 0 errors. Commits `86c9497..cf1417c` + close docs.
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-16.md` and execute it** (CI
+promotions — date gate OPENS ≥07-23 (+ web-e2e→required assessment), brandkit phase 2,
+probe-stats UI surface, conditional v0.3.0, operator-gated iOS SDK). **Check
+`docs/operator-expected.md` answers FIRST — 4 switches (all unanswered at S15 close):
+"ship v0.3.0", CodeQL yes/no, PR-first yes/no, mobile-SDK need yes/no.**
+
+**Standing numbers (2026-07-10 post-S15/D-075):** Go total **74.5%** (floor **70.2**;
+prober 72.8, api 77.1, anomaly 81.6, domain 100); web **62.96 / 59.04 / 52.05** (gates
+59/54/45, vitest-4); sdk untouched (66.06/45.79/70.42; gates 63/43/67; 3.52 KB). Prod
+**`pulse v0.2.0`**, healthy — next rollout (**v0.3.0, operator-gated D-V2-6**) carries
+D-068+D-070+D-072+D-073+D-074+**D-075**. Operator queue: 4 questions + U3 + optionals.
+Watches: pion ICE-in-CI 120s/5s budget (D-042 — if it flakes READ THE SCHEDULER); AMS
+`highResourceUsage` under load (live WebRTC checks on an idle box only); latency-guard
+tests must DISCRIMINATE (D-075 lesson).
+
+---
+
+## ▶ prior session context (S14, superseded by the above)
 
 **Session 2026-07-10(c) result: D-074 — S14 DONE (pion media path + OIDC phase 2 + anomaly
 expansion + LimitReader).** All 8 WOs executed or explicitly gated:

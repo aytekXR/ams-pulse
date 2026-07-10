@@ -1,30 +1,47 @@
-# Operator TODO — the items only YOU can do (updated at S14 close, post-D-074, 2026-07-10)
+# Operator TODO — the items only YOU can do (updated at S15 close, post-D-075, 2026-07-10)
 
 > **Audience: the human operator.** Ledger of record: `ROADMAP.md` §5 + `ROADMAP-V2.md` §4; this
 > file is the actionable view, refreshed at every session close. When you finish an item, just
 > tell the agent (or do nothing — every session start re-verifies each item automatically).
 > **Never commit secret VALUES anywhere; `deploy/.env` and `oguz-testing.md` are gitignored.**
 
-## ⚡ TL;DR — expected from you right now (2026-07-10, S14 closed)
+## ⚡ TL;DR — expected from you right now (2026-07-10, S15 closed)
 
-> **NOTHING is required from you.** S14 finished autonomously — WebRTC probes now
-> complete a REAL media-path check against your AMS (verified live: ICE connected in
-> 0.2 s), your SSO login now has a UI button, anomaly alerts can watch bitrate and disk,
-> and a bug that only showed up against your real server (not in CI) was found and fixed
-> by the live check. Your four standing questions are still open — answer whenever; the
-> next session (S15) checks them first and adapts.
+> **NOTHING is required from you.** S15 finished autonomously — WebRTC probes now
+> measure the actual network quality of the media path against your AMS: round-trip
+> time, jitter, and packet loss (verified live against your server: rtt 0.47 ms,
+> jitter 22.33 ms, loss 0% — measured from your real teststream's video). A flaky
+> alert test that would eventually have caused false CI failures was also found and
+> hardened. Your four standing questions are still open — answer whenever; the next
+> session (S16) checks them first and adapts. Next session also opens the CI-promotions
+> date gate (2026-07-23).
 
 **Your open items, all non-blocking:**
 
 | Priority | Item | What to say/do |
 |---|---|---|
-| 🟠 **unlocks prod rollout** | **Ship v0.3.0?** Prod still runs v0.2.0; main now carries FIVE sessions of improvements: O(N²) fix, S11 features (PDF logo, anomaly rules, OIDC), Postgres backend, **your brandkit UI re-theme**, all four protocol probes (now incl. the WebRTC media-path check), SSO login UI, bitrate/disk anomaly alerts | Reply "ship v0.3.0" — the session tags, rolls out with smoke + rollback ready, then pings you for the browser look |
-| 🟠 answer by ~07-23 | **CodeQL as a required merge check?** (CI promotions land at S15; the date gate opens 07-23) | Reply "CodeQL required: yes/no" |
+| 🟠 **unlocks prod rollout** | **Ship v0.3.0?** Prod still runs v0.2.0; main now carries SIX sessions of improvements: O(N²) fix, S11 features (PDF logo, anomaly rules, OIDC), Postgres backend, **your brandkit UI re-theme**, all four protocol probes (WebRTC now measures rtt/jitter/loss of the real media path), SSO login UI, bitrate/disk anomaly alerts | Reply "ship v0.3.0" — the session tags, rolls out with smoke + rollback ready, then pings you for the browser look |
+| 🟠 answer by ~07-23 | **CodeQL as a required merge check?** (CI promotions land at S16; the date gate opens 07-23) | Reply "CodeQL required: yes/no" |
 | 🟠 whenever | **PR-first cadence?** (drives enforce_admins re-arm) | Reply "PR-first" or "keep direct pushes" |
-| 🟠 whenever | **Mobile SDKs — do you have (or plan) native iOS/Android apps?** S15 has an iOS-SDK work order that fires ONLY on your explicit yes. | Reply "need mobile SDKs: yes/no" (no = the item is cut from the roadmap) |
+| 🟠 whenever | **Mobile SDKs — do you have (or plan) native iOS/Android apps?** S16 has an iOS-SDK work order that fires ONLY on your explicit yes. | Reply "need mobile SDKs: yes/no" (no = the item is cut from the roadmap) |
 | 🟡 feature unlock | **U3 — Pro+ license in prod** (QoE/beacon data doesn't flow until then) | See §U3 below (self-serve minting) |
 | 🟢 optional | Enable DASH muxing on an AMS app (NEW, see below) · O7 GHCR-public · D-V2-1 unsigned-webhook call · O11 rotation · `gh auth refresh -s workflow` | See §Optional below |
 | 👀 later (after v0.3.0) | **Browser-accept the re-branded UI** (prod renders the OLD UI until v0.3.0 rolls out) | You'll be pinged with URLs to eyeball |
+
+## ✅ What SESSION-15 did (2026-07-10, D-075 — nothing was needed from you)
+
+| Area | Result |
+|---|---|
+| **WebRTC network-quality stats** | Probes now measure the media path itself: after connecting, they report round-trip time, jitter, and packet loss per probe run. **Verified live against YOUR AMS: rtt 0.47 ms / jitter 22.33 ms / loss 0%, measured from your real teststream's video in 2.2 s.** |
+| **Honest data semantics** | A metric that wasn't measured is *absent*, never shown as 0 — so "0% loss" always means genuinely measured zero loss. |
+| **CI now exercises the full path** | The CI mock server sends real video packets after connecting, so the whole measurement chain is tested on every PR. |
+| **Flaky test hardened** | A pre-existing alert test would have started randomly failing CI under load (it measured scheduler noise, not the behavior it guarded). Caught at this session's gate and rebuilt so it can neither false-fail nor false-pass. |
+| **Docs corrected** | An operator-facing doc still claimed the WebRTC/RTMP/DASH probes were stubs — an operator reading it would think their working probes were broken. Fixed, plus ~19 smaller staleness fixes. |
+| **Quality net** | 3 workflows (13 agents): scouts → authors (all TDD red→green) → 3 adversarial verifiers (correctness verdict: CONFIRMED-OK, zero functional must-fix) + the live real-AMS run; all CI gates green. |
+
+**Not landed (nothing was due):** the CI-promotions work order stayed date-gated
+(opens 2026-07-23 → S16); the v0.3.0 rollout and iOS SDK work orders are waiting on
+your answers above; brandkit light-theme moved to S16.
 
 ## ✅ What SESSION-14 did (2026-07-10, D-074 — nothing was needed from you)
 
@@ -91,11 +108,11 @@ keep observing + reporting only.
   `gh secret set SLACK_WEBHOOK_URL`. (Exposure was never public; risk-accepted D-066.)
 
 ---
-*Status snapshot (2026-07-10, S14 close): GA v0.2.0 live + healthy; main is ahead with
-D-068 + D-070 + D-072 + D-073 + D-074 — all await your "ship v0.3.0". Dependabot queue
-zero. Go coverage 74.4% (floor 70.2); web 62.96/59.04/52.05 (gates 59/54/45); sdk 3.52 KB.
-All four probe protocols have real probes; WebRTC now includes a live-verified media-path
-(ICE) check; WebRTC network stats (rtt/jitter/loss) are S15. Plan of record:
-`ROADMAP-V2.md` (S15 next: CI promotions — gate opens 07-23, pion phase-2b, conditional
-v0.3.0). Your list: 4 questions (v0.3.0, CodeQL, PR-first, mobile SDKs) + U3 + optionals
-(DASH-muxing fixture, O7, D-V2-1, O11, workflow-scope).*
+*Status snapshot (2026-07-10, S15 close): GA v0.2.0 live + healthy; main is ahead with
+D-068 + D-070 + D-072 + D-073 + D-074 + D-075 — all await your "ship v0.3.0". Dependabot
+queue zero. Go coverage 74.5% (floor 70.2); web 62.96/59.04/52.05 (gates 59/54/45); sdk
+3.52 KB. All four probe protocols have real probes; WebRTC is complete through network-
+quality stats (rtt/jitter/loss, live-verified against your AMS). Plan of record:
+`ROADMAP-V2.md` (S16 next: CI promotions — gate opens 07-23, brandkit light theme,
+probe-stats UI, conditional v0.3.0). Your list: 4 questions (v0.3.0, CodeQL, PR-first,
+mobile SDKs) + U3 + optionals (DASH-muxing fixture, O7, D-V2-1, O11, workflow-scope).*
