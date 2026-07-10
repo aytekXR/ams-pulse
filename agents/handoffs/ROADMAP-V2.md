@@ -284,6 +284,65 @@ equivalence; keep window semantics aligned with the Detector's windowS.
 
 ---
 
+### 2.15  Brand adoption — `brandkit/` → product UI  [M–L]  (NEW, OPERATOR-DIRECTED → S12 WO-G, D-071)
+
+**Why:** The operator landed `brandkit/` at the repo root (2026-07-10, D-071) — a complete
+brand & design package: machine-readable `design-system/tokens.json` (dark+light token
+sets), full logo suite + favicons + PWA/iOS/Android icons, 8 hi-fi product screens
+(`ui/Pulse App - Screens.dc.html`: login, dashboard, stream detail, analytics, settings,
+users/tokens, error/empty/gated states, mobile ×2), a component library
+(`design-system/Design System.dc.html`), and a WCAG-verified palette
+(`documentation/design-rationale.md` §2 — BINDING). The current web UI is a GitHub-dark
+placeholder (blue `#1f6feb` accent, no favicon, no logo asset, no light theme) that predates
+the brand. **Operator directive: the frontend adopts the brandkit in the next session.**
+
+**Source of truth:** `brandkit/design-system/tokens.json` is authoritative for every color/
+space/radius/type value — do not invent values. Hi-fi screens + design-system doc are the
+layout/component reference. `brandkit/documentation/README.md` maps the package.
+
+**Scope (phase 1 = S12 WO-G, dark-theme parity):**
+- **Tokens:** regenerate `web/src/styles/global.css` `:root` vars from tokens.json (bg
+  `#0A0E14`, surface `#10161D`, signal `#2CE5A7`, status warn `#FFB224`/crit `#FF5C68`…),
+  then sweep ALL hardcoded hexes in components — scouted (D-071): health-bar ternaries in
+  `FleetPage.tsx`, chart series in `ProtocolDonut.tsx`/`AnalyticsPage.tsx`/`QoePage.tsx`,
+  badge/toast background literals. ⚠ `FleetPage.test.tsx:146-168` pins the OLD hexes by
+  value — update test WITH component (TDD).
+- **Type:** self-host IBM Plex Sans + IBM Plex Mono (OFL) as woff2 under `web/` — NO CDN
+  (ARCHITECTURE §3; the brandkit HTML previews reference Google Fonts for preview ONLY,
+  never copy that). `font-variant-numeric: tabular-nums` on all metric values.
+- **CSP:** self-hosted fonts need `font-src 'self'` — ⚠ `web/e2e/csp.spec.ts` asserts the
+  CSP header BYTE-FOR-BYTE vs the Caddy config; update Caddyfile(s) + `CANONICAL_CSP`
+  atomically or CI reds (INFRA-01 coordination for `deploy/`).
+- **Identity:** create `web/public/` (does not exist) with `favicon.svg` + PNG 16/32/48,
+  apple-touch-icon 180, PWA manifest icons 192/512 (+maskable) from `brandkit/{logo,icons}/
+  png`; `<link rel="icon">` + title in `index.html`; primary-dark logo in the login screen +
+  app shell per screens 01/02.
+- **Components:** restyle per design-system — app shell/nav (active = signal left-border +
+  `rgba(44,229,167,0.1)` tint), KPI stat cards (40px/700 tabular metric), tables (40px rows,
+  11px mono uppercase headers), buttons/inputs/toggles/toasts; status is ALWAYS shape+color
+  paired (dot/diamond/triangle/outline circle — CVD rule, never hue-only).
+- **Charts:** recharts adopts the 8-color dataviz palette in order (series 1 = `#2CE5A7`),
+  horizontal-only grid `#1E2833`, 2px strokes, mono 10px axis labels.
+- **Reports (optional [XS] sub-item, BE-02):** swap the embedded default PDF logo to a
+  rasterized brand asset — canonical white-label default is `logo/powered-by-pulse-badge.svg`
+  (must rasterize: the embed path requires PNG/JPEG); `PULSE_REPORT_LOGO_PATH` override
+  behavior unchanged.
+
+**Explicitly OUT of phase 1 (→ phase 2 backlog):** light theme (tokens.json has the set,
+but no theme-switch mechanism exists in the SPA), density/wall-screen modes, motion
+language, marketing-site build, mobile bottom-tab layout.
+
+**Verification:** vitest runs `css: false` — CSS-var typos are INVISIBLE to unit tests; the
+Playwright specs (dashboard zero-console-errors + csp byte-equality) are the real gate. Web
+coverage gates (59/54/45) must stay green. Visual acceptance = operator browser check
+(U5 pattern); attach screenshots to the handoff.
+
+**Size:** [M–L] — mostly FE-01 (`web/`); + optional reports [XS] (BE-02) + one Caddy CSP
+line (INFRA-01). `brandkit/` itself is read-mostly design source, owner FE-01 (manifest
+updated D-071).
+
+---
+
 ## 3. Sessions
 
 S9 is already scoped — see `agents/handoffs/sessions/SESSION-09.md`. Entries from S10 onward
@@ -362,8 +421,9 @@ under CHF mock; OIDC login round-trip proven in CI with mock server.
 
 ---
 
-### S12 — infrastructure scaling: Postgres meta backend + WebRTC probe (+ S11 carries)
-**Goal:** Unlock HA deployments; extend probe coverage beyond HLS; drain the carry queue.
+### S12 — infrastructure scaling: Postgres meta backend + WebRTC probe + brand adoption (+ S11 carries)
+**Goal:** Unlock HA deployments; extend probe coverage beyond HLS; adopt the brandkit in the
+web UI (operator-directed, D-071); drain the carry queue.
 
 1. **WO-A [L]** Postgres meta backend (§2.13) — `store/meta/postgres` + migration parity +
    CI integration test; `PULSE_META_BACKEND=postgres` env gate; SQLite default unchanged.
@@ -380,10 +440,18 @@ under CHF mock; OIDC login round-trip proven in CI with mock server.
    (trial expires 2026-07-12).
 6. **WO-F [XS]** enforce_admins re-arm (§2.1 / D-V2-3) — flip if operator said "PR-first",
    else re-record rationale.
+7. **WO-G [M–L, OPERATOR-DIRECTED, D-071]** Brand adoption phase 1 (§2.15) — brandkit →
+   web UI: tokens → `global.css` + hardcoded-hex sweep (incl. the pinned FleetPage test),
+   self-hosted IBM Plex woff2 + CSP updated ATOMICALLY with `csp.spec.ts`, favicon/PWA/logo
+   identity (`web/public/` from scratch), component + recharts restyle per design-system;
+   optional [XS] embedded PDF default-logo swap (BE-02). **Non-droppable** (operator
+   directive: brandkit ships in this session); if the session runs hot, WO-B (WebRTC probe)
+   yields to S13 BEFORE WO-G shrinks.
 
 **Exit:** `PULSE_META_BACKEND=postgres` boots and passes migration parity tests in CI;
-WebRTC probe returns a real result (not `not_probed`) for a WebRTC stream in CI; carries
-executed or re-gated with evidence.
+WebRTC probe returns a real result (not `not_probed`) for a WebRTC stream in CI; web UI
+renders the Pulse brand (tokens/fonts/logo/favicon live; web coverage gates + Playwright
+dashboard/csp specs green); carries executed or re-gated with evidence.
 
 ---
 

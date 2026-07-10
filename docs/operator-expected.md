@@ -5,6 +5,14 @@
 > tell the agent (or do nothing — every session start re-verifies each item automatically).
 > **Never commit secret VALUES anywhere; `deploy/.env` and `oguz-testing.md` are gitignored.**
 
+## ✅ Brandkit received (2026-07-10) — UI re-theme scheduled for the next session
+
+Your `brandkit/` package is committed and scheduled: SESSION-12 carries a non-droppable
+work order (WO-G, D-071) to re-theme the web UI from it — design tokens, self-hosted IBM
+Plex, the new logo/favicon/PWA icons, and component/chart restyling per your hi-fi screens.
+Nothing needed from you now; after it ships you'll be asked for a browser check (the U5
+pattern) to visually accept it.
+
 ## ✅ AMS trial license expiry (2026-07-12) — operator says handled (2026-07-10)
 
 You told the session "don't worry about AMS" — recorded as operator-handled/accepted. No

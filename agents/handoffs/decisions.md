@@ -2780,3 +2780,47 @@ install.md + release.yml header comment; SESSION-12/ROADMAP-V2/RESUME-PROMPT/ope
 updated — **S12 WO-E is UNBLOCKED and pre-staged** (image local). First half of the D-069
 release test (authed pull + signature) is hereby EVIDENCED; the clean-install + real-AMS +
 ≤15-min half remains S12 WO-E.
+
+## D-071 — OPERATOR DIRECTIVE (2026-07-10): `brandkit/` landed → brand adoption scheduled as S12 WO-G (non-droppable)
+
+**What landed (operator-authored, repo root `brandkit/`, 60 files / 4.1 MB):** complete brand
+& design package — `design-system/tokens.json` (machine-readable dark+light token sets:
+color/type/space/radius/layout/motion; AUTHORITATIVE), logo suite (primary dark/light,
+stacked, mono ×2, mark ×2, favicon SVG + PNG 16/32/48, `powered-by-pulse-badge.svg`
+white-label default), icons (iOS/Android/web-maskable + PNG exports 180…1024 — PWA-ready),
+8 hi-fi product screens (`ui/Pulse App - Screens.dc.html`: login, dashboard, stream detail,
+analytics, settings, users/tokens, error/empty/gated, mobile ×2), component library
+(`design-system/Design System.dc.html`, light+dark), brand guidelines, marketing site,
+design rationale with a WCAG 2.1 contrast table (`documentation/design-rationale.md` §2 —
+treated as BINDING). Brand core: dark-primary `#0A0E14`, ONE signal color `#2CE5A7`
+(live/healthy/primary-action only; amber/red reserved for state), IBM Plex Sans+Mono (OFL —
+self-host mandatory), status always shape+color paired (CVD-safe). Pre-commit safety sweep:
+`uploads/` = byte-identical copies of docs/{product,ARCHITECTURE,AMS-INTEGRATION}.md + the
+market PDF; no secrets (only placeholder examples).
+
+**Decision (operator: "brandkit is utilized and frontend UI is updated with it in the next
+session"):** new backlog item **ROADMAP-V2 §2.15** (full spec) + **S12 WO-G, non-droppable**
+(phase 1 = dark-theme parity; light theme / density modes / motion = phase 2 backlog).
+Triage rule recorded: WO-B (WebRTC probe) yields to S13 before WO-G shrinks. S12's close
+entry renumbers **D-071 → D-072** (precedent: S11's renumber to D-070). Scope map:
+`brandkit/` assigned to **FE-01** in `agents/manifest.yaml` (read-mostly design source).
+CLAUDE.md + operator-expected.md pointered.
+
+**Scout evidence (1 workflow, 4 read-only agents, 169k tok — full digests in the session
+transcript; verify against live tree at execution):** current UI is a GitHub-dark
+placeholder — inline `style={{}}` everywhere + one `web/src/styles/global.css` `:root`
+block (accent `#1f6feb`), dark-only, no favicon (`web/public/` absent), no logo asset, no
+theme switch. Traps for WO-G: (1) `web/e2e/csp.spec.ts` asserts the CSP header BYTE-FOR-BYTE
+vs Caddy config — font-src changes must land atomically; (2) `FleetPage.test.tsx:146-168`
+pins old health-bar hexes by value; (3) chart/health colors hardcoded per-component
+(`ProtocolDonut`/`AnalyticsPage`/`QoePage`/`FleetPage`) — global.css sweep alone won't
+restyle; (4) vitest `css: false` → CSS-var typos invisible to unit tests, Playwright is the
+real gate; (5) brandkit HTML previews reference Google Fonts — PREVIEW ONLY, production
+self-hosts woff2 (ARCHITECTURE §3 no-CDN rule); (6) embedded PDF default logo is PNG — the
+badge SVG must be rasterized if swapped (`PULSE_REPORT_LOGO_PATH` behavior unchanged).
+
+**Commits:** brandkit assets + planning docs pushed with `[skip ci]` per operator
+instruction ("push without triggering the workflows") — ci/e2e/codeql are all
+push-triggered; no runs expected at this HEAD. NOTE for S12: HEAD is therefore UNVERIFIED
+by CI — the docs-only diff makes that safe, but S12's first push after real changes must
+watch ci+e2e+codeql as usual.

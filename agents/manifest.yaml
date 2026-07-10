@@ -43,7 +43,9 @@ agents:
   - id: FE-01
     name: frontend
     charter: definitions/FE-01-frontend.md
-    scope: [web/]
+    scope:
+      - web/
+      - brandkit/   # brand & design source of truth (D-071) — read-mostly; tokens.json is authoritative for web styling
 
   - id: SDK-01
     name: beacon-sdk

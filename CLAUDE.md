@@ -24,6 +24,11 @@ business logic is not. Build sessions execute the wave plan in `agents/manifest.
    `docs/ARCHITECTURE.md` §4 — treat them as test targets, not aspirations.
 5. `TODO(<AGENT-ID>)` markers throughout the skeleton say who implements what, in
    which phase.
+6. **Brand/design source of truth is `brandkit/`** (D-071) —
+   `brandkit/design-system/tokens.json` is authoritative for all web-UI colors/type/spacing
+   (don't invent values); hi-fi screens in `brandkit/ui/`; the WCAG table in
+   `brandkit/documentation/design-rationale.md` §2 is binding. Fonts (IBM Plex, OFL) are
+   self-hosted only — never a CDN. Adoption plan: `agents/handoffs/ROADMAP-V2.md` §2.15.
 
 ## Commands
 

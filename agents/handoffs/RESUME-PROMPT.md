@@ -48,11 +48,24 @@ tests skipped; fixed, now run).
 - **WO-D/WO-E skips:** backup volume ALREADY 7/7 (prune boundary ~07-10 — S12 verifies
   immediately); promotions still ≥07-23.
 
+**▶ NEW OPERATOR DIRECTIVE (2026-07-10 post-close, D-071): `brandkit/` landed at repo root
+— complete brand & design package** (machine-readable `design-system/tokens.json` dark+light,
+logo suite + favicons + PWA/iOS/Android icons, 8 hi-fi screens in `ui/`, component library,
+IBM Plex OFL type, WCAG-verified palette in `documentation/design-rationale.md` §2 —
+BINDING). **S12 now carries WO-G (non-droppable): re-theme the web UI from the brandkit** —
+full spec ROADMAP-V2 §2.15; work order SESSION-12 WO-G; scout digest + traps in decisions.md
+D-071. Headline traps: fonts SELF-HOSTED only (brandkit HTML previews use Google Fonts —
+never ship); `csp.spec.ts` pins the CSP header byte-for-byte (font-src lands atomically with
+Caddy config); `FleetPage.test.tsx:146-168` pins old hexes; chart colors hardcoded
+per-component (var sweep alone insufficient); vitest `css:false` → Playwright is the gate.
+`brandkit/` scope → FE-01 (manifest updated). S12's own close entry renumbers to **D-072**.
+
 **▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-12.md` and execute it** (S12:
-Postgres meta backend, WebRTC probe phase 1, keep-7 verify, date-gated promotions,
-operator-gated clean-install release test, enforce_admins re-arm). **Check
-`docs/operator-expected.md` answers FIRST — ⏰ the AMS trial license expired/expires
-2026-07-12 (prod polling + WO-E both need it valid).** Plan of record: `ROADMAP-V2.md`.
+Postgres meta backend, WebRTC probe phase 1, **brandkit UI adoption (WO-G, D-071)**, keep-7
+verify, date-gated promotions, operator-gated clean-install release test, enforce_admins
+re-arm). **Check `docs/operator-expected.md` answers FIRST — ⏰ the AMS trial license
+expired/expires 2026-07-12 (prod polling + WO-E both need it valid).** Plan of record:
+`ROADMAP-V2.md`.
 
 **Standing numbers (2026-07-10 post-S11/D-070):** Go total **73.9%** (floor **70.2**); web
 **79.69/76.25/47.33** (gates 59/54/45); sdk **66.06/45.79/70.42** (gates 63/43/67; 3.52 KB).
