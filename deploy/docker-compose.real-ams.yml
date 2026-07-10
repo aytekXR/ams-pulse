@@ -65,3 +65,9 @@ services:
       # are often well below the generic 2000 default — set this to the source's
       # expected healthy bitrate so the health badge is honest. D-031.
       PULSE_INGEST_TARGET_BITRATE_KBPS: "${PULSE_INGEST_TARGET_BITRATE_KBPS:-2000}"
+      # Product license (U3, D-076). Values come from deploy/.env (gitignored) —
+      # the base compose has these commented out, and --env-file only interpolates
+      # compose files, so WITHOUT this mapping the container never sees the key
+      # and silently runs Free tier (found live at the v0.3.0 rollout).
+      PULSE_LICENSE_KEY: "${PULSE_LICENSE_KEY:-}"
+      PULSE_LICENSE_PUBKEY: "${PULSE_LICENSE_PUBKEY:-}"
