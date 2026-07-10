@@ -410,7 +410,7 @@ executed or re-gated with evidence.
 | D-V2-2 | **CodeQL as required CI context:** promote CodeQL to a required branch-protection context | **OPEN — operator OK needed** | Streak green since D-062 (O9 closed). Evidence ready to share. Needs explicit OK given GHAS nuances even on the now-public repo. |
 | D-V2-3 | **enforce_admins flip (§2.1):** flip `enforce_admins` to `true` once sessions stop pushing directly to main | **RESOLVED-DEFERRED (D-068, S10)** | Stays `false`: 1-review requirement + solo owner = self-approval impossible → flip would deadlock session pushes (§2.1 rationale). Re-arm: S12, or operator says "PR-first" (then drop reviews to 0 or add a reviewer). |
 | D-V2-4 | **U3 — activate Pro+ license in prod:** set `PULSE_LICENSE_KEY` in `deploy/.env` | **OPEN — optional feature unlock** | Until then QoE/beacon data does not flow in prod; CI covers it with the mock license (G6 met). Minting instructions in docs/licensing.md. |
-| D-V2-5 | **O7 — GHCR package public:** make `ghcr.io/aytekxr/ams-pulse` public | **OPEN — one UI click, now BLOCKS S12 WO-E** | The single remaining G1 gap. No API path (PATCH 404, D-066 verified). Since S11: also hard-blocks the clean-install release test (anon 401 + gh token lacks read:packages + no local ghcr image — D-070). Alternative unblock: `gh auth refresh -s read:packages`. |
+| D-V2-5 | **O7 — GHCR package public:** make `ghcr.io/aytekxr/ams-pulse` public | **DOWNGRADED to optional (2026-07-10)** | Operator granted `read:packages` instead → S12 WO-E unblocked (pull + cosign verified live: image tag `0.2.0` — NO v prefix, doc bug fixed; Rekor 2128354996). Package stays private: only outside users can't pull/verify until the one UI click (no API path, D-066). |
 
 ---
 

@@ -13,7 +13,9 @@
 #   cosign verify \
 #     --certificate-identity-regexp 'github.com/aytekXR/ams-pulse' \
 #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-#     ghcr.io/aytekxr/ams-pulse:vX.Y.Z
+#     ghcr.io/aytekxr/ams-pulse:X.Y.Z
+#   (image tags have NO v prefix — git tag vX.Y.Z publishes image tag X.Y.Z;
+#    verified live D-070 addendum: 0.2.0 digest 9c6c1204…, Rekor logIndex 2128354996)
 
 name: release
 

@@ -7,8 +7,12 @@
 > carries BOTH the O(N²) fix (D-068) AND S11 features (D-070) — consider cutting v0.3.0 first
 > (release pipeline proven D-058/D-067) so the clean-install test (WO-E) exercises a tag that
 > matches main.
-> ⚠ CHECK `docs/operator-expected.md` ANSWERS FIRST: AMS license renewal (expired 07-12?),
-> O7/read:packages (unblocks WO-E), CodeQL yes/no (WO-D), PR-first yes/no (WO-F).
+> ⚠ CHECK `docs/operator-expected.md` ANSWERS FIRST: CodeQL yes/no (WO-D), PR-first yes/no
+> (WO-F). ALREADY RESOLVED post-D-070 (2026-07-10): gh token has `read:packages` — WO-E is
+> UNBLOCKED and pre-staged (image `ghcr.io/aytekxr/ams-pulse:0.2.0` pulled + cosign-verified:
+> Rekor logIndex 2128354996, commit 4657512). ⚠ Image tags have NO v prefix (git v0.2.0 →
+> image 0.2.0) — docs fixed, remember it in the WO-E override file. AMS license expiry:
+> operator says handled ("don't worry") — observe + report during WO-E, don't block on it.
 
 ## Mission
 
@@ -38,9 +42,10 @@ enforce_admins re-arm (flip if operator said PR-first, else re-record rationale,
    `pulse-prod_pulse-backups` volume (alpine bind-mount pattern), confirm prune + count ≤7 +
    restore-verify; record in decisions.md D-071.
 4. **WO-D [S, date-gated ≥2026-07-23]** CI promotions (§2.7) — spec in Mission (d).
-5. **WO-E [M, operator-gated]** clean-install RELEASE test (S11 WO-F carry) — spec in
-   Mission (e). ⚠ needs valid AMS license (trial expired 2026-07-12 unless renewed) AND
-   GHCR access. If still blocked: record + carry again, do NOT substitute a local build.
+5. **WO-E [M, UNBLOCKED 2026-07-10]** clean-install RELEASE test (S11 WO-F carry) — spec in
+   Mission (e). GHCR access verified (pull + cosign green, image pre-staged locally as
+   `ghcr.io/aytekxr/ams-pulse:0.2.0`). AMS side: operator-handled per their statement —
+   verify live behavior during the test and report. Do NOT substitute a local build.
 6. **WO-F [XS]** enforce_admins re-arm (§2.1, D-V2-3) — operator-answer-dependent.
 
 Backlog seeded but NOT S12 (pick up only if the session runs light): §2.14 anomaly Detector

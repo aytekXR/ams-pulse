@@ -2762,3 +2762,21 @@ docs/operator-expected.md (prod polling + WO-F live half both depend on it).
 
 **WO-D/WO-E:** skipped on date gates as recorded at open; NEW fact — backup volume already
 at 7/7 zips, prune boundary hits ~2026-07-10, so S12 can verify keep-7 immediately.
+
+### D-070 ADDENDUM (2026-07-10, post-close operator actions)
+
+Operator granted **`gh auth refresh -s read:packages`** (confirmed in token scopes) and
+waived the AMS-license concern ("don't worry about ams" — recorded operator-handled; S12
+observes + reports). Package itself remains **private** (API `visibility: private`, anon
+manifest 401) → O7 downgraded to optional/outsiders-only. ORCH validated the unblock
+END-TO-END immediately: `docker login ghcr.io` ✓ → **pull FAILED on `:v0.2.0` (not found)**
+→ **REAL DOC BUG: image tags carry NO `v` prefix** (metadata-action semver pattern strips
+it; actual tags `0.2.0`/`0.2`/`0`/`latest`) → pulled `ghcr.io/aytekxr/ams-pulse:0.2.0` ✓ →
+keyless **cosign verify ✓** (subject `release.yml@refs/tags/v0.2.0`, commit 4657512 = prod,
+digest sha256:9c6c1204…, Rekor logIndex **2128354996**; run via
+gcr.io/projectsigstore/cosign container — no host cosign; creds mount needs world-readable
+DOCKER_CONFIG copy, cosign image runs nonroot). Fixed the `vX.Y.Z` image-tag references in
+install.md + release.yml header comment; SESSION-12/ROADMAP-V2/RESUME-PROMPT/operator-expected
+updated — **S12 WO-E is UNBLOCKED and pre-staged** (image local). First half of the D-069
+release test (authed pull + signature) is hereby EVIDENCED; the clean-install + real-AMS +
+≤15-min half remains S12 WO-E.

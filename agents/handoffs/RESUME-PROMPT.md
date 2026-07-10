@@ -58,10 +58,12 @@ operator-gated clean-install release test, enforce_admins re-arm). **Check
 **79.69/76.25/47.33** (gates 59/54/45); sdk **66.06/45.79/70.42** (gates 63/43/67; 3.52 KB).
 Prod **`pulse v0.2.0` (commit 4657512) + D-067 digests**, healthy — pre-D-068/pre-D-070
 image; next rollout (consider tagging **v0.3.0**) carries the O(N²) fix + S11 features.
-**Dependabot queue: ZERO** (policy: `docs/dependabot-policy.md`). Operator queue: **⏰ AMS
-license renewal (expires 2026-07-12)** + **O7 GHCR visibility (blocks S12 WO-E; alt:
-`gh auth refresh -s read:packages`)** + 2 questions (CodeQL yes/no ~07-23; PR-first yes/no)
-+ optional U3 / D-V2-1 / O11 / `gh auth refresh -s workflow`. **Operator-facing checklist:
+**Dependabot queue: ZERO** (policy: `docs/dependabot-policy.md`). Operator queue
+(post-close update 2026-07-10): **read:packages GRANTED → S12 WO-E UNBLOCKED** (image
+`0.2.0` pulled + cosign-verified — NOTE image tags have NO v prefix, doc bug fixed);
+**AMS license expiry operator-waived** ("don't worry" — observe during WO-E); O7
+public-visibility now optional (outsiders-only); 2 questions stand (CodeQL yes/no ~07-23;
+PR-first yes/no) + optional U3 / D-V2-1 / O11 / `gh auth refresh -s workflow`. **Operator-facing checklist:
 `docs/operator-expected.md` — REFRESHED at this close** (ledger of record: ROADMAP §5 +
 ROADMAP-V2 §4). CH-startup-flake watch stands (2nd occurrence ⇒ 60→180s ×4 copies).
 

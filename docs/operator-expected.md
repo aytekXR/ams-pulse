@@ -5,14 +5,11 @@
 > tell the agent (or do nothing — every session start re-verifies each item automatically).
 > **Never commit secret VALUES anywhere; `deploy/.env` and `oguz-testing.md` are gitignored.**
 
-## ⏰ TIME-CRITICAL — AMS trial license expires 2026-07-12 (~2 days)
+## ✅ AMS trial license expiry (2026-07-12) — operator says handled (2026-07-10)
 
-Your AMS Enterprise 3.0.3 trial license (see oguz-testing.md) is valid only to
-**2026-07-12T12:09Z**. After that the real AMS may stop serving streams / reject REST calls —
-which affects BOTH production Pulse polling AND the S12 clean-install live test.
-**Action: renew/replace the AMS license before 07-12**, or expect prod `live/overview` to go
-empty and poll errors in pulse logs. (Pulse itself is unaffected — this is the AMS-side license,
-not the Pulse license U3.)
+You told the session "don't worry about AMS" — recorded as operator-handled/accepted. No
+session action; S12 will simply observe whether real-AMS polling still returns data during
+the release test and report what it sees.
 
 ## ✅ What SESSION-11 did (2026-07-09/10, D-070 — nothing was needed from you)
 
@@ -24,18 +21,19 @@ not the Pulse license U3.)
 | **install.md accuracy** | 6 doc bugs fixed (the yaml-copy step was dead — config is env-var-only; missing AMS env vars; released-image instructions; port-80 collision warning; migration note). |
 | **Interrupted + resumed** | The session hit the usage limit mid-run; work was committed per-scope and the workflow resumed cleanly — nothing lost. |
 
-## 🔴 The ONE remaining click — still blocks the release test (now S12 WO-E)
+## ✅ GHCR — release test UNBLOCKED (2026-07-10, your `read:packages` refresh)
 
-### O7 — Make the GHCR package public
-- Click path: github.com/aytekXR → Packages → `ams-pulse` → Package settings →
-  Danger zone → **Change visibility → Public**.
-- There is NO API for this (verified — UI-only), so it stays with you.
-- Until then: nobody can `docker pull ghcr.io/aytekxr/ams-pulse:v0.2.0` anonymously,
-  `cosign verify` fails for outsiders, AND the clean-install RELEASE test you ordered
-  (D-069) cannot run — verified 2026-07-09: anonymous pull 401, agent token lacks
-  `read:packages`, no local copy of the ghcr image exists.
-- **Alternative unblock (agent-only):** type `! gh auth refresh -s read:packages` in a
-  session (interactive, ~1 min). Outsiders still can't pull until O7.
+Verified live the moment you did it: authed `docker pull ghcr.io/aytekxr/ams-pulse:0.2.0` ✓
+and keyless `cosign verify` ✓ (signed by release.yml @ v0.2.0, commit 4657512, Rekor log
+2128354996). **S12 WO-E (the clean-install release test) can now run.** Bonus: this
+immediately caught a doc bug — image tags have NO `v` prefix (git tag `v0.2.0` → image tag
+`0.2.0`); docs fixed.
+
+### O7 — package visibility (now OPTIONAL, outsiders-only)
+The package is still **private**: outside users can't `docker pull` or `cosign verify` it.
+That no longer blocks any session work — it only matters when you want the public to pull
+your image. Click path when you do: github.com/aytekXR → Packages → `ams-pulse` → Package
+settings → Danger zone → **Change visibility → Public** (UI-only, no API).
 
 ## 🟠 Two standing questions (answer whenever, not blocking)
 
@@ -74,7 +72,8 @@ not the Pulse license U3.)
   `gh secret set SLACK_WEBHOOK_URL`. (Exposure was never public; risk-accepted D-066.)
 
 ---
-*Status snapshot (2026-07-10, post-D-070): GA v0.2.0 live + healthy; S11 features (PDF logo,
-anomaly rules, OIDC phase 1) on main, ship with the next rollout; dependabot queue zero;
-Go coverage 73.9%. Your list: ⏰ AMS license (07-12!) + O7 (one click, blocks the release
-test) + 2 questions (CodeQL, PR-first) + optional U3 / logo / D-V2-1 / O11 / workflow-scope.*
+*Status snapshot (2026-07-10, post-D-070 + operator unblocks): GA v0.2.0 live + healthy; S11
+features (PDF logo, anomaly rules, OIDC phase 1) on main, ship with the next rollout;
+release test UNBLOCKED (read:packages ✓, pull+cosign verified); AMS license operator-handled;
+dependabot queue zero; Go coverage 73.9%. Your list: 2 questions (CodeQL, PR-first) +
+optional O7-public / U3 / logo / D-V2-1 / O11 / workflow-scope.*

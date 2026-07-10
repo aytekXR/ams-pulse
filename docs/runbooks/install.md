@@ -133,17 +133,18 @@ make up
 > create a small image-pin override file:
 >
 > ```sh
-> # Pull the released image:
-> docker pull ghcr.io/aytekxr/ams-pulse:vX.Y.Z
+> # Pull the released image. ⚠ Image tags have NO `v` prefix: the git tag
+> # `v0.2.0` publishes the image tag `0.2.0` (also `0.2`, `0`, `latest`).
+> docker pull ghcr.io/aytekxr/ams-pulse:0.2.0
 > ```
 >
 > Create `deploy/docker-compose.image-pin.yml` (do not commit this file):
 > ```yaml
 > services:
 >   pulse:
->     image: ghcr.io/aytekxr/ams-pulse:vX.Y.Z
+>     image: ghcr.io/aytekxr/ams-pulse:0.2.0
 >   pulse-migrate:
->     image: ghcr.io/aytekxr/ams-pulse:vX.Y.Z
+>     image: ghcr.io/aytekxr/ams-pulse:0.2.0
 > ```
 >
 > Then start the stack **without** `--build`:
