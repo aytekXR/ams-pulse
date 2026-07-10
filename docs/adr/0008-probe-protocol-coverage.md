@@ -111,3 +111,13 @@ manifest-vs-segment semantics). The WHIP/WHEP+STUN idea above is now fully
 retired: both signaling AND media-path validation ride AMS's own WS protocol.
 RTCP receiver stats (rtt/jitter/loss) remain phase-2b (CH 0008 reserved,
 D-074 pre-declared yield).
+
+**Amendment (D-075, 2026-07-10, S15):** phase-2b SHIPPED — after `ice_state=connected`
+the probe holds ~2 s and reads `rtt_ms` (selected ICE candidate-pair
+`CurrentRoundTripTime`) plus inbound-RTP `jitter_ms`/`loss_pct` via `pc.GetStats()`
+(pion v4 auto-registers its default interceptors, incl. stats, when no registry is
+supplied). CH migration 0008 (`Nullable(Float32)` ×3 — 0.0 is a valid measurement,
+so the sentinel-default pattern of earlier columns is deliberately not used). Keys
+are OMITTED when not measured; stats outcome never flips `Success`. mock-ams
+`-webrtc-ice` now sends ~2 s of deterministic VP8 RTP after DTLS completes so CI
+exercises the full path.

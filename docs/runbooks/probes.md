@@ -154,17 +154,15 @@ non-zero `bitrate_kbps` when a segment is reachable. (Closed: GAP-3-001 and GAP-
 TTFB measurements are stored separately: `ttfb_ms` for the manifest, `segment_ttfb_ms`
 for the first segment. Both are surfaced in the API response and the results panel.
 
-### WebRTC / RTMP / DASH probes (minimal — Phase-3 roadmap)
+### WebRTC / RTMP / DASH probes
 
-These protocols receive a **reachability-only** HTTP GET check. The probe returns
-`success=false, error_code=not_probed` with an `error_msg` that explicitly states:
-
-```
-protocol=webrtc: full probing not yet implemented (Phase 3); HTTP 200 received
-```
-
-No faked success is ever emitted. The HTTP 200 for these protocols only confirms
-the URL is reachable over HTTP — it says nothing about playback quality.
+All three protocols have real probe implementations — see the coverage matrix
+below for exact depth: DASH is full (MPD + segment, D-073), RTMP performs the
+TCP handshake (phase 1, D-073), and WebRTC completes signaling + ICE and — since
+phase 2b (D-075) — reports inbound-RTP `rtt_ms`/`jitter_ms`/`loss_pct` measured
+during a ~2 s post-connect hold. Only unknown/unsupported protocols get the
+honest reachability stub (`success=false, error_code=not_probed`); no faked
+success is ever emitted.
 
 ### Protocol coverage matrix
 
@@ -172,7 +170,7 @@ the URL is reachable over HTTP — it says nothing about playback quality.
 |---|---|---|---|
 | `hls` | **Full** — manifest parse (media and master playlists); segment fetch; manifest TTFB, segment TTFB, bitrate; parse/4xx/5xx/timeout/DNS errors | None | — |
 | `rtmp` | **Handshake (phase 1, D-073)** — stdlib TCP C0/C1→S0/S1/S2→C2 with strict S2-echo validation; `connect_time_ms`, `signaling_state=handshake_complete`; `rtmp_timeout`/`rtmp_refused`/`rtmp_error` | No AMF0 connect / media measurement | AMF0 `connect` + `_result` round-trip |
-| `webrtc` | **Signaling + ICE (phase 2a, D-074)** — WS dial + play → offer (`signaling_state=offer_received`, `connect_time_ms`); then pion answer + trickle ICE → `ice_state=connected\|failed\|timeout` (`ice_failed`/`ice_timeout` error codes; ICE never flips success) | No media decode / RTCP stats | RTCP receiver stats rtt/jitter/loss (phase 2b, S15) |
+| `webrtc` | **Signaling + ICE + RTP stats (phase 2a D-074 / phase 2b D-075)** — WS dial + play → offer (`signaling_state=offer_received`, `connect_time_ms`); pion answer + trickle ICE → `ice_state=connected\|failed\|timeout` (`ice_failed`/`ice_timeout` error codes; ICE never flips success); on connected, ~2 s hold then `rtt_ms` (selected ICE pair) + `jitter_ms`/`loss_pct` (inbound RTP), keys absent when not measured | No media decode | — |
 | `dash` | **Full (D-073)** — MPD parse (SegmentTemplate incl. `$Number%0Nd$`, SegmentList, chained BaseURL); segment fetch; manifest TTFB, segment TTFB, timescale-adjusted bitrate; same error codes as HLS | Fixtures spec-derived (real-AMS DASH muxing disabled — see D-073) | Live AMS MPD fixture capture when operator enables DASH |
 
 ---
@@ -318,7 +316,7 @@ The 403 response body:
 |---|---|---|
 | GAP-3-001 | Segment TTFB stored separately from manifest TTFB | **CLOSED Wave-3-Plus** — `segment_ttfb_ms` column added to `probe_results` DDL (`0003_probe_segment_ttfb.sql`); populated by prober; returned in API response |
 | GAP-3-003 | Master HLS playlist probes returned `bitrate_kbps=0` | **CLOSED Wave-3-Plus** — prober follows first variant URL; `TestHLSProbe_MasterFollowsVariant` asserts `bitrate=66.7 seg_ttfb_ms=1` |
-| WebRTC media QoE | Signaling-only (D-072); no rtt/jitter/loss — pion media path re-gated to S14 (D-073 triage). | S14 |
+| WebRTC media QoE | **CLOSED S15 (D-075)** — phase 2a ICE (D-074) + phase 2b inbound-RTP `rtt_ms`/`jitter_ms`/`loss_pct` (CH 0008). Remaining: no media decode. | — |
 | RTMP media | Handshake-only (D-073); no AMF0 connect or playback measurement. | Future phase |
 
 ---
@@ -326,6 +324,5 @@ The 403 response body:
 ## Phase-3 roadmap
 
 - Native RTMP client for RTMP probes (AMF0 `connect` round-trip).
-- WebRTC RTCP receiver stats — rtt/jitter/loss (phase 2b; ICE landed D-074).
 - Distributed probe network (run probes from multiple locations).
 - Multi-node edge deduplication.

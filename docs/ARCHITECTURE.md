@@ -69,7 +69,7 @@ Last updated: Wave 3-MVP complete (2026-06-14). QA gate: **PASS_WITH_LIMITATIONS
 
 | Component | Package | Status |
 |---|---|---|
-| Probe runner | `internal/prober` | **Shipped** (F10 MVP + D-072/D-073/D-074) — HLS full; dash full (MPD+segment); webrtc phase-2a signaling+ICE (`ice_state`); rtmp phase-1 TCP handshake; 4-worker pool; 60 s config refresh |
+| Probe runner | `internal/prober` | **Shipped** (F10 MVP + D-072/D-073/D-074/D-075) — HLS full; dash full (MPD+segment); webrtc phase-2a signaling+ICE (`ice_state`) + phase-2b RTP stats (`rtt_ms`/`jitter_ms`/`loss_pct`, D-075); rtmp phase-1 TCP handshake; 4-worker pool; 60 s config refresh |
 | Probe results store | `internal/store/clickhouse` | **Shipped** (F10) — `InsertProbeResult` + `QueryProbeResults`; `{retention_days}`-configurable TTL (D-073, default 90) |
 | Probe CRUD + API | `internal/api` | **Shipped** (F10) — `POST/GET/PUT/DELETE /probes`; `GET /probes/{id}/results`; Pro+ tier gate |
 | Anomaly detector | `internal/anomaly` | **Shipped** (F9 MVP) — Welford online baselines; σ=4.0; 0.259 FA/node-week; `GET /anomalies`; Enterprise-only |
@@ -78,7 +78,7 @@ Last updated: Wave 3-MVP complete (2026-06-14). QA gate: **PASS_WITH_LIMITATIONS
 
 Minimal-but-working scope (D-001):
 - F9: 5 metrics (viewers, cpu_pct, mem_pct, ingest_bitrate_kbps, disk_pct — D-074); 1-hour rolling window; on-read flag computation.
-- F10: HLS + DASH probes fully implemented; webrtc = phase-2a signaling+ICE (D-072/D-074), rtmp = phase-1 handshake (D-073); only unknown protocols are reachability stubs (`error_code=not_probed`).
+- F10: HLS + DASH probes fully implemented; webrtc = signaling+ICE+RTP stats (D-072/D-074/D-075), rtmp = phase-1 handshake (D-073); only unknown protocols are reachability stubs (`error_code=not_probed`).
 
 Wave-3-Plus enhancements (closed in D-018):
 - F10: `segment_ttfb_ms` stored separately from manifest TTFB; master-playlist probes follow first variant for real bitrate measurement.
@@ -89,7 +89,7 @@ Wave-3-Plus enhancements (closed in D-018):
 Phase-3 deltas (remaining):
 - Mobile beacons (F3 extension), SSO, white-label PDF, distributed probe network, multi-node edge dedup.
 - F9: multi-window baselines (24h, 7d), additional metrics, flag persistence table.
-- F10: native RTMP client, WHIP/WHEP WebRTC probing, DASH manifest parsing.
+- F10: native RTMP client (AMF0 `connect` round-trip) — WebRTC and DASH probing are shipped (WHIP/WHEP idea retired per ADR 0008; DASH full since D-073).
 
 ### Wave-2 implementation status
 

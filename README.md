@@ -81,7 +81,7 @@ live behind Caddy TLS against a real AMS 3.0.3. Product one-pager: [docs/product
 | API (REST + WebSocket) | — | **Shipped** | 32 paths, 46 ops, OpenAPI-conformant; WS origin enforcement; idempotent DELETE documented |
 | Onboarding wizard | §7.12 | **Shipped** | 4-step first-run flow |
 | Anomaly detection | F9 | **Shipped** (Wave 3-MVP + Wave-3-Plus, Enterprise) | Welford baselines; σ=4.0; 0.259 false alarms/node-week (target <1); minSamples=30 warmup; hysteresis cooldown; epsilon floor — constant-baseline deviations now flagged |
-| Synthetic probes | F10 | **Shipped** (Wave 3-MVP + Wave-3-Plus, Pro+) | HLS full — media and master playlists; `ttfb_ms` + `segment_ttfb_ms` stored separately; bitrate >0 for master playlists; webrtc/rtmp/dash reachability-only stubs (Phase-3 roadmap); 60 s config refresh; 4-worker pool; 90-day result TTL |
+| Synthetic probes | F10 | **Shipped** (Wave 3-MVP + Wave-3-Plus, Pro+) | HLS full — media and master playlists; `ttfb_ms` + `segment_ttfb_ms` stored separately; bitrate >0 for master playlists; dash full MPD+segment (D-073); webrtc signaling+ICE+RTP stats rtt/jitter/loss (D-072/D-074/D-075); rtmp TCP handshake (D-073); 60 s config refresh; 4-worker pool; 90-day result TTL |
 
 ### Known limitations (Phase-3 / deferred)
 
@@ -223,10 +223,10 @@ sqlite3 :memory: < contracts/db/meta/0001_init.sql        # meta DDL
 
 - **Wave 1 / MVP (complete):** Collector, live ops dashboard (F1), historical analytics (F2), core alerting (F5), Docker Compose installer, licensing.
 - **Wave 2 (complete):** QoE beacon SDK (F3, 3.44 KB gzip), ingest health (F4, 250 µs detection), usage/billing reports (F6, ±1% reconciliation), cluster fleet view (F7, ≤30 s discovery), full data API + Prometheus (F8), Telegram/PD/webhook channels, Helm chart.
-- **Wave 3-MVP (complete):** Anomaly detection (F9, Enterprise — Welford baselines, 0.259 false alarms/node-week), synthetic probes (F10, Pro+ — HLS full coverage, webrtc/rtmp/dash minimal-honest stubs).
+- **Wave 3-MVP (complete):** Anomaly detection (F9, Enterprise — Welford baselines, 0.259 false alarms/node-week), synthetic probes (F10, Pro+ — HLS full coverage; webrtc/rtmp/dash grew real probes in D-072…D-075).
 - **V3a/V3b fix-loop (complete, 2026-06-15):** Beacon round-trip end-to-end (SDK header, main-port sink, Pro+ gate, geo enrichment); geo/device analytics; QoE rollup queries; ingest health non-zero; alerting muted/group_by/node_down; 4-tier license model (Business tier); report tier gates; 5-field cron; security hardening (CT compare, WS origin, token kind). See `docs/ARCHITECTURE.md` for full defect list.
 - **Wave-3-Plus (complete, 2026-06-15):** True windowed peak concurrency in billing (`rollup_concurrency_1d`, maxState/maxMerge; VD-38); alert detect→notify wall-clock test passes at 201 ms (VD-31); 13-month dimensional GROUP BY query at 145 ms (VD-18/C9b); HLS probe segment TTFB (`segment_ttfb_ms`) and master-playlist variant-following for real bitrate; anomaly epsilon floor — constant-baseline deviations now flagged; Kafka lag + parse_errors in `/healthz`.
-- **Post-MVP (Phase 3):** Mobile beacons, SSO, white-label PDF, air-gapped licensing, distributed probe network, native RTMP/WebRTC/DASH probing, multi-window anomaly baselines, headless render-time benchmarks.
+- **Post-MVP (Phase 3):** Mobile beacons, air-gapped licensing, distributed probe network, native RTMP client (AMF0 connect), multi-window anomaly baselines, headless render-time benchmarks. (SSO shipped D-070/D-074; white-label PDF shipped D-070.)
 
 ---
 
