@@ -3094,3 +3094,58 @@ scratchpad `scout-{arch,rtmp,dash,pion}.txt`; every fact file:line-cited).
   strict=true, 7 contexts, 1 review — unchanged from D-072; PR-first still unanswered →
   rationale RE-RECORDED verbatim (direct-push cadence stands; flip would deadlock on
   self-approval). Next revisit: operator answer or S14 promotions pickup.
+
+### D-073 CLOSE EVIDENCE (2026-07-10)
+
+**Result: S13 DONE — all 7 WOs executed or explicitly gated.** Commits (pushed):
+`7f097fd` contracts CR + WO-F TTL (0001 fix + 0006 + RED→GREEN integration test at
+RetentionDays=33; runner name-not-content tracking verified at runner.go:201-213) ·
+`a3e1e6f` prober WO-B RTMP + WO-C DASH + serial wiring (18 new function-level tests +
+2 dispatch tests; NotProbed flipped to srt-only atomically) · `10de503` mock-ams RTMP
+listener + DASH routes (zero new deps) · `1bf08dd` e2e steps + compose flag ·
+`7413121` ORCH rulings · `cae6d97` verifier-findings fix. **CI + e2e + codeql ALL GREEN
+at `cae6d97`** (runs 29101697379 / 29101697577 / 29101697561). e2e log evidence:
+`PASS: S13/WO-B' — RTMP probe success=true, connect_time_ms>0,
+signaling_state=handshake_complete` and `PASS: S13/WO-C' — DASH probe success=true,
+ttfb_ms>0, bitrate_kbps>0, segment_ttfb_ms>0` — exit criteria (b)+(c) CI-evidenced.
+
+**Workflows:** `pulse-s13-scout` (4 read-only scouts, 372k tok) → `pulse-s13-impl`
+(6 authors, 453k tok: contracts/mock-ams/infra parallel + rtmp→dash→wiring SERIAL CHAIN
+for the shared prober package — zero same-package interference, the D-070/D-072 wiring
+pattern extended to whole-author serialization) → `pulse-s13-verify` (3 adversarial
+verifiers, 334k tok: CONFIRMED_OK ×2 + PARTIAL). ORCH central gates between impl and
+verify: full -race 24 pkgs 0 FAIL/0 unexpected SKIP, **Go total 74.0%** (floor 70.2),
+gofmt empty, CGO=0 build + vet, mock-ams module -race, web lint/typecheck/coverage
+(62.68/58.78/51.54 vs 59/54/45)/build, gen:api drift-clean.
+
+**Verify highlights (all dispositioned same session):**
+- **LIVE CROSS-PAIR (new pattern, keep it):** real probeRTMP + probeDASH vs real
+  mock-ams inside one container netns — both PASSED (bitrate exactly 200 kbps; RFC3986
+  resolution landed on the mock's segment route). This seam (prober authors used in-test
+  responders, mock authors used in-test clients) is invisible to unit tests.
+- **LIVE AMS EVIDENCE:** strict RTMP S2-echo check passes the REAL AMS 3.0.3
+  (handshake_complete, 40 ms, pristine-copy test) — FP9 complex-handshake concern
+  REFUTED for the target server before push.
+- **Fixed:** DASH BaseURL chain (Period/AdaptationSet levels were ignored — ISO/IEC
+  23009-1 §5.6 chain implemented + TestProbeDASH_BaseURLChain); stale-docs sweep
+  (probes.md coverage matrix — incl. a PRE-EXISTING stale webrtc row D-072 missed —,
+  error-code table, limitations; ARCHITECTURE.md F10 rows + TTL note; ADR 0008 →
+  Partially superseded + D-072/D-073 amendments; prober.go package doc; domain
+  ProbeResult comments). ORCH edited domain/types.go COMMENTS post-authoring (the
+  no-touch ruling bound parallel authors, not the post-gate ORCH fix pass).
+- **Deferred to S14 WO-F:** io.ReadAll segment-body LimitReader hardening (shared
+  HLS+DASH, pre-existing class, truncation-vs-bitrate semantics need care).
+- **Process note:** ORCH gates script had a cwd bug in its drift check (git run from
+  web/); re-verified from repo root → drift-clean. Fix the path handling if the script
+  is reused.
+
+**Standing numbers at close:** Go total **74.0%** (floor 70.2; prober 70.1); web
+62.68/58.78/51.54 (gates 59/54/45, vitest-4) — web untouched this session (schema.d.ts
+JSDoc only); sdk untouched. Dependabot queue ZERO. Prod v0.2.0 healthy, untouched
+(WO-E gated). NEW watch for S14: pion ICE-in-CI flake surface (budget once, generously,
+with evidence — D-042 rule).
+
+**Handoff:** RESUME-PROMPT ▶ START HERE → SESSION-14; ROADMAP-V2 §2.11/§3 (S13 result +
+S14 plan)/§4 (D-V2-6 v0.3.0-ship + D-V2-7 mobile-SDK added)/§5 ratchet row; SESSION-14.md
+written; operator-expected.md refreshed (headline: NOTHING required; 4 open questions;
+NEW optional DASH-muxing fixture-capture note).

@@ -227,7 +227,7 @@ TDD.
 
 ---
 
-### 2.11  Native WebRTC / RTMP / DASH probes  [L per protocol] — ⚙ WebRTC PHASE 1 (signaling) ✅ S12 (D-072); pion media path + RTMP + DASH → S13
+### 2.11  Native WebRTC / RTMP / DASH probes  [L per protocol] — ⚙ WebRTC PHASE 1 ✅ S12 (D-072) · RTMP PHASE 1 (handshake) + DASH (full MPD+segment) ✅ S13 (D-073, 2026-07-10; RTMP S2-echo live-verified vs real AMS 3.0.3; DASH fixtures spec-derived — AMS DASH muxing disabled, capture gap recorded) · pion media path → S14 (D-073 triage: phase-2a = ICE-connected + ice_state + CH 0007, phase-2b = rtt/jitter/loss stats)
 
 **Why:** Current QoE probes are HLS-only; non-HLS streams return `not_probed` (stub from
 ROADMAP.md §1 audit). AMS supports WebRTC, RTMP, and DASH. Full QoE measurement requires
@@ -471,22 +471,47 @@ dashboard/csp specs green); carries executed or re-gated with evidence.
 
 ---
 
-### S13 — probe protocol completion + promotions (REVISED at S12 close, D-072)
-**Goal:** Complete probe protocol coverage (RTMP + DASH + WebRTC pion phase 2); land the
+### S13 — probe protocol completion + promotions (REVISED at S12 close, D-072) ✅ DONE (D-073, 2026-07-10)
+**Result:** WO-B RTMP handshake probe phase 1 (stdlib-only, zero deps, strict S2-echo
+LIVE-VERIFIED vs real AMS 3.0.3) · WO-C DASH probe (full MPD+segment, SegmentTemplate/
+SegmentList/BaseURL-chain, timescale-adjusted bitrate; spec-derived fixtures — AMS DASH
+muxing disabled, capture gap recorded) · WO-F probe_results TTL → {retention_days}
+(0001 fix + CH 0006, RED→GREEN integration test at RetentionDays=33) · WO-D pion
+**RE-GATED to S14 with triage record** (cold-start dep ×2 modules, mock-ams answerer =
+[M] on its own, fixture server→client-only) · WO-A date-gate skip re-recorded (07-10 <
+07-23) · WO-E did NOT fire ("ship v0.3.0" unanswered) · WO-G rationale re-recorded.
+3 workflows (4 scouts / 6 authors / 3 verifiers — CONFIRMED_OK ×2 + PARTIAL; live
+cross-pair real-probe↔real-mock PASSED; findings: DASH BaseURL chain fixed + doc sweep).
+Session opened by completing S12's interrupted close (terminal crash mid-close; no work
+lost). Prompt: `sessions/SESSION-13.md`.
+**Goal (as planned):** Complete probe protocol coverage (RTMP + DASH + WebRTC pion phase 2); land the
 date-gated CI promotions (≥07-23); conditional v0.3.0 prod rollout. Mobile SDKs MOVED to
-S14 and are operator-gated (asked 2026-07-10 whether native iOS/Android apps exist — if
-"drop mobile SDKs", §2.12 is cut). Full prompt: `sessions/SESSION-13.md`.
+S14 and are operator-gated.
 
-1. **WO-A [S, ≥07-23]** CI promotions (§2.7) + CodeQL-answer check.
-2. **WO-B [M]** RTMP handshake probe phase 1 (§2.11).
-3. **WO-C [S–M]** DASH probe (§2.11) — HLS-adjacent manifest+segment.
-4. **WO-D [L]** WebRTC pion media path phase 2 (§2.11 carry) — first to yield if hot.
-5. **WO-E [M, operator-gated "ship v0.3.0"]** prod rollout (carries D-068/D-070/D-072).
-6. **WO-F [XS]** probe_results TTL → {retention_days} (D-072 verifier finding, CH 0006).
-7. **WO-G [XS]** enforce_admins/PR-first re-check.
+---
 
-*(S14+ planned at S13 close: iOS/Android SDKs IF operator confirms need (§2.12), SSO/OIDC
-phase 2 (SPA login), anomaly metric expansion §2.14, brandkit phase 2 (light theme).)*
+### S14 — pion media path + OIDC phase 2 + promotions (planned at S13 close, D-073)
+**Goal:** WebRTC media-path QoE (pion phase 2a/2b per the D-073 triage spec); SPA OIDC
+login; CI promotions (date gate ≥07-23 opens during/near S14); conditional v0.3.0 rollout
+(operator-gated, still pending); anomaly metric expansion. Mobile SDKs remain
+operator-gated (§2.12 uncut until answered). Full prompt: `sessions/SESSION-14.md`.
+
+1. **WO-A [S, ≥07-23]** CI promotions (§2.7) + CodeQL-answer check (carry ×2).
+2. **WO-B [L]** WebRTC pion media path (§2.11): phase-2a = pion dep (server + mock-ams),
+   ICE-connected assertion, `ice_state` field + CH 0007; phase-2b = rtt/jitter/loss stats
+   (RTCP, needs ~2s RTP); live fixture capture (client→server shapes) from real AMS.
+3. **WO-C [M]** SSO/OIDC phase 2 — SPA login UI uses the D-070 cookie flow.
+4. **WO-D [M]** anomaly metric expansion (§2.14) — needs manifest-owner ruling first.
+5. **WO-E [M, operator-gated "ship v0.3.0"]** prod rollout (now carries D-068/D-070/
+   D-072/D-073) + post-rollout operator browser-accept of the re-branded UI.
+6. **WO-F [S]** probe segment-body LimitReader hardening (HLS+DASH, D-073 verifier note —
+   truncation must not silently corrupt bitrate).
+7. **WO-G [XS]** enforce_admins/PR-first re-check (standing).
+8. **WO-H [L, operator-gated]** iOS beacon SDK phase 1 — ONLY on explicit "need mobile
+   SDKs: yes".
+
+*(Backlog-if-light: brandkit phase 2 light theme; DASH live-fixture capture if operator
+enables DASH muxing.)*
 
 ---
 
@@ -499,9 +524,11 @@ phase 2 (SPA login), anomaly metric expansion §2.14, brandkit phase 2 (light th
 |---|---|---|---|
 | D-V2-1 | **Unsigned-webhook ingest (§2.6):** build an optional IP-allowlisted unsigned mode vs keep REST-polling-only | **OPEN** | O3 closed-N/A (D-066): AMS 3.0.3 hooks unsigned — verified live. No build commitment. Agent awaits "build" or "wontfix". |
 | D-V2-2 | **CodeQL as required CI context:** promote CodeQL to a required branch-protection context | **OPEN — operator OK needed** | Streak green since D-062 (O9 closed). Evidence ready to share. Needs explicit OK given GHAS nuances even on the now-public repo. |
-| D-V2-3 | **enforce_admins flip (§2.1):** flip `enforce_admins` to `true` once sessions stop pushing directly to main | **RESOLVED-DEFERRED (D-068, S10)** | Stays `false`: 1-review requirement + solo owner = self-approval impossible → flip would deadlock session pushes (§2.1 rationale). Re-arm: S12, or operator says "PR-first" (then drop reviews to 0 or add a reviewer). |
+| D-V2-3 | **enforce_admins flip (§2.1):** flip `enforce_admins` to `true` once sessions stop pushing directly to main | **RESOLVED-DEFERRED (D-068, S10)** | Stays `false`: 1-review requirement + solo owner = self-approval impossible → flip would deadlock session pushes (§2.1 rationale). Re-arm: re-checked S12 (D-072) + S13 (D-073, live gh evidence, unchanged) → next at S14 WO-G, or operator says "PR-first" (then drop reviews to 0 or add a reviewer). |
 | D-V2-4 | **U3 — activate Pro+ license in prod:** set `PULSE_LICENSE_KEY` in `deploy/.env` | **OPEN — optional feature unlock** | Until then QoE/beacon data does not flow in prod; CI covers it with the mock license (G6 met). Minting instructions in docs/licensing.md. |
 | D-V2-5 | **O7 — GHCR package public:** make `ghcr.io/aytekxr/ams-pulse` public | **DOWNGRADED to optional (2026-07-10)** | Operator granted `read:packages` instead → S12 WO-E unblocked (pull + cosign verified live: image tag `0.2.0` — NO v prefix, doc bug fixed; Rekor 2128354996). Package stays private: only outside users can't pull/verify until the one UI click (no API path, D-066). |
+| D-V2-6 | **Ship v0.3.0:** tag + prod rollout carrying D-068 O(N²) fix, D-070 S11 features, D-072 Postgres/WebRTC-probe/brandkit UI, D-073 RTMP/DASH probes + TTL fix | **OPEN (asked S12, re-asked S13)** | WO-E stays staged every session until "ship v0.3.0". Post-rollout: operator browser-accept of the re-branded UI (U5 pattern). |
+| D-V2-7 | **Mobile SDKs needed?** native iOS/Android beacon SDKs (§2.12) | **OPEN (asked S12, re-asked S13)** | S14 WO-H fires only on explicit "yes"; "no" cuts §2.12 from the roadmap. |
 
 ---
 
@@ -512,4 +539,5 @@ phase 2 (SPA login), anomaly metric expansion §2.14, brandkit phase 2 (light th
 | 2026-07-09 GA (v0.2.0, D-065) | **73.2%** | **70.2** | 76 / 72 / 45 | Baseline for v2 plan; floor = achieved−3 per GA rule |
 | 2026-07-09 S10 (D-068) | **73.5%** | **70.2** | 62.13 / 57.6 / 51 (gates 59/54/45) | Web numbers = vitest-4 re-baseline (D-067); sdk 66.06/45.79/70.42 (gates 63/43/67) |
 | 2026-07-10 S11 (D-070) | **73.9%** | **70.2** | 79.69 / 76.25 / 47.33 (gates 59/54/45) | api 76.1, reports 90.1, query 87.5, meta 67.7; sdk untouched (66.06/45.79/70.42, 3.52 KB) |
+| 2026-07-10 S13 (D-073) | **74.0%** | **70.2** | 62.68 / 58.78 / 51.54 (gates 59/54/45) | prober 70.1 (new rtmp+dash probes fully tested); web untouched (schema.d.ts JSDoc only — numbers are the vitest-4 rebaseline, the S11 row's 79.69 was the notation artifact); sdk untouched |
 | *(update each session at close)* | | | | |

@@ -1,55 +1,62 @@
-# Operator TODO — the items only YOU can do (updated at S13 open, post-D-072, 2026-07-10)
+# Operator TODO — the items only YOU can do (updated at S13 close, post-D-073, 2026-07-10)
 
 > **Audience: the human operator.** Ledger of record: `ROADMAP.md` §5 + `ROADMAP-V2.md` §4; this
 > file is the actionable view, refreshed at every session close. When you finish an item, just
 > tell the agent (or do nothing — every session start re-verifies each item automatically).
 > **Never commit secret VALUES anywhere; `deploy/.env` and `oguz-testing.md` are gitignored.**
 
-## ⚡ TL;DR — expected from you right now (2026-07-10)
+## ⚡ TL;DR — expected from you right now (2026-07-10, S13 closed)
 
-> **S13 IS RUNNING (probe protocol completion: RTMP + DASH + WebRTC media path):
-> NOTHING is required from you.** All four of your standing questions are unanswered —
-> that's fine: the session skips/gates the dependent items and runs everything else
-> autonomously. Answer any of them whenever you like.
+> **NOTHING is required from you.** S13 finished autonomously (RTMP + DASH probes,
+> retention fix; the WebRTC media-path work was honestly re-gated to S14 with evidence).
+> Your four standing questions are still open — answer any of them whenever; the next
+> session (S14) checks them first and adapts.
 
-**Nothing blocks the current session (S13).** Your open items, all non-blocking:
+**Your open items, all non-blocking:**
 
 | Priority | Item | What to say/do |
 |---|---|---|
-| 🟠 **NEW — unlocks prod rollout** | **Ship v0.3.0?** Prod still runs v0.2.0; main carries the O(N²) fix (D-068), S11 features (PDF logo, anomaly rules, OIDC phase 1), and S12's Postgres backend + WebRTC probe + **your brandkit UI re-theme** — none of it reaches prod until this ships. | Reply "ship v0.3.0" — the session tags, rolls out with smoke + rollback ready, then pings you for the browser look |
-| 🟠 answer by ~07-23 | **CodeQL as a required merge check?** (needed when CI promotions land, S13/S14 WO-A) | Reply "CodeQL required: yes/no" |
+| 🟠 **unlocks prod rollout** | **Ship v0.3.0?** Prod still runs v0.2.0; main now additionally carries S13's RTMP+DASH probes and the probe-retention fix on top of the O(N²) fix, S11 features (PDF logo, anomaly rules, OIDC), Postgres backend, WebRTC probe, and **your brandkit UI re-theme** | Reply "ship v0.3.0" — the session tags, rolls out with smoke + rollback ready, then pings you for the browser look |
+| 🟠 answer by ~07-23 | **CodeQL as a required merge check?** (CI promotions land at S14, date gate opens 07-23) | Reply "CodeQL required: yes/no" |
 | 🟠 whenever | **PR-first cadence?** (drives enforce_admins re-arm) | Reply "PR-first" or "keep direct pushes" |
-| 🟠 whenever | **Mobile SDKs — do you have (or plan) native iOS/Android apps?** S14's shape depends on it; no iOS work starts without an explicit yes. | Reply "need mobile SDKs: yes/no" (no = §2.12 is cut from the roadmap) |
+| 🟠 whenever | **Mobile SDKs — do you have (or plan) native iOS/Android apps?** S14 has an iOS-SDK work order that fires ONLY on your explicit yes. | Reply "need mobile SDKs: yes/no" (no = the item is cut from the roadmap) |
 | 🟡 feature unlock | **U3 — Pro+ license in prod** (QoE/beacon data doesn't flow until then) | See §U3 below (self-serve minting) |
-| 🟢 optional | O7 GHCR-public · D-V2-1 unsigned-webhook call · O11 rotation · `gh auth refresh -s workflow` | See §Optional below |
-| 👀 later (after v0.3.0) | **Browser-accept the re-branded UI** (shipped on main in S12; prod renders the OLD UI until v0.3.0 rolls out) | You'll be pinged with URLs to eyeball |
+| 🟢 optional | Enable DASH muxing on an AMS app (NEW, see below) · O7 GHCR-public · D-V2-1 unsigned-webhook call · O11 rotation · `gh auth refresh -s workflow` | See §Optional below |
+| 👀 later (after v0.3.0) | **Browser-accept the re-branded UI** (prod renders the OLD UI until v0.3.0 rolls out) | You'll be pinged with URLs to eyeball |
 
-## ✅ What SESSION-12 did (2026-07-10, D-072 — nothing was needed from you)
+## ✅ What SESSION-13 did (2026-07-10, D-073 — nothing was needed from you)
 
 | Area | Result |
 |---|---|
-| **Your brandkit → product UI (WO-G, D-071)** | Phase 1 shipped on main: design tokens → CSS vars, self-hosted IBM Plex (zero CDN), your favicons/PWA icons/manifest/logo marks, nav + buttons + badges + charts restyled per the design system, WCAG contrast table applied. Light theme = phase 2. **Prod still shows the old UI until v0.3.0 ships** — your browser-accept comes after that. |
-| **Postgres meta backend (HA)** | `PULSE_META=postgres` + DSN now supported (SQLite stays the default; zero action needed from you). Proven by a 19-test parity suite against postgres:16 in CI. Note: the backup sidecar is SQLite-only — PG operators use pg_dump. |
-| **WebRTC probe phase 1** | WebRTC streams now get a real signaling probe (connect time, precise error codes) instead of `not_probed`. Media-path QoE (rtt/jitter/loss) is S13's WO-D. |
-| **Backup keep-7 retention** | First real prune observed live (cycle 8): oldest backup removed, 7/7 kept, and a full ClickHouse RESTORE was verified (613,939 rows) + meta integrity ok. |
-| **Release install test** | Clean-install from the released 0.2.0 image vs your real AMS: healthy in 182 s (budget was 15 min). 7 more install.md bugs found and fixed in the process. |
-| **PDF report logo** | The default embedded logo is now your brandkit "powered by pulse" badge (your own logo still wins via `PULSE_REPORT_LOGO_PATH`). |
-| **Quality net** | 3 adversarial verifiers, 10 findings, all resolved same-session — including a CRITICAL e2e assertion bug caught before push. |
+| **RTMP probe** | RTMP streams now get a real probe (TCP handshake, connect time, precise error codes) instead of `not_probed`. Zero new dependencies. The handshake was verified live against YOUR real AMS (succeeded in 40 ms). |
+| **DASH probe** | DASH streams now get a full probe: manifest parse + first segment + bitrate — same measurements as HLS. |
+| **Probe data retention** | `probe_results` previously ignored your configured retention (hardcoded 90 days); now honors `PULSE_RETENTION_DAYS` (new migration ships with the next rollout). |
+| **WebRTC media QoE** | Honestly re-gated to S14 with evidence (needs a new dependency in two modules + substantial mock rework + a new fixture capture) — rather than landing something half-tested. |
+| **Recovery** | Your terminal crash at the end of S12 lost nothing: the interrupted close was reconstructed and committed at S13 open. |
+| **Quality net** | 3 adversarial verifiers incl. a live cross-pair test; findings fixed same-session (a DASH URL-resolution gap + a documentation sweep). |
+
+### 🟢 NEW optional: enable DASH muxing on an AMS app
+Your AMS has DASH muxing disabled (verified read-only: `.mpd` → 404), so the DASH probe's
+test fixtures are spec-derived rather than captured from your server. Purely optional: if
+you enable DASH muxing on any AMS app (AMS panel → app settings → muxing), tell a session
+and it will capture a real MPD fixture to pin the parser against your server's exact
+output. Nothing is broken without it.
 
 ## ✅ AMS trial license expiry (2026-07-12) — operator says handled (2026-07-10)
 
-You said "don't worry about AMS" — recorded as operator-handled/accepted. S12 observed the
-real AMS still serving normally 2 days pre-expiry. Sessions keep observing + reporting only.
+You said "don't worry about AMS" — recorded as operator-handled/accepted. S13 verified the
+real AMS still answers (RTMP handshake + HLS manifest both live-confirmed today). Sessions
+keep observing + reporting only.
 
-## 🟠 Standing questions (answer whenever, not blocking — now FOUR, see TL;DR table)
+## 🟠 Standing questions (answer whenever, not blocking — FOUR, see TL;DR table)
 
-1. **Ship v0.3.0?** (NEW) — gates the prod rollout work order; everything is staged and the
-   release pipeline is proven (v0.1.0, v0.2.0). Rollback tags stand.
-2. **CodeQL as a REQUIRED merge context** when the web-e2e/csp-e2e promotions land
-   (≥2026-07-23)? Reply "CodeQL required: yes/no".
+1. **Ship v0.3.0?** — gates the prod rollout work order; release pipeline proven (v0.1.0,
+   v0.2.0); rollback tags stand. Until then prod stays on v0.2.0 and your brandkit UI is
+   not visible in prod.
+2. **CodeQL as a REQUIRED merge context** when the CI promotions land (≥2026-07-23, S14)?
 3. **PR-first cadence?** Today sessions push directly to main; `enforce_admins` stays off
-   for that (rationale re-recorded every session). Say "PR-first" to flip.
-4. **Mobile SDKs needed?** iOS/Android beacon SDKs are roadmap §2.12, operator-gated at S14.
+   for that (rationale re-verified every session). Say "PR-first" to flip.
+4. **Mobile SDKs needed?** iOS/Android beacon SDKs — S14 WO-H fires only on explicit yes.
 
 ## 🟡 When you're ready (feature unlock, not a blocker)
 
@@ -63,6 +70,7 @@ real AMS still serving normally 2 days pre-expiry. Sessions keep observing + rep
 
 ## 🟢 Optional / your policy call
 
+- **DASH muxing** — see the NEW note above (real-MPD fixture capture).
 - **O7 — GHCR package visibility** (outsiders-only): the package is private; outside users
   can't `docker pull` or `cosign verify`. Click path: github.com/aytekXR → Packages →
   `ams-pulse` → Package settings → Danger zone → **Change visibility → Public** (UI-only).
@@ -76,10 +84,11 @@ real AMS still serving normally 2 days pre-expiry. Sessions keep observing + rep
   `gh secret set SLACK_WEBHOOK_URL`. (Exposure was never public; risk-accepted D-066.)
 
 ---
-*Status snapshot (2026-07-10, S13 open): GA v0.2.0 live + healthy; main is ahead with
-D-068 O(N²) fix + S11 features + S12 Postgres/WebRTC-probe/brandkit UI — all await your
-"ship v0.3.0". CI/e2e/codeql ALL GREEN at `c767ded`. Dependabot queue zero. Go coverage
-73.9% (floor 70.2); web 62.68/58.78/51.54 (gates 59/54/45, vitest-4); sdk 3.52 KB.
-Backup keep-7 restore-verified. Plan of record: `ROADMAP-V2.md` (S13 running: RTMP + DASH
-probes, WebRTC media path, TTL fix, CI-promotion date gate ≥07-23). Your list: 4 questions
-(v0.3.0, CodeQL, PR-first, mobile SDKs) + U3 + optional O7/D-V2-1/O11/workflow-scope.*
+*Status snapshot (2026-07-10, S13 close): GA v0.2.0 live + healthy; main is ahead with
+D-068 + D-070 + D-072 + D-073 — all await your "ship v0.3.0". Dependabot queue zero. Go
+coverage 74.0% (floor 70.2); web 62.68/58.78/51.54 (gates 59/54/45); sdk 3.52 KB. All four
+probe protocols now have real probes (HLS + DASH full; WebRTC signaling; RTMP handshake);
+WebRTC media path is S14. Plan of record: `ROADMAP-V2.md` (S14 next: pion media path, OIDC
+phase-2 SPA login, CI promotions ≥07-23, conditional v0.3.0). Your list: 4 questions
+(v0.3.0, CodeQL, PR-first, mobile SDKs) + U3 + optionals (DASH-muxing fixture, O7,
+D-V2-1, O11, workflow-scope).*

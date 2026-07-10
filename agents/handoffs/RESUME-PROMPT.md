@@ -11,71 +11,65 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-13.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-14.md`)
 
-**Session 2026-07-10 result: D-072 — S12 DONE, ALL 7 work orders: Postgres meta backend
-(WO-A), WebRTC signaling probe phase 1 (WO-B), keep-7 cycle-8 prune VERIFIED live +
-restore-verified (WO-C), WO-D date-gate skip, clean-install release test PASSED 182s vs
-15-min budget + 7 more install.md bugs fixed (WO-E), enforce_admins rationale re-recorded
-(WO-F), brandkit UI adoption phase 1 (WO-G, D-071) + optional PDF-logo swap.** 3 workflows
-(3 scouts / 7 authors incl. serial-wiring / 3 adversarial verifiers). Verifiers all
-PARTIAL — 10 findings, 8 fixed + 2 dispositioned same session, incl. a **CRITICAL
-always-False e2e poll condition caught BEFORE push** (`get('error_code','not_probed')` vs
-key-omitted-on-success — verify omission semantics, not just field names). CI+e2e+codeql
-ALL GREEN at **c767ded** (e2e log: "PASS: WO-B — WebRTC probe success=true").
-- **WO-A:** `PULSE_META=postgres` + `PULSE_META_DSN` (or `PULSE_POSTGRES_DSN` shorthand —
-  wins); pgx/v5 stdlib (pure-Go, CGO=0); ONE SQL source + cached `?`→`$N` rebind;
-  `EmbeddedDDLPostgres` (contracts/db/meta/postgres/0001+0002 mirrored, schema_migrations
-  PARITY with sqlite); `Migrate(ddlPath)` HARD-REJECTED for PG (sqlite-only escape hatch);
-  PULSE_SECRET_KEY REQUIRED for PG (key-file derivation impossible from a DSN); PG prune
-  orders by (ts,id) — sqlite rowid semantics untouched; 19-test integration parity suite
-  behind `-tags integration` + `PULSE_META_TEST_PG_DSN` (postgres:16 service in ci.yml —
-  the env var is PROVEN set in the CI step log; skip fires only on empty). SQLite default
-  unchanged. Backup sidecar is SQLITE-ONLY (documented; PG operators use pg_dump).
-- **WO-B:** signaling-only slice (headless browser REJECTED — single-binary CGO=0;
-  pion media path → S13). Probe URL = `ws(s)://host/{app}/websocket?streamId=<id>`
-  (percent-decoded); success = takeConfiguration/offer received; real `connect_time_ms`;
-  codes ws_timeout/ws_refused/ws_error; contract CR fields nullable; CH migration
-  **0005** (0004 was taken); mock-ams WS handler + tests; fixture message shapes
-  live-captured from the real AMS (file itself gitignored per capture-dir convention;
-  shapes pinned inline in `TestProbe_WebRTC_FixtureReplay`). e2e asserts the full chain.
-- **WO-G:** tokens.json → global.css dark vars + full hex sweep; @fontsource IBM Plex
-  (Vite-bundled, zero CDN); web/public identity (favicon/PWA/manifest/marks); nav 240px +
-  signal left-border active; chartColors.ts palette; FleetPage trap test updated
-  atomically; **NO CSP change was needed** (font-src 'self' pre-existed everywhere — the
-  §2.15 atomicity trap dissolved); light theme = phase 2. ⚠ web coverage handoff numbers
-  are now lines 62.68/branches 58.78/functions 51.54 (gates 59/54/45) — the old
-  "79.69/76.25" figures were a notation artifact vs the vitest-4 rebaseline; never compare
-  across instrumentation.
-- **WO-C evidence:** sidecar schedule is start+24h (not clock-aligned); cycle 8 pruned
-  `pulse-20260707-073113` (ch zip + meta db), 7/7 kept; `RESTORE DATABASE pulse AS
-  pulse_restore_verify` → 613,939 server_events rows; meta copy integrity_check ok.
-- **WO-E:** released image 0.2.0 → verified-healthy vs REAL AMS in 182s (88s on corrected
-  pin file); install.md released-image path rewritten from the WORKING image-pin.yml
-  (port publish, complete pulse-migrate, CLICKHOUSE_SKIP_USER_SETUP, contracts mount,
-  `--entrypoint pulse` migrate cmd). AMS trial license still serving 2 days pre-expiry
-  (operator-waived).
+**Session 2026-07-10(b) result: D-073 — S13 DONE (probe protocol completion).** Opened by
+COMPLETING S12'S INTERRUPTED CLOSE (operator terminal crashed mid-closing-protocol; code
+was already pushed+green at c767ded; the D-072 decisions close-evidence, operator-expected
+refresh and handoff commit were recovered at S13 open — no work lost; lesson recorded:
+append ledger evidence + commit handoffs EARLY in every close). Then S13 proper:
+- **WO-B RTMP handshake probe phase 1:** stdlib-only (ZERO new deps in both modules)
+  TCP C0/C1→S0/S1/S2→C2 with STRICT S2-echo validation — **live-verified against the real
+  AMS 3.0.3 (handshake_complete, 40 ms)**, refuting the FP9 complex-handshake concern for
+  our target; reuses `connect_time_ms` (description-widening CR only, NO new CH column);
+  `signaling_state=handshake_complete`; codes rtmp_timeout/rtmp_refused/rtmp_error.
+- **WO-C DASH probe (full):** stdlib encoding/xml MPD parse — SegmentTemplate (incl.
+  `$Number%0Nd$`/`$RepresentationID$`/timescale conversion), SegmentList, BaseURL chain
+  per ISO/IEC 23009-1 §5.6 (chain gap was a verifier catch, fixed + pinned same session),
+  RFC 3986 resolution (deliberate divergence from HLS string-truncation resolveURI);
+  HLS-mirrored measurement shape + success semantics (manifest-OK ⇒ success, segment =
+  bonus). NO contract schema change (fields protocol-neutral). ⚠ Fixtures are
+  SPEC-DERIVED: real-AMS DASH muxing is DISABLED (.mpd → 404 verified read-only;
+  enabling it = prod AMS config mutation = operator-only; optional note filed).
+- **WO-F TTL fix:** `0001_init.sql` hardcoded `toIntervalDay(90)` → `{retention_days}`
+  (SAFE: runner tracks migrations by NAME, sha256-of-name — content edit invisible to
+  applied installs) + `0006_probe_results_ttl.sql` ALTER MODIFY TTL for existing
+  installs; `TestIntegration_ProbeResultsTTL` RED at 90 → GREEN at 33; idempotency 6/6.
+- **WO-D pion media path: RE-GATED to S14** with triage record (scout-evidenced:
+  pion = cold-start dep in TWO modules; mock-ams needs a ~300-400 LOC ICE/DTLS answerer
+  rewrite; S12 fixture is server→client-only; 5 new fields + CH 0007). S14 spec: phase-2a
+  ICE-connected + `ice_state`, phase-2b RTCP stats.
+- **WO-A CI promotions: date-gate skip re-recorded** (07-10 < 07-23, carry ×2). **WO-E
+  v0.3.0 rollout: did NOT fire** — "ship v0.3.0" still unanswered (asked again). **WO-G:**
+  enforce_admins rationale re-recorded w/ live gh evidence (false/strict/7 contexts/1
+  review, unchanged).
+- **Process:** 3 workflows (4 scouts / 6 authors incl. serial-wiring chain for the shared
+  prober package / 3 adversarial verifiers → CONFIRMED_OK ×2 + PARTIAL). Verify included
+  a LIVE CROSS-PAIR (real probeRTMP+probeDASH vs real mock-ams — the seam unit tests
+  can't see): both PASSED (bitrate exactly 200 kbps, RFC3986 resolution lands on the
+  mock route). Findings: DASH BaseURL chain (fixed+test), stale-docs sweep (probes.md
+  matrix incl. a PRE-EXISTING stale webrtc row from D-072, ARCHITECTURE.md F10, ADR 0008
+  → Partially superseded + amendments, prober.go package doc, domain comments). Deferred
+  to S14: io.ReadAll LimitReader hardening (pre-existing, shared HLS/DASH).
 
-**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-13.md` and execute it** (S13
-REVISED at D-072: probe protocol completion — RTMP + DASH + WebRTC pion phase 2 — CI
-promotions ≥07-23, probe_results TTL fix, conditional **v0.3.0 rollout**; mobile SDKs
-moved to S14, operator-gated). **Check `docs/operator-expected.md` answers FIRST — 4
-switches: "ship v0.3.0", CodeQL yes/no, PR-first yes/no, mobile-SDK need yes/no.**
-Plan of record: `ROADMAP-V2.md`.
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-14.md` and execute it** (pion
+phase 2a/2b, OIDC phase-2 SPA login, CI promotions ≥07-23, anomaly expansion, LimitReader
+hardening, conditional v0.3.0, operator-gated iOS SDK). **Check `docs/operator-expected.md`
+answers FIRST — 4 switches (all unanswered at S13 close): "ship v0.3.0", CodeQL yes/no,
+PR-first yes/no, mobile-SDK need yes/no.** Plan of record: `ROADMAP-V2.md`.
 
-**Standing numbers (2026-07-10 post-S12/D-072):** Go total **73.9%** (floor **70.2**); web
-**lines 62.68 / branches 58.78 / functions 51.54** (gates 59/54/45, vitest-4); sdk
-**66.06/45.79/70.42** (gates 63/43/67; 3.52 KB), untouched. Prod **`pulse v0.2.0` (commit
-4657512) + D-067 digests**, healthy — next rollout (**v0.3.0 proposed, S13 WO-E**) carries
-D-068 O(N²) fix + D-070 S11 features + D-072 Postgres/probe/brandkit UI. **Dependabot
-queue: ZERO** at session open. Operator queue: 4 questions (v0.3.0-ship, CodeQL ~07-23,
-PR-first, mobile-SDK need) + U3 + optional O7 / D-V2-1 / O11 / `gh auth refresh -s
-workflow`; **browser-accept of the re-branded UI happens AFTER v0.3.0 ships** (prod still
-renders the old UI until then). **Operator-facing checklist: `docs/operator-expected.md` —
-REFRESHED at this close** (ledger of record: ROADMAP §5 + ROADMAP-V2 §4). CH-startup-flake
-watch stands (2nd occurrence ⇒ 60→180s ×4 copies). NEW watch: `TestProbe_WebRTC_WsTimeout`
-budgets already loosened 6s→20s (D-042 class) — if it still flakes, read the scheduler,
-don't bump further.
+**Standing numbers (2026-07-10 post-S13/D-073):** Go total **74.0%** (floor **70.2**;
+prober 70.1); web **lines 62.68 / branches 58.78 / functions 51.54** (gates 59/54/45,
+vitest-4 — never compare to the S11 notation-artifact "79.69"); sdk untouched
+(66.06/45.79/70.42; gates 63/43/67; 3.52 KB). Prod **`pulse v0.2.0` + D-067 digests**,
+healthy — next rollout (**v0.3.0, operator-gated D-V2-6**) carries D-068 + D-070 + D-072 +
+D-073. Dependabot queue ZERO at S13 open. Operator queue: 4 questions (v0.3.0-ship,
+CodeQL ~07-23, PR-first, mobile-SDK) + U3 + optionals; **browser-accept of the re-branded
+UI happens AFTER v0.3.0 ships.** Operator checklist: `docs/operator-expected.md` —
+REFRESHED at this close (ledger of record: ROADMAP §5 + ROADMAP-V2 §4). Watches: CH
+startup flake (2nd occurrence ⇒ 60→180s ×4 copies); `TestProbe_WebRTC_WsTimeout` at 20s
+budget (if it flakes again READ THE SCHEDULER, don't bump — D-042); NEW: pion ICE-in-CI
+will be a fresh flake surface in S14 (budget once, generously, with evidence).
 
 ---
 
