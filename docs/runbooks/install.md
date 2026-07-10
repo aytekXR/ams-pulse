@@ -114,13 +114,25 @@ make up
 > ```
 >
 > When using explicit `-f` flags without the override, the one-shot `pulse-migrate`
-> container is not included. Apply schema migrations before the first start:
+> container is not included. Apply schema migrations before the first start.
+> Three gotchas (all verified empirically, D-072 release test):
+> the image `ENTRYPOINT` is `pulse serve`, so `compose run` must override the
+> entrypoint (`run --rm pulse pulse migrate` would execute `pulse serve pulse
+> migrate` and fail); `pulse migrate` validates `PULSE_SECRET_KEY` at startup;
+> and the ClickHouse migration SQL files are **not** baked into the runtime
+> image — mount the repo's `contracts/` directory and point
+> `PULSE_MIGRATIONS_DIR` at it:
 >
 > ```sh
+> # from the repo root; PULSE_SECRET_KEY exported in step 3
 > docker compose \
 >   -f deploy/docker-compose.yml \
 >   -f deploy/docker-compose.real-ams.yml \
->   run --rm pulse pulse migrate
+>   run --rm --entrypoint pulse \
+>   -e PULSE_SECRET_KEY \
+>   -e PULSE_MIGRATIONS_DIR=/contracts/db/clickhouse \
+>   -v "$(pwd)/contracts:/contracts:ro" \
+>   pulse migrate
 > docker compose \
 >   -f deploy/docker-compose.yml \
 >   -f deploy/docker-compose.real-ams.yml \
@@ -138,13 +150,48 @@ make up
 > docker pull ghcr.io/aytekxr/ams-pulse:0.2.0
 > ```
 >
-> Create `deploy/docker-compose.image-pin.yml` (do not commit this file):
+> Create `deploy/docker-compose.image-pin.yml` (do not commit this file).
+> This full example is the one that passed the clean-install release test
+> (D-072, ~3 min to verified-healthy): when running with explicit `-f` flags
+> the override's conveniences are absent, so the pin file must also publish
+> the API port, define the one-shot `pulse-migrate` service completely (the
+> image `ENTRYPOINT` is `pulse serve` and the migration SQL is not baked into
+> the runtime image), pass `PULSE_SECRET_KEY`, and keep ClickHouse's
+> permissive default user:
 > ```yaml
 > services:
 >   pulse:
 >     image: ghcr.io/aytekxr/ams-pulse:0.2.0
+>     ports:
+>       - "127.0.0.1:8090:8090"   # loopback only; front with a reverse proxy for remote access
+>     environment:
+>       PULSE_SECRET_KEY: "${PULSE_SECRET_KEY}"
+>     depends_on:
+>       pulse-migrate:
+>         condition: service_completed_successfully
+>
 >   pulse-migrate:
 >     image: ghcr.io/aytekxr/ams-pulse:0.2.0
+>     entrypoint: ["pulse", "migrate"]   # image ENTRYPOINT is `pulse serve`
+>     restart: "no"
+>     depends_on:
+>       clickhouse:
+>         condition: service_healthy
+>     environment:
+>       PULSE_CLICKHOUSE_DSN: "clickhouse://clickhouse:9000/pulse"
+>       PULSE_CLICKHOUSE_DATABASE: "pulse"
+>       PULSE_MIGRATIONS_DIR: "/contracts/db/clickhouse"   # SQL not in the runtime image
+>       PULSE_META_DSN: "/var/lib/pulse/pulse_meta.db"
+>       PULSE_SECRET_KEY: "${PULSE_SECRET_KEY}"            # migrate validates it too
+>     volumes:
+>       - pulse-data:/var/lib/pulse
+>       - ../contracts:/contracts:ro
+>
+>   clickhouse:
+>     environment:
+>       # ClickHouse ≥24.8 disables the default user for network access unless
+>       # credentials are set; the dev override sets this — explicit -f paths must too.
+>       CLICKHOUSE_SKIP_USER_SETUP: "1"
 > ```
 >
 > Then start the stack **without** `--build`:
@@ -167,6 +214,12 @@ at 10 s intervals). Pulse will wait for it via the `depends_on: clickhouse: cond
 **5. Open the UI and run first-run setup**
 
 Navigate to `http://your-server:8090` in a browser.
+
+> With the default `make up` path the dev override publishes the UI on port 80.
+> With explicit `-f` flags the base compose only `expose`s 8090 inside the Docker
+> network — nothing is reachable from the host unless you added a `ports:` binding
+> (the image-pin example above binds `127.0.0.1:8090`) or fronted the stack with a
+> reverse proxy (see `productionize.md`).
 
 On first run, the bootstrap token is printed to the Pulse container logs:
 
