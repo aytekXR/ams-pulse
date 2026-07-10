@@ -90,6 +90,12 @@ type Config struct {
 	// on wall-clock timing. Never set in production (serve.go leaves them zero).
 	BeaconRateRPSOverride float64
 	BeaconBurstOverride   float64
+
+	// OIDCConfig, when non-nil, enables the /auth/oidc/* endpoints.
+	// OIDCConfig.Provider must be pre-built by the caller (serve.go or test).
+	// Nil = OIDC disabled (no behaviour change to existing auth).
+	// S11 WO-C: SSO/OIDC phase 1.
+	OIDCConfig *OIDCProviderConfig
 }
 
 // KafkaStatsProvider is the interface to the Kafka source for health reporting.
@@ -171,6 +177,9 @@ type Server struct {
 	wsMu    sync.Mutex
 	wsConns map[*wsConn]struct{}
 	wsStop  func()
+
+	// S11 WO-C: OIDC handler (nil when OIDC is not configured).
+	oidc *oidcHandler
 }
 
 // IngestTracker is the interface to the collector/ingest.HealthTracker.
@@ -209,6 +218,11 @@ func New(cfg Config, store *meta.Store, live domain.LiveProvider, qsvc *query.Se
 		// A7: per-IP limiter for /metrics scrape.
 		metricsLimiter: newKeyedLimiter(metricsRateRPS, metricsBurst),
 	}
+	// S11 WO-C: initialise OIDC handler if a pre-built provider was injected.
+	if cfg.OIDCConfig != nil && cfg.OIDCConfig.Provider != nil {
+		s.oidc = newOIDCHandler(cfg.OIDCConfig, store, logger)
+	}
+
 	s.buildRouter()
 	return s
 }
@@ -408,6 +422,12 @@ func (s *Server) buildRouter() {
 		r.Delete("/admin/users/{userId}", s.handleDeleteUser)
 	})
 
+	// S11 WO-C: OIDC/SSO auth (non-versioned, no bearer auth required).
+	// Routes are always registered; handlers return 501 when OIDC is not configured.
+	r.Get("/auth/oidc/login", s.handleOIDCLogin)
+	r.Get("/auth/oidc/callback", s.handleOIDCCallback)
+	r.Post("/auth/oidc/logout", s.handleOIDCLogout)
+
 	// Static serving of the built web UI (SPA). Registered after the API routes
 	// (so they take precedence) and gated on the assets being present, so
 	// API-only and test builds keep clean 404s.
@@ -459,9 +479,48 @@ type contextKey string
 
 const ctxTokenKey contextKey = "api_token"
 
+// ─── OIDC route handlers ──────────────────────────────────────────────────────
+
+// handleOIDCLogin is the server-level wrapper for the OIDC login handler.
+// Returns 501 NOT_CONFIGURED when OIDC is not enabled.
+func (s *Server) handleOIDCLogin(w http.ResponseWriter, r *http.Request) {
+	if s.oidc == nil {
+		writeError(w, http.StatusNotImplemented, "NOT_CONFIGURED", "OIDC is not configured on this server")
+		return
+	}
+	s.oidc.handleLogin(w, r)
+}
+
+// handleOIDCCallback is the server-level wrapper for the OIDC callback handler.
+// Returns 501 NOT_CONFIGURED when OIDC is not enabled.
+func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
+	if s.oidc == nil {
+		writeError(w, http.StatusNotImplemented, "NOT_CONFIGURED", "OIDC is not configured on this server")
+		return
+	}
+	s.oidc.handleCallback(w, r)
+}
+
+// handleOIDCLogout is the server-level wrapper for the OIDC logout handler.
+// Returns 501 NOT_CONFIGURED when OIDC is not enabled.
+func (s *Server) handleOIDCLogout(w http.ResponseWriter, r *http.Request) {
+	if s.oidc == nil {
+		writeError(w, http.StatusNotImplemented, "NOT_CONFIGURED", "OIDC is not configured on this server")
+		return
+	}
+	s.oidc.handleLogout(w, r)
+}
+
 func (s *Server) bearerAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := extractBearerToken(r)
+		// S11 WO-C: fall back to pulse_session cookie when no Authorization header.
+		// The cookie is set by the OIDC callback; existing bearer flows are unchanged.
+		if token == "" {
+			if c, err := r.Cookie("pulse_session"); err == nil {
+				token = c.Value
+			}
+		}
 		if token == "" {
 			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing or invalid Authorization header")
 			return
@@ -1135,6 +1194,11 @@ func (s *Server) handleCreateAlertRule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "INVALID_RULE", err.Error())
 		return
 	}
+	// S11 WO-B: validate anomaly-specific constraints (metric support, window_s=3600).
+	if valErr := alert.ValidateAnomalyRule(row); valErr != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_ANOMALY_RULE", valErr.Error())
+		return
+	}
 	created, err := s.store.CreateAlertRule(r.Context(), row)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
@@ -1158,6 +1222,11 @@ func (s *Server) handleUpdateAlertRule(w http.ResponseWriter, r *http.Request) {
 	row, err := alertRuleFromAPI(body)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "INVALID_RULE", err.Error())
+		return
+	}
+	// S11 WO-B: validate anomaly-specific constraints.
+	if valErr := alert.ValidateAnomalyRule(row); valErr != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_ANOMALY_RULE", valErr.Error())
 		return
 	}
 	row.ID = id
@@ -1847,6 +1916,14 @@ func alertRuleToAPI(r meta.AlertRuleRow) map[string]any {
 	} else {
 		m["group_by"] = nil
 	}
+	// S11 WO-B: anomaly rule fields.
+	m["rule_type"] = r.RuleType
+	if r.Sigma > 0 {
+		m["sigma"] = r.Sigma
+	}
+	if r.MinSamples > 0 {
+		m["min_samples"] = r.MinSamples
+	}
 	return m
 }
 
@@ -1911,6 +1988,16 @@ func alertRuleFromAPI(body map[string]any) (meta.AlertRuleRow, error) {
 	}
 	if gb, ok := body["group_by"].(string); ok && gb != "" {
 		row.GroupBy = sql.NullString{String: gb, Valid: true}
+	}
+	// S11 WO-B: anomaly rule fields.
+	if rt, ok := body["rule_type"].(string); ok && rt != "" {
+		row.RuleType = rt
+	}
+	if s, ok := body["sigma"].(float64); ok {
+		row.Sigma = s
+	}
+	if ms, ok := body["min_samples"].(float64); ok {
+		row.MinSamples = int(ms)
 	}
 	return row, nil
 }

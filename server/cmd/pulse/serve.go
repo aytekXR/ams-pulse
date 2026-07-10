@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"time"
+
+	oidclib "github.com/coreos/go-oidc/v3/oidc"
 
 	"github.com/pulse-analytics/pulse/server/internal/alert"
 	"github.com/pulse-analytics/pulse/server/internal/alert/channels"
@@ -338,12 +341,41 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	if webDir == "" {
 		webDir = "/usr/share/pulse/web" // matches deploy/docker/pulse.Dockerfile
 	}
+
+	// S11 WO-C: OIDC provider initialization (nil when OIDC_ISSUER not set).
+	var oidcCfg *api.OIDCProviderConfig
+	if cfg.OIDCIssuer != "" {
+		oidcProvider, err := oidclib.NewProvider(ctx, cfg.OIDCIssuer)
+		if err != nil {
+			return nil, fmt.Errorf("OIDC provider init: %w", err)
+		}
+		var groupRoleMap map[string]string
+		if cfg.OIDCGroupRoleMap != "" {
+			if err := json.Unmarshal([]byte(cfg.OIDCGroupRoleMap), &groupRoleMap); err != nil {
+				return nil, fmt.Errorf("PULSE_OIDC_GROUP_ROLE_MAP parse: %w", err)
+			}
+		}
+		oidcCfg = &api.OIDCProviderConfig{
+			Issuer:       cfg.OIDCIssuer,
+			ClientID:     cfg.OIDCClientID,
+			ClientSecret: cfg.OIDCClientSecret,
+			RedirectURL:  cfg.OIDCRedirectURL,
+			GroupClaim:   cfg.OIDCGroupClaim,
+			GroupRoleMap: groupRoleMap,
+			DefaultRole:  cfg.OIDCDefaultRole,
+			SessionTTL:   cfg.OIDCSessionTTL,
+			SecretKey:    metaSecretKey, // reuse meta store key for state-cookie HMAC
+			Provider:     oidcProvider,
+		}
+	}
+
 	apiCfg := api.Config{
 		ListenAddr:         cfg.ListenAddr,
 		MetricsToken:       cfg.MetricsToken, // Wave 2: PULSE_METRICS_TOKEN gating
 		WebDir:             webDir,
 		CORSAllowedOrigins: cfg.CORSAllowedOrigins, // A1: PULSE_CORS_ALLOWED_ORIGINS
 		AllowedWSOrigins:   cfg.AllowedWSOrigins,   // C2: PULSE_ALLOWED_WS_ORIGINS
+		OIDCConfig:         oidcCfg,                // S11 WO-C
 	}
 	apiServer := api.New(apiCfg, metaStore, agg, qsvc, lic, logger)
 	// Wire ClickHouse connection for /healthz probes (D-W1-002).
@@ -382,7 +414,8 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	// Wired to the evaluator to enable TLS cert monitoring.
 	certChecker := alert.NewCertChecker(10 * time.Second)
 	alertEval.SetCertChecker(certChecker)
-	wireAlertQoEReader(alertEval, qsvc) // D-062: honest rebuffer_ratio/error_rate from ClickHouse rollup_qoe_1h
+	wireAlertQoEReader(alertEval, qsvc)          // D-062: honest rebuffer_ratio/error_rate from ClickHouse rollup_qoe_1h
+	wireAlertAnomalyReader(alertEval, metaStore) // S11 WO-B: Welford baseline reader for anomaly rules
 
 	// Wave 2 (BE-02, WO-204): Report accountant, scheduler, and generator.
 	// Accountant queries ClickHouse rollup tables for usage figures.
@@ -397,10 +430,14 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		AccessKeyEnvRef: cfg.S3AccessKeyEnvRef,
 		SecretKeyEnvRef: cfg.S3SecretKeyEnvRef,
 	}
+	// PULSE_REPORT_LOGO_PATH: validate at boot (WARN if set but unreadable, never crash).
+	reports.ValidateLogoPath(cfg.ReportLogoPath, logger)
+
 	reportScheduler := reports.NewScheduler(reports.SchedulerConfig{
 		ArtifactsDir: cfg.ReportsDir,
 		TickInterval: 60 * time.Second,
 		S3:           s3Cfg,
+		LogoPath:     cfg.ReportLogoPath,
 	}, accountant, metaStore, logger)
 	// Wire alert history for schedule failure notifications.
 	reportScheduler.SetAlertStore(metaStore)
@@ -421,7 +458,9 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 
 	// Wave 3 (WO-302): F9 anomaly detector.
 	// Reads live snapshots and maintains rolling baselines in anomaly_baselines.
-	anomalyDet := anomaly.New(anomaly.Config{}, metaStore, agg, logger)
+	// PULSE_ANOMALY_TICK_S overrides the default 60s tick interval (e.g. CI uses 5s).
+	anomalyTickInterval := time.Duration(cfg.AnomalyTickS) * time.Second
+	anomalyDet := anomaly.New(anomaly.Config{TickInterval: anomalyTickInterval}, metaStore, agg, logger)
 
 	// Wire anomaly detector into API server.
 	apiServer.SetAnomalyDetector(&anomalyDetectorBridge{det: anomalyDet})
@@ -578,6 +617,19 @@ func (s *server) Stop() {
 func wireAlertQoEReader(eval *alert.Evaluator, reader alert.QoEReader) {
 	if reader != nil {
 		eval.SetQoEReader(reader)
+	}
+}
+
+// wireAlertAnomalyReader wires the meta store as the anomaly baseline reader for
+// anomaly alert rules. *meta.Store satisfies alert.AnomalyBaselineReader via
+// GetAnomalyBaseline (store/meta/anomaly.go:57). Without this call, anomaly rules
+// are skipped each tick with a WARN log.
+//
+// D-WOB wiring pin: SetAnomalyBaselineReader has the same comment; deleting either
+// breaks compilation of any serve_wiring_test.go that references these symbols.
+func wireAlertAnomalyReader(eval *alert.Evaluator, store alert.AnomalyBaselineReader) {
+	if store != nil {
+		eval.SetAnomalyBaselineReader(store)
 	}
 }
 

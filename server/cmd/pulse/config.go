@@ -81,6 +81,10 @@ type EnvConfig struct {
 	// Empty = geo enrichment disabled (no-op resolver).
 	GeoMMDBPath string
 
+	// ReportLogoPath is the filesystem path to a PNG/JPEG logo for PDF reports.
+	// Corresponds to PULSE_REPORT_LOGO_PATH. Empty = embedded default Pulse waveform.
+	ReportLogoPath string
+
 	// AnonymizeIP controls IP anonymization before geo lookup and storage.
 	// Set to true for GDPR/KVKK compliance.
 	AnonymizeIP bool
@@ -153,6 +157,48 @@ type EnvConfig struct {
 	// /live/ws endpoint. Parsed from PULSE_ALLOWED_WS_ORIGINS (comma-separated).
 	// Empty = same-origin only (nhooyr.io/websocket derives the pattern from Host).
 	AllowedWSOrigins []string
+
+	// AnomalyTickS is the anomaly Detector tick interval in seconds (0 = default 60 s).
+	// Overridden by PULSE_ANOMALY_TICK_S for CI (set to 5 in deploy/docker-compose.ci.yml).
+	AnomalyTickS int
+
+	// ─── S11 WO-C: SSO/OIDC phase 1 ─────────────────────────────────────────────
+
+	// OIDCIssuer is the OIDC provider issuer URL. Empty = OIDC disabled.
+	// Corresponds to PULSE_OIDC_ISSUER.
+	OIDCIssuer string
+
+	// OIDCClientID is the registered OAuth2 client ID.
+	// Corresponds to PULSE_OIDC_CLIENT_ID.
+	OIDCClientID string
+
+	// OIDCClientSecret is the OAuth2 client secret (supports _FILE convention).
+	// Corresponds to PULSE_OIDC_CLIENT_SECRET.
+	OIDCClientSecret string
+
+	// OIDCRedirectURL is the full callback URL registered with the provider.
+	// e.g. https://pulse.example.com/auth/oidc/callback.
+	// Corresponds to PULSE_OIDC_REDIRECT_URL.
+	OIDCRedirectURL string
+
+	// OIDCGroupClaim is the id_token claim name holding group membership.
+	// Default: "groups". Corresponds to PULSE_OIDC_GROUP_CLAIM.
+	OIDCGroupClaim string
+
+	// OIDCGroupRoleMap is a JSON object mapping group names to Pulse roles.
+	// e.g. {"ops-admins":"admin","pulse-users":"viewer"}.
+	// Corresponds to PULSE_OIDC_GROUP_ROLE_MAP.
+	OIDCGroupRoleMap string
+
+	// OIDCDefaultRole is the Pulse role assigned when no group matches.
+	// Empty (default) = fail-closed: no group match → 403 GROUP_DENIED.
+	// Set to "viewer" to allow any authenticated OIDC user read-only access.
+	// Corresponds to PULSE_OIDC_DEFAULT_ROLE. ORCH ruling: default is EMPTY.
+	OIDCDefaultRole string
+
+	// OIDCSessionTTL is the session cookie/token lifetime (default: 24h).
+	// Corresponds to PULSE_OIDC_SESSION_TTL (duration string, e.g. "48h").
+	OIDCSessionTTL time.Duration
 }
 
 // loadEnvConfig reads configuration from PULSE_* environment variables.
@@ -233,6 +279,7 @@ func loadEnvConfig() (EnvConfig, error) {
 
 	// Wave 2: Geo enrichment.
 	cfg.GeoMMDBPath = os.Getenv("PULSE_GEO_MMDB_PATH")
+	cfg.ReportLogoPath = os.Getenv("PULSE_REPORT_LOGO_PATH")
 	cfg.AnonymizeIP = os.Getenv("PULSE_ANONYMIZE_IP") == "true"
 
 	// Wave 2: Session stitcher.
@@ -307,6 +354,50 @@ func loadEnvConfig() (EnvConfig, error) {
 			if origin != "" {
 				cfg.AllowedWSOrigins = append(cfg.AllowedWSOrigins, origin)
 			}
+		}
+	}
+
+	// S11 WO-B: anomaly detector tick interval.
+	if v := os.Getenv("PULSE_ANOMALY_TICK_S"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.AnomalyTickS = n
+		}
+	}
+
+	// S11 WO-C: OIDC/SSO phase 1 config.
+	cfg.OIDCIssuer = os.Getenv("PULSE_OIDC_ISSUER")
+	cfg.OIDCClientID = os.Getenv("PULSE_OIDC_CLIENT_ID")
+	cfg.OIDCRedirectURL = os.Getenv("PULSE_OIDC_REDIRECT_URL")
+	cfg.OIDCGroupClaim = envOrDefault("PULSE_OIDC_GROUP_CLAIM", "groups")
+	cfg.OIDCGroupRoleMap = os.Getenv("PULSE_OIDC_GROUP_ROLE_MAP")
+	cfg.OIDCDefaultRole = os.Getenv("PULSE_OIDC_DEFAULT_ROLE") // ORCH: default EMPTY = fail-closed
+
+	oidcClientSecret, err := config.GetSecret("PULSE_OIDC_CLIENT_SECRET")
+	if err != nil {
+		return cfg, err
+	}
+	cfg.OIDCClientSecret = oidcClientSecret
+
+	if v := os.Getenv("PULSE_OIDC_SESSION_TTL"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return cfg, fmt.Errorf("PULSE_OIDC_SESSION_TTL: %w", err)
+		}
+		cfg.OIDCSessionTTL = d
+	} else {
+		cfg.OIDCSessionTTL = 24 * time.Hour
+	}
+
+	// Boot validation: required fields when OIDC is enabled.
+	if cfg.OIDCIssuer != "" {
+		if cfg.OIDCClientID == "" {
+			return cfg, fmt.Errorf("PULSE_OIDC_CLIENT_ID required when PULSE_OIDC_ISSUER is set")
+		}
+		if cfg.OIDCClientSecret == "" {
+			return cfg, fmt.Errorf("PULSE_OIDC_CLIENT_SECRET required when PULSE_OIDC_ISSUER is set")
+		}
+		if cfg.OIDCRedirectURL == "" {
+			return cfg, fmt.Errorf("PULSE_OIDC_REDIRECT_URL required when PULSE_OIDC_ISSUER is set")
 		}
 	}
 

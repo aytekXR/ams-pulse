@@ -116,6 +116,10 @@ type Config struct {
 	// Parsed from PULSE_ALLOWED_WS_ORIGINS (comma-separated, spaces trimmed,
 	// empties dropped). Nil/empty means same-origin policy only.
 	AllowedWSOrigins []string `yaml:"-"`
+
+	// AnomalyTickS is the Detector tick interval in seconds (0 = default 60 s).
+	// Overridden by PULSE_ANOMALY_TICK_S for CI (set to 5 in deploy/docker-compose.ci.yml).
+	AnomalyTickS int `yaml:"-"`
 }
 
 // AMSConfig holds all AMS source definitions.
@@ -376,6 +380,11 @@ func applyEnv(cfg *Config) error {
 			if origin != "" {
 				cfg.AllowedWSOrigins = append(cfg.AllowedWSOrigins, origin)
 			}
+		}
+	}
+	if v := os.Getenv("PULSE_ANOMALY_TICK_S"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.AnomalyTickS = n
 		}
 	}
 
