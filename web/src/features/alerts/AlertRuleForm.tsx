@@ -21,9 +21,10 @@ const METRICS = [
 ];
 
 // Anomaly rules: only metrics tracked by the Welford Detector.
-// Detector tracks: viewers (-> "viewer_count"), cpu_pct, mem_pct.
-// window_s must be 3600 (anomaly.go:229 hardcoded Detector window).
-const ANOMALY_METRICS = ["viewer_count", "cpu_pct", "mem_pct"];
+// Detector tracks: viewers (-> "viewer_count"), ingest_bitrate_kbps (stream-scoped),
+// cpu_pct, mem_pct, disk_pct (node-scoped).
+// window_s must be 3600 (anomaly.go hardcoded Detector window).
+const ANOMALY_METRICS = ["viewer_count", "ingest_bitrate_kbps", "cpu_pct", "mem_pct", "disk_pct"];
 
 const OPERATORS = ["gt", "lt", "gte", "lte", "eq"] as const;
 const SEVERITIES = ["info", "warning", "critical"] as const;

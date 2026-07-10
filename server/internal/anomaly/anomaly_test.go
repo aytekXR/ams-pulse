@@ -369,6 +369,226 @@ func TestAnomaly_ConstantBaseline_SmallDeviation_NoFlag(t *testing.T) {
 	}
 }
 
+// fakeIngestBitrateLive provides a live snapshot with a stream having a
+// configurable IngestBitrate. Used by TestAnomaly_IngestBitrate_Baselines.
+type fakeIngestBitrateLive struct {
+	ingestBitrate float64
+}
+
+func (f *fakeIngestBitrateLive) CurrentSnapshot() *domain.LiveSnapshot {
+	return &domain.LiveSnapshot{
+		Streams: map[string]*domain.LiveStream{
+			"stream1": {
+				StreamID:      "stream1",
+				IngestBitrate: f.ingestBitrate,
+			},
+		},
+		Nodes: map[string]*domain.LiveNodeStats{},
+	}
+}
+
+func (f *fakeIngestBitrateLive) Subscribe() (<-chan *domain.LiveSnapshot, func()) {
+	ch := make(chan *domain.LiveSnapshot, 1)
+	return ch, func() { close(ch) }
+}
+
+// fakeDiskPctLive provides a live snapshot with a node having a configurable DiskPCT.
+// Used by TestAnomaly_DiskPct_Baselines.
+type fakeDiskPctLive struct {
+	diskPCT float64
+}
+
+func (f *fakeDiskPctLive) CurrentSnapshot() *domain.LiveSnapshot {
+	return &domain.LiveSnapshot{
+		Streams: map[string]*domain.LiveStream{},
+		Nodes: map[string]*domain.LiveNodeStats{
+			"node1": {
+				NodeID:  "node1",
+				DiskPCT: f.diskPCT,
+			},
+		},
+	}
+}
+
+func (f *fakeDiskPctLive) Subscribe() (<-chan *domain.LiveSnapshot, func()) {
+	ch := make(chan *domain.LiveSnapshot, 1)
+	return ch, func() { close(ch) }
+}
+
+// TestAnomaly_IngestBitrate_Baselines verifies that UpdateBaselines writes a
+// baseline row keyed by metric="ingest_bitrate_kbps" with the correct stream scope,
+// and that ComputeFlags emits a flag when the observed value deviates significantly.
+//
+// RED: fails before anomaly.go UpdateBaselines/ComputeFlags observe IngestBitrate.
+// GREEN: passes once those paths are added (D-074 WO-D).
+func TestAnomaly_IngestBitrate_Baselines(t *testing.T) {
+	store := &fakeBaselineStore{}
+	live := &fakeIngestBitrateLive{ingestBitrate: 5000.0}
+
+	det := anomaly.New(anomaly.Config{
+		DefaultSigma:    3.0,
+		MinSamples:      5,
+		HysteresisTicks: 10,
+		TickInterval:    time.Second,
+	}, store, live, nil)
+
+	ctx := context.Background()
+
+	// Feed MinSamples steady observations so the baseline warms up.
+	for i := 0; i < 5; i++ {
+		if err := det.UpdateBaselines(ctx); err != nil {
+			t.Fatalf("UpdateBaselines iter %d: %v", i, err)
+		}
+	}
+
+	// Assert: a baseline row with metric="ingest_bitrate_kbps" must now exist.
+	baselines, err := store.ListAnomalyBaselines(ctx)
+	if err != nil {
+		t.Fatalf("ListAnomalyBaselines: %v", err)
+	}
+	var found *anomaly.AnomalyBaselineRow
+	for i := range baselines {
+		if baselines[i].Metric == "ingest_bitrate_kbps" {
+			found = &baselines[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("expected baseline row with metric=ingest_bitrate_kbps, got none (UpdateBaselines must observe IngestBitrate)")
+	}
+	if found.SampleCount < 5 {
+		t.Errorf("expected SampleCount>=5, got %d", found.SampleCount)
+	}
+	// Scope must be stream-scoped: {"stream_id":"stream1"}
+	if found.Scope != `{"stream_id":"stream1"}` {
+		t.Errorf("expected scope={\"stream_id\":\"stream1\"}, got %q", found.Scope)
+	}
+	t.Logf("ingest_bitrate_kbps baseline: mean=%.2f stddev=%.4f samples=%d scope=%s",
+		found.Mean, found.Stddev, found.SampleCount, found.Scope)
+
+	// Build a non-zero stddev by alternating the bitrate.
+	for i := 0; i < 5; i++ {
+		if i%2 == 0 {
+			live.ingestBitrate = 4500.0
+		} else {
+			live.ingestBitrate = 5500.0
+		}
+		if err := det.UpdateBaselines(ctx); err != nil {
+			t.Fatalf("UpdateBaselines (vary) iter %d: %v", i, err)
+		}
+	}
+
+	// Inject a very large spike — ComputeFlags must return a flag for ingest_bitrate_kbps.
+	// With effStddev >= 0.05*mean ≈ 250, a value of 50000 gives z=(50000-5000)/250=180>>3.0.
+	live.ingestBitrate = 50000.0
+	flags, err := det.ComputeFlags(ctx, 3.0)
+	if err != nil {
+		t.Fatalf("ComputeFlags: %v", err)
+	}
+	var bitrateFlag *anomaly.AnomalyFlag
+	for i := range flags {
+		if flags[i].Metric == "ingest_bitrate_kbps" {
+			bitrateFlag = &flags[i]
+			break
+		}
+	}
+	if bitrateFlag == nil {
+		t.Fatal("expected AnomalyFlag with metric=ingest_bitrate_kbps after large ingest_bitrate deviation, got none")
+	}
+	if bitrateFlag.Scope.StreamID != "stream1" {
+		t.Errorf("expected flag Scope.StreamID=stream1, got %q", bitrateFlag.Scope.StreamID)
+	}
+	t.Logf("PASS: ingest_bitrate_kbps anomaly flag: sigma=%.2f observed=%.1f expected=%.2f",
+		bitrateFlag.Sigma, bitrateFlag.Observed, bitrateFlag.Expected)
+}
+
+// TestAnomaly_DiskPct_Baselines verifies that UpdateBaselines writes a baseline
+// row keyed by metric="disk_pct" with the correct node scope, and that
+// ComputeFlags emits a flag when the observed value deviates significantly.
+//
+// RED: fails before anomaly.go UpdateBaselines/ComputeFlags observe DiskPCT.
+// GREEN: passes once those paths are added (D-074 WO-D).
+func TestAnomaly_DiskPct_Baselines(t *testing.T) {
+	store := &fakeBaselineStore{}
+	live := &fakeDiskPctLive{diskPCT: 45.0}
+
+	det := anomaly.New(anomaly.Config{
+		DefaultSigma:    3.0,
+		MinSamples:      5,
+		HysteresisTicks: 10,
+		TickInterval:    time.Second,
+	}, store, live, nil)
+
+	ctx := context.Background()
+
+	// Feed MinSamples steady observations so the baseline warms up.
+	for i := 0; i < 5; i++ {
+		if err := det.UpdateBaselines(ctx); err != nil {
+			t.Fatalf("UpdateBaselines iter %d: %v", i, err)
+		}
+	}
+
+	// Assert: a baseline row with metric="disk_pct" must now exist.
+	baselines, err := store.ListAnomalyBaselines(ctx)
+	if err != nil {
+		t.Fatalf("ListAnomalyBaselines: %v", err)
+	}
+	var found *anomaly.AnomalyBaselineRow
+	for i := range baselines {
+		if baselines[i].Metric == "disk_pct" {
+			found = &baselines[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("expected baseline row with metric=disk_pct, got none (UpdateBaselines must observe DiskPCT)")
+	}
+	if found.SampleCount < 5 {
+		t.Errorf("expected SampleCount>=5, got %d", found.SampleCount)
+	}
+	// Scope must be node-scoped: {"node_id":"node1"}
+	if found.Scope != `{"node_id":"node1"}` {
+		t.Errorf("expected scope={\"node_id\":\"node1\"}, got %q", found.Scope)
+	}
+	t.Logf("disk_pct baseline: mean=%.2f stddev=%.4f samples=%d scope=%s",
+		found.Mean, found.Stddev, found.SampleCount, found.Scope)
+
+	// Build a non-zero stddev by alternating the disk usage.
+	for i := 0; i < 5; i++ {
+		if i%2 == 0 {
+			live.diskPCT = 43.0
+		} else {
+			live.diskPCT = 47.0
+		}
+		if err := det.UpdateBaselines(ctx); err != nil {
+			t.Fatalf("UpdateBaselines (vary) iter %d: %v", i, err)
+		}
+	}
+
+	// Inject a near-full-disk spike. With effStddev >= 0.05*45 ≈ 2.25,
+	// z = (99-45)/2.25 = 24 >> 3.0 → must flag.
+	live.diskPCT = 99.0
+	flags, err := det.ComputeFlags(ctx, 3.0)
+	if err != nil {
+		t.Fatalf("ComputeFlags: %v", err)
+	}
+	var diskFlag *anomaly.AnomalyFlag
+	for i := range flags {
+		if flags[i].Metric == "disk_pct" {
+			diskFlag = &flags[i]
+			break
+		}
+	}
+	if diskFlag == nil {
+		t.Fatal("expected AnomalyFlag with metric=disk_pct after large disk_pct deviation, got none")
+	}
+	if diskFlag.Scope.NodeID != "node1" {
+		t.Errorf("expected flag Scope.NodeID=node1, got %q", diskFlag.Scope.NodeID)
+	}
+	t.Logf("PASS: disk_pct anomaly flag: sigma=%.2f observed=%.1f expected=%.2f",
+		diskFlag.Sigma, diskFlag.Observed, diskFlag.Expected)
+}
+
 // TestAnomaly_FalseAlarmRate documents the modeled false-alarm rate.
 // This is a documentation/calibration test, not a stochastic simulation.
 //
@@ -389,7 +609,15 @@ func TestAnomaly_FalseAlarmRate_ModeledTarget(t *testing.T) {
 	// Observations per node per week at 60 s tick.
 	secondsPerWeek := 7 * 24 * 3600
 	ticksPerWeek := secondsPerWeek / tickIntervalS // 10,080
-	metricsPerNode := 3
+	// metricsPerNode is a CONSERVATIVE per-node metric budget (D-074 WO-D).
+	// Truly node-scoped metrics are cpu_pct, mem_pct, disk_pct (3); viewers is
+	// stream-scoped (UpdateBaselines iterates snap.Streams) but is counted here
+	// as a 4th as-if-node-scoped metric so the modeled rate stays an upper
+	// bound for the common 1-node/1-stream deployment. ingest_bitrate_kbps is
+	// likewise stream-scoped and excluded — it scales with stream count, not
+	// node count. True node-only rate at 3 metrics ≈ 0.2594/node-week; this
+	// 4-metric bound ≈ 0.3458/node-week — both < the PRD 1.0 target.
+	metricsPerNode := 4
 
 	// Gaussian tail probability for |Z| >= sigma (two-tailed).
 	// P(|Z| >= 4.0) ≈ 6.33e-5 (standard normal, two-tailed).

@@ -65,13 +65,14 @@ func TestContractAlertRuleIncludesRuleType(t *testing.T) {
 
 // TestContractAlertRule_AnomalyBadMetric400 verifies that POST /api/v1/alerts/rules
 // with rule_type=anomaly and an unsupported metric returns HTTP 400 INVALID_ANOMALY_RULE.
+// Uses rebuffer_ratio (beacon QoE — excluded until U3; truly unsupported).
 func TestContractAlertRule_AnomalyBadMetric400(t *testing.T) {
 	ts, token, cleanup := setupTestServer(t)
 	defer cleanup()
 
 	body := map[string]any{
 		"name":        "contract-anomaly-bad-metric",
-		"metric":      "ingest_bitrate_kbps",
+		"metric":      "rebuffer_ratio",
 		"rule_type":   "anomaly",
 		"window_s":    3600,
 		"sigma":       2.0,

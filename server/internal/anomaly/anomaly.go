@@ -15,7 +15,8 @@
 //	sigma=4.0 → P ≈ 6.33e-5 per observation
 //
 // Baseline update tick = 60 s → 10,080 ticks/node/week.
-// Tracking 3 metrics/node (viewers, cpu_pct, mem_pct) = 30,240 raw obs/node-week.
+// Tracking 4 node-scoped metrics/node (viewers, cpu_pct, mem_pct, disk_pct) = 40,320
+// raw obs/node-week. ingest_bitrate_kbps is stream-scoped and scales with stream count.
 //
 // With hysteresis (renewal-process model): after a false alarm, the next
 // HysteresisTicks checks are suppressed. Effective false-alarm rate:
@@ -60,11 +61,12 @@ import (
 // At σ=4.0 with MinSamples=30 and HysteresisTicks=10:
 //
 //	P(|Z|>=4.0) ≈ 6.33e-5 per observation.
-//	raw flags/node/week (3 metrics, 10080 ticks) = 10080 × 6.33e-5 × 3 = 1.91
+//	raw flags/node/week (4 metrics, 10080 ticks) = 10080 × 6.33e-5 × 4 = 2.55
 //	with hysteresis renewal process: lambda_flags = lambda / (1 + lambda × cooldown)
 //	lambda = 10080 × 6.33e-5 = 0.638/week/metric
 //	lambda_flags = 0.638 / (1 + 0.638 × 10) ≈ 0.638/7.38 ≈ 0.086/week/metric
-//	across 3 metrics: 0.086 × 3 = 0.26/node/week < 1.0. PASSES PRD target.
+//	across 4 metrics: 0.086 × 4 ≈ 0.35/node/week < 1.0. PASSES PRD target.
+//	(ingest_bitrate_kbps is stream-scoped; excluded from per-node budget.)
 const DefaultSigma = 4.0
 
 // MinSamples is the minimum number of samples required before anomaly flagging.
@@ -228,7 +230,7 @@ func (d *Detector) UpdateBaselines(ctx context.Context) error {
 	now := time.Now().UnixMilli()
 	const windowS = 3600 // 1-hour rolling window
 
-	// Collect observations: per-stream viewer counts + per-node CPU/mem.
+	// Collect observations: per-stream viewer counts + ingest bitrate; per-node CPU/mem/disk.
 	type observation struct {
 		metric string
 		scope  AnomalyBaselineRow
@@ -243,6 +245,12 @@ func (d *Detector) UpdateBaselines(ctx context.Context) error {
 			scope:  AnomalyBaselineRow{Metric: "viewers", Scope: scope, WindowS: windowS},
 			value:  float64(s.ViewerCount),
 		})
+		// ingest_bitrate_kbps: Detector key == rule metric name (no alias).
+		obs = append(obs, observation{
+			metric: "ingest_bitrate_kbps",
+			scope:  AnomalyBaselineRow{Metric: "ingest_bitrate_kbps", Scope: scope, WindowS: windowS},
+			value:  s.IngestBitrate,
+		})
 	}
 
 	for nodeID, n := range snap.Nodes {
@@ -256,6 +264,12 @@ func (d *Detector) UpdateBaselines(ctx context.Context) error {
 			metric: "mem_pct",
 			scope:  AnomalyBaselineRow{Metric: "mem_pct", Scope: nodeScope, WindowS: windowS},
 			value:  n.MemPCT,
+		})
+		// disk_pct: node-scoped, Detector key == rule metric name (no alias).
+		obs = append(obs, observation{
+			metric: "disk_pct",
+			scope:  AnomalyBaselineRow{Metric: "disk_pct", Scope: nodeScope, WindowS: windowS},
+			value:  n.DiskPCT,
 		})
 	}
 
@@ -349,13 +363,15 @@ func (d *Detector) ComputeFlags(ctx context.Context, sigmaThreshold float64) ([]
 	// Build live values map.
 	liveValues := make(map[string]float64) // key = "metric:scopeJSON"
 	for streamID, s := range snap.Streams {
-		k := "viewers:" + scopeJSON("", "", streamID)
-		liveValues[k] = float64(s.ViewerCount)
+		ss := scopeJSON("", "", streamID)
+		liveValues["viewers:"+ss] = float64(s.ViewerCount)
+		liveValues["ingest_bitrate_kbps:"+ss] = s.IngestBitrate
 	}
 	for nodeID, n := range snap.Nodes {
 		ns := scopeJSON(nodeID, "", "")
 		liveValues["cpu_pct:"+ns] = n.CPUPCT
 		liveValues["mem_pct:"+ns] = n.MemPCT
+		liveValues["disk_pct:"+ns] = n.DiskPCT
 	}
 
 	now := time.Now().UnixMilli()

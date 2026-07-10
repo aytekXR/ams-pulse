@@ -698,7 +698,7 @@ func TestEvaluator_AnomalyRulePersistsHistory(t *testing.T) {
 // ─── ValidateAnomalyRule tests ────────────────────────────────────────────────
 
 func TestValidateAnomalyRule_SupportedMetrics(t *testing.T) {
-	for _, metric := range []string{"viewer_count", "cpu_pct", "mem_pct"} {
+	for _, metric := range []string{"viewer_count", "ingest_bitrate_kbps", "cpu_pct", "mem_pct", "disk_pct"} {
 		rule := meta.AlertRuleRow{RuleType: "anomaly", Metric: metric, WindowS: 3600}
 		if err := alert.ValidateAnomalyRule(rule); err != nil {
 			t.Errorf("metric %q: expected no error, got %v", metric, err)
@@ -707,7 +707,8 @@ func TestValidateAnomalyRule_SupportedMetrics(t *testing.T) {
 }
 
 func TestValidateAnomalyRule_UnsupportedMetric(t *testing.T) {
-	rule := meta.AlertRuleRow{RuleType: "anomaly", Metric: "ingest_bitrate_kbps", WindowS: 3600}
+	// rebuffer_ratio is excluded (beacon QoE — not in LiveSnapshot until U3).
+	rule := meta.AlertRuleRow{RuleType: "anomaly", Metric: "rebuffer_ratio", WindowS: 3600}
 	err := alert.ValidateAnomalyRule(rule)
 	if err == nil {
 		t.Fatal("expected error for unsupported metric")

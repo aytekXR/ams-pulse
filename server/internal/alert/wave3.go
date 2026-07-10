@@ -68,17 +68,20 @@ func (e *AnomalyRuleValidationError) Error() string {
 // supportedAnomalyMetrics is the set of alert rule metric names accepted for
 // anomaly rules. These must have a corresponding Detector observation path:
 //   - viewer_count → Detector tracks "viewers" per stream (metricAliases maps it)
-//   - cpu_pct, mem_pct → Detector tracks these per node
+//   - ingest_bitrate_kbps → Detector tracks per stream (key == metric name, no alias)
+//   - cpu_pct, mem_pct, disk_pct → Detector tracks these per node
 var supportedAnomalyMetrics = map[string]bool{
-	"viewer_count": true,
-	"cpu_pct":      true,
-	"mem_pct":      true,
+	"viewer_count":        true,
+	"ingest_bitrate_kbps": true,
+	"cpu_pct":             true,
+	"mem_pct":             true,
+	"disk_pct":            true,
 }
 
 // ValidateAnomalyRule validates anomaly-specific constraints on a rule.
 // Returns nil for non-anomaly rules (threshold/empty RuleType always passes).
 // Returns *AnomalyRuleValidationError for anomaly rules that fail:
-//   - metric must be in the supported set (viewer_count, cpu_pct, mem_pct)
+//   - metric must be in the supported set (viewer_count, ingest_bitrate_kbps, cpu_pct, mem_pct, disk_pct)
 //   - window_s must be exactly 3600 (matches the Detector's fixed windowS)
 func ValidateAnomalyRule(row meta.AlertRuleRow) error {
 	if row.RuleType != "anomaly" {
@@ -87,7 +90,7 @@ func ValidateAnomalyRule(row meta.AlertRuleRow) error {
 	if !supportedAnomalyMetrics[row.Metric] {
 		return &AnomalyRuleValidationError{
 			Field:   "metric",
-			Message: fmt.Sprintf("metric %q is not supported for anomaly rules; supported: viewer_count, cpu_pct, mem_pct", row.Metric),
+			Message: fmt.Sprintf("metric %q is not supported for anomaly rules; supported: viewer_count, ingest_bitrate_kbps, cpu_pct, mem_pct, disk_pct", row.Metric),
 		}
 	}
 	if row.WindowS != 3600 {
@@ -138,7 +141,8 @@ type anomalyEvalInfo struct {
 //
 // Metrics:
 //   - viewer_count → iterates snap.Streams, baseline key "viewers", groupKey = stream_id
-//   - cpu_pct, mem_pct → iterates snap.Nodes, baseline key = metric, groupKey = node_id
+//   - ingest_bitrate_kbps → iterates snap.Streams, baseline key = metric, groupKey = stream_id
+//   - cpu_pct, mem_pct, disk_pct → iterates snap.Nodes, baseline key = metric, groupKey = node_id
 //
 // Stddev floor formula (identical to anomaly.Detector.ComputeFlags, anomaly.go:383):
 //
@@ -175,9 +179,9 @@ func (e *Evaluator) evalAnomalyMetric(ctx context.Context, snap *domain.LiveSnap
 	}
 
 	switch rule.Metric {
-	case "viewer_count":
+	case "viewer_count", "ingest_bitrate_kbps":
 		return e.evalAnomalyStreams(ctx, snap, scope, rule, lookupMetric, effectiveSigma, effectiveMinSamples, rule.WindowS, reader)
-	case "cpu_pct", "mem_pct":
+	case "cpu_pct", "mem_pct", "disk_pct":
 		return e.evalAnomalyNodes(ctx, snap, scope, rule, lookupMetric, effectiveSigma, effectiveMinSamples, rule.WindowS, reader)
 	default:
 		e.logger.Warn("alert: anomaly rule metric not supported", "metric", rule.Metric)
@@ -202,7 +206,13 @@ func (e *Evaluator) evalAnomalyStreams(ctx context.Context, snap *domain.LiveSna
 			continue
 		}
 
-		val := float64(s.ViewerCount)
+		var val float64
+		switch rule.Metric {
+		case "ingest_bitrate_kbps":
+			val = s.IngestBitrate
+		default: // "viewer_count"
+			val = float64(s.ViewerCount)
+		}
 		scopeStr := scopeJSONAnomaly("", sid)
 
 		baseline, err := reader.GetAnomalyBaseline(ctx, lookupMetric, scopeStr, windowS)
@@ -254,6 +264,8 @@ func (e *Evaluator) evalAnomalyNodes(ctx context.Context, snap *domain.LiveSnaps
 			val = n.CPUPCT
 		case "mem_pct":
 			val = n.MemPCT
+		case "disk_pct":
+			val = n.DiskPCT
 		}
 
 		scopeStr := scopeJSONAnomaly(nodeID, "")
