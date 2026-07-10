@@ -25,6 +25,7 @@ agents:
       - server/internal/collector/
       - server/internal/store/clickhouse/
       - server/internal/cluster/
+      - server/internal/prober/   # assigned D-072 (S12 WO-B) — was unowned, same gap class as internal/anomaly
       - server/cmd/
       - server/internal/domain/   # shared with BE-02; changes need INT-01 sign-off
 

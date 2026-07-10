@@ -2824,3 +2824,121 @@ instruction ("push without triggering the workflows") — ci/e2e/codeql are all
 push-triggered; no runs expected at this HEAD. NOTE for S12: HEAD is therefore UNVERIFIED
 by CI — the docs-only diff makes that safe, but S12's first push after real changes must
 watch ci+e2e+codeql as usual.
+
+## D-072 — SESSION-12 (2026-07-10): S12 execution — plan of record + ORCH rulings + pre-approved CRs (opened at dispatch; evidence appended at close)
+
+**Session open state (all re-verified):** tree clean; ci+e2e+codeql (+ams-version-matrix)
+ALL GREEN at HEAD `d538631` — the D-071 "HEAD unverified by CI" note is RETIRED (the
+operator's follow-up commit pushed without [skip ci] and every workflow ran green on the
+identical code). Dependabot queue ZERO. U3 not fired (`PULSE_LICENSE_KEY` still commented
+in deploy/.env). **Nothing is required from the operator to run S12** — stated explicitly
+per the session-start directive; CodeQL + PR-first questions remain open and non-blocking.
+
+**Tree drift note (concurrent-session hazard §14, inspected → benign):** HEAD carries an
+operator-authored commit `d538631` "yanki caddyfile update" — adds a `yanki.beyondkaira.com`
+site block to `deploy/config/Caddyfile.prod` (separate project sharing the prod Caddy;
+docker-network-alias upstreams; no secrets; already pushed; CI green). Any S12 edit to
+Caddyfile.prod must preserve that block byte-for-byte. (WO-G scout verdict: NO CSP change
+needed this session, so the file is expected to stay untouched.)
+
+**WO-C (keep-7 cycle-8) opening evidence:** volume `pulse-prod_pulse-backups` at 11:04Z
+holds 7 CH zips + 7 meta .db (oldest `pulse-20260707-073113` STILL present). Root cause of
+the "expected ~07-10 prune" not yet firing: the sidecar schedule is **backup-on-start +
+every 24h** (pulse-backup.sh daemon mode), not clock-aligned; the sidecar restarted
+2026-07-09 16:18:51Z (last backup ts) → **cycle 8 + first prune fires ~16:18:51Z TODAY**.
+Sidecar healthy (Up, logs clean, "Sleeping 24 h"). Prune logic read-verified: `prune_old`
+keeps newest 7 per artifact type (ch zips; meta .db/.db-wal/.db-shm independently). Boundary
+re-check + restore-verify scheduled for later THIS session (after 16:19Z).
+
+**Execution shape:** scout workflow `pulse-s12-scout` DONE (3 read-only scouts, 291k tok,
+digests in session transcript + scratchpad). WO-E clean-install release test dispatched as
+a parallel ops agent (pristine copy, `-p pulse-s12install`, image 0.2.0, ≤15-min budget,
+down -v teardown). Impl workflow `pulse-s12-impl` dispatched after this entry.
+
+**ORCH rulings on scout open questions — BINDING for this session's authors:**
+
+- **Scope assignment (NEW):** `server/internal/prober/` has NO manifest owner (same gap
+  class as `internal/anomaly`, D-070) → assigned to **BE-01** in `agents/manifest.yaml`
+  this session (probe = data plane; writes via store/clickhouse). `internal/anomaly` stays
+  unassigned (S12 doesn't touch it; assign at §2.14 pickup).
+- **Scope partition:** WO-A author writes ONLY `server/internal/store/meta/` (+ its
+  embedded sql/); WO-B author writes `server/internal/prober/`, `server/internal/domain/`,
+  `server/internal/store/clickhouse/`, the probe-result API mapping file in
+  `server/internal/api/`, `qa/mock-ams/`, and the new fixture under
+  `agents/handoffs/real-ams-captures/`; WO-G author writes `web/` only (reads `brandkit/`);
+  INT-01 single pass owns `contracts/`; INFRA-01 pass owns `.github/workflows/` +
+  `deploy/.env.example`; ONE serial wiring author (after WO-A) applies the exact fragments
+  to `server/cmd/pulse/` — no parallel author touches cmd/pulse (D-070 pattern).
+  **server/go.mod single writer = WO-A** (adds pgx; WO-B needs no new server dep —
+  `nhooyr.io/websocket` already present; mock-ams has its own go.mod).
+- **WO-A rulings:** env var = **`PULSE_META`** (tree wins over the WO spec's
+  `PULSE_META_BACKEND`, config.go:315 + existing `PULSE_POSTGRES_DSN` convenience alias);
+  driver = **jackc/pgx/v5 stdlib** (pure-Go, CGO=0); placeholder strategy = ONE SQL source
+  + a deterministic `?`→`$N` rebind helper cached per query (no 150-string duplication;
+  author verifies no SQL literal contains `?` inside quotes, with tests); PG DDL = new
+  **`contracts/db/meta/postgres/0001_init.sql` + `0002_anomaly_alert_rule.sql`** (INT-01),
+  mirrored embedded in store/meta (EmbeddedDDLPostgres applies both in order; parity test =
+  `schema_migrations` versions identical to sqlite after migrate); `applySchemaUpgrades`
+  stays sqlite-only; **key file bypass: `backend==postgres && secretKey==""` → hard error**
+  (PULSE_SECRET_KEY required — filepath.Dir on a postgres:// DSN is garbage); prune query
+  for PG uses `(ts, id)` ordering — sqlite rowid-tiebreak behavior documented as
+  sqlite-only, its pinning test NOT replicated for PG; pool defaults 10/5/5m; integration
+  tests behind `-tags integration` + **`PULSE_META_TEST_PG_DSN`** (skip when unset);
+  CI adds a postgres:16 service container to the server job (INFRA-01).
+- **WO-B rulings (phase-1 slice = signaling-only, scout recommendation ACCEPTED):**
+  headless-browser probe REJECTED (violates single-binary CGO=0 deployment); full pion
+  media path = S13 phase 2. Phase 1: `probeWebRTC()` dials the AMS WS signaling endpoint,
+  sends `{"command":"play","streamId":...}`, `Success=true` + `signaling_state=
+  "offer_received"` + real `connect_time_ms` when the offer arrives; error codes
+  `ws_timeout|ws_refused|ws_error`. **Probe URL convention = the signaling endpoint
+  itself: `ws(s)://host/{app}/websocket?streamId=<id>`** (streamId REQUIRED as query
+  param; missing → ws_error with explanatory msg; documented in the contract field
+  description). Fixture: **capture ourselves from the REAL AMS on this host** (LiveApp has
+  live publishers) → `agents/handoffs/real-ams-captures/webrtc-signaling-play-offer.json`
+  with provenance header; if live capture fails, derive from the AMS JS SDK and mark
+  provenance accordingly (fixture-first, then implement). mock-ams gains a WS upgrade
+  handler (nhooyr.io/websocket in qa/mock-ams/go.mod — approved). `TestProbe_NotProbed`
+  keeps rtmp/dash, drops webrtc (replaced by real-result tests).
+- **WO-B contract CR-1 (pre-approved, INT-01 applies):** `ProbeResult` gains OPTIONAL
+  nullable `connect_time_ms` (integer, ms from WS dial to first server message) +
+  `signaling_state` (string enum-doc: offer_received|ws_timeout|ws_refused|ws_error);
+  `error_code` description gains the ws_* codes. NEW CH migration
+  `contracts/db/clickhouse/0004_probe_webrtc.sql` (ADD COLUMN IF NOT EXISTS
+  connect_time_ms UInt32 DEFAULT 0; signaling_state LowCardinality(String) DEFAULT '').
+  Backward-compatible optional-add per the D-070 freeze-policy precedent.
+- **WO-A contract CR-2 (pre-approved, INT-01 applies):** new `contracts/db/meta/postgres/`
+  DDL pair as above (PG translations: no PRAGMA, `ON CONFLICT DO NOTHING` for INSERT OR
+  IGNORE, `EXTRACT(EPOCH FROM NOW())::bigint*1000` for strftime; schema identical
+  otherwise; 0002 columns present via its own file so schema_migrations parity holds).
+- **WO-G rulings:** **NO CSP change** (scout verified `font-src 'self'` already in all 4
+  CSP surfaces; @fontsource woff2 bundles same-origin; csp.spec.ts/Caddyfiles NOT touched —
+  the §2.15 atomicity trap is MOOT this session). Fonts via **@fontsource/ibm-plex-sans
+  (400/500/600/700) + @fontsource/ibm-plex-mono (500)** npm packages, Vite-bundled (no CDN
+  at any point; real `npm install`, lockfile committed). Light theme **OUT** (per §2.15
+  phase-1 scope — do NOT add a prefers-color-scheme block). Nav = 240px sidebar; active =
+  2px signal left-border + `rgba(44,229,167,0.1)` tint + textPrimary; inactive textMuted
+  (binding table allows muted for labels). Buttons per design-system spec (primary
+  signal/onSignal; destructive keeps critical text — audit every `#fff` per instance).
+  Chart series = `web/src/lib/chartColors.ts` literal-hex constants (+ its own test for
+  the coverage gate); ProtocolDonut protocol colors = palette order 0/1/2/3/7 (NO critical
+  red for a protocol — semantic collision). `--color-muted` splits: new `--color-secondary`
+  #9FB0C0 for secondary text; muted #5C6F80 ONLY for labels/captions (WCAG binding).
+  Stale var fallbacks updated to new hexes. `FleetPage.test.tsx` local cpuColor copy
+  updated ATOMICALLY with FleetPage.tsx. Layout keeps the "Pulse" text node (test pin).
+  CVD rule: color never the only channel — text labels satisfy it; add shape pairing where
+  color-only dots exist. tabular-nums on metric values. web/public/ built from brandkit
+  assets (192/512 + maskable + apple-touch 180 + favicons; NOT the 1024px icons).
+- **BE-02 optional [XS] PDF logo swap:** APPROVED as droppable — rasterize
+  `brandkit/logo/powered-by-pulse-badge.svg` → PNG via a docker tool container, swap the
+  embedded default report logo, keep `PULSE_REPORT_LOGO_PATH` behavior + decode-pin test
+  green. First candidate to drop if the session runs hot (before WO-B yields).
+- **WO-D:** SKIPPED on the date gate (today 2026-07-10 < 2026-07-23) — promotions +
+  CodeQL-required decision carry to S13 with the same spec.
+- **WO-F:** operator has NOT answered PR-first → rationale RE-RECORDED: `enforce_admins`
+  stays **false** (re-verified live this session: enforce_admins=false, strict=true,
+  7 contexts, 1 review) because sessions push directly to main as the operator's standing
+  cadence and flipping it would deadlock on self-approval (D-068 WO-A rationale still
+  holds). Next revisit: when the operator answers PR-first, or at the S13 WO-D promotions
+  pickup, whichever first.
+
+*(evidence + verdicts appended at session close below)*
