@@ -3190,3 +3190,98 @@ push → CI watch → closing protocol. CGO_ENABLED=0 build gate runs EARLY (pio
 it non-trivial for the first time).
 
 *(rulings + evidence appended below as the session progresses)*
+
+### D-074 ORCH RULINGS (post-scout, BINDING for this session's authors)
+
+**Scout workflow `s14-scout` DONE** (4 read-only scouts, 345k tok, all facts file:line-cited).
+**pion CGO pre-check PASSED at open (ORCH, live):** `github.com/pion/webrtc/v4 v4.2.16`
+resolves on golang:1.25, `CGO_ENABLED=0 go build` clean AND a PeerConnection instantiates
+at runtime under CGO=0 → **v4.2.16 is the PINNED version for BOTH modules.**
+
+- **WO-B phase sequencing:** phase-2a lands THIS session; **phase-2b decision is deferred
+  until phase-2a passes ORCH gates** (pre-declared yield per SESSION-14 "FIRST to yield
+  if hot"). CH **0007 = `ice_state` ONLY**; 0008 is reserved for 2b stats if it fires.
+  Rationale: 2b needs mock-side RTP sending + receiver-stats plumbing — a fresh flake
+  surface stacked on the new ICE-in-CI surface; landing 2a clean beats landing both hot.
+- **WO-B `ice_state` semantics (binding):** mirrors the HLS "manifest OK ⇒ success,
+  segment = bonus" philosophy — signaling success ⇒ `Success=true` regardless of ICE
+  outcome; `ice_state` = terminal pion state mapped to `connected` (connected/completed)
+  | `failed` | `timeout` (deadline with neither); ICE failure additionally sets
+  `error_code=ice_failed|ice_timeout` (Success stays true, like `read`/`segment_too_large`);
+  `signaling_state` semantics UNCHANGED (`offer_received` = signaling ok). `ice_state`
+  key-ABSENT for non-WebRTC probes and when ICE not attempted (set only if non-empty in
+  wave3.go, same pattern as signaling_state). e2e asserts `ice_state=='connected'` AND
+  `error_code` absent (`.get('error_code','')==''`).
+- **WO-B probe flow (binding):** after phase-1 offer parse: pion ANSWERER —
+  SetRemoteDescription(offer) → CreateAnswer → send `{command:"takeConfiguration",
+  streamId, type:"answer", sdp}` (AMS shape per fixture) → exchange `takeCandidate`
+  BOTH ways (client sends {command,streamId,label,id,candidate}; server's are added via
+  AddICECandidate) → wait OnICEConnectionStateChange within the existing ctx deadline
+  (TimeoutS budget, no new config). Clean teardown (pc.Close + WS close) on all paths.
+  probeWebRTC stays the entry; pion continuation goes in NEW FILE `probe_webrtc_ice.go`
+  (+ test file) with minimal prober.go edits (call/fields only — WO-F lands first, see
+  partition).
+- **WO-B mock-ams (binding):** flag `-webrtc-ice` (bool, default OFF = exact phase-1
+  behavior, existing tests untouched). When ON: wsSignalingHandler keeps WS open; real
+  pion OFFERER (VP8 TrackLocalStaticRTP m-line so ICE+DTLS negotiates; the track also
+  future-proofs 2b), sends real offer via takeConfiguration, handles client answer +
+  takeCandidate, emits server candidates, deadline-guarded. In-process loopback test
+  (pion client ↔ handler) asserting ICE connected — deterministic, no docker.
+- **WO-B live-verify + fixture capture:** after impl, run the REAL probe against the real
+  AMS (publisher availability checked first via /live/overview; `ams-teststream` may
+  still publish). Success ⇒ capture the client→server shapes (our answer + candidates,
+  validated by AMS completing ICE) into `real-ams-captures/` completing the S12 partial
+  fixture. No publisher ⇒ record honestly as N/A-this-session.
+- **WO-B CI budget (D-042, once, generously):** e2e ICE poll 120s/5s (vs 90s phase-1);
+  container-network UDP only, NO host ports; compose adds `-webrtc-ice` to mock-ams.
+- **WO-D owner RULING: `server/internal/anomaly/` → BE-02** (D-012 verbatim: "F9 anomaly
+  detection → BE-02 entirely… product-plane like the alert evaluator"; import graph
+  concurs — consumers are alert/api/meta, all BE-02; the aggregator is a data dependency,
+  not ownership). manifest.yaml edited by ORCH THIS commit, before any author touches
+  the package.
+- **WO-D metrics (binding):** add `ingest_bitrate_kbps` (stream-scoped; Detector key ==
+  rule name, NO alias — unlike viewer_count/viewers; source `LiveStream.IngestBitrate`)
+  and `disk_pct` (node-scoped, `LiveNodeStats.DiskPCT`, same pattern as cpu/mem).
+  **EXCLUDED with reason:** beacon QoE (rebuffer_ratio/startup_ms — NOT in LiveSnapshot
+  until U3; whitelisting would mint rules that can never fire) and viewer_* WebRTC QoE
+  (sparse; MinSamples=30 starvation) — both deferred, recorded in ROADMAP §2.14. All 5
+  whitelist copies updated in the SAME commit (wave3.go map+msg+eval switch, AlertRuleForm
+  ANOMALY_METRICS, wave3_test list); negative tests flip their bad-metric to
+  `rebuffer_ratio` (truly unsupported); FalseAlarmRate model metricsPerNode 3→4 (+comment);
+  windowS stays 3600. e2e A5b: bitrate anomaly via mock-ams `/control/set_bitrate`
+  (D-055 lever; wire→kbps ÷1000 per normalize.go:79).
+- **WO-C rulings (binding):** contract CR adds GET `/auth/oidc/status` → 200
+  `{enabled: bool}` (security:[], NO issuer leak) and GET `/auth/me` → 200
+  `{name, role, auth_method: bearer|cookie}` / 401 (standard middleware; cookie fallback
+  already exists — middleware stashes a ctx flag for auth_method). SPA: AuthGate on mount
+  calls /auth/me (cookie-authenticated ⇒ skip token panel) + /auth/oidc/status (enabled ⇒
+  "Sign in with SSO" button → `/auth/oidc/login`); Layout sign-out also POSTs
+  /auth/oidc/logout when cookie-authed. Existing bearer/401 flows UNCHANGED (the 401
+  CustomEvent semantics must not regress — pinned by existing tests). Vitest branches +
+  Playwright `auth-oidc.spec.ts` (route-mocked, chromium-only). web-e2e stays
+  continue-on-error (promotion is a future decision, noted not taken).
+- **WO-F rulings (binding, scout-verified):** const `segBodyCapBytes = 32 << 20` (2×
+  headroom over 6s@20Mbps=15MB; 640× the largest fixture); read via
+  `io.LimitReader(body, segBodyCapBytes+1)`; `len > cap` ⇒ `Success=true`,
+  `ErrorCode="segment_too_large"`, `BitrateKbps=0`, SegmentTTFBMs kept — truncation NEVER
+  silently corrupts bitrate. SYMMETRIC at prober.go:508 (HLS) + probe_dash.go:196 (DASH);
+  new tests both sides serve cap+1 bytes; NO cap on manifests (streamed decoders, no
+  ReadAll). Also closes the unbounded-memory exposure (10s × bandwidth per worker).
+- **Pre-approved contract CR (INT-01 single writer):** pulse-api.yaml — ProbeResult +
+  `ice_state` (nullable string; described enum connected|failed|timeout, WebRTC-only);
+  error_code description + `segment_too_large|ice_failed|ice_timeout`; NEW paths
+  /auth/oidc/status + /auth/me (shapes above). CH `0007_probe_webrtc_ice.sql`:
+  `ALTER TABLE {db}.probe_results ADD COLUMN IF NOT EXISTS ice_state
+  LowCardinality(String) DEFAULT '';` (migrations live ONLY in contracts/db/clickhouse —
+  runtime-read, runner.go:25-27, no server-side copy). gen:api regen + redocly + ajv.
+- **Scope partition (single-writer, binding):** INT-01 contracts author FIRST (schema.d.ts
+  regen gates FE) → then parallel: **serial chain WO-F → WO-B-server** (shared prober
+  package; WO-B-server owns the FULL ice_state vertical: domain/types.go + clickhouse.go
+  INSERT-list+Append ATOMIC (D-072 hazard) + wave3.go + prober + server/go.mod) ·
+  **QA mock-ams** (own module incl. go.mod) · **WO-D anomaly** (anomaly/ + alert/wave3*
+  + api contract test + AlertRuleForm.tsx — file-level single-writer holds) · **WO-C
+  full-stack** (api/oidc.go + server.go routes/middleware-flag + oidc_test + web
+  AuthGate/client/Layout + tests + e2e spec) · **INFRA e2e** (e2e.yml + docker-compose.ci.yml
+  per binding predicates; the per-key static cross-check vs wave3.go re-runs in VERIFY
+  since wave3.go lands concurrently). Authors AUTHOR ONLY (no commits, no git mutations,
+  D-063); ORCH gates + commits per scope.

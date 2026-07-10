@@ -40,6 +40,7 @@ agents:
       - server/internal/license/
       - server/internal/config/
       - server/internal/store/meta/
+      - server/internal/anomaly/   # assigned D-074 (S14 WO-D) — D-012 precedent: product-plane, same class as the alert evaluator
 
   - id: FE-01
     name: frontend
