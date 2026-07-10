@@ -502,3 +502,43 @@ func generateSessionToken() (string, error) {
 
 // Note: isUniqueConstraintError is declared in reports_wave2.go (package-level).
 // oidc.go reuses it rather than redeclaring.
+
+// ─── Phase-2: discovery + identity handlers ───────────────────────────────────
+
+// handleOIDCStatus returns whether OIDC SSO is configured on this server.
+// Unauthenticated; safe for SPA mount-time discovery.
+// Returns 200 {"enabled": bool} regardless of OIDC configuration.
+//
+//	GET /auth/oidc/status → 200 {"enabled": bool}
+func (s *Server) handleOIDCStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]bool{"enabled": s.oidc != nil})
+}
+
+// handleAuthMe returns the identity of the currently authenticated principal.
+// bearerAuthMiddleware (with cookie fallback) must run before this handler.
+// auth_method is "bearer" when the Authorization header was used, "cookie" when
+// the pulse_session cookie was used — stashed in context by bearerAuthMiddleware.
+//
+//	GET /auth/me → 200 {"name", "role", "auth_method"}
+//	GET /auth/me → 401 (via bearerAuthMiddleware when no valid token present)
+func (s *Server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
+	tok, _ := r.Context().Value(ctxTokenKey).(*meta.APIToken)
+	if tok == nil {
+		// Defensive: middleware should have already returned 401, but guard here.
+		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "not authenticated")
+		return
+	}
+	authMethod, _ := r.Context().Value(ctxAuthMethodKey).(string)
+	if authMethod == "" {
+		authMethod = "bearer"
+	}
+	role := ""
+	if len(tok.Scopes) > 0 {
+		role = tok.Scopes[0]
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"name":        tok.Name,
+		"role":        role,
+		"auth_method": authMethod,
+	})
+}

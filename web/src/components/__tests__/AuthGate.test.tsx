@@ -26,10 +26,14 @@ vi.mock("@/api/client", () => ({
 describe("AuthGate — 401 redirect fix", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Existing tests don't mock fetch; stub it to resolve quickly so the
+    // async OIDC-status/auth-me check doesn't stall. Errors are swallowed.
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("not mocked")));
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("renders children when token is present", () => {
@@ -106,6 +110,139 @@ describe("AuthGate — 401 redirect fix", () => {
     await waitFor(() => {
       expect(mockClearToken).toHaveBeenCalledOnce();
       // Should show the "Session expired" message
+      expect(screen.getByText(/session expired/i)).toBeInTheDocument();
+    });
+  });
+});
+
+// ─── OIDC phase-2 tests (S14 WO-C) ──────────────────────────────────────────
+//
+// Uses the MODULE-LEVEL mockGetToken/mockSetToken/mockClearToken that were
+// already captured in the module-level vi.mock("@/api/client") factory above.
+// Do NOT re-declare or re-mock here — doing so inside a describe body causes
+// vi.mock hoisting issues (vitest moves the call to file scope where the inner
+// variable is in TDZ, resulting in the factory closing over the wrong binding).
+//
+// Global fetch is stubbed per-test via vi.stubGlobal so /auth/oidc/status and
+// /auth/me never hit a real server and the pulse:auth:401 event is never fired
+// by plain-fetch calls inside AuthGate (only apiFetch triggers that event).
+describe("AuthGate — OIDC phase-2", () => {
+  // Re-use module-level mock fns — they ARE the fns captured in the factory.
+  // (mockGetToken, mockSetToken, mockClearToken are in file scope above.)
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Default: no localStorage token; plain-fetch rejects (overridden per test)
+    mockGetToken.mockReturnValue(null);
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("fetch not stubbed for this test")));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** Build a per-test fetch stub that handles both OIDC discovery endpoints. */
+  function makeFetch(statusEnabled: boolean, meStatus: number) {
+    return vi.fn((url: string) => {
+      if (url === "/auth/oidc/status") {
+        return Promise.resolve(
+          new Response(JSON.stringify({ enabled: statusEnabled }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+      if (url === "/auth/me") {
+        return Promise.resolve(
+          new Response(
+            meStatus === 200
+              ? JSON.stringify({ name: "oidc-session", role: "viewer", auth_method: "cookie" })
+              : JSON.stringify({ code: "UNAUTHORIZED", message: "not authenticated" }),
+            {
+              status: meStatus,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+      }
+      return Promise.reject(new Error(`unmocked fetch: ${url}`));
+    });
+  }
+
+  it("shows SSO button when OIDC is enabled and no token", async () => {
+    vi.stubGlobal("fetch", makeFetch(true, 401));
+    render(
+      <AuthGate>
+        <div>Protected</div>
+      </AuthGate>,
+    );
+    // AuthGate fires /auth/oidc/status on mount; once enabled=true resolves,
+    // the SSO button should appear in the login panel.
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /sign in with sso/i })).toBeInTheDocument();
+    });
+  });
+
+  it("hides SSO button when OIDC is disabled", async () => {
+    vi.stubGlobal("fetch", makeFetch(false, 401));
+    render(
+      <AuthGate>
+        <div>Protected</div>
+      </AuthGate>,
+    );
+    // Wait for the login form to appear (confirms fetch settled), then verify
+    // the SSO button is absent because OIDC is disabled.
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^sign in$/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: /sign in with sso/i })).not.toBeInTheDocument();
+  });
+
+  it("renders children when /auth/me returns 200 (cookie session)", async () => {
+    // No localStorage token; /auth/me 200 → cookieAuthed=true → children
+    vi.stubGlobal("fetch", makeFetch(true, 200));
+    render(
+      <AuthGate>
+        <div data-testid="protected">Protected content</div>
+      </AuthGate>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("protected")).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: /^sign in$/i })).not.toBeInTheDocument();
+  });
+
+  it("shows token panel when /auth/me returns 401 and no localStorage token", async () => {
+    vi.stubGlobal("fetch", makeFetch(false, 401));
+    render(
+      <AuthGate>
+        <div>Protected</div>
+      </AuthGate>,
+    );
+    // After both fetches settle: login form visible; clearToken NOT called
+    // (the 401 is from a plain fetch, not apiFetch — no pulse:auth:401 event).
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^sign in$/i })).toBeInTheDocument();
+    });
+    expect(mockClearToken).not.toHaveBeenCalled();
+  });
+
+  it("401 event flow unchanged: pulse:auth:401 clears token and shows login form", async () => {
+    mockGetToken.mockReturnValue("plt_existing");
+    vi.stubGlobal("fetch", makeFetch(false, 401));
+    render(
+      <AuthGate>
+        <div data-testid="protected">Protected</div>
+      </AuthGate>,
+    );
+    expect(screen.getByTestId("protected")).toBeInTheDocument();
+
+    act(() => {
+      window.dispatchEvent(new Event("pulse:auth:401"));
+    });
+
+    await waitFor(() => {
+      expect(mockClearToken).toHaveBeenCalledOnce();
       expect(screen.getByText(/session expired/i)).toBeInTheDocument();
     });
   });

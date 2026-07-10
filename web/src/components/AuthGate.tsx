@@ -5,6 +5,14 @@
  * redirects the user back to the token entry screen without a full page reload.
  *
  * Wave-2 carried fix: 401 → React Router redirect to token screen.
+ *
+ * S14 WO-C OIDC phase-2:
+ * - On mount fires GET /auth/oidc/status (plain fetch, no auth) to discover
+ *   whether SSO is configured and show a "Sign in with SSO" button.
+ * - On mount fires GET /auth/me (plain fetch, cookie rides same-origin) to
+ *   detect an existing OIDC session without a localStorage token. A 401 from
+ *   /auth/me is handled quietly (no pulse:auth:401 event) — it simply means
+ *   the user is not cookie-authenticated.
  */
 import { useState, useEffect } from "react";
 import { getToken, setToken, clearToken } from "@/api/client";
@@ -18,6 +26,10 @@ export function AuthGate({ children }: Props) {
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  // S14 WO-C: OIDC discovery state
+  const [oidcEnabled, setOidcEnabled] = useState(false);
+  const [cookieAuthed, setCookieAuthed] = useState(false);
+
   // Wave-2: listen for 401 events from the API client to auto-redirect
   useEffect(() => {
     const handler = () => {
@@ -29,7 +41,40 @@ export function AuthGate({ children }: Props) {
     return () => window.removeEventListener("pulse:auth:401", handler);
   }, []);
 
-  if (token) {
+  // S14 WO-C: fire BOTH /auth/oidc/status and /auth/me on every mount.
+  // Plain fetch (not apiFetch) so a 401 from /auth/me does NOT fire
+  // pulse:auth:401. Cookie rides same-origin automatically for /auth/me.
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("/auth/oidc/status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { enabled?: boolean } | null) => {
+        if (!cancelled && data) {
+          setOidcEnabled(!!data.enabled);
+        }
+      })
+      .catch(() => {
+        /* ignore — server may not have the endpoint yet */
+      });
+
+    fetch("/auth/me")
+      .then((r) => {
+        if (!cancelled && r.ok) {
+          setCookieAuthed(true);
+        }
+      })
+      .catch(() => {
+        /* ignore — server unreachable or cookie not present */
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Cookie-authenticated OR bearer-token — render the protected content.
+  if (token || cookieAuthed) {
     return <>{children}</>;
   }
 
@@ -119,6 +164,27 @@ export function AuthGate({ children }: Props) {
             Sign in
           </button>
         </form>
+        {oidcEnabled && (
+          <>
+            <hr style={{ border: "none", borderTop: "1px solid var(--color-border)", margin: "8px 0" }} />
+            <button
+              type="button"
+              onClick={() => { window.location.href = "/auth/oidc/login"; }}
+              style={{
+                background: "var(--color-surface-2)",
+                color: "var(--color-text)",
+                border: "1px solid var(--color-border)",
+                borderRadius: 6,
+                padding: "10px",
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Sign in with SSO
+            </button>
+          </>
+        )}
         <p style={{ marginTop: 20, marginBottom: 0, fontSize: 12, color: "var(--color-muted)", textAlign: "center" }}>
           Generate a token in Settings → API Tokens.
         </p>

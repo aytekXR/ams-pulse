@@ -127,6 +127,9 @@ export function Layout({ children, wsConnected, overview: _overview, tier }: Lay
 
   const handleSignOut = () => {
     clearToken();
+    // S14 WO-C: fire-and-forget OIDC logout so cookie sessions are server-revoked.
+    // Ignore failures — the cookie will expire naturally if the request fails.
+    void fetch("/auth/oidc/logout", { method: "POST" }).catch(() => undefined);
     navigate("/");
     window.location.reload();
   };

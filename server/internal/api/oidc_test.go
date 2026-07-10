@@ -1155,5 +1155,165 @@ func TestConformance_OIDCLogin_501_WhenDisabled(t *testing.T) {
 	}
 }
 
+// ─── Phase-2: /auth/oidc/status + /auth/me tests ─────────────────────────────
+
+// TestOIDCStatus_Enabled: OIDC configured → 200 {"enabled": true}
+func TestOIDCStatus_Enabled(t *testing.T) {
+	env := setupOIDCTestServer(t, "viewer", nil)
+
+	resp, err := http.Get(env.srv.URL + "/auth/oidc/status")
+	if err != nil {
+		t.Fatalf("GET /auth/oidc/status: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var status struct {
+		Enabled bool `json:"enabled"`
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &status); err != nil {
+		t.Fatalf("parse JSON %q: %v", string(body), err)
+	}
+	if !status.Enabled {
+		t.Errorf("expected enabled=true, got false (body: %s)", body)
+	}
+}
+
+// TestOIDCStatus_Disabled: no OIDC → 200 {"enabled": false}
+func TestOIDCStatus_Disabled(t *testing.T) {
+	ts, _, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	resp, err := http.Get(ts.URL + "/auth/oidc/status")
+	if err != nil {
+		t.Fatalf("GET /auth/oidc/status: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var status struct {
+		Enabled bool `json:"enabled"`
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &status); err != nil {
+		t.Fatalf("parse JSON %q: %v", string(body), err)
+	}
+	if status.Enabled {
+		t.Errorf("expected enabled=false, got true (body: %s)", body)
+	}
+}
+
+// TestAuthMe_Bearer: bearer token → 200 {name, role, auth_method: "bearer"}
+func TestAuthMe_Bearer(t *testing.T) {
+	env := setupOIDCTestServer(t, "viewer", nil)
+
+	req, _ := http.NewRequest(http.MethodGet, env.srv.URL+"/auth/me", nil)
+	req.Header.Set("Authorization", "Bearer plt_oidc_bearer_test")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /auth/me: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var me struct {
+		Name       string `json:"name"`
+		Role       string `json:"role"`
+		AuthMethod string `json:"auth_method"`
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &me); err != nil {
+		t.Fatalf("parse JSON: %v (body: %s)", err, body)
+	}
+	if me.AuthMethod != "bearer" {
+		t.Errorf("expected auth_method=bearer, got %q (body: %s)", me.AuthMethod, body)
+	}
+	if me.Name == "" {
+		t.Errorf("expected non-empty name (body: %s)", body)
+	}
+	if me.Role == "" {
+		t.Errorf("expected non-empty role (body: %s)", body)
+	}
+}
+
+// TestAuthMe_Cookie: pulse_session cookie → 200 {auth_method: "cookie"}
+func TestAuthMe_Cookie(t *testing.T) {
+	env := setupOIDCTestServer(t, "viewer", nil)
+
+	// Complete a full OIDC login to obtain a session cookie.
+	stateCookieVal, stateParam := env.doLogin(t)
+	cbResp := env.doCallback(t, stateCookieVal, stateParam)
+	defer cbResp.Body.Close()
+	if cbResp.StatusCode != http.StatusFound {
+		body, _ := io.ReadAll(cbResp.Body)
+		t.Fatalf("callback: expected 302, got %d: %s", cbResp.StatusCode, body)
+	}
+	sessionToken := sessionCookieFrom(cbResp)
+	if sessionToken == "" {
+		t.Fatal("no pulse_session cookie after callback")
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, env.srv.URL+"/auth/me", nil)
+	req.AddCookie(&http.Cookie{Name: "pulse_session", Value: sessionToken})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /auth/me (cookie): %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var me struct {
+		Name       string `json:"name"`
+		Role       string `json:"role"`
+		AuthMethod string `json:"auth_method"`
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &me); err != nil {
+		t.Fatalf("parse JSON: %v (body: %s)", err, body)
+	}
+	if me.AuthMethod != "cookie" {
+		t.Errorf("expected auth_method=cookie, got %q (body: %s)", me.AuthMethod, body)
+	}
+	if me.Name == "" {
+		t.Errorf("expected non-empty name (body: %s)", body)
+	}
+	if me.Role == "" {
+		t.Errorf("expected non-empty role (body: %s)", body)
+	}
+}
+
+// TestAuthMe_Unauthenticated: no token → 401
+func TestAuthMe_Unauthenticated(t *testing.T) {
+	env := setupOIDCTestServer(t, "viewer", nil)
+
+	resp, err := http.Get(env.srv.URL + "/auth/me")
+	if err != nil {
+		t.Fatalf("GET /auth/me: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		body, _ := io.ReadAll(resp.Body)
+		t.Errorf("expected 401, got %d: %s", resp.StatusCode, body)
+	}
+}
+
 // ─── Unused import guard (big.Int is used in JWKS exponent encoding) ─────────
 var _ = big.NewInt

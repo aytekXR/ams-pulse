@@ -428,6 +428,15 @@ func (s *Server) buildRouter() {
 	r.Get("/auth/oidc/callback", s.handleOIDCCallback)
 	r.Post("/auth/oidc/logout", s.handleOIDCLogout)
 
+	// S14 WO-C: OIDC phase-2 discovery + identity endpoints.
+	// /auth/oidc/status is unauthenticated (SPA mount-time discovery).
+	// /auth/me uses the standard bearer middleware (cookie fallback included).
+	r.Get("/auth/oidc/status", s.handleOIDCStatus)
+	r.Group(func(r chi.Router) {
+		r.Use(s.bearerAuthMiddleware)
+		r.Get("/auth/me", s.handleAuthMe)
+	})
+
 	// Static serving of the built web UI (SPA). Registered after the API routes
 	// (so they take precedence) and gated on the assets being present, so
 	// API-only and test builds keep clean 404s.
@@ -479,6 +488,11 @@ type contextKey string
 
 const ctxTokenKey contextKey = "api_token"
 
+// ctxAuthMethodKey stashes how the request was authenticated: "bearer" when the
+// Authorization header was used, "cookie" when the pulse_session cookie was used.
+// Set by bearerAuthMiddleware; read by handleAuthMe.
+const ctxAuthMethodKey contextKey = "api_auth_method"
+
 // ─── OIDC route handlers ──────────────────────────────────────────────────────
 
 // handleOIDCLogin is the server-level wrapper for the OIDC login handler.
@@ -514,11 +528,14 @@ func (s *Server) handleOIDCLogout(w http.ResponseWriter, r *http.Request) {
 func (s *Server) bearerAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := extractBearerToken(r)
+		// S14 WO-C: track how the token was supplied so handleAuthMe can reflect it.
+		authMethod := "bearer"
 		// S11 WO-C: fall back to pulse_session cookie when no Authorization header.
 		// The cookie is set by the OIDC callback; existing bearer flows are unchanged.
 		if token == "" {
 			if c, err := r.Cookie("pulse_session"); err == nil {
 				token = c.Value
+				authMethod = "cookie"
 			}
 		}
 		if token == "" {
@@ -544,6 +561,7 @@ func (s *Server) bearerAuthMiddleware(next http.Handler) http.Handler {
 		}
 		go s.store.TouchToken(context.Background(), tok.ID)
 		ctx := context.WithValue(r.Context(), ctxTokenKey, tok)
+		ctx = context.WithValue(ctx, ctxAuthMethodKey, authMethod)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
