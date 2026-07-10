@@ -1419,7 +1419,7 @@ export interface components {
             name: string;
             /**
              * Format: uri
-             * @description Stream URL to probe (HLS, WebRTC, RTMP)
+             * @description Stream URL to probe (HLS, WebRTC, RTMP). For webrtc probes this must be the AMS signaling endpoint: ws(s)://host/{app}/websocket?streamId=<id> — the streamId query parameter is REQUIRED; omitting it causes the probe to fail with ws_error.
              */
             url: string;
             /** @enum {string} */
@@ -1460,12 +1460,17 @@ export interface components {
             success: boolean;
             /** @description Time to first byte in ms; null on failure */
             ttfb_ms: number | null;
+            /** @description Machine-readable error code; null on success. WebRTC-specific codes: ws_timeout (WebSocket dial or handshake timed out before a server signaling message was received), ws_refused (TCP connection refused to the signaling endpoint), ws_error (WebSocket protocol or application-level error). */
             error_code?: string | null;
             error_message?: string | null;
             /** Format: float */
             bitrate_kbps?: number;
             /** @description Time to first byte of the first media segment in ms; null on failure or when not applicable */
             segment_ttfb_ms?: number | null;
+            /** @description WebRTC signaling-only probe — milliseconds from WebSocket dial to first server signaling message; null for non-WebRTC probes or on connection failure. */
+            connect_time_ms?: number | null;
+            /** @description Final WebRTC signaling state recorded by the probe. One of: offer_received | ws_timeout | ws_refused | ws_error. Null for non-WebRTC probes. */
+            signaling_state?: string | null;
         };
         BeaconBatch: {
             events: components["schemas"]["BeaconEventEnvelope"][];
