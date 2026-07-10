@@ -424,6 +424,19 @@ type ProbeResult struct {
 	ConnectTimeMs  *uint32 // nil = not applicable (HLS/DASH, or connection failed before measurement point)
 	SignalingState string  // "offer_received" | "handshake_complete" | "ws_*" | "rtmp_*" | ""
 	IceState       string  // "connected" | "failed" | "timeout" | "" (empty = not applicable / ICE not attempted)
+
+	// RttMs — WebRTC phase-2b: RTT of the selected ICE candidate pair in
+	//          milliseconds (CurrentRoundTripTime seconds × 1000); nil = not measured;
+	//          set only after ice_state="connected"; CH migration 0008; D-075.
+	RttMs *float32
+	// JitterMs — WebRTC phase-2b: inbound-RTP inter-arrival jitter per RFC 3550
+	//             in milliseconds (Jitter seconds × 1000); nil = not measured;
+	//             set only after ice_state="connected"; CH migration 0008; D-075.
+	JitterMs *float32
+	// LossPct — WebRTC phase-2b: inbound-RTP packet loss percent, 0-100,
+	//            clamped >= 0; nil = not measured (no packets received or lost,
+	//            or ice_state != "connected"); CH migration 0008; D-075.
+	LossPct *float32
 }
 
 // ProbeConfigSource is the seam between the probe runner (BE-01) and the meta

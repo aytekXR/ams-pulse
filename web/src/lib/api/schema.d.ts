@@ -1520,6 +1520,21 @@ export interface components {
             signaling_state?: string | null;
             /** @description Terminal ICE state of the WebRTC media path check; present only for webrtc probes that attempted ICE negotiation — the key is OMITTED (absent) for non-WebRTC probes or when ICE was not attempted. Values: connected (ICE reached connected or completed state), failed (pion ICE state machine reached failed), timeout (probe deadline elapsed before ICE reached a terminal state). */
             ice_state?: string | null;
+            /**
+             * Format: float
+             * @description RTT of the selected ICE candidate pair in milliseconds; the key is OMITTED (absent) for non-WebRTC probes or when the measurement was not collected (ICE not connected, or the probe deadline expired during the post-connect hold).
+             */
+            rtt_ms?: number | null;
+            /**
+             * Format: float
+             * @description Inbound-RTP inter-arrival jitter in milliseconds per RFC 3550; the key is OMITTED (absent) for non-WebRTC probes or when the measurement was not collected (ICE not connected, or the probe deadline expired during the post-connect hold).
+             */
+            jitter_ms?: number | null;
+            /**
+             * Format: float
+             * @description Inbound-RTP packet loss percent, 0-100; the key is OMITTED (absent) for non-WebRTC probes or when the measurement was not collected (ICE not connected, or the probe deadline expired during the post-connect hold). Set only when at least one RTP packet was received or lost; value is clamped to >= 0.
+             */
+            loss_pct?: number | null;
         };
         BeaconBatch: {
             events: components["schemas"]["BeaconEventEnvelope"][];

@@ -2741,6 +2741,31 @@ components:
             Values: connected (ICE reached connected or completed state),
             failed (pion ICE state machine reached failed),
             timeout (probe deadline elapsed before ICE reached a terminal state).
+        rtt_ms:
+          type: [number, 'null']
+          format: float
+          description: >-
+            RTT of the selected ICE candidate pair in milliseconds; the key is
+            OMITTED (absent) for non-WebRTC probes or when the measurement was
+            not collected (ICE not connected, or the probe deadline expired
+            during the post-connect hold).
+        jitter_ms:
+          type: [number, 'null']
+          format: float
+          description: >-
+            Inbound-RTP inter-arrival jitter in milliseconds per RFC 3550; the
+            key is OMITTED (absent) for non-WebRTC probes or when the
+            measurement was not collected (ICE not connected, or the probe
+            deadline expired during the post-connect hold).
+        loss_pct:
+          type: [number, 'null']
+          format: float
+          description: >-
+            Inbound-RTP packet loss percent, 0-100; the key is OMITTED (absent)
+            for non-WebRTC probes or when the measurement was not collected
+            (ICE not connected, or the probe deadline expired during the
+            post-connect hold). Set only when at least one RTP packet was
+            received or lost; value is clamped to >= 0.
 
     # ── Beacon ingest ─────────────────────────────────────────
     BeaconBatch:
