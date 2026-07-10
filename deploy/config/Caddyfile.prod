@@ -112,3 +112,38 @@ ams.{$PULSE_DOMAIN} {
         level INFO
     }
 }
+
+# Yanki — site block for the SHARED pulse-prod Caddy (yanki.beyondkaira.com).
+#
+# The shared Caddy (container pulse-prod-caddy-1, the TLS terminator for every
+# site on this VPS) mounts ONE file read-only:
+#   ~/repo/ams-pulse/deploy/config/Caddyfile.prod  ->  /etc/caddy/Caddyfile
+# There is NO import directory (verified 2026-07-10 by inspecting the container
+# mounts) — to publish Yanki, add this block to that file (or add an `import`
+# directive there plus a matching volume mount in ams-pulse's compose), then:
+#     docker exec pulse-prod-caddy-1 caddy validate --config /etc/caddy/Caddyfile
+#     docker exec pulse-prod-caddy-1 caddy reload   --config /etc/caddy/Caddyfile
+# NEVER restart the shared Caddy — the other live sites terminate TLS on it.
+#
+# Upstreams are DOCKER NETWORK ALIASES, not host ports: the shared Caddy runs in
+# a container, so host-loopback binds (127.0.0.1:...) are unreachable from it.
+# docker-compose.prod.yml joins Yanki's web+api containers to the external
+# network `pulse-prod_default` under the aliases below — the same pattern the
+# shared Caddyfile already uses for its own app (`reverse_proxy pulse:8090`).
+# Container-internal ports are fixed: web 8140, api 8141.
+#
+# One origin, path-routed, so there is NO CORS:
+#   /api/* + /healthz  -> FastAPI  (alias yanki-api, container port 8141)
+#   everything else    -> Next.js  (alias yanki-web, container port 8140)
+yanki.beyondkaira.com {
+	# API + health check -> backend
+	@api path /api/* /healthz
+	handle @api {
+		reverse_proxy yanki-api:8141
+	}
+
+	# Everything else -> frontend
+	handle {
+		reverse_proxy yanki-web:8140
+	}
+}
