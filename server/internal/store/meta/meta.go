@@ -168,6 +168,9 @@ func (s *Store) MigrateEmbedded(ctx context.Context, ddl string) error {
 //     'sha256' so auth can use the correct hash algorithm on lookup.
 //   - ams_sources.webhook_secret_enc (added in B7, D-062): AES-256-GCM
 //     encrypted per-source HMAC secret for /webhook/ams/{name} dispatch.
+//   - alert_rules.rule_type, .sigma, .min_samples (S11 0002 migration): anomaly
+//     rule columns added by 0002_anomaly_alert_rule.sql; the applySchemaUpgrades
+//     path makes them available on all databases regardless of migration runner.
 //
 // Note: these upgrades are SQLite-specific. Postgres schemas are managed via
 // dedicated migration tooling; the function returns nil early for Postgres
@@ -232,6 +235,53 @@ func (s *Store) applySchemaUpgrades(ctx context.Context) error {
 			if _, err := s.db.ExecContext(ctx,
 				`ALTER TABLE ams_sources ADD COLUMN webhook_secret_enc TEXT`); err != nil {
 				return fmt.Errorf("schema upgrade: add ams_sources.webhook_secret_enc: %w", err)
+			}
+		}
+	}
+
+	// ── alert_rules anomaly columns (S11 0002) ────────────────────────────────
+	// The 0002_anomaly_alert_rule.sql migration adds rule_type, sigma, and
+	// min_samples. We add them here too so that databases initialised via
+	// MigrateEmbedded (which runs only the 0001 DDL embed) also get the columns
+	// after applySchemaUpgrades — no separate migration runner needed.
+	rows3, err := s.db.QueryContext(ctx, "PRAGMA table_info(alert_rules)")
+	if err == nil {
+		hasRuleType, hasSigma, hasMinSamples := false, false, false
+		for rows3.Next() {
+			var cid int
+			var name, ctype string
+			var notNull int
+			var dflt sql.NullString
+			var pk int
+			if scanErr := rows3.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); scanErr != nil {
+				continue
+			}
+			switch name {
+			case "rule_type":
+				hasRuleType = true
+			case "sigma":
+				hasSigma = true
+			case "min_samples":
+				hasMinSamples = true
+			}
+		}
+		_ = rows3.Close()
+		if !hasRuleType {
+			if _, err := s.db.ExecContext(ctx,
+				`ALTER TABLE alert_rules ADD COLUMN rule_type TEXT NOT NULL DEFAULT 'threshold'`); err != nil {
+				return fmt.Errorf("schema upgrade: add alert_rules.rule_type: %w", err)
+			}
+		}
+		if !hasSigma {
+			if _, err := s.db.ExecContext(ctx,
+				`ALTER TABLE alert_rules ADD COLUMN sigma REAL`); err != nil {
+				return fmt.Errorf("schema upgrade: add alert_rules.sigma: %w", err)
+			}
+		}
+		if !hasMinSamples {
+			if _, err := s.db.ExecContext(ctx,
+				`ALTER TABLE alert_rules ADD COLUMN min_samples INTEGER`); err != nil {
+				return fmt.Errorf("schema upgrade: add alert_rules.min_samples: %w", err)
 			}
 		}
 	}
@@ -508,6 +558,12 @@ type AlertRuleRow struct {
 	ChannelIDs         string // JSON array
 	CreatedAt          int64
 	UpdatedAt          int64
+	// S11 WO-B: anomaly rule fields (0002 migration).
+	// RuleType is "threshold" (default) or "anomaly".
+	// Empty string is normalised to "threshold" in CreateAlertRule for backward compat.
+	RuleType   string
+	Sigma      float64 // effective sigma: >0 overrides anomaly.DefaultSigma
+	MinSamples int     // effective min_samples: >0 overrides anomaly.MinSamples
 }
 
 // CreateAlertRule inserts a new rule.
@@ -530,14 +586,20 @@ func (s *Store) CreateAlertRule(ctx context.Context, r AlertRuleRow) (AlertRuleR
 	if r.ScopeJSON == "" {
 		r.ScopeJSON = "{}"
 	}
+	// S11 WO-B: normalise empty RuleType to "threshold" for backward compat.
+	if r.RuleType == "" {
+		r.RuleType = "threshold"
+	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO alert_rules
 		 (id, name, metric, operator, threshold, window_s, scope, severity, cooldown_s, group_by,
-		  enabled, muted, maintenance_windows, channel_ids, created_at, updated_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		  enabled, muted, maintenance_windows, channel_ids, created_at, updated_at,
+		  rule_type, sigma, min_samples)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		r.ID, r.Name, r.Metric, r.Operator, r.Threshold, r.WindowS, r.ScopeJSON,
 		r.Severity, r.CooldownS, r.GroupBy, boolToInt(r.Enabled), boolToInt(r.Muted),
-		r.MaintenanceWindows, r.ChannelIDs, r.CreatedAt, r.UpdatedAt)
+		r.MaintenanceWindows, r.ChannelIDs, r.CreatedAt, r.UpdatedAt,
+		r.RuleType, r.Sigma, r.MinSamples)
 	return r, err
 }
 
@@ -545,7 +607,8 @@ func (s *Store) CreateAlertRule(ctx context.Context, r AlertRuleRow) (AlertRuleR
 func (s *Store) GetAlertRule(ctx context.Context, id string) (*AlertRuleRow, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, name, metric, operator, threshold, window_s, scope, severity, cooldown_s, group_by,
-		        enabled, muted, maintenance_windows, channel_ids, created_at, updated_at
+		        enabled, muted, maintenance_windows, channel_ids, created_at, updated_at,
+		        COALESCE(rule_type,'threshold'), COALESCE(sigma,0), COALESCE(min_samples,0)
 		 FROM alert_rules WHERE id=?`, id)
 	return scanAlertRule(row)
 }
@@ -554,7 +617,8 @@ func (s *Store) GetAlertRule(ctx context.Context, id string) (*AlertRuleRow, err
 func (s *Store) ListAlertRules(ctx context.Context) ([]AlertRuleRow, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, name, metric, operator, threshold, window_s, scope, severity, cooldown_s, group_by,
-		        enabled, muted, maintenance_windows, channel_ids, created_at, updated_at
+		        enabled, muted, maintenance_windows, channel_ids, created_at, updated_at,
+		        COALESCE(rule_type,'threshold'), COALESCE(sigma,0), COALESCE(min_samples,0)
 		 FROM alert_rules ORDER BY created_at`)
 	if err != nil {
 		return nil, err
@@ -574,13 +638,17 @@ func (s *Store) ListAlertRules(ctx context.Context) ([]AlertRuleRow, error) {
 // UpdateAlertRule updates a rule by ID.
 func (s *Store) UpdateAlertRule(ctx context.Context, r AlertRuleRow) error {
 	r.UpdatedAt = nowMS()
+	// S11 WO-B: normalise empty RuleType to "threshold" for backward compat.
+	if r.RuleType == "" {
+		r.RuleType = "threshold"
+	}
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE alert_rules SET name=?, metric=?, operator=?, threshold=?, window_s=?, scope=?,
 		  severity=?, cooldown_s=?, group_by=?, enabled=?, muted=?, maintenance_windows=?, channel_ids=?,
-		  updated_at=? WHERE id=?`,
+		  updated_at=?, rule_type=?, sigma=?, min_samples=? WHERE id=?`,
 		r.Name, r.Metric, r.Operator, r.Threshold, r.WindowS, r.ScopeJSON,
 		r.Severity, r.CooldownS, r.GroupBy, boolToInt(r.Enabled), boolToInt(r.Muted),
-		r.MaintenanceWindows, r.ChannelIDs, r.UpdatedAt, r.ID)
+		r.MaintenanceWindows, r.ChannelIDs, r.UpdatedAt, r.RuleType, r.Sigma, r.MinSamples, r.ID)
 	return err
 }
 
@@ -595,7 +663,8 @@ func scanAlertRule(row scanner) (*AlertRuleRow, error) {
 	var enabled, muted int
 	if err := row.Scan(&r.ID, &r.Name, &r.Metric, &r.Operator, &r.Threshold, &r.WindowS,
 		&r.ScopeJSON, &r.Severity, &r.CooldownS, &r.GroupBy, &enabled, &muted,
-		&r.MaintenanceWindows, &r.ChannelIDs, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		&r.MaintenanceWindows, &r.ChannelIDs, &r.CreatedAt, &r.UpdatedAt,
+		&r.RuleType, &r.Sigma, &r.MinSamples); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}

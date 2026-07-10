@@ -1022,6 +1022,66 @@ func (s *Service) IngestTimeseries(ctx context.Context, p IngestTimeseriesParams
 
 // buildSessionTimeWhere generates a WHERE clause for viewer_sessions based on
 // started_at. Uses epoch-second DateTime64 column.
+// ─── S11 WO-B: anomaly baseline query ───────────────────────────────────────
+
+// AnomalyBaselineForMetric queries ClickHouse for the rolling mean, stddev, and
+// sample count of the named metric over lookbackS seconds.
+//
+// Supported metrics:
+//   - viewer_count: queries server_events (live viewer aggregate per stream)
+//   - all others: queries rollup_qoe_1h (QoE rollup rows per stream)
+//
+// streamID filters to a single stream when non-empty. Returns (0,0,0,nil) when
+// conn is nil or when ClickHouse returns no data (e.g. early startup, no rows).
+// NaN results from ClickHouse aggregate functions are sanitized to 0 via
+// jsonSafeFloat to prevent JSON encoding errors downstream.
+func (s *Service) AnomalyBaselineForMetric(ctx context.Context, metric, streamID string, lookbackS int) (mean, stddev float64, n int, err error) {
+	if s.conn == nil {
+		return 0, 0, 0, nil
+	}
+
+	var rawMean, rawStddev float64
+	var rawN int64
+
+	switch metric {
+	case "viewer_count":
+		// Aggregate live viewer counts from server_events over the lookback window.
+		q := `SELECT avg(viewers) AS mean, stddevPop(viewers) AS stddev, count() AS n
+		      FROM server_events
+		      WHERE event_time >= now() - INTERVAL ? SECOND`
+		args := []any{lookbackS}
+		if streamID != "" {
+			q += ` AND stream_id = ?`
+			args = append(args, streamID)
+		}
+		row := s.conn.QueryRow(ctx, q, args...)
+		if scanErr := row.Scan(&rawMean, &rawStddev, &rawN); scanErr != nil {
+			// No data — not an error to the caller.
+			return 0, 0, 0, nil
+		}
+	default:
+		// All other metrics (rebuffer_ratio, error_rate, etc.) from QoE rollup.
+		q := `SELECT avg(rebuffer_ratio) AS mean, stddevPop(rebuffer_ratio) AS stddev, count() AS n
+		      FROM rollup_qoe_1h
+		      WHERE bucket >= now() - INTERVAL ? SECOND`
+		args := []any{lookbackS}
+		if streamID != "" {
+			q += ` AND stream_id = ?`
+			args = append(args, streamID)
+		}
+		row := s.conn.QueryRow(ctx, q, args...)
+		if scanErr := row.Scan(&rawMean, &rawStddev, &rawN); scanErr != nil {
+			return 0, 0, 0, nil
+		}
+	}
+
+	// Sanitize NaN/Inf from ClickHouse aggregate functions over empty windows.
+	mean = jsonSafeFloat(rawMean)
+	stddev = jsonSafeFloat(rawStddev)
+	n = int(rawN)
+	return mean, stddev, n, nil
+}
+
 func buildSessionTimeWhere(from, to time.Time) (string, []any) {
 	if from.IsZero() && to.IsZero() {
 		return "1=1", nil

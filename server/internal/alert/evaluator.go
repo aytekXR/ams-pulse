@@ -138,6 +138,9 @@ type Evaluator struct {
 	// nil = these rules are skipped with a WARN log (one per tick).
 	qoeReader QoEReader
 
+	// S11 WO-B: baseline reader for anomaly rules (nil = skipped with WARN).
+	anomalyReader AnomalyBaselineReader
+
 	// Notification sink for tests.
 	notifySink func([]byte)
 
@@ -219,6 +222,18 @@ func (e *Evaluator) SetQoEReader(reader QoEReader) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.qoeReader = reader
+}
+
+// SetAnomalyBaselineReader wires the meta store baseline reader for anomaly rules.
+// If not set, anomaly rules are skipped with a WARN log (at most one per tick).
+// Call after New, before Start (S11 WO-B).
+//
+// D-WOB wiring pin: serve_wiring_test.go references wireAlertAnomalyReader which
+// calls this function; deleting it breaks the wiring test compilation.
+func (e *Evaluator) SetAnomalyBaselineReader(r AnomalyBaselineReader) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.anomalyReader = r
 }
 
 // Start runs the evaluator loop until ctx is cancelled.
@@ -342,29 +357,35 @@ func (e *Evaluator) evaluateRule(ctx context.Context, rule meta.AlertRuleRow, sn
 
 	var evals []evalResult
 
-	switch rule.Metric {
-	case "stream_offline":
-		evals = e.evalStreamOffline(snap, scope, rule)
-	case "viewer_drop_pct":
-		evals = e.evalViewerDrop(snap, scope, rule)
-	case "node_cpu":
-		evals = e.evalNodeMetric(snap, scope, rule, "cpu_pct")
-	case "node_mem":
-		evals = e.evalNodeMetric(snap, scope, rule, "mem_pct")
-	case "node_disk":
-		evals = e.evalNodeMetric(snap, scope, rule, "disk_pct")
-	// Wave 2: new metric types.
-	case "rebuffer_ratio", "error_rate", "ingest_bitrate_floor":
-		evals = e.evalQoEMetric(ctx, snap, scope, rule)
-	case "node_down", "node_degraded":
-		evals = e.evalNodeUpDown(snap, scope, rule)
-	case "cert_expiry":
-		// Cert expiry uses a real TLS checker in production; nil checker = skip.
-		if e.certChecker != nil {
-			evals = e.evalCertExpiry(ctx, rule, scope, e.certChecker)
+	// S11 WO-B: anomaly rules dispatch to evalAnomalyMetric before the threshold switch.
+	// RuleType=="" or RuleType=="threshold" falls through to the existing switch (backward compat).
+	if rule.RuleType == "anomaly" {
+		evals = e.evalAnomalyMetric(ctx, snap, scope, rule)
+	} else {
+		switch rule.Metric {
+		case "stream_offline":
+			evals = e.evalStreamOffline(snap, scope, rule)
+		case "viewer_drop_pct":
+			evals = e.evalViewerDrop(snap, scope, rule)
+		case "node_cpu":
+			evals = e.evalNodeMetric(snap, scope, rule, "cpu_pct")
+		case "node_mem":
+			evals = e.evalNodeMetric(snap, scope, rule, "mem_pct")
+		case "node_disk":
+			evals = e.evalNodeMetric(snap, scope, rule, "disk_pct")
+		// Wave 2: new metric types.
+		case "rebuffer_ratio", "error_rate", "ingest_bitrate_floor":
+			evals = e.evalQoEMetric(ctx, snap, scope, rule)
+		case "node_down", "node_degraded":
+			evals = e.evalNodeUpDown(snap, scope, rule)
+		case "cert_expiry":
+			// Cert expiry uses a real TLS checker in production; nil checker = skip.
+			if e.certChecker != nil {
+				evals = e.evalCertExpiry(ctx, rule, scope, e.certChecker)
+			}
+		default:
+			evals = e.evalGenericMetric(snap, scope, rule)
 		}
-	default:
-		evals = e.evalGenericMetric(snap, scope, rule)
 	}
 
 	// VD-29: Apply group_by storm grouping.
@@ -375,13 +396,17 @@ func (e *Evaluator) evaluateRule(ctx context.Context, rule meta.AlertRuleRow, sn
 	}
 
 	for _, ev := range evals {
-		e.processEvaluation(ctx, rule, scope, ev.groupKey, ev.value, ev.ok, now)
+		e.processEvaluation(ctx, rule, scope, ev, now)
 	}
 }
 
-// processEvaluation advances the state machine for one (rule, groupKey) pair.
+// processEvaluation advances the state machine for one (rule, evalResult) pair.
+// The evalResult carries groupKey, value, ok, and (for anomaly rules) anomalyInfo.
 func (e *Evaluator) processEvaluation(ctx context.Context, rule meta.AlertRuleRow, scope domain.AlertScope,
-	groupKey string, value float64, conditionMet bool, now time.Time) {
+	ev evalResult, now time.Time) {
+	groupKey := ev.groupKey
+	value := ev.value
+	conditionMet := ev.ok
 	key := rule.ID + ":" + groupKey
 
 	e.mu.Lock()
@@ -398,7 +423,10 @@ func (e *Evaluator) processEvaluation(ctx context.Context, rule meta.AlertRuleRo
 			if st.pendingSince.IsZero() {
 				st.pendingSince = now
 			}
-			windowElapsed := now.Sub(st.pendingSince) >= time.Duration(rule.WindowS)*time.Second
+			// S11 WO-B: anomaly rules fire immediately on detection — window_s=3600
+			// is the Welford baseline lookback, NOT a "condition must hold" duration.
+			// Threshold rules require the condition to hold for WindowS seconds.
+			windowElapsed := rule.RuleType == "anomaly" || now.Sub(st.pendingSince) >= time.Duration(rule.WindowS)*time.Second
 			if windowElapsed {
 				// Check cooldown.
 				if !st.cooldownUntil.IsZero() && now.Before(st.cooldownUntil) {
@@ -410,7 +438,7 @@ func (e *Evaluator) processEvaluation(ctx context.Context, rule meta.AlertRuleRo
 				st.firedAt = now
 				cooldownUntil := now.Add(time.Duration(rule.CooldownS) * time.Second)
 				st.cooldownUntil = cooldownUntil
-				e.fire(ctx, rule, scope, groupKey, value, st.alertID, now, &cooldownUntil)
+				e.fire(ctx, rule, scope, groupKey, value, st.alertID, now, &cooldownUntil, ev.anomalyInfo)
 			}
 		} else {
 			st.pendingSince = time.Time{}
@@ -429,8 +457,10 @@ func (e *Evaluator) processEvaluation(ctx context.Context, rule meta.AlertRuleRo
 }
 
 // fire sends a firing notification and persists history.
+// anomalyInfo is non-nil for anomaly rules; it sets the notification threshold to
+// the baseline mean and adds expected/sigma_multiplier fields to the payload.
 func (e *Evaluator) fire(ctx context.Context, rule meta.AlertRuleRow, scope domain.AlertScope,
-	groupKey string, value float64, alertID string, now time.Time, cooldownUntil *time.Time) {
+	groupKey string, value float64, alertID string, now time.Time, cooldownUntil *time.Time, anomalyInfo *anomalyEvalInfo) {
 	// VD-28: muted=true means evaluated but notifications suppressed.
 	if rule.Muted {
 		return
@@ -442,7 +472,14 @@ func (e *Evaluator) fire(ctx context.Context, rule meta.AlertRuleRow, scope doma
 		cooldownMS = &ms
 	}
 
-	notif := buildNotification(rule, scope, groupKey, "firing", value, alertID, now, cooldownMS, nil, false)
+	// S11 WO-B: for anomaly rules, use baseline mean as the "threshold" in the notification
+	// so webhook recipients see a meaningful expected-vs-actual comparison.
+	notifThreshold := rule.Threshold
+	if anomalyInfo != nil {
+		notifThreshold = anomalyInfo.Expected
+	}
+
+	notif := buildNotification(rule, scope, groupKey, "firing", value, alertID, now, cooldownMS, nil, false, notifThreshold, anomalyInfo)
 	payload, err := json.Marshal(notif)
 	if err != nil {
 		e.logger.Error("alert: marshal notification", "error", err)
@@ -459,7 +496,7 @@ func (e *Evaluator) fire(ctx context.Context, rule meta.AlertRuleRow, scope doma
 			TS:            now.UnixMilli(),
 			Metric:        rule.Metric,
 			Value:         value,
-			Threshold:     rule.Threshold,
+			Threshold:     notifThreshold, // baseline mean for anomaly rules
 			ScopeJSON:     rule.ScopeJSON,
 			CooldownUntil: cooldownMS,
 		}
@@ -490,7 +527,7 @@ func (e *Evaluator) resolve(ctx context.Context, rule meta.AlertRuleRow, scope d
 	}
 
 	resolvedAt := now.UnixMilli()
-	notif := buildNotification(rule, scope, groupKey, "resolved", value, alertID, firedAt, nil, &resolvedAt, false)
+	notif := buildNotification(rule, scope, groupKey, "resolved", value, alertID, firedAt, nil, &resolvedAt, false, rule.Threshold, nil)
 	payload, err := json.Marshal(notif)
 	if err != nil {
 		return
@@ -652,6 +689,9 @@ type evalResult struct {
 	groupKey string
 	value    float64
 	ok       bool
+	// S11 WO-B: anomaly eval context. Non-nil only for anomaly rule results.
+	// Passed through processEvaluation → fire() → buildNotification.
+	anomalyInfo *anomalyEvalInfo
 }
 
 func (e *Evaluator) evalStreamOffline(snap *domain.LiveSnapshot, scope domain.AlertScope, rule meta.AlertRuleRow) []evalResult {
@@ -825,8 +865,12 @@ func compare(value float64, operator string, threshold float64) bool {
 
 // ─── Notification builder ─────────────────────────────────────────────────────
 
+// buildNotification constructs the alert notification payload.
+// notifThreshold is used as the "threshold" field (baseline mean for anomaly rules,
+// rule.Threshold for threshold rules). anomalyInfo adds optional anomaly fields.
 func buildNotification(rule meta.AlertRuleRow, scope domain.AlertScope, groupKey, state string,
-	value float64, alertID string, firedAt time.Time, cooldownUntil, resolvedAt *int64, isTest bool) map[string]any {
+	value float64, alertID string, firedAt time.Time, cooldownUntil, resolvedAt *int64, isTest bool,
+	notifThreshold float64, anomalyInfo *anomalyEvalInfo) map[string]any {
 	n := map[string]any{
 		"version":   1,
 		"alert_id":  alertID,
@@ -837,13 +881,18 @@ func buildNotification(rule meta.AlertRuleRow, scope domain.AlertScope, groupKey
 		"title":     buildTitle(rule, scope, state),
 		"metric":    rule.Metric,
 		"value":     value,
-		"threshold": rule.Threshold,
+		"threshold": notifThreshold,
 		"scope": map[string]any{
 			"node_id":   scope.NodeID,
 			"app":       scope.App,
 			"stream_id": scope.StreamID,
 		},
 		"test": isTest,
+	}
+	// S11 WO-B: anomaly rules add expected and sigma_multiplier fields.
+	if anomalyInfo != nil {
+		n["expected"] = anomalyInfo.Expected
+		n["sigma_multiplier"] = anomalyInfo.SigmaMultiplier
 	}
 	if cooldownUntil != nil {
 		n["cooldown_until"] = *cooldownUntil
