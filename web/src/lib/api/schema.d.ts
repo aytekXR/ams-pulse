@@ -635,6 +635,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/oidc/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * OIDC SSO availability discovery
+         * @description Returns whether OIDC SSO is configured on this server. Safe unauthenticated
+         *     discovery endpoint for the SPA — the login page calls this on mount to
+         *     decide whether to show the "Sign in with SSO" button.
+         */
+        get: operations["oidcStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Current authenticated identity
+         * @description Returns the name, role, and authentication method of the currently
+         *     authenticated principal. The response is the same whether the caller
+         *     authenticated via a bearer token or via the OIDC session cookie —
+         *     the middleware stashes an auth_method flag in the request context.
+         *     Used by the SPA AuthGate on mount to detect cookie-authenticated
+         *     sessions and skip the token-input panel.
+         */
+        get: operations["authMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/sources": {
         parameters: {
             query?: never;
@@ -1460,7 +1507,7 @@ export interface components {
             success: boolean;
             /** @description Time to first byte in ms; null on failure */
             ttfb_ms: number | null;
-            /** @description Machine-readable error code; null on success. WebRTC-specific codes: ws_timeout (WebSocket dial or handshake timed out before a server signaling message was received), ws_refused (TCP connection refused to the signaling endpoint), ws_error (WebSocket protocol or application-level error). RTMP-specific codes: rtmp_timeout (TCP dial or S2 handshake timed out before the handshake byte was fully read), rtmp_refused (TCP connection refused to the RTMP endpoint), rtmp_error (RTMP protocol-level or application error). */
+            /** @description Machine-readable error code; null on success. WebRTC-specific codes: ws_timeout (WebSocket dial or handshake timed out before a server signaling message was received), ws_refused (TCP connection refused to the signaling endpoint), ws_error (WebSocket protocol or application-level error). RTMP-specific codes: rtmp_timeout (TCP dial or S2 handshake timed out before the handshake byte was fully read), rtmp_refused (TCP connection refused to the RTMP endpoint), rtmp_error (RTMP protocol-level or application error). Segment codes: segment_too_large (first media segment exceeded the size cap; bitrate_kbps is 0, success stays true). ICE codes: ice_failed (pion ICE state machine reached failed; success stays true since signaling succeeded), ice_timeout (probe deadline elapsed before ICE reached connected/completed or failed; success stays true). */
             error_code?: string | null;
             error_message?: string | null;
             /** Format: float */
@@ -1471,6 +1518,8 @@ export interface components {
             connect_time_ms?: number | null;
             /** @description Final protocol state recorded by the probe; null for probes that do not use a signaling or handshake phase. WebRTC values: offer_received | ws_timeout | ws_refused | ws_error. RTMP values: handshake_complete | rtmp_timeout | rtmp_refused | rtmp_error. */
             signaling_state?: string | null;
+            /** @description Terminal ICE state of the WebRTC media path check; present only for webrtc probes that attempted ICE negotiation — the key is OMITTED (absent) for non-WebRTC probes or when ICE was not attempted. Values: connected (ICE reached connected or completed state), failed (pion ICE state machine reached failed), timeout (probe deadline elapsed before ICE reached a terminal state). */
+            ice_state?: string | null;
         };
         BeaconBatch: {
             events: components["schemas"]["BeaconEventEnvelope"][];
@@ -2976,6 +3025,54 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    oidcStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OIDC configuration status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        enabled: boolean;
+                    };
+                };
+            };
+        };
+    };
+    authMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authenticated identity */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        role: string;
+                        /** @enum {string} */
+                        auth_method: "bearer" | "cookie";
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     listSources: {

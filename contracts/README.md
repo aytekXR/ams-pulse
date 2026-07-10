@@ -14,7 +14,7 @@ file change, before any implementation changes.
 | `events/ams-server-event.schema.json` | Normalized internal event from AMS sources (REST poll, log tail, Kafka, webhook) | INT-01 | server (collector emits → store ingests) |
 | `events/alert-notification.schema.json` | Alert payload sent to notification channels | INT-01 | server (emits), integrations |
 | `events/fixtures/` | JSON Schema test fixtures (≥2 valid + ≥1 invalid per schema) | INT-01 | server tests, SDK tests |
-| `db/clickhouse/0001_init.sql` | ClickHouse event/rollup table migrations | INT-01 | server |
+| `db/clickhouse/000N_*.sql` | ClickHouse migrations, name-ordered (0001 init … 0007 probe `ice_state`); runner tracks by filename | INT-01 | server |
 | `db/meta/0001_init.sql` | Metadata store (SQLite/Postgres) migrations | INT-01 | server |
 
 ## Rules
