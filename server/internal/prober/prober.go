@@ -307,9 +307,16 @@ func (r *Runner) executeProbe(ctx context.Context, p domain.ProbeConfig) {
 		// WebRTC phase-1: signaling-only check via nhooyr.io/websocket.
 		// URL convention: ws(s)://host/{app}/websocket?streamId=<id>
 		result = r.probeWebRTC(probeCtx, p, result)
+	case "rtmp":
+		// RTMP: TCP handshake (C0+C1 / S0+S1+S2 / C2) probe.
+		result = r.probeRTMP(probeCtx, p, result)
+	case "dash":
+		// DASH: MPD manifest fetch + first-segment TTFB/bitrate probe.
+		result = r.probeDASH(probeCtx, p, result)
 	default:
-		// rtmp / dash: minimal honest check — attempt HTTP reachability
-		// but mark as not-yet-probed with a documented error_code.
+		// Unknown protocol (e.g. "srt"): minimal honest reachability check.
+		// Returns error_code="not_probed" as a forward-compat stub until a
+		// dedicated probe is implemented. Does NOT cover rtmp or dash.
 		result = r.probeReachability(probeCtx, p, result)
 	}
 

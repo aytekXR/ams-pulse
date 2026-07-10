@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -378,9 +379,10 @@ func TestHLSProbe_Timeout(t *testing.T) {
 	t.Logf("PASS: success=false, error_code=%q", result.ErrorCode)
 }
 
-// TestProbe_NotProbed verifies that rtmp/dash probes return
-// success=false with error_code="not_probed" (honest minimal stub).
-// webrtc is now a real probe (probeWebRTC) — it no longer falls here.
+// TestProbe_NotProbed verifies that an unrecognised protocol string (e.g. "srt")
+// falls through to probeReachability and returns error_code="not_probed".
+// rtmp and dash now have dedicated probes — see TestProbe_RTMPDispatch and
+// TestProbe_DASHDispatch below.
 func TestProbe_NotProbed(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -388,52 +390,162 @@ func TestProbe_NotProbed(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	for _, proto := range []string{"rtmp", "dash"} {
-		proto := proto
-		t.Run(proto, func(t *testing.T) {
-			source := &fakeSource{
-				probes: []domain.ProbeConfig{
-					{
-						ID:        "probe-" + proto,
-						Name:      "test-" + proto,
-						URL:       srv.URL + "/stream",
-						Protocol:  proto,
-						IntervalS: 60,
-						TimeoutS:  5,
-						Enabled:   true,
-					},
-				},
-			}
-			store := &fakeStore{}
-			clock := NewFakeClock(time.Now())
-			r := prober.New(prober.Config{Workers: 1, MaxJitterFraction: 0}, source, store, nil, clock)
-
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-
-			go func() { _ = r.Run(ctx) }()
-
-			results := waitForResults(store, 1, 5*time.Second)
-			cancel()
-
-			if len(results) == 0 {
-				t.Fatal("expected at least one probe result; got none")
-			}
-			result := results[0]
-			t.Logf("[%s] result: success=%v error_code=%q", proto, result.Success, result.ErrorCode)
-
-			if result.Success {
-				t.Errorf("[%s] expected Success=false for not-yet-probed protocol", proto)
-			}
-			if result.ErrorCode != "not_probed" {
-				t.Errorf("[%s] expected error_code=not_probed, got %q", proto, result.ErrorCode)
-			}
-			if !strings.Contains(result.ErrorMsg, "Phase 3") {
-				t.Errorf("[%s] expected error_msg to mention Phase 3, got %q", proto, result.ErrorMsg)
-			}
-			t.Logf("PASS [%s]: success=false, error_code=not_probed (honest stub)", proto)
-		})
+	source := &fakeSource{
+		probes: []domain.ProbeConfig{
+			{
+				ID:        "probe-srt",
+				Name:      "test-srt",
+				URL:       srv.URL + "/stream",
+				Protocol:  "srt",
+				IntervalS: 60,
+				TimeoutS:  5,
+				Enabled:   true,
+			},
+		},
 	}
+	store := &fakeStore{}
+	clock := NewFakeClock(time.Now())
+	r := prober.New(prober.Config{Workers: 1, MaxJitterFraction: 0}, source, store, nil, clock)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	go func() { _ = r.Run(ctx) }()
+
+	results := waitForResults(store, 1, 5*time.Second)
+	cancel()
+
+	if len(results) == 0 {
+		t.Fatal("expected at least one probe result for srt; got none")
+	}
+	result := results[0]
+	t.Logf("[srt] result: success=%v error_code=%q msg=%q", result.Success, result.ErrorCode, result.ErrorMsg)
+
+	if result.Success {
+		t.Error("[srt] expected Success=false for unrecognised protocol")
+	}
+	if result.ErrorCode != "not_probed" {
+		t.Errorf("[srt] expected error_code=not_probed (forward-compat default), got %q", result.ErrorCode)
+	}
+	if !strings.Contains(result.ErrorMsg, "Phase 3") {
+		t.Errorf("[srt] expected error_msg to mention Phase 3, got %q", result.ErrorMsg)
+	}
+	t.Log("PASS [srt]: success=false, error_code=not_probed (probeReachability forward-compat)")
+}
+
+// TestProbe_RTMPDispatch verifies that protocol="rtmp" dispatches to probeRTMP
+// and NOT to probeReachability. The probe runs against a TCP address that is
+// immediately closed after binding, so probeRTMP returns rtmp_refused or
+// rtmp_error — either way, never "not_probed".
+func TestProbe_RTMPDispatch(t *testing.T) {
+	// Grab a free port, note address, close immediately → ECONNREFUSED on dial.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	source := &fakeSource{
+		probes: []domain.ProbeConfig{
+			{
+				ID:        "probe-rtmp-dispatch",
+				Name:      "test-rtmp-dispatch",
+				URL:       "rtmp://" + addr + "/live",
+				Protocol:  "rtmp",
+				IntervalS: 60,
+				TimeoutS:  5,
+				Enabled:   true,
+			},
+		},
+	}
+	store := &fakeStore{}
+	clock := NewFakeClock(time.Now())
+	r := prober.New(prober.Config{Workers: 1, MaxJitterFraction: 0}, source, store, nil, clock)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	go func() { _ = r.Run(ctx) }()
+
+	results := waitForResults(store, 1, 5*time.Second)
+	cancel()
+
+	if len(results) == 0 {
+		t.Fatal("[rtmp dispatch] expected at least one probe result; got none")
+	}
+	result := results[0]
+	t.Logf("[rtmp dispatch] result: success=%v error_code=%q msg=%q",
+		result.Success, result.ErrorCode, result.ErrorMsg)
+
+	if result.Success {
+		t.Error("[rtmp dispatch] expected Success=false against dead RTMP address")
+	}
+	// probeRTMP must have handled the request — any rtmp_* code is valid;
+	// "not_probed" means dispatch still fell through to probeReachability.
+	if result.ErrorCode == "not_probed" {
+		t.Errorf("[rtmp dispatch] error_code=not_probed: dispatch fell through to probeReachability — case \"rtmp\" missing from executeProbe switch")
+	}
+	if result.ErrorCode != "rtmp_refused" && result.ErrorCode != "rtmp_error" && result.ErrorCode != "rtmp_timeout" {
+		t.Errorf("[rtmp dispatch] unexpected error_code %q; want rtmp_refused, rtmp_error, or rtmp_timeout", result.ErrorCode)
+	}
+	t.Logf("PASS [rtmp dispatch]: success=false, error_code=%q (probeRTMP reached)", result.ErrorCode)
+}
+
+// TestProbe_DASHDispatch verifies that protocol="dash" dispatches to probeDASH
+// and NOT to probeReachability. The server returns 200 OK with a non-MPD body;
+// probeDASH fails with error_code="parse" — never "not_probed".
+func TestProbe_DASHDispatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("this is not an MPD"))
+	}))
+	t.Cleanup(srv.Close)
+
+	source := &fakeSource{
+		probes: []domain.ProbeConfig{
+			{
+				ID:        "probe-dash-dispatch",
+				Name:      "test-dash-dispatch",
+				URL:       srv.URL + "/manifest.mpd",
+				Protocol:  "dash",
+				IntervalS: 60,
+				TimeoutS:  5,
+				Enabled:   true,
+			},
+		},
+	}
+	store := &fakeStore{}
+	clock := NewFakeClock(time.Now())
+	r := prober.New(prober.Config{Workers: 1, MaxJitterFraction: 0}, source, store, nil, clock)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	go func() { _ = r.Run(ctx) }()
+
+	results := waitForResults(store, 1, 5*time.Second)
+	cancel()
+
+	if len(results) == 0 {
+		t.Fatal("[dash dispatch] expected at least one probe result; got none")
+	}
+	result := results[0]
+	t.Logf("[dash dispatch] result: success=%v error_code=%q msg=%q",
+		result.Success, result.ErrorCode, result.ErrorMsg)
+
+	if result.Success {
+		t.Error("[dash dispatch] expected Success=false (non-MPD response)")
+	}
+	// probeDASH returns "parse" when the body is not parseable as MPD;
+	// "not_probed" means dispatch still fell through to probeReachability.
+	if result.ErrorCode == "not_probed" {
+		t.Errorf("[dash dispatch] error_code=not_probed: dispatch fell through to probeReachability — case \"dash\" missing from executeProbe switch")
+	}
+	if result.ErrorCode != "parse" {
+		t.Errorf("[dash dispatch] expected error_code=parse (non-MPD body), got %q", result.ErrorCode)
+	}
+	t.Logf("PASS [dash dispatch]: success=false, error_code=%q (probeDASH reached)", result.ErrorCode)
 }
 
 // ─── WebRTC probe tests ───────────────────────────────────────────────────────
