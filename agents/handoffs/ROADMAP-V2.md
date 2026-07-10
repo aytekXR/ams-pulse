@@ -208,7 +208,7 @@ reports/` and boot validation in `cmd/pulse/serve.go`.
 
 ---
 
-### 2.10  SSO / OIDC  [L] — ✅ PHASE 1 (server) DONE S11 (D-070); phase 2 = UI login flow
+### 2.10  SSO / OIDC  [L] — ✅ PHASE 1 (server) DONE S11 (D-070) · ✅ PHASE 2 (SPA login) DONE S14 (D-074, 2026-07-10: /auth/oidc/status + /auth/me, AuthGate cookie-session path + SSO button, OIDC logout wired; bearer flows unchanged)
 
 > Phase-1 limitation (documented): the OIDC session cookie authenticates API calls, but the
 > SPA AuthGate still reads localStorage — after OIDC login the UI still shows the token
@@ -227,7 +227,7 @@ TDD.
 
 ---
 
-### 2.11  Native WebRTC / RTMP / DASH probes  [L per protocol] — ⚙ WebRTC PHASE 1 ✅ S12 (D-072) · RTMP PHASE 1 (handshake) + DASH (full MPD+segment) ✅ S13 (D-073, 2026-07-10; RTMP S2-echo live-verified vs real AMS 3.0.3; DASH fixtures spec-derived — AMS DASH muxing disabled, capture gap recorded) · pion media path → S14 (D-073 triage: phase-2a = ICE-connected + ice_state + CH 0007, phase-2b = rtt/jitter/loss stats)
+### 2.11  Native WebRTC / RTMP / DASH probes  [L per protocol] — ⚙ WebRTC PHASE 1 ✅ S12 (D-072) · RTMP PHASE 1 (handshake) + DASH (full MPD+segment) ✅ S13 (D-073) · **WebRTC PHASE 2a (pion ICE) ✅ S14 (D-074, 2026-07-10: ice_state connected|failed|timeout + CH 0007, live-verified ICE-connected vs real AMS 3.0.3 in 0.2s; PLUS the notification-skip signaling fix — real AMS sends subtrackAdded BEFORE the offer, the D-072 parse failed live-only, now fixed + mock mirrors it)** · phase-2b (RTCP rtt/jitter/loss, CH 0008) → S15 (D-074 pre-declared yield; triage in ledger)
 
 **Why:** Current QoE probes are HLS-only; non-HLS streams return `not_probed` (stub from
 ROADMAP.md §1 audit). AMS supports WebRTC, RTMP, and DASH. Full QoE measurement requires
@@ -276,7 +276,7 @@ integration test.
 
 ---
 
-### 2.14  Anomaly Detector metric expansion  [S]  (NEW, seeded by S11 WO-B)
+### 2.14  Anomaly Detector metric expansion  [S]  (NEW, seeded by S11 WO-B) — ✅ DONE S14 (D-074, 2026-07-10: +ingest_bitrate_kbps (stream) + disk_pct (node), all 5 whitelist copies atomic, e2e A5b; beacon QoE + viewer_* EXCLUDED w/ reason — U3 gate / sparsity — revisit post-U3)
 
 **Why:** Anomaly alert rules (§2.8) support exactly the metrics the Welford Detector
 baselines: `viewers`, `cpu_pct`, `mem_pct`. Rules on `ingest_bitrate_kbps` (or QoE metrics)
@@ -490,7 +490,7 @@ S14 and are operator-gated.
 
 ---
 
-### S14 — pion media path + OIDC phase 2 + promotions (planned at S13 close, D-073)
+### S14 — pion media path + OIDC phase 2 + promotions ✅ DONE (D-074, 2026-07-10)
 **Goal:** WebRTC media-path QoE (pion phase 2a/2b per the D-073 triage spec); SPA OIDC
 login; CI promotions (date gate ≥07-23 opens during/near S14); conditional v0.3.0 rollout
 (operator-gated, still pending); anomaly metric expansion. Mobile SDKs remain
@@ -513,6 +513,34 @@ operator-gated (§2.12 uncut until answered). Full prompt: `sessions/SESSION-14.
 *(Backlog-if-light: brandkit phase 2 light theme; DASH live-fixture capture if operator
 enables DASH muxing.)*
 
+**S14 result (D-074):** WO-B phase-2a ✅ (pion v4.2.16 CGO=0; ice_state vertical; e2e ICE
+120s/5s; live ICE-connected vs real AMS + the notification-skip fix for the live-only
+D-072 signaling bug) · WO-C ✅ (SPA cookie login + SSO) · WO-D ✅ (+2 metrics, owner
+anomaly→BE-02) · WO-F ✅ (32MB cap) · WO-G ✅ re-recorded · WO-A skip ×3 (date) · WO-E/
+WO-H gated (operator). Phase-2b → S15. Coverage 74.4/62.96-59.04-52.05. 3 workflows,
+14 agents, ~1.31M tok; verify: CONFIRMED_OK + PARTIAL×2, zero functional must-fix.
+
+### S15 — CI promotions (gate OPEN ≥07-23) + pion phase-2b + carries (planned at S14 close, D-074)
+
+Execute `sessions/SESSION-15.md`. Check operator answers FIRST (v0.3.0 / CodeQL /
+PR-first / mobile-SDK — all four still open at S14 close).
+
+1. **WO-A [S]** CI promotions (§2.7) — the ≥2026-07-23 date gate OPENS before/during S15
+   if run on schedule; JOB-level streak re-measure; FULL-LIST PUT; GET-diff proof;
+   CodeQL only with explicit operator OK. (Carry ×3: S12/S13/S14.)
+2. **WO-B [M]** pion phase-2b (§2.11, D-074 triage): mock-ams sends RTP over the existing
+   VP8 track (~2s); probe reads inbound-RTP stats (jitter/loss) + ICE-candidate-pair RTT;
+   contract CR rtt_ms/jitter_ms/loss_pct; CH **0008**; e2e asserts stats present.
+   FIRST to yield if hot (same rule as S14).
+3. **WO-C [M, operator-gated "ship v0.3.0"]** prod rollout — now carries D-068+D-070+
+   D-072+D-073+**D-074**; §8.8 smoke + runbook; post-rollout operator browser-accept.
+4. **WO-D [S]** brandkit phase 2 (light theme, §2.15 backlog) — if time permits.
+5. **WO-E [XS]** enforce_admins/PR-first re-check (standing).
+6. **WO-F [L, operator-gated]** iOS beacon SDK phase 1 — ONLY on explicit yes.
+
+*(Backlog-if-light: DASH live-fixture capture if operator enables DASH muxing; post-U3
+beacon-QoE anomaly metrics (§2.14 revisit).)*
+
 ---
 
 ## 4. Operator decision ledger
@@ -527,7 +555,7 @@ enables DASH muxing.)*
 | D-V2-3 | **enforce_admins flip (§2.1):** flip `enforce_admins` to `true` once sessions stop pushing directly to main | **RESOLVED-DEFERRED (D-068, S10)** | Stays `false`: 1-review requirement + solo owner = self-approval impossible → flip would deadlock session pushes (§2.1 rationale). Re-arm: re-checked S12 (D-072) + S13 (D-073, live gh evidence, unchanged) → next at S14 WO-G, or operator says "PR-first" (then drop reviews to 0 or add a reviewer). |
 | D-V2-4 | **U3 — activate Pro+ license in prod:** set `PULSE_LICENSE_KEY` in `deploy/.env` | **OPEN — optional feature unlock** | Until then QoE/beacon data does not flow in prod; CI covers it with the mock license (G6 met). Minting instructions in docs/licensing.md. |
 | D-V2-5 | **O7 — GHCR package public:** make `ghcr.io/aytekxr/ams-pulse` public | **DOWNGRADED to optional (2026-07-10)** | Operator granted `read:packages` instead → S12 WO-E unblocked (pull + cosign verified live: image tag `0.2.0` — NO v prefix, doc bug fixed; Rekor 2128354996). Package stays private: only outside users can't pull/verify until the one UI click (no API path, D-066). |
-| D-V2-6 | **Ship v0.3.0:** tag + prod rollout carrying D-068 O(N²) fix, D-070 S11 features, D-072 Postgres/WebRTC-probe/brandkit UI, D-073 RTMP/DASH probes + TTL fix | **OPEN (asked S12, re-asked S13)** | WO-E stays staged every session until "ship v0.3.0". Post-rollout: operator browser-accept of the re-branded UI (U5 pattern). |
+| D-V2-6 | **Ship v0.3.0:** tag + prod rollout carrying D-068 O(N²) fix, D-070 S11 features, D-072 Postgres/WebRTC-probe/brandkit UI, D-073 RTMP/DASH probes + TTL fix, D-074 WebRTC ICE + OIDC SPA login + anomaly metrics | **OPEN (asked S12/S13, re-asked S14)** | WO-E stays staged every session until "ship v0.3.0". Post-rollout: operator browser-accept of the re-branded UI (U5 pattern). |
 | D-V2-7 | **Mobile SDKs needed?** native iOS/Android beacon SDKs (§2.12) | **OPEN (asked S12, re-asked S13)** | S14 WO-H fires only on explicit "yes"; "no" cuts §2.12 from the roadmap. |
 
 ---
@@ -540,4 +568,5 @@ enables DASH muxing.)*
 | 2026-07-09 S10 (D-068) | **73.5%** | **70.2** | 62.13 / 57.6 / 51 (gates 59/54/45) | Web numbers = vitest-4 re-baseline (D-067); sdk 66.06/45.79/70.42 (gates 63/43/67) |
 | 2026-07-10 S11 (D-070) | **73.9%** | **70.2** | 79.69 / 76.25 / 47.33 (gates 59/54/45) | api 76.1, reports 90.1, query 87.5, meta 67.7; sdk untouched (66.06/45.79/70.42, 3.52 KB) |
 | 2026-07-10 S13 (D-073) | **74.0%** | **70.2** | 62.68 / 58.78 / 51.54 (gates 59/54/45) | prober 70.1 (new rtmp+dash probes fully tested); web untouched (schema.d.ts JSDoc only — numbers are the vitest-4 rebaseline, the S11 row's 79.69 was the notation artifact); sdk untouched |
+| 2026-07-10 S14 (D-074) | **74.4%** | **70.2** | 62.96 / 59.04 / 52.05 (gates 59/54/45) | prober 72.6 (ICE tests), anomaly 81.6, api 76.9, domain 100; sdk untouched (66.06/45.79/70.42, 3.52 KB) |
 | *(update each session at close)* | | | | |

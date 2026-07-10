@@ -11,65 +11,62 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-14.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-15.md`)
 
-**Session 2026-07-10(b) result: D-073 — S13 DONE (probe protocol completion).** Opened by
-COMPLETING S12'S INTERRUPTED CLOSE (operator terminal crashed mid-closing-protocol; code
-was already pushed+green at c767ded; the D-072 decisions close-evidence, operator-expected
-refresh and handoff commit were recovered at S13 open — no work lost; lesson recorded:
-append ledger evidence + commit handoffs EARLY in every close). Then S13 proper:
-- **WO-B RTMP handshake probe phase 1:** stdlib-only (ZERO new deps in both modules)
-  TCP C0/C1→S0/S1/S2→C2 with STRICT S2-echo validation — **live-verified against the real
-  AMS 3.0.3 (handshake_complete, 40 ms)**, refuting the FP9 complex-handshake concern for
-  our target; reuses `connect_time_ms` (description-widening CR only, NO new CH column);
-  `signaling_state=handshake_complete`; codes rtmp_timeout/rtmp_refused/rtmp_error.
-- **WO-C DASH probe (full):** stdlib encoding/xml MPD parse — SegmentTemplate (incl.
-  `$Number%0Nd$`/`$RepresentationID$`/timescale conversion), SegmentList, BaseURL chain
-  per ISO/IEC 23009-1 §5.6 (chain gap was a verifier catch, fixed + pinned same session),
-  RFC 3986 resolution (deliberate divergence from HLS string-truncation resolveURI);
-  HLS-mirrored measurement shape + success semantics (manifest-OK ⇒ success, segment =
-  bonus). NO contract schema change (fields protocol-neutral). ⚠ Fixtures are
-  SPEC-DERIVED: real-AMS DASH muxing is DISABLED (.mpd → 404 verified read-only;
-  enabling it = prod AMS config mutation = operator-only; optional note filed).
-- **WO-F TTL fix:** `0001_init.sql` hardcoded `toIntervalDay(90)` → `{retention_days}`
-  (SAFE: runner tracks migrations by NAME, sha256-of-name — content edit invisible to
-  applied installs) + `0006_probe_results_ttl.sql` ALTER MODIFY TTL for existing
-  installs; `TestIntegration_ProbeResultsTTL` RED at 90 → GREEN at 33; idempotency 6/6.
-- **WO-D pion media path: RE-GATED to S14** with triage record (scout-evidenced:
-  pion = cold-start dep in TWO modules; mock-ams needs a ~300-400 LOC ICE/DTLS answerer
-  rewrite; S12 fixture is server→client-only; 5 new fields + CH 0007). S14 spec: phase-2a
-  ICE-connected + `ice_state`, phase-2b RTCP stats.
-- **WO-A CI promotions: date-gate skip re-recorded** (07-10 < 07-23, carry ×2). **WO-E
-  v0.3.0 rollout: did NOT fire** — "ship v0.3.0" still unanswered (asked again). **WO-G:**
-  enforce_admins rationale re-recorded w/ live gh evidence (false/strict/7 contexts/1
-  review, unchanged).
-- **Process:** 3 workflows (4 scouts / 6 authors incl. serial-wiring chain for the shared
-  prober package / 3 adversarial verifiers → CONFIRMED_OK ×2 + PARTIAL). Verify included
-  a LIVE CROSS-PAIR (real probeRTMP+probeDASH vs real mock-ams — the seam unit tests
-  can't see): both PASSED (bitrate exactly 200 kbps, RFC3986 resolution lands on the
-  mock route). Findings: DASH BaseURL chain (fixed+test), stale-docs sweep (probes.md
-  matrix incl. a PRE-EXISTING stale webrtc row from D-072, ARCHITECTURE.md F10, ADR 0008
-  → Partially superseded + amendments, prober.go package doc, domain comments). Deferred
-  to S14: io.ReadAll LimitReader hardening (pre-existing, shared HLS/DASH).
+**Session 2026-07-10(c) result: D-074 — S14 DONE (pion media path + OIDC phase 2 + anomaly
+expansion + LimitReader).** All 8 WOs executed or explicitly gated:
+- **WO-B pion phase-2a LANDED + LIVE-EVIDENCED:** pion/webrtc **v4.2.16** in BOTH modules
+  (CGO=0 pre-verified at open, gates green); probeWebRTC continues past the offer into a
+  pion ANSWERER (trickle ICE both ways) → new `ice_state` (connected|failed|timeout, CH
+  **0007**, key-absent semantics); ICE outcome NEVER flips Success (bonus-measurement).
+  Live vs real AMS 3.0.3: `ice_state=connected` in 0.2s. mock-ams `-webrtc-ice` pion
+  offerer (VP8 track); e2e asserts `ice_state=='connected'` at 120s/5s.
+  **★ HEADLINE FIX (live-verify pays again):** real AMS sends `notification`
+  (subtrackAdded) BEFORE the offer — D-072's first-message-must-be-offer parse FAILED
+  against every real AMS with a live stream (CI mock false-green). Fixed (notification-
+  skip loop + AMS error `definition` surfaced), pinned by fixture-replay from the live
+  capture, mock now mirrors real AMS in both modes. **Phase-2b (RTCP rtt/jitter/loss,
+  CH 0008) RE-GATED to S15** per the pre-declared yield — triage in decisions.md.
+- **WO-C OIDC phase-2 LANDED:** GET /auth/oidc/status {enabled} + GET /auth/me
+  (name/role/auth_method via ctx cookie-vs-bearer flag); AuthGate: pulse_session cookie
+  authenticates the SPA, "Sign in with SSO" button when enabled; sign-out also revokes
+  the OIDC session; bearer/401 flows byte-unchanged; Playwright auth-oidc.spec.ts.
+- **WO-D anomaly expansion LANDED:** +`ingest_bitrate_kbps` (stream) + `disk_pct` (node);
+  all 5 whitelist copies atomic; negative tests → rebuffer_ratio; FalseAlarmRate 4-metric
+  CONSERVATIVE bound documented (~0.346 < 1.0 PRD); e2e A5b (spike UP, EXIT-trap restore);
+  owner ruling: `internal/anomaly` → BE-02 in manifest (D-012 precedent). Beacon QoE +
+  viewer_* metrics EXCLUDED w/ reason (U3 gate / sparsity).
+- **WO-F LimitReader LANDED:** `segBodyCapBytes=32<<20`, LimitReader(cap+1) at BOTH
+  segment sites; over-cap ⇒ Success=true + `segment_too_large` + BitrateKbps=0.
+- **WO-A skip carry ×3** (07-10 < 07-23 — the gate OPENS by S15). **WO-E v0.3.0 did NOT
+  fire** (unanswered; now carries D-074 too). **WO-G** re-recorded (unchanged). **WO-H**
+  gated (mobile-SDK unanswered).
+- **Process:** 3 workflows (4 scouts / 7 authors incl. WO-F→WO-B serial chain / 3
+  adversarial verifiers → CONFIRMED_OK + PARTIAL×2, zero functional must-fix; 11
+  stale-docs findings fixed same-session). Live cross-pair (probe↔mock binary, ICE 16ms).
+  Final gate caught a test **budget inversion** (harness wait == probe deadline —
+  deterministic, D-042 class; wait must STRICTLY dominate). AMS refuses WebRTC sessions
+  (`highResourceUsage`) while workflows saturate the box — run live WebRTC checks idle.
+  `ams-teststream` was found crashed (2h), restarted. Captures dir is GITIGNORED —
+  shapes pinned via in-repo fixture tests instead.
 
-**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-14.md` and execute it** (pion
-phase 2a/2b, OIDC phase-2 SPA login, CI promotions ≥07-23, anomaly expansion, LimitReader
-hardening, conditional v0.3.0, operator-gated iOS SDK). **Check `docs/operator-expected.md`
-answers FIRST — 4 switches (all unanswered at S13 close): "ship v0.3.0", CodeQL yes/no,
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-15.md` and execute it** (CI
+promotions — date gate OPENS ≥07-23, pion phase-2b, conditional v0.3.0, brandkit light
+theme if light, operator-gated iOS SDK). **Check `docs/operator-expected.md` answers
+FIRST — 4 switches (all unanswered at S14 close): "ship v0.3.0", CodeQL yes/no,
 PR-first yes/no, mobile-SDK need yes/no.** Plan of record: `ROADMAP-V2.md`.
 
-**Standing numbers (2026-07-10 post-S13/D-073):** Go total **74.0%** (floor **70.2**;
-prober 70.1); web **lines 62.68 / branches 58.78 / functions 51.54** (gates 59/54/45,
-vitest-4 — never compare to the S11 notation-artifact "79.69"); sdk untouched
-(66.06/45.79/70.42; gates 63/43/67; 3.52 KB). Prod **`pulse v0.2.0` + D-067 digests**,
-healthy — next rollout (**v0.3.0, operator-gated D-V2-6**) carries D-068 + D-070 + D-072 +
-D-073. Dependabot queue ZERO at S13 open. Operator queue: 4 questions (v0.3.0-ship,
-CodeQL ~07-23, PR-first, mobile-SDK) + U3 + optionals; **browser-accept of the re-branded
-UI happens AFTER v0.3.0 ships.** Operator checklist: `docs/operator-expected.md` —
-REFRESHED at this close (ledger of record: ROADMAP §5 + ROADMAP-V2 §4). Watches: CH
-startup flake (2nd occurrence ⇒ 60→180s ×4 copies); `TestProbe_WebRTC_WsTimeout` at 20s
-budget (if it flakes again READ THE SCHEDULER, don't bump — D-042); NEW: pion ICE-in-CI
-will be a fresh flake surface in S14 (budget once, generously, with evidence).
+**Standing numbers (2026-07-10 post-S14/D-074):** Go total **74.4%** (floor **70.2**;
+prober 72.6, anomaly 81.6, api 76.9, domain 100); web **lines 62.96 / branches 59.04 /
+functions 52.05** (gates 59/54/45, vitest-4); sdk untouched (66.06/45.79/70.42; gates
+63/43/67; 3.52 KB). Prod **`pulse v0.2.0` + D-067 digests**, healthy — next rollout
+(**v0.3.0, operator-gated D-V2-6**) carries D-068 + D-070 + D-072 + D-073 + **D-074**.
+Dependabot queue ZERO at S14 open. Operator queue: 4 questions (v0.3.0-ship, CodeQL
+~07-23, PR-first, mobile-SDK) + U3 + optionals; **browser-accept of the re-branded UI
+happens AFTER v0.3.0 ships.** Watches: CH startup flake (2nd occurrence ⇒ 60→180s ×4
+copies); pion ICE-in-CI budgeted ONCE at 120s/5s (D-042 — if it flakes READ THE
+SCHEDULER; budget-inversion class documented in D-074); AMS `highResourceUsage` refusals
+under load (run live WebRTC checks on an idle box).
 
 ---
 

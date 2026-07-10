@@ -3285,3 +3285,76 @@ at runtime under CGO=0 → **v4.2.16 is the PINNED version for BOTH modules.**
   per binding predicates; the per-key static cross-check vs wave3.go re-runs in VERIFY
   since wave3.go lands concurrently). Authors AUTHOR ONLY (no commits, no git mutations,
   D-063); ORCH gates + commits per scope.
+
+### D-074 CLOSE EVIDENCE (2026-07-10)
+
+**Result: S14 DONE — all 8 WOs executed or explicitly gated.** Commits (pushed
+`3801ae8..23f1e0c`): `10b574f` open · `af6ff36` rulings · `a8a626b` contracts CR (+CH
+0007 + /auth/oidc/status + /auth/me) · `0350edf` BE-01 pion phase-2a + notification-skip
+fix + WO-F LimitReader · `8b6c6ce` mock-ams pion offerer + AMS-realism notification ·
+`6cc70e1` anomaly expansion · `d15d990` OIDC phase-2 SPA login · `69dc2f3` e2e ice_state
++ A5b · `23f1e0c` docs sweep. **CI+e2e+codeql at 23f1e0c: [stamped in the follow-up
+commit at CI-green].**
+
+**★ THE SESSION'S HEADLINE FINDING (live-verify pattern pays again):** real AMS 3.0.3
+sends a `notification` (subtrackAdded) BEFORE `takeConfiguration`/offer — the D-072
+phase-1 "first message must be the offer" parse FAILED against every real AMS with a
+live stream (`ws_error: unexpected first message`). CI never saw it (mock sent the
+offer first = false green); the S12 "live" evidence was a fixture capture, not a probe
+run. Fixed same-session TDD (notification-skip read loop + AMS error `definition`
+surfaced in error_msg), pinned by fixture-replay cases from the live capture
+(notification_then_offer / notification_only_times_out / error-definition), and the
+mock now mirrors real AMS (notification before offer in BOTH modes) so CI e2e
+permanently exercises the skip path. Capture saved LOCAL-ONLY (gitignored captures dir)
+at `real-ams-captures/webrtc-signaling-notification-offer.json` — full live offer SDP
+(H264+rtx, opus+red, datachannel, trickle ICE) + 3 host candidates.
+
+**LIVE-EVIDENCED (pristine-copy test, real AMS 3.0.3, teststream restarted after its
+2h-earlier crash — `docker start ams-teststream`, broadcasting again):**
+`success=true signaling_state=offer_received ice_state=connected error_code="" (0.2s)`
+— the COMPLETE phase-2a vertical works against the production AMS. First attempt was
+blocked by AMS `highResourceUsage` (own verify workflows saturating the 2-vCPU box) —
+retried idle, clean. ALSO live cross-pair (verify workflow): real probe ↔ real mock-ams
+binary in one netns → ICE connected 16ms.
+
+**WO dispositions:** WO-A date-gate skip carry ×3 (07-10 < 07-23 → S15 picks up, gate
+OPEN by then) · WO-B phase-2a LANDED (pion v4.2.16 both modules, CGO=0 green; ice_state
+vertical atomic; ICE budget e2e 120s/5s) — **phase-2b RE-GATED to S15 per the
+pre-declared yield** (triage: needs mock RTP sending over the existing VP8 track ~2s +
+probe inbound-RTP stats (jitter/loss) + ICE-pair RTT + contract CR rtt_ms/jitter_ms/
+loss_pct + CH 0008 — a fresh [M] flake surface; landing it hot after a 1.3M-token
+session contradicts D-042 discipline) · WO-C LANDED (SPA cookie login + SSO button +
+/auth/me; bearer/401 flows unchanged) · WO-D LANDED (ingest_bitrate_kbps + disk_pct;
+owner ruling anomaly→BE-02 in manifest) · WO-E did NOT fire (v0.3.0 unanswered — now
+carries D-074 too) · WO-F LANDED (32MB cap symmetric) · WO-G re-recorded · WO-H did NOT
+fire (mobile-SDK unanswered).
+
+**Workflows:** `s14-scout` (4 read-only scouts, 345k tok) → `s14-impl` (7 authors:
+contract-first then 5 parallel tracks incl. the WO-F→WO-B serial chain, 586k tok, 0
+errors) → `s14-verify` (3 adversarial verifiers, 378k tok: CONFIRMED_OK + PARTIAL ×2 —
+zero functional must-fix; 11 stale-docs/comment findings ALL fixed same-session by the
+ORCH fix pass, incl. OpenAPI ice_state "null otherwise"→key-omitted wording, dead
+Sprintf removal, FalseAlarmRate comment honesty (4-metric bound documented as
+conservative vs 3 true node metrics), ADR 0008 D-074 amendment). pion CGO pre-check ran
+at OPEN (before any author) — v4.2.16 pinned.
+
+**ORCH gates (all green before push):** gofmt empty (both modules) · CGO=0 vet+build+
+binary (both modules) · full `-race` 24/24 pkgs 0 FAIL/**0 SKIP**, **Go total 74.4%**
+(floor 70.2; prober 72.6, anomaly 81.6, api 76.9) · qa modules -race · web lint/
+typecheck/**264/264 tests** + thresholds (62.96/59.04/52.05 vs 59/54/45) /build · ajv
+3/3 + redocly valid (5 warnings 0 errors; +1 pre-accepted on the no-4xx status
+endpoint) · gen:api regen-idempotent · yaml parses.
+
+**Process notes for future sessions:**
+- The final full-suite gate caught a **budget inversion** in a NEW test
+  (notification_only_times_out): harness waitForResults budget (5s) == probe TimeoutS
+  (5s) → result stored at ~5.0s lost the race only under whole-suite -race contention.
+  Fix = wait budget STRICTLY dominates the probe deadline (8s = 5+3 margin), commented
+  in-test. D-042 class: read the scheduler, the "flake" was deterministic.
+- AMS refuses new WebRTC sessions with `highResourceUsage` when the box is loaded —
+  live WebRTC checks must run AFTER heavy workflows drain, or they false-fail.
+- `agents/handoffs/real-ams-captures/` is GITIGNORED — captures stay local; pin their
+  shapes via in-repo fixture-replay tests (the commit-msg claim in 23f1e0c was amended
+  to say local-only).
+- `ams-teststream` container was found Exited(1) (~2h) — restarted; still the synthetic
+  publisher until real streams suffice.
