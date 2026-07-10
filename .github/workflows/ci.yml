@@ -45,6 +45,20 @@ jobs:
           --health-timeout 5s
           --health-retries 12
 
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: pulse
+          POSTGRES_PASSWORD: pulse
+          POSTGRES_DB: pulse_meta_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pulse"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
     steps:
       - uses: actions/checkout@v4
 
@@ -140,6 +154,7 @@ jobs:
         env:
           PULSE_CLICKHOUSE_DSN: "clickhouse://localhost:9000/pulse"
           PULSE_MIGRATIONS_DIR: "contracts/db/clickhouse"
+          PULSE_META_TEST_PG_DSN: "postgres://pulse:pulse@localhost:5432/pulse_meta_test?sslmode=disable"
         run: cd server && go test -tags integration ./... -timeout 300s
 
   # ── 3. Web ───────────────────────────────────────────────────────────────────
