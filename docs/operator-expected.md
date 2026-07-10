@@ -1,9 +1,21 @@
-# Operator TODO — the items only YOU can do (updated by SESSION-11 close, D-070, 2026-07-10)
+# Operator TODO — the items only YOU can do (updated post-D-071 brandkit directive, 2026-07-10)
 
 > **Audience: the human operator.** Ledger of record: `ROADMAP.md` §5 + `ROADMAP-V2.md` §4; this
 > file is the actionable view, refreshed at every session close. When you finish an item, just
 > tell the agent (or do nothing — every session start re-verifies each item automatically).
 > **Never commit secret VALUES anywhere; `deploy/.env` and `oguz-testing.md` are gitignored.**
+
+## ⚡ TL;DR — expected from you right now (2026-07-10)
+
+**Nothing blocks the next session (S12).** Your open items, all non-blocking:
+
+| Priority | Item | What to say/do |
+|---|---|---|
+| 🟠 answer by ~07-23 | **CodeQL as a required merge check?** (needed when CI promotions land, S12 WO-D) | Reply "CodeQL required: yes/no" |
+| 🟠 whenever | **PR-first cadence?** (drives enforce_admins re-arm, S12 WO-F) | Reply "PR-first" or "keep direct pushes" |
+| 🟡 feature unlock | **U3 — Pro+ license in prod** (QoE/beacon data doesn't flow until then) | See §U3 below (self-serve minting) |
+| 🟢 optional | O7 GHCR-public · D-V2-1 unsigned-webhook call · O11 rotation · `gh auth refresh -s workflow` | See §Optional below |
+| 👀 later (after S12) | **Browser-accept the re-branded UI** (your brandkit ships in S12 WO-G) | You'll be pinged with URLs to eyeball |
 
 ## ✅ Brandkit received (2026-07-10) — UI re-theme scheduled for the next session
 
@@ -80,8 +92,12 @@ settings → Danger zone → **Change visibility → Public** (UI-only, no API).
   `gh secret set SLACK_WEBHOOK_URL`. (Exposure was never public; risk-accepted D-066.)
 
 ---
-*Status snapshot (2026-07-10, post-D-070 + operator unblocks): GA v0.2.0 live + healthy; S11
-features (PDF logo, anomaly rules, OIDC phase 1) on main, ship with the next rollout;
-release test UNBLOCKED (read:packages ✓, pull+cosign verified); AMS license operator-handled;
-dependabot queue zero; Go coverage 73.9%. Your list: 2 questions (CodeQL, PR-first) +
-optional O7-public / U3 / logo / D-V2-1 / O11 / workflow-scope.*
+*Status snapshot (2026-07-10, post-D-071): GA v0.2.0 live + healthy; S11 features (PDF logo,
+anomaly rules, OIDC phase 1) on main, ship with the next rollout; **brandkit committed +
+UI re-theme scheduled (S12 WO-G, non-droppable)**; release test UNBLOCKED (read:packages ✓,
+pull+cosign verified); AMS license operator-handled; dependabot queue zero; Go coverage
+73.9% (floor 70.2). CI/e2e/codeql all GREEN at the last code-verified commit (`ae6b5ed`);
+the D-071 commits are docs+assets-only and pushed `[skip ci]` per your instruction.
+Plan-of-record completion: v1 roadmap → GA 100%; ROADMAP-V2 sessions 3/5 done (S9-S11);
+v2 backlog ~6.5/15 items closed. Your list: 2 questions (CodeQL, PR-first) + optional
+O7-public / U3 / logo / D-V2-1 / O11 / workflow-scope.*
