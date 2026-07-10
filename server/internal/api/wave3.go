@@ -407,5 +407,17 @@ func probeResultToAPI(r domain.ProbeResult) map[string]any {
 	if r.IceState != "" {
 		m["ice_state"] = r.IceState
 	}
+	// WebRTC phase-2b RTP stats (D-075): key-absent semantics — nil pointer omits
+	// the key entirely; a pointer to 0.0 emits value 0.  ICE/stats outcome NEVER
+	// flips result.Success (bonus-measurement rule).
+	if r.RttMs != nil {
+		m["rtt_ms"] = *r.RttMs
+	}
+	if r.JitterMs != nil {
+		m["jitter_ms"] = *r.JitterMs
+	}
+	if r.LossPct != nil {
+		m["loss_pct"] = *r.LossPct
+	}
 	return m
 }
