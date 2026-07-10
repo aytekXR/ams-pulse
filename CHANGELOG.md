@@ -14,6 +14,67 @@ Nothing yet — next changes land here.
 
 ---
 
+## [0.3.0] - 2026-07-11
+
+Operator-approved release ("ship v0.3.0", D-076) carrying SESSION-10 through
+SESSION-15 (D-068 … D-075). First release rendering the brandkit UI in production.
+
+### Added
+
+- **Synthetic probes — all four protocols are now real probes** (was: HLS only):
+  - **WebRTC**: full chain — WS signaling (`signaling_state`, `connect_time_ms`,
+    D-072), pion ICE media-path check (`ice_state`, D-074), and per-run network
+    stats `rtt_ms` / `jitter_ms` / `loss_pct` measured from ~2 s of inbound RTP
+    (D-075). Metrics not measured are *absent*, never zero. Live-verified against
+    a production AMS 3.0.3.
+  - **RTMP**: real TCP handshake probe (C0/C1→S0/S1/S2→C2 with strict S2-echo
+    validation; `connect_time_ms`; D-073).
+  - **DASH**: full MPD parse + segment fetch with timescale-adjusted bitrate
+    (D-073).
+- **SSO / OIDC** end-to-end: server-side OIDC (D-070) and SPA login — "Sign in
+  with SSO" button, cookie-session browser auth, `/auth/oidc/status` +
+  `/auth/me`, OIDC-aware sign-out (D-074).
+- **Postgres meta-store backend** (`PULSE_META_BACKEND=postgres`) for HA
+  deployments; SQLite remains the zero-config default (D-072).
+- **Anomaly detection**: two new metrics — `ingest_bitrate_kbps` (per-stream) and
+  `disk_pct` (per-node) — alongside viewers/CPU/memory (D-074); anomaly rule
+  editor UI (D-070).
+- **White-label PDF reports**: operator logo in report headers (D-070).
+- **`qa/licensegen`**: `-privkey` / `-expires` flags — self-serve production
+  license minting (D-068, documented in `docs/licensing.md` §3).
+- **Probe results retention**: `{retention_days}`-configurable ClickHouse TTL
+  (default 90 days, D-073).
+
+### Changed
+
+- **Brandkit UI re-theme** (D-071/D-072): the web UI now uses the operator
+  brandkit design system (`brandkit/design-system/tokens.json`) — IBM Plex
+  (self-hosted), new palette, dark theme. Light theme/density/motion follow in a
+  later release.
+- **Live snapshot rebuild is O(1) incremental** (was O(N²) per event at high
+  stream counts): ~688× faster at 1k streams, allocations per event 1021→1
+  (D-068).
+
+### Fixed
+
+- **WebRTC probes against real AMS**: real AMS 3.0.3 sends a `notification`
+  (e.g. `subtrackAdded`) *before* the SDP offer — the probe's signaling parse
+  failed against every live stream while CI's mock passed (mock-only ordering).
+  Fixed with a notification-skip read loop; the AMS error `definition` is now
+  surfaced in `error_msg`; CI mock now mirrors the real ordering (D-074).
+- **Probe segment downloads capped at 32 MB** (`LimitReader`): a huge or
+  misbehaving segment can no longer produce a silently wrong bitrate or unbounded
+  memory use; over-cap runs report `segment_too_large` (D-074).
+
+### Database
+
+- ClickHouse migrations **0006** (probe-results TTL), **0007** (`ice_state`),
+  **0008** (`rtt_ms`/`jitter_ms`/`loss_pct`, `Nullable(Float32)`) apply
+  automatically via the `pulse-migrate` one-shot on upgrade; all are idempotent
+  (`IF NOT EXISTS`).
+
+---
+
 ## [0.2.0] - 2026-07-09
 
 **GA release** (declared D-065; tag chosen by the operator, D-066). Post-v0.1.0
