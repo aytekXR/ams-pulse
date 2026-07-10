@@ -171,7 +171,12 @@ considerations mean explicit operator OK is required before making it a required
 
 ---
 
-### 2.8  Anomaly expansion  [M]
+### 2.8  Anomaly expansion  [M] ✅ DONE S11 (D-070, 2026-07-10)
+
+> Delivered: rule_type `anomaly` (contract CR-1 + migration 0002), z-score eval off the
+> Welford Detector baselines for viewer_count/cpu_pct/mem_pct, UI rule builder, e2e A5,
+> numeric target (≤50 ms/5 s tick @500 streams) in ARCHITECTURE §4. Follow-up: §2.14
+> (Detector metric expansion — e.g. ingest_bitrate_kbps).
 
 **Why:** Current alerting is threshold-based (operator-defined rules with numeric conditions).
 At GA, the evaluator reads real `rollup_qoe_1h` data (G6). Anomaly detection would
@@ -189,7 +194,7 @@ query/`, `web/src/`.
 
 ---
 
-### 2.9  White-label PDF logo  [XS]
+### 2.9  White-label PDF logo  [XS] ✅ DONE S11 (D-070, 2026-07-10)
 
 **Why:** Report exports currently embed the default Pulse wordmark. Multi-tenant and OEM
 deployments need to substitute their own branding without rebuilding the binary.
@@ -203,7 +208,11 @@ reports/` and boot validation in `cmd/pulse/serve.go`.
 
 ---
 
-### 2.10  SSO / OIDC  [L]
+### 2.10  SSO / OIDC  [L] — ✅ PHASE 1 (server) DONE S11 (D-070); phase 2 = UI login flow
+
+> Phase-1 limitation (documented): the OIDC session cookie authenticates API calls, but the
+> SPA AuthGate still reads localStorage — after OIDC login the UI still shows the token
+> gate. Phase 2 (S13+): login button + cookie-aware AuthGate + logout UI.
 
 **Why:** Enterprise operators need single sign-on. Pulse currently manages its own user table
 with bcrypt passwords and local sessions. SSO/OIDC enables Okta, Entra, and Google Workspace
@@ -261,6 +270,20 @@ integration test.
 
 ---
 
+### 2.14  Anomaly Detector metric expansion  [S]  (NEW, seeded by S11 WO-B)
+
+**Why:** Anomaly alert rules (§2.8) support exactly the metrics the Welford Detector
+baselines: `viewers`, `cpu_pct`, `mem_pct`. Rules on `ingest_bitrate_kbps` (or QoE metrics)
+are rejected 400 because no baseline would ever exist — extending `UpdateBaselines`
+(`server/internal/anomaly/anomaly.go`) adds them. ⚠ `server/internal/anomaly/` has NO
+manifest owner — ORCH must assign scope first (flagged D-070).
+**Action:** add bitrate (and candidate QoE) observations to the Detector; widen
+`ValidateAnomalyRule`'s supported set + UI metric list; extend e2e A5 or add a unit-level
+equivalence; keep window semantics aligned with the Detector's windowS.
+**Size:** [S].
+
+---
+
 ## 3. Sessions
 
 S9 is already scoped — see `agents/handoffs/sessions/SESSION-09.md`. Entries from S10 onward
@@ -312,8 +335,20 @@ next gate date.
 
 ---
 
-### S11 — polish + anomaly expansion + SSO/OIDC phase 1
-**Goal:** Operator-visible feature additions on the stable GA base.
+### S11 — polish + anomaly expansion + SSO/OIDC phase 1 ✅ DONE (D-070, 2026-07-10)
+**Result:** WO-A PDF logo TDD-green (9 tests incl. garbage-content pin; poppler-validated);
+WO-B anomaly rule type end-to-end (contract CR-1 + migration 0002 + engine z-score eval for
+viewer_count/cpu_pct/mem_pct + UI + e2e A5 under mock w/ PULSE_ANOMALY_TICK_S=5; ≤50 ms/tick
+@500 streams target in ARCHITECTURE §4); WO-C OIDC phase 1 (contract CR-2, PKCE S256,
+HMAC state+nonce cookie, fail-closed group→role, api_tokens sessions + pulse_session cookie,
+27 tests; UI = phase 2); WO-F(D-069) SPLIT: 6 statically-verified install.md bugs FIXED,
+empirical release test BLOCKED on operator (O7/read:packages) → S12; WO-D/WO-E date-gate
+skips recorded (backup vol at 7/7 — prune verifiable from ~07-10). 2 workflows (4 scouts;
+10 agents incl. 3 adversarial verifiers — verdicts C/PARTIAL/PARTIAL, all 4 findings fixed
+same session incl. a D-028 silent-skip false-green). Go 73.9% / web gates green.
+Commits: b9d96ff…9d4b8d3 (9). Prompt: `sessions/SESSION-11.md`.
+
+**Goal (as planned):** Operator-visible feature additions on the stable GA base.
 
 1. **WO-A [XS]** White-label PDF logo (§2.9) — `PULSE_REPORT_LOGO_PATH`; TDD; boot
    validation.
@@ -327,16 +362,28 @@ under CHF mock; OIDC login round-trip proven in CI with mock server.
 
 ---
 
-### S12 — infrastructure scaling: Postgres meta backend + WebRTC probe
-**Goal:** Unlock HA deployments; extend probe coverage beyond HLS.
+### S12 — infrastructure scaling: Postgres meta backend + WebRTC probe (+ S11 carries)
+**Goal:** Unlock HA deployments; extend probe coverage beyond HLS; drain the carry queue.
 
 1. **WO-A [L]** Postgres meta backend (§2.13) — `store/meta/postgres` + migration parity +
    CI integration test; `PULSE_META_BACKEND=postgres` env gate; SQLite default unchanged.
 2. **WO-B [L]** WebRTC probe phase 1 (§2.11) — headless-browser probe implementation; CI
    fixture from `real-ams-captures/`; contract CR for extended probe result schema.
+3. **WO-C [XS, carry]** keep-7 backup cycle-8 pruning check (§2.2) — boundary REACHED:
+   volume held 7/7 on 2026-07-09; first prune expected ~2026-07-10 cycle. Verify oldest
+   (pulse-20260707-073113) pruned + count ≤7 + restore-verify green.
+4. **WO-D [S, date-gated ≥2026-07-23]** CI promotions (§2.7) — unchanged spec; check
+   docs/operator-expected.md for the CodeQL answer first.
+5. **WO-E [M, operator-gated]** WO-F clean-install RELEASE test carry — execute the moment
+   O7 (or `gh auth refresh -s read:packages`) lands; full runnable step list preserved in
+   the S11 scout report (D-070) + SESSION-12 prompt. ⚠ needs a valid AMS license
+   (trial expires 2026-07-12).
+6. **WO-F [XS]** enforce_admins re-arm (§2.1 / D-V2-3) — flip if operator said "PR-first",
+   else re-record rationale.
 
 **Exit:** `PULSE_META_BACKEND=postgres` boots and passes migration parity tests in CI;
-WebRTC probe returns a real result (not `not_probed`) for a WebRTC stream in CI.
+WebRTC probe returns a real result (not `not_probed`) for a WebRTC stream in CI; carries
+executed or re-gated with evidence.
 
 ---
 
@@ -363,7 +410,7 @@ WebRTC probe returns a real result (not `not_probed`) for a WebRTC stream in CI.
 | D-V2-2 | **CodeQL as required CI context:** promote CodeQL to a required branch-protection context | **OPEN — operator OK needed** | Streak green since D-062 (O9 closed). Evidence ready to share. Needs explicit OK given GHAS nuances even on the now-public repo. |
 | D-V2-3 | **enforce_admins flip (§2.1):** flip `enforce_admins` to `true` once sessions stop pushing directly to main | **RESOLVED-DEFERRED (D-068, S10)** | Stays `false`: 1-review requirement + solo owner = self-approval impossible → flip would deadlock session pushes (§2.1 rationale). Re-arm: S12, or operator says "PR-first" (then drop reviews to 0 or add a reviewer). |
 | D-V2-4 | **U3 — activate Pro+ license in prod:** set `PULSE_LICENSE_KEY` in `deploy/.env` | **OPEN — optional feature unlock** | Until then QoE/beacon data does not flow in prod; CI covers it with the mock license (G6 met). Minting instructions in docs/licensing.md. |
-| D-V2-5 | **O7 — GHCR package public:** make `ghcr.io/aytekxr/ams-pulse` public | **OPEN — one UI click** | The single remaining G1 gap. No API path (PATCH 404, D-066 verified). Must be done via GitHub package settings → "Change visibility". |
+| D-V2-5 | **O7 — GHCR package public:** make `ghcr.io/aytekxr/ams-pulse` public | **OPEN — one UI click, now BLOCKS S12 WO-E** | The single remaining G1 gap. No API path (PATCH 404, D-066 verified). Since S11: also hard-blocks the clean-install release test (anon 401 + gh token lacks read:packages + no local ghcr image — D-070). Alternative unblock: `gh auth refresh -s read:packages`. |
 
 ---
 
@@ -373,4 +420,5 @@ WebRTC probe returns a real result (not `not_probed`) for a WebRTC stream in CI.
 |---|---|---|---|---|
 | 2026-07-09 GA (v0.2.0, D-065) | **73.2%** | **70.2** | 76 / 72 / 45 | Baseline for v2 plan; floor = achieved−3 per GA rule |
 | 2026-07-09 S10 (D-068) | **73.5%** | **70.2** | 62.13 / 57.6 / 51 (gates 59/54/45) | Web numbers = vitest-4 re-baseline (D-067); sdk 66.06/45.79/70.42 (gates 63/43/67) |
+| 2026-07-10 S11 (D-070) | **73.9%** | **70.2** | 79.69 / 76.25 / 47.33 (gates 59/54/45) | api 76.1, reports 90.1, query 87.5, meta 67.7; sdk untouched (66.06/45.79/70.42, 3.52 KB) |
 | *(update each session at close)* | | | | |

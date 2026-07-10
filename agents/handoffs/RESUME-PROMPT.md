@@ -11,57 +11,59 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-11.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-12.md`)
 
-**Session 2026-07-09(g) result: D-068 — S10 DONE: O(N²) rebuildSnapshot ELIMINATED (~688×
-faster @1k streams, CPU cap reverted 1.0→0.5), licensegen `-privkey`/`-expires` TDD-green
-(production minting unblocked), `docs/dependabot-policy.md` committed, enforce_admins
-rationale committed; WO-B/WO-F date-gated → S11.** 2 workflows (3 read-only scouts; 3
-disjoint-scope TDD authors + 3 independent adversarial verifiers — all CONFIRMED).
-- **O(N²) fix (WO-D):** per-event `rebuildSnapshot`/`copySnapshot` full scans replaced by
-  `snapRemoveStream`/`snapAddStream` O(1) deltas + leading-edge ≤1/s subscriber coalescing;
-  full rebuild retained only for New/EvictStale/EvictStaleNodes. Benchmarks (new
-  `aggregator_bench_test.go`): BEFORE 6.72ms/175.3ms/684.4ms per cycle @100/500/1k (26×
-  superlinear), AFTER 88.8µs/480.7µs/993.8µs (5.4×/2.1× = linear); allocs/event 1021→1;
-  equivalence + AllocsPerRun(≤64) CI-stable guards pin it. Cap mitigation reverted (compose
-  0.5 / helm 500m / 3 goldens via alpine/helm:3.17.0 / runbook). ⚠ **Prod still runs the
-  pre-fix v0.2.0 image** — 0.5 cap is safe at prod's ~2 streams; fix ships next rollout;
-  don't run a high-stream prod on the old image.
-- **licensegen (WO-C):** `-privkey <hex-file>` (64-byte seed||pub, validated) + `-expires
-  <days>` (`flag.Visit`-guarded; expires_at UnixMilli; server already enforces). 8 new tests,
-  12/12 -race green; stdout 2-line contract + e2e/ci invocations untouched. docs/licensing.md
-  **§3 vendor key ceremony** added (offline keygen → vault → pubkey-only deploy → mint →
-  activate/verify → rotation); §2.1 post-GA footnote removed. **U3 minting is now self-serve.**
-- **Dependabot steady-state (WO-E):** `docs/dependabot-policy.md` — cadence per bump class,
-  merge mechanics (pristine → `@dependabot rebase`; carrier → API update ONLY; workflow-touching
-  → dependabot rebase; no auto-merge → poll+squash serial), batch-absorption order, co-upgrade
-  cluster registry. **Future dependabot PRs follow this doc.**
-- **enforce_admins (WO-A): stays `false`** — 1-review requirement + solo owner = self-approval
-  impossible → flip would deadlock session pushes (ROADMAP-V2 §2.1/§4 D-V2-3). Re-arm S12 or
-  operator "PR-first". **WO-B keep-7 cycle-8 (≥07-16) and WO-F promotions (≥07-23) SKIPPED on
-  date gates** — both carried into SESSION-11 (WO-D/WO-E there).
+**Session 2026-07-09/10 result: D-070 — S11 DONE: white-label PDF logo (WO-A), anomaly
+alert rule type end-to-end (WO-B), SSO/OIDC phase 1 server-side (WO-C), install.md's 6
+code-verified doc bugs fixed (WO-F static half); WO-F empirical release test
+OPERATOR-BLOCKED → S12; WO-D/WO-E date-gate skips recorded.** 2 workflows (4 scouts; 10
+agents incl. serial-wiring pattern + 3 adversarial verifiers). The impl workflow was
+interrupted by the account session limit mid-run — green scopes were committed early and
+the SAME run resumed (`resumeFromRunId`) with partial-work audit notes; pattern worked,
+reuse it. Verifiers: C CONFIRMED / A+B PARTIAL — all 4 findings fixed same session, incl. a
+**D-028-class silent-skip false green** (new meta tests' DDL path 3-up instead of 4-up → 5
+tests skipped; fixed, now run).
+- **WO-A:** `PULSE_REPORT_LOGO_PATH` → reports XObject image (PNG/JPEG magic-detect,
+  aspect-fit 120×40pt), embedded default waveform asset, boot WARN validation, 9 TDD tests +
+  poppler pdfinfo/pdftoppm validation.
+- **WO-B:** contract CR-1 (rule_type/sigma/min_samples + migration 0002 + notification
+  expected/sigma_multiplier), evaluator anomaly dispatch reading the EXISTING Welford
+  Detector baselines (metrics LIMITED to viewer_count/cpu_pct/mem_pct; window_s must be
+  3600; else 400 — §2.14 seeded for expansion), meta CRUD + applySchemaUpgrades ALTERs,
+  query `AnomalyBaselineForMetric`, UI rule builder, **e2e step A5** (A4 existed; mock-ams
+  `POST /control/set_viewers`; `PULSE_ANOMALY_TICK_S=5` in ci compose), ARCHITECTURE §4
+  target: ≤50 ms per 5 s tick @500 streams.
+- **WO-C:** contract CR-2 `/auth/oidc/{login,callback,logout}`; go-oidc/v3 + x/oauth2 (new
+  deps, CGO=0 ok); PKCE S256; HMAC state+nonce+verifier cookie; iss/aud/exp/sig+nonce
+  enforced (27 tests incl. verifier-added nonce-mismatch + https-Secure-cookie); FAIL-CLOSED
+  group→role (`PULSE_OIDC_DEFAULT_ROLE` default empty → 403); sessions reuse `api_tokens` +
+  `pulse_session` HttpOnly cookie (middleware falls back only when Authorization absent);
+  boot fail-closed if issuer set but unreachable. ⚠ Phase-1 limitation: SPA AuthGate still
+  localStorage-token-based — the cookie auths the API only; UI login = phase 2 (S13+).
+- **WO-F:** 6 install.md bugs fixed (dead pulse.example.yaml step, missing
+  PULSE_AMS_URL/LOGIN_* vars, build-vs-released-image gap, override.yml port-80 collision,
+  -p-less logs cmd, pulse-migrate note). Empirical half (pull+cosign+clean install vs real
+  AMS, ≤15 min budget) **BLOCKED**: GHCR private + token lacks read:packages + no local ghcr
+  image → S12 WO-E; runnable step list in D-070/S11 scout report.
+- **WO-D/WO-E skips:** backup volume ALREADY 7/7 (prune boundary ~07-10 — S12 verifies
+  immediately); promotions still ≥07-23.
 
-**Same-day D-069 (docs audit, operator-directed):** OPERATOR-TODO → `docs/operator-expected.md`;
-AMS-INTEGRATION + prd-report → `docs/`; PRODUCTION-READINESS / RELEASE-NOTES-DRAFT / DEVLOG /
-IMPLEMENTATION_LOG **deleted**; NEW `docs/product.md` (product + distilled PRD + brand-kit
-prompt); README + install.md de-staled (real repo URL, GHCR image, D-002 waiver retired);
-**SESSION-11 gained WO-F: clean-install RELEASE test vs the real AMS** (install.md accuracy test).
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-12.md` and execute it** (S12:
+Postgres meta backend, WebRTC probe phase 1, keep-7 verify, date-gated promotions,
+operator-gated clean-install release test, enforce_admins re-arm). **Check
+`docs/operator-expected.md` answers FIRST — ⏰ the AMS trial license expired/expires
+2026-07-12 (prod polling + WO-E both need it valid).** Plan of record: `ROADMAP-V2.md`.
 
-**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-11.md` and execute it** (S11:
-white-label PDF logo, anomaly expansion w/ contract CR, SSO/OIDC phase 1, clean-install release
-test (WO-F), + date-gated carry-overs keep-7 cycle-8 (≥07-16) and CI promotions (≥07-23)).
-**Plan of record: `ROADMAP-V2.md`.**
-
-**Standing numbers (2026-07-09 post-S10/D-068):** Go total **73.5%** (floor **70.2**); web
-**62.13/57.6/51** (gates 59/54/45 — vitest-4 re-baseline); sdk **66.06/45.79/70.42** (gates
-63/43/67; 3.52 KB). Prod **`pulse v0.2.0` (commit 4657512) + D-067 digests**, healthy —
-pre-D-068 image, next rollout carries the O(N²) fix. **Dependabot queue: ZERO** (policy:
-`docs/dependabot-policy.md`). Operator queue: **O7 GHCR visibility (the ONE remaining click)**
-+ 2 questions (CodeQL required yes/no ~07-23; PR-first cadence yes/no) + optional U3 (minting
-now self-serve, docs/licensing.md §3) / D-V2-1 unsigned-webhook decision / O11 / `gh auth
-refresh -s workflow`. **Operator-facing checklist: `docs/operator-expected.md` —
-REFRESHED at this close** (ledger of record: ROADMAP §5 + ROADMAP-V2 §4). CH-startup-flake
-watch stands (2nd occurrence ⇒ 60→180s ×4 copies).
+**Standing numbers (2026-07-10 post-S11/D-070):** Go total **73.9%** (floor **70.2**); web
+**79.69/76.25/47.33** (gates 59/54/45); sdk **66.06/45.79/70.42** (gates 63/43/67; 3.52 KB).
+Prod **`pulse v0.2.0` (commit 4657512) + D-067 digests**, healthy — pre-D-068/pre-D-070
+image; next rollout (consider tagging **v0.3.0**) carries the O(N²) fix + S11 features.
+**Dependabot queue: ZERO** (policy: `docs/dependabot-policy.md`). Operator queue: **⏰ AMS
+license renewal (expires 2026-07-12)** + **O7 GHCR visibility (blocks S12 WO-E; alt:
+`gh auth refresh -s read:packages`)** + 2 questions (CodeQL yes/no ~07-23; PR-first yes/no)
++ optional U3 / D-V2-1 / O11 / `gh auth refresh -s workflow`. **Operator-facing checklist:
+`docs/operator-expected.md` — REFRESHED at this close** (ledger of record: ROADMAP §5 +
+ROADMAP-V2 §4). CH-startup-flake watch stands (2nd occurrence ⇒ 60→180s ×4 copies).
 
 ---
 

@@ -2706,3 +2706,59 @@ open questions — BINDING for this session's authors:**
   evaluator tick at 500 active streams (batch baseline read + O(1) z-score per stream).
 
 *(evidence + verdicts appended at session close below)*
+
+### D-070 CLOSE (2026-07-10) — S11 COMPLETE: WO-A/WO-B/WO-C shipped; WO-F split (docs fixed, live test operator-blocked); WO-D/WO-E skipped on date gates
+
+**Execution shape:** 2 workflows — `pulse-s11-scout` (4 read-only scouts, 414k tok) and
+`pulse-s11-impl` (10 agents: INT-01 contracts ∥ WO-A ∥ DOC-01 → WO-B-server ∥ WO-B-web ∥
+WO-C → serial wiring → 3 adversarial verifiers; 587k+627k tok). The impl run was interrupted
+mid-flight by the account session limit (6 agents died, 4 green); ORCH committed the green
+scopes early per §12 and RESUMED the same run (`resumeFromRunId`) with partial-work audit
+notes — the re-run authors audited + completed the interrupted work instead of rewriting.
+
+**Verifier verdicts:** WO-C CONFIRMED; WO-A PARTIAL, WO-B PARTIAL — 4 findings, ALL fixed
+same session by ORCH (TDD-pinned):
+1. **[false-green, D-028 class]** `meta_anomaly_alert_test.go` DDL path `../../../` (3 up =
+   server/, not repo root) → 5 new store tests SILENTLY SKIPPED. Fixed to `../../../../`;
+   all 5 now RUN + PASS (verbatim -v evidence in session log).
+2. **[coverage]** no test for garbage bytes at a READABLE logo path →
+   `TestValidateLogoPath_GarbageContent_WarnsAndFallsBack` (WARN + render fallback) added, green.
+3. **[security-coverage]** nonce-mismatch fail path untested → `TestOIDC_Callback_NonceMismatch_401`
+   (forged id_token nonce vs cookie nonce → 401 TOKEN_INVALID) added, green.
+4. **[coverage]** Secure cookie flag under https redirect untested →
+   `TestOIDC_Callback_SecureCookie_HTTPSRedirectURL` + `setupOIDCTestServerRedirect` helper, green.
+
+**Gates (all green):** Go full `-race` repo-root mount golang:1.25 — 24/24 pkgs ok, 0 FAIL;
+total **73.9%** (floor 70.2; api 76.1, reports 90.1, query 87.5, alert 75.8, meta 67.7,
+cmd/pulse 43.5); `gofmt -l` EMPTY; `go vet` + `CGO_ENABLED=0 go build` OK. Web: lint+typecheck
+OK, vitest 244/244, coverage 79.69/76.25/47.33 vs gates 59/54/45, build OK, `gen:api` drift
+CLEAN. Contracts: redocly valid (4 expected 302-flow warnings), ajv 3/3 schemas, gen:api
+idempotent. sdk untouched.
+
+**Commits (9, by explicit path):** b6633a9 operator-expected WO-F blocker · 9a61828 D-070
+open · b9d96ff contracts CR-1+CR-2 · 46e31f9 WO-A PDF logo · 1630bda install.md 6 doc bugs ·
+a9e0671 WO-B web/e2e (A5 — NOT A4: an A4 delivery-failure step already existed; mock-ams
+spike via POST /control/set_viewers) · 2888e0d WO-C OIDC · 7dce8af WO-B engine ·
+3f5106e wiring · 9d4b8d3 reports garbage test. **CI at 9d4b8d3: ALL GREEN — ci 29060803249
+(5m41s), e2e 29060803265 (4m08s, step A5 "seed viewer anomaly baseline, spike viewers,
+assert history" ✓ PASSED on first run — anomaly rule type e2e-proven), codeql 29060803248
+(1m50s).**
+
+**Notable implementation facts:** anomaly rules validate metric ∈ {viewer_count→"viewers",
+cpu_pct, mem_pct} + window_s==3600 → else 400 (Detector-baseline-backed only; §2.14 seeded
+for expansion — `internal/anomaly` needs a manifest owner). Anomaly notifications carry
+threshold=baseline-mean + optional expected/sigma_multiplier. OIDC: go-oidc/v3 + x/oauth2
+(new direct deps, CGO=0 verified); boot FAIL-CLOSED if issuer set but unreachable/misconfigured;
+phase-1 limitation: SPA AuthGate still localStorage-token-based — cookie authenticates the API
+only (phase 2 = UI). PULSE_ANOMALY_TICK_S wired cmd/pulse EnvConfig + internal/config (CI=5s).
+`.env.example` documents PULSE_REPORT_LOGO_PATH / PULSE_ANOMALY_TICK_S / PULSE_OIDC_*.
+
+**WO-F:** static half DONE (6 install.md bugs, each re-verified against code before edit);
+empirical half (pull+cosign+15-min clean install vs real AMS) BLOCKED on operator — O7 click
+or `gh auth refresh -s read:packages` (verified: anon GHCR 401; token scopes repo-only; no
+local ghcr image). Full runnable step list in the scout report (session transcript) +
+SESSION-12 WO-E. ⚠ AMS trial license expires 2026-07-12 — flagged TIME-CRITICAL in
+docs/operator-expected.md (prod polling + WO-F live half both depend on it).
+
+**WO-D/WO-E:** skipped on date gates as recorded at open; NEW fact — backup volume already
+at 7/7 zips, prune boundary hits ~2026-07-10, so S12 can verify keep-7 immediately.

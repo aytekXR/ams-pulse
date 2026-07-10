@@ -174,6 +174,7 @@ Wave-3-Plus re-gate: PASS_WITH_LIMITATIONS (2026-06-15, `qa/wave-3-plus/gate-rep
 | New cluster nodes auto-discovered ≤ 2 min | F7 | Stub | **24.4 ms** (C-W2-07) | Unchanged |
 | ~1–2 GB ClickHouse per 1M viewer-sessions | §7.10 | Not measurable | Not measurable | Not measurable |
 | F9 false-alarm rate < 1/node-week | F9 | — | — | **0.259/node-week** (σ=4.0, hysteresis=10; `TestAnomaly_FalseAlarmRate_ModeledTarget`) |
+| Anomaly RULE evaluation overhead ≤ 50 ms per 5 s evaluator tick @ 500 streams | F9/F5 (S11 WO-B, D-070 — PRD §7 has no anomaly latency target; defined at scoping) | — | — | Design bound: one batch baseline read (SQLite, ~1.5 ms @1.5k rows) + O(1) z-score per stream (~0.05 ms @500); e2e A5 proves fire ≤ 30 s under CI mock |
 | F10 HLS probe: success, TTFB > 0, bitrate > 0 | F10 | — | — | **success=true, ttfb_ms=1, bitrate_kbps=66.7** (`TestHLSProbe_Success`) |
 | F10 HLS probe: segment TTFB (`segment_ttfb_ms`) > 0 | F10 | — | — | **segment_ttfb_ms=1** (`TestHLSProbe_Success`; `result.SegmentTTFBMs > 0` assertion; GAP-3-001 CLOSED) — serialized as `segment_ttfb_ms` in API response (wave3.go) |
 | F10 HLS master-playlist: follows variant, bitrate > 0 | F10 | — | — | **bitrate=66.7 kbps, seg_ttfb_ms=1** (`TestHLSProbe_MasterFollowsVariant`; GAP-3-003 CLOSED) |
