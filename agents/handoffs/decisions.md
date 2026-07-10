@@ -3293,8 +3293,13 @@ at runtime under CGO=0 → **v4.2.16 is the PINNED version for BOTH modules.**
 0007 + /auth/oidc/status + /auth/me) · `0350edf` BE-01 pion phase-2a + notification-skip
 fix + WO-F LimitReader · `8b6c6ce` mock-ams pion offerer + AMS-realism notification ·
 `6cc70e1` anomaly expansion · `d15d990` OIDC phase-2 SPA login · `69dc2f3` e2e ice_state
-+ A5b · `23f1e0c` docs sweep. **CI+e2e+codeql at 23f1e0c: [stamped in the follow-up
-commit at CI-green].**
++ A5b · `23f1e0c` docs sweep · `9781d09` handoffs. **CI + e2e + codeql ALL GREEN at
+`23f1e0c`** (runs 29118982387 / 29118982128 / 29118982352). e2e log evidence:
+`PASS: WO-B — WebRTC probe success=true, connect_time_ms>0,
+signaling_state=offer_received, ice_state=connected` (ICE over the compose container
+network — the new flake surface held at first shot within the 120s budget) and
+`PASS: A5b — ingest_bitrate_kbps anomaly alert found in firing history`; prior steps
+(A1/A5/RTMP/DASH) unaffected — exit criteria (a)+(d) CI-evidenced.
 
 **★ THE SESSION'S HEADLINE FINDING (live-verify pattern pays again):** real AMS 3.0.3
 sends a `notification` (subtrackAdded) BEFORE `takeConfiguration`/offer — the D-072
