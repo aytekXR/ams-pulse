@@ -2645,6 +2645,10 @@ components:
             timed out before a server signaling message was received),
             ws_refused (TCP connection refused to the signaling endpoint),
             ws_error (WebSocket protocol or application-level error).
+            RTMP-specific codes: rtmp_timeout (TCP dial or S2 handshake
+            timed out before the handshake byte was fully read),
+            rtmp_refused (TCP connection refused to the RTMP endpoint),
+            rtmp_error (RTMP protocol-level or application error).
         error_message:
           type: [string, 'null']
         bitrate_kbps:
@@ -2656,15 +2660,18 @@ components:
         connect_time_ms:
           type: [integer, 'null']
           description: >-
-            WebRTC signaling-only probe — milliseconds from WebSocket dial
-            to first server signaling message; null for non-WebRTC probes
-            or on connection failure.
+            Protocol-neutral connection-establishment time in milliseconds;
+            null on connection failure or when not applicable.
+            WebRTC: milliseconds from WebSocket dial to the first server
+            signaling message received.
+            RTMP: milliseconds from TCP dial to the S2 handshake byte fully read.
         signaling_state:
           type: [string, 'null']
           description: >-
-            Final WebRTC signaling state recorded by the probe.
-            One of: offer_received | ws_timeout | ws_refused | ws_error.
-            Null for non-WebRTC probes.
+            Final protocol state recorded by the probe; null for probes
+            that do not use a signaling or handshake phase.
+            WebRTC values: offer_received | ws_timeout | ws_refused | ws_error.
+            RTMP values: handshake_complete | rtmp_timeout | rtmp_refused | rtmp_error.
 
     # ── Beacon ingest ─────────────────────────────────────────
     BeaconBatch:

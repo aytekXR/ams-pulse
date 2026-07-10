@@ -1460,16 +1460,16 @@ export interface components {
             success: boolean;
             /** @description Time to first byte in ms; null on failure */
             ttfb_ms: number | null;
-            /** @description Machine-readable error code; null on success. WebRTC-specific codes: ws_timeout (WebSocket dial or handshake timed out before a server signaling message was received), ws_refused (TCP connection refused to the signaling endpoint), ws_error (WebSocket protocol or application-level error). */
+            /** @description Machine-readable error code; null on success. WebRTC-specific codes: ws_timeout (WebSocket dial or handshake timed out before a server signaling message was received), ws_refused (TCP connection refused to the signaling endpoint), ws_error (WebSocket protocol or application-level error). RTMP-specific codes: rtmp_timeout (TCP dial or S2 handshake timed out before the handshake byte was fully read), rtmp_refused (TCP connection refused to the RTMP endpoint), rtmp_error (RTMP protocol-level or application error). */
             error_code?: string | null;
             error_message?: string | null;
             /** Format: float */
             bitrate_kbps?: number;
             /** @description Time to first byte of the first media segment in ms; null on failure or when not applicable */
             segment_ttfb_ms?: number | null;
-            /** @description WebRTC signaling-only probe — milliseconds from WebSocket dial to first server signaling message; null for non-WebRTC probes or on connection failure. */
+            /** @description Protocol-neutral connection-establishment time in milliseconds; null on connection failure or when not applicable. WebRTC: milliseconds from WebSocket dial to the first server signaling message received. RTMP: milliseconds from TCP dial to the S2 handshake byte fully read. */
             connect_time_ms?: number | null;
-            /** @description Final WebRTC signaling state recorded by the probe. One of: offer_received | ws_timeout | ws_refused | ws_error. Null for non-WebRTC probes. */
+            /** @description Final protocol state recorded by the probe; null for probes that do not use a signaling or handshake phase. WebRTC values: offer_received | ws_timeout | ws_refused | ws_error. RTMP values: handshake_complete | rtmp_timeout | rtmp_refused | rtmp_error. */
             signaling_state?: string | null;
         };
         BeaconBatch: {

@@ -222,7 +222,7 @@ CREATE TABLE IF NOT EXISTS {db}.probe_results
 ENGINE = MergeTree()
 PARTITION BY toDate(ts)
 ORDER BY (probe_id, ts)
-TTL toDate(ts) + toIntervalDay(90)
+TTL toDate(ts) + toIntervalDay({retention_days})
 SETTINGS index_granularity = 8192;
 
 -- ═══════════════════════════════════════════════════════════════
