@@ -321,8 +321,15 @@ func TestWSSignaling_HappyPath(t *testing.T) {
 		Type     string `json:"type"`
 		SDP      string `json:"sdp"`
 	}
-	if err := wsjson.Read(ctx, conn, &reply); err != nil {
-		t.Fatalf("read offer: %v", err)
+	// Real AMS sends notification messages before the offer (D-074); the mock
+	// mirrors that — skip them like any real signaling client must.
+	for {
+		if err := wsjson.Read(ctx, conn, &reply); err != nil {
+			t.Fatalf("read offer: %v", err)
+		}
+		if reply.Command != "notification" {
+			break
+		}
 	}
 
 	if reply.Command != "takeConfiguration" {

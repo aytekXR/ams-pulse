@@ -15,11 +15,12 @@
 //	GET /rest/v2/cluster/nodes              → []ClusterNodeDTO
 //	GET /rest/v2/broadcasts/{app}/{id}/webrtc-client-stats/0/100 → []WebRTCStatsDTO
 //
-// WebRTC signaling (WO-B, phase-1):
+// WebRTC signaling (WO-B):
 //
 //	GET /{app}/websocket (WS upgrade)  — on {"command":"play","streamId":"..."}
-//	                                      replies with takeConfiguration/offer.
-//	                                      Enables real probe results in CI.
+//	    Phase-1 (default, -webrtc-ice=false): replies with a static offer and closes.
+//	    Phase-2a (-webrtc-ice=true): pion offerer, full ICE candidate exchange,
+//	                                 WS kept open until ICE completes or deadline.
 //
 // Control endpoints (test driver uses these):
 //
@@ -62,11 +63,12 @@ import (
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 type Config struct {
-	Addr     string
-	RtmpAddr string
-	LogDir   string
-	Scenario int
-	AppName  string
+	Addr      string
+	RtmpAddr  string
+	WebRTCICE bool // -webrtc-ice: enable pion ICE offerer on /{app}/websocket
+	LogDir    string
+	Scenario  int
+	AppName   string
 }
 
 // dashSegmentData is a 50000-byte static payload served by the DASH segment route.
@@ -341,12 +343,17 @@ func (s *Server) routes() {
 		})
 	})
 
-	// WebRTC signaling handler — WO-B phase 1.
+	// WebRTC signaling handler.
 	// Handles WS upgrade on /{app}/websocket (any app prefix, e.g. /live/websocket).
 	// Path pattern: "/{app}/websocket" where {app} matches the configured AppName.
-	// On {"command":"play","streamId":"..."} → replies with takeConfiguration/offer.
-	// SDP is minimal but syntactically valid (trimmed from real-AMS fixture).
-	// Deterministic and instant — designed for CI probe assertions.
+	//
+	// Phase-1 (default, -webrtc-ice=false):
+	//   On {"command":"play","streamId":"..."} → replies with a static
+	//   takeConfiguration/offer and closes the WS.  Deterministic and instant.
+	//
+	// Phase-2a (-webrtc-ice=true):
+	//   Delegates to runPionOfferer (webrtc_ice.go): real pion offer, full
+	//   candidate exchange, WS kept open until ICE completes or deadline fires.
 	wsSignalingHandler := func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 			InsecureSkipVerify: true, // CI/local: no cert verification needed
@@ -357,6 +364,7 @@ func (s *Server) routes() {
 		}
 		defer conn.Close(websocket.StatusNormalClosure, "done")
 
+		// 10 s is enough for the play-command read in both modes.
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 
@@ -381,9 +389,29 @@ func (s *Server) routes() {
 			return
 		}
 
-		// Reply with AMS-shaped takeConfiguration/offer.
-		// SDP is minimal but RFC-4566 compliant (from real-AMS capture,
-		// see agents/handoffs/real-ams-captures/webrtc-signaling-play-offer.json).
+		// Real AMS 3.0.3 sends a notification (subtrackAdded) BEFORE the offer
+		// (live-captured 2026-07-10, D-074) — mirror it in BOTH modes so CI
+		// exercises the probe's notification-skip path.
+		notification := map[string]interface{}{
+			"command":    "notification",
+			"definition": "subtrackAdded",
+			"trackId":    streamID,
+			"mainTrack":  streamID,
+		}
+		if err := wsjson.Write(r.Context(), conn, notification); err != nil {
+			log.Printf("mock-ams: ws signaling: send notification: %v", err)
+			return
+		}
+
+		// Phase-2a: delegate to pion offerer (keeps WS open for ICE exchange).
+		if s.cfg.WebRTCICE {
+			runPionOfferer(r.Context(), conn, streamID)
+			return
+		}
+
+		// Phase-1: reply with a static, minimal-but-valid AMS-shaped offer and
+		// close immediately (from real-AMS capture, see
+		// agents/handoffs/real-ams-captures/webrtc-signaling-play-offer.json).
 		offer := map[string]interface{}{
 			"command":  "takeConfiguration",
 			"streamId": streamID,
@@ -656,6 +684,7 @@ func main() {
 	cfg := Config{}
 	flag.StringVar(&cfg.Addr, "addr", ":9090", "listen address")
 	flag.StringVar(&cfg.RtmpAddr, "rtmp-addr", "", "TCP address for RTMP handshake listener (empty = disabled)")
+	flag.BoolVar(&cfg.WebRTCICE, "webrtc-ice", false, "enable pion WebRTC ICE offerer on /{app}/websocket (default off = phase-1 static offer)")
 	flag.StringVar(&cfg.LogDir, "log-dir", "", "directory to write AMS analytics log (empty = disable)")
 	flag.IntVar(&cfg.Scenario, "scenario", 0, "auto-run scenario (0 = manual control only)")
 	flag.StringVar(&cfg.AppName, "app", "live", "AMS application name")
