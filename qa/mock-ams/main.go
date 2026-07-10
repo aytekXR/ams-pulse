@@ -39,10 +39,14 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -59,10 +63,22 @@ import (
 
 type Config struct {
 	Addr     string
+	RtmpAddr string
 	LogDir   string
 	Scenario int
 	AppName  string
 }
+
+// dashSegmentData is a 50000-byte static payload served by the DASH segment route.
+// Deterministic across requests: byte[i] = i % 256.
+// Expected bitrate at a 2 s segment duration: 50000*8/2/1000 = 200 kbps.
+var dashSegmentData = func() []byte {
+	b := make([]byte, 50000)
+	for i := range b {
+		b[i] = byte(i % 256)
+	}
+	return b
+}()
 
 // ─── Broadcast (AMS wire shape) ───────────────────────────────────────────────
 
@@ -397,6 +413,41 @@ func (s *Server) routes() {
 	}
 	s.mux.HandleFunc("/"+s.cfg.AppName+"/websocket", wsSignalingHandler)
 
+	// DASH MPD + segment routes — AMS URL convention /{app}/streams/{streamId}.mpd
+	// and /{app}/streams/{streamId}-seg-N.m4s.
+	//
+	// MPD: timescale=90000, duration=180000 (= 2 s per segment at 90 kHz), startNumber=1.
+	// Segment: exactly 50000 bytes (bitrate = 50000*8/2/1000 = 200 kbps).
+	// Media URL is relative to the MPD directory so a standards-based resolver
+	// lands on the same /{app}/streams/ prefix.
+	// Unknown streamIds return 200 (consistent with other read-only mock routes).
+	streamsPrefix := "/" + s.cfg.AppName + "/streams/"
+	s.mux.HandleFunc(streamsPrefix, func(w http.ResponseWriter, r *http.Request) {
+		rest := strings.TrimPrefix(r.URL.Path, streamsPrefix)
+		switch {
+		case strings.HasSuffix(rest, ".mpd"):
+			streamID := strings.TrimSuffix(rest, ".mpd")
+			w.Header().Set("Content-Type", "application/dash+xml")
+			mpd := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="PT4S" minBufferTime="PT2S" profiles="urn:mpeg:dash:profile:isoff-on-demand:2011">
+  <Period duration="PT4S">
+    <AdaptationSet mimeType="video/mp4" segmentAlignment="true">
+      <Representation id="1" bandwidth="200000">
+        <SegmentTemplate timescale="90000" duration="180000" startNumber="1" media="%s-seg-$Number$.m4s"/>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>
+`, streamID)
+			_, _ = w.Write([]byte(mpd))
+		case strings.HasSuffix(rest, ".m4s"):
+			w.Header().Set("Content-Type", "video/iso.segment")
+			_, _ = w.Write(dashSegmentData)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
 	// Health check for mock itself.
 	s.mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]string{"status": "ok"})
@@ -516,11 +567,95 @@ func writeJSON(w http.ResponseWriter, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// ─── RTMP Handshake Listener ──────────────────────────────────────────────────
+
+// startRTMPListener binds addr, logs the effective address, then calls
+// serveRTMPOnListener. Calls log.Fatalf on bind failure; call in a goroutine.
+func startRTMPListener(addr string) {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("mock-ams: rtmp listen %s: %v", addr, err)
+	}
+	log.Printf("mock-ams: RTMP listener on %s", ln.Addr())
+	serveRTMPOnListener(ln)
+}
+
+// serveRTMPOnListener accepts connections from ln and spawns a goroutine per
+// connection. Returns when ln is closed.
+func serveRTMPOnListener(ln net.Listener) {
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		go handleRTMPConn(conn)
+	}
+}
+
+// handleRTMPConn completes a single RTMP handshake and closes the connection.
+//
+// Protocol:
+//
+//	C0 (1 B, must be 0x03) + C1 (1536 B)
+//	→ S0 (0x03) + S1 (1536 B) + S2 (echo of C1)
+//	→ C2 (1536 B)
+//	→ close
+//
+// A bad C0 version byte or any I/O error causes immediate close without reply.
+// One log line is emitted on successful completion.
+func handleRTMPConn(conn net.Conn) {
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+
+	// Read C0: version byte must be 0x03.
+	var c0 [1]byte
+	if _, err := io.ReadFull(conn, c0[:]); err != nil || c0[0] != 0x03 {
+		return
+	}
+
+	// Read C1: 4-byte timestamp + 4 zero bytes + 1528 random bytes.
+	var c1 [1536]byte
+	if _, err := io.ReadFull(conn, c1[:]); err != nil {
+		return
+	}
+
+	// Build response: S0 (1 B) + S1 (1536 B) + S2 (1536 B) = 3073 B.
+	var response [3073]byte
+
+	// S0.
+	response[0] = 0x03
+
+	// S1: 4-byte BE timestamp + 4 zero bytes + 1528 random bytes.
+	binary.BigEndian.PutUint32(response[1:5], uint32(time.Now().UnixMilli()))
+	// response[5:9] remains zero.
+	if _, err := io.ReadFull(rand.Reader, response[9:1537]); err != nil {
+		return
+	}
+
+	// S2 echoes C1: C1 timestamp | ack time | C1's 1528 random bytes.
+	copy(response[1537:1541], c1[0:4])
+	binary.BigEndian.PutUint32(response[1541:1545], uint32(time.Now().UnixMilli()))
+	copy(response[1545:3073], c1[8:1536])
+
+	if _, err := conn.Write(response[:]); err != nil {
+		return
+	}
+
+	// Read C2 (client echo of S1).
+	var c2 [1536]byte
+	if _, err := io.ReadFull(conn, c2[:]); err != nil {
+		return
+	}
+
+	log.Printf("mock-ams: rtmp handshake complete from %s", conn.RemoteAddr())
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 func main() {
 	cfg := Config{}
 	flag.StringVar(&cfg.Addr, "addr", ":9090", "listen address")
+	flag.StringVar(&cfg.RtmpAddr, "rtmp-addr", "", "TCP address for RTMP handshake listener (empty = disabled)")
 	flag.StringVar(&cfg.LogDir, "log-dir", "", "directory to write AMS analytics log (empty = disable)")
 	flag.IntVar(&cfg.Scenario, "scenario", 0, "auto-run scenario (0 = manual control only)")
 	flag.StringVar(&cfg.AppName, "app", "live", "AMS application name")
@@ -541,6 +676,10 @@ func main() {
 		defer f.Close()
 		state.logFile = f
 		log.Printf("mock-ams: writing analytics log to %s", logPath)
+	}
+
+	if cfg.RtmpAddr != "" {
+		go startRTMPListener(cfg.RtmpAddr)
 	}
 
 	srv := NewServer(cfg, state)
