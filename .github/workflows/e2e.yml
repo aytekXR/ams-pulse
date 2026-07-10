@@ -191,6 +191,8 @@ jobs:
 
       - name: WO-B — poll for WebRTC probe success=true (120 s, 5 s interval)
         run: |
+          # D-075 budget arithmetic: outer poll 120s >> probe timeout_s=10 >> 2s RTP hold + ~0.2s margin.
+          # Strictly dominates at each level: 120 >> 10 >> ~2.2 (D-074 budget-inversion rule).
           echo "Polling /api/v1/probes/${WEBRTC_PROBE_ID}/results for WebRTC success (120 s, 5 s) ..."
           deadline=$(( $(date +%s) + 120 ))
           LAST_RESULTS=""
@@ -209,7 +211,10 @@ jobs:
                       and it.get('connect_time_ms', 0) > 0
                       and it.get('signaling_state') == 'offer_received'
                       and it.get('ice_state', '') == 'connected'
-                      and it.get('error_code', '') == ''):
+                      and it.get('error_code', '') == ''
+                      and it.get('rtt_ms') is not None
+                      and it.get('jitter_ms') is not None
+                      and it.get('loss_pct') is not None):
                       print('yes')
                       sys.exit(0)
               print('no')
@@ -225,7 +230,7 @@ jobs:
             fi
             sleep 5
           done
-          echo "PASS: WO-B — WebRTC probe success=true, connect_time_ms>0, signaling_state=offer_received, ice_state=connected"
+          echo "PASS: WO-B — WebRTC probe success=true, connect_time_ms>0, signaling_state=offer_received, ice_state=connected, rtt_ms/jitter_ms/loss_pct present"
 
       # ── S13/WO-B': RTMP probe → mock-ams RTMP signaling → success=true ──────────
       - name: S13 WO-B' — create RTMP probe pointing at mock-ams
