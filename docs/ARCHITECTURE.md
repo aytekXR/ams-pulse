@@ -69,8 +69,8 @@ Last updated: Wave 3-MVP complete (2026-06-14). QA gate: **PASS_WITH_LIMITATIONS
 
 | Component | Package | Status |
 |---|---|---|
-| Probe runner | `internal/prober` | **Shipped** (F10 MVP) — HLS full; webrtc/rtmp/dash minimal-honest; 4-worker pool; 60 s config refresh |
-| Probe results store | `internal/store/clickhouse` | **Shipped** (F10) — `InsertProbeResult` + `QueryProbeResults`; 90-day TTL |
+| Probe runner | `internal/prober` | **Shipped** (F10 MVP + D-072/D-073) — HLS full; dash full (MPD+segment); webrtc phase-1 signaling; rtmp phase-1 TCP handshake; 4-worker pool; 60 s config refresh |
+| Probe results store | `internal/store/clickhouse` | **Shipped** (F10) — `InsertProbeResult` + `QueryProbeResults`; `{retention_days}`-configurable TTL (D-073, default 90) |
 | Probe CRUD + API | `internal/api` | **Shipped** (F10) — `POST/GET/PUT/DELETE /probes`; `GET /probes/{id}/results`; Pro+ tier gate |
 | Anomaly detector | `internal/anomaly` | **Shipped** (F9 MVP) — Welford online baselines; σ=4.0; 0.259 FA/node-week; `GET /anomalies`; Enterprise-only |
 | Web UI — anomalies | `web/src/features/anomalies` | **Shipped** (F9) — flag table; sigma selector; severity badges; Enterprise gate |
@@ -78,7 +78,7 @@ Last updated: Wave 3-MVP complete (2026-06-14). QA gate: **PASS_WITH_LIMITATIONS
 
 Minimal-but-working scope (D-001):
 - F9: 3 metrics (viewers, cpu_pct, mem_pct); 1-hour rolling window; on-read flag computation.
-- F10: HLS probes fully implemented; webrtc/rtmp/dash are reachability-only stubs (`error_code=not_probed`).
+- F10: HLS + DASH probes fully implemented; webrtc = phase-1 signaling (D-072), rtmp = phase-1 handshake (D-073); only unknown protocols are reachability stubs (`error_code=not_probed`).
 
 Wave-3-Plus enhancements (closed in D-018):
 - F10: `segment_ttfb_ms` stored separately from manifest TTFB; master-playlist probes follow first variant for real bitrate measurement.

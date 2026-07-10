@@ -16,10 +16,13 @@ runner, not by organic viewer beacons, and are always displayed with a
 A synthetic probe is a scheduled outbound HTTP check from the Pulse server to a
 stream URL. At each interval the runner:
 
-1. Fetches the stream URL.
-2. Measures TTFB (time to first byte of the HTTP response).
-3. (HLS only) Parses the manifest and fetches the first media segment to estimate
-   bitrate.
+1. Fetches the stream URL (HTTP for HLS/DASH; WebSocket signaling for WebRTC;
+   raw TCP handshake for RTMP).
+2. Measures TTFB (HLS/DASH: time to first byte of the HTTP response) or
+   `connect_time_ms` (WebRTC: WS dial → first offer; RTMP: TCP dial → S2
+   handshake byte).
+3. (HLS and DASH) Parses the manifest (M3U8 / MPD) and fetches the first media
+   segment to estimate bitrate.
 4. Records the result (success/failure, TTFB, bitrate, error code) to ClickHouse
    (`probe_results` table) and updates the probe's `last_result` summary in the
    meta store.
@@ -165,12 +168,12 @@ the URL is reachable over HTTP — it says nothing about playback quality.
 
 ### Protocol coverage matrix
 
-| Protocol | Coverage | Limitation | Phase-3 Plan |
+| Protocol | Coverage | Limitation | Next phase |
 |---|---|---|---|
 | `hls` | **Full** — manifest parse (media and master playlists); segment fetch; manifest TTFB, segment TTFB, bitrate; parse/4xx/5xx/timeout/DNS errors | None | — |
-| `rtmp` | **Minimal** — HTTP GET reachability only | `error_code=not_probed` always | Native RTMP client |
-| `webrtc` | **Minimal** — HTTP GET reachability only | `error_code=not_probed` always | WHIP/WHEP HTTP signaling + STUN reachability |
-| `dash` | **Minimal** — HTTP GET reachability only | `error_code=not_probed` always | DASH manifest parse (similar to HLS) |
+| `rtmp` | **Handshake (phase 1, D-073)** — stdlib TCP C0/C1→S0/S1/S2→C2 with strict S2-echo validation; `connect_time_ms`, `signaling_state=handshake_complete`; `rtmp_timeout`/`rtmp_refused`/`rtmp_error` | No AMF0 connect / media measurement | AMF0 `connect` + `_result` round-trip |
+| `webrtc` | **Signaling (phase 1, D-072)** — WS dial + play command; success on `takeConfiguration`/offer; `connect_time_ms`, `signaling_state=offer_received`; `ws_timeout`/`ws_refused`/`ws_error` | No ICE/DTLS/SRTP media path | pion media path + rtt/jitter/loss (S14) |
+| `dash` | **Full (D-073)** — MPD parse (SegmentTemplate incl. `$Number%0Nd$`, SegmentList, chained BaseURL); segment fetch; manifest TTFB, segment TTFB, timescale-adjusted bitrate; same error codes as HLS | Fixtures spec-derived (real-AMS DASH muxing disabled — see D-073) | Live AMS MPD fixture capture when operator enables DASH |
 
 ---
 
@@ -301,7 +304,9 @@ The 403 response body:
 | `conn_refused` | TCP connection refused |
 | `network` | Other network error |
 | `read` | Error reading segment body |
-| `not_probed` | Protocol stub (webrtc/rtmp/dash — full probing not yet implemented) |
+| `not_probed` | Protocol stub (unknown/non-enum protocols only, e.g. `srt` — hls/webrtc/rtmp/dash all have real probes) |
+| `ws_timeout` / `ws_refused` / `ws_error` | WebRTC signaling failures (D-072) |
+| `rtmp_timeout` / `rtmp_refused` / `rtmp_error` | RTMP handshake failures (D-073) |
 
 ---
 
@@ -311,7 +316,8 @@ The 403 response body:
 |---|---|---|
 | GAP-3-001 | Segment TTFB stored separately from manifest TTFB | **CLOSED Wave-3-Plus** — `segment_ttfb_ms` column added to `probe_results` DDL (`0003_probe_segment_ttfb.sql`); populated by prober; returned in API response |
 | GAP-3-003 | Master HLS playlist probes returned `bitrate_kbps=0` | **CLOSED Wave-3-Plus** — prober follows first variant URL; `TestHLSProbe_MasterFollowsVariant` asserts `bitrate=66.7 seg_ttfb_ms=1` |
-| RTMP/WebRTC/DASH | Reachability-only; no playback quality measurement. | Phase 3 |
+| WebRTC media QoE | Signaling-only (D-072); no rtt/jitter/loss — pion media path re-gated to S14 (D-073 triage). | S14 |
+| RTMP media | Handshake-only (D-073); no AMF0 connect or playback measurement. | Future phase |
 
 ---
 

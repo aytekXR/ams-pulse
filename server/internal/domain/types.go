@@ -405,16 +405,18 @@ type ProbeResult struct {
 	TS            time.Time // when the probe ran (UTC)
 	Success       bool      // true only on 2xx + parseable response
 	TTFBMs        uint32    // time-to-first-byte in milliseconds
-	ErrorCode     string    // "timeout" | "dns" | "http_4xx" | "http_5xx" | "parse" | "not_probed" | "ws_timeout" | "ws_refused" | "ws_error" | ""
+	ErrorCode     string    // "timeout" | "dns" | "http_4xx" | "http_5xx" | "parse" | "not_probed" | "ws_timeout" | "ws_refused" | "ws_error" | "rtmp_timeout" | "rtmp_refused" | "rtmp_error" | ""
 	ErrorMsg      string    // human-readable detail; empty on success
-	BitrateKbps   float32   // estimated kbps = segment_bytes / segment_duration_s; 0 on failure
-	SegmentTTFBMs uint32    // TTFB of the first media segment in ms; 0 if not measured
+	BitrateKbps   float32   // estimated kbps = segment_bytes / segment_duration_s (HLS/DASH); 0 on failure
+	SegmentTTFBMs uint32    // TTFB of the first media segment in ms (HLS/DASH); 0 if not measured
 
-	// WebRTC phase-1 signaling fields (nil/empty for non-WebRTC probes).
-	// ConnectTimeMs: WS dial → first server message (offer received) in ms; nil if not applicable.
-	// SignalingState: "offer_received" on success; "ws_timeout"/"ws_refused"/"ws_error" on failure; "" for non-WebRTC.
-	ConnectTimeMs  *uint32 // nil = not applicable (non-WebRTC or connection failed before first message)
-	SignalingState string  // "offer_received" | "ws_timeout" | "ws_refused" | "ws_error" | ""
+	// Connection-establishment measurement fields (nil/empty for HLS/DASH probes).
+	// ConnectTimeMs — WebRTC: WS dial → first server message (offer received) in ms;
+	//                 RTMP: TCP dial → S2 handshake byte fully read in ms; nil if not applicable.
+	// SignalingState — WebRTC: "offer_received" on success, "ws_*" on failure;
+	//                  RTMP: "handshake_complete" on success, "rtmp_*" on failure; "" for HLS/DASH.
+	ConnectTimeMs  *uint32 // nil = not applicable (HLS/DASH, or connection failed before measurement point)
+	SignalingState string  // "offer_received" | "handshake_complete" | "ws_*" | "rtmp_*" | ""
 }
 
 // ProbeConfigSource is the seam between the probe runner (BE-01) and the meta

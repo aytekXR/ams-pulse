@@ -1,6 +1,6 @@
 # ADR 0008: F10 probe protocol coverage — HLS full, others minimal-honest
 
-**Status:** Accepted · **Date:** 2026-06-14 · **Wave:** 3-MVP
+**Status:** Partially superseded (see Amendments) · **Date:** 2026-06-14 · **Wave:** 3-MVP
 
 ## Context
 
@@ -68,3 +68,32 @@ The probe runner's `executeProbe` branch structure (`switch p.Protocol`) is
 designed for incremental enhancement: replace `probeReachability` call with
 a protocol-specific function, keeping the `ResultStore` and `ProbeConfigSource`
 interfaces unchanged.
+
+## Amendments
+
+### Amended — D-072 (2026-07-10): WebRTC phase-1 signaling probe
+
+The WebRTC stub was replaced by a signaling-level probe (`probeWebRTC`,
+nhooyr.io/websocket): WS dial → `play` command → success on
+`takeConfiguration`/offer; measures `connect_time_ms`; error codes
+`ws_timeout`/`ws_refused`/`ws_error`. The WHIP/WHEP+STUN plan above was NOT
+used — AMS 3.0.3 exposes its own WS signaling protocol, which the probe
+speaks directly (fixture shapes live-captured). Media path (ICE/DTLS/SRTP
+via pion) is planned for S14 (D-073 triage).
+
+### Amended — D-073 (2026-07-10): RTMP phase-1 handshake + DASH full probe
+
+- **RTMP** (`probeRTMP`): stdlib-only TCP C0/C1 → S0/S1/S2 → C2 with strict
+  S2-echo validation (verified live against real AMS 3.0.3); measures
+  `connect_time_ms`; `signaling_state=handshake_complete`; error codes
+  `rtmp_timeout`/`rtmp_refused`/`rtmp_error`. No external library was needed
+  (the "evaluate aler/rtmpeg" note is obsolete). AMF0 `connect` round-trip
+  is a future phase.
+- **DASH** (`probeDASH`): MPD parse via stdlib `encoding/xml`
+  (SegmentTemplate incl. `$Number%0Nd$`/`$RepresentationID$`, SegmentList,
+  BaseURL chain per ISO/IEC 23009-1 §5.6, RFC 3986 resolution) + first
+  segment fetch; mirrors the HLS measurement shape (manifest TTFB, segment
+  TTFB, timescale-adjusted `bitrate_kbps`) — exactly the Phase-3 plan above.
+- `probeReachability`/`not_probed` now applies ONLY to unknown/non-enum
+  protocol strings; the `executeProbe` switch has dedicated cases for all
+  four contract protocols, confirming the incremental-enhancement design.

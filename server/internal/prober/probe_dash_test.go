@@ -442,3 +442,62 @@ func TestProbeDASH_Timeout(t *testing.T) {
 		t.Errorf("test took too long (%v); expected < 5s", elapsed)
 	}
 }
+
+// TestProbeDASH_BaseURLChain verifies the full BaseURL resolution chain
+// (ISO/IEC 23009-1 §5.6): MPD → Period → AdaptationSet → Representation,
+// each level resolved against its parent's effective base (D-073 verifier
+// finding: Period/AdaptationSet-level BaseURL elements were ignored).
+func TestProbeDASH_BaseURLChain(t *testing.T) {
+	const segBytes = 4_000
+	segData := make([]byte, segBytes)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/manifest.mpd", func(w http.ResponseWriter, r *http.Request) {
+		// Chain: MPD URL dir → Period "p/" → AdaptationSet "a/" →
+		// Representation "r/" → media "seg1.m4s" ⇒ /p/a/r/seg1.m4s.
+		mpd := `<?xml version="1.0"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011">
+  <Period>
+    <BaseURL>p/</BaseURL>
+    <AdaptationSet>
+      <BaseURL>a/</BaseURL>
+      <Representation id="1">
+        <BaseURL>r/</BaseURL>
+        <SegmentList timescale="2" duration="8">
+          <SegmentURL media="seg1.m4s"/>
+        </SegmentList>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>`
+		w.Header().Set("Content-Type", "application/dash+xml")
+		_, _ = w.Write([]byte(mpd))
+	})
+	mux.HandleFunc("/p/a/r/seg1.m4s", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "video/mp4")
+		_, _ = w.Write(segData)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	r := dashTestRunner()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	result := r.probeDASH(ctx, dashConfig(srv.URL+"/manifest.mpd"), dashResult())
+
+	t.Logf("BaseURL-chain result: success=%v ttfb=%d seg_ttfb=%d bitrate=%.4f code=%q msg=%q",
+		result.Success, result.TTFBMs, result.SegmentTTFBMs, result.BitrateKbps, result.ErrorCode, result.ErrorMsg)
+
+	if !result.Success {
+		t.Fatalf("expected Success=true (chained BaseURL resolution), got false: code=%q msg=%q",
+			result.ErrorCode, result.ErrorMsg)
+	}
+	if result.SegmentTTFBMs < 1 {
+		t.Fatalf("expected SegmentTTFBMs >= 1 (segment fetched via chained base), got %d", result.SegmentTTFBMs)
+	}
+	// timescale=2, duration=8 → 4s; 4000 bytes*8/4/1000 = 8 kbps.
+	if result.BitrateKbps < 7.9 || result.BitrateKbps > 8.1 {
+		t.Fatalf("expected BitrateKbps ≈ 8 (timescale-adjusted via chain), got %.4f", result.BitrateKbps)
+	}
+}

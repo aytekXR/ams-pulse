@@ -55,10 +55,12 @@ type mpdDoc struct {
 }
 
 type mpdPeriod struct {
+	BaseURL       []string           `xml:"BaseURL"`
 	AdaptationSet []mpdAdaptationSet `xml:"AdaptationSet"`
 }
 
 type mpdAdaptationSet struct {
+	BaseURL         []string            `xml:"BaseURL"`
 	SegmentTemplate *mpdSegmentTemplate `xml:"SegmentTemplate"`
 	SegmentList     *mpdSegmentList     `xml:"SegmentList"`
 	Representation  []mpdRepresentation `xml:"Representation"`
@@ -265,17 +267,27 @@ func parseMPD(body io.Reader, baseURL string) (segmentURI string, segmentDuratio
 	}
 
 	// Walk Period → AdaptationSet → Representation to find the first derivable
-	// segment URL.
+	// segment URL. BaseURL elements chain at every level (ISO/IEC 23009-1 §5.6):
+	// MPD → Period → AdaptationSet → Representation, each resolved against its
+	// parent's effective base.
 	for p := range doc.Period {
+		periodBase := effectiveBase
+		if len(doc.Period[p].BaseURL) > 0 && doc.Period[p].BaseURL[0] != "" {
+			periodBase = resolveDASHRef(doc.Period[p].BaseURL[0], effectiveBase)
+		}
 		for a := range doc.Period[p].AdaptationSet {
 			as := &doc.Period[p].AdaptationSet[a]
+			asBase := periodBase
+			if len(as.BaseURL) > 0 && as.BaseURL[0] != "" {
+				asBase = resolveDASHRef(as.BaseURL[0], periodBase)
+			}
 			for ri := range as.Representation {
 				rep := &as.Representation[ri]
 
 				// Compute the effective base URL for this Representation.
-				repBase := effectiveBase
+				repBase := asBase
 				if len(rep.BaseURL) > 0 && rep.BaseURL[0] != "" {
-					repBase = resolveDASHRef(rep.BaseURL[0], effectiveBase)
+					repBase = resolveDASHRef(rep.BaseURL[0], asBase)
 				}
 
 				// SegmentTemplate: Representation wins over AdaptationSet.

@@ -10,11 +10,16 @@
 //   - WebRTC (phase-1 signaling-only): dials wss?://{host}/{app}/websocket?streamId=<id>,
 //     sends play command, measures time to first takeConfiguration/offer message.
 //     streamId MUST be present as a query param; missing → ws_error.
-//   - RTMP / DASH: minimal-but-honest reachability check — performs an
-//     HTTP GET against the URL and records a "not_probed" error_code.
-//     No faked success. Phase-3 roadmap: native protocol clients.
+//   - RTMP (phase-1 handshake): stdlib-only TCP C0/C1 → S0/S1/S2 → C2 with strict
+//     S2-echo validation; measures connect_time_ms (dial → S2 fully read);
+//     signaling_state=handshake_complete; errors rtmp_timeout/rtmp_refused/rtmp_error.
+//   - DASH: GET MPD + first segment (mirrors the HLS measurement shape); parses
+//     SegmentTemplate/SegmentList via encoding/xml, chains BaseURL per spec,
+//     computes timescale-adjusted bitrate_kbps.
+//   - Unknown protocols (e.g. srt): minimal-but-honest reachability check —
+//     records a "not_probed" error_code. No faked success.
 //
-// See WO-301 for phase-3 full-coverage roadmap.
+// Remaining roadmap: WebRTC media path (pion, phase 2 — S14).
 package prober
 
 import (
