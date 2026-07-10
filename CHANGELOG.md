@@ -66,6 +66,12 @@ SESSION-15 (D-068 … D-075). First release rendering the brandkit UI in product
   misbehaving segment can no longer produce a silently wrong bitrate or unbounded
   memory use; over-cap runs report `segment_too_large` (D-074).
 
+### Security
+
+- **go-jose/v4 bumped 4.0.5 → 4.1.4** (CVE-2026-34986, HIGH: DoS via crafted JSON
+  Web Encryption; go-jose is part of the OIDC token-verification stack). Caught by
+  the release pipeline's Trivy gate during this release (D-076).
+
 ### Database
 
 - ClickHouse migrations **0006** (probe-results TTL), **0007** (`ice_state`),
