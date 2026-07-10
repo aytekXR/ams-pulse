@@ -11,74 +11,71 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-12.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-13.md`)
 
-**Session 2026-07-09/10 result: D-070 — S11 DONE: white-label PDF logo (WO-A), anomaly
-alert rule type end-to-end (WO-B), SSO/OIDC phase 1 server-side (WO-C), install.md's 6
-code-verified doc bugs fixed (WO-F static half); WO-F empirical release test
-OPERATOR-BLOCKED → S12; WO-D/WO-E date-gate skips recorded.** 2 workflows (4 scouts; 10
-agents incl. serial-wiring pattern + 3 adversarial verifiers). The impl workflow was
-interrupted by the account session limit mid-run — green scopes were committed early and
-the SAME run resumed (`resumeFromRunId`) with partial-work audit notes; pattern worked,
-reuse it. Verifiers: C CONFIRMED / A+B PARTIAL — all 4 findings fixed same session, incl. a
-**D-028-class silent-skip false green** (new meta tests' DDL path 3-up instead of 4-up → 5
-tests skipped; fixed, now run).
-- **WO-A:** `PULSE_REPORT_LOGO_PATH` → reports XObject image (PNG/JPEG magic-detect,
-  aspect-fit 120×40pt), embedded default waveform asset, boot WARN validation, 9 TDD tests +
-  poppler pdfinfo/pdftoppm validation.
-- **WO-B:** contract CR-1 (rule_type/sigma/min_samples + migration 0002 + notification
-  expected/sigma_multiplier), evaluator anomaly dispatch reading the EXISTING Welford
-  Detector baselines (metrics LIMITED to viewer_count/cpu_pct/mem_pct; window_s must be
-  3600; else 400 — §2.14 seeded for expansion), meta CRUD + applySchemaUpgrades ALTERs,
-  query `AnomalyBaselineForMetric`, UI rule builder, **e2e step A5** (A4 existed; mock-ams
-  `POST /control/set_viewers`; `PULSE_ANOMALY_TICK_S=5` in ci compose), ARCHITECTURE §4
-  target: ≤50 ms per 5 s tick @500 streams.
-- **WO-C:** contract CR-2 `/auth/oidc/{login,callback,logout}`; go-oidc/v3 + x/oauth2 (new
-  deps, CGO=0 ok); PKCE S256; HMAC state+nonce+verifier cookie; iss/aud/exp/sig+nonce
-  enforced (27 tests incl. verifier-added nonce-mismatch + https-Secure-cookie); FAIL-CLOSED
-  group→role (`PULSE_OIDC_DEFAULT_ROLE` default empty → 403); sessions reuse `api_tokens` +
-  `pulse_session` HttpOnly cookie (middleware falls back only when Authorization absent);
-  boot fail-closed if issuer set but unreachable. ⚠ Phase-1 limitation: SPA AuthGate still
-  localStorage-token-based — the cookie auths the API only; UI login = phase 2 (S13+).
-- **WO-F:** 6 install.md bugs fixed (dead pulse.example.yaml step, missing
-  PULSE_AMS_URL/LOGIN_* vars, build-vs-released-image gap, override.yml port-80 collision,
-  -p-less logs cmd, pulse-migrate note). Empirical half (pull+cosign+clean install vs real
-  AMS, ≤15 min budget) **BLOCKED**: GHCR private + token lacks read:packages + no local ghcr
-  image → S12 WO-E; runnable step list in D-070/S11 scout report.
-- **WO-D/WO-E skips:** backup volume ALREADY 7/7 (prune boundary ~07-10 — S12 verifies
-  immediately); promotions still ≥07-23.
+**Session 2026-07-10 result: D-072 — S12 DONE, ALL 7 work orders: Postgres meta backend
+(WO-A), WebRTC signaling probe phase 1 (WO-B), keep-7 cycle-8 prune VERIFIED live +
+restore-verified (WO-C), WO-D date-gate skip, clean-install release test PASSED 182s vs
+15-min budget + 7 more install.md bugs fixed (WO-E), enforce_admins rationale re-recorded
+(WO-F), brandkit UI adoption phase 1 (WO-G, D-071) + optional PDF-logo swap.** 3 workflows
+(3 scouts / 7 authors incl. serial-wiring / 3 adversarial verifiers). Verifiers all
+PARTIAL — 10 findings, 8 fixed + 2 dispositioned same session, incl. a **CRITICAL
+always-False e2e poll condition caught BEFORE push** (`get('error_code','not_probed')` vs
+key-omitted-on-success — verify omission semantics, not just field names). CI+e2e+codeql
+ALL GREEN at **c767ded** (e2e log: "PASS: WO-B — WebRTC probe success=true").
+- **WO-A:** `PULSE_META=postgres` + `PULSE_META_DSN` (or `PULSE_POSTGRES_DSN` shorthand —
+  wins); pgx/v5 stdlib (pure-Go, CGO=0); ONE SQL source + cached `?`→`$N` rebind;
+  `EmbeddedDDLPostgres` (contracts/db/meta/postgres/0001+0002 mirrored, schema_migrations
+  PARITY with sqlite); `Migrate(ddlPath)` HARD-REJECTED for PG (sqlite-only escape hatch);
+  PULSE_SECRET_KEY REQUIRED for PG (key-file derivation impossible from a DSN); PG prune
+  orders by (ts,id) — sqlite rowid semantics untouched; 19-test integration parity suite
+  behind `-tags integration` + `PULSE_META_TEST_PG_DSN` (postgres:16 service in ci.yml —
+  the env var is PROVEN set in the CI step log; skip fires only on empty). SQLite default
+  unchanged. Backup sidecar is SQLITE-ONLY (documented; PG operators use pg_dump).
+- **WO-B:** signaling-only slice (headless browser REJECTED — single-binary CGO=0;
+  pion media path → S13). Probe URL = `ws(s)://host/{app}/websocket?streamId=<id>`
+  (percent-decoded); success = takeConfiguration/offer received; real `connect_time_ms`;
+  codes ws_timeout/ws_refused/ws_error; contract CR fields nullable; CH migration
+  **0005** (0004 was taken); mock-ams WS handler + tests; fixture message shapes
+  live-captured from the real AMS (file itself gitignored per capture-dir convention;
+  shapes pinned inline in `TestProbe_WebRTC_FixtureReplay`). e2e asserts the full chain.
+- **WO-G:** tokens.json → global.css dark vars + full hex sweep; @fontsource IBM Plex
+  (Vite-bundled, zero CDN); web/public identity (favicon/PWA/manifest/marks); nav 240px +
+  signal left-border active; chartColors.ts palette; FleetPage trap test updated
+  atomically; **NO CSP change was needed** (font-src 'self' pre-existed everywhere — the
+  §2.15 atomicity trap dissolved); light theme = phase 2. ⚠ web coverage handoff numbers
+  are now lines 62.68/branches 58.78/functions 51.54 (gates 59/54/45) — the old
+  "79.69/76.25" figures were a notation artifact vs the vitest-4 rebaseline; never compare
+  across instrumentation.
+- **WO-C evidence:** sidecar schedule is start+24h (not clock-aligned); cycle 8 pruned
+  `pulse-20260707-073113` (ch zip + meta db), 7/7 kept; `RESTORE DATABASE pulse AS
+  pulse_restore_verify` → 613,939 server_events rows; meta copy integrity_check ok.
+- **WO-E:** released image 0.2.0 → verified-healthy vs REAL AMS in 182s (88s on corrected
+  pin file); install.md released-image path rewritten from the WORKING image-pin.yml
+  (port publish, complete pulse-migrate, CLICKHOUSE_SKIP_USER_SETUP, contracts mount,
+  `--entrypoint pulse` migrate cmd). AMS trial license still serving 2 days pre-expiry
+  (operator-waived).
 
-**▶ NEW OPERATOR DIRECTIVE (2026-07-10 post-close, D-071): `brandkit/` landed at repo root
-— complete brand & design package** (machine-readable `design-system/tokens.json` dark+light,
-logo suite + favicons + PWA/iOS/Android icons, 8 hi-fi screens in `ui/`, component library,
-IBM Plex OFL type, WCAG-verified palette in `documentation/design-rationale.md` §2 —
-BINDING). **S12 now carries WO-G (non-droppable): re-theme the web UI from the brandkit** —
-full spec ROADMAP-V2 §2.15; work order SESSION-12 WO-G; scout digest + traps in decisions.md
-D-071. Headline traps: fonts SELF-HOSTED only (brandkit HTML previews use Google Fonts —
-never ship); `csp.spec.ts` pins the CSP header byte-for-byte (font-src lands atomically with
-Caddy config); `FleetPage.test.tsx:146-168` pins old hexes; chart colors hardcoded
-per-component (var sweep alone insufficient); vitest `css:false` → Playwright is the gate.
-`brandkit/` scope → FE-01 (manifest updated). S12's own close entry renumbers to **D-072**.
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-13.md` and execute it** (S13
+REVISED at D-072: probe protocol completion — RTMP + DASH + WebRTC pion phase 2 — CI
+promotions ≥07-23, probe_results TTL fix, conditional **v0.3.0 rollout**; mobile SDKs
+moved to S14, operator-gated). **Check `docs/operator-expected.md` answers FIRST — 4
+switches: "ship v0.3.0", CodeQL yes/no, PR-first yes/no, mobile-SDK need yes/no.**
+Plan of record: `ROADMAP-V2.md`.
 
-**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-12.md` and execute it** (S12:
-Postgres meta backend, WebRTC probe phase 1, **brandkit UI adoption (WO-G, D-071)**, keep-7
-verify, date-gated promotions, operator-gated clean-install release test, enforce_admins
-re-arm). **Check `docs/operator-expected.md` answers FIRST — ⏰ the AMS trial license
-expired/expires 2026-07-12 (prod polling + WO-E both need it valid).** Plan of record:
-`ROADMAP-V2.md`.
-
-**Standing numbers (2026-07-10 post-S11/D-070):** Go total **73.9%** (floor **70.2**); web
-**79.69/76.25/47.33** (gates 59/54/45); sdk **66.06/45.79/70.42** (gates 63/43/67; 3.52 KB).
-Prod **`pulse v0.2.0` (commit 4657512) + D-067 digests**, healthy — pre-D-068/pre-D-070
-image; next rollout (consider tagging **v0.3.0**) carries the O(N²) fix + S11 features.
-**Dependabot queue: ZERO** (policy: `docs/dependabot-policy.md`). Operator queue
-(post-close update 2026-07-10): **read:packages GRANTED → S12 WO-E UNBLOCKED** (image
-`0.2.0` pulled + cosign-verified — NOTE image tags have NO v prefix, doc bug fixed);
-**AMS license expiry operator-waived** ("don't worry" — observe during WO-E); O7
-public-visibility now optional (outsiders-only); 2 questions stand (CodeQL yes/no ~07-23;
-PR-first yes/no) + optional U3 / D-V2-1 / O11 / `gh auth refresh -s workflow`. **Operator-facing checklist:
-`docs/operator-expected.md` — REFRESHED at this close** (ledger of record: ROADMAP §5 +
-ROADMAP-V2 §4). CH-startup-flake watch stands (2nd occurrence ⇒ 60→180s ×4 copies).
+**Standing numbers (2026-07-10 post-S12/D-072):** Go total **73.9%** (floor **70.2**); web
+**lines 62.68 / branches 58.78 / functions 51.54** (gates 59/54/45, vitest-4); sdk
+**66.06/45.79/70.42** (gates 63/43/67; 3.52 KB), untouched. Prod **`pulse v0.2.0` (commit
+4657512) + D-067 digests**, healthy — next rollout (**v0.3.0 proposed, S13 WO-E**) carries
+D-068 O(N²) fix + D-070 S11 features + D-072 Postgres/probe/brandkit UI. **Dependabot
+queue: ZERO** at session open. Operator queue: 4 questions (v0.3.0-ship, CodeQL ~07-23,
+PR-first, mobile-SDK need) + U3 + optional O7 / D-V2-1 / O11 / `gh auth refresh -s
+workflow`; **browser-accept of the re-branded UI happens AFTER v0.3.0 ships** (prod still
+renders the old UI until then). **Operator-facing checklist: `docs/operator-expected.md` —
+REFRESHED at this close** (ledger of record: ROADMAP §5 + ROADMAP-V2 §4). CH-startup-flake
+watch stands (2nd occurrence ⇒ 60→180s ×4 copies). NEW watch: `TestProbe_WebRTC_WsTimeout`
+budgets already loosened 6s→20s (D-042 class) — if it still flakes, read the scheduler,
+don't bump further.
 
 ---
 

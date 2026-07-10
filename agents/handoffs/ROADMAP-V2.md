@@ -62,7 +62,7 @@ in docs/operator-expected.md; next revisit: S12 or on operator request, whicheve
 
 ---
 
-### 2.2  keep-7 backup cycle-8 pruning verification  [XS]
+### 2.2  keep-7 backup cycle-8 pruning verification  [XS] ✅ DONE S12 (D-072, 2026-07-10: cycle-8 prune observed live — both 07-07 artifacts removed, 7/7 kept; CH RESTORE-verify green (613,939 server_events rows via `RESTORE DATABASE pulse AS pulse_restore_verify`); meta integrity_check ok)
 
 **Why:** The backup sidecar implements keep-7 retention. Cycle 8 is the first run where an
 old backup should actually be pruned — this has never been exercised on a real clock, only
@@ -227,7 +227,7 @@ TDD.
 
 ---
 
-### 2.11  Native WebRTC / RTMP / DASH probes  [L per protocol]
+### 2.11  Native WebRTC / RTMP / DASH probes  [L per protocol] — ⚙ WebRTC PHASE 1 (signaling) ✅ S12 (D-072); pion media path + RTMP + DASH → S13
 
 **Why:** Current QoE probes are HLS-only; non-HLS streams return `not_probed` (stub from
 ROADMAP.md §1 audit). AMS supports WebRTC, RTMP, and DASH. Full QoE measurement requires
@@ -261,7 +261,7 @@ from the JS beacon schema.
 
 ---
 
-### 2.13  Postgres meta backend (HA)  [L]
+### 2.13  Postgres meta backend (HA)  [L] ✅ DONE S12 (D-072, 2026-07-10: pgx/v5, rebind, embedded PG DDL parity, 19 integration tests green in CI vs postgres:16; SQLite default unchanged)
 
 **Why:** The meta store is SQLite (single-file, single-writer). This works for single-node
 deployments and remains the default. A Postgres backend enables HA configurations (active
@@ -290,7 +290,7 @@ equivalence; keep window semantics aligned with the Detector's windowS.
 
 ---
 
-### 2.15  Brand adoption — `brandkit/` → product UI  [M–L]  (NEW, OPERATOR-DIRECTED → S12 WO-G, D-071)
+### 2.15  Brand adoption — `brandkit/` → product UI  [M–L]  (OPERATOR-DIRECTED, D-071) — ✅ PHASE 1 DONE S12 (D-072, 2026-07-10; light theme/density/motion = phase 2 backlog; ships to prod with the next rollout — v0.3.0 proposed)
 
 **Why:** The operator landed `brandkit/` at the repo root (2026-07-10, D-071) — a complete
 brand & design package: machine-readable `design-system/tokens.json` (dark+light token
@@ -427,8 +427,18 @@ under CHF mock; OIDC login round-trip proven in CI with mock server.
 
 ---
 
-### S12 — infrastructure scaling: Postgres meta backend + WebRTC probe + brand adoption (+ S11 carries)
-**Goal:** Unlock HA deployments; extend probe coverage beyond HLS; adopt the brandkit in the
+### S12 — infrastructure scaling: Postgres meta backend + WebRTC probe + brand adoption (+ S11 carries) ✅ DONE (D-072, 2026-07-10)
+**Result:** ALL work orders landed — WO-A Postgres meta backend (pgx/v5, rebind, embedded
+PG DDL, 19-test parity suite green in CI vs postgres:16 service); WO-B WebRTC signaling
+probe phase 1 (real connect_time_ms in CI e2e — "PASS: WO-B" evidenced; pion media path →
+S13); WO-C keep-7 cycle-8 prune observed + restore-verified; WO-D date-gate skip
+re-recorded; WO-E clean-install release test PASSED (182s vs 15-min budget; 7 more doc
+bugs fixed); WO-F enforce_admins rationale re-recorded; WO-G brandkit phase 1 shipped
+(tokens/fonts/identity/components/charts; NO CSP change needed — trap dissolved by scout);
++ optional PDF-logo swap. 3 workflows (3 scouts / 7 authors / 3 adversarial verifiers —
+verdicts PARTIAL×3, all 10 findings fixed-or-dispositioned same session incl. a CRITICAL
+always-False e2e poll condition caught BEFORE push). Prompt: `sessions/SESSION-12.md`.
+**Goal (as planned):** Unlock HA deployments; extend probe coverage beyond HLS; adopt the brandkit in the
 web UI (operator-directed, D-071); drain the carry queue.
 
 1. **WO-A [L]** Postgres meta backend (§2.13) — `store/meta/postgres` + migration parity +
@@ -461,15 +471,22 @@ dashboard/csp specs green); carries executed or re-gated with evidence.
 
 ---
 
-### S13 — probes phase 2 + iOS SDK phase 1
-**Goal:** Complete RTMP/DASH protocol coverage; begin mobile SDK delivery.
+### S13 — probe protocol completion + promotions (REVISED at S12 close, D-072)
+**Goal:** Complete probe protocol coverage (RTMP + DASH + WebRTC pion phase 2); land the
+date-gated CI promotions (≥07-23); conditional v0.3.0 prod rollout. Mobile SDKs MOVED to
+S14 and are operator-gated (asked 2026-07-10 whether native iOS/Android apps exist — if
+"drop mobile SDKs", §2.12 is cut). Full prompt: `sessions/SESSION-13.md`.
 
-1. **WO-A [M each]** RTMP probe + DASH probe (§2.11, phase 2) — one WO per protocol; CI
-   fixtures required for each.
-2. **WO-B [L]** iOS beacon SDK (§2.12, phase 1) — Swift package; beacon REST parity with
-   `sdk/beacon-js`; size gate defined and enforced in CI.
+1. **WO-A [S, ≥07-23]** CI promotions (§2.7) + CodeQL-answer check.
+2. **WO-B [M]** RTMP handshake probe phase 1 (§2.11).
+3. **WO-C [S–M]** DASH probe (§2.11) — HLS-adjacent manifest+segment.
+4. **WO-D [L]** WebRTC pion media path phase 2 (§2.11 carry) — first to yield if hot.
+5. **WO-E [M, operator-gated "ship v0.3.0"]** prod rollout (carries D-068/D-070/D-072).
+6. **WO-F [XS]** probe_results TTL → {retention_days} (D-072 verifier finding, CH 0006).
+7. **WO-G [XS]** enforce_admins/PR-first re-check.
 
-*(S14+ planned from this roadmap at S13 close: Android SDK, SSO/OIDC phase 2, anomaly tuning.)*
+*(S14+ planned at S13 close: iOS/Android SDKs IF operator confirms need (§2.12), SSO/OIDC
+phase 2 (SPA login), anomaly metric expansion §2.14, brandkit phase 2 (light theme).)*
 
 ---
 

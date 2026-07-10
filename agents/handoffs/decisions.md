@@ -2941,4 +2941,84 @@ down -v teardown). Impl workflow `pulse-s12-impl` dispatched after this entry.
   holds). Next revisit: when the operator answers PR-first, or at the S13 WO-D promotions
   pickup, whichever first.
 
-*(evidence + verdicts appended at session close below)*
+### D-072 CLOSE EVIDENCE (2026-07-10; append interrupted — completed at S13 open, see interruption record)
+
+**Result: S12 DONE — ALL 7 work orders.** Commits (all pushed, per-scope explicit-path):
+`1fe38c8` contracts CR-1 probe-WebRTC fields + CH **0005** (0004 was taken) + CR-2 PG meta
+DDL · `aa1ce98` WO-A Postgres meta backend (pgx/v5 stdlib, ?→$N rebind cache,
+EmbeddedDDLPostgres, PG prune (ts,id), 18-test parity suite) · `c588b26` WO-B WebRTC
+signaling probe phase 1 (real connect_time_ms; ws_timeout/ws_refused/ws_error; fixture
+shapes live-captured from AMS 3.0.3) · `38bd830` resolveMetaBackend wiring (8-case table
+test) · `6399970` WO-G brandkit adoption phase 1 (tokens→global.css, @fontsource IBM Plex
+zero-CDN, identity assets, chartColors.ts + 15 tests, FleetPage trap updated atomically) ·
+`9c271e0` BE-02 optional PDF-logo swap (rasterized brandkit badge; 9/9 logo tests) ·
+`da361ca` INFRA-01 ci.yml postgres:16 service + e2e.yml WebRTC probe steps · `c767ded`
+ORCH verifier-findings fix. **CI + e2e + codeql ALL GREEN at `c767ded`** (e2e log:
+`PASS: WO-B — WebRTC probe success=true`; PG parity suite PROVEN running in CI —
+env var set in step log, 0 skips).
+
+**Workflows:** `pulse-s12-scout` (3 read-only scouts) → `pulse-s12-impl` (7 authors incl.
+serial wiring) → `pulse-s12-verify` (3 adversarial verifiers). Verdicts **PARTIAL ×3 — 10
+findings, 8 fixed + 2 dispositioned same session**, incl. a **CRITICAL always-False e2e
+poll condition caught BEFORE push**: `get('error_code','not_probed')` — `error_code` is
+OMITTED on success, so the `.get()` default made the success predicate permanently False →
+guaranteed 90s timeout. Lesson (binding, in SESSION-13 gates): statically cross-check every
+e2e poll condition against the actual response shape — **verify omission semantics, not
+just field names**. Finding #6 (probe_results TTL ignores `{retention_days}`) dispositioned
+→ **S13 WO-F** (CH migration 0006).
+
+**WO-C evidence (keep-7 cycle-8, live):** sidecar schedule is start+24h (not
+clock-aligned); cycle 8 fired ~16:18Z and pruned `pulse-20260707-073113` (ch zip + meta
+db), 7/7 kept per artifact type; `RESTORE DATABASE pulse AS pulse_restore_verify` →
+**613,939 server_events rows**; meta copy `integrity_check` ok.
+
+**WO-E evidence (clean-install release test):** released image 0.2.0 → verified-healthy vs
+REAL AMS in **182s** (88s on corrected pin file) vs 15-min budget; install.md
+released-image path rewritten from the WORKING image-pin.yml (7 more doc bugs: port
+publish, complete pulse-migrate, CLICKHOUSE_SKIP_USER_SETUP, contracts mount,
+`--entrypoint pulse` migrate cmd, …). AMS trial license still serving 2 days pre-expiry
+(operator-waived, observed as directed).
+
+**Standing numbers at close:** Go total **73.9%** (floor 70.2; meta 67.9 = ratchet
+candidate); web **lines 62.68 / branches 58.78 / functions 51.54** (gates 59/54/45,
+vitest-4 instrumentation — the old "79.69/76.25" handoff figures were a notation artifact
+vs the rebaseline; NEVER compare across instrumentation); sdk untouched 66.06/45.79/70.42
+(gates 63/43/67; 3.52 KB). NEW watch: `TestProbe_WebRTC_WsTimeout` budgets already loosened
+6s→20s (D-042 class) — if it flakes again, read the scheduler, don't bump further.
+
+**⚠ Close-interruption record (process):** the operator's terminal closed mid-closing-
+protocol — AFTER the code push + green CI verify and the RESUME-PROMPT/ROADMAP-V2/
+SESSION-13 file writes, BEFORE this decisions append, the operator-expected.md refresh,
+the handoff commit, and `codegraph sync`. Completed at S13 open (same day, 2026-07-10);
+handoff files recovered intact from the working tree; no work lost. Pattern note for
+future closes: append decisions evidence + commit handoff files EARLY in the closing
+protocol — the cheap steps (notification, sync) can trail, the ledger must not.
+
+## D-073 — SESSION-13 (2026-07-10): S13 execution — probe protocol completion (opened at dispatch; evidence appended at close)
+
+**Session open state (all re-verified):** HEAD `c767ded` == origin/main; ci + e2e + codeql
+ALL GREEN at HEAD (gh, fresh read). Dependabot queue ZERO. U3 not fired
+(`PULSE_LICENSE_KEY` still commented in deploy/.env). Working tree carried ONLY the
+interrupted-S12-close handoff files (RESUME-PROMPT/ROADMAP-V2 modified + SESSION-13.md
+untracked) — recovered, D-072 close evidence appended, operator-expected.md refreshed,
+committed at S13 open (see D-072 close-interruption record). No foreign commits/drift
+(§14 hazard check clean).
+
+**Operator-gate check (session-start directive — 4 switches, ALL unanswered; NOTHING
+required from the operator to run S13):**
+- "ship v0.3.0" — NOT answered → **WO-E does NOT fire** (prod stays v0.2.0; rollout staged,
+  question logged in operator-expected.md TL;DR as the top item).
+- CodeQL required — NOT answered → moot this session anyway: **WO-A skips on its date gate**
+  (2026-07-10 < 2026-07-23); carries with the same spec.
+- PR-first — NOT answered → **WO-G re-records the enforce_admins rationale** (same
+  rationale-or-flip rule as D-072).
+- Mobile-SDK need — NOT answered → S14 planning stays operator-gated; §2.12 uncut.
+
+**Autonomous scope this session:** WO-B RTMP handshake probe phase 1 · WO-C DASH probe ·
+WO-D WebRTC pion media path phase 2 (FIRST to yield if hot) · WO-F probe_results TTL →
+`{retention_days}` (CH 0006) · WO-G rationale re-record. Execution shape: scout workflow →
+ORCH rulings + pre-approved CRs appended here → impl workflow (disjoint scopes, serial
+wiring author) → adversarial verify workflow → ORCH gates → per-scope commits → push →
+CI watch → closing protocol.
+
+*(rulings + evidence appended below as the session progresses)*
