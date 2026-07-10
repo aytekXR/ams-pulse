@@ -205,6 +205,45 @@ func TestValidateLogoPath_UnreadablePath_WarnsAndReturnsDefault(t *testing.T) {
 	t.Logf("PASS: warn emitted, default returned. log=%q", logOutput)
 }
 
+// TestValidateLogoPath_GarbageContent_WarnsAndFallsBack: a READABLE file that is
+// neither PNG nor JPEG must WARN at boot and resolve to the embedded default,
+// and PDF generation with that path must not error (render() falls back too).
+func TestValidateLogoPath_GarbageContent_WarnsAndFallsBack(t *testing.T) {
+	garbagePath := filepath.Join(t.TempDir(), "garbage_logo.png")
+	if err := os.WriteFile(garbagePath, []byte{0x00, 0x01, 'n', 'o', 't', 'p', 'n', 'g'}, 0o644); err != nil {
+		t.Fatalf("WriteFile garbage: %v", err)
+	}
+
+	var logBuf strings.Builder
+	logger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+	got := reports.ValidateLogoPath(garbagePath, logger)
+	if !bytes.Equal(got, reports.ResolveLogo("")) {
+		t.Error("ValidateLogoPath did not fall back to defaultLogoBytes on garbage content")
+	}
+	if !strings.Contains(logBuf.String(), "not a PNG or JPEG") {
+		t.Errorf("expected WARN containing 'not a PNG or JPEG'; got: %q", logBuf.String())
+	}
+
+	// Render path: garbage at a readable path must not error and must still
+	// embed an image (default-logo fallback inside render()).
+	report := synthReportSmall(t)
+	now := time.Now()
+	stmt, err := reports.GenerateStatement(report, reports.StatementOptions{
+		From:     now.AddDate(0, -1, 0),
+		To:       now,
+		Format:   reports.FormatPDF,
+		LogoPath: garbagePath,
+	})
+	if err != nil {
+		t.Fatalf("GenerateStatement with garbage logo returned error: %v", err)
+	}
+	if !strings.Contains(string(stmt.Data), "/Subtype /Image") {
+		t.Error("garbage-logo PDF does not contain /Subtype /Image (default fallback missing)")
+	}
+	t.Logf("PASS: garbage content → WARN + default fallback, PDF len=%d", len(stmt.Data))
+}
+
 // ─── Asset validity pin ───────────────────────────────────────────────────────
 
 // TestDefaultLogoAsset_ValidPNG pins that the committed default_logo.png asset
