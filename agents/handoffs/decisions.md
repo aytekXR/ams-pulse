@@ -3149,3 +3149,44 @@ with evidence — D-042 rule).
 S14 plan)/§4 (D-V2-6 v0.3.0-ship + D-V2-7 mobile-SDK added)/§5 ratchet row; SESSION-14.md
 written; operator-expected.md refreshed (headline: NOTHING required; 4 open questions;
 NEW optional DASH-muxing fixture-capture note).
+
+---
+
+## D-074 — SESSION-14 (2026-07-10, third session today): pion media path + OIDC phase 2 + anomaly expansion + LimitReader
+
+**Open at HEAD `3801ae8` (== origin/main, tree clean).** Executing `sessions/SESSION-14.md`
+(ROADMAP-V2 §3 S14). Preflight re-verified live at open:
+
+- **ci + e2e + codeql all `success` at HEAD** (gh run list; e2e asserts HLS-implicit +
+  WebRTC + RTMP + DASH probe chains per D-073).
+- **Dependabot queue: ZERO open PRs** (gh pr list).
+- **U3: `PULSE_LICENSE_KEY` still ABSENT from `deploy/.env`** (grep count 0) → no
+  restart/live-verify action; QoE/beacon still does not flow in prod.
+- **Date gate: 2026-07-10 < 2026-07-23** → **WO-A CI promotions SKIPS (carry ×3:
+  S12, S13, S14)** — same spec carries to S15; calendar re-check was done THIS session
+  as SESSION-14 requires.
+
+**Operator switches (checked FIRST per SESSION-14 — all four still unanswered):**
+- "ship v0.3.0" — NOT answered → **WO-E prod rollout does NOT fire**; prod stays
+  v0.2.0; main's D-068+D-070+D-072+D-073(+D-074) carry to the next rollout; question
+  stays top of operator-expected.md.
+- CodeQL required — NOT answered → moot anyway (WO-A date-gated).
+- PR-first — NOT answered → **WO-G rationale re-recorded** (evidence below).
+- Mobile-SDK need — NOT answered → **WO-H iOS SDK does NOT fire**; §2.12 stays uncut.
+
+**WO-G evidence (done at open):** live gh api: enforce_admins=false, strict=true,
+7 contexts (contracts/server/web/sdk/docker-build/helm/compose), 1 review — UNCHANGED
+from D-072/D-073; PR-first unanswered → rationale RE-RECORDED (direct-push cadence
+stands; enforce_admins=true would deadlock sessions on self-approval). Next revisit:
+operator answer or S15.
+
+**Autonomous scope this session:** WO-B pion media path phase-2a (ICE-connected,
+`ice_state`, CH 0007; phase-2b RTCP stats — FIRST to yield if hot) · WO-C OIDC phase-2
+SPA login · WO-D anomaly metric expansion (manifest-owner ruling FIRST) · WO-F segment
+LimitReader hardening (HLS+DASH symmetric). Execution shape: scout workflow →
+ORCH rulings + pre-approved CRs appended here → impl workflow (disjoint scopes, serial
+wiring where shared) → adversarial verify BEFORE push → ORCH gates → per-scope commits →
+push → CI watch → closing protocol. CGO_ENABLED=0 build gate runs EARLY (pion deps make
+it non-trivial for the first time).
+
+*(rulings + evidence appended below as the session progresses)*
