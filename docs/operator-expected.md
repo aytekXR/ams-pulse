@@ -1,16 +1,58 @@
-# Operator TODO — the items only YOU can do (updated at SESSION-16 close, D-077/D-078, 2026-07-11; rides SESSION-16's close PR — push budget)
+# Operator TODO — the items only YOU can do (updated at SESSION-17 close, D-079, 2026-07-11; rides S17's PR)
 
 > **Audience: the human operator.** Ledger of record: `ROADMAP.md` §5 + `ROADMAP-V2.md` §4; this
 > file is the actionable view, refreshed at every session close. When you finish an item, just
 > tell the agent (or do nothing — every session start re-verifies each item automatically).
 > **Never commit secret VALUES anywhere; `deploy/.env` and `oguz-testing.md` are gitignored.**
 
-## ⚡ TL;DR — expected from you right now (2026-07-11, SESSION-16 closed)
+## ⚡ TL;DR — expected from you right now (2026-07-11, SESSION-17 closed)
+
+> **Nothing is needed from you.** S17 executed your validation directive (D-078):
+> the real-AMS test harness is BUILT (26 automated parity scenarios under
+> `qa/realams/`, rerunnable any time via `make validate-realams-p0`) and the full
+> P0 suite ran against your live AMS: **24 PASS / 2 SKIP / 0 FAIL.** Highlights:
+> **Pulse saw stream start in 4 s and stream end in 7 s (the PRD promises 10 s)**;
+> ingest bitrate parity within ±10%; WebRTC/RTMP/HLS probes green against your
+> server; viewer counts matched AMS exactly. The 2 skips are honest "nothing to
+> test against" cases, not failures (details in the S17 table below). The suite
+> also caught and fixed its own false-green bug before trusting any result —
+> every PASS is now backed by a fresh evidence file, never just an exit code.
+>
+> **One thing to confirm when you have a second (non-blocking):** your AMS's app
+> inventory changed since S16 — 16 apps (8 IP-blocked) shrank to **4 apps, all
+> open** (`LiveApp`, `WebRTCAppEE`, `live`, `pulse-test`), the old VoDs are gone,
+> and `GET /rest/v2/applications/info` now returns HTTP 405. If YOU reset/
+> recreated the AMS apps, all good — just say so; if not, tell a session and it
+> will investigate. (The `antmedia` container shows a restart ~18 h before S17.)
+>
+> **FYI, two harmless test artifacts on your AMS:** S17 briefly enabled MP4
+> recording on the `pulse-test` app to create ONE small test VoD (~20 s test
+> pattern) as ground truth for the recording-gap validation — the setting was
+> restored to off; the VoD stays as standing test evidence. Test streams named
+> `val-*` may appear/disappear on LiveApp while validation suites run.
+
+## 🔎 What SESSION-17 did (2026-07-11, closed — D-079)
+
+| Area | Result |
+|---|---|
+| **Validation harness (your D-078 program)** | LANDED: `qa/realams/` — 26 automated scenarios that drive your AMS (real ffmpeg publishers, HLS viewers, headless-browser WebRTC viewers, probes) and cross-check every Pulse number against the AMS REST API. Rerunnable forever: `make validate-realams-p0`. |
+| **P0 parity results** | **24 PASS / 2 SKIP / 0 FAIL.** Stream start visible in Pulse in 4 s, stream end in 7 s (PRD: ≤10 s). Bitrate parity ±10%. Viewer counts exact. Probes (WebRTC incl. rtt/jitter/loss, RTMP, HLS, DASH-404) all green live. Fleet card honest (no fake zeros for CPU/mem your AMS doesn't report). |
+| **The 2 SKIPs (honest, not failures)** | (1) "IP-blocked app handling" — your AMS currently has no blocked app to test against; (2) "WebRTC viewer count" — the headless browser loaded the player page but playback never started; next session debugs it (needed for deeper WebRTC stats anyway). |
+| **Trust hardening** | The suite's first run claimed 21 passes in under 4 minutes — impossible. Root cause found (a script exiting early made "didn't run" look like "passed"); now every PASS requires fresh evidence on disk. Three reusable shell pitfalls saved to agent memory. |
+| **Your AMS drifted since last week (please confirm)** | 16 apps → 4 apps (all open), old VoDs gone, `applications/info` endpoint now rejects GET (405), HLS path form changed. All validation docs corrected to match reality. **If this reset wasn't you, tell a session.** |
+| **Bugs filed (for the assessment)** | BUG-001: dead code around an AMS statistics endpoint (low). BUG-002: `recording_gb` always 0 because AMS 3.0.3 can't sign the `vodReady` webhook — the recording/billing gap; suggested fix (VoD REST polling) is on the program roadmap. |
+| **UI polish (S16 leftovers)** | Info-blue text now theme-aware-ready (6 hardcoded colors → variables), 21 new unit tests (360 total). The light-mode blue + link-color need two tiny brandkit token additions — **proposal awaiting your/designer sign-off** (non-blocking): `agents/handoffs/proposals/D-079-linkbody-token-proposal.md`. |
+| **Ship vehicle** | Everything rides ONE PR; prod untouched all session. Gates: lint/types clean, 360/360 unit, coverage up, browser suite 15/15. |
+
+## (superseded) TL;DR at SESSION-16 close
 
 > **Nothing new is needed from you.** S16 landed everything it promised — the **light
 > theme + density modes**, the **WebRTC stats columns** on the Probes page, and the
 > login-gate bug fix (your prod was never affected) — all gates green (339/339 unit
 > tests, 15/15 browser tests, coverage up across the board), one PR, prod untouched.
+> **PR #28 MERGED with all 15 CI checks green — including `web-e2e`'s first green in
+> 13 runs, the in-CI proof of the login-gate fix.** (This merge-confirmation line rides
+> S17's first PR — push budget.)
 > **Your new validation directive was received and is now the plan of record (D-078):**
 > the full 8-phase Pulse × AMS real-validation & product-fit program is planned under
 > `docs/assessment/` and EXECUTION STARTS next session (S17) — building the real test
