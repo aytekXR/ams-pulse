@@ -56,6 +56,13 @@ document. S19 should fix all five in a single `docs/AMS-INTEGRATION.md` editing 
 
 ## Prioritized Authoring Plan for S19
 
+> **S19 status (D-081, 2026-07-11): DG-04, DG-11, and DG-07 are AUTHORED** —
+> DG-04 expanded `docs/AMS-INTEGRATION.md` §4.5 (downstream impact, workarounds,
+> D-V2-1 future path); DG-11 added the implicit-broadcast deletion admonition to
+> §1.1; DG-07 created `docs/beacon-sdk.md` (full integration guide, 12 sections).
+> All three passed adversarial verification against primary sources. The
+> remaining gaps below carry to future sessions.
+
 The order below weights: (1) operator confusion that causes real production problems,
 (2) user questions with no answer anywhere, (3) gaps that block PRD feature
 adoption, (4) S17 drift fixes that are low-effort and prevent future confusion.

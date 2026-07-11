@@ -18,9 +18,9 @@ work from tasks that require operator involvement.
 | 3 | E2E User Scenarios | DONE for P0+P1 (S18: P0 25/1/0, P1 21/3/0; remaining P2 + remote-viewer/SRT items → S19+ backlog) | S17–S18 | BE agent + ORCH |
 | 4 | Automated Validation Scripts | DONE (`make validate-realams-p0` + `validate-p1`, 50 scenarios) | S17–S18 | BE agent |
 | 5 | Bug Investigation | ROLLING (BUG-001..004 filed; 003/004 are live Pulse bugs) | S17+ | Any |
-| 6 | Documentation Program | GAP LIST DONE (documentation-gaps.md DG-01..18); authoring → S19 | S18–S19 | DOC agent |
-| 7 | PRD Validation Matrix | PLANNED | S19 | QA + ORCH |
-| 8 | Final Assessment | PLANNED | S19+ | ORCH |
+| 6 | Documentation Program | TOP-3 AUTHORED (S19: DG-04 + DG-11 → AMS-INTEGRATION.md, DG-07 → docs/beacon-sdk.md); remaining gaps carry | S18–S19+ | DOC agent |
+| 7 | PRD Validation Matrix | DONE (S19: prd-validation-matrix.md — 66 sub-rows F1–F10 + 36 numeric criteria N1–N36, all evidence-cited, adversarially verified) | S19 | QA + ORCH |
+| 8 | Final Assessment | DRAFTED (S19: final-assessment.md — DRAFT banner; operator review REQUIRED before external use; 5 NEEDS-OPERATOR-CONTACT rows) | S19+ | ORCH |
 
 ---
 
@@ -340,7 +340,7 @@ At the end of each session, ORCH-00 should verify:
 - [ ] No open BUG-NNN without severity assignment
 
 **S19 close:**
-- [ ] `docs/assessment/prd-validation-matrix.md` complete (all F1–F10)
-- [ ] `docs/assessment/final-assessment.md` drafted
-- [ ] Operator review scheduled before sharing with Ant Media
-- [ ] Session-plan.md updated with final status of all phases
+- [x] `docs/assessment/prd-validation-matrix.md` complete (all F1–F10 + N1–N36)
+- [x] `docs/assessment/final-assessment.md` drafted (DRAFT banner + operator gate)
+- [x] Operator review requested before sharing with Ant Media (operator-expected.md)
+- [x] Session-plan.md updated with final status of all phases
