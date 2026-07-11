@@ -11,7 +11,39 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-19.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-20.md`)
+
+**Session 2026-07-11(d) result: D-081 — S19 DONE (D-078 Phases 7+8 + Phase-6 top-3).**
+- **Phase 7 LANDED: `docs/assessment/prd-validation-matrix.md`** — F1–F10
+  (1 FULLY = F10 probes / 9 PARTIALLY); 66 sub-rows: 40 FULLY / 14 PARTIALLY /
+  7 DIFFERENTLY / 4 MISSING / 1 NC; numeric N1–N36: 33/1/2. Every verdict
+  evidence-cited; adversarially verified (a FAIL-run evidence citation and a
+  missing PRD criterion row were caught & fixed — the net works).
+- **Phase 8 LANDED: `docs/assessment/final-assessment.md` DRAFT** — completeness
+  **60.6% strict / 79.9% weighted / 91.7% numeric**; 17-row marketplace
+  checklist (5 NEEDS-OPERATOR-CONTACT, 1 FAIL = BUG-002); 13-item prioritized
+  roadmap (P0: BUG-002 VoD REST poll, D-V2-1 unsigned webhook, BUG-004);
+  5 open questions for Ant Media. **★ OPERATOR ACTION PRODUCED: review the
+  draft before ANY external use** (operator-expected.md ⚡ TL;DR).
+- **Phase-6 top-3 AUTHORED:** DG-04 + DG-11 → AMS-INTEGRATION.md (+56 lines);
+  DG-07 → NEW `docs/beacon-sdk.md`. Verifiers killed a fabricated D-V2-1
+  "third option", 2 stale `index.iife.js` refs (real file: `index.global.js`),
+  and a missing BUG-004 caveat.
+- **Date facts:** S19 ran PRE-expiry (open 18:17Z; lapse 07-12T12:09Z) — fresh
+  authed baseline: Enterprise Edition 3.0.3 build 20260504_1443. **Post-expiry
+  sweep moved to S20 open.** CI promotions skip carry ×8 (07-11 < 07-23).
+- Docs-only session; prod + AMS untouched (read-only). Workflow: 14 agents,
+  0 errors. Ledger: decisions.md **D-081**.
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-20.md` and execute it**
+(post-expiry sweep FIRST — the trial lapses 2026-07-12T12:09Z; then
+operator-review intake for final-assessment.md + P0 bug fixes BUG-004/BUG-003 +
+backlog; CI promotions if ≥07-23 else skip carry ×9). **PR-first, ≤2 pushes.**
+Check `docs/operator-expected.md` (final-assessment review answered?) FIRST.
+
+---
+
+## ▶ prior session context (S18, superseded by the above)
 
 **Session 2026-07-11(c) result: D-080 — S18 DONE (D-078 Phases 3+4 P1 + Phase 6).**
 - **P1 vs LIVE AMS: 21 PASS / 3 SKIP / 0 FAIL** (24 new scenario scripts +

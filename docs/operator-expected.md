@@ -1,4 +1,55 @@
-# Operator TODO — the items only YOU can do (updated at SESSION-18 close, D-080, 2026-07-11; rides S18's PR)
+# Operator TODO — the items only YOU can do (updated at SESSION-19 close, D-081, 2026-07-11; rides S19's PR)
+
+## ⚡ TL;DR — expected from you right now (2026-07-11, SESSION-19 closed)
+
+> **ONE new action is requested (the first real one in three sessions): review
+> the final assessment draft.** Your validation program's end deliverable is
+> written: **`docs/assessment/final-assessment.md`** — the marketplace-readiness
+> report for the Ant Media team. It is a clearly-marked DRAFT and **nothing
+> goes external until you review it.** What to look at:
+>
+> 1. **Section 1–2:** the headline story — 46/50 scenarios pass, 0 failures;
+>    product completeness **79.9% weighted / 60.6% strict**, architecture
+>    budgets **91.7%**. Check you're comfortable with these numbers being shown
+>    to Ant Media.
+> 2. **Section 3:** five rows are **NEEDS-OPERATOR-CONTACT** (marketplace
+>    listing requirements, revenue-share, support channel, licensing terms,
+>    co-marketing) — they need your Ant Media contact to resolve. The PRD's
+>    20–30% revenue-share figure is flagged UNVERIFIED.
+> 3. **Section 5:** the proposed roadmap — three P0 items (VoD recording fix,
+>    the unsigned-webhook decision D-V2-1 that's been waiting on you, and the
+>    BUG-004 API fix). Next session starts fixing the two bug P0s.
+> 4. **Section 6:** five open questions for the Ant Media team, ready to send
+>    once you approve.
+>
+> Companion deliverable: **`docs/assessment/prd-validation-matrix.md`** — every
+> PRD feature and every numeric budget with verdict + evidence (also DRAFT).
+> Reply with edits, "approved", or nothing — it stays internal until you act.
+>
+> **FYI, no action:** the AMS trial license lapses **tomorrow 2026-07-12 at
+> 12:09 UTC** (you said "handled"/observe-report). All validation so far ran
+> pre-expiry; the next session opens with a read-only sweep to record what
+> changes. Also two new operator docs went live: `docs/beacon-sdk.md` (how
+> customers embed the QoE beacon) and expanded AMS-INTEGRATION.md sections on
+> the webhook limitation and RTMP stream-end semantics.
+>
+> **Still waiting on (all non-blocking, unchanged):** AMS-reset confirmation
+> (S17), browser-accept of the re-branded UI, brandkit token proposals,
+> Kafka yes/no, Ant Media marketplace contact (now item #1 above makes this
+> one concrete).
+
+## 🔎 What SESSION-19 did (2026-07-11, closed — D-081)
+
+| Area | Result |
+|---|---|
+| **PRD validation matrix (Phase 7)** | Every PRD feature (F1–F10) and all 36 architecture budgets now have an evidence-cited verdict. 40 of 66 sub-requirements FULLY validated against your live AMS; the gaps are precisely characterized (4 MISSING, incl. the recording/billing gap; 7 "works differently than the PRD says", each explained). |
+| **Final assessment (Phase 8)** | The Ant-Media-facing report DRAFTED (see TL;DR — your review is the gate). Includes a 13-item prioritized roadmap and 5 open questions for the AMS team. |
+| **Customer docs (Phase 6)** | 3 highest-priority gaps authored: a complete Beacon SDK integration guide (new `docs/beacon-sdk.md`), the webhook-limitation impact + workarounds, and the RTMP stream-end semantics your S17 drift finding uncovered. |
+| **Quality net** | 14 workflow agents; 3 independent adversarial verifiers re-derived every number from primary evidence. They caught 7 real errors before you ever saw the docs — including one citation pointing at a FAILED test run and one fabricated option in a decision writeup. All fixed and re-verified. |
+| **Honesty items** | Scores recomputed after fixes (79.9% not 80.4%); a "node up/down alerts" claim downgraded because no direct node-offline test was run; stress claims bounded to the 5-stream VPS capacity. |
+| **Ops** | Prod and your AMS untouched (one read-only version check). One PR, docs only. |
+
+## (superseded) S18-close header follows
 
 ## ⚡ TL;DR — expected from you right now (2026-07-11, SESSION-18 closed)
 
