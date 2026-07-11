@@ -108,7 +108,7 @@ function SyntheticBadge() {
       style={{
         display: "inline-block",
         background: "rgba(88,166,255,0.1)",
-        color: "#58A6FF",
+        color: "var(--color-info)",
         border: "1px solid rgba(88,166,255,0.25)",
         borderRadius: 4,
         padding: "2px 8px",
@@ -409,7 +409,7 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
 
 // ─── Probe results panel (synthetic labeling — the F10 acceptance) ────────────
 
-function ttfbColor(ttfb: number | null): string {
+export function ttfbColor(ttfb: number | null): string {
   if (ttfb == null) return "var(--color-muted)";
   if (ttfb < 200) return "var(--color-success)";
   if (ttfb < 500) return "var(--color-warning)";
@@ -417,7 +417,7 @@ function ttfbColor(ttfb: number | null): string {
 }
 
 /** Maps an ICE terminal state string to the Badge variant — modeled on FleetPage statusVariant. */
-function iceVariant(state: string): "success" | "error" | "warning" {
+export function iceVariant(state: string): "success" | "error" | "warning" {
   if (state === "connected") return "success";
   if (state === "failed") return "error";
   return "warning"; // "timeout"
@@ -494,7 +494,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
         }}
       >
         <SyntheticBadge />
-        <span style={{ fontSize: 13, fontWeight: 600, color: "#58A6FF" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-info)" }}>
           Synthetic Probe Results
         </span>
         <span style={{ fontSize: 12, color: "var(--color-muted)", marginLeft: 4 }}>
@@ -866,7 +866,7 @@ function DeleteConfirm({ probeName, onConfirm, onCancel, deleting }: DeleteConfi
       aria-label="Confirm probe deletion"
       style={{
         background: "var(--color-surface)",
-        border: "1px solid rgba(255,92,104,0.4)",
+        border: "1px solid var(--color-error)",
         borderRadius: 8,
         padding: 16,
         maxWidth: 400,
@@ -887,7 +887,7 @@ function DeleteConfirm({ probeName, onConfirm, onCancel, deleting }: DeleteConfi
           style={{
             background: "var(--color-error-bg)",
             color: "var(--color-error)",
-            border: "1px solid rgba(255,92,104,0.4)",
+            border: "1px solid var(--color-error)",
             borderRadius: 6,
             padding: "6px 14px",
             fontSize: 13,
@@ -1005,7 +1005,7 @@ function ProbeRow({
             onClick={() => onViewResults(probe)}
             style={{
               background: showingResults ? "rgba(88,166,255,0.15)" : "none",
-              color: "#58A6FF",
+              color: "var(--color-info)",
               border: "1px solid rgba(88,166,255,0.25)",
               borderRadius: 4,
               padding: "3px 9px",
@@ -1038,7 +1038,7 @@ function ProbeRow({
             style={{
               background: "none",
               color: "var(--color-error)",
-              border: "1px solid rgba(255,92,104,0.4)",
+              border: "1px solid var(--color-error)",
               borderRadius: 4,
               padding: "3px 9px",
               fontSize: 11,
@@ -1254,7 +1254,7 @@ export function ProbesPage() {
           borderRadius: 6,
           padding: "8px 14px",
           fontSize: 12,
-          color: "#58A6FF",
+          color: "var(--color-info)",
           marginBottom: 16,
           display: "flex",
           alignItems: "center",

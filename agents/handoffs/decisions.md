@@ -3673,3 +3673,93 @@ ID/steps/AMS ground truth/Pulse assertion/auto-vs-manual/priority + parity-toler
 philosophy), `session-plan.md` (phases → S17/S18/S19+, dependencies, operator-vs-
 autonomous split). **EXECUTION starts S17 (primary track WO-A)** — see SESSION-17.md +
 ROADMAP-V2 §3 S17. Program docs ride the S16 close PR.
+
+## D-079 — SESSION-17 (2026-07-11): D-078 program Phases 1–2 — real-AMS harness + P0 parity validation (IN PROGRESS; evidence appended at close)
+
+**S17 open verification (all checks passed before work started):**
+- **Operator-action check (user directive): NO new operator action required — session
+  proceeds autonomously.** Standing queue unchanged (👀 browser-accept + optionals
+  D-V2-1/O7/O11/workflow-scope). All S17 dependencies resolved without the operator:
+  AMS up (app-scope REST answers unauthenticated from this VPS — CIDR-open verified
+  live); prod Pulse healthy (`/healthz` ok ×3 components, read-only); docker works via
+  `sg docker`; AMS creds present in gitignored `deploy/.env`
+  (PULSE_AMS_LOGIN_EMAIL/PASSWORD — NOT the PULSE_AMS_USER/PASS names session-plan.md
+  guessed); Pulse prod token at `oguz-testing.md:159`; **PULSE_AMS_APPLICATIONS is
+  EMPTY** → auto-discovery, TC-APP-01 runs as designed.
+- Preconditions: tree clean (one expected uncommitted `docs/operator-expected.md`
+  hunk riding S17's first PR per plan); PR #28 merged; ci+e2e+codeql GREEN at HEAD
+  70a4387; branch protection exact (9 contexts, enforce_admins, strict, 0 reviews);
+  dependabot queue ZERO.
+- **WO-B date gate: 2026-07-11 < 2026-07-23 → CLOSED → skip carry ×6** (JOB-level
+  streak re-measure evidence collected this session, see close notes).
+- AMS trial license expires 2026-07-12T12:09Z (operator-waived) — S17 runs on the
+  LAST full day of the trial; post-expiry drift is S18's observe-and-report item.
+- `pulse-realams` isolated stack brought up from HEAD (base + real-ams + realams-test,
+  loopback :18090): healthy, polling the real AMS (overview shows teststream,
+  standalone node up). Bootstrap admin token extracted from container logs (local
+  only, never committed). Prod untouched.
+- Branch `s17-d079`; PR-first, ≤2 pushes (D-076).
+
+**S17 CLOSE (same session, D-079 evidence):**
+- **WO-A (D-078 Phases 1–2) DELIVERED.** Harness: `qa/realams/` (env/auth/assert/
+  capture/publisher/viewer-sim/failures + 26 P0 scenario scripts + Makefile;
+  `make validate-realams-p0`; evidence gitignored). Built by a 12-agent workflow
+  (6 authors, WO-B/WO-C/triage/proposal agents, 2 adversarial verifiers; 0 errors,
+  ~861k subagent tokens); verifier round produced 74 `|| true` assert guards + 2 more
+  fixes BEFORE first run.
+- **P0 EXECUTION vs LIVE AMS: final 24 PASS / 2 SKIP / 0 FAIL** (26 scenarios).
+  SKIPs are honest premise-skips: TC-APP-02 (zero IP-blocked apps exist today),
+  TC-V-02 (headless WebRTC playback never registered a viewer — player page 200,
+  S18 item; needed for TC-V-07/08 anyway). Headline parity evidence:
+  publish→Pulse-visible **4 s**, stop→Pulse-removed **7 s** (PRD ≤10 s, TC-WH-02);
+  bitrate ÷1000 within ±10% at 2000 kbps (TC-I-01/02); fps-absent → fps=0 with
+  health_score>80 (TC-I-06); probes live-green incl. D-075 rtt/jitter/loss
+  key-present semantics (TC-P-01) and http_4xx negative paths (TC-P-05/06);
+  standalone fleet honest-absent cpu/mem (TC-H-01/FL-01); HLS/cross-protocol viewer
+  parity within ±2 (TC-V-01/03/04, AV-16: rtmpViewerCount never negative, 20 samples).
+- **★ SUITE FALSE-GREEN CAUGHT (D-028 class, run 1):** `auth.sh` did `exit 0` on its
+  reuse path — sourced by scenarios, it terminated 17 of them with rc=0 BEFORE their
+  bodies ran; the Makefile equated rc=0 with PASS ("21/26 in <4 min" — impossible).
+  Fixes: source-safe `return N 2>/dev/null || exit N`; runner PASS now requires a
+  verdict.txt NEWER than a per-scenario stamp AND starting with PASS (NOEVID
+  otherwise); jq `'.success // true'` inverts false (`//` fires on false) → explicit
+  `== true` test; `grep -c || echo 0` doubles the zero. Memory saved:
+  shell-harness-false-green-patterns. Run-2 V/I crash class also fixed (unguarded
+  `curl|jq` under `set -euo pipefail` dies on the first 404 body).
+- **LIVE AMS DRIFT (assessment findings, folded into scenario-matrix ⚠ S17
+  Corrections):** app inventory 16→4 (LiveApp/WebRTCAppEE/live/pulse-test, ALL open —
+  operator asked to confirm the reset; antmedia container restarted ~18 h pre-S17);
+  `GET /rest/v2/applications/info` → **HTTP 405** (S16 capture had it working; Pulse
+  never calls it — no impact); HLS served at FLAT `/{app}/streams/{id}.m3u8` (the
+  S16-doc `/{id}/playlist.m3u8` form never worked on this build); **implicit RTMP
+  broadcasts are DELETED on stop** (GET 404; never `finished`/`terminated_unexpectedly`
+  — those presumably need REST pre-create, S18 verify); versionType="Enterprise
+  Edition"; S16-era VoDs wiped → S17 created ONE test VoD on pulse-test (mp4 muxing
+  enabled → 20 s publish → restored OFF; VoD kept as standing ground truth).
+- **Phase 1 close-out:** AV triage — AV-02/05/06/08/09/10/11/12/16 CONFIRMED live;
+  AV-01/03/04/07/13/14 covered by scenario runs; AV-15 BLOCKED (Kafka, operator).
+  Triage concern resolved: prod `per_source_secrets:0` is the B7 per-source count,
+  global PULSE_WEBHOOK_SECRET wired via hardened overlay (D-054 smoke stands).
+- **Phase 5:** BUG-001 (BroadcastStatistics dead code, low) + BUG-002 (recording_gb
+  always 0 — vodReady webhook-only + AMS 3.0.3 unsigned; fix suggestion: VoD REST
+  poll fallback, P0 roadmap) filed under docs/assessment/bugs/.
+- **WO-B:** date gate CLOSED (07-11 < 07-23) → **skip carry ×6** w/ JOB-level
+  re-measure: e2e-workflow jobs `e2e` + `csp-e2e` 30/30 green (run window
+  29034433653→29136375304); csp-e2e still continue-on-error → promotion candidate at
+  07-23; the Playwright web job's clock restarted at S16 merge (2026-07-11T02:27Z) →
+  earliest ~07-25; 9 required contexts confirmed unchanged.
+- **WO-C:** 6 UI-text #58A6FF literals → var(--color-info) (ProbesPage ×4,
+  AnomaliesPage ×2); delete-button rgba border → var-based; 21 unit pins for
+  ttfbColor()/iceVariant()/memStatus() (360 tests, was 339). tokens.json has NO
+  `info` key in either theme → light value NOT invented (D-071); escalated in
+  `agents/handoffs/proposals/D-079-linkbody-token-proposal.md` (§7 companion:
+  color.light.info; §1–6: color.light.linkBody for --color-link #087A59, contrast
+  math 4.82–5.33:1 AA). Operator/design sign-off pending (non-blocking).
+- **WO-D:** protection exact (9 contexts, enforce_admins, strict, 0 reviews);
+  dependabot ZERO; prod healthy read-only + UNTOUCHED all session.
+- **Gates:** web lint+typecheck clean; vitest 360/360; coverage lines 65.94 /
+  branches 61.66 / functions 54.85 (gates 59/54/45, all ↑ or =); build green;
+  **Playwright-docker 15/15**. Go/contracts/sdk untouched (no Go gates due).
+- **Ops notes:** pulse-realams stack left RUNNING (loopback-only) for S18; AMS trial
+  license expires 2026-07-12T12:09Z (operator-waived) — S17 was the last full-trial
+  day; S18 opens with a read-only post-expiry sweep.

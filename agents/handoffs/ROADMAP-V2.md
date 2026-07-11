@@ -600,7 +600,29 @@ beacon-QoE anomaly metrics (§2.14 revisit); RTMP AMF0 connect round-trip (§2.1
 
 ---
 
-### S17 — Pulse × AMS validation program launch (D-078) + CI-promotion date gate (planned at S16 close, D-077)
+### S17 — validation program launch ✅ DONE (D-079, 2026-07-11)
+**Result:** WO-A LANDED — `qa/realams/` harness (7 helpers + 26 P0 scenario scripts +
+Makefile, `make validate-realams-p0`) built via 12-agent workflow + adversarial verify;
+**P0 executed against the LIVE AMS: 24 PASS / 2 SKIP / 0 FAIL** (SKIPs honest:
+TC-APP-02 no blocked app exists; TC-V-02 headless WebRTC playback never registered —
+S18 item). Headline parity: publish→Pulse 4 s, stop→Pulse 7 s (PRD ≤10 s); bitrate
+÷1000 ±10% holds; probes WebRTC/RTMP/HLS live-green incl. rtt/jitter/loss key-present;
+fleet standalone honest-absent holds. **Suite run 1 false-greened 17 scenarios**
+(auth.sh exit-on-source; D-028 class) → runner now requires fresh verdict.txt for PASS
+(+ jq `//`-on-boolean and `grep -c || echo 0` landmines fixed; memory saved).
+**Live AMS drift caught (program working as designed):** app inventory 16→4 (all
+open), applications/info → 405, HLS at flat `{id}.m3u8`, implicit RTMP broadcasts
+DELETED on stop (404, never `finished`), versionType="Enterprise Edition" — all folded
+into scenario-matrix ⚠ S17 Corrections. Bugs filed: BUG-001 (BroadcastStatistics dead
+code), BUG-002 (recording_gb=0 webhook-blocked; real test VoD created on pulse-test as
+standing ground truth, mp4 setting restored). AV triage: 9 CONFIRMED live. WO-B gate
+CLOSED (07-11 < 07-23) → skip carry ×6 (csp-e2e 30/30 green; web-e2e clock restarted at
+S16 merge). WO-C LANDED (6 UI-text #58A6FF → var(--color-info); border token; 21 unit
+pins → 360 tests; light value escalated to proposals/D-079-linkbody-token-proposal.md
+§7 — no invented colors, D-071). WO-D: protection/dependabot/prod all clean.
+Prompt: `sessions/SESSION-17.md`; ledger: decisions.md D-079.
+
+### S17 (original plan) — Pulse × AMS validation program launch (D-078) + CI-promotion date gate (planned at S16 close, D-077)
 
 Execute `sessions/SESSION-17.md`. The operator's D-078 directive (real-validation &
 product-fit program, plan of record `docs/assessment/session-plan.md`) is now the

@@ -11,7 +11,42 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-17.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-18.md`)
+
+**Session 2026-07-11(b) result: D-079 — S17 DONE (D-078 program Phases 1–2 delivered).**
+- **HARNESS LANDED:** `qa/realams/` (7 helpers, 26 P0 scenario scripts, Makefile;
+  `make validate-realams-p0`) — reusable, evidence-gitignored, lockout-safe.
+- **P0 vs LIVE AMS: 24 PASS / 2 SKIP / 0 FAIL.** Parity headlines: publish→Pulse 4 s,
+  stop→Pulse 7 s (PRD ≤10 s); bitrate ÷1000 ±10%; probes live-green (rtt/jitter/loss
+  keys present); fleet honest-absent. SKIPs honest: TC-APP-02 (no blocked app exists),
+  TC-V-02 (headless WebRTC playback never registered — S18 item).
+- **★ False-green caught (D-028 class):** suite run 1 "passed" 17 scenarios in <4 min
+  — auth.sh `exit 0` on source killed callers rc=0. Runner now requires a FRESH
+  verdict.txt for PASS. Memory: shell-harness-false-green-patterns (jq `//` fires on
+  false; `grep -c || echo 0` doubles the zero).
+- **Live AMS drift (S17 Corrections in scenario-matrix.md — BINDING over S16 rows):**
+  apps 16→4 all-open (operator asked to confirm the reset); applications/info → 405;
+  HLS at flat `{id}.m3u8`; implicit RTMP broadcasts DELETED on stop (404, never
+  `finished`); versionType="Enterprise Edition"; one S17-created test VoD on
+  pulse-test (ground truth for the recording gap).
+- Bugs: BUG-001 (BroadcastStatistics dead code) + BUG-002 (recording_gb=0,
+  webhook-blocked; fix = VoD REST poll fallback) in `docs/assessment/bugs/`.
+- WO-B skip carry ×6 (csp-e2e 30/30 green, candidate at 07-23; web-e2e ~07-25).
+  WO-C landed (info-color vars + 21 unit pins → 360 tests; light values escalated to
+  `agents/handoffs/proposals/D-079-linkbody-token-proposal.md` — operator sign-off,
+  non-blocking). Coverage web 65.94/61.66/54.85. Prod UNTOUCHED; pulse-realams stack
+  left running (loopback :18090).
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-18.md` and execute it**
+(D-078 Phases 3+4 P1 scenarios + Phase 6 documentation-gap list; FIRST a read-only
+post-license-expiry AMS sweep — the trial lapsed 2026-07-12T12:09Z, operator-waived;
+CI promotions if run date ≥07-23, else skip carry ×7). **PR-first, ≤2 pushes.**
+Check `docs/operator-expected.md` (AMS-reset confirmation?) + scenario-matrix
+⚠ S17 Corrections FIRST.
+
+---
+
+## ▶ prior session context (S16, superseded by the above)
 
 **Session 2026-07-11 result: D-077 — S16 DONE (+ D-078 opened: new operator program).**
 - **S16 LANDED (one PR):** AuthGate fail-open FIX (the web-e2e ×12-red root cause —

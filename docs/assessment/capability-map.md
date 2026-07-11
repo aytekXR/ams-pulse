@@ -578,3 +578,45 @@ GeoLite2 DB for non-zero results)
 | AV-14 | WebRTC probe works against live AMS stream (D-074 fix holds) | TC-P-01 (WebRTC probe) |
 | AV-15 | Kafka path activates when PULSE_KAFKA_BROKERS set | Not scheduled (S17+) |
 | AV-16 | Inline `rtmpViewerCount` (BroadcastDTO poll path) is never negative on live AMS — normalize.go:83 sums WITHOUT clamping, so a negative value would corrupt `viewer_count`; if observed negative, file a Pulse bug to add clamping | TC-V-04 + live poll sampling |
+
+---
+
+## AV Triage — S17 (2026-07-11, live)
+
+All checks executed against: Pulse prod `https://beyondkaira.com/api/v1` (token from
+oguz-testing.md:159) and AMS `http://161.97.172.146:5080`. AMS version confirmed:
+3.0.3 Enterprise Edition build 20260504\_1443. One cookie login performed; cookie
+written to scratchpad only.
+
+| AV | Verdict | Evidence — file / command + observed value |
+|----|---------|-------------------------------------------|
+| AV-01 | SCHEDULED — TC-F-02 | Kill-publisher scenario; requires live ffmpeg publisher to crash-detect `terminated_unexpectedly`. Covered by TC-F-02 this session. |
+| AV-02 | CONFIRMED | `grep -rn "BroadcastStatistics" server/` + `codegraph explore "BroadcastStatistics callers"`: method defined at `client.go:483`; only caller is `client_test.go:625` (a test). No caller in restpoller, normalize, or any runtime code path. Dead code at runtime confirmed. |
+| AV-03 | SCHEDULED — TC-W-01 | RTT/jitter unit-conversion requires a live WebRTC viewer session. Covered by TC-W-01. |
+| AV-04 | SCHEDULED — TC-I-01 | fps=0 health-score behavior tested by bitrate-drop scenario TC-I-01. |
+| AV-05 | CONFIRMED | `GET /api/v1/fleet/nodes` → `{node_id:"beyondkaira-ams", role:"standalone", status:"up", version:"3.0.3", os_name:"Linux", os_arch:"amd64", java_version:"17", processor_count:6}`. OS/JVM populated as expected. |
+| AV-06 | CONFIRMED | Same response as AV-05. Fields `cpu_pct`, `mem_pct`, `disk_pct`, `net_in_mbps`, `net_out_mbps` are **absent** (not present in JSON). No false zeros for standalone node. |
+| AV-07 | SCHEDULED — TC-APP-01 | S16 had 8+ open apps and some IP-blocked. S17 shows only 4 apps (LiveApp, WebRTCAppEE, live, pulse-test), all returning HTTP 200 — no 403 apps currently exist. TC-APP-01 may need a synthetic 403 fixture. |
+| AV-08 | CONFIRMED | `Caddyfile.prod` lines 55–60: `/webhook/*` route present, proxies to `pulse:8092`. `docker logs pulse-prod-pulse-1 \| grep -i webhook` → 2 lines, startup only (`"webhook: listening","addr":":8092","per_source_secrets":0`). Zero delivery events logged. AMS 3.0.3 is not sending lifecycle hooks (cannot HMAC-sign per O3 decision). |
+| AV-09 | CONFIRMED | `GET /api/v1/reports/usage` → `recording_gb:0`. VoD bytes not tracked (no webhook delivery). Note: `egress_gb:0.0025` via `bitrate_x_watch_time` estimate (unrelated to webhooks); `viewer_minutes:0.3333` from one beacon session. |
+| AV-10 | CONFIRMED ABSENT | `docker exec pulse-prod-pulse-1 sh -c 'find / -name GeoLite2*.mmdb 2>/dev/null'` → no output. Fallback: `/var/lib/pulse/` contains only `pulse_meta.db{,-shm,-wal}`. `PULSE_GEO_MMDB_PATH` commented out in `deploy/.env`. GeoLite2-City.mmdb absent from prod container. |
+| AV-11 | CONFIRMED (nuanced) | `GET /api/v1/analytics/geo` → `[{country:"",views:1,uniques:1,watch_time_s:10}]`. Not an error — returns valid JSON. One beacon event exists (D-076 QoE live, enterprise license), but `country=""` because GeoLite2 DB absent (AV-10). Response is non-empty, not empty-as-expected (prod has real traffic). Empty country is the correct behaviour without the mmdb. |
+| AV-12 | CONFIRMED | `GET /api/v1/anomalies` → `{items:[],meta:{next_cursor:null}}`. Empty list. No cpu/mem/disk anomaly findings for standalone node (no data source to baseline against). |
+| AV-13 | SCHEDULED — TC-P-04 | DASH probe http_4xx behavior requires the prober to run against real AMS; covered by TC-P-04. |
+| AV-14 | SCHEDULED — TC-P-01 | D-074 WebRTC probe fix requires a live AMS stream with `subtrackAdded` notification; covered by TC-P-01. |
+| AV-15 | BLOCKED — operator decision pending | Kafka consumer path (`server/internal/collector/kafka/`) requires `PULSE_KAFKA_BROKERS` env var and a running Kafka broker. No broker deployed; not scheduled for S17. Reference `docs/operator-expected.md` Kafka question for operator decision. |
+| AV-16 | CONFIRMED SAFE | `GET /LiveApp/rest/v2/broadcasts/teststream` sampled ×10 over 50 s (5 s interval, 10:55:53–10:56:38 UTC): `rtmpViewerCount=0` every sample. `publishType=RTMP`, `bitrate=2067136 bits/s` (~2 Mbps), all viewer fields 0. No negative values observed. normalize.go sum-without-clamp is safe for this deployment. Risk note: if future AMS firmware or cluster mode emits negative inline counts, clamping in normalize.go:83 would be needed. |
+
+### Additional live findings (server-scope captures, S17)
+
+- **App inventory change**: S16 documented 16 apps; S17 `GET /rest/v2/applications` (cookie
+  auth) shows only 4: `LiveApp`, `WebRTCAppEE`, `live`, `pulse-test`. All 16 S16 apps not in
+  this list now return HTTP 404 on app-scope broadcasts poll. `agents/handoffs/real-ams-captures/S17-applications.json`.
+- **All remaining apps open**: All 4 apps return HTTP 200 on
+  `/{app}/rest/v2/broadcasts/list/0/1` (no auth). No 403 apps on this deployment as of S17.
+- **`/rest/v2/applications/info` returns HTTP 405**: Endpoint exists but `GET` is not
+  allowed in build 20260504\_1443 (response: "Method Not Allowed"). S16 behavior (returned
+  per-app liveStreamCount/vodCount/storage) no longer reproducible. Recorded in
+  `agents/handoffs/real-ams-captures/S17-applications-info.json`.
+- **AMS version**: `{"versionName":"3.0.3","versionType":"Enterprise Edition","buildNumber":"20260504_1443"}`.
+  `agents/handoffs/real-ams-captures/S17-version.json`.
