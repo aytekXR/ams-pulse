@@ -150,7 +150,11 @@ fi
 assert_eq "${_beacon_http}" "202" "${SCENARIO} beacon POST accepted (HTTP 202)" || true
 
 # ── Step 3: Poll /qoe/summary for rebuffer_ratio ≈ 0.2 (budget: 120 s) ───────
-log "Polling /qoe/summary for rebuffer_ratio ≈ 0.2 ±0.05  (budget: 120 s, 5 s interval)"
+# Scope to ?stream=${STREAM_ID} so prior sessions on the realams stack (which
+# accumulate watch_time_ms without rebuffers) don't dilute the ratio.
+# Arithmetic guarantee: sent events → rebuffer_total_ms=2000, watch_time_ms=10000
+# → rebuffer_ratio = 2000/10000 = 0.2 for this stream only.
+log "Polling /qoe/summary?stream=${STREAM_ID} for rebuffer_ratio ≈ 0.2 ±0.05  (budget: 120 s, 5 s interval)"
 _ratio_val="0"
 _ratio_gt0="no"
 _ratio_conv_s=999
@@ -159,7 +163,7 @@ while [ "${_i}" -lt 24 ]; do
   sleep 5
   _qoe_resp="$(curl -s -m 15 \
     -H "Authorization: Bearer ${PULSE_TOKEN}" \
-    "${PULSE_URL}/qoe/summary" 2>/dev/null || echo '{}')"
+    "${PULSE_URL}/qoe/summary?stream=${STREAM_ID}" 2>/dev/null || echo '{}')"
   _ratio_val="$(printf '%s' "${_qoe_resp}" | \
     jq '.totals.rebuffer_ratio // 0' 2>/dev/null || echo 0)"
   _ratio_gt0="$(awk -v v="${_ratio_val}" 'BEGIN { print (v > 0) ? "yes" : "no" }')"
@@ -172,7 +176,7 @@ while [ "${_i}" -lt 24 ]; do
   _i=$(( _i + 1 ))
 done
 
-capture_pulse "/qoe/summary" "qoe-summary"
+capture_pulse "/qoe/summary?stream=${STREAM_ID}" "qoe-summary"
 printf '%s' "${_qoe_resp:-{}}" | jq . > "${EVIDENCE_DIR}/qoe-summary.json" 2>/dev/null || true
 
 log "Final rebuffer_ratio=${_ratio_val}  convergence_s=${_ratio_conv_s}"
@@ -182,8 +186,8 @@ printf 'rebuffer_ratio=%s\nratio_convergence_s=%s\n' \
 
 # ── Assertions ───────────────────────────────────────────────────────────────
 # rebuffer_ratio ≈ 0.2 ±0.05 absolute (sent 2000ms rebuffer / 10000ms watch)
-# Use assert_within for absolute tolerance
-assert_within "${_ratio_val}" "0.2" "0.05" "${SCENARIO} rebuffer_ratio ≈ 0.2 (±0.05 abs; 2000/10000)" || true
+# Queried with ?stream=${STREAM_ID} so only this test's beacon events are counted.
+assert_within "${_ratio_val}" "0.2" "0.05" "${SCENARIO} rebuffer_ratio ≈ 0.2 (±0.05 abs; 2000/10000; stream-scoped)" || true
 assert_lte "${_ratio_conv_s}" 120 "${SCENARIO} rebuffer_ratio appeared within ≤120 s (rollup latency)" || true
 
 # ── Verdict ───────────────────────────────────────────────────────────────────

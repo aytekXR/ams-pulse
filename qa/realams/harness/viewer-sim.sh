@@ -44,29 +44,41 @@ _AMS_HTTP_HOSTPORT="${_vs_url_strip%%/*}"
 unset _vs_url_strip
 
 # ── start_hls_viewer ID APP VIEWER_ID ─────────────────────────────────────────
-# Polls the HLS playlist and fetches segments in a background subshell.
-# PID written to: /tmp/claude-1000/hls-viewer-<VIEWER_ID>.pid
+# Simulates a real HLS player: polls the playlist every 2 s and downloads
+# each segment EXACTLY ONCE (never re-fetches an already-seen segment).
+# This matches real-player semantics so AMS counts one viewer window per
+# sim-viewer instead of multiplying by segments-per-poll.
+#
+# PID written to:       /tmp/claude-1000/hls-viewer-<VIEWER_ID>.pid
+# Seen-segment log to:  /tmp/claude-1000/hls-viewer-<VIEWER_ID>.seen
 start_hls_viewer() {
   local ID="$1"
   local APP="${2:-LiveApp}"
   local VIEWER_ID="${3:-viewer-001}"
   local PLAYLIST="${AMS_URL}/${APP}/streams/${ID}.m3u8"
   local PID_FILE="${_VIEWER_PID_DIR}/hls-viewer-${VIEWER_ID}.pid"
+  local SEEN_FILE="${_VIEWER_PID_DIR}/hls-viewer-${VIEWER_ID}.seen"
 
   mkdir -p "$_VIEWER_PID_DIR"
+  # Initialise an empty seen-segments registry for this viewer
+  : > "$SEEN_FILE"
 
   (
     while true; do
-      # Fetch playlist; extract .ts segment names (top 3 to avoid burst)
+      # Fetch playlist; extract ALL .ts segment names
       # shellcheck disable=SC2310
-      SEGMENTS="$(curl -s -m 10 "$PLAYLIST" 2>/dev/null | grep '\.ts$' | head -3 || true)"
+      SEGMENTS="$(curl -s -m 10 "$PLAYLIST" 2>/dev/null | grep '\.ts$' || true)"
       if [[ -n "$SEGMENTS" ]]; then
         # Base URL = playlist URL minus the filename
         BASE="${PLAYLIST%/*}"
-        # shellcheck disable=SC2086
-        for SEG in $SEGMENTS; do
-          curl -s -m 15 -o /dev/null "${BASE}/${SEG}" 2>/dev/null || true
-        done
+        while IFS= read -r SEG; do
+          [[ -z "$SEG" ]] && continue
+          # Real-player rule: fetch each segment ONCE only
+          if ! grep -qxF "$SEG" "$SEEN_FILE" 2>/dev/null; then
+            echo "$SEG" >> "$SEEN_FILE"
+            curl -s -m 30 -o /dev/null "${BASE}/${SEG}" 2>/dev/null || true
+          fi
+        done <<< "$SEGMENTS"
       fi
       sleep 2
     done
@@ -80,11 +92,12 @@ start_hls_viewer() {
 stop_hls_viewer() {
   local VIEWER_ID="$1"
   local PID_FILE="${_VIEWER_PID_DIR}/hls-viewer-${VIEWER_ID}.pid"
+  local SEEN_FILE="${_VIEWER_PID_DIR}/hls-viewer-${VIEWER_ID}.seen"
   if [[ -f "$PID_FILE" ]]; then
     local PID
     PID="$(cat "$PID_FILE")"
     kill "$PID" 2>/dev/null || true
-    rm -f "$PID_FILE"
+    rm -f "$PID_FILE" "$SEEN_FILE"
     echo "[viewer-hls] ${VIEWER_ID} stopped (PID ${PID})" >&2
   else
     echo "[viewer-hls] ${VIEWER_ID}: PID file not found (already stopped?)" >&2
@@ -93,6 +106,7 @@ stop_hls_viewer() {
 
 # ── stop_all_hls_viewers ──────────────────────────────────────────────────────
 # Kills every HLS viewer tracked by a PID file in the viewer PID dir.
+# Also removes the corresponding .seen state files.
 stop_all_hls_viewers() {
   local count=0
   local pid_file
@@ -102,7 +116,7 @@ stop_all_hls_viewers() {
     PID="$(cat "$pid_file")"
     VNAME="$(basename "$pid_file" .pid | sed 's/^hls-viewer-//')"
     kill "$PID" 2>/dev/null || true
-    rm -f "$pid_file"
+    rm -f "$pid_file" "${_VIEWER_PID_DIR}/hls-viewer-${VNAME}.seen"
     echo "[viewer-hls] ${VNAME} stopped (PID ${PID})" >&2
     (( count++ )) || true
   done

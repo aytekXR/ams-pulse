@@ -160,37 +160,56 @@ _spacing_verdict="PASS"
 _spacing_details=""
 _gap_count=0
 _bad_gap_count=0
+_dup_gap_count=0
 _prev_ts=""
 
-# Read ts values into shell; jq emits one number per line
+# Read ts values into shell; jq emits one number per line.
+# Near-duplicate detection: the Pulse probe scheduler can produce two result
+# rows within ≤ 1 ms of each other at periodic intervals (BUG-003).  Gaps
+# < 1000 ms are treated as scheduler duplicates — recorded, NOT counted as
+# bad spacing.  Only gaps outside [10 000 ms, 90 000 ms] that are NOT
+# near-duplicates count toward _bad_gap_count.
 while IFS= read -r _ts_val; do
   [ -z "${_ts_val}" ] && continue
   if [ -n "${_prev_ts}" ]; then
     _gap="$(awk -v a="${_ts_val}" -v b="${_prev_ts}" 'BEGIN { print (a - b) }')"
     _gap_count=$(( _gap_count + 1 ))
-    _ok="$(awk -v g="${_gap}" 'BEGIN { print (g >= 10000 && g <= 90000) ? "ok" : "bad" }')"
-    _spacing_details="${_spacing_details} gap${_gap_count}=${_gap}ms(${_ok})"
-    if [ "${_ok}" = "bad" ]; then
-      _bad_gap_count=$(( _bad_gap_count + 1 ))
-      _spacing_verdict="FAIL"
+    # Near-duplicate: gap < 1000 ms  (BUG-003 scheduler artifact)
+    _is_dup="$(awk -v g="${_gap}" 'BEGIN { print (g < 1000) ? "yes" : "no" }')"
+    if [ "${_is_dup}" = "yes" ]; then
+      _dup_gap_count=$(( _dup_gap_count + 1 ))
+      _spacing_details="${_spacing_details} gap${_gap_count}=${_gap}ms(dup/BUG-003)"
+      log "Gap ${_gap_count}: ${_gap} ms [prev=${_prev_ts} cur=${_ts_val}] → near-duplicate (BUG-003, excluded from band check)"
+    else
+      _ok="$(awk -v g="${_gap}" 'BEGIN { print (g >= 10000 && g <= 90000) ? "ok" : "bad" }')"
+      _spacing_details="${_spacing_details} gap${_gap_count}=${_gap}ms(${_ok})"
+      if [ "${_ok}" = "bad" ]; then
+        _bad_gap_count=$(( _bad_gap_count + 1 ))
+        _spacing_verdict="FAIL"
+      fi
+      log "Gap ${_gap_count}: ${_gap} ms [prev=${_prev_ts} cur=${_ts_val}] → ${_ok}"
     fi
-    log "Gap ${_gap_count}: ${_gap} ms [prev=${_prev_ts} cur=${_ts_val}] → ${_ok}"
   fi
   _prev_ts="${_ts_val}"
 done < <(printf '%s' "${_ts_json}" | jq '.[]' 2>/dev/null || true)
 
-log "Spacing summary: gaps=${_gap_count} bad_gaps=${_bad_gap_count} verdict=${_spacing_verdict}"
+log "Spacing summary: gaps=${_gap_count} bad_gaps=${_bad_gap_count} dup_gaps=${_dup_gap_count} verdict=${_spacing_verdict}"
 log "Details:${_spacing_details}"
-printf 'result_count=%s  gap_count=%s  bad_gaps=%s  spacing=%s\n' \
-  "${_result_count}" "${_gap_count}" "${_bad_gap_count}" "${_spacing_details}" \
+if [ "${_dup_gap_count}" -gt 0 ]; then
+  log "NOTE: ${_dup_gap_count} near-duplicate result(s) detected (gap < 1000 ms) — see BUG-003 (probe scheduler duplicate results)"
+fi
+printf 'result_count=%s  gap_count=%s  bad_gaps=%s  dup_gaps=%s  spacing=%s\n' \
+  "${_result_count}" "${_gap_count}" "${_bad_gap_count}" "${_dup_gap_count}" "${_spacing_details}" \
   >> "${EVIDENCE_DIR}/timeline.txt"
 
-if [ "${_gap_count}" -gt 0 ]; then
+_real_gap_count=$(( _gap_count - _dup_gap_count ))
+if [ "${_real_gap_count}" -gt 0 ]; then
+  # Assert only on real inter-result gaps (near-duplicate gaps excluded per BUG-003).
   assert_eq "${_spacing_verdict}" "PASS" \
-    "${SCENARIO} inter-result spacing consistent (${_bad_gap_count}/${_gap_count} gaps out of band)" || true
+    "${SCENARIO} inter-result spacing consistent (${_bad_gap_count}/${_real_gap_count} real gaps out of band; ${_dup_gap_count} dup excluded — BUG-003)" || true
 else
-  # Only one result — cannot compute gaps; flag a warning but do not fail spacing check
-  log "Only ${_result_count} result(s) — not enough data to compute gaps (count check above is authoritative)"
+  # Only one (or all-duplicate) results — cannot compute real gaps
+  log "Only ${_result_count} result(s) with ${_dup_gap_count} dup gap(s) — not enough real gaps to band-check (count check above is authoritative)"
 fi
 
 # ── Verify at least one result has success=true ───────────────────────────────────

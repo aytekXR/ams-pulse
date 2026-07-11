@@ -143,8 +143,11 @@ if [ "${_stats_converge_s}" -eq -1 ]; then
 fi
 
 # ── 4. Extract AMS raw unit values from first peer entry ─────────────────────
+# IMPORTANT: do NOT use ${_stat0:-{}} — bash parses ":-{}" by appending a
+# literal "}" to the variable when it is already set, corrupting the JSON and
+# causing downstream jq calls to fail with parse errors (producing doubled
+# fallback values like "0\n0" that break awk numeric comparisons).
 _stat0="$(printf '%s' "${_stats_raw}" | jq '.[0] // {}' 2>/dev/null || echo '{}')"
-_stat0="${_stat0:-{}}"
 
 _ams_video_rtt="$(printf '%s' "${_stat0}" | jq '.videoRoundTripTime // 0' 2>/dev/null || echo 0)"
 _ams_audio_rtt="$(printf '%s' "${_stat0}" | jq '.audioRoundTripTime // 0' 2>/dev/null || echo 0)"
@@ -225,7 +228,7 @@ _pulse_stream="$(printf '%s' "${_pulse_resp}" | jq \
   --arg id "${STREAM_ID}" \
   '(.items // .streams // []) | map(select(.stream_id == $id)) | first // {}' \
   2>/dev/null || echo '{}')"
-_pulse_stream="${_pulse_stream:-{}}"
+# NOTE: do NOT add ${_pulse_stream:-{}} here — same bash brace-corruption bug.
 
 _pulse_rtt_ms="$(printf '%s' "${_pulse_stream}" | jq '.viewer_rtt_ms // 0' 2>/dev/null || echo 0)"
 _pulse_rtt_ms="${_pulse_rtt_ms:-0}"
@@ -245,8 +248,12 @@ printf 'pulse_viewer_rtt_ms=%s  expected=%s\n' "${_pulse_rtt_ms}" "${_expected_r
   >> "${EVIDENCE_DIR}/timeline.txt"
 
 # ── 7. Assertions ──────────────────────────────────────────────────────────────
-# Primary: RTT unit conversion — ±20% tolerance for inter-sample jitter
-# (AMS and Pulse sample at different moments; the conversion formula is the invariant)
+# Primary: RTT unit conversion — ±20% tolerance for inter-sample jitter.
+# SEMANTICS: When AMS reports absent/0 RTT fields (same-host loopback viewer),
+# Pulse correctly shows null (via omitempty). The jq '// 0' fallback normalises
+# null to 0, so pulse_rtt_ms=0 and expected_rtt_ms=0.000. assert_approx handles
+# b=0 by checking a==0 — PASS when AMS QoE is all-zero (correct normalisation).
+# Non-zero unit conversion validation requires a remote viewer (S19+).
 assert_approx "${_pulse_rtt_ms}" "${_expected_rtt_ms}" 20 \
   "${SCENARIO} Pulse viewer_rtt_ms ≈ AMS avgNonZero(videoRTT,audioRTT)×1000 (±20% normalize.go:185)" || true
 

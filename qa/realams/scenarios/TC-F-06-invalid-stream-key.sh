@@ -8,14 +8,14 @@
 #                 Save original settings to /tmp/claude-1000/tc-f06-orig-<epoch>.json.
 #                 Restore unconditionally in EXIT trap.
 #   Steps:        1. GET /rest/v2/applications/settings/pulse-test → save original
-#                 2. Flip publishTokenControlEnabled → true and PUT back
+#                 2. Flip publishTokenControlEnabled → true and POST back
 #                 3. Publish RTMP to pulse-test/<stream-id> WITHOUT a token
 #                 4. Wait 15 s; assert stream never reaches broadcasting on AMS
 #                 5. Assert no phantom stream in Pulse /api/v1/live/streams
 #   AMS truth:    GET /pulse-test/rest/v2/broadcasts/<id> → 404 (rejected publish)
 #   Pulse assert: GET /api/v1/live/streams → stream absent (no phantom)
-#   Restore:      PUT original settings back in EXIT trap (unconditional)
-#   Exit:         0 PASS | 1 FAIL | 77 SKIP (settings GET/PUT failed; never touch LiveApp)
+#   Restore:      POST original settings back in EXIT trap (unconditional)
+#   Exit:         0 PASS | 1 FAIL | 77 SKIP (settings GET/POST failed; never touch LiveApp)
 #
 set -euo pipefail
 
@@ -53,7 +53,7 @@ restore_settings() {
     log "CLEANUP: restoring original pulse-test settings from ${ORIG_SETTINGS_FILE}"
     _restore_resp="$(curl -s -m 20 \
       -b "$AMS_COOKIE_FILE" \
-      -X PUT \
+      -X POST \
       -H "Content-Type: application/json" \
       -d "@${ORIG_SETTINGS_FILE}" \
       "${AMS_URL}/rest/v2/applications/settings/pulse-test" 2>/dev/null || echo '{}')"
@@ -106,12 +106,12 @@ printf '%s' "${_orig_settings}" | jq . > "${EVIDENCE_DIR}/pulse-test-settings-or
 
 # Confirm current token control state (read the actual field name from the JSON)
 _orig_token_ctrl="$(printf '%s' "${_orig_settings}" | \
-  jq 'if .publishTokenControlEnabled == true then "true" else "false" end' \
+  jq -r 'if .publishTokenControlEnabled == true then "true" else "false" end' \
   2>/dev/null || echo "false")"
 log "Original pulse-test publishTokenControlEnabled: ${_orig_token_ctrl}"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Phase 2: Enable publishTokenControlEnabled and PUT back
+# Phase 2: Enable publishTokenControlEnabled and POST back
 # ─────────────────────────────────────────────────────────────────────────────
 log "Phase 2: enabling publishTokenControlEnabled on pulse-test"
 
@@ -134,7 +134,7 @@ printf '%s' "${_modified_settings}" | jq . > "${EVIDENCE_DIR}/pulse-test-setting
 
 _put_resp="$(curl -s -m 20 \
   -b "$AMS_COOKIE_FILE" \
-  -X PUT \
+  -X POST \
   -H "Content-Type: application/json" \
   -d "${_modified_settings}" \
   "${AMS_URL}/rest/v2/applications/settings/pulse-test" 2>/dev/null || echo '{}')"
@@ -164,7 +164,7 @@ _verify_resp="$(curl -s -m 20 \
   -b "$AMS_COOKIE_FILE" \
   "${AMS_URL}/rest/v2/applications/settings/pulse-test" 2>/dev/null || echo '{}')"
 _applied_flag="$(printf '%s' "${_verify_resp}" | \
-  jq 'if .publishTokenControlEnabled == true then "true" else "false" end' \
+  jq -r 'if .publishTokenControlEnabled == true then "true" else "false" end' \
   2>/dev/null || echo "false")"
 log "Verified applied publishTokenControlEnabled=${_applied_flag} on pulse-test"
 

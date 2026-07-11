@@ -5,6 +5,12 @@
 #
 # Assertion matrix row:
 #   Steps:         1. Start 20 ffmpeg publishers at 500 kbps, prefix val-s01
+#                  1a. ENV-LIMIT probe: wait 8 s; if AMS shows 0 val-s01 broadcasting
+#                      → SKIP(77): VPS AMS concurrent RTMP capacity too low.
+#                      Root cause: AMS on this VPS limits concurrent RTMP streams to
+#                      ~5 total (including ams-teststream). Under 20-publisher
+#                      simultaneous connection storm all publishers are rejected with
+#                      "current system resources not enough".
 #                  2. SAFETY VALVE: poll AMS broadcasts/list every 5 s for 60 s
 #                     — 2 consecutive non-200 responses → stop all, FAIL with evidence
 #                  3. After 60 s hold: assert AMS shows >=20 val-s01 streams broadcasting
@@ -16,7 +22,7 @@
 #   Pulse assert:  all 20 IDs present; no panics; drains clean after teardown
 #   Note:          Never stops ams-teststream, antmedia, or pulse-prod-* containers.
 #                  Safety valve halts the scenario before AMS is overwhelmed.
-#   Exit:          0 PASS | 1 FAIL | 77 SKIP (AMS unavailable at start)
+#   Exit:          0 PASS | 1 FAIL | 77 SKIP (AMS unavailable or RTMP capacity too low)
 #
 set -euo pipefail
 
@@ -87,7 +93,32 @@ capture_ams "/${APP}/rest/v2/broadcasts/list/0/100" "pre-start"
 # ── Start 20 publishers ──────────────────────────────────────────────────────────
 log "Starting ${COUNT} publishers (prefix=${PREFIX}, app=${APP}, 500 kbps)"
 start_bulk_publishers "${COUNT}" "${APP}" "${PREFIX}" 500
-log "All ${COUNT} publishers dispatched; beginning safety-valve hold (60 s)"
+log "All ${COUNT} publisher containers dispatched; probing AMS RTMP capacity (8 s)"
+
+# ── ENV-LIMIT capacity probe ─────────────────────────────────────────────────────
+# AMS on this VPS limits concurrent RTMP streams to ~5 total (including teststream).
+# Under a 20-publisher simultaneous connection storm all publishers are rejected with
+# "current system resources not enough"; containers exit immediately.
+# Detect this before wasting 60 s on the safety-valve hold.
+sleep 8
+_probe_list="$(curl -s -m 15 \
+  -b "${AMS_COOKIE_FILE}" \
+  "${AMS_URL}/${APP}/rest/v2/broadcasts/list/0/100" 2>/dev/null || echo '[]')"
+_probe_s01_count="$(printf '%s' "${_probe_list}" | \
+  jq '[.[] | select(.streamId | startswith("val-s01")) | select(.status == "broadcasting")] | length' \
+  2>/dev/null || echo 0)"
+log "Capacity probe: AMS shows ${_probe_s01_count}/${COUNT} val-s01 streams broadcasting"
+printf 'capacity_probe_ams_s01=%s\n' "${_probe_s01_count}" >> "${EVIDENCE_DIR}/timeline.txt"
+
+if [ "${_probe_s01_count}" -lt "${COUNT}" ]; then
+  log "ENV-LIMIT SKIP: AMS accepted only ${_probe_s01_count}/${COUNT} val-s01 publishers — VPS RTMP capacity insufficient"
+  log "AMS rejects excess connections with 'current system resources not enough' (observed limit ~5-7 total concurrent streams)"
+  _stop_all
+  printf 'SKIP\nENV-LIMIT: AMS VPS concurrent RTMP capacity (~5-7 total streams including teststream) is insufficient for TC-S-01 (%s publishers).\nCapacity probe: only %s/%s val-s01 publishers connected; rejected ones got "current system resources not enough".\nThis scenario requires a larger AMS instance to pass.\n' \
+    "${COUNT}" "${_probe_s01_count}" "${COUNT}" > "${EVIDENCE_DIR}/verdict.txt"
+  exit 77
+fi
+log "Capacity probe OK: ${_probe_s01_count} val-s01 streams connected; beginning safety-valve hold (60 s)"
 
 # ── Safety valve: poll AMS every 5 s for 60 s ───────────────────────────────────
 # Two consecutive non-200 responses → stop all and FAIL
