@@ -622,6 +622,46 @@ pins → 360 tests; light value escalated to proposals/D-079-linkbody-token-prop
 §7 — no invented colors, D-071). WO-D: protection/dependabot/prod all clean.
 Prompt: `sessions/SESSION-17.md`; ledger: decisions.md D-079.
 
+### S18 — validation program P1 + doc-gaps ✅ DONE (D-080, 2026-07-11)
+**Result:** WO-A LANDED — 24 P1 scenario scripts + `make validate-p1`; **P1 final
+21 PASS / 3 SKIP / 0 FAIL**; P0 upgraded to **25/1** (TC-V-02 fixed: detached
+Playwright container died on missing NODE_PATH — invisible under `docker -d`).
+**Pulse bugs filed: BUG-003** (probe scheduler near-duplicate result rows) +
+**BUG-004** (/qoe/ingest declares-but-ignores from/to — contract violation).
+**Env/AMS findings:** VPS AMS caps at ~5–7 concurrent RTMP streams (stress
+scenarios ENV-LIMIT-skip w/ capacity probe; bigger AMS needed for TC-S-01/L-05);
+hlsViewerCount = sliding request-window (~9× session inflation, >90 s expiry lag);
+RTMP/TCP masks netem loss (packetLostRatio is UDP-only); settings mutate = POST.
+Fix round (5 diagnose agents, all retested green) caught 4 more shell/API
+landmines (memory updated). **WO-B LANDED:** documentation-gaps.md (DG-01..18 +
+S19 authoring plan). WO-C skip carry ×7 (delta green). WO-D clean; prod untouched.
+Prompt: `sessions/SESSION-18.md`; ledger: decisions.md D-080.
+
+### S19 — D-078 Phases 7+8: PRD validation matrix + final assessment draft (planned at S18 close, D-080)
+
+Execute `sessions/SESSION-19.md`. FIRST: post-license-expiry read-only AMS sweep
+(trial lapsed 2026-07-12T12:09Z, operator-waived — record what 403s/shrinks).
+
+1. **WO-A [M, PRIMARY]** Phase 7: `docs/assessment/prd-validation-matrix.md` —
+   F1–F10 verdicts (FULLY/PARTIALLY/MISSING/DIFFERENTLY/NEEDS-CLARIFICATION) from
+   the 50-scenario evidence base (P0 25/1, P1 21/3/0) + ARCHITECTURE §4 numeric
+   criteria; every verdict cites scenario/bug/AV evidence.
+2. **WO-B [M]** Phase 8: `docs/assessment/final-assessment.md` DRAFT — exec
+   summary, completeness score, marketplace checklist, missing opportunities
+   (Kafka CPU/mem, VoD REST poll, SRT loss, unsigned-webhook mode), prioritized
+   roadmap; operator reviews before anything goes external.
+3. **WO-C [S]** Phase 6 tail: author the top-priority docs from
+   documentation-gaps.md §authoring-plan (DG-04 webhook, DG-07 beacon guide,
+   DG-11 lifecycle semantics first).
+4. **WO-D [S, gate ≥07-23]** CI promotions (csp-e2e lands AT the gate; web-e2e
+   ~07-25) — if S19 runs ≥07-23: JOB-streak re-measure then FULL-LIST PUT +
+   GET-diff; else skip carry ×8.
+5. **WO-E [XS]** standing re-checks + operator answers (AMS-reset confirm,
+   browser-accept, brandkit token proposals, Kafka yes/no, marketplace contact).
+
+*(Backlog-if-light: remote-host WebRTC viewer for non-zero viewer-QoE parity;
+SRT publisher for real packet-loss validation; BUG-002 VoD REST-poll design note.)*
+
 ### S17 (original plan) — Pulse × AMS validation program launch (D-078) + CI-promotion date gate (planned at S16 close, D-077)
 
 Execute `sessions/SESSION-17.md`. The operator's D-078 directive (real-validation &

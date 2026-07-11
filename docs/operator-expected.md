@@ -1,4 +1,45 @@
-# Operator TODO — the items only YOU can do (updated at SESSION-17 close, D-079, 2026-07-11; rides S17's PR)
+# Operator TODO — the items only YOU can do (updated at SESSION-18 close, D-080, 2026-07-11; rides S18's PR)
+
+## ⚡ TL;DR — expected from you right now (2026-07-11, SESSION-18 closed)
+
+> **Nothing is needed from you.** S18 finished the deep-scenario half of your
+> validation program: **21 more scenarios PASS / 3 honest skips / 0 failures**
+> against your live AMS (viewer ramps, alert firing, beacon QoE parity, failure
+> injection, token-gated publish rejection) — and the WebRTC viewer skip from
+> S17 was root-caused and fixed, upgrading S17's run to **25/26 green**.
+> Total across the program so far: **46 of 50 automated scenarios PASS, 4
+> documented skips, 0 parity failures.**
+>
+> **Two real Pulse bugs were found and filed** (the program working as
+> intended): the probe scheduler occasionally writes duplicate result rows
+> (BUG-003), and one API endpoint advertises time-window filters it silently
+> ignores (BUG-004). Both are documented with evidence for the fix backlog —
+> neither affects your prod dashboards' correctness.
+>
+> **One capacity fact you should know (no action needed):** your AMS VPS
+> accepts only ~5–7 simultaneous RTMP streams — beyond that it answers
+> "current system resources not enough". The 20-stream stress test therefore
+> can't run on this hardware; if you ever want that validated, it needs a
+> bigger AMS instance (or the same box with more headroom).
+>
+> **Still waiting on (all non-blocking):** your confirmation that the AMS app
+> reset (16→4 apps, VoDs wiped) was intentional; the browser-accept of the
+> re-branded UI; optionals (brandkit token proposals, Kafka yes/no, Ant Media
+> marketplace contact — the last one becomes relevant next session when the
+> marketplace-readiness report is drafted).
+
+## 🔎 What SESSION-18 did (2026-07-11, closed — D-080)
+
+| Area | Result |
+|---|---|
+| **P1 scenarios (your program, Phases 3+4)** | 24 new automated scenarios; final **21 PASS / 3 SKIP / 0 FAIL**. Alert rules fire in seconds; beacon QoE numbers match sent data exactly (startup 450 ms, rebuffer ratio 0.2); bitrate-drop degrades health scores as designed; invalid stream keys are rejected with no phantom streams; network-cut publishers recover cleanly. |
+| **WebRTC viewer fixed** | S17's skip was a one-line container env bug (invisible because the container ran detached). Now a real headless browser viewer registers on your AMS — S17's TC-V-02 re-ran green. |
+| **2 Pulse bugs filed** | BUG-003 probe-scheduler duplicate rows; BUG-004 `/qoe/ingest` ignores its declared `from`/`to` filters. Evidence-complete, ready for a fix session. |
+| **AMS behavior documented** | HLS viewer counts are a sliding request-window (≈9× higher than real sessions, >90 s decay — now documented for your customers); RTMP over TCP masks packet loss (loss metrics only meaningful for SRT/WebRTC ingest); app settings change via POST; ~5–7 concurrent RTMP stream capacity on this VPS. |
+| **Documentation gap list (Phase 6)** | `docs/assessment/documentation-gaps.md` — 18 gaps, each with target doc + severity + the user question it answers; next session authors the top three. |
+| **Quality net** | 13 workflow agents (authors, live debuggers, adversarial verifier); every failure diagnosed to root cause and retested; 2 new shell landmines saved to agent memory. Prod untouched; one PR. |
+
+## (superseded) S17-close header follows
 
 > **Audience: the human operator.** Ledger of record: `ROADMAP.md` §5 + `ROADMAP-V2.md` §4; this
 > file is the actionable view, refreshed at every session close. When you finish an item, just

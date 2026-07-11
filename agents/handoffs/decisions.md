@@ -3786,3 +3786,41 @@ ROADMAP-V2 §3 S17. Program docs ride the S16 close PR.
   bitrate×watch-time ESTIMATE, not the matrix's "always 0"; scenario authored
   against the estimate semantics.
 - Branch `s18-d080`; PR-first, ≤2 pushes (D-076).
+
+**S18 CLOSE (same session, D-080 evidence):**
+- **WO-A DELIVERED — D-078 Phases 3+4 P1: final 21 PASS / 3 SKIP / 0 FAIL** (24
+  scenarios; SKIPs are findings, not failures: TC-V-06 AMS hlsViewerCount expiry
+  lags >90 s; TC-L-05 + TC-S-01 ENV-LIMIT — **this VPS's AMS accepts only ~5–7
+  concurrent RTMP streams**, rejects the rest with "current system resources not
+  enough"; capacity probe added, stress re-runs need a bigger AMS instance).
+  **P0 upgraded: TC-V-02 now PASS → P0 = 25 PASS / 1 SKIP** after the WebRTC-viewer
+  fix (root cause: detached Playwright container died on module resolution —
+  NODE_PATH missing; invisible under docker -d).
+- **Pulse bugs filed:** BUG-003 (probe scheduler emits near-duplicate result rows
+  0–1 ms apart, phase-aligned ~60 s — two execution paths suspected); BUG-004
+  (/qoe/ingest declares from/to in OpenAPI but ignores them — contract violation,
+  TC-I-04 root cause; also argues for the §6 response-body contract tests).
+- **AMS-semantics findings (documented in scenarios + doc-gaps):** hlsViewerCount
+  is a sliding request-window metric (5 real-player viewers → count 45; ~9×
+  session inflation; expiry lag >90 s) → DG-01 evidence; RTMP/TCP masks transport
+  loss (netem 10% → packetLostRatio stays 0; UDP-only semantics) → DG-18;
+  settings mutate is POST (PUT → 405); publishTokenControlEnabled round-trip
+  works and token-gated publish rejection verified (TC-F-06 PASS).
+- **Fix-round scenario bugs (5 diagnose agents, all retested green):** /qoe/summary
+  cross-scenario beacon bleed → ?stream= scoping; era-mixed timeseries bucket →
+  live-aggregator read; bash `${var:-{}}` stray-brace corruption; jq-without--r
+  quoted-boolean compares. Memory shell-harness-false-green-patterns extended
+  with both new landmines.
+- **WO-B DELIVERED:** docs/assessment/documentation-gaps.md — 18 traceable gaps
+  (DG-01..18) incl. the S17/S18 drift class, with an S19 authoring priority plan.
+- **WO-C:** gate CLOSED (07-11 < 07-23) → skip carry ×7; delta re-measure: the
+  single new e2e+ci run pair since S17's ceiling is green (jobs e2e, csp-e2e,
+  web-e2e all success); 9 contexts unchanged; csp-e2e candidate 07-23, web-e2e
+  ~07-25.
+- **WO-D:** done at open (protection exact, dependabot zero, prod healthy
+  read-only, prod untouched all session).
+- **Gates:** bash -n all 50 scenario + 7 harness scripts clean; only qa/ + docs
+  touched (no Go/web/sdk/contract changes → no code gates due); CI full matrix on
+  the PR. Ops: pulse-realams stack left running; one pulse-test VoD + the S17
+  evidence conventions stand; AMS trial license expires 2026-07-12T12:09Z →
+  S19 opens with the post-expiry read-only sweep.
