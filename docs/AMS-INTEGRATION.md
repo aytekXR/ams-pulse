@@ -42,6 +42,31 @@ is a **0..1 fraction** (×100 → pct); `currentFPS` is **absent** from the REST
 broadcast object on AMS 3.0.3 (health scoring redistributes the FPS weight);
 `terminated_unexpectedly` is a real broadcast status (crash) → emit publish_end.
 
+> **⚠️ Implicit RTMP broadcasts (S17 live finding, D-079):**
+> AMS 3.0.3 auto-creates a broadcast object when an RTMP publisher connects
+> **without** a prior `POST /{app}/rest/v2/broadcasts/create`.  While the
+> publisher is live the object appears in `ListBroadcastsPaged` with
+> `status=broadcasting`.  When the publisher disconnects, AMS **deletes** the
+> object entirely — `GET /{app}/rest/v2/broadcasts/{streamId}` returns HTTP 404
+> immediately; the broadcast **never** transitions to `status=finished` or
+> `status=terminated_unexpectedly`.  Those two terminal statuses have been
+> observed only on REST-pre-created broadcasts (S17 presumption; direct S18
+> verification pending).  This is the normal RTMP workflow; pre-creating
+> a broadcast is optional, not required for publishing.
+>
+> Pulse handles this correctly: `detectEnded()` (`restpoller.go:222–265`) fires
+> when a `status=broadcasting` stream that was present in the previous poll
+> cycle is **absent** from the current broadcast list.  It emits
+> `EventStreamPublishEnd` with `reason: "disappeared"` — not `reason:
+> "finished"`.  The stream disappears from `GET /api/v1/live/streams` within
+> one poll cycle; D-079 live evidence measured 7 s in practice (PRD ≤10 s).
+>
+> **Developer implication:** integrations that poll `GET /api/v1/live/streams`
+> or the AMS REST API looking for `status: finished` on an implicit RTMP
+> broadcast will never see it.  Treat a broadcast's **absence from the active
+> list** as its terminal state; do not wait for `status: finished`.  See
+> DG-11 (scenario-matrix.md S17 Corrections #2) for the test evidence.
+
 Auth (D-029): AMS 3.0.3 Enterprise has JWT disabled (`jwtServerControlEnabled=false`),
 so amsclient uses **cookie-session** auth — `POST /rest/v2/users/authenticate
 {email,password}` → JSESSIONID via a custom IP-safe cookie jar, with re-login +
@@ -353,6 +378,39 @@ sg docker -c "docker compose $DC restart caddy"
 > interval) is the supported AMS ingest and already meets the ≤10 s visibility
 > budget. The webhook path is for HMAC-capable senders (custom middleware, a
 > signing proxy, or a future AMS version that signs hooks).
+>
+> **Downstream impact of absent webhook delivery:**
+>
+> - `recording_gb` in `GET /api/v1/reports/usage` is **always 0** on an AMS
+>   3.0.3 deployment.  VoD recording-size data arrives only via the `vodReady`
+>   webhook event; Pulse has no REST-poll path for VoD lists
+>   (`/{app}/rest/v2/vods/list/...` is not polled).  This is
+>   **BUG-002** on the roadmap (AV-09 CONFIRMED).
+> - Stream start/stop visibility is **not** degraded.  The REST poller
+>   (`detectEnded` in `restpoller.go`) detects stream appearance and
+>   disappearance from the broadcast list within 4–7 s on the production AMS
+>   (D-079 live evidence); the PRD ≤10 s budget is met.  The
+>   `liveStreamStarted`/`liveStreamEnded` webhook events are simply not
+>   delivered, but REST polling already covers this path; there is no net
+>   latency regression versus a correctly-signed webhook deployment.
+>
+> **Workarounds:**
+>
+> - *Stream lifecycle:* REST polling is complete and sufficient.  No operator
+>   action required.
+> - *VoD recording tracking:* No current workaround.  A REST-poll fallback
+>   (`/{app}/rest/v2/vods/list/{offset}/{size}`) is the planned fix
+>   (BUG-002 roadmap item); `recording_gb` will remain 0 until BUG-002 is
+>   implemented.
+>
+> **Future path — D-V2-1 (OPEN decision):**
+>
+> Two options are under consideration (agents/handoffs/ROADMAP-V2.md §2.6, D-V2-1):
+> (a) build an unsigned-webhook ingest mode gated on a `PULSE_WEBHOOK_ALLOW_UNSIGNED_SOURCES`
+> IP CIDR allowlist env var so AMS 3.x hook deliveries from a known IP are
+> accepted without HMAC; (b) maintain REST-poll-only indefinitely.  No
+> code exists for option (a).  The operator must decide the preferred option
+> before any build work begins on D-V2-1.
 
 **Shared route (legacy, all sources):**
 
