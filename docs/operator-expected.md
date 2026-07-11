@@ -31,6 +31,15 @@
 > restored to off; the VoD stays as standing test evidence. Test streams named
 > `val-*` may appear/disappear on LiveApp while validation suites run.
 
+## 📣 SESSION-18 load heads-up (2026-07-11, in progress — D-080)
+
+> Per our protocol ("sessions will tell you before any load beyond a handful of
+> test streams/viewers"): **S18 runs the 20-concurrent-publisher stress scenario
+> (TC-S-01) on your AMS today** — low bitrate (500 kbps each), ~2 minutes, run
+> last in the batch, health-monitored, all streams named `val-*` and cleaned up
+> after. Also up to ~30 simulated HLS viewers during the viewer-ramp scenario.
+> Nothing is needed from you; this is the notify-before-load notice.
+
 ## 🔎 What SESSION-17 did (2026-07-11, closed — D-079)
 
 | Area | Result |

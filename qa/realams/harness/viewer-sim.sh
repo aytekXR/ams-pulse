@@ -201,6 +201,12 @@ JSEOF
   run_cmd="${run_cmd} -w /work"
   run_cmd="${run_cmd} -v ${_WEB_DIR}:/work"
   run_cmd="${run_cmd} -v ${_VIEWER_PID_DIR}:${_VIEWER_PID_DIR}"
+  # NODE_PATH lets the script resolve `require('playwright')` against the
+  # web/ node_modules even though the JS file lives outside /work.
+  # Without this, Node walks up from /tmp/claude-1000/ and never finds
+  # playwright — the container exits immediately and webRTCViewerCount
+  # never rises (root cause of TC-V-02 SKIP in S17).
+  run_cmd="${run_cmd} -e NODE_PATH=/work/node_modules"
   run_cmd="${run_cmd} ${_PLAYWRIGHT_IMAGE}"
   run_cmd="${run_cmd} node ${JS_FILE}"
 
