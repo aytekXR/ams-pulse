@@ -50,7 +50,10 @@ printf 'ams_versionName=%s\nams_versionType=%s\n' "${_ams_version_name}" "${_ams
   >> "${EVIDENCE_DIR}/timeline.txt"
 
 assert_eq "${_ams_version_name}" "3.0.3" "${SCENARIO} AMS versionName=3.0.3 (ground truth)" || true
-assert_eq "${_ams_version_type}" "Enterprise" "${SCENARIO} AMS versionType=Enterprise (ground truth)" || true
+# S17 live: this build reports versionType="Enterprise Edition" (S16 capture
+# said "Enterprise") — accept the Enterprise* family, record the exact string.
+case "${_ams_version_type}" in Enterprise*) _vt_family="Enterprise" ;; *) _vt_family="${_ams_version_type}" ;; esac
+assert_eq "${_vt_family}" "Enterprise" "${SCENARIO} AMS versionType is Enterprise-family (observed: ${_ams_version_type})" || true
 
 # ── Pulse fleet/nodes ────────────────────────────────────────────────────────
 log "Pulse: GET /api/v1/fleet/nodes"

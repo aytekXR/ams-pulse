@@ -61,7 +61,7 @@ _broadcasting=0
 _i=0
 while [ "${_i}" -lt 15 ]; do
   _st="$(curl -s -m 10 "${AMS_URL}/LiveApp/rest/v2/broadcasts/${STREAM_ID}" \
-    | jq -r '.status // "unknown"')"
+    | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")"
   if [ "${_st}" = "broadcasting" ]; then
     log "AMS status=broadcasting after $(( _i * 2 )) s"
     _broadcasting=1
@@ -124,10 +124,10 @@ log "Snapshots captured"
 _ams_broadcast="$(curl -s -m 10 "${AMS_URL}/LiveApp/rest/v2/broadcasts/${STREAM_ID}")"
 
 # AMS sum: hls + webrtc + dash; clamp negative rtmpViewerCount to 0
-_ams_hls="$(printf '%s' "${_ams_broadcast}" | jq '.hlsViewerCount // 0')"
-_ams_wrtc="$(printf '%s' "${_ams_broadcast}" | jq '.webRTCViewerCount // 0')"
-_ams_rtmp_raw="$(printf '%s' "${_ams_broadcast}" | jq '.rtmpViewerCount // 0')"
-_ams_dash="$(printf '%s' "${_ams_broadcast}" | jq '.dashViewerCount // 0')"
+_ams_hls="$(printf '%s' "${_ams_broadcast}" | jq '.hlsViewerCount // 0' 2>/dev/null || echo 0)"
+_ams_wrtc="$(printf '%s' "${_ams_broadcast}" | jq '.webRTCViewerCount // 0' 2>/dev/null || echo 0)"
+_ams_rtmp_raw="$(printf '%s' "${_ams_broadcast}" | jq '.rtmpViewerCount // 0' 2>/dev/null || echo 0)"
+_ams_dash="$(printf '%s' "${_ams_broadcast}" | jq '.dashViewerCount // 0' 2>/dev/null || echo 0)"
 
 # Clamp negative rtmp to 0 per scenario-matrix / AV-16
 _ams_rtmp="$(awk -v r="${_ams_rtmp_raw}" 'BEGIN { print (r < 0) ? 0 : r }')"

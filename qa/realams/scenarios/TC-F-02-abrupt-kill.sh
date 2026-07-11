@@ -100,10 +100,16 @@ _ams_status_after=""
 _ams_crash_conv=999   # sentinel: exceeded 120 s budget
 _i=0
 while [ "${_i}" -lt 40 ]; do
-  _ams_status_after="$(curl -s -m 10 \
-    "${AMS_URL}/LiveApp/rest/v2/broadcasts/${STREAM_ID}" \
-    | jq -r '.status // "unknown"' 2>/dev/null || echo "curl_error")"
-  if [ "${_ams_status_after}" = "terminated_unexpectedly" ]; then
+  _poll_body="/tmp/claude-1000/ams-poll-$$.json"
+  _http_code="$(curl -s -m 10 -o "${_poll_body}" -w '%{http_code}' \
+    "${AMS_URL}/LiveApp/rest/v2/broadcasts/${STREAM_ID}" 2>/dev/null || echo 000)"
+  if [ "${_http_code}" = "404" ]; then
+    _ams_status_after="removed"
+  else
+    _ams_status_after="$(jq -r '.status // "unknown"' "${_poll_body}" 2>/dev/null || echo "curl_error")"
+  fi
+  rm -f "${_poll_body}"
+  if [ "${_ams_status_after}" = "terminated_unexpectedly" ] || [ "${_ams_status_after}" = "removed" ]; then
     _ams_crash_conv=$(( (_i + 1) * 3 ))
     log "AMS status=terminated_unexpectedly — observed latency ${_ams_crash_conv} s"
     break
@@ -142,8 +148,9 @@ capture_pulse "/live/streams" "after-kill"
 # ── Assertions ────────────────────────────────────────────────────────────────────
 log "ASSERT: AMS terminated_unexpectedly  Pulse stream absent from /live/streams"
 
-assert_eq "${_ams_status_after}" "terminated_unexpectedly" \
-  "${SCENARIO} AMS status=terminated_unexpectedly after SIGKILL" || true
+_ams_terminal="not_terminal"; case "${_ams_status_after}" in terminated_unexpectedly|removed) _ams_terminal="terminal";; esac
+# S17 live finding: implicit RTMP broadcasts may be DELETED (GET 404) rather than flagged terminated_unexpectedly
+assert_eq "${_ams_terminal}" "terminal" "${SCENARIO} AMS terminal after SIGKILL (terminated_unexpectedly|removed-404; observed: ${_ams_status_after})" || true
 assert_eq "${_pulse_gone}" "0" \
   "${SCENARIO} Pulse stream removed from /live/streams after abrupt kill" || true
 

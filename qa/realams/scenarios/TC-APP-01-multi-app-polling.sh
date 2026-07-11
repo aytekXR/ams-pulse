@@ -63,8 +63,11 @@ printf '%s\n' "${_app_list}" | jq . > "${EVIDENCE_DIR}/ams-app-list.json" 2>/dev
 
 # Extract app names (AMS returns app objects; name field varies by AMS version)
 # Try .name then .application_name then treat each element as a string
+# NB: elements are plain STRINGS on AMS 3.0.3 — `.name` on a string is a hard
+# jq error (not null), so type-dispatch instead of `//`-chaining.
 _app_names="$(printf '%s' "${_app_list}" | \
-  jq -r '.[] | (.name // .application_name // .)' 2>/dev/null | sort || true)"
+  jq -r '.[] | if type == "object" then (.name // .application_name // empty) else . end' \
+  2>/dev/null | sort || true)"
 
 log "AMS app names: $(printf '%s' "${_app_names}" | tr '\n' ' ')"
 printf 'ams_app_count=%s\nams_apps=%s\n' \

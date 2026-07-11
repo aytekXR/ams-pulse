@@ -81,7 +81,22 @@ printf 'ams_total_vod_count=%s\nams_total_vod_size_bytes=%s\nams_total_vod_size_
   "${_total_vod_count}" "${_total_vod_size_bytes}" "${_total_vod_size_gb}" \
   >> "${EVIDENCE_DIR}/timeline.txt"
 
-# Ground truth: AMS must have VoDs for this test to be meaningful
+# Ground truth: AMS must have VoDs for this test to be meaningful.
+# S17 drift: the app reset wiped the S16-era VoDs (was ~1006/24 GB in
+# WebRTCAppEE) — with zero VoDs the gap has no live contrast to demonstrate,
+# so SKIP with instructions rather than FAIL (the Pulse-side recording_gb==0
+# plus the code-level webhook chain still back BUG-002).
+if [ "${_total_vod_count}" -eq 0 ]; then
+  {
+    echo "SKIP"
+    echo "Premise unmet: AMS currently has zero VoDs in every app — nothing to"
+    echo "contrast recording_gb=0 against. Create one: enable mp4 muxing on a"
+    echo "test app (POST /rest/v2/applications/settings/pulse-test with"
+    echo "mp4MuxingEnabled=true), publish ~20 s, stop, re-run this scenario."
+  } > "${EVIDENCE_DIR}/verdict.txt"
+  cat "${EVIDENCE_DIR}/verdict.txt" >&2
+  exit 77
+fi
 assert_gte "${_total_vod_count}" 1 "${SCENARIO} AMS vodCount > 0 (VoDs exist, ground truth)" || true
 
 # ── Step 2: Pulse usage report ────────────────────────────────────────────────

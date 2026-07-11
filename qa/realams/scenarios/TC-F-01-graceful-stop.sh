@@ -90,10 +90,16 @@ _ams_status_after=""
 _ams_stop_conv=999   # sentinel: exceeded 30 s budget
 _i=0
 while [ "${_i}" -lt 10 ]; do
-  _ams_status_after="$(curl -s -m 10 \
-    "${AMS_URL}/LiveApp/rest/v2/broadcasts/${STREAM_ID}" \
-    | jq -r '.status // "unknown"' 2>/dev/null || echo "curl_error")"
-  if [ "${_ams_status_after}" = "finished" ]; then
+  _poll_body="/tmp/claude-1000/ams-poll-$$.json"
+  _http_code="$(curl -s -m 10 -o "${_poll_body}" -w '%{http_code}' \
+    "${AMS_URL}/LiveApp/rest/v2/broadcasts/${STREAM_ID}" 2>/dev/null || echo 000)"
+  if [ "${_http_code}" = "404" ]; then
+    _ams_status_after="removed"
+  else
+    _ams_status_after="$(jq -r '.status // "unknown"' "${_poll_body}" 2>/dev/null || echo "curl_error")"
+  fi
+  rm -f "${_poll_body}"
+  if [ "${_ams_status_after}" = "finished" ] || [ "${_ams_status_after}" = "removed" ]; then
     _ams_stop_conv=$(( (_i + 1) * 3 ))
     log "AMS status=finished — convergence ${_ams_stop_conv} s"
     break
@@ -141,7 +147,9 @@ log "ASSERT: AMS status=finished  Pulse stream gone  convergence ≤30 s each"
   printf '  Assertion covered by live-list disappearance + AMS status=finished.\n'
 } >> "${EVIDENCE_DIR}/timeline.txt"
 
-assert_eq "${_ams_status_after}" "finished" "${SCENARIO} AMS status=finished after graceful stop" || true
+_ams_terminal="not_terminal"; case "${_ams_status_after}" in finished|removed) _ams_terminal="terminal";; esac
+# S17 live finding: implicit RTMP broadcasts are DELETED on stop (GET 404), not marked finished
+assert_eq "${_ams_terminal}" "terminal" "${SCENARIO} AMS terminal after graceful stop (finished|removed-404; observed: ${_ams_status_after})" || true
 assert_eq "${_pulse_gone}" "0" "${SCENARIO} Pulse stream removed from /live/streams" || true
 assert_lte "${_ams_stop_conv}" 30 "${SCENARIO} AMS finished convergence ≤30 s" || true
 assert_lte "${_pulse_stop_conv}" 30 "${SCENARIO} Pulse removal convergence ≤30 s" || true

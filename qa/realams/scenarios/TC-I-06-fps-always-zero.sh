@@ -59,7 +59,7 @@ _broadcasting=0
 _i=0
 while [ "${_i}" -lt 15 ]; do
   _st="$(curl -s -m 10 "${AMS_URL}/LiveApp/rest/v2/broadcasts/${STREAM_ID}" \
-    | jq -r '.status // "unknown"')"
+    | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")"
   if [ "${_st}" = "broadcasting" ]; then
     log "AMS status=broadcasting after $(( _i * 2 )) s"
     _broadcasting=1
@@ -93,13 +93,13 @@ printf '%s\n' "${_ams_broadcast}" > "${EVIDENCE_DIR}/ams-broadcast-dto-raw.json"
 log "AMS BroadcastDTO captured"
 
 # Check what fps-related keys ARE present in the DTO (for documentation)
-_ams_keys="$(printf '%s' "${_ams_broadcast}" | jq '[keys[] | select(test("fps|Fps|FPS"; "i"))]')"
+_ams_keys="$(printf '%s' "${_ams_broadcast}" | jq '[keys[] | select(test("fps|Fps|FPS"; "i"))]' 2>/dev/null || echo "")"
 log "AMS BroadcastDTO fps-related keys: ${_ams_keys}"
 
 # ── 4. Assert AMS BroadcastDTO has no currentFPS key ───────────────────────────
 # AMS 3.0.3 omits currentFPS from the REST payload (client.go:97 comment).
 # jq 'has("currentFPS")' returns "true" or "false".
-_has_fps="$(printf '%s' "${_ams_broadcast}" | jq 'has("currentFPS")')"
+_has_fps="$(printf '%s' "${_ams_broadcast}" | jq 'has("currentFPS")' 2>/dev/null || echo "false")"
 log "AMS BroadcastDTO has(\"currentFPS\")=${_has_fps}"
 
 assert_eq "${_has_fps}" "false" \

@@ -5,7 +5,7 @@
 #
 # Assertion matrix row:
 #   Steps:        1. Start publisher val-p04-<epoch> on LiveApp
-#                 2. Create HLS probe → http://<ams>/LiveApp/streams/<id>/playlist.m3u8
+#                 2. Create HLS probe → http://<ams>/LiveApp/streams/<id>.m3u8
 #                 3. Poll /api/v1/probes/{id}/results up to 180 s
 #   AMS truth:    AMS serves valid M3U8 playlist (stream broadcasting)
 #   Pulse assert: success=true, ttfb_ms > 0, bitrate_kbps > 0, segment_ttfb_ms > 0
@@ -35,7 +35,7 @@ mkdir -p "${EVIDENCE_DIR}"
 export EVIDENCE_DIR
 
 PROBE_ID=""
-PROBE_HLS_URL="${AMS_URL}/LiveApp/streams/${STREAM_ID}/playlist.m3u8"
+PROBE_HLS_URL="${AMS_URL}/LiveApp/streams/${STREAM_ID}.m3u8"
 
 # ── Timeline log ─────────────────────────────────────────────────────────────
 log() { printf '[%s] %s\n' "$(date -u +%H:%M:%SZ)" "$*" | tee -a "${EVIDENCE_DIR}/timeline.txt" >&2; }
@@ -71,7 +71,7 @@ while [ "${_i}" -lt 14 ]; do
   if [ "${_ams_status}" = "broadcasting" ] && [ "${_hls_ready}" = "false" ]; then
     # Verify M3U8 is available
     _hls_code="$(curl -s -m 10 -o /dev/null -w '%{http_code}' \
-      "${AMS_URL}/LiveApp/streams/${STREAM_ID}/playlist.m3u8" 2>/dev/null || echo 0)"
+      "${AMS_URL}/LiveApp/streams/${STREAM_ID}.m3u8" 2>/dev/null || echo 0)"
     if [ "${_hls_code}" = "200" ]; then
       _hls_ready=true
       log "AMS: broadcasting + HLS ready after $(( (_i + 1) * 3 )) s (HTTP ${_hls_code})"

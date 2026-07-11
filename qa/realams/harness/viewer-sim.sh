@@ -50,7 +50,7 @@ start_hls_viewer() {
   local ID="$1"
   local APP="${2:-LiveApp}"
   local VIEWER_ID="${3:-viewer-001}"
-  local PLAYLIST="${AMS_URL}/${APP}/streams/${ID}/playlist.m3u8"
+  local PLAYLIST="${AMS_URL}/${APP}/streams/${ID}.m3u8"
   local PID_FILE="${_VIEWER_PID_DIR}/hls-viewer-${VIEWER_ID}.pid"
 
   mkdir -p "$_VIEWER_PID_DIR"

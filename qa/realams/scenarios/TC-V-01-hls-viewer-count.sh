@@ -56,7 +56,7 @@ log "Waiting for AMS to show broadcasting status (budget: 30 s)"
 _i=0
 while [ "${_i}" -lt 15 ]; do
   _st="$(curl -s -m 10 "${AMS_URL}/LiveApp/rest/v2/broadcasts/${STREAM_ID}" \
-    | jq -r '.status // "unknown"')"
+    | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")"
   if [ "${_st}" = "broadcasting" ]; then
     log "AMS status=broadcasting after $(( _i * 2 )) s"
     break
@@ -78,7 +78,7 @@ _converge_s=-1
 _i=0
 while [ "${_i}" -lt 30 ]; do
   _ams_hls="$(curl -s -m 10 "${AMS_URL}/LiveApp/rest/v2/broadcasts/${STREAM_ID}" \
-    | jq '.hlsViewerCount // 0')"
+    | jq '.hlsViewerCount // 0' 2>/dev/null || echo 0)"
   if [ "${_ams_hls}" -ge 1 ] 2>/dev/null; then
     _converge_s=$(( _i * 2 ))
     log "AMS hlsViewerCount=${_ams_hls} — converged after ${_converge_s} s"
@@ -106,7 +106,7 @@ log "Snapshots captured"
 
 # ── 6. Read assertion values ────────────────────────────────────────────────────
 _ams_broadcast="$(curl -s -m 10 "${AMS_URL}/LiveApp/rest/v2/broadcasts/${STREAM_ID}")"
-_ams_hls_final="$(printf '%s' "${_ams_broadcast}" | jq '.hlsViewerCount // 0')"
+_ams_hls_final="$(printf '%s' "${_ams_broadcast}" | jq '.hlsViewerCount // 0' 2>/dev/null || echo 0)"
 
 _pulse_resp="$(curl -s -m 10 \
   -H "Authorization: Bearer ${PULSE_TOKEN}" \

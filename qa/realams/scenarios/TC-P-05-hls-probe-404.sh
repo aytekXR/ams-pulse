@@ -34,7 +34,7 @@ PROBE_ID=""
 
 # Use a stream ID that provably does not exist
 _NONEXISTENT_ID="val-p05-no-stream-${EPOCH}"
-PROBE_HLS_URL="${AMS_URL}/LiveApp/streams/${_NONEXISTENT_ID}/playlist.m3u8"
+PROBE_HLS_URL="${AMS_URL}/LiveApp/streams/${_NONEXISTENT_ID}.m3u8"
 
 # ── Timeline log ─────────────────────────────────────────────────────────────
 log() { printf '[%s] %s\n' "$(date -u +%H:%M:%SZ)" "$*" | tee -a "${EVIDENCE_DIR}/timeline.txt" >&2; }

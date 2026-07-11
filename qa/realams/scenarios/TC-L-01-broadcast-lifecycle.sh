@@ -115,21 +115,30 @@ _stop_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 log "Stopping publisher ${STREAM_ID} gracefully at ${_stop_ts}"
 stop_publisher "${STREAM_ID}"
 
-# ── Poll AMS for finished (≤30 s) ────────────────────────────────────────────────
-log "Polling AMS for status=finished (budget: 30 s)"
+# ── Poll AMS for terminal state (≤30 s) ──────────────────────────────────────────
+# S17 live finding: implicitly-created RTMP broadcasts (no REST pre-create) are
+# DELETED on stop — GET returns 404 — instead of transitioning to "finished".
+# Both are accepted terminal forms; the observed one is recorded.
+log "Polling AMS for terminal state finished|removed-404 (budget: 30 s)"
 _ams_status_after=""
 _ams_stop_conv=999
 _i=0
 while [ "${_i}" -lt 10 ]; do
-  _ams_status_after="$(curl -s -m 10 \
-    "${AMS_URL}/LiveApp/rest/v2/broadcasts/${STREAM_ID}" \
-    | jq -r '.status // "unknown"' 2>/dev/null || echo "curl_error")"
-  if [ "${_ams_status_after}" = "finished" ]; then
+  _poll_body="/tmp/claude-1000/ams-poll-$$.json"
+  _http_code="$(curl -s -m 10 -o "${_poll_body}" -w '%{http_code}' \
+    "${AMS_URL}/LiveApp/rest/v2/broadcasts/${STREAM_ID}" 2>/dev/null || echo 000)"
+  if [ "${_http_code}" = "404" ]; then
+    _ams_status_after="removed"
+  else
+    _ams_status_after="$(jq -r '.status // "unknown"' "${_poll_body}" 2>/dev/null || echo "curl_error")"
+  fi
+  rm -f "${_poll_body}"
+  if [ "${_ams_status_after}" = "finished" ] || [ "${_ams_status_after}" = "removed" ]; then
     _ams_stop_conv=$(( (_i + 1) * 3 ))
-    log "AMS status=finished after ${_ams_stop_conv} s"
+    log "AMS terminal state=${_ams_status_after} after ${_ams_stop_conv} s"
     break
   fi
-  log "AMS status=${_ams_status_after} (attempt $(( _i + 1 ))/10)"
+  log "AMS status=${_ams_status_after} http=${_http_code} (attempt $(( _i + 1 ))/10)"
   sleep 3
   _i=$(( _i + 1 ))
 done
@@ -168,7 +177,9 @@ log "ASSERT: AMS status=finished  Pulse stream gone  convergence ≤30 s each"
   printf 'Pulse removal convergence: %s s (budget: 30 s)\n' "${_pulse_stop_conv}"
 } >> "${EVIDENCE_DIR}/timeline.txt"
 
-assert_eq "${_ams_status_after}" "finished" "${SCENARIO} AMS status=finished after stop" || true
+_ams_terminal="not_terminal"; case "${_ams_status_after}" in finished|removed) _ams_terminal="terminal";; esac
+# S17 live finding: implicit RTMP broadcasts are DELETED on stop (GET 404), not marked finished
+assert_eq "${_ams_terminal}" "terminal" "${SCENARIO} AMS terminal after stop (finished|removed-404; observed: ${_ams_status_after})" || true
 assert_eq "${_pulse_gone}" "0" "${SCENARIO} Pulse stream removed from /live/streams after stop" || true
 assert_lte "${_ams_stop_conv}" 30 "${SCENARIO} AMS finished convergence ≤30 s" || true
 assert_lte "${_pulse_stop_conv}" 30 "${SCENARIO} Pulse removal convergence ≤30 s" || true

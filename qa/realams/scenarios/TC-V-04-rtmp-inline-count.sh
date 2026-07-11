@@ -57,7 +57,7 @@ _broadcasting=0
 _i=0
 while [ "${_i}" -lt 15 ]; do
   _st="$(curl -s -m 10 "${AMS_URL}/LiveApp/rest/v2/broadcasts/${STREAM_ID}" \
-    | jq -r '.status // "unknown"')"
+    | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")"
   if [ "${_st}" = "broadcasting" ]; then
     log "AMS status=broadcasting after $(( _i * 2 )) s"
     _broadcasting=1
@@ -94,11 +94,11 @@ while [ "${_sample}" -lt 10 ]; do
 
   # val-v04 stream
   _val_dto="$(curl -s -m 10 "${AMS_URL}/LiveApp/rest/v2/broadcasts/${STREAM_ID}")"
-  _val_rtmp="$(printf '%s' "${_val_dto}" | jq '.rtmpViewerCount // 0')"
+  _val_rtmp="$(printf '%s' "${_val_dto}" | jq '.rtmpViewerCount // 0' 2>/dev/null || echo 0)"
 
   # teststream (constant publisher — always live)
   _test_dto="$(curl -s -m 10 "${AMS_URL}/LiveApp/rest/v2/broadcasts/teststream")"
-  _test_rtmp="$(printf '%s' "${_test_dto}" | jq '.rtmpViewerCount // 0')"
+  _test_rtmp="$(printf '%s' "${_test_dto}" | jq '.rtmpViewerCount // 0' 2>/dev/null || echo 0)"
 
   log "sample ${_sample}/10: val-v04.rtmpViewerCount=${_val_rtmp}  teststream.rtmpViewerCount=${_test_rtmp}"
 

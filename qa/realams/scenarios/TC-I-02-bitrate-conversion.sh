@@ -58,7 +58,7 @@ _broadcasting=0
 _i=0
 while [ "${_i}" -lt 15 ]; do
   _st="$(curl -s -m 10 "${AMS_URL}/LiveApp/rest/v2/broadcasts/${STREAM_ID}" \
-    | jq -r '.status // "unknown"')"
+    | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")"
   if [ "${_st}" = "broadcasting" ]; then
     log "AMS status=broadcasting after $(( _i * 2 )) s"
     _broadcasting=1
@@ -86,7 +86,7 @@ sleep 15
 # ── 3. Capture AMS snapshot ─────────────────────────────────────────────────────
 capture_ams "/LiveApp/rest/v2/broadcasts/${STREAM_ID}" "bitrate-stable"
 _ams_broadcast="$(curl -s -m 10 "${AMS_URL}/LiveApp/rest/v2/broadcasts/${STREAM_ID}")"
-_ams_bitrate="$(printf '%s' "${_ams_broadcast}" | jq '.bitrate // 0')"
+_ams_bitrate="$(printf '%s' "${_ams_broadcast}" | jq '.bitrate // 0' 2>/dev/null || echo 0)"
 _ams_bitrate_kbps="$(awk -v b="${_ams_bitrate}" 'BEGIN { printf "%.3f", b / 1000 }')"
 log "AMS bitrate=${_ams_bitrate} bits/sec  expected_pulse_kbps=${_ams_bitrate_kbps}"
 

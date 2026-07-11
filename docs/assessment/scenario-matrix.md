@@ -2,6 +2,33 @@
 
 **Phases:** 3 (User Scenarios) + 4 (Automated Validation Scripts)
 **Produced:** S16 close (2026-07-11)
+**Corrected:** S17 (2026-07-11) — live-verified deltas below
+
+## ⚠ S17 Corrections (live-verified against AMS 3.0.3 build 20260504_1443)
+
+The S16 matrix embedded several unverified assumptions that the first live run
+refuted. The scenario scripts under `qa/realams/scenarios/` implement the
+CORRECTED behavior; rows below are kept as originally written for provenance.
+
+1. **HLS URL form:** this build serves HLS at flat `/{app}/streams/{id}.m3u8`.
+   The `/{app}/streams/{id}/playlist.m3u8` form used in TC-P-04/TC-P-05/TC-V
+   rows always 404s (it was never valid here).
+2. **Stop semantics:** implicitly-created RTMP broadcasts (no REST pre-create)
+   are **deleted** on stop — `GET /broadcasts/{id}` → 404 — they do NOT
+   transition to `finished` (nor to `terminated_unexpectedly` on SIGKILL).
+   Terminal ground truth = `finished` **or** object-removed-404; scripts record
+   which form was observed. `finished`/`terminated_unexpectedly` presumably
+   apply to REST-pre-created broadcasts (to verify in S18).
+3. **App inventory drift:** 16 apps (8 IP-blocked) → **4 apps, all open**
+   (`LiveApp`, `WebRTCAppEE`, `live`, `pulse-test`). TC-APP-02 (403 handling)
+   has no live trigger and SKIPs until a blocked test app is created.
+   `GET /rest/v2/applications` returns an array of plain STRINGS.
+4. **`GET /rest/v2/applications/info` → HTTP 405** (S16 captured it working).
+   VoD ground truth now via per-app `GET /{app}/rest/v2/vods/count`.
+5. **`versionType` = `"Enterprise Edition"`** (S16 capture said `"Enterprise"`).
+6. **VoDs wiped** with the app reset; S17 created one small test VoD on
+   `pulse-test` (mp4 muxing temporarily enabled, then restored) so TC-WH-03 /
+   TC-A-09 keep a live ground truth.
 
 All scenarios run against real AMS 3.0.3 at `http://161.97.172.146:5080`
 and Pulse v0.3.0 at `https://beyondkaira.com` (prod) or
