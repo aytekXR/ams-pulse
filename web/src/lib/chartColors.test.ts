@@ -5,8 +5,16 @@
  * These are literal hex tests — if someone accidentally changes a hex
  * value, the test catches the regression before it ships.
  */
-import { describe, it, expect } from "vitest";
-import { CHART_COLORS, STATUS_COLORS, PROTOCOL_COLORS } from "./chartColors";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { renderHook } from "@testing-library/react";
+import { ThemeProvider } from "./ThemeContext";
+import {
+  CHART_COLORS,
+  STATUS_COLORS,
+  PROTOCOL_COLORS,
+  LIGHT_STATUS_COLORS,
+  useStatusColors,
+} from "./chartColors";
 
 describe("CHART_COLORS", () => {
   it("exports an 8-element readonly array", () => {
@@ -73,5 +81,60 @@ describe("PROTOCOL_COLORS", () => {
 
   it("other is muted dataviz[7]", () => {
     expect(PROTOCOL_COLORS.other).toBe("#7C93AD");
+  });
+});
+
+// ─── Light palette pins — tokens.json color.light ────────────────────────────
+
+describe("LIGHT_STATUS_COLORS", () => {
+  it("healthy is accessible green #0BA678 (tokens.json color.light.healthy)", () => {
+    expect(LIGHT_STATUS_COLORS.healthy).toBe("#0BA678");
+  });
+
+  it("warning is accessible amber #B45309 (tokens.json color.light.warning)", () => {
+    expect(LIGHT_STATUS_COLORS.warning).toBe("#B45309");
+  });
+
+  it("critical is accessible red #DC2626 (tokens.json color.light.critical)", () => {
+    expect(LIGHT_STATUS_COLORS.critical).toBe("#DC2626");
+  });
+
+  it("neutral is accessible grey #64748B (tokens.json color.light.neutral)", () => {
+    expect(LIGHT_STATUS_COLORS.neutral).toBe("#64748B");
+  });
+});
+
+// ─── useStatusColors hook — returns correct set per theme ────────────────────
+
+describe("useStatusColors hook", () => {
+  beforeEach(() => {
+    document.documentElement.removeAttribute("data-theme");
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    document.documentElement.removeAttribute("data-theme");
+  });
+
+  it("returns dark STATUS_COLORS when theme is dark", () => {
+    document.documentElement.setAttribute("data-theme", "dark");
+    const { result } = renderHook(() => useStatusColors(), {
+      wrapper: ThemeProvider,
+    });
+    expect(result.current.healthy).toBe("#2CE5A7");
+    expect(result.current.warning).toBe("#FFB224");
+    expect(result.current.critical).toBe("#FF5C68");
+    expect(result.current.neutral).toBe("#8296A8");
+  });
+
+  it("returns LIGHT_STATUS_COLORS when theme is light", () => {
+    document.documentElement.setAttribute("data-theme", "light");
+    const { result } = renderHook(() => useStatusColors(), {
+      wrapper: ThemeProvider,
+    });
+    expect(result.current.healthy).toBe("#0BA678");
+    expect(result.current.warning).toBe("#B45309");
+    expect(result.current.critical).toBe("#DC2626");
+    expect(result.current.neutral).toBe("#64748B");
   });
 });

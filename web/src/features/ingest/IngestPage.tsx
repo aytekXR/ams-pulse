@@ -294,7 +294,7 @@ export function IngestPage() {
                           <div style={{
                             width: `${s.health_score}%`,
                             height: "100%",
-                            background: s.health_score >= 80 ? "#2CE5A7" : s.health_score >= 50 ? "#FFB224" : "#FF5C68",
+                            background: s.health_score >= 80 ? "var(--color-success)" : s.health_score >= 50 ? "var(--color-warning)" : "var(--color-error)",
                             borderRadius: 3,
                           }} />
                         </div>

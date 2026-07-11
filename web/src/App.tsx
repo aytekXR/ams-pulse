@@ -20,6 +20,7 @@ import { useState } from "react";
 import { AuthGate } from "@/components/AuthGate";
 import { Layout } from "@/components/Layout";
 import { ToastProvider } from "@/components/Toast";
+import { ThemeProvider, DensityProvider } from "@/lib/ThemeContext";
 import { LiveDashboard } from "@/features/live/LiveDashboard";
 import { AnalyticsPage } from "@/features/analytics/AnalyticsPage";
 import { QoePage } from "@/features/qoe/QoePage";
@@ -72,9 +73,13 @@ function AppRoutes() {
 export function App() {
   return (
     <BrowserRouter>
-      <ToastProvider>
-        <AppRoutes />
-      </ToastProvider>
+      <ThemeProvider>
+        <DensityProvider>
+          <ToastProvider>
+            <AppRoutes />
+          </ToastProvider>
+        </DensityProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

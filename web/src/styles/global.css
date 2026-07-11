@@ -11,7 +11,7 @@
 @import "@fontsource/ibm-plex-mono/500.css";
 
 :root {
-  /* Background / surface scale */
+  /* Background / surface scale — dark theme (default) */
   --color-bg:           #0A0E14;
   --color-surface:      #10161D;
   --color-surface-2:    #161E27;
@@ -34,7 +34,13 @@
   --color-error:        #FF5C68;
   --color-error-bg:     rgba(255,92,104,0.1);
 
-  /* Dataviz palette (tokens.json color.dataviz) */
+  /* Accent as comma-separated RGB triplet for rgba() tints */
+  --color-accent-rgb:   44,229,167;
+
+  /* Body-link: in dark, accent-hover has sufficient contrast */
+  --color-link:         var(--color-accent-hover);
+
+  /* Dataviz palette (tokens.json color.dataviz — theme-invariant) */
   --chart-1: #2CE5A7;
   --chart-2: #58A6FF;
   --chart-3: #A78BFA;
@@ -51,6 +57,102 @@
   /* Layout */
   --nav-width:    240px;
   --header-height: 52px;
+
+  /* Motion tokens (tokens.json motion) */
+  --motion-fast: 120ms ease-out;
+  --motion-base: 200ms ease-out;
+
+  /* Density tokens — default mode (tokens.json layout + type) */
+  /* tableRowHeight=40 (authoritative; JS 44 was a phase-1 divergence) */
+  --row-height:    40px;
+  /* card padding=24 (tokens.json space[4]=24) */
+  --card-padding:  24px;
+  /* metric type size=40 (tokens.json type.metric.size) */
+  --metric-size:   40px;
+
+  /* Spacing scale (tokens.json space: [4,8,12,16,24,32,48,64,96]) */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  24px;
+  --space-6:  32px;
+  --space-7:  48px;
+  --space-8:  64px;
+  --space-9:  96px;
+
+  /* Badge semantic background vars (theme-aware; kept in :root for dark) */
+  --color-success-bg:   rgba(44,229,167,0.12);
+  --color-warning-bg:   rgba(255,178,36,0.12);
+  --color-info:         #58A6FF;
+  --color-info-bg:      rgba(88,166,255,0.1);
+}
+
+/* -------------------------------------------------------------------------
+ * Light theme overrides
+ * All 15 keys from tokens.json color.light, mapped to existing var names.
+ * --chart-* stay :root-only (dataviz palette is theme-invariant).
+ * ------------------------------------------------------------------------- */
+[data-theme="light"] {
+  --color-bg:           #F7F9FA;
+  --color-surface:      #FFFFFF;
+  --color-surface-2:    #F0F4F7;
+  --color-raised:       #F0F4F7;
+  --color-border:       #D7DEE5;
+  --color-border-strong:#C7D1DA;
+  --color-text:         #10181F;
+  --color-secondary:    #4A5B6B;
+  --color-muted:        #6B7B88;
+  --color-neutral:      #64748B;
+  --color-accent:       #0BA678;
+  --color-accent-hover: #099168;
+  --color-on-signal:    #FFFFFF;
+  --color-success:      #0BA678;
+  /* warning in light uses B-scale amber for accessible contrast (tokens.json) */
+  --color-warning:      #B45309;
+  --color-error:        #DC2626;
+  --color-error-bg:     rgba(220,38,38,0.1);
+
+  /* Accent RGB triplet for light signal #0BA678 */
+  --color-accent-rgb:   11,166,120;
+
+  /* Body link: #087A59 per design-rationale §2 (light signal on white ~3.2:1
+   * is large-text/icons only; body links need the darker value for AA body) */
+  --color-link:         #087A59;
+
+  /* Badge semantic backgrounds — light-tuned.
+   * --color-info/--color-info-bg intentionally NOT overridden: info is
+   * dataviz[1] (#58A6FF), theme-invariant like --chart-* (tokens.json has
+   * no light 'info' key — inheriting :root avoids inventing a value). */
+  --color-success-bg:   rgba(11,166,120,0.12);
+  --color-warning-bg:   rgba(180,83,9,0.12);
+}
+
+/* -------------------------------------------------------------------------
+ * Density modes
+ * Values derived on-grid from the space array (compact = space[3..4],
+ * wall = space[6..7]). ORCH ruling — flagged as derived.
+ * ------------------------------------------------------------------------- */
+[data-density="compact"] {
+  --row-height:   32px;
+  --card-padding: 16px;
+  --metric-size:  32px;
+}
+
+[data-density="wall"] {
+  --row-height:   48px;
+  --card-padding: 32px;
+  --metric-size:  64px;
+}
+
+/* -------------------------------------------------------------------------
+ * Reduced-motion: collapse all motion tokens to instant
+ * ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+  }
 }
 
 *, *::before, *::after {
@@ -70,7 +172,7 @@ html, body, #root {
 }
 
 a {
-  color: var(--color-accent-hover);
+  color: var(--color-link);
   text-decoration: none;
 }
 

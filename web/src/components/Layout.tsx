@@ -1,6 +1,9 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { clearToken } from "@/api/client";
 import type { LiveOverview } from "@/lib/api/types";
+import { useTheme } from "@/lib/ThemeContext";
+import { useDensity } from "@/lib/ThemeContext";
+import type { Density } from "@/lib/density";
 
 interface NavItem {
   to: string;
@@ -115,6 +118,12 @@ const navItems: NavItem[] = [
   },
 ];
 
+const DENSITY_SEGMENTS: { value: Density; label: string }[] = [
+  { value: "default", label: "Default" },
+  { value: "compact", label: "Compact" },
+  { value: "wall", label: "Wall" },
+];
+
 interface LayoutProps {
   children: React.ReactNode;
   wsConnected?: boolean;
@@ -124,6 +133,8 @@ interface LayoutProps {
 
 export function Layout({ children, wsConnected, overview: _overview, tier }: LayoutProps) {
   const navigate = useNavigate();
+  const { theme, setTheme } = useTheme();
+  const { density, setDensity } = useDensity();
 
   const handleSignOut = () => {
     clearToken();
@@ -132,6 +143,10 @@ export function Layout({ children, wsConnected, overview: _overview, tier }: Lay
     void fetch("/auth/oidc/logout", { method: "POST" }).catch(() => undefined);
     navigate("/");
     window.location.reload();
+  };
+
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark");
   };
 
   return (
@@ -187,14 +202,18 @@ export function Layout({ children, wsConnected, overview: _overview, tier }: Lay
                   padding: "8px 16px",
                   paddingLeft: isActive ? 14 : 16,
                   color: isActive ? "var(--color-text)" : "var(--color-muted)",
-                  background: isActive ? "rgba(44,229,167,0.1)" : "transparent",
-                  borderLeft: isActive ? "2px solid #2CE5A7" : "2px solid transparent",
+                  background: isActive
+                    ? `rgba(var(--color-accent-rgb),0.1)`
+                    : "transparent",
+                  borderLeft: isActive
+                    ? `2px solid var(--color-accent)`
+                    : "2px solid transparent",
                   textDecoration: "none",
                   fontSize: 13,
                   fontWeight: isActive ? 600 : 400,
                   borderRadius: 4,
                   margin: "1px 8px",
-                  transition: "background 0.1s, color 0.1s",
+                  transition: `background var(--motion-fast), color var(--motion-fast)`,
                 })}
               >
                 {item.icon}
@@ -219,10 +238,105 @@ export function Layout({ children, wsConnected, overview: _overview, tier }: Lay
           ))}
         </ul>
 
-        {/* Footer */}
+        {/* Preferences cluster — ABOVE sign-out */}
         <div
           style={{
-            padding: "12px 16px",
+            padding: "10px 12px 8px",
+            borderTop: "1px solid var(--color-border)",
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
+          {/* Theme toggle */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              onClick={toggleTheme}
+              aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+              title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+              style={{
+                background: "none",
+                border: "1px solid var(--color-border)",
+                color: "var(--color-secondary)",
+                cursor: "pointer",
+                padding: "3px 8px",
+                borderRadius: 6,
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                fontSize: 11,
+                transition: `border-color var(--motion-fast), color var(--motion-fast)`,
+              }}
+            >
+              {theme === "dark" ? (
+                /* Sun icon */
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <circle cx="12" cy="12" r="5" />
+                  <line x1="12" y1="1" x2="12" y2="3" />
+                  <line x1="12" y1="21" x2="12" y2="23" />
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                  <line x1="1" y1="12" x2="3" y2="12" />
+                  <line x1="21" y1="12" x2="23" y2="12" />
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                </svg>
+              ) : (
+                /* Moon icon */
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                </svg>
+              )}
+              {theme === "dark" ? "Light" : "Dark"}
+            </button>
+          </div>
+
+          {/* Density 3-segment control */}
+          <div
+            role="group"
+            aria-label="Display density"
+            style={{
+              display: "flex",
+              borderRadius: 6,
+              overflow: "hidden",
+              border: "1px solid var(--color-border)",
+            }}
+          >
+            {DENSITY_SEGMENTS.map((seg) => (
+              <button
+                key={seg.value}
+                onClick={() => setDensity(seg.value)}
+                aria-pressed={density === seg.value}
+                style={{
+                  flex: 1,
+                  padding: "3px 0",
+                  background:
+                    density === seg.value
+                      ? `rgba(var(--color-accent-rgb),0.15)`
+                      : "transparent",
+                  border: "none",
+                  borderRight:
+                    seg.value !== "wall" ? "1px solid var(--color-border)" : "none",
+                  color:
+                    density === seg.value
+                      ? "var(--color-accent)"
+                      : "var(--color-muted)",
+                  cursor: "pointer",
+                  fontSize: 10,
+                  fontWeight: density === seg.value ? 600 : 400,
+                  transition: `background var(--motion-fast), color var(--motion-fast)`,
+                }}
+              >
+                {seg.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer — sign-out */}
+        <div
+          style={{
+            padding: "10px 16px",
             borderTop: "1px solid var(--color-border)",
             display: "flex",
             alignItems: "center",
