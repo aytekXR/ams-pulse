@@ -27,7 +27,22 @@ P0_SCENARIOS := \
   TC-I-01 TC-I-02 TC-I-06 \
   TC-WH-02
 
-.PHONY: help auth validate-p0 validate-all clean-evidence
+# ── P1 scenario list ──────────────────────────────────────────────────────────
+# Ordered: anomaly/analytics read-only first, viewer/ingest, probes, lifecycle,
+# stress dead last (per wave work-order constraint).
+P1_SCENARIOS := \
+  TC-AN-03 TC-AN-05 TC-A-08 TC-A-09 \
+  TC-H-06 TC-H-04 TC-H-05 \
+  TC-A-05 TC-A-06 \
+  TC-V-09 \
+  TC-P-07 TC-P-08 \
+  TC-V-05 TC-V-06 TC-V-07 TC-V-08 \
+  TC-I-04 TC-I-05 TC-I-07 \
+  TC-F-06 TC-F-08 \
+  TC-L-04 TC-L-05 \
+  TC-S-01
+
+.PHONY: help auth validate-p0 validate-p1 validate-all clean-evidence
 
 help: ## List targets
 	@grep -E '^[a-zA-Z0-9_%/-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -49,7 +64,7 @@ validate-p0: auth ## Run P0 scenarios in order; SKIP(77)/MISSING do not fail; FA
 	  else \
 	    stamp=$$(mktemp); \
 	    bash "$$script"; rc=$$?; \
-	    evdir=$$(ls -td "$(EVIDENCE_ROOT)/S17-$${tc}-"* 2>/dev/null | head -1 || echo '-'); \
+	    evdir=$$(ls -td "$(EVIDENCE_ROOT)"/S*-"$${tc}-"* 2>/dev/null | head -1 || echo '-'); \
 	    case "$$rc" in \
 	      0)  if [ -f "$$evdir/verdict.txt" ] && [ "$$evdir/verdict.txt" -nt "$$stamp" ] \
 	             && head -1 "$$evdir/verdict.txt" | grep -q '^PASS'; then \
@@ -72,6 +87,40 @@ validate-p0: auth ## Run P0 scenarios in order; SKIP(77)/MISSING do not fail; FA
 	printf '\nP0 summary: pass=%s  skip=%s  fail=%s\n' "$$pass" "$$skip" "$$fail"; \
 	[ "$$fail" -eq 0 ]
 
+# ── validate-p1 ───────────────────────────────────────────────────────────────
+
+validate-p1: auth ## Run P1 scenarios in order; SKIP(77)/MISSING do not fail; FAIL → exit 1
+	@fail=0; pass=0; skip=0; results=""; \
+	for tc in $(P1_SCENARIOS); do \
+	  script=$$(ls "$(SCENARIOS_DIR)/$${tc}"-*.sh 2>/dev/null | head -1 || true); \
+	  if [ -z "$$script" ]; then \
+	    verdict=MISSING; skip=$$((skip+1)); evdir="-"; \
+	  else \
+	    stamp=$$(mktemp); \
+	    bash "$$script"; rc=$$?; \
+	    evdir=$$(ls -td "$(EVIDENCE_ROOT)"/S*-"$${tc}-"* 2>/dev/null | head -1 || echo '-'); \
+	    case "$$rc" in \
+	      0)  if [ -f "$$evdir/verdict.txt" ] && [ "$$evdir/verdict.txt" -nt "$$stamp" ] \
+	             && head -1 "$$evdir/verdict.txt" | grep -q '^PASS'; then \
+	            verdict=PASS; pass=$$((pass+1)); \
+	          else \
+	            verdict=NOEVID; fail=$$((fail+1)); \
+	          fi ;; \
+	      77) verdict=SKIP; skip=$$((skip+1)) ;; \
+	      *)  verdict=FAIL; fail=$$((fail+1)) ;; \
+	    esac; \
+	    rm -f "$$stamp"; \
+	  fi; \
+	  results="$${results}$${tc}|$${verdict}|$${evdir}\n"; \
+	done; \
+	printf '\n%-14s  %-8s  %s\n' SCENARIO VERDICT EVIDENCE_DIR; \
+	printf '%s\n' '----------------------------------------------------------------------'; \
+	printf '%b' "$$results" | while IFS='|' read -r sc v e; do \
+	  printf '%-14s  %-8s  %s\n' "$$sc" "$$v" "$$e"; \
+	done; \
+	printf '\nP1 summary: pass=%s  skip=%s  fail=%s\n' "$$pass" "$$skip" "$$fail"; \
+	[ "$$fail" -eq 0 ]
+
 # ── validate-all ──────────────────────────────────────────────────────────────
 
 validate-all: auth ## Run every TC-*.sh in scenarios/ (sorted); SKIP(77) OK; FAIL → exit 1
@@ -80,7 +129,7 @@ validate-all: auth ## Run every TC-*.sh in scenarios/ (sorted); SKIP(77) OK; FAI
 	  tc=$$(basename "$$script" .sh | cut -d- -f1-3); \
 	  stamp=$$(mktemp); \
 	  bash "$$script"; rc=$$?; \
-	  evdir=$$(ls -td "$(EVIDENCE_ROOT)/S17-$${tc}-"* 2>/dev/null | head -1 || echo '-'); \
+	  evdir=$$(ls -td "$(EVIDENCE_ROOT)"/S*-"$${tc}-"* 2>/dev/null | head -1 || echo '-'); \
 	  case "$$rc" in \
 	    0)  if [ -f "$$evdir/verdict.txt" ] && [ "$$evdir/verdict.txt" -nt "$$stamp" ] \
 	           && head -1 "$$evdir/verdict.txt" | grep -q '^PASS'; then \

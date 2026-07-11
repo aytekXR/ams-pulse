@@ -11,7 +11,37 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-18.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-19.md`)
+
+**Session 2026-07-11(c) result: D-080 — S18 DONE (D-078 Phases 3+4 P1 + Phase 6).**
+- **P1 vs LIVE AMS: 21 PASS / 3 SKIP / 0 FAIL** (24 new scenario scripts +
+  `make validate-p1`). **P0 upgraded to 25 PASS / 1 SKIP** — TC-V-02 fixed
+  (detached Playwright viewer died on missing NODE_PATH, invisible under -d).
+- **Pulse bugs: BUG-003** (probe scheduler near-duplicate result rows, 0–1 ms
+  apart ~every 60 s) + **BUG-004** (/qoe/ingest declares from/to in OpenAPI but
+  ignores them). Both in docs/assessment/bugs/ — S19's PRD matrix cites them.
+- **★ ENV-LIMIT finding: this VPS's AMS accepts only ~5–7 concurrent RTMP
+  streams** ("current system resources not enough") — TC-L-05/TC-S-01 skip with
+  a capacity probe; stress validation needs a bigger AMS instance (operator FYI
+  filed). AMS-semantics findings: hlsViewerCount = sliding request-window (~9×
+  session inflation, expiry lag >90 s); RTMP/TCP masks packet loss
+  (packetLostRatio is UDP/SRT/WebRTC-only); app-settings mutate = POST not PUT.
+- **Phase 6 DELIVERED:** docs/assessment/documentation-gaps.md (DG-01..18 with
+  S19 authoring priorities). WO-C skip carry ×7 (delta green). Prod untouched.
+- Shell landmine memory extended (bash \`\${var:-{}}\` stray brace; jq without -r
+  quotes booleans) — check memory shell-harness-false-green-patterns before
+  writing/reviewing ANY harness bash.
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-19.md` and execute it**
+(post-license-expiry sweep FIRST — trial lapsed 2026-07-12T12:09Z; then D-078
+Phase 7 PRD validation matrix + Phase 8 final-assessment draft + top doc-gap
+authoring; CI promotions if ≥07-23 else skip carry ×8). **PR-first, ≤2 pushes.**
+Check `docs/operator-expected.md` for operator answers (AMS-reset confirm,
+Kafka, marketplace contact) FIRST.
+
+---
+
+## ▶ prior session context (S17, superseded by the above)
 
 **Session 2026-07-11(b) result: D-079 — S17 DONE (D-078 program Phases 1–2 delivered).**
 - **HARNESS LANDED:** `qa/realams/` (7 helpers, 26 P0 scenario scripts, Makefile;

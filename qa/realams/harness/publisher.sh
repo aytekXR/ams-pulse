@@ -96,7 +96,12 @@ kill_publisher() {
 # ── start_bulk_publishers COUNT APP PREFIX KBPS ────────────────────────────────
 # Starts COUNT parallel publishers with zero-padded 4-digit sequence IDs.
 # Container names: pulse-pub-val-<PREFIX><NNNN>
-# Waits for all docker run commands before returning.
+# Waits for all docker run -d commands before returning.
+#
+# NOTE: "dispatched" means docker run -d returned, NOT that ffmpeg connected to
+# AMS. AMS may reject RTMP connections with "current system resources not enough"
+# when concurrent stream capacity is exceeded — the container will exit with
+# code 1. Callers MUST verify against AMS /broadcasts/list after a short wait.
 start_bulk_publishers() {
   local COUNT="${1:-5}"
   local APP="${2:-LiveApp}"
@@ -110,5 +115,5 @@ start_bulk_publishers() {
     start_publisher "$ID" "$APP" "$KBPS" &
   done
   wait
-  echo "[publisher] all ${COUNT} publishers started" >&2
+  echo "[publisher] all ${COUNT} publisher containers dispatched (docker run -d; verify RTMP connections via AMS REST)" >&2
 }

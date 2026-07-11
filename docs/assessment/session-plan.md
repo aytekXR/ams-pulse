@@ -15,10 +15,10 @@ work from tasks that require operator involvement.
 |-------|------|--------|--------|---------|
 | 1 | Product Understanding | DONE (S17: AV triage — 9 CONFIRMED live, see capability-map § AV Triage) | S16 | WRITER |
 | 2 | Test Environment | DONE (S17: `qa/realams/` harness + Makefile, D-079) | S17 | BE agent |
-| 3 | E2E User Scenarios | IN PROGRESS (S17: all 26 P0 executed, see § S17 results) | S17–S18 | BE agent + ORCH |
-| 4 | Automated Validation Scripts | DONE for P0 (`make validate-realams-p0`); P1 scripts S18 | S17–S18 | BE agent |
-| 5 | Bug Investigation | ROLLING (BUG-001, BUG-002 filed S17) | S17+ | Any |
-| 6 | Documentation Program | PLANNED | S18–S19 | DOC agent |
+| 3 | E2E User Scenarios | DONE for P0+P1 (S18: P0 25/1/0, P1 21/3/0; remaining P2 + remote-viewer/SRT items → S19+ backlog) | S17–S18 | BE agent + ORCH |
+| 4 | Automated Validation Scripts | DONE (`make validate-realams-p0` + `validate-p1`, 50 scenarios) | S17–S18 | BE agent |
+| 5 | Bug Investigation | ROLLING (BUG-001..004 filed; 003/004 are live Pulse bugs) | S17+ | Any |
+| 6 | Documentation Program | GAP LIST DONE (documentation-gaps.md DG-01..18); authoring → S19 | S18–S19 | DOC agent |
 | 7 | PRD Validation Matrix | PLANNED | S19 | QA + ORCH |
 | 8 | Final Assessment | PLANNED | S19+ | ORCH |
 

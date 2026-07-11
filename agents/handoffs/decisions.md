@@ -3763,3 +3763,64 @@ ROADMAP-V2 §3 S17. Program docs ride the S16 close PR.
 - **Ops notes:** pulse-realams stack left RUNNING (loopback-only) for S18; AMS trial
   license expires 2026-07-12T12:09Z (operator-waived) — S17 was the last full-trial
   day; S18 opens with a read-only post-expiry sweep.
+
+## D-080 — SESSION-18 (2026-07-11): D-078 Phases 3+4 P1 scenarios + Phase 6 doc-gap list (IN PROGRESS; evidence at close)
+
+**S18 open verification:**
+- **Operator-action check (user directive): NO new operator action required — session
+  proceeds autonomously.** Standing queue unchanged (👀 browser-accept; AMS-reset
+  confirmation from S17 still unanswered — ~1 h elapsed, non-blocking; optionals).
+  Two protocol notes: (1) **TC-S-01 (20-publisher stress) load heads-up is RECORDED
+  in operator-expected.md before the run** per the "sessions will tell you" protocol —
+  short (~2 min), low-bitrate (500 kbps), run LAST (AMS may refuse WebRTC under load,
+  D-074 highResourceUsage); (2) TC-F-05 (AMS restart) stays FORCE_DISRUPT-gated —
+  operator-coordinated only, SKIPPED this session.
+- **Date-driven plan adjustments (same-day continuation, 2026-07-11T13:13Z):**
+  AMS trial license expires TOMORROW (07-12T12:09Z) → the S18 "post-expiry sweep"
+  premise doesn't apply; S17's P0 run is the pre-expiry baseline; the sweep moves to
+  S19 open. CI promotion gate still CLOSED (07-11 < 07-23) → **skip carry ×7**.
+- Preconditions: tree clean at S17 merge 59e4990; ci+e2e+codeql SUCCESS at HEAD;
+  protection exact (9 contexts, enforce_admins, strict); dependabot ZERO; no open
+  PRs; pulse-realams stack healthy (Up 2 h); AMS reachable (teststream broadcasting).
+- TC-A-08 premise correction carried from S17 triage: prod egress_gb=0.0025 — a
+  bitrate×watch-time ESTIMATE, not the matrix's "always 0"; scenario authored
+  against the estimate semantics.
+- Branch `s18-d080`; PR-first, ≤2 pushes (D-076).
+
+**S18 CLOSE (same session, D-080 evidence):**
+- **WO-A DELIVERED — D-078 Phases 3+4 P1: final 21 PASS / 3 SKIP / 0 FAIL** (24
+  scenarios; SKIPs are findings, not failures: TC-V-06 AMS hlsViewerCount expiry
+  lags >90 s; TC-L-05 + TC-S-01 ENV-LIMIT — **this VPS's AMS accepts only ~5–7
+  concurrent RTMP streams**, rejects the rest with "current system resources not
+  enough"; capacity probe added, stress re-runs need a bigger AMS instance).
+  **P0 upgraded: TC-V-02 now PASS → P0 = 25 PASS / 1 SKIP** after the WebRTC-viewer
+  fix (root cause: detached Playwright container died on module resolution —
+  NODE_PATH missing; invisible under docker -d).
+- **Pulse bugs filed:** BUG-003 (probe scheduler emits near-duplicate result rows
+  0–1 ms apart, phase-aligned ~60 s — two execution paths suspected); BUG-004
+  (/qoe/ingest declares from/to in OpenAPI but ignores them — contract violation,
+  TC-I-04 root cause; also argues for the §6 response-body contract tests).
+- **AMS-semantics findings (documented in scenarios + doc-gaps):** hlsViewerCount
+  is a sliding request-window metric (5 real-player viewers → count 45; ~9×
+  session inflation; expiry lag >90 s) → DG-01 evidence; RTMP/TCP masks transport
+  loss (netem 10% → packetLostRatio stays 0; UDP-only semantics) → DG-18;
+  settings mutate is POST (PUT → 405); publishTokenControlEnabled round-trip
+  works and token-gated publish rejection verified (TC-F-06 PASS).
+- **Fix-round scenario bugs (5 diagnose agents, all retested green):** /qoe/summary
+  cross-scenario beacon bleed → ?stream= scoping; era-mixed timeseries bucket →
+  live-aggregator read; bash `${var:-{}}` stray-brace corruption; jq-without--r
+  quoted-boolean compares. Memory shell-harness-false-green-patterns extended
+  with both new landmines.
+- **WO-B DELIVERED:** docs/assessment/documentation-gaps.md — 18 traceable gaps
+  (DG-01..18) incl. the S17/S18 drift class, with an S19 authoring priority plan.
+- **WO-C:** gate CLOSED (07-11 < 07-23) → skip carry ×7; delta re-measure: the
+  single new e2e+ci run pair since S17's ceiling is green (jobs e2e, csp-e2e,
+  web-e2e all success); 9 contexts unchanged; csp-e2e candidate 07-23, web-e2e
+  ~07-25.
+- **WO-D:** done at open (protection exact, dependabot zero, prod healthy
+  read-only, prod untouched all session).
+- **Gates:** bash -n all 50 scenario + 7 harness scripts clean; only qa/ + docs
+  touched (no Go/web/sdk/contract changes → no code gates due); CI full matrix on
+  the PR. Ops: pulse-realams stack left running; one pulse-test VoD + the S17
+  evidence conventions stand; AMS trial license expires 2026-07-12T12:09Z →
+  S19 opens with the post-expiry read-only sweep.
