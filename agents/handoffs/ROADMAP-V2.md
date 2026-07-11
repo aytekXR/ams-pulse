@@ -559,7 +559,24 @@ skipped; NEW binding operator directive: **max 2 pushes/session**. Ledger: D-076
 
 ---
 
-### S16 — CI promotions (date gate OPENS 2026-07-23) + brandkit phase 2 + probe-stats UI (planned at S15 close, D-075)
+### S16 — CI promotions gate-check + brandkit phase 2 + probe-stats UI ✅ DONE (D-077, 2026-07-11)
+**Result:** WO-D protection unchanged; WO-A gate CLOSED (07-11 < 07-23) → skip carry ×5,
+but the streak audit found `web-e2e` RED ×12 (not flaky — deterministic D-074 AuthGate
+fail-open on SPA-fallback 200 /auth/me, masked by continue-on-error; prior "passed on
+PR #27" ledger claim corrected) → WO-FIX added + landed (JSON shape-guard + /auth vite
+proxy, TDD); WO-B brandkit phase-2 LANDED (light theme [15/15 exact tokens], density
+default/compact/wall, motion + reduced-motion, sidebar toggle+segment control, Badge/
+status-color sweep, StreamsTable 44→40 density-aware); WO-C probe-stats UI LANDED
+(ice_state badge + rtt/jitter/loss, absent=dash, 0=valid). Session survived a terminal
+crash mid-workflow (verifiers re-ran verbatim from the persisted script; no work lost).
+Verify PARTIAL×2+REFUTED → 3 must-fixes applied; Playwright-docker gate caught 3 spec
+bugs → 15/15; coverage 65.80/61.13/54.85 (all ↑). ★ NEW operator directive mid-session
+(D-078): **Pulse × AMS real-validation & product-fit program** — plan docs authored
+under `docs/assessment/` (5 docs: program README, capability map, validation
+environment, scenario matrix, session plan); EXECUTION starts S17.
+Prompt: `sessions/SESSION-16.md`; ledger: decisions.md D-077 + D-078.
+
+### S16 (original plan) — CI promotions (date gate OPENS 2026-07-23) + brandkit phase 2 + probe-stats UI (planned at S15 close, D-075)
 
 Execute `sessions/SESSION-16.md`. Check operator answers FIRST (v0.3.0 / CodeQL /
 PR-first / mobile-SDK — all four still open at S15 close).
@@ -580,6 +597,31 @@ PR-first / mobile-SDK — all four still open at S15 close).
 
 *(Backlog-if-light: DASH live-fixture capture if operator enables DASH muxing; post-U3
 beacon-QoE anomaly metrics (§2.14 revisit); RTMP AMF0 connect round-trip (§2.11 tail).)*
+
+---
+
+### S17 — Pulse × AMS validation program launch (D-078) + CI-promotion date gate (planned at S16 close, D-077)
+
+Execute `sessions/SESSION-17.md`. The operator's D-078 directive (real-validation &
+product-fit program, plan of record `docs/assessment/session-plan.md`) is now the
+primary track; CI promotions remain date-gated.
+
+1. **WO-A [M–L, PRIMARY]** validation program Phases 1–2 (D-078): finalize the
+   capability-map assumptions list, then BUILD the reusable real-AMS harness per
+   `docs/assessment/validation-environment.md` (publisher control, viewer simulation,
+   failure injection, AMS-vs-Pulse parity checker). Start executing the P0 rows of
+   `docs/assessment/scenario-matrix.md` (broadcast lifecycle + viewer-count parity).
+2. **WO-B [S, gate ≥07-23]** CI promotions (§2.7): if run on/after 07-23 → promote
+   `csp-e2e` if still green (candidate lands exactly at gate); `e2e` separate decision;
+   `web-e2e` clock restarted at S16's fix merge (earliest ~07-25). Else skip carry ×6.
+3. **WO-C [S]** S16 verifier-findings backlog: ProbesPage delete-button border +
+   #58A6FF UI-text literals (light-mode); ttfbColor()/iceVariant()/memStatus() unit
+   pins; propose tokens.json color.light.linkBody upstream.
+4. **WO-D [XS]** standing re-checks: protection/PR-first drift, dependabot queue, prod
+   health (read-only), operator browser-accept follow-up.
+
+*(Backlog-if-light: post-U3 beacon-QoE anomaly metrics (§2.14 — feeds the program's
+viewer-analytics phase); RTMP AMF0 connect round-trip (§2.11 tail).)*
 
 ---
 

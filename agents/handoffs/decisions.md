@@ -3529,3 +3529,147 @@ LAST → browser-accept ping.
 - AFTER:  `{"contexts":[...7...,"Analyze (go)","Analyze (javascript-typescript)"],"enforce_admins":true,"reviews":0,"strict":true}` (force_push/deletions false, unchanged)
 - This entry itself landed via the FIRST PR under the new flow (validating PR-first is
   not deadlocked: branch → PR → 9 contexts → merge with 0 reviews, enforce_admins on).
+
+## D-077 — SESSION-16 (2026-07-11): CI-promotion gate check + brandkit phase 2 + probe-stats UI (opened at dispatch; evidence appended at close)
+
+**S16 OPEN (2026-07-11) — session-open facts:**
+- **🔑 Key-hygiene operator item RESOLVED:** operator confirmed at session open "I have
+  stored the file for myself" (= the "key vaulted, delete the backup" say-so recorded in
+  operator-expected.md). `deploy/.env.bak-d076` **shredded** (`shred -u -z -n 3`) — the
+  private signing key now exists ONLY in the operator's vault. `deploy/.env` (live prod
+  config, holds the minted enterprise LICENSE, not the private key) and the committed
+  `.env.example` are untouched; repo-wide sweep confirms no other stray .env files.
+- **Prod healthy at open (read-only):** `/healthz` all-ok (clickhouse/collector/meta_store);
+  `/favicon.svg → 200 image/svg+xml` at the public edge (D-076b hotfix holds).
+- **WO-D DONE at open — protection UNCHANGED under PR-first:** GET shows
+  enforce_admins=true, strict=true, reviews=0, exactly 9 contexts (7 + 2 CodeQL). No drift.
+- **Dependabot queue: ZERO open PRs.**
+- **WO-A date gate: CLOSED** (2026-07-11 < 2026-07-23) → skip carry ×5 (S12/S13/S14/S15/S16);
+  JOB-level streak measurement recorded this session as evidence for the S17+ decision
+  (incl. the PR #26 web-e2e flake / PR #27 pass data points).
+- **Remaining operator queue after this open: ONLY 👀 browser-accept of the re-branded UI**
+  (hard-refresh https://pulse.beyondkaira.com, fresh `plt_…` token at the bottom of
+  oguz-testing.md) + the standing optionals (D-V2-1, O7, O11, workflow-scope). No operator
+  action BLOCKS this session — S16 proceeds autonomously (WO-B brandkit phase 2, WO-C
+  probe-stats UI, ledger folds incl. this D-076b evidence, single close PR, ≤2 pushes).
+
+**D-077 WO-A — CI-promotion evidence (measured 2026-07-11, gate CLOSED until 07-23; skip carry ×5):**
+- **JOB-level streaks (last 40 runs each, via gh):** `e2e` (e2e.yml) 40/40 GREEN;
+  `csp-e2e` (e2e.yml) 40/40 GREEN (first appeared 2026-07-09 → 14 days green lands
+  EXACTLY at the 07-23 gate — promote csp-e2e at S17+ if still green); `web-e2e`
+  (ci.yml) streak **ZERO — red 12 consecutive runs** since ci-run-235
+  (29118982387, 2026-07-10T19:43:46Z), masked by continue-on-error:true.
+- **★ web-e2e ROOT CAUSE (S16 triage, D-042 class — "flake" was a deterministic bug):**
+  run-235's head commit (23f1e0ce) is docs-only — it was merely the TIP of the S14
+  close-batch push; the batch carried **d15d990 (D-074 WO-C OIDC AuthGate)**, which
+  added mount-time `fetch("/auth/me").then(r => r.ok && setCookieAuthed(true))`.
+  `/auth` is NOT in the vite dev proxy → the dev server's SPA fallback answers
+  `/auth/me` with **200 + index.html** → cookieAuthed=true → the token gate NEVER
+  renders → the 3 gate-asserting specs fail (auth-gate ×2, auth-401 ×1); dashboard
+  specs still pass (6→10 tests green-run vs red-run confirmed the D-074 spec additions).
+  **Real prod-adjacent bug, not a test gap:** ANY 200-HTML fallback on /auth/me (stale
+  pre-D-074 server SPA-fallback, misconfigured reverse proxy) silently "authenticates"
+  the shell — user gets a broken dashboard with 401ing API calls instead of the login
+  gate. Fix (this session, TDD): JSON shape-guard on the /auth/me response + `/auth`
+  added to the vite proxy (dev topology = prod topology).
+- **LEDGER CORRECTION (D-076b addendum was WRONG):** "web-e2e PASSED on PR #27" is
+  false — check-runs shows web-e2e=failure on PR #27 (run 29131118536) AND PR #26
+  (29129705845); both PRs' overall CI green only via continue-on-error. PR #26's
+  failure was NOT diff-related (main already red 4h earlier) — but it was the D-074
+  regression, not vite-proxy "noise" as S15c recorded.
+- **Promotion recommendation recorded for S17+ (gate opens 07-23):** promote `csp-e2e`
+  if still green; `web-e2e` clock RESTARTS at the S16 fix merge (earliest ~07-25);
+  `e2e` promotion is a separate decision (stable 40/40 but intentionally non-required).
+
+**D-077 CLOSE (2026-07-11) — S16 implementation SHIPPED; all gates green:**
+- **Session continuity note:** the S16 terminal died mid-`s16-implement` (after the 4
+  author agents finished, killing the 3 in-flight verifiers). A fresh session recovered
+  from the persisted workflow script + journal: the author output was intact in the
+  working tree; the Verify phase re-ran verbatim as `s16-verify-continue`. No work lost.
+- **WO-FIX (AuthGate fail-open, the web-e2e root cause):** JSON shape-guard on
+  `/auth/me` (r.ok AND content-type application/json AND parsed body has string
+  `auth_method` per pulse-api.yaml) + `/auth` added to the vite dev proxy. TDD: 4 new
+  AuthGate tests (200-HTML does NOT authenticate [red→green], valid JSON does, network
+  error → gate, 401 → quiet gate). 14/14 AuthGate tests green.
+- **WO-C (probe-stats UI):** ProbesPage WebRTC columns — ice_state Badge
+  (connected=success/failed=error/timeout=warning, falsy⇒dash) + rtt/jitter/loss
+  (`!= null` guard; 0 is a VALID measurement, pinned by tests: loss_pct=0 → "0.0%").
+  12 new tests; th==td==11 verified; chart mapping untouched.
+- **WO-B1 (brandkit phase-2 mechanism):** `[data-theme=light]` block (15/15 tokens.json
+  color.light values verified EXACT by the brandkit verifier) + `--color-link #087A59`
+  (design-rationale §2 body-link rule) + motion tokens (120/200ms ease-out) +
+  density modes (compact 32/16/32, wall 48/32/64 — derived on-grid from the space
+  array, ORCH-ruled) + prefers-reduced-motion collapse; theme.ts/density.ts/
+  ThemeContext.tsx (localStorage → matchMedia → dark; cross-tab storage sync);
+  init before React render (CSP untouched — csp.spec.ts/index.html/Caddyfile
+  byte-identical, verifier-confirmed); Layout sidebar theme toggle + 3-segment
+  density control; Badge CSS-var refactor. 47 new mechanism tests.
+- **WO-B2 (status-color sweep):** LIGHT_STATUS_COLORS + useStatusColors() hook;
+  FleetPage/ProbesPage/AnomaliesPage/IngestPage status hexes theme-aware (dataviz
+  literals intentionally invariant); StreamsTable ROW_HEIGHT 44→40 density-aware via
+  ROW_HEIGHT_MAP (tokens.json tableRowHeight — 44 was a phase-1 divergence);
+  StatCard → var(--card-padding)/var(--metric-size); LoadingSpinner respects
+  reduced-motion. FleetPage cpuColor pins updated atomically (D-071 trap avoided,
+  verifier-confirmed).
+- **Adversarial verify (3 lenses):** correctness=PARTIAL, brandkit=PARTIAL,
+  gates=REFUTED → 3 must-fixes, ALL APPLIED: (1) LiveDashboard.test.tsx lacked
+  DensityProvider (7 tests crashed — StreamsTable's new useDensity() throw) → wrapper
+  added + stale virtualizer mock 44→40; (2) eslint globals missing
+  SVGElement/StorageEvent/MediaQueryList/MediaQueryListEvent (7 lint errors) → added;
+  (3) light `--color-info: #0369A1` was an INVENTED value (not in tokens.json) →
+  removed; info now inherits :root dataviz[1] #58A6FF (theme-invariant like --chart-*).
+- **Playwright docker gate found 3 real spec bugs (4 red → 15/15 green):**
+  (a) dashboard-render zero-console-error assert tripped by the NEW /auth proxy 502ing
+  in preview (no backend) — auth endpoints now mocked (200 contract-shaped /auth/me;
+  Chromium logs ANY non-2xx resource as a console error, so a 401 mock also fails it);
+  (b) prefs (ii)/(iii) assumed ambient dark — headless Chromium defaults to LIGHT →
+  emulateMedia({colorScheme:"dark"}) pins (exactly as the brandkit verifier predicted);
+  (c) prefs (v) expected "0ms" but the prod CSS minifier rewrites 0ms→0s → accept
+  either zero form.
+- **GATES (all green, measured 2026-07-11):** lint 0 errors; tsc clean; vitest
+  339/339 (28 files); coverage lines 65.80 / branches 61.13 / functions 54.85 vs gates
+  59/54/45 (all three UP from S15's 62.96/59.04/52.05); build clean (1.08s);
+  Playwright-in-docker 15/15; server/ + sdk/ untouched (verifier-confirmed).
+- **Non-blocking verifier findings carried to S17 backlog:** ProbesPage delete-button
+  border rgba(255,92,104,.4) unswept (pre-existing); #58A6FF UI-text literals in
+  ProbesPage (pre-existing, light-mode contrast); light-theme badge small-text
+  contrast ~3.3:1 (token-level constraint, design review item); --color-link not a
+  formal tokens.json key (design-rationale-sourced — propose color.light.linkBody
+  upstream); ttfbColor()/iceVariant()/memStatus() lack direct unit pins; theoretical
+  pre-JS FOUC for light-theme users (accepted: CSP > flash).
+
+## D-078 — SESSION-16 (2026-07-11): OPERATOR DIRECTIVE — Pulse × AMS real-validation & product-fit program (plan authored; execution from S17)
+
+**Directive (operator, mid-S16, verbatim intent):** build a REAL validation environment
+— "simulate a real customer using Ant Media Server together with Pulse": control AMS
+(create/start/stop broadcasts, multiple concurrent broadcasts, multiple + simulated
+viewers, protocols, stream failures, network interruptions, reconnects), ramp
+streams/watchers and SEE the effects in Pulse; validate numbers automatically by
+cross-checking Pulse against the AMS APIs ("Do not trust the UI alone"; AMS says N ==
+Pulse says N or the test FAILS with evidence). Eight phases: (1) product understanding
+doc; (2) reusable test environment; (3) e2e user scenarios (lifecycle, viewer
+analytics, health-metric parity, stress incl. AMS/Pulse restarts, failure injection
+incl. invalid stream key + expired token); (4) automated parity validation; (5) bug
+investigation protocol (repro/expected/actual/root-cause/severity/fix — implementable
+by another engineer as-is); (6) documentation program (complementing, not copying, AMS
+docs); (7) PRD validation matrix (fully/partially/missing/differently/needs-
+clarification per requirement, with WHY); (8) final assessment: product completeness,
+marketplace readiness, missing opportunities, prioritized roadmap
+(complexity × customer value), executive summary usable with the Ant Media team.
+Working rules: iterate via workflows; keep docs current; artifacts under
+docs/assessment/ (or docs/testing); do not stop at the plan — execute; make the suite
+reusable for regression; per-session progress summaries + seamless-continue notes.
+
+**S16 action (same session, close):** plan of record authored under `docs/assessment/`
+via a 5-agent workflow (3 scouts: Pulse AMS-facing surface / local-env + test
+resources / AMS capability map incl. bounded antmedia.io docs pass → writer → 
+completeness critic): `README.md` (program overview + working rules), 
+`capability-map.md` (Phase-1 seed: AMS capability universe × Pulse coverage, metric-
+level mapping, assumptions-to-validate), `validation-environment.md` (Phase-2 design:
+publisher control, viewer simulation, failure injection, parity checker, evidence
+capture; respects host constraints — docker-no-sudo, Playwright-in-docker-only, AMS
+MD5-console/lockout/unsigned-webhook gotchas), `scenario-matrix.md` (Phase 3+4 rows:
+ID/steps/AMS ground truth/Pulse assertion/auto-vs-manual/priority + parity-tolerance
+philosophy), `session-plan.md` (phases → S17/S18/S19+, dependencies, operator-vs-
+autonomous split). **EXECUTION starts S17 (primary track WO-A)** — see SESSION-17.md +
+ROADMAP-V2 §3 S17. Program docs ride the S16 close PR.

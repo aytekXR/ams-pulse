@@ -93,3 +93,57 @@ RESOLVED, real beacon data flows in prod; this item is finally actionable)**; RT
 3. RESUME-PROMPT ▶ START HERE → SESSION-17; ROADMAP-V2 §3/§4/§5 ledgers updated.
 4. REFRESH `docs/operator-expected.md` + PushNotification at completion.
 5. Write `sessions/SESSION-17.md` from ROADMAP-V2 §3.
+
+## D-076b addendum (2026-07-11, written at S15c close — THIS FILE EDIT + operator-expected.md are UNCOMMITTED in the working tree by design (push budget); fold them into S16's FIRST PR together with the D-076b ledger evidence below
+
+- **S15c hotfix (operator-reported at browser-accept):** mountWebUI served index.html
+  for every root-level asset → broken favicon. Fixed (exists-check before SPA fallback,
+  TDD `webui_static_test.go`), merged PR #27 (9/9 required green), prod redeployed
+  `v0.3.0-4-ge8f8f5f`, `/favicon.svg → image/svg+xml` verified live. AuthGate
+  placeholder `pulse_tok_…`→`plt_…`. Fresh admin login token minted for the operator
+  (bottom of oguz-testing.md); one mint lost to shell quoting was REVOKED (204).
+- **Ledger TODO for S16's first PR:** append D-076b evidence to decisions.md (PR #26
+  merge = first PR-first cycle proven; PR #27 = first hotfix cycle; prod stamp
+  v0.3.0-4-ge8f8f5f; the favicon fix + placeholder fix; token mint/revoke note).
+- **web-e2e FLAKED on PR #26** (vite-proxy ECONNREFUSED noise, auth-401 spec, docs-only
+  diff — cannot be diff-related) and PASSED on PR #27 — direct streak input for the
+  WO-A promotion decision; measure the full history before promoting web-e2e.
+  **[S16 CORRECTION (D-077): this bullet was wrong — web-e2e FAILED on PR #27 too
+  (check-runs 29131118536); continue-on-error masked it. Not a flake: deterministic
+  D-074 AuthGate regression (SPA-fallback 200 on unproxied /auth/me ⇒ gate never
+  renders), red 12 straight runs since ci-run-235; root-caused + fixed in S16.]**
+- **Operator items pending:** 👀 UI accept (icon now fixed) · 🔑 vault private key,
+  delete deploy/.env.bak-d076 on operator say-so.
+- **Push budget note:** S15b+S15c used 3 pushes (close batch, PR #26 branch, PR #27
+  branch — the third flagged and operator-motivated). Keep S16 to ≤2.
+
+## S16 session log (2026-07-11, live — D-077)
+
+- **OPEN:** 🔑 key-hygiene operator item RESOLVED — operator: "I have stored the file
+  for myself" → `deploy/.env.bak-d076` SHREDDED (`shred -u -z -n 3`); `deploy/.env`
+  (live prod config) + `.env.example` (committed) untouched; no other stray .env files
+  repo-wide. Prod healthy at open (healthz ok; favicon `image/svg+xml` live). WO-D done
+  at open: protection UNCHANGED (enforce_admins=true, strict, 9 contexts, 0 reviews).
+  Dependabot queue ZERO. WO-A date gate CLOSED (07-11 < 07-23) → skip carry ×5; streaks
+  measured for the record.
+- **Operator action required this session: NONE (nothing blocks).** Only standing item:
+  👀 browser-accept of the re-branded UI (+ optionals D-V2-1/O7/O11/workflow-scope).
+  Session proceeds autonomously: WO-B (brandkit phase 2) + WO-C (probe-stats UI) via
+  workflows, ledger folds (D-076b evidence + this log), single close PR, ≤2 pushes.
+- **CRASH + RECOVERY:** terminal closed mid-`s16-implement` (authors done, 3 verifiers
+  in flight, ~03:26). New session recovered from the persisted workflow script +
+  journal — author output intact in the tree, Verify phase re-ran verbatim
+  (`s16-verify-continue`). No work lost; workflow persistence validated end-to-end.
+- **VERIFY:** 3 lenses → 3 must-fixes (LiveDashboard DensityProvider wrapper; 4 eslint
+  DOM globals; invented light `--color-info` removed → inherits dataviz[1]). All applied.
+- **GATES:** lint 0 / tsc clean / vitest 339/339, coverage 65.80/61.13/54.85 (gates
+  59/54/45, all UP vs S15) / build clean / **Playwright-in-docker 15/15** — the docker
+  gate caught 3 real spec bugs first (auth mocks vs the new /auth proxy; ambient
+  color-scheme pin; minifier 0ms→0s). web-e2e regression PROVEN fixed: auth-gate ×2 +
+  auth-401 specs green under the proxied topology.
+- **★ NEW OPERATOR DIRECTIVE (mid-session, recorded as D-078):** Pulse × AMS
+  real-validation & product-fit program — 8 phases (product understanding → real test
+  env w/ stream+viewer control → e2e scenarios → automated AMS-vs-Pulse parity checks →
+  bug protocol → docs program → PRD matrix → marketplace assessment). Plan docs
+  authored this session under docs/assessment/ (workflow: 3 scouts + writer + critic);
+  EXECUTION starts S17 — S17 scope re-planned around it.

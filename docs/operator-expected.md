@@ -1,30 +1,79 @@
-# Operator TODO — the items only YOU can do (updated at S15b close, post-D-076, 2026-07-11)
+# Operator TODO — the items only YOU can do (updated at SESSION-16 close, D-077/D-078, 2026-07-11; rides SESSION-16's close PR — push budget)
 
 > **Audience: the human operator.** Ledger of record: `ROADMAP.md` §5 + `ROADMAP-V2.md` §4; this
 > file is the actionable view, refreshed at every session close. When you finish an item, just
 > tell the agent (or do nothing — every session start re-verifies each item automatically).
 > **Never commit secret VALUES anywhere; `deploy/.env` and `oguz-testing.md` are gitignored.**
 
-## ⚡ TL;DR — expected from you right now (2026-07-11, S15b closed)
+## ⚡ TL;DR — expected from you right now (2026-07-11, SESSION-16 closed)
 
-> **v0.3.0 IS LIVE IN PRODUCTION with your ENTERPRISE license active.** Everything
-> you asked for in one batch is done: v0.3.0 shipped (the release pipeline first
-> BLOCKED a real HIGH CVE in the OIDC dependency — fixed same session, nothing
-> vulnerable was ever published), your license is verified end-to-end (a test
-> viewer-event posted at the public edge came back in the QoE dashboard numbers),
-> CodeQL is now a required merge check, PR-first is ON, mobile SDKs deferred,
-> DASH fixture skipped.
+> **Nothing new is needed from you.** S16 landed everything it promised — the **light
+> theme + density modes**, the **WebRTC stats columns** on the Probes page, and the
+> login-gate bug fix (your prod was never affected) — all gates green (339/339 unit
+> tests, 15/15 browser tests, coverage up across the board), one PR, prod untouched.
+> **Your new validation directive was received and is now the plan of record (D-078):**
+> the full 8-phase Pulse × AMS real-validation & product-fit program is planned under
+> `docs/assessment/` and EXECUTION STARTS next session (S17) — building the real test
+> environment that drives your AMS (streams up/down, viewers ramping) and
+> auto-cross-checks every Pulse number against the AMS APIs. It will need your AMS
+> instance healthy and reachable; nothing else from you to start.
 
-**TWO items for you now:**
+**Your open items (unchanged — one):**
 
 | Priority | Item | What to do |
 |---|---|---|
-| 👀 **please eyeball** | **Browser-accept the re-branded UI** — prod now renders your brandkit design for the first time | Open https://beyondkaira.com and https://pulse.beyondkaira.com — confirm the new look renders and the browser console shows no errors; tell a session "UI accepted" (or report anything off) |
-| 🔑 **key hygiene** | **Your license PRIVATE key was in `deploy/.env`** (it's the 128-hex signing key, not a license — I minted your enterprise license from it and swapped it in). The original file is preserved at `deploy/.env.bak-d076` | Copy the 128-hex private key from that file into your offline vault (password manager / encrypted USB), then delete the file — or just tell a session "key vaulted, delete the backup" |
+| 👀 **finish the eyeball** | Browser-accept the re-branded UI (icon now fixed) | Hard-refresh (Ctrl+Shift+R) https://pulse.beyondkaira.com — log in with the fresh `plt_0352…` token at the BOTTOM of `oguz-testing.md` — check the look + console, then tell a session "UI accepted". **Tip: after S16's PR merges and a future rollout, you'll also get a theme toggle (light/dark) + density switch in the sidebar.** |
 
-**Everything else: nothing needed.** Remaining optional decisions whenever: D-V2-1
-(unsigned-webhook mode: "build" or "wontfix"), O7 (GHCR public — one UI click),
-O11 rotation, `gh auth refresh -s workflow`.
+## ✅ Key hygiene — DONE (2026-07-11, S16 open, D-077)
+
+You confirmed the private key is stored on your side ("I have stored the file for
+myself") → `deploy/.env.bak-d076` was **securely shredded** at S16 open. The private
+signing key now exists only in your vault; `deploy/.env` (live prod config with the
+minted enterprise LICENSE — not the private key) is untouched and stays gitignored.
+
+## 🔎 What SESSION-16 did (2026-07-11, closed — D-077)
+
+| Area | Result |
+|---|---|
+| **Key hygiene (your say-so)** | Backup shredded at open — done (above). |
+| **CI promotion audit** | Date gate still closed (opens 07-23) — but the audit found the `web-e2e` browser-test job **red for 12 straight runs**, silently (it's non-blocking during its bake period). Root-caused to a real bug, not flakiness. |
+| **Real bug found & FIXED** | The SSO login change (S14) made the app treat *any* "200 OK" reply on its session-check as a valid login — even an HTML error/fallback page. In the wrong topology (stale server, misconfigured proxy) you'd see a broken dashboard instead of the login screen. Fixed with tests, **proven in the browser gate: all 15 end-to-end tests green**, including the 3 that had been failing for 12 runs. Your prod was never affected. |
+| **Light theme + density (brandkit phase 2)** | LANDED: light/dark toggle (remembers your choice, follows OS preference by default), compact & wall-screen density modes, motion tokens + reduced-motion support. Every light-theme color verified EXACTLY against your brandkit tokens.json; link color follows the WCAG note (§2). |
+| **Probes page** | LANDED: WebRTC network-quality columns (ICE state badge + RTT / jitter / loss) — a dash means "not measured", 0 means genuinely measured zero. |
+| **Quality net** | 2 implementation workflows + 3 adversarial verifiers (they found 3 real issues — all fixed same-session) + the docker browser gate (found 3 more test bugs — fixed, 15/15). Coverage rose to 65.8/61.1/54.9 (gates 59/54/45). The session also survived a terminal crash mid-work with zero loss (recovered from persisted workflow state). |
+| **Ship vehicle** | Everything rides ONE PR (PR-first, ≤2 pushes/session) and reaches prod with the next rollout you approve — **prod is untouched this session.** |
+
+## 🚀 NEW — your validation directive is now the plan of record (D-078, starts S17)
+
+You asked for a **real validation environment**: simulate a real customer using AMS +
+Pulse — control AMS (create/start/stop broadcasts, ramp concurrent streams and
+viewers, force failures/reconnects) and verify the effects in Pulse, cross-checking
+every number against the AMS APIs automatically (mismatch = test FAILS with evidence),
+plus the full product-fit ladder up to a marketplace-readiness report for the Ant
+Media team. **Planned this session** under `docs/assessment/` (program README,
+AMS-capability × Pulse-coverage map, test-environment design, scenario matrix,
+session plan). **Execution starts S17.** From you to start: nothing — just keep your
+AMS reachable. Heads-up: publisher/viewer load runs will exercise your AMS instance;
+sessions will tell you before any load beyond a handful of test streams/viewers.
+
+**New (non-blocking) items the program will eventually want from you:**
+
+| When | Item |
+|---|---|
+| before S19 | **Ant Media marketplace contact** — the Phase-8 assessment needs the real listing requirements + revenue-share terms (PRD's 20–30% is unverified). When you have a contact/thread with the Ant Media team, tell a session. |
+| whenever | **Kafka broker: available or planned?** Standalone AMS 3.0.3 exposes no CPU/mem/disk via REST — without Kafka, Fleet resource gauges stay empty forever. A yes/no shapes the roadmap priority. |
+| whenever | **AMS trial license after 07-12** — you said "handled"; if any Enterprise feature does lapse, the validation surface shrinks (sessions will observe + report what 403s). |
+
+**Everything else: nothing needed.** Optionals whenever: D-V2-1 ("build"/"wontfix"),
+O7 GHCR-public, O11 rotation, `gh auth refresh -s workflow`.
+
+## ✅ What SESSION-15c did (2026-07-11, D-076b — your two mid-accept reports)
+
+| Area | Result |
+|---|---|
+| **Broken icon (your report)** | Root cause: the server only served `/assets/*` — every other asset (favicon, icons, manifest, logo) got the HTML page instead. Fixed with a regression test, merged via PR #27 (all 9 required checks), redeployed; `/favicon.svg` → `image/svg+xml` verified live. |
+| **Login token (your question)** | Fresh admin token minted and appended to `oguz-testing.md` (bottom); an earlier mint lost to a shell-quoting slip was revoked, not orphaned. Login placeholder corrected `pulse_tok_…` → `plt_…`. |
+| **Prod now** | `v0.3.0-4-ge8f8f5f`, healthy, `tier=enterprise`; rollback tags + backup stand. |
 
 ## ✅ What SESSION-15b did (2026-07-11, D-076)
 
@@ -109,11 +158,11 @@ during the v0.3.0 swap (tier + beacon→QoE chain). Evidence lands in decisions.
   `gh secret set SLACK_WEBHOOK_URL`. (Exposure was never public; risk-accepted D-066.)
 
 ---
-*Status snapshot (2026-07-10, S15 close): GA v0.2.0 live + healthy; main is ahead with
-D-068 + D-070 + D-072 + D-073 + D-074 + D-075 — all await your "ship v0.3.0". Dependabot
-queue zero. Go coverage 74.5% (floor 70.2); web 62.96/59.04/52.05 (gates 59/54/45); sdk
-3.52 KB. All four probe protocols have real probes; WebRTC is complete through network-
-quality stats (rtt/jitter/loss, live-verified against your AMS). Plan of record:
-`ROADMAP-V2.md` (S16 next: CI promotions — gate opens 07-23, brandkit light theme,
-probe-stats UI, conditional v0.3.0). Your list: 4 questions (v0.3.0, CodeQL, PR-first,
-mobile SDKs) + U3 + optionals (DASH-muxing fixture, O7, D-V2-1, O11, workflow-scope).*
+*Status snapshot (2026-07-11, S16 close): **prod = v0.3.0-4-ge8f8f5f + ENTERPRISE
+license, live + healthy**; QoE/beacon, all four probe protocols (WebRTC through
+rtt/jitter/loss), data API and anomaly detection all active in prod. CodeQL required;
+PR-first active (9 contexts, enforce_admins). Dependabot queue zero. Go coverage 74.5%
+(floor 70.2); web 65.80/61.13/54.85 (gates 59/54/45); sdk 3.52 KB. Plan of record:
+`ROADMAP-V2.md` + **`docs/assessment/` (D-078 validation program — S17's primary
+track)**; CI-promotion gate opens 07-23 (csp-e2e candidate; web-e2e ~07-25). Your
+list: 👀 UI browser-accept + optionals (O7, D-V2-1, O11, workflow-scope).*
