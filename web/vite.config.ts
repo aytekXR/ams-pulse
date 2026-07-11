@@ -13,6 +13,11 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": "http://localhost:8090",
+      // /auth must be proxied so that /auth/me and /auth/oidc/status reach the
+      // Go binary in dev — without this the vite SPA fallback answers /auth/me
+      // with 200 + index.html (text/html), which the old AuthGate mistakenly
+      // treated as "authenticated" (fail-open bug, D-074).
+      "/auth": "http://localhost:8090",
       "/live": {
         target: "http://localhost:8090",
         ws: true,

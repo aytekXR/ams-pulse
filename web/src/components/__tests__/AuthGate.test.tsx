@@ -247,3 +247,138 @@ describe("AuthGate — OIDC phase-2", () => {
     });
   });
 });
+
+// ─── Fail-open bug fix tests (D-074) ─────────────────────────────────────────
+//
+// Guards against the regression where any HTTP 200 from /auth/me (including an
+// HTML SPA-fallback page) silently sets cookieAuthed=true and hides the gate.
+// Test (a) MUST fail before the AuthGate fix and pass after.
+describe("AuthGate — fail-open fix (D-074)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetToken.mockReturnValue(null);
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("not mocked")));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** Build a fetch stub that returns the given /auth/me response; /auth/oidc/status always returns disabled JSON. */
+  function makeMeResponse(meRes: Response): ReturnType<typeof vi.fn> {
+    return vi.fn((url: string) => {
+      if (url === "/auth/oidc/status")
+        return Promise.resolve(
+          new Response(JSON.stringify({ enabled: false }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      if (url === "/auth/me") return Promise.resolve(meRes);
+      return Promise.reject(new Error(`unmocked fetch: ${url}`));
+    });
+  }
+
+  it("(a) 200 text/html response from /auth/me does NOT authenticate (fail-open guard)", async () => {
+    // This is the SPA-fallback case: vite dev server (or a stale Go binary) answers
+    // /auth/me with 200 + index.html.  The gate MUST still render.
+    vi.stubGlobal(
+      "fetch",
+      makeMeResponse(
+        new Response(
+          "<!doctype html><html><head></head><body>SPA fallback</body></html>",
+          { status: 200, headers: { "Content-Type": "text/html; charset=UTF-8" } },
+        ),
+      ),
+    );
+
+    render(
+      <AuthGate>
+        <div data-testid="protected">Protected</div>
+      </AuthGate>,
+    );
+
+    // After both fetches settle the gate view must render and the protected
+    // content must NOT be visible — cookieAuthed must NOT be set for HTML bodies.
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^sign in$/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("protected")).not.toBeInTheDocument();
+  });
+
+  it("(b) 200 application/json with valid auth_method field → children render", async () => {
+    vi.stubGlobal(
+      "fetch",
+      makeMeResponse(
+        new Response(
+          JSON.stringify({ name: "oidc-user", role: "admin", auth_method: "cookie" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    render(
+      <AuthGate>
+        <div data-testid="protected">Protected</div>
+      </AuthGate>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("protected")).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: /^sign in$/i })).not.toBeInTheDocument();
+  });
+
+  it("(c) /auth/me network error → gate renders (not authenticated)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url === "/auth/oidc/status")
+          return Promise.resolve(
+            new Response(JSON.stringify({ enabled: false }), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            }),
+          );
+        if (url === "/auth/me")
+          return Promise.reject(new TypeError("NetworkError: Failed to fetch"));
+        return Promise.reject(new Error(`unmocked fetch: ${url}`));
+      }),
+    );
+
+    render(
+      <AuthGate>
+        <div data-testid="protected">Protected</div>
+      </AuthGate>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^sign in$/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("protected")).not.toBeInTheDocument();
+  });
+
+  it("(d) /auth/me 401 → gate renders quietly (clearToken NOT called)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      makeMeResponse(
+        new Response(JSON.stringify({ code: "UNAUTHORIZED", message: "not authenticated" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    render(
+      <AuthGate>
+        <div data-testid="protected">Protected</div>
+      </AuthGate>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^sign in$/i })).toBeInTheDocument();
+    });
+    expect(mockClearToken).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("protected")).not.toBeInTheDocument();
+  });
+});
