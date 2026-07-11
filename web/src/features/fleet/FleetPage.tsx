@@ -42,8 +42,9 @@ export function cpuStatus(pct: number): "critical" | "warning" | "healthy" {
  * Pure threshold function — maps mem % to a status tier string.
  * Note: mem "healthy" uses dataviz blue (#58A6FF), not status green,
  * because memory at low levels is a normal secondary metric.
+ * Exported so tests can verify threshold logic independently of rendering.
  */
-function memStatus(pct: number): "critical" | "warning" | "healthy" {
+export function memStatus(pct: number): "critical" | "warning" | "healthy" {
   if (pct > 85) return "critical";
   if (pct > 70) return "warning";
   return "healthy";

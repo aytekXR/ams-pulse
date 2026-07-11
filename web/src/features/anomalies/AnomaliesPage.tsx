@@ -194,7 +194,7 @@ function AnomalyRow({ flag }: AnomalyRowProps) {
             delta > 0
               ? "var(--color-error)"
               : delta < 0
-                ? "#58A6FF"
+                ? "var(--color-info)"
                 : "var(--color-muted)",
           fontFamily: "var(--font-mono)",
         }}
@@ -214,7 +214,7 @@ function AnomalyRow({ flag }: AnomalyRowProps) {
                 ? "var(--color-error)"
                 : severity === "warning"
                   ? "var(--color-warning)"
-                  : "#58A6FF",
+                  : "var(--color-info)",
           }}
           title={`${sigmaAbs.toFixed(2)}σ deviation`}
         >

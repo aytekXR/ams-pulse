@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { FleetPage, cpuStatus } from "../FleetPage";
+import { FleetPage, cpuStatus, memStatus } from "../FleetPage";
 import type { FleetNode } from "@/lib/api/types";
 import { ThemeProvider } from "@/lib/ThemeContext";
 import { STATUS_COLORS, LIGHT_STATUS_COLORS } from "@/lib/chartColors";
@@ -204,5 +204,70 @@ describe("cpuStatus → light palette hex (LIGHT_STATUS_COLORS)", () => {
 
   it("healthy maps to light healthy #0BA678", () => {
     expect(LIGHT_STATUS_COLORS[cpuStatus(45)]).toBe("#0BA678");
+  });
+});
+
+// ─── memStatus — pure threshold logic ────────────────────────────────────────
+//
+// Maps mem % to a status tier. Thresholds differ from cpuStatus:
+//   > 85 → critical, > 70 → warning, else → healthy.
+// "healthy" memory intentionally renders as dataviz blue, not status green
+// (documented in FleetPage.tsx comment at the memStatus definition).
+
+describe("memStatus — pure threshold logic", () => {
+  it("pct > 85 is critical", () => {
+    expect(memStatus(86)).toBe("critical");
+    expect(memStatus(100)).toBe("critical");
+    expect(memStatus(85.1)).toBe("critical");
+  });
+
+  it("boundary: pct = 85 is warning (not critical)", () => {
+    expect(memStatus(85)).toBe("warning");
+  });
+
+  it("pct > 70 and <= 85 is warning", () => {
+    expect(memStatus(71)).toBe("warning");
+    expect(memStatus(80)).toBe("warning");
+    expect(memStatus(85)).toBe("warning");
+  });
+
+  it("boundary: pct = 70 is healthy (not warning)", () => {
+    expect(memStatus(70)).toBe("healthy");
+  });
+
+  it("pct <= 70 is healthy", () => {
+    expect(memStatus(70)).toBe("healthy");
+    expect(memStatus(50)).toBe("healthy");
+    expect(memStatus(0)).toBe("healthy");
+  });
+});
+
+describe("memStatus → dark palette hex (STATUS_COLORS)", () => {
+  it("critical maps to dark critical #FF5C68", () => {
+    expect(STATUS_COLORS[memStatus(90)]).toBe("#FF5C68");
+  });
+
+  it("warning maps to dark warning #FFB224", () => {
+    expect(STATUS_COLORS[memStatus(75)]).toBe("#FFB224");
+  });
+
+  // healthy maps to dataviz blue #58A6FF in rendering (not STATUS_COLORS.healthy),
+  // documented intentional decision — chart dataviz, not status semantic.
+  it("healthy tier exists in STATUS_COLORS (healthy maps to #2CE5A7 in the status palette)", () => {
+    expect(STATUS_COLORS[memStatus(50)]).toBe("#2CE5A7");
+  });
+});
+
+describe("memStatus → light palette hex (LIGHT_STATUS_COLORS)", () => {
+  it("critical maps to light critical #DC2626", () => {
+    expect(LIGHT_STATUS_COLORS[memStatus(90)]).toBe("#DC2626");
+  });
+
+  it("warning maps to light warning #B45309", () => {
+    expect(LIGHT_STATUS_COLORS[memStatus(75)]).toBe("#B45309");
+  });
+
+  it("healthy tier exists in LIGHT_STATUS_COLORS", () => {
+    expect(LIGHT_STATUS_COLORS[memStatus(50)]).toBe("#0BA678");
   });
 });

@@ -142,7 +142,7 @@ vi.mock("recharts", () => ({
 }));
 
 import { adminApi, probesApi } from "@/api/client";
-import { ProbesPage } from "../ProbesPage";
+import { ProbesPage, ttfbColor, iceVariant } from "../ProbesPage";
 
 const freeLicense: LicenseInfo = { tier: "free", valid: true };
 const proLicense: LicenseInfo = { tier: "pro", valid: true };
@@ -639,5 +639,67 @@ describe("ProbesPage delete confirm", () => {
         screen.queryByRole("dialog", { name: /confirm probe deletion/i }),
       ).toBeNull();
     });
+  });
+});
+
+// ─── ttfbColor — pure threshold logic ────────────────────────────────────────
+//
+// Maps a TTFB value (ms) or null to a CSS variable string.
+// Thresholds: <200 → success, <500 → warning, ≥500 → error, null → muted.
+
+describe("ttfbColor — pure threshold logic", () => {
+  it("returns var(--color-muted) when ttfb is null", () => {
+    expect(ttfbColor(null)).toBe("var(--color-muted)");
+  });
+
+  it("returns var(--color-success) for ttfb < 200ms", () => {
+    expect(ttfbColor(0)).toBe("var(--color-success)");
+    expect(ttfbColor(100)).toBe("var(--color-success)");
+    expect(ttfbColor(199)).toBe("var(--color-success)");
+  });
+
+  it("boundary: ttfb = 200ms is warning (not success)", () => {
+    expect(ttfbColor(200)).toBe("var(--color-warning)");
+  });
+
+  it("returns var(--color-warning) for 200 ≤ ttfb < 500ms", () => {
+    expect(ttfbColor(200)).toBe("var(--color-warning)");
+    expect(ttfbColor(350)).toBe("var(--color-warning)");
+    expect(ttfbColor(499)).toBe("var(--color-warning)");
+  });
+
+  it("boundary: ttfb = 500ms is error (not warning)", () => {
+    expect(ttfbColor(500)).toBe("var(--color-error)");
+  });
+
+  it("returns var(--color-error) for ttfb ≥ 500ms", () => {
+    expect(ttfbColor(500)).toBe("var(--color-error)");
+    expect(ttfbColor(1000)).toBe("var(--color-error)");
+    expect(ttfbColor(9999)).toBe("var(--color-error)");
+  });
+});
+
+// ─── iceVariant — ICE terminal state to Badge variant ────────────────────────
+//
+// Maps a WebRTC ICE terminal state string to a Badge variant.
+// connected → success, failed → error, anything else → warning.
+
+describe("iceVariant — ICE state to Badge variant", () => {
+  it("'connected' maps to success", () => {
+    expect(iceVariant("connected")).toBe("success");
+  });
+
+  it("'failed' maps to error", () => {
+    expect(iceVariant("failed")).toBe("error");
+  });
+
+  it("'timeout' maps to warning (non-terminal fallback)", () => {
+    expect(iceVariant("timeout")).toBe("warning");
+  });
+
+  it("unknown strings map to warning", () => {
+    expect(iceVariant("checking")).toBe("warning");
+    expect(iceVariant("new")).toBe("warning");
+    expect(iceVariant("")).toBe("warning");
   });
 });
