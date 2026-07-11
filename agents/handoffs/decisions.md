@@ -3763,3 +3763,26 @@ ROADMAP-V2 §3 S17. Program docs ride the S16 close PR.
 - **Ops notes:** pulse-realams stack left RUNNING (loopback-only) for S18; AMS trial
   license expires 2026-07-12T12:09Z (operator-waived) — S17 was the last full-trial
   day; S18 opens with a read-only post-expiry sweep.
+
+## D-080 — SESSION-18 (2026-07-11): D-078 Phases 3+4 P1 scenarios + Phase 6 doc-gap list (IN PROGRESS; evidence at close)
+
+**S18 open verification:**
+- **Operator-action check (user directive): NO new operator action required — session
+  proceeds autonomously.** Standing queue unchanged (👀 browser-accept; AMS-reset
+  confirmation from S17 still unanswered — ~1 h elapsed, non-blocking; optionals).
+  Two protocol notes: (1) **TC-S-01 (20-publisher stress) load heads-up is RECORDED
+  in operator-expected.md before the run** per the "sessions will tell you" protocol —
+  short (~2 min), low-bitrate (500 kbps), run LAST (AMS may refuse WebRTC under load,
+  D-074 highResourceUsage); (2) TC-F-05 (AMS restart) stays FORCE_DISRUPT-gated —
+  operator-coordinated only, SKIPPED this session.
+- **Date-driven plan adjustments (same-day continuation, 2026-07-11T13:13Z):**
+  AMS trial license expires TOMORROW (07-12T12:09Z) → the S18 "post-expiry sweep"
+  premise doesn't apply; S17's P0 run is the pre-expiry baseline; the sweep moves to
+  S19 open. CI promotion gate still CLOSED (07-11 < 07-23) → **skip carry ×7**.
+- Preconditions: tree clean at S17 merge 59e4990; ci+e2e+codeql SUCCESS at HEAD;
+  protection exact (9 contexts, enforce_admins, strict); dependabot ZERO; no open
+  PRs; pulse-realams stack healthy (Up 2 h); AMS reachable (teststream broadcasting).
+- TC-A-08 premise correction carried from S17 triage: prod egress_gb=0.0025 — a
+  bitrate×watch-time ESTIMATE, not the matrix's "always 0"; scenario authored
+  against the estimate semantics.
+- Branch `s18-d080`; PR-first, ≤2 pushes (D-076).
