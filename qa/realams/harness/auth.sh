@@ -27,7 +27,9 @@ AMS_PASS="$(grep '^PULSE_AMS_LOGIN_PASSWORD=' "${_DOTENV}" | cut -d= -f2-)"
 if [ -z "$AMS_EMAIL" ] || [ -z "$AMS_PASS" ]; then
   echo "[auth] ERROR: PULSE_AMS_LOGIN_EMAIL or PULSE_AMS_LOGIN_PASSWORD" \
        "not found in deploy/.env" >&2
-  exit 1
+  # Source-safe: `return` pops out of a sourced file; when executed it fails
+  # (can't return outside a function) and the || exit takes over.
+  return 1 2>/dev/null || exit 1
 fi
 
 # ── Idempotency: reuse cookie if still valid ──────────────────────────────────
@@ -50,7 +52,10 @@ _ams_session_valid() {
 
 if _ams_session_valid; then
   echo "[auth] Existing AMS session is valid — reusing cookie (${AMS_COOKIE_FILE})" >&2
-  exit 0
+  # Source-safe success: MUST NOT `exit` here — scenario scripts source this
+  # file, and exit-on-source terminates them with rc=0 BEFORE their body runs
+  # (the S17 suite false-green: 17 scenarios "passed" without executing).
+  return 0 2>/dev/null || exit 0
 fi
 
 # ── Single login attempt ───────────────────────────────────────────────────────
@@ -80,5 +85,5 @@ else
   echo "[auth] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" >&2
   # Remove any partial cookie to prevent cached-failure confusion
   rm -f "$AMS_COOKIE_FILE"
-  exit 1
+  return 1 2>/dev/null || exit 1
 fi

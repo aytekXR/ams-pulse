@@ -41,8 +41,37 @@ log "PULSE_URL=${PULSE_URL}"
 # ── Step 1: Count 403 warnings in pulse-realams-pulse-1 logs ─────────────────
 log "Extracting 403 warning count from pulse-realams-pulse-1 logs"
 _log_403_count="$(sg docker -c "docker logs pulse-realams-pulse-1 2>&1" \
-  | grep -c '403' 2>/dev/null || echo 0)"
+  | grep -c '403' 2>/dev/null || true)"
 log "pulse-realams-pulse-1 log 403 count: ${_log_403_count}"
+
+# Premise check (S17 drift finding): this AMS currently has NO IP-blocked apps
+# (S16's 16-app inventory shrank to 4, all remoteAllowedCIDR-open). With no
+# blocked app there is nothing for Pulse to 403 on — the scenario has no live
+# trigger and must SKIP, not FAIL. Verify the premise via the authed app list:
+# every app whose app-scope REST answers 200 from this VPS is open.
+if [ "${_log_403_count}" = "0" ]; then
+  _blocked=0
+  _apps="$(curl -s -m 15 -b "${AMS_COOKIE_FILE}" "${AMS_URL}/rest/v2/applications" 2>/dev/null \
+    | jq -r '.applications[]? // empty' 2>/dev/null || true)"
+  for _app in ${_apps}; do
+    _code="$(curl -s -m 10 -o /dev/null -w '%{http_code}' \
+      "${AMS_URL}/${_app}/rest/v2/broadcasts/list/0/1" 2>/dev/null || echo 000)"
+    log "  app=${_app} app-scope HTTP ${_code}"
+    [ "${_code}" = "403" ] && _blocked=$((_blocked + 1))
+  done
+  if [ "${_blocked}" -eq 0 ]; then
+    {
+      echo "SKIP"
+      echo "Premise unmet: no IP-blocked apps exist on this AMS today (all apps"
+      echo "answer app-scope REST with 200 from this VPS), so the 403-handling"
+      echo "path has no live trigger. S16 inventory (16 apps, 8 blocked) has"
+      echo "drifted to $(printf '%s' "${_apps}" | wc -w) open apps. Re-run after"
+      echo "creating a test app with remoteAllowedCIDR=127.0.0.1."
+    } > "${EVIDENCE_DIR}/verdict.txt"
+    cat "${EVIDENCE_DIR}/verdict.txt" >&2
+    exit 77
+  fi
+fi
 
 # Save a sample of 403 log lines for evidence
 sg docker -c "docker logs pulse-realams-pulse-1 2>&1" \

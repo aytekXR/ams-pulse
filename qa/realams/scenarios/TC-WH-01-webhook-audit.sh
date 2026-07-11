@@ -56,7 +56,7 @@ log "realams webhook log lines: ${_realams_wh_lines}"
 # Count accepted deliveries — look for lines indicating a successful webhook receipt
 _realams_accepted="$(printf '%s' "${_realams_logs}" \
   | grep -ciE '(webhook.*accepted|webhook.*ok|webhook.*200|accepted.*webhook|delivery.*success)' \
-  2>/dev/null || echo 0)"
+  2>/dev/null || true)"
 log "realams accepted webhook deliveries: ${_realams_accepted}"
 printf 'realams_webhook_log_lines=%s\nrealams_accepted_deliveries=%s\n' \
   "${_realams_wh_lines}" "${_realams_accepted}" >> "${EVIDENCE_DIR}/timeline.txt"
@@ -78,7 +78,7 @@ else
 
   _prod_accepted="$(printf '%s' "${_prod_logs}" \
     | grep -ciE '(webhook.*accepted|webhook.*ok|webhook.*200|accepted.*webhook|delivery.*success)' \
-    2>/dev/null || echo 0)"
+    2>/dev/null || true)"
   log "prod accepted webhook deliveries: ${_prod_accepted}"
 
   printf 'prod_webhook_log_lines=%s\nprod_accepted_deliveries=%s\n' \

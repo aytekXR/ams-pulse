@@ -110,7 +110,7 @@ printf '%s' "${_result}" | jq . > "${EVIDENCE_DIR}/probe-result-first.json"
 log "Result: $(printf '%s' "${_result}" | jq -c '{success,error_code,ttfb_ms}')"
 
 # ── Assertions ───────────────────────────────────────────────────────────────
-_success="$(printf '%s' "${_result}" | jq -r '.success // true')"
+_success="$(printf '%s' "${_result}" | jq -r 'if .success == true then "true" else "false" end')"
 assert_eq "${_success}" "false" "${SCENARIO} success=false for 404 stream" || true
 
 _error_code="$(printf '%s' "${_result}" | jq -r '.error_code // "null"')"

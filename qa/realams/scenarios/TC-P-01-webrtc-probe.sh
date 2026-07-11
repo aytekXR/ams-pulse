@@ -143,7 +143,7 @@ printf '%s' "${_result}" | jq . > "${EVIDENCE_DIR}/probe-result-first.json"
 log "Result: $(printf '%s' "${_result}" | jq -c '{success,ice_state,signaling_state,error_code}')"
 
 # ── Assertions ───────────────────────────────────────────────────────────────
-_success="$(printf '%s' "${_result}" | jq -r '.success // false')"
+_success="$(printf '%s' "${_result}" | jq -r 'if .success == true then "true" else "false" end')"
 assert_eq "${_success}" "true" "${SCENARIO} success=true" || true
 
 _signaling="$(printf '%s' "${_result}" | jq -r '.signaling_state // ""')"

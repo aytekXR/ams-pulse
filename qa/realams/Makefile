@@ -47,13 +47,20 @@ validate-p0: auth ## Run P0 scenarios in order; SKIP(77)/MISSING do not fail; FA
 	  if [ -z "$$script" ]; then \
 	    verdict=MISSING; skip=$$((skip+1)); evdir="-"; \
 	  else \
+	    stamp=$$(mktemp); \
 	    bash "$$script"; rc=$$?; \
+	    evdir=$$(ls -td "$(EVIDENCE_ROOT)/S17-$${tc}-"* 2>/dev/null | head -1 || echo '-'); \
 	    case "$$rc" in \
-	      0)  verdict=PASS; pass=$$((pass+1)) ;; \
+	      0)  if [ -f "$$evdir/verdict.txt" ] && [ "$$evdir/verdict.txt" -nt "$$stamp" ] \
+	             && head -1 "$$evdir/verdict.txt" | grep -q '^PASS'; then \
+	            verdict=PASS; pass=$$((pass+1)); \
+	          else \
+	            verdict=NOEVID; fail=$$((fail+1)); \
+	          fi ;; \
 	      77) verdict=SKIP; skip=$$((skip+1)) ;; \
 	      *)  verdict=FAIL; fail=$$((fail+1)) ;; \
 	    esac; \
-	    evdir=$$(ls -td "$(EVIDENCE_ROOT)/S17-$${tc}-"* 2>/dev/null | head -1 || echo '-'); \
+	    rm -f "$$stamp"; \
 	  fi; \
 	  results="$${results}$${tc}|$${verdict}|$${evdir}\n"; \
 	done; \
@@ -71,13 +78,20 @@ validate-all: auth ## Run every TC-*.sh in scenarios/ (sorted); SKIP(77) OK; FAI
 	@fail=0; pass=0; skip=0; results=""; \
 	for script in $$(ls "$(SCENARIOS_DIR)"/TC-*.sh 2>/dev/null | sort || true); do \
 	  tc=$$(basename "$$script" .sh | cut -d- -f1-3); \
+	  stamp=$$(mktemp); \
 	  bash "$$script"; rc=$$?; \
+	  evdir=$$(ls -td "$(EVIDENCE_ROOT)/S17-$${tc}-"* 2>/dev/null | head -1 || echo '-'); \
 	  case "$$rc" in \
-	    0)  verdict=PASS; pass=$$((pass+1)) ;; \
+	    0)  if [ -f "$$evdir/verdict.txt" ] && [ "$$evdir/verdict.txt" -nt "$$stamp" ] \
+	           && head -1 "$$evdir/verdict.txt" | grep -q '^PASS'; then \
+	          verdict=PASS; pass=$$((pass+1)); \
+	        else \
+	          verdict=NOEVID; fail=$$((fail+1)); \
+	        fi ;; \
 	    77) verdict=SKIP; skip=$$((skip+1)) ;; \
 	    *)  verdict=FAIL; fail=$$((fail+1)) ;; \
 	  esac; \
-	  evdir=$$(ls -td "$(EVIDENCE_ROOT)/S17-$${tc}-"* 2>/dev/null | head -1 || echo '-'); \
+	  rm -f "$$stamp"; \
 	  results="$${results}$${tc}|$${verdict}|$${evdir}\n"; \
 	done; \
 	printf '\n%-14s  %-8s  %s\n' SCENARIO VERDICT EVIDENCE_DIR; \
