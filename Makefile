@@ -4,7 +4,7 @@
 .PHONY: help build build-server build-web build-sdk \
         test test-server test-web test-sdk \
         lint lint-server lint-web lint-sdk \
-        validate-contracts dev up down \
+        validate-contracts validate-realams-p0 dev up down \
         helm-lint helm-template helm-golden-update \
         mock-ams local-stack-up local-stack-down
 
@@ -86,6 +86,9 @@ validate-contracts: ## Validate JSON schemas (ajv) and OpenAPI spec (redocly)
 	  -s contracts/events/alert-notification.schema.json
 	npx --yes @redocly/cli lint --skip-rule=path-parameters-defined \
 	  contracts/openapi/pulse-api.yaml
+
+validate-realams-p0: ## Run the P0 real-AMS validation suite (requires pulse-realams stack)
+	$(MAKE) -C qa/realams validate-p0
 
 # ---------------------------------------------------------------------------
 # Docker Compose (requires Docker daemon — see decisions.md D-002)

@@ -59,5 +59,8 @@ agents/handoffs/real-ams-captures/
 web/playwright-report/
 web/test-results/
 
+# Real-AMS validation evidence (timestamped JSON/screenshot packages — never commit)
+qa/realams/evidence/
+
 # licensegen local build artifact (CI uses `go run .`)
 qa/licensegen/licensegen
