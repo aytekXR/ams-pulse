@@ -11,31 +11,34 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-16.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-17.md`)
 
-**Session 2026-07-11 result: D-076 — S15b DONE (operator answer batch EXECUTED).**
-- **v0.3.0 LIVE IN PROD** (stamped f2aac13; CH 0006–0008 applied; smoke green; rollback
-  `pre-v0.3.0` + backup ts=20260710-221024 stand). ★ First tag BLOCKED by the release
-  Trivy gate — go-jose CVE-2026-34986 (HIGH) fixed 4.0.5→4.1.4 same session; nothing
-  vulnerable published. GH release live.
-- **U3 RESOLVED + LIVE-VERIFIED:** two live-only root causes — (1) prod overlays never
-  passed PULSE_LICENSE_* (CI-only wiring; fixed in real-ams.yml), (2) operator's .env
-  held the PRIVATE key, not a license → ORCH minted **enterprise perpetual**, swapped
-  in, shredded scratch; original at deploy/.env.bak-d076 (operator: vault key → delete).
-  Verified: `tier=enterprise` + beacon 202 → qoe/summary startup_p50_ms=123.
-- **CodeQL REQUIRED** (D-076 decide-for-me: 29-run streak) + **PR-FIRST ACTIVE**
-  (enforce_admins=true, reviews 0, 9 contexts) — **sessions now work via PRs; direct
-  pushes to main are BLOCKED.** Mobile SDKs DEFERRED; DASH fixture SKIPPED.
-- **⚠ NEW OPERATOR DIRECTIVE (BINDING): max 2 pushes per session** — batch commits;
-  push only for required CI evidence + at close (in memory + D-076).
-- Operator queue now: 👀 browser-accept of the re-branded UI (pinged) + 🔑 vault the
-  private key / delete .env.bak-d076 + optionals (D-V2-1, O7, O11, workflow-scope).
+**Session 2026-07-11 result: D-077 — S16 DONE (+ D-078 opened: new operator program).**
+- **S16 LANDED (one PR):** AuthGate fail-open FIX (the web-e2e ×12-red root cause —
+  SPA-fallback 200 on unproxied /auth/me "authenticated" the shell; JSON shape-guard +
+  /auth vite proxy, TDD); brandkit phase 2 (light theme 15/15 exact tokens, density
+  default/compact/wall, motion + reduced-motion, sidebar toggle, status-color sweep,
+  StreamsTable 44→40); ProbesPage WebRTC columns (ice_state badge + rtt/jitter/loss,
+  absent=dash, 0=valid). Gates: 339/339 vitest, coverage 65.80/61.13/54.85 (all ↑),
+  Playwright-docker 15/15 (the gate caught 3 spec bugs — see D-077). Key-hygiene
+  closed (backup shredded on operator say-so). WO-A skip carry ×5; csp-e2e promotion
+  candidate lands EXACTLY at 07-23; web-e2e clock restarted at S16's merge (~07-25).
+- **★ D-078 (NEW OPERATOR DIRECTIVE, primary track from S17):** Pulse × AMS
+  **real-validation & product-fit program** — 8 phases from real test env (control AMS:
+  broadcasts/viewers/failures; verify effects in Pulse; AMS-API-vs-Pulse-API parity
+  checks that FAIL loudly) through PRD matrix to a marketplace-readiness report for
+  the Ant Media team. Plan of record: **`docs/assessment/`** (README + capability-map +
+  validation-environment + scenario-matrix + session-plan), authored at S16 close.
+- **Session continuity proof:** S16's terminal died mid-workflow; a fresh session
+  resumed from the persisted script + journal with zero work lost (D-077).
+- Operator queue now: 👀 browser-accept of the re-branded UI (standing) + optionals
+  (D-V2-1, O7, O11, workflow-scope).
 
-**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-16.md` (REVISED at D-076) and
-execute it** (CI promotions — date gate opens ≥07-23, e2e/web-e2e/csp-e2e streaks;
-brandkit phase 2; probe-stats UI). **PR-FIRST: all work via branches + PRs (direct main
-pushes are blocked); max 2 pushes/session.** Check `docs/operator-expected.md` first —
-only the browser-accept + key-vault items are pending, both operator-side.
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-17.md` and execute it**
+(D-078 program Phases 1–2: build the real-AMS harness + P0 parity scenarios; CI
+promotions if the ≥07-23 gate is open, else skip carry ×6; S16 verifier backlog).
+**PR-FIRST: all work via branches + PRs; max 2 pushes/session.** Check
+`docs/operator-expected.md` + `docs/assessment/session-plan.md` first.
 
 ---
 

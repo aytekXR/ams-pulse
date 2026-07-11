@@ -6,13 +6,16 @@
  * - Empty state when no nodes
  * - Node cards render with role/status badges
  * - Node table view renders all columns
- * - Health color logic (cpu thresholds)
+ * - Health color logic — cpuStatus pure threshold + both palettes (dark & light)
  * - Aggregate header counts
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { FleetPage } from "../FleetPage";
+import { FleetPage, cpuStatus } from "../FleetPage";
 import type { FleetNode } from "@/lib/api/types";
+import { ThemeProvider } from "@/lib/ThemeContext";
+import { STATUS_COLORS, LIGHT_STATUS_COLORS } from "@/lib/chartColors";
+import type { ReactNode } from "react";
 
 // Mock the fleet API
 const mockListNodes = vi.fn();
@@ -63,20 +66,26 @@ const sampleNodes: FleetNode[] = [
   },
 ];
 
+// Wrap renders with ThemeProvider — FleetPage calls useStatusColors().
+function wrapper({ children }: { children: ReactNode }) {
+  return <ThemeProvider>{children}</ThemeProvider>;
+}
+
 describe("FleetPage rendering", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    document.documentElement.setAttribute("data-theme", "dark");
   });
 
   it("shows loading spinner while fetching", () => {
     mockListNodes.mockReturnValue(new Promise(() => {}));
-    render(<FleetPage />);
+    render(<FleetPage />, { wrapper });
     expect(screen.getByRole("status")).toBeInTheDocument();
   });
 
   it("shows empty state when no nodes discovered", async () => {
     mockListNodes.mockResolvedValue({ items: [], meta: {} });
-    render(<FleetPage />);
+    render(<FleetPage />, { wrapper });
     await waitFor(() => {
       expect(screen.getByText(/no fleet nodes discovered/i)).toBeInTheDocument();
     });
@@ -84,7 +93,7 @@ describe("FleetPage rendering", () => {
 
   it("shows error banner on fetch failure", async () => {
     mockListNodes.mockRejectedValue(new Error("network error"));
-    render(<FleetPage />);
+    render(<FleetPage />, { wrapper });
     await waitFor(() => {
       expect(screen.getByRole("alert")).toBeInTheDocument();
     });
@@ -92,7 +101,7 @@ describe("FleetPage rendering", () => {
 
   it("renders node cards with role badges", async () => {
     mockListNodes.mockResolvedValue({ items: sampleNodes, meta: {} });
-    render(<FleetPage />);
+    render(<FleetPage />, { wrapper });
     await waitFor(() => {
       // node-origin-1 should show origin badge
       expect(screen.getByText("node-origin-1")).toBeInTheDocument();
@@ -107,7 +116,7 @@ describe("FleetPage rendering", () => {
 
   it("renders aggregate header with correct counts", async () => {
     mockListNodes.mockResolvedValue({ items: sampleNodes, meta: {} });
-    render(<FleetPage />);
+    render(<FleetPage />, { wrapper });
     await waitFor(() => {
       // 3 total, 1 up, 1 degraded, 1 down, 1 origin, 2 edge
       expect(screen.getByText("3")).toBeInTheDocument(); // total
@@ -116,7 +125,7 @@ describe("FleetPage rendering", () => {
 
   it("switches to table view when table button clicked", async () => {
     mockListNodes.mockResolvedValue({ items: sampleNodes, meta: {} });
-    render(<FleetPage />);
+    render(<FleetPage />, { wrapper });
     await waitFor(() => {
       expect(screen.getByText("node-origin-1")).toBeInTheDocument();
     });
@@ -134,37 +143,66 @@ describe("FleetPage rendering", () => {
 
   it("renders version numbers", async () => {
     mockListNodes.mockResolvedValue({ items: sampleNodes, meta: {} });
-    render(<FleetPage />);
+    render(<FleetPage />, { wrapper });
     await waitFor(() => {
       expect(screen.getByText(/2\.9\.1/)).toBeInTheDocument();
     });
   });
 });
 
-// ─── Health color logic (pure unit test) ─────────────────────────────────────
+// ─── CPU threshold — pure logic + both palettes ───────────────────────────────
+//
+// The cpuStatus() export from FleetPage returns the status tier string.
+// STATUS_COLORS and LIGHT_STATUS_COLORS map that string to the theme hex.
+// These pins are updated atomically with the FleetPage.tsx LoadBar ternaries.
 
-// ─── cpuColor mirrors the inline ternary in FleetPage.tsx LoadBar calls ────────
-// Updated atomically with FleetPage.tsx to brandkit STATUS_COLORS (D-071 trap fix).
-function cpuColor(pct: number): string {
-  if (pct > 80) return "#FF5C68"; // critical
-  if (pct > 60) return "#FFB224"; // warning
-  return "#2CE5A7"; // healthy
-}
-
-describe("Fleet node health color logic", () => {
-  it("returns critical red for cpu > 80", () => {
-    expect(cpuColor(85)).toBe("#FF5C68");
-    expect(cpuColor(100)).toBe("#FF5C68");
+describe("cpuStatus — pure threshold logic", () => {
+  it("pct > 80 is critical", () => {
+    expect(cpuStatus(85)).toBe("critical");
+    expect(cpuStatus(100)).toBe("critical");
+    expect(cpuStatus(81)).toBe("critical");
   });
 
-  it("returns warning amber for cpu > 60 and <= 80", () => {
-    expect(cpuColor(65)).toBe("#FFB224");
-    expect(cpuColor(80)).toBe("#FFB224");
+  it("pct > 60 and <= 80 is warning", () => {
+    expect(cpuStatus(65)).toBe("warning");
+    expect(cpuStatus(80)).toBe("warning");
+    expect(cpuStatus(61)).toBe("warning");
   });
 
-  it("returns healthy green for cpu <= 60", () => {
-    expect(cpuColor(60)).toBe("#2CE5A7");
-    expect(cpuColor(0)).toBe("#2CE5A7");
-    expect(cpuColor(45)).toBe("#2CE5A7");
+  it("pct <= 60 is healthy", () => {
+    expect(cpuStatus(60)).toBe("healthy");
+    expect(cpuStatus(0)).toBe("healthy");
+    expect(cpuStatus(45)).toBe("healthy");
+  });
+});
+
+describe("cpuStatus → dark palette hex (STATUS_COLORS)", () => {
+  it("critical maps to dark critical #FF5C68", () => {
+    expect(STATUS_COLORS[cpuStatus(85)]).toBe("#FF5C68");
+    expect(STATUS_COLORS[cpuStatus(100)]).toBe("#FF5C68");
+  });
+
+  it("warning maps to dark warning #FFB224", () => {
+    expect(STATUS_COLORS[cpuStatus(65)]).toBe("#FFB224");
+    expect(STATUS_COLORS[cpuStatus(80)]).toBe("#FFB224");
+  });
+
+  it("healthy maps to dark healthy #2CE5A7", () => {
+    expect(STATUS_COLORS[cpuStatus(45)]).toBe("#2CE5A7");
+    expect(STATUS_COLORS[cpuStatus(0)]).toBe("#2CE5A7");
+  });
+});
+
+describe("cpuStatus → light palette hex (LIGHT_STATUS_COLORS)", () => {
+  it("critical maps to light critical #DC2626", () => {
+    expect(LIGHT_STATUS_COLORS[cpuStatus(85)]).toBe("#DC2626");
+  });
+
+  it("warning maps to light warning #B45309", () => {
+    expect(LIGHT_STATUS_COLORS[cpuStatus(65)]).toBe("#B45309");
+  });
+
+  it("healthy maps to light healthy #0BA678", () => {
+    expect(LIGHT_STATUS_COLORS[cpuStatus(45)]).toBe("#0BA678");
   });
 });

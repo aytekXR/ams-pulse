@@ -492,6 +492,116 @@ describe("ProbesPage synthetic labeling", () => {
   });
 });
 
+// ─── WebRTC column tests (ICE state, RTT, Jitter, Loss) ──────────────────────
+
+describe("ProbesPage WebRTC columns", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(adminApi.getLicense).mockResolvedValue(proLicense);
+    vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
+  });
+
+  /** A minimal WebRTC probe result with all new fields absent by default */
+  const baseRtcResult: ProbeResult = {
+    id: "r-rtc-1",
+    probe_id: "probe-1",
+    ts: now - 30_000,
+    success: true,
+    ttfb_ms: null,
+  };
+
+  async function openWebRTCResults(results: ProbeResult[]) {
+    vi.mocked(probesApi.getResults).mockResolvedValue({ items: results, meta: {} });
+    render(<ProbesPage />);
+    await waitFor(() => expect(screen.getByText("Main HLS stream")).toBeInTheDocument());
+    const btns = screen.getAllByRole("button", { name: /view results for/i });
+    fireEvent.click(btns[0]);
+    await waitFor(() =>
+      expect(screen.getByText(/synthetic probe results/i)).toBeInTheDocument(),
+    );
+  }
+
+  // ── ICE state badge tests ─────────────────────────────────────────────────
+
+  it("renders 'connected' badge for ice_state='connected'", async () => {
+    await openWebRTCResults([{ ...baseRtcResult, ice_state: "connected" }]);
+    expect(screen.getByText("connected")).toBeInTheDocument();
+  });
+
+  it("renders 'failed' badge for ice_state='failed'", async () => {
+    await openWebRTCResults([{ ...baseRtcResult, ice_state: "failed" }]);
+    expect(screen.getByText("failed")).toBeInTheDocument();
+  });
+
+  it("renders 'timeout' badge for ice_state='timeout'", async () => {
+    await openWebRTCResults([{ ...baseRtcResult, ice_state: "timeout" }]);
+    expect(screen.getByText("timeout")).toBeInTheDocument();
+  });
+
+  it("renders dash (no badge) when ice_state is absent", async () => {
+    // ice_state key is completely omitted — key-absent = NOT MEASURED
+    await openWebRTCResults([{ ...baseRtcResult }]);
+    expect(screen.queryByText("connected")).toBeNull();
+    expect(screen.queryByText("failed")).toBeNull();
+    expect(screen.queryByText("timeout")).toBeNull();
+  });
+
+  it("renders dash when ice_state is empty string (pre-D-074 server compat)", async () => {
+    await openWebRTCResults([{ ...baseRtcResult, ice_state: "" }]);
+    expect(screen.queryByText("connected")).toBeNull();
+    expect(screen.queryByText("failed")).toBeNull();
+    expect(screen.queryByText("timeout")).toBeNull();
+  });
+
+  // ── RTT column tests ──────────────────────────────────────────────────────
+
+  it("renders '0.0 ms' for rtt_ms=0 (zero is a valid measured value, not a dash)", async () => {
+    await openWebRTCResults([{ ...baseRtcResult, rtt_ms: 0 }]);
+    expect(screen.getByText("0.0 ms")).toBeInTheDocument();
+  });
+
+  it("renders dash when rtt_ms is absent", async () => {
+    // baseRtcResult has no rtt_ms — expect no decimal-formatted ms value
+    await openWebRTCResults([{ ...baseRtcResult }]);
+    expect(screen.queryByText(/\d+\.\d+ ms/)).toBeNull();
+  });
+
+  // ── Jitter column tests ───────────────────────────────────────────────────
+
+  it("renders '0.0 ms' for jitter_ms=0", async () => {
+    await openWebRTCResults([{ ...baseRtcResult, jitter_ms: 0 }]);
+    expect(screen.getByText("0.0 ms")).toBeInTheDocument();
+  });
+
+  it("renders dash when jitter_ms is absent", async () => {
+    await openWebRTCResults([{ ...baseRtcResult }]);
+    expect(screen.queryByText(/\d+\.\d+ ms/)).toBeNull();
+  });
+
+  // ── Loss column tests ─────────────────────────────────────────────────────
+
+  it("renders '0.0%' for loss_pct=0 (the critical zero-is-valid pin)", async () => {
+    await openWebRTCResults([{ ...baseRtcResult, loss_pct: 0 }]);
+    expect(screen.getByText("0.0%")).toBeInTheDocument();
+  });
+
+  it("renders dash when loss_pct is absent", async () => {
+    await openWebRTCResults([{ ...baseRtcResult }]);
+    expect(screen.queryByText("0.0%")).toBeNull();
+  });
+
+  // ── Protocol coverage: HLS rows show dashes in all four columns ───────────
+
+  it("HLS result rows show dashes in all four WebRTC columns (no ICE badges, no formatted values)", async () => {
+    // sampleResults are HLS/generic — none have ice_state/rtt_ms/jitter_ms/loss_pct
+    await openWebRTCResults(sampleResults);
+    expect(screen.queryByText("connected")).toBeNull();
+    expect(screen.queryByText("failed")).toBeNull();
+    expect(screen.queryByText("timeout")).toBeNull();
+    expect(screen.queryByText("0.0%")).toBeNull();
+  });
+});
+
 describe("ProbesPage delete confirm", () => {
   beforeEach(() => {
     vi.clearAllMocks();

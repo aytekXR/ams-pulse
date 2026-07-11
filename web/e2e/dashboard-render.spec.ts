@@ -42,6 +42,27 @@ test.describe("Dashboard render", () => {
     await page.route("/api/v1/live/streams**", (route) =>
       route.fulfill({ status: 200, contentType: "application/json", body: STREAMS_BODY })
     );
+
+    // AuthGate mount-time checks: mock both /auth endpoints so the vite
+    // preview /auth proxy (no backend on 8090 in CI) never answers 502.
+    // /auth/me must be 200 here: Chromium logs ANY non-2xx resource load as
+    // a console error, which would trip the zero-error assert below. Auth
+    // semantics (401/HTML/network paths) are pinned in auth-gate.spec.ts and
+    // the AuthGate unit tests — this spec only cares about dashboard render.
+    await page.route("/auth/me", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ name: "e2e", role: "admin", auth_method: "token" }),
+      })
+    );
+    await page.route("/auth/oidc/status", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ enabled: false }),
+      })
+    );
   });
 
   test("nav + overview cards render; zero console errors + pageerrors", async ({ page }) => {

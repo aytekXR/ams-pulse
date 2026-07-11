@@ -59,13 +59,23 @@ export function AuthGate({ children }: Props) {
       });
 
     fetch("/auth/me")
-      .then((r) => {
-        if (!cancelled && r.ok) {
+      .then(async (r) => {
+        if (cancelled) return;
+        if (!r.ok) return; // 401/403 etc — stay on gate, no event fired
+        // Guard against the SPA-fallback fail-open: only trust the response when
+        // it is actually JSON (a Go binary returning index.html is HTTP 200 but
+        // text/html and must NOT be treated as "authenticated").
+        const ct = r.headers.get("content-type") ?? "";
+        if (!ct.includes("application/json")) return;
+        // Validate the shape per contracts/openapi/pulse-api.yaml /auth/me: the
+        // object must carry auth_method so we know it is the real endpoint.
+        const data = (await r.json()) as { auth_method?: string };
+        if (!cancelled && typeof data?.auth_method === "string") {
           setCookieAuthed(true);
         }
       })
       .catch(() => {
-        /* ignore — server unreachable or cookie not present */
+        /* ignore — server unreachable, cookie not present, or JSON parse error */
       });
 
     return () => {

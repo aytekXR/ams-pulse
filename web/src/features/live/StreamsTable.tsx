@@ -2,12 +2,15 @@ import { useRef, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Badge } from "@/components/Badge";
 import type { LiveStream } from "@/lib/api/types";
+import { useDensity } from "@/lib/ThemeContext";
 
 interface Props {
   streams: LiveStream[];
 }
 
-const ROW_HEIGHT = 44;
+// ROW_HEIGHT was 44 (phase-1 divergence vs tokens.json tableRowHeight=40).
+// Replaced by useDensity().rowHeight so all three density modes are correct:
+//   default=40, compact=32, wall=48 (see density.ts ROW_HEIGHT_MAP).
 
 type BadgeVariant = "success" | "warning" | "error" | "muted" | "default" | "info";
 
@@ -42,12 +45,14 @@ function fmtBitrate(kbps: number | undefined): string {
 
 export function StreamsTable({ streams }: Props) {
   const parentRef = useRef<HTMLDivElement>(null);
+  // rowHeight is density-aware: default=40, compact=32, wall=48.
+  const { rowHeight } = useDensity();
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual returns non-memoizable functions; this is expected and documented behavior
   const rowVirtualizer = useVirtualizer({
     count: streams.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => rowHeight,
     overscan: 10,
   });
 
@@ -139,7 +144,7 @@ export function StreamsTable({ streams }: Props) {
                 top: 0,
                 left: 0,
                 width: "100%",
-                height: ROW_HEIGHT,
+                height: rowHeight,
                 transform: `translateY(${virtualRow.start}px)`,
                 display: "flex",
                 alignItems: "center",

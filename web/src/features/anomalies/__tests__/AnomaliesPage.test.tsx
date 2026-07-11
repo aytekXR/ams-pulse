@@ -254,3 +254,64 @@ describe("AnomaliesPage rendering", () => {
     expect((select as HTMLSelectElement).value).toBe("3");
   });
 });
+
+// ─── B2 sweep: status color CSS vars ─────────────────────────────────────────
+//
+// These pins verify that semantic status inline-styles reference CSS custom
+// properties instead of hardcoded hex values. CSS vars let global.css serve
+// the correct value for both dark and light themes.
+//
+// jsdom 29 serialises CSS-var references to getAttribute("style") even for
+// standard CSS properties (e.g. color: var(--color-error)), so we can assert
+// on the raw style string.
+
+describe("AnomaliesPage — status-color CSS vars (B2 sweep)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("sigma error color uses var(--color-error) not hardcoded #FF5C68", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue(enterpriseLicense);
+    vi.mocked(anomaliesApi.list).mockResolvedValue({
+      items: [sampleFlags[0]], // sigma 4.5 → severity "error"
+      meta: { total: 1 },
+    });
+    render(<AnomaliesPage />);
+    await waitFor(() => {
+      const sigmaEl = screen.getByText("4.50σ");
+      const styleText = sigmaEl.getAttribute("style") ?? sigmaEl.style.cssText;
+      expect(styleText).toContain("var(--color-error)");
+    });
+  });
+
+  it("sigma warning color uses var(--color-warning) not hardcoded #FFB224", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue(enterpriseLicense);
+    vi.mocked(anomaliesApi.list).mockResolvedValue({
+      items: [sampleFlags[1]], // sigma 3.1 → severity "warning"
+      meta: { total: 1 },
+    });
+    render(<AnomaliesPage />);
+    await waitFor(() => {
+      const sigmaEl = screen.getByText("3.10σ");
+      const styleText = sigmaEl.getAttribute("style") ?? sigmaEl.style.cssText;
+      expect(styleText).toContain("var(--color-warning)");
+    });
+  });
+
+  it("positive delta uses var(--color-error) not hardcoded #FF5C68", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue(enterpriseLicense);
+    vi.mocked(anomaliesApi.list).mockResolvedValue({
+      items: [sampleFlags[0]], // observed 150, expected 50 → delta = +100 → positive
+      meta: { total: 1 },
+    });
+    const { container } = render(<AnomaliesPage />);
+    await waitFor(() => {
+      // Delta cell: positive delta → error color; text content is "+100.00"
+      const tds = Array.from(container.querySelectorAll("td")) as HTMLElement[];
+      const deltaCell = tds.find((td) => td.textContent?.trim() === "+100.00");
+      expect(deltaCell).toBeDefined();
+      const styleText = deltaCell!.getAttribute("style") ?? deltaCell!.style.cssText;
+      expect(styleText).toContain("var(--color-error)");
+    });
+  });
+});

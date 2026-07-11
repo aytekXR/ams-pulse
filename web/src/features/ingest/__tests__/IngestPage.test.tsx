@@ -127,3 +127,58 @@ describe("IngestPage rendering", () => {
     });
   });
 });
+
+// ─── B2 sweep: health-bar uses CSS vars ──────────────────────────────────────
+//
+// The health-score progress bar previously used hardcoded hex colors. It must
+// now reference CSS custom properties so the correct value is resolved for each
+// theme by global.css.
+//
+// Uses a stream with health_score < 50 to trigger the critical branch (var(--color-error)).
+
+describe("IngestPage — health-bar CSS var (B2 sweep)", () => {
+  it("critical health bar uses var(--color-error) not hardcoded #FF5C68", async () => {
+    const criticalStream = {
+      ...populatedResponse.streams[0],
+      health_score: 30, // < 50 → critical branch
+    };
+    mockGetIngestHealth.mockResolvedValue({ streams: [criticalStream] });
+    const { container } = render(<IngestPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/live\/test-stream/)).toBeInTheDocument();
+    });
+
+    // Find the health bar div (has a width% inline style and background color)
+    const bars = Array.from(
+      container.querySelectorAll("div[style]"),
+    ) as HTMLElement[];
+    const healthBar = bars.find((el) => {
+      const style = el.getAttribute("style") ?? el.style.cssText;
+      return style.includes("width: 30%") || style.includes("width:30%");
+    });
+    expect(healthBar).toBeDefined();
+    const styleText = healthBar!.getAttribute("style") ?? healthBar!.style.cssText;
+    expect(styleText).toContain("var(--color-error)");
+  });
+
+  it("good health bar uses var(--color-success) not hardcoded #2CE5A7", async () => {
+    mockGetIngestHealth.mockResolvedValue(populatedResponse); // health_score 95
+    const { container } = render(<IngestPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/live\/test-stream/)).toBeInTheDocument();
+    });
+
+    const bars = Array.from(
+      container.querySelectorAll("div[style]"),
+    ) as HTMLElement[];
+    const healthBar = bars.find((el) => {
+      const style = el.getAttribute("style") ?? el.style.cssText;
+      return style.includes("width: 95%") || style.includes("width:95%");
+    });
+    expect(healthBar).toBeDefined();
+    const styleText = healthBar!.getAttribute("style") ?? healthBar!.style.cssText;
+    expect(styleText).toContain("var(--color-success)");
+  });
+});

@@ -13,6 +13,7 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/Badge";
 import type { FleetNode } from "@/lib/api/types";
+import { useStatusColors } from "@/lib/chartColors";
 
 function statusVariant(status: string): "success" | "warning" | "error" {
   if (status === "up") return "success";
@@ -24,6 +25,28 @@ function roleVariant(role: string): "info" | "muted" | "default" {
   if (role === "origin") return "info";
   if (role === "edge") return "muted";
   return "default";
+}
+
+/**
+ * Pure threshold function — maps cpu % to a status tier string.
+ * Exported so tests can verify threshold logic AND palette mapping independently.
+ * Updated atomically with the LoadBar ternaries below (D-071 palette sweep).
+ */
+export function cpuStatus(pct: number): "critical" | "warning" | "healthy" {
+  if (pct > 80) return "critical";
+  if (pct > 60) return "warning";
+  return "healthy";
+}
+
+/**
+ * Pure threshold function — maps mem % to a status tier string.
+ * Note: mem "healthy" uses dataviz blue (#58A6FF), not status green,
+ * because memory at low levels is a normal secondary metric.
+ */
+function memStatus(pct: number): "critical" | "warning" | "healthy" {
+  if (pct > 85) return "critical";
+  if (pct > 70) return "warning";
+  return "healthy";
 }
 
 function LoadBar({ value, color }: { value: number; color: string }) {
@@ -42,7 +65,7 @@ function LoadBar({ value, color }: { value: number; color: string }) {
           height: "100%",
           background: color,
           borderRadius: 3,
-          transition: "width 0.3s ease",
+          transition: "width var(--motion-base)",
         }} />
       </div>
       <span style={{ fontSize: 11, color: "var(--color-muted)", width: 32, textAlign: "right" }}>
@@ -64,6 +87,8 @@ interface NodeCardProps {
 }
 
 function NodeCard({ node }: NodeCardProps) {
+  // useStatusColors() returns the theme-correct hex set (dark or light).
+  const statusColors = useStatusColors();
   return (
     <div style={{
       background: "var(--color-surface)",
@@ -92,14 +117,26 @@ function NodeCard({ node }: NodeCardProps) {
       {node.cpu_pct != null && (
         <div>
           <div style={{ fontSize: 11, color: "var(--color-muted)", marginBottom: 3 }}>CPU</div>
-          <LoadBar value={node.cpu_pct} color={node.cpu_pct > 80 ? "#FF5C68" : node.cpu_pct > 60 ? "#FFB224" : "#2CE5A7"} />
+          <LoadBar
+            value={node.cpu_pct}
+            color={statusColors[cpuStatus(node.cpu_pct)]}
+          />
         </div>
       )}
 
       {node.mem_pct != null && (
         <div>
           <div style={{ fontSize: 11, color: "var(--color-muted)", marginBottom: 3 }}>Memory</div>
-          <LoadBar value={node.mem_pct} color={node.mem_pct > 85 ? "#FF5C68" : node.mem_pct > 70 ? "#FFB224" : "#58A6FF"} />
+          <LoadBar
+            value={node.mem_pct}
+            color={
+              memStatus(node.mem_pct) === "critical"
+                ? statusColors.critical
+                : memStatus(node.mem_pct) === "warning"
+                  ? statusColors.warning
+                  : '#58A6FF' // dataviz blue — "normal" memory, not a status signal
+            }
+          />
         </div>
       )}
 
@@ -118,6 +155,9 @@ export function FleetPage() {
   const [error, setError] = useState<string | null>(null);
   const [nodes, setNodes] = useState<FleetNode[]>([]);
   const [view, setView] = useState<"cards" | "table">("cards");
+
+  // Theme-correct status colors for the table view's LoadBar calls.
+  const statusColors = useStatusColors();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -266,12 +306,24 @@ export function FleetPage() {
                   <td style={{ padding: "10px 14px", color: "var(--color-muted)", fontSize: 12 }}>{node.version ?? "—"}</td>
                   <td style={{ padding: "10px 14px", minWidth: 100 }}>
                     {node.cpu_pct != null ? (
-                      <LoadBar value={node.cpu_pct} color={node.cpu_pct > 80 ? "#FF5C68" : node.cpu_pct > 60 ? "#FFB224" : "#2CE5A7"} />
+                      <LoadBar
+                        value={node.cpu_pct}
+                        color={statusColors[cpuStatus(node.cpu_pct)]}
+                      />
                     ) : "—"}
                   </td>
                   <td style={{ padding: "10px 14px", minWidth: 100 }}>
                     {node.mem_pct != null ? (
-                      <LoadBar value={node.mem_pct} color={node.mem_pct > 85 ? "#FF5C68" : node.mem_pct > 70 ? "#FFB224" : "#58A6FF"} />
+                      <LoadBar
+                        value={node.mem_pct}
+                        color={
+                          memStatus(node.mem_pct) === "critical"
+                            ? statusColors.critical
+                            : memStatus(node.mem_pct) === "warning"
+                              ? statusColors.warning
+                              : '#58A6FF' // dataviz blue — normal memory level
+                        }
+                      />
                     ) : "—"}
                   </td>
                   <td style={{ padding: "10px 14px", fontSize: 12, color: "var(--color-muted)" }}>

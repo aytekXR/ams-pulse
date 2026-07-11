@@ -8,9 +8,13 @@
  * (d) Shows tier badge when tier prop is provided.
  * (e) Sign-out button is present.
  * (f) Connection status indicator ("Polling" or "Live") reflects wsConnected.
+ * (g) Theme toggle button is rendered with correct aria-label.
+ * (h) Clicking theme toggle calls setTheme with opposite value.
+ * (i) Density control renders 3 segments (Default, Compact, Wall).
+ * (j) Clicking a density segment calls setDensity.
  */
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { Layout } from "../Layout";
 
@@ -18,6 +22,15 @@ import { Layout } from "../Layout";
 const mockClearToken = vi.fn();
 vi.mock("@/api/client", () => ({
   clearToken: () => mockClearToken(),
+}));
+
+// Mock ThemeContext so Layout tests don't depend on real DOM state
+const mockSetTheme = vi.fn();
+const mockSetDensity = vi.fn();
+
+vi.mock("@/lib/ThemeContext", () => ({
+  useTheme: () => ({ theme: "dark", setTheme: mockSetTheme }),
+  useDensity: () => ({ density: "default", setDensity: mockSetDensity, rowHeight: 40 }),
 }));
 
 function Wrapped({ children = <div data-testid="content">Page</div>, wsConnected = false, tier }: {
@@ -81,5 +94,33 @@ describe("Layout", () => {
   it("(g) renders children in the main content area", () => {
     render(<Wrapped><div data-testid="child-content">My Page</div></Wrapped>);
     expect(screen.getByTestId("child-content")).toBeInTheDocument();
+  });
+
+  it("(g) theme toggle renders with aria-label for switching from dark to light", () => {
+    render(<Wrapped />);
+    // In dark mode, button should say "Switch to light theme"
+    expect(
+      screen.getByRole("button", { name: /switch to light theme/i })
+    ).toBeInTheDocument();
+  });
+
+  it("(h) clicking theme toggle calls setTheme with 'light' when in dark mode", () => {
+    render(<Wrapped />);
+    const toggle = screen.getByRole("button", { name: /switch to light theme/i });
+    fireEvent.click(toggle);
+    expect(mockSetTheme).toHaveBeenCalledWith("light");
+  });
+
+  it("(i) density control renders 3 segments: Default, Compact, Wall", () => {
+    render(<Wrapped />);
+    expect(screen.getByRole("button", { name: /default/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /compact/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /wall/i })).toBeInTheDocument();
+  });
+
+  it("(j) clicking Compact density segment calls setDensity('compact')", () => {
+    render(<Wrapped />);
+    fireEvent.click(screen.getByRole("button", { name: /compact/i }));
+    expect(mockSetDensity).toHaveBeenCalledWith("compact");
   });
 });

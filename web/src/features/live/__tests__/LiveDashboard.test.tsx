@@ -11,8 +11,24 @@
  * no WebSocket is ever created, avoiding msw's WS interceptor.
  */
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render as rtlRender, screen, waitFor } from "@testing-library/react";
 import { LiveDashboard } from "../LiveDashboard";
+import { ThemeProvider, DensityProvider } from "@/lib/ThemeContext";
+import type { ReactNode, ReactElement } from "react";
+
+// StreamsTable (rendered by LiveDashboard) calls useDensity(); StatCard/theme
+// consumers may read useTheme() — provide both contexts for every render.
+function wrapper({ children }: { children: ReactNode }) {
+  return (
+    <ThemeProvider>
+      <DensityProvider>{children}</DensityProvider>
+    </ThemeProvider>
+  );
+}
+
+function render(ui: ReactElement) {
+  return rtlRender(ui, { wrapper });
+}
 
 // Keep all real API functions (liveApi, alertsApi, etc.) so msw can intercept
 // their fetch calls, but replace LiveSocket with a no-op to prevent any
@@ -32,18 +48,19 @@ vi.mock("@/api/client", async (importActual) => {
 
 // @tanstack/react-virtual requires real DOM measurements unavailable in jsdom.
 // The stub renders up to 10 rows deterministically.
+// size=40 mirrors the default density row height (was 44 — phase-1 divergence fixed).
 vi.mock("@tanstack/react-virtual", () => ({
   useVirtualizer: ({ count }: { count: number }) => ({
     getVirtualItems: () =>
       Array.from({ length: Math.min(count, 10) }, (_, i) => ({
         index: i,
-        start: i * 44,
-        size: 44,
+        start: i * 40,
+        size: 40,
         key: i,
         lane: 0,
-        end: (i + 1) * 44,
+        end: (i + 1) * 40,
       })),
-    getTotalSize: () => count * 44,
+    getTotalSize: () => count * 40,
   }),
 }));
 

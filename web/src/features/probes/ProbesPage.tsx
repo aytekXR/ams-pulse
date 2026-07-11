@@ -411,9 +411,16 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
 
 function ttfbColor(ttfb: number | null): string {
   if (ttfb == null) return "var(--color-muted)";
-  if (ttfb < 200) return "#2CE5A7";
-  if (ttfb < 500) return "#FFB224";
-  return "#FF5C68";
+  if (ttfb < 200) return "var(--color-success)";
+  if (ttfb < 500) return "var(--color-warning)";
+  return "var(--color-error)";
+}
+
+/** Maps an ICE terminal state string to the Badge variant — modeled on FleetPage statusVariant. */
+function iceVariant(state: string): "success" | "error" | "warning" {
+  if (state === "connected") return "success";
+  if (state === "failed") return "error";
+  return "warning"; // "timeout"
 }
 
 interface ProbeResultsChartData {
@@ -702,6 +709,18 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                     <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-muted)" }}>
                       Bitrate
                     </th>
+                    <th style={{ padding: "6px 10px", textAlign: "center", fontWeight: 600, color: "var(--color-muted)", whiteSpace: "nowrap" }}>
+                      ICE State
+                    </th>
+                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-muted)", whiteSpace: "nowrap" }}>
+                      RTT
+                    </th>
+                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-muted)", whiteSpace: "nowrap" }}>
+                      Jitter
+                    </th>
+                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-muted)", whiteSpace: "nowrap" }}>
+                      Loss
+                    </th>
                     <th style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "var(--color-muted)" }}>
                       Error
                     </th>
@@ -762,10 +781,53 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                       >
                         {r.bitrate_kbps != null ? `${r.bitrate_kbps.toFixed(0)} kbps` : "—"}
                       </td>
+                      <td style={{ padding: "6px 10px", textAlign: "center", whiteSpace: "nowrap" }}>
+                        {r.ice_state ? (
+                          <Badge label={r.ice_state} variant={iceVariant(r.ice_state)} />
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                       <td
                         style={{
                           padding: "6px 10px",
-                          color: "#FF5C68",
+                          textAlign: "right",
+                          color: "var(--color-muted)",
+                          fontFamily: "var(--font-mono)",
+                          fontSize: 12,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {r.rtt_ms != null ? `${r.rtt_ms.toFixed(1)} ms` : "—"}
+                      </td>
+                      <td
+                        style={{
+                          padding: "6px 10px",
+                          textAlign: "right",
+                          color: "var(--color-muted)",
+                          fontFamily: "var(--font-mono)",
+                          fontSize: 12,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {r.jitter_ms != null ? `${r.jitter_ms.toFixed(1)} ms` : "—"}
+                      </td>
+                      <td
+                        style={{
+                          padding: "6px 10px",
+                          textAlign: "right",
+                          color: "var(--color-muted)",
+                          fontFamily: "var(--font-mono)",
+                          fontSize: 12,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {r.loss_pct != null ? `${r.loss_pct.toFixed(1)}%` : "—"}
+                      </td>
+                      <td
+                        style={{
+                          padding: "6px 10px",
+                          color: "var(--color-error)",
                           fontSize: 11,
                           maxWidth: 200,
                           overflow: "hidden",
@@ -823,8 +885,8 @@ function DeleteConfirm({ probeName, onConfirm, onCancel, deleting }: DeleteConfi
           onClick={onConfirm}
           disabled={deleting}
           style={{
-            background: "rgba(255,92,104,0.1)",
-            color: "#FF5C68",
+            background: "var(--color-error-bg)",
+            color: "var(--color-error)",
             border: "1px solid rgba(255,92,104,0.4)",
             borderRadius: 6,
             padding: "6px 14px",
@@ -975,7 +1037,7 @@ function ProbeRow({
             onClick={() => onDelete(probe)}
             style={{
               background: "none",
-              color: "#FF5C68",
+              color: "var(--color-error)",
               border: "1px solid rgba(255,92,104,0.4)",
               borderRadius: 4,
               padding: "3px 9px",

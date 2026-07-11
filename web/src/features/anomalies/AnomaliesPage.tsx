@@ -192,7 +192,7 @@ function AnomalyRow({ flag }: AnomalyRowProps) {
           textAlign: "right",
           color:
             delta > 0
-              ? "#FF5C68"
+              ? "var(--color-error)"
               : delta < 0
                 ? "#58A6FF"
                 : "var(--color-muted)",
@@ -211,9 +211,9 @@ function AnomalyRow({ flag }: AnomalyRowProps) {
             fontFamily: "var(--font-mono)",
             color:
               severity === "error"
-                ? "#FF5C68"
+                ? "var(--color-error)"
                 : severity === "warning"
-                  ? "#FFB224"
+                  ? "var(--color-warning)"
                   : "#58A6FF",
           }}
           title={`${sigmaAbs.toFixed(2)}σ deviation`}
