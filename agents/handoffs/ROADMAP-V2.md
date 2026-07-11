@@ -637,30 +637,45 @@ landmines (memory updated). **WO-B LANDED:** documentation-gaps.md (DG-01..18 +
 S19 authoring plan). WO-C skip carry ×7 (delta green). WO-D clean; prod untouched.
 Prompt: `sessions/SESSION-18.md`; ledger: decisions.md D-080.
 
-### S19 — D-078 Phases 7+8: PRD validation matrix + final assessment draft (planned at S18 close, D-080)
+### S19 — D-078 Phases 7+8 ✅ DONE (D-081, 2026-07-11)
+**Result:** **WO-A LANDED — `docs/assessment/prd-validation-matrix.md`**: F1–F10
+feature-level 1 FULLY (F10) / 9 PARTIALLY; 66 sub-rows 40 FULLY / 14 PARTIALLY /
+7 DIFFERENTLY / 4 MISSING / 1 NC; numeric N1–N36 33/1/2 — every verdict
+evidence-cited, adversarially verified (3 must-fix caught & fixed, incl. a
+FAIL-run evidence citation and a missing PRD acceptance-criterion row).
+**WO-B LANDED — `final-assessment.md` DRAFT**: completeness **60.6% strict /
+79.9% weighted / 91.7% numeric**; marketplace checklist 17 rows (5
+NEEDS-OPERATOR-CONTACT, 1 FAIL = BUG-002); 13-item prioritized roadmap (P0:
+BUG-002 VoD REST poll, D-V2-1, BUG-004); 5 open questions for Ant Media.
+**→ operator action produced: review the draft (operator-expected.md).**
+**WO-C LANDED — top-3 doc gaps authored:** DG-04 + DG-11 → AMS-INTEGRATION.md,
+DG-07 → NEW `docs/beacon-sdk.md` (verifier killed a fabricated D-V2-1 "third
+option" + 2 stale dist filenames + missing BUG-004 caveat). WO-D skip carry ×8
+(07-11 < 07-23). WO-E clean; prod + AMS untouched (session ran PRE-expiry —
+authed baseline Enterprise 3.0.3 at 18:2xZ; post-expiry sweep → S20).
+Prompt: `sessions/SESSION-19.md`; ledger: decisions.md D-081.
 
-Execute `sessions/SESSION-19.md`. FIRST: post-license-expiry read-only AMS sweep
-(trial lapsed 2026-07-12T12:09Z, operator-waived — record what 403s/shrinks).
+### S20 — operator-review intake + post-expiry sweep + P0 bug fixes (planned at S19 close, D-081)
 
-1. **WO-A [M, PRIMARY]** Phase 7: `docs/assessment/prd-validation-matrix.md` —
-   F1–F10 verdicts (FULLY/PARTIALLY/MISSING/DIFFERENTLY/NEEDS-CLARIFICATION) from
-   the 50-scenario evidence base (P0 25/1, P1 21/3/0) + ARCHITECTURE §4 numeric
-   criteria; every verdict cites scenario/bug/AV evidence.
-2. **WO-B [M]** Phase 8: `docs/assessment/final-assessment.md` DRAFT — exec
-   summary, completeness score, marketplace checklist, missing opportunities
-   (Kafka CPU/mem, VoD REST poll, SRT loss, unsigned-webhook mode), prioritized
-   roadmap; operator reviews before anything goes external.
-3. **WO-C [S]** Phase 6 tail: author the top-priority docs from
-   documentation-gaps.md §authoring-plan (DG-04 webhook, DG-07 beacon guide,
-   DG-11 lifecycle semantics first).
-4. **WO-D [S, gate ≥07-23]** CI promotions (csp-e2e lands AT the gate; web-e2e
-   ~07-25) — if S19 runs ≥07-23: JOB-streak re-measure then FULL-LIST PUT +
-   GET-diff; else skip carry ×8.
-5. **WO-E [XS]** standing re-checks + operator answers (AMS-reset confirm,
-   browser-accept, brandkit token proposals, Kafka yes/no, marketplace contact).
+Execute `sessions/SESSION-20.md`. FIRST: post-license-expiry read-only AMS sweep
+(trial lapses 2026-07-12T12:09Z — record what 403s/shrinks vs the S17–S19
+pre-expiry baseline in D-082; note which scenarios become blocked).
 
-*(Backlog-if-light: remote-host WebRTC viewer for non-zero viewer-QoE parity;
-SRT publisher for real packet-loss validation; BUG-002 VoD REST-poll design note.)*
+1. **WO-A [S]** operator-review intake: if the operator has reviewed
+   final-assessment.md → apply edits, resolve NEEDS-OPERATOR-CONTACT rows that
+   got answers, finalize; else re-surface the request (non-blocking).
+2. **WO-B [M]** P0 bug fixes from the assessment roadmap (code, TDD):
+   BUG-004 (/qoe/ingest: parse from/to — make the handler honor the declared
+   OpenAPI params; contract unchanged) + BUG-003 (probe scheduler duplicate
+   rows — guard the immediate-on-create vs ticker race). Full §8 gates apply
+   (Go tests -race repo-root mount, coverage floor).
+3. **WO-C [S–M]** backlog-if-light: BUG-002 VoD REST-poll design note;
+   remote-host WebRTC viewer for non-zero viewer-QoE parity; SRT publisher
+   loss validation; TC-APP-02 if a blocked app exists; more DG authoring
+   (DG-05+DG-15 Kafka pair next per the plan).
+4. **WO-D [S, gate ≥07-23]** CI promotions (csp-e2e candidate lands AT the
+   gate; web-e2e ~07-25) — else skip carry ×9.
+5. **WO-E [XS]** standing re-checks + operator-answer sweep.
 
 ### S17 (original plan) — Pulse × AMS validation program launch (D-078) + CI-promotion date gate (planned at S16 close, D-077)
 

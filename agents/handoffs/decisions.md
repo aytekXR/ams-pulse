@@ -3824,3 +3824,75 @@ ROADMAP-V2 §3 S17. Program docs ride the S16 close PR.
   the PR. Ops: pulse-realams stack left running; one pulse-test VoD + the S17
   evidence conventions stand; AMS trial license expires 2026-07-12T12:09Z →
   S19 opens with the post-expiry read-only sweep.
+
+## D-081 — SESSION-19 (2026-07-11): D-078 Phases 7+8 PRD matrix + final-assessment draft + top doc-gaps (IN PROGRESS; evidence at close)
+
+**S19 open verification (2026-07-11T18:17Z):**
+- **Operator-action check (user directive): NO operator action required to
+  proceed — session continues autonomously.** Standing queue unchanged and
+  non-blocking (AMS-reset confirmation, browser-accept, brandkit token sign-off,
+  Kafka yes/no, marketplace contact — the last is absent, so Phase-8
+  listing-requirement rows will be marked NEEDS-OPERATOR-CONTACT per plan).
+  **S19 WILL produce one operator action at close:** review of the
+  `final-assessment.md` DRAFT before any external use — to be recorded in
+  `operator-expected.md` at close per the closing protocol.
+- **Date-driven plan adjustments (same-day continuation, 18:17Z):** S19 runs
+  PRE-expiry — the AMS trial lapses 2026-07-12T12:09Z, ~18 h AFTER this open,
+  so the planned "post-expiry sweep" premise doesn't apply → **sweep deferred
+  to S20 open** (first session after the lapse). Fresh pre-expiry baseline
+  taken instead (authed read-only): version 3.0.3, versionType="Enterprise
+  Edition", build 20260504_1443. CI promotion gate still CLOSED (07-11 <
+  07-23) → **skip carry ×8** (csp-e2e candidate 07-23, web-e2e ~07-25).
+- Preconditions: tree clean at S18 merge e5675ce; protection exact (9 contexts,
+  enforce_admins, strict); dependabot ZERO; no open PRs; prod healthy read-only
+  (healthz all-ok, SPA 200); AMS REST reachable (first-login-status 200).
+- Branch `s19-d081`; PR-first, ≤2 pushes (D-076). Docs-only session expected —
+  no Go/web gates unless code is touched.
+
+**S19 CLOSE (same session, D-081 evidence):**
+- **WO-A DELIVERED — Phase 7: `docs/assessment/prd-validation-matrix.md`**
+  (~415 lines). Feature-level: **1 FULLY (F10 probes) / 9 PARTIALLY**; 66
+  sub-requirement rows: **FULLY 40 / PARTIALLY 14 / DIFFERENTLY 7 / MISSING 4
+  / NEEDS-CLARIFICATION 1**; numeric criteria N1–N36: **33 FULLY / 1 PARTIALLY
+  (N3 cluster dedup not live-testable) / 2 NC (N7 CPU overhead, N18 storage
+  extrapolation)**. Every verdict evidence-cited (TC-x run timestamps, BUG-x,
+  AV-x, D-0NN); stress bounded to N=5 (ENV-LIMIT); SKIPs excluded from
+  validation counts; DRAFT banner (operator gate).
+- **WO-B DELIVERED — Phase 8: `docs/assessment/final-assessment.md` DRAFT**
+  (~490 lines): completeness **60.6% strict / 79.9% weighted / 91.7% numeric**
+  (arithmetic shown, recomputed post-fix-round); marketplace checklist 17 rows
+  (8 PASS / 3 PARTIAL / 1 FAIL = BUG-002 / **5 NEEDS-OPERATOR-CONTACT**);
+  prioritized roadmap 13 items (P0: BUG-002 VoD REST poll, D-V2-1 unsigned
+  webhook, BUG-004 from/to fix); 5 open questions for Ant Media (webhook HMAC,
+  hlsViewerCount 9×, WHEP counts, Kafka FPS field, listing terms — rev-share
+  20–30% flagged UNVERIFIED). **→ OPERATOR ACTION PRODUCED: review the draft
+  before ANY external use — recorded in operator-expected.md.**
+- **WO-C DELIVERED — Phase 6 top-3:** DG-04 (§4.5 webhook downstream-impact/
+  workarounds/D-V2-1 path) + DG-11 (§1.1 implicit-broadcast deletion
+  admonition) → AMS-INTEGRATION.md (+56 lines, additive only); DG-07 → NEW
+  `docs/beacon-sdk.md` (~450 lines, 12 sections, every API name verified
+  against sdk source). documentation-gaps.md marked AUTHORED ×3.
+- **Adversarial verify round (the net worked):** 3 verifiers → matrix
+  MUST-FIX×3 (no DRAFT banner; TC-P-07 evidence cited the FAIL-run timestamp
+  141544Z instead of the PASS run 145258Z; F5 "test-fire button" acceptance
+  criterion had NO row) — fixed, re-verify PASS. Assessment PASS round 1.
+  DG docs MUST-FIX×3 (a FABRICATED third D-V2-1 option "signing proxy" not in
+  ROADMAP-V2 §2.6; `dist/index.iife.js` → actual `index.global.js`; BUG-004
+  caveat missing from §8.2) — fixed; re-verify caught 1 residual (2nd stale
+  iife ref in the troubleshooting table) — fixed by ORCH. ORCH also applied
+  all minors: N5 126/144 → **144/145 ms** (Wave-3 gate-report primary source);
+  TC-A-05 2/2→3/3; F7 node up/down FULLY→PARTIALLY (no direct node-offline
+  scenario; ENV-LIMIT single-node); test-fire route ref 1374→server.go:379;
+  Appendix B peak=45/residual=38; env var aligned to
+  `PULSE_WEBHOOK_ALLOW_UNSIGNED_SOURCES` (§2.6); expired→expires tense.
+- **ORCH consistency gate:** awk recount Table 1 = 40/14/7/4/1 (Σ66) and
+  Table 2 = 33/1/2 (Σ36) — both match the published summaries; assessment
+  arithmetic recomputed for 66 rows; stale-value sweep (2/2, 61.5/80.4, iife,
+  3.44) clean. Workflow: 14 agents (3 scouts / 4 authors / 3 verifiers /
+  2 fixers / 2 re-verifiers), 0 errors, ~908k subagent tokens.
+- **WO-D:** gate CLOSED (07-11 < 07-23) → skip carry ×8. **WO-E:** clean at
+  open (protection exact, dependabot zero, prod healthy read-only); prod +
+  AMS untouched ALL session (read-only: one authed version GET at open).
+- **Gates:** docs-only diff (5 docs + decisions/ledgers) — no Go/web/sdk/
+  contract changes → no code gates due; markdown-only PR, CI full matrix on
+  the PR. Post-expiry sweep hands to S20 (lapse 07-12T12:09Z).
