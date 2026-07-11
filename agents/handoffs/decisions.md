@@ -3673,3 +3673,29 @@ ID/steps/AMS ground truth/Pulse assertion/auto-vs-manual/priority + parity-toler
 philosophy), `session-plan.md` (phases → S17/S18/S19+, dependencies, operator-vs-
 autonomous split). **EXECUTION starts S17 (primary track WO-A)** — see SESSION-17.md +
 ROADMAP-V2 §3 S17. Program docs ride the S16 close PR.
+
+## D-079 — SESSION-17 (2026-07-11): D-078 program Phases 1–2 — real-AMS harness + P0 parity validation (IN PROGRESS; evidence appended at close)
+
+**S17 open verification (all checks passed before work started):**
+- **Operator-action check (user directive): NO new operator action required — session
+  proceeds autonomously.** Standing queue unchanged (👀 browser-accept + optionals
+  D-V2-1/O7/O11/workflow-scope). All S17 dependencies resolved without the operator:
+  AMS up (app-scope REST answers unauthenticated from this VPS — CIDR-open verified
+  live); prod Pulse healthy (`/healthz` ok ×3 components, read-only); docker works via
+  `sg docker`; AMS creds present in gitignored `deploy/.env`
+  (PULSE_AMS_LOGIN_EMAIL/PASSWORD — NOT the PULSE_AMS_USER/PASS names session-plan.md
+  guessed); Pulse prod token at `oguz-testing.md:159`; **PULSE_AMS_APPLICATIONS is
+  EMPTY** → auto-discovery, TC-APP-01 runs as designed.
+- Preconditions: tree clean (one expected uncommitted `docs/operator-expected.md`
+  hunk riding S17's first PR per plan); PR #28 merged; ci+e2e+codeql GREEN at HEAD
+  70a4387; branch protection exact (9 contexts, enforce_admins, strict, 0 reviews);
+  dependabot queue ZERO.
+- **WO-B date gate: 2026-07-11 < 2026-07-23 → CLOSED → skip carry ×6** (JOB-level
+  streak re-measure evidence collected this session, see close notes).
+- AMS trial license expires 2026-07-12T12:09Z (operator-waived) — S17 runs on the
+  LAST full day of the trial; post-expiry drift is S18's observe-and-report item.
+- `pulse-realams` isolated stack brought up from HEAD (base + real-ams + realams-test,
+  loopback :18090): healthy, polling the real AMS (overview shows teststream,
+  standalone node up). Bootstrap admin token extracted from container logs (local
+  only, never committed). Prod untouched.
+- Branch `s17-d079`; PR-first, ≤2 pushes (D-076).
