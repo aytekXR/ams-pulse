@@ -4135,3 +4135,35 @@ occurrence — this one benign):**
   of foreign commits (no D-062 recurrence this session). Workflow: 8 agents,
   0 errors, 0 rate-limit deaths. Ledger: this entry. Close commits + PR
   evidence appended by ORCH below after merge.
+
+## D-084 — SESSION-22 (2026-07-12): post-expiry sweep + conformance-debt fixes BUG-006/007/009/010 (IN PROGRESS; evidence at close)
+
+**S22 OPEN (recorded 05:25Z):**
+- **⚠️ CLOCK FACT: S22 opened 05:23Z — BEFORE the 12:10Z gate** (AMS trial lapses
+  12:09Z). Per SESSION-22 §⚠️1 ("if earlier: WAIT — do not re-gate a 4th time")
+  the session **HOLDS OPEN**: WO-A (post-expiry sweep) is deferred in-session to
+  ≥12:10Z (a persistent clock monitor fires at the gate); the sweep is NOT
+  re-gated to S23 and is NOT run pre-expiry (a 4th pre-expiry run would be
+  worthless). Meanwhile WO-C (conformance-debt fixes — pure Pulse code, fully
+  independent of AMS state) proceeds now. WO-A remains the session's exit
+  criterion (a).
+- **Tree/hazard check (D-062 class): CLEAN.** HEAD = `8365599` (S21 merge, #33);
+  no foreign commits; dirt is exactly the known operator-side state — modified
+  `deploy/config/Caddyfile.prod` (+35 lines = the preserved `caddy-bedirhan-vhost`
+  content live prod mounts; NOT reverted, NOT committed) + the operator's
+  untracked `.bak-bedirhan-20260712`. Both untouched. Branch `s22-d084`.
+- **WO-B (operator intake): NO ANSWERS in the session-open prompt** — caddy-vhost
+  merge + final-assessment review both still open, both non-blocking →
+  re-surfaced at close in operator-expected.md. **No NEW operator action is
+  required for this session to proceed** (the "start after 12:10Z" ask is mooted
+  by holding open — recorded so the operator knows an early start is handled).
+- **WO-F (standing re-checks, 05:24Z): ALL GREEN, read-only.** Prod healthz
+  status=ok (clickhouse/collector/meta_store all ok); branch protection
+  unchanged (9 contexts incl. CodeQL pair, enforce_admins=true — no drift);
+  dependabot queue EMPTY.
+- **WO-E (CI promotions): date gate CLOSED** (07-12 < 07-23) → skip carry ×11;
+  streak re-measure at close rides the session PR's own runs.
+- Plan of record: SESSION-22.md — WO-C now (workflow: scouts → designer →
+  serial TDD authors BUG-006+007 → BUG-009 → BUG-010 CR, parallel BUG-008
+  assessor, 3 adversarial verifiers, ORCH gates full §8), WO-A at the clock,
+  WO-D only if light, PR-first ≤2 pushes.
