@@ -1,4 +1,55 @@
-# Operator TODO — the items only YOU can do (updated at SESSION-21 close, D-083, 2026-07-12; rides S21's PR)
+# Operator TODO — the items only YOU can do (updated at SESSION-22 close, D-084, 2026-07-12; rides S22's PR)
+
+## ⚡ TL;DR — expected from you right now (2026-07-12, SESSION-22 closed — D-084)
+
+> **Nothing is needed from you right now.** S22 opened early (05:23Z, before
+> your 12:09Z AMS trial lapse), held itself open, and ran the post-expiry
+> sweep at 12:11Z — nothing was skipped, nothing re-gated a 4th time.
+>
+> **★ THE EXPIRY ANSWER (D-084): your AMS trial lapsed at 12:09Z and — so far
+> — NOTHING changed.** The post-expiry sweep is **byte-identical** to the
+> pre-expiry baseline: still "Enterprise Edition" 3.0.3, licence-status
+> endpoint unchanged, all 4 apps + settings intact, and AMS **accepted a
+> fresh RTMP publish after the lapse** (live-probed: the teststream was found
+> crashed — 5 h *before* the lapse, plain ffmpeg crash, unrelated — restarted,
+> AMS took the publish, HLS serves, Pulse sees it). No validation scenario is
+> blocked. **One caveat for you:** trial enforcement may only kick in when the
+> AMS *process restarts* (boot-time license check). Sessions will NOT restart
+> your `antmedia` container to test that — if it ever restarts and features
+> start 403ing, sessions will observe + report per your "handled" directive.
+>
+> **The parameter-debt cleanup landed, fully gated:** the declared-parameter
+> debt S21 pinned is fixed test-first and adversarially verified — pagination
+> is now real on 10 list endpoints (BUG-006/007), `/live/streams` paging
+> actually advances (BUG-009 partial; `tenant` filtering honestly stays
+> pinned until the multi-tenancy data model exists), the audience CSV export
+> is now declared in the API contract (BUG-010, the one deliberate contract
+> change), and 4 of 6 dead `/anomalies` filters now work (BUG-008 partial;
+> honoring `from`/`to` needs a persistent flag-event store — S23 designs it,
+> written triage in `docs/assessment/bugs/BUG-008-triage-s22.md`).
+> **Declared-param violations: 28/85 at S21 close → 4/86 now**, each remaining
+> one pinned with a written reason and a path (2× tenant → multi-tenancy; 2×
+> anomalies time-range → S23).
+>
+> **Still waiting on your two standing decisions (unchanged, non-blocking):**
+> caddy-vhost merge + final-assessment DRAFT review — details in the S21 TL;DR
+> below. Today's fixes reach prod only with your next approved rollout; a
+> rollout now carries three sessions of API-correctness fixes
+> (BUG-003/004/005/006/007 + partials of 008/009 + two panic fixes).
+
+## 🔎 What SESSION-22 did (2026-07-12, closed — D-084)
+
+| Area | Result |
+|---|---|
+| **License-expiry sweep** | Your AMS trial lapsed 12:09Z; the post-expiry sweep is **byte-identical** to the pre-expiry baseline — still Enterprise Edition 3.0.3, all 4 apps intact, and AMS **accepted a fresh RTMP publish after the lapse** (live-probed). Nothing is blocked. Caveat on record: enforcement may only kick in when the AMS process restarts — sessions will not restart it to test; they re-check at each open. |
+| **Teststream crash (found+fixed)** | The synthetic test publisher had crashed ~07:10 (plain ffmpeg crash, 5 h before the lapse — unrelated). Restarted; it doubled as the post-expiry publish probe. |
+| **Pagination real everywhere** | Every list endpoint that declared `limit`/`cursor` now honors them, down to the database layer, with proper `next_cursor` paging. A caller asking for 1 item now gets 1 item, not the whole table. |
+| **Two crashes prevented** | The adversarial verifiers caught two panic bugs *introduced-then-fixed inside the session, before anything shipped*: a stale page-cursor crashing `/live/streams`, and `?limit=-1` crashing alert history into an HTTP 500. Both now have regression tests. |
+| **Contract honesty** | The audience CSV export your API always had is now declared in the OpenAPI contract (generated clients can finally see it). The conformance gate grew: 35 live parameter probes (was 11 at S21 close), floor raised so it can't silently decay. |
+| **Quality net** | 16 workflow agents (4 scouts, designer, 3 TDD authors, assessor, 3 remediation authors, 4 adversarial verifiers), 0 errors. Every fix mutation-proofed: revert the fix in a copy → its tests go red, verified per bug. |
+| **Ops** | Gates: 24/24 Go packages race-clean, 0 failures / 0 skips, coverage 74.9%→**75.9%** (floor 70.2); web 360/360. Prod untouched; AMS read-only except the teststream restart. CI-promotion date gate still closed (opens 07-23) → skip carry ×11. One PR. |
+
+## (superseded) S21-close header follows
 
 ## ⚡ TL;DR — expected from you right now (2026-07-12, SESSION-21 closed ~03:45Z)
 

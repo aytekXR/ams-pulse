@@ -698,7 +698,51 @@ pre-expiry diff base on disk, baseline re-confirmed ×3. Skip carry ×10. No
 concurrent-session incident. Prompt: `sessions/SESSION-21.md`; ledger:
 decisions.md D-083.
 
-### S22 — post-expiry sweep (operator-directed re-gate) + conformance-debt fixes (planned at S21 close, D-083)
+### S22 — post-expiry sweep + conformance-debt fixes ✅ DONE (D-084, 2026-07-12)
+
+- **WO-A DELIVERED — post-expiry sweep: NULL DELTA (byte-identical).** Opened
+  05:23Z (pre-gate) → HELD OPEN per spec (no 4th re-gate); clock monitor fired
+  12:10:03Z; sweep 12:11Z. Only diff = teststream offline — crashed 07:10Z,
+  5 h PRE-lapse (ffmpeg, S14 class); restarted as a live probe → **AMS
+  ACCEPTED an RTMP publish post-lapse**; re-sweep byte-identical to baseline.
+  Blocked-scenario list EMPTY. Hypothesis pinned: enforcement may bite at AMS
+  process restart — observe-only.
+- **WO-C DELIVERED — conformance debt 27→4 known-violations (all TDD,
+  mutation-verified):** BUG-006 FIXED (keyset limit+cursor through 8 list
+  endpoints + store layer); BUG-007 FIXED (cursor: alerts/history +
+  probe-results, real probes not exempts); BUG-009 PARTIAL (LiveStreams cursor
+  decode + stability sort; tenant ×2 stays pinned — no tenant data model, F6);
+  BUG-010 FIXED (the ONE contract CR: `format` json|csv on /analytics/audience
+  + text/csv, gen:api idempotent); BUG-008 PARTIAL (app/stream/limit/cursor
+  post-filter + pagination; from/to → S23 flag-event-store design, triage doc).
+  Registry census 29/8/49 → **35 probe / 4 known-violation / 47 exempt**;
+  minProbes 8→33; minSpecParams 85→86.
+- **★ Verifier catches fixed in-session: TWO panics** — stale-cursor OOB in
+  LiveStreams (`items[10:2]`) + `?limit=-1` slice panic → HTTP 500 in
+  alert-history. Both red-first, both clamped. 5/5 remediation spot-mutations
+  RED.
+- WO-B: no operator answers (re-surfaced). WO-D did NOT fire (no room —
+  remediation consumed it; → S23 primary). WO-E skip carry ×11. WO-F green.
+- Workflows: 16 agents (12+4), 0 errors, ~1.28M subagent tokens.
+
+### S23 — BUG-002 VoD REST-poll build + BUG-008 phase-2 design (planned at S22 close, D-084)
+
+Execute `sessions/SESSION-23.md`. No clock gate. At open: operator-expected
+check, concurrent-session hazard check, quick AMS post-expiry re-sweep
+(observe-only; enforcement may bite at AMS process restart — D-084).
+
+1. **WO-A [M–L, PRIMARY]** BUG-002 build TDD: `mv_recording_1d` +
+   `vod_poll_state` migrations + VoD REST poller + fixture-replay tests +
+   read-only live verify (S17 test VoD = ground truth).
+2. **WO-B [M]** BUG-008 phase 2: anomaly flag-event persistence ADR
+   (makes /anomalies from/to honest); build only if Small post-ADR.
+3. **WO-C [S]** assessment refresh: matrix + final-assessment rows changed by
+   the S20–S22 fixes (stays DRAFT); session-plan bugs table.
+4. **WO-D [S, gate ≥07-23]** CI promotions — else skip carry ×12.
+5. **WO-E [XS]** standing re-checks; a rollout (if operator-approved) now
+   carries D-082+D-083+D-084.
+
+### S22 (original plan) — post-expiry sweep (operator-directed re-gate) + conformance-debt fixes (planned at S21 close, D-083)
 
 Execute `sessions/SESSION-22.md`. **⚠️ OPEN AFTER 2026-07-12T12:10Z** — verify
 the clock FIRST; if early, WAIT (do not re-gate a 4th time).

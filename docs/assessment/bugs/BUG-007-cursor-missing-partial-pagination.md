@@ -2,7 +2,7 @@
 
 **Severity:** low-medium
 **Component:** api / store (meta.Store) / query service
-**Status:** OPEN — filed S21 / D-083, 2026-07-12 (parameter-conformance sweep)
+**Status:** FIXED AND PROBED (S22 / D-084 / F3) — `cursor` added to `store.ListAlertHistory` and `qsvc.QueryProbeResults`/`clickhouse.QueryProbeResults` signatures; handlers read and pass cursor; conformance registry entries upgraded to `probe` (F3 in D-084): `GET /alerts/history ?cursor` seeds rows via the meta store and asserts two-page cursor advance; `GET /probes/{probeId}/results ?cursor` uses a recording fake `ProbeResultQuerier` to assert cursor value threading at the handler→qsvc boundary.
 
 ## Summary
 

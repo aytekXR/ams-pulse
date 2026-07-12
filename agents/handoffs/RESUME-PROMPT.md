@@ -11,7 +11,52 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-22.md`; ⚠️ OPEN AFTER 2026-07-12T12:10Z)
+## ▶ START HERE (next session — execute `sessions/SESSION-23.md`)
+
+**Session 2026-07-12 result: D-084 — S22 DONE (post-expiry sweep NULL delta +
+conformance debt 27→4 fixed TDD + two panic fixes).**
+- **★ THE EXPIRY ANSWER (WO-A): the AMS trial lapsed 12:09Z and NOTHING
+  observable changed.** S22 opened 05:23Z (pre-gate) → HELD OPEN per spec (no
+  4th re-gate), clock monitor fired 12:10:03Z, sweep 12:11Z. The only diff vs
+  the pre-expiry baseline was the teststream being down — it crashed at
+  07:10Z, **5 h BEFORE the lapse** (ffmpeg, S14 class). Restarted as a live
+  probe: **AMS accepted the RTMP publish post-lapse**; re-sweep BYTE-IDENTICAL
+  to baseline (null delta stated explicitly). Blocked-scenario list EMPTY.
+  Standing hypothesis (untested BY DESIGN): enforcement may bite at AMS
+  **process restart** — S23 re-sweeps at open, observe-only, NEVER restart
+  the antmedia container to test.
+- **WO-C: conformance debt 27→4 known-violations, all TDD + mutation-verified.**
+  BUG-006 FIXED (keyset limit+cursor through 8 list endpoints + store layer;
+  `limit<=0` preserves internal callers); BUG-007 FIXED (cursor threading +
+  REAL probes, not exempts); BUG-009 PARTIAL (LiveStreams cursor + required
+  stability sort; tenant ×2 → F6, no tenant data model); BUG-010 FIXED (the
+  ONE contract CR: audience `format` json|csv + text/csv; regen idempotent);
+  BUG-008 PARTIAL (app/stream/limit/cursor fixed handler-side; **from/to are
+  architecturally unfixable without a persistent flag-event store** — S23
+  designs the ADR; triage: `docs/assessment/bugs/BUG-008-triage-s22.md`).
+  Registry census 29/8/49 → **35 probe / 4 KV / 47 exempt = 86**; minProbes
+  8→33.
+- **★ The verify net caught TWO PANICS pre-ship:** stale-cursor `items[10:2]`
+  OOB in LiveStreams + `?limit=-1` → `hist[:-1]` → HTTP 500 on alerts/history.
+  Both red-first, both fixed. 5/5 remediation spot-mutations RED.
+- **Gates:** 24/24 Go pkgs `-race` ok, **0 FAIL / 0 SKIP**; coverage
+  **74.9% → 75.9%** (floor 70.2); gofmt/vet/build clean; contract-drift clean
+  except the deliberate CR; web 360/360 (63.15/61.40/54.85 vs 59/54/45).
+- WO-B: no operator answers (caddy-vhost + final-assessment re-surfaced).
+  WO-D (BUG-002 build) did NOT fire → **S23 primary**. CI promotions skip
+  carry ×11 (07-12 < 07-23). Workflows: 16 agents, 0 errors. Prod + AMS
+  read-only except the sanctioned teststream restart.
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-23.md` and execute it**
+(BUG-002 VoD REST-poll build [primary] + BUG-008 flag-event-store ADR +
+assessment refresh + CI promotions if ≥07-23 else skip carry ×12). No clock
+gate. **PR-first, ≤2 pushes.** Check `docs/operator-expected.md` FIRST
+(caddy-vhost merge? final-assessment review?) + the AMS post-expiry re-sweep
+at open (restart hypothesis, observe-only).
+
+---
+
+## ▶ prior session context (S21, superseded by the above)
 
 **Session 2026-07-12 result: D-083 — S21 DONE (BUG-005 fixed + the parameter-conformance
 class fix landed; post-expiry sweep re-gated BY OPERATOR DIRECTION).**

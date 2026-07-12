@@ -2,7 +2,7 @@
 
 **Severity:** high
 **Component:** api / anomaly detector (wave3.go)
-**Status:** OPEN — filed S21 / D-083, 2026-07-12 (parameter-conformance sweep)
+**Status:** PARTIALLY FIXED (S22/D-084): app/stream/limit/cursor params now wired (Group A); from/to open (Group B — architectural gap, no persistent flag-event store; S23 designs the real fix)
 
 ## Summary
 

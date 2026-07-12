@@ -4193,3 +4193,59 @@ occurrence — this one benign):**
   license check). Do NOT restart the `antmedia` container to test — operator's
   call; sessions keep observing each open. Validation docs need NO reality
   updates (nothing drifted).
+
+**S22 WO-C evidence (recorded at close — conformance debt 27→4, all TDD + adversarially verified):**
+- **BUG-006 FIXED** (8 list endpoints × limit+cursor): keyset cursors
+  (`<created_at_ms>:<id>`, DESC variants for tokens/alert-history;
+  `<ts_unix_nano>:<id>` for CH probe results) threaded handler→store;
+  `limit+1` sentinel → honest `next_cursor`; `limit<=0` = unbounded preserves
+  every internal caller (evaluator, accounting, serve, wave2 seed). Invalid
+  cursor → first page (contract treats cursor as opaque).
+- **BUG-007 FIXED** (alerts/history + probes/{id}/results cursor) — and the
+  registry entries are REAL PROBES, not exempts (remediation F3): seeded-rows
+  page-2-differs probe + a recording-fake boundary probe.
+- **BUG-009 PARTIALLY FIXED:** LiveStreams cursor decode + a REQUIRED
+  stability sort (map iteration is non-deterministic — offset paging without
+  it dup/drops items; the "3-line fix" estimate was wrong). `tenant` ×2 stays
+  known-violation: domain.LiveSnapshot has NO tenant assignment (F6 backlog),
+  per the SESSION-22 escape hatch.
+- **BUG-010 FIXED (the ONE contract CR):** `format` enum [json,csv] +
+  `text/csv` 200 on /analytics/audience; gen:api regenerated (re-regen
+  byte-idempotent, verified by hash); probe = Content-Type differential;
+  minSpecParams 85→86.
+- **BUG-008 PARTIALLY FIXED (assess→partial, triage-driven):** triage verdict
+  split-S23 (`docs/assessment/bugs/BUG-008-triage-s22.md`) — from/to are
+  architecturally unfixable without a persistent flag-event store (detector is
+  point-in-time; S23 designs the ADR); the 4 Group-A params
+  (app/stream/limit/cursor) fixed handler-side with deterministic TS+ID sort,
+  offset cursor, cap 500, fake-detector probes. NO 501 for from/to (behavior
+  change refused; UI-caller audit: AnomaliesPage.tsx sends neither).
+- **★ TWO PANICS caught by the verify net BEFORE ship:** (1) stale/fabricated
+  numeric cursor → `items[10:2]` slice OOB panic in query.LiveStreams;
+  (2) `?limit=-1` on alerts/history bypassed the `==0` default guard →
+  `hist[:-1]` panic → HTTP 500 via chi Recoverer. Both red-first, both fixed
+  (clamp; `<=0`); a sweep confirmed all other parse blocks already use `<=0`.
+- **Registry census: 29 probe / 8 KV / 49 exempt → 35 probe / 4 KV / 47
+  exempt = 86**; anti-vacuity minProbes 8→33 (census-comment), floor 86.
+  Remaining KV: anomalies from/to (S23), tenant ×2 (F6) — all pinned w/ docs.
+- **Verification:** 3 adversarial verifiers round 1 (mutation CONFIRMED_OK —
+  fix-reverts all RED in pristine copies; correctness PARTIAL → the panic
+  must-fix; completeness PARTIAL → triage-doc mismatch + exempt-not-probe +
+  minProbes) + remediation round (F1/F2/F3) + re-verifier (PARTIAL, 0
+  must-fix, 5/5 spot-mutations RED; the one should-fix — stale census line —
+  ORCH-fixed inline). Workflows: 12+4 agents, 0 errors, ~1.28M tokens.
+- **GATES (full §8, ORCH-run, repo-root mount, golang:1.25):** build/vet
+  clean; gofmt-on-emptiness clean; `go test -race` **24/24 pkgs ok, 0 FAIL /
+  0 SKIP**; coverage **74.9% → 75.9%** (floor 70.2); contract-drift clean
+  except the deliberate BUG-010 CR (regen idempotent); web 360/360, coverage
+  63.15/61.40/54.85 (gates 59/54/45). codegraph sync clean.
+
+**S22 CLOSE (D-084):**
+- WO-D (BUG-002 build) did NOT fire — the remediation round consumed the
+  spare room; → S23 WO-A (primary). WO-E skip carry ×11 (07-12 < 07-23).
+- Session pattern note (D-062 adjacent): operator queried status twice
+  mid-session; mid-session operator-expected.md updates (a "📣 in-progress"
+  block) worked well — keep for long clock-gated sessions.
+- Prod + AMS: read-only EXCEPT the sanctioned `ams-teststream` restart (S14
+  precedent, doubled as the post-lapse publish probe). Branch `s22-d084`;
+  1 PR; ≤2 pushes. Close commits + PR evidence appended below after merge.

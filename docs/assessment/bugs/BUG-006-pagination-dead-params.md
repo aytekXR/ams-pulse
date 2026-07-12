@@ -2,7 +2,7 @@
 
 **Severity:** medium
 **Component:** api / store (meta.Store)
-**Status:** OPEN — filed S21 / D-083, 2026-07-12 (parameter-conformance sweep)
+**Status:** FIXED (S22 / D-084) — keyset pagination added to all 8 store methods and handlers; conformance registry entries flipped to `probe` (GREEN in CI).
 
 ## Summary
 
