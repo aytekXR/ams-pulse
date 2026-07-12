@@ -347,6 +347,36 @@ coverage gates (59/54/45) must stay green. Visual acceptance = operator browser 
 line (INFRA-01). `brandkit/` itself is read-mostly design source, owner FE-01 (manifest
 updated D-071).
 
+### 2.16  AMS operational early-warning — demand-driven (OPERATOR-APPROVED 2026-07-12, D-086 addendum)  [S–M]
+
+Seeded by an operator-directed review of the Ant Media issue tracker (2026-07-12).
+Two upstream issues are direct demand evidence for Pulse:
+
+- **ant-media/Ant-Media-Server#3122** (Prometheus exporter; closed 2023 UNBUILT —
+  community json_exporter workaround with a moved blog + lost dashboard). Pulse's
+  `/metrics` endpoint (server.go:882–906) already delivers this natively →
+  **positioning item, not a build item**: cite as demand evidence in the
+  marketplace assessment.
+- **ant-media/Ant-Media-Server#7926** (OPEN, 2026-07-06: AMS freezes after ~24 h
+  under ~90–100 RTMP publishers; Java alive, HLS/API dead, **OS metrics normal**
+  — so cpu/mem/disk anomaly metrics are blind by construction). Pulse already
+  DETECTS the freeze (node_down absence eviction ~3×PollInterval + HLS probe
+  failure alerts). The gap is EARLY warning:
+  1. **`ams_api_latency_ms`** (node scope): measure poll round-trip in
+     restpoller (today errors are only logged, nothing measured) → live
+     snapshot → anomaly whitelist (same 5-copy plumbing as §2.14/F9) — catches
+     the "gradual" degradation the report describes.
+  2. **API error-streak → `node_degraded`**: consecutive poll-failure counter
+     feeding the existing `node_degraded` rule type (evaluator.go:379) before
+     full absence.
+  3. Stretch: probe TTFB trend anomaly (HLS/DASH TTFB already stored in
+     probe_results; nothing watches the trend, only hard failures alert).
+  The S24 flag-event store persists these detections with timestamps — the
+  forensic timeline the #7926 reporter lacks.
+
+Rides the S25 anomaly-expansion session naturally (WO-D there). Plus two
+one-line demand-evidence citations in `docs/assessment/final-assessment.md`.
+
 ---
 
 ## 3. Sessions
