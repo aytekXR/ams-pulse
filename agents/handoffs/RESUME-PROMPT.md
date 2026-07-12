@@ -11,7 +11,57 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-23.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-24.md`)
+
+**Session 2026-07-12 result: D-085 — S23 DONE (★ BUG-002 FIXED end-to-end,
+live-validated + BUG-008 ADR-0009 authored + assessment 65.2/83.0).**
+- **★ BUG-002 FIXED (WO-A, the recording/billing gap — was the last FAIL row
+  in the marketplace checklist):** amsclient `ListVods(Paged)` (DTO pinned by
+  a VERBATIM live-AMS fixture) + `restpoller.pollVods` (every 12th tick,
+  tick-0 backfill, persistent seen-set on the stable AMS `vodId` — the live
+  probe at open resolved ALL 5 design-note OQs in one read-only call) +
+  `mv_recording_1d` (CH 0009) + `vod_poll_state` (meta 0003, 4 copies incl.
+  the Postgres embed chain). **LIVE-VALIDATED: TC-REC-01 3/3 PASS vs real
+  AMS — recording_gb=0.003126, 0.02% reconciliation** with the S17 fixture
+  VoD. Traps pre-empted: the poll Deduplicator would silently drop
+  same-window VoD events (bypassed + regression-pinned); `streamName` is the
+  FILE name (`streamId` is the stream); `duration` is ms. At-most-once
+  (mark-then-emit): undercount-on-crash preferred over double-BILLING.
+- **WO-B: ADR-0009 (anomaly flag-event store) authored, Proposed** — CH
+  `anomaly_flag_events`, migration **0010** (0009 taken by BUG-002), write
+  path in the UpdateBaselines tick, hysteresis warm-up on restart, separate
+  `FlagHistoryQuerier` interface. **Build DEFERRED** (Effort L vs the
+  build-only-if-Small gate) → S24 primary IF approved; the 2 `/anomalies`
+  known-violations stay pinned.
+- **WO-C: assessment refreshed** (S20–S22 fixes + BUG-002 landed):
+  completeness **60.6/79.9 → 65.2 strict / 83.0 weighted** (recounted
+  mechanically 43/12/7/3/1); marketplace "No P0 open bugs" FAIL→PASS; only
+  BUG-001 (low) open; docs stay DRAFT (operator review still gates external
+  use).
+- **Verification:** 4 scouts + 9 build agents, 0 errors; 3 adversarial
+  verifiers, 0 must-fix; 5 mutation proofs (4 RED; the uncaught Postgres
+  embed-chain hole got an ORCH remediation guard test + PG-parity 0003 fix).
+- **Gates:** 24/24 Go pkgs `-race`, 0 FAIL (3 SKIPs = pre-existing env-gated
+  infra, byte-unchanged since 2d311d9; D-028 api-skip class = 0); coverage
+  **75.9% → 76.0%** (floor 70.2); gofmt/vet/contract-drift clean (no OpenAPI
+  change).
+- **AMS post-expiry (s23open sweep): byte-identical AGAIN; no post-lapse
+  antmedia restart yet** (StartedAt 06:52Z < lapse 12:09Z) — the boot-time
+  enforcement hypothesis stays untested; observe-only. **pulse-realams now
+  runs the S23 build** (stack reset `down -v` + rebuilt; loopback :18090).
+  Prod untouched. CI promotions skip carry ×12 (07-12 < 07-23 — the gate
+  opens within ~11 days of S23).
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-24.md` and execute it**
+(BUG-008 ADR-0009 build [primary, IF approved — else next ROADMAP item] +
+CI promotions if ≥07-23 else skip carry ×13 + AMS re-sweep at open,
+observe-only). **PR-first, ≤2 pushes.** Check `docs/operator-expected.md`
+FIRST (caddy-vhost? final-assessment review? prod rollout now carries
+D-082..D-085 = all BUG-002..010 fixes).
+
+---
+
+## ▶ prior session context (S22, superseded by the above)
 
 **Session 2026-07-12 result: D-084 — S22 DONE (post-expiry sweep NULL delta +
 conformance debt 27→4 fixed TDD + two panic fixes).**

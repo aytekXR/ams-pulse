@@ -106,8 +106,8 @@ func pgSchemaVersions(t *testing.T) []string {
 	return vs
 }
 
-// sqliteSchemaVersions creates an in-memory SQLite store, applies both 0001
-// and 0002 DDL files in a single MigrateEmbedded call (concatenated), and
+// sqliteSchemaVersions creates an in-memory SQLite store, applies the 0001,
+// 0002 and 0003 DDL files in a single MigrateEmbedded call (concatenated), and
 // returns the resulting schema_migrations version strings.
 //
 // WHY concatenated: MigrateEmbedded calls applySchemaUpgrades after running
@@ -130,6 +130,10 @@ func sqliteSchemaVersions(t *testing.T) []string {
 	if err != nil {
 		t.Skipf("cannot read 0002_anomaly_alert_rule.sql: %v", err)
 	}
+	ddl0003, err := os.ReadFile("../../../../contracts/db/meta/0003_vod_poll_state.sql")
+	if err != nil {
+		t.Skipf("cannot read 0003_vod_poll_state.sql: %v", err)
+	}
 
 	// Use a temp file so we can read schema_migrations via a raw connection.
 	tmp, err := os.CreateTemp("", "meta_parity_*.db")
@@ -144,9 +148,9 @@ func sqliteSchemaVersions(t *testing.T) []string {
 	if err != nil {
 		t.Fatalf("sqliteSchemaVersions: New: %v", err)
 	}
-	// Apply both DDL files in one call to avoid the applySchemaUpgrades
+	// Apply all DDL files in one call to avoid the applySchemaUpgrades
 	// double-column issue (see function doc above).
-	combined := string(ddl0001) + "\n" + string(ddl0002)
+	combined := string(ddl0001) + "\n" + string(ddl0002) + "\n" + string(ddl0003)
 	if err := s.MigrateEmbedded(ctx, combined); err != nil {
 		_ = s.Close()
 		t.Fatalf("sqliteSchemaVersions: MigrateEmbedded combined: %v", err)
@@ -179,7 +183,7 @@ func sqliteSchemaVersions(t *testing.T) []string {
 
 // TestPG_MigrationParity checks that after migrating a fresh PG database,
 // schema_migrations contains exactly the same version strings as a fresh SQLite
-// database migrated with both 0001 and 0002 SQL files.
+// database migrated with the 0001, 0002 and 0003 SQL files.
 func TestPG_MigrationParity(t *testing.T) {
 	openPGStore(t) // resets schema and migrates
 

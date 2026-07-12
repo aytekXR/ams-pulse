@@ -1,4 +1,58 @@
-# Operator TODO — the items only YOU can do (updated at SESSION-22 close, D-084, 2026-07-12; rides S22's PR)
+# Operator TODO — the items only YOU can do (updated at SESSION-23 close, D-085, 2026-07-12; rides S23's PR)
+
+## ⚡ TL;DR — expected from you right now (2026-07-12, SESSION-23 closed — D-085)
+
+> **Nothing is needed from you right now.** S23 ran fully autonomously (your
+> open items were re-checked at open: no answers had arrived, nothing blocked).
+>
+> **★ THE HEADLINE: the recording/billing gap is FIXED (BUG-002) — and proven
+> against your real AMS.** Since S17 we knew `recording_gb` was structurally 0
+> on every AMS 3.0.3 deployment (AMS can't sign the `vodReady` webhook, and
+> Pulse's webhook door stays locked by design). Pulse now polls the AMS VoD
+> REST list directly (read-only, once a minute), remembers per VoD what it
+> already counted (restart-safe — no double-billing), and rolls sizes into the
+> billing report. **Live proof on your server today: the usage report now
+> shows recording_gb = 0.003126 for the S17 test VoD — within 0.02% of the
+> file's true 3,125,555 bytes.** This was the LAST failing row in the
+> marketplace-readiness checklist; "No P0 open bugs" now reads PASS.
+>
+> **The assessment numbers moved (still DRAFT, still waiting on your review):**
+> product completeness is now **65.2% strict / 83.0% weighted** (was
+> 60.6/79.9 at S19 close) after the S20–S23 fixes were folded into the
+> validation matrix. Only BUG-001 (low, no user impact) remains open of the
+> 10 bugs the program filed.
+>
+> **Also this session:** the design for the last `/anomalies` parameter gap
+> (BUG-008 `from`/`to`) is written as ADR-0009 — building it is a full
+> session and waits for the plan/your nod; the two parameters stay honestly
+> pinned until then. FYI: your isolated validation stack (`pulse-realams`,
+> loopback :18090) was reset and now runs today's build — its old test data
+> was disposable by design.
+>
+> **Your AMS after the trial lapse — still nothing changed** (second
+> byte-identical sweep; your `antmedia` container has not restarted since
+> before the lapse, so the "enforcement bites at restart" hypothesis remains
+> untested; sessions keep observing, never restarting it).
+>
+> **Still waiting on your two standing decisions (unchanged, non-blocking):**
+> caddy-vhost merge + final-assessment DRAFT review — details in the S21
+> TL;DR below. **A third one is now worth a thought:** a prod rollout would
+> carry FOUR sessions of fixes (D-082..D-085 — every BUG-002..010 fix
+> including recording/billing). Say "roll out" whenever you want them live;
+> prod stays untouched until then.
+
+## 🔎 What SESSION-23 did (2026-07-12, closed — D-085)
+
+| Area | Result |
+|---|---|
+| **BUG-002 fixed (recording/billing)** | VoD REST poll fallback exactly per the S20 design note, upgraded to a safer dedup after a live probe confirmed AMS exposes a stable `vodId` (all five of the design note's open questions were answered by ONE read-only REST call at session open). Two additive migrations (ClickHouse view + meta seen-set table), 8 poller tests, restart-resume and no-double-count regression pins. **Live-validated end-to-end on your AMS: 3/3 PASS, 0.02% reconciliation.** |
+| **Two traps caught before code** | The scouts found (1) the poller's event deduplicator would have silently swallowed same-minute VoD events (bypassed + pinned by a regression test) and (2) the AMS field `streamName` on VoDs is actually the FILE name — attribution uses `streamId`. Either would have shipped a subtly wrong fix. |
+| **BUG-008 phase-2 designed** | ADR-0009: a persistent anomaly flag-event store (ClickHouse) that will make `/anomalies?from&to` honest. Adversarially fact-checked (19 code citations verified). Build deferred — it's a full session of work; the 2 parameters stay visibly pinned until built. |
+| **Assessment refreshed** | All S20–S22 bug fixes + today's BUG-002 fix folded into the validation matrix and the marketplace report: completeness 65.2% strict / 83.0% weighted; marketplace "No P0 open bugs" flips FAIL→PASS. Both docs remain DRAFT pending your review. |
+| **Quality net** | 13 workflow agents (4 scouts, 6 authors, 3 adversarial verifiers), 0 errors, 0 must-fix findings; 5 mutation proofs run in pristine copies (the one gap found — a Postgres migration-chain omission no test caught — got its guard test same-session). |
+| **Ops** | Gates: 24/24 Go packages race-clean, 0 failures, coverage 75.9%→**76.0%** (floor 70.2). Prod untouched; AMS read-only. CI-promotion date gate still closed (opens 07-23, ~11 days) → skip carry ×12. One PR. |
+
+## (superseded) S22-close header follows
 
 ## ⚡ TL;DR — expected from you right now (2026-07-12, SESSION-22 closed — D-084)
 

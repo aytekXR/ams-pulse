@@ -2,7 +2,13 @@
 
 **Severity:** high (blocks the recording/billing use case: PRD F6)
 **Component:** collector (webhook path) + reports
-**Status:** confirmed
+**Status:** **FIXED (S23 / D-085, 2026-07-12)** — VoD REST poll fallback per the
+design note (`BUG-002-design-note-vod-rest-poll.md`): `restpoller.pollVods`
+(every 12th tick), persistent seen-set dedup on the stable AMS `vodId`
+(`vod_poll_state`, meta migration 0003), `mv_recording_1d` ClickHouse MV
+(migration 0009). Live-validated: TC-REC-01 3/3 vs real AMS —
+recording\_gb = 0.003126 vs 3,125,555-byte ground truth (0.02% reconciliation).
+The webhook path remains fail-closed (unchanged).
 
 ## Reproduction Steps
 

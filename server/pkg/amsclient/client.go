@@ -562,3 +562,60 @@ func (c *Client) GetVersion(ctx context.Context) (*VersionDTO, error) {
 	}
 	return &result, nil
 }
+
+// VodDTO is the AMS REST v2 VoD list entry.
+// Fields are verified against a live capture: GET /pulse-test/rest/v2/vods/list/0/5
+// on AMS 3.0.3, 2026-07-12. All fields are tolerant: unknown fields silently
+// ignored, missing fields zero.
+//
+// Unit notes (curl-verified):
+//   - VodID: stable unique string id — use as dedup key, NOT StreamID
+//   - FileSize: bytes (int64)
+//   - CreationDate: Unix epoch MILLISECONDS
+//   - Duration: MILLISECONDS (43025 for a ~43 s VoD — NOT seconds)
+//   - StreamID: originating live stream id; VodName is the file name
+//     (e.g. StreamID="val-vodgen-s17", VodName="val-vodgen-s17.mp4")
+type VodDTO struct {
+	VodID        string `json:"vodId"`        // unique stable id (dedup key)
+	VodName      string `json:"vodName"`      // file name (e.g. "val-vodgen-s17.mp4")
+	StreamID     string `json:"streamId"`     // originating stream id (use for attribution, not streamName)
+	FilePath     string `json:"filePath"`     // relative path (e.g. "streams/val-vodgen-s17.mp4")
+	FileSize     int64  `json:"fileSize"`     // bytes
+	CreationDate int64  `json:"creationDate"` // Unix epoch ms
+	Duration     int64  `json:"duration"`     // ms (NOT seconds)
+	Type         string `json:"type"`         // e.g. "streamVod"
+}
+
+// ListVods returns a single page of VoDs for an application.
+// Uses the AMS v3 path: /{app}/rest/v2/vods/list/{offset}/{size}.
+// size<=0 defaults to 200.
+func (c *Client) ListVods(ctx context.Context, app string, offset, size int) ([]VodDTO, error) {
+	if size <= 0 {
+		size = 200
+	}
+	path := fmt.Sprintf("/%s/rest/v2/vods/list/%d/%d", app, offset, size)
+	var result []VodDTO
+	return result, c.getJSON(ctx, path, &result)
+}
+
+// ListVodsPaged fetches all pages and returns the complete VoD list for an
+// application. Terminates when a page contains fewer than pageSize entries.
+// Uses the AMS v3 path: /{app}/rest/v2/vods/list/{offset}/200.
+func (c *Client) ListVodsPaged(ctx context.Context, app string) ([]VodDTO, error) {
+	const pageSize = 200
+	var all []VodDTO
+	offset := 0
+	for {
+		path := fmt.Sprintf("/%s/rest/v2/vods/list/%d/%d", app, offset, pageSize)
+		var page []VodDTO
+		if err := c.getJSON(ctx, path, &page); err != nil {
+			return all, err
+		}
+		all = append(all, page...)
+		if len(page) < pageSize {
+			break
+		}
+		offset += pageSize
+	}
+	return all, nil
+}

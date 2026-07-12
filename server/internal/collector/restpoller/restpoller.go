@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,22 @@ import (
 // DefaultPollInterval is the default broadcast poll interval.
 // 5 s guarantees ≤10 s stream visibility (F1): worst case = two polls.
 const DefaultPollInterval = 5 * time.Second
+
+// vodPollEveryNTicks defines how often VoD polling fires relative to the broadcast
+// poll cadence. At the 5 s default: 12 ticks × 5 s = 60 s VoD poll interval.
+// No new env var — adjust PULSE_POLL_INTERVAL if a shorter cadence is needed.
+const vodPollEveryNTicks = 12
+
+// VodStateStore persists the per-app seen-set for VoD deduplication across Pulse
+// restarts. *meta.Store satisfies this interface structurally (vod_poll_state.go).
+type VodStateStore interface {
+	// ListSeenVodIDs returns the set of VoD IDs already marked seen for app.
+	// Returns a non-nil empty map (not an error) when the app has no entries yet.
+	ListSeenVodIDs(ctx context.Context, app string) (map[string]struct{}, error)
+	// MarkVodSeen records (app, vodID) as seen. Idempotent (ON CONFLICT DO NOTHING).
+	// createdMS is the VoD creation timestamp in Unix epoch milliseconds.
+	MarkVodSeen(ctx context.Context, app, vodID string, createdMS int64) error
+}
 
 // Config holds restpoller configuration.
 type Config struct {
@@ -41,6 +58,11 @@ type Config struct {
 	// GeoResolver and UAParser are optional enrichment hooks.
 	GeoResolver collector.GeoResolver
 	UAParser    collector.UAParser
+
+	// VodState is the persistent seen-set backend for VoD deduplication.
+	// nil disables VoD polling (logged once at Run start). *meta.Store satisfies
+	// this interface structurally via ListSeenVodIDs / MarkVodSeen.
+	VodState VodStateStore
 }
 
 // Poller implements collector.Source by polling AMS REST API v2.
@@ -54,6 +76,12 @@ type Poller struct {
 	// prevStatus tracks each stream's last known AMS status for transition detection.
 	mu         sync.Mutex
 	prevStatus map[string]string // key = nodeID+"/"+app+"/"+streamID
+
+	// vodState is the persistent seen-set backend (nil = VoD polling disabled).
+	vodState VodStateStore
+	// vodTick counts poll() invocations for VoD cadence gating.
+	// Single-goroutine invariant: poll() runs only from Run's loop, so no mutex needed.
+	vodTick int
 }
 
 // New creates a new Poller.
@@ -85,6 +113,7 @@ func New(
 		dedup:      collector.NewDeduplicator(cfg.PollInterval * 2),
 		logger:     logger,
 		prevStatus: make(map[string]string),
+		vodState:   cfg.VodState,
 	}
 }
 
@@ -97,6 +126,9 @@ func (p *Poller) Name() string {
 // is cancelled or a fatal error occurs.
 func (p *Poller) Run(ctx context.Context) error {
 	p.logger.Info("restpoller: starting", "node_id", p.cfg.NodeID, "interval", p.cfg.PollInterval)
+	if p.vodState == nil {
+		p.logger.Info("restpoller: VoD polling disabled (VodState not configured)")
+	}
 	ticker := time.NewTicker(p.cfg.PollInterval)
 	defer ticker.Stop()
 
@@ -125,6 +157,11 @@ func (p *Poller) poll(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("list applications: %w", err)
 	}
+
+	// VoD cadence gate (Option A): fire every vodPollEveryNTicks ticks.
+	// Check BEFORE increment so tick 0 fires immediately (backfill on startup).
+	vodDue := p.vodState != nil && p.vodTick%vodPollEveryNTicks == 0
+	p.vodTick++
 
 	// Poll cluster nodes (best-effort). A standalone AMS returns 404, which
 	// ClusterNodes maps to (nil, nil) — no warning. Any OTHER error (500, network,
@@ -168,6 +205,124 @@ func (p *Poller) poll(ctx context.Context) error {
 			// Continue with remaining apps.
 		}
 	}
+
+	// VoD polling runs after broadcast work, once per vodPollEveryNTicks ticks.
+	if vodDue {
+		for _, app := range apps {
+			if err := p.pollVods(ctx, app); err != nil {
+				p.logger.Warn("restpoller: vod poll error",
+					"app", app,
+					"error", err,
+				)
+				// Continue with remaining apps.
+			}
+		}
+	}
+
+	return nil
+}
+
+// pollVods polls the AMS vods/list endpoint and emits EventRecordingReady for each
+// VoD not yet recorded in the persistent seen-set.
+//
+// At-most-once semantics: MarkVodSeen is called BEFORE emitting the event. A mark
+// failure aborts the cycle immediately — better to miss one cycle than to double-emit
+// (SummingMergeTree would double-count recording_bytes on the next restart).
+//
+// Events are emitted DIRECTLY via p.sink.WriteServerEvent — NEVER through p.dedup.
+// The Deduplicator would silently drop same-window recording events that share a
+// StreamID (common during backfill when multiple VoDs originate from the same stream),
+// causing missed recording_ready events. The seen-set in VodState is the correct
+// dedup mechanism for VoDs.
+func (p *Poller) pollVods(ctx context.Context, app string) error {
+	vods, err := p.client.ListVodsPaged(ctx, app)
+	if err != nil {
+		return fmt.Errorf("list vods: %w", err)
+	}
+
+	// Never fall back to empty-seen on error — that would mass double-emit.
+	seen, err := p.vodState.ListSeenVodIDs(ctx, app)
+	if err != nil {
+		return fmt.Errorf("list seen vod ids: %w", err)
+	}
+
+	// Collect unseen VoDs; skip entries with empty VodID (no stable dedup key — emit
+	// would be unsafe because the next cycle could emit the same file again).
+	var unseen []amsclient.VodDTO
+	for _, v := range vods {
+		if v.VodID == "" {
+			p.logger.Warn("restpoller: skipping VoD with empty vodId — no stable dedup key, cannot emit safely",
+				"app", app,
+				"vod_name", v.VodName,
+			)
+			continue
+		}
+		if _, ok := seen[v.VodID]; !ok {
+			unseen = append(unseen, v)
+		}
+	}
+
+	// Sort ascending by CreationDate so older VoDs are ingested before newer ones.
+	sort.Slice(unseen, func(i, j int) bool {
+		return unseen[i].CreationDate < unseen[j].CreationDate
+	})
+
+	if len(unseen) > 1000 {
+		p.logger.Warn("restpoller: large VoD backfill — may approach ClickHouse channel capacity (~2000)",
+			"app", app,
+			"count", len(unseen),
+		)
+	}
+
+	var emitted int
+	for _, v := range unseen {
+		// At-most-once ruling: mark FIRST, then emit.
+		// A mark failure must not lead to double emission on the next cycle — abort.
+		if err := p.vodState.MarkVodSeen(ctx, app, v.VodID, v.CreationDate); err != nil {
+			p.logger.Error("restpoller: MarkVodSeen failed — aborting VoD cycle to prevent double-emit",
+				"app", app,
+				"vod_id", v.VodID,
+				"error", err,
+			)
+			return err
+		}
+
+		ts := v.CreationDate
+		if ts == 0 {
+			ts = time.Now().UnixMilli()
+		}
+
+		data := map[string]any{
+			"path":       v.VodName,
+			"size_bytes": v.FileSize,
+		}
+		// Duration from AMS vods/list is in MILLISECONDS; convert to seconds.
+		// Omit duration_s entirely when AMS does not report it (zero duration).
+		if v.Duration > 0 {
+			data["duration_s"] = v.Duration / 1000
+		}
+
+		ev := domain.ServerEvent{
+			Version:  1,
+			Type:     domain.EventRecordingReady,
+			TS:       ts,
+			Source:   domain.SourceRestPoll,
+			NodeID:   p.cfg.NodeID,
+			App:      app,
+			StreamID: v.StreamID,
+			Data:     data,
+		}
+		// Emit DIRECTLY via p.sink.WriteServerEvent — NEVER through p.dedup.
+		// The Deduplicator would silently drop same-window recording events sharing
+		// the same StreamID and TS, causing missed VoD events during backfill.
+		p.sink.WriteServerEvent(ev)
+		emitted++
+	}
+
+	if emitted > 0 {
+		p.logger.Info("restpoller: VoD events emitted", "app", app, "count", emitted)
+	}
+
 	return nil
 }
 

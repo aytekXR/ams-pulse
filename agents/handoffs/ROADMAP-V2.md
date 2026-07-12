@@ -725,22 +725,27 @@ decisions.md D-083.
   remediation consumed it; → S23 primary). WO-E skip carry ×11. WO-F green.
 - Workflows: 16 agents (12+4), 0 errors, ~1.28M subagent tokens.
 
-### S23 — BUG-002 VoD REST-poll build + BUG-008 phase-2 design (planned at S22 close, D-084)
+### S23 — BUG-002 VoD REST-poll build + BUG-008 phase-2 design ✅ DONE (D-085, 2026-07-12)
 
-Execute `sessions/SESSION-23.md`. No clock gate. At open: operator-expected
-check, concurrent-session hazard check, quick AMS post-expiry re-sweep
-(observe-only; enforcement may bite at AMS process restart — D-084).
-
-1. **WO-A [M–L, PRIMARY]** BUG-002 build TDD: `mv_recording_1d` +
-   `vod_poll_state` migrations + VoD REST poller + fixture-replay tests +
-   read-only live verify (S17 test VoD = ground truth).
-2. **WO-B [M]** BUG-008 phase 2: anomaly flag-event persistence ADR
-   (makes /anomalies from/to honest); build only if Small post-ADR.
-3. **WO-C [S]** assessment refresh: matrix + final-assessment rows changed by
-   the S20–S22 fixes (stays DRAFT); session-plan bugs table.
-4. **WO-D [S, gate ≥07-23]** CI promotions — else skip carry ×12.
-5. **WO-E [XS]** standing re-checks; a rollout (if operator-approved) now
-   carries D-082+D-083+D-084.
+All five WOs executed (SESSION-23.md; open checks clean — no concurrent-session
+incident, s23open sweep byte-identical, no post-lapse antmedia restart):
+1. **WO-A DONE — ★ BUG-002 FIXED, live-validated:** amsclient ListVods(Paged)
+   (verbatim live-capture fixture) + restpoller.pollVods (12-tick cadence,
+   tick-0 backfill, persistent seen-set on stable `vodId` — the live probe at
+   open resolved all 5 design-note OQs) + mv_recording_1d (CH 0009) +
+   vod_poll_state (meta 0003). TC-REC-01 3/3 PASS vs real AMS
+   (recording_gb 0.02% reconciliation). Dedup-bypass + restart-resume pinned;
+   5 mutation proofs; at-most-once mark-then-emit.
+2. **WO-B DONE (design):** ADR-0009 anomaly flag-event store, Proposed;
+   migration 0010; build DEFERRED (Effort L vs build-only-if-Small) → S24
+   primary if approved.
+3. **WO-C DONE:** assessment refreshed for S20–S23 — completeness
+   60.6/79.9 → **65.2 strict / 83.0 weighted**; marketplace "No P0 open
+   bugs" FAIL→PASS; only BUG-001 (low) open; stays DRAFT.
+4. **WO-D skip carry ×12** (07-12 < 07-23).
+5. **WO-E green** (protection/dependabot/prod-health). pulse-realams reset +
+   now runs the S23 build. Prod untouched; a rollout now carries
+   D-082+D-083+D-084+D-085.
 
 ### S22 (original plan) — post-expiry sweep (operator-directed re-gate) + conformance-debt fixes (planned at S21 close, D-083)
 

@@ -340,6 +340,38 @@ func (s *Store) applySchemaUpgrades(ctx context.Context) error {
 		}
 	}
 
+	// ── vod_poll_state table (S23 0003) ──────────────────────────────────────
+	// The 0003_vod_poll_state.sql migration creates the vod_poll_state seen-set
+	// table for BUG-002. We create it here idempotently so that SQLite databases
+	// initialised via MigrateEmbedded (which embeds only 0001) also get the
+	// table on startup — no separate migration runner is needed.
+	rows4, err := s.queryContext(ctx, "PRAGMA table_info(vod_poll_state)")
+	if err == nil {
+		hasTable := false
+		for rows4.Next() {
+			hasTable = true
+			// Drain the rows — we only need to know if any columns exist.
+			var cid int
+			var name, ctype string
+			var notNull int
+			var dflt sql.NullString
+			var pk int
+			_ = rows4.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk)
+		}
+		_ = rows4.Close()
+		if !hasTable {
+			if _, err := s.execContext(ctx,
+				`CREATE TABLE IF NOT EXISTS vod_poll_state (
+				    app        TEXT    NOT NULL,
+				    vod_id     TEXT    NOT NULL,
+				    created_ms INTEGER NOT NULL DEFAULT 0,
+				    PRIMARY KEY (app, vod_id)
+				)`); err != nil {
+				return fmt.Errorf("schema upgrade: create vod_poll_state: %w", err)
+			}
+		}
+	}
+
 	return nil
 }
 
