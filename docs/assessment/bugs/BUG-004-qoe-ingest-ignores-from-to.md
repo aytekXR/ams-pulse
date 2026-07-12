@@ -82,6 +82,8 @@ was never a test-only defect.
 
 ## Residual → BUG-005 (`interval` declared but ignored — same class)
 
+**FIXED (S21 / D-083, 2026-07-12)**
+
 The shared OpenAPI `interval` parameter (enum `[hour, day]`, default `day`) is
 **still not read** by `/qoe/ingest`. `IngestTimeseriesParams.BucketSeconds` is left
 at `0`, so `IngestTimeseries` falls back to its internal 60 s bucket default —
@@ -92,6 +94,21 @@ and was deliberately scoped OUT of the S20 fix rather than left undocumented.
 Natural mapping: `hour → BucketSeconds=3600`, `day → BucketSeconds=86400` — but
 note the bucket width interacts with the F4 "degradation visible within 15 s"
 acceptance criterion, so the default must stay 60 s when `interval` is absent.
+
+**Fix as landed (S21, D-083, 2026-07-12):**
+
+- New `parseBucketInterval(s string) int` helper added to `server/internal/api/server.go`
+  immediately after `parseTimeParam`. Maps `"hour"` → 3600, `"day"` → 86400, absent/other → 0.
+  F4 deviation is documented in the godoc: absent `interval` intentionally returns 0 (not 86400),
+  so `IngestTimeseries` keeps its internal 60-second bucket default — a 24-hour bucket would
+  collapse sub-minute degradations required visible within 15 s by PRD F4.
+- `handleIngestHealth` now calls `parseBucketInterval(q.Get("interval"))` and passes the result
+  as `BucketSeconds` in `query.IngestTimeseriesParams{}`. Stale "OUT OF SCOPE" comment replaced
+  with a note confirming the fix and the F4 deviation rationale.
+- TDD: `TestBUG005_IngestHealth_HonorsBucketInterval` (5 subtests: hour, day, absent, invalid-week,
+  combined) in `server/internal/api/vd20b_vd21_ingest_test.go`. RED before fix (hour/day/combined
+  subtests: BucketSeconds=0, want 3600/86400/3600). GREEN after.
+- Gates: `go test -race ./internal/api/...` → **0 FAIL / 0 SKIP**; `gofmt -l` → empty; `go vet` → clean.
 
 **Lesson (why the response-body/parameter contract tests in RESUME-PROMPT §6 matter):**
 CI lints the OpenAPI spec but never asserts that handlers honor what the spec
