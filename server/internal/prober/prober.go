@@ -73,6 +73,11 @@ type Config struct {
 
 	// HTTPUserAgent is the User-Agent sent in probe requests.
 	HTTPUserAgent string
+
+	// RefreshInterval is how often the runner reloads the enabled-probe list from
+	// the source.  Default: 60 s.  Set to a shorter duration in tests to drive
+	// the refresh loop through the injected FakeClock.
+	RefreshInterval time.Duration
 }
 
 // Clock abstracts time for deterministic testing.
@@ -112,6 +117,9 @@ func New(cfg Config, source domain.ProbeConfigSource, store ResultStore, logger 
 		cfg.MaxJitterFraction = 0.10
 	}
 	// MaxJitterFraction == 0 is valid: means no jitter (useful for testing).
+	if cfg.RefreshInterval <= 0 {
+		cfg.RefreshInterval = 60 * time.Second
+	}
 	if cfg.HTTPUserAgent == "" {
 		cfg.HTTPUserAgent = "Pulse-Prober/1.0"
 	}
@@ -154,24 +162,35 @@ func (r *Runner) Run(ctx context.Context) error {
 	// Channel for per-probe scheduler goroutines to request execution.
 	execCh := make(chan probeExecRequest, maxInt(len(probes), 1)+4)
 
-	// refreshTicker reloads the probe list every minute so new probes are
-	// picked up without restart.
-	refreshTicker := time.NewTicker(60 * time.Second)
-	defer refreshTicker.Stop()
+	// refreshCh fires every RefreshInterval to reload the probe list so new,
+	// changed, or removed probes are picked up without a restart.
+	// Using r.clock.After (re-armed after each tick) lets a FakeClock drive the
+	// refresh loop deterministically in tests; production uses realClock.
+	refreshCh := r.clock.After(r.cfg.RefreshInterval)
 
-	// Track per-probe goroutine lifecycle.
+	// Track per-probe goroutine lifecycle.  Storing the config alongside the
+	// cancel func lets spawnProbe detect unchanged probes and skip the
+	// cancel+respawn that caused BUG-003 duplicates.
 	type probeEntry struct {
+		config domain.ProbeConfig
 		cancel context.CancelFunc
 	}
 	running := make(map[string]probeEntry)
 
 	spawnProbe := func(p domain.ProbeConfig) {
 		if e, ok := running[p.ID]; ok {
-			// Cancel the old scheduler goroutine and respawn with updated config.
+			if e.config == p {
+				// Config is identical — keep the existing goroutine running with its
+				// current phase.  Cancelling+respawning would cause the goroutine to
+				// fire immediately (jitter==0 in production), producing a duplicate
+				// result row on every 60 s refresh (BUG-003).
+				return
+			}
+			// Config changed — cancel the stale goroutine and fall through to spawn.
 			e.cancel()
 		}
 		pCtx, pCancel := context.WithCancel(ctx)
-		running[p.ID] = probeEntry{cancel: pCancel}
+		running[p.ID] = probeEntry{config: p, cancel: pCancel}
 
 		wg.Add(1)
 		go func(probe domain.ProbeConfig, probeCtx context.Context) {
@@ -224,17 +243,19 @@ func (r *Runner) Run(ctx context.Context) error {
 			wg.Wait()
 			return ctx.Err()
 
-		case <-refreshTicker.C:
+		case <-refreshCh:
 			newProbes, err := r.source.ListEnabled(ctx)
 			if err != nil {
 				r.logger.Warn("prober: ListEnabled refresh failed", "error", err)
+				// Re-arm before continuing so the refresh loop keeps running.
+				refreshCh = r.clock.After(r.cfg.RefreshInterval)
 				continue
 			}
 			// Build a set of new IDs.
 			newIDs := make(map[string]struct{}, len(newProbes))
 			for _, p := range newProbes {
 				newIDs[p.ID] = struct{}{}
-				spawnProbe(p)
+				spawnProbe(p) // no-op for unchanged probes; respawns changed ones
 			}
 			// Cancel removed probes.
 			for id, e := range running {
@@ -243,6 +264,8 @@ func (r *Runner) Run(ctx context.Context) error {
 					delete(running, id)
 				}
 			}
+			// Re-arm the refresh channel for the next tick.
+			refreshCh = r.clock.After(r.cfg.RefreshInterval)
 		}
 	}
 }

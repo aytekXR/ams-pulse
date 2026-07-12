@@ -157,6 +157,11 @@ type Server struct {
 	// Wave 2: ingest tracker for QoE endpoints (optional).
 	ingestTracker IngestTracker
 
+	// BUG-004: ingest querier used exclusively by handleIngestHealth.
+	// Defaults to qsvc; tests may override via SetIngestQuerier to inject a
+	// capture double without replacing the concrete *query.Service everywhere.
+	iqsvc IngestQuerier
+
 	// Wave 2: reports generator (optional — requires ClickHouse for real data).
 	reportGen *reports.Generator
 
@@ -193,6 +198,13 @@ type IngestTracker interface {
 	Snapshot() map[string]ingest.PublisherState
 }
 
+// IngestQuerier is the subset of query.Service used by handleIngestHealth.
+// Keeping it narrow lets tests inject a capture double without replacing the
+// full *query.Service. *query.Service satisfies this interface automatically.
+type IngestQuerier interface {
+	IngestTimeseries(ctx context.Context, p query.IngestTimeseriesParams) (*query.IngestTimeseriesResult, error)
+}
+
 // New creates and initializes the API server.
 func New(cfg Config, store *meta.Store, live domain.LiveProvider, qsvc *query.Service,
 	lic *license.Manager, logger *slog.Logger) *Server {
@@ -219,6 +231,12 @@ func New(cfg Config, store *meta.Store, live domain.LiveProvider, qsvc *query.Se
 		}(),
 		// A7: per-IP limiter for /metrics scrape.
 		metricsLimiter: newKeyedLimiter(metricsRateRPS, metricsBurst),
+	}
+	// BUG-004: default the ingest querier to qsvc.  Guard the nil case explicitly
+	// so that a nil *query.Service does not become a non-nil interface value
+	// (Go nil-interface vs nil-pointer distinction).
+	if qsvc != nil {
+		s.iqsvc = qsvc
 	}
 	// S11 WO-C: initialise OIDC handler if a pre-built provider was injected.
 	if cfg.OIDCConfig != nil && cfg.OIDCConfig.Provider != nil {
@@ -249,6 +267,13 @@ func (s *Server) SetEventSink(sink domain.EventSink) {
 // Call after New, before Start.
 func (s *Server) SetIngestTracker(tracker IngestTracker) {
 	s.ingestTracker = tracker
+}
+
+// SetIngestQuerier overrides the IngestQuerier used by handleIngestHealth.
+// Call after New, before Start.  Intended for tests that need to inject a
+// capture double without replacing the full *query.Service.
+func (s *Server) SetIngestQuerier(iq IngestQuerier) {
+	s.iqsvc = iq
 }
 
 // SetReportGenerator wires the reports generator (F6).
@@ -1137,6 +1162,14 @@ func (s *Server) handleIngestHealth(w http.ResponseWriter, r *http.Request) {
 	// VD-20b + VD-21: return health_score (non-zero when ingest_stats received)
 	// and per-stream timeseries + drop_events per OpenAPI IngestStream schema.
 	//
+	// BUG-004 fix: honour the declared OpenAPI query parameters.
+	//
+	//   from / to  — parsed by parseTimeParam (zero when absent → no time filter
+	//                in IngestTimeseries; back-compat when caller passes nothing).
+	//   app / stream / node — stream-selection filters; absent = no filtering.
+	//   interval   — OUT OF SCOPE (BUG-004 residual); BucketSeconds stays at the
+	//                IngestTimeseries default of 60 s.
+	//
 	// Data sources:
 	//   - health_score, health, and current raw metrics: live aggregator snapshot
 	//     (populated by BE-01 VD-20a bridge: aggregator.onIngestStats calls
@@ -1145,6 +1178,13 @@ func (s *Server) handleIngestHealth(w http.ResponseWriter, r *http.Request) {
 	//
 	// OpenAPI IngestStream schema requires: [stream_id, app, health_score, timeseries].
 	// The health_score field is 0–100 per spec (minimum 0, maximum 100).
+	q := r.URL.Query()
+	from := parseTimeParam(q.Get("from"))
+	to := parseTimeParam(q.Get("to"))
+	filterApp := q.Get("app")
+	filterStream := q.Get("stream")
+	filterNode := q.Get("node")
+
 	ctx := r.Context()
 	snap := s.live.CurrentSnapshot()
 	var streams []map[string]any
@@ -1153,14 +1193,27 @@ func (s *Server) handleIngestHealth(w http.ResponseWriter, r *http.Request) {
 			if !st.Active {
 				continue
 			}
+			// Stream-selection filters — absent param means include all.
+			if filterApp != "" && st.App != filterApp {
+				continue
+			}
+			if filterStream != "" && sid != filterStream {
+				continue
+			}
+			if filterNode != "" && st.NodeID != filterNode {
+				continue
+			}
+
 			// Fetch ingest timeseries for this stream.
 			// Non-blocking: falls back to empty slices when ClickHouse is unavailable.
 			ts, dropEvents := []any{}, []any{}
-			if s.qsvc != nil {
-				tsResult, err := s.qsvc.IngestTimeseries(ctx, query.IngestTimeseriesParams{
+			if s.iqsvc != nil {
+				tsResult, err := s.iqsvc.IngestTimeseries(ctx, query.IngestTimeseriesParams{
 					StreamID: sid,
 					App:      st.App,
 					NodeID:   st.NodeID,
+					From:     from,
+					To:       to,
 				})
 				if err == nil && tsResult != nil {
 					for _, b := range tsResult.Timeseries {
@@ -2317,6 +2370,24 @@ func parseTimeRange(from, to string) (time.Time, time.Time) {
 		t = time.Now()
 	}
 	return f, t
+}
+
+// parseTimeParam parses a single from/to query-parameter value.
+// Returns zero time.Time when s is empty or cannot be parsed — intentionally
+// no default is applied, so callers that need "no filter" semantics get a zero
+// value that IngestTimeseries treats as "unbounded".
+// Supports epoch-milliseconds (integer string) and RFC 3339.
+func parseTimeParam(s string) time.Time {
+	if s == "" {
+		return time.Time{}
+	}
+	if ms, err := strconv.ParseInt(s, 10, 64); err == nil {
+		return time.UnixMilli(ms)
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t
+	}
+	return time.Time{}
 }
 
 func parseAudienceParams(q url.Values) (query.AudienceParams, error) {

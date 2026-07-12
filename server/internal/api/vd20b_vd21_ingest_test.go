@@ -17,8 +17,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/pulse-analytics/pulse/server/internal/api"
 	"github.com/pulse-analytics/pulse/server/internal/collector/ingest"
@@ -276,4 +279,307 @@ func TestVD23_IngestTracker_InterfaceConformance(t *testing.T) {
 	var _ api.IngestTracker = ht
 
 	t.Logf("PASS VD-23: ingest.HealthTracker satisfies api.IngestTracker (Snapshot() → map[string]ingest.PublisherState)")
+}
+
+// ─── BUG-004 regression tests ──────────────────────────────────────────────────
+//
+// handleIngestHealth ignored every declared OpenAPI query parameter: from, to,
+// app, stream, node.  These tests are the TDD specification for the fix.
+
+// captureIngestQsvc implements api.IngestQuerier and records every
+// IngestTimeseriesParams it receives.  Used to assert that handleIngestHealth
+// correctly plumbs from/to and app/stream/node params through to the query layer.
+type captureIngestQsvc struct {
+	captured []query.IngestTimeseriesParams
+}
+
+func (c *captureIngestQsvc) IngestTimeseries(_ context.Context, p query.IngestTimeseriesParams) (*query.IngestTimeseriesResult, error) {
+	c.captured = append(c.captured, p)
+	return &query.IngestTimeseriesResult{
+		Timeseries: []query.IngestBucket{},
+		DropEvents: []query.DropEvent{},
+	}, nil
+}
+
+// setupIngestCaptureServer mirrors setupHealthyTestServer but injects the given
+// IngestQuerier double so tests can observe IngestTimeseriesParams.
+func setupIngestCaptureServer(t *testing.T, iq api.IngestQuerier) (ts *httptest.Server, adminToken string, cleanup func()) {
+	t.Helper()
+	ctx := context.Background()
+
+	licKey, licCleanup := makeTestBusinessLicense(t)
+
+	ddlPath := metaDDLPath(t)
+	ddl, err := os.ReadFile(ddlPath)
+	if err != nil {
+		licCleanup()
+		t.Skipf("meta DDL not found: %v", err)
+	}
+	store, err := meta.New(ctx, "sqlite", ":memory:", "bug004-test-secret")
+	if err != nil {
+		licCleanup()
+		t.Fatalf("meta.New: %v", err)
+	}
+	if err := store.MigrateEmbedded(ctx, string(ddl)); err != nil {
+		store.Close()
+		licCleanup()
+		t.Fatalf("migrate: %v", err)
+	}
+
+	adminToken = "plt_bug004_testtoken_abcdef"
+	tokenHash := hashToken(adminToken)
+	if err := store.CreateToken(ctx, meta.APIToken{
+		Kind:      "api",
+		Name:      "bug004-admin",
+		TokenHash: tokenHash,
+		Scopes:    []string{"admin"},
+		CreatedAt: 1000,
+	}); err != nil {
+		store.Close()
+		licCleanup()
+		t.Fatalf("CreateToken: %v", err)
+	}
+
+	lic, err := license.New(licKey, "")
+	if err != nil {
+		store.Close()
+		licCleanup()
+		t.Fatalf("license.New (business): %v", err)
+	}
+	live := &fakeHealthyLiveProvider{}
+	qsvc := query.New(live, nil, lic)
+
+	apiCfg := api.Config{ListenAddr: ":0"}
+	srv := api.New(apiCfg, store, live, qsvc, lic, nil)
+	srv.SetIngestTracker(&fakeIngestTracker{})
+	if iq != nil {
+		srv.SetIngestQuerier(iq)
+	}
+
+	ts = httptest.NewServer(srv.Handler())
+	cleanup = func() {
+		ts.Close()
+		store.Close()
+		licCleanup()
+	}
+	return ts, adminToken, cleanup
+}
+
+// TestBUG004_IngestHealth_HonorsTimeRange proves that from/to query params
+// reach IngestTimeseriesParams.From / .To (BUG-004 core regression).
+// Table-driven: epoch-ms, RFC3339, only-from, only-to, and absent (back-compat
+// zero time → no time filter) cases.
+func TestBUG004_IngestHealth_HonorsTimeRange(t *testing.T) {
+	epochMs1 := int64(1_700_000_000_000) // 2023-11-14T22:13:20Z
+	epochMs2 := int64(1_700_100_000_000)
+	rfc1 := time.UnixMilli(epochMs1).UTC().Format(time.RFC3339)
+	rfc2 := time.UnixMilli(epochMs2).UTC().Format(time.RFC3339)
+
+	cases := []struct {
+		name      string
+		fromParam string
+		toParam   string
+		wantFrom  time.Time
+		wantTo    time.Time
+		wantCalls int
+	}{
+		{
+			name:      "epoch-ms both",
+			fromParam: strconv.FormatInt(epochMs1, 10),
+			toParam:   strconv.FormatInt(epochMs2, 10),
+			wantFrom:  time.UnixMilli(epochMs1),
+			wantTo:    time.UnixMilli(epochMs2),
+			wantCalls: 1,
+		},
+		{
+			name:      "RFC3339 both",
+			fromParam: rfc1,
+			toParam:   rfc2,
+			wantFrom:  time.UnixMilli(epochMs1).UTC(),
+			wantTo:    time.UnixMilli(epochMs2).UTC(),
+			wantCalls: 1,
+		},
+		{
+			name:      "absent both – back-compat zero",
+			fromParam: "",
+			toParam:   "",
+			wantFrom:  time.Time{}, // zero → no time filter passed to IngestTimeseries
+			wantTo:    time.Time{},
+			wantCalls: 1,
+		},
+		{
+			name:      "only from provided",
+			fromParam: strconv.FormatInt(epochMs1, 10),
+			toParam:   "",
+			wantFrom:  time.UnixMilli(epochMs1),
+			wantTo:    time.Time{}, // zero
+			wantCalls: 1,
+		},
+		{
+			name:      "only to provided",
+			fromParam: "",
+			toParam:   strconv.FormatInt(epochMs2, 10),
+			wantFrom:  time.Time{}, // zero
+			wantTo:    time.UnixMilli(epochMs2),
+			wantCalls: 1,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			cap := &captureIngestQsvc{}
+			ts, token, cleanup := setupIngestCaptureServer(t, cap)
+			defer cleanup()
+
+			vals := url.Values{}
+			if tc.fromParam != "" {
+				vals.Set("from", tc.fromParam)
+			}
+			if tc.toParam != "" {
+				vals.Set("to", tc.toParam)
+			}
+			rawURL := ts.URL + "/api/v1/qoe/ingest"
+			if len(vals) > 0 {
+				rawURL += "?" + vals.Encode()
+			}
+
+			req, _ := http.NewRequest(http.MethodGet, rawURL, nil)
+			req.Header.Set("Authorization", authHeader(token))
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("GET /qoe/ingest: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				body, _ := io.ReadAll(resp.Body)
+				t.Fatalf("want 200, got %d: %s", resp.StatusCode, body)
+			}
+
+			if len(cap.captured) != tc.wantCalls {
+				t.Fatalf("BUG-004: want %d IngestTimeseries call(s), got %d (handler may not be using iqsvc or not plumbing params)",
+					tc.wantCalls, len(cap.captured))
+			}
+			if tc.wantCalls == 0 {
+				return
+			}
+			got := cap.captured[0]
+			if !got.From.Equal(tc.wantFrom) {
+				t.Errorf("BUG-004: IngestTimeseriesParams.From = %v, want %v", got.From, tc.wantFrom)
+			}
+			if !got.To.Equal(tc.wantTo) {
+				t.Errorf("BUG-004: IngestTimeseriesParams.To = %v, want %v", got.To, tc.wantTo)
+			}
+			if t.Failed() {
+				return
+			}
+			t.Logf("PASS %s: From=%v To=%v", tc.name, got.From, got.To)
+		})
+	}
+}
+
+// TestBUG004_IngestHealth_AppStreamNodeFilter proves that app/stream/node query
+// params filter which streams from the live snapshot appear in the response.
+// fakeHealthyLiveProvider has one stream: id="healthy-stream-1", app="live", node="node-1".
+func TestBUG004_IngestHealth_AppStreamNodeFilter(t *testing.T) {
+	cases := []struct {
+		name        string
+		queryStr    string
+		wantStreams int // streams array length in JSON response
+		wantCalls   int // IngestTimeseries capture calls
+	}{
+		{name: "no filter", queryStr: "", wantStreams: 1, wantCalls: 1},
+		{name: "app match", queryStr: "app=live", wantStreams: 1, wantCalls: 1},
+		{name: "app no match", queryStr: "app=other", wantStreams: 0, wantCalls: 0},
+		{name: "stream match", queryStr: "stream=healthy-stream-1", wantStreams: 1, wantCalls: 1},
+		{name: "stream no match", queryStr: "stream=other-stream", wantStreams: 0, wantCalls: 0},
+		{name: "node match", queryStr: "node=node-1", wantStreams: 1, wantCalls: 1},
+		{name: "node no match", queryStr: "node=other-node", wantStreams: 0, wantCalls: 0},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			cap := &captureIngestQsvc{}
+			ts, token, cleanup := setupIngestCaptureServer(t, cap)
+			defer cleanup()
+
+			rawURL := ts.URL + "/api/v1/qoe/ingest"
+			if tc.queryStr != "" {
+				rawURL += "?" + tc.queryStr
+			}
+
+			req, _ := http.NewRequest(http.MethodGet, rawURL, nil)
+			req.Header.Set("Authorization", authHeader(token))
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("GET: %v", err)
+			}
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("want 200, got %d: %s", resp.StatusCode, body)
+			}
+
+			var result map[string]any
+			if err := json.Unmarshal(body, &result); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			streams, _ := result["streams"].([]any)
+			if len(streams) != tc.wantStreams {
+				t.Errorf("BUG-004 filter %q: want %d stream(s) in response, got %d",
+					tc.queryStr, tc.wantStreams, len(streams))
+			}
+			if len(cap.captured) != tc.wantCalls {
+				t.Errorf("BUG-004 filter %q: want %d IngestTimeseries call(s), got %d",
+					tc.queryStr, tc.wantCalls, len(cap.captured))
+			}
+			if !t.Failed() {
+				t.Logf("PASS %s: streams=%d calls=%d", tc.name, len(streams), len(cap.captured))
+			}
+		})
+	}
+}
+
+// TestBUG004_IngestHealth_BackCompat_NoParams proves byte-identical back-compat:
+// absent from/to → zero time.Time → no time filter in IngestTimeseries; all
+// active streams from the live snapshot are still returned.
+func TestBUG004_IngestHealth_BackCompat_NoParams(t *testing.T) {
+	cap := &captureIngestQsvc{}
+	ts, token, cleanup := setupIngestCaptureServer(t, cap)
+	defer cleanup()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/qoe/ingest", nil)
+	req.Header.Set("Authorization", authHeader(token))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	streams, _ := result["streams"].([]any)
+	if len(streams) != 1 {
+		t.Errorf("back-compat: want 1 active stream in response, got %d", len(streams))
+	}
+	if len(cap.captured) != 1 {
+		t.Fatalf("back-compat: want 1 IngestTimeseries call, got %d (iqsvc not wired?)", len(cap.captured))
+	}
+	got := cap.captured[0]
+	if !got.From.IsZero() {
+		t.Errorf("back-compat: want zero From (no time filter), got %v", got.From)
+	}
+	if !got.To.IsZero() {
+		t.Errorf("back-compat: want zero To (no time filter), got %v", got.To)
+	}
+	if !t.Failed() {
+		t.Logf("PASS back-compat: From=%v (zero) To=%v (zero) — no time filter applied", got.From, got.To)
+	}
 }
