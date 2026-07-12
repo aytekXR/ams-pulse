@@ -4250,6 +4250,108 @@ occurrence — this one benign):**
   precedent, doubled as the post-lapse publish probe). Branch `s22-d084`;
   1 PR; ≤2 pushes. Close commits + PR evidence appended below after merge.
 
+## D-086 — SESSION-24 (2026-07-12): BUG-008 phase-2 build per ADR-0009 (IN PROGRESS; evidence at close)
+
+**S24 OPEN facts (17:44Z–17:50Z, recorded early per protocol):**
+- **Concurrent-session check: CLEAN.** HEAD == origin/main == `a30ba62` (S23
+  merge); tree carries only the known prod `Caddyfile.prod` delta (do-not-revert,
+  D-082) + the operator's untracked `.bak`. No foreign commits. Session branch
+  `s24-d086`.
+- **AMS post-expiry re-sweep (s24open, 17:46Z): BYTE-IDENTICAL** to the S21
+  pre-expiry baseline (`S21-sweep-s24open-20260712T174620Z` vs
+  `S21-sweep-preexpiry-20260712T014135Z/stable.txt`, diff empty) — **third
+  consecutive null delta.** `antmedia` StartedAt 2026-07-12T06:52:55Z = PRE-lapse
+  (12:09Z) → still no post-lapse process restart; the boot-time-enforcement
+  hypothesis stays untested by design. Nothing blocked; observe-only unchanged.
+- **Operator intake: no answers arrived** (caddy-vhost merge + final-assessment
+  review + optional rollout approval re-surface at close, all non-blocking).
+  **No operator action required to proceed** — stated explicitly per the
+  session-open directive.
+- **★ WO-A APPROVAL RULING (plan-approves path):** ADR-0009 build gate was
+  "IF the plan/operator approves". No operator answer arrived; the operator's
+  session-open directive is "continue implementation using the workflows"; the
+  S23 deferral reason was the *S23* build-only-if-Small session gate (Effort L),
+  not a design objection — S24 is the designated full-session primary and no
+  higher-priority ROADMAP-V2 item exists (BUG-008 phase 2 is the last
+  non-tenant conformance debt). **ORCH rules: BUILD (WO-A fires).** ADR-0009
+  flips Proposed→Accepted with the landed build.
+- **WO-C: CI promotions skip carry ×13** (07-12 < 07-23; gate opens in 11 days).
+  **WO-D green:** 0 open PRs, dependabot 0, protection intact (enforce_admins,
+  9 contexts), prod healthz all-ok + SPA 200 (read-only).
+- **WO-B RULING (no new Makefile list):** TC-REC-01 already auto-discovers
+  under `validate-all` (honest SKIP-77 without the flag) and runs individually
+  via the `validate-%` pattern rule — a one-element P2 list is bureaucracy;
+  `PULSE_HAS_VOD_POLL=1` stays an explicit deployment attestation, never a
+  default. **Re-ran vs the realams stack (S23 build, 18:05Z): 3/3 PASS,
+  recording_gb=0.003126 UNCHANGED after ~3 h of 12th-tick poll cycles since
+  S23** — fresh live proof the vod_poll_state seen-set holds (no
+  double-billing drift). Evidence `S23-TC-REC-01-20260712T180527Z`.
+  recording_method contract CR: did NOT fire (optional, area untouched).
+
+**S24 WO-A evidence (recorded at close — BUG-008 FULLY FIXED, ADR-0009 built + Accepted):**
+- **The vertical:** CH migration 0010 `anomaly_flag_events` (MergeTree,
+  ORDER BY (detected_at, metric, scope), TTL {retention_days}); write path in
+  the UpdateBaselines tick via shared `detectFlagsLocked` (detected_at = tick
+  time captured pre-Welford; hysteresis check+set under d.mu; **inserts
+  OUTSIDE d.mu**; insert failure = logged drop, at-most-once per the D-085
+  analog); `WarmHysteresis` restart dedup (RecentFlagKeys over
+  hysteresisTicks×tickInterval, called in Run() before the first tick);
+  `QueryFlagHistory` keyset read (base64 "ms:id" cursor, filters pushed to
+  SQL, explicit ORDER BY (detected_at, id), LIMIT n+1); api
+  `FlagHistoryQuerier`/`SetFlagHistoryQuerier` + handleAnomalies routing on
+  RAW ?from/?to presence BEFORE the nil-detector guard (nil querier → 400
+  FLAG_STORE_NOT_CONFIGURED; malformed time/cursor → 400; parseTimeParam,
+  never parseTimeRange); serve.go `SetFlagStore` + `flagHistoryBridge`.
+  Contract UNTOUCHED (params were already declared; drift 0).
+- **★ The build's live-observed bug (ADR §6 was WRONG as written):**
+  clickhouse-go v2.47 sends time.Time query params as DateTime
+  (SECOND precision) — the ADR's literal keyset WHERE duplicated
+  page-boundary rows at DateTime64(3) (9 rows returned for 7 stored).
+  Fixed via toUnixTimestamp64Milli integer comparison; ADR Amendment (g);
+  after the S24 fixture strengthening the reverted form fails as an
+  INFINITE CURSOR LOOP (structural pin, not timing-dependent).
+- **ADR amendments a–h** (the notable ones): RecentFlagKeys second interface
+  method (§5 warmup needed a read); QueryFlagHistory carries metric+min_sigma
+  (dropping declared params on the new path would recreate BUG-008 there);
+  flagHistoryBridge in serve.go (store→api import direction); explicit
+  (detected_at,id) query ordering; no-migration-count-test correction.
+- **★ A1 STALLED mid-build (1570 s, auto-retry):** the retry found its
+  predecessor's uncommitted work and correctly treated it as an UNGATED
+  dead-workflow tree (D-082) — gated it, found+fixed the cursor bug, but most
+  anomaly unit REDs were never observed live → the verify phase re-derived
+  EVERY one as a mutation proof in pristine worktrees.
+- **Verification:** 3 adversarial verifiers — V3 CONFIRMED_OK (ADR items 1–15
+  each cited file:line; lock discipline + -race ×3; regression surface clean;
+  e2e/web blast radius zero). V1/V2 MUST_FIX → remediated same-session:
+  (1) DetectedAt pin used t.Skip on zero events (false-green — now t.Fatal,
+  re-derived RED); (2) pagination fixture didn't force same-second events
+  (~1/1000 GREEN_BAD — now 250 ms spacing from a second-aligned base,
+  re-derived RED); (3) ADR amendment (g) was missing (the audit trail for the
+  one live-observed bug). **Mutation ledger: 9/9 RED (write-path, minSamples,
+  hysteresis-set, warmup, ComputeFlags-persists, migration-delete,
+  cursor-revert, routing-revert, bridge-break) + 2 re-derived post-fix.**
+- **GATES (ORCH-run, repo-root mount, golang:1.25):** gofmt 0 bytes; vet
+  clean; `go test -race` **24/24 pkgs, 0 FAIL**; skip census = exactly the
+  3 pre-existing env-gated infra tests (npx ×2, poppler; D-028 api class 0).
+  Coverage **76.0% → 75.5%** (floor 70.2) — honest dilution: ~190 new
+  store/clickhouse lines are integration-covered (-tags integration), not
+  unit-covered; anomaly 81.6→84.1, api →80.2. Integration suite green
+  (store 55 s incl. 4 new AnomalyFlagEvents tests, migrations idempotent at
+  10, meta, query). Contract-drift 0 (openapi + schema.d.ts byte-identical
+  to origin/main).
+- **Conformance census: 37 probes / 2 known-violations (both BUG-009
+  ?tenant) / 47 exempt; minProbes 33→35; minSpecParams 86.** The only
+  remaining declared-param debt needs the multi-tenancy data model (F6).
+
+**S24 CLOSE (D-086):** Workflows: 4 scouts + 3 authors (1 auto-retry) +
+3 verifiers = 10 agents, 0 errors, ~1.34M subagent tokens. Branch `s24-d086`,
+commits `cbf9ec1` (feat) + `f46d2c6` (docs) + `a564228` (verify remediation)
++ close docs, ONE PR, ≤2 pushes. Operator queue unchanged (caddy-vhost +
+final-assessment review, both non-blocking); a prod rollout now carries
+**D-082..D-086** (all BUG-002..010 fixes + recording billing + anomaly
+history). PR/merge evidence appended below after merge (rides S25 if
+post-push).
+
 ## D-085 — SESSION-23 (2026-07-12): BUG-002 VoD REST-poll build + BUG-008 flag-event-store ADR (IN PROGRESS; evidence at close)
 
 **S23 OPEN facts (13:44Z–13:50Z, recorded early per protocol):**

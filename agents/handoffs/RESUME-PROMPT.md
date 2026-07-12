@@ -11,7 +11,56 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-24.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-25.md`)
+
+**Session 2026-07-12 result: D-086 — S24 DONE (★ BUG-008 FULLY FIXED —
+ADR-0009 flag-event store built + Accepted; conformance debt now 2, both
+tenant).**
+- **★ WO-A: BUG-008 Group B built end-to-end:** CH migration **0010**
+  `anomaly_flag_events` + UpdateBaselines-tick write path (shared
+  `detectFlagsLocked`, detected_at = tick time, inserts outside d.mu,
+  at-most-once) + `WarmHysteresis` restart dedup + `QueryFlagHistory`
+  (base64 keyset cursor) + `/anomalies` routes ?from/?to on RAW presence
+  (400 FLAG_STORE_NOT_CONFIGURED / BAD_REQUEST; parseTimeParam never
+  parseTimeRange) + `flagHistoryBridge` wiring. **Registry: 37 probes /
+  2 known-violations (only BUG-009 ?tenant ×2 — needs the multi-tenancy
+  data model), minProbes 35.** Contract untouched.
+- **★ Bug found DURING build (ADR §6 was wrong as written):** clickhouse-go
+  sends time.Time params second-precision → keyset cursor duplicated
+  page-boundary rows at DateTime64(3); fixed via toUnixTimestamp64Milli
+  (ADR Amendment g); the reverted form now fails as an infinite cursor loop
+  (structural pin). **A1 author stalled + auto-retried mid-build** — the
+  retry gated its predecessor's tree per D-082; the verify phase re-derived
+  ALL missing REDs: **9/9 mutations RED + 2 re-derived** after V1/V2
+  must-fix remediation (t.Skip→t.Fatal pin; same-second pagination fixture).
+  V3 CONFIRMED_OK (ADR items 1–15 cited; -race ×3; blast radius zero).
+- **WO-B ruling:** no P2 Makefile list (auto-discovery suffices;
+  PULSE_HAS_VOD_POLL stays an explicit attestation). TC-REC-01 re-run vs
+  realams: **3/3 PASS, recording_gb stable after ~3 h of poll cycles** —
+  the BUG-002 seen-set holds live (no double-billing drift).
+- **Gates:** 24/24 Go pkgs `-race` 0 FAIL (skip census = the 3 pre-existing
+  env-gated infra tests; D-028 class 0); coverage **76.0 → 75.5** (floor
+  70.2; honest dilution — ~190 new CH-store lines are integration-covered);
+  gofmt/vet/contract-drift clean; full integration green (10 migrations
+  idempotent). ADR-0009 **Accepted** (amendments a–h).
+- **AMS post-expiry (s24open): byte-identical 3rd null delta; still no
+  post-lapse antmedia restart** (StartedAt 06:52Z < lapse 12:09Z) — the
+  boot-time-enforcement hypothesis stays untested; observe-only. CI
+  promotions skip carry ×13 (07-12 < 07-23 — the gate opens ~07-23).
+  Prod untouched; **a rollout now carries D-082..D-086.**
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-25.md` and execute it**
+(operator intake FIRST; CI promotions if run date ≥07-23 [csp-e2e candidate;
+web-e2e ~07-25] else skip carry ×14; primary = next ROADMAP-V2 item — top
+candidate: F9 beacon-QoE anomaly metrics [rebuffer_ratio/error_rate], the
+§2.14 post-U3 revisit that U3's resolution unblocked; AMS re-sweep at open,
+observe-only). **PR-first, ≤2 pushes.** Check `docs/operator-expected.md`
+FIRST (caddy-vhost? final-assessment review? prod rollout now carries
+D-082..D-086 = BUG-002..010 + anomaly history).
+
+---
+
+## ▶ prior session context (S23, superseded by the above)
 
 **Session 2026-07-12 result: D-085 — S23 DONE (★ BUG-002 FIXED end-to-end,
 live-validated + BUG-008 ADR-0009 authored + assessment 65.2/83.0).**

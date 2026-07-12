@@ -10,6 +10,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -33,8 +34,13 @@ import (
 // opaque offset is sufficient and avoids the complexity of a keyset cursor on volatile
 // data. Invalid or absent cursor → first page (offset 0).
 //
-// ?from and ?to remain ignored (known-violation until S23 flag-event store is built;
-// see docs/assessment/bugs/BUG-008-triage-s22.md §3).
+// BUG-008 Group B fix (S24/D-086, ADR-0009): when ?from or ?to is present in the
+// raw query string, the request is routed to flagHistoryQuerier.QueryFlagHistory.
+// Routing uses raw string presence (q.Get != "") — NEVER the parsed zero-time — to
+// prevent malformed params from silently falling through to ComputeFlags (which would
+// re-introduce the dishonest behavior the ADR forbids).
+// Branch runs BEFORE the nil-anomalyDetector early-return so servers without an
+// anomaly detector can still serve history queries.
 func (s *Server) handleAnomalies(w http.ResponseWriter, r *http.Request) {
 	// Tier gate: anomaly detection is Enterprise only.
 	if err := s.lic.CheckAnomalies(); err != nil {
@@ -75,6 +81,64 @@ func (s *Server) handleAnomalies(w http.ResponseWriter, r *http.Request) {
 	if offset < 0 {
 		offset = 0
 	}
+
+	// ── BUG-008 Group B: history routing (ADR-0009 §6) ───────────────────────
+	// Route on raw string presence, not parsed value: a malformed ?from=abc
+	// parses to zero time — falling through to ComputeFlags would silently drop
+	// the param, recreating the dishonest behavior this fix addresses.
+	fromRaw := q.Get("from")
+	toRaw := q.Get("to")
+	if fromRaw != "" || toRaw != "" {
+		if s.flagHistoryQuerier == nil {
+			writeError(w, http.StatusBadRequest, "FLAG_STORE_NOT_CONFIGURED",
+				"anomaly flag-event store not configured; ?from/?to requires persistent history (ADR-0009)")
+			return
+		}
+		from := parseTimeParam(fromRaw)
+		if fromRaw != "" && from.IsZero() {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST",
+				"invalid from: must be epoch-milliseconds or RFC3339")
+			return
+		}
+		to := parseTimeParam(toRaw)
+		if toRaw != "" && to.IsZero() {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST",
+				"invalid to: must be epoch-milliseconds or RFC3339")
+			return
+		}
+		// Pass raw cursor — the querier decodes base64; the ComputeFlags
+		// decimal-offset cursor is a different namespace (never Atoi here).
+		page, err := s.flagHistoryQuerier.QueryFlagHistory(
+			r.Context(), from, to,
+			metricFilter, appFilter, streamFilter,
+			sigmaThreshold, limit, q.Get("cursor"),
+		)
+		if err != nil {
+			if errors.Is(err, ErrBadCursor) {
+				writeError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid cursor")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+			return
+		}
+		// make() is never nil, so an empty page serializes as [] not null.
+		items := make([]any, len(page.Items))
+		for i, f := range page.Items {
+			items[i] = f
+		}
+		// next_cursor: "" (last page) → null per spec [string,null].
+		var nextCursor *string
+		if page.NextCursor != "" {
+			nc := page.NextCursor
+			nextCursor = &nc
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"items": items,
+			"meta":  map[string]any{"next_cursor": nextCursor},
+		})
+		return
+	}
+	// ── End history routing ───────────────────────────────────────────────────
 
 	if s.anomalyDetector == nil {
 		// Detector not wired (e.g., ClickHouse not available in test env).

@@ -98,6 +98,43 @@ type BaselineStore interface {
 	UpsertAnomalyBaseline(ctx context.Context, row AnomalyBaselineRow) error
 }
 
+// AnomalyFlagEvent is a persisted record of one anomaly detection event.
+// Written by Detector.UpdateBaselines (tick path) and queried by GET /anomalies
+// with ?from/?to (ADR-0009 BUG-008 phase 2).
+type AnomalyFlagEvent struct {
+	ID         string
+	Metric     string
+	NodeID     string
+	App        string
+	StreamID   string
+	Scope      string // raw JSON bytes from scopeJSON() — byte-identical to hysteresisKey.scope
+	Observed   float64
+	Expected   float64
+	Sigma      float64   // z-score = |observed − expected| / effStddev
+	DetectedAt time.Time // tick time (UTC); shared by all events of one tick
+}
+
+// FlagKey identifies a unique (metric, scope) pair in the hysteresis map.
+// Used by FlagEventStore.RecentFlagKeys for WarmHysteresis startup warmup.
+type FlagKey struct {
+	Metric string
+	Scope  string
+}
+
+// FlagEventStore persists detected anomaly flag events and supports startup
+// warmup of the in-memory hysteresis map.
+// Implemented by *clickhouse.Store; nil = no persistence (safe, no-op).
+type FlagEventStore interface {
+	// InsertAnomalyFlagEvent writes one flag event to the persistent store.
+	// Called synchronously from Detector.UpdateBaselines after lock release.
+	InsertAnomalyFlagEvent(ctx context.Context, event AnomalyFlagEvent) error
+
+	// RecentFlagKeys returns distinct (metric, scope) pairs that had a flag event
+	// within the last windowSecs seconds. Used by WarmHysteresis on startup to
+	// pre-populate the in-memory hysteresis map (ADR-0009 §5).
+	RecentFlagKeys(ctx context.Context, windowSecs int) ([]FlagKey, error)
+}
+
 // AnomalyBaselineRow mirrors the anomaly_baselines meta table.
 type AnomalyBaselineRow struct {
 	ID          string
@@ -140,6 +177,10 @@ type Detector struct {
 
 	// hysteresis tracks how many ticks remain before re-firing is allowed.
 	hysteresis map[hysteresisKey]int
+
+	// flagStore persists detected flag events (nil = disabled, no-op).
+	// Injected via SetFlagStore; nil by default so existing tests are ClickHouse-free.
+	flagStore FlagEventStore
 
 	logger *slog.Logger
 }
@@ -185,10 +226,48 @@ func New(cfg Config, store BaselineStore, live domain.LiveProvider, logger *slog
 	}
 }
 
+// SetFlagStore wires an optional persistent store for anomaly flag events.
+// Call after New, before Run. When nil (default), flag events are never persisted
+// and all existing behaviour is unchanged (existing tests remain ClickHouse-free).
+func (d *Detector) SetFlagStore(s FlagEventStore) {
+	d.flagStore = s
+}
+
+// WarmHysteresis pre-populates the in-memory hysteresis map from the store on
+// startup, preventing duplicate flag events after a process restart (ADR-0009 §5).
+//
+// windowSecs = hysteresisTicks × tickInterval.Seconds() (default: 10 × 60 = 600 s).
+// For each (metric, scope) pair returned by the store, hysteresis is set to
+// hysteresisTicks so the next tick is suppressed for the full cooldown window.
+//
+// No-op when flagStore is nil. Store errors are returned to the caller (Run logs
+// and continues); the detector remains safe to use with an empty hysteresis map.
+func (d *Detector) WarmHysteresis(ctx context.Context) error {
+	if d.flagStore == nil {
+		return nil
+	}
+	warmupSecs := d.hysteresisTicks * int(d.tickInterval.Seconds())
+	keys, err := d.flagStore.RecentFlagKeys(ctx, warmupSecs)
+	if err != nil {
+		return err
+	}
+	d.mu.Lock()
+	for _, k := range keys {
+		d.hysteresis[hysteresisKey{metric: k.Metric, scope: k.Scope}] = d.hysteresisTicks
+	}
+	d.mu.Unlock()
+	return nil
+}
+
 // Run starts the baseline update tick loop. Blocks until ctx is cancelled.
+// WarmHysteresis is called once before the first tick to restore cooldown state
+// across process restarts when a flagStore is configured.
 func (d *Detector) Run(ctx context.Context) {
 	ticker := time.NewTicker(d.tickInterval)
 	defer ticker.Stop()
+	if err := d.WarmHysteresis(ctx); err != nil {
+		d.logger.Warn("anomaly: WarmHysteresis failed", "error", err)
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -210,11 +289,19 @@ func (d *Detector) Run(ctx context.Context) {
 //
 // The window_s is fixed to 3600 (1 hour) for now, as a rolling "current hour"
 // perspective. Multiple windows are a Phase 3 extension.
+//
+// After the Welford loop, checkFlags is called with the UPDATED baseline rows
+// (not the stale pre-Welford slice) and the current live values to detect and
+// persist new anomaly flag events (ADR-0009 §4).
 func (d *Detector) UpdateBaselines(ctx context.Context) error {
 	snap := d.live.CurrentSnapshot()
 	if snap == nil {
 		return nil
 	}
+
+	// Capture tick time BEFORE the Welford loop. All flag events of this tick share
+	// DetectedAt=tickAt. The existing 'now' int64 below stays as-is (different purpose).
+	tickAt := time.Now().UTC()
 
 	// Update hysteresis counters (decrement each tick).
 	d.mu.Lock()
@@ -278,7 +365,8 @@ func (d *Detector) UpdateBaselines(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	// Index by (metric, scope, window_s).
+	// Index by (metric, scope, window_s). Both pre-existing and newly created rows
+	// are tracked here so the post-Welford snapshot contains UPDATED values.
 	baselineIdx := make(map[string]*AnomalyBaselineRow, len(existing))
 	for i := range existing {
 		key := baselineKey(existing[i].Metric, existing[i].Scope, existing[i].WindowS)
@@ -295,6 +383,8 @@ func (d *Detector) UpdateBaselines(ctx context.Context) error {
 				Scope:   o.scope.Scope,
 				WindowS: o.scope.WindowS,
 			}
+			// Track new rows in the index so checkFlags sees updated values.
+			baselineIdx[key] = row
 		}
 
 		// Welford online update:
@@ -336,7 +426,115 @@ func (d *Detector) UpdateBaselines(ctx context.Context) error {
 			d.logger.Warn("anomaly: upsert baseline failed", "metric", o.metric, "error", err)
 		}
 	}
+
+	// Build liveValues from the observation slice (key = metric + ":" + scope).
+	liveValues := make(map[string]float64, len(obs))
+	for _, o := range obs {
+		liveValues[o.metric+":"+o.scope.Scope] = o.value
+	}
+
+	// Materialise UPDATED baseline rows from the index (NOT the stale pre-Welford
+	// 'existing' slice — stale mean/stddev would produce wrong z-scores).
+	updatedBaselines := make([]AnomalyBaselineRow, 0, len(baselineIdx))
+	for _, row := range baselineIdx {
+		updatedBaselines = append(updatedBaselines, *row)
+	}
+
+	// Detect flags and persist via flagStore (runs unconditionally; only the
+	// Insert is gated on flagStore != nil inside checkFlags).
+	d.checkFlags(ctx, tickAt, updatedBaselines, liveValues)
+
 	return nil
+}
+
+// detectedFlag is the output of detectFlagsLocked: one detection result whose
+// caller translates into either an AnomalyFlag (ComputeFlags) or an
+// AnomalyFlagEvent (checkFlags). Hysteresis has already been set for each entry.
+type detectedFlag struct {
+	baseline AnomalyBaselineRow
+	observed float64
+	zScore   float64
+}
+
+// detectFlagsLocked runs the z-score detection pass and updates the in-memory
+// hysteresis map. MUST be called with d.mu held. Returns one detectedFlag per
+// new flag; re-fires within the cooldown window are suppressed.
+//
+// Replicates the minSamples guard and effStddev epsilon logic exactly so both
+// ComputeFlags and checkFlags produce consistent results.
+func (d *Detector) detectFlagsLocked(baselines []AnomalyBaselineRow, liveValues map[string]float64, sigmaThreshold float64) []detectedFlag {
+	var out []detectedFlag
+	for _, b := range baselines {
+		if b.SampleCount < d.minSamples {
+			continue // not enough history (warmup guard — matches ComputeFlags :384)
+		}
+		liveKey := b.Metric + ":" + b.Scope
+		observed, ok := liveValues[liveKey]
+		if !ok {
+			continue // metric not currently observed (stream offline etc.)
+		}
+
+		// Effective stddev with epsilon floor (matches ComputeFlags :399):
+		//   - StddevRelEpsilon*|mean| prevents flagging on tiny relative deviations.
+		//   - StddevAbsEpsilon avoids divide-by-zero when mean=0 and stddev=0.
+		effStddev := math.Max(b.Stddev, math.Max(StddevRelEpsilon*math.Abs(b.Mean), StddevAbsEpsilon))
+		z := math.Abs(observed-b.Mean) / effStddev
+		if z < sigmaThreshold {
+			continue
+		}
+
+		// Check and set hysteresis (matches ComputeFlags :407/:412).
+		hk := hysteresisKey{metric: b.Metric, scope: b.Scope}
+		if rem := d.hysteresis[hk]; rem > 0 {
+			continue // still in cooldown
+		}
+		d.hysteresis[hk] = d.hysteresisTicks
+
+		out = append(out, detectedFlag{baseline: b, observed: observed, zScore: z})
+	}
+	return out
+}
+
+// checkFlags detects anomaly flags from the UPDATED baselines and live values
+// produced by one UpdateBaselines tick, and persists each new flag event via
+// flagStore.
+//
+// Runs unconditionally (hysteresis bookkeeping is always performed). Only the
+// InsertAnomalyFlagEvent call is gated on flagStore != nil.
+//
+// The lock is held only during detection; CH inserts run after lock release to
+// avoid holding d.mu across a network call (ComputeFlags also contends on d.mu).
+// Insert failures are logged and dropped — hysteresis is already set so an
+// at-most-once undercount is acceptable (no phantom re-fires on the next tick).
+func (d *Detector) checkFlags(ctx context.Context, tickAt time.Time, baselines []AnomalyBaselineRow, liveValues map[string]float64) {
+	d.mu.Lock()
+	detected := d.detectFlagsLocked(baselines, liveValues, d.defaultSigma)
+	d.mu.Unlock()
+
+	if d.flagStore == nil {
+		return
+	}
+
+	for _, df := range detected {
+		scope := parseScopeJSON(df.baseline.Scope)
+		ev := AnomalyFlagEvent{
+			ID:         uuid.New().String(),
+			Metric:     df.baseline.Metric,
+			NodeID:     scope.NodeID,
+			App:        scope.App,
+			StreamID:   scope.StreamID,
+			Scope:      df.baseline.Scope, // raw JSON bytes, byte-identical to hysteresisKey.scope
+			Observed:   df.observed,
+			Expected:   df.baseline.Mean,
+			Sigma:      df.zScore,
+			DetectedAt: tickAt,
+		}
+		if err := d.flagStore.InsertAnomalyFlagEvent(ctx, ev); err != nil {
+			// Log and drop: hysteresis is already set; at-most-once undercount acceptable.
+			d.logger.Warn("anomaly: insert flag event failed, dropping (at-most-once undercount acceptable)",
+				"metric", ev.Metric, "scope", ev.Scope, "error", err)
+		}
+	}
 }
 
 // ComputeFlags computes AnomalyFlag entries on-read by comparing current
@@ -345,6 +543,10 @@ func (d *Detector) UpdateBaselines(ctx context.Context) error {
 // Only baselines with sample_count >= minSamples are flagged.
 // A flag is emitted when |observed - mean| / stddev >= sigmaThreshold.
 // Hysteresis suppresses re-firing within HysteresisTicks ticks.
+//
+// ComputeFlags NEVER writes to flagStore — it is the HTTP on-demand path only.
+// Persistent flag events are written exclusively by checkFlags (called from
+// UpdateBaselines on the single-goroutine tick path — ADR-0009 §4).
 func (d *Detector) ComputeFlags(ctx context.Context, sigmaThreshold float64) ([]AnomalyFlag, error) {
 	if sigmaThreshold <= 0 {
 		sigmaThreshold = d.defaultSigma
@@ -374,49 +576,24 @@ func (d *Detector) ComputeFlags(ctx context.Context, sigmaThreshold float64) ([]
 		liveValues["disk_pct:"+ns] = n.DiskPCT
 	}
 
+	// TS is captured once per ComputeFlags call (not per detected flag).
+	// This is the ephemeral HTTP-response timestamp; detected_at in persisted
+	// events uses tickAt from UpdateBaselines (ADR-0009 Consequences §1).
 	now := time.Now().UnixMilli()
-	var flags []AnomalyFlag
 
 	d.mu.Lock()
-	defer d.mu.Unlock()
+	detected := d.detectFlagsLocked(baselines, liveValues, sigmaThreshold)
+	d.mu.Unlock()
 
-	for _, b := range baselines {
-		if b.SampleCount < d.minSamples {
-			continue // not enough history
-		}
-		liveKey := b.Metric + ":" + b.Scope
-		observed, ok := liveValues[liveKey]
-		if !ok {
-			continue // metric not currently observed (stream offline etc.)
-		}
-
-		// Compute effective stddev with epsilon floor to handle constant baselines:
-		//   - StddevRelEpsilon*|mean| prevents flagging on tiny relative deviations
-		//     (e.g. a 1-unit wobble on mean=100 yields z≈0.2 at 5% floor, well below σ=4).
-		//   - StddevAbsEpsilon avoids divide-by-zero when mean=0 and stddev=0.
-		// When a constant baseline (stddev=0) is observed with a large deviation,
-		// the effective stddev is small so z is large and the flag fires correctly.
-		effStddev := math.Max(b.Stddev, math.Max(StddevRelEpsilon*math.Abs(b.Mean), StddevAbsEpsilon))
-		z := math.Abs(observed-b.Mean) / effStddev
-		if z < sigmaThreshold {
-			continue
-		}
-
-		// Check hysteresis.
-		hk := hysteresisKey{metric: b.Metric, scope: b.Scope}
-		if rem := d.hysteresis[hk]; rem > 0 {
-			continue // still in cooldown
-		}
-
-		// Emit flag and set hysteresis.
-		d.hysteresis[hk] = d.hysteresisTicks
+	flags := make([]AnomalyFlag, 0, len(detected))
+	for _, df := range detected {
 		flags = append(flags, AnomalyFlag{
 			ID:       uuid.New().String(),
-			Metric:   b.Metric,
-			Scope:    parseScopeJSON(b.Scope),
-			Observed: observed,
-			Expected: b.Mean,
-			Sigma:    z,
+			Metric:   df.baseline.Metric,
+			Scope:    parseScopeJSON(df.baseline.Scope),
+			Observed: df.observed,
+			Expected: df.baseline.Mean,
+			Sigma:    df.zScore,
 			TS:       now,
 		})
 	}

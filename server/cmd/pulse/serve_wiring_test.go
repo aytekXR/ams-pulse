@@ -164,6 +164,89 @@ func TestAnomalyBridge_ComputeFlags_NilSnapshot(t *testing.T) {
 	}
 }
 
+// ─── D-086 wiring pin: flagHistoryBridge ─────────────────────────────────────
+
+// stubFlagQueryer is a test double satisfying the flagQueryer interface used
+// by flagHistoryBridge (serve.go). It returns pre-configured data without a
+// real ClickHouse connection.
+type stubFlagQueryer struct {
+	events     []anomaly.AnomalyFlagEvent
+	nextCursor string
+	err        error
+}
+
+func (s *stubFlagQueryer) QueryFlagHistory(_ context.Context, _, _ time.Time, _, _, _ string, _ float64, _ int, _ string) ([]anomaly.AnomalyFlagEvent, string, error) {
+	return s.events, s.nextCursor, s.err
+}
+
+// TestFlagHistoryBridge_QueryFlagHistory verifies that flagHistoryBridge correctly
+// converts anomaly.AnomalyFlagEvent rows to api.AnomalyFlagAPI values (D-086,
+// ADR-0009 §6 read path). The test exercises scope field mapping
+// (NodeID/App/StreamID → Scope), TS conversion (DetectedAt.UnixMilli()), and
+// NextCursor passthrough.
+//
+// Compile-time catch: referencing &flagHistoryBridge{} here causes a compile
+// failure until serve.go defines the type — that is the RED evidence for this pin.
+func TestFlagHistoryBridge_QueryFlagHistory(t *testing.T) {
+	detectedAt := time.Date(2026, 7, 12, 10, 0, 0, 0, time.UTC)
+	stub := &stubFlagQueryer{
+		events: []anomaly.AnomalyFlagEvent{{
+			ID:         "evt-1",
+			Metric:     "ingest_bitrate_kbps",
+			NodeID:     "node-1",
+			App:        "live",
+			StreamID:   "s1",
+			Scope:      `{"node_id":"node-1","app":"live","stream_id":"s1"}`,
+			Observed:   150.0,
+			Expected:   100.0,
+			Sigma:      3.5,
+			DetectedAt: detectedAt,
+		}},
+		nextCursor: "abc123",
+	}
+
+	bridge := &flagHistoryBridge{store: stub}
+	page, err := bridge.QueryFlagHistory(context.Background(), time.Time{}, time.Time{}, "", "", "", 0, 50, "")
+	if err != nil {
+		t.Fatalf("QueryFlagHistory: unexpected error: %v", err)
+	}
+	if len(page.Items) != 1 {
+		t.Fatalf("page.Items: got %d items, want 1", len(page.Items))
+	}
+	got := page.Items[0]
+	if got.ID != "evt-1" {
+		t.Errorf("ID: got %q, want evt-1", got.ID)
+	}
+	if got.Metric != "ingest_bitrate_kbps" {
+		t.Errorf("Metric: got %q, want ingest_bitrate_kbps", got.Metric)
+	}
+	if got.Scope.NodeID != "node-1" {
+		t.Errorf("Scope.NodeID: got %q, want node-1", got.Scope.NodeID)
+	}
+	if got.Scope.App != "live" {
+		t.Errorf("Scope.App: got %q, want live", got.Scope.App)
+	}
+	if got.Scope.StreamID != "s1" {
+		t.Errorf("Scope.StreamID: got %q, want s1", got.Scope.StreamID)
+	}
+	if got.Observed != 150.0 {
+		t.Errorf("Observed: got %v, want 150.0", got.Observed)
+	}
+	if got.Expected != 100.0 {
+		t.Errorf("Expected: got %v, want 100.0", got.Expected)
+	}
+	if got.Sigma != 3.5 {
+		t.Errorf("Sigma: got %v, want 3.5", got.Sigma)
+	}
+	wantTS := detectedAt.UnixMilli()
+	if got.TS != wantTS {
+		t.Errorf("TS: got %d, want %d (DetectedAt.UnixMilli)", got.TS, wantTS)
+	}
+	if page.NextCursor != "abc123" {
+		t.Errorf("NextCursor: got %q, want abc123", page.NextCursor)
+	}
+}
+
 // ─── D-062 wiring pin: wireAlertQoEReader ────────────────────────────────────
 
 // qoeWiringFakeLive is a minimal LiveProvider that returns one active stream.

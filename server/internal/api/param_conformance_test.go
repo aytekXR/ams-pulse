@@ -13,11 +13,12 @@
 //
 //	(a) t.Fatal if the spec cannot be loaded (never t.Skip).
 //	(b) t.Errorf for every unregistered param (all gaps reported in one run).
-//	(c) minProbes = 33 — at least this many probe subtests must actually run
-//	    (35 probes as of S22/D-084 F3; floor = 35 − 2 for minor-evolution headroom).
+//	(c) minProbes = 35 — at least this many probe subtests must actually run
+//	    (37 probes as of S24/D-086; floor = 37 − 2 for minor-evolution headroom).
 //	(d) Reverse-check: t.Logf warning for any registry key absent from spec.
 //
-// Known-violation entries (BUG-006, BUG-007, BUG-008, BUG-009) log without
+// Known-violation entries (BUG-009 ?tenant ×2 — the only ones left after the
+// S22/D-084 BUG-006/007 and S24/D-086 BUG-008 promotions) log without
 // failing — they make debt visible but do not block CI until intentionally
 // fixed. Filed: S21 / D-083 (2026-07-12). Link: docs/assessment/bugs/.
 package api_test
@@ -82,9 +83,10 @@ func TestParamConformance(t *testing.T) {
 	// healthyTs — Business-tier with fakeHealthyLiveProvider: live/*, qoe/ingest
 	//             response-differential probes.
 	//
-	// Enterprise server omitted: all anomaly and probe params are either exempt
-	// (nil detector/CH) or known-violation (BUG-006/BUG-008), so no enterprise
-	// probes exist in this iteration.
+	// No shared Enterprise server here: the two BUG-008 ?from/?to probes
+	// (S24/D-086) construct their own per-subtest Enterprise servers via
+	// setupEnterpriseAnomalyServerWithHistory; remaining anomaly/probe params
+	// are exempt (nil detector/CH) or known-violation (BUG-009 tenant).
 	bizTs, bizTok, bizCleanup := setupBusinessServer(t)
 	defer bizCleanup()
 
@@ -913,29 +915,103 @@ func TestParamConformance(t *testing.T) {
 
 		// ── GET /anomalies ───────────────────────────────────────────────────────
 		//
-		// ── BUG-008 triage (S22 / D-084) ────────────────────────────────────────
+		// ── BUG-008 triage (S22 / D-084 → S24 / D-086) ─────────────────────────
 		// Group A (app, stream, limit, cursor): handler-only fixes delivered S22/D-084.
 		// Each probe spins up a fresh Enterprise server with fakeAnomalyDetector
 		// (stdFakeFlags: 6 flags across 2 apps × 3 streams) so the response-differential
 		// is observable without a ClickHouse baseline store.
 		//
-		// Group B (from, to): ComputeFlags is point-in-time; no persistent flag-event
-		// store exists. S22 DECISION: remain known-violation — no 501 guard this session
-		// (a refusal on declared params is a behavior change requiring UI-caller audit +
-		// product decision). S23 designs the real fix (anomaly_flag_events store).
-		// See docs/assessment/bugs/BUG-008-triage-s22.md §3 for the rationale.
+		// Group B (from, to): promoted from known-violation to probe in S24/D-086.
+		// Fix: ADR-0009 anomaly_flag_events store; FlagHistoryQuerier wired into
+		// handleAnomalies. Each probe injects a recordingFlagHistoryQuerier via
+		// SetFlagHistoryQuerier and asserts the parsed time.Time reaches the querier.
 		"GET /anomalies ?from": {
-			// from/to: architectural gap — no persistent flag-event store.
-			// S23: design anomaly_flag_events table (ClickHouse recommended).
-			// S22 DECISION: known-violation retained; no 501 guard (behavior change
-			// requires UI-caller audit; web/src does NOT currently pass from/to).
-			disp:   paramKnownViolation,
-			bugRef: "BUG-008",
+			// BUG-008 Group B — fixed S24/D-086 (ADR-0009 flag-event store).
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				epochMs := int64(1_700_000_000_000) // 2023-11-14T22:13:20Z
+				rec := &recordingFlagHistoryQuerier{}
+				ants, anTok, anCleanup := setupEnterpriseAnomalyServerWithHistory(t, rec)
+				defer anCleanup()
+
+				req, _ := http.NewRequest(http.MethodGet,
+					ants.URL+"/api/v1/anomalies?from="+strconv.FormatInt(epochMs, 10), nil)
+				req.Header.Set("Authorization", authHeader(anTok))
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					t.Fatalf("GET /anomalies?from=...: %v", err)
+				}
+				io.Copy(io.Discard, resp.Body)
+				resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					t.Fatalf("want 200, got %d", resp.StatusCode)
+				}
+				calls := rec.snapshot()
+				if len(calls) == 0 {
+					t.Fatal("?from: QueryFlagHistory not called (flagHistoryQuerier not wired?)")
+				}
+				wantFrom := time.UnixMilli(epochMs)
+				if !calls[0].From.Equal(wantFrom) {
+					t.Errorf("From=%v, want %v", calls[0].From, wantFrom)
+				} else {
+					t.Logf("PASS: From=%v", calls[0].From)
+				}
+				// Non-overlapping-window differential (ADR-0009 §8): two disjoint
+				// ranges both route through, confirming args are not silently dropped.
+				rec2 := &recordingFlagHistoryQuerier{}
+				ants2, anTok2, anCleanup2 := setupEnterpriseAnomalyServerWithHistory(t, rec2)
+				defer anCleanup2()
+				for _, qs := range []string{
+					"from=1700000000000&to=1700050000000",
+					"from=1700100000000&to=1700150000000",
+				} {
+					r2, _ := http.NewRequest(http.MethodGet, ants2.URL+"/api/v1/anomalies?"+qs, nil)
+					r2.Header.Set("Authorization", authHeader(anTok2))
+					rsp2, _ := http.DefaultClient.Do(r2)
+					io.Copy(io.Discard, rsp2.Body)
+					rsp2.Body.Close()
+				}
+				if calls2 := rec2.snapshot(); len(calls2) != 2 {
+					t.Errorf("non-overlapping-window: want 2 querier calls, got %d", len(calls2))
+				} else {
+					t.Logf("PASS: non-overlapping-window differential: %d calls", len(calls2))
+				}
+			},
 		},
 		"GET /anomalies ?to": {
-			// Same S22 decision as ?from above.
-			disp:   paramKnownViolation,
-			bugRef: "BUG-008",
+			// BUG-008 Group B — fixed S24/D-086 (ADR-0009 flag-event store).
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				epochMs := int64(1_700_100_000_000)
+				rec := &recordingFlagHistoryQuerier{}
+				ants, anTok, anCleanup := setupEnterpriseAnomalyServerWithHistory(t, rec)
+				defer anCleanup()
+
+				req, _ := http.NewRequest(http.MethodGet,
+					ants.URL+"/api/v1/anomalies?to="+strconv.FormatInt(epochMs, 10), nil)
+				req.Header.Set("Authorization", authHeader(anTok))
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					t.Fatalf("GET /anomalies?to=...: %v", err)
+				}
+				io.Copy(io.Discard, resp.Body)
+				resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					t.Fatalf("want 200, got %d", resp.StatusCode)
+				}
+				calls := rec.snapshot()
+				if len(calls) == 0 {
+					t.Fatal("?to: QueryFlagHistory not called")
+				}
+				wantTo := time.UnixMilli(epochMs)
+				if !calls[0].To.Equal(wantTo) {
+					t.Errorf("To=%v, want %v", calls[0].To, wantTo)
+				} else {
+					t.Logf("PASS: To=%v", calls[0].To)
+				}
+			},
 		},
 		"GET /anomalies ?app": {
 			// BUG-008 Group A — fixed S22/D-084: handler post-filter on scope.App.
@@ -1426,13 +1502,13 @@ func TestParamConformance(t *testing.T) {
 	if missing > 0 {
 		t.Errorf("param-conformance: %d unregistered param(s) found — gate open", missing)
 	}
-	// minProbes census (S22/D-084 final):
+	// minProbes census (S24/D-086 update):
 	//   29 probes at S21 baseline
-	//  + 4 BUG-008 Group A (anomalies ?app/?stream/?limit/?cursor) added by F2
-	//  + 2 BUG-007 cursor probes (alerts/history ?cursor, probes/results ?cursor) added by F3
-	//  = 35 total probes. Floor = 35 - 2 = 33 (headroom for minor spec evolution
-	//  without rebalancing the gate on every single-param addition).
-	const minProbes = 33
+	//  + 4 BUG-008 Group A (anomalies ?app/?stream/?limit/?cursor) added by F2 (S22/D-084)
+	//  + 2 BUG-007 cursor probes (alerts/history ?cursor, probes/results ?cursor) added by F3 (S22/D-084)
+	//  + 2 BUG-008 Group B (anomalies ?from/?to) promoted from known-violation S24/D-086
+	//  = 37 total probes. Floor = 37 - 2 = 35.
+	const minProbes = 35
 	if probesRan < minProbes {
 		t.Errorf("param-conformance: only %d probe(s) ran (need >= %d); "+
 			"check that probe entries are not all skipping", probesRan, minProbes)

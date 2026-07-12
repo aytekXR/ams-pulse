@@ -6,7 +6,8 @@
 //   - ?limit  — in-memory slice window (default 50, max 500)
 //   - ?cursor — decimal-offset opaque cursor; invalid cursor → first page
 //
-// ?from and ?to remain known-violation (no 501 guard in S22; see triage doc §3).
+// ?from and ?to (Group B) were fixed in S24/D-086 via the ADR-0009 flag-history
+// routing — see bug008_flag_history_test.go for those pins.
 //
 // TDD discipline: all tests in this file were RED before the handleAnomalies
 // changes in wave3.go. GREEN evidence captured after Group A fix.

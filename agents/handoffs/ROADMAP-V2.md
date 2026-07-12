@@ -747,6 +747,39 @@ incident, s23open sweep byte-identical, no post-lapse antmedia restart):
    now runs the S23 build. Prod untouched; a rollout now carries
    D-082+D-083+D-084+D-085.
 
+### S24 — BUG-008 phase-2 build (ADR-0009 flag-event store) ✅ DONE (D-086, 2026-07-12)
+
+All four WOs executed (SESSION-24.md; open checks clean — s24open sweep
+byte-identical [3rd null delta], no post-lapse antmedia restart, no
+concurrent-session incident; WO-A fired on the plan-approves path — no
+operator answer, ORCH ruling recorded in D-086):
+1. **WO-A DONE — ★ BUG-008 FULLY FIXED (Group B), ADR-0009 Accepted:**
+   CH migration 0010 `anomaly_flag_events`; write path in the UpdateBaselines
+   tick (shared detectFlagsLocked, detected_at = tick time, inserts outside
+   d.mu, at-most-once); WarmHysteresis restart dedup; QueryFlagHistory
+   (base64 keyset cursor, **toUnixTimestamp64Milli comparison — clickhouse-go
+   sends time.Time params second-precision, which duplicated page boundaries;
+   live-observed RED, fixed + structurally pinned**); /anomalies routes
+   ?from/?to on raw presence (400 FLAG_STORE_NOT_CONFIGURED / BAD_REQUEST);
+   metric/app/stream/min_sigma honored on the history path (ADR amendment).
+   **Conformance: 37 probes / 2 known-violations (both BUG-009 tenant),
+   minProbes 33→35.** 3 verifiers (V3 CONFIRMED_OK; V1/V2 must-fix →
+   remediated same-session: skip→fatal pin, same-second pagination fixture,
+   ADR amendments g/h); **9/9 mutation proofs RED + 2 re-derived** vs
+   strengthened pins in pristine worktrees (A1 stalled mid-build and was
+   auto-retried — its retry gated the predecessor tree per D-082).
+2. **WO-B DONE (ruling):** no P2 Makefile list (validate-all auto-discovers;
+   PULSE_HAS_VOD_POLL stays an explicit attestation). TC-REC-01 re-run vs the
+   realams stack: **3/3 PASS, recording_gb stable after ~3 h of poll cycles**
+   (seen-set no-double-billing holds live). recording_method CR not fired.
+3. **WO-C skip carry ×13** (07-12 < 07-23).
+4. **WO-D green** (protection/dependabot/prod-health read-only). Gates:
+   24/24 -race 0 FAIL (3 pre-existing env-gated skips; D-028 class 0),
+   coverage 76.0→**75.5** (≥70.2 floor; dilution = ~190 new CH-store lines
+   are integration-covered, not unit-covered), gofmt/vet/contract-drift
+   clean, full integration green (10 migrations idempotent). Prod untouched;
+   a rollout now carries D-082..**D-086**.
+
 ### S22 (original plan) — post-expiry sweep (operator-directed re-gate) + conformance-debt fixes (planned at S21 close, D-083)
 
 Execute `sessions/SESSION-22.md`. **⚠️ OPEN AFTER 2026-07-12T12:10Z** — verify
