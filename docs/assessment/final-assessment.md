@@ -54,7 +54,7 @@ deployment. The program covered:
 - **Direct AMS-REST cross-checks**: every claim about a viewer count,
   bitrate value, or stream state was verified against the raw AMS REST
   endpoint in the same request window, not inferred from the Pulse UI alone.
-- **4 bugs found and filed** (BUG-001 through BUG-004), demonstrating that
+- **10 bugs found and filed** (BUG-001 through BUG-010), demonstrating that
   the methodology is capable of finding real defects, not just confirming
   expected behavior.
 
@@ -71,7 +71,7 @@ deployment. The program covered:
 | Bitrate normalization accuracy | AMS 2,067,136 bits/s → Pulse 2,067 kbps, within ±10% |
 | Beacon SDK gzipped bundle | **3.52 KB** (limit: 15 KB) |
 | Pulse process memory at load | **18.6 MiB** peak @ 500 streams + 3,000 viewers (limit: 512 MiB) |
-| PRD sub-requirements FULLY met | **40 of 66** (60.6% simple; 79.9% weighted) |
+| PRD sub-requirements FULLY met | **43 of 66** (65.2% simple; 83.0% weighted) |
 | Architecture numeric criteria FULLY met | **33 of 36** (91.7%) |
 
 ### What was validated
@@ -133,10 +133,10 @@ deliverable). The arithmetic is shown in full below.
 
 | Verdict | Count | Meaning |
 |---------|------:|---------|
-| FULLY | 40 | Implemented and validated end-to-end against real AMS |
-| PARTIALLY | 14 | Core implemented; at least one sub-criterion missing or not live-validated |
+| FULLY | 43 | Implemented and validated end-to-end against real AMS |
+| PARTIALLY | 12 | Core implemented; at least one sub-criterion missing or not live-validated |
 | DIFFERENTLY | 7 | Implemented via a method that differs from PRD spec; delta documented |
-| MISSING | 4 | Specified in PRD; not implemented or structurally non-functional |
+| MISSING | 3 | Specified in PRD; not implemented or structurally non-functional |
 | NEEDS-CLARIFICATION | 1 | Requirement ambiguous; Ant Media team input needed |
 | **Total** | **66** | |
 
@@ -145,7 +145,7 @@ deliverable). The arithmetic is shown in full below.
 > Counts only full compliance as "done."
 
 ```
-40 (FULLY) / 66 (total) = 60.6%
+43 (FULLY) / 66 (total) = 65.2%
 ```
 
 ### Method B — Weighted percentage (headline score)
@@ -154,14 +154,14 @@ deliverable). The arithmetic is shown in full below.
 > not as specified), PARTIALLY = 0.5, NEEDS-CLARIFICATION = 0.5, MISSING = 0.
 
 ```
-(40 × 1.0) + (7 × 0.75) + (14 × 0.5) + (1 × 0.5) + (4 × 0.0)
-  = 40.00 + 5.25 + 7.00 + 0.50 + 0.00
-  = 52.75
+(43 × 1.0) + (7 × 0.75) + (12 × 0.5) + (1 × 0.5) + (3 × 0.0)
+  = 43.00 + 5.25 + 6.00 + 0.50 + 0.00
+  = 54.75
 
-52.75 / 66 = 79.9%
+54.75 / 66 = 83.0%
 ```
 
-**Headline: Product Completeness = 79.9% (weighted) / 60.6% (strict)**
+**Headline: Product Completeness = 83.0% (weighted) / 65.2% (strict)**
 
 ### Feature-level summary (F1–F10)
 
@@ -198,15 +198,16 @@ Phase 3 deliverable that shipped ahead of the nominal Phase 3 milestone.
 33 (FULLY) / 36 (total) = 91.7%
 ```
 
-The four sub-requirements with a MISSING verdict are:
+The three sub-requirements with a MISSING verdict are:
 1. **Geo country-level accuracy (F2)** — GeoLite2 mmdb not deployed.
 2. **SDK integration documentation (F3)** — MVP+1 item; runtime integration
    points exist, step-by-step operator guide not yet authored.
-3. **Recording storage (recording\_gb) accounting (F6)** — BUG-002 (high
-   severity): VoD REST not polled; vodReady webhook path blocked by
-   AMS 3.0.3 unsigned-hook limitation.
-4. **Error and rebuffer anomaly signals (F9)** — `error_rate` and
+3. **Error and rebuffer anomaly signals (F9)** — `error_rate` and
    `rebuffer_ratio` confirmed absent from the anomaly evaluator.
+
+(Recording storage (recording\_gb) accounting (F6) was MISSING through S22;
+**BUG-002 FIXED S23/D-085** — VoD REST poll + `mv_recording_1d`, live-validated
+TC-REC-01 with 0.02% reconciliation → verdict now FULLY.)
 
 ---
 
@@ -223,9 +224,9 @@ The four sub-requirements with a MISSING verdict are:
 |---|-------------|--------|-------|
 | 1 | Working product against current AMS release | PASS | 46/50 scenario scripts PASS against AMS 3.0.3 Enterprise; 0 FAIL |
 | 2 | Core features functional end-to-end | PASS | Stream lifecycle, viewer counts, alerting, probes, QoE beacon all validated live |
-| 3 | No P0 severity open bugs | FAIL | BUG-002 (high): recording\_gb structurally 0 on all AMS 3.0.3 deployments; P0 roadmap fix required |
+| 3 | No P0 severity open bugs | PASS | BUG-002 FIXED S23/D-085 (VoD REST poll, live-validated TC-REC-01); no P0-roadmap bugs remain open (BUG-001 is low/no-user-impact; BUG-008 from/to is a pinned known-violation with an approved ADR, not a P0 roadmap item) |
 | 4 | Integration documentation (AMS-side setup) | PARTIAL | `docs/AMS-INTEGRATION.md` exists; beacon SDK integration guide not yet produced (DG-07); webhook limitation not fully documented for operators |
-| 5 | API documentation / OpenAPI spec | PASS | OpenAPI spec exists; 51/52 operations response-body conformant; BUG-004 is a parameter-handling gap, not a missing spec |
+| 5 | API documentation / OpenAPI spec | PASS | OpenAPI spec exists; 51/52 operations response-body conformant; BUG-004/005/006/007/010 FIXED S20–S22; remaining parameter known-violations: BUG-008 ?from/?to on GET /anomalies (S23 ADR) and BUG-009 ?tenant ×2 on GET /live (F6 backlog); all 4 pinned in conformance registry |
 | 6 | Self-hosted deployment guide | PASS | `deploy/` directory contains Docker Compose stack, `Caddyfile.prod`, and environment variable documentation |
 | 7 | Support channel defined | NEEDS-OPERATOR-CONTACT | No support SLA or support channel (email / forum / GitHub issues) has been publicly defined for Pulse v0.3.0 |
 | 8 | Licensing clearly stated | NEEDS-OPERATOR-CONTACT | Pulse uses a license-key model (PULSE\_LICENSE\_KEY); the public licensing terms (free/pro/enterprise tiers, self-hosted redistribution rights) are not yet published |
@@ -318,7 +319,7 @@ complexity, and marketplace impact.
 
 | Priority | Item | Customer Value | Complexity | Marketplace Impact |
 |----------|------|---------------|------------|-------------------|
-| **P0** | **VoD recording\_gb via REST poll fallback** (BUG-002 fix: poll `/{app}/rest/v2/vods/list` incrementally; write `recording_bytes` to `rollup_usage_1d`) | High — recording/billing use case is structurally broken on all AMS 3.0.3 deployments; VoD assets exist but are not accounted for | **Medium** — incremental REST poll **plus two additive migrations** (corrected S20/D-082: a ClickHouse `mv_recording_1d` view, without which recording events never reach `rollup_usage_1d`, and a `vod_poll_state` table for a restart-safe high-water mark). Design note: `bugs/BUG-002-design-note-vod-rest-poll.md` | High — required before billing/SLA report use case is credible |
+| ~~**P0**~~ **DONE (S23/D-085)** | ~~**VoD recording\_gb via REST poll fallback**~~ — **FIXED 2026-07-12**: restpoller polls `/{app}/rest/v2/vods/list` every 12th tick; persistent seen-set dedup keyed on the stable AMS `vodId` (`vod_poll_state` meta migration 0003 — the live probe confirmed `vodId` exists, upgrading the design note's HWM to its own safer seen-set option); new `mv_recording_1d` ClickHouse MV (migration 0009) rolls recording\_size into `rollup_usage_1d`; live-validated TC-REC-01 (recording\_gb reconciles within 0.02% of AMS ground truth) | High — was structurally broken; now accounted | **Medium** — landed exactly as the corrected S20/D-082 design predicted (two additive migrations). Design note: `bugs/BUG-002-design-note-vod-rest-poll.md` | High — billing/SLA report use case now credible |
 | **P0** | **Unsigned-webhook ingest mode** (D-V2-1; operator decision pending) — accept lifecycle events without HMAC from sources on a `PULSE_WEBHOOK_ALLOW_UNSIGNED_SOURCES` CIDR allowlist (ROADMAP-V2 §2.6 design); operator assumes network-layer trust risk | High — the webhook path is the intended real-time event channel; it is entirely unused in prod today; REST poll covers latency but misses vodReady | Medium — new config flag, webhook handler changes, security documentation | High — enables the full F1 + F6 intended design |
 | ~~**P0**~~ **DONE (S20/D-082)** | ~~**Fix BUG-004: parse `from`/`to` in `/api/v1/qoe/ingest` handler**~~ — **FIXED 2026-07-12**: handler now honors `from`/`to`/`app`/`stream`/`node`; contract unchanged. Residual `interval` param carved out as **BUG-005** (same declared-but-ignored class). | Medium — operators using the historical ingest view after a bitrate incident see incorrect averaged data | Low — targeted handler fix at one route; no schema change | Medium — OpenAPI contract violation is a quality signal for marketplace reviewers |
 | **P1** | **Standalone CPU / mem / disk via Kafka** (AV-15; requires operator to deploy Kafka broker or configure `PULSE_KAFKA_BROKERS`) | High — the most common deployment profile (standalone AMS on a single VPS) currently shows no resource gauges on the Fleet page | High — requires Kafka broker deployment by operator and validation of the existing `server/internal/collector/kafka/` consumer against `ams-instance-stats` topic schema | High — "fleet health" is a key positioning claim; empty gauges undermine it |
@@ -328,7 +329,7 @@ complexity, and marketplace impact.
 | **P1** | **Remote-viewer WebRTC QoE parity** — repeat TC-V-07 / TC-V-08 with a geographically remote WebRTC viewer to confirm ×1000 RTT conversion at non-zero values; same-host loopback returns all-zero AMS stats | Medium — the ×1000 unit conversion is code-verified at `normalize.go:185` but exercised only at 0 values; a flip to ×0.001 would produce RTT values in the µs range silently | Low — test-only; requires access to a second host | Medium — WebRTC QoE is a differentiating metric; correct units are table stakes |
 | **P2** | **Scheduled-stream pre-event alerting** — consume AMS schedule endpoint; emit an alert when a scheduled stream has not started within configurable N minutes of its scheduled time | Medium — high-impact for live-event operators (sports, concerts, webinars) | Medium — new AMS API surface to poll; new alert rule type | Medium — live-event monitoring differentiates from generic AMS dashboards |
 | **P2** | **GeoLite2 mmdb bundling or setup guide** — geo country analytics are non-functional without the MaxMind database; either bundle under OFL terms or provide a one-command setup step in the deployment guide | Medium — geo analytics is listed as an F2 sub-requirement; empty-country reduces value of the audience analytics module | Low — packaging or documentation change | Low — operators expect geo to work at install time |
-| **P2** | **Fix BUG-003: probe scheduler near-duplicate rows** — probe result timeseries has N+1/N+2 rows per expected-N window at ~60 s phase-aligned marks; likely two concurrent execution paths (immediate-on-create goroutine + periodic ticker) | Low — interval accuracy is slightly degraded; no data loss; workaround is a dedup at query layer | Low — scheduler fix to remove or guard the immediate-run-on-create path | Low — affects F10 result timeseries aesthetics |
+| ~~**P2**~~ **DONE (S20/D-082)** | ~~**Fix BUG-003: probe scheduler near-duplicate rows**~~ — **FIXED 2026-07-12**: spawnProbe now returns early on unchanged probe config (filed root-cause hypothesis was wrong — not immediate-on-create goroutine + periodic ticker; actual: 60 s refresh loop unconditionally respawned ALL probes, resetting probe phase on every tick; fix: probeEntry stores domain.ProbeConfig, whole-struct equality check before respawn). | Low | Low | Low |
 | **P2** | **RTMP pull viewer count via `/{app}/connections`** | Low — `rtmpViewerCount` inline is 0 for pull viewers in BroadcastDTO; dedicated connections endpoint not polled | Low — additional REST call per stream | Low — edge case for operators using RTMP pull distribution |
 
 ---
@@ -344,9 +345,11 @@ documentation actions.
 **Context:** AMS 3.0.3 cannot HMAC-sign lifecycle hooks (O3 decision,
 `decisions.md`; AV-08 confirmed). Pulse's webhook listener is fail-closed
 and rejects all unsigned deliveries. The `vodReady` webhook is the only
-ingestion path for VoD recording data (BUG-002). REST polling covers stream
-lifecycle within the 10 s latency budget, but recording accounting requires
-the `vodReady` event.
+ingestion path for VoD recording data via webhooks (BUG-002 — since fixed
+S23/D-085 by a VoD REST poll fallback, so recording accounting no longer
+depends on this answer; the question stands because a signed webhook would
+cut recording-visibility latency from ≤60 s to near-real-time). REST polling
+covers stream lifecycle within the 10 s latency budget.
 
 **Question:** Does AMS have a roadmap item to add HMAC webhook signing
 (a `SharedSecret` field on the outbound hook configuration)? If so, what
@@ -426,21 +429,34 @@ initiated as of this draft.
 
 ## Appendix A — Bugs Found During This Validation Program
 
-Four bugs were found and filed by this program. The methodology (direct
+Ten bugs were found and filed by this program. The methodology (direct
 AMS REST cross-check, not UI-only assertions) produced real defects, not
-just scenario confirmations.
+just scenario confirmations. BUG-002/003/004/005/006/007/010 have been fixed; BUG-008/009 are partially fixed; only BUG-001 (low, no user impact) remains open.
 
 | ID | Severity | Title | Features Affected | Status |
 |----|----------|-------|-------------------|--------|
-| BUG-001 | Low | `amsclient.BroadcastStatistics()` is dead code — defined, tested, never called at runtime | F1 (no user impact; inline counts correct) | Confirmed |
-| BUG-002 | **High** | `recording_gb` always 0 — vodReady webhook only; AMS 3.0.3 cannot sign hooks | F6 (recording/billing use case broken) | Confirmed; P0 roadmap fix |
-| BUG-003 | Medium | Probe scheduler emits near-duplicate result rows 0–1 ms apart at ~60 s phase-aligned intervals | F10 (probe result timeseries has phantom duplicates) | Confirmed |
-| BUG-004 | Medium | `GET /api/v1/qoe/ingest` declares `from`/`to` parameters but handler silently ignores them | F4 (era-mixed timeseries on windowed queries); F8 (OpenAPI contract violation) | Confirmed; P0 roadmap fix |
+| BUG-001 | Low | `amsclient.BroadcastStatistics()` is dead code — defined, tested, never called at runtime | F1 (no user impact; inline counts correct) | Confirmed; no user impact |
+| BUG-002 | **High** | `recording_gb` always 0 — VoD REST never polled; vodReady webhook blocked on AMS 3.0.3 (cannot HMAC-sign hooks) | F6 (recording/billing use case was structurally broken) | **FIXED S23/D-085**: VoD REST poll + persistent `vodId` seen-set + `mv_recording_1d` MV (migrations 0003 meta / 0009 ClickHouse); TDD (8 poller tests, MV integration test, 5 mutation proofs RED); live-validated TC-REC-01 3/3 vs real AMS (0.02% reconciliation) |
+| BUG-003 | Medium | Probe scheduler unconditionally respawned ALL probes on every 60 s refresh tick, resetting probe phase and producing duplicate result rows every 60 s | F10 (probe result timeseries had N+1/N+2 rows per expected-N window; filed root-cause hypothesis was wrong) | **FIXED S20/D-082** (PR #32); 4 regression tests; prober coverage 72.6%→74.3% |
+| BUG-004 | Medium | `GET /api/v1/qoe/ingest` declares `from`/`to` parameters but handler silently ignored them; production dashboard served all-time era-mixed buckets on every page load | F4 (windowed ingest health queries); F8 (OpenAPI contract violation) | **FIXED S20/D-082** (PR #32); 13 TDD subtests; api coverage 76.9%→78.0% |
+| BUG-005 | Medium | `GET /api/v1/qoe/ingest` `interval` param declared but ignored; callers receive 60 s buckets regardless of hour/day request | F4/F8 | **FIXED S21/D-083** (PR #33); 5 TDD subtests; absent interval intentionally maps to 0 to preserve 60 s default (F4 "15 s visibility" criterion) |
+| BUG-006 | Medium | Pagination params `limit` + `cursor` declared on 8 list endpoints but store-layer methods had no pagination args; all results were unbounded | F5/F8/F10 + admin endpoints | **FIXED S22/D-084** (PR #34); keyset cursors on all 8 store methods; 2 panics caught and fixed (slice OOB, negative limit) |
+| BUG-007 | Low–Medium | `cursor` param dropped in `GET /alerts/history` and `GET /probes/{probeId}/results`; callers could not page past page 1 | F5 (alert history); F10 (probe results) | **FIXED S22/D-084** (PR #34); real probes (not exempts) asserting page 1 ≠ page 2 |
+| BUG-008 | High | `GET /anomalies` drops all 6 declared filter params; `from`/`to` are architecturally unfixable without a persistent flag-event store | F9 (anomaly detection) | **PARTIALLY FIXED S22/D-084** (PR #34): `app`/`stream`/`limit`/`cursor` (Group A) fixed handler-side; `from`/`to` (Group B) remain known-violation; S23 designs `anomaly_flag_events` table and ADR |
+| BUG-009 | Medium | `GET /live/overview` + `GET /live/streams`: `tenant` param passed by handler but silently dropped in query layer; `cursor` in LiveStreams was stubbed | F6/F1 | **PARTIALLY FIXED S22/D-084** (PR #34): LiveStreams `cursor` decode + required stability sort added; `tenant` ×2 remain known-violation → `domain.LiveSnapshot` has no tenant assignment (F6 multi-tenancy backlog) |
+| BUG-010 | Low | `GET /analytics/audience` reads `?format=csv` but the parameter was not declared in the OpenAPI spec (reverse-direction gap: implementation ahead of contract) | F2/F8 | **FIXED S22/D-084** (PR #34): `format` enum `[json,csv]` + `text/csv` 200 response declared; `gen:api` regenerated; `minSpecParams` 85→86 |
 
 Bug documents: `docs/assessment/bugs/BUG-001-broadcast-statistics-dead-code.md`,
 `BUG-002-recording-gb-zero-webhook-blocked.md`,
+`BUG-002-design-note-vod-rest-poll.md`,
 `BUG-003-probe-scheduler-duplicate-results.md`,
-`BUG-004-qoe-ingest-ignores-from-to.md`.
+`BUG-004-qoe-ingest-ignores-from-to.md` (BUG-005 documented as residual section therein),
+`BUG-006-pagination-dead-params.md`,
+`BUG-007-cursor-missing-partial-pagination.md`,
+`BUG-008-anomalies-filter-params-silently-dropped.md`,
+`BUG-008-triage-s22.md`,
+`BUG-009-live-tenant-cursor-dropped-in-query-layer.md`,
+`BUG-010-audience-format-param-undeclared.md`.
 
 ---
 

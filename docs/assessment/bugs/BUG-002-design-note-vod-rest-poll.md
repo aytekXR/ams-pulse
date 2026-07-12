@@ -1,6 +1,6 @@
 # DESIGN NOTE — BUG-002 fix: VoD REST poll fallback for `recording_gb`
 
-**Status:** PROPOSAL — not implemented, not committed.  
+**Status:** IMPLEMENTED (S23 / D-085, 2026-07-12) — built as designed (seen-set variant per OQ-1: the live probe confirmed a stable `vodId`, so the meta table dedupes on `(app, vod_id)` instead of an HWM). Kept for design provenance.  
 **Authored:** S20 (2026-07-12), DOC/BE design author  
 **Relates to:** BUG-002 (`docs/assessment/bugs/BUG-002-recording-gb-zero-webhook-blocked.md`),
   D-066 (O3 closed-N/A), D-V2-1 (unsigned-webhook mode, operator-gated),
