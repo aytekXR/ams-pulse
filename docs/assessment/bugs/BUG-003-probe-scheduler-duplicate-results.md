@@ -2,7 +2,8 @@
 
 **Severity:** medium
 **Component:** probe runner / scheduler (server-side)
-**Status:** confirmed via TC-P-07 evidence (S18)
+**Status:** **FIXED (S20 / D-082, 2026-07-12)** — see "Root cause (ACTUAL)" +
+"Fix (as landed)" below. The filed hypothesis below was **WRONG**; kept for provenance.
 
 ## Reproduction Steps
 
@@ -68,3 +69,58 @@ both are returned by the results API.
 - `qa/realams/evidence/S18-TC-P-07-20260711T141544Z/timeline.txt`
 - `qa/realams/evidence/S18-TC-P-07-20260711T141544Z/probe-ts-values.json`
 - `qa/realams/evidence/S18-TC-P-07-20260711T141544Z/probe-results-all.json`
+
+---
+
+## Root cause (ACTUAL — S20, D-082) — the filed hypothesis above was WRONG
+
+The hypothesis above guessed an **"immediate run on create" goroutine racing a
+periodic ticker**. No such path exists. The real mechanism, found by reading the
+scheduler (D-042: read the code, never bump the timeout):
+
+`Runner.Run` (`server/internal/prober/prober.go`) reloads the enabled-probe list
+on a **60 s refresh ticker** and called `spawnProbe(p)` for **every** probe on
+**every** tick. `spawnProbe` **unconditionally cancelled and respawned** that
+probe's scheduler goroutine — even when nothing about the probe had changed. The
+respawned `runProbeScheduler` waits only `jitter(interval)` before its first fire,
+and in **production** `serve.go` constructs `prober.New(prober.Config{Workers: 4}, …)`,
+leaving `MaxJitterFraction` at its zero value ⇒ `jitter()` returns **0** ⇒ the
+respawned goroutine fires **immediately** — landing 0–1 ms on top of the original
+goroutine's own periodic fire, which is phase-aligned to the same start instant.
+
+That is exactly the evidence signature: a duplicate pair **every 60 s** (the
+refresh period), not every probe interval. The 30 s-interval probe in TC-P-07
+duplicated at the 60 s and 120 s marks — the two refresh ticks inside the window.
+
+**Why this matters beyond duplicate rows:** every refresh also *reset every
+probe's phase*, so probe timing in production was never actually periodic.
+
+## Fix (as landed — S20, D-082)
+
+Mechanism fix, not a dedup band-aid (all three "Fix Suggestion" options above were
+**rejected**: insert-time dedup, results-API dedup, and a per-probe mutex all hide
+the duplicate instead of removing it, and none fix the phase reset):
+
+- `probeEntry` now stores the `domain.ProbeConfig` alongside the cancel func.
+  `spawnProbe` compares whole-struct (`e.config == p`; `ProbeConfig` is all-scalar
+  and comparable) and **returns early when the config is unchanged** — the existing
+  goroutine keeps running with its established phase. A **changed** config still
+  cancels + respawns; a **removed** probe is still cancelled and deleted.
+- The refresh loop moved from a real `time.NewTicker(60*time.Second)` to a re-armed
+  `r.clock.After(cfg.RefreshInterval)`, so a `FakeClock` can drive it
+  deterministically. New `Config.RefreshInterval` defaults to 60 s when ≤ 0, so
+  **production behavior is unchanged** (`serve.go` passes nothing).
+
+**Tests:** `server/internal/prober/prober_bug003_test.go` —
+`TestBUG003_NoRespawnOnUnchangedConfig` (the regression pin),
+`TestBUG003_ChangedConfigRespawns`, `TestBUG003_RemovedProbeStops`,
+`TestBUG003_N24_FirstFireImmediate` (guards the N24 <100 ms first-result budget —
+a new probe must still fire immediately; the fix adds no startup delay).
+
+**Red→green proof (ORCH-run, the authoring agent died before producing it):** the
+pin was re-run against the **pre-fix** `spawnProbe` in an isolated pristine-copy
+tree and fails with the bug's exact signature —
+`expected exactly 4 probe fires in 100 virtual seconds (1 immediate + 3 interval;
+refresh at T=100 must NOT respawn an unchanged probe), got 5`. Green on the fix.
+Gates: `go test -race -count=3 ./internal/prober/...` → ok, 0 FAIL / 0 SKIP;
+prober coverage 72.6% → **74.3%**; Go total **74.8%** (floor 70.2).
