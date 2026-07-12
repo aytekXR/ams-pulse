@@ -1167,8 +1167,7 @@ func (s *Server) handleIngestHealth(w http.ResponseWriter, r *http.Request) {
 	//   from / to  — parsed by parseTimeParam (zero when absent → no time filter
 	//                in IngestTimeseries; back-compat when caller passes nothing).
 	//   app / stream / node — stream-selection filters; absent = no filtering.
-	//   interval   — OUT OF SCOPE (BUG-004 residual); BucketSeconds stays at the
-	//                IngestTimeseries default of 60 s.
+	//   interval   — parsed by parseBucketInterval; 0 when absent (F4 60-second default preserved; see parseBucketInterval godoc).
 	//
 	// Data sources:
 	//   - health_score, health, and current raw metrics: live aggregator snapshot
@@ -1184,6 +1183,7 @@ func (s *Server) handleIngestHealth(w http.ResponseWriter, r *http.Request) {
 	filterApp := q.Get("app")
 	filterStream := q.Get("stream")
 	filterNode := q.Get("node")
+	bucketSecs := parseBucketInterval(q.Get("interval"))
 
 	ctx := r.Context()
 	snap := s.live.CurrentSnapshot()
@@ -1209,11 +1209,12 @@ func (s *Server) handleIngestHealth(w http.ResponseWriter, r *http.Request) {
 			ts, dropEvents := []any{}, []any{}
 			if s.iqsvc != nil {
 				tsResult, err := s.iqsvc.IngestTimeseries(ctx, query.IngestTimeseriesParams{
-					StreamID: sid,
-					App:      st.App,
-					NodeID:   st.NodeID,
-					From:     from,
-					To:       to,
+					StreamID:      sid,
+					App:           st.App,
+					NodeID:        st.NodeID,
+					From:          from,
+					To:            to,
+					BucketSeconds: bucketSecs,
 				})
 				if err == nil && tsResult != nil {
 					for _, b := range tsResult.Timeseries {
@@ -2388,6 +2389,36 @@ func parseTimeParam(s string) time.Time {
 		return t
 	}
 	return time.Time{}
+}
+
+// parseBucketInterval maps the OpenAPI `interval` query-parameter to
+// IngestTimeseriesParams.BucketSeconds.
+//
+//	"hour"  → 3600
+//	"day"   → 86400
+//	""      → 0  (see F4 deviation note below)
+//	other   → 0  (lenient; consistent with parseTimeParam invalid-input handling)
+//
+// F4 deviation — deliberate default override:
+// The OpenAPI spec declares default: "day" (86400 s buckets). Pulse deviates
+// intentionally: when interval is absent the function returns 0, which makes
+// IngestTimeseries keep its internal 60-second bucket default.
+// Rationale: PRD F4 requires ingest degradation to be visible within 15 seconds
+// of occurrence. A 24-hour bucket collapses an entire day into a single data
+// point, hiding sub-minute degradations entirely. Callers that want daily
+// granularity must pass interval=day explicitly; absence means "give me the
+// finest grain available." This matches the intent of the F4 criterion and is
+// consistent with how parseTimeParam returns zero (= no filter) rather than a
+// default window when a time param is absent.
+func parseBucketInterval(s string) int {
+	switch s {
+	case "hour":
+		return 3600
+	case "day":
+		return 86400
+	default:
+		return 0
+	}
 }
 
 func parseAudienceParams(q url.Values) (query.AudienceParams, error) {

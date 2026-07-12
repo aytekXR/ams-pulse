@@ -1,6 +1,59 @@
-# Operator TODO — the items only YOU can do (updated at SESSION-20 close, D-082, 2026-07-12; rides S20's PR)
+# Operator TODO — the items only YOU can do (updated at SESSION-21 close, D-083, 2026-07-12; rides S21's PR)
 
-## ⚡ TL;DR — expected from you right now (2026-07-12, SESSION-20 closed)
+## ⚡ TL;DR — expected from you right now (2026-07-12, SESSION-21 closed ~03:45Z)
+
+> **ONE small new item, at your convenience: start the next session AFTER
+> 14:09 today (12:09 UTC)** — that's when your AMS trial lapses. You asked S21
+> to close now and continue in a fresh session instead of holding open ~9 h
+> (good call — recorded as the operator direction in D-083). The post-expiry
+> sweep is fully staged: the sweep tool is committed
+> (`qa/realams/harness/expiry-sweep.sh`, validated — its output is
+> byte-identical to the baseline run), and your pre-expiry baseline is on disk,
+> re-confirmed three times this session. The next session just runs it and
+> diffs. **If a session opens before 12:10Z it will wait, not skip.**
+>
+> **Still waiting on your decision (both non-blocking, unchanged):**
+>
+> **1. Caddy vhost merge.** `origin/main` still lacks the
+> `bedirhandemirel.beyondkaira.com` vhost that live prod Caddy HAS. A redeploy
+> from a clean main checkout would drop that site. Say **"merge the caddy
+> vhost"** and a session opens the one-commit PR from `caddy-bedirhan-vhost`.
+> Until then: branch preserved, on-disk file untouched, your `.bak` untouched.
+>
+> **2. Final-assessment review.** `docs/assessment/final-assessment.md`
+> + `prd-validation-matrix.md` stay **DRAFT**; nothing goes external until you
+> reply "approved" or send edits.
+>
+> **FYI, no action needed:**
+> - **BUG-005 is fixed** (the `/qoe/ingest` `interval` parameter — the last of
+>   the S18-filed Pulse bugs), test-first, contract unchanged, adversarially
+>   verified. Reaches prod with your next approved rollout; prod untouched.
+> - **A new test now guards the whole bug class:** every one of the **85**
+>   query params your API contract declares must be explicitly accounted for
+>   in `param_conformance_test.go` — a declared-but-ignored parameter (the
+>   BUG-004/005 pattern) can no longer land silently.
+> - **★ That sweep found the class was much bigger: 28 of 85 declared params
+>   were not honored.** 1 fixed (BUG-005), 27 pinned visibly with bug docs:
+>   **BUG-006** (`limit`/`cursor` pagination dead on 8 list endpoints),
+>   **BUG-007** (`cursor` missing where `limit` works), **BUG-008**
+>   (`/anomalies` ignores every declared filter), **BUG-009** (`tenant`
+>   dropped one layer deeper, inside the query layer), plus **BUG-010**
+>   (reverse direction: the audience CSV export `?format=csv` works but was
+>   never declared in the contract). Fixing them starts next session — the
+>   debt is pinned, not silent.
+
+## 🔎 What SESSION-21 did (2026-07-12, closed — D-083)
+
+| Area | Result |
+|---|---|
+| **BUG-005 fixed** | `GET /qoe/ingest` now honors the `interval` parameter (hourly/daily buckets); when absent, the fine 60-second buckets your dashboard's "degradation visible in 15 s" promise depends on are preserved. Test-first; the API contract itself unchanged. |
+| **Parameter-conformance gate** | A new CI-enforced test loads the OpenAPI contract and requires every declared query parameter (85 today) to be explicitly proven honored, exempted with a reason, or pinned against a bug. The class of bug that produced BUG-004 and BUG-005 can no longer enter the codebase silently. |
+| **5 new bugs filed** | BUG-006…BUG-010 (see TL;DR) — found by the conformance sweep and its adversarial verifiers, including one a layer deeper than the original audit looked. All evidence-cited, none fixed this session (scope discipline); they head the S22 backlog. |
+| **Post-expiry sweep** | Re-gated to S22 **on your direction** (close now, continue in a new session after the 12:09Z lapse). Zero cost: the sweep tool is committed and validated, and the pre-expiry baseline (Enterprise 3.0.3, build 20260504_1443, 4 apps, all endpoints green) was re-confirmed three times today — the next session's diff will be exact. |
+| **Quality net** | 8 workflow agents (2 scouts, designer, 2 TDD authors, 3 adversarial verifiers), 0 errors. Verifier catches applied same-session: an enumeration-floor guard, a misclassified exemption (became BUG-009), and a latent silent-skip path in shared test helpers made loud. |
+| **Ops** | Prod and your AMS untouched (read-only). Gates: 24/24 Go packages race-clean, 0 failures / 0 skips, coverage 74.9% (floor 70.2), contract-drift clean. CI-promotion date gate still closed (opens 07-23) → skip carry ×10. One PR. |
+
+## (superseded) S20-close header follows
 
 > **Nothing blocks the work — two things want a decision from you, neither urgent.**
 >

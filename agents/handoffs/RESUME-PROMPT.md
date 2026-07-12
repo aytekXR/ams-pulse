@@ -11,7 +11,56 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-21.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-22.md`; ⚠️ OPEN AFTER 2026-07-12T12:10Z)
+
+**Session 2026-07-12 result: D-083 — S21 DONE (BUG-005 fixed + the parameter-conformance
+class fix landed; post-expiry sweep re-gated BY OPERATOR DIRECTION).**
+- **BUG-005 FIXED** (`fix(api)` `2e9d026`, TDD): `/qoe/ingest` honors `interval`
+  (new `parseBucketInterval`: hour→3600, day→86400; absent/invalid→0 ⇒ the 60 s
+  query-layer default is KEPT — deliberate, documented deviation from the spec
+  default `day`; PRD F4 15 s visibility depends on it). Contract UNCHANGED.
+- **★ THE CLASS FIX LANDED:** `server/internal/api/param_conformance_test.go`
+  enumerates **all 85 declared query params** from `pulse-api.yaml` and FAILS on
+  any without an explicit registry entry (probe / exempt / known-violation) — a
+  declared-but-ignored param can no longer land silently. 11 live probes / 47
+  honest exempts / **27 known-violations pinned**. Anti-vacuity: enumeration
+  floor 85, minProbes 8, spec-load t.Fatal. Mutation-verified (fix-revert,
+  registry-hole, probe-break all go RED in a pristine copy).
+- **★ SWEEP YIELD — the class was 28/85, not 1:** **BUG-006** (limit+cursor dead
+  on 8 list endpoints), **BUG-007** (cursor-only gaps ×2), **BUG-008**
+  (`/anomalies` drops ALL six declared filters), **BUG-009** (verifier catch one
+  layer DEEPER: `query.LiveOverview/LiveStreams` accept `tenant` and never use
+  it; `LiveStreams` stubs `cursor` — audits must follow the value to its
+  observable effect), **BUG-010** (reverse direction: audience `?format=csv`
+  implemented but undeclared). All filed under `docs/assessment/bugs/`; fixing
+  them is S22+ backlog — pinned, not silent.
+- **Gates:** 24/24 Go pkgs `-race` ok, **0 FAIL / 0 SKIP** (D-028 asserted);
+  coverage **74.8% → 74.9%** (floor 70.2); gofmt/vet/build/contract-drift clean.
+  Shared test helpers now `t.Fatalf` (not Skip) on missing meta DDL.
+- **Date fact + the re-gate:** S21 opened 01:30Z — 9 min after S20's merge,
+  STILL pre-expiry (lapse 12:09Z). Planned to HOLD past the lapse, but the
+  **operator directed (03:33Z): close and continue in a new session** → sweep
+  re-gated to S22 (3rd re-gate, 1st operator-directed) **at zero cost**: the
+  sweep tool is committed (`qa/realams/harness/expiry-sweep.sh`, validated —
+  output byte-identical to the baseline run) and the pre-expiry diff base is on
+  disk (`qa/realams/evidence/S21-sweep-preexpiry-20260712T014135Z/stable.txt`,
+  baseline re-confirmed ×3: Enterprise 3.0.3, build 20260504_1443, 4 apps).
+- Workflow: 8 agents, 0 errors. No concurrent-session incident this time. The
+  caddy-vhost decision + final-assessment review still pending (non-blocking).
+  CI promotions skip carry ×10 (07-12 < 07-23). Prod + AMS untouched.
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-22.md` and execute it**
+(**verify the clock ≥2026-07-12T12:10Z first** — if earlier, WAIT, do not re-gate;
+then `bash qa/realams/harness/expiry-sweep.sh postexpiry` + diff vs the S21
+baseline → **D-084** delta + blocked-scenario list; then operator intake; then
+the conformance-debt fixes BUG-006/007/009 + BUG-010 contract CR (BUG-008 needs
+a ComputeFlags redesign — assess first); BUG-002 VoD poll build if light; CI
+promotions if ≥07-23 else skip carry ×11). **PR-first, ≤2 pushes.**
+Check `docs/operator-expected.md` FIRST (caddy-vhost merge? final-assessment review?).
+
+---
+
+## ▶ prior session context (S20, superseded by the above)
 
 **Session 2026-07-12 result: D-082 — S20 DONE (both P0 code bugs fixed; sweep re-gated).**
 - **BUG-004 FIXED** (`fix(api)`): `/qoe/ingest` now honors the `from`/`to`/`app`/

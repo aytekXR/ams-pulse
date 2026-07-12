@@ -4027,3 +4027,111 @@ occurrence — this one benign):**
   external. Re-surfaced politely in operator-expected.md (non-blocking).
 - **WO-D:** gate CLOSED (07-11/12 < 07-23) → **skip carry ×9**. **WO-E:** clean.
   Prod + AMS **untouched all session** (read-only only).
+
+## D-083 — SESSION-21 (2026-07-12): post-expiry sweep + BUG-005 + parameter-conformance class fix (IN PROGRESS; evidence at close)
+
+**S21 open verification (2026-07-12T01:30Z):**
+- **Operator-action check (user directive): NO operator action is REQUIRED to
+  proceed — session continues autonomously.** Two decisions remain PENDING and
+  NON-BLOCKING, re-surfaced (not new): (1) the `caddy-bedirhan-vhost` merge —
+  `origin/main` still lacks the vhost live prod Caddy HAS; no "merge it" arrived;
+  branch + on-disk `Caddyfile.prod` + `.bak` all left exactly as S20 left them;
+  (2) `final-assessment.md` review — still DRAFT, nothing external. **S21
+  produces NO new operator action** (unless the post-expiry sweep finds one).
+- **Date-driven plan adjustment (3rd occurrence, D-081/D-082 class):** S21 opened
+  2026-07-12T01:30Z — 9 minutes after S20's merge (`7f71d82` @ 01:21Z) and still
+  ~10.6 h BEFORE the 12:09Z AMS trial lapse. The SESSION-21 "post-expiry sweep
+  finally real" premise does NOT hold at open. **Plan: the session HOLDS open
+  past 12:09Z and runs the real post-expiry sweep before close** (instead of a
+  3rd re-gate); if the hold fails for any reason, the sweep re-gates to S22 with
+  this date fact recorded. NTP-synced clock verified (`timedatectl`).
+- **WO-A1 pre-expiry re-confirm (read-only, lockout-safe, 01:33:54Z):**
+  `/rest/v2/version` → `versionName=3.0.3, versionType="Enterprise Edition",
+  buildNumber=20260504_1443`; `/rest/v2/applications` →
+  `["LiveApp","WebRTCAppEE","live","pulse-test"]` — **byte-identical to the
+  D-082 baseline** (evidence: `qa/realams/evidence/S21-preexpiry-recheck-20260712T013354Z/`,
+  gitignored). Cookie had expired; ONE login attempt, success (no lockout risk).
+- Preconditions: tree at S20 merge `7f71d82` + the two known non-session
+  artifacts (uncommitted `Caddyfile.prod` prod-live edit + `.bak`, both EXCLUDED
+  from every commit, D-082); protection exact (9 contexts incl. both CodeQL,
+  strict, enforce_admins=true, reviews=0); dependabot ZERO; no open PRs; prod
+  healthy read-only (healthz all-ok; SPA 200).
+- **WO-D CI-promotion gate: CLOSED** (07-12 < 07-23) → **skip carry ×10**.
+  Streak re-measure on the S20-merge main pair (ci 29175133412 / e2e
+  29175133404 / codeql 29175133402, 01:21Z): ALL jobs success — 8/8 ci incl.
+  `web-e2e`, e2e incl. `csp-e2e`. Candidates unchanged: csp-e2e at 07-23,
+  web-e2e ~07-25.
+- Branch `s21-d083`; PR-first, ≤2 pushes (D-076). Go-touching session → full
+  §8 gates due at close.
+
+**S21 WO-C evidence (recorded 03:27Z, pre-close — sweep evidence follows at close):**
+- **WO-C DELIVERED — BUG-005 FIXED** (`fix(api)` `2e9d026`, TDD red→green):
+  `handleIngestHealth` reads `interval` via new `parseBucketInterval`
+  (hour→3600, day→86400, absent/invalid→0 ⇒ query-layer 60 s default KEPT —
+  deliberate, documented deviation from the spec default `day`; PRD F4 "15 s
+  visibility" depends on fine default buckets). Red captured pre-fix
+  (`BucketSeconds=0, want 3600`); 5 subtests green after. Stale "OUT OF
+  SCOPE (BUG-004 residual)" comment replaced. Contract UNCHANGED
+  (`gen:api` + `git diff --exit-code` → clean).
+- **WO-C DELIVERED — the CLASS FIX:** `server/internal/api/param_conformance_test.go`
+  loads `pulse-api.yaml` at test time, enumerates **all 85 declared query
+  params** and FAILS on any without an explicit registry entry
+  (probe/exempt/known-violation) — a declared-but-ignored param can no longer
+  land silently. 11 live probes / 47 exempt (honest reasons) / **27
+  known-violations pinned** against filed bugs. Anti-vacuity: min-enumeration
+  floor 85, minProbes 8, spec-load t.Fatal (never Skip). Red evidence: empty
+  registry → the gate names all 85.
+- **★ SWEEP FINDINGS — the class was 28/85, not 1:** BUG-006 (limit+cursor
+  dead on 8 list endpoints, store layer scaffolded without pagination),
+  BUG-007 (cursor-only gaps: alerts/history, probe results), BUG-008
+  (/anomalies drops ALL six declared filters — ComputeFlags signature
+  mismatch), **BUG-009 (verifier catch, one layer DEEPER than the handler
+  audit: query.LiveOverview/LiveStreams accept `tenant` and never use it;
+  LiveStreams stubs `cursor` — handler audits must follow the value to its
+  observable effect)**, BUG-010 (reverse direction: audience `?format=csv`
+  implemented but undeclared — "per spec" comment in code is wrong). All
+  filed under docs/assessment/bugs/ (`3ec8b35`); FIXING them is S22+ backlog.
+- **Workflow: 8 agents (2 scouts / 1 designer / 2 authors / 3 adversarial
+  verifiers), 0 errors, 0 rate-limit deaths** (~716k tokens). Verdicts:
+  mutation CONFIRMED_OK (fix-revert + registry-hole + probe-break all go RED
+  in a pristine copy), correctness CONFIRMED_OK, completeness PARTIAL — its
+  should-fix (min-enumeration floor) + notes (tenant misclassified exempt →
+  reclassified w/ BUG-009; latent t.Skipf in shared helpers → t.Fatalf,
+  D-028 class) ALL applied by ORCH inline same-session.
+- **GATES (full §8, ORCH-run, repo-root mount, golang:1.25):** build OK;
+  `gofmt -l .` → empty; vet clean; `go test -race` **24/24 pkgs ok, 0 FAIL /
+  0 SKIP** (D-028 assert); coverage **74.8% → 74.9%** (floor 70.2);
+  contract-drift clean. Commits `2e9d026` (fix) + `3ec8b35` (bug docs).
+
+**S21 CLOSE (D-083 evidence):**
+- **WO-A2 (post-expiry sweep): RE-GATED to S22 BY OPERATOR DIRECTION — 3rd
+  re-gate, but the FIRST that is operator-directed.** At 03:33Z the operator
+  asked to continue in a new session rather than hold ~8.6 h for the 12:09Z
+  lapse ("can't we start another session for continuing") → the D-083 hold
+  plan is dropped, the lapse monitor stopped. **The re-gate costs nothing this
+  time:** the diff base exists and the tooling is now IN THE REPO —
+  `qa/realams/harness/expiry-sweep.sh` (bash -n + shellcheck clean; validated
+  end-to-end at 03:37Z: its `stable.txt` is byte-identical to the 01:41Z
+  baseline run, proving the diff mechanism AND re-confirming the baseline ×3
+  this session). **S22 MUST open ≥2026-07-12T12:10Z**, run
+  `bash qa/realams/harness/expiry-sweep.sh postexpiry` FIRST, then
+  `diff qa/realams/evidence/S21-sweep-preexpiry-20260712T014135Z/stable.txt
+  <post-dir>/stable.txt` → record the delta in **D-084** (a null delta is a
+  real result — say so explicitly) + the blocked-scenario list.
+- Pre-expiry stable baseline (01:41Z, re-confirmed 01:33Z + 03:37Z):
+  Enterprise Edition 3.0.3 build 20260504_1443; apps
+  [LiveApp, WebRTCAppEE, live, pulse-test] — settings+broadcast-count all 200
+  (remoteAllowedCIDR 0.0.0.0/0 ×4); cluster-nodes 404 (standalone);
+  system-status 200; licence-status 204/empty body; HLS live manifest 200
+  (teststream broadcasting); prod healthz all-ok; realams overview
+  total_publishers=1; prod poll-errlines-15m=0.
+- **WO-B (operator intake): NOT ACTIONABLE** — no operator answer on the
+  caddy-vhost merge or the final-assessment review; both re-surfaced in
+  operator-expected.md. **NEW operator expectation produced: START the next
+  session after 12:09Z** (12:10Z+ safe; 14:09+ CEST) so the sweep finally
+  runs post-expiry — the one step only the operator can take (sessions do not
+  self-start).
+- Prod + AMS untouched all session (read-only checks only). Tree stayed clean
+  of foreign commits (no D-062 recurrence this session). Workflow: 8 agents,
+  0 errors, 0 rate-limit deaths. Ledger: this entry. Close commits + PR
+  evidence appended by ORCH below after merge.

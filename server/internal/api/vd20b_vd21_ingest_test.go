@@ -98,7 +98,9 @@ func setupHealthyTestServer(t *testing.T) (ts *httptest.Server, adminToken strin
 	ddl, err := os.ReadFile(ddlPath)
 	if err != nil {
 		licCleanup()
-		t.Skipf("meta DDL not found: %v", err)
+		// A missing DDL is test-infrastructure failure, not a legitimate skip:
+		// silent skips are the D-028 false-green class. Fail loud.
+		t.Fatalf("meta DDL not found: %v", err)
 	}
 	store, err := meta.New(ctx, "sqlite", ":memory:", "vd20b-test-secret")
 	if err != nil {
@@ -313,7 +315,9 @@ func setupIngestCaptureServer(t *testing.T, iq api.IngestQuerier) (ts *httptest.
 	ddl, err := os.ReadFile(ddlPath)
 	if err != nil {
 		licCleanup()
-		t.Skipf("meta DDL not found: %v", err)
+		// A missing DDL is test-infrastructure failure, not a legitimate skip:
+		// silent skips are the D-028 false-green class. Fail loud.
+		t.Fatalf("meta DDL not found: %v", err)
 	}
 	store, err := meta.New(ctx, "sqlite", ":memory:", "bug004-test-secret")
 	if err != nil {
@@ -536,6 +540,118 @@ func TestBUG004_IngestHealth_AppStreamNodeFilter(t *testing.T) {
 			}
 			if !t.Failed() {
 				t.Logf("PASS %s: streams=%d calls=%d", tc.name, len(streams), len(cap.captured))
+			}
+		})
+	}
+}
+
+// TestBUG005_IngestHealth_HonorsBucketInterval proves that the `interval` query
+// param is parsed by parseBucketInterval and reaches IngestTimeseriesParams.BucketSeconds
+// (BUG-005 regression guard).
+//
+// F4 deviation note: absent `interval` → BucketSeconds=0 → IngestTimeseries uses
+// its internal 60-second bucket default, preserving PRD F4's 15-second visibility
+// requirement. The OpenAPI default of "day" (86400 s) is deliberately NOT applied
+// when the param is absent, because a 24-hour bucket hides sub-minute degradation.
+func TestBUG005_IngestHealth_HonorsBucketInterval(t *testing.T) {
+	epochMs1 := int64(1_700_000_000_000) // 2023-11-14T22:13:20Z
+	epochMs2 := int64(1_700_100_000_000)
+
+	cases := []struct {
+		name           string
+		queryStr       string
+		wantBucketSecs int
+		wantFrom       time.Time
+		wantTo         time.Time
+		wantCalls      int
+	}{
+		{
+			name:           "hour",
+			queryStr:       "interval=hour",
+			wantBucketSecs: 3600,
+			wantCalls:      1,
+		},
+		{
+			name:           "day",
+			queryStr:       "interval=day",
+			wantBucketSecs: 86400,
+			wantCalls:      1,
+		},
+		{
+			name:           "absent",
+			queryStr:       "",
+			wantBucketSecs: 0, // F4 deviation: absent → 0 → IngestTimeseries uses 60s default
+			wantCalls:      1,
+		},
+		{
+			name:           "invalid-week",
+			queryStr:       "interval=week",
+			wantBucketSecs: 0, // lenient: unknown value → 0
+			wantCalls:      1,
+		},
+		{
+			name:           "combined",
+			queryStr:       "interval=hour&from=" + strconv.FormatInt(epochMs1, 10) + "&to=" + strconv.FormatInt(epochMs2, 10),
+			wantBucketSecs: 3600,
+			wantFrom:       time.UnixMilli(epochMs1),
+			wantTo:         time.UnixMilli(epochMs2),
+			wantCalls:      1,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			// Fresh captureIngestQsvc per subtest to avoid slice accumulation.
+			cap := &captureIngestQsvc{}
+			ts, token, cleanup := setupIngestCaptureServer(t, cap)
+			defer cleanup()
+
+			rawURL := ts.URL + "/api/v1/qoe/ingest"
+			if tc.queryStr != "" {
+				rawURL += "?" + tc.queryStr
+			}
+
+			req, _ := http.NewRequest(http.MethodGet, rawURL, nil)
+			req.Header.Set("Authorization", authHeader(token))
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("GET /qoe/ingest: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				body, _ := io.ReadAll(resp.Body)
+				t.Fatalf("BUG-005: want 200, got %d: %s", resp.StatusCode, body)
+			}
+
+			if len(cap.captured) != tc.wantCalls {
+				t.Fatalf("BUG-005: want %d IngestTimeseries call(s), got %d (interval plumbing broken?)",
+					tc.wantCalls, len(cap.captured))
+			}
+			if tc.wantCalls == 0 {
+				return
+			}
+			got := cap.captured[0]
+
+			t.Logf("BUG-005 fix check [%s]: got BucketSeconds=%d, want %d",
+				tc.name, got.BucketSeconds, tc.wantBucketSecs)
+			if got.BucketSeconds != tc.wantBucketSecs {
+				t.Errorf("BUG-005: IngestTimeseriesParams.BucketSeconds = %d, want %d (interval=%q)",
+					got.BucketSeconds, tc.wantBucketSecs, tc.queryStr)
+			}
+
+			// For the "combined" case, also assert From and To are plumbed.
+			if tc.name == "combined" {
+				if !got.From.Equal(tc.wantFrom) {
+					t.Errorf("BUG-005 combined: From = %v, want %v", got.From, tc.wantFrom)
+				}
+				if !got.To.Equal(tc.wantTo) {
+					t.Errorf("BUG-005 combined: To = %v, want %v", got.To, tc.wantTo)
+				}
+			}
+
+			if !t.Failed() {
+				t.Logf("PASS BUG-005 [%s]: BucketSeconds=%d as expected", tc.name, got.BucketSeconds)
 			}
 		})
 	}

@@ -677,7 +677,48 @@ change"). Sweep **re-gated to S21** (S20 ran pre-expiry again). Skip carry ×9.
 `caddy-bedirhan-vhost`; `origin/main` now lacks a vhost live prod HAS → operator call.
 Prompt: `sessions/SESSION-20.md`; ledger: decisions.md D-082.
 
-### S21 — post-expiry sweep (finally real) + operator intake + BUG-005/class fix (planned at S20 close, D-082)
+### S21 — BUG-005 + parameter-conformance class fix ✅ DONE (D-083, 2026-07-12)
+
+**Result:** **BUG-005 FIXED** (`fix(api)` `2e9d026`, TDD): `/qoe/ingest` honors
+`interval` (hour→3600 s, day→86400 s; absent keeps the 60 s default — documented
+F4 deviation from the spec default). Contract UNCHANGED. **★ THE CLASS FIX
+LANDED — `param_conformance_test.go`**: enumerates all **85** declared query
+params, fails on any unclaimed one; 11 probes / 47 exempts / **27
+known-violations pinned**; anti-vacuity floors; mutation-verified (3 mutation
+classes all go RED). **★ Sweep yield: 28/85 declared params were not honored** —
+BUG-006 (pagination dead ×8 endpoints), BUG-007 (cursor-only ×2), BUG-008
+(/anomalies drops all 6 filters), BUG-009 (tenant/cursor dropped INSIDE
+query.LiveOverview/LiveStreams — verifier catch one layer deeper), BUG-010
+(reverse: `?format=csv` implemented, undeclared). Gates: 24/24 `-race` 0 FAIL /
+0 SKIP; coverage **74.8 → 74.9** (floor 70.2). **Post-expiry sweep re-gated to
+S22 BY OPERATOR DIRECTION** (S21 opened 01:30Z, still pre-expiry; operator chose
+new-session-later over an 8.6 h hold) — zero-cost re-gate: sweep tool committed
+(`qa/realams/harness/expiry-sweep.sh`, output byte-identical to baseline),
+pre-expiry diff base on disk, baseline re-confirmed ×3. Skip carry ×10. No
+concurrent-session incident. Prompt: `sessions/SESSION-21.md`; ledger:
+decisions.md D-083.
+
+### S22 — post-expiry sweep (operator-directed re-gate) + conformance-debt fixes (planned at S21 close, D-083)
+
+Execute `sessions/SESSION-22.md`. **⚠️ OPEN AFTER 2026-07-12T12:10Z** — verify
+the clock FIRST; if early, WAIT (do not re-gate a 4th time).
+
+1. **WO-A [S, FIRST]** post-expiry sweep: `bash qa/realams/harness/expiry-sweep.sh
+   postexpiry`, diff vs `evidence/S21-sweep-preexpiry-20260712T014135Z/stable.txt`
+   → **D-084** delta + blocked-scenario list (a null delta is a real result).
+2. **WO-B [S]** operator intake: caddy-vhost merge if approved; final-assessment
+   edits if reviewed; else re-surface (non-blocking).
+3. **WO-C [M]** conformance-debt fixes: BUG-006 (pagination through store layer),
+   BUG-007 (cursor threading), BUG-009 (tenant/cursor in query layer) — flip each
+   fixed registry entry known-violation → probe; BUG-010 contract CR (declare
+   `format` on /analytics/audience, INT-01 scope, contract-first + gen:api).
+   BUG-008 needs a ComputeFlags redesign — assess, split out if heavy.
+4. **WO-D [S–M, backlog-if-light]** BUG-002 VoD REST-poll build (design note +
+   two INT-01 migration CRs are written).
+5. **WO-E [S, gate ≥07-23]** CI promotions — else skip carry ×11.
+6. **WO-F [XS]** standing re-checks.
+
+### S21 (original plan) — post-expiry sweep (finally real) + operator intake + BUG-005/class fix (planned at S20 close, D-082)
 
 Execute `sessions/SESSION-21.md`. FIRST: the post-license-expiry read-only AMS sweep
 — S19 AND S20 both ran pre-expiry and re-gated it; S21 is the first session after the
