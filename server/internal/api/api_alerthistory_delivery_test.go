@@ -8,6 +8,7 @@ package api_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -187,4 +188,95 @@ func TestAlertHistory_DeliveryFailure_RoundTrip(t *testing.T) {
 
 	t.Logf("PASS: delivery_failure row round-trips: state=%q rule_id=%q (firing row excluded from filtered response)",
 		state, ruleID)
+}
+
+// TestAlertHistory_NegativeLimitUsesDefault verifies that ?limit=-1 is treated
+// as the default page size (50) and does NOT return all rows unboundedly.
+//
+// TDD RED: before the fix, limit=-1 is not caught by `if limit == 0`, so
+// limit+1 = 0 is passed to ListAlertHistory → no SQL LIMIT → all 52 rows returned.
+// TDD GREEN: after changing the guard to `<= 0`, limit is clamped to 50 →
+// exactly 50 rows are returned and next_cursor is non-nil.
+func TestAlertHistory_NegativeLimitUsesDefault(t *testing.T) {
+	ts, token, store, cleanup := setupAlertHistoryServer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a rule for the FK constraint.
+	rule, err := store.CreateAlertRule(ctx, meta.AlertRuleRow{
+		Name:               "neg-limit-test-rule",
+		Metric:             "stream_offline",
+		Operator:           "eq",
+		Threshold:          1,
+		WindowS:            5,
+		ScopeJSON:          `{}`,
+		Severity:           "critical",
+		CooldownS:          300,
+		Enabled:            true,
+		Muted:              false,
+		MaintenanceWindows: "[]",
+		ChannelIDs:         `[]`,
+	})
+	if err != nil {
+		t.Fatalf("CreateAlertRule: %v", err)
+	}
+
+	// Insert 52 rows — more than the default limit of 50 — so an unbounded
+	// query returns 52 items, proving the cap was not applied.
+	for i := 0; i < 52; i++ {
+		row := meta.AlertHistoryRow{
+			AlertID:   fmt.Sprintf("neg-limit-alert-%03d", i),
+			RuleID:    rule.ID,
+			State:     "firing",
+			Severity:  "critical",
+			TS:        time.Now().UnixMilli() - int64(i)*1000,
+			Metric:    "stream_offline",
+			Value:     1.0,
+			Threshold: 1.0,
+			ScopeJSON: `{}`,
+		}
+		if err := store.CreateAlertHistory(ctx, row); err != nil {
+			t.Fatalf("CreateAlertHistory[%d]: %v", i, err)
+		}
+	}
+
+	// GET /alerts/history?limit=-1 must behave as the default (50 items).
+	req, err := http.NewRequest(http.MethodGet,
+		ts.URL+"/api/v1/alerts/history?limit=-1", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Authorization", authHeader(token))
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /alerts/history: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var result struct {
+		Items []map[string]any `json:"items"`
+		Meta  struct {
+			NextCursor *string `json:"next_cursor"`
+		} `json:"meta"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("decode response: %v — body: %s", err, body)
+	}
+
+	// Without the fix: all 52 rows returned (unbounded — limit+1=0 → no SQL LIMIT).
+	// With the fix: exactly 50 rows returned (default limit applied).
+	if len(result.Items) != 50 {
+		t.Errorf("expected 50 items (default limit), got %d (body snippet: %.200s)", len(result.Items), body)
+	}
+	if result.Meta.NextCursor == nil {
+		t.Error("expected non-nil next_cursor: 52 rows exist but only 50 should be returned")
+	}
+	t.Logf("PASS: limit=-1 returns %d items (default=50), next_cursor present", len(result.Items))
 }

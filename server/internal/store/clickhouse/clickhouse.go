@@ -16,6 +16,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -699,12 +701,38 @@ func (s *Store) InsertProbeResult(ctx context.Context, r domain.ProbeResult) err
 	return b.Send()
 }
 
+// parseProbeResultCursor decodes a "<unix_ms>:<id>" cursor into a (time.Time, id)
+// pair. probe_results.ts is DateTime64(3) — millisecond precision.
+// Returns zero time, "" on empty or malformed input (first page).
+func parseProbeResultCursor(cursor string) (time.Time, string) {
+	if cursor == "" {
+		return time.Time{}, ""
+	}
+	i := strings.IndexByte(cursor, ':')
+	if i < 0 {
+		return time.Time{}, ""
+	}
+	ms, err := strconv.ParseInt(cursor[:i], 10, 64)
+	if err != nil {
+		return time.Time{}, ""
+	}
+	return time.UnixMilli(ms).UTC(), cursor[i+1:]
+}
+
 // QueryProbeResults fetches probe results for a given probeID in the [from, to)
-// time range, ordered by ts ASC, capped at limit rows.
+// time range, ordered by ts ASC, id ASC, capped at limit rows.
+// cursor is a "<unix_ms>:<id>" keyset cursor; empty means first page.
 // Used by BE-02's GET /probes/{id}/results handler.
-func (s *Store) QueryProbeResults(ctx context.Context, probeID string, from, to time.Time, limit int) ([]domain.ProbeResult, error) {
+func (s *Store) QueryProbeResults(ctx context.Context, probeID string, from, to time.Time, limit int, cursor string) ([]domain.ProbeResult, error) {
 	if limit <= 0 {
 		limit = 100
+	}
+	cursorTime, cursorID := parseProbeResultCursor(cursor)
+	cursorClause := ""
+	var cursorArgs []any
+	if cursorID != "" {
+		cursorClause = " AND (ts > ? OR (ts = ? AND id > ?))"
+		cursorArgs = []any{cursorTime, cursorTime, cursorID}
 	}
 	query := fmt.Sprintf(
 		`SELECT id, probe_id, ts, success, ttfb_ms, error_code, error_msg, bitrate_kbps, segment_ttfb_ms,
@@ -712,12 +740,14 @@ func (s *Store) QueryProbeResults(ctx context.Context, probeID string, from, to 
 		        rtt_ms, jitter_ms, loss_pct
 		 FROM %s.probe_results
 		 WHERE probe_id = ?
-		   AND ts >= ? AND ts < ?
-		 ORDER BY ts ASC
+		   AND ts >= ? AND ts < ?%s
+		 ORDER BY ts ASC, id ASC
 		 LIMIT %d`,
-		s.db, limit,
+		s.db, cursorClause, limit,
 	)
-	rows, err := s.conn.Query(ctx, query, probeID, from.UTC(), to.UTC())
+	queryArgs := []any{probeID, from.UTC(), to.UTC()}
+	queryArgs = append(queryArgs, cursorArgs...)
+	rows, err := s.conn.Query(ctx, query, queryArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("probe_results: query: %w", err)
 	}

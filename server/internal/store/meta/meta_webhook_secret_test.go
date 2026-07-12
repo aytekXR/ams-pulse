@@ -61,7 +61,7 @@ func TestAMSSource_WebhookSecretEnc_RoundTrip(t *testing.T) {
 	}
 
 	// Verify ListAMSSources also returns the field.
-	list, err := s.ListAMSSources(ctx)
+	list, err := s.ListAMSSources(ctx, 0, "")
 	if err != nil {
 		t.Fatalf("ListAMSSources: %v", err)
 	}

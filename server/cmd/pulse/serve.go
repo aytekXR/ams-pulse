@@ -313,7 +313,7 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		} else {
 			// B7: build per-source HMAC secret map from meta store.
 			sourceSecrets := make(map[string]string)
-			if srcs, listErr := metaStore.ListAMSSources(ctx); listErr != nil {
+			if srcs, listErr := metaStore.ListAMSSources(ctx, 0, ""); listErr != nil {
 				logger.Warn("pulse: webhook: could not load per-source secrets", "error", listErr)
 			} else {
 				for _, src := range srcs {

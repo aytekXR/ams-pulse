@@ -276,7 +276,7 @@ func (e *Evaluator) evaluate(ctx context.Context) {
 	// deleted channel is handled gracefully (logged + skipped) without crashing the tick.
 	e.syncRegistryFromStore(ctx)
 
-	rules, err := e.store.ListAlertRules(ctx)
+	rules, err := e.store.ListAlertRules(ctx, 0, "")
 	if err != nil {
 		e.logger.Warn("alert evaluator: list rules failed", "error", err)
 		return
@@ -315,7 +315,7 @@ func (e *Evaluator) evaluate(ctx context.Context) {
 //   - Channels removed from the store are removed from the registry on the next tick,
 //     causing deliver() to skip them (no delivery_failure row for deleted channels).
 func (e *Evaluator) syncRegistryFromStore(ctx context.Context) {
-	storedChannels, err := e.store.ListAlertChannels(ctx)
+	storedChannels, err := e.store.ListAlertChannels(ctx, 0, "")
 	if err != nil {
 		e.logger.Warn("alert evaluator: list channels failed — registry not updated", "error", err)
 		return

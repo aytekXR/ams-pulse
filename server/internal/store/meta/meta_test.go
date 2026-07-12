@@ -65,7 +65,7 @@ func TestMetaStore_Users_RoundTrip(t *testing.T) {
 	}
 
 	// List.
-	users, err := s.ListUsers(ctx)
+	users, err := s.ListUsers(ctx, 0, "")
 	if err != nil {
 		t.Fatalf("ListUsers: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestMetaStore_Users_RoundTrip(t *testing.T) {
 	if err := s.DeleteUser(ctx, got.ID); err != nil {
 		t.Fatalf("DeleteUser: %v", err)
 	}
-	users2, _ := s.ListUsers(ctx)
+	users2, _ := s.ListUsers(ctx, 0, "")
 	if len(users2) != 0 {
 		t.Error("expected empty after delete")
 	}
@@ -146,7 +146,7 @@ func TestMetaStore_AlertRules_RoundTrip(t *testing.T) {
 	}
 
 	// List.
-	rules, err := s.ListAlertRules(ctx)
+	rules, err := s.ListAlertRules(ctx, 0, "")
 	if err != nil {
 		t.Fatalf("ListAlertRules: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestMetaStore_AlertRules_RoundTrip(t *testing.T) {
 	if err := s.DeleteAlertRule(ctx, created.ID); err != nil {
 		t.Fatalf("DeleteAlertRule: %v", err)
 	}
-	rules2, _ := s.ListAlertRules(ctx)
+	rules2, _ := s.ListAlertRules(ctx, 0, "")
 	if len(rules2) != 0 {
 		t.Error("expected empty after delete")
 	}
@@ -211,7 +211,7 @@ func TestMetaStore_AlertRules_SurviveRestart(t *testing.T) {
 		t.Fatalf("migrate2: %v", err)
 	}
 
-	rules, err := s2.ListAlertRules(ctx)
+	rules, err := s2.ListAlertRules(ctx, 0, "")
 	if err != nil {
 		t.Fatalf("ListAlertRules after restart: %v", err)
 	}

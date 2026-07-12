@@ -392,7 +392,7 @@ func TestProbe_CRUD_MetaStore(t *testing.T) {
 	t.Logf("PASS: CreateProbe → ID=%q", p.ID)
 
 	// List.
-	probes, err := ms.ListProbes(ctx)
+	probes, err := ms.ListProbes(ctx, 0, "")
 	if err != nil {
 		t.Fatalf("ListProbes: %v", err)
 	}
@@ -423,7 +423,7 @@ func TestProbe_CRUD_MetaStore(t *testing.T) {
 	if err := ms.DeleteProbe(ctx, p.ID); err != nil {
 		t.Fatalf("DeleteProbe: %v", err)
 	}
-	probes2, _ := ms.ListProbes(ctx)
+	probes2, _ := ms.ListProbes(ctx, 0, "")
 	if len(probes2) != 0 {
 		t.Errorf("expected 0 probes after delete, got %d", len(probes2))
 	}
@@ -687,7 +687,7 @@ type fakeProbeResultQuerier struct {
 }
 
 func (f *fakeProbeResultQuerier) QueryProbeResults(
-	_ context.Context, _ string, _, _ time.Time, _ int,
+	_ context.Context, _ string, _, _ time.Time, _ int, _ string,
 ) ([]domain.ProbeResult, error) {
 	return f.results, nil
 }

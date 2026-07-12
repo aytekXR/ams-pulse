@@ -257,7 +257,7 @@ func TestPG_Users_RoundTrip(t *testing.T) {
 		t.Errorf("user fields: %+v", got)
 	}
 
-	list, err := s.ListUsers(ctx)
+	list, err := s.ListUsers(ctx, 0, "")
 	if err != nil || len(list) != 1 {
 		t.Fatalf("ListUsers: err=%v len=%d", err, len(list))
 	}
@@ -278,7 +278,7 @@ func TestPG_Users_RoundTrip(t *testing.T) {
 	if err := s.DeleteUser(ctx, got.ID); err != nil {
 		t.Fatalf("DeleteUser: %v", err)
 	}
-	list2, _ := s.ListUsers(ctx)
+	list2, _ := s.ListUsers(ctx, 0, "")
 	if len(list2) != 0 {
 		t.Errorf("expected 0 users after delete, got %d", len(list2))
 	}
@@ -314,7 +314,7 @@ func TestPG_Tokens_RoundTrip(t *testing.T) {
 
 	s.TouchToken(ctx, found.ID)
 
-	list, err := s.ListTokens(ctx, "api")
+	list, err := s.ListTokens(ctx, "api", 0, "")
 	if err != nil || len(list) < 1 {
 		t.Fatalf("ListTokens: err=%v len=%d", err, len(list))
 	}
@@ -403,7 +403,7 @@ func TestPG_AlertRules_RoundTrip(t *testing.T) {
 		t.Errorf("name mismatch: %q", got.Name)
 	}
 
-	list, err := s.ListAlertRules(ctx)
+	list, err := s.ListAlertRules(ctx, 0, "")
 	if err != nil || len(list) < 1 {
 		t.Fatalf("ListAlertRules: %v", err)
 	}
@@ -460,7 +460,7 @@ func TestPG_AlertChannels_RoundTrip(t *testing.T) {
 		t.Fatalf("GetAlertChannel: %v", err)
 	}
 
-	list, err := s.ListAlertChannels(ctx)
+	list, err := s.ListAlertChannels(ctx, 0, "")
 	if err != nil || len(list) < 1 {
 		t.Fatalf("ListAlertChannels: %v", err)
 	}
@@ -498,13 +498,13 @@ func TestPG_AlertHistory_CreateListPrune(t *testing.T) {
 		}
 	}
 
-	all, err := s.ListAlertHistory(ctx, rule, "", 0, 0, 0)
+	all, err := s.ListAlertHistory(ctx, rule, "", 0, 0, 0, "")
 	if err != nil || len(all) != n {
 		t.Fatalf("ListAlertHistory: err=%v len=%d want %d", err, len(all), n)
 	}
 
 	// Filtered by state.
-	byState, err := s.ListAlertHistory(ctx, rule, "firing", 0, 0, 0)
+	byState, err := s.ListAlertHistory(ctx, rule, "firing", 0, 0, 0, "")
 	if err != nil || len(byState) != n {
 		t.Fatalf("ListAlertHistory (by state): err=%v len=%d", err, len(byState))
 	}
@@ -514,7 +514,7 @@ func TestPG_AlertHistory_CreateListPrune(t *testing.T) {
 	if err := s.PruneAlertHistory(ctx, rule, keep); err != nil {
 		t.Fatalf("PruneAlertHistory: %v", err)
 	}
-	after, err := s.ListAlertHistory(ctx, rule, "", 0, 0, 0)
+	after, err := s.ListAlertHistory(ctx, rule, "", 0, 0, 0, "")
 	if err != nil || len(after) != keep {
 		t.Fatalf("after prune: err=%v len=%d want %d", err, len(after), keep)
 	}
@@ -584,7 +584,7 @@ func TestPG_AMSSources_RoundTrip(t *testing.T) {
 		t.Fatalf("GetAMSSource: err=%v got=%v", err, got)
 	}
 
-	list, err := s.ListAMSSources(ctx)
+	list, err := s.ListAMSSources(ctx, 0, "")
 	if err != nil || len(list) < 1 {
 		t.Fatalf("ListAMSSources: %v", err)
 	}
@@ -597,7 +597,7 @@ func TestPG_AMSSources_RoundTrip(t *testing.T) {
 	if err := s.DeleteAMSSource(ctx, created.ID); err != nil {
 		t.Fatalf("DeleteAMSSource: %v", err)
 	}
-	list2, _ := s.ListAMSSources(ctx)
+	list2, _ := s.ListAMSSources(ctx, 0, "")
 	if len(list2) != 0 {
 		t.Errorf("expected 0 sources after delete, got %d", len(list2))
 	}
@@ -626,7 +626,7 @@ func TestPG_Tenants_RoundTrip(t *testing.T) {
 		t.Fatalf("GetTenantByName: %v", err)
 	}
 
-	list, err := s.ListTenants(ctx)
+	list, err := s.ListTenants(ctx, 0, "")
 	if err != nil || len(list) < 1 {
 		t.Fatalf("ListTenants: %v", err)
 	}
@@ -663,7 +663,7 @@ func TestPG_ReportSchedules_RoundTrip(t *testing.T) {
 		t.Fatalf("GetReportSchedule: %v", err)
 	}
 
-	list, err := s.ListReportSchedules(ctx)
+	list, err := s.ListReportSchedules(ctx, 0, "")
 	if err != nil || len(list) < 1 {
 		t.Fatalf("ListReportSchedules: %v", err)
 	}
@@ -782,7 +782,7 @@ func TestPG_Probes_RoundTrip(t *testing.T) {
 		t.Fatalf("GetProbe: err=%v got=%v", err, got)
 	}
 
-	list, err := s.ListProbes(ctx)
+	list, err := s.ListProbes(ctx, 0, "")
 	if err != nil || len(list) < 1 {
 		t.Fatalf("ListProbes: %v", err)
 	}
@@ -819,7 +819,7 @@ func TestPG_Probes_RoundTrip(t *testing.T) {
 	if err := s.DeleteProbe(ctx, created.ID); err != nil {
 		t.Fatalf("DeleteProbe: %v", err)
 	}
-	list2, _ := s.ListProbes(ctx)
+	list2, _ := s.ListProbes(ctx, 0, "")
 	if len(list2) != 0 {
 		t.Errorf("expected 0 probes after delete, got %d", len(list2))
 	}

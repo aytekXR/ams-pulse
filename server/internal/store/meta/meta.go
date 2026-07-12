@@ -31,6 +31,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,6 +39,26 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // pure-Go Postgres driver; registers "pgx" driver name
 	_ "modernc.org/sqlite"             // pure-Go SQLite driver
 )
+
+// parseKeysetCursor splits a "<int64>:<id>" keyset cursor string used for
+// stable pagination over SQLite tables. Returns (0, "") on empty or malformed
+// input so the caller silently falls back to the first page — matching the
+// OpenAPI contract which treats cursor as opaque and mandates no error on
+// invalid values.
+func parseKeysetCursor(cursor string) (int64, string) {
+	if cursor == "" {
+		return 0, ""
+	}
+	i := strings.IndexByte(cursor, ':')
+	if i < 0 {
+		return 0, ""
+	}
+	ts, err := strconv.ParseInt(cursor[:i], 10, 64)
+	if err != nil {
+		return 0, ""
+	}
+	return ts, cursor[i+1:]
+}
 
 // AlertHistoryDefaultKeep is the default maximum number of alert_history rows
 // retained per rule_id. CreateAlertHistory automatically prunes to this cap
@@ -372,10 +393,20 @@ func (s *Store) GetUserByUsername(ctx context.Context, username string) (*User, 
 	return &u, nil
 }
 
-// ListUsers returns all users.
-func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
-	rows, err := s.queryContext(ctx,
-		`SELECT id, username, pw_hash, role, created_at, updated_at FROM users ORDER BY created_at`)
+// ListUsers returns users ordered by created_at ASC, id ASC.
+// limit<=0 means no LIMIT (unbounded); cursor="" means first page.
+func (s *Store) ListUsers(ctx context.Context, limit int, cursor string) ([]User, error) {
+	q := `SELECT id, username, pw_hash, role, created_at, updated_at FROM users WHERE 1=1`
+	var args []any
+	if ts, id := parseKeysetCursor(cursor); id != "" {
+		q += " AND (created_at > ? OR (created_at = ? AND id > ?))"
+		args = append(args, ts, ts, id)
+	}
+	q += " ORDER BY created_at ASC, id ASC"
+	if limit > 0 {
+		q += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	rows, err := s.queryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -506,16 +537,31 @@ func (s *Store) HashToken(rawToken string) (hash, alg string) {
 	return sha256HexLocal(rawToken), "sha256"
 }
 
-// ListTokens returns all tokens, optionally filtered by kind.
-func (s *Store) ListTokens(ctx context.Context, kind string) ([]APIToken, error) {
+// ListTokens returns tokens ordered by created_at DESC, id DESC.
+// kind filters by token kind when non-empty. limit<=0 means no LIMIT;
+// cursor="" means first page. Cursor is DESC keyset (older rows on later pages).
+func (s *Store) ListTokens(ctx context.Context, kind string, limit int, cursor string) ([]APIToken, error) {
 	q := `SELECT id, user_id, kind, name, token_hash, hash_alg, scopes, expires_at, last_used_at, created_at
 	      FROM api_tokens`
 	var args []any
+	hasWhere := false
 	if kind != "" {
 		q += " WHERE kind = ?"
 		args = append(args, kind)
+		hasWhere = true
 	}
-	q += " ORDER BY created_at DESC"
+	if ts, id := parseKeysetCursor(cursor); id != "" {
+		if hasWhere {
+			q += " AND (created_at < ? OR (created_at = ? AND id < ?))"
+		} else {
+			q += " WHERE (created_at < ? OR (created_at = ? AND id < ?))"
+		}
+		args = append(args, ts, ts, id)
+	}
+	q += " ORDER BY created_at DESC, id DESC"
+	if limit > 0 {
+		q += fmt.Sprintf(" LIMIT %d", limit)
+	}
 	rows, err := s.queryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -646,13 +692,23 @@ func (s *Store) GetAlertRule(ctx context.Context, id string) (*AlertRuleRow, err
 	return scanAlertRule(row)
 }
 
-// ListAlertRules returns all alert rules.
-func (s *Store) ListAlertRules(ctx context.Context) ([]AlertRuleRow, error) {
-	rows, err := s.queryContext(ctx,
-		`SELECT id, name, metric, operator, threshold, window_s, scope, severity, cooldown_s, group_by,
-		        enabled, muted, maintenance_windows, channel_ids, created_at, updated_at,
-		        COALESCE(rule_type,'threshold'), COALESCE(sigma,0), COALESCE(min_samples,0)
-		 FROM alert_rules ORDER BY created_at`)
+// ListAlertRules returns alert rules ordered by created_at ASC, id ASC.
+// limit<=0 means no LIMIT; cursor="" means first page.
+func (s *Store) ListAlertRules(ctx context.Context, limit int, cursor string) ([]AlertRuleRow, error) {
+	q := `SELECT id, name, metric, operator, threshold, window_s, scope, severity, cooldown_s, group_by,
+	             enabled, muted, maintenance_windows, channel_ids, created_at, updated_at,
+	             COALESCE(rule_type,'threshold'), COALESCE(sigma,0), COALESCE(min_samples,0)
+	      FROM alert_rules WHERE 1=1`
+	var args []any
+	if ts, id := parseKeysetCursor(cursor); id != "" {
+		q += " AND (created_at > ? OR (created_at = ? AND id > ?))"
+		args = append(args, ts, ts, id)
+	}
+	q += " ORDER BY created_at ASC, id ASC"
+	if limit > 0 {
+		q += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	rows, err := s.queryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -747,11 +803,21 @@ func (s *Store) GetAlertChannel(ctx context.Context, id string) (*AlertChannelRo
 	return scanAlertChannel(row)
 }
 
-// ListAlertChannels returns all channels.
-func (s *Store) ListAlertChannels(ctx context.Context) ([]AlertChannelRow, error) {
-	rows, err := s.queryContext(ctx,
-		`SELECT id, type, name, config_enc, config_public, created_at, updated_at
-		 FROM alert_channels ORDER BY created_at`)
+// ListAlertChannels returns channels ordered by created_at ASC, id ASC.
+// limit<=0 means no LIMIT; cursor="" means first page.
+func (s *Store) ListAlertChannels(ctx context.Context, limit int, cursor string) ([]AlertChannelRow, error) {
+	q := `SELECT id, type, name, config_enc, config_public, created_at, updated_at
+	      FROM alert_channels WHERE 1=1`
+	var args []any
+	if ts, id := parseKeysetCursor(cursor); id != "" {
+		q += " AND (created_at > ? OR (created_at = ? AND id > ?))"
+		args = append(args, ts, ts, id)
+	}
+	q += " ORDER BY created_at ASC, id ASC"
+	if limit > 0 {
+		q += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	rows, err := s.queryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -904,8 +970,10 @@ func (s *Store) PruneAlertHistory(ctx context.Context, ruleID string, keep int) 
 	return err
 }
 
-// ListAlertHistory returns recent history entries filtered by optional ruleID and state.
-func (s *Store) ListAlertHistory(ctx context.Context, ruleID, state string, from, to int64, limit int) ([]AlertHistoryRow, error) {
+// ListAlertHistory returns history entries ordered by ts DESC, id DESC.
+// Filtered by optional ruleID, state, from/to time range. limit<=0 means no
+// LIMIT; cursor="" means first page. Cursor is DESC keyset (older rows later).
+func (s *Store) ListAlertHistory(ctx context.Context, ruleID, state string, from, to int64, limit int, cursor string) ([]AlertHistoryRow, error) {
 	q := `SELECT id, alert_id, rule_id, state, severity, ts, metric, value, threshold,
 	             scope, cooldown_until, group_key, test
 	      FROM alert_history WHERE 1=1`
@@ -926,7 +994,11 @@ func (s *Store) ListAlertHistory(ctx context.Context, ruleID, state string, from
 		q += " AND ts <= ?"
 		args = append(args, to)
 	}
-	q += " ORDER BY ts DESC"
+	if ts, id := parseKeysetCursor(cursor); id != "" {
+		q += " AND (ts < ? OR (ts = ? AND id < ?))"
+		args = append(args, ts, ts, id)
+	}
+	q += " ORDER BY ts DESC, id DESC"
 	if limit > 0 {
 		q += fmt.Sprintf(" LIMIT %d", limit)
 	}
@@ -1064,12 +1136,22 @@ func (s *Store) GetAMSSource(ctx context.Context, id string) (*AMSSourceRow, err
 	return scanAMSSource(row)
 }
 
-// ListAMSSources returns all sources.
-func (s *Store) ListAMSSources(ctx context.Context) ([]AMSSourceRow, error) {
-	rows, err := s.queryContext(ctx,
-		`SELECT id, name, source_type, rest_url, rest_user, credential_enc, credential_env_ref,
-		        log_path, kafka_brokers, webhook_path, webhook_secret_enc, enabled, created_at, updated_at
-		 FROM ams_sources ORDER BY created_at`)
+// ListAMSSources returns sources ordered by created_at ASC, id ASC.
+// limit<=0 means no LIMIT; cursor="" means first page.
+func (s *Store) ListAMSSources(ctx context.Context, limit int, cursor string) ([]AMSSourceRow, error) {
+	q := `SELECT id, name, source_type, rest_url, rest_user, credential_enc, credential_env_ref,
+	             log_path, kafka_brokers, webhook_path, webhook_secret_enc, enabled, created_at, updated_at
+	      FROM ams_sources WHERE 1=1`
+	var args []any
+	if ts, id := parseKeysetCursor(cursor); id != "" {
+		q += " AND (created_at > ? OR (created_at = ? AND id > ?))"
+		args = append(args, ts, ts, id)
+	}
+	q += " ORDER BY created_at ASC, id ASC"
+	if limit > 0 {
+		q += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	rows, err := s.queryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1164,11 +1246,21 @@ func (s *Store) GetTenantByName(ctx context.Context, name string) (*TenantRow, e
 	return scanTenant(row)
 }
 
-// ListTenants returns all tenants.
-func (s *Store) ListTenants(ctx context.Context) ([]TenantRow, error) {
-	rows, err := s.queryContext(ctx,
-		`SELECT id, name, stream_pattern, meta_tag_key, meta_tag_value, created_at, updated_at
-		 FROM tenants ORDER BY created_at`)
+// ListTenants returns tenants ordered by created_at ASC, id ASC.
+// limit<=0 means no LIMIT; cursor="" means first page.
+func (s *Store) ListTenants(ctx context.Context, limit int, cursor string) ([]TenantRow, error) {
+	q := `SELECT id, name, stream_pattern, meta_tag_key, meta_tag_value, created_at, updated_at
+	      FROM tenants WHERE 1=1`
+	var args []any
+	if ts, id := parseKeysetCursor(cursor); id != "" {
+		q += " AND (created_at > ? OR (created_at = ? AND id > ?))"
+		args = append(args, ts, ts, id)
+	}
+	q += " ORDER BY created_at ASC, id ASC"
+	if limit > 0 {
+		q += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	rows, err := s.queryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1255,11 +1347,21 @@ func (s *Store) GetReportSchedule(ctx context.Context, id string) (*ReportSchedu
 	return scanReportSchedule(row)
 }
 
-// ListReportSchedules returns all schedules.
-func (s *Store) ListReportSchedules(ctx context.Context) ([]ReportScheduleRow, error) {
-	rows, err := s.queryContext(ctx,
-		`SELECT id, cron, format, scope, tenant_mapping, whitelabel_header, last_run_at, next_run_at, created_at, updated_at
-		 FROM report_schedules ORDER BY created_at`)
+// ListReportSchedules returns schedules ordered by created_at ASC, id ASC.
+// limit<=0 means no LIMIT; cursor="" means first page.
+func (s *Store) ListReportSchedules(ctx context.Context, limit int, cursor string) ([]ReportScheduleRow, error) {
+	q := `SELECT id, cron, format, scope, tenant_mapping, whitelabel_header, last_run_at, next_run_at, created_at, updated_at
+	      FROM report_schedules WHERE 1=1`
+	var args []any
+	if ts, id := parseKeysetCursor(cursor); id != "" {
+		q += " AND (created_at > ? OR (created_at = ? AND id > ?))"
+		args = append(args, ts, ts, id)
+	}
+	q += " ORDER BY created_at ASC, id ASC"
+	if limit > 0 {
+		q += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	rows, err := s.queryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

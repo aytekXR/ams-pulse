@@ -855,7 +855,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	// ── Alert state counters ──────────────────────────────────────────────
 	if s.store != nil {
 		ctx := r.Context()
-		hist, err := s.store.ListAlertHistory(ctx, "", "firing", 0, 0, 1000)
+		hist, err := s.store.ListAlertHistory(ctx, "", "firing", 0, 0, 1000, "")
 		firingCount := 0
 		if err == nil {
 			firingCount = len(hist)
@@ -1255,16 +1255,32 @@ func (s *Server) handleIngestHealth(w http.ResponseWriter, r *http.Request) {
 // ─── Alert rules ──────────────────────────────────────────────────────────────
 
 func (s *Server) handleListAlertRules(w http.ResponseWriter, r *http.Request) {
-	rules, err := s.store.ListAlertRules(r.Context())
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	cursor := q.Get("cursor")
+	rules, err := s.store.ListAlertRules(r.Context(), limit+1, cursor)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
+	}
+	var nextCursor *string
+	if len(rules) > limit {
+		rules = rules[:limit]
+		last := rules[len(rules)-1]
+		c := fmt.Sprintf("%d:%s", last.CreatedAt, last.ID)
+		nextCursor = &c
 	}
 	items := make([]any, 0, len(rules))
 	for _, rule := range rules {
 		items = append(items, alertRuleToAPI(rule))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "meta": map[string]any{"next_cursor": nil}})
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "meta": map[string]any{"next_cursor": nextCursor}})
 }
 
 func (s *Server) handleCreateAlertRule(w http.ResponseWriter, r *http.Request) {
@@ -1339,16 +1355,32 @@ func (s *Server) handleDeleteAlertRule(w http.ResponseWriter, r *http.Request) {
 // ─── Alert channels ───────────────────────────────────────────────────────────
 
 func (s *Server) handleListAlertChannels(w http.ResponseWriter, r *http.Request) {
-	chans, err := s.store.ListAlertChannels(r.Context())
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	cursor := q.Get("cursor")
+	chans, err := s.store.ListAlertChannels(r.Context(), limit+1, cursor)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
+	}
+	var nextCursor *string
+	if len(chans) > limit {
+		chans = chans[:limit]
+		last := chans[len(chans)-1]
+		c := fmt.Sprintf("%d:%s", last.CreatedAt, last.ID)
+		nextCursor = &c
 	}
 	items := make([]any, 0, len(chans))
 	for _, ch := range chans {
 		items = append(items, alertChannelToAPI(ch))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "meta": map[string]any{"next_cursor": nil}})
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "meta": map[string]any{"next_cursor": nextCursor}})
 }
 
 func (s *Server) handleCreateAlertChannel(w http.ResponseWriter, r *http.Request) {
@@ -1453,18 +1485,26 @@ func (s *Server) handleAlertHistory(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	from, to := parseTimeRange(q.Get("from"), q.Get("to"))
 	limit, _ := strconv.Atoi(q.Get("limit"))
-	if limit == 0 {
+	if limit <= 0 {
 		limit = 50
 	}
 	// A11: cap at 500 to prevent unbounded result sets.
 	if limit > 500 {
 		limit = 500
 	}
+	cursor := q.Get("cursor")
 	hist, err := s.store.ListAlertHistory(r.Context(), q.Get("rule_id"), q.Get("state"),
-		from.UnixMilli(), to.UnixMilli(), limit)
+		from.UnixMilli(), to.UnixMilli(), limit+1, cursor)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
+	}
+	var nextCursor *string
+	if len(hist) > limit {
+		hist = hist[:limit]
+		last := hist[len(hist)-1]
+		c := fmt.Sprintf("%d:%s", last.TS, last.ID)
+		nextCursor = &c
 	}
 	items := make([]any, 0, len(hist))
 	for _, h := range hist {
@@ -1483,7 +1523,7 @@ func (s *Server) handleAlertHistory(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, item)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "meta": map[string]any{"next_cursor": nil}})
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "meta": map[string]any{"next_cursor": nextCursor}})
 }
 
 // ─── Fleet ────────────────────────────────────────────────────────────────────
@@ -1506,16 +1546,32 @@ func (s *Server) handleFleetNodes(w http.ResponseWriter, r *http.Request) {
 // ─── Admin: Sources ───────────────────────────────────────────────────────────
 
 func (s *Server) handleListSources(w http.ResponseWriter, r *http.Request) {
-	sources, err := s.store.ListAMSSources(r.Context())
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	cursor := q.Get("cursor")
+	sources, err := s.store.ListAMSSources(r.Context(), limit+1, cursor)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
+	}
+	var nextCursor *string
+	if len(sources) > limit {
+		sources = sources[:limit]
+		last := sources[len(sources)-1]
+		c := fmt.Sprintf("%d:%s", last.CreatedAt, last.ID)
+		nextCursor = &c
 	}
 	items := make([]any, 0, len(sources))
 	for _, src := range sources {
 		items = append(items, amsSourceToAPI(src))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "meta": map[string]any{"next_cursor": nil}})
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "meta": map[string]any{"next_cursor": nextCursor}})
 }
 
 func (s *Server) handleCreateSource(w http.ResponseWriter, r *http.Request) {
@@ -1525,7 +1581,7 @@ func (s *Server) handleCreateSource(w http.ResponseWriter, r *http.Request) {
 	defer s.sourceMu.Unlock()
 
 	// License gate: count existing sources; fail if adding one more would exceed MaxNodes.
-	existing, err := s.store.ListAMSSources(r.Context())
+	existing, err := s.store.ListAMSSources(r.Context(), 0, "")
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
@@ -1724,16 +1780,32 @@ func (s *Server) handleActivateLicense(w http.ResponseWriter, r *http.Request) {
 // ─── Admin: Tokens ────────────────────────────────────────────────────────────
 
 func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
-	tokens, err := s.store.ListTokens(r.Context(), r.URL.Query().Get("kind"))
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	cursor := q.Get("cursor")
+	tokens, err := s.store.ListTokens(r.Context(), q.Get("kind"), limit+1, cursor)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
+	}
+	var nextCursor *string
+	if len(tokens) > limit {
+		tokens = tokens[:limit]
+		last := tokens[len(tokens)-1]
+		c := fmt.Sprintf("%d:%s", last.CreatedAt, last.ID)
+		nextCursor = &c
 	}
 	items := make([]any, 0, len(tokens))
 	for _, t := range tokens {
 		items = append(items, tokenToAPI(t))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "meta": map[string]any{"next_cursor": nil}})
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "meta": map[string]any{"next_cursor": nextCursor}})
 }
 
 func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
@@ -1786,16 +1858,32 @@ func (s *Server) handleRevokeToken(w http.ResponseWriter, r *http.Request) {
 // ─── Admin: Users ─────────────────────────────────────────────────────────────
 
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
-	users, err := s.store.ListUsers(r.Context())
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	cursor := q.Get("cursor")
+	users, err := s.store.ListUsers(r.Context(), limit+1, cursor)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
+	}
+	var nextCursor *string
+	if len(users) > limit {
+		users = users[:limit]
+		last := users[len(users)-1]
+		c := fmt.Sprintf("%d:%s", last.CreatedAt, last.ID)
+		nextCursor = &c
 	}
 	items := make([]any, 0, len(users))
 	for _, u := range users {
 		items = append(items, userToAPI(u))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "meta": map[string]any{"next_cursor": nil}})
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "meta": map[string]any{"next_cursor": nextCursor}})
 }
 
 func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {

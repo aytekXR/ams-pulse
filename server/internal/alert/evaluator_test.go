@@ -198,7 +198,7 @@ func TestEvaluator_StreamOffline_FiresWithinBudget(t *testing.T) {
 		t.Errorf("detection→notification latency %.1f s exceeds 30 s budget", latencyS)
 	}
 	// Also check alert_history was persisted.
-	hist, err := store.ListAlertHistory(ctx, "", "", 0, 0, 10)
+	hist, err := store.ListAlertHistory(ctx, "", "", 0, 0, 10, "")
 	if err != nil {
 		t.Fatalf("ListAlertHistory: %v", err)
 	}
@@ -539,7 +539,7 @@ func TestEvaluator_DisabledRule_NotEvaluated(t *testing.T) {
 	}
 
 	// Also check no history entries were written.
-	hist, err := store.ListAlertHistory(ctx, "", "", 0, 0, 10)
+	hist, err := store.ListAlertHistory(ctx, "", "", 0, 0, 10, "")
 	if err != nil {
 		t.Fatalf("ListAlertHistory: %v", err)
 	}
@@ -780,7 +780,7 @@ func TestEvaluator_HistoryBoundedAtCap(t *testing.T) {
 		ev.TickOnce(ctx)
 	}
 
-	hist, err := store.ListAlertHistory(ctx, ruleID, "", 0, 0, 0)
+	hist, err := store.ListAlertHistory(ctx, ruleID, "", 0, 0, 0, "")
 	if err != nil {
 		t.Fatalf("ListAlertHistory: %v", err)
 	}

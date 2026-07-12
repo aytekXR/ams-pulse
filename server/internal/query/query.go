@@ -11,6 +11,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
+	"strconv"
 	"time"
 
 	clickhouse "github.com/ClickHouse/clickhouse-go/v2"
@@ -194,13 +196,28 @@ func (s *Service) LiveStreams(ctx context.Context, app, nodeID, tenant string, l
 		})
 	}
 
+	// Sort by StreamID for stable, deterministic offset-cursor pagination.
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].StreamID < items[j].StreamID
+	})
+
 	// Pagination.
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
 	// Simple offset cursor.
 	start := 0
-	_ = cursor // wave 1: ignore cursor, return first page
+	if cursor != "" {
+		if n, err := strconv.Atoi(cursor); err == nil && n > 0 {
+			start = n
+		}
+	}
+	// Clamp start to len(items) so that a stale or fabricated cursor (e.g.
+	// cursor="10" with only 2 live streams) never causes items[start:end] to
+	// panic with a "slice bounds out of range" error.
+	if start > len(items) {
+		start = len(items)
+	}
 	end := start + limit
 	if end > len(items) {
 		end = len(items)
@@ -488,7 +505,7 @@ type FleetNodeListResult struct {
 // ProbeResultQuerier is the interface the query service uses to read probe results.
 // Implemented by *store/clickhouse.Store.
 type ProbeResultQuerier interface {
-	QueryProbeResults(ctx context.Context, probeID string, from, to time.Time, limit int) ([]domain.ProbeResult, error)
+	QueryProbeResults(ctx context.Context, probeID string, from, to time.Time, limit int, cursor string) ([]domain.ProbeResult, error)
 }
 
 // SetProbeResultQuerier wires the probe result reader (from the ClickHouse store)
@@ -499,11 +516,11 @@ func (s *Service) SetProbeResultQuerier(q ProbeResultQuerier) {
 
 // QueryProbeResults fetches probe results for a given probeID via the ClickHouse
 // store. Returns nil, nil when no querier is wired (ClickHouse not available).
-func (s *Service) QueryProbeResults(ctx context.Context, probeID string, from, to time.Time, limit int) ([]domain.ProbeResult, error) {
+func (s *Service) QueryProbeResults(ctx context.Context, probeID string, from, to time.Time, limit int, cursor string) ([]domain.ProbeResult, error) {
 	if s.probeResultQuerier == nil {
 		return nil, nil
 	}
-	return s.probeResultQuerier.QueryProbeResults(ctx, probeID, from, to, limit)
+	return s.probeResultQuerier.QueryProbeResults(ctx, probeID, from, to, limit, cursor)
 }
 
 // ─── VD-06: Geo breakdown ────────────────────────────────────────────────────

@@ -108,7 +108,7 @@ func TestEvalAnomalyMetric_NoReader(t *testing.T) {
 	clock.Advance(3601 * time.Second)
 	ev.TickOnce(ctx)
 
-	hist, err := store.ListAlertHistory(ctx, "", "", 0, 0, 10)
+	hist, err := store.ListAlertHistory(ctx, "", "", 0, 0, 10, "")
 	if err != nil {
 		t.Fatalf("ListAlertHistory: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestEvalAnomalyMetric_BelowMinSamples(t *testing.T) {
 	clock.Advance(3601 * time.Second)
 	ev.TickOnce(ctx)
 
-	hist, _ := store.ListAlertHistory(ctx, "", "", 0, 0, 10)
+	hist, _ := store.ListAlertHistory(ctx, "", "", 0, 0, 10, "")
 	if len(hist) != 0 {
 		t.Errorf("expected 0 history (below min_samples=30, got %d samples), got %d rows", 2, len(hist))
 	}
@@ -180,7 +180,7 @@ func TestEvalAnomalyMetric_NoBaseline(t *testing.T) {
 	clock.Advance(3601 * time.Second)
 	ev.TickOnce(ctx)
 
-	hist, _ := store.ListAlertHistory(ctx, "", "", 0, 0, 10)
+	hist, _ := store.ListAlertHistory(ctx, "", "", 0, 0, 10, "")
 	if len(hist) != 0 {
 		t.Errorf("expected 0 history (no baseline), got %d", len(hist))
 	}
@@ -209,7 +209,7 @@ func TestEvalAnomalyMetric_FiresAboveSigma(t *testing.T) {
 	clock.Advance(3601 * time.Second)
 	ev.TickOnce(ctx)
 
-	hist, err := store.ListAlertHistory(ctx, "", "", 0, 0, 10)
+	hist, err := store.ListAlertHistory(ctx, "", "", 0, 0, 10, "")
 	if err != nil {
 		t.Fatalf("ListAlertHistory: %v", err)
 	}
@@ -307,7 +307,7 @@ func TestEvalAnomalyMetric_NoFireBelowSigma(t *testing.T) {
 	clock.Advance(3601 * time.Second)
 	ev.TickOnce(ctx)
 
-	hist, _ := store.ListAlertHistory(ctx, "", "", 0, 0, 10)
+	hist, _ := store.ListAlertHistory(ctx, "", "", 0, 0, 10, "")
 	if len(hist) != 0 {
 		t.Errorf("expected 0 history (z=1.0 < sigma=5.0), got %d", len(hist))
 	}
@@ -337,7 +337,7 @@ func TestEvalAnomalyMetric_StddevZero(t *testing.T) {
 	clock.Advance(3601 * time.Second)
 	ev.TickOnce(ctx)
 
-	hist, _ := store.ListAlertHistory(ctx, "", "", 0, 0, 10)
+	hist, _ := store.ListAlertHistory(ctx, "", "", 0, 0, 10, "")
 	if len(hist) == 0 {
 		t.Error("expected firing with stddev=0 and deviation=10 (z=20 > sigma=2.0)")
 	}
@@ -426,7 +426,7 @@ func TestEvalAnomalyMetric_DefaultSigmaApplied(t *testing.T) {
 	clock.Advance(3601 * time.Second)
 	ev.TickOnce(ctx)
 
-	hist, _ := store.ListAlertHistory(ctx, "", "", 0, 0, 10)
+	hist, _ := store.ListAlertHistory(ctx, "", "", 0, 0, 10, "")
 	if len(hist) == 0 {
 		t.Error("expected firing with z=5 > DefaultSigma=4.0")
 	}
@@ -454,7 +454,7 @@ func TestEvalAnomalyMetric_NodePath_CpuPct(t *testing.T) {
 	clock.Advance(3601 * time.Second)
 	ev.TickOnce(ctx)
 
-	hist, err := store.ListAlertHistory(ctx, "", "", 0, 0, 10)
+	hist, err := store.ListAlertHistory(ctx, "", "", 0, 0, 10, "")
 	if err != nil {
 		t.Fatalf("ListAlertHistory: %v", err)
 	}
@@ -488,7 +488,7 @@ func TestEvalAnomalyMetric_NodePath_MemPct(t *testing.T) {
 	clock.Advance(3601 * time.Second)
 	ev.TickOnce(ctx)
 
-	hist, _ := store.ListAlertHistory(ctx, "", "", 0, 0, 10)
+	hist, _ := store.ListAlertHistory(ctx, "", "", 0, 0, 10, "")
 	if len(hist) == 0 {
 		t.Fatal("expected firing history for mem_pct anomaly node rule")
 	}
@@ -519,7 +519,7 @@ func TestEvalAnomalyMetric_BaselineReaderError(t *testing.T) {
 	clock.Advance(3601 * time.Second)
 	ev.TickOnce(ctx) // must not panic
 
-	hist, _ := store.ListAlertHistory(ctx, "", "", 0, 0, 10)
+	hist, _ := store.ListAlertHistory(ctx, "", "", 0, 0, 10, "")
 	if len(hist) != 0 {
 		t.Errorf("expected 0 history when reader errors, got %d", len(hist))
 	}
@@ -604,7 +604,7 @@ func TestEvaluator_ThresholdRuleUnchanged(t *testing.T) {
 	clock.Advance(1 * time.Second)
 	ev.TickOnce(ctx)
 
-	hist, _ := store.ListAlertHistory(ctx, "", "", 0, 0, 10)
+	hist, _ := store.ListAlertHistory(ctx, "", "", 0, 0, 10, "")
 	if len(hist) == 0 {
 		t.Error("expected threshold rule to still fire with viewer_count=10 > threshold=5")
 	}
@@ -640,7 +640,7 @@ func TestEvaluator_RuleTypeEmpty_BehavesAsThreshold(t *testing.T) {
 	clock.Advance(1 * time.Second)
 	ev.TickOnce(ctx)
 
-	hist, _ := store.ListAlertHistory(ctx, "", "", 0, 0, 10)
+	hist, _ := store.ListAlertHistory(ctx, "", "", 0, 0, 10, "")
 	if len(hist) == 0 {
 		t.Error("expected empty RuleType rule to fire as threshold (backward compat)")
 	}
@@ -680,7 +680,7 @@ func TestEvaluator_AnomalyRulePersistsHistory(t *testing.T) {
 	clock.Advance(3601 * time.Second)
 	ev.TickOnce(ctx)
 
-	hist, err := store.ListAlertHistory(ctx, "", "", 0, 0, 10)
+	hist, err := store.ListAlertHistory(ctx, "", "", 0, 0, 10, "")
 	if err != nil {
 		t.Fatalf("ListAlertHistory: %v", err)
 	}

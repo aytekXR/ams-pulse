@@ -490,7 +490,7 @@ func TestDefaultRulePack_SeedsOnFirstRun(t *testing.T) {
 	ctx := context.Background()
 
 	// Verify no rules exist initially.
-	before, _ := store.ListAlertRules(ctx)
+	before, _ := store.ListAlertRules(ctx, 0, "")
 	if len(before) != 0 {
 		t.Fatalf("expected 0 rules before seeding, got %d", len(before))
 	}
@@ -501,7 +501,7 @@ func TestDefaultRulePack_SeedsOnFirstRun(t *testing.T) {
 	}
 
 	// Verify rules were created.
-	after, _ := store.ListAlertRules(ctx)
+	after, _ := store.ListAlertRules(ctx, 0, "")
 	if len(after) == 0 {
 		t.Error("expected rules to be seeded, got 0")
 	}
@@ -525,14 +525,14 @@ func TestDefaultRulePack_Idempotent(t *testing.T) {
 	if err := alert.SeedDefaultRulePack(ctx, store, nil); err != nil {
 		t.Fatalf("first SeedDefaultRulePack: %v", err)
 	}
-	after1, _ := store.ListAlertRules(ctx)
+	after1, _ := store.ListAlertRules(ctx, 0, "")
 	n1 := len(after1)
 
 	// Second seed (idempotent: should not add more rules).
 	if err := alert.SeedDefaultRulePack(ctx, store, nil); err != nil {
 		t.Fatalf("second SeedDefaultRulePack: %v", err)
 	}
-	after2, _ := store.ListAlertRules(ctx)
+	after2, _ := store.ListAlertRules(ctx, 0, "")
 	n2 := len(after2)
 
 	if n2 != n1 {
