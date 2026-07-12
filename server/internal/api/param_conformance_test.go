@@ -17,7 +17,8 @@
 //	    (37 probes as of S24/D-086; floor = 37 − 2 for minor-evolution headroom).
 //	(d) Reverse-check: t.Logf warning for any registry key absent from spec.
 //
-// Known-violation entries (BUG-006, BUG-007, BUG-008, BUG-009) log without
+// Known-violation entries (BUG-009 ?tenant ×2 — the only ones left after the
+// S22/D-084 BUG-006/007 and S24/D-086 BUG-008 promotions) log without
 // failing — they make debt visible but do not block CI until intentionally
 // fixed. Filed: S21 / D-083 (2026-07-12). Link: docs/assessment/bugs/.
 package api_test
@@ -82,9 +83,10 @@ func TestParamConformance(t *testing.T) {
 	// healthyTs — Business-tier with fakeHealthyLiveProvider: live/*, qoe/ingest
 	//             response-differential probes.
 	//
-	// Enterprise server omitted: all anomaly and probe params are either exempt
-	// (nil detector/CH) or known-violation (BUG-006/BUG-008), so no enterprise
-	// probes exist in this iteration.
+	// No shared Enterprise server here: the two BUG-008 ?from/?to probes
+	// (S24/D-086) construct their own per-subtest Enterprise servers via
+	// setupEnterpriseAnomalyServerWithHistory; remaining anomaly/probe params
+	// are exempt (nil detector/CH) or known-violation (BUG-009 tenant).
 	bizTs, bizTok, bizCleanup := setupBusinessServer(t)
 	defer bizCleanup()
 

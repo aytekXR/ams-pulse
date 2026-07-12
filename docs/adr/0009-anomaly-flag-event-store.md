@@ -297,6 +297,7 @@ The `minProbes` floor comment (param_conformance_test.go:17, currently "35 probe
 floor = 35 − 2 = 33") updates to "37 probes; floor = 37 − 2 = **35**" when the two probes promote.
 
 **Build gate: this ADR is design-only; the S23 session gate is build-only-if-Small and BUG-008 phase 2 is Effort L. The conformance flip, migration, write path, and read path are all deferred to the next build session designated for BUG-008 phase 2.**
+*(Historical S23 note — the deferred build landed in S24/D-086; §§2–8 above describe the design as proposed, with build-time deviations recorded in the Amendments section at the bottom.)*
 
 ---
 
@@ -478,3 +479,15 @@ no such test existed in the tree. The `0010_anomaly_flag_events.sql` migration w
 **(f) Inserts run outside `d.mu`; insert failure = logged drop.** `checkFlags` releases `d.mu` before iterating detected flags
 and calling `InsertAnomalyFlagEvent`. An insert failure is logged and dropped (the hysteresis entry is already set, so the
 at-most-once undercount is acceptable). This is the at-most-once analog of D-085's VoD-poll ruling for BUG-002.
+
+**(g) Keyset comparison uses `toUnixTimestamp64Milli`, not `time.Time` parameters.** §6's literal WHERE clause
+(`(detected_at, id) > (?, ?)` with a `time.Time` bind) is WRONG against `DateTime64(3)`: clickhouse-go (v2.47.0) sends
+`time.Time` query parameters as `DateTime` (second precision), so the second-truncated cursor re-admits same-second rows —
+observed live as page-boundary duplicates (9 rows returned for 7 stored). The build compares integer milliseconds instead:
+`(toUnixTimestamp64Milli(detected_at) > ? OR (toUnixTimestamp64Milli(detected_at) = ? AND id > ?))`. Any future reader
+implementing a cursor over a `DateTime64` column must not bind `time.Time` into the comparison. Pinned by
+`TestIntegration_AnomalyFlagEvents_Pagination` (fixture forces same-second events at 250 ms spacing).
+
+**(h) `flagHistoryBridge` holds an unexported `flagQueryer` interface, not `*clickhouse.Store`.** Required for
+unit-testability of the bridge conversion (`serve_wiring_test.go` stubs it); `*clickhouse.Store` satisfies `flagQueryer`,
+so the runtime wiring is equivalent to (c).

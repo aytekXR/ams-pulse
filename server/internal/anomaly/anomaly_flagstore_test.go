@@ -667,7 +667,9 @@ func TestFlagStore_DetectedAtIsTickAt(t *testing.T) {
 
 	events := flagStore.capturedEvents()
 	if len(events) == 0 {
-		t.Skip("no events fired — cannot verify DetectedAt invariant")
+		// Zero events here means the UpdateBaselines write path is broken —
+		// that is the failure this test guards, never a skip (D-086 verify catch).
+		t.Fatal("no events fired — write path broken, DetectedAt invariant unverifiable")
 	}
 	if len(events) < 2 {
 		t.Logf("got %d events (only 1 stream may have fired)", len(events))

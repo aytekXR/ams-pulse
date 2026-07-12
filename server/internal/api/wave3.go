@@ -121,13 +121,10 @@ func (s *Server) handleAnomalies(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 			return
 		}
+		// make() is never nil, so an empty page serializes as [] not null.
 		items := make([]any, len(page.Items))
 		for i, f := range page.Items {
 			items[i] = f
-		}
-		// Ensure items serializes as [] not null when empty.
-		if items == nil {
-			items = []any{}
 		}
 		// next_cursor: "" (last page) → null per spec [string,null].
 		var nextCursor *string

@@ -224,12 +224,17 @@ func TestIntegration_AnomalyFlagEvents_Pagination(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// Insert 7 events spread over time so pages don't share a timestamp boundary.
+	// Insert 7 events at 250 ms spacing from a second-aligned base so that every
+	// page boundary falls INSIDE a shared wall-clock second. This makes the test
+	// structurally sensitive to the cursor-precision bug fixed in D-086: a keyset
+	// comparison that truncates the cursor to second precision (clickhouse-go
+	// sends time.Time params as DateTime) re-admits same-second rows and
+	// duplicates them across page boundaries, deterministically.
 	const total = 7
-	baseTime := time.Now().UTC().Truncate(time.Millisecond).Add(-15 * time.Minute)
+	baseTime := time.Now().UTC().Truncate(time.Second).Add(-15 * time.Minute)
 	inserted := make([]anomaly.AnomalyFlagEvent, total)
 	for i := 0; i < total; i++ {
-		ev := newFlagEvent("viewers", "", "", "stream-page", float64(i+1), baseTime.Add(time.Duration(i)*time.Minute))
+		ev := newFlagEvent("viewers", "", "", "stream-page", float64(i+1), baseTime.Add(time.Duration(i)*250*time.Millisecond))
 		inserted[i] = ev
 		if err := store.InsertAnomalyFlagEvent(ctx, ev); err != nil {
 			t.Fatalf("insert[%d]: %v", i, err)
