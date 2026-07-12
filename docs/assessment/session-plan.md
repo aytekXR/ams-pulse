@@ -17,7 +17,7 @@ work from tasks that require operator involvement.
 | 2 | Test Environment | DONE (S17: `qa/realams/` harness + Makefile, D-079) | S17 | BE agent |
 | 3 | E2E User Scenarios | DONE for P0+P1 (S18: P0 25/1/0, P1 21/3/0; remaining P2 + remote-viewer/SRT items → S19+ backlog) | S17–S18 | BE agent + ORCH |
 | 4 | Automated Validation Scripts | DONE (`make validate-realams-p0` + `validate-p1`, 50 scenarios) | S17–S18 | BE agent |
-| 5 | Bug Investigation | ROLLING (BUG-001..004 filed; 003/004 are live Pulse bugs) | S17+ | Any |
+| 5 | Bug Investigation | ROLLING (BUG-001..010 filed; **003/004 FIXED S20, 005 FIXED S21**; 006–009 declared-param violations PINNED by `param_conformance_test.go` (S21); 010 = undeclared CSV param, contract-side; 001 low / 002 design-note ready) | S17+ | Any |
 | 6 | Documentation Program | TOP-3 AUTHORED (S19: DG-04 + DG-11 → AMS-INTEGRATION.md, DG-07 → docs/beacon-sdk.md); remaining gaps carry | S18–S19+ | DOC agent |
 | 7 | PRD Validation Matrix | DONE (S19: prd-validation-matrix.md — 66 sub-rows F1–F10 + 36 numeric criteria N1–N36, all evidence-cited, adversarially verified) | S19 | QA + ORCH |
 | 8 | Final Assessment | DRAFTED (S19: final-assessment.md — DRAFT banner; operator review REQUIRED before external use; 5 NEEDS-OPERATOR-CONTACT rows) | S19+ | ORCH |
