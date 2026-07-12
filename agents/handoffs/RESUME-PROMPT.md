@@ -50,13 +50,14 @@ tenant).**
   Prod untouched; **a rollout now carries D-082..D-086.**
 
 **▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-25.md` and execute it**
-(operator intake FIRST; CI promotions if run date ≥07-23 [csp-e2e candidate;
-web-e2e ~07-25] else skip carry ×14; primary = next ROADMAP-V2 item — top
-candidate: F9 beacon-QoE anomaly metrics [rebuffer_ratio/error_rate], the
-§2.14 post-U3 revisit that U3's resolution unblocked; AMS re-sweep at open,
-observe-only). **PR-first, ≤2 pushes.** Check `docs/operator-expected.md`
-FIRST (caddy-vhost? final-assessment review? prod rollout now carries
-D-082..D-086 = BUG-002..010 + anomaly history).
+(★ STANDING OPERATOR DIRECTIVE at its top: review the backlog + REVISE the
+plan before dispatching — carry that header into every future SESSION-NN;
+operator intake FIRST; CI promotions if run date ≥07-23 else skip carry ×14;
+primary = F9 beacon-QoE anomaly metrics + NEW WO-D `ams_api_latency_ms`
+early-warning [operator-approved, ROADMAP §2.16, upstream ant-media#7926];
+AMS re-sweep at open, observe-only). **PR-first, ≤2 pushes.** Check
+`docs/operator-expected.md` FIRST (caddy-vhost? final-assessment review?
+prod rollout now carries D-082..D-086 = BUG-002..010 + anomaly history).
 
 ---
 

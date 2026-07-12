@@ -4352,6 +4352,19 @@ final-assessment review, both non-blocking); a prod rollout now carries
 history). PR/merge evidence appended below after merge (rides S25 if
 post-push).
 
+**D-086 ADDENDUM (operator-directed, post-close 2026-07-12):** S24 merged as
+`c572d92` (PR #36, 15/15 checks). The operator then directed a review of two
+upstream AMS issues → **ROADMAP-V2 §2.16 added** (AMS operational
+early-warning): ant-media#3122 (Prometheus exporter, closed-unbuilt —
+Pulse's /metrics already solves it; positioning evidence) + ant-media#7926
+(open 24 h-freeze; Pulse detects via node_down today; the gap = lead time →
+`ams_api_latency_ms` anomaly metric + error-streak→node_degraded, now S25
+WO-D). **Operator also issued a STANDING directive: each session reviews the
+backlog and revises the session plan at open** ("we always find a spot to
+shine") — recorded in SESSION-25.md as a standing header; carry it forward
+into every future SESSION-NN.md. Docs-only change, pushed solo without agent
+workflows per operator instruction (push 2/2 of the session budget).
+
 ## D-085 — SESSION-23 (2026-07-12): BUG-002 VoD REST-poll build + BUG-008 flag-event-store ADR (IN PROGRESS; evidence at close)
 
 **S23 OPEN facts (13:44Z–13:50Z, recorded early per protocol):**

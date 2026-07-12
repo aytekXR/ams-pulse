@@ -5,6 +5,18 @@
 > `agents/handoffs/ROADMAP-V2.md` §2.14/§3 + `RESUME-PROMPT.md` §7/§8/§12
 > before dispatching.
 
+## ⚡ STANDING DIRECTIVE (operator, 2026-07-12): review the backlog, revise this plan
+
+Before dispatching: re-read ROADMAP-V2 §2 (esp. the NEW §2.16) + the
+final-assessment §5 roadmap and REVISE this plan if a higher-leverage move
+exists. This file is a starting point, not a contract — the operator's words:
+"we always find a spot to shine." S24's example: two upstream AMS issues
+(#3122, #7926) turned into a demand-driven backlog item (§2.16 / WO-D below)
+worth more than mechanical list-execution. Spend a few read-only minutes
+looking for that kind of leverage (upstream issues, operator pain, assessment
+gaps) before locking the session shape; record any revision in the D-087 open
+block.
+
 ## Mission
 
 Exit = (a) the next ROADMAP-V2 item built or explicitly re-gated — **top
@@ -56,6 +68,23 @@ still hold with 7 metrics). The S24 flag-event store persists whatever
 fires — no schema change expected (verify: LowCardinality(metric) accepts
 new values transparently). If beacon data is too sparse to baseline honestly
 → document the gate in ROADMAP §2.14 and fall back to the next candidate.
+
+## WO-D [S, OPERATOR-APPROVED 2026-07-12] — AMS early-warning metrics (ROADMAP §2.16)
+
+Demand-driven by upstream **ant-media/Ant-Media-Server#7926** (open: AMS
+freezes after ~24 h; OS metrics normal → cpu/mem/disk anomaly blind by
+construction; Pulse's node_down already detects the freeze — the gap is the
+lead time). Build, riding WO-A's whitelist plumbing:
+1. `ams_api_latency_ms` (node scope): measure poll round-trip in restpoller
+   (restpoller.go — today poll errors are ONLY logged, nothing measured) →
+   live snapshot → anomaly whitelist (all 5 copies atomic, D-074 pattern).
+2. API error-streak → `node_degraded` (rule type already in
+   evaluator.go:379's scope-match; feed it a consecutive-failure counter
+   BEFORE absence eviction fires node_down).
+3. Stretch only if light: probe TTFB trend anomaly (TTFB already stored).
+Assessment docs: add the two demand-evidence citations (#3122 — Pulse's
+/metrics already solves it natively; #7926 — detect-in-30s + early-warn
+story). FalseAlarmRate budget must be re-derived with the metric count.
 
 ## WO-B [S, gate ≥2026-07-23] — CI promotions
 
