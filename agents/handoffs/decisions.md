@@ -1,5 +1,73 @@
 # Decision log — append-only (ORCH-00)
 
+## D-087 — SESSION-25 (2026-07-12): F9 beacon-QoE anomaly metrics + AMS early-warning (IN PROGRESS; evidence at close)
+
+**S25 OPEN facts (20:41Z–20:45Z, recorded early per protocol):**
+- **Concurrent-session check: CLEAN.** HEAD == origin/main == `9f6f681`
+  (D-086 addendum PR #37, merged 15/15 checks; S24 itself = `c572d92`,
+  PR #36 15/15 — merge evidence for both now recorded). Tree carries only
+  the known `Caddyfile.prod` delta (do-not-revert, D-082) + the operator's
+  `.bak`. Session branch `s25-d087`.
+- **AMS post-expiry re-sweep (s25open, 20:42Z): BYTE-IDENTICAL — 4th
+  consecutive null delta.** `antmedia` StartedAt still 2026-07-12T06:52:55Z
+  (pre-lapse) → no post-lapse restart; boot-time-enforcement hypothesis
+  stays untested by design. Observe-only unchanged.
+- **Operator intake: no answers arrived** (caddy-vhost + final-assessment
+  review + optional rollout [now D-082..D-086] re-surface at close, all
+  non-blocking). **No operator action required to proceed** — stated
+  explicitly per the session-open directive.
+- **★ STANDING BACKLOG-REVIEW DIRECTIVE — first execution:** reviewed
+  ROADMAP-V2 §2 (incl. new §2.16) + final-assessment §5. Open candidates:
+  F9 signals (§2.14 post-U3), §2.16 early-warning (operator-approved),
+  BUG-001 (low), F10 tail, §2.5 O(N²), §2.4 dependabot policy; the rest are
+  operator-gated (Kafka, D-V2-1, tenant). **Ruling: plan CONFIRMED as
+  written** — WO-A (F9) + WO-D (§2.16) share the anomaly-whitelist plumbing
+  and are jointly the highest-leverage move; no revision needed this time.
+- **WO-B: CI promotions skip carry ×14** (07-12 < 07-23). **WO-C green:**
+  0 open PRs, dependabot 0, protection intact (enforce_admins, 9 contexts),
+  prod healthz all-ok + SPA 200, realams stack up (S23 build — REBUILD
+  REQUIRED if S25 live-checks /anomalies?from, sanctioned `down -v`).
+
+**S25 SCOUT RESULTS + ORCH RULINGS (4 scouts, 0 errors, recorded pre-build):**
+- **★ WO-A RULED: GATED (sparsity), not built** — per the plan's own
+  assess-then-build clause, with sharper evidence than D-074 had:
+  (1) prod `beacon_events` = **2 rows total** (1 stream, the 'u3-smoke'
+  smoke test, 2026-07-10); realams = 0 — no real beacon deployment exists;
+  (2) **zero-variance trap**: all-zero baselines + the epsilon floor ⇒ the
+  FIRST real rebuffer event ever would z >> 4 ⇒ instant false alarm —
+  violating F9's only acceptance criterion (<1 false alarm/node-week);
+  (3) **non-independence trap**: rollup_qoe_1h buckets ACCUMULATE within
+  the hour ⇒ 30 Welford ticks read the same accumulating value, corrupting
+  the stats by construction — honest baselining needs a sub-hour windowing
+  design (minute rollup or tick-deltas) IN ADDITION to real traffic.
+  F9 stays PARTIALLY; the rebuffer_ratio exclusion pin stays; scores
+  unchanged (65.2/83.0). Gate documented at §2.14 + matrix F9 + assessment.
+- **★ BUG-011 FILED (scout catch): `EvictStaleNodes` is NEVER WIRED** —
+  implemented (VD-30, aggregator.go:202) but no serve.go caller exists ⇒
+  **node_down could never fire in any deployment**. Also explains the S19
+  matrix honesty-downgrade of the node-offline claim. Fixed this session.
+- **Standalone blindness fact:** NormalizeSystemStats emits NO cpu/mem/disk
+  (AMS 3.x REST limitation) ⇒ node_degraded's CPU/Mem>90 check could also
+  never fire on prod. `ams_api_latency_ms` becomes the FIRST live
+  node-scoped metric on standalone deployments.
+- **PLAN REVISION (standing directive):** WO-D expands into the session
+  primary — the 3-rung early-warning ladder for the ant-media#7926 class:
+  latency-creep anomaly (`ams_api_latency_ms`, poller-RTT-measured, key-
+  absent-on-failure semantics) → API error-streak ≥3 → node_degraded
+  (~15 s) → eviction → node_down (BUG-011 fix). **Load-bearing ORCH design
+  ruling: API-failure emissions must NOT refresh LastSeenAt and update
+  ConsecAPIErrors IN-PLACE only** — otherwise rung-2 events would keep the
+  node fresh forever and rung 3 could never fire; both properties pinned
+  red-first. FalseAlarmRate budget metricsPerNode 4→5 = 0.432 < 1.0.
+- **Latent bug (scout catch, A2 to assess):** query.go:1081
+  AnomalyBaselineForMetric's default branch hardcodes avg(rebuffer_ratio)
+  ignoring its metric argument — fix if reachable, else file + TODO.
+- **Contract fact:** alert-rule metric fields are free strings (no enum) ⇒
+  no breaking CR; but pulse-api.yaml :2112/:2192 description text is stale
+  since D-074 ('viewer_count, cpu_pct, mem_pct') — brought current +
+  gen:api regen this session.
+
+
 Rulings on PRD ambiguities, scope, waivers, and contract-change approvals.
 Newest at the bottom. Referenced by DEVLOG.md.
 

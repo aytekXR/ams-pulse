@@ -288,6 +288,14 @@ manifest owner — ORCH must assign scope first (flagged D-070).
 equivalence; keep window semantics aligned with the Detector's windowS.
 **Size:** [S].
 
+**S25/D-087 assessed: SPARSITY GATE** — prod `beacon_events` = 2 rows / 1 stream
+(`u3-smoke` smoke test, 2026-07-10); `realams` = 0 rows; all-zero baselines ⇒
+epsilon-floor makes the FIRST real rebuffer event an instant false alarm (violates
+PRD F9's '<1 false alarm/node-week'); `rollup_qoe_1h` buckets ACCUMULATE within the
+hour ⇒ 30 Welford ticks read non-independent samples (windowing redesign needed:
+minute-granularity or tick-deltas). Re-assess when a real beacon deployment shows
+sustained multi-viewer traffic AND a sub-hour windowing design exists.
+
 ---
 
 ### 2.15  Brand adoption — `brandkit/` → product UI  [M–L]  (OPERATOR-DIRECTED, D-071) — ✅ PHASE 1 DONE S12 (D-072, 2026-07-10; light theme/density/motion = phase 2 backlog; ships to prod with the next rollout — v0.3.0 proposed)

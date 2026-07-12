@@ -460,7 +460,8 @@ first. Fixed and proven via WO-B CI scenario.
 - Welford online algorithm, 1-hour rolling window (fixed)
 - Min 30 samples, 4σ default, 10-tick hysteresis
 - Signals: `viewers`, `ingest_bitrate_kbps`, `cpu_pct`, `mem_pct`,
-  `disk_pct` (per stream or node)
+  `disk_pct` (per stream or node), `ams_api_latency_ms` (node; Pulse-measured
+  poller RTT — D-087)
 - Files: `server/internal/anomaly/anomaly.go`
 - Gate: `GET /api/v1/anomalies` — Enterprise tier only
 

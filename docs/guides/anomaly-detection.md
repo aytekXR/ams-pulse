@@ -12,17 +12,37 @@ Anomalies dashboard at `/anomalies`.
 
 ## What F9 flags
 
-The detector tracks three metrics per entity:
+The detector tracks six metrics:
 
-| Metric | Scope | Description |
-|---|---|---|
-| `viewers` | per-stream | Current viewer count for a stream |
-| `cpu_pct` | per-node | Node CPU utilisation percentage |
-| `mem_pct` | per-node | Node memory utilisation percentage |
+| Metric | Scope | Description | Notes |
+|---|---|---|---|
+| `viewers` | per-stream | Current viewer count for a stream | |
+| `ingest_bitrate_kbps` | per-stream | Ingest bitrate for active publishers | |
+| `cpu_pct` | per-node | Node CPU utilisation percentage | Absent on standalone AMS via REST (DG-05); available in cluster mode or via Kafka |
+| `mem_pct` | per-node | Node memory utilisation percentage | Absent on standalone AMS via REST (DG-05) |
+| `disk_pct` | per-node | Node disk utilisation percentage | Absent on standalone AMS via REST (DG-05) |
+| `ams_api_latency_ms` | per-node | Pulse poller round-trip time to AMS REST API | Key-absent on failed polls — see §Key-absent semantics below |
 
 A flag is emitted when the current observed value deviates from the stored
 rolling mean by more than `sigma` standard deviations. The `sigma` value is
 reported in the flag and in the UI (e.g. "19.92σ").
+
+### Key-absent semantics for `ams_api_latency_ms`
+
+Unlike AMS-reported metrics, `ams_api_latency_ms` is measured by Pulse itself
+(the round-trip time of the `SystemStats` or `ClusterNodes` HTTP call).
+
+When the call **fails**, the metric key is **absent** from the event (not
+emitted as 0). This follows the D-075 key-absent convention: a missing key
+means "not measured this tick," which is distinct from "measured as zero."
+
+Feeding 0 to Welford on failures would skew the baseline toward zero, making
+normal latency look anomalous once the node recovers. The presence guard
+(`APILatencyMS > 0`) prevents this: only successful, non-zero measurements
+update the baseline and contribute to live-value comparisons.
+
+Pinned by `TestAnomaly_APILatencyMS_NoMeasurement_NoBaseline` in
+`server/internal/anomaly/anomaly_api_latency_test.go`.
 
 ---
 
@@ -103,7 +123,10 @@ Model: Gaussian tail probability + renewal-process hysteresis.
 sigma=4.0: P(|Z| >= 4.0) ≈ 6.33e-5  (two-tailed standard normal)
 
 ticks/node/week = 7 × 24 × 3600 / 60 = 10,080
-metrics/node    = 3 (viewers, cpu_pct, mem_pct)
+metrics/node    = 5  (conservative node-scoped budget: cpu_pct, mem_pct, disk_pct,
+                      ams_api_latency_ms + viewers as a 1-stream-per-node bound;
+                      ingest_bitrate_kbps scales with stream count, excluded from
+                      the per-node budget)
 
 lambda_raw per metric = 10,080 × 6.33e-5 = 0.638 exceedances/week
 
@@ -111,12 +134,12 @@ With hysteresis (renewal-process suppression):
   lambda_effective = lambda_raw / (1 + lambda_raw × HysteresisTicks)
                    = 0.638 / (1 + 0.638 × 10)
                    = 0.638 / 7.38
-                   ≈ 0.086/week/metric
+                   ≈ 0.08644/week/metric
 
-Total across 3 metrics: 0.086 × 3 = 0.259 false alarms/node/week
+Total across 5 node-scoped metrics: 0.08644 × 5 ≈ 0.432/node-week
 ```
 
-**Measured result: 0.259/node-week < 1.0/node-week — PRD F9 target met.**
+**Measured result: 0.432/node-week < 1.0/node-week — PRD F9 target met.**
 
 Verified by `TestAnomaly_FalseAlarmRate_ModeledTarget` in
 `server/internal/anomaly/anomaly_test.go`.
@@ -172,7 +195,7 @@ Authorization: Bearer <token>
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `min_sigma` | float | 2.0 | Minimum sigma to include |
-| `metric` | string | — | Filter by metric name (`viewers`, `cpu_pct`, `mem_pct`) |
+| `metric` | string | — | Filter by metric name (`viewers`, `ingest_bitrate_kbps`, `cpu_pct`, `mem_pct`, `disk_pct`, `ams_api_latency_ms`) |
 | `from` | epoch ms | — | Start of time range |
 | `to` | epoch ms | — | End of time range |
 | `limit` | int | 100 | Maximum flags returned (1–1000) |
@@ -215,19 +238,43 @@ Navigate to `/anomalies` in the Pulse dashboard. The page shows:
 
 ---
 
+## AMS early-warning ladder (S25 / D-087, ant-media#7926)
+
+AMS can gradually freeze while appearing healthy at the OS level — CPU, memory,
+and disk metrics remain normal; the Java process stays alive; but the HLS/REST
+API stops responding (see upstream issue
+[ant-media/Ant-Media-Server#7926](https://github.com/ant-media/Ant-Media-Server/issues/7926),
+open 2026-07-06: ~24 h freeze, OS metrics normal, HLS/API dead).
+
+Pulse's anomaly detector forms the first rung of a three-rung detection ladder
+for this failure class:
+
+| Rung | Signal | Mechanism | Typical latency |
+|------|--------|-----------|----------------|
+| 1 — creep | `ams_api_latency_ms` rising | Welford anomaly flag (F9) | Minutes — catches gradual degradation early |
+| 2 — errors | Consecutive API-failure streak (`consec_api_errors >= 3`) | `node_degraded` alert (evaluator, wave2.go) | ~15 s at 5 s poll interval |
+| 3 — freeze | No node stats for 3×PollInterval → `EvictStaleNodes` removes node | `node_down` alert (BUG-011 FIXED S25/D-087) | ≤15 s after `node_degraded` |
+
+The flag-event store (ADR-0009, S24/D-086) persists rung-1 detections with
+timestamps, providing the forensic timeline the #7926 reporter lacked.
+
+---
+
 ## Known limitations
 
 | Gap | Description | Phase |
 |---|---|---|
 | GAP-3-004 | Zero-stddev blind spot | **CLOSED Wave-3-Plus** — epsilon floor applied in `ComputeFlags` (see "Epsilon floor" above) |
 | Single window | Only a 1-hour rolling window is tracked. Multi-window anomaly detection (e.g., 24-hour baseline) is Phase 3. | Phase 3 |
-| 3 metrics only | `viewers`, `cpu_pct`, `mem_pct` are tracked. Additional metrics (e.g., `error_rate`, `rebuffer_ratio`) are Phase 3 extensions. | Phase 3 |
+| error\_rate / rebuffer\_ratio absent | These QoE metrics are not tracked as anomaly signals. `rebuffer_ratio` and `error_rate` are gated by beacon data sparsity (S25/D-087 assessment: prod `beacon_events` = 2 rows / 1 stream; all-zero baselines would make the first real rebuffer event an instant false alarm). Re-assess when a real beacon deployment shows sustained multi-viewer traffic and a sub-hour windowing design exists. | Phase 3 |
+| cpu\_pct / mem\_pct / disk\_pct absent for standalone AMS | These node metrics are unavailable via REST on standalone AMS deployments (DG-05); available in cluster mode or via Kafka. | Environment |
 
 ---
 
 ## Phase-3 roadmap
 
 - Multi-window baselines (1h, 24h, 7d).
-- Additional metrics: `error_rate`, `rebuffer_ratio`, `ingest_bitrate_floor`.
-- Flag persistence in a dedicated table (currently computed on-read from live snapshot + baselines).
+- `error_rate` and `rebuffer_ratio` anomaly signals — gated on beacon data volume
+  (sparsity gate, S25/D-087; see Known limitations above) and a sub-hour
+  windowing redesign.
 - Alert integration: auto-create an alert rule from an anomaly flag.

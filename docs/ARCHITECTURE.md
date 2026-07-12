@@ -77,7 +77,7 @@ Last updated: Wave 3-MVP complete (2026-06-14). QA gate: **PASS_WITH_LIMITATIONS
 | Web UI — probes | `web/src/features/probes` | **Shipped** (F10) — CRUD form; results panel with TTFB+bitrate charts; 4-level synthetic labeling; Pro+ gate |
 
 Minimal-but-working scope (D-001):
-- F9: 5 metrics (viewers, cpu_pct, mem_pct, ingest_bitrate_kbps, disk_pct — D-074); 1-hour rolling window; on-read flag computation.
+- F9: 6 metrics (viewers, cpu_pct, mem_pct, ingest_bitrate_kbps, disk_pct — D-074; ams_api_latency_ms — D-087, Pulse-measured poller RTT); 1-hour rolling window; on-read flag computation + tick-persisted flag events (D-086).
 - F10: HLS + DASH probes fully implemented; webrtc = signaling+ICE+RTP stats (D-072/D-074/D-075), rtmp = phase-1 handshake (D-073); only unknown protocols are reachability stubs (`error_code=not_probed`).
 
 Wave-3-Plus enhancements (closed in D-018):
