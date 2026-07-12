@@ -4167,3 +4167,29 @@ occurrence — this one benign):**
   serial TDD authors BUG-006+007 → BUG-009 → BUG-010 CR, parallel BUG-008
   assessor, 3 adversarial verifiers, ORCH gates full §8), WO-A at the clock,
   WO-D only if light, PR-first ≤2 pushes.
+
+**S22 WO-A evidence (post-expiry sweep, recorded 12:2xZ — THE gate deliverable):**
+- Clock monitor fired 12:10:03Z; sweep #1 ran 12:11:02Z
+  (`S21-sweep-postexpiry-20260712T121102Z`, evidence gitignored). Diff vs the
+  S21 pre-expiry baseline (`S21-sweep-preexpiry-20260712T014135Z`): **only 3
+  lines, ALL teststream-liveness** (broadcasts-count 1→0, hls-manifest
+  200→SKIP, total_publishers 1→0). Every license-relevant line UNCHANGED.
+- **The 3-line delta is NOT license-related:** `ams-teststream` had Exited(1)
+  at ~07:10Z — **5 h BEFORE the 12:09Z lapse** — with an ffmpeg "Conversion
+  failed!" crash (S14 recurrence class). Restarted per S14 precedent at
+  ~12:15Z as a deliberate LIVE post-expiry publish probe: **AMS ACCEPTED the
+  RTMP publish post-lapse** (container stays Up; HLS manifest 200; Pulse
+  overview total_publishers=1 — full pipeline confirms).
+- Sweep #2 (12:1xZ, `S21-sweep-postexpiry2-*`): **BYTE-IDENTICAL to the
+  pre-expiry baseline** (diff rc=0). **D-084 RESULT: the post-expiry delta is
+  NULL — stated explicitly per the SESSION-22 requirement.** versionType
+  "Enterprise Edition" 3.0.3 build 20260504_1443, licence-status 204/empty,
+  4 apps + settings 200 (CIDR 0.0.0.0/0 ×4), system-status 200, cluster-nodes
+  404 (standalone) — all unchanged. Prod polling healthy: healthz all-ok,
+  poll-errlines-15m=0.
+- **Blocked-scenario list: EMPTY** — no `qa/realams/scenarios/` scenario is
+  blocked by the lapse as of 12:2xZ. Standing hypothesis (recorded, untested
+  BY DESIGN): trial enforcement may bite only at AMS process restart (boot-time
+  license check). Do NOT restart the `antmedia` container to test — operator's
+  call; sessions keep observing each open. Validation docs need NO reality
+  updates (nothing drifted).
