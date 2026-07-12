@@ -609,15 +609,16 @@ func TestAnomaly_FalseAlarmRate_ModeledTarget(t *testing.T) {
 	// Observations per node per week at 60 s tick.
 	secondsPerWeek := 7 * 24 * 3600
 	ticksPerWeek := secondsPerWeek / tickIntervalS // 10,080
-	// metricsPerNode is a CONSERVATIVE per-node metric budget (D-074 WO-D).
-	// Truly node-scoped metrics are cpu_pct, mem_pct, disk_pct (3); viewers is
-	// stream-scoped (UpdateBaselines iterates snap.Streams) but is counted here
-	// as a 4th as-if-node-scoped metric so the modeled rate stays an upper
-	// bound for the common 1-node/1-stream deployment. ingest_bitrate_kbps is
-	// likewise stream-scoped and excluded — it scales with stream count, not
-	// node count. True node-only rate at 3 metrics ≈ 0.2594/node-week; this
-	// 4-metric bound ≈ 0.3458/node-week — both < the PRD 1.0 target.
-	metricsPerNode := 4
+	// metricsPerNode is a CONSERVATIVE per-node metric budget (D-074 WO-D, updated D-087).
+	// Truly node-scoped metrics are cpu_pct, mem_pct, disk_pct, ams_api_latency_ms (4);
+	// viewers is stream-scoped (UpdateBaselines iterates snap.Streams) but is counted
+	// here as a 5th as-if-node-scoped metric so the modeled rate stays an upper bound
+	// for the common 1-node/1-stream deployment. ingest_bitrate_kbps is likewise
+	// stream-scoped and excluded — it scales with stream count, not node count.
+	// True node-only rate at 4 metrics ≈ 0.3442/node-week; this 5-metric bound
+	// ≈ 0.4322/node-week — both < the PRD 1.0 target. D-087 adds ams_api_latency_ms
+	// as the 4th truly-node-scoped metric (0.08644×5 = 0.4322 < 1.0 PASS).
+	metricsPerNode := 5
 
 	// Gaussian tail probability for |Z| >= sigma (two-tailed).
 	// P(|Z| >= 4.0) ≈ 6.33e-5 (standard normal, two-tailed).

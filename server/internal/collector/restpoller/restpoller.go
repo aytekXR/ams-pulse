@@ -82,6 +82,11 @@ type Poller struct {
 	// vodTick counts poll() invocations for VoD cadence gating.
 	// Single-goroutine invariant: poll() runs only from Run's loop, so no mutex needed.
 	vodTick int
+
+	// consecAPIErrors is the count of consecutive SystemStats/ClusterNodes call
+	// failures. Resets to 0 on any successful call. Single-goroutine invariant:
+	// poll() runs only from Run's loop, same as vodTick. D-087.
+	consecAPIErrors int
 }
 
 // New creates a new Poller.
@@ -171,29 +176,61 @@ func (p *Poller) poll(ctx context.Context) error {
 	// Standalone path: when ClusterNodes returns no error AND zero nodes the AMS
 	// node is standalone. Fall back to SystemStats so the fleet node card is
 	// populated even without a cluster endpoint (item B).
-	if nodes, err := p.client.ClusterNodes(ctx); err == nil {
+	//
+	// D-087: RTT is measured around the deterministic stats call:
+	//   cluster path → ClusterNodes RTT; standalone path → SystemStats RTT.
+	// Failures increment p.consecAPIErrors and emit a FAILURE-STREAK event
+	// (api_unreachable=true). Successes reset the counter and include the RTT.
+	t0 := time.Now()
+	nodes, clusterErr := p.client.ClusterNodes(ctx)
+	clusterRTTMS := float64(time.Since(t0).Microseconds()) / 1000.0
+
+	if clusterErr == nil {
 		if len(nodes) > 0 {
+			// Cluster path: successful — reset streak, emit each node with RTT.
+			p.consecAPIErrors = 0
 			for _, n := range nodes {
 				ev := collector.NormalizeClusterNode(n)
 				ev.NodeID = p.cfg.NodeID // override with our configured ID
+				ev.Data["api_latency_ms"] = clusterRTTMS
+				// Emit the live counter (0 after the reset above), never a literal:
+				// a hardcoded 0 here would mask a missing reset (D-087 verify M4).
+				ev.Data["consec_api_errors"] = float64(p.consecAPIErrors)
 				p.sink.WriteServerEvent(ev)
 			}
 		} else {
 			// len(nodes)==0 && err==nil → standalone AMS (404 mapped to nil,nil).
 			// Best-effort: log and continue on any SystemStats error.
-			if stats, sErr := p.client.SystemStats(ctx); sErr == nil {
+			// D-087: measure RTT around the standalone SystemStats call specifically.
+			t1 := time.Now()
+			stats, sErr := p.client.SystemStats(ctx)
+			sysRTTMS := float64(time.Since(t1).Microseconds()) / 1000.0
+
+			if sErr == nil {
+				// Standalone success: reset streak, emit with RTT.
+				p.consecAPIErrors = 0
 				// GetVersion is best-effort: version="" on error (older AMS without /rest/v2/version).
 				versionName := ""
 				if vDTO, vErr := p.client.GetVersion(ctx); vErr == nil && vDTO != nil {
 					versionName = vDTO.VersionName
 				}
-				p.sink.WriteServerEvent(collector.NormalizeSystemStats(stats, p.cfg.NodeID, versionName))
+				ev := collector.NormalizeSystemStats(stats, p.cfg.NodeID, versionName)
+				ev.Data["api_latency_ms"] = sysRTTMS
+				// Live counter, not a literal — see the cluster-path note (D-087 M4).
+				ev.Data["consec_api_errors"] = float64(p.consecAPIErrors)
+				p.sink.WriteServerEvent(ev)
 			} else {
+				// Standalone failure: increment streak, emit FAILURE-STREAK event.
 				p.logger.Warn("restpoller: system stats poll failed", "error", sErr)
+				p.consecAPIErrors++
+				p.sink.WriteServerEvent(p.failureStreakEvent())
 			}
 		}
 	} else {
-		p.logger.Warn("restpoller: cluster nodes poll failed", "error", err)
+		// Cluster failure (non-404 error): increment streak, emit FAILURE-STREAK event.
+		p.logger.Warn("restpoller: cluster nodes poll failed", "error", clusterErr)
+		p.consecAPIErrors++
+		p.sink.WriteServerEvent(p.failureStreakEvent())
 	}
 
 	for _, app := range apps {
@@ -220,6 +257,28 @@ func (p *Poller) poll(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// failureStreakEvent builds a FAILURE-STREAK EventNodeStats event for the current
+// node. Called when SystemStats or ClusterNodes fails. Per the ORCH design ruling:
+//   - api_unreachable=true marks this as a failure event (not a metrics update).
+//   - consec_api_errors carries the (already-incremented) counter.
+//   - api_latency_ms is deliberately ABSENT (key-absent = not measured, D-075 semantics).
+//
+// The aggregator's onNodeStats handles api_unreachable=true events in-place
+// (updates ConsecAPIErrors only; does NOT refresh LastSeenAt). D-087.
+func (p *Poller) failureStreakEvent() domain.ServerEvent {
+	return domain.ServerEvent{
+		Version: 1,
+		Type:    domain.EventNodeStats,
+		TS:      time.Now().UnixMilli(),
+		Source:  domain.SourceRestPoll,
+		NodeID:  p.cfg.NodeID,
+		Data: map[string]any{
+			"api_unreachable":   true,
+			"consec_api_errors": float64(p.consecAPIErrors),
+		},
+	}
 }
 
 // pollVods polls the AMS vods/list endpoint and emits EventRecordingReady for each

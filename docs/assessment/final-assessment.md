@@ -54,7 +54,7 @@ deployment. The program covered:
 - **Direct AMS-REST cross-checks**: every claim about a viewer count,
   bitrate value, or stream state was verified against the raw AMS REST
   endpoint in the same request window, not inferred from the Pulse UI alone.
-- **10 bugs found and filed** (BUG-001 through BUG-010), demonstrating that
+- **11 bugs found and filed** (BUG-001 through BUG-011), demonstrating that
   the methodology is capable of finding real defects, not just confirming
   expected behavior.
 
@@ -240,6 +240,10 @@ TC-REC-01 with 0.02% reconciliation → verdict now FULLY.)
 | 16 | AMS version compatibility disclosure | PARTIAL | Validation covers AMS 3.0.3; compatibility matrix for other AMS versions not documented |
 | 17 | Known limitations documented | PARTIAL | `docs/assessment/documentation-gaps.md` (DG-01 through DG-18) catalogs 18 gaps; operator-facing documentation not yet authored for all of them |
 
+**Demand evidence and positioning notes (S25/D-087):**
+- **ant-media/Ant-Media-Server#3122** (Prometheus exporter requested 2021, closed 2023 unbuilt; community workaround via `json_exporter` with a moved blog and lost dashboard) — Pulse's `/metrics` endpoint ships this natively, addressing a long-standing unmet community demand.
+- **ant-media/Ant-Media-Server#7926** (open 2026-07-06: AMS freezes after ~24 h under high RTMP load; Java alive, OS metrics normal, HLS/API dead) — Pulse's S25 three-rung detection ladder directly addresses this failure class: latency-creep anomaly flag (`ams_api_latency_ms`) → `node_degraded` alert (~15 s) → `node_down` on freeze (BUG-011 fix, D-087).
+
 ---
 
 ## 4. Missing Opportunities
@@ -323,7 +327,7 @@ complexity, and marketplace impact.
 | **P0** | **Unsigned-webhook ingest mode** (D-V2-1; operator decision pending) — accept lifecycle events without HMAC from sources on a `PULSE_WEBHOOK_ALLOW_UNSIGNED_SOURCES` CIDR allowlist (ROADMAP-V2 §2.6 design); operator assumes network-layer trust risk | High — the webhook path is the intended real-time event channel; it is entirely unused in prod today; REST poll covers latency but misses vodReady | Medium — new config flag, webhook handler changes, security documentation | High — enables the full F1 + F6 intended design |
 | ~~**P0**~~ **DONE (S20/D-082)** | ~~**Fix BUG-004: parse `from`/`to` in `/api/v1/qoe/ingest` handler**~~ — **FIXED 2026-07-12**: handler now honors `from`/`to`/`app`/`stream`/`node`; contract unchanged. Residual `interval` param carved out as **BUG-005** (same declared-but-ignored class). | Medium — operators using the historical ingest view after a bitrate incident see incorrect averaged data | Low — targeted handler fix at one route; no schema change | Medium — OpenAPI contract violation is a quality signal for marketplace reviewers |
 | **P1** | **Standalone CPU / mem / disk via Kafka** (AV-15; requires operator to deploy Kafka broker or configure `PULSE_KAFKA_BROKERS`) | High — the most common deployment profile (standalone AMS on a single VPS) currently shows no resource gauges on the Fleet page | High — requires Kafka broker deployment by operator and validation of the existing `server/internal/collector/kafka/` consumer against `ams-instance-stats` topic schema | High — "fleet health" is a key positioning claim; empty gauges undermine it |
-| **P1** | **error\_rate + rebuffer\_ratio anomaly signals** — add `error_rate` and `rebuffer_ratio` (from beacon rollup) to the Welford anomaly evaluator; currently confirmed absent (TC-AN-05 PASS) | Medium — the PRD explicitly lists "errors and rebuffering" as anomaly targets; the absence is a documented gap (F9 PARTIALLY) | Medium — evaluator extension; requires beacon data volume for reliable baselining | High — viewer QoE anomaly detection is a differentiator; completing it makes F9 FULLY |
+| **P1** | **error\_rate + rebuffer\_ratio anomaly signals** — add `error_rate` and `rebuffer_ratio` (from beacon rollup) to the Welford anomaly evaluator; currently confirmed absent (TC-AN-05 PASS) | Medium — the PRD explicitly lists "errors and rebuffering" as anomaly targets; the absence is a documented gap (F9 PARTIALLY) | High — S25/D-087 SPARSITY GATE: prod `beacon_events` = 2 rows / 1 stream, `realams` = 0 rows; all-zero baselines ⇒ epsilon-floor makes first real rebuffer event an instant false alarm; `rollup_qoe_1h` buckets accumulate within the hour ⇒ non-independent Welford samples; windowing redesign (minute-granularity or tick-deltas) needed before this is safe to enable | High — viewer QoE anomaly detection is a differentiator; completing it makes F9 FULLY |
 | **P1** | **SDK integration guide** (DG-07; MVP+1 documentation deliverable) — step-by-step operator guide for `ams-webrtc`, `hls.js`, and `video.js` adapters covering adapter selection, token provisioning, and ingest URL | Medium — the SDK runtime exists but operators cannot self-serve integration without docs | Low — documentation only; no code changes | Medium — marketplace listings expect integration documentation |
 | **P1** | **SRT loss validation against live SRT ingest** — run TC-I-05 variant with SRT publisher instead of RTMP; document whether `packetLostRatio` reflects SRT ARQ-corrected or pre-correction loss; add DG-18 variant | Medium — SRT ingest operators may misinterpret `packet_loss_pct = 0` when transport loss exists | Low — test-only; possible doc clarification; no code change unless SRT stats API differs | Low — correctness documentation |
 | **P1** | **Remote-viewer WebRTC QoE parity** — repeat TC-V-07 / TC-V-08 with a geographically remote WebRTC viewer to confirm ×1000 RTT conversion at non-zero values; same-host loopback returns all-zero AMS stats | Medium — the ×1000 unit conversion is code-verified at `normalize.go:185` but exercised only at 0 values; a flip to ×0.001 would produce RTT values in the µs range silently | Low — test-only; requires access to a second host | Medium — WebRTC QoE is a differentiating metric; correct units are table stakes |
@@ -429,9 +433,9 @@ initiated as of this draft.
 
 ## Appendix A — Bugs Found During This Validation Program
 
-Ten bugs were found and filed by this program. The methodology (direct
+Eleven bugs were found and filed by this program. The methodology (direct
 AMS REST cross-check, not UI-only assertions) produced real defects, not
-just scenario confirmations. BUG-002/003/004/005/006/007/008/010 have been fixed; BUG-009 is partially fixed; only BUG-001 (low, no user impact) remains open.
+just scenario confirmations. BUG-002/003/004/005/006/007/008/010/011 have been fixed; BUG-009 is partially fixed; only BUG-001 (low, no user impact) remains open.
 
 | ID | Severity | Title | Features Affected | Status |
 |----|----------|-------|-------------------|--------|
@@ -445,6 +449,7 @@ just scenario confirmations. BUG-002/003/004/005/006/007/008/010 have been fixed
 | BUG-008 | High | `GET /anomalies` drops all 6 declared filter params; `from`/`to` are architecturally unfixable without a persistent flag-event store | F9 (anomaly detection) | **FIXED S22+S24 (D-084 Group A, D-086 Group B)**: `app`/`stream`/`limit`/`cursor` (Group A) fixed handler-side S22; `from`/`to` (Group B) fixed S24 via `anomaly_flag_events` ClickHouse table (migration 0010) + ADR-0009 + `flagHistoryBridge` wired in serve.go |
 | BUG-009 | Medium | `GET /live/overview` + `GET /live/streams`: `tenant` param passed by handler but silently dropped in query layer; `cursor` in LiveStreams was stubbed | F6/F1 | **PARTIALLY FIXED S22/D-084** (PR #34): LiveStreams `cursor` decode + required stability sort added; `tenant` ×2 remain known-violation → `domain.LiveSnapshot` has no tenant assignment (F6 multi-tenancy backlog) |
 | BUG-010 | Low | `GET /analytics/audience` reads `?format=csv` but the parameter was not declared in the OpenAPI spec (reverse-direction gap: implementation ahead of contract) | F2/F8 | **FIXED S22/D-084** (PR #34): `format` enum `[json,csv]` + `text/csv` 200 response declared; `gen:api` regenerated; `minSpecParams` 85→86 |
+| BUG-011 | **High** | `EvictStaleNodes` implemented but never wired in serve.go — `node_down` structurally unable to fire in production; compounded by failure-streak path refreshing LastSeenAt, keeping frozen nodes perpetually "fresh" | F7 (node up/down alerts; node_down for frozen AMS nodes per ant-media#7926 failure class) | **FIXED S25/D-087**: `wireNodeEviction` goroutine added to serve.go; failure-streak path updated to in-place ConsecAPIErrors update only (no LastSeenAt refresh); RED→GREEN unit tests (TestBUG011\_NodeEviction\_Wired, TestAggregator\_FailureStreak\_LastSeenAtFrozen, TestAggregator\_FailureStreak\_EvictStillWorks); node\_down path is structurally correct and unit-proven; live node-offline scenario not run |
 
 Bug documents: `docs/assessment/bugs/BUG-001-broadcast-statistics-dead-code.md`,
 `BUG-002-recording-gb-zero-webhook-blocked.md`,
@@ -456,7 +461,8 @@ Bug documents: `docs/assessment/bugs/BUG-001-broadcast-statistics-dead-code.md`,
 `BUG-008-anomalies-filter-params-silently-dropped.md`,
 `BUG-008-triage-s22.md`,
 `BUG-009-live-tenant-cursor-dropped-in-query-layer.md`,
-`BUG-010-audience-format-param-undeclared.md`.
+`BUG-010-audience-format-param-undeclared.md`,
+`BUG-011-evictstalenodes-never-wired.md`.
 
 ---
 

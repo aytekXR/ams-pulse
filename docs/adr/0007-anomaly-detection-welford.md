@@ -65,3 +65,41 @@ Measured by: `TestAnomaly_FalseAlarmRate_ModeledTarget` in
   re-evaluated. The `BaselineStore` interface (`ListAnomalyBaselines` /
   `UpsertAnomalyBaseline`) is the abstraction boundary; swapping the algorithm
   requires only replacing the update logic in `anomaly.Detector.UpdateBaselines`.
+
+## Amendments
+
+### D-087 (2026-07-12): ams_api_latency_ms metric + budget update
+
+**Metric count and budget update.**
+The historical '3 metrics' text (viewers, error_rate, rebuffer_ratio) in the
+original calibration section is now stale: `rebuffer_ratio` and `error_rate`
+are excluded by the wave-3 sparsity gate (pinned in `wave3_test.go:709`
+`TestValidateAnomalyRule_UnsupportedMetric`). The updated budget is:
+
+| Scope       | Metrics                                          | Count |
+|-------------|--------------------------------------------------|-------|
+| node-scoped | cpu_pct, mem_pct, disk_pct, ams_api_latency_ms   | 4     |
+| as-if-node  | viewers (1-stream conservative bound)            | +1    |
+| stream-only | ingest_bitrate_kbps (scales with streams, excl.) | —     |
+
+Conservative 5-metric budget: `0.08644 × 5 = 0.4322/node-week < 1.0 PRD target`.
+Pinned by `TestAnomaly_FalseAlarmRate_ModeledTarget` (`metricsPerNode=5`).
+
+**Semantic novelty: ams_api_latency_ms is the first Pulse-measured metric.**
+All previous metrics (cpu_pct, mem_pct, disk_pct, viewers, ingest_bitrate_kbps)
+are values *reported by AMS* and forwarded by the poller. `ams_api_latency_ms`
+is the round-trip time of Pulse's own `SystemStats`/`ClusterNodes` HTTP call —
+it monitors the monitoring path itself, enabling early detection of the
+AMS-freeze failure class (ant-media/Ant-Media-Server#7926, D-087 rung 1).
+
+**Honest caveat:** because this latency is measured at the Pulse host, a
+network event or Pulse-side CPU spike can also move it independently of AMS
+health. This is acceptable for an early-warning signal: a genuine AMS freeze
+produces a sustained latency rise that persists across rung-1 (anomaly), rung-2
+(consecutive error streak), and rung-3 (eviction timeout) — transient Pulse-side
+slowdowns typically do not. The signal is complementary, not definitive.
+
+**Key-absent semantics.** `APILatencyMS==0` signals that the last stats call
+*failed* (or the node has never been polled). Feeding 0 to Welford would poison
+the baseline toward zero and make normal latency look anomalous. The presence
+guard (`if n.APILatencyMS > 0`) is pinned by `TestAnomaly_APILatencyMS_NoMeasurement_NoBaseline`.

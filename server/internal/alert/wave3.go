@@ -70,18 +70,20 @@ func (e *AnomalyRuleValidationError) Error() string {
 //   - viewer_count → Detector tracks "viewers" per stream (metricAliases maps it)
 //   - ingest_bitrate_kbps → Detector tracks per stream (key == metric name, no alias)
 //   - cpu_pct, mem_pct, disk_pct → Detector tracks these per node
+//   - ams_api_latency_ms → D-087 early-warning rung 1: API round-trip latency per node
 var supportedAnomalyMetrics = map[string]bool{
 	"viewer_count":        true,
 	"ingest_bitrate_kbps": true,
 	"cpu_pct":             true,
 	"mem_pct":             true,
 	"disk_pct":            true,
+	"ams_api_latency_ms":  true,
 }
 
 // ValidateAnomalyRule validates anomaly-specific constraints on a rule.
 // Returns nil for non-anomaly rules (threshold/empty RuleType always passes).
 // Returns *AnomalyRuleValidationError for anomaly rules that fail:
-//   - metric must be in the supported set (viewer_count, ingest_bitrate_kbps, cpu_pct, mem_pct, disk_pct)
+//   - metric must be in the supported set (viewer_count, ingest_bitrate_kbps, cpu_pct, mem_pct, disk_pct, ams_api_latency_ms)
 //   - window_s must be exactly 3600 (matches the Detector's fixed windowS)
 func ValidateAnomalyRule(row meta.AlertRuleRow) error {
 	if row.RuleType != "anomaly" {
@@ -90,7 +92,7 @@ func ValidateAnomalyRule(row meta.AlertRuleRow) error {
 	if !supportedAnomalyMetrics[row.Metric] {
 		return &AnomalyRuleValidationError{
 			Field:   "metric",
-			Message: fmt.Sprintf("metric %q is not supported for anomaly rules; supported: viewer_count, ingest_bitrate_kbps, cpu_pct, mem_pct, disk_pct", row.Metric),
+			Message: fmt.Sprintf("metric %q is not supported for anomaly rules; supported: viewer_count, ingest_bitrate_kbps, cpu_pct, mem_pct, disk_pct, ams_api_latency_ms", row.Metric),
 		}
 	}
 	if row.WindowS != 3600 {
@@ -181,7 +183,7 @@ func (e *Evaluator) evalAnomalyMetric(ctx context.Context, snap *domain.LiveSnap
 	switch rule.Metric {
 	case "viewer_count", "ingest_bitrate_kbps":
 		return e.evalAnomalyStreams(ctx, snap, scope, rule, lookupMetric, effectiveSigma, effectiveMinSamples, rule.WindowS, reader)
-	case "cpu_pct", "mem_pct", "disk_pct":
+	case "cpu_pct", "mem_pct", "disk_pct", "ams_api_latency_ms":
 		return e.evalAnomalyNodes(ctx, snap, scope, rule, lookupMetric, effectiveSigma, effectiveMinSamples, rule.WindowS, reader)
 	default:
 		e.logger.Warn("alert: anomaly rule metric not supported", "metric", rule.Metric)
@@ -266,6 +268,14 @@ func (e *Evaluator) evalAnomalyNodes(ctx context.Context, snap *domain.LiveSnaps
 			val = n.MemPCT
 		case "disk_pct":
 			val = n.DiskPCT
+		case "ams_api_latency_ms":
+			// Presence guard (D-075 key-absent semantics): APILatencyMS is only
+			// set on successful stats calls. Zero means "not measured" (the last
+			// call failed). Skip this node — do not compare 0ms to the baseline.
+			if n.APILatencyMS == 0 {
+				continue
+			}
+			val = n.APILatencyMS
 		}
 
 		scopeStr := scopeJSONAnomaly(nodeID, "")

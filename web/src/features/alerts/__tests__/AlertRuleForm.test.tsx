@@ -89,6 +89,35 @@ describe("AlertRuleForm", () => {
   });
 });
 
+// ── D-087: metric list content pins ────────────────────────────────────────
+describe("AlertRuleForm — metric list content (D-087)", () => {
+  it("ANOMALY_METRICS includes ams_api_latency_ms", () => {
+    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    // Switch to anomaly mode so the anomaly metric dropdown is rendered.
+    fireEvent.change(screen.getByLabelText(/rule type/i), { target: { value: "anomaly" } });
+    // ams_api_latency_ms must be present as an option in the metric dropdown.
+    const options = screen.getAllByRole("option");
+    const labels = options.map((o) => o.textContent ?? "");
+    expect(labels).toContain("ams_api_latency_ms");
+  });
+
+  it("threshold METRICS includes node_degraded", () => {
+    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    // Default mode is threshold.
+    const options = screen.getAllByRole("option");
+    const labels = options.map((o) => o.textContent ?? "");
+    expect(labels).toContain("node_degraded");
+  });
+
+  it("threshold METRICS includes node_down", () => {
+    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    // Default mode is threshold.
+    const options = screen.getAllByRole("option");
+    const labels = options.map((o) => o.textContent ?? "");
+    expect(labels).toContain("node_down");
+  });
+});
+
 // ── S11 WO-B: anomaly rule type tests ──────────────────────────────────────
 describe("AlertRuleForm — anomaly rule type (S11 WO-B)", () => {
   it("renders threshold fields by default", () => {

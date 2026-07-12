@@ -1137,8 +1137,9 @@ export interface components {
              *     `anomaly`: fires when the metric deviates beyond `sigma` standard
              *     deviations from its rolling Welford baseline (stored in
              *     anomaly_baselines). For anomaly rules, `operator` and `threshold`
-             *     are ignored by the evaluator. Supported anomaly metrics are exactly
-             *     `viewer_count`, `cpu_pct`, and `mem_pct`; `window_s` must be 3600
+             *     are ignored by the evaluator. Supported anomaly metrics are
+             *     `viewer_count`, `ingest_bitrate_kbps`, `cpu_pct`, `mem_pct`,
+             *     `disk_pct`, and `ams_api_latency_ms`; `window_s` must be 3600
              *     (the Detector window). Unsupported metric or window value returns 400.
              * @default threshold
              * @enum {string}
@@ -1201,8 +1202,9 @@ export interface components {
              *     `anomaly`: fires when the metric deviates beyond `sigma` standard
              *     deviations from its rolling Welford baseline (stored in
              *     anomaly_baselines). For anomaly rules, `operator` and `threshold`
-             *     are ignored by the evaluator. Supported anomaly metrics are exactly
-             *     `viewer_count`, `cpu_pct`, and `mem_pct`; `window_s` must be 3600
+             *     are ignored by the evaluator. Supported anomaly metrics are
+             *     `viewer_count`, `ingest_bitrate_kbps`, `cpu_pct`, `mem_pct`,
+             *     `disk_pct`, and `ams_api_latency_ms`; `window_s` must be 3600
              *     (the Detector window). Unsupported metric or window value returns 400.
              * @default threshold
              * @enum {string}

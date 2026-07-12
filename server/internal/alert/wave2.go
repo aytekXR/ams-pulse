@@ -164,7 +164,11 @@ func (e *Evaluator) evalNodeUpDown(snap *domain.LiveSnapshot, scope domain.Alert
 				continue
 			}
 			var val float64
-			if n.CPUPCT > 90 || n.MemPCT > 90 {
+			// D-087 rung-2: ConsecAPIErrors>=3 indicates the AMS REST API is
+			// repeatedly failing (early-warning). On standalone AMS nodes
+			// CPUPCT and MemPCT are always 0 (OS metrics not reported), so the
+			// ConsecAPIErrors arm is the only practical degradation signal there.
+			if n.CPUPCT > 90 || n.MemPCT > 90 || n.ConsecAPIErrors >= 3 {
 				val = 1.0
 			}
 			results = append(results, evalResult{
