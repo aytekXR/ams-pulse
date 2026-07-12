@@ -173,6 +173,13 @@ paths:
         - $ref: "#/components/parameters/node"
         - $ref: "#/components/parameters/tenant"
         - $ref: "#/components/parameters/interval"
+        - name: format
+          in: query
+          description: Response format. Use `csv` to download a CSV attachment.
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
       responses:
         "200":
           description: Audience analytics timeseries and totals
@@ -180,6 +187,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AudienceResponse"
+            text/csv:
+              schema:
+                type: string
+                description: CSV export of audience timeseries (Content-Disposition attachment).
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }

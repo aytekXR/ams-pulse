@@ -1982,6 +1982,8 @@ export interface operations {
                 tenant?: components["parameters"]["tenant"];
                 /** @description Rollup bucket size */
                 interval?: components["parameters"]["interval"];
+                /** @description Response format. Use `csv` to download a CSV attachment. */
+                format?: "json" | "csv";
             };
             header?: never;
             path?: never;
@@ -1996,6 +1998,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AudienceResponse"];
+                    "text/csv": string;
                 };
             };
             400: components["responses"]["BadRequest"];
