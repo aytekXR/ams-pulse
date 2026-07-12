@@ -4250,6 +4250,44 @@ occurrence — this one benign):**
   precedent, doubled as the post-lapse publish probe). Branch `s22-d084`;
   1 PR; ≤2 pushes. Close commits + PR evidence appended below after merge.
 
+## D-086 — SESSION-24 (2026-07-12): BUG-008 phase-2 build per ADR-0009 (IN PROGRESS; evidence at close)
+
+**S24 OPEN facts (17:44Z–17:50Z, recorded early per protocol):**
+- **Concurrent-session check: CLEAN.** HEAD == origin/main == `a30ba62` (S23
+  merge); tree carries only the known prod `Caddyfile.prod` delta (do-not-revert,
+  D-082) + the operator's untracked `.bak`. No foreign commits. Session branch
+  `s24-d086`.
+- **AMS post-expiry re-sweep (s24open, 17:46Z): BYTE-IDENTICAL** to the S21
+  pre-expiry baseline (`S21-sweep-s24open-20260712T174620Z` vs
+  `S21-sweep-preexpiry-20260712T014135Z/stable.txt`, diff empty) — **third
+  consecutive null delta.** `antmedia` StartedAt 2026-07-12T06:52:55Z = PRE-lapse
+  (12:09Z) → still no post-lapse process restart; the boot-time-enforcement
+  hypothesis stays untested by design. Nothing blocked; observe-only unchanged.
+- **Operator intake: no answers arrived** (caddy-vhost merge + final-assessment
+  review + optional rollout approval re-surface at close, all non-blocking).
+  **No operator action required to proceed** — stated explicitly per the
+  session-open directive.
+- **★ WO-A APPROVAL RULING (plan-approves path):** ADR-0009 build gate was
+  "IF the plan/operator approves". No operator answer arrived; the operator's
+  session-open directive is "continue implementation using the workflows"; the
+  S23 deferral reason was the *S23* build-only-if-Small session gate (Effort L),
+  not a design objection — S24 is the designated full-session primary and no
+  higher-priority ROADMAP-V2 item exists (BUG-008 phase 2 is the last
+  non-tenant conformance debt). **ORCH rules: BUILD (WO-A fires).** ADR-0009
+  flips Proposed→Accepted with the landed build.
+- **WO-C: CI promotions skip carry ×13** (07-12 < 07-23; gate opens in 11 days).
+  **WO-D green:** 0 open PRs, dependabot 0, protection intact (enforce_admins,
+  9 contexts), prod healthz all-ok + SPA 200 (read-only).
+- **WO-B RULING (no new Makefile list):** TC-REC-01 already auto-discovers
+  under `validate-all` (honest SKIP-77 without the flag) and runs individually
+  via the `validate-%` pattern rule — a one-element P2 list is bureaucracy;
+  `PULSE_HAS_VOD_POLL=1` stays an explicit deployment attestation, never a
+  default. **Re-ran vs the realams stack (S23 build, 18:05Z): 3/3 PASS,
+  recording_gb=0.003126 UNCHANGED after ~3 h of 12th-tick poll cycles since
+  S23** — fresh live proof the vod_poll_state seen-set holds (no
+  double-billing drift). Evidence `S23-TC-REC-01-20260712T180527Z`.
+  recording_method contract CR: did NOT fire (optional, area untouched).
+
 ## D-085 — SESSION-23 (2026-07-12): BUG-002 VoD REST-poll build + BUG-008 flag-event-store ADR (IN PROGRESS; evidence at close)
 
 **S23 OPEN facts (13:44Z–13:50Z, recorded early per protocol):**

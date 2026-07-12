@@ -224,9 +224,9 @@ TC-REC-01 with 0.02% reconciliation → verdict now FULLY.)
 |---|-------------|--------|-------|
 | 1 | Working product against current AMS release | PASS | 46/50 scenario scripts PASS against AMS 3.0.3 Enterprise; 0 FAIL |
 | 2 | Core features functional end-to-end | PASS | Stream lifecycle, viewer counts, alerting, probes, QoE beacon all validated live |
-| 3 | No P0 severity open bugs | PASS | BUG-002 FIXED S23/D-085 (VoD REST poll, live-validated TC-REC-01); no P0-roadmap bugs remain open (BUG-001 is low/no-user-impact; BUG-008 from/to is a pinned known-violation with an approved ADR, not a P0 roadmap item) |
+| 3 | No P0 severity open bugs | PASS | BUG-002 FIXED S23/D-085 (VoD REST poll, live-validated TC-REC-01); BUG-008 FIXED S24/D-086 (Group B from/to via flagHistoryBridge + anomaly_flag_events); no P0-roadmap bugs remain open (BUG-001 is low/no-user-impact) |
 | 4 | Integration documentation (AMS-side setup) | PARTIAL | `docs/AMS-INTEGRATION.md` exists; beacon SDK integration guide not yet produced (DG-07); webhook limitation not fully documented for operators |
-| 5 | API documentation / OpenAPI spec | PASS | OpenAPI spec exists; 51/52 operations response-body conformant; BUG-004/005/006/007/010 FIXED S20–S22; remaining parameter known-violations: BUG-008 ?from/?to on GET /anomalies (S23 ADR) and BUG-009 ?tenant ×2 on GET /live (F6 backlog); all 4 pinned in conformance registry |
+| 5 | API documentation / OpenAPI spec | PASS | OpenAPI spec exists; 51/52 operations response-body conformant; BUG-004/005/006/007/010 FIXED S20–S22; BUG-008 FIXED S24/D-086 (from/to probed); remaining parameter known-violations: BUG-009 ?tenant ×2 on GET /live (F6 backlog); 2 pinned in conformance registry; conformance registry: 37 probes / 2 known-violations / 47 exempt |
 | 6 | Self-hosted deployment guide | PASS | `deploy/` directory contains Docker Compose stack, `Caddyfile.prod`, and environment variable documentation |
 | 7 | Support channel defined | NEEDS-OPERATOR-CONTACT | No support SLA or support channel (email / forum / GitHub issues) has been publicly defined for Pulse v0.3.0 |
 | 8 | Licensing clearly stated | NEEDS-OPERATOR-CONTACT | Pulse uses a license-key model (PULSE\_LICENSE\_KEY); the public licensing terms (free/pro/enterprise tiers, self-hosted redistribution rights) are not yet published |
@@ -431,7 +431,7 @@ initiated as of this draft.
 
 Ten bugs were found and filed by this program. The methodology (direct
 AMS REST cross-check, not UI-only assertions) produced real defects, not
-just scenario confirmations. BUG-002/003/004/005/006/007/010 have been fixed; BUG-008/009 are partially fixed; only BUG-001 (low, no user impact) remains open.
+just scenario confirmations. BUG-002/003/004/005/006/007/008/010 have been fixed; BUG-009 is partially fixed; only BUG-001 (low, no user impact) remains open.
 
 | ID | Severity | Title | Features Affected | Status |
 |----|----------|-------|-------------------|--------|
@@ -442,7 +442,7 @@ just scenario confirmations. BUG-002/003/004/005/006/007/010 have been fixed; BU
 | BUG-005 | Medium | `GET /api/v1/qoe/ingest` `interval` param declared but ignored; callers receive 60 s buckets regardless of hour/day request | F4/F8 | **FIXED S21/D-083** (PR #33); 5 TDD subtests; absent interval intentionally maps to 0 to preserve 60 s default (F4 "15 s visibility" criterion) |
 | BUG-006 | Medium | Pagination params `limit` + `cursor` declared on 8 list endpoints but store-layer methods had no pagination args; all results were unbounded | F5/F8/F10 + admin endpoints | **FIXED S22/D-084** (PR #34); keyset cursors on all 8 store methods; 2 panics caught and fixed (slice OOB, negative limit) |
 | BUG-007 | Low–Medium | `cursor` param dropped in `GET /alerts/history` and `GET /probes/{probeId}/results`; callers could not page past page 1 | F5 (alert history); F10 (probe results) | **FIXED S22/D-084** (PR #34); real probes (not exempts) asserting page 1 ≠ page 2 |
-| BUG-008 | High | `GET /anomalies` drops all 6 declared filter params; `from`/`to` are architecturally unfixable without a persistent flag-event store | F9 (anomaly detection) | **PARTIALLY FIXED S22/D-084** (PR #34): `app`/`stream`/`limit`/`cursor` (Group A) fixed handler-side; `from`/`to` (Group B) remain known-violation; S23 designs `anomaly_flag_events` table and ADR |
+| BUG-008 | High | `GET /anomalies` drops all 6 declared filter params; `from`/`to` are architecturally unfixable without a persistent flag-event store | F9 (anomaly detection) | **FIXED S22+S24 (D-084 Group A, D-086 Group B)**: `app`/`stream`/`limit`/`cursor` (Group A) fixed handler-side S22; `from`/`to` (Group B) fixed S24 via `anomaly_flag_events` ClickHouse table (migration 0010) + ADR-0009 + `flagHistoryBridge` wired in serve.go |
 | BUG-009 | Medium | `GET /live/overview` + `GET /live/streams`: `tenant` param passed by handler but silently dropped in query layer; `cursor` in LiveStreams was stubbed | F6/F1 | **PARTIALLY FIXED S22/D-084** (PR #34): LiveStreams `cursor` decode + required stability sort added; `tenant` ×2 remain known-violation → `domain.LiveSnapshot` has no tenant assignment (F6 multi-tenancy backlog) |
 | BUG-010 | Low | `GET /analytics/audience` reads `?format=csv` but the parameter was not declared in the OpenAPI spec (reverse-direction gap: implementation ahead of contract) | F2/F8 | **FIXED S22/D-084** (PR #34): `format` enum `[json,csv]` + `text/csv` 200 response declared; `gen:api` regenerated; `minSpecParams` 85→86 |
 

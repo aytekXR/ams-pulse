@@ -2,7 +2,7 @@
 
 **Severity:** high
 **Component:** api / anomaly detector (wave3.go)
-**Status:** PARTIALLY FIXED (S22/D-084): app/stream/limit/cursor params now wired (Group A); from/to open (Group B — architectural gap, no persistent flag-event store; S23 designs the real fix)
+**Status:** FIXED — S22/D-084 Group A (app/stream/limit/cursor handler-side), S24/D-086 Group B (from/to — anomaly_flag_events ClickHouse table + ADR-0009 flagHistoryBridge wired)
 
 ## Summary
 

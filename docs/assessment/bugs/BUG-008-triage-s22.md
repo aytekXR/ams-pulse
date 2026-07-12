@@ -112,11 +112,17 @@ a "cheap honesty" option. ORCH rejected this for S22:
 | `from` | not delivered — architectural gap; no 501 guard (ORCH decision, see §2) | `known-violation` retained |
 | `to` | not delivered — same reason | `known-violation` retained |
 
-Conformance test census after S22/D-084:
+Conformance test census after S22/D-084 (Group A):
 
 - **Probes**: 35 (up from 29; +4 anomalies Group A, +2 BUG-007 cursor probes promoted from exempt)
 - **Known-violations**: 4 (down from 8; BUG-008 ?from, BUG-008 ?to, BUG-009 ?tenant ×2)
 - **Exempt**: 47 (down from 49; the two BUG-007 cursor exempts became probes)
+
+Conformance test census after S24/D-086 (Group B):
+
+- **Probes**: 37 (up from 35; +2 BUG-008 ?from/?to promoted from known-violation)
+- **Known-violations**: 2 (down from 4; BUG-009 ?tenant ×2 remain — F6 backlog)
+- **Exempt**: 47 (unchanged)
 
 ### S23 — architectural work deferred
 
@@ -147,14 +153,14 @@ After S22/D-084 (Group A delivered, Group B deferred):
 
 | Registry key | S21 disposition | S22 disposition | Notes |
 |---|---|---|---|
-| `GET /anomalies ?from` | `known-violation` (BUG-008) | `known-violation` (BUG-008) | no 501 guard; S23 designs flag-event store |
-| `GET /anomalies ?to` | `known-violation` (BUG-008) | `known-violation` (BUG-008) | same; web UI does not currently pass ?to |
+| `GET /anomalies ?from` | `known-violation` (BUG-008) | `known-violation` (BUG-008) → **`probe` S24/D-086** | ADR-0009 built S24; ?from routes to QueryFlagHistory |
+| `GET /anomalies ?to` | `known-violation` (BUG-008) | `known-violation` (BUG-008) → **`probe` S24/D-086** | same; ?to routes to QueryFlagHistory |
 | `GET /anomalies ?app` | `known-violation` (BUG-008) | `probe` | real filter on scope.App; response differential via fakeAnomalyDetector |
 | `GET /anomalies ?stream` | `known-violation` (BUG-008) | `probe` | real filter on scope.StreamID |
 | `GET /anomalies ?limit` | `known-violation` (BUG-008) | `probe` | real slice-window; next_cursor emitted when more items remain |
 | `GET /anomalies ?cursor` | `known-violation` (BUG-008) | `probe` | decimal-offset cursor; page 1 ≠ page 2 differential |
 
-Two BUG-008 `known-violation` entries remain (?from, ?to). The other four are closed.
+All six BUG-008 entries are now closed: ?from and ?to promoted to `probe` in S24/D-086 (ADR-0009 built). The four Group A entries were promoted in S22/D-084.
 
 ---
 
