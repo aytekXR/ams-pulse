@@ -211,11 +211,10 @@ func TestAnomaly_APILatencyMS_Spike_Flags(t *testing.T) {
 // Feeding 0 would poison the Welford baseline toward zero, making normal latency
 // look anomalous. The presence guard (skip when APILatencyMS==0) prevents this.
 //
-// This test passes both before and after implementation; it pins the guard:
-// if the guard is accidentally removed, the test continues to PASS — it is
-// the companion Baselines test that would catch the regression by finding a
-// poisoned (zero-mean) baseline. The no-measurement test is explicit contract
-// documentation for the convention.
+// This test DOES discriminate the guard (proven by the S25 verify mutation
+// M5): removing the presence guard feeds 0.0 observations, a zero-mean
+// baseline row appears for ams_api_latency_ms, and the no-baseline assertion
+// below fails with "expected NO baseline row ... found one: mean=0.0000".
 func TestAnomaly_APILatencyMS_NoMeasurement_NoBaseline(t *testing.T) {
 	store := &fakeBaselineStore{}
 	// Node with APILatencyMS == 0: no measurement (last call failed or not yet polled).

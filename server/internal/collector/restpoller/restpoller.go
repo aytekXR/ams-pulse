@@ -193,7 +193,9 @@ func (p *Poller) poll(ctx context.Context) error {
 				ev := collector.NormalizeClusterNode(n)
 				ev.NodeID = p.cfg.NodeID // override with our configured ID
 				ev.Data["api_latency_ms"] = clusterRTTMS
-				ev.Data["consec_api_errors"] = float64(0)
+				// Emit the live counter (0 after the reset above), never a literal:
+				// a hardcoded 0 here would mask a missing reset (D-087 verify M4).
+				ev.Data["consec_api_errors"] = float64(p.consecAPIErrors)
 				p.sink.WriteServerEvent(ev)
 			}
 		} else {
@@ -214,7 +216,8 @@ func (p *Poller) poll(ctx context.Context) error {
 				}
 				ev := collector.NormalizeSystemStats(stats, p.cfg.NodeID, versionName)
 				ev.Data["api_latency_ms"] = sysRTTMS
-				ev.Data["consec_api_errors"] = float64(0)
+				// Live counter, not a literal — see the cluster-path note (D-087 M4).
+				ev.Data["consec_api_errors"] = float64(p.consecAPIErrors)
 				p.sink.WriteServerEvent(ev)
 			} else {
 				// Standalone failure: increment streak, emit FAILURE-STREAK event.

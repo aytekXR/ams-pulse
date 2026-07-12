@@ -500,3 +500,86 @@ func TestAPIStreak_ClusterPath_FailureEvent(t *testing.T) {
 	}
 	t.Logf("PASS: cluster-path failure produces api_unreachable=true, no RTT")
 }
+
+// ─── Test 8: post-recovery failure starts a FRESH streak (D-087 verify M4) ───
+
+// TestAPIStreak_PostRecoveryFailure_StartsAtOne is the discriminating pin the
+// S25 verify pass demanded: a success event emitting a hardcoded 0 would make
+// Test 4 pass even if the internal counter were never reset. The only
+// observable proof of the reset is the FIRST failure AFTER a recovery: its
+// consec_api_errors must be 1 (fresh streak), not oldStreak+1.
+//
+// Sequence driven via the fake AMS: fail ×2 → succeed ×1 → fail forever.
+func TestAPIStreak_PostRecoveryFailure_StartsAtOne(t *testing.T) {
+	call := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/rest/v2/applications":
+			json.NewEncoder(w).Encode(map[string]any{"applications": []any{}}) //nolint:errcheck
+		case "/rest/v2/cluster/nodes":
+			w.WriteHeader(http.StatusNotFound)
+		case "/rest/v2/system-status":
+			call++
+			if call <= 2 || call >= 4 {
+				w.WriteHeader(http.StatusInternalServerError)
+			} else { // call == 3: the one recovery success
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]any{"osName": "Linux"}) //nolint:errcheck
+			}
+		case "/rest/v2/version":
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	p, sink := makePoller(t, srv.URL)
+	_, cancel := runPoller(p)
+	defer cancel()
+
+	deadline := time.NewTimer(5 * time.Second)
+	defer deadline.Stop()
+	for {
+		select {
+		case <-sink.notify:
+			// Stateless positional scan on every notify: the verdict event is the
+			// first failure event AFTER the buffer position of the recovery
+			// success. (A latched-flag rescan from index 0 would pick a
+			// PRE-recovery failure and pass vacuously — the first draft of this
+			// test did exactly that; caught by the D-087 M4 re-derivation.)
+			sink.mu.Lock()
+			var nodeEvents []domain.ServerEvent
+			for _, ev := range sink.events {
+				if ev.Type == domain.EventNodeStats {
+					nodeEvents = append(nodeEvents, ev)
+				}
+			}
+			sink.mu.Unlock()
+			recoveryIdx := -1
+			for i, ev := range nodeEvents {
+				if u, _ := ev.Data["api_unreachable"].(bool); !u {
+					recoveryIdx = i
+					break
+				}
+			}
+			if recoveryIdx < 0 {
+				continue // recovery success not yet observed
+			}
+			for _, ev := range nodeEvents[recoveryIdx+1:] {
+				if u, _ := ev.Data["api_unreachable"].(bool); !u {
+					continue
+				}
+				// The verdict event: first failure after the recovery.
+				c, _ := ev.Data["consec_api_errors"].(float64)
+				if c != 1 {
+					t.Fatalf("FAIL: post-recovery failure carries consec_api_errors=%v, want 1 — the internal streak counter was not reset on success", c)
+				}
+				t.Logf("PASS: post-recovery failure starts a fresh streak (consec_api_errors=1)")
+				return
+			}
+		case <-deadline.C:
+			t.Fatal("FAIL: timed out — expected a failure event after the recovery success")
+		}
+	}
+}

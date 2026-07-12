@@ -83,7 +83,7 @@ var supportedAnomalyMetrics = map[string]bool{
 // ValidateAnomalyRule validates anomaly-specific constraints on a rule.
 // Returns nil for non-anomaly rules (threshold/empty RuleType always passes).
 // Returns *AnomalyRuleValidationError for anomaly rules that fail:
-//   - metric must be in the supported set (viewer_count, ingest_bitrate_kbps, cpu_pct, mem_pct, disk_pct)
+//   - metric must be in the supported set (viewer_count, ingest_bitrate_kbps, cpu_pct, mem_pct, disk_pct, ams_api_latency_ms)
 //   - window_s must be exactly 3600 (matches the Detector's fixed windowS)
 func ValidateAnomalyRule(row meta.AlertRuleRow) error {
 	if row.RuleType != "anomaly" {

@@ -749,10 +749,7 @@ func wireAlertAnomalyReader(eval *alert.Evaluator, store alert.AnomalyBaselineRe
 // D-087 wiring pin: serve_wiring_test.go calls this function directly; deleting
 // it causes the test file to fail to compile (analogous to beaconListenerConfig).
 func wireNodeEviction(ctx context.Context, agg *aggregator.Aggregator, pollInterval time.Duration) {
-	if pollInterval <= 0 {
-		pollInterval = restpoller.DefaultPollInterval
-	}
-	threshold := 3 * pollInterval
+	threshold := nodeEvictionThreshold(pollInterval)
 	cadence := threshold / 2
 	go func() {
 		ticker := time.NewTicker(cadence)
@@ -766,6 +763,18 @@ func wireNodeEviction(ctx context.Context, agg *aggregator.Aggregator, pollInter
 			}
 		}
 	}()
+}
+
+// nodeEvictionThreshold computes the staleness window for node eviction:
+// 3×PollInterval per the aggregator's EvictStaleNodes contract (VD-30) —
+// ~15 s freeze-detection at the 5 s default. The multiplier is load-bearing
+// for the node_down lead-time claim and is pinned by a direct unit test
+// (D-087 verify M8: an unpinned multiplier silently doubles detection time).
+func nodeEvictionThreshold(pollInterval time.Duration) time.Duration {
+	if pollInterval <= 0 {
+		pollInterval = restpoller.DefaultPollInterval
+	}
+	return 3 * pollInterval
 }
 
 // ─── Beacon listener wiring ───────────────────────────────────────────────────
