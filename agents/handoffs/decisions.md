@@ -3896,3 +3896,134 @@ ROADMAP-V2 §3 S17. Program docs ride the S16 close PR.
 - **Gates:** docs-only diff (5 docs + decisions/ledgers) — no Go/web/sdk/
   contract changes → no code gates due; markdown-only PR, CI full matrix on
   the PR. Post-expiry sweep hands to S20 (lapse 07-12T12:09Z).
+
+## D-082 — SESSION-20 (2026-07-11/12): P0 bug fixes BUG-004 + BUG-003 + expiry-sweep re-gate (IN PROGRESS; evidence at close)
+
+**S20 open verification (2026-07-11T22:32Z):**
+- **Operator-action check (user directive): NO operator action is REQUIRED to
+  proceed — session continues autonomously.** The S19-produced action (review
+  the `final-assessment.md` DRAFT before any external use) is **still
+  outstanding and remains NON-BLOCKING**: nothing external is sent, the draft
+  keeps its DRAFT banner, and S20's work (code fixes) does not depend on it.
+  Re-surfaced politely in `docs/operator-expected.md` at close. Standing queue
+  unchanged and non-blocking (AMS-reset confirm, browser-accept, brandkit token
+  sign-off, Kafka yes/no, marketplace contact). **S20 produces NO new operator
+  action.**
+- **Date-driven plan adjustment (2nd occurrence, same class as D-081):** S20
+  opens 2026-07-11T22:32Z — still ~13.6 h BEFORE the AMS trial lapse
+  (2026-07-12T12:09Z). The SESSION-20 "post-expiry sweep FIRST" premise
+  therefore does NOT hold → **the post-expiry sweep is re-gated to S21 open**
+  (first session that actually runs after the lapse). Instead, a cheap
+  lockout-safe authed read-only re-confirm was taken: `/rest/v2/version` →
+  `versionName=3.0.3, versionType="Enterprise Edition", buildNumber=20260504_1443`
+  and `/rest/v2/applications` → `["LiveApp","WebRTCAppEE","live","pulse-test"]`
+  at 22:34Z — **byte-identical to the D-081 pre-expiry baseline**, so the
+  baseline stands unchanged for the S21 delta.
+- Preconditions: tree clean at S19 merge `ca22141`; protection exact (9
+  contexts incl. both CodeQL, strict, enforce_admins=true, reviews=0);
+  dependabot ZERO; no open PRs; prod healthy read-only (healthz all-ok:
+  clickhouse/collector/meta_store; SPA 200 on pulse.beyondkaira.com).
+- **WO-D CI-promotion gate: CLOSED** (07-11 < 07-23) → **skip carry ×9**.
+  Delta re-measure on the latest main run pair (ci 29165580223 / e2e
+  29165580245, 07-11T19:37Z): all jobs success — `csp-e2e` success, `web-e2e`
+  success, 8/8 ci jobs success. csp-e2e promotion candidate at 07-23; web-e2e
+  earliest ~07-25.
+- Branch `s20-d082`; PR-first, ≤2 pushes (D-076). Go-touching session → full
+  §8 gates due at close.
+
+**⚠️ S20 CONCURRENT-SESSION INCIDENT (2026-07-12T00:44Z, the D-062 hazard, 2nd
+occurrence — this one benign):**
+- A **foreign commit `2d3f539`** ("Caddy: add bedirhandemirel.beyondkaira.com
+  vhost (→ host:3200)", author+committer `aytek`, 35 additive lines to
+  `deploy/config/Caddyfile.prod`) appeared **on top of the S20 session branch**
+  mid-session — a concurrent Claude session (the operator's `~/repo/bedo`
+  portfolio work) committed to whatever branch happened to be checked out, which
+  was `s20-d082`. Also left an untracked backup
+  `deploy/config/Caddyfile.prod.bak-bedirhan-20260712`.
+- **Inspected before any action (RESUME-PROMPT §14 protocol): CLEAN — no
+  secrets.** Secret-shaped-line scan over the full diff returned nothing; the
+  block is a plain TLS-terminating reverse_proxy vhost (`header -Server`,
+  upstream `161.97.172.146:3200`) using `{$PULSE_DOMAIN}`, no credentials.
+- **Disposition (nothing destroyed, D-063):** the commit was **preserved on its
+  own branch `caddy-bedirhan-vhost` (2d3f539)** and the S20 branch reset to
+  `ca22141` (`--mixed`, working tree untouched), so the S20 PR carries ONLY S20
+  work and the foreign commit is not silently laundered through a PR titled "P0
+  bug fixes". **`deploy/config/Caddyfile.prod` on disk was NOT reverted** — it
+  is the file `pulse-prod-caddy-1` mounts as its live config, so reverting it
+  would have taken `bedirhandemirel.beyondkaira.com` down. It therefore stands
+  as an uncommitted working-tree modification and is EXCLUDED from every S20
+  commit (explicit-path commits only, D-008/D-011). The `.bak` file is left in
+  place, untracked and uncommitted (not this session's to delete).
+- **→ OPERATOR ITEM PRODUCED (new, non-blocking):** `origin/main` does NOT
+  contain that vhost block, but **live prod Caddy DOES** — main is now out of
+  sync with the deployed Caddy config, so a redeploy/reload from a clean main
+  checkout would drop `bedirhandemirel.beyondkaira.com`. The commit is preserved
+  and ready; the operator decides whether to merge it (a one-commit PR from
+  `caddy-bedirhan-vhost`). Recorded in `docs/operator-expected.md`.
+- **Process note for future sessions:** the hazard is now confirmed recurrent.
+  A session that finds HEAD moved must inspect-then-preserve (branch the foreign
+  commit, reset own branch) — never revert, never absorb it into the session PR.
+
+**S20 CLOSE (D-082 evidence):**
+- **WO-C DELIVERED — BUG-004 FIXED** (`fix(api)`): `/qoe/ingest` now honors the
+  `from`/`to`/`app`/`stream`/`node` params it had been declaring and discarding.
+  New `parseTimeParam` (zero `time.Time` on absent input — `parseTimeRange` could
+  NOT be reused: its 7-day default would have invented a window where the caller
+  asked for none); From/To plumbed into `IngestTimeseriesParams`; app/stream/node
+  filter the returned stream set; additive `IngestQuerier` interface + nil-guarded
+  `iqsvc` field as the test seam. **Contract UNCHANGED** (`npm run gen:api` +
+  `git diff --exit-code` on `web/src/api/` + `contracts/` → clean). TDD red→green,
+  13 subtests / 3 funcs; red captured (0 IngestTimeseries calls) pre-fix.
+  **★ Production impact found while fixing:** `web/src/api/client.ts`
+  `getIngestHealth` sends `from=now-15min&to=now` on EVERY Ingest-page load — the
+  real prod dashboard was being served all-time era-mixed buckets. Never a
+  test-only defect. **Residual carved out as BUG-005** (`interval` declared but
+  ignored — identical class; `BucketSeconds` stays 0 → silent 60 s buckets).
+- **WO-C DELIVERED — BUG-003 FIXED** (`fix(prober)`): **the filed root-cause
+  hypothesis was WRONG.** There is no "immediate run on create" goroutine. Actual
+  mechanism: `Run`'s 60 s refresh loop called `spawnProbe` for EVERY probe on
+  EVERY tick and `spawnProbe` cancelled+respawned unconditionally — even for an
+  UNCHANGED probe; the respawned goroutine fires after only `jitter(interval)`,
+  and prod leaves `MaxJitterFraction`=0 (`serve.go`: `prober.Config{Workers: 4}`)
+  ⇒ fires IMMEDIATELY, 0–1 ms on top of the original's phase-aligned fire ⇒ a
+  duplicate pair every **60 s** (the refresh period — matching the evidence
+  signature exactly), NOT every probe interval. Every refresh ALSO silently reset
+  each probe's phase, so prod probe timing was never truly periodic.
+  Fix = `probeEntry` stores the config; `spawnProbe` returns early on whole-struct
+  equality (changed ⇒ respawn, removed ⇒ cancel); refresh moved from a real
+  `time.NewTicker` to a re-armed `r.clock.After(cfg.RefreshInterval)` (defaults 60 s
+  when ≤0 ⇒ prod behavior identical) so a FakeClock drives it deterministically.
+  **The 3 filed fix suggestions were REJECTED** (insert-time dedup, results-API
+  dedup, per-probe mutex): each hides the duplicate row and none fix the phase
+  reset (D-042 — fix the mechanism, never the symptom).
+- **★ WORKFLOW PARTIAL FAILURE (weekly subagent rate limit) — recovered by ORCH.**
+  6 agents: 2 scouts + 2 authors + 2 verifiers. The **BUG-003 author died on the
+  limit AFTER writing code+tests but BEFORE running its gates**, and one BUG-004
+  verifier died. Unverified, ungated code was therefore sitting in the tree — the
+  exact false-green hazard. **ORCH ran every gate inline instead of trusting it**,
+  and crucially **re-derived the missing red proof**: the BUG-003 pin was re-run
+  against the PRE-FIX `spawnProbe` in an **isolated pristine-copy tree** (never the
+  real repo, D-061) → fails with the bug's exact signature (`expected exactly 4
+  probe fires in 100 virtual seconds …, got 5`), green on the fix. A regression
+  test whose red was never observed is not a pin — this one now is.
+  The surviving BUG-004 verifier returned **CONFIRMED_OK, zero findings**
+  (re-ran the suite, confirmed contracts untouched, confirmed the web client's
+  query-key names match what the handler now reads).
+- **GATES (full §8, all ORCH-run, repo-root mount, golang:1.25):** `go build ./...`
+  OK; `gofmt -l internal/api internal/prober cmd/pulse` → **empty output** (gated on
+  emptiness, never on exit code); `go vet` clean; **`go test -race` all 24 packages
+  ok, 0 FAIL, 0 SKIP** (api SKIP count explicitly asserted **0** — D-028 guard);
+  `-race -count=3` on prober ok (no flake); **Go total coverage 74.5% → 74.8%**
+  (floor 70.2; api 76.9→78.0, prober 72.6→74.3); contract-drift gate clean.
+- **WO-A (backlog-if-light) DELIVERED:** `bugs/BUG-002-design-note-vod-rest-poll.md`
+  — VoD REST-poll design for the recording/billing gap. **Corrects
+  final-assessment.md §5**, which claimed the fix needs "no schema change": it needs
+  **TWO additive migrations** (ClickHouse `mv_recording_1d` — without it, emitted
+  recording events never reach `rollup_usage_1d` and billing stays 0 — plus a
+  `vod_poll_state` table for a restart-safe high-water mark). Both need INT-01 CRs
+  (D-004). Proposal only; nothing committed to building. §5 row corrected to Medium.
+- **WO-B (operator-review intake): NOT ACTIONABLE** — no operator answer arrived;
+  final-assessment.md + prd-validation-matrix.md stay **DRAFT**, nothing sent
+  external. Re-surfaced politely in operator-expected.md (non-blocking).
+- **WO-D:** gate CLOSED (07-11/12 < 07-23) → **skip carry ×9**. **WO-E:** clean.
+  Prod + AMS **untouched all session** (read-only only).

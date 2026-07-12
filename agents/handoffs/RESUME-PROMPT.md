@@ -11,7 +11,53 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-20.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-21.md`)
+
+**Session 2026-07-12 result: D-082 — S20 DONE (both P0 code bugs fixed; sweep re-gated).**
+- **BUG-004 FIXED** (`fix(api)`): `/qoe/ingest` now honors the `from`/`to`/`app`/
+  `stream`/`node` params it had been declaring and silently discarding. Contract
+  UNCHANGED (gen:api + diff clean). **★ Prod impact found while fixing:** the web
+  Ingest page sends `from=now-15min&to=now` on every load — the REAL dashboard was
+  being served all-time era-mixed buckets, not just tests. Residual carved out as
+  **BUG-005** (`interval` declared-but-ignored — same class).
+- **BUG-003 FIXED** (`fix(prober)`): **the filed hypothesis was WRONG** (no
+  "immediate run on create" goroutine exists). Real mechanism: the 60 s refresh loop
+  cancel+respawned EVERY probe's scheduler on EVERY tick even when unchanged, and
+  the respawn fires immediately (prod `MaxJitterFraction`=0) → duplicate 0–1 ms
+  apart every **60 s** (= the refresh period, matching the evidence). It also
+  silently reset every probe's phase. Fix = skip respawn on unchanged config +
+  FakeClock-drivable refresh. All 3 filed fix suggestions REJECTED as symptom-hiding.
+- **★ WORKFLOW PARTIALLY DIED on the weekly subagent limit** — the BUG-003 author
+  wrote code+tests then died BEFORE gating. **ORCH gated everything inline and
+  re-derived the missing RED proof** in a pristine copy (pre-fix `spawnProbe` → the
+  pin fails with the bug's exact signature: 5 fires where 4 are expected). A pin
+  whose red was never observed is not a pin. **If a workflow dies mid-phase, never
+  trust the tree it left — gate it yourself.**
+- **Gates:** 24/24 Go packages `-race` ok, **0 FAIL / 0 SKIP** (api skips asserted 0,
+  D-028); coverage **74.5% → 74.8%** (floor 70.2); gofmt/vet/build/contract-drift clean.
+- **BUG-002 design note** landed + **corrects final-assessment §5**: the VoD-poll fix
+  needs **two additive migrations**, not the "no schema change" the draft claimed.
+- **Date fact:** S20 ran 22:32Z–03:0xZ, i.e. STILL PRE-EXPIRY (lapse 07-12T12:09Z) →
+  **the post-expiry sweep is re-gated to S21 open** (2nd re-gate; it is finally real
+  next session). Baseline re-confirmed unchanged: Enterprise 3.0.3, build
+  20260504_1443, 4 apps. CI promotions skip carry ×9. Prod + AMS untouched.
+- **⚠️ CONCURRENT-SESSION INCIDENT (2nd occurrence):** a foreign commit (`2d3f539`,
+  operator's `~/repo/bedo` session) landed a `bedirhandemirel` Caddy vhost ON the S20
+  branch. Inspected (CLEAN — no secrets), **preserved on branch `caddy-bedirhan-vhost`**,
+  reset out of the S20 branch, and the on-disk `Caddyfile.prod` was **NOT reverted**
+  (prod Caddy mounts it — reverting would down the site). **`origin/main` now LACKS a
+  vhost that live prod HAS** → a Caddy reload from a clean main checkout drops that
+  site. Operator must decide whether to merge it (operator-expected.md item 1).
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-21.md` and execute it**
+(post-expiry AMS sweep FIRST — the trial lapsed 2026-07-12T12:09Z and S21 is the first
+session that actually runs after it; then operator-review intake, BUG-005 + the
+remaining P0s, CI promotions if ≥07-23 else skip carry ×10). **PR-first, ≤2 pushes.**
+Check `docs/operator-expected.md` FIRST (caddy-vhost merge? final-assessment review?).
+
+---
+
+## ▶ prior session context (S19, superseded by the above)
 
 **Session 2026-07-11(d) result: D-081 — S19 DONE (D-078 Phases 7+8 + Phase-6 top-3).**
 - **Phase 7 LANDED: `docs/assessment/prd-validation-matrix.md`** — F1–F10

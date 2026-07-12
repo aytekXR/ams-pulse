@@ -1,6 +1,78 @@
-# Operator TODO — the items only YOU can do (updated at SESSION-19 close, D-081, 2026-07-11; rides S19's PR)
+# Operator TODO — the items only YOU can do (updated at SESSION-20 close, D-082, 2026-07-12; rides S20's PR)
 
-## ⚡ TL;DR — expected from you right now (2026-07-11, SESSION-19 closed)
+## ⚡ TL;DR — expected from you right now (2026-07-12, SESSION-20 closed)
+
+> **Nothing blocks the work — two things want a decision from you, neither urgent.**
+>
+> **1. NEW — your other Claude session committed to Pulse's session branch, and
+> your prod Caddy config is now ahead of `main`.** At 00:44 tonight a concurrent
+> session (the `~/repo/bedo` portfolio work) added a
+> `bedirhandemirel.beyondkaira.com` vhost to `deploy/config/Caddyfile.prod` and
+> committed it onto whatever branch was checked out — which happened to be this
+> session's branch. I inspected it (**clean — no secrets, 35 additive lines, a
+> plain TLS reverse-proxy to host:3200**), **preserved it on its own branch
+> `caddy-bedirhan-vhost`**, and kept it OUT of the Pulse S20 pull request — a PR
+> titled "P0 bug fixes" should not quietly carry an unrelated vhost change.
+> **I did NOT revert the file on disk**: that file is what the live
+> `pulse-prod-caddy-1` container mounts, so reverting it would have taken
+> `bedirhandemirel.beyondkaira.com` down.
+>
+> **⚠️ The consequence you should know about:** `origin/main` does **not** have
+> that vhost block, but **live prod does**. If anyone ever redeploys or reloads
+> Caddy from a clean `main` checkout, **`bedirhandemirel.beyondkaira.com` will
+> drop off**. The fix is one small PR from the `caddy-bedirhan-vhost` branch.
+> **Say "merge the caddy vhost" and a session will open it** (it is your own
+> commit — I just won't ship someone else's work through my PR without you
+> saying so). Also left untouched: an untracked backup file
+> `deploy/config/Caddyfile.prod.bak-bedirhan-20260712` that the other session
+> created — yours to keep or delete.
+>
+> *Process note: this is the second time a concurrent session has committed into
+> a Pulse session branch. It is harmless when caught, but if you run two Claude
+> sessions in this repo, it helps to give each one its own git worktree.*
+>
+> **2. STILL OPEN (re-surfaced, non-blocking) — review the final assessment
+> draft.** From last session: `docs/assessment/final-assessment.md` (the
+> marketplace-readiness report for the Ant Media team) plus its companion
+> `docs/assessment/prd-validation-matrix.md` are written and marked **DRAFT**.
+> **Nothing goes external until you review them.** Reply "approved", send edits,
+> or ignore — they stay internal either way. (One correction landed this session:
+> the draft claimed the recording/billing fix needs no schema change; the design
+> work showed it needs two — see below.)
+>
+> **FYI, no action needed:**
+> - **Your AMS trial license lapses today at 12:09 UTC.** This session (like the
+>   last) ran *before* that moment, so the post-expiry sweep — recording exactly
+>   which AMS features start refusing — is the **first thing next session does**.
+>   Your pre-expiry baseline is confirmed unchanged (Enterprise 3.0.3, build
+>   20260504_1443, 4 apps).
+> - **Two Pulse bugs fixed this session** (BUG-004: an API endpoint advertised
+>   time-window filters it silently ignored — this was corrupting the real
+>   Ingest page's charts, not just tests; BUG-003: the probe scheduler wrote a
+>   duplicate result row every 60 s). Both fixed test-first and adversarially
+>   verified. They reach prod with your next approved rollout; prod is untouched.
+> - **Recording/billing gap (BUG-002) now has a design note** —
+>   `docs/assessment/bugs/BUG-002-design-note-vod-rest-poll.md`. Key finding: the
+>   fix needs **two additive schema migrations**, not zero as the assessment draft
+>   assumed. Nothing is committed to building it; the note is a proposal.
+>
+> **Still waiting on (all non-blocking, unchanged):** AMS-reset confirmation
+> (S17), browser-accept of the re-branded UI, brandkit token proposals, Kafka
+> yes/no, Ant Media marketplace contact.
+
+## 🔎 What SESSION-20 did (2026-07-12, closed — D-082)
+
+| Area | Result |
+|---|---|
+| **BUG-004 fixed** | `GET /qoe/ingest` declared `from`/`to`/`app`/`stream`/`node` filters in its API contract and silently ignored every one of them — so it returned all-time data mixed across eras. **Your Ingest dashboard page was affected** (it asks for the last 15 minutes and was getting everything). Fixed test-first; the API contract itself did not change (the implementation caught up to the spec it already published). |
+| **BUG-003 fixed** | The probe scheduler wrote a duplicate result row every 60 s. Root cause was not what the bug report guessed: the runner's 60-second "reload the probe list" loop was **cancelling and restarting every probe's scheduler on every tick**, even when nothing about the probe had changed — and the restarted scheduler fires immediately, landing ~1 ms on top of the original's own tick. Now a probe is only restarted when its config actually changed. First-check-under-100 ms behavior for new probes is preserved. |
+| **BUG-002 design note** | The recording/billing gap (`recording_gb` always 0) now has a written design for the VoD REST-poll fix, with a correction to the assessment: it needs two additive migrations (a ClickHouse view to reach the billing rollup, and a table to remember what was already counted). Not built — a proposal for a future session. |
+| **Concurrent-session incident** | Your other session's Caddy commit was found on this session's branch, inspected (clean), preserved on `caddy-bedirhan-vhost`, and excluded from the PR. See item 1 above — `main` is now behind live prod Caddy config. |
+| **Ops** | Prod and your AMS untouched (read-only checks only). CI-promotion date gate still closed (opens 07-23) → skip carry ×9; the latest main CI/e2e runs are fully green including `csp-e2e` and `web-e2e`. |
+
+## (superseded) S19-close header follows
+
+## ⚡ TL;DR — expected from you at SESSION-19 close (2026-07-11)
 
 > **ONE new action is requested (the first real one in three sessions): review
 > the final assessment draft.** Your validation program's end deliverable is

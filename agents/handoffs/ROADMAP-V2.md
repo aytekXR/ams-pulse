@@ -655,7 +655,51 @@ option" + 2 stale dist filenames + missing BUG-004 caveat). WO-D skip carry ×8
 authed baseline Enterprise 3.0.3 at 18:2xZ; post-expiry sweep → S20).
 Prompt: `sessions/SESSION-19.md`; ledger: decisions.md D-081.
 
-### S20 — operator-review intake + post-expiry sweep + P0 bug fixes (planned at S19 close, D-081)
+### S20 — P0 bug fixes ✅ DONE (D-082, 2026-07-12)
+**Result: both P0 code bugs FIXED.** **BUG-004** (`fix(api)`): `/qoe/ingest` now
+honors the `from`/`to`/`app`/`stream`/`node` params it declared and discarded;
+contract UNCHANGED. **★ Prod impact found while fixing** — the web Ingest page sends
+`from=now-15min&to=now` on every load, so REAL dashboard charts were era-mixed, not
+just tests. Residual → **BUG-005** (`interval`, same declared-but-ignored class).
+**BUG-003** (`fix(prober)`): **the filed root-cause hypothesis was WRONG** — no
+"immediate run on create" goroutine exists; the 60 s refresh loop cancel+respawned
+EVERY probe on EVERY tick even when unchanged, and the respawn fires immediately
+(prod `MaxJitterFraction`=0) → duplicates every 60 s + a silent phase reset on every
+refresh. Fix = skip respawn on unchanged config + FakeClock-drivable refresh; all 3
+filed fix suggestions REJECTED as symptom-hiding (D-042).
+**★ The workflow partially DIED on the weekly subagent limit** (BUG-003 author wrote
+code+tests, died before gating) — **ORCH gated inline and re-derived the missing RED
+proof** in a pristine copy (pre-fix → 5 fires where 4 expected). Gates: 24/24 pkgs
+`-race`, 0 FAIL / 0 SKIP; coverage **74.5% → 74.8%**. **BUG-002 design note** landed
+and **corrects final-assessment §5** (needs TWO additive migrations, not "no schema
+change"). Sweep **re-gated to S21** (S20 ran pre-expiry again). Skip carry ×9.
+**⚠️ Concurrent-session incident #2:** foreign caddy commit preserved on
+`caddy-bedirhan-vhost`; `origin/main` now lacks a vhost live prod HAS → operator call.
+Prompt: `sessions/SESSION-20.md`; ledger: decisions.md D-082.
+
+### S21 — post-expiry sweep (finally real) + operator intake + BUG-005/class fix (planned at S20 close, D-082)
+
+Execute `sessions/SESSION-21.md`. FIRST: the post-license-expiry read-only AMS sweep
+— S19 AND S20 both ran pre-expiry and re-gated it; S21 is the first session after the
+2026-07-12T12:09Z lapse, so it is no longer deferrable. Record the delta vs the
+D-082 baseline in **D-083** + which scenarios become blocked (a null delta is a real
+result — say so explicitly).
+
+1. **WO-A [S, FIRST]** post-expiry sweep → D-083 delta + blocked-scenario list.
+2. **WO-B [S]** operator intake: the `caddy-bedirhan-vhost` merge decision (main is
+   BEHIND live prod Caddy until it lands) + final-assessment review; else re-surface.
+3. **WO-C [M]** BUG-005 (`interval` declared-but-ignored) + **the class fix**:
+   parameter-conformance contract tests (kin-openapi) that assert handlers honor every
+   declared query param — CI lints the spec but never the handlers, which is exactly
+   why BUG-004 and BUG-005 both slipped through.
+4. **WO-D [S, gate ≥07-23]** CI promotions (csp-e2e candidate at the gate; web-e2e
+   ~07-25) — else skip carry ×10.
+5. **WO-E [XS]** standing re-checks.
+
+*(Backlog-if-light: BUG-002 VoD REST poll — now a BUILD decision, design + its two
+INT-01 migration CRs are written; remote-host WebRTC viewer; SRT loss; Kafka doc pair.)*
+
+### S20 (original plan) — operator-review intake + post-expiry sweep + P0 bug fixes (planned at S19 close, D-081)
 
 Execute `sessions/SESSION-20.md`. FIRST: post-license-expiry read-only AMS sweep
 (trial lapses 2026-07-12T12:09Z — record what 403s/shrinks vs the S17–S19
