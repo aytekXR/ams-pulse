@@ -1,4 +1,57 @@
-# Operator TODO — the items only YOU can do (updated at SESSION-24 close, D-086, 2026-07-12; rides S24's PR)
+# Operator TODO — the items only YOU can do (updated at SESSION-25 close, D-087, 2026-07-13; rides S25's PR)
+
+## ⚡ TL;DR — expected from you right now (2026-07-13, SESSION-25 closed — D-087)
+
+> **Nothing is needed from you right now.** S25 ran fully autonomously (your
+> open items re-checked at open: no answers, nothing blocked). Per your new
+> standing directive, the session reviewed the backlog before executing —
+> and the review paid off immediately.
+>
+> **★ THE HEADLINE: Pulse can now warn you EARLY about the exact failure in
+> the open Ant Media issue #7926** (servers that gradually freeze after
+> ~24 h while CPU/RAM look normal — the kind that today gets noticed by
+> users complaining). Three escalating signals, all live in the code:
+> Pulse now measures your AMS API's response time on every poll and
+> baseline-monitors it (a slowdown creep raises an anomaly flag — and this
+> is the FIRST resource-style signal that works on standalone AMS, which
+> reports no CPU/memory at all); three consecutive API failures fire a
+> `node_degraded` alert within ~15 seconds; and a fully frozen server fires
+> `node_down`. **Proven against your real AMS tonight: the new latency
+> baseline formed within minutes — your server answers in ~3.2 ms.**
+>
+> **★ The honest confession that comes with it: `node_down` could never
+> have fired before this session — in any deployment.** The stale-node
+> eviction routine existed but was never activated (BUG-011, found by this
+> session's scouts, fixed and pinned with tests). This also explains why
+> S19's validation honestly downgraded the "node up/down alerts" claim.
+> The docs now claim exactly what the evidence supports.
+>
+> **Also decided — honestly NOT built:** the viewer-experience anomaly
+> signals (rebuffer/error rates) stay gated. Your deployment has
+> essentially zero beacon data (2 smoke-test events ever), and building on
+> that would produce a detector whose first real event is a guaranteed
+> false alarm. The gate, with precise re-assess criteria, is written down;
+> the moment a real beacon deployment exists, it's a one-session build.
+>
+> **Still waiting on your two standing decisions (unchanged, non-blocking):**
+> caddy-vhost merge + final-assessment DRAFT review — details in the S21
+> TL;DR below. **The rollout keeps growing:** a prod rollout now carries
+> SIX sessions of fixes (D-082..D-087 — every BUG-002..011 fix,
+> recording/billing, persistent anomaly history, and the early-warning
+> ladder). Say "roll out" whenever you want them live.
+
+## 🔎 What SESSION-25 did (2026-07-12/13, closed — D-087)
+
+| Area | Result |
+|---|---|
+| **Early-warning ladder** | AMS API round-trip time is now a monitored anomaly metric (`ams_api_latency_ms`); 3 consecutive API failures → `node_degraded` alert; frozen server → `node_down` (BUG-011 fix made this rung actually reachable). Failure signals deliberately never mask the freeze detector — pinned by tests both ways. New alert metrics appear in the web UI dropdowns. |
+| **Live proof** | Your validation stack was rebuilt on tonight's build: the latency baseline for node `beyondkaira-ams` formed within ~4 minutes against your real AMS (mean 3.18 ms). Prod itself untouched, as always. |
+| **BUG-011** | Filed + fixed + documented: node eviction was implemented but never activated, so offline-node alerts were structurally dead. Found by comparing the alert docs' claims against what could ever execute. |
+| **F9 viewer-QoE gate** | Beacon-based anomaly signals assessed with real data volumes and honestly deferred (2 smoke events total; statistical traps documented). Assessment scores unchanged (65.2/83.0) — nothing inflated. |
+| **Quality net** | 11 workflow agents (4 scouts, 4 authors, 3 adversarial verifiers). 8 sabotage mutations; 2 exposed weak spots (one masked a missing counter reset; the replacement test's own first draft was vacuous and got caught by re-running the sabotage against it) — both strengthened before merge. |
+| **Ops** | Gates: 24/24 Go packages race-clean, coverage 75.9% (floor 70.2), contract text-only change (stale docs since D-074 brought current), web 366 tests green. Fourth byte-identical post-expiry AMS sweep; your antmedia container still hasn't restarted since before the lapse. CI-promotion date gate still closed (opens 07-23) → skip carry ×14. One PR. |
+
+## (superseded) S24-close header follows
 
 ## ⚡ TL;DR — expected from you right now (2026-07-12, SESSION-24 closed — D-086)
 

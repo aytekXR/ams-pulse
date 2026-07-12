@@ -67,6 +67,55 @@
   since D-074 ('viewer_count, cpu_pct, mem_pct') — brought current +
   gen:api regen this session.
 
+**S25 WO-D evidence (recorded at close — the early-warning ladder BUILT, TDD + adversarially verified):**
+- **The vertical (4 authors, all reds observed live):** restpoller measures
+  RTT around the node-stats call (standalone SystemStats / cluster
+  ClusterNodes) → `LiveNodeStats.APILatencyMS` + `ConsecAPIErrors` →
+  anomaly metric `ams_api_latency_ms` (skip-when-0 presence guard at ALL
+  THREE eval sites — verified parity) → error-streak ≥3 extends
+  node_degraded (wave2) → **BUG-011 fixed:** `wireNodeEviction` goroutine
+  (serve.go) calls EvictStaleNodes at threshold `nodeEvictionThreshold()` =
+  3×PollInterval (extracted + pinned), cadence threshold/2. Failure events
+  update the streak IN-PLACE and never refresh LastSeenAt (both properties
+  pinned red-first) — rung 2 cannot starve rung 3. Web dropdowns +
+  contract description text (stale since D-074) + gen:api regen; 30 new
+  tests total; map/switch parity pin covers all 6 anomaly metrics.
+- **★ Verify net earned its keep on the VERIFIER'S OWN CATCH-CLASS:** V1
+  found M4 GREEN_BAD (success paths emitted a hardcoded 0 for
+  consec_api_errors — a missing reset was invisible). The remediation's
+  FIRST replacement pin was itself vacuous (rescanned the event buffer
+  from index 0 → verdict hit a pre-recovery failure) — caught ONLY by
+  re-running the mutation against the strengthened pin (D-082/D-086
+  discipline: re-derive every red). Final pin: stateless positional scan;
+  mutated run RED with 'consec=3, want 1'. M8: the 3× multiplier was
+  unpinned (doubling it would silently double node_down lead time) — now a
+  direct unit pin (6× mutation RED). Mutations: 8 run, 6 RED first pass,
+  2 GREEN/SKIPPED → both remediated + re-derived RED. V2+V3 CONFIRMED_OK
+  (contract diff = 2 description strings + regen only; conformance
+  untouched, minSpecParams 86; flag-event flow traced zero-change;
+  WO-A gate integrity: no whitelist copy gained beacon metrics; race ×3;
+  eviction blast radius: fleet/metrics/alerts/e2e all safe).
+- **GATES (ORCH-run, repo-root mount, golang:1.25):** gofmt 0 bytes; vet
+  clean; `go test -race` **24/24 pkgs 0 FAIL**; skip census = the 3
+  pre-existing env-gated infra tests (D-028 class 0); coverage
+  **75.5% → 75.9%** (floor 70.2); integration suite green (store 71 s,
+  migrations 16 s, meta 63 s, query 34 s); web 366 tests, coverage gates
+  met. Follow-up seeded (V3): FleetNodes status ignores ConsecAPIErrors —
+  §2.16 note, S26+ [XS].
+- **★ LIVE-VALIDATED (rung 1 vs the REAL AMS):** pulse-realams rebuilt from
+  the S25 tree (`down -v`, sanctioned); within ~4 min the meta store shows
+  `anomaly_baselines: ams_api_latency_ms | {"node_id":"beyondkaira-ams"} |
+  mean=3.177 ms | stddev=0.062 | sample_count=2` — poller RTT → snapshot →
+  Welford, correctly node-scoped, measuring the real AMS REST API at
+  ~3.2 ms. (Meta DB inspected via db+wal+shm copy per the SQLite-WAL
+  memory.) Rungs 2/3 are NOT live-testable against the real AMS by design
+  (never restart/degrade the operator's antmedia container); unit +
+  serve-level pins carry those claims, stated as such in the matrix.
+  Pre-existing observation (out of scope, noted): standalone deployments
+  also grow zero-mean cpu/mem/disk baselines (D-074-era behavior, no
+  presence guard on those metrics) — S26+ candidate alongside the
+  FleetNodes display gap.
+
 
 Rulings on PRD ambiguities, scope, waivers, and contract-change approvals.
 Newest at the bottom. Referenced by DEVLOG.md.

@@ -11,7 +11,60 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-25.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-26.md`)
+
+**Session 2026-07-12/13 result: D-087 — S25 DONE (★ AMS early-warning ladder
+built + live-validated; BUG-011 fixed — node_down could never fire; F9
+beacon metrics honestly GATED on sparsity).**
+- **★ WO-D (expanded primary): the 3-rung ladder for the ant-media#7926
+  class** (AMS gradually freezes; OS metrics normal): rung 1
+  `ams_api_latency_ms` poller-RTT anomaly metric (FIRST live node-scoped
+  metric on standalone — AMS 3.x reports no cpu/mem; key-absent-on-failure;
+  skip-when-0 at all 3 eval sites; budget 5×0.086=0.432<1.0) → rung 2 API
+  error-streak ≥3 → node_degraded (~15 s; was dead on standalone) → rung 3
+  **BUG-011 FIXED: EvictStaleNodes was NEVER WIRED — node_down could never
+  fire in ANY deployment** (explains the S19 matrix downgrade); now
+  `wireNodeEviction` at pinned 3×PollInterval. Load-bearing ruling: failure
+  events never refresh LastSeenAt (in-place streak update) so rung 2 can't
+  starve rung 3 — both pinned red-first. **LIVE: realams rebuilt on the S25
+  tree — baseline `ams_api_latency_ms|{"node_id":"beyondkaira-ams"}|
+  mean=3.177ms` vs the real AMS in ~4 min.** Contract: text-only CR
+  (rule_type descriptions, stale since D-074) + gen:api regen.
+- **★ WO-A (F9 rebuffer_ratio/error_rate) HONESTLY GATED:** prod
+  beacon_events = 2 smoke rows (realams 0); zero-variance baselines ⇒ first
+  real event = instant false alarm; hourly rollup bucket accumulates ⇒
+  non-independent Welford samples (needs sub-hour windowing + real
+  traffic). Gate documented (§2.14/matrix F9/assessment); scores stay
+  65.2/83.0; the rebuffer_ratio exclusion pin untouched.
+- **Verify:** V2+V3 CONFIRMED_OK; V1 PARTIAL → remediated same-session:
+  M4 GREEN_BAD (hardcoded-0 streak emission) fixed twice over — the first
+  replacement pin was ITSELF vacuous (index-0 buffer rescan) and only the
+  mutation re-derivation caught it (final RED: 'consec=3, want 1'); M8: 3×
+  eviction multiplier extracted + pinned. 8 mutations + 2 re-derived.
+  Latent AnomalyBaselineForMetric bug = dead code, TODO(D-087)-pinned.
+- **Gates:** 24/24 `-race` 0 FAIL (3 env-gated infra skips; D-028 class 0);
+  coverage **75.5 → 75.9** (floor 70.2); gofmt/vet/integration green; web
+  366 tests, gates met. Backlog seeded: FleetNodes status ignores
+  ConsecAPIErrors (§2.16 note, XS) + pre-existing zero-mean cpu/mem/disk
+  standalone baselines (no presence guard, D-074-era) — both S26+.
+- **AMS post-expiry (s25open): byte-identical 4th null delta; still no
+  post-lapse antmedia restart.** CI promotions skip carry ×14 (ran
+  07-12/13 < 07-23). Prod untouched; **a rollout now carries D-082..D-087**
+  (BUG-002..011 + recording billing + anomaly history + early warning).
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-26.md` and execute it**
+(★ standing directive at its top: review the backlog + REVISE the plan;
+operator intake FIRST; CI promotions if run date ≥07-23 [csp-e2e candidate,
+web-e2e ~07-25] else skip carry ×15; candidates: FleetNodes degraded-status
+display gap [XS] + standalone zero-mean baseline guard [S] + F10 tail
+[probe-stats UI + RTMP AMF0] + BUG-001 [low]; AMS re-sweep at open,
+observe-only). **PR-first, ≤2 pushes.** Check `docs/operator-expected.md`
+FIRST (caddy-vhost? final-assessment review? prod rollout now carries
+D-082..D-087).
+
+---
+
+## ▶ prior session context (S24, superseded by the above)
 
 **Session 2026-07-12 result: D-086 — S24 DONE (★ BUG-008 FULLY FIXED —
 ADR-0009 flag-event store built + Accepted; conformance debt now 2, both

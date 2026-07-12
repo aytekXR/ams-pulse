@@ -385,6 +385,13 @@ Two upstream issues are direct demand evidence for Pulse:
 Rides the S25 anomaly-expansion session naturally (WO-D there). Plus two
 one-line demand-evidence citations in `docs/assessment/final-assessment.md`.
 
+**✅ BUILT S25 (D-087)** — all three items + BUG-011 (EvictStaleNodes never
+wired) fixed. **Follow-up [XS], seeded by the S25 verifier:** query.FleetNodes
+sets status="degraded" only on CPUPCT>90 — it ignores ConsecAPIErrors>=3, so a
+node firing the rung-2 node_degraded ALERT still shows status "up" on
+/fleet/nodes + the Fleet page (display-consistency gap; not contracted in the
+FleetNode schema; S26+ candidate).
+
 ---
 
 ## 3. Sessions
@@ -817,6 +824,41 @@ operator answer, ORCH ruling recorded in D-086):
    are integration-covered, not unit-covered), gofmt/vet/contract-drift
    clean, full integration green (10 migrations idempotent). Prod untouched;
    a rollout now carries D-082..**D-086**.
+
+### S25 — AMS early-warning ladder (§2.16) + F9 sparsity gate ✅ DONE (D-087, 2026-07-12/13)
+
+All WOs executed (SESSION-25.md; open checks clean — s25open sweep
+byte-identical [4th null delta], no post-lapse antmedia restart; standing
+backlog-review directive executed first time: plan confirmed, then WO-D
+expanded to primary on scout evidence):
+1. **WO-A (F9 beacon metrics) HONESTLY GATED** per its own assess-then-build
+   clause: prod beacon_events = 2 smoke rows / realams 0; zero-variance
+   first-event false alarm violates F9's acceptance; hourly rollup bucket
+   accumulates ⇒ non-independent Welford samples (needs sub-hour windowing
+   + real traffic). Gate documented (§2.14 / matrix F9 / assessment);
+   scores unchanged 65.2/83.0; rebuffer_ratio exclusion pin untouched.
+2. **WO-D DONE — ★ the 3-rung early-warning ladder (ant-media#7926 class):**
+   `ams_api_latency_ms` poller-RTT anomaly metric (first live node-scoped
+   metric on standalone AMS; key-absent-on-failure; budget 5×0.086=0.432<1.0)
+   → API error-streak ≥3 → node_degraded (~15 s; was dead on standalone:
+   cpu/mem never reported) → **BUG-011 FIXED: EvictStaleNodes was NEVER
+   WIRED — node_down could never fire in ANY deployment** (also explains
+   the S19 matrix downgrade). Load-bearing ruling pinned: failure events
+   never refresh LastSeenAt (in-place streak update) so rung 2 can't starve
+   rung 3. Map/switch parity pin kills the silent-nil metric trap class.
+3. **Verify:** V2+V3 CONFIRMED_OK (contract text-only CR + gen:api; skip-
+   when-0 parity ×3 sites; race ×3; ladder traced e2e; eviction blast
+   radius safe). V1 PARTIAL → remediated: M4 GREEN_BAD fixed twice over
+   (hardcoded-0 emission masked a missing reset; the replacement pin's own
+   first draft was vacuous — caught by re-derivation, now RED at consec=3);
+   M8 threshold multiplier extracted + pinned. 8 discrimination mutations
+   + 2 re-derived. Latent AnomalyBaselineForMetric bug = dead code,
+   TODO(D-087)-pinned.
+4. **Gates:** 24/24 -race 0 FAIL (3 env-gated infra skips; D-028 class 0);
+   coverage 75.5→**75.9** (floor 70.2); gofmt/vet clean; integration green;
+   web 366 tests, gates met. Follow-up seeded: FleetNodes status ignores
+   ConsecAPIErrors (display gap, V3 finding) → §2.16 note. Prod untouched;
+   a rollout now carries D-082..**D-087**.
 
 ### S22 (original plan) — post-expiry sweep (operator-directed re-gate) + conformance-debt fixes (planned at S21 close, D-083)
 
