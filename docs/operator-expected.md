@@ -1,4 +1,60 @@
-# Operator TODO — the items only YOU can do (updated at SESSION-23 close, D-085, 2026-07-12; rides S23's PR)
+# Operator TODO — the items only YOU can do (updated at SESSION-24 close, D-086, 2026-07-12; rides S24's PR)
+
+## ⚡ TL;DR — expected from you right now (2026-07-12, SESSION-24 closed — D-086)
+
+> **Nothing is needed from you right now.** S24 ran fully autonomously (your
+> open items were re-checked at open: no answers had arrived, nothing
+> blocked; the one gated decision — building the anomaly history store — was
+> resolved by the plan's own rules and recorded in D-086).
+>
+> **★ THE HEADLINE: the last of the API parameter debt (outside
+> multi-tenancy) is gone.** Since S21 your API contract's declared-parameter
+> audit had `GET /anomalies ?from/?to` pinned as "declared but ignored"
+> (BUG-008's final piece — answering a time-range question needs history
+> that was never stored). Pulse now **persists every anomaly detection** to
+> a ClickHouse table (with your tier's retention), survives restarts without
+> double-recording, and `/anomalies?from=…&to=…` answers honestly from that
+> history — with real pagination. Of the 86 declared parameters, **84 are
+> now proven honored; the 2 remaining are the `?tenant` pair**, which needs
+> a multi-tenancy data model (a product decision, not a bug).
+>
+> **The quality net earned its keep twice this session:** (1) the build
+> found the ClickHouse driver silently truncates timestamps to whole seconds
+> in query parameters — the spec'd pagination design would have duplicated
+> rows at page boundaries; caught live, fixed, and pinned so it can never
+> return. (2) One build agent stalled and was auto-retried mid-work; per the
+> standing rule its half-gated work was NOT trusted — all 9 "would the tests
+> really catch it?" sabotage proofs were re-derived from scratch, which
+> exposed two weak tests (one could silently skip, one passed by luck ~999
+> times in 1000) — both strengthened before merge.
+>
+> **Also re-proven today:** your recording/billing fix (S23) is holding live
+> — the usage report still shows exactly 0.003126 GB after 3 more hours of
+> polling (no double-billing drift), and your AMS post-expiry state is
+> byte-identical for the third consecutive sweep (your `antmedia` container
+> still hasn't restarted since before the lapse, so the "enforcement bites
+> at restart" hypothesis stays untested; sessions keep observing, never
+> restarting it).
+>
+> **Still waiting on your two standing decisions (unchanged, non-blocking):**
+> caddy-vhost merge + final-assessment DRAFT review — details in the S21
+> TL;DR below. **The rollout question grows again:** a prod rollout now
+> carries FIVE sessions of fixes (D-082..D-086 — every BUG-002..010 fix,
+> recording/billing, and persistent anomaly history). Say "roll out"
+> whenever you want them live; prod stays untouched until then.
+
+## 🔎 What SESSION-24 did (2026-07-12, closed — D-086)
+
+| Area | Result |
+|---|---|
+| **BUG-008 fully fixed** | `GET /anomalies` time-range queries (`?from`/`?to`) now work: anomaly detections are persisted (ClickHouse, tier retention: Free 7 d / Pro 90 d / Business 13 mo), restart-safe (warm-up prevents duplicate records), queryable with cursor pagination, and the endpoint's `metric`/`app`/`stream`/`min_sigma` filters work on the history path too. Design per ADR-0009 (now Accepted), which S23 wrote and adversarially fact-checked. |
+| **Driver bug caught pre-ship** | The ClickHouse Go driver sends timestamps at second precision in query parameters; the millisecond-precision pagination cursor therefore re-admitted same-second rows (duplicates at page boundaries — later proven able to loop forever). Fixed with integer-millisecond comparison; a regression test now forces the same-second case deterministically. |
+| **Conformance registry** | 37 live parameter probes (was 35) / **2 known-violations remain, both `?tenant`** (multi-tenancy — product decision) / floor raised so it can't decay. The BUG-004/005-class ("declared but ignored") is now structurally extinct outside tenancy. |
+| **Recording fix re-proven** | TC-REC-01 re-run against the validation stack: 3/3 PASS, recording_gb byte-stable after ~3 h of continued polling — the no-double-billing memory holds live. |
+| **Quality net** | 10 workflow agents (4 scouts, 3 authors [1 auto-retried after a stall — its tree was re-gated, not trusted], 3 adversarial verifiers). 9/9 sabotage-mutation proofs RED; 2 weak tests found by the verifiers (silent-skip pin, luck-dependent fixture) strengthened and re-proven same-session. |
+| **Ops** | Gates: 24/24 Go packages race-clean, 0 failures (3 pre-existing env-gated infra skips only), coverage 75.5% (floor 70.2 — the small dip from 76.0 is new store code covered by integration tests rather than unit tests), contract byte-unchanged. Prod untouched; AMS read-only; third byte-identical post-expiry sweep. CI-promotion date gate still closed (opens 07-23) → skip carry ×13. One PR. |
+
+## (superseded) S23-close header follows
 
 ## ⚡ TL;DR — expected from you right now (2026-07-12, SESSION-23 closed — D-085)
 
