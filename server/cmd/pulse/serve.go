@@ -208,24 +208,9 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	// full consumer list.
 	fanout = collector.NewFanout(logger, store, agg, sessionStitcher, ingestTracker)
 
-	// 5. Sources.
+	// 5. Sources (populated below; poller added after metaStore is initialized so
+	// VodState can be wired — see BUG-002 fix below).
 	var sources []collector.Source
-
-	// REST poller (always enabled).
-	// VD-07: pass geo/UA resolvers so REST-polled events get enrichment.
-	poller := restpoller.New(
-		restpoller.Config{
-			NodeID:       cfg.AMSNodeID,
-			PollInterval: cfg.PollInterval,
-			Applications: cfg.AMSApplications,
-			GeoResolver:  geoResolver,
-			UAParser:     uaParser,
-		},
-		amsClient,
-		fanout,
-		logger,
-	)
-	sources = append(sources, poller)
 
 	// A5/B1/B7: webhook source wired below after metaStore is available
 	// so that per-source HMAC secrets can be loaded from ams_sources. See
@@ -301,6 +286,28 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 			logger.Warn("meta store: explicit DDL migration failed", "path", metaDDLPath, "error", err)
 		}
 	}
+
+	// REST poller (always enabled).
+	// VD-07: pass geo/UA resolvers so REST-polled events get enrichment.
+	// BUG-002: VodState wires the meta store so VoD seen-set is persisted across
+	// restarts, preventing SummingMergeTree double-counts on recording_bytes.
+	// Placed here (after metaStore) so *meta.Store is available as VodState.
+	// *meta.Store satisfies restpoller.VodStateStore structurally via
+	// ListSeenVodIDs / MarkVodSeen (server/internal/store/meta/vod_poll_state.go).
+	poller := restpoller.New(
+		restpoller.Config{
+			NodeID:       cfg.AMSNodeID,
+			PollInterval: cfg.PollInterval,
+			Applications: cfg.AMSApplications,
+			GeoResolver:  geoResolver,
+			UAParser:     uaParser,
+			VodState:     metaStore,
+		},
+		amsClient,
+		fanout,
+		logger,
+	)
+	sources = append(sources, poller)
 
 	// A5/B1/B7: Wire webhook source when PULSE_WEBHOOK_ADDR is set.
 	// Placed here (after metaStore) so per-source HMAC secrets can be loaded.
