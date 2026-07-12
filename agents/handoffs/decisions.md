@@ -4249,3 +4249,98 @@ occurrence — this one benign):**
 - Prod + AMS: read-only EXCEPT the sanctioned `ams-teststream` restart (S14
   precedent, doubled as the post-lapse publish probe). Branch `s22-d084`;
   1 PR; ≤2 pushes. Close commits + PR evidence appended below after merge.
+
+## D-085 — SESSION-23 (2026-07-12): BUG-002 VoD REST-poll build + BUG-008 flag-event-store ADR (IN PROGRESS; evidence at close)
+
+**S23 OPEN facts (13:44Z–13:50Z, recorded early per protocol):**
+- **Concurrent-session check: CLEAN.** HEAD == origin/main == `2d311d9` (S22
+  merge); tree carries only the known prod `Caddyfile.prod` delta (do-not-revert,
+  D-082) + the operator's untracked `.bak`. No foreign commits.
+- **AMS post-expiry re-sweep (s23open, 13:45Z): BYTE-IDENTICAL** to the S21
+  pre-expiry baseline (`S21-sweep-s23open-20260712T134526Z` vs
+  `S21-sweep-preexpiry-20260712T014135Z/stable.txt`, diff empty). `antmedia`
+  StartedAt 2026-07-12T06:52:55Z = PRE-lapse (12:09Z) → **no post-lapse process
+  restart has occurred; the boot-time-enforcement hypothesis stays untested by
+  design.** Nothing blocked; observe-only stance unchanged.
+- **★ BUG-002 OQ-1/OQ-2/OQ-4/OQ-5 RESOLVED at open by ONE read-only live probe**
+  (`GET /pulse-test/rest/v2/vods/list/0/5`, no auth needed): AMS 3.0.3 VoD DTO
+  confirmed — **`vodId` EXISTS and is a stable string** ("SiJJzyAJEDhSMd7nmaDmgIbz"),
+  size field is **`fileSize`** (bytes, 3125555 for the S17 VoD), **`creationDate`**
+  is epoch-ms (1783770838091), **`streamId`** present ("val-vodgen-s17") → per-stream
+  attribution possible (OQ-2=yes). vods/count: pulse-test=1, LiveApp/WebRTCAppEE/live=0.
+  OQ-4 moot (post-expiry AMS fully functional). Capture saved to scratchpad
+  s23/vods-list-capture.json; shape to be pinned via in-repo fixture tests
+  (captures dir stays gitignored, S14 precedent).
+  **ORCH dedup ruling (per design-note OQ-1 clause):** vodId is stable → the
+  seen-set approach IS the design note's own recommendation — meta table
+  `vod_poll_state (app, vod_id, created_ms, PK(app,vod_id))`, migration 0003;
+  ClickHouse `mv_recording_1d` = migration 0009. Event TS = VoD creationDate
+  (bucket = creation day); OQ-3 = full backfill (design note's stated correct
+  accounting), noted for the operator at close.
+- **Operator intake: no answers arrived** (caddy-vhost merge + final-assessment
+  review re-surface at close, both non-blocking). **No operator action required
+  to proceed** — stated explicitly per the session-open directive.
+- **WO-D: CI promotions skip carry ×12** (07-12 < 07-23). **WO-E green:** 0 open
+  PRs, dependabot 0, protection intact (enforce_admins, 9 contexts, strict),
+  prod healthz ok + SPA 200 (read-only).
+
+**S23 WO-A evidence (recorded at close — BUG-002 FIXED, TDD + adversarially verified + LIVE-VALIDATED):**
+- **The vertical:** amsclient `VodDTO/ListVods/ListVodsPaged` (fixture pinned
+  VERBATIM from the live AMS capture); `restpoller.pollVods` — every 12th tick
+  (tick 0 = immediate backfill), persistent seen-set dedup on `(app, vodId)`
+  via meta `vod_poll_state` (migration 0003, all 4 required copies: contracts
+  sqlite+pg, embedded pg + embed_pg.go chain, applySchemaUpgrades block);
+  `mv_recording_1d` (CH migration 0009) — the structurally-missing
+  server_events→rollup_usage_1d.recording_bytes path. TS = VoD creationDate
+  (billing bucket = creation day); StreamID = `streamId` (NOT `streamName`,
+  which is the FILE name — capture caught this); duration is MILLISECONDS
+  (43025 for the ~43 s fixture — a naive "seconds" read was pre-empted).
+- **★ Two traps the scouts caught before any code:** (1) the restpoller
+  Deduplicator explicitly handles EventRecordingReady with a
+  {type,node,stream,window} key — routing VoD events through it silently
+  drops same-window recordings (pollVods bypasses it; pinned by
+  TestPollVods_DedupBypass_Regression); (2) the design note's "D-082 made the
+  refresh loop FakeClock-drivable" claim was FALSE for restpoller (no clock
+  abstraction exists there) — tests drive poll()/pollVods directly instead.
+- **At-most-once ruling:** MarkVodSeen BEFORE emit; a mark failure aborts the
+  cycle (slight undercount in a crash window is preferable to double-BILLING;
+  CH-channel overflow drops are the same semantics). Known limitation
+  documented: meta-db loss with surviving CH ⇒ one re-backfill double-count.
+- **Verification:** 3 adversarial verifiers, 0 must-fix. V1 (PARTIAL):
+  5 mutation proofs — delete-MV, dedup-route, neutered-persistence,
+  DTO-tag-corrupt all RED in pristine copies; embed-chain removal NOT caught
+  → ORCH remediation: EmbeddedDDLPostgres content guard test + PG-parity
+  helper now includes 0003. V2 (CONFIRMED_OK): red-evidence audit name-matched
+  all 4 red files; fixture byte-fidelity vs capture; contract surface
+  untouched. V3 (CONFIRMED_OK): 19/19 ADR citations verified (2 off-by-one
+  line cites ORCH-fixed); assessment recount independent.
+- **GATES (ORCH-run, repo-root mount, golang:1.25):** gofmt 0 bytes; vet
+  clean; `go test -race` 24/24 pkgs, 0 FAIL; **3 SKIPs are pre-existing
+  env-gated infra tests** (schema-fixtures ×2 need npx, poppler PDF needs
+  PDF_OUT_DIR — files byte-unchanged since 2d311d9; the D-028 api-skip class
+  is 0). Coverage **75.9% → 76.0%** (floor 70.2). Integration: MV test +
+  idempotent-run (9 migrations) + meta green.
+- **★ LIVE-VALIDATED vs real AMS (read-only against AMS):** pulse-realams
+  stack reset (`down -v`, sanctioned — isolated test stack) + rebuilt from
+  the working tree; migrate applied 9/9 (mv_recording_1d present); tick-0
+  backfill emitted exactly 1 event (the S17 pulse-test VoD); rollup row
+  `2026-07-11|pulse-test|val-vodgen-s17|3125555`; **TC-REC-01 3/3 PASS —
+  recording_gb=0.003126, 0.02% reconciliation** (evidence
+  S23-TC-REC-01-20260712T151721Z). The realams stack is left RUNNING on the
+  S23 build (loopback :18090). Prod untouched.
+
+**S23 WO-B/WO-C evidence:** ADR-0009 (anomaly flag-event store) authored,
+Proposed, migration 0010 (0009 collision noted), build DEFERRED (Effort L vs
+build-only-if-Small). Assessment refresh: S20–S22 fixes applied via the
+scout's 20-edit list + BUG-002-landed pass; **completeness 60.6/79.9 →
+65.2 strict / 83.0 weighted** (counts recounted mechanically: 43/12/7/3/1);
+marketplace "No P0 open bugs" FAIL→PASS; docs stay DRAFT. Stale "~1006 VoDs"
+S16 claim removed. session-plan + BUG-002 docs statuses updated.
+
+**S23 CLOSE (D-085):** Workflows: 4 scouts + 9 build agents (6 authors,
+3 verifiers), 0 errors, ~1.28M tokens. Branch `s23-d085`, commits
+f5fb305..HEAD, ONE PR, ≤2 pushes. WO-D skip carry ×12 (07-12 < 07-23).
+Operator queue unchanged (caddy-vhost + final-assessment review, both
+non-blocking). A prod rollout now carries D-082+D-083+D-084+**D-085**
+(BUG-002..010 fixes = the full API-correctness + billing release).
+PR/merge evidence appended below after merge (rides S24 if post-push).
