@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -24,6 +25,7 @@ import (
 	"github.com/pulse-analytics/pulse/server/internal/collector/sessions"
 	webhooksrc "github.com/pulse-analytics/pulse/server/internal/collector/webhook"
 	"github.com/pulse-analytics/pulse/server/internal/config"
+	"github.com/pulse-analytics/pulse/server/internal/domain"
 	"github.com/pulse-analytics/pulse/server/internal/license"
 	"github.com/pulse-analytics/pulse/server/internal/prober"
 	"github.com/pulse-analytics/pulse/server/internal/query"
@@ -85,6 +87,54 @@ func (b *anomalyDetectorBridge) ComputeFlags(ctx context.Context, sigmaThreshold
 		}
 	}
 	return out, nil
+}
+
+// flagQueryer is the subset of *clickhouse.Store needed by flagHistoryBridge.
+// Unexported to keep the package interface narrow; *clickhouse.Store satisfies it
+// and tests can inject a stub without requiring a real ClickHouse connection.
+type flagQueryer interface {
+	QueryFlagHistory(ctx context.Context, from, to time.Time, metric, app, stream string, minSigma float64, limit int, cursor string) ([]anomaly.AnomalyFlagEvent, string, error)
+}
+
+// flagHistoryBridge adapts a flagQueryer to the api.FlagHistoryQuerier interface.
+// Converts []anomaly.AnomalyFlagEvent → api.FlagHistoryPage, mapping each event's
+// NodeID/App/StreamID fields to domain.AlertScope so both the ComputeFlags
+// (in-memory) and QueryFlagHistory (persisted) paths serialize scope identically.
+// Wraps clickhouse.ErrInvalidCursor as api.ErrBadCursor so handleAnomalies maps
+// it to HTTP 400 rather than 500.
+// Follows the anomalyDetectorBridge precedent (serve.go:63–88). ADR-0009 §6.
+type flagHistoryBridge struct {
+	store flagQueryer
+}
+
+func (b *flagHistoryBridge) QueryFlagHistory(ctx context.Context, from, to time.Time, metric, app, stream string, minSigma float64, limit int, cursor string) (api.FlagHistoryPage, error) {
+	events, nextCursor, err := b.store.QueryFlagHistory(ctx, from, to, metric, app, stream, minSigma, limit, cursor)
+	if err != nil {
+		if errors.Is(err, clickhouse.ErrInvalidCursor) {
+			return api.FlagHistoryPage{}, api.ErrBadCursor
+		}
+		return api.FlagHistoryPage{}, err
+	}
+	items := make([]api.AnomalyFlagAPI, len(events))
+	for i, ev := range events {
+		// Build AlertScope from the stored denormalized columns (NodeID, App, StreamID).
+		// This mirrors parseScopeJSON's empty-value convention: absent fields stay "".
+		// Both paths (ComputeFlags and QueryFlagHistory) produce the same scope shape.
+		items[i] = api.AnomalyFlagAPI{
+			ID:     ev.ID,
+			Metric: ev.Metric,
+			Scope: domain.AlertScope{
+				NodeID:   ev.NodeID,
+				App:      ev.App,
+				StreamID: ev.StreamID,
+			},
+			Observed: ev.Observed,
+			Expected: ev.Expected,
+			Sigma:    ev.Sigma,
+			TS:       ev.DetectedAt.UnixMilli(),
+		}
+	}
+	return api.FlagHistoryPage{Items: items, NextCursor: nextCursor}, nil
 }
 
 // metaIngestTokenStore adapts *meta.Store to the beacon.TokenStore interface.
@@ -497,6 +547,15 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 
 	// Wire anomaly detector into API server.
 	apiServer.SetAnomalyDetector(&anomalyDetectorBridge{det: anomalyDet})
+
+	// BUG-008 Group B (ADR-0009 §4+6): wire flag-event store so the write path
+	// persists detections and GET /anomalies ?from/?to serves honest history.
+	// store (*clickhouse.Store) satisfies both anomaly.FlagEventStore (write)
+	// and flagQueryer (read); guaranteed non-nil (clickhouse.New fails on error above).
+	// Run() calls WarmHysteresis internally (anomaly.go:268); the nil-guard at
+	// serve.go:610 prevents Run from being called when anomalyDetector is nil.
+	anomalyDet.SetFlagStore(store)
+	apiServer.SetFlagHistoryQuerier(&flagHistoryBridge{store: store})
 
 	return &server{
 		store:            store,

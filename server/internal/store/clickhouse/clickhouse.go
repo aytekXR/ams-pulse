@@ -13,7 +13,9 @@ package clickhouse
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -23,6 +25,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/pulse-analytics/pulse/server/internal/anomaly"
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 )
 
@@ -791,6 +794,194 @@ func (s *Store) QueryProbeResults(ctx context.Context, probeID string, from, to 
 		results = append(results, r)
 	}
 	return results, rows.Err()
+}
+
+// ─── F9 Anomaly flag-event store (ADR-0009 BUG-008 phase 2) ─────────────────
+
+// ErrInvalidCursor is returned by QueryFlagHistory when the cursor string cannot
+// be decoded. The API bridge maps this to HTTP 400.
+var ErrInvalidCursor = errors.New("invalid cursor")
+
+// InsertAnomalyFlagEvent writes one anomaly flag event to ClickHouse
+// anomaly_flag_events. Synchronous, non-batched — flag events are ~17/day at
+// Enterprise scale, so batching is not needed (same rationale as InsertProbeResult).
+//
+// Explicit column list guards against physical-order drift (D-072 positional
+// hazard): every column in the INSERT must match the Append call below at the
+// same position, atomically. CH migration 0010 creates this table.
+func (s *Store) InsertAnomalyFlagEvent(ctx context.Context, ev anomaly.AnomalyFlagEvent) error {
+	b, err := s.conn.PrepareBatch(ctx, fmt.Sprintf(
+		"INSERT INTO %s.anomaly_flag_events (id, metric, node_id, app, stream_id, scope, observed, expected, sigma, detected_at)", s.db))
+	if err != nil {
+		return fmt.Errorf("anomaly_flag_events: prepare batch: %w", err)
+	}
+	if err := b.Append(
+		ev.ID,
+		ev.Metric,
+		ev.NodeID,
+		ev.App,
+		ev.StreamID,
+		ev.Scope,
+		ev.Observed,
+		ev.Expected,
+		ev.Sigma,
+		ev.DetectedAt.UTC(), // clickhouse-go v2 maps time.Time → DateTime64(3) natively
+	); err != nil {
+		return fmt.Errorf("anomaly_flag_events: append: %w", err)
+	}
+	return b.Send()
+}
+
+// RecentFlagKeys returns distinct (metric, scope) pairs that had a flag event
+// within the last windowSecs seconds. Called by Detector.WarmHysteresis on
+// startup to pre-populate the in-memory hysteresis map (ADR-0009 §5).
+func (s *Store) RecentFlagKeys(ctx context.Context, windowSecs int) ([]anomaly.FlagKey, error) {
+	query := fmt.Sprintf(`
+		SELECT metric, scope
+		FROM %s.anomaly_flag_events
+		WHERE detected_at >= now() - toIntervalSecond(?)
+		GROUP BY metric, scope`, s.db)
+	rows, err := s.conn.Query(ctx, query, windowSecs)
+	if err != nil {
+		return nil, fmt.Errorf("anomaly_flag_events: recent_flag_keys: %w", err)
+	}
+	defer rows.Close()
+	var keys []anomaly.FlagKey
+	for rows.Next() {
+		var k anomaly.FlagKey
+		if err := rows.Scan(&k.Metric, &k.Scope); err != nil {
+			return nil, fmt.Errorf("anomaly_flag_events: scan recent_flag_keys: %w", err)
+		}
+		keys = append(keys, k)
+	}
+	return keys, rows.Err()
+}
+
+// QueryFlagHistory queries the anomaly_flag_events table with optional filters
+// and keyset pagination. Used by GET /anomalies?from=…&to=… (ADR-0009 §6).
+//
+// Filter semantics:
+//   - from/to: detected_at >= from / <= to (skipped if zero value)
+//   - metric/app/stream: equality (skipped if "")
+//   - minSigma: sigma >= minSigma (skipped if <= 0)
+//   - cursor: base64(strconv.FormatInt(detected_at_ms,10)+":"+id) keyset; "" = first page
+//   - limit <= 0: default 50 (matching the S22 keyset store-layer conventions)
+//
+// Returns (items, nextCursor, err). nextCursor == "" means last page.
+// Malformed cursor returns ErrInvalidCursor (API layer maps to HTTP 400).
+func (s *Store) QueryFlagHistory(ctx context.Context, from, to time.Time, metric, app, stream string, minSigma float64, limit int, cursor string) ([]anomaly.AnomalyFlagEvent, string, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+
+	var whereParts []string
+	var args []any
+
+	if !from.IsZero() {
+		whereParts = append(whereParts, "detected_at >= ?")
+		args = append(args, from.UTC())
+	}
+	if !to.IsZero() {
+		whereParts = append(whereParts, "detected_at <= ?")
+		args = append(args, to.UTC())
+	}
+	if metric != "" {
+		whereParts = append(whereParts, "metric = ?")
+		args = append(args, metric)
+	}
+	if app != "" {
+		whereParts = append(whereParts, "app = ?")
+		args = append(args, app)
+	}
+	if stream != "" {
+		whereParts = append(whereParts, "stream_id = ?")
+		args = append(args, stream)
+	}
+	if minSigma > 0 {
+		whereParts = append(whereParts, "sigma >= ?")
+		args = append(args, minSigma)
+	}
+
+	if cursor != "" {
+		// cursor = base64.StdEncoding("<detected_at_unix_ms>:<id>")
+		// NOTE: deliberately base64, NOT the raw decimal form used by probe-results cursor.
+		decoded, err := base64.StdEncoding.DecodeString(cursor)
+		if err != nil {
+			return nil, "", fmt.Errorf("%w: base64 decode: %v", ErrInvalidCursor, err)
+		}
+		sep := strings.IndexByte(string(decoded), ':')
+		if sep < 0 {
+			return nil, "", fmt.Errorf("%w: missing colon separator", ErrInvalidCursor)
+		}
+		ms, err := strconv.ParseInt(string(decoded[:sep]), 10, 64)
+		if err != nil {
+			return nil, "", fmt.Errorf("%w: bad timestamp %q: %v", ErrInvalidCursor, string(decoded[:sep]), err)
+		}
+		cursorID := string(decoded[sep+1:])
+		if cursorID == "" {
+			return nil, "", fmt.Errorf("%w: empty id after colon", ErrInvalidCursor)
+		}
+		// Keyset: skip rows at or before the cursor position.
+		// Use toUnixTimestamp64Milli() to compare as integer ms, avoiding the
+		// DateTime vs DateTime64 type-coercion hazard: the clickhouse-go driver
+		// may send time.Time as DateTime (second precision), causing the cursor
+		// event to satisfy (detected_at_sec > cursor_sec) and appear on both
+		// the current page and the next page (duplicate at boundary).
+		// Comparing integer ms values is unambiguous and always correct.
+		whereParts = append(whereParts, "(toUnixTimestamp64Milli(detected_at) > ? OR (toUnixTimestamp64Milli(detected_at) = ? AND id > ?))")
+		args = append(args, ms, ms, cursorID)
+	}
+
+	whereClause := ""
+	if len(whereParts) > 0 {
+		whereClause = "WHERE " + strings.Join(whereParts, " AND ")
+	}
+
+	// ORDER BY detected_at ASC, id ASC: the table ORDER BY lacks id; we impose the
+	// explicit total order here so the keyset cursor is unambiguous.
+	// LIMIT limit+1 to detect the next page without an extra COUNT query.
+	query := fmt.Sprintf(
+		`SELECT id, metric, node_id, app, stream_id, scope, observed, expected, sigma, detected_at
+		 FROM %s.anomaly_flag_events
+		 %s
+		 ORDER BY detected_at ASC, id ASC
+		 LIMIT %d`,
+		s.db, whereClause, limit+1)
+
+	rows, err := s.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, "", fmt.Errorf("anomaly_flag_events: query: %w", err)
+	}
+	defer rows.Close()
+
+	var events []anomaly.AnomalyFlagEvent
+	for rows.Next() {
+		var ev anomaly.AnomalyFlagEvent
+		var detectedAt time.Time
+		if err := rows.Scan(
+			&ev.ID, &ev.Metric, &ev.NodeID, &ev.App, &ev.StreamID, &ev.Scope,
+			&ev.Observed, &ev.Expected, &ev.Sigma, &detectedAt,
+		); err != nil {
+			return nil, "", fmt.Errorf("anomaly_flag_events: scan: %w", err)
+		}
+		ev.DetectedAt = detectedAt.UTC()
+		events = append(events, ev)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", fmt.Errorf("anomaly_flag_events: rows: %w", err)
+	}
+
+	// LIMIT+1 trick: if we got limit+1 rows, there is a next page.
+	// nextCursor = base64("<detected_at_ms>:<id>") of the last item on the current page.
+	var nextCursor string
+	if len(events) == limit+1 {
+		last := events[limit-1] // last item of this page (not the overflow probe)
+		events = events[:limit]
+		raw := strconv.FormatInt(last.DetectedAt.UTC().UnixMilli(), 10) + ":" + last.ID
+		nextCursor = base64.StdEncoding.EncodeToString([]byte(raw))
+	}
+
+	return events, nextCursor, nil
 }
 
 // ─── Data helpers ─────────────────────────────────────────────────────────────

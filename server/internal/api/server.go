@@ -27,6 +27,7 @@ import (
 	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -118,6 +119,37 @@ type AnomalyDetector interface {
 	ComputeFlags(ctx context.Context, sigmaThreshold float64) ([]AnomalyFlagAPI, error)
 }
 
+// ErrBadCursor is a sentinel returned (possibly wrapped) by FlagHistoryQuerier
+// implementations when the cursor parameter cannot be decoded.
+// handleAnomalies maps this to HTTP 400 BAD_REQUEST rather than 500.
+// ADR-0009 §6: base64("<detected_at_ms>:<id>") cursor namespace.
+var ErrBadCursor = errors.New("bad cursor")
+
+// FlagHistoryQuerier queries the persisted anomaly flag-event store.
+// Separate from AnomalyDetector to preserve the single-method interface
+// and avoid breaking existing test fakes (blast-radius argument; see ADR-0009 §B).
+// ADR-0009 §6.
+type FlagHistoryQuerier interface {
+	// QueryFlagHistory returns a page of anomaly flag events in [from, to].
+	// Zero from/to = unbounded side. cursor = "" means first page.
+	// ADR AMENDMENT (D-086): carries metric + minSigma so /anomalies ?metric
+	// and ?min_sigma remain honest on the history path.
+	QueryFlagHistory(ctx context.Context,
+		from, to time.Time,
+		metric, app, stream string,
+		minSigma float64,
+		limit int,
+		cursor string,
+	) (FlagHistoryPage, error)
+}
+
+// FlagHistoryPage is a single page of QueryFlagHistory results.
+// NextCursor "" = last page (serialize as JSON null per spec [string,null]).
+type FlagHistoryPage struct {
+	Items      []AnomalyFlagAPI
+	NextCursor string // empty on last page
+}
+
 // AnomalyFlagAPI is the API representation of an anomaly flag.
 // Mirrors the AnomalyFlag schema in contracts/openapi/pulse-api.yaml.
 type AnomalyFlagAPI struct {
@@ -167,6 +199,10 @@ type Server struct {
 
 	// Wave 3: anomaly detector (optional — wired in serve.go).
 	anomalyDetector AnomalyDetector
+
+	// BUG-008 phase 2 (ADR-0009): flag-event store querier for GET /anomalies ?from/?to.
+	// Nil until wired; when nil, ?from/?to returns 400 FLAG_STORE_NOT_CONFIGURED.
+	flagHistoryQuerier FlagHistoryQuerier
 
 	// Wave 3: kafka stats provider for /healthz (optional — wired in serve.go).
 	kafkaStats KafkaStatsProvider
@@ -286,6 +322,13 @@ func (s *Server) SetReportGenerator(gen *reports.Generator) {
 // Call after New, before Start.
 func (s *Server) SetAnomalyDetector(det AnomalyDetector) {
 	s.anomalyDetector = det
+}
+
+// SetFlagHistoryQuerier wires the flag-event store for GET /anomalies ?from/?to.
+// Call after New, before Start. Follows the SetIngestQuerier precedent
+// (server/internal/api/server.go:275). ADR-0009 §6.
+func (s *Server) SetFlagHistoryQuerier(q FlagHistoryQuerier) {
+	s.flagHistoryQuerier = q
 }
 
 // SetKafkaStats wires the Kafka stats provider for /healthz (VD-27).
