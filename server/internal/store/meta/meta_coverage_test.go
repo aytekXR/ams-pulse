@@ -79,7 +79,7 @@ func TestMetaStore_Probes_RoundTrip(t *testing.T) {
 	}
 
 	// ListProbes — should contain exactly the one we created.
-	probes, err := s.ListProbes(ctx)
+	probes, err := s.ListProbes(ctx, 0, "")
 	if err != nil {
 		t.Fatalf("ListProbes: %v", err)
 	}
@@ -384,7 +384,7 @@ func TestMetaStore_Tenants_RoundTrip(t *testing.T) {
 	}
 
 	// ListTenants must return the one tenant.
-	all, err := s.ListTenants(ctx)
+	all, err := s.ListTenants(ctx, 0, "")
 	if err != nil {
 		t.Fatalf("ListTenants: %v", err)
 	}
@@ -453,7 +453,7 @@ func TestMetaStore_Token_Revoke(t *testing.T) {
 	}
 
 	// ListTokens filtered by kind must return only that kind.
-	apiList, err := s.ListTokens(ctx, "api")
+	apiList, err := s.ListTokens(ctx, "api", 0, "")
 	if err != nil {
 		t.Fatalf("ListTokens(api): %v", err)
 	}
@@ -464,7 +464,7 @@ func TestMetaStore_Token_Revoke(t *testing.T) {
 		t.Errorf("ListTokens(api): Kind got %q, want api", apiList[0].Kind)
 	}
 
-	ingestList, err := s.ListTokens(ctx, "ingest")
+	ingestList, err := s.ListTokens(ctx, "ingest", 0, "")
 	if err != nil {
 		t.Fatalf("ListTokens(ingest): %v", err)
 	}
@@ -473,7 +473,7 @@ func TestMetaStore_Token_Revoke(t *testing.T) {
 	}
 
 	// ListTokens with empty kind must return both.
-	allList, err := s.ListTokens(ctx, "")
+	allList, err := s.ListTokens(ctx, "", 0, "")
 	if err != nil {
 		t.Fatalf("ListTokens(all): %v", err)
 	}

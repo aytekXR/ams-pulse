@@ -530,7 +530,7 @@ func SeedDefaultRulePack(ctx context.Context, store *meta.Store, logger *slog.Lo
 	if logger == nil {
 		logger = slog.Default()
 	}
-	existing, err := store.ListAlertRules(ctx)
+	existing, err := store.ListAlertRules(ctx, 0, "")
 	if err != nil {
 		return fmt.Errorf("seed default rules: list: %w", err)
 	}

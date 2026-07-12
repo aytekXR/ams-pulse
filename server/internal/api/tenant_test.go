@@ -423,7 +423,7 @@ func TestTenant_StreamPattern_ResolvesStream(t *testing.T) {
 
 	// Load tenants from the meta store and build a TenantMatcher.
 	// Fetch tenants from the store directly to build a matcher.
-	tenants, err := mstore.ListTenants(resp.Request.Context())
+	tenants, err := mstore.ListTenants(resp.Request.Context(), 0, "")
 	if err != nil {
 		t.Fatalf("ListTenants: %v", err)
 	}
@@ -469,7 +469,7 @@ func TestTenant_MetaTag_ResolvesStream(t *testing.T) {
 		t.Fatalf("create tenant: expected 201, got %d: %s", resp.StatusCode, b)
 	}
 
-	tenants, err := mstore.ListTenants(resp.Request.Context())
+	tenants, err := mstore.ListTenants(resp.Request.Context(), 0, "")
 	if err != nil {
 		t.Fatalf("ListTenants: %v", err)
 	}

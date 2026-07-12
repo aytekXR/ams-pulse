@@ -3,8 +3,7 @@
 **Severity:** low (feature invisible to the contract; no wrong data served)
 **Component:** contracts (`contracts/openapi/pulse-api.yaml`) — the code is the
 side telling the truth here
-**Status:** OPEN — filed S21 / D-083 (2026-07-12) by the parameter-conformance
-sweep (scout bonus finding).
+**Status:** FIXED (S22/D-084) — contract CR landed in S22; `?format` and `text/csv` response added to `/analytics/audience` GET; registry entry flipped to `paramProbe`; 29 conformance probes now pass.
 
 ## What it is
 

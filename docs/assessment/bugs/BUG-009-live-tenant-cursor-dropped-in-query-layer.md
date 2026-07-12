@@ -3,8 +3,7 @@
 **Severity:** medium (OpenAPI contract violation — silent; multi-tenant data isolation
 expectation not met by these endpoints)
 **Component:** query (`server/internal/query/query.go`)
-**Status:** OPEN — filed S21 / D-083 (2026-07-12) by the parameter-conformance
-verification round (adversarial verifier finding on the S21 registry).
+**Status:** PARTIALLY FIXED (S22/D-084) — `cursor` param for `GET /live/streams` fixed; `tenant` param for both endpoints remains known-violation (F6 multi-tenancy backlog).
 
 ## What is different from BUG-006/BUG-007/BUG-008
 

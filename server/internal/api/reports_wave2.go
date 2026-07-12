@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -71,16 +72,32 @@ func (s *Server) handleListReportSchedules(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
 		return
 	}
-	schedules, err := s.store.ListReportSchedules(r.Context())
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	cursor := q.Get("cursor")
+	schedules, err := s.store.ListReportSchedules(r.Context(), limit+1, cursor)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
+	}
+	var nextCursor *string
+	if len(schedules) > limit {
+		schedules = schedules[:limit]
+		last := schedules[len(schedules)-1]
+		c := fmt.Sprintf("%d:%s", last.CreatedAt, last.ID)
+		nextCursor = &c
 	}
 	items := make([]any, 0, len(schedules))
 	for _, sched := range schedules {
 		items = append(items, reportScheduleToAPI(sched))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "meta": map[string]any{"next_cursor": nil}})
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "meta": map[string]any{"next_cursor": nextCursor}})
 }
 
 // handleCreateReportSchedule serves POST /api/v1/reports/schedules.
@@ -178,16 +195,32 @@ func (s *Server) handleListTenants(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
 		return
 	}
-	tenants, err := s.store.ListTenants(r.Context())
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	cursor := q.Get("cursor")
+	tenants, err := s.store.ListTenants(r.Context(), limit+1, cursor)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
+	}
+	var nextCursor *string
+	if len(tenants) > limit {
+		tenants = tenants[:limit]
+		last := tenants[len(tenants)-1]
+		c := fmt.Sprintf("%d:%s", last.CreatedAt, last.ID)
+		nextCursor = &c
 	}
 	items := make([]any, 0, len(tenants))
 	for _, t := range tenants {
 		items = append(items, tenantToAPI(t))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "meta": map[string]any{"next_cursor": nil}})
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "meta": map[string]any{"next_cursor": nextCursor}})
 }
 
 // handleCreateTenant serves POST /api/v1/admin/tenants.

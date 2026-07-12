@@ -10,7 +10,9 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -24,6 +26,15 @@ import (
 
 // handleAnomalies implements GET /api/v1/anomalies.
 // Enterprise tier required per §7.11.
+//
+// BUG-008 Group A fix (S22/D-084): reads and applies app, stream, limit, cursor.
+// Pagination cursor is a plain decimal integer offset over the in-memory filtered+sorted
+// slice — chosen because ComputeFlags returns an ephemeral point-in-time list; an
+// opaque offset is sufficient and avoids the complexity of a keyset cursor on volatile
+// data. Invalid or absent cursor → first page (offset 0).
+//
+// ?from and ?to remain ignored (known-violation until S23 flag-event store is built;
+// see docs/assessment/bugs/BUG-008-triage-s22.md §3).
 func (s *Server) handleAnomalies(w http.ResponseWriter, r *http.Request) {
 	// Tier gate: anomaly detection is Enterprise only.
 	if err := s.lic.CheckAnomalies(); err != nil {
@@ -31,15 +42,38 @@ func (s *Server) handleAnomalies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse min_sigma query param (OpenAPI default 2.0, but we use detector's default if absent).
+	q := r.URL.Query()
+
+	// Parse min_sigma query param (OpenAPI default 2.0; use detector default when absent).
 	var sigmaThreshold float64
-	if minSigmaStr := r.URL.Query().Get("min_sigma"); minSigmaStr != "" {
+	if minSigmaStr := q.Get("min_sigma"); minSigmaStr != "" {
 		v, err := strconv.ParseFloat(minSigmaStr, 64)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "INVALID_PARAM", "min_sigma must be a number")
 			return
 		}
 		sigmaThreshold = v
+	}
+
+	// Parse Group-A filter params (BUG-008 partial fix S22/D-084).
+	metricFilter := q.Get("metric")
+	appFilter := q.Get("app")
+	streamFilter := q.Get("stream")
+
+	// Parse limit: OpenAPI default 50, max 500.
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
+	// Parse cursor as a decimal integer offset for in-memory pagination.
+	// Invalid or absent cursor (Atoi error or negative) → first page (offset 0).
+	offset, _ := strconv.Atoi(q.Get("cursor"))
+	if offset < 0 {
+		offset = 0
 	}
 
 	if s.anomalyDetector == nil {
@@ -57,19 +91,51 @@ func (s *Server) handleAnomalies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Apply optional metric filter.
-	metricFilter := r.URL.Query().Get("metric")
-	items := make([]any, 0, len(flags))
+	// Apply optional filters: metric, app, stream.
+	filtered := make([]AnomalyFlagAPI, 0, len(flags))
 	for _, f := range flags {
 		if metricFilter != "" && f.Metric != metricFilter {
 			continue
 		}
-		items = append(items, f)
+		if appFilter != "" && f.Scope.App != appFilter {
+			continue
+		}
+		if streamFilter != "" && f.Scope.StreamID != streamFilter {
+			continue
+		}
+		filtered = append(filtered, f)
+	}
+
+	// Deterministic sort: ascending TS, then by ID for tie-breaking.
+	sort.Slice(filtered, func(i, j int) bool {
+		if filtered[i].TS != filtered[j].TS {
+			return filtered[i].TS < filtered[j].TS
+		}
+		return filtered[i].ID < filtered[j].ID
+	})
+
+	// Clamp offset to valid range; past-end cursor → empty last page, no cursor.
+	if offset > len(filtered) {
+		offset = len(filtered)
+	}
+	page := filtered[offset:]
+
+	// Emit next_cursor only when more items remain beyond this page.
+	var nextCursor *string
+	if len(page) > limit {
+		page = page[:limit]
+		nc := strconv.Itoa(offset + limit)
+		nextCursor = &nc
+	}
+
+	items := make([]any, len(page))
+	for i, f := range page {
+		items[i] = f
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": items,
-		"meta":  map[string]any{"next_cursor": nil},
+		"meta":  map[string]any{"next_cursor": nextCursor},
 	})
 }
 
@@ -118,19 +184,35 @@ func (s *Server) handleListProbes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	probes, err := s.store.ListProbes(r.Context())
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	cursor := q.Get("cursor")
+	probes, err := s.store.ListProbes(r.Context(), limit+1, cursor)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
 
+	var nextCursor *string
+	if len(probes) > limit {
+		probes = probes[:limit]
+		last := probes[len(probes)-1]
+		c := fmt.Sprintf("%d:%s", last.CreatedAt, last.ID)
+		nextCursor = &c
+	}
 	items := make([]any, 0, len(probes))
 	for _, p := range probes {
 		items = append(items, probeToAPI(p))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": items,
-		"meta":  map[string]any{"next_cursor": nil},
+		"meta":  map[string]any{"next_cursor": nextCursor},
 	})
 }
 
@@ -350,20 +432,28 @@ func (s *Server) handleProbeResults(w http.ResponseWriter, r *http.Request) {
 			limit = v
 		}
 	}
+	cursor := r.URL.Query().Get("cursor")
 
-	results, err := s.qsvc.QueryProbeResults(r.Context(), probeID, from, to, limit)
+	results, err := s.qsvc.QueryProbeResults(r.Context(), probeID, from, to, limit+1, cursor)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
 
+	var nextCursor *string
+	if len(results) > limit {
+		results = results[:limit]
+		last := results[len(results)-1]
+		c := fmt.Sprintf("%d:%s", last.TS.UnixMilli(), last.ID)
+		nextCursor = &c
+	}
 	items := make([]any, 0, len(results))
 	for _, res := range results {
 		items = append(items, probeResultToAPI(res))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": items,
-		"meta":  map[string]any{"next_cursor": nil},
+		"meta":  map[string]any{"next_cursor": nextCursor},
 	})
 }
 

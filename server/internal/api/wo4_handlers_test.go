@@ -1215,7 +1215,7 @@ func TestWO4_BootstrapFirstRun(t *testing.T) {
 	defer srv.Stop()
 
 	// Verify a token was created (count should be 1 now).
-	tokens, err := store.ListTokens(ctx, "api")
+	tokens, err := store.ListTokens(ctx, "api", 0, "")
 	if err != nil {
 		t.Fatalf("ListTokens: %v", err)
 	}
@@ -1288,7 +1288,7 @@ func TestWO4_BootstrapNoOp(t *testing.T) {
 	defer srv.Stop()
 
 	// Token count must stay at 1 (bootstrap must not create another).
-	tokens, err := store.ListTokens(ctx, "api")
+	tokens, err := store.ListTokens(ctx, "api", 0, "")
 	if err != nil {
 		t.Fatalf("ListTokens: %v", err)
 	}

@@ -120,7 +120,7 @@ func (a *Accountant) resolveTenantMatcher(ctx context.Context) (*TenantMatcher, 
 	if a.meta == nil {
 		return NewTenantMatcher(nil), nil
 	}
-	tenants, err := a.meta.ListTenants(ctx)
+	tenants, err := a.meta.ListTenants(ctx, 0, "")
 	if err != nil {
 		return nil, fmt.Errorf("list tenants: %w", err)
 	}

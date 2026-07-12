@@ -162,7 +162,7 @@ func TestDelivery_RetrySucceeds(t *testing.T) {
 	}
 
 	// Assert no delivery_failure row was written.
-	hist, err := store.ListAlertHistory(ctx, "", "delivery_failure", 0, 0, 10)
+	hist, err := store.ListAlertHistory(ctx, "", "delivery_failure", 0, 0, 10, "")
 	if err != nil {
 		t.Fatalf("ListAlertHistory: %v", err)
 	}
@@ -212,7 +212,7 @@ func TestDelivery_AllFail_RecordsDeliveryFailure(t *testing.T) {
 	ev.Stop()
 
 	// Assert exactly 1 delivery_failure row.
-	hist, err := store.ListAlertHistory(ctx, "", "delivery_failure", 0, 0, 10)
+	hist, err := store.ListAlertHistory(ctx, "", "delivery_failure", 0, 0, 10, "")
 	if err != nil {
 		t.Fatalf("ListAlertHistory: %v", err)
 	}

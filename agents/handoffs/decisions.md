@@ -4135,3 +4135,117 @@ occurrence — this one benign):**
   of foreign commits (no D-062 recurrence this session). Workflow: 8 agents,
   0 errors, 0 rate-limit deaths. Ledger: this entry. Close commits + PR
   evidence appended by ORCH below after merge.
+
+## D-084 — SESSION-22 (2026-07-12): post-expiry sweep + conformance-debt fixes BUG-006/007/009/010 (IN PROGRESS; evidence at close)
+
+**S22 OPEN (recorded 05:25Z):**
+- **⚠️ CLOCK FACT: S22 opened 05:23Z — BEFORE the 12:10Z gate** (AMS trial lapses
+  12:09Z). Per SESSION-22 §⚠️1 ("if earlier: WAIT — do not re-gate a 4th time")
+  the session **HOLDS OPEN**: WO-A (post-expiry sweep) is deferred in-session to
+  ≥12:10Z (a persistent clock monitor fires at the gate); the sweep is NOT
+  re-gated to S23 and is NOT run pre-expiry (a 4th pre-expiry run would be
+  worthless). Meanwhile WO-C (conformance-debt fixes — pure Pulse code, fully
+  independent of AMS state) proceeds now. WO-A remains the session's exit
+  criterion (a).
+- **Tree/hazard check (D-062 class): CLEAN.** HEAD = `8365599` (S21 merge, #33);
+  no foreign commits; dirt is exactly the known operator-side state — modified
+  `deploy/config/Caddyfile.prod` (+35 lines = the preserved `caddy-bedirhan-vhost`
+  content live prod mounts; NOT reverted, NOT committed) + the operator's
+  untracked `.bak-bedirhan-20260712`. Both untouched. Branch `s22-d084`.
+- **WO-B (operator intake): NO ANSWERS in the session-open prompt** — caddy-vhost
+  merge + final-assessment review both still open, both non-blocking →
+  re-surfaced at close in operator-expected.md. **No NEW operator action is
+  required for this session to proceed** (the "start after 12:10Z" ask is mooted
+  by holding open — recorded so the operator knows an early start is handled).
+- **WO-F (standing re-checks, 05:24Z): ALL GREEN, read-only.** Prod healthz
+  status=ok (clickhouse/collector/meta_store all ok); branch protection
+  unchanged (9 contexts incl. CodeQL pair, enforce_admins=true — no drift);
+  dependabot queue EMPTY.
+- **WO-E (CI promotions): date gate CLOSED** (07-12 < 07-23) → skip carry ×11;
+  streak re-measure at close rides the session PR's own runs.
+- Plan of record: SESSION-22.md — WO-C now (workflow: scouts → designer →
+  serial TDD authors BUG-006+007 → BUG-009 → BUG-010 CR, parallel BUG-008
+  assessor, 3 adversarial verifiers, ORCH gates full §8), WO-A at the clock,
+  WO-D only if light, PR-first ≤2 pushes.
+
+**S22 WO-A evidence (post-expiry sweep, recorded 12:2xZ — THE gate deliverable):**
+- Clock monitor fired 12:10:03Z; sweep #1 ran 12:11:02Z
+  (`S21-sweep-postexpiry-20260712T121102Z`, evidence gitignored). Diff vs the
+  S21 pre-expiry baseline (`S21-sweep-preexpiry-20260712T014135Z`): **only 3
+  lines, ALL teststream-liveness** (broadcasts-count 1→0, hls-manifest
+  200→SKIP, total_publishers 1→0). Every license-relevant line UNCHANGED.
+- **The 3-line delta is NOT license-related:** `ams-teststream` had Exited(1)
+  at ~07:10Z — **5 h BEFORE the 12:09Z lapse** — with an ffmpeg "Conversion
+  failed!" crash (S14 recurrence class). Restarted per S14 precedent at
+  ~12:15Z as a deliberate LIVE post-expiry publish probe: **AMS ACCEPTED the
+  RTMP publish post-lapse** (container stays Up; HLS manifest 200; Pulse
+  overview total_publishers=1 — full pipeline confirms).
+- Sweep #2 (12:1xZ, `S21-sweep-postexpiry2-*`): **BYTE-IDENTICAL to the
+  pre-expiry baseline** (diff rc=0). **D-084 RESULT: the post-expiry delta is
+  NULL — stated explicitly per the SESSION-22 requirement.** versionType
+  "Enterprise Edition" 3.0.3 build 20260504_1443, licence-status 204/empty,
+  4 apps + settings 200 (CIDR 0.0.0.0/0 ×4), system-status 200, cluster-nodes
+  404 (standalone) — all unchanged. Prod polling healthy: healthz all-ok,
+  poll-errlines-15m=0.
+- **Blocked-scenario list: EMPTY** — no `qa/realams/scenarios/` scenario is
+  blocked by the lapse as of 12:2xZ. Standing hypothesis (recorded, untested
+  BY DESIGN): trial enforcement may bite only at AMS process restart (boot-time
+  license check). Do NOT restart the `antmedia` container to test — operator's
+  call; sessions keep observing each open. Validation docs need NO reality
+  updates (nothing drifted).
+
+**S22 WO-C evidence (recorded at close — conformance debt 27→4, all TDD + adversarially verified):**
+- **BUG-006 FIXED** (8 list endpoints × limit+cursor): keyset cursors
+  (`<created_at_ms>:<id>`, DESC variants for tokens/alert-history;
+  `<ts_unix_nano>:<id>` for CH probe results) threaded handler→store;
+  `limit+1` sentinel → honest `next_cursor`; `limit<=0` = unbounded preserves
+  every internal caller (evaluator, accounting, serve, wave2 seed). Invalid
+  cursor → first page (contract treats cursor as opaque).
+- **BUG-007 FIXED** (alerts/history + probes/{id}/results cursor) — and the
+  registry entries are REAL PROBES, not exempts (remediation F3): seeded-rows
+  page-2-differs probe + a recording-fake boundary probe.
+- **BUG-009 PARTIALLY FIXED:** LiveStreams cursor decode + a REQUIRED
+  stability sort (map iteration is non-deterministic — offset paging without
+  it dup/drops items; the "3-line fix" estimate was wrong). `tenant` ×2 stays
+  known-violation: domain.LiveSnapshot has NO tenant assignment (F6 backlog),
+  per the SESSION-22 escape hatch.
+- **BUG-010 FIXED (the ONE contract CR):** `format` enum [json,csv] +
+  `text/csv` 200 on /analytics/audience; gen:api regenerated (re-regen
+  byte-idempotent, verified by hash); probe = Content-Type differential;
+  minSpecParams 85→86.
+- **BUG-008 PARTIALLY FIXED (assess→partial, triage-driven):** triage verdict
+  split-S23 (`docs/assessment/bugs/BUG-008-triage-s22.md`) — from/to are
+  architecturally unfixable without a persistent flag-event store (detector is
+  point-in-time; S23 designs the ADR); the 4 Group-A params
+  (app/stream/limit/cursor) fixed handler-side with deterministic TS+ID sort,
+  offset cursor, cap 500, fake-detector probes. NO 501 for from/to (behavior
+  change refused; UI-caller audit: AnomaliesPage.tsx sends neither).
+- **★ TWO PANICS caught by the verify net BEFORE ship:** (1) stale/fabricated
+  numeric cursor → `items[10:2]` slice OOB panic in query.LiveStreams;
+  (2) `?limit=-1` on alerts/history bypassed the `==0` default guard →
+  `hist[:-1]` panic → HTTP 500 via chi Recoverer. Both red-first, both fixed
+  (clamp; `<=0`); a sweep confirmed all other parse blocks already use `<=0`.
+- **Registry census: 29 probe / 8 KV / 49 exempt → 35 probe / 4 KV / 47
+  exempt = 86**; anti-vacuity minProbes 8→33 (census-comment), floor 86.
+  Remaining KV: anomalies from/to (S23), tenant ×2 (F6) — all pinned w/ docs.
+- **Verification:** 3 adversarial verifiers round 1 (mutation CONFIRMED_OK —
+  fix-reverts all RED in pristine copies; correctness PARTIAL → the panic
+  must-fix; completeness PARTIAL → triage-doc mismatch + exempt-not-probe +
+  minProbes) + remediation round (F1/F2/F3) + re-verifier (PARTIAL, 0
+  must-fix, 5/5 spot-mutations RED; the one should-fix — stale census line —
+  ORCH-fixed inline). Workflows: 12+4 agents, 0 errors, ~1.28M tokens.
+- **GATES (full §8, ORCH-run, repo-root mount, golang:1.25):** build/vet
+  clean; gofmt-on-emptiness clean; `go test -race` **24/24 pkgs ok, 0 FAIL /
+  0 SKIP**; coverage **74.9% → 75.9%** (floor 70.2); contract-drift clean
+  except the deliberate BUG-010 CR (regen idempotent); web 360/360, coverage
+  63.15/61.40/54.85 (gates 59/54/45). codegraph sync clean.
+
+**S22 CLOSE (D-084):**
+- WO-D (BUG-002 build) did NOT fire — the remediation round consumed the
+  spare room; → S23 WO-A (primary). WO-E skip carry ×11 (07-12 < 07-23).
+- Session pattern note (D-062 adjacent): operator queried status twice
+  mid-session; mid-session operator-expected.md updates (a "📣 in-progress"
+  block) worked well — keep for long clock-gated sessions.
+- Prod + AMS: read-only EXCEPT the sanctioned `ams-teststream` restart (S14
+  precedent, doubled as the post-lapse publish probe). Branch `s22-d084`;
+  1 PR; ≤2 pushes. Close commits + PR evidence appended below after merge.

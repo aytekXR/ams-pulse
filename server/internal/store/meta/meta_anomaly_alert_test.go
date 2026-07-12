@@ -136,7 +136,7 @@ func TestListAlertRules_IncludesNewFields(t *testing.T) {
 		t.Fatalf("CreateAlertRule: %v", err)
 	}
 
-	rules, err := store.ListAlertRules(ctx)
+	rules, err := store.ListAlertRules(ctx, 0, "")
 	if err != nil {
 		t.Fatalf("ListAlertRules: %v", err)
 	}

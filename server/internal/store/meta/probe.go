@@ -11,6 +11,7 @@ package meta
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 )
@@ -66,12 +67,22 @@ func (s *Store) GetProbe(ctx context.Context, id string) (*ProbeRow, error) {
 	return scanProbe(row)
 }
 
-// ListProbes returns all probe rows ordered by created_at.
-func (s *Store) ListProbes(ctx context.Context) ([]ProbeRow, error) {
-	rows, err := s.queryContext(ctx,
-		`SELECT id, name, url, protocol, interval_s, timeout_s, enabled,
-		        last_result_id, last_success, last_run_at, created_at, updated_at
-		 FROM probes ORDER BY created_at`)
+// ListProbes returns probe rows ordered by created_at ASC, id ASC.
+// limit<=0 means no LIMIT; cursor="" means first page.
+func (s *Store) ListProbes(ctx context.Context, limit int, cursor string) ([]ProbeRow, error) {
+	q := `SELECT id, name, url, protocol, interval_s, timeout_s, enabled,
+	             last_result_id, last_success, last_run_at, created_at, updated_at
+	      FROM probes WHERE 1=1`
+	var args []any
+	if ts, id := parseKeysetCursor(cursor); id != "" {
+		q += " AND (created_at > ? OR (created_at = ? AND id > ?))"
+		args = append(args, ts, ts, id)
+	}
+	q += " ORDER BY created_at ASC, id ASC"
+	if limit > 0 {
+		q += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	rows, err := s.queryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

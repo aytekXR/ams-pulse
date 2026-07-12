@@ -218,7 +218,7 @@ type fakeProbeQuerier struct {
 	err     error
 }
 
-func (f *fakeProbeQuerier) QueryProbeResults(_ context.Context, _ string, _, _ time.Time, _ int) ([]domain.ProbeResult, error) {
+func (f *fakeProbeQuerier) QueryProbeResults(_ context.Context, _ string, _, _ time.Time, _ int, _ string) ([]domain.ProbeResult, error) {
 	return f.results, f.err
 }
 
@@ -1122,7 +1122,7 @@ func TestIngestTimeseries_NoDropEventsSliceNonNil(t *testing.T) {
 func TestQueryProbeResults_NilQuerier(t *testing.T) {
 	svc := New(nilSnapLive{}, nil, nil)
 	// probeResultQuerier is nil by default.
-	results, err := svc.QueryProbeResults(context.Background(), "probe-1", time.Time{}, time.Time{}, 10)
+	results, err := svc.QueryProbeResults(context.Background(), "probe-1", time.Time{}, time.Time{}, 10, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1146,7 +1146,7 @@ func TestQueryProbeResults_Delegates(t *testing.T) {
 	svc := New(nilSnapLive{}, nil, nil)
 	svc.SetProbeResultQuerier(querier)
 
-	results, err := svc.QueryProbeResults(context.Background(), "probe-1", time.Time{}, time.Time{}, 10)
+	results, err := svc.QueryProbeResults(context.Background(), "probe-1", time.Time{}, time.Time{}, 10, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1161,7 +1161,7 @@ func TestQueryProbeResults_PropagatesError(t *testing.T) {
 	svc := New(nilSnapLive{}, nil, nil)
 	svc.SetProbeResultQuerier(querier)
 
-	_, err := svc.QueryProbeResults(context.Background(), "probe-1", time.Time{}, time.Time{}, 10)
+	_, err := svc.QueryProbeResults(context.Background(), "probe-1", time.Time{}, time.Time{}, 10, "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

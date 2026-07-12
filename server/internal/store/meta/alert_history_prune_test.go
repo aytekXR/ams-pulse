@@ -42,7 +42,7 @@ func makeRule(t *testing.T, s *meta.Store, name string) string {
 func countHistoryRows(t *testing.T, s *meta.Store, ruleID string) int {
 	t.Helper()
 	ctx := context.Background()
-	rows, err := s.ListAlertHistory(ctx, ruleID, "", 0, 0, 0)
+	rows, err := s.ListAlertHistory(ctx, ruleID, "", 0, 0, 0, "")
 	if err != nil {
 		t.Fatalf("ListAlertHistory(%s): %v", ruleID, err)
 	}
@@ -146,7 +146,7 @@ func TestAlertHistory_PruneKeepsNewest(t *testing.T) {
 	}
 
 	// The kept rows must be the newest (highest ts: baseTS+10 .. baseTS+14).
-	kept, err := s.ListAlertHistory(ctx, ruleX, "", 0, 0, 0)
+	kept, err := s.ListAlertHistory(ctx, ruleX, "", 0, 0, 0, "")
 	if err != nil {
 		t.Fatalf("ListAlertHistory after prune: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestAlertHistory_PruneEqualTsDeterministic(t *testing.T) {
 		t.Fatalf("PruneAlertHistory: %v", err)
 	}
 
-	got, err := s.ListAlertHistory(ctx, ruleEq, "", 0, 0, 0)
+	got, err := s.ListAlertHistory(ctx, ruleEq, "", 0, 0, 0, "")
 	if err != nil {
 		t.Fatalf("ListAlertHistory: %v", err)
 	}

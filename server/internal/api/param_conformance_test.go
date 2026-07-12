@@ -13,7 +13,8 @@
 //
 //	(a) t.Fatal if the spec cannot be loaded (never t.Skip).
 //	(b) t.Errorf for every unregistered param (all gaps reported in one run).
-//	(c) minProbes = 8 — at least this many probe subtests must actually run.
+//	(c) minProbes = 33 — at least this many probe subtests must actually run
+//	    (35 probes as of S22/D-084 F3; floor = 35 − 2 for minor-evolution headroom).
 //	(d) Reverse-check: t.Logf warning for any registry key absent from spec.
 //
 // Known-violation entries (BUG-006, BUG-007, BUG-008, BUG-009) log without
@@ -22,6 +23,7 @@
 package api_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,6 +33,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -174,9 +177,11 @@ func TestParamConformance(t *testing.T) {
 		},
 
 		"GET /live/overview ?tenant": {
-			// Handler reads and passes tenant, but query.LiveOverview accepts the
-			// parameter and never uses it (no tenant filter in the method body) —
-			// the caller-visible effect is identical to BUG-004's class.
+			// Handler correctly reads and passes tenant, but domain.LiveStream has no TenantID
+			// field and domain.LiveSnapshot carries no tenant assignment. reports.TenantMatcher
+			// operates in the historical-report layer only and is not wired into query.Service.
+			// Fix requires adding TenantID to the live data model (F6 multi-tenancy backlog).
+			// Cursor for LiveStreams is now fixed in S22 (see ?cursor entry above).
 			disp:   paramKnownViolation,
 			bugRef: "BUG-009",
 		},
@@ -259,8 +264,8 @@ func TestParamConformance(t *testing.T) {
 		},
 
 		"GET /live/streams ?tenant": {
-			// Same as live/overview ?tenant: query.LiveStreams accepts tenant and
-			// silently drops it (no filter in the method body).
+			// Same as live/overview ?tenant: no TenantID on domain.LiveStream.
+			// Cursor is now fixed (see separate ?cursor entry). Tenant remains pinned.
 			disp:   paramKnownViolation,
 			bugRef: "BUG-009",
 		},
@@ -271,11 +276,60 @@ func TestParamConformance(t *testing.T) {
 		},
 
 		"GET /live/streams ?cursor": {
-			// query.LiveStreams explicitly stubs the cursor ("_ = cursor // wave 1:
-			// ignore cursor, return first page") while honouring limit — callers
-			// can never page past page 1.
-			disp:   paramKnownViolation,
-			bugRef: "BUG-009",
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				ts2, tok2, cleanup2 := setupTwoStreamServer(t)
+				defer cleanup2()
+				// Page 1: limit=1, no cursor -> 1 item, next_cursor non-nil.
+				req1, _ := http.NewRequest(http.MethodGet, ts2.URL+"/api/v1/live/streams?limit=1", nil)
+				req1.Header.Set("Authorization", authHeader(tok2))
+				resp1, err := http.DefaultClient.Do(req1)
+				if err != nil {
+					t.Fatalf("page1: %v", err)
+				}
+				b1, _ := io.ReadAll(resp1.Body)
+				resp1.Body.Close()
+				if resp1.StatusCode != http.StatusOK {
+					t.Fatalf("page1: want 200, got %d: %s", resp1.StatusCode, b1)
+				}
+				var r1 map[string]any
+				json.Unmarshal(b1, &r1)
+				items1 := r1["items"].([]any)
+				if len(items1) != 1 {
+					t.Fatalf("page1: want 1 item, got %d", len(items1))
+				}
+				cursor, ok := r1["meta"].(map[string]any)["next_cursor"].(string)
+				if !ok || cursor == "" {
+					t.Fatalf("page1: next_cursor missing — cursor not emitted?")
+				}
+				// Page 2: cursor must advance.
+				req2, _ := http.NewRequest(http.MethodGet,
+					ts2.URL+"/api/v1/live/streams?limit=1&cursor="+url.QueryEscape(cursor), nil)
+				req2.Header.Set("Authorization", authHeader(tok2))
+				resp2, err := http.DefaultClient.Do(req2)
+				if err != nil {
+					t.Fatalf("page2: %v", err)
+				}
+				b2, _ := io.ReadAll(resp2.Body)
+				resp2.Body.Close()
+				if resp2.StatusCode != http.StatusOK {
+					t.Fatalf("page2: want 200, got %d: %s", resp2.StatusCode, b2)
+				}
+				var r2 map[string]any
+				json.Unmarshal(b2, &r2)
+				items2 := r2["items"].([]any)
+				if len(items2) == 0 {
+					t.Fatalf("page2: got 0 items — cursor ignored?")
+				}
+				sid1 := items1[0].(map[string]any)["stream_id"].(string)
+				sid2 := items2[0].(map[string]any)["stream_id"].(string)
+				if sid1 == sid2 {
+					t.Errorf("cursor not advancing: same stream_id %s on both pages", sid1)
+				} else {
+					t.Logf("PASS: %s -> %s", sid1, sid2)
+				}
+			},
 		},
 
 		// ── GET /analytics/audience ──────────────────────────────────────────────
@@ -306,6 +360,46 @@ func TestParamConformance(t *testing.T) {
 		"GET /analytics/audience ?interval": {
 			disp:         paramExempt,
 			exemptReason: "nil CH returns empty response regardless of interval; parse wiring confirmed by parseAudienceParams unit test path; no CH fixture to observe differential.",
+		},
+		// BUG-010 fixed S22/D-084: contract now declares ?format; handler already implemented CSV.
+		"GET /analytics/audience ?format": {
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				// Response-differential: format=json -> Content-Type: application/json;
+				// format=csv -> Content-Type: text/csv.
+				// nil ClickHouse returns empty timeseries; the CSV branch fires before
+				// JSON serialization, so Content-Type is observable regardless of data.
+				for _, tc := range []struct {
+					format string
+					wantCT string
+				}{
+					{"json", "application/json"},
+					{"csv", "text/csv"},
+				} {
+					u := healthyTs.URL + "/api/v1/analytics/audience?format=" + tc.format
+					req, _ := http.NewRequest(http.MethodGet, u, nil)
+					req.Header.Set("Authorization", authHeader(healthyTok))
+					resp, err := http.DefaultClient.Do(req)
+					if err != nil {
+						t.Fatalf("GET ?format=%s: %v", tc.format, err)
+					}
+					io.Copy(io.Discard, resp.Body)
+					resp.Body.Close()
+					if resp.StatusCode != http.StatusOK {
+						t.Fatalf("?format=%s: want 200, got %d", tc.format, resp.StatusCode)
+					}
+					ct := resp.Header.Get("Content-Type")
+					if ct == "" {
+						ct = "application/json"
+					}
+					if !strings.Contains(ct, tc.wantCT) {
+						t.Errorf("?format=%s: Content-Type=%q, want to contain %q", tc.format, ct, tc.wantCT)
+					} else {
+						t.Logf("PASS ?format=%s: Content-Type=%q", tc.format, ct)
+					}
+				}
+			},
 		},
 
 		// ── GET /analytics/geo ───────────────────────────────────────────────────
@@ -615,22 +709,94 @@ func TestParamConformance(t *testing.T) {
 
 		// ── GET /alerts/rules ────────────────────────────────────────────────────
 		"GET /alerts/rules ?limit": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-006",
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				for i := 1; i <= 2; i++ {
+					postConformanceItem(t, bizTs.URL, "/api/v1/alerts/rules", bizTok, map[string]any{
+						"name": fmt.Sprintf("rule-lim-%d", i), "metric": "bitrate",
+						"operator": "lt", "threshold": 100.0,
+					})
+				}
+				items, nc := getListPage(t, bizTs.URL, "/api/v1/alerts/rules?limit=1", bizTok)
+				if len(items) != 1 {
+					t.Errorf("?limit=1: got %d items, want 1", len(items))
+				} else {
+					t.Logf("PASS ?limit=1: 1 item returned")
+				}
+				if nc == "" {
+					t.Errorf("?limit=1: next_cursor empty, want non-empty (more items exist)")
+				} else {
+					t.Logf("PASS ?limit=1: next_cursor=%q", nc)
+				}
+			},
 		},
 		"GET /alerts/rules ?cursor": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-006",
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				for i := 1; i <= 2; i++ {
+					postConformanceItem(t, bizTs.URL, "/api/v1/alerts/rules", bizTok, map[string]any{
+						"name": fmt.Sprintf("rule-cur-%d", i), "metric": "bitrate",
+						"operator": "lt", "threshold": 100.0,
+					})
+				}
+				_, nc := getListPage(t, bizTs.URL, "/api/v1/alerts/rules?limit=1", bizTok)
+				if nc == "" {
+					t.Fatal("?cursor: no next_cursor from page 1; need >= 2 items")
+				}
+				items2, _ := getListPage(t, bizTs.URL, "/api/v1/alerts/rules?limit=50&cursor="+url.QueryEscape(nc), bizTok)
+				if len(items2) < 1 {
+					t.Errorf("?cursor: page2 has %d items, want >= 1 (cursor not advancing)", len(items2))
+				} else {
+					t.Logf("PASS ?cursor: page2 has %d item(s)", len(items2))
+				}
+			},
 		},
 
 		// ── GET /alerts/channels ─────────────────────────────────────────────────
 		"GET /alerts/channels ?limit": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-006",
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				for i := 1; i <= 2; i++ {
+					postConformanceItem(t, bizTs.URL, "/api/v1/alerts/channels", bizTok, map[string]any{
+						"type": "webhook", "name": fmt.Sprintf("chan-lim-%d", i),
+					})
+				}
+				items, nc := getListPage(t, bizTs.URL, "/api/v1/alerts/channels?limit=1", bizTok)
+				if len(items) != 1 {
+					t.Errorf("?limit=1: got %d items, want 1", len(items))
+				} else {
+					t.Logf("PASS ?limit=1: 1 item returned")
+				}
+				if nc == "" {
+					t.Errorf("?limit=1: next_cursor empty, want non-empty")
+				} else {
+					t.Logf("PASS ?limit=1: next_cursor=%q", nc)
+				}
+			},
 		},
 		"GET /alerts/channels ?cursor": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-006",
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				for i := 1; i <= 2; i++ {
+					postConformanceItem(t, bizTs.URL, "/api/v1/alerts/channels", bizTok, map[string]any{
+						"type": "webhook", "name": fmt.Sprintf("chan-cur-%d", i),
+					})
+				}
+				_, nc := getListPage(t, bizTs.URL, "/api/v1/alerts/channels?limit=1", bizTok)
+				if nc == "" {
+					t.Fatal("?cursor: no next_cursor from page 1; need >= 2 items")
+				}
+				items2, _ := getListPage(t, bizTs.URL, "/api/v1/alerts/channels?limit=50&cursor="+url.QueryEscape(nc), bizTok)
+				if len(items2) < 1 {
+					t.Errorf("?cursor: page2 has %d items, want >= 1", len(items2))
+				} else {
+					t.Logf("PASS ?cursor: page2 has %d item(s)", len(items2))
+				}
+			},
 		},
 
 		// ── GET /alerts/history ──────────────────────────────────────────────────
@@ -647,9 +813,13 @@ func TestParamConformance(t *testing.T) {
 			exemptReason: "Same empty-fixture reason; limit IS read and passed to store.ListAlertHistory (scout reads=yes); differential requires multiple seeded history rows.",
 		},
 		"GET /alerts/history ?cursor": {
-			// cursor threading omitted from store.ListAlertHistory — see BUG-007.
-			disp:   paramKnownViolation,
-			bugRef: "BUG-007",
+			// BUG-007 fix verified S22/D-084: cursor now threaded through handleAlertHistory →
+			// store.ListAlertHistory (keyset pagination). Probe seeds >= 3 rows via the
+			// meta store (the setupAlertHistoryServer helper returns the store directly),
+			// pages with limit=1, and asserts page 2 returns a distinct item from page 1.
+			// Reverting cursor threading causes page 2 to repeat page 1 → id1 == id2 → fail.
+			disp:      paramProbe,
+			probeFunc: func(t *testing.T) { probeAlertHistoryCursor(t) },
 		},
 		"GET /alerts/history ?rule_id": {
 			disp:         paramExempt,
@@ -688,12 +858,47 @@ func TestParamConformance(t *testing.T) {
 
 		// ── GET /reports/schedules ───────────────────────────────────────────────
 		"GET /reports/schedules ?limit": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-006",
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				for i := 1; i <= 2; i++ {
+					postConformanceItem(t, bizTs.URL, "/api/v1/reports/schedules", bizTok, map[string]any{
+						"cron": "0 6 * * *", "format": "csv",
+					})
+				}
+				items, nc := getListPage(t, bizTs.URL, "/api/v1/reports/schedules?limit=1", bizTok)
+				if len(items) != 1 {
+					t.Errorf("?limit=1: got %d items, want 1", len(items))
+				} else {
+					t.Logf("PASS ?limit=1: 1 item returned")
+				}
+				if nc == "" {
+					t.Errorf("?limit=1: next_cursor empty, want non-empty")
+				} else {
+					t.Logf("PASS ?limit=1: next_cursor=%q", nc)
+				}
+			},
 		},
 		"GET /reports/schedules ?cursor": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-006",
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				for i := 1; i <= 2; i++ {
+					postConformanceItem(t, bizTs.URL, "/api/v1/reports/schedules", bizTok, map[string]any{
+						"cron": "0 8 * * *", "format": "csv",
+					})
+				}
+				_, nc := getListPage(t, bizTs.URL, "/api/v1/reports/schedules?limit=1", bizTok)
+				if nc == "" {
+					t.Fatal("?cursor: no next_cursor from page 1; need >= 2 items")
+				}
+				items2, _ := getListPage(t, bizTs.URL, "/api/v1/reports/schedules?limit=50&cursor="+url.QueryEscape(nc), bizTok)
+				if len(items2) < 1 {
+					t.Errorf("?cursor: page2 has %d items, want >= 1", len(items2))
+				} else {
+					t.Logf("PASS ?cursor: page2 has %d item(s)", len(items2))
+				}
+			},
 		},
 
 		// ── GET /fleet/nodes ─────────────────────────────────────────────────────
@@ -707,29 +912,127 @@ func TestParamConformance(t *testing.T) {
 		},
 
 		// ── GET /anomalies ───────────────────────────────────────────────────────
+		//
+		// ── BUG-008 triage (S22 / D-084) ────────────────────────────────────────
+		// Group A (app, stream, limit, cursor): handler-only fixes delivered S22/D-084.
+		// Each probe spins up a fresh Enterprise server with fakeAnomalyDetector
+		// (stdFakeFlags: 6 flags across 2 apps × 3 streams) so the response-differential
+		// is observable without a ClickHouse baseline store.
+		//
+		// Group B (from, to): ComputeFlags is point-in-time; no persistent flag-event
+		// store exists. S22 DECISION: remain known-violation — no 501 guard this session
+		// (a refusal on declared params is a behavior change requiring UI-caller audit +
+		// product decision). S23 designs the real fix (anomaly_flag_events store).
+		// See docs/assessment/bugs/BUG-008-triage-s22.md §3 for the rationale.
 		"GET /anomalies ?from": {
+			// from/to: architectural gap — no persistent flag-event store.
+			// S23: design anomaly_flag_events table (ClickHouse recommended).
+			// S22 DECISION: known-violation retained; no 501 guard (behavior change
+			// requires UI-caller audit; web/src does NOT currently pass from/to).
 			disp:   paramKnownViolation,
 			bugRef: "BUG-008",
 		},
 		"GET /anomalies ?to": {
+			// Same S22 decision as ?from above.
 			disp:   paramKnownViolation,
 			bugRef: "BUG-008",
 		},
 		"GET /anomalies ?app": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-008",
+			// BUG-008 Group A — fixed S22/D-084: handler post-filter on scope.App.
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				ants, anTok, anCleanup := setupEnterpriseAnomalyServer(t)
+				defer anCleanup()
+				// app=app-A → 3 items; app=ghost → 0 items (response differential).
+				for _, tc := range []struct {
+					app  string
+					want int
+				}{
+					{"app-A", 3},
+					{"ghost", 0},
+				} {
+					items, _ := anomalyItems(t, ants.URL, anTok, "app="+tc.app)
+					if len(items) != tc.want {
+						t.Errorf("?app=%s: items=%d want %d (filter not applied)", tc.app, len(items), tc.want)
+					} else {
+						t.Logf("PASS ?app=%s: %d items", tc.app, len(items))
+					}
+				}
+			},
 		},
 		"GET /anomalies ?stream": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-008",
+			// BUG-008 Group A — fixed S22/D-084: handler post-filter on scope.StreamID.
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				ants, anTok, anCleanup := setupEnterpriseAnomalyServer(t)
+				defer anCleanup()
+				// stream=stream-1 → 2 items (one per app); stream=ghost → 0.
+				for _, tc := range []struct {
+					stream string
+					want   int
+				}{
+					{"stream-1", 2},
+					{"ghost", 0},
+				} {
+					items, _ := anomalyItems(t, ants.URL, anTok, "stream="+tc.stream)
+					if len(items) != tc.want {
+						t.Errorf("?stream=%s: items=%d want %d (filter not applied)", tc.stream, len(items), tc.want)
+					} else {
+						t.Logf("PASS ?stream=%s: %d items", tc.stream, len(items))
+					}
+				}
+			},
 		},
 		"GET /anomalies ?limit": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-008",
+			// BUG-008 Group A — fixed S22/D-084: in-memory slice window.
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				ants, anTok, anCleanup := setupEnterpriseAnomalyServer(t)
+				defer anCleanup()
+				// limit=2 on 6 flags → 2 items + next_cursor non-empty.
+				items, cursor := anomalyItems(t, ants.URL, anTok, "limit=2")
+				if len(items) != 2 {
+					t.Errorf("?limit=2: items=%d want 2 (limit not applied)", len(items))
+				} else {
+					t.Logf("PASS ?limit=2: %d items", len(items))
+				}
+				if cursor == "" {
+					t.Errorf("?limit=2: next_cursor empty, want non-empty (more items exist)")
+				} else {
+					t.Logf("PASS ?limit=2: next_cursor=%q", cursor)
+				}
+			},
 		},
 		"GET /anomalies ?cursor": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-008",
+			// BUG-008 Group A — fixed S22/D-084: decimal-offset in-memory cursor.
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				ants, anTok, anCleanup := setupEnterpriseAnomalyServer(t)
+				defer anCleanup()
+				// Page 1 (limit=2) → 2 items + cursor. Page 2 → different items.
+				items1, cursor := anomalyItems(t, ants.URL, anTok, "limit=2")
+				if len(items1) != 2 {
+					t.Fatalf("page1: want 2 items, got %d (limit not applied?)", len(items1))
+				}
+				if cursor == "" {
+					t.Fatal("page1: next_cursor empty — cursor not emitted")
+				}
+				items2, _ := anomalyItems(t, ants.URL, anTok, "limit=2&cursor="+url.QueryEscape(cursor))
+				if len(items2) == 0 {
+					t.Fatal("page2: 0 items — cursor ignored?")
+				}
+				id1 := items1[0].(map[string]any)["id"].(string)
+				id2 := items2[0].(map[string]any)["id"].(string)
+				if id1 == id2 {
+					t.Errorf("cursor not advancing: same id %s on both pages", id1)
+				} else {
+					t.Logf("PASS: page1[0].id=%s → page2[0].id=%s (cursor advanced)", id1, id2)
+				}
+			},
 		},
 		"GET /anomalies ?metric": {
 			disp:         paramExempt,
@@ -742,12 +1045,49 @@ func TestParamConformance(t *testing.T) {
 
 		// ── GET /probes ──────────────────────────────────────────────────────────
 		"GET /probes ?limit": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-006",
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				for i := 1; i <= 2; i++ {
+					postConformanceItem(t, bizTs.URL, "/api/v1/probes", bizTok, map[string]any{
+						"name": fmt.Sprintf("probe-lim-%d", i), "url": "http://example.com",
+						"interval_s": 30,
+					})
+				}
+				items, nc := getListPage(t, bizTs.URL, "/api/v1/probes?limit=1", bizTok)
+				if len(items) != 1 {
+					t.Errorf("?limit=1: got %d items, want 1", len(items))
+				} else {
+					t.Logf("PASS ?limit=1: 1 item returned")
+				}
+				if nc == "" {
+					t.Errorf("?limit=1: next_cursor empty, want non-empty")
+				} else {
+					t.Logf("PASS ?limit=1: next_cursor=%q", nc)
+				}
+			},
 		},
 		"GET /probes ?cursor": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-006",
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				for i := 1; i <= 2; i++ {
+					postConformanceItem(t, bizTs.URL, "/api/v1/probes", bizTok, map[string]any{
+						"name": fmt.Sprintf("probe-cur-%d", i), "url": "http://example.com",
+						"interval_s": 30,
+					})
+				}
+				_, nc := getListPage(t, bizTs.URL, "/api/v1/probes?limit=1", bizTok)
+				if nc == "" {
+					t.Fatal("?cursor: no next_cursor from page 1; need >= 2 items")
+				}
+				items2, _ := getListPage(t, bizTs.URL, "/api/v1/probes?limit=50&cursor="+url.QueryEscape(nc), bizTok)
+				if len(items2) < 1 {
+					t.Errorf("?cursor: page2 has %d items, want >= 1", len(items2))
+				} else {
+					t.Logf("PASS ?cursor: page2 has %d item(s)", len(items2))
+				}
+			},
 		},
 
 		// ── GET /probes/{probeId}/results ────────────────────────────────────────
@@ -764,9 +1104,16 @@ func TestParamConformance(t *testing.T) {
 			exemptReason: "Same nil-CH reason; limit is read and passed to QueryProbeResults (scout reads=yes).",
 		},
 		"GET /probes/{probeId}/results ?cursor": {
-			// cursor absent from handler and qsvc.QueryProbeResults signature — see BUG-007.
-			disp:   paramKnownViolation,
-			bugRef: "BUG-007",
+			// BUG-007 fix verified S22/D-084: cursor now threaded through handleProbeResults →
+			// qsvc.QueryProbeResults. Probe uses a recording fake ProbeResultQuerier
+			// (wired via qsvc.SetProbeResultQuerier before server start) to assert:
+			//   (a) the cursor VALUE sent in the URL arrives at the querier, and
+			//   (b) the handler emits next_cursor from the fake-returned results.
+			// Removes the querier wiring → querier.calls == 0 → probe fails (red captured).
+			// Store-level SQL cursor (clickhouse.QueryProbeResults) is covered by
+			// server/internal/query/query_conn_test.go — this probe targets handler→qsvc only.
+			disp:      paramProbe,
+			probeFunc: func(t *testing.T) { probeProbeResultsCursor(t) },
 		},
 
 		// ── GET /auth/oidc/callback ──────────────────────────────────────────────
@@ -781,22 +1128,92 @@ func TestParamConformance(t *testing.T) {
 
 		// ── GET /admin/sources ───────────────────────────────────────────────────
 		"GET /admin/sources ?limit": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-006",
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				for i := 1; i <= 2; i++ {
+					postConformanceItem(t, bizTs.URL, "/api/v1/admin/sources", bizTok, map[string]any{
+						"name": fmt.Sprintf("src-lim-%d", i), "type": "rest",
+					})
+				}
+				items, nc := getListPage(t, bizTs.URL, "/api/v1/admin/sources?limit=1", bizTok)
+				if len(items) != 1 {
+					t.Errorf("?limit=1: got %d items, want 1", len(items))
+				} else {
+					t.Logf("PASS ?limit=1: 1 item returned")
+				}
+				if nc == "" {
+					t.Errorf("?limit=1: next_cursor empty, want non-empty")
+				} else {
+					t.Logf("PASS ?limit=1: next_cursor=%q", nc)
+				}
+			},
 		},
 		"GET /admin/sources ?cursor": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-006",
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				for i := 1; i <= 2; i++ {
+					postConformanceItem(t, bizTs.URL, "/api/v1/admin/sources", bizTok, map[string]any{
+						"name": fmt.Sprintf("src-cur-%d", i), "type": "rest",
+					})
+				}
+				_, nc := getListPage(t, bizTs.URL, "/api/v1/admin/sources?limit=1", bizTok)
+				if nc == "" {
+					t.Fatal("?cursor: no next_cursor from page 1; need >= 2 items")
+				}
+				items2, _ := getListPage(t, bizTs.URL, "/api/v1/admin/sources?limit=50&cursor="+url.QueryEscape(nc), bizTok)
+				if len(items2) < 1 {
+					t.Errorf("?cursor: page2 has %d items, want >= 1", len(items2))
+				} else {
+					t.Logf("PASS ?cursor: page2 has %d item(s)", len(items2))
+				}
+			},
 		},
 
 		// ── GET /admin/tokens ────────────────────────────────────────────────────
+		// bizTs is pre-seeded with 1 api token (kind=api, CreatedAt=1000).
+		// Tokens list in DESC order; new tokens (higher CreatedAt) appear first.
 		"GET /admin/tokens ?limit": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-006",
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				// Create 1 extra token so we have at least 2 (pre-seeded + new).
+				postConformanceItem(t, bizTs.URL, "/api/v1/admin/tokens", bizTok, map[string]any{
+					"kind": "api", "name": "tok-lim-extra", "scopes": []string{"read"},
+				})
+				items, nc := getListPage(t, bizTs.URL, "/api/v1/admin/tokens?limit=1", bizTok)
+				if len(items) != 1 {
+					t.Errorf("?limit=1: got %d items, want 1", len(items))
+				} else {
+					t.Logf("PASS ?limit=1: 1 item returned")
+				}
+				if nc == "" {
+					t.Errorf("?limit=1: next_cursor empty, want non-empty")
+				} else {
+					t.Logf("PASS ?limit=1: next_cursor=%q", nc)
+				}
+			},
 		},
 		"GET /admin/tokens ?cursor": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-006",
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				// Create 1 extra token; combined with pre-seeded and any ?limit probe tokens we have >= 2.
+				postConformanceItem(t, bizTs.URL, "/api/v1/admin/tokens", bizTok, map[string]any{
+					"kind": "api", "name": "tok-cur-extra", "scopes": []string{"read"},
+				})
+				_, nc := getListPage(t, bizTs.URL, "/api/v1/admin/tokens?limit=1", bizTok)
+				if nc == "" {
+					t.Fatal("?cursor: no next_cursor from page 1; need >= 2 tokens")
+				}
+				items2, _ := getListPage(t, bizTs.URL, "/api/v1/admin/tokens?limit=50&cursor="+url.QueryEscape(nc), bizTok)
+				if len(items2) < 1 {
+					t.Errorf("?cursor: page2 has %d items, want >= 1", len(items2))
+				} else {
+					t.Logf("PASS ?cursor: page2 has %d item(s)", len(items2))
+				}
+			},
 		},
 		"GET /admin/tokens ?kind": {
 			disp: paramProbe,
@@ -841,22 +1258,92 @@ func TestParamConformance(t *testing.T) {
 
 		// ── GET /admin/users ─────────────────────────────────────────────────────
 		"GET /admin/users ?limit": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-006",
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				for i := 1; i <= 2; i++ {
+					postConformanceItem(t, bizTs.URL, "/api/v1/admin/users", bizTok, map[string]any{
+						"username": fmt.Sprintf("user-lim-%d", i), "role": "viewer", "password": "x",
+					})
+				}
+				items, nc := getListPage(t, bizTs.URL, "/api/v1/admin/users?limit=1", bizTok)
+				if len(items) != 1 {
+					t.Errorf("?limit=1: got %d items, want 1", len(items))
+				} else {
+					t.Logf("PASS ?limit=1: 1 item returned")
+				}
+				if nc == "" {
+					t.Errorf("?limit=1: next_cursor empty, want non-empty")
+				} else {
+					t.Logf("PASS ?limit=1: next_cursor=%q", nc)
+				}
+			},
 		},
 		"GET /admin/users ?cursor": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-006",
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				for i := 1; i <= 2; i++ {
+					postConformanceItem(t, bizTs.URL, "/api/v1/admin/users", bizTok, map[string]any{
+						"username": fmt.Sprintf("user-cur-%d", i), "role": "viewer", "password": "x",
+					})
+				}
+				_, nc := getListPage(t, bizTs.URL, "/api/v1/admin/users?limit=1", bizTok)
+				if nc == "" {
+					t.Fatal("?cursor: no next_cursor from page 1; need >= 2 users")
+				}
+				items2, _ := getListPage(t, bizTs.URL, "/api/v1/admin/users?limit=50&cursor="+url.QueryEscape(nc), bizTok)
+				if len(items2) < 1 {
+					t.Errorf("?cursor: page2 has %d items, want >= 1", len(items2))
+				} else {
+					t.Logf("PASS ?cursor: page2 has %d item(s)", len(items2))
+				}
+			},
 		},
 
 		// ── GET /admin/tenants ───────────────────────────────────────────────────
 		"GET /admin/tenants ?limit": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-006",
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				for i := 1; i <= 2; i++ {
+					postConformanceItem(t, bizTs.URL, "/api/v1/admin/tenants", bizTok, map[string]any{
+						"name": fmt.Sprintf("tenant-lim-%d", i), "stream_pattern": fmt.Sprintf("lim%d/*", i),
+					})
+				}
+				items, nc := getListPage(t, bizTs.URL, "/api/v1/admin/tenants?limit=1", bizTok)
+				if len(items) != 1 {
+					t.Errorf("?limit=1: got %d items, want 1", len(items))
+				} else {
+					t.Logf("PASS ?limit=1: 1 item returned")
+				}
+				if nc == "" {
+					t.Errorf("?limit=1: next_cursor empty, want non-empty")
+				} else {
+					t.Logf("PASS ?limit=1: next_cursor=%q", nc)
+				}
+			},
 		},
 		"GET /admin/tenants ?cursor": {
-			disp:   paramKnownViolation,
-			bugRef: "BUG-006",
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				for i := 1; i <= 2; i++ {
+					postConformanceItem(t, bizTs.URL, "/api/v1/admin/tenants", bizTok, map[string]any{
+						"name": fmt.Sprintf("tenant-cur-%d", i), "stream_pattern": fmt.Sprintf("cur%d/*", i),
+					})
+				}
+				_, nc := getListPage(t, bizTs.URL, "/api/v1/admin/tenants?limit=1", bizTok)
+				if nc == "" {
+					t.Fatal("?cursor: no next_cursor from page 1; need >= 2 tenants")
+				}
+				items2, _ := getListPage(t, bizTs.URL, "/api/v1/admin/tenants?limit=50&cursor="+url.QueryEscape(nc), bizTok)
+				if len(items2) < 1 {
+					t.Errorf("?cursor: page2 has %d items, want >= 1", len(items2))
+				} else {
+					t.Logf("PASS ?cursor: page2 has %d item(s)", len(items2))
+				}
+			},
 		},
 	}
 
@@ -891,11 +1378,12 @@ func TestParamConformance(t *testing.T) {
 	}
 
 	// 4a. Non-vacuity floor: the walk enumerated 85 query params at authoring
-	//     time (S21/D-083). If kin-openapi ever silently under-enumerates
+	//     time (S21/D-083); bumped to 86 when BUG-010 added ?format to audience
+	//     (S22/D-084). If kin-openapi ever silently under-enumerates
 	//     (e.g. a $ref refactor that doc.Validate does not catch), the gate
 	//     must go loud instead of vacuously passing. Lower this constant only
 	//     for an intentional spec shrink.
-	const minSpecParams = 85
+	const minSpecParams = 86
 	if len(specParams) < minSpecParams {
 		t.Errorf("param-conformance: enumerated only %d spec query params, "+
 			"expected >= %d — spec load may be incomplete", len(specParams), minSpecParams)
@@ -938,7 +1426,13 @@ func TestParamConformance(t *testing.T) {
 	if missing > 0 {
 		t.Errorf("param-conformance: %d unregistered param(s) found — gate open", missing)
 	}
-	const minProbes = 8
+	// minProbes census (S22/D-084 final):
+	//   29 probes at S21 baseline
+	//  + 4 BUG-008 Group A (anomalies ?app/?stream/?limit/?cursor) added by F2
+	//  + 2 BUG-007 cursor probes (alerts/history ?cursor, probes/results ?cursor) added by F3
+	//  = 35 total probes. Floor = 35 - 2 = 33 (headroom for minor spec evolution
+	//  without rebalancing the gate on every single-param addition).
+	const minProbes = 33
 	if probesRan < minProbes {
 		t.Errorf("param-conformance: only %d probe(s) ran (need >= %d); "+
 			"check that probe entries are not all skipping", probesRan, minProbes)
@@ -949,4 +1443,56 @@ func TestParamConformance(t *testing.T) {
 
 // NOTE: This file reuses setupBusinessServer (v3b_guard_test.go), setupHealthyTestServer
 // and setupIngestCaptureServer (vd20b_vd21_ingest_test.go), captureIngestQsvc, and
-// authHeader (api_test.go) — all in the same package api_test. No new helpers needed.
+// authHeader (api_test.go) — all in the same package api_test.
+
+// ─── Pagination probe helpers ─────────────────────────────────────────────────
+
+// postConformanceItem sends an authenticated JSON POST to the given path and
+// fatals if the response is not 2xx.  Used by BUG-006 pagination probes to seed
+// items without boilerplate in every closure.
+func postConformanceItem(t *testing.T, baseURL, path, tok string, body map[string]any) {
+	t.Helper()
+	b, _ := json.Marshal(body)
+	req, _ := http.NewRequest(http.MethodPost, baseURL+path, bytes.NewReader(b))
+	req.Header.Set("Authorization", authHeader(tok))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("postConformanceItem POST %s: %v", path, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		rb, _ := io.ReadAll(resp.Body)
+		t.Fatalf("postConformanceItem POST %s: got %d: %s", path, resp.StatusCode, rb)
+	}
+	io.Copy(io.Discard, resp.Body)
+}
+
+// getListPage fetches an authenticated list page and returns (items, next_cursor).
+// Fatals on network or non-200 response.
+func getListPage(t *testing.T, baseURL, path, tok string) (items []any, nextCursor string) {
+	t.Helper()
+	// Ensure path starts with a slash so string operations below are predictable.
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	req, _ := http.NewRequest(http.MethodGet, baseURL+path, nil)
+	req.Header.Set("Authorization", authHeader(tok))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("getListPage GET %s: %v", path, err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("getListPage GET %s: got %d: %s", path, resp.StatusCode, b)
+	}
+	var result map[string]any
+	if err := json.Unmarshal(b, &result); err != nil {
+		t.Fatalf("getListPage GET %s: decode: %v", path, err)
+	}
+	items, _ = result["items"].([]any)
+	meta2, _ := result["meta"].(map[string]any)
+	nextCursor, _ = meta2["next_cursor"].(string)
+	return items, nextCursor
+}

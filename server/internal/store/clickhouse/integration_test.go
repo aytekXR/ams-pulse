@@ -595,7 +595,7 @@ func TestIntegration_ProbeResults(t *testing.T) {
 	// Test QueryProbeResults — query the full range, expect all results ordered by ts.
 	from := baseTime.Add(-1 * time.Minute)
 	to := baseTime.Add(time.Duration(numResults+1) * time.Minute)
-	results, err := store.QueryProbeResults(qCtx, probeID, from, to, 100)
+	results, err := store.QueryProbeResults(qCtx, probeID, from, to, 100, "")
 	if err != nil {
 		t.Fatalf("QueryProbeResults: %v", err)
 	}
@@ -701,7 +701,7 @@ func TestIntegration_ProbeResults(t *testing.T) {
 
 	// Test range filtering: query only the first half.
 	midTime := baseTime.Add(time.Duration(numResults/2) * time.Minute)
-	firstHalf, err := store.QueryProbeResults(qCtx, probeID, from, midTime, 100)
+	firstHalf, err := store.QueryProbeResults(qCtx, probeID, from, midTime, 100, "")
 	if err != nil {
 		t.Fatalf("QueryProbeResults (first half): %v", err)
 	}
@@ -717,7 +717,7 @@ func TestIntegration_ProbeResults(t *testing.T) {
 	}
 
 	// Test limit enforcement.
-	limited, err := store.QueryProbeResults(qCtx, probeID, from, to, 5)
+	limited, err := store.QueryProbeResults(qCtx, probeID, from, to, 5, "")
 	if err != nil {
 		t.Fatalf("QueryProbeResults (limited): %v", err)
 	}
