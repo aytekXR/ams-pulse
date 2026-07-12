@@ -191,6 +191,12 @@ type server struct {
 
 	// Wave 3 (WO-302): F9 anomaly detector.
 	anomalyDetector *anomaly.Detector
+
+	// D-087 BUG-011: stale-node eviction threshold derivation.
+	// pollInterval is the AMS REST poll interval (default 5 s), stored here so
+	// Start() can compute the 3×PollInterval node-eviction threshold without
+	// re-reading the config.
+	pollInterval time.Duration
 }
 
 // newServer constructs all services from config.
@@ -575,6 +581,7 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		reportScheduler:  reportScheduler,
 		probeRunner:      probeRunnerInstance,
 		anomalyDetector:  anomalyDet,
+		pollInterval:     cfg.PollInterval,
 	}, nil
 }
 
@@ -600,6 +607,12 @@ func (s *server) Start(ctx context.Context) error {
 			}
 		}
 	}()
+
+	// BUG-011 fix (D-087): stale-node eviction loop.
+	// EvictStaleNodes was implemented (VD-30) but never wired — node_down could
+	// never fire in production. threshold = 3×PollInterval (default 15 s);
+	// cadence = threshold/2 so evictions fire in the first half-threshold after stale.
+	wireNodeEviction(ctx, s.agg, s.pollInterval)
 
 	// Wave 2: Session idle eviction loop (evict every 60s).
 	if s.sessionStitcher != nil {
@@ -723,6 +736,36 @@ func wireAlertAnomalyReader(eval *alert.Evaluator, store alert.AnomalyBaselineRe
 	if store != nil {
 		eval.SetAnomalyBaselineReader(store)
 	}
+}
+
+// wireNodeEviction starts the stale-node eviction goroutine (BUG-011 fix, D-087).
+//
+// threshold = 3×pollInterval: a node must miss three consecutive poll windows before
+// it is considered gone (generous enough to survive transient jitter, tight enough
+// to catch a frozen AMS within ~15 s at the 5 s default). cadence = threshold/2
+// ensures the ticker fires at least twice before the threshold elapses, so the
+// first eviction opportunity arrives in the first half-threshold window.
+//
+// D-087 wiring pin: serve_wiring_test.go calls this function directly; deleting
+// it causes the test file to fail to compile (analogous to beaconListenerConfig).
+func wireNodeEviction(ctx context.Context, agg *aggregator.Aggregator, pollInterval time.Duration) {
+	if pollInterval <= 0 {
+		pollInterval = restpoller.DefaultPollInterval
+	}
+	threshold := 3 * pollInterval
+	cadence := threshold / 2
+	go func() {
+		ticker := time.NewTicker(cadence)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				agg.EvictStaleNodes(threshold)
+			}
+		}
+	}()
 }
 
 // ─── Beacon listener wiring ───────────────────────────────────────────────────

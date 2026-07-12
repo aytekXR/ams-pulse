@@ -1077,7 +1077,18 @@ func (s *Service) AnomalyBaselineForMetric(ctx context.Context, metric, streamID
 			return 0, 0, 0, nil
 		}
 	default:
-		// All other metrics (rebuffer_ratio, error_rate, etc.) from QoE rollup.
+		// TODO(D-087, 2026-07-12): LATENT BUG — this default branch hardcodes
+		// avg(rebuffer_ratio) and completely ignores the metric argument, so any
+		// call with metric!="viewer_count" silently returns rebuffer_ratio statistics.
+		// The correct fix: switch on metric, build the column name dynamically from
+		// an allowlist, and return an error for unknown metrics.
+		//
+		// DEAD CODE as of D-087: AnomalyBaselineForMetric has no non-test callers
+		// reachable from any endpoint (grep -r '\.AnomalyBaselineForMetric' across
+		// server/ hits only wave3_anomaly_query_test.go). The function was written
+		// for a query path never wired to an endpoint or the anomaly.Detector (which
+		// uses meta-store Welford baselines, not ClickHouse). Leave this comment in
+		// place as a pin; fix only when this function is actually wired to live code.
 		q := `SELECT avg(rebuffer_ratio) AS mean, stddevPop(rebuffer_ratio) AS stddev, count() AS n
 		      FROM rollup_qoe_1h
 		      WHERE bucket >= now() - INTERVAL ? SECOND`

@@ -18,13 +18,16 @@ const METRICS = [
   "rtt_ms",
   "health_score",
   "rebuffer_ratio",
+  // D-087: node up/down and degraded status (rung 2 + rung 3 of early-warning ladder).
+  "node_degraded",
+  "node_down",
 ];
 
 // Anomaly rules: only metrics tracked by the Welford Detector.
 // Detector tracks: viewers (-> "viewer_count"), ingest_bitrate_kbps (stream-scoped),
-// cpu_pct, mem_pct, disk_pct (node-scoped).
+// cpu_pct, mem_pct, disk_pct (node-scoped), ams_api_latency_ms (node-scoped, D-087).
 // window_s must be 3600 (anomaly.go hardcoded Detector window).
-const ANOMALY_METRICS = ["viewer_count", "ingest_bitrate_kbps", "cpu_pct", "mem_pct", "disk_pct"];
+const ANOMALY_METRICS = ["viewer_count", "ingest_bitrate_kbps", "cpu_pct", "mem_pct", "disk_pct", "ams_api_latency_ms"];
 
 const OPERATORS = ["gt", "lt", "gte", "lte", "eq"] as const;
 const SEVERITIES = ["info", "warning", "critical"] as const;

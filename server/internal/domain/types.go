@@ -327,6 +327,15 @@ type LiveNodeStats struct {
 	OsArch         string `json:"os_arch,omitempty"`
 	JavaVersion    string `json:"java_version,omitempty"`
 	ProcessorCount int    `json:"processor_count,omitempty"`
+
+	// D-087: AMS early-warning ladder (rung 1 & 2 feed).
+	// APILatencyMS is the round-trip time of the last successful SystemStats or
+	// ClusterNodes call in milliseconds. Absent (zero) when the last call failed.
+	APILatencyMS float64 `json:"api_latency_ms,omitempty"`
+	// ConsecAPIErrors is the number of consecutive API-call failures since the
+	// last success. Reset to 0 on any successful stats call. Drives the
+	// node_degraded rule (rung 2: ConsecAPIErrors >= 3 → degraded).
+	ConsecAPIErrors int `json:"consec_api_errors,omitempty"`
 }
 
 // LiveSnapshot is the in-memory aggregate state served to the dashboard.

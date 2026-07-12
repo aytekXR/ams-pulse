@@ -376,6 +376,26 @@ func (a *Aggregator) onStreamStats(ev domain.ServerEvent) {
 }
 
 func (a *Aggregator) onNodeStats(ev domain.ServerEvent) {
+	// D-087 ORCH design ruling: FAILURE-STREAK events (api_unreachable=true) must
+	// NOT refresh LastSeenAt and must NOT replace the LiveNodeStats struct.
+	// Refreshing LastSeenAt would keep the node "fresh" forever and prevent
+	// EvictStaleNodes from ever firing (rung 3 of the AMS early-warning ladder).
+	// In-place update: only ConsecAPIErrors is written; all other fields stay frozen.
+	if unreachable, _ := ev.Data["api_unreachable"].(bool); unreachable {
+		existing, ok := a.nodes[ev.NodeID]
+		if !ok {
+			// Unknown node: failure events create nothing (D-087 contract).
+			return
+		}
+		if errs, ok := ev.Data["consec_api_errors"].(float64); ok {
+			existing.ConsecAPIErrors = int(errs)
+		}
+		// Snapshot already references the same pointer — update is visible immediately.
+		a.snapshot.UpdatedAt = time.Now()
+		return
+	}
+
+	// Normal path: full replace + LastSeenAt=now.
 	now := time.Now()
 	ns := &domain.LiveNodeStats{
 		NodeID:     ev.NodeID,
@@ -416,6 +436,13 @@ func (a *Aggregator) onNodeStats(ev domain.ServerEvent) {
 		ns.ProcessorCount = int(v)
 	} else if v, ok := ev.Data["processor_count"].(int); ok && v > 0 {
 		ns.ProcessorCount = v
+	}
+	// D-087: extract API latency and consecutive error counter from normal-path events.
+	if v, ok := ev.Data["api_latency_ms"].(float64); ok {
+		ns.APILatencyMS = v
+	}
+	if v, ok := ev.Data["consec_api_errors"].(float64); ok {
+		ns.ConsecAPIErrors = int(v)
 	}
 	a.nodes[ev.NodeID] = ns
 	// O(1): update snapshot node map in-place (no rebuild needed).

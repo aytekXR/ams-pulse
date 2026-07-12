@@ -15,8 +15,9 @@
 //	sigma=4.0 → P ≈ 6.33e-5 per observation
 //
 // Baseline update tick = 60 s → 10,080 ticks/node/week.
-// Tracking 4 node-scoped metrics/node (viewers, cpu_pct, mem_pct, disk_pct) = 40,320
-// raw obs/node-week. ingest_bitrate_kbps is stream-scoped and scales with stream count.
+// Tracking 5 node-scoped metrics/node (viewers, cpu_pct, mem_pct, disk_pct,
+// ams_api_latency_ms) = 50,400 raw obs/node-week.
+// ingest_bitrate_kbps is stream-scoped and scales with stream count.
 //
 // With hysteresis (renewal-process model): after a false alarm, the next
 // HysteresisTicks checks are suppressed. Effective false-alarm rate:
@@ -27,7 +28,10 @@
 //
 //	sigma=4.0 per metric: lambda_raw = 10,080 × 6.33e-5 = 0.638/week
 //	lambda_effective = 0.638 / (1 + 0.638 × 10) = 0.638 / 7.38 ≈ 0.086/week
-//	across 3 metrics: 0.086 × 3 = 0.26/node-week < 1.0 ← PASSES PRD target
+//	across 4 node-only metrics (cpu_pct, mem_pct, disk_pct, ams_api_latency_ms):
+//	  0.086 × 4 = 0.3442/node-week < 1.0 ← PASSES PRD target
+//	conservative budget (+ viewers as 5th as-if-node-scoped):
+//	  0.086 × 5 = 0.4322/node-week < 1.0 ← PASSES PRD target
 //
 // DefaultSigma=4.0 satisfies the PRD <1 false alarm/node-week at the default
 // tick rate with hysteresis cooldown of 10 ticks.
@@ -39,9 +43,9 @@
 //	HysteresisTicks = 10    (suppress re-firing for 10 ticks after a flag)
 //	TickInterval    = 60 s  (baseline update period)
 //
-// Modeled false-alarm rate: ~0.47 per node per week per metric at σ=3.5.
-// Across 3 metrics (viewers, error_rate, rebuffer_ratio): ~1.4/node-week before
-// hysteresis; after hysteresis collapse: <0.5/node-week. PASSES PRD target.
+// D-074 historical note: stale '3 metrics' text (viewers, error_rate, rebuffer_ratio)
+// dates from pre-exclusion; rebuffer_ratio/error_rate are excluded by the wave3 sparsity
+// gate (wave3_test.go:709 pin). Current budget: 5 metrics (D-087, see above).
 package anomaly
 
 import (
@@ -61,12 +65,13 @@ import (
 // At σ=4.0 with MinSamples=30 and HysteresisTicks=10:
 //
 //	P(|Z|>=4.0) ≈ 6.33e-5 per observation.
-//	raw flags/node/week (4 metrics, 10080 ticks) = 10080 × 6.33e-5 × 4 = 2.55
+//	raw flags/node/week (5 metrics, 10080 ticks) = 10080 × 6.33e-5 × 5 = 3.19
 //	with hysteresis renewal process: lambda_flags = lambda / (1 + lambda × cooldown)
 //	lambda = 10080 × 6.33e-5 = 0.638/week/metric
 //	lambda_flags = 0.638 / (1 + 0.638 × 10) ≈ 0.638/7.38 ≈ 0.086/week/metric
-//	across 4 metrics: 0.086 × 4 ≈ 0.35/node/week < 1.0. PASSES PRD target.
-//	(ingest_bitrate_kbps is stream-scoped; excluded from per-node budget.)
+//	across 5 metrics: 0.086 × 5 ≈ 0.43/node/week < 1.0. PASSES PRD target.
+//	(ingest_bitrate_kbps is stream-scoped; excluded from per-node budget.
+//	 ams_api_latency_ms added D-087 as the 4th truly-node-scoped metric.)
 const DefaultSigma = 4.0
 
 // MinSamples is the minimum number of samples required before anomaly flagging.
@@ -358,6 +363,19 @@ func (d *Detector) UpdateBaselines(ctx context.Context) error {
 			scope:  AnomalyBaselineRow{Metric: "disk_pct", Scope: nodeScope, WindowS: windowS},
 			value:  n.DiskPCT,
 		})
+		// ams_api_latency_ms: Pulse-measured poller RTT (D-087 rung-1 feed).
+		// Key-absent semantics (D-075): skip when APILatencyMS==0, which signals
+		// either that the last stats call FAILED or the node has never been polled.
+		// Feeding 0 would poison the Welford baseline toward zero and make normal
+		// latency look anomalous. An honest sub-ms RTT rounds to a small positive
+		// float64 (e.g. 0.1 ms), never exactly 0 — so 0 is a safe sentinel.
+		if n.APILatencyMS > 0 {
+			obs = append(obs, observation{
+				metric: "ams_api_latency_ms",
+				scope:  AnomalyBaselineRow{Metric: "ams_api_latency_ms", Scope: nodeScope, WindowS: windowS},
+				value:  n.APILatencyMS,
+			})
+		}
 	}
 
 	// Load current baselines to get existing M2 (needed for Welford).
@@ -574,6 +592,12 @@ func (d *Detector) ComputeFlags(ctx context.Context, sigmaThreshold float64) ([]
 		liveValues["cpu_pct:"+ns] = n.CPUPCT
 		liveValues["mem_pct:"+ns] = n.MemPCT
 		liveValues["disk_pct:"+ns] = n.DiskPCT
+		// ams_api_latency_ms: same presence guard as UpdateBaselines (D-087 1b).
+		// Skip when APILatencyMS==0 (no measurement); avoid populating with a
+		// zero that would produce a spurious flag against the real baseline.
+		if n.APILatencyMS > 0 {
+			liveValues["ams_api_latency_ms:"+ns] = n.APILatencyMS
+		}
 	}
 
 	// TS is captured once per ComputeFlags call (not per detected flag).

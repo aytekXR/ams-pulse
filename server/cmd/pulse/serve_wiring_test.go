@@ -36,6 +36,7 @@ import (
 	"github.com/pulse-analytics/pulse/server/internal/alert"
 	"github.com/pulse-analytics/pulse/server/internal/alert/channels"
 	anomaly "github.com/pulse-analytics/pulse/server/internal/anomaly"
+	"github.com/pulse-analytics/pulse/server/internal/collector/aggregator"
 	beaconingest "github.com/pulse-analytics/pulse/server/internal/collector/beacon"
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 	"github.com/pulse-analytics/pulse/server/internal/store/meta"
@@ -244,6 +245,57 @@ func TestFlagHistoryBridge_QueryFlagHistory(t *testing.T) {
 	}
 	if page.NextCursor != "abc123" {
 		t.Errorf("NextCursor: got %q, want abc123", page.NextCursor)
+	}
+}
+
+// ─── BUG-011 wiring pin: wireNodeEviction ────────────────────────────────────
+
+// TestBUG011_NodeEviction_Wired verifies that wireNodeEviction starts a goroutine
+// that calls EvictStaleNodes, so a node whose stats stop flowing is removed from
+// the snapshot within the stale threshold (BUG-011 D-087).
+//
+// Compile-time catch: referencing wireNodeEviction here causes a compile failure
+// until serve.go defines the function — that is the RED evidence for this pin
+// (analogous to beaconListenerConfig / VD-15).
+func TestBUG011_NodeEviction_Wired(t *testing.T) {
+	// Use a very short poll interval so the test runs fast.
+	// threshold = 3×pollInterval = 15ms; cadence = threshold/2 = 7.5ms.
+	const pollInterval = 5 * time.Millisecond
+
+	agg := aggregator.New(3*time.Minute, nil, nil)
+
+	// Seed the node with a successful stats event.
+	agg.OnServerEvent(domain.ServerEvent{
+		Version: 1,
+		Type:    domain.EventNodeStats,
+		TS:      time.Now().UnixMilli(),
+		Source:  domain.SourceRestPoll,
+		NodeID:  "vanishing-node",
+		Data:    map[string]any{"consec_api_errors": 0.0},
+	})
+
+	if _, ok := agg.CurrentSnapshot().Nodes["vanishing-node"]; !ok {
+		t.Fatal("vanishing-node not in snapshot after seeding")
+	}
+
+	// Stats stop flowing — sleep past the threshold so the node becomes stale.
+	time.Sleep(20 * time.Millisecond) // 20ms > threshold (15ms)
+
+	// Start the eviction goroutine (the BUG-011 fix). It should fire within cadence
+	// and evict the node since LastSeenAt is already past the threshold.
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	wireNodeEviction(ctx, agg, pollInterval)
+
+	// Give the goroutine time to fire (2× cadence should be enough).
+	time.Sleep(20 * time.Millisecond)
+
+	if _, ok := agg.CurrentSnapshot().Nodes["vanishing-node"]; ok {
+		t.Error("BUG-011 FAIL: vanishing-node still in snapshot after stale threshold elapsed — " +
+			"wireNodeEviction did not call EvictStaleNodes (or was not called from serve.Start)")
+	} else {
+		t.Log("PASS BUG-011: vanishing-node evicted by wireNodeEviction goroutine (rung 3 now fires)")
 	}
 }
 
