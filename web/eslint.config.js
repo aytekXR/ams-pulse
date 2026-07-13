@@ -27,6 +27,7 @@ export default [
         setInterval: "readonly",
         clearInterval: "readonly",
         localStorage: "readonly",
+        sessionStorage: "readonly",
         fetch: "readonly",
         WebSocket: "readonly",
         RequestInit: "readonly",

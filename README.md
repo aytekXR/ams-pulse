@@ -13,9 +13,11 @@ Customer data never leaves the customer's infrastructure.
 
 ## Quick start
 
+For a guided 15-minute install wizard, see [deploy/quickstart/](deploy/quickstart/).
+
 **Released image:** `ghcr.io/aytekxr/ams-pulse` — cosign-signed, multi-arch (amd64/arm64),
 SBOM + provenance, published by a CI-gated tag pipeline.
-Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.2.0**).
+Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.4.0**).
 
 **Docker Compose (supported production path):**
 

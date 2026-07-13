@@ -1,0 +1,353 @@
+# Pulse — Known Limitations
+
+**Product:** Pulse v0.3.0 (D-089, S27)  
+**Source:** `docs/assessment/documentation-gaps.md` (DG-01 through DG-18),
+`docs/assessment/final-assessment.md` §1 and Appendix B,
+`docs/assessment/capability-map.md`
+
+This document lists every known operator-facing limitation of Pulse v0.3.0 in
+priority order. Each entry states what the limitation means for you, and what
+workaround or roadmap path exists.
+
+---
+
+## Priority 1 — Affects the default installation experience
+
+### LIM-01: Fleet resource gauges (CPU, memory, disk) are blank for standalone AMS
+
+**What it means for you:** The Pulse Fleet page shows your AMS node with OS, JVM,
+and version info, but CPU %, memory %, and disk % gauges are empty. You cannot
+set CPU or memory alert rules for a standalone AMS deployment.
+
+**Root cause:** AMS 3.x `GET /rest/v2/system-status` for standalone nodes returns
+only `{osName, osArch, javaVersion, processorCount}` — no CPU, memory, or disk
+fields (AV-06; `docs/assessment/capability-map.md` §5). These metrics are
+available on the `ams-instance-stats` Kafka topic.
+
+**Workaround:** Set `PULSE_KAFKA_BROKERS=<your-kafka>` to activate the Kafka
+consumer (`server/internal/collector/kafka/`). If you run AMS in cluster mode,
+cluster-node REST responses include `cpuUsage` and `memoryUsage` fields.
+
+**Roadmap:** DG-05; roadmap item P1 "Standalone CPU/mem/disk via Kafka"
+(`docs/assessment/final-assessment.md` §5).
+
+---
+
+### LIM-02: HLS viewer count is approximately 9× higher than the real session count
+
+**What it means for you:** `hlsViewerCount` in Pulse mirrors the AMS value
+exactly. With 5 real HLS viewers, Pulse showed a count of 45; the count did not
+drop below 38 for 90 seconds after 3 of 5 viewers stopped.
+
+**Root cause:** AMS `hlsViewerCount` is a sliding segment-request window, not a
+true session count. Each HLS player requests multiple segments per second; each
+request extends the window. The window expiry is longer than most session
+durations. This is AMS platform behavior, not a Pulse defect (TC-V-06, S18;
+`docs/assessment/final-assessment.md` Appendix B; DG-01).
+
+**Workaround:** Treat `hlsViewerCount` as a request-rate proxy, not a unique
+session count. Q2 in `docs/assessment/final-assessment.md` §6 asks the AMS team
+whether a session-accurate count is available.
+
+**Roadmap:** Awaiting AMS team input (Q2). If a session-accurate HLS endpoint is
+found, Pulse will expose it.
+
+---
+
+### LIM-03: Webhook path is non-functional on AMS 3.0.3; VoD recording has ≤60 s visibility latency
+
+**What it means for you:** AMS 3.0.3 exposes `listenerHookURL` but provides no
+HMAC secret field. Pulse's webhook listener is fail-closed (rejects all unsigned
+deliveries). Do not point `listenerHookURL` at Pulse — you will see only 401
+errors and no benefit.
+
+VoD recording (`recording_gb` in usage reports) is populated via a REST poll of
+`/{app}/rest/v2/vods/list` that runs every ~60 s (12th REST tick at default 5 s
+interval). New VoD recordings may appear in reports up to 60 s after AMS registers
+them. Stream lifecycle detection (start/stop) is not affected — REST polling covers
+that within the ≤10 s PRD budget (4 s confirmed, TC-WH-02).
+
+**Root cause:** AMS 3.0.3 cannot sign webhooks (O3 decision, `decisions.md`;
+AV-08 confirmed). BUG-002 was fixed in S23/D-085 by the VoD REST poll fallback;
+the 60 s polling lag is a residual of that fix (DG-04).
+
+**Workaround:** No action needed for stream lifecycle. For VoD recording accuracy,
+rely on the REST poll (already active).
+
+**Roadmap:** D-V2-1 (OPEN) — unsigned-webhook ingest mode gated on a
+`PULSE_WEBHOOK_ALLOW_UNSIGNED_SOURCES` CIDR allowlist (operator decision pending;
+`agents/handoffs/ROADMAP-V2.md` §2.6). A future AMS version with HMAC signing
+would cut recording visibility latency to near-real-time.
+
+---
+
+### LIM-04: FPS is always 0 for streams polled from AMS 3.x REST
+
+**What it means for you:** The Pulse ingest health view shows `fps = 0` for every
+stream, regardless of actual frame rate. The health score formula redistributes
+FPS weight so a healthy 2 Mbps stream still scores above 80 (confirmed TC-I-06).
+
+**Root cause:** `currentFPS` is absent from the AMS 3.0.3 BroadcastDTO REST
+response (AV-04; `server/pkg/amsclient/client.go:97` comment). FPS data is
+available on the `ams-instance-stats` Kafka topic but the Kafka field name is
+unconfirmed (Q4 in `docs/assessment/final-assessment.md` §6; DG-03).
+
+**Workaround:** Use the health score as the primary ingest-health signal rather
+than raw FPS. Enable Kafka (`PULSE_KAFKA_BROKERS`) if your deployment has a broker.
+
+**Roadmap:** Awaiting AMS team confirmation of the Kafka FPS field name (Q4).
+
+---
+
+### LIM-05: Geo country analytics require a MaxMind GeoLite2 database that is not bundled
+
+**What it means for you:** `GET /api/v1/analytics/geo` returns rows with
+`country: ""` (blank country) until you configure a GeoLite2-City mmdb file.
+The geo analytics feature is structurally functional — the ClickHouse query runs
+and returns real rows — but country enrichment is inactive without the database
+(AV-10, AV-11; DG-17).
+
+**Workaround:** Obtain GeoLite2-City.mmdb from MaxMind (free account at
+maxmind.com), mount it into the Pulse container, and set
+`PULSE_GEO_MMDB_PATH=/path/to/GeoLite2-City.mmdb` in `deploy/.env`.
+
+**Roadmap:** DG-17; PRD §7.9 F2; roadmap item P2 "GeoLite2 mmdb bundling or
+setup guide" (`docs/assessment/final-assessment.md` §5). Licensing (OFL vs MaxMind
+EULA) determines whether the mmdb can be bundled in the Docker image.
+
+---
+
+## Priority 2 — Affects specific metrics or configurations
+
+### LIM-06: Error-rate and rebuffer-ratio anomaly signals are not implemented (F9 sparsity gate)
+
+**What it means for you:** The PRD F9 anomaly detection covers `viewers` and
+`bitrate` deviations (implemented, 0.259 false alarms/node-week). It does NOT
+cover `error_rate` or `rebuffer_ratio`, which the PRD also lists. TC-AN-05 confirms
+these signals are absent from the anomaly evaluator.
+
+**Why the delay:** In the production beacon deployment, `beacon_events` = 2 rows
+over 1 stream; in the `realams` environment = 0 rows. Welford baselines built on
+all-zero data make the first real rebuffer event an instant false alarm — a PRD
+violation. Additionally, `rollup_qoe_1h` accumulates within the hour, so up to 30
+Welford ticks read non-independent samples; sub-hour windowing is needed before
+this is safe to enable (S25/D-087 assessment; `docs/assessment/prd-validation-matrix.md`
+F9 MISSING row).
+
+**Workaround:** None currently. Monitor rebuffer ratios via `GET /api/v1/qoe/summary`.
+
+**Roadmap:** P1 "error\_rate + rebuffer\_ratio anomaly signals" pending windowing
+redesign (`docs/assessment/final-assessment.md` §5).
+
+---
+
+### LIM-07: Egress GB is a bitrate×watch-time estimate, not measured delivered bytes
+
+**What it means for you:** `egress_gb` in `GET /api/v1/reports/usage` is computed
+as `bitrate × watch_time` stored in `mv_usage_1d`. It is a heuristic proxy for
+network egress, not a measurement from a CDN or network switch (AV-09; DG-06).
+
+**Example:** One beacon session of a 2 Mbps stream for 20 s produced
+`egress_gb = 0.0025` — this is the model estimate, not a counter of actual bytes
+delivered to the viewer's NIC.
+
+**Workaround:** Use CDN access logs or network flow data for billing-grade egress
+accounting. Pulse's `egress_gb` is useful for directional estimates and relative
+comparisons, not for invoicing.
+
+**Roadmap:** DG-06; PRD §7.9 F6 notes this limitation in the product spec
+("Egress estimated from delivered-bytes events where available, else
+bitrate×watch-time model with method disclosed on the report").
+
+---
+
+### LIM-08: Packet loss (`packetLostRatio`) is always 0 for RTMP ingest
+
+**What it means for you:** AMS `packetLostRatio` and `packetsLost` are populated
+only by UDP-based ingest paths (WebRTC, SRT). For RTMP ingest, TCP retransmission
+repairs packet loss below the application layer before AMS observes the stream.
+Even with 10% netem loss injected on the publisher's NIC, AMS reported
+`packetLostRatio=0.0` and `bitrate≈2 Mbps` (TC-I-05, S18; DG-18).
+
+**What this means:** Monitoring `packetLostRatio` is only meaningful for WebRTC
+and SRT ingest paths. RTMP ingest always shows 0 — this is correct for RTMP, not
+a Pulse defect.
+
+**Workaround:** If packet loss monitoring is critical, switch to WebRTC or SRT
+ingest.
+
+---
+
+### LIM-09: RTMP-pull viewer count shows 0
+
+**What it means for you:** For RTMP pull streams (where AMS pulls from a source
+rather than receiving a push), `rtmpViewerCount` inline in BroadcastDTO is 0.
+The `broadcast-statistics` endpoint (now dead code, removed in S26/D-088 BUG-001
+FIXED) returned `-1` as an "untracked" sentinel for pull viewers — Pulse was
+never calling it. The inline inline RTMP count is the actual value for push
+streams and is correct there (AV-02, AV-16; DG-02).
+
+**Workaround:** RTMP pull viewer tracking is a roadmap P2 item that would require
+polling the per-connection `/{app}/connections` endpoint.
+
+**Roadmap:** P2 "RTMP pull viewer count via `/{app}/connections`"
+(`docs/assessment/final-assessment.md` §5).
+
+---
+
+### LIM-10: Cluster mode is not live-validated against a real multi-node AMS
+
+**What it means for you:** Edge/origin viewer dedup (`IsEdgeStream()`), cluster
+node auto-discovery, and aggregate fleet metrics are implemented and unit-tested.
+None of these were validated against a real multi-node AMS cluster — the validation
+VPS ran single-node AMS only.
+
+**What is proven:** Standalone mode is fully live-validated (46/50 scenarios PASS);
+`IsEdgeStream()` dedup logic is unit-tested; node discovery completes in 24.4 ms
+in CI.
+
+**Workaround:** If you run a multi-node AMS cluster, treat cluster-specific behavior
+(edge role labeling, dedup) as provisionally implemented, not live-proven. Report
+any discrepancies as issues.
+
+**Roadmap:** `docs/assessment/final-assessment.md` §1 "Honest limitations";
+N3 PARTIALLY in prd-validation-matrix.md.
+
+---
+
+### LIM-11: WebRTC remote viewer QoE stats (RTT/jitter/loss) validated at 0 only
+
+**What it means for you:** The ×1000 unit conversion for WebRTC viewer stats
+(ms to µs, `normalize.go:185`) is code-verified, but was exercised only with
+same-host loopback WebRTC viewers that return all-zero AMS stats. Non-zero RTT,
+jitter, and loss values from a geographically remote WebRTC viewer have not been
+validated against real AMS.
+
+**What is proven:** The conversion formula is correct at line 185. RTT/jitter/loss
+keys are present in probe results (TC-P-01, S17). A flip to ×0.001 would produce
+µs-range values silently — the unit conversion direction has not been validated
+at non-zero values.
+
+**Workaround:** If your viewers are geographically distant from AMS, treat WebRTC
+RTT/jitter/loss values as unvalidated. Report suspicious readings.
+
+**Roadmap:** P1 "Remote-viewer WebRTC QoE parity" (`docs/assessment/final-assessment.md` §5).
+
+---
+
+## Priority 3 — Configuration and semantic gotchas
+
+### LIM-12: AMS VPS capacity limits stream count (AMS / OS constraint, not Pulse)
+
+**What it means for you:** On a standard VPS running AMS, the practical concurrent
+RTMP stream limit is approximately 5–7 publishers. All additional publishers are
+rejected by AMS with "current system resources not enough." This is an AMS / OS
+resource limit, not a Pulse scalability limit.
+
+**What Pulse supports:** All scale claims at N = 500 concurrent streams and
+N = 3,000 concurrent viewers are CI-verified with mock-ams (SESSION-07, D-064;
+`docs/assessment/final-assessment.md` §1). Pulse uses 18.6 MiB peak memory at
+that scale. The stream limit you hit in production is AMS's, not Pulse's.
+
+**Workaround:** Size your AMS VPS (RAM, CPU) for your expected concurrent stream
+count. Pulse imposes no practical stream limit.
+
+---
+
+### LIM-13: `speed_read_kbps` stores the AMS real-time ratio (~1.0), not a bitrate
+
+**What it means for you:** In the Pulse ingest event schema and API, the column
+`speed_read_kbps` stores the AMS `speed` ratio (approximately 1.0 for a healthy
+ingest, <0.8 indicates ingestion backpressure). It is NOT a bitrate in kbps.
+A healthy 2 Mbps stream shows `speed_read_kbps ≈ 1.02` — not 2000 (DG-16;
+`docs/assessment/capability-map.md` §4 "MISLEADING: this is the AMS realtime ratio").
+
+**Workaround:** Use `bitrate_kbps` for the actual ingest bitrate. Treat
+`speed_read_kbps > 0.8` as healthy, `< 0.8` as under backpressure.
+
+---
+
+### LIM-14: Each AMS application must have `remoteAllowedCIDR` opened for Pulse
+
+**What it means for you:** AMS controls REST API access per-application via
+`remoteAllowedCIDR`. If an app is set to `remoteAllowedCIDR=127.0.0.1` only,
+Pulse receives HTTP 403 and logs a warning every poll cycle. Apps with restricted
+CIDR are silently excluded from monitoring.
+
+**Workaround:** For each AMS application Pulse should monitor, add the Pulse
+container's IP to `remoteAllowedCIDR` in the AMS console. TC-APP-02 was SKIP
+in the S17 validation because all test apps were already CIDR-open (DG-08).
+
+---
+
+### LIM-15: AMS locks a login account after 2 failed attempts for 5 minutes
+
+**What it means for you:** AMS enforces a per-email (not per-IP) brute-force
+lockout: 2 failed login attempts on any account lock that email for 5 minutes,
+returning "User is blocked" even for correct passwords. If you use the same account
+for `PULSE_AMS_LOGIN_EMAIL` as for human console sessions, a mistyped console
+password will disrupt Pulse polling for 5 minutes (memory: `ams-brute-force-lockout.md`; DG-09).
+
+**Workaround:** Use a dedicated AMS account (e.g., `pulse-service@`) for
+`PULSE_AMS_LOGIN_EMAIL` and a separate account for human console logins.
+
+---
+
+### LIM-16: HLS probe URL must use the flat path form `/{app}/streams/{id}.m3u8`
+
+**What it means for you:** AMS 3.0.3 serves HLS at `/{app}/streams/{id}.m3u8`.
+The nested form `/{app}/streams/{id}/playlist.m3u8` returns 404 on AMS 3.0.3
+build 20260504\_1443. If you create HLS probes with the nested path, they will
+always report `success=false` with `error_code=http_4xx` (DG-10; S17 corrections;
+TC-P-04).
+
+**Workaround:** Use the flat form: `http://<ams-host>:5080/<app>/streams/<id>.m3u8`.
+
+---
+
+### LIM-17: SRT ingest packet loss before AMS ARQ correction is not instrumented
+
+**What it means for you:** `packetLostRatio` for SRT ingest reflects the
+BroadcastDTO value, which is the post-ARQ packet loss seen by AMS after SRT
+error-correction. Transport-layer packet loss that SRT's ARQ mechanism repaired
+before delivering to AMS is invisible to Pulse. You may see `packetLostRatio = 0`
+even when the SRT link has meaningful transport-level loss (DG-18;
+`docs/assessment/final-assessment.md` §4.2).
+
+**Workaround:** Monitor SRT link health at the network level (e.g., sFlow, netflow,
+SRT socket statistics from the publisher side) for pre-ARQ loss.
+
+**Roadmap:** P1 "SRT loss validation against live SRT ingest"
+(`docs/assessment/final-assessment.md` §5).
+
+---
+
+### LIM-18: WHEP viewer counts are not tracked
+
+**What it means for you:** WHEP (WebRTC HTTP Egress Protocol) viewer counts are
+not separately exposed in the AMS 3.0.3 BroadcastDTO inline fields observed during
+validation. WHIP (WebRTC HTTP Ingest Protocol) publisher counts are visible as
+WebRTC publishers. WHEP viewer counts, if accessible via a separate endpoint, are
+not consumed by Pulse (`docs/assessment/final-assessment.md` §4.5; Q3).
+
+**Workaround:** None currently. The total `viewer_count` field sums
+`hlsViewerCount + webRTCViewerCount + rtmpViewerCount + dashViewerCount`
+(`normalize.go:83`); any WHEP-specific count not in those fields is not included.
+
+**Roadmap:** Q3 in `docs/assessment/final-assessment.md` §6 asks the AMS team
+whether WHEP viewer counts are exposed separately.
+
+---
+
+## Changelog
+
+| Version | Change |
+|---------|--------|
+| D-089 (S27, 2026-07-13) | Initial document — 18 limitations from DG-01–DG-18 + final-assessment §1 + §4 |
+
+---
+
+*All claims in this document are traceable to primary evidence cited inline.
+See `docs/assessment/documentation-gaps.md` for the full gap detail and
+authoring history. See `docs/assessment/final-assessment.md` for the validation
+program results this document summarizes.*

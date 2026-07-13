@@ -4751,3 +4751,219 @@ now carries D-082..**D-088** (every BUG-001..011 fix + recording billing +
 anomaly history + early-warning ladder + degraded-display consistency +
 the zero-mean guard/sweep).
 PR/merge evidence appended below after merge (rides S27 if post-push).
+
+**S26 MERGE EVIDENCE (appended at S27 open per protocol):** PR #39 MERGED
+2026-07-13T11:55:19Z, merge commit `58a9c84` (squash; all required contexts
+green). origin/main == HEAD at S27 open.
+
+## D-089 — SESSION-27 (2026-07-13): OPERATOR DIRECTIVE — marketplace-ASAP pivot + prod rollout approved (IN PROGRESS; evidence at close)
+
+**★ OPERATOR DIRECTIVE (2026-07-13, verbatim intent):** "rollout quick — i
+want app to be ready for marketplace asap. adjust the plan accordingly. i
+will provide ams license again today. after making installation easy and
+ready for uploading to the marketplace with trial license key."
+
+**ORCH interpretation rulings (recorded before any dispatch):**
+1. **"rollout quick" = the standing rollout offer is TRIGGERED.** Since S20
+   every operator-expected.md close has said "Say 'roll out' whenever you
+   want them live." This is that. S27 rolls D-082..D-088 to prod per
+   `deploy/runbooks/upgrade-rollback.md` (rollback tag `pre-d089`, fresh
+   backup first, smoke after). Prod at open: healthy, v0.3.0-4-ge8f8f5f.
+2. **Marketplace-ASAP supersedes the planned S27 batch.** Per the standing
+   backlog-review directive, the F10-tail/§2.17/§2.5 candidates are
+   DEFERRED (→ S28+); S27's mission becomes the **marketplace-readiness
+   sprint**: trial-license lifecycle + easy install + the marketplace
+   checklist PARTIAL rows that need no operator contact (final-assessment
+   §3 rows 4/16/17) + listing-copy draft (row 10). New backlog section
+   ROADMAP-V2 §2.18.
+3. **"trial license key" scoping:** infrastructure EXISTS (license.go
+   `expires_at` + tiers; qa/licensegen `-tier -expires -privkey`, §2.3 done
+   S10). The gaps are (a) runtime behavior at expiry — must degrade
+   gracefully to free-tier entitlements with an honest surface (never a
+   dead product), verify/build+pin; (b) a documented mint→install→expire
+   trial flow; (c) MINTING is operator-gated — the vendor ed25519 private
+   key exists ONLY in the operator vault (S16/D-077 key hygiene);
+   the embedded license.go pubkey is the DEV key, prod overrides via
+   PULSE_LICENSE_PUBKEY (deploy/.env, gitignored). Sessions can build and
+   test everything with dev-key-signed trial licenses; the OFFICIAL
+   marketplace trial key needs the operator (command provided in
+   operator-expected.md).
+4. **AMS license incoming today (operator said).** Recorded in
+   operator-expected.md with what to do when it lands (re-sweep +
+   Enterprise-surface re-validation). Until then: observe-only unchanged.
+
+**S27 OPEN facts (13:58Z, recorded early per protocol):**
+- **Concurrent-session check: CLEAN.** HEAD == origin/main == `58a9c84`
+  (S26 PR #39 merged 11:55:19Z, evidence above). Tree carries only the
+  known Caddyfile.prod delta (do-not-revert, D-082) + the operator `.bak`.
+- **Prod health read-only: all-ok** (healthz clickhouse/collector/meta ok;
+  pulse-prod-pulse-1 Up 2 days healthy). `antmedia` StartedAt still
+  2026-07-12T06:52:55Z — no post-lapse restart.
+- **Operator intake: THIS SESSION'S PROMPT IS the intake** (directive
+  above). Standing items (caddy-vhost, final-assessment review) re-surfaced
+  in operator-expected.md — final-assessment review is now ELEVATED: it
+  gates marketplace submission (nothing external until reviewed, D-081).
+- **WO CI promotions: skip carry ×16** (07-13 < 07-23).
+- **AMS observation sweep (s27open, 14:01Z): BYTE-IDENTICAL — 6th
+  consecutive null delta** (evidence S21-sweep-s27open-20260713T140145Z;
+  diff excludes the pulse-realams.overview line — orphaned-token gotcha hit
+  exactly as SESSION-27 §3 predicted, line ran with a placeholder token and
+  recorded parse-err honestly; PULSE_TOKEN override used, no down -v).
+  Still Enterprise 3.0.3 build 20260504_1443, 4 apps, licence-status 204.
+  **The operator's promised new AMS license has NOT landed yet** —
+  operator-expected.md item 1 stands.
+
+**★ S27 PROD ROLLOUT EXECUTED (operator-approved "rollout quick"; 14:02–14:06Z):**
+- Runbook path verbatim (upgrade-rollback.md): config -q OK → rollback tag
+  `pre-d089` = bc6e4f1c4212 (`v0.3.0-4-ge8f8f5f`, the S15c build) → manual
+  backup rc=0 (CH BACKUP_CREATED pulse-20260713-140252.zip + SQLite+WAL
+  4.1 MB; keep-7 pruned 07-09) → stamped build → stamp asserted
+  **`pulse v0.3.0-34-g58a9c84`** (main == S26 merge; never dev/unknown) →
+  `up -d` (no --build).
+- **Migrations applied clean on first boot: CH 0009_recording_mv +
+  0010_anomaly_flag_events** (meta migrations done; one-shot exited 0).
+- **Smoke ALL GREEN:** healthz all-ok via both beyondkaira.com (resolve-pinned)
+  + pulse.beyondkaira.com 200; container version matches stamp; resource
+  limits intact (memory=512Mi cpus=0.5); log scan 0 ERROR/panic lines;
+  webhook signed→200 / unsigned→**401 fail-closed**; license
+  tier=enterprise valid=true.
+- **★ TWO SHIPPED FIXES SELF-PROVED LIVE AT BOOT:** (1) D-088 sweep:
+  `anomaly: purged zero-mean baselines on startup count=3` — exactly the 3
+  poisoned prod rows from the S26 census (cpu/mem n=8813, disk n=3578);
+  (2) BUG-002/D-085 VoD poller: `restpoller: VoD events emitted
+  app=pulse-test count=1` — first prod recording event (the S17 test VoD).
+- **Prod now runs D-082..D-088** (all BUG-001..011 fixes + recording
+  billing + anomaly flag history + early-warning ladder + degraded-display
+  consistency + zero-mean guard/sweep). Rollback path: retag pre-d089 +
+  up -d.
+
+**S27 SCOUT RESULTS + ORCH RULINGS (4 scouts, 0 errors, ~330k tokens, recorded pre-build):**
+- **★ Scout headline (license): a mid-run trial expiry is INVISIBLE today** —
+  license loaded once at boot (serve.go:307), expiry checked only inside
+  activate() (license.go:388-395); a Pro trial crossing expires_at mid-run
+  keeps tier/entitlements/valid=true FOREVER until restart; boot with an
+  expired key silently falls to free discarding the error (license.go:187-190).
+- **RULE-1 (license, NO contract CR):** lazy expiry check in a locked
+  helper at the top of every Manager reader (Tier/Valid/all Check*):
+  expired ⇒ downgrade to freeTierEntitlements, set valid=false, **RETAIN
+  expiresAt**, slog once. Boot-with-expired-key: same honest state (free/
+  valid=false/expiresAt retained). No-key free semantics byte-unchanged.
+  The three states are distinguishable in the EXISTING LicenseInfo shape
+  (never-licensed {free,true,null} / active {pro,true,future} / degraded
+  {free,false,past}) ⇒ contracts/ stays byte-untouched. Test-injectable
+  `var now = time.Now`; mid-run + boot-expired + no-key pins; mutation
+  targets pre-declared (drop lazy check / clear expiresAt / valid stays
+  true ⇒ all must go RED).
+- **RULE-2 (install):** adopt scout 5-file plan — bake migrations into the
+  runtime image (COPY + ENV PULSE_MIGRATIONS_DIR=/usr/share/pulse/migrations;
+  env supported at config.go:210) + NEW deploy/quickstart/ (compose with
+  `image: \${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.0}`, 6-var
+  .env.example INCLUDING the vendor PULSE_LICENSE_PUBKEY [public key
+  material — the only value ever copied out of deploy/.env], install.sh
+  one-command path) + install.md Path A0. Repo verified PUBLIC ⇒ curl|bash
+  viable; **GHCR package still PRIVATE ⇒ O7 flip is now CRITICAL-PATH
+  operator item #5** (recorded in operator-expected.md). **v0.4.0 tag at
+  close** (quickstart pins it; also refreshes checklist row 12).
+- **RULE-3 (web UI, NO contract CR):** GET /admin/license already carries
+  tier/valid/expires_at ⇒ LicenseContext (single fetch at app root) +
+  TrialBanner in Layout between header and main (warning when
+  0<days≤14, session-dismissable; error non-dismissable when expired),
+  brandkit warning/error tokens only; App.tsx finally passes tier to the
+  Layout badge slot (dead since D-072). Client computes expiry from
+  expires_at (server valid is stale only pre-RULE-1-fix; belt+braces).
+- **RULE-4 (docs):** NEW docs/compatibility.md (row 16) +
+  docs/known-limitations.md (row 17, 18 items) + docs/marketplace/
+  {listing-draft,screenshot-list}.md (row 10, DRAFT-INTERNAL banner) +
+  stale-row fixes: final-assessment §3 row 4 (beacon-sdk.md EXISTS since
+  S19 — checklist self-inconsistent) + row 12 (v0.2.0/v0.3.0 releases
+  EXIST; residual = GHCR private + no binary tarballs) + prd-validation-
+  matrix F3 MISSING→FULLY with mechanical score recount + README current-
+  version line. kafka-integration.md (DG-15) + the AMS-INTEGRATION DG
+  batch → S28 (not marketplace-critical).
+- **Author fan-out: A1 license-go / A2 install / A3 web-ui / A4 docs —
+  disjoint single-writer scopes; no agent runs git state changes; ORCH
+  gates inline post-authors, then adversarial verify (V1 mutations in
+  pristine copies / V2 live quickstart clean-install on :28090 with a
+  branch-built image / V3 docs adversarial).**
+
+**S27 BUILD + ADVERSARIAL VERIFY (4 authors + 3 verifiers, 0 errors, recorded pre-close):**
+- **Authors (all TDD where code):** A1 license lifecycle (red observed:
+  'valid want false got true' + 'expires_at must be non-nil' against old
+  silent-setFree; 6 new license tests + api three-state pin + licensegen
+  -expires-minutes; readers RWMutex→Mutex for the lazy write, once-only
+  warn via atomic.Pointer[slog.Logger]). A2 install (baked migrations
+  VERIFIED by container ls: 0001..0010 at /usr/share/pulse/migrations +
+  ENV; quickstart compose config -q OK; install.sh bash -n + shellcheck
+  clean, no-TTY hard-fail, positive-evidence healthz gate). A3 web (388
+  vitest green, was 366; coverage 66.83/61.95/56.12 vs gates 59/54/45;
+  build clean; optional Reports/Anomalies refactor honestly SKIPPED —
+  structural test churn). A4 docs (score recount 43→44 FULLY ⇒ 66.7
+  strict / 84.5 weighted, arithmetic shown; Pro MaxNodes=10 vs PRD 1–2
+  discrepancy FLAGGED NEEDS-RECONCILE in the listing draft, not silently
+  resolved; found docs/AMS-INTEGRATION.md §4.5 stale re BUG-002 —
+  S28 carry).
+- **ORCH pre-commit catch:** .env.example claimed trial keys obtainable
+  at pulse.beyondkaira.com (the operator's private dashboard) — corrected
+  to marketplace-listing wording before commit. Secret-leak crosscheck of
+  quickstart .env.example vs deploy/.env: only the PUBLIC pubkey shared.
+- **★ V1 CONFIRMED_OK — 7/7 mutations RED in pristine copies** (lazy-check
+  drop, valid-stays-true, expiresAt-nil'd, boot-silent-setFree restore,
+  perpetual-degrades, once-guard drop [once-ness IS pinned: 'want exactly
+  1 warn log, got 6'], Check*-bypass). -race ×2 clean; RWMutex→Mutex
+  re-entrancy audit clean; api reads license ONLY via public getters.
+- **★ V2 CONFIRMED_OK — LIVE quickstart clean-install vs the real AMS:**
+  branch image built; stack healthy ~60s; migrations from the BAKED path
+  (dir=/usr/share/pulse/migrations, 10 applied, idempotent on re-runs);
+  bootstrap plt_ token extracted by install.sh; free-tier baseline; live
+  overview shows the real AMS node. **THE MONEY SHOT: live mid-run trial
+  expiry WITHOUT restart** — own-keypair 3-minute pro key activated via
+  PUT /admin/license → polled to the transition {tier:free, valid:false,
+  expires_at RETAINED}; /analytics/audience 200-pre → 403 LICENSE_REQUIRED
+  post; single 'license: expired — degraded to free tier' warn in the
+  container log. install.sh re-run honest (no wipe, token-absent stated).
+  Torn down (down -v), scratch .env with real creds removed.
+- **V3 PARTIAL → all 4 must-fix REMEDIATED same-session:** (1)+(2)
+  compatibility.md claimed the REMOVED Speed fallback still exists w/ a
+  citation that didn't resolve — rewritten to normalize.go:73-79 reality
+  (v2.10 speed-only DTOs ⇒ honest bitrate 0); (3) workflow comment ref
+  line 60→16; (4) quickstart pins ghcr :0.4.0 which does not exist yet —
+  RULED: **the v0.4.0 tag at close is LOAD-BEARING** (0.3.0 image lacks
+  baked migrations; quickstart REQUIRES ≥0.4.0); README bumped to v0.4.0
+  accordingly. Minor: mock-profile line-range 135–157→134–171; PULSE_IMAGE
+  override documented in .env.example (V2 observation). V3 clean on:
+  score recount independently re-derived (44/66=66.7, 55.75/66=84.5 both
+  CONFIRMED), brandkit paths all resolve, DRAFT-INTERNAL banners present,
+  GHCR visibility=private re-confirmed via gh api (operator item #5),
+  no external-promise leaks, honesty flags intact.
+
+**S27 GATES (ORCH-run, CI-faithful, post-remediation):** gofmt scan empty;
+vet clean; `go test -race` **24/24 pkgs 0 FAIL** (license pkg 92.5%
+coverage; the new expiry tests proven non-vacuous by V1's 7 REDs);
+coverage **76.0 → 76.1%** (floor 70.2); qa/mock-ams + qa/licensegen
+-race green; web **388/388** (366→388), coverage 66.83/61.95/56.12
+(gates 59/54/45), build clean; contracts/ **byte-untouched** (no CR —
+the three license states fit the existing LicenseInfo shape by design);
+integration suite deferred to PR CI (no store/query production-code
+change; the live V2 quickstart exercised migrations+boot+API end-to-end
+against real CH + the real AMS).
+
+**S27 CLOSE (D-089):** Workflows: 4 scouts + 4 authors + 3 adversarial
+verifiers = 11 agents, 0 errors (~1.0M subagent tokens). Marketplace
+sprint: R1 rollout DONE (prod v0.3.0-34-g58a9c84, boot-proof sweep
+count=3 + first VoD event); R2 trial lifecycle DONE (live mid-run expiry
+proven, no restart); R3 one-command install DONE (live clean-install
+verified vs real AMS); R4 marketplace package DONE (rows 16/17
+PARTIAL→PASS, row 4/12 refreshed honest, listing draft INTERNAL);
+R5 operator ledger DONE (5 items). CI promotions skip carry ×16
+(07-13 < 07-23). Branch `s27-d089`, ONE PR, 2 pushes (PR + v0.4.0 tag —
+the tag is LOAD-BEARING for the quickstart image pin). S28 carries:
+AMS-INTEGRATION.md §4.5 stale (BUG-002-era), kafka-integration.md
+(DG-15), realams fresh rebuild (orphaned token), listing PNG exports,
+deferred F10 tail / §2.17 / §2.5, Pro MaxNodes=10 vs PRD 1–2 reconcile.
+PR/merge + tag/release evidence appended below after merge.
+- **OPERATOR ACTIONS REQUIRED — YES (4, recorded per the session-open
+  directive; none blocks S27's own work):** (1) AMS license today
+  (operator-promised); (2) trial-license mint needs the vault privkey;
+  (3) final-assessment DRAFT review — gates marketplace upload;
+  (4) Ant Media marketplace contact (checklist rows 7–11) — gates the
+  actual listing. Details + exact commands: operator-expected.md ⚡ TL;DR.

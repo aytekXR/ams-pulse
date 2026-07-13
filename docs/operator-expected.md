@@ -1,4 +1,97 @@
-# Operator TODO — the items only YOU can do (updated at SESSION-26 close, D-088, 2026-07-13; rides S26's PR)
+# Operator TODO — the items only YOU can do (updated at SESSION-27 close, D-089, 2026-07-13; rides S27's PR)
+
+## ⚡ TL;DR — expected from you right now (2026-07-13, SESSION-27 closed — D-089, marketplace sprint)
+
+> **Your marketplace directive executed end-to-end today. The headlines:**
+>
+> **1. ★ The rollout you asked for is LIVE.** "rollout quick" was taken as
+> your approval of the standing offer: prod now runs `v0.3.0-34-g58a9c84`
+> carrying all seven waiting sessions of fixes (D-082..D-088 — every one
+> of the 11 bugs, recording billing, anomaly history, the early-warning
+> ladder). Backup + rollback tag `pre-d089` were staged first; smoke all
+> green; and two of the shipped fixes proved themselves within seconds of
+> boot (prod purged its 3 poisoned anomaly baselines and recorded its
+> first VoD billing event). Rollback is one command if you ever want it.
+>
+> **2. ★ Trial licenses now behave like trials.** Until today, a trial key
+> expiring mid-run silently kept its paid tier until the next restart —
+> and an expired key at boot silently looked like plain Free. Now an
+> expired trial degrades to Free-tier limits THE MOMENT it lapses (product
+> keeps running, nothing crashes), the API reports the honest state, and
+> the web UI shows a banner ("expires in N days" amber → "expired,
+> running on Free" red). **Proven LIVE today: a real 3-minute trial key
+> was watched crossing its expiry on a running server — tier dropped,
+> paid endpoint started refusing, one honest log line.** 7/7 sabotage
+> mutations red.
+>
+> **3. ★ Installation is now one command.** `deploy/quickstart/` ships a
+> 3-service compose + install.sh: a customer runs it, answers 4 questions
+> (or flags), and gets a running Pulse with the admin token printed —
+> **verified live today with a scratch clean-install against your real
+> AMS** (migrations now baked into the image; no repo clone needed).
+>
+> **4. The marketplace paper-pack is drafted:** compatibility matrix +
+> known-limitations doc (both now PASS rows on the checklist) + a listing
+> draft with copy, feature bullets, pricing table, and screenshot plan —
+> all marked DRAFT-INTERNAL awaiting your review.
+>
+> **FIVE things only you can do — items 2–5 gate the actual marketplace
+> upload:**
+>
+> 1. **AMS license (you said "today").** When you've applied it to your
+>    AMS, just tell a session "AMS license applied" — it will re-sweep
+>    (`expiry-sweep.sh`) and re-validate the Enterprise surface. Nothing
+>    else needed from you.
+>
+> 2. **★ Mint the official trial license key (needs YOUR vault key).**
+>    The trial-flow work is BUILT and live-proven; only the official key
+>    needs you, because the vendor ed25519 private key exists only in
+>    your vault (S16 key hygiene — by design). Run:
+>    `cd qa/licensegen && go run . -tier pro -expires 14 -privkey <path-to-your-vault-key-file>`
+>    and store the output key wherever the listing needs it (or paste it
+>    to a session to embed in the listing draft). Customers' installs
+>    already verify against your public key — it ships in the quickstart
+>    config. (Also decide trial tier/length: the draft assumes **Pro,
+>    14 days** — say otherwise if you want.)
+>
+> 3. **★ ELEVATED — final-assessment DRAFT review now gates the
+>    marketplace upload.** `docs/assessment/final-assessment.md` +
+>    `prd-validation-matrix.md` have waited since S19 as non-blocking;
+>    "nothing goes external until you review" now sits directly on the
+>    critical path to uploading. Reply "approved" or send edits.
+>
+> 4. **Ant Media marketplace contact (unchanged, now critical-path).**
+>    Listing requirements, revenue-share, support channel, category —
+>    checklist rows 7–11 all read NEEDS-OPERATOR-CONTACT. Only you can
+>    open that thread with the Ant Media team.
+>
+> 5. **★ NEW (scout-discovered, critical-path) — make the GHCR package
+>    public.** The one-command install being built today pulls
+>    `ghcr.io/aytekxr/ams-pulse` — which is still **private** (the old
+>    optional O7). No marketplace customer can `docker pull` until you
+>    flip it: github.com/aytekXR → Packages → `ams-pulse` → Package
+>    settings → Danger zone → Change visibility → **Public** (UI-only,
+>    ~30 seconds). The repo itself is already public; this is just the
+>    image package.
+>
+> **Standing, unchanged, non-blocking:** caddy-vhost merge decision
+> (say "merge the caddy vhost") + final-assessment review (item 3 above —
+> now critical-path).
+
+## 🔎 What SESSION-27 did (2026-07-13, closed — D-089)
+
+| Area | Result |
+|---|---|
+| **Prod rollout (your "rollout quick")** | Runbook path: config validated, backup taken (CH + SQLite), rollback tag `pre-d089` staged, stamped build `v0.3.0-34-g58a9c84` deployed, migrations 0009+0010 applied clean, smoke green on both domains, webhook fail-closed re-proven (signed 200 / unsigned 401), zero error lines. Live boot proof: `purged zero-mean baselines on startup count=3` + first prod VoD billing event from your S17 test recording. |
+| **Trial-license lifecycle** | Mid-run expiry now degrades to Free entitlements immediately (was: silent paid tier until restart); boot with an expired key reports the honest degraded state instead of looking like plain Free; expiry timestamp retained so the UI can say "expired" not just "free". Live-proven with a real 3-minute key on a running server. 7/7 adversarial mutations red; race-clean. |
+| **One-command install** | `deploy/quickstart/`: compose + `.env.example` + `install.sh` (`curl \| bash` or in-repo). Migrations baked into the image (no repo clone). Live clean-install verified against your real AMS: healthy in ~60 s, bootstrap token printed, free tier default, re-run safe. Trial key slot documented. |
+| **Web UI** | Trial banner in the app shell (amber ≤14 days, red non-dismissable when expired, brandkit tokens, light+dark); license fetched once app-wide; the dead tier badge in the sidebar now renders. 388 web tests (was 366), coverage above all gates. |
+| **Marketplace docs** | NEW `docs/compatibility.md` (AMS 3.0.3 live-validated; older versions honestly mock-only) + `docs/known-limitations.md` (18 disclosures) + `docs/marketplace/` listing draft + screenshot plan (DRAFT-INTERNAL). Checklist rows 16/17 PARTIAL→PASS; rows 4/12 refreshed honest; completeness recount 66.7% strict / 84.5% weighted (independently re-derived by a verifier). |
+| **Release** | `v0.4.0` tagged at close → signed multi-arch image `ghcr.io/aytekxr/ams-pulse:0.4.0` (the tag the quickstart pins). GHCR visibility flip (item 5) is what makes it pullable by customers. |
+| **Quality net** | 11 workflow agents (4 scouts, 4 authors, 3 adversarial verifiers), 0 errors. V3 docs audit found 4 accuracy bugs (incl. a claim about a code path that was removed) — all fixed same-session. Gates: 24/24 Go pkgs race-clean, coverage 76.1% (floor 70.2), contracts byte-untouched, one PR, 2 pushes. |
+| **AMS observation** | 6th consecutive byte-identical post-expiry sweep at open; your antmedia container still hasn't restarted since before the lapse. **Your promised new AMS license had not landed by session close** — item 1 above. |
+
+## (superseded) S26-close header follows
 
 ## ⚡ TL;DR — expected from you right now (2026-07-13, SESSION-26 closed — D-088)
 

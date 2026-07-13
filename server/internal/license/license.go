@@ -49,11 +49,28 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
+
+// now is the package-level time source. Overridden in tests via SetNow (export_test.go).
+var now = time.Now
+
+// licenseLog is the package-level logger for license lifecycle events.
+// Use SetLogger to override (typically in tests or at process startup).
+var licenseLog atomic.Pointer[slog.Logger]
+
+func init() {
+	licenseLog.Store(slog.Default())
+}
+
+// SetLogger replaces the package-level logger used for license events.
+// Safe for concurrent use. Intended for tests and process-start configuration.
+func SetLogger(l *slog.Logger) { licenseLog.Store(l) }
 
 // Tier represents a license tier.
 type Tier string
@@ -140,14 +157,15 @@ type claims struct {
 
 // Manager resolves and caches the active license.
 type Manager struct {
-	mu           sync.RWMutex
-	tier         Tier
-	entitlements Entitlements
-	expiresAt    *time.Time
-	valid        bool
-	rawKey       string
-	offlineFile  string
-	pubKey       ed25519.PublicKey
+	mu            sync.RWMutex
+	tier          Tier
+	entitlements  Entitlements
+	expiresAt     *time.Time
+	valid         bool
+	rawKey        string
+	offlineFile   string
+	pubKey        ed25519.PublicKey
+	degradedByExp bool // true after mid-run expiry downgrade; makes maybeExpireLocked idempotent
 }
 
 // devPublicKeyHex is the embedded dev/test public key (ed25519).
@@ -214,32 +232,65 @@ func (m *Manager) Refresh(_ context.Context, key string) error {
 	return m.activate(key)
 }
 
+// maybeExpireLocked checks for mid-run expiry and lazily downgrades the Manager
+// to Free tier. Must be called while m.mu (write lock) is held.
+// It is idempotent: after the first downgrade it sets degradedByExp=true and
+// subsequent calls return immediately without re-logging.
+func (m *Manager) maybeExpireLocked() {
+	if m.degradedByExp {
+		return // already degraded; idempotent
+	}
+	if m.expiresAt == nil {
+		return // perpetual key or no-key path
+	}
+	if !now().After(*m.expiresAt) {
+		return // not yet expired
+	}
+	prevTier := m.tier
+	m.tier = TierFree
+	m.entitlements = freeTierEntitlements
+	m.valid = false
+	// RETAIN m.expiresAt so callers can distinguish "expired trial" from "no key".
+	m.degradedByExp = true
+	licenseLog.Load().Warn("license: expired — degraded to free tier",
+		"prev_tier", string(prevTier),
+		"expired_at", m.expiresAt.Format(time.RFC3339))
+}
+
 // Tier returns the current license tier.
+// Triggers a lazy expiry check on every call.
 func (m *Manager) Tier() Tier {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.maybeExpireLocked()
 	return m.tier
 }
 
 // Entitlements returns the current tier entitlements.
+// Triggers a lazy expiry check on every call.
 func (m *Manager) Entitlements() Entitlements {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.maybeExpireLocked()
 	return m.entitlements
 }
 
 // Valid returns whether the license is valid (not expired, signature OK).
-// Free tier is always valid.
+// Free tier with no key is always valid; an expired trial key returns false.
 func (m *Manager) Valid() bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.maybeExpireLocked()
 	return m.valid
 }
 
-// ExpiresAt returns the expiration time, or nil for perpetual/free.
+// ExpiresAt returns the expiration time, or nil for perpetual/no-key.
+// After expiry, the past timestamp is RETAINED so callers can distinguish
+// "expired trial" (non-nil past) from "no key" (nil).
 func (m *Manager) ExpiresAt() *time.Time {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.maybeExpireLocked()
 	return m.expiresAt
 }
 
@@ -384,14 +435,16 @@ func (m *Manager) activate(key string) error {
 		return fmt.Errorf("license: parse claims: %w", err)
 	}
 
-	// Check expiry.
+	// Parse expiry (if present). Expiry enforcement is done lazily via
+	// maybeExpireLocked() on the first reader call, so that mid-run expiry
+	// is also caught and so that the expiresAt timestamp is always preserved.
 	var expiresAt *time.Time
 	if c.ExpiresAt != nil {
 		t := time.UnixMilli(*c.ExpiresAt).UTC()
 		expiresAt = &t
-		if time.Now().After(t) {
-			return fmt.Errorf("license: expired at %s", t.Format(time.RFC3339))
-		}
+		// NOTE: do NOT error here for already-expired keys. The signature has
+		// already been verified above; we set expiresAt and let maybeExpireLocked
+		// produce the honest state on the first read.
 	}
 
 	// Build entitlements from claims.
@@ -404,6 +457,7 @@ func (m *Manager) activate(key string) error {
 	m.expiresAt = expiresAt
 	m.valid = true
 	m.rawKey = key
+	m.degradedByExp = false // reset so mid-run expiry can fire after a Refresh
 	return nil
 }
 
@@ -414,6 +468,7 @@ func (m *Manager) setFree() {
 	m.entitlements = freeTierEntitlements
 	m.expiresAt = nil
 	m.valid = true
+	m.degradedByExp = false
 }
 
 func buildEntitlements(c claims) Entitlements {

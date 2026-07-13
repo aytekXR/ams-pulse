@@ -12,10 +12,11 @@ Two components are required: the **Pulse binary** (collector + API + UI) and **C
 (event store). Configuration is via environment variables; AMS credentials never go
 in a config file or image.
 
-Three install paths are available:
+Four install paths are available:
 
 | Path | Status | Recommended for |
 |---|---|---|
+| **Path A0: One-command quickstart** | Supported — live clean-install verification scheduled (D-089 V2) | Evaluators, first install, single-server |
 | **Path A: Docker Compose** | Supported production path — runs the live production deployment; CI `docker-build` is a required merge context and staging smokes exercise it every deploy session | Single-server production |
 | **Path B: Local binary** | QA-verified (< 2 min) | Dev, bare-metal, ClickHouse managed separately |
 | **Path C: Helm** | Authored, lint- and golden-file-verified in CI; marked experimental until a cluster install is validated | Kubernetes / clustered AMS |
@@ -26,6 +27,69 @@ what the live production deployment runs (base + hardened + TLS + real-AMS + bac
 overlays; see `productionize.md`). Released images: `ghcr.io/aytekxr/ams-pulse`
 (cosign-signed, multi-arch, from `v0.1.0` onward). The historical D-002
 "Docker unavailable on the build machine" waiver is retired.
+
+---
+
+## Path A0 — One-command quickstart
+
+The quickstart path uses a pre-built released image (`ghcr.io/aytekxr/ams-pulse`) with
+ClickHouse migration SQL **baked in** — no repo clone is needed. A single script handles
+Docker preflight, credential collection, `.env` writing, stack start, healthz polling,
+and bootstrap-token extraction.
+
+> **GHCR visibility (pending):** `ghcr.io/aytekxr/ams-pulse` is pending public visibility.
+> Until the operator flips the package to Public you must authenticate first:
+> `docker login ghcr.io` (GitHub PAT with `read:packages` scope).
+> This note will be removed once the package is public.
+
+> **Image tag format:** Pulse image tags have **no `v` prefix**. The git release tag
+> `v0.4.0` is published as image tag `0.4.0` (not `v0.4.0`). Always omit the `v`
+> when specifying an image tag (e.g. `ghcr.io/aytekxr/ams-pulse:0.4.0`).
+
+### Prerequisites
+
+- Docker Engine 24+ and Docker Compose v2 (`docker compose version` must succeed)
+- AMS host accessible from this host on port 5080
+
+### Option 1 — curl|bash (one command)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/aytekXR/ams-pulse/main/deploy/quickstart/install.sh \
+  | bash -s -- \
+      --ams-url http://YOUR_AMS_HOST:5080 \
+      --email your-ams-admin@example.com \
+      --password your-ams-password
+```
+
+The script prompts interactively for any missing required flags when a TTY is attached.
+Append `--license-key <key>` to activate a Pro/Business/Enterprise license on first boot.
+
+### Option 2 — manual (3 commands)
+
+```sh
+mkdir quickstart && cd quickstart
+
+# Download the compose file and env template
+curl -fsSL https://raw.githubusercontent.com/aytekXR/ams-pulse/main/deploy/quickstart/docker-compose.quickstart.yml \
+  -o docker-compose.quickstart.yml
+curl -fsSL https://raw.githubusercontent.com/aytekXR/ams-pulse/main/deploy/quickstart/.env.example \
+  -o .env && chmod 600 .env
+
+# Edit .env: fill in PULSE_AMS_URL, PULSE_AMS_LOGIN_EMAIL, PULSE_AMS_LOGIN_PASSWORD,
+# generate PULSE_SECRET_KEY with `openssl rand -hex 32`, and optionally PULSE_LICENSE_KEY.
+${EDITOR:-nano} .env
+
+docker compose -f docker-compose.quickstart.yml --env-file .env up -d
+```
+
+After the stack starts, extract the bootstrap admin token (first run only):
+
+```sh
+docker compose -f docker-compose.quickstart.yml --env-file .env logs pulse \
+  | grep -oE 'plt_[a-f0-9]+' | head -1
+```
+
+Open `http://localhost:8090` and enter the token in the onboarding wizard.
 
 ---
 
@@ -83,6 +147,12 @@ export PULSE_AMS_LOGIN_PASSWORD=your-ams-password
 
 # 32-byte hex key for encrypting secrets at rest (generate once, keep safe):
 export PULSE_SECRET_KEY=$(openssl rand -hex 32)
+
+# License key — optional; empty = Free tier (1 node, 7-day retention):
+# export PULSE_LICENSE_KEY=
+
+# Official Pulse license verification key — do not change unless self-signing:
+export PULSE_LICENSE_PUBKEY=6403d7b49951d0220c7219e491b6525971edf10f0e64616b17023eab002ab4ba
 ```
 
 > AMS Enterprise Edition authenticates via cookie-session (email + password login).
@@ -143,6 +213,10 @@ make up
 > `image:` key for the Pulse service; it builds the binary from the local source tree
 > on every `compose up`. To use a pre-built released image instead, pull it first and
 > create a small image-pin override file:
+>
+> > **GHCR visibility (pending):** `ghcr.io/aytekxr/ams-pulse` is pending public visibility.
+> > Until the package is made public you must authenticate first:
+> > `docker login ghcr.io` (GitHub PAT with `read:packages` scope).
 >
 > ```sh
 > # Pull the released image. ⚠ Image tags have NO `v` prefix: the git tag
