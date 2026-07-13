@@ -64,3 +64,6 @@ qa/realams/evidence/
 
 # licensegen local build artifact (CI uses `go run .`)
 qa/licensegen/licensegen
+
+# Marketplace screenshot PNGs — binary blobs; script is the reproducible artifact
+docs/marketplace/screenshots/
