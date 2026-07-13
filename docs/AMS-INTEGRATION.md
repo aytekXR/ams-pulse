@@ -29,7 +29,6 @@ earlier root-level `/rest/v2/broadcasts/...` paths 404'd; real AMS uses per-app 
 |---|---|---|
 | `ListApplications` | `GET /rest/v2/applications` | Discover apps — **array-of-strings** envelope `{"applications":["LiveApp",…]}` |
 | `ListBroadcastsPaged` | `GET /{app}/rest/v2/broadcasts/list/{offset}/{size}` | All broadcasts, 200/page (per-app) |
-| `BroadcastStatistics` | `GET /{app}/rest/v2/broadcasts/{streamId}/broadcast-statistics` | Watcher-count totals (RTMP count can be **-1** = untracked) |
 | `WebRTCClientStats` | `GET /{app}/rest/v2/broadcasts/{streamId}/webrtc-client-stats/0/100` | Per-peer WebRTC QoE (empty `[]` when no viewers) |
 | `ClusterNodes` | `GET /rest/v2/cluster/nodes` | Node list — **404 on standalone** → mapped to nil (no error) |
 | `NodeInfo` | `GET /rest/v2/cluster/nodes/{nodeId}` | Single-node detail (404-tolerant) |

@@ -1,4 +1,69 @@
-# Operator TODO — the items only YOU can do (updated at SESSION-25 close, D-087, 2026-07-13; rides S25's PR)
+# Operator TODO — the items only YOU can do (updated at SESSION-26 close, D-088, 2026-07-13; rides S26's PR)
+
+## ⚡ TL;DR — expected from you right now (2026-07-13, SESSION-26 closed — D-088)
+
+> **Nothing is needed from you right now.** S26 ran fully autonomously
+> (your open items re-checked at open: no answers, nothing blocked). Per
+> your standing directive the session reviewed the backlog before
+> executing — and again it paid: one planned one-line fix turned out to be
+> three drifted copies of the same rule, and a "mark it done" audit found
+> a whole roadmap item you already had (the dependabot policy doc,
+> delivered weeks ago, never ticked off).
+>
+> **★ THE HEADLINE: two honesty gaps in last session's early-warning
+> ladder are closed, and the milestone underneath: the bug tracker now
+> shows ZERO open bugs (11 of 11 filed by your validation program are
+> fixed).**
+>
+> 1. **The Fleet page can no longer disagree with your alerts.** Until
+>    today, a node failing its API checks would fire the `node_degraded`
+>    ALERT while the Fleet page still showed it green-"up" (the alert and
+>    the display used separately-maintained copies of the "degraded" rule,
+>    and the display copies had decayed). All three copies were replaced
+>    by ONE shared rule — this class of drift is now structurally
+>    impossible, and it's pinned by tests that were proven to fail on the
+>    old code.
+>
+> 2. **A false-alarm landmine was defused — proven live on your stack.**
+>    Your deployments had been silently growing "normal = 0% CPU/memory/
+>    disk" statistical baselines (thousands of samples deep in prod) —
+>    because standalone AMS never reports those metrics, and the absence
+>    was being recorded as zeros. The day AMS ever started reporting real
+>    values (cluster mode, Kafka), the very FIRST reading would have
+>    z-scored against "normal=0" and fired a guaranteed false anomaly
+>    alarm. Fixed at the cause (Pulse now tracks whether a metric was
+>    actually reported — "reported 0" and "never reported" are different
+>    things) and at the symptom (poisoned rows are deleted at startup).
+>    **Live proof on your validation stack tonight: boot log "purged
+>    zero-mean baselines on startup count=3", and no re-formation while
+>    the real polling continued.** Prod gets the same self-clean on your
+>    next approved rollout — no manual step.
+>
+> **Also this session:** BUG-001 (the last open bug, dead code around an
+> AMS statistics endpoint) was resolved by deleting the dead code — your
+> live viewer counts never depended on it. The marketplace assessment
+> docs were updated to match (still DRAFT, still waiting on your review).
+>
+> **Still waiting on your two standing decisions (unchanged, non-blocking):**
+> caddy-vhost merge + final-assessment DRAFT review — details in the S21
+> TL;DR below. **The rollout keeps growing:** a prod rollout now carries
+> SEVEN sessions of fixes (D-082..D-088 — ALL eleven bugs, recording/
+> billing, persistent anomaly history, the early-warning ladder, and
+> today's display-consistency + false-alarm fixes). Say "roll out"
+> whenever you want them live.
+
+## 🔎 What SESSION-26 did (2026-07-13, closed — D-088)
+
+| Area | Result |
+|---|---|
+| **Alert/display consistency** | A node with 3+ consecutive AMS API failures now shows "degraded" on the Fleet page (it already fired the alert; the page said "up"). The high-memory arm was ALSO missing from the page, and a third copy of the rule (the overview endpoint) had the same gap — all three now call one shared rule. No API contract change; the UI already knew how to render it. |
+| **Zero-mean baseline fix** | Per-metric "was it actually reported?" tracking now guards the anomaly baselines (a genuine 0% reading from a cluster node still counts — that distinction is mutation-tested); poisoned rows are swept once at startup. Live census before/after on your validation stack: 3 poisoned rows → 0, legitimate baselines untouched, no re-formation over live polling. |
+| **Zero open bugs** | BUG-001 resolved by deletion (~60 lines of never-called code). All 11 bugs your validation program filed are now fixed (BUG-009's tenant-filter half remains a product decision, not a defect — documented as such). |
+| **Bookkeeping honesty** | The dependabot-policy roadmap item was discovered already delivered (S9) and never marked — corrected. Four small follow-ups were seeded as §2.17 (one was addressed in-session: Postgres coverage for the new sweep). |
+| **Quality net** | 10 workflow agents (4 scouts, 3 authors, 3 adversarial verifiers), 0 errors. 12/12 sabotage mutations went red in pristine copies — including the one that swaps the honest "was it reported" check for a lazy "is it nonzero" check (that mutation is exactly the bug class this session fixed, and the tests catch it). The verifiers' only must-fix findings were stale doc claims — all corrected same-session. |
+| **Ops** | Gates: 24/24 Go packages race-clean, coverage 76.0% (floor 70.2), full integration suite green against CI-identical databases, contracts byte-untouched. Fifth byte-identical post-expiry AMS sweep; your antmedia container still hasn't restarted since before the lapse. CI-promotion date gate still closed (opens 07-23) → skip carry ×15. One PR. |
+
+## (superseded) S25-close header follows
 
 ## ⚡ TL;DR — expected from you right now (2026-07-13, SESSION-25 closed — D-087)
 
