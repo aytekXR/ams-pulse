@@ -11,7 +11,87 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-29.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-30.md`)
+
+**Session 2026-07-13/14 result: D-091 — S29 DONE (★ F10 TAIL COMPLETE:
+RTMP AMF0 connect live-validated + probe-stats UI columns; ★ FIRST
+post-expiry enforcement delta found — SRT ingest license-gated and
+rejecting; known-limitations 18→22; NEW operator directive → §2.19
+uipro UI/UX refactor).**
+- **★ OPERATOR INTAKE (mission (a)): ALL SIX items OPEN, re-verified
+  live** — 8th byte-identical sweep (license NOT applied; sweep gotcha:
+  the `PULSE_TOKEN=<any>` prefix SUPPRESSES token auto-extract →
+  parse-err; run the sweep WITHOUT it); GHCR anonymous pull 401; no
+  key/review/contact/MaxNodes signals. **Caddy-vhost decision CLOSED by
+  operator action:** `80df0ab "bedirhan site"` committed by the
+  operator onto local main (his authorship; on-disk prod file
+  byte-identical; carried to origin at S29 close). **NEW operator-side
+  artifact:** `docs/ant-media-marketplace-opportunity-report.md.pdf`
+  (8pp, untracked, content unread — no PDF tooling on host; operator
+  asked what to do with it).
+- **★ F10 TAIL DONE (W1+W2, live-validated):** probe_rtmp.go AMF0
+  connect round-trip (hand-rolled AMF0 + chunk demuxer honoring
+  SetChunkSize; app_accepted/app_rejected/rtmp_connect_timeout;
+  no-app URL keeps legacy path; description-only contract CR; live vs
+  real AMS: app_accepted, 281-byte wire fixture committed — RTMP
+  connect WORKS under the suspended license); ProbesPage Signaling
+  badge + Connect ms columns (the S15-noted UI gap; 407 vitest).
+  V1 must-fix remediated: SetChunkSize handler test added, mutation
+  re-proven RED in a pristine copy (the live fixture never
+  renegotiates — fixture-only coverage was a hole).
+- **★ SRT (W3, license-BLOCKED honestly):** AMS EE SRTAdaptor rejects
+  every SRT publish "License is suspended" (RTMP unaffected) — the
+  FIRST feature-level post-lapse enforcement observed (8 REST sweeps
+  were byte-identical because the REST surface doesn't change).
+  TC-I-05-SRT-packet-loss.sh committed (OBSERVATION framing,
+  license-gate SKIP 77 keyed to OUR streamid after V3 must-fix; ran
+  once → honest SKIP w/ evidence). Runs for real the moment the
+  operator's license lands. DG-18 variant note in AMS-INTEGRATION
+  (RTMP TCP-masking / SRT post-ARQ); blocked-scenario list EMPTY→
+  [SRT ingest].
+- **★ Docs honesty (W4):** known-limitations +LIM-19 (Kafka consumer
+  NEVER live-validated, AV-15 — disclosure-critical for the LIM-01
+  workaround path), +LIM-20 (plaintext-only), +LIM-21 (at-least-once +
+  first-start FirstOffset replay), +LIM-22 (first-viewer z-spike
+  intentional, Enterprise-only); LIM-01/04 stale topic name fixed
+  (ams-instance-stats→ams-server-events, code-derived caveat). All
+  citations independently re-verified (V4 CONFIRMED_OK).
+- **★ NEW OPERATOR DIRECTIVE (2026-07-14): ROADMAP §2.19 — full UI/UX
+  refactor via uipro** ("UI/UX Pro Max" skill; CLI v2.11.0 global, NOT
+  yet `uipro init`-ed in-repo). Ruling: uipro = method, brandkit
+  tokens stay authoritative (D-071) unless operator overrules
+  (confirmation asked in operator-expected). S30 primary = §2.19
+  scoping WO. Ledger: §2.17.4 stamped DONE-S26 (3rd drift find).
+- **Incidents (all recorded):** workflow died on the account spend
+  limit mid-batch (4 authors) → operator raised it → resumed with
+  partials adopted+gated (dead-workflow rule held); ORCH false-green
+  near-miss during a mutation re-proof (`cp -a` rc≠0 on root-owned CH
+  debris short-circuited `&&` — tested the unmutated copy; caught by
+  RED-expectation mismatch).
+- **Gates:** 24/24 `-race` 0 FAIL; coverage **76.0** (floor 70.2); web
+  407/407 + lint + build; regen idempotent ×3; no new skips. CI
+  promotions skip carry ×18. 12 agents (4 scouts + 4 authors + 4
+  verifiers), 0 errors post-resume.
+- **S30 carries:** §2.19 uipro scoping WO [primary]; SRT live run +
+  Enterprise re-validation the moment the license lands; browser-accept
+  trial banner (realams :18090, operator-assisted); D-V2-1 (operator
+  decision); marketplace upload prep (operator-gated); PDF disposition
+  (operator answer).
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-30.md` and execute it**
+(★ standing directive at its top: review the backlog + REVISE the plan;
+operator intake FIRST — six items + PDF disposition + uipro/brandkit
+confirmation; CI promotions if run date ≥07-23 [csp-e2e candidate,
+web-e2e ~07-25] else skip carry ×19; AMS re-sweep at open WITHOUT any
+PULSE_TOKEN prefix, observe-only — a non-null AMS diff = the operator's
+license landed → run TC-I-05-SRT + Enterprise re-validation).
+**PR-first, ≤2 pushes.** Check `docs/operator-expected.md` FIRST.
+
+---
+
+## ▶ prior session context (S28, superseded by the above — original START HERE follows)
+
+## (superseded) ▶ START HERE (next session — execute `sessions/SESSION-29.md`)
 
 **Session 2026-07-13 result: D-090 — S28 DONE (★ operator-intake gate +
 marketplace tail: all 5 operator items re-verified still-open; DG-15 kafka
