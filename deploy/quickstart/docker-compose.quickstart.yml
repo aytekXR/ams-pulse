@@ -1,0 +1,117 @@
+# Pulse — one-command quickstart stack (D-089 RULE-2)
+#
+# Usage:
+#   cp deploy/quickstart/.env.example deploy/quickstart/.env
+#   # edit .env
+#   docker compose -f deploy/quickstart/docker-compose.quickstart.yml --env-file deploy/quickstart/.env up -d
+#
+# Or use deploy/quickstart/install.sh for a guided setup that handles .env creation,
+# healthz polling and bootstrap-token extraction automatically.
+#
+# Image: ghcr.io/aytekxr/ams-pulse  — ClickHouse migrations are BAKED IN (no repo
+# clone needed). Override PULSE_IMAGE to pin a specific release tag or digest.
+#
+# NOTE: ghcr.io/aytekxr/ams-pulse is pending public visibility. Until the package is
+# public you must authenticate: docker login ghcr.io  (GitHub PAT with read:packages).
+# This note will be removed once the operator flips the visibility toggle.
+
+name: pulse-quickstart
+
+services:
+
+  pulse-migrate:
+    image: ${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.0}
+    entrypoint: ["pulse", "migrate"]
+    restart: "no"
+    environment:
+      PULSE_CLICKHOUSE_DSN: "clickhouse://clickhouse:9000/pulse"
+      PULSE_CLICKHOUSE_DATABASE: "pulse"
+      # Migration SQL is baked into the image at /usr/share/pulse/migrations (D-089).
+      # PULSE_MIGRATIONS_DIR is set by the image ENV; listed here for clarity.
+      PULSE_MIGRATIONS_DIR: "/usr/share/pulse/migrations"
+      PULSE_META_DSN: "/var/lib/pulse/pulse_meta.db"
+      PULSE_SECRET_KEY: "${PULSE_SECRET_KEY}"
+    volumes:
+      - pulse-data:/var/lib/pulse
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  pulse:
+    image: ${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.0}
+    ports:
+      - "8090:8090"
+    environment:
+      # ── Core ─────────────────────────────────────────────────────────────────
+      PULSE_LISTEN_ADDR: ":8090"
+      PULSE_LOG_LEVEL: "info"
+
+      # ── ClickHouse ───────────────────────────────────────────────────────────
+      PULSE_CLICKHOUSE_DSN: "clickhouse://clickhouse:9000/pulse"
+      PULSE_CLICKHOUSE_DATABASE: "pulse"
+      PULSE_RETENTION_DAYS: "90"
+      PULSE_ROLLUP_TTL_DAYS: "395"
+
+      # ── AMS source ───────────────────────────────────────────────────────────
+      PULSE_AMS_URL: "${PULSE_AMS_URL}"
+      PULSE_AMS_LOGIN_EMAIL: "${PULSE_AMS_LOGIN_EMAIL}"
+      PULSE_AMS_LOGIN_PASSWORD: "${PULSE_AMS_LOGIN_PASSWORD}"
+      PULSE_AMS_NODE_ID: "standalone"
+      PULSE_POLL_INTERVAL: "5s"
+
+      # ── Meta store ───────────────────────────────────────────────────────────
+      # Same DSN and volume as pulse-migrate so they share the same SQLite file.
+      PULSE_META_DSN: "/var/lib/pulse/pulse_meta.db"
+
+      # ── Security ─────────────────────────────────────────────────────────────
+      PULSE_SECRET_KEY: "${PULSE_SECRET_KEY}"
+
+      # ── License ──────────────────────────────────────────────────────────────
+      # Empty = Free tier (1 node, 7-day retention). Paste trial key to unlock.
+      PULSE_LICENSE_KEY: "${PULSE_LICENSE_KEY:-}"
+      # Official Pulse license verification key — do not change unless self-signing.
+      PULSE_LICENSE_PUBKEY: "${PULSE_LICENSE_PUBKEY}"
+
+      # ── Migrations ───────────────────────────────────────────────────────────
+      PULSE_MIGRATIONS_DIR: "/usr/share/pulse/migrations"
+
+    volumes:
+      - pulse-data:/var/lib/pulse
+    depends_on:
+      pulse-migrate:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/healthz"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 9
+    restart: unless-stopped
+
+  clickhouse:
+    # clickhouse/clickhouse-server:24.8 — same digest pin as deploy/docker-compose.yml
+    # Pinned 2026-06-11 via registry HTTP API.
+    image: clickhouse/clickhouse-server@sha256:1d1f6508eba2dccce2cee9913907c5f7766327debc57a6b1991f2c9e3176c163
+    environment:
+      # ClickHouse >=24.8 restricts the default user for network access unless
+      # credentials are set. SKIP_USER_SETUP=1 keeps the permissive built-in default.
+      # Safe: CH ports are only exposed inside the Docker network, never to the host.
+      CLICKHOUSE_SKIP_USER_SETUP: "1"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    expose:
+      - "9000"
+      - "8123"
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 12
+    restart: unless-stopped
+
+volumes:
+  pulse-data:
+  clickhouse-data:

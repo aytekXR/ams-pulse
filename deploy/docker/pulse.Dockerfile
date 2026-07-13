@@ -38,6 +38,11 @@ FROM alpine@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943
 RUN adduser -D -H pulse && mkdir -p /var/lib/pulse && chown pulse:pulse /var/lib/pulse
 COPY --from=server /out/pulse /usr/local/bin/pulse
 COPY --from=web /src/web/dist /usr/share/pulse/web
+# Bake ClickHouse migration SQL into the image so single-image deployments (quickstart,
+# released ghcr.io image) do not need a repo clone to apply schema.
+# Source: contracts/db/clickhouse/ is copied into /src/contracts/ in the server build stage (line 25).
+COPY --from=server /src/contracts/db/clickhouse /usr/share/pulse/migrations
+ENV PULSE_MIGRATIONS_DIR=/usr/share/pulse/migrations
 USER pulse
 EXPOSE 8090 8091
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
