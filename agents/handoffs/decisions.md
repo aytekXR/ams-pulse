@@ -4885,6 +4885,56 @@ ready for uploading to the marketplace with trial license key."
   gates inline post-authors, then adversarial verify (V1 mutations in
   pristine copies / V2 live quickstart clean-install on :28090 with a
   branch-built image / V3 docs adversarial).**
+
+**S27 BUILD + ADVERSARIAL VERIFY (4 authors + 3 verifiers, 0 errors, recorded pre-close):**
+- **Authors (all TDD where code):** A1 license lifecycle (red observed:
+  'valid want false got true' + 'expires_at must be non-nil' against old
+  silent-setFree; 6 new license tests + api three-state pin + licensegen
+  -expires-minutes; readers RWMutex→Mutex for the lazy write, once-only
+  warn via atomic.Pointer[slog.Logger]). A2 install (baked migrations
+  VERIFIED by container ls: 0001..0010 at /usr/share/pulse/migrations +
+  ENV; quickstart compose config -q OK; install.sh bash -n + shellcheck
+  clean, no-TTY hard-fail, positive-evidence healthz gate). A3 web (388
+  vitest green, was 366; coverage 66.83/61.95/56.12 vs gates 59/54/45;
+  build clean; optional Reports/Anomalies refactor honestly SKIPPED —
+  structural test churn). A4 docs (score recount 43→44 FULLY ⇒ 66.7
+  strict / 84.5 weighted, arithmetic shown; Pro MaxNodes=10 vs PRD 1–2
+  discrepancy FLAGGED NEEDS-RECONCILE in the listing draft, not silently
+  resolved; found docs/AMS-INTEGRATION.md §4.5 stale re BUG-002 —
+  S28 carry).
+- **ORCH pre-commit catch:** .env.example claimed trial keys obtainable
+  at pulse.beyondkaira.com (the operator's private dashboard) — corrected
+  to marketplace-listing wording before commit. Secret-leak crosscheck of
+  quickstart .env.example vs deploy/.env: only the PUBLIC pubkey shared.
+- **★ V1 CONFIRMED_OK — 7/7 mutations RED in pristine copies** (lazy-check
+  drop, valid-stays-true, expiresAt-nil'd, boot-silent-setFree restore,
+  perpetual-degrades, once-guard drop [once-ness IS pinned: 'want exactly
+  1 warn log, got 6'], Check*-bypass). -race ×2 clean; RWMutex→Mutex
+  re-entrancy audit clean; api reads license ONLY via public getters.
+- **★ V2 CONFIRMED_OK — LIVE quickstart clean-install vs the real AMS:**
+  branch image built; stack healthy ~60s; migrations from the BAKED path
+  (dir=/usr/share/pulse/migrations, 10 applied, idempotent on re-runs);
+  bootstrap plt_ token extracted by install.sh; free-tier baseline; live
+  overview shows the real AMS node. **THE MONEY SHOT: live mid-run trial
+  expiry WITHOUT restart** — own-keypair 3-minute pro key activated via
+  PUT /admin/license → polled to the transition {tier:free, valid:false,
+  expires_at RETAINED}; /analytics/audience 200-pre → 403 LICENSE_REQUIRED
+  post; single 'license: expired — degraded to free tier' warn in the
+  container log. install.sh re-run honest (no wipe, token-absent stated).
+  Torn down (down -v), scratch .env with real creds removed.
+- **V3 PARTIAL → all 4 must-fix REMEDIATED same-session:** (1)+(2)
+  compatibility.md claimed the REMOVED Speed fallback still exists w/ a
+  citation that didn't resolve — rewritten to normalize.go:73-79 reality
+  (v2.10 speed-only DTOs ⇒ honest bitrate 0); (3) workflow comment ref
+  line 60→16; (4) quickstart pins ghcr :0.4.0 which does not exist yet —
+  RULED: **the v0.4.0 tag at close is LOAD-BEARING** (0.3.0 image lacks
+  baked migrations; quickstart REQUIRES ≥0.4.0); README bumped to v0.4.0
+  accordingly. Minor: mock-profile line-range 135–157→134–171; PULSE_IMAGE
+  override documented in .env.example (V2 observation). V3 clean on:
+  score recount independently re-derived (44/66=66.7, 55.75/66=84.5 both
+  CONFIRMED), brandkit paths all resolve, DRAFT-INTERNAL banners present,
+  GHCR visibility=private re-confirmed via gh api (operator item #5),
+  no external-promise leaks, honesty flags intact.
 - **OPERATOR ACTIONS REQUIRED — YES (4, recorded per the session-open
   directive; none blocks S27's own work):** (1) AMS license today
   (operator-promised); (2) trial-license mint needs the vault privkey;

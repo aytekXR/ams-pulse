@@ -10,7 +10,7 @@
 | AMS Version | Validation Status | Pulse Support Level | Source |
 |-------------|------------------|---------------------|--------|
 | 3.0.3 Enterprise (build 20260504\_1443) | **LIVE-VALIDATED** | **Supported — primary target** | 46/50 scenario scripts PASS, qa/realams S17–S18, D-079/D-080 |
-| 3.0.2 | Mock-profile only | Mock-compatible | `.github/workflows/ams-version-matrix.yml`; `server/internal/collector/ams_version_matrix_test.go` lines 135–157 |
+| 3.0.2 | Mock-profile only | Mock-compatible | `.github/workflows/ams-version-matrix.yml`; `server/internal/collector/ams_version_matrix_test.go` lines 134–171 |
 | 2.14.x | Mock-profile only | Mock-compatible | `ams_version_matrix_test.go` lines 99–133 |
 | 2.10.0 | Mock-profile only | Mock-compatible | `ams_version_matrix_test.go` lines 63–97 |
 
@@ -70,7 +70,7 @@ from real AMS REST responses.
 > making the 'version matrix' fictional" (workflow header comment, lines 5–8).
 > The current workflow runs in-process mock tests only. If a pullable real-AMS
 > image for these versions becomes available, add a container-backed job per the
-> comment at `ams-version-matrix.yml` line 60.
+> comment at `ams-version-matrix.yml` line 16.
 
 ### AMS 2.10.0
 
@@ -83,9 +83,13 @@ Mock profile source: `ams_version_matrix_test.go` lines 63–97.
 | `webRTCViewerCount` | Present in mock (50) | `ams_version_matrix_test.go:75` |
 | `currentFPS` | Present in mock (30) | Mock-only; behavior on real v2.10.x unverified |
 
-**Wire format note:** Pulse normalizer reads `BitRate` (from `bitrate`) and falls back
-to `Speed` when `BitRate == 0`, which is the expected v2.10 behavior
-(`normalize.go`; `server/internal/collector/ams_version_matrix_test.go` lines 181–191).
+**Wire format note:** Pulse's normalizer reads **only** `BitRate` (from `bitrate`):
+`bitrateKbps := b.BitRate / 1000.0`. A historical fallback to `Speed` when
+`BitRate == 0` was deliberately **removed** — AMS `speed` is a real-time RATIO
+(≈1.0), not a bitrate, and the fallback emitted ~1 "kbps" of garbage (see the
+comment at `server/internal/collector/normalize.go:73-79`). Consequence for real
+v2.10.x deployments whose DTOs carry only `speed`: Pulse reports bitrate 0
+(honest absence) rather than a fabricated value.
 
 ### AMS 2.14.x
 
@@ -105,7 +109,7 @@ optional feature in this era.
 
 ### AMS 3.0.2
 
-Mock profile source: `ams_version_matrix_test.go` lines 135–157.
+Mock profile source: `ams_version_matrix_test.go` lines 134–171.
 
 | Field | Mock-profile behavior | AMS 3.0.3 live reality |
 |-------|----------------------|------------------------|
@@ -153,7 +157,7 @@ The nightly workflow also runs a REST v2 contract smoke against the mock-ams bin
 (`.github/workflows/ams-version-matrix.yml`).
 
 To add a real-AMS container leg (when images become available), see the comment at
-`.github/workflows/ams-version-matrix.yml` line 60.
+`.github/workflows/ams-version-matrix.yml` line 16.
 
 ---
 
