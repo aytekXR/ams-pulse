@@ -56,6 +56,15 @@ document. S19 should fix all five in a single `docs/AMS-INTEGRATION.md` editing 
 
 ## Prioritized Authoring Plan for S19
 
+> **S28 status (D-090, 2026-07-13): DG-15 and DG-05 are AUTHORED** — DG-15
+> created `docs/kafka-integration.md` (code-authoritative guide: topic
+> `ams-server-events` per kafka.go — note this CORRECTS the `ams-instance-stats`
+> name this file and capability-map.md §4 carried; AV-15 stays BLOCKED and the
+> doc says so prominently); DG-05 added `docs/AMS-INTEGRATION.md` §3.7 (fleet
+> resource metrics stub pointing at the new guide). Both adversarially verified
+> against the code (2 verifier catches fixed: healthz lag>10000 degradation,
+> first-start FirstOffset replay).
+>
 > **S19 status (D-081, 2026-07-11): DG-04, DG-11, and DG-07 are AUTHORED** —
 > DG-04 expanded `docs/AMS-INTEGRATION.md` §4.5 (downstream impact, workarounds,
 > D-V2-1 future path); DG-11 added the implicit-broadcast deletion admonition to

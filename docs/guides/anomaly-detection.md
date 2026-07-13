@@ -44,6 +44,55 @@ update the baseline and contribute to live-value comparisons.
 Pinned by `TestAnomaly_APILatencyMS_NoMeasurement_NoBaseline` in
 `server/internal/anomaly/anomaly_api_latency_test.go`.
 
+### Zero-viewer baselines and the first-viewer spike
+
+Streams with a sustained zero-viewer history — for example, a test stream
+publishing continuously but watched by no one — accumulate a Welford baseline of
+`mean=0`, `stddev=0` after ≥30 ticks (the `MinSamples` warmup gate, ~30 minutes).
+When the first viewer connects, the detector fires a high-sigma anomaly flag.
+
+**Why this is intentional.** `viewers=0` is a genuine measurement — Pulse reads
+`ViewerCount` from the AMS live snapshot for every active stream and feeds it to
+Welford unconditionally, with no presence guard (see `UpdateBaselines`,
+`anomaly.go`). "Zero viewers" means "this stream is live and currently has no
+audience", which is a true observation, not a missing data point.
+
+This is the critical distinction from the D-088 cpu/mem/disk class: those metrics
+are absent on standalone AMS deployments (the `CPUPCTReported`/`MemPCTReported`/
+`DiskPCTReported` presence flags suppress false-zero feeding). Likewise,
+`ams_api_latency_ms` uses an `APILatencyMS > 0` guard because `0` is a sentinel
+for a failed poll, not a real sub-millisecond round-trip. For `viewers`, `0` is
+never a sentinel — it is the actual viewer count.
+
+**The spike mechanics.** After a zero-viewer history the effective-stddev floor
+applies at detection time (see `detectFlagsLocked`, `anomaly.go`):
+
+```
+effStddev = max(stddev, StddevRelEpsilon × |mean|, StddevAbsEpsilon)
+          = max(0,      0.05 × 0,                  1e-9)
+          = 1e-9
+```
+
+When the first viewer arrives (`observed=1`, `mean=0`):
+
+```
+z = |1 − 0| / 1e-9 ≈ 1 × 10⁹
+```
+
+The flag fires immediately (well above `DefaultSigma = 4.0`). The
+`HysteresisTicks` (10 ticks / 600 s cooldown) then suppresses re-fires.
+
+**Ruling: KEEP.** "Audience appeared after a long quiet period" is a
+true statistical anomaly. Operators who consider it noise can raise `min_sigma` on
+`viewers` queries, e.g.:
+
+```
+GET /api/v1/anomalies?metric=viewers&min_sigma=10
+```
+
+An observation-side skip (mirroring the `APILatencyMS > 0` pattern — a ~2-line
+change) remains a follow-up option if an operator overrules this ruling.
+
 ---
 
 ## Statistical model
