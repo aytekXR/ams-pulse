@@ -36,6 +36,28 @@ test.describe("Dashboard render", () => {
       TOKEN_KEY
     );
 
+    // LicenseProvider fetches this at app root (S27 TrialBanner); unmocked it
+    // ECONNREFUSEDs through the vite proxy and trips the zero-console-error gate.
+    await page.route("/api/v1/admin/license", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          tier: "free",
+          valid: true,
+          expires_at: null,
+          offline_file: false,
+          limits: {
+            max_nodes: 1,
+            max_streams: null,
+            retention_days: 7,
+            data_api: false,
+            white_label: false,
+          },
+        }),
+      })
+    );
+
     await page.route("/api/v1/live/overview", (route) =>
       route.fulfill({ status: 200, contentType: "application/json", body: OVERVIEW_BODY })
     );
