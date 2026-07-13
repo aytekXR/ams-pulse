@@ -56,6 +56,17 @@ document. S19 should fix all five in a single `docs/AMS-INTEGRATION.md` editing 
 
 ## Prioritized Authoring Plan for S19
 
+> **S29 status (D-091, 2026-07-13): DG-18 variant note AUTHORED** — the
+> `packetLostRatio` per-protocol semantics note (RTMP always 0 / SRT post-ARQ /
+> WebRTC UDP-native) was added to `docs/AMS-INTEGRATION.md` §1.1 as a callout
+> table after the D-029v real-wire units paragraph. Live SRT ingest validation
+> (TC-I-05-SRT-packet-loss.sh) was run on 2026-07-13 and **BLOCKED** by AMS EE
+> license suspension: SRTAdaptor logged "License is suspended. Not accepting the
+> stream:#!::h=LiveApp/val-i05-srt-1783979972,m=publish" (evidence:
+> `qa/realams/evidence/S29-TC-I-05-SRT-20260713T215932Z/`). The scenario is
+> committed and ready. DG-18 CLOSURE requires a live SRT observation run
+> post-license-renewal to record publishType and confirm post-ARQ semantics.
+>
 > **S28 status (D-090, 2026-07-13): DG-15 and DG-05 are AUTHORED** — DG-15
 > created `docs/kafka-integration.md` (code-authoritative guide: topic
 > `ams-server-events` per kafka.go — note this CORRECTS the `ams-instance-stats`
