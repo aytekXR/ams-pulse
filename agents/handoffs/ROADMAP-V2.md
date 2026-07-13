@@ -430,6 +430,43 @@ discipline). Each is independent:
    runs in a session. *(Addressed same-session if S26's gates allowed —
    check D-088 close evidence before picking this up.)*
 
+### 2.18  Marketplace-readiness sprint  [M–L]  (OPERATOR-DIRECTED 2026-07-13, D-089 — ★ TOP PRIORITY, supersedes ordering of every non-gated item above)
+
+Operator directive (S27 prompt): app ready for the Ant Media marketplace
+ASAP — installation easy, listing uploadable with a trial license key;
+"rollout quick" (executed S27). Everything below is sequenced ahead of
+§2.5/§2.11-tail/§2.17 until DONE. Operator-gated rows are listed last —
+they gate the UPLOAD, not the build.
+
+1. **Prod rollout D-082..D-088** [S] — ⚙ S27 (the standing offer,
+   operator-triggered). Runbook path + `pre-d089` rollback tag + smoke.
+2. **Trial-license lifecycle** [M] — expiry at runtime must degrade to
+   free-tier entitlements GRACEFULLY (product keeps running; honest
+   API/UI surface of "trial expired"); mint→install→expire documented;
+   dev-key-signed short-expiry licenses in tests; mutation-pinned.
+   Existing infra: license.go expires_at + tiers; licensegen -tier
+   -expires -privkey (§2.3, S10). ⚠ The official trial key mint is
+   OPERATOR-GATED (vault privkey — S16 key hygiene).
+3. **One-command install** [S–M] — quickstart path with a trial-key slot;
+   install.md brought current (the pulse.example.yaml "not consumed at
+   runtime" wart documented or fixed); clean-install verified per D-069's
+   still-open verification intent.
+4. **Marketplace checklist PARTIAL→PASS rows in our control** [S] —
+   final-assessment §3: row 4 (beacon SDK guide exists since S19 — fold
+   in + close the loop), row 12 (release/tag evidence — v0.3.0 EXISTS,
+   row is stale; refresh + tag the rollout build if warranted), row 16
+   (AMS version compat disclosure), row 17 (known-limitations doc from
+   DG-01..18).
+5. **Listing package DRAFT** [S] — category, short description, feature
+   bullets, screenshot list (row 10). Stays INTERNAL until the
+   final-assessment review (D-081 external gate) — drafting is not
+   publishing.
+6. **Operator-gated (recorded, not buildable):** official trial key mint
+   (vault privkey); final-assessment DRAFT review (gates upload); Ant
+   Media marketplace contact — rows 7–11 (support channel, licensing
+   terms publication, revenue share, category confirm, co-marketing);
+   AMS license re-apply (promised 2026-07-13).
+
 ---
 
 ## 3. Sessions

@@ -1,4 +1,50 @@
-# Operator TODO — the items only YOU can do (updated at SESSION-26 close, D-088, 2026-07-13; rides S26's PR)
+# Operator TODO — the items only YOU can do (updated at SESSION-27 OPEN, D-089, 2026-07-13)
+
+## ⚡ TL;DR — expected from you right now (2026-07-13, SESSION-27 in progress — D-089, marketplace pivot)
+
+> **Your directive was received and is executing:** marketplace-ASAP is the
+> new plan of record (D-089), and **"rollout quick" was taken as your
+> approval of the standing prod rollout** — S27 is rolling D-082..D-088
+> live (backup + rollback tag first, smoke after). If that reading is
+> wrong, say "stop the rollout" and the session reverts to the rollback
+> tag.
+>
+> **FOUR things only you can do — two you already promised, two standing.
+> None blocks today's session work; items 2–4 gate the actual marketplace
+> upload:**
+>
+> 1. **AMS license (you said "today").** When you've applied it to your
+>    AMS, just tell a session "AMS license applied" — it will re-sweep
+>    (`expiry-sweep.sh`) and re-validate the Enterprise surface. Nothing
+>    else needed from you.
+>
+> 2. **★ NEW — mint the official trial license key (needs YOUR vault
+>    key).** The marketplace listing ships with a trial key, but the
+>    vendor ed25519 private key exists only in your vault (S16 key
+>    hygiene — by design). When S27's trial-flow work lands, run:
+>    `cd qa/licensegen && go run . -tier pro -expires 14 -privkey <path-to-your-vault-key-file>`
+>    and store the output key wherever the listing needs it (or paste it
+>    to a session to embed in the listing draft). Until then, sessions
+>    build + test the whole trial flow with dev-key-signed licenses —
+>    only the OFFICIAL key needs you. (Decide trial tier/length too:
+>    the draft assumes **Pro, 14 days** — say otherwise if you want.)
+>
+> 3. **★ ELEVATED — final-assessment DRAFT review now gates the
+>    marketplace upload.** `docs/assessment/final-assessment.md` +
+>    `prd-validation-matrix.md` have waited since S19 as non-blocking;
+>    "nothing goes external until you review" now sits directly on the
+>    critical path to uploading. Reply "approved" or send edits.
+>
+> 4. **Ant Media marketplace contact (unchanged, now critical-path).**
+>    Listing requirements, revenue-share, support channel, category —
+>    checklist rows 7–11 all read NEEDS-OPERATOR-CONTACT. Only you can
+>    open that thread with the Ant Media team.
+>
+> **Standing, unchanged, non-blocking:** caddy-vhost merge decision
+> (say "merge the caddy vhost"). S27 close will refresh this file with
+> rollout + build results.
+
+## (superseded) S26-close header follows
 
 ## ⚡ TL;DR — expected from you right now (2026-07-13, SESSION-26 closed — D-088)
 

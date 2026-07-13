@@ -14,7 +14,33 @@ already delivered and never marked, and the scouts widened the FleetNodes
 fix from one missing arm to a three-copy predicate unification.) Record any
 revision in the D-089 open block. Carry this header into SESSION-28.md.
 
-## Mission
+## ★ REVISED AT OPEN (2026-07-13, D-089) — OPERATOR DIRECTIVE SUPERSEDES THE MISSION BELOW
+
+Operator (this session's prompt): **"rollout quick — i want app to be ready
+for marketplace asap … installation easy and ready for uploading to the
+marketplace with trial license key. i will provide ams license again today."**
+
+Revised exit criteria (the original WO-A candidates are DEFERRED → S28+):
+- (R1) **Prod rollout of D-082..D-088 executed** (the standing offer,
+  triggered by "rollout quick"): runbook path, `pre-d089` rollback tag,
+  fresh backup, smoke. **DONE = prod healthz ok on the new build.**
+- (R2) **Trial-license lifecycle honest end-to-end:** expiry at runtime
+  degrades to free-tier entitlements gracefully (never a dead product),
+  surfaced in API/UI; mint→install→expire flow documented; tested with
+  dev-key-signed short-expiry licenses; mutation-pinned.
+- (R3) **Installation easy:** one-command install path (quickstart with
+  trial key slot), install.md brought current, clean-install verified.
+- (R4) **Marketplace package:** checklist rows 4/16/17 (integration docs /
+  AMS compat disclosure / known limitations) brought from PARTIAL toward
+  PASS; row 10 listing copy DRAFTED (stays internal — final-assessment
+  review still gates anything external).
+- (R5) Operator-action ledger recorded (D-089 + operator-expected.md ⚡):
+  AMS license (promised today), official trial-key mint (vault privkey),
+  final-assessment review (now gates upload), Ant Media contact.
+- Standing: (b) operator intake ✅ (the directive IS the intake), (c) CI
+  promotions skip carry ×16 (07-13 < 07-23), (d) AMS observation at open.
+
+## Mission (original, superseded by the block above)
 
 Exit = (a) the highest-leverage backlog batch built — candidates:
 **F10 tail [M]** (probe-stats UI surface + RTMP AMF0 connect phase —

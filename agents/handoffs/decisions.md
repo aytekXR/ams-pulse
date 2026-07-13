@@ -4751,3 +4751,94 @@ now carries D-082..**D-088** (every BUG-001..011 fix + recording billing +
 anomaly history + early-warning ladder + degraded-display consistency +
 the zero-mean guard/sweep).
 PR/merge evidence appended below after merge (rides S27 if post-push).
+
+**S26 MERGE EVIDENCE (appended at S27 open per protocol):** PR #39 MERGED
+2026-07-13T11:55:19Z, merge commit `58a9c84` (squash; all required contexts
+green). origin/main == HEAD at S27 open.
+
+## D-089 — SESSION-27 (2026-07-13): OPERATOR DIRECTIVE — marketplace-ASAP pivot + prod rollout approved (IN PROGRESS; evidence at close)
+
+**★ OPERATOR DIRECTIVE (2026-07-13, verbatim intent):** "rollout quick — i
+want app to be ready for marketplace asap. adjust the plan accordingly. i
+will provide ams license again today. after making installation easy and
+ready for uploading to the marketplace with trial license key."
+
+**ORCH interpretation rulings (recorded before any dispatch):**
+1. **"rollout quick" = the standing rollout offer is TRIGGERED.** Since S20
+   every operator-expected.md close has said "Say 'roll out' whenever you
+   want them live." This is that. S27 rolls D-082..D-088 to prod per
+   `deploy/runbooks/upgrade-rollback.md` (rollback tag `pre-d089`, fresh
+   backup first, smoke after). Prod at open: healthy, v0.3.0-4-ge8f8f5f.
+2. **Marketplace-ASAP supersedes the planned S27 batch.** Per the standing
+   backlog-review directive, the F10-tail/§2.17/§2.5 candidates are
+   DEFERRED (→ S28+); S27's mission becomes the **marketplace-readiness
+   sprint**: trial-license lifecycle + easy install + the marketplace
+   checklist PARTIAL rows that need no operator contact (final-assessment
+   §3 rows 4/16/17) + listing-copy draft (row 10). New backlog section
+   ROADMAP-V2 §2.18.
+3. **"trial license key" scoping:** infrastructure EXISTS (license.go
+   `expires_at` + tiers; qa/licensegen `-tier -expires -privkey`, §2.3 done
+   S10). The gaps are (a) runtime behavior at expiry — must degrade
+   gracefully to free-tier entitlements with an honest surface (never a
+   dead product), verify/build+pin; (b) a documented mint→install→expire
+   trial flow; (c) MINTING is operator-gated — the vendor ed25519 private
+   key exists ONLY in the operator vault (S16/D-077 key hygiene);
+   the embedded license.go pubkey is the DEV key, prod overrides via
+   PULSE_LICENSE_PUBKEY (deploy/.env, gitignored). Sessions can build and
+   test everything with dev-key-signed trial licenses; the OFFICIAL
+   marketplace trial key needs the operator (command provided in
+   operator-expected.md).
+4. **AMS license incoming today (operator said).** Recorded in
+   operator-expected.md with what to do when it lands (re-sweep +
+   Enterprise-surface re-validation). Until then: observe-only unchanged.
+
+**S27 OPEN facts (13:58Z, recorded early per protocol):**
+- **Concurrent-session check: CLEAN.** HEAD == origin/main == `58a9c84`
+  (S26 PR #39 merged 11:55:19Z, evidence above). Tree carries only the
+  known Caddyfile.prod delta (do-not-revert, D-082) + the operator `.bak`.
+- **Prod health read-only: all-ok** (healthz clickhouse/collector/meta ok;
+  pulse-prod-pulse-1 Up 2 days healthy). `antmedia` StartedAt still
+  2026-07-12T06:52:55Z — no post-lapse restart.
+- **Operator intake: THIS SESSION'S PROMPT IS the intake** (directive
+  above). Standing items (caddy-vhost, final-assessment review) re-surfaced
+  in operator-expected.md — final-assessment review is now ELEVATED: it
+  gates marketplace submission (nothing external until reviewed, D-081).
+- **WO CI promotions: skip carry ×16** (07-13 < 07-23).
+- **AMS observation sweep (s27open, 14:01Z): BYTE-IDENTICAL — 6th
+  consecutive null delta** (evidence S21-sweep-s27open-20260713T140145Z;
+  diff excludes the pulse-realams.overview line — orphaned-token gotcha hit
+  exactly as SESSION-27 §3 predicted, line ran with a placeholder token and
+  recorded parse-err honestly; PULSE_TOKEN override used, no down -v).
+  Still Enterprise 3.0.3 build 20260504_1443, 4 apps, licence-status 204.
+  **The operator's promised new AMS license has NOT landed yet** —
+  operator-expected.md item 1 stands.
+
+**★ S27 PROD ROLLOUT EXECUTED (operator-approved "rollout quick"; 14:02–14:06Z):**
+- Runbook path verbatim (upgrade-rollback.md): config -q OK → rollback tag
+  `pre-d089` = bc6e4f1c4212 (`v0.3.0-4-ge8f8f5f`, the S15c build) → manual
+  backup rc=0 (CH BACKUP_CREATED pulse-20260713-140252.zip + SQLite+WAL
+  4.1 MB; keep-7 pruned 07-09) → stamped build → stamp asserted
+  **`pulse v0.3.0-34-g58a9c84`** (main == S26 merge; never dev/unknown) →
+  `up -d` (no --build).
+- **Migrations applied clean on first boot: CH 0009_recording_mv +
+  0010_anomaly_flag_events** (meta migrations done; one-shot exited 0).
+- **Smoke ALL GREEN:** healthz all-ok via both beyondkaira.com (resolve-pinned)
+  + pulse.beyondkaira.com 200; container version matches stamp; resource
+  limits intact (memory=512Mi cpus=0.5); log scan 0 ERROR/panic lines;
+  webhook signed→200 / unsigned→**401 fail-closed**; license
+  tier=enterprise valid=true.
+- **★ TWO SHIPPED FIXES SELF-PROVED LIVE AT BOOT:** (1) D-088 sweep:
+  `anomaly: purged zero-mean baselines on startup count=3` — exactly the 3
+  poisoned prod rows from the S26 census (cpu/mem n=8813, disk n=3578);
+  (2) BUG-002/D-085 VoD poller: `restpoller: VoD events emitted
+  app=pulse-test count=1` — first prod recording event (the S17 test VoD).
+- **Prod now runs D-082..D-088** (all BUG-001..011 fixes + recording
+  billing + anomaly flag history + early-warning ladder + degraded-display
+  consistency + zero-mean guard/sweep). Rollback path: retag pre-d089 +
+  up -d.
+- **OPERATOR ACTIONS REQUIRED — YES (4, recorded per the session-open
+  directive; none blocks S27's own work):** (1) AMS license today
+  (operator-promised); (2) trial-license mint needs the vault privkey;
+  (3) final-assessment DRAFT review — gates marketplace upload;
+  (4) Ant Media marketplace contact (checklist rows 7–11) — gates the
+  actual listing. Details + exact commands: operator-expected.md ⚡ TL;DR.
