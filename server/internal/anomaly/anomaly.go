@@ -103,6 +103,17 @@ type BaselineStore interface {
 	UpsertAnomalyBaseline(ctx context.Context, row AnomalyBaselineRow) error
 }
 
+// BaselineSweeper is an optional capability of BaselineStore implementations.
+// When d.store satisfies this interface, Detector.Run sweeps stale zero-mean
+// baselines on startup (before the first tick) to evict rows poisoned by
+// standalone AMS nodes that never report cpu/mem/disk (D-088).
+// The sweep is a Detector-startup operation; it is not a schema migration.
+type BaselineSweeper interface {
+	// DeleteZeroMeanNodeBaselines deletes baseline rows where metric is one of
+	// the given metrics and both mean=0 and stddev=0. Returns the count deleted.
+	DeleteZeroMeanNodeBaselines(ctx context.Context, metrics []string) (int64, error)
+}
+
 // AnomalyFlagEvent is a persisted record of one anomaly detection event.
 // Written by Detector.UpdateBaselines (tick path) and queried by GET /anomalies
 // with ?from/?to (ADR-0009 BUG-008 phase 2).
@@ -267,11 +278,22 @@ func (d *Detector) WarmHysteresis(ctx context.Context) error {
 // Run starts the baseline update tick loop. Blocks until ctx is cancelled.
 // WarmHysteresis is called once before the first tick to restore cooldown state
 // across process restarts when a flagStore is configured.
+// When d.store implements BaselineSweeper, DeleteZeroMeanNodeBaselines is called
+// once after WarmHysteresis to evict baselines poisoned by standalone AMS nodes
+// that never report cpu_pct/mem_pct/disk_pct (D-088 startup sweep).
 func (d *Detector) Run(ctx context.Context) {
 	ticker := time.NewTicker(d.tickInterval)
 	defer ticker.Stop()
 	if err := d.WarmHysteresis(ctx); err != nil {
 		d.logger.Warn("anomaly: WarmHysteresis failed", "error", err)
+	}
+	if sweeper, ok := d.store.(BaselineSweeper); ok {
+		n, err := sweeper.DeleteZeroMeanNodeBaselines(ctx, []string{"cpu_pct", "mem_pct", "disk_pct"})
+		if err != nil {
+			d.logger.Warn("anomaly: zero-mean baseline sweep failed", "error", err)
+		} else if n > 0 {
+			d.logger.Info("anomaly: purged zero-mean baselines on startup", "count", n)
+		}
 	}
 	for {
 		select {
@@ -347,22 +369,32 @@ func (d *Detector) UpdateBaselines(ctx context.Context) error {
 
 	for nodeID, n := range snap.Nodes {
 		nodeScope := scopeJSON(nodeID, "", "")
-		obs = append(obs, observation{
-			metric: "cpu_pct",
-			scope:  AnomalyBaselineRow{Metric: "cpu_pct", Scope: nodeScope, WindowS: windowS},
-			value:  n.CPUPCT,
-		})
-		obs = append(obs, observation{
-			metric: "mem_pct",
-			scope:  AnomalyBaselineRow{Metric: "mem_pct", Scope: nodeScope, WindowS: windowS},
-			value:  n.MemPCT,
-		})
+		// D-088: guard on presence flags — standalone AMS 3.x omits cpu/mem/disk
+		// (normalize.go:241). Feeding zero-value observations would poison the Welford
+		// baseline toward zero, causing false alarms when the node later reports real data.
+		// cluster path sets all three flags; standalone path leaves them false.
+		if n.CPUPCTReported {
+			obs = append(obs, observation{
+				metric: "cpu_pct",
+				scope:  AnomalyBaselineRow{Metric: "cpu_pct", Scope: nodeScope, WindowS: windowS},
+				value:  n.CPUPCT,
+			})
+		}
+		if n.MemPCTReported {
+			obs = append(obs, observation{
+				metric: "mem_pct",
+				scope:  AnomalyBaselineRow{Metric: "mem_pct", Scope: nodeScope, WindowS: windowS},
+				value:  n.MemPCT,
+			})
+		}
 		// disk_pct: node-scoped, Detector key == rule metric name (no alias).
-		obs = append(obs, observation{
-			metric: "disk_pct",
-			scope:  AnomalyBaselineRow{Metric: "disk_pct", Scope: nodeScope, WindowS: windowS},
-			value:  n.DiskPCT,
-		})
+		if n.DiskPCTReported {
+			obs = append(obs, observation{
+				metric: "disk_pct",
+				scope:  AnomalyBaselineRow{Metric: "disk_pct", Scope: nodeScope, WindowS: windowS},
+				value:  n.DiskPCT,
+			})
+		}
 		// ams_api_latency_ms: Pulse-measured poller RTT (D-087 rung-1 feed).
 		// Key-absent semantics (D-075): skip when APILatencyMS==0, which signals
 		// either that the last stats call FAILED or the node has never been polled.
@@ -589,9 +621,19 @@ func (d *Detector) ComputeFlags(ctx context.Context, sigmaThreshold float64) ([]
 	}
 	for nodeID, n := range snap.Nodes {
 		ns := scopeJSON(nodeID, "", "")
-		liveValues["cpu_pct:"+ns] = n.CPUPCT
-		liveValues["mem_pct:"+ns] = n.MemPCT
-		liveValues["disk_pct:"+ns] = n.DiskPCT
+		// D-088: presence guards mirror UpdateBaselines — key absent from liveValues
+		// when the metric was not reported by the node. detectFlagsLocked skips any
+		// baseline whose liveKey is absent, so stale zero-mean baselines cannot fire
+		// false alarms against unreported (zero) live values.
+		if n.CPUPCTReported {
+			liveValues["cpu_pct:"+ns] = n.CPUPCT
+		}
+		if n.MemPCTReported {
+			liveValues["mem_pct:"+ns] = n.MemPCT
+		}
+		if n.DiskPCTReported {
+			liveValues["disk_pct:"+ns] = n.DiskPCT
+		}
 		// ams_api_latency_ms: same presence guard as UpdateBaselines (D-087 1b).
 		// Skip when APILatencyMS==0 (no measurement); avoid populating with a
 		// zero that would produce a spurious flag against the real baseline.

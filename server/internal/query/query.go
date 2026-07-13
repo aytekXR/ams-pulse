@@ -127,7 +127,7 @@ func (s *Service) LiveOverview(ctx context.Context, app, nodeID, tenant string) 
 			CPUPCT:   n.CPUPCT,
 			MemPCT:   n.MemPCT,
 		}
-		if n.CPUPCT > 90 || n.MemPCT > 90 {
+		if n.Degraded() {
 			nh.Status = "degraded"
 		}
 		nodes = append(nodes, nh)
@@ -356,7 +356,7 @@ func (s *Service) FleetNodes(ctx context.Context, limit int, cursor string) (*Fl
 			JavaVersion:    n.JavaVersion,
 			ProcessorCount: n.ProcessorCount,
 		}
-		if n.CPUPCT > 90 {
+		if n.Degraded() {
 			fn.Status = "degraded"
 		}
 		nodes = append(nodes, fn)

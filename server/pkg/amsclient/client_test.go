@@ -608,42 +608,6 @@ func TestListBroadcasts_UsesPerAppPathParams(t *testing.T) {
 	}
 }
 
-// TestBroadcastStatistics_RealFields decodes the curl-verified broadcast
-// statistics response for stream test123 and asserts the real AMS v3 field names.
-func TestBroadcastStatistics_RealFields(t *testing.T) {
-	fixture := mustReadFixture(t, "broadcast_statistics_real.json")
-
-	var gotPath string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(fixture)
-	}))
-	defer srv.Close()
-
-	c := newTestClient(srv)
-	stats, err := c.BroadcastStatistics(context.Background(), "LiveApp", "test123")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if stats.TotalHLSWatchersCount != 0 {
-		t.Errorf("TotalHLSWatchersCount = %d, want 0", stats.TotalHLSWatchersCount)
-	}
-	if stats.TotalRTMPWatchersCount != -1 {
-		t.Errorf("TotalRTMPWatchersCount = %d, want -1", stats.TotalRTMPWatchersCount)
-	}
-	if stats.TotalWebRTCWatchersCount != 0 {
-		t.Errorf("TotalWebRTCWatchersCount = %d, want 0", stats.TotalWebRTCWatchersCount)
-	}
-	if stats.TotalDASHWatchersCount != 0 {
-		t.Errorf("TotalDASHWatchersCount = %d, want 0", stats.TotalDASHWatchersCount)
-	}
-	// Path must end with /broadcast-statistics (real AMS v3 endpoint).
-	if !strings.HasSuffix(gotPath, "/broadcast-statistics") {
-		t.Errorf("request path %q must end with /broadcast-statistics", gotPath)
-	}
-}
-
 // ─── Auth: cookie-session tests ───────────────────────────────────────────────
 
 // TestLogin_AttachesCookieAndAuthorizes verifies that a client configured with

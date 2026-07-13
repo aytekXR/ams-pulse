@@ -108,15 +108,6 @@ type BroadcastDTO struct {
 // BroadcastListResponse wraps the paged list response.
 type BroadcastListResponse []BroadcastDTO
 
-// BroadcastStatisticsDTO holds per-broadcast stats from the broadcast-statistics endpoint.
-// Fields match the REAL AMS v3 wire format (curl-verified 2026-06-21).
-type BroadcastStatisticsDTO struct {
-	TotalRTMPWatchersCount   int `json:"totalRTMPWatchersCount"`
-	TotalHLSWatchersCount    int `json:"totalHLSWatchersCount"`
-	TotalWebRTCWatchersCount int `json:"totalWebRTCWatchersCount"`
-	TotalDASHWatchersCount   int `json:"totalDASHWatchersCount"`
-}
-
 // WebRTCClientStatsDTO holds per-WebRTC-peer quality stats.
 type WebRTCClientStatsDTO struct {
 	StatID               string           `json:"statId"`
@@ -476,17 +467,6 @@ func (c *Client) ListBroadcastsPaged(ctx context.Context, app string) ([]Broadca
 		offset += pageSize
 	}
 	return all, nil
-}
-
-// BroadcastStatistics returns statistics for a specific broadcast.
-// Path: /{app}/rest/v2/broadcasts/{streamID}/broadcast-statistics
-func (c *Client) BroadcastStatistics(ctx context.Context, app, streamID string) (*BroadcastStatisticsDTO, error) {
-	path := fmt.Sprintf("/%s/rest/v2/broadcasts/%s/broadcast-statistics", app, streamID)
-	var result BroadcastStatisticsDTO
-	if err := c.getJSON(ctx, path, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
 }
 
 // WebRTCClientStats returns per-peer WebRTC quality stats for a stream.

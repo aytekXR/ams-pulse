@@ -404,12 +404,15 @@ func (a *Aggregator) onNodeStats(ev domain.ServerEvent) {
 	}
 	if v, ok := ev.Data["cpu_pct"].(float64); ok {
 		ns.CPUPCT = v
+		ns.CPUPCTReported = true
 	}
 	if v, ok := ev.Data["mem_pct"].(float64); ok {
 		ns.MemPCT = v
+		ns.MemPCTReported = true
 	}
 	if v, ok := ev.Data["disk_pct"].(float64); ok {
 		ns.DiskPCT = v
+		ns.DiskPCTReported = true
 	}
 	if v, ok := ev.Data["net_in_mbps"].(float64); ok {
 		ns.NetIn = v

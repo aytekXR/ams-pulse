@@ -81,12 +81,20 @@ func snapWithStream(streamID string, viewerCount int) *domain.LiveSnapshot {
 	}
 }
 
-// snapWithNode returns a LiveSnapshot containing one node.
+// snapWithNode returns a LiveSnapshot containing one node with cpu_pct and
+// mem_pct presence flags set (cluster path — both keys are present). Tests that
+// need an unreported node should use snapWithUnreportedCPU or equivalent.
 func snapWithNode(nodeID string, cpuPct, memPct float64) *domain.LiveSnapshot {
 	return &domain.LiveSnapshot{
 		Streams: map[string]*domain.LiveStream{},
 		Nodes: map[string]*domain.LiveNodeStats{
-			nodeID: {NodeID: nodeID, CPUPCT: cpuPct, MemPCT: memPct},
+			nodeID: {
+				NodeID:         nodeID,
+				CPUPCT:         cpuPct,
+				MemPCT:         memPct,
+				CPUPCTReported: true, // D-088: cluster path reports cpu_pct
+				MemPCTReported: true, // D-088: cluster path reports mem_pct
+			},
 		},
 	}
 }

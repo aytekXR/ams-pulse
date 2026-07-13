@@ -766,6 +766,53 @@ func TestPG_AnomalyBaselines_RoundTrip(t *testing.T) {
 	t.Log("PASS: Anomaly baselines round-trip")
 }
 
+func TestPG_DeleteZeroMeanNodeBaselines(t *testing.T) {
+	ctx := context.Background()
+	s := openPGStore(t)
+
+	now := time.Now().UnixMilli()
+	rows := []anomaly.AnomalyBaselineRow{
+		// Poisoned pre-D-088 row: zero-mean with a large sample count.
+		{Metric: "cpu_pct", Scope: `{"node_id":"standalone-1"}`, WindowS: 300,
+			Mean: 0, Stddev: 0, SampleCount: 733, LastUpdated: now},
+		// Genuine cluster reading — must survive.
+		{Metric: "cpu_pct", Scope: `{"node_id":"cluster-1"}`, WindowS: 300,
+			Mean: 42.5, Stddev: 3.1, SampleCount: 100, LastUpdated: now},
+		// Zero-mean but not a node system metric — must survive.
+		{Metric: "viewers", Scope: `{"app":"LiveApp","stream":"s1"}`, WindowS: 300,
+			Mean: 0, Stddev: 0, SampleCount: 50, LastUpdated: now},
+	}
+	for _, r := range rows {
+		if err := s.UpsertAnomalyBaseline(ctx, r); err != nil {
+			t.Fatalf("UpsertAnomalyBaseline(%s): %v", r.Metric, err)
+		}
+	}
+
+	n, err := s.DeleteZeroMeanNodeBaselines(ctx, []string{"cpu_pct", "mem_pct", "disk_pct"})
+	if err != nil {
+		t.Fatalf("DeleteZeroMeanNodeBaselines: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("deleted rows: got %d, want 1 (only the zero-mean cpu_pct)", n)
+	}
+
+	if gone, _ := s.GetAnomalyBaseline(ctx, "cpu_pct", `{"node_id":"standalone-1"}`, 300); gone != nil {
+		t.Error("poisoned zero-mean cpu_pct row must be deleted")
+	}
+	if kept, _ := s.GetAnomalyBaseline(ctx, "cpu_pct", `{"node_id":"cluster-1"}`, 300); kept == nil {
+		t.Error("nonzero cpu_pct row must survive the sweep")
+	}
+	if kept, _ := s.GetAnomalyBaseline(ctx, "viewers", `{"app":"LiveApp","stream":"s1"}`, 300); kept == nil {
+		t.Error("zero-mean viewers row must survive (not a node system metric)")
+	}
+
+	n2, err := s.DeleteZeroMeanNodeBaselines(ctx, []string{"cpu_pct", "mem_pct", "disk_pct"})
+	if err != nil || n2 != 0 {
+		t.Errorf("idempotent second sweep: n=%d err=%v, want 0/nil", n2, err)
+	}
+	t.Log("PASS: DeleteZeroMeanNodeBaselines PG parity")
+}
+
 // ─── Probes + MetaProbeConfigSource ──────────────────────────────────────────
 
 func TestPG_Probes_RoundTrip(t *testing.T) {

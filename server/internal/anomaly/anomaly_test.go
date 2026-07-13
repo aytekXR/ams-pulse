@@ -403,8 +403,9 @@ func (f *fakeDiskPctLive) CurrentSnapshot() *domain.LiveSnapshot {
 		Streams: map[string]*domain.LiveStream{},
 		Nodes: map[string]*domain.LiveNodeStats{
 			"node1": {
-				NodeID:  "node1",
-				DiskPCT: f.diskPCT,
+				NodeID:          "node1",
+				DiskPCT:         f.diskPCT,
+				DiskPCTReported: true, // D-088: cluster path always reports disk_pct
 			},
 		},
 	}
