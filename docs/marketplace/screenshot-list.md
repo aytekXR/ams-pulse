@@ -6,19 +6,32 @@
 > **DRAFT — INTERNAL. External use gated on operator review of
 > `docs/assessment/final-assessment.md` (D-081).**
 >
-> Screenshot PNGs are a pending manual step: the Pulse UI screens are designed
-> in `brandkit/ui/Pulse App - Screens.dc.html` (the design-canvas HTML file).
-> Exporting individual screens as PNG requires opening that file in a browser
-> and using the browser's screenshot or print-to-image function, or using the
-> design-canvas native export. This document lists the ordered shots with
-> captions; the PNG export is operator-action-pending.
+> SS1, SS2, and SS4 are now automated via `qa/marketplace/render-screenshots.mjs`.
+> SS3, SS5, and SS6 remain operator-manual (no standalone screens in brandkit dc.html).
 
 ---
 
 # Marketplace Screenshot Plan
 
 **Product:** Pulse — Analytics & QoE Monitoring for AMS  
-**Prepared:** S27 / D-089 (2026-07-13)
+**Prepared:** S27 / D-089 (2026-07-13); automation added S28 / D-090 (2026-07-13)
+
+---
+
+## Automation status
+
+| # | File | Status | Method |
+|---|------|--------|--------|
+| SS1 | `ss1-dashboard.png` | **AUTOMATED** | `node qa/marketplace/render-screenshots.mjs` |
+| SS2 | `ss2-stream-detail.png` | **AUTOMATED** | `node qa/marketplace/render-screenshots.mjs` |
+| SS3 | `ss3-alerting.png` | **OPERATOR-MANUAL** | No standalone Alerting screen in brandkit dc.html; options: extend dc.html with a new screen section, or take live-app captures once the alerting React route carries real data |
+| SS4 | `ss4-analytics.png` | **AUTOMATED** | `node qa/marketplace/render-screenshots.mjs` |
+| SS5 | `ss5-billing.png` | **OPERATOR-MANUAL** | No standalone Billing/Usage screen in brandkit dc.html; same options as SS3 |
+| SS6 | `ss6-probes.png` | **OPERATOR-MANUAL** | No standalone Probes screen in brandkit dc.html; same options as SS3 |
+
+**Script:** `qa/marketplace/render-screenshots.mjs`  
+**Rerun command:** `node qa/marketplace/render-screenshots.mjs` (from repo root)  
+**Output directory:** `docs/marketplace/screenshots/` (gitignored — PNGs are reproducible artifacts, not committed)
 
 ---
 
@@ -50,20 +63,25 @@ The Pulse UI hi-fi screens are designed in:
 brandkit/ui/Pulse App - Screens.dc.html
 ```
 
-This is a design-canvas HTML file (the `.dc.html` extension). To export individual
-screens as PNG:
+This is a design-canvas HTML file (the `.dc.html` extension). It contains 8
+named screens: Login, Dashboard, Stream Detail, Analytics, Settings, Users and
+Tokens, Error and Empty States, Mobile — each a `data-screen-label` div with a
+1280×800 inner content div.
 
-1. Open `brandkit/ui/Pulse App - Screens.dc.html` in a modern browser (Chrome or
-   Firefox recommended for accurate font rendering — fonts are IBM Plex, self-hosted
-   per brandkit/design-system, no CDN).
-2. Navigate to the target screen/frame.
-3. Use the browser's built-in screenshot tool or a headless Puppeteer/Playwright
-   script to capture a 1280×800 (or 1440×900) viewport PNG.
-4. Save to a `docs/marketplace/screenshots/` directory (create this directory; it is
-   not committed yet).
+**Automated capture** (`qa/marketplace/render-screenshots.mjs`):
+- Copies the dc.html and support.js to a temp render directory
+- Replaces the Google Fonts CDN `<link>` tags with inline `@font-face` CSS using
+  woff2 files from `web/node_modules/@fontsource/` (self-hosted, OFL)
+- Pre-stubs `window.React`/`window.ReactDOM` in the support.js copy so the
+  dc-runtime boots offline without CDN (screens are static HTML, no React needed)
+- Launches Chromium headless, aborts all non-`file://` requests (zero CDN reliance)
+- Element-screenshots each matched screen at 1440×900 viewport
 
-**Pending action:** The operator or a design-tooling agent must perform the PNG
-export. This document specifies what to capture and in what order.
+**Operator-manual capture** (SS3/SS5/SS6):
+- These screens do not exist as standalone layouts in the dc.html
+- Options: (a) extend `brandkit/ui/Pulse App - Screens.dc.html` with new screen
+  sections (designer decision), or (b) take live-app screenshots once the
+  corresponding React routes (alerting, billing, probes) carry real data
 
 ---
 
@@ -74,6 +92,9 @@ AMS marketplace listings use 4–6 screenshots. The priority order reflects feat
 importance and demand evidence.
 
 ### Screenshot 1 — Live Operations Dashboard
+
+**Status:** AUTOMATED — `node qa/marketplace/render-screenshots.mjs`  
+**Output:** `docs/marketplace/screenshots/ss1-dashboard.png` (1282×802px)
 
 **Caption:** "Real-time stream overview — viewer counts, active publishers, and node
 health at a glance. New streams appear within 4 seconds of publish on AMS 3.0.3."
@@ -96,6 +117,9 @@ TC-FL-01/02 (S17/S18).
 
 ### Screenshot 2 — Ingest Health and Bitrate Timeline
 
+**Status:** AUTOMATED — `node qa/marketplace/render-screenshots.mjs`  
+**Output:** `docs/marketplace/screenshots/ss2-stream-detail.png` (1282×802px)
+
 **Caption:** "Per-publisher ingest health: bitrate, health score, packet loss, and
 drop events. Ingest degradation visible within 15 seconds."
 
@@ -116,6 +140,11 @@ Ideally showing a non-trivial bitrate (~2 Mbps) and health score above 80.
 
 ### Screenshot 3 — Alerting — Active Rules and Incident History
 
+**Status:** OPERATOR-MANUAL — no standalone Alerting screen in `brandkit/ui/Pulse App - Screens.dc.html`.
+Options:
+- Extend the dc.html with a new `data-screen-label="Alerting"` screen section (designer decision)
+- Take a live-app screenshot once the alerting React route carries real data
+
 **Caption:** "Alerting on any metric — stream offline, bitrate floor, viewer drop.
 Delivers to Slack, email, Telegram, or PagerDuty in under 201 ms."
 
@@ -134,6 +163,9 @@ if visible.
 ---
 
 ### Screenshot 4 — Audience Analytics and QoE Rollups
+
+**Status:** AUTOMATED — `node qa/marketplace/render-screenshots.mjs`  
+**Output:** `docs/marketplace/screenshots/ss4-analytics.png` (1282×802px)
 
 **Caption:** "Historical audience analytics with viewer QoE: startup time, rebuffer
 ratio, watch time, and geo breakdown. 13-month rollup queries return in under 150 ms."
@@ -154,6 +186,11 @@ structure is visible). Date range selector visible.
 ---
 
 ### Screenshot 5 — Usage and Billing Reports
+
+**Status:** OPERATOR-MANUAL — no standalone Billing/Usage screen in `brandkit/ui/Pulse App - Screens.dc.html`.
+Options:
+- Extend the dc.html with a new `data-screen-label="Billing"` screen section (designer decision)
+- Take a live-app screenshot once the billing React route carries real data
 
 **Caption:** "Usage reports with billing-grade accuracy: viewer-minutes, egress
 estimate, VoD recording storage. ±1% reconciliation confirmed against real AMS."
@@ -176,6 +213,11 @@ S23/D-085 (0.02% reconciliation live-validated).
 
 ### Screenshot 6 — Synthetic Viewer Probes (optional / bonus)
 
+**Status:** OPERATOR-MANUAL — no standalone Probes screen in `brandkit/ui/Pulse App - Screens.dc.html`.
+Options:
+- Extend the dc.html with a new `data-screen-label="Probes"` screen section (designer decision)
+- Take a live-app screenshot once the probes React route carries real data
+
 **Caption:** "Synthetic viewer probes — HLS, WebRTC, RTMP, and DASH probes run
 continuously alongside organic viewers. Detect outages from outside your network."
 
@@ -194,22 +236,18 @@ claim.
 
 ---
 
-## PNG export checklist (pending operator action)
+## PNG export checklist
 
-- [ ] Open `brandkit/ui/Pulse App - Screens.dc.html` in Chrome
-- [ ] Capture Screenshot 1 — Live Operations Dashboard (1440×900 viewport, light theme)
-- [ ] Capture Screenshot 2 — Ingest Health and Bitrate Timeline
-- [ ] Capture Screenshot 3 — Alerting — Active Rules and Incident History
-- [ ] Capture Screenshot 4 — Audience Analytics and QoE Rollups
-- [ ] Capture Screenshot 5 — Usage and Billing Reports
-- [ ] Capture Screenshot 6 — Synthetic Viewer Probes (optional)
-- [ ] Save PNGs to `docs/marketplace/screenshots/` (directory not yet created)
-- [ ] Verify PNG dimensions meet Ant Media marketplace spec (NEEDS-OPERATOR-CONTACT for spec)
-- [ ] Compress PNGs with `pngcrush` or equivalent
+- [x] SS1 Dashboard — AUTOMATED (`node qa/marketplace/render-screenshots.mjs`)
+- [x] SS2 Stream Detail — AUTOMATED (`node qa/marketplace/render-screenshots.mjs`)
+- [ ] SS3 Alerting — OPERATOR-MANUAL (no dc.html screen; extend dc.html or use live-app capture)
+- [x] SS4 Analytics — AUTOMATED (`node qa/marketplace/render-screenshots.mjs`)
+- [ ] SS5 Billing/Usage — OPERATOR-MANUAL (no dc.html screen; extend dc.html or use live-app capture)
+- [ ] SS6 Probes (optional) — OPERATOR-MANUAL (no dc.html screen; extend dc.html or use live-app capture)
 
 ---
 
-*Produced at S27/D-089. Brand assets verified against `brandkit/logo/` and
-`brandkit/ui/` directory listings. Design token source:
-`brandkit/design-system/tokens.json`. Font: IBM Plex, self-hosted (OFL),
-never from CDN per CLAUDE.md §6.*
+*Produced at S27/D-089; automation added S28/D-090. Brand assets verified against
+`brandkit/logo/` and `brandkit/ui/` directory listings. Design token source:
+`brandkit/design-system/tokens.json`. Font: IBM Plex, self-hosted (OFL), never
+from CDN per CLAUDE.md §6.*

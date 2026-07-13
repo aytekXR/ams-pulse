@@ -1,4 +1,68 @@
-# Operator TODO — the items only YOU can do (updated at SESSION-27 close, D-089, 2026-07-13; rides S27's PR)
+# Operator TODO — the items only YOU can do (updated at SESSION-28 close, D-090, 2026-07-13; rides S28's PR)
+
+## ⚡ TL;DR — expected from you right now (2026-07-13, SESSION-28 closed — D-090, marketplace tail)
+
+> **Your FIVE marketplace items are all still open — S28 re-verified each
+> one live at open and none had landed** (7th byte-identical AMS sweep: the
+> new license is not applied; the GHCR package still answers "private" to
+> an anonymous pull; no trial key, no assessment review, no Ant Media
+> contact signal). They are unchanged from the S27 list below — items 2–5
+> gate the marketplace upload; the GHCR flip (item 5) is the 30-second one.
+> Good news on the release itself: **the v0.4.0 release pipeline re-ran
+> GREEN and the signed multi-arch image + GitHub Release page are live** —
+> only your visibility flip stands between customers and `docker pull`.
+>
+> **ONE NEW small decision for you (item 6): how many nodes should a Pro
+> license allow?** The PRD's pricing table says Pro = "1 to 2 nodes"; the
+> shipped code enforces **10**. The enforcement itself is built and tested —
+> this is purely a pricing/positioning call. Say "Pro nodes = 2" (or 10, or
+> another number) and it's a one-line change; the marketplace listing draft
+> stays flagged NEEDS-RECONCILE until you rule.
+>
+> **FYI, no action needed — what S28 did autonomously:**
+> - **Your validation stack now runs v0.4.0** (fresh rebuild, sanctioned):
+>   the trial banner + license surface are live on `127.0.0.1:18090` for
+>   your browser-accept whenever you want (ssh tunnel; prod untouched).
+> - **Three marketplace listing screenshots are rendered** (Dashboard,
+>   Stream Detail, Analytics — from your brandkit hi-fi screens, IBM Plex
+>   correct, reproducible via one command: `node qa/marketplace/render-screenshots.mjs`).
+>   Three more (Alerting, Billing, Probes) need either designer screens or
+>   live-app captures — marked operator-manual in the screenshot plan.
+>   One finding for your designer: the brandkit hi-fi file loads IBM Plex
+>   from the Google Fonts CDN, which violates your own self-hosting rule —
+>   the render works around it; the brandkit source fix is yours/theirs.
+> - **The Kafka guide your standalone deployment will eventually need is
+>   written** (`docs/kafka-integration.md`): how to get CPU/mem/disk fleet
+>   gauges on standalone AMS. Honest disclosures inside: the consumer has
+>   never been validated against a real AMS Kafka broker (needs you to
+>   deploy one, the old AV-15 decision), it is plaintext-only, and on its
+>   very first start with a fresh consumer group it will ingest whatever
+>   history the topic retains — once.
+> - **The AMS integration guide was heavily de-staled** — among other
+>   things it was still telling you `recording_gb` is always 0 (fixed
+>   since S23), and instructing operators to add a Caddy webhook route
+>   that already exists (and with the wrong port). All corrected against
+>   the shipped code, adversarially fact-checked.
+> - **Fleet "down" honesty:** the API contract promised a node status
+>   ("down") that the code could structurally never emit — removed from
+>   the contract (the node_down ALERT is unaffected; it fires on node
+>   disappearance, which is how AMS actually behaves). The Fleet page's
+>   permanently-zero "Down" tile went with it.
+
+## 🔎 What SESSION-28 did (2026-07-13, closed — D-090)
+
+| Area | Result |
+|---|---|
+| **Operator intake** | All 5 items re-verified live at open: none landed (7th byte-identical sweep; GHCR anonymous pull → 401; no key/review/contact signals). Recorded in D-090; none blocked the session's own work. |
+| **v0.4.0 release confirm** | Release run completed success; GitHub Release page live (published 16:04Z, marked Latest); signed multi-arch image on GHCR — pullable by customers the moment you flip visibility (item 5). |
+| **Validation stack** | Sanctioned `down -v` + rebuild on v0.4.0: healthy in 10 s, fresh harness token auto-extracts again (the S26 orphaned-token gotcha is gone), authed API sees your real AMS. |
+| **Docs** | `docs/kafka-integration.md` NEW (DG-15, the top unwritten gap) + AMS-INTEGRATION.md 4-tier staleness remediation (~30 fixes incl. webhook port + Caddy route corrections) + DG-05 stub + anomaly-guide ruling on first-viewer spikes. All adversarially verified; 5 verifier catches fixed same-session (incl. two real code-behavior corrections the draft docs got wrong). |
+| **Marketplace assets** | 3 of 6 listing PNGs rendered reproducibly from brandkit (hermetic, self-hosted fonts); 3 marked operator-manual; PNGs kept out of git history (script committed instead). |
+| **Code honesty items** | Anomaly-metric parity test now derives from the canonical set (a 7th metric can't silently miss coverage — sabotage-proven twice, once independently); unreachable "down" dropped from the fleet-status contract (deliberate CR, regen idempotent); two stale test comments/slices fixed. |
+| **Ledger corrections** | ROADMAP §2.5 (O(N²) hot path) discovered already fixed since S10 and never stamped — 2nd find of this class; §2.17.1 ruled (first-viewer spike KEPT as a real signal, documented); §2.17.2/.3 done. |
+| **Quality net** | 14 workflow agents this session (4 scouts + 5 authors + 5 adversarial verifiers), 0 errors. Gates: 24/24 Go pkgs race-clean, coverage 76.1% (floor 70.2), web 388/388 + lint + build green, contracts valid, regen idempotent. CI promotions skip carry ×17 (07-13 < 07-23). One PR. |
+
+## (superseded) S27-close header follows
 
 ## ⚡ TL;DR — expected from you right now (2026-07-13, SESSION-27 closed — D-089, marketplace sprint)
 
@@ -87,7 +151,7 @@
 | **One-command install** | `deploy/quickstart/`: compose + `.env.example` + `install.sh` (`curl \| bash` or in-repo). Migrations baked into the image (no repo clone). Live clean-install verified against your real AMS: healthy in ~60 s, bootstrap token printed, free tier default, re-run safe. Trial key slot documented. |
 | **Web UI** | Trial banner in the app shell (amber ≤14 days, red non-dismissable when expired, brandkit tokens, light+dark); license fetched once app-wide; the dead tier badge in the sidebar now renders. 388 web tests (was 366), coverage above all gates. |
 | **Marketplace docs** | NEW `docs/compatibility.md` (AMS 3.0.3 live-validated; older versions honestly mock-only) + `docs/known-limitations.md` (18 disclosures) + `docs/marketplace/` listing draft + screenshot plan (DRAFT-INTERNAL). Checklist rows 16/17 PARTIAL→PASS; rows 4/12 refreshed honest; completeness recount 66.7% strict / 84.5% weighted (independently re-derived by a verifier). |
-| **Release** | `v0.4.0` tagged at close → signed multi-arch image `ghcr.io/aytekxr/ams-pulse:0.4.0` (the tag the quickstart pins). GHCR visibility flip (item 5) is what makes it pullable by customers. |
+| **Release** | PR #40 MERGED (all 15 checks green; one CI round-trip fixed a lint global + an e2e mock — both remediated and re-proven same-session). `v0.4.0` tagged on the merge commit. **Release-pipeline status: the first run failed its own preflight** ("no successful ci run for this SHA" — the tag raced main's post-merge CI, a timing artifact, not a code failure); **the re-run is auto-queued behind main CI** and produces the signed multi-arch `ghcr.io/aytekxr/ams-pulse:0.4.0` image the quickstart pins. You'll get a notification when it lands. GHCR visibility flip (item 5) is what makes it pullable by customers. |
 | **Quality net** | 11 workflow agents (4 scouts, 4 authors, 3 adversarial verifiers), 0 errors. V3 docs audit found 4 accuracy bugs (incl. a claim about a code path that was removed) — all fixed same-session. Gates: 24/24 Go pkgs race-clean, coverage 76.1% (floor 70.2), contracts byte-untouched, one PR, 2 pushes. |
 | **AMS observation** | 6th consecutive byte-identical post-expiry sweep at open; your antmedia container still hasn't restarted since before the lapse. **Your promised new AMS license had not landed by session close** — item 1 above. |
 

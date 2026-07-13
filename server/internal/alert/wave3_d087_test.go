@@ -38,10 +38,15 @@ func TestValidateAnomalyRule_AmsAPILatencyMS_Supported(t *testing.T) {
 	}
 }
 
-// TestValidateAnomalyRule_SupportedMetrics_IncludesAmsLatency checks all 6 supported metrics.
+// TestValidateAnomalyRule_SupportedMetrics_IncludesAmsLatency checks every supported metric.
 // RED before map update: ams_api_latency_ms is missing → validation errors.
+// Driven by the canonical set so a new metric cannot be added while silently
+// missing validator coverage (same drift class as the parity guard above).
 func TestValidateAnomalyRule_SupportedMetrics_IncludesAmsLatency(t *testing.T) {
-	all := []string{"viewer_count", "ingest_bitrate_kbps", "cpu_pct", "mem_pct", "disk_pct", "ams_api_latency_ms"}
+	all := alert.SupportedAnomalyMetrics()
+	if len(all) == 0 {
+		t.Fatal("SupportedAnomalyMetrics() returned empty — canonical set missing")
+	}
 	for _, metric := range all {
 		rule := meta.AlertRuleRow{RuleType: "anomaly", Metric: metric, WindowS: 3600}
 		if err := alert.ValidateAnomalyRule(rule); err != nil {
@@ -185,24 +190,24 @@ func TestEvalAnomalyMetric_AmsAPILatencyMS_ZeroSkip(t *testing.T) {
 // evalAnomalyMetric's dispatch switch. A metric in the map but missing from
 // the switch hits the default case (Warn + nil), which silently skips the rule.
 // This test detects that silent-nil trap by verifying the reader IS called.
-// RED for ams_api_latency_ms before switch update.
+//
+// The cases map is keyed by metric name (same key as SupportedAnomalyMetrics()),
+// and a fail-fast guard at the top ensures every canonical metric has a fixture —
+// adding a metric to supportedAnomalyMetrics without a fixture t.Fatals immediately.
 func TestAnomalyMetricMapSwitchParity(t *testing.T) {
 	type metricCase struct {
-		metric    string
 		readerKey string // expected baseline lookup key (after alias)
 		snap      *domain.LiveSnapshot
 		baseline  *anomaly.AnomalyBaselineRow
 	}
 
-	cases := []metricCase{
-		{
-			metric:    "viewer_count",
+	cases := map[string]metricCase{
+		"viewer_count": {
 			readerKey: "viewers",
 			snap:      snapWithStream("s1", 100),
 			baseline:  streamBaseline("viewers", "s1", 10.0, 1.0, 30),
 		},
-		{
-			metric:    "ingest_bitrate_kbps",
+		"ingest_bitrate_kbps": {
 			readerKey: "ingest_bitrate_kbps",
 			snap: &domain.LiveSnapshot{
 				Streams: map[string]*domain.LiveStream{
@@ -212,20 +217,17 @@ func TestAnomalyMetricMapSwitchParity(t *testing.T) {
 			},
 			baseline: streamBaseline("ingest_bitrate_kbps", "s1", 500.0, 50.0, 30),
 		},
-		{
-			metric:    "cpu_pct",
+		"cpu_pct": {
 			readerKey: "cpu_pct",
 			snap:      snapWithNode("n1", 80.0, 50.0),
 			baseline:  nodeBaseline("cpu_pct", "n1", 30.0, 5.0, 30),
 		},
-		{
-			metric:    "mem_pct",
+		"mem_pct": {
 			readerKey: "mem_pct",
 			snap:      snapWithNode("n1", 50.0, 90.0),
 			baseline:  nodeBaseline("mem_pct", "n1", 40.0, 3.0, 30),
 		},
-		{
-			metric:    "disk_pct",
+		"disk_pct": {
 			readerKey: "disk_pct",
 			snap: &domain.LiveSnapshot{
 				Streams: map[string]*domain.LiveStream{},
@@ -236,18 +238,29 @@ func TestAnomalyMetricMapSwitchParity(t *testing.T) {
 			},
 			baseline: nodeBaseline("disk_pct", "n1", 30.0, 5.0, 30),
 		},
-		{
-			// ams_api_latency_ms: node-scoped, no alias, skip when value==0.
-			metric:    "ams_api_latency_ms",
+		// ams_api_latency_ms: node-scoped, no alias, skip when value==0.
+		"ams_api_latency_ms": {
 			readerKey: "ams_api_latency_ms",
 			snap:      snapWithNodeAPILatency("n1", 500.0),
 			baseline:  nodeBaseline("ams_api_latency_ms", "n1", 50.0, 10.0, 30),
 		},
 	}
 
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.metric, func(t *testing.T) {
+	// Fail-fast guard: every metric in the canonical set must have a fixture.
+	// If a new metric is added to supportedAnomalyMetrics without a corresponding
+	// test case here, this t.Fatal names the missing metric immediately — the
+	// silent-nil trap cannot survive undetected.
+	for _, m := range alert.SupportedAnomalyMetrics() {
+		if _, ok := cases[m]; !ok {
+			t.Fatalf("metric %q is in SupportedAnomalyMetrics() but has no parity test case in TestAnomalyMetricMapSwitchParity — add one", m)
+		}
+	}
+
+	// Drive sub-tests from the canonical set (not a parallel slice that can drift).
+	for _, metric := range alert.SupportedAnomalyMetrics() {
+		metric := metric
+		tc := cases[metric]
+		t.Run(metric, func(t *testing.T) {
 			store := openTestStore(t)
 			live := newFakeLive()
 			clock := alert.NewFakeClock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
@@ -261,7 +274,7 @@ func TestAnomalyMetricMapSwitchParity(t *testing.T) {
 			ev.SetAnomalyBaselineReader(reader)
 
 			ctx := context.Background()
-			makeAnomalyRule(ctx, t, store, "parity-"+tc.metric, tc.metric, 1.0, 5)
+			makeAnomalyRule(ctx, t, store, "parity-"+metric, metric, 1.0, 5)
 
 			live.setSnap(tc.snap)
 			clock.Advance(3601 * time.Second)
@@ -275,7 +288,7 @@ func TestAnomalyMetricMapSwitchParity(t *testing.T) {
 				t.Errorf(
 					"metric %q: GetAnomalyBaseline was never called — "+
 						"metric is in supportedAnomalyMetrics but missing from evalAnomalyMetric switch (silent-nil trap)",
-					tc.metric,
+					metric,
 				)
 				return
 			}
@@ -286,7 +299,7 @@ func TestAnomalyMetricMapSwitchParity(t *testing.T) {
 				}
 			}
 			if !found {
-				t.Errorf("metric %q: expected reader called with key %q, got: %v", tc.metric, tc.readerKey, calls)
+				t.Errorf("metric %q: expected reader called with key %q, got: %v", metric, tc.readerKey, calls)
 			}
 		})
 	}

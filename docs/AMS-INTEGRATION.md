@@ -18,7 +18,7 @@ Pulse has three ingest paths for server-side data, and one client-side SDK:
 `server/pkg/amsclient/client.go` implements a typed, read-only REST client.
 `server/internal/collector/restpoller` polls AMS on `PULSE_POLL_INTERVAL`
 (default 5 s) and is always wired regardless of other source config
-(`serve.go:169–181`).
+(`serve.go:353–366`).
 
 AMS endpoints polled per cycle:
 
@@ -33,6 +33,8 @@ earlier root-level `/rest/v2/broadcasts/...` paths 404'd; real AMS uses per-app 
 | `ClusterNodes` | `GET /rest/v2/cluster/nodes` | Node list — **404 on standalone** → mapped to nil (no error) |
 | `NodeInfo` | `GET /rest/v2/cluster/nodes/{nodeId}` | Single-node detail (404-tolerant) |
 | `SystemStats` | `GET /rest/v2/system-status` | `{osName,osArch,javaVersion,processorCount}` — **no cpu/mem** on AMS 3.x |
+| `ListVodsPaged` | `GET /{app}/rest/v2/vods/list/{offset}/200` | VoD list for recording billing — polled every 12 broadcast ticks (60 s at 5 s default); deduped via `vod_poll_state` seen-set; emits `EventRecordingReady` (BUG-002 fix, S23/D-085) |
+| `GetVersion` | `GET /rest/v2/version` | AMS version string for fleet node card (standalone path only); best-effort — returns nil on AMS < v3 without this endpoint |
 
 **D-029v real-wire units (curl-verified — get these wrong and the dashboard lies):**
 broadcast `bitrate` is **bits/sec** (÷1000 → kbps); `speed` is a **realtime ratio**
@@ -53,7 +55,7 @@ broadcast object on AMS 3.0.3 (health scoring redistributes the FPS weight);
 > verification pending).  This is the normal RTMP workflow; pre-creating
 > a broadcast is optional, not required for publishing.
 >
-> Pulse handles this correctly: `detectEnded()` (`restpoller.go:222–265`) fires
+> Pulse handles this correctly: `detectEnded()` (`restpoller.go:438–479`) fires
 > when a `status=broadcasting` stream that was present in the previous poll
 > cycle is **absent** from the current broadcast list.  It emits
 > `EventStreamPublishEnd` with `reason: "disappeared"` — not `reason:
@@ -78,8 +80,8 @@ the Go stdlib provides. If `PULSE_AMS_URL` begins with `https://`, the stdlib TL
 stack verifies the server cert against system roots. There is no `InsecureSkipVerify`
 option; use `http://` only on trusted private networks.
 
-Body safety: every response is capped at 10 MB (`client.go:179`). Individual
-request timeout defaults to 10 s (`serve.go:134`).
+Body safety: every response is capped at 10 MB (`client.go:388`). Individual
+request timeout defaults to 10 s (`serve.go:236`).
 
 AMS version tolerance: the client was hardened in W2c (D-025) + D-030 to tolerate
 v2.10/v2.14/v3.0 wire variance — unknown JSON fields are silently ignored, missing
@@ -94,17 +96,17 @@ units table above for the complete set of unit corrections.
 `server/internal/collector/webhook/webhook.go` receives AMS lifecycle events by
 HTTP POST. Lower latency than polling for publish-start visibility (F1 criterion:
 10 s) and alert detection (F5 criterion: 30 s). Activated when both
-`PULSE_WEBHOOK_ADDR` and `PULSE_WEBHOOK_SECRET` are set (`serve.go:193–205`).
+`PULSE_WEBHOOK_ADDR` and `PULSE_WEBHOOK_SECRET` are set (`serve.go:368–404`).
 
-**Fail-closed** (B2): `serve.go:195–196` logs an error and skips starting the
+**Fail-closed** (B2): `serve.go:373–375` logs an error and skips starting the
 listener when `PULSE_WEBHOOK_ADDR` is set but `PULSE_WEBHOOK_SECRET` is empty.
-`validateHMAC` in `webhook.go:217–225` independently returns `false` when the
+`validateHMAC` in `webhook.go:260–267` independently returns `false` when the
 secret is empty, so even if the listener were somehow started without a secret,
 every request would be rejected.
 
 ### 1.3 Kafka source (optional, high-throughput)
 
-Activated when `PULSE_KAFKA_BROKERS` is non-empty (`serve.go:210–221`). Not
+Activated when `PULSE_KAFKA_BROKERS` is non-empty (`serve.go:279–290`). Not
 covered further here; see `server/internal/collector/kafka`.
 
 ### 1.4 Beacon-JS SDK (client QoE)
@@ -127,9 +129,17 @@ Before connecting Pulse to a real AMS node:
    or a private LAN IP). Default AMS REST port is **5080** (HTTP) or **5443**
    (HTTPS).
 
-2. **Bearer token** — log into AMS Management Console > Settings > Security to
-   generate or retrieve the REST API token. Some self-hosted AMS installs have
-   auth disabled; in that case leave `PULSE_AMS_AUTH_TOKEN` empty.
+2. **AMS credentials** — Pulse supports two auth modes depending on your AMS
+   configuration:
+   - **Bearer token** (AMS < 3.x or custom JWT): log into AMS Management Console >
+     Settings > Security to generate or retrieve the REST API token. Set
+     `PULSE_AMS_AUTH_TOKEN`. Some self-hosted AMS installs have auth disabled; in
+     that case leave it empty.
+   - **Cookie-session auth (AMS 3.x Enterprise, JWT disabled by default):** set
+     `PULSE_AMS_LOGIN_EMAIL` and `PULSE_AMS_LOGIN_PASSWORD` instead of a static
+     bearer token. `amsclient` POSTs to `/rest/v2/users/authenticate` and manages
+     the JSESSIONID cookie automatically, with re-login on 401/403. This is the
+     primary auth path for AMS 3.x Enterprise deployments.
 
 3. **Network path** — Pulse's `pulse` container must be able to open a TCP
    connection to `PULSE_AMS_URL`. Verify with:
@@ -155,14 +165,18 @@ Add or update these lines in `deploy/.env` (gitignored):
 
 ```env
 PULSE_AMS_URL=https://your-ams-host:5443
+# Bearer token auth (omit if using cookie-session auth below):
 PULSE_AMS_AUTH_TOKEN=your-ams-bearer-token
+# Cookie-session auth for AMS 3.x Enterprise (JWT disabled by default):
+PULSE_AMS_LOGIN_EMAIL=admin@your-ams-host
+PULSE_AMS_LOGIN_PASSWORD=your-ams-password
 PULSE_AMS_NODE_ID=ams-node-01
 PULSE_AMS_APPLICATIONS=live,vod
 ```
 
 `PULSE_AMS_APPLICATIONS` is optional. When omitted or empty, Pulse calls
 `/rest/v2/applications` on each poll cycle and monitors all discovered apps
-(`config.go:178–185`). Set it explicitly to narrow polling to specific apps and
+(`config.go:259–267`). Set it explicitly to narrow polling to specific apps and
 reduce load on AMS.
 
 ### 3.2 Bring up the production stack with the real-AMS overlay
@@ -209,7 +223,7 @@ sg docker -c "docker compose $DC logs pulse --tail=50"
 
 Look for:
 - `pulse: all services started`
-- `webhook: listening addr=:8091` (if webhook is enabled)
+- `webhook: listening addr=:8092` (if webhook is enabled)
 - No `amsclient: GET /rest/v2/applications: HTTP 401` errors
 
 ### 3.4 Register the source via the admin sources API
@@ -240,7 +254,7 @@ curl -s -X POST https://your-domain/api/v1/admin/sources \
   }'
 ```
 
-Request fields accepted by `amsSourceFromAPI` (`server.go:1857–1893`):
+Request fields accepted by `amsSourceFromAPI` (`server/internal/api/server.go:2296`):
 
 | Field | Purpose | Required |
 |---|---|---|
@@ -262,7 +276,7 @@ curl -s -X POST https://your-domain/api/v1/admin/sources/${SOURCE_ID}/test \
   -H "Authorization: Bearer plt_<your-admin-token>"
 ```
 
-The test handler (`server.go:1328–1420`) GETs `{rest_url}/rest/v2/version` with a
+The test handler (`server/internal/api/server.go:1696`) GETs `{rest_url}/rest/v2/version` with a
 5-second timeout. It uses a redirect-blocking client (no SSRF via redirect chains).
 Response shape:
 
@@ -279,11 +293,10 @@ Response shape:
 `status: "error"` means a 4xx/5xx was returned — check AMS auth config.
 `reachable: false` means a network error (timeout, DNS failure, TLS cert mismatch).
 
-Note (B6): when `rest_user` is set, the test sends an empty password string
-(`server.go:1379`). This is a known limitation — the stored encrypted credential
-is not decrypted for the connectivity test. A reachable-but-auth-failed result
-from the test endpoint does not mean polling will fail; the REST poller uses the
-`PULSE_AMS_AUTH_TOKEN` bearer token, not the stored basic-auth credential.
+**B6 (shipped, S2x):** when `rest_user` is set, the test now decrypts the stored
+credential before the test request (`server/internal/api/server.go:1746–1759`).
+A reachable-but-auth-failed result from the test endpoint means the stored
+credential itself is wrong, not a decryption gap.
 
 ### 3.6 Confirm live data
 
@@ -296,6 +309,16 @@ When AMS has active streams, `total_viewers` and `total_publishers` will be
 non-zero. The REST poller runs every `PULSE_POLL_INTERVAL` (default 5 s), so
 allow up to 10 s after startup.
 
+### 3.7 Standalone resource metrics and Kafka (DG-05)
+
+Standalone resource metrics (CPU, memory, disk) for the fleet node card require
+a Kafka feed from AMS — the REST `/rest/v2/system-status` endpoint on AMS 3.x
+returns only `{osName, osArch, javaVersion, processorCount}` and does not carry
+real-time load data. Operators who need per-node resource utilisation in Pulse
+must enable the Kafka source; see `docs/kafka-integration.md` for the
+configuration guide (authored in parallel — path is authoritative, file content
+is in progress).
+
 ---
 
 ## 4. Webhook setup over HTTPS
@@ -305,22 +328,22 @@ allow up to 10 s after startup.
 In `deploy/.env`:
 
 ```env
-PULSE_WEBHOOK_ADDR=:8091
+PULSE_WEBHOOK_ADDR=:8092
 PULSE_WEBHOOK_SECRET=your-strong-random-secret
 ```
 
 `PULSE_WEBHOOK_ADDR` is the listen address for the webhook HTTP server
-(`config.go:157`). `PULSE_WEBHOOK_SECRET` is the shared HMAC-SHA256 secret
-(`config.go:158`).
+(`config.go:62`). `PULSE_WEBHOOK_SECRET` is the shared HMAC-SHA256 secret
+(`config.go:65`).
 
 ### 4.2 The webhook listener and its path
 
 The webhook handler registers two paths on the webhook listener port
-(legacy: `webhook.go:64`; per-source: `webhook.go:67`). With `PULSE_WEBHOOK_ADDR=:8091`,
+(legacy: `webhook.go:64`; per-source: `webhook.go:67`). With `PULSE_WEBHOOK_ADDR=:8092`,
 AMS should POST events to the shared path:
 
 ```
-http://<pulse-host>:8091/webhook/ams
+http://<pulse-host>:8092/webhook/ams
 ```
 
 When fronted by Caddy over HTTPS (see below), the public URL becomes:
@@ -331,8 +354,8 @@ https://your-domain/webhook/ams
 
 ### 4.3 HMAC signature validation
 
-Pulse reads the `X-Ams-Signature` request header (`webhook.go:116`) and validates
-it as `sha256=<hex(HMAC-SHA256(body, secret))>` (`webhook.go:217–225`). AMS must
+Pulse reads the `X-Ams-Signature` request header (`webhook.go:159`) and validates
+it as `sha256=<hex(HMAC-SHA256(body, secret))>` (`webhook.go:260–267`). AMS must
 be configured to send this header with the same secret. If the signature is missing
 or wrong, the handler returns HTTP 401 and logs a warning.
 
@@ -340,30 +363,27 @@ Fail-closed: `validateHMAC` returns `false` when `secret == ""` so a misconfigur
 instance cannot accidentally accept unsigned webhooks even if `serve.go`'s own
 guard were bypassed.
 
-### 4.4 Add a Caddy route for the webhook path
+### 4.4 Caddy route for the webhook path
 
-The current `deploy/config/Caddyfile.prod` does **not** proxy `/webhook/*` to the
-webhook port. The webhook listener (`:8091`) is not proxied by Caddy, so AMS
-cannot reach it over HTTPS without an explicit route. Add the following `handle`
-block to `Caddyfile.prod` inside the `{$PULSE_DOMAIN} { ... }` block, **before**
-the catch-all `handle { ... }` block:
+The `/webhook/*` route is **already present** in `deploy/config/Caddyfile.prod`
+(lines 55–60), proxying to `pulse:8092`. No route addition is required. The
+route is:
 
 ```caddyfile
-# AMS webhook — proxy /webhook/* to the webhook listener port.
-# Required to receive AMS lifecycle events over HTTPS.
+# AMS lifecycle webhooks — proxy /webhook/* to pulse:8092.
 handle /webhook/* {
-    reverse_proxy pulse:8091 {
+    reverse_proxy pulse:8092 {
         header_up X-Forwarded-For {remote_host}
         header_up X-Real-IP {remote_host}
     }
 }
 ```
 
-After editing `Caddyfile.prod`, restart Caddy (not just reload — a restart is
-needed to pick up new `handle` blocks on the same hostname):
+After any changes to `Caddyfile.prod`, reload (not restart) Caddy to avoid
+disrupting other tenants sharing the container:
 
 ```bash
-sg docker -c "docker compose $DC restart caddy"
+docker exec pulse-prod-caddy-1 caddy reload --config /etc/caddy/Caddyfile
 ```
 
 ### 4.5 Configure a sender to POST webhooks
@@ -380,11 +400,16 @@ sg docker -c "docker compose $DC restart caddy"
 >
 > **Downstream impact of absent webhook delivery:**
 >
-> - `recording_gb` in `GET /api/v1/reports/usage` is **always 0** on an AMS
->   3.0.3 deployment.  VoD recording-size data arrives only via the `vodReady`
->   webhook event; Pulse has no REST-poll path for VoD lists
->   (`/{app}/rest/v2/vods/list/...` is not polled).  This is
->   **BUG-002** on the roadmap (AV-09 CONFIRMED).
+> - `recording_gb` in `GET /api/v1/reports/usage` — **as of S23 (D-085),
+>   BUG-002 is fixed and closed.** `recording_gb` is populated by the REST poll
+>   path: the restpoller calls `/{app}/rest/v2/vods/list/{offset}/200` (200 per
+>   page, paginated) every 12 broadcast ticks (60 s at the 5 s default interval)
+>   via `pollVods()` (`restpoller.go:296–386`). New VoDs not yet in the
+>   persistent seen-set (`vod_poll_state` meta table, migration 0003) emit
+>   `EventRecordingReady`; ClickHouse migration 0009 (`mv_recording_1d`) flows
+>   those events into `rollup_usage_1d.recording_bytes`. Live prod:
+>   `recording_gb=0.003126` confirmed stable at 0.02% reconciliation (S23/D-085
+>   rollout).
 > - Stream start/stop visibility is **not** degraded.  The REST poller
 >   (`detectEnded` in `restpoller.go`) detects stream appearance and
 >   disappearance from the broadcast list within 4–7 s on the production AMS
@@ -393,14 +418,12 @@ sg docker -c "docker compose $DC restart caddy"
 >   delivered, but REST polling already covers this path; there is no net
 >   latency regression versus a correctly-signed webhook deployment.
 >
-> **Workarounds:**
+> **Status:**
 >
 > - *Stream lifecycle:* REST polling is complete and sufficient.  No operator
 >   action required.
-> - *VoD recording tracking:* No current workaround.  A REST-poll fallback
->   (`/{app}/rest/v2/vods/list/{offset}/{size}`) is the planned fix
->   (BUG-002 roadmap item); `recording_gb` will remain 0 until BUG-002 is
->   implemented.
+> - *VoD recording tracking:* Implemented and live (BUG-002 closed, S23/D-085).
+>   REST polling covers VoD ingestion automatically. No operator action required.
 >
 > **Future path — D-V2-1 (OPEN decision):**
 >
@@ -441,14 +464,14 @@ handler maps them to domain events via the `action`, `event`, and `type` fields
 ### 4.6 Expose the webhook port in Docker Compose (if needed)
 
 If Caddy is not involved and you want AMS to POST directly to the Docker host on
-port 8091, add an override:
+port 8092, add an override:
 
 ```yaml
 # deploy/docker-compose.webhook-port.yml (create if needed)
 services:
   pulse:
     ports:
-      - "8091:8091"
+      - "8092:8092"
 ```
 
 For production behind Caddy, the Caddy route above is preferred (single exposed
@@ -465,39 +488,28 @@ The bearer token in `Authorization: Bearer <token>` travels in cleartext over
 the token is protected in transit. The amsclient does not emit a startup warning
 for `http://` — this is a known gap noted for future improvement.
 
-### 5.2 Inject secrets via Docker secrets (deferred — B3 backlog)
+### 5.2 Inject secrets via Docker secrets (`_FILE` convention — shipped)
 
-Currently `PULSE_AMS_AUTH_TOKEN` and `PULSE_WEBHOOK_SECRET` are injected as
-environment variables from `deploy/.env`. Environment variables are visible in
-`docker inspect` output and in `/proc/<pid>/environ`. The production-hardened
-pattern uses Docker Compose secrets:
+Pulse supports the `_FILE` convention via `config.GetSecret()`
+(`server/internal/config/secrets.go:27`): for each secret variable `NAME`, set
+`NAME_FILE` to a file path; the value is read from that file at startup
+(fail-closed if unreadable — a missing or unreadable file is a hard error, not a
+fallback to the plain env var). The following secrets honour this convention:
+`PULSE_AMS_AUTH_TOKEN`, `PULSE_AMS_LOGIN_PASSWORD`, `PULSE_WEBHOOK_SECRET`,
+`PULSE_METRICS_TOKEN` (`config.go:219–242`), `PULSE_OIDC_CLIENT_SECRET`
+(`config.go:375`).
 
-```yaml
-# In docker-compose.hardened.yml (pattern to apply — B3 backlog item):
-secrets:
-  ams_token:
-    environment: PULSE_AMS_AUTH_TOKEN
-  webhook_secret:
-    environment: PULSE_WEBHOOK_SECRET
-
-services:
-  pulse:
-    secrets:
-      - ams_token
-      - webhook_secret
-```
-
-With mounted secrets, the value is read from a tmpfs file (e.g.
-`/run/secrets/ams_token`) rather than from the process environment. Pulse's
-current `EnvConfig` reads from `os.Getenv` and does not yet support secret-file
-paths. Until B3 is completed, mitigate by restricting `deploy/.env` permissions
-(`chmod 600 deploy/.env`) and ensuring the `.env` file is in `.gitignore` (it is).
+An opt-in overlay `deploy/docker-compose.secrets.yml` wires Docker secrets via
+this mechanism. Apply it instead of `docker-compose.hardened.yml`'s plain env
+injection when file-based secret delivery is preferred. Until then, mitigate by
+restricting `deploy/.env` permissions (`chmod 600 deploy/.env`) and ensuring the
+`.env` file is in `.gitignore` (it is).
 
 ### 5.3 Stored credentials
 
 AMS REST passwords registered via `POST /api/v1/admin/sources` are encrypted with
 AES-GCM using the key derived from `PULSE_SECRET_KEY` before being stored in the
-meta SQLite store (`server.go:1885–1890`). Protect `PULSE_SECRET_KEY` — loss
+meta SQLite store. Protect `PULSE_SECRET_KEY` — loss
 of this key means stored credentials cannot be decrypted.
 
 ### 5.4 CORS and CSP
@@ -512,17 +524,19 @@ CORS for `/api/v1/*` routes is allowlist-controlled via `PULSE_CORS_ALLOWED_ORIG
 ## 6. Env surface
 
 Complete table of `PULSE_*` variables relevant to AMS integration, read from
-`server/cmd/pulse/config.go` (`loadEnvConfig`, lines 147–268):
+`server/cmd/pulse/config.go` (`loadEnvConfig`, `config.go:204–405`):
 
 | Variable | Purpose | Default | Required |
 |---|---|---|---|
 | `PULSE_AMS_URL` | AMS REST API base URL | `http://localhost:5080` | Yes (for real AMS) |
-| `PULSE_AMS_AUTH_TOKEN` | Bearer token for AMS REST API | _(empty = no auth)_ | Conditional |
+| `PULSE_AMS_AUTH_TOKEN` | Bearer token for AMS REST API; supports `_FILE` convention | _(empty = no auth)_ | Conditional |
+| `PULSE_AMS_LOGIN_EMAIL` | AMS console email for cookie-session auth (AMS 3.x Enterprise with JWT disabled) | _(empty)_ | Conditional |
+| `PULSE_AMS_LOGIN_PASSWORD` | AMS console password for cookie-session auth; supports `_FILE` convention | _(empty)_ | Conditional |
 | `PULSE_AMS_NODE_ID` | Node identifier stamped on events | `standalone` | Recommended |
 | `PULSE_AMS_APPLICATIONS` | Comma-separated app names to poll; empty = all | _(empty)_ | No |
 | `PULSE_POLL_INTERVAL` | REST poll interval (Go duration, e.g. `5s`, `10s`) | `5s` | No |
-| `PULSE_WEBHOOK_ADDR` | Webhook HTTP listen address (e.g. `:8091`); empty = disabled | _(empty)_ | No |
-| `PULSE_WEBHOOK_SECRET` | HMAC-SHA256 secret for webhook signature validation | _(empty)_ | Required if PULSE_WEBHOOK_ADDR is set |
+| `PULSE_WEBHOOK_ADDR` | Webhook HTTP listen address (e.g. `:8092`); empty = disabled | _(empty)_ | No |
+| `PULSE_WEBHOOK_SECRET` | HMAC-SHA256 secret for webhook signature validation; supports `_FILE` convention | _(empty)_ | Required if PULSE_WEBHOOK_ADDR is set |
 | `PULSE_KAFKA_BROKERS` | Comma-separated Kafka broker addresses; empty = disabled | _(empty)_ | No |
 | `PULSE_KAFKA_GROUP_ID` | Kafka consumer group ID | `pulse-collector` | No |
 | `PULSE_LISTEN_ADDR` | Main API listen address | `:8090` | No |
@@ -534,7 +548,7 @@ Complete table of `PULSE_*` variables relevant to AMS integration, read from
 | `PULSE_SECRET_KEY` | AES-GCM key for encrypting stored credentials | _(empty = no encryption)_ | Yes for production |
 | `PULSE_RETENTION_DAYS` | Raw event TTL in days | `90` | No |
 | `PULSE_ROLLUP_TTL_DAYS` | Rollup table TTL in days | `395` | No |
-| `PULSE_METRICS_TOKEN` | Bearer token required on `GET /metrics`; empty = open | _(empty)_ | Recommended |
+| `PULSE_METRICS_TOKEN` | Bearer token required on `GET /metrics`; empty = open; supports `_FILE` convention | _(empty)_ | Recommended |
 | `PULSE_CORS_ALLOWED_ORIGINS` | Comma-separated CORS origins for `/api/v1/*` | _(empty)_ | No |
 | `PULSE_LOG_LEVEL` | Log level: `debug`, `info`, `warn`, `error` | `info` | No |
 | `PULSE_GEO_MMDB_PATH` | Path to MaxMind .mmdb for geo enrichment; empty = disabled | _(empty)_ | No |
@@ -556,26 +570,17 @@ Complete table of `PULSE_*` variables relevant to AMS integration, read from
 
 ## 7. Deferred hardening to complete during real-AMS integration
 
-These items are open backlog and directly affect real-AMS production quality.
-All are non-blocking for initial connectivity but should be completed before
-treating the integration as production-hardened.
+These items are either open backlog or now shipped. Shipped items are preserved
+here as a history record for developers.
 
-### B6 — Source test does not decrypt stored credential (medium, server)
+### B6 — Source test decrypts stored credential (shipped, S2x)
 
-**File:** `server/internal/api/server.go:1379`
+**File:** `server/internal/api/server.go:1746–1759`
 
-```go
-req.SetBasicAuth(src.RestUser.String, "") // password from encrypted store; skip for connectivity check
-```
-
-The `/admin/sources/{id}/test` endpoint sends an empty password string even when
-a `rest_password` was stored. The encrypted credential exists in
-`src.CredentialEnc` but is not decrypted before the test request. A source that
-requires basic auth will show `reachable: true, status: "error", HTTP 401` from
-the test even though the stored credential is correct. Fix: decrypt
-`src.CredentialEnc` using `store.Decrypt(src.CredentialEnc.String)` and pass it
-to `SetBasicAuth`. This is a straightforward change within the existing
-`handleTestSource` function; no contract change required.
+The `/admin/sources/{id}/test` endpoint now decrypts the stored `rest_password`
+before the test request (`B6:` comment at line 1746). A source configured with
+basic auth will no longer show spurious `HTTP 401` from the test while polling
+succeeds. This fix was delivered as part of the connectivity-test hardening pass.
 
 ### B7 — Per-source webhook HMAC secret (shipped D-062)
 
@@ -603,8 +608,8 @@ inject events for another.
   - Unknown source names never return 404 — to avoid leaking which source names exist
     (returns 200 when SharedSecret is valid, 401 when it is empty or the HMAC is wrong).
 - **Startup-only load:** `SourceSecrets` is built once at startup from the meta store
-  (`serve.go:286–301`). **Rotating a per-source secret requires a `pulse` process
-  restart** to take effect (B7 limitation, `serve.go:279–280`).
+  (`serve.go:378–403`). **Rotating a per-source secret requires a `pulse` process
+  restart** to take effect (B7 limitation, `serve.go:371–372`).
 
 **Set a per-source secret via the API:**
 
@@ -627,27 +632,33 @@ A different AMS instance (e.g. `production-us`) must use its own per-source URL
 (`/webhook/ams/production-us`) and its own secret; its requests on
 `/webhook/ams/production-eu` will be rejected.
 
-### B3 — Secrets via Docker secrets rather than env vars (medium, deploy)
+### B3 — Secrets via Docker secrets rather than env vars (partially shipped)
 
-`PULSE_AMS_AUTH_TOKEN` and `PULSE_WEBHOOK_SECRET` are currently plaintext env vars
-in `deploy/.env`. Migrate to Docker Compose `secrets:` (see section 5.2 pattern).
-Requires adding secret-file reading to `loadEnvConfig` or a thin shim in
-`server/cmd/pulse/main.go`.
+`PULSE_AMS_AUTH_TOKEN`, `PULSE_AMS_LOGIN_PASSWORD`, `PULSE_WEBHOOK_SECRET`, and
+`PULSE_METRICS_TOKEN` now support the `_FILE` convention via `config.GetSecret()`
+(`server/internal/config/secrets.go:27`). The secret-file reading requirement of
+B3 is met. An opt-in overlay `deploy/docker-compose.secrets.yml` wires Docker
+`secrets:` entries via this mechanism. Until an operator explicitly opts into
+`docker-compose.secrets.yml`, mitigate by restricting `deploy/.env` permissions
+(`chmod 600 deploy/.env`) — the `.env` file is gitignored.
 
-### A2 — Rate-limit beacon ingest on the main API port (medium, server)
+### A2 — Rate-limit beacon ingest on the main API port (shipped, S2x)
 
-The dedicated beacon server (`PULSE_INGEST_LISTEN_ADDR`) has a per-token rate
-limiter (100 req/s, burst 200 — `serve.go:326`). The main-port `/ingest/beacon`
-handler (`server.go:288`) does not apply this rate limiter, leaving the main port
-open to beacon flooding without the dedicated listener active. Fix: wire the same
-token-bucket limiter on the main-port handler.
+**File:** `server/internal/api/server.go:2007–2011`
 
-### A7 — Rate-limit `GET /metrics` (low, server)
+The main-port `/ingest/beacon` handler (`server/internal/api/server.go:1989`) now
+applies the same per-token token-bucket rate limiter as the dedicated beacon server
+(100 rps / burst 200 — matching `serve.go:796`). The `A2:` comment at line 2007
+documents this parity. No further work is required.
 
-`GET /metrics` is unauthenticated by default (or token-gated via
-`PULSE_METRICS_TOKEN`). There is no rate limit; a Prometheus scraper misconfigured
-to scrape every second at high parallelism could exert sustained load. Fix: add a
-simple per-IP token bucket (e.g. 10 req/s) to `handleMetrics` in `server.go`.
+### A7 — Rate-limit `GET /metrics` (shipped, S2x)
+
+**File:** `server/internal/api/server.go:836–842`
+
+`GET /metrics` now applies a per-IP token bucket (10 rps / burst 20) before the
+auth check, so an unauthenticated flood is throttled ahead of the constant-time
+compare and the live-snapshot computation. The `A7:` comment at line 837 documents
+the limit. No further work is required.
 
 ---
 
@@ -669,15 +680,16 @@ amsclient against live captures.
 
 INPUTS FROM OPERATOR (fill these in before running):
   AMS_URL=https://<your-ams-host>:5443
-  AMS_TOKEN=<your-bearer-token>
+  AMS_TOKEN=<your-bearer-token>    # or use LOGIN_EMAIL+LOGIN_PASSWORD for AMS 3.x Enterprise
   AMS_NODE_ID=<node-identifier>
   AMS_APPLICATIONS=live,vod   # or omit for all apps
 
 TASKS — run as an ORCH workflow with Verify + Commit + Handoff flows:
 
 1. WIRE THE REAL-AMS OVERLAY
-   - Add PULSE_AMS_URL, PULSE_AMS_AUTH_TOKEN, PULSE_AMS_NODE_ID,
-     PULSE_AMS_APPLICATIONS to deploy/.env.
+   - Add PULSE_AMS_URL, PULSE_AMS_AUTH_TOKEN (or PULSE_AMS_LOGIN_EMAIL +
+     PULSE_AMS_LOGIN_PASSWORD), PULSE_AMS_NODE_ID, PULSE_AMS_APPLICATIONS
+     to deploy/.env.
    - Restart the pulse service:
        DC="-p pulse-prod -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml -f deploy/docker-compose.prod-tls.yml -f deploy/docker-compose.real-ams.yml -f deploy/docker-compose.backup.yml --env-file deploy/.env"
        sg docker -c "docker compose $DC up -d pulse"
@@ -700,25 +712,31 @@ TASKS — run as an ORCH workflow with Verify + Commit + Handoff flows:
      when AMS has active streams.
 
 4. OPTIONAL WEBHOOK SETUP (if you have PULSE_WEBHOOK_SECRET)
-   - Set PULSE_WEBHOOK_ADDR=:8091 and PULSE_WEBHOOK_SECRET in deploy/.env.
-   - Add the Caddy route for /webhook/* -> pulse:8091 per AMS-INTEGRATION.md §4.4.
-   - Restart caddy, then configure AMS Management Console to POST to
-     https://<domain>/webhook/ams with the shared secret.
+   - Set PULSE_WEBHOOK_ADDR=:8092 and PULSE_WEBHOOK_SECRET in deploy/.env.
+   - The Caddy route for /webhook/* → pulse:8092 is already present in
+     Caddyfile.prod (lines 55–60). No route addition needed. Reload (not
+     restart) Caddy after any Caddyfile change:
+       docker exec pulse-prod-caddy-1 caddy reload --config /etc/caddy/Caddyfile
+   - Configure AMS Management Console to POST to https://<domain>/webhook/ams
+     with the shared secret.
    - Verify: trigger a publish-start event in AMS and confirm it appears in
      pulse logs within 2 s.
 
-5. COMPLETE DEFERRED HARDENING (scope: server only, no contract changes)
-   - B6: fix handleTestSource to decrypt src.CredentialEnc before SetBasicAuth.
-     File: server/internal/api/server.go:1379.
-   - A2: add per-token rate limit to main-port /ingest/beacon handler. Wire the
-     same token-bucket limiter used by the dedicated beacon server.
-   - A7: add per-IP rate limit (10 req/s) to handleMetrics in server.go.
+5. DEFERRED HARDENING STATUS (as of S28)
+   - B6: SHIPPED (server/internal/api/server.go:1746–1759). handleTestSource
+     now decrypts the stored credential. No further work required.
+   - A2: SHIPPED (server/internal/api/server.go:2007–2011). Per-token rate
+     limit (100 rps / burst 200) applied on main-port /ingest/beacon. No
+     further work required.
+   - A7: SHIPPED (server/internal/api/server.go:836–842). Per-IP rate limit
+     (10 rps / burst 20) applied on GET /metrics. No further work required.
    - B7 is implemented and shipped (D-062). Per-source webhook secrets are live:
      see section 4.5 for the full operator guide. No further work is required
      unless rotating per-source secrets without a restart (currently needs a
      restart — see B7 limitation note in section 7).
-   - B3 (Docker secrets migration) is a deploy change — ORCH should assess
-     scope before starting; flag for next ORCH session if time allows.
+   - B3 (_FILE convention): SHIPPED for secret reading. Docker secrets overlay
+     `deploy/docker-compose.secrets.yml` is available. Operator opts in by
+     using that overlay.
 
 6. VERIFY + COMMIT + HANDOFF
    - Per RESUME-PROMPT.md protocol: rebuild (cd server && go test ./... -race
@@ -765,6 +783,8 @@ Symptom: pulse logs show `amsclient: GET /rest/v2/broadcasts/live/list: HTTP 401
 Causes and fixes:
 - `PULSE_AMS_AUTH_TOKEN` is wrong, expired, or missing. Regenerate the token in
   AMS Management Console > Settings > Security.
+- AMS 3.x Enterprise has JWT disabled — use `PULSE_AMS_LOGIN_EMAIL` +
+  `PULSE_AMS_LOGIN_PASSWORD` instead of a bearer token.
 - AMS requires HTTPS but `PULSE_AMS_URL` uses `http://`. Switch to `https://`.
 - AMS has IP-based REST API restrictions that exclude the Pulse container IP.
 
@@ -776,23 +796,23 @@ redirects by default), but the bearer token may not be forwarded to the
 `https://` target by some AMS reverse-proxy configurations. Use `https://` from
 the start.
 
-The source-test client (`server.go:1387–1392`) uses `CheckRedirect` to block
-redirects. A redirect from `http://` to `https://` will appear as
-`reachable: false` in the test response (redirect is stopped, treated as an
-error). This is by design — it forces the operator to use the correct scheme
+The source-test client (`server/internal/api/server.go:1767–1773`) uses
+`CheckRedirect` to block redirects. A redirect from `http://` to `https://` will
+appear as `reachable: false` in the test response (redirect is stopped, treated as
+an error). This is by design — it forces the operator to use the correct scheme
 in `rest_url`.
 
 ### Webhook returns 404
 
 Symptom: AMS logs show HTTP 404 when POSTing to `https://your-domain/webhook/ams`.
 
-Cause: the Caddy route for `/webhook/*` has not been added to `Caddyfile.prod`,
-or Caddy was reloaded (not restarted) after adding it.
+Cause: the Caddy route for `/webhook/*` was not loaded, or Caddy has not been
+reloaded since the route was added.
 
-Fix: add the `/webhook/*` handle block per section 4.4, then restart (not just
-reload) Caddy:
+Fix: the `/webhook/*` handle block is already in `Caddyfile.prod` (lines 55–60).
+Reload (not restart) Caddy:
 ```bash
-sg docker -c "docker compose $DC restart caddy"
+docker exec pulse-prod-caddy-1 caddy reload --config /etc/caddy/Caddyfile
 ```
 
 ### Webhook returns 401 (invalid signature)
@@ -805,17 +825,18 @@ Causes and fixes:
   in AMS Management Console.
 - AMS is not sending the `X-Ams-Signature` header, or is sending it in a
   different format than `sha256=<hex>`. The handler reads `X-Ams-Signature`
-  (`webhook.go:116`) and expects the format `sha256=<hex(HMAC-SHA256(body, secret))>`.
+  (`webhook.go:159`) and expects the format `sha256=<hex(HMAC-SHA256(body, secret))>`.
 - The header name is wrong in the AMS webhook config (it must be exactly
   `X-Ams-Signature`).
 
 ### Source test shows `reachable: true` but `status: "error"` (HTTP 401)
 
-This is expected when `rest_user` is set in the source but `rest_password` was
-provided — the test sends the username with an empty password (B6, see section 7).
-The REST poller uses the bearer token from `PULSE_AMS_AUTH_TOKEN`, not the stored
-basic-auth credential, so polling will still work. Fix B6 to make the test
-accurate.
+As of S2x (B6 shipped, `server/internal/api/server.go:1746–1759`), the test
+endpoint decrypts the stored credential before the request. A 401 from the test
+now means the stored credential is genuinely wrong — check the `rest_password`
+value passed when the source was registered. The REST poller uses
+`PULSE_AMS_AUTH_TOKEN` / `PULSE_AMS_LOGIN_PASSWORD` (env-driven), not the stored
+basic-auth credential, so polling can still work independently.
 
 ### Dashboard shows 0 viewers after switching to real AMS
 

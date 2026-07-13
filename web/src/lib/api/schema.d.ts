@@ -967,7 +967,7 @@ export interface components {
             /** @enum {string} */
             role?: "origin" | "edge" | "standalone";
             /** @enum {string} */
-            status: "up" | "degraded" | "down";
+            status: "up" | "degraded";
             /** @description Unix epoch ms */
             last_seen?: number;
             /** Format: float */
@@ -1410,7 +1410,7 @@ export interface components {
             /** @enum {string} */
             role: "origin" | "edge" | "standalone";
             /** @enum {string} */
-            status: "up" | "degraded" | "down";
+            status: "up" | "degraded";
             /** @description Unix epoch ms */
             last_seen: number;
             /** @description AMS version string */

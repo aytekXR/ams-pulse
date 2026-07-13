@@ -1,8 +1,14 @@
 // Package api_test — A2: license gate tests.
 //
 // These tests verify that the 3 license gates (CheckDataAPI, CheckPrometheus,
-// CheckNodeLimit) actually block requests on the FREE tier. Today the gates are
-// defined in license.Manager but are never called, so these tests are RED.
+// CheckNodeLimit) actually block requests on the FREE tier.
+//
+// Current enforcement state (as of D-041):
+//   - CheckNodeLimit IS actively called at server.go:1632 inside handleCreateSource
+//     (serialized by sourceMu; fails closed with 403 LICENSE_REQUIRED). Tests for
+//     this gate are GREEN.
+//   - CheckDataAPI and CheckPrometheus are NOT yet wired at the handler level.
+//     Tests for those two paths remain RED until the handlers call the gates.
 //
 // Pattern mirrors v3b_guard_test.go.
 package api_test

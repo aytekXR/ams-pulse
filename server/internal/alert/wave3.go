@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"sync"
 
 	"github.com/pulse-analytics/pulse/server/internal/anomaly"
@@ -78,6 +79,18 @@ var supportedAnomalyMetrics = map[string]bool{
 	"mem_pct":             true,
 	"disk_pct":            true,
 	"ams_api_latency_ms":  true,
+}
+
+// SupportedAnomalyMetrics returns the sorted list of metric names that are valid
+// for anomaly alert rules. The list is derived from supportedAnomalyMetrics and is
+// used by tests to pin parity between the map and evalAnomalyMetric's dispatch switch.
+func SupportedAnomalyMetrics() []string {
+	out := make([]string, 0, len(supportedAnomalyMetrics))
+	for m := range supportedAnomalyMetrics {
+		out = append(out, m)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // ValidateAnomalyRule validates anomaly-specific constraints on a rule.

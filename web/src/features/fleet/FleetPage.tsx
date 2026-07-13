@@ -182,7 +182,6 @@ export function FleetPage() {
   }, [load]);
 
   const upCount = nodes.filter((n) => n.status === "up").length;
-  const downCount = nodes.filter((n) => n.status === "down").length;
   const degradedCount = nodes.filter((n) => n.status === "degraded").length;
   const originCount = nodes.filter((n) => n.role === "origin").length;
   const edgeCount = nodes.filter((n) => n.role === "edge").length;
@@ -249,7 +248,6 @@ export function FleetPage() {
             { label: "Total Nodes", value: nodes.length },
             { label: "Up", value: upCount },
             { label: "Degraded", value: degradedCount },
-            { label: "Down", value: downCount },
             { label: "Origins", value: originCount },
             { label: "Edges", value: edgeCount },
           ].map(({ label, value }) => (

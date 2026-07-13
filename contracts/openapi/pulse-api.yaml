@@ -1797,7 +1797,9 @@ components:
           enum: [origin, edge, standalone]
         status:
           type: string
-          enum: [up, degraded, down]
+          # D-090: "down" removed — AMS has no native transient-down state.
+          # Lifecycle is up → degraded (ConsecAPIErrors ≥ 3) → evicted (node disappears).
+          enum: [up, degraded]
         last_seen:
           type: integer
           description: Unix epoch ms
@@ -2536,7 +2538,9 @@ components:
           enum: [origin, edge, standalone]
         status:
           type: string
-          enum: [up, degraded, down]
+          # D-090: "down" removed — AMS has no native transient-down state.
+          # Lifecycle is up → degraded (ConsecAPIErrors ≥ 3) → evicted (node disappears).
+          enum: [up, degraded]
         last_seen:
           type: integer
           description: Unix epoch ms
