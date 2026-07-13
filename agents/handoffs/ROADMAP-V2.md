@@ -430,7 +430,7 @@ discipline). Each is independent:
    runs in a session. *(Addressed same-session if S26's gates allowed —
    check D-088 close evidence before picking this up.)*
 
-### 2.18  Marketplace-readiness sprint  [M–L]  (OPERATOR-DIRECTED 2026-07-13, D-089 — ★ TOP PRIORITY, supersedes ordering of every non-gated item above)
+### 2.18  Marketplace-readiness sprint  [M–L]  (OPERATOR-DIRECTED 2026-07-13, D-089 — ★ TOP PRIORITY, supersedes ordering of every non-gated item above) — ✅ ITEMS 1–5 DONE S27 (D-089, 2026-07-13: rollout live; trial lifecycle live-proven [7/7 mutations RED + live 3-min-key expiry]; quickstart live clean-install vs real AMS; rows 16/17→PASS + scores 66.7/84.5; listing draft INTERNAL). Item 6 (operator-gated) OPEN — 5 items in operator-expected.md ⚡ incl. NEW GHCR-public flip.
 
 Operator directive (S27 prompt): app ready for the Ant Media marketplace
 ASAP — installation easy, listing uploadable with a trial license key;
@@ -899,6 +899,19 @@ operator answer, ORCH ruling recorded in D-086):
    are integration-covered, not unit-covered), gofmt/vet/contract-drift
    clean, full integration green (10 migrations idempotent). Prod untouched;
    a rollout now carries D-082..**D-086**.
+
+### S27 — ★ operator marketplace directive: rollout + trial lifecycle + quickstart + docs pack ✅ DONE (D-089, 2026-07-13)
+
+Operator prompt = the intake ("rollout quick … marketplace asap … trial
+license key"). Delivered: prod rollout D-082..D-088 (runbook path, boot
+self-proofs); license lazy-expiry lifecycle (NO contract CR — three states
+fit LicenseInfo; live mid-run expiry proven, 7/7 mutations RED);
+deploy/quickstart/ one-command install (migrations baked; live
+clean-install vs real AMS); web TrialBanner + LicenseContext (388 tests);
+docs/compatibility.md + known-limitations.md + marketplace/ drafts;
+checklist 16/17→PASS; scores 66.7/84.5 (verifier-re-derived); v0.4.0
+tagged (LOAD-BEARING for the quickstart pin). 11 agents, 0 errors.
+Full evidence: decisions.md D-089.
 
 ### S26 — early-warning polish batch (§2.16 tail) + zero-mean guard ✅ DONE (D-088, 2026-07-13)
 

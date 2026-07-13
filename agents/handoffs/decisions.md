@@ -4935,6 +4935,32 @@ ready for uploading to the marketplace with trial license key."
   CONFIRMED), brandkit paths all resolve, DRAFT-INTERNAL banners present,
   GHCR visibility=private re-confirmed via gh api (operator item #5),
   no external-promise leaks, honesty flags intact.
+
+**S27 GATES (ORCH-run, CI-faithful, post-remediation):** gofmt scan empty;
+vet clean; `go test -race` **24/24 pkgs 0 FAIL** (license pkg 92.5%
+coverage; the new expiry tests proven non-vacuous by V1's 7 REDs);
+coverage **76.0 → 76.1%** (floor 70.2); qa/mock-ams + qa/licensegen
+-race green; web **388/388** (366→388), coverage 66.83/61.95/56.12
+(gates 59/54/45), build clean; contracts/ **byte-untouched** (no CR —
+the three license states fit the existing LicenseInfo shape by design);
+integration suite deferred to PR CI (no store/query production-code
+change; the live V2 quickstart exercised migrations+boot+API end-to-end
+against real CH + the real AMS).
+
+**S27 CLOSE (D-089):** Workflows: 4 scouts + 4 authors + 3 adversarial
+verifiers = 11 agents, 0 errors (~1.0M subagent tokens). Marketplace
+sprint: R1 rollout DONE (prod v0.3.0-34-g58a9c84, boot-proof sweep
+count=3 + first VoD event); R2 trial lifecycle DONE (live mid-run expiry
+proven, no restart); R3 one-command install DONE (live clean-install
+verified vs real AMS); R4 marketplace package DONE (rows 16/17
+PARTIAL→PASS, row 4/12 refreshed honest, listing draft INTERNAL);
+R5 operator ledger DONE (5 items). CI promotions skip carry ×16
+(07-13 < 07-23). Branch `s27-d089`, ONE PR, 2 pushes (PR + v0.4.0 tag —
+the tag is LOAD-BEARING for the quickstart image pin). S28 carries:
+AMS-INTEGRATION.md §4.5 stale (BUG-002-era), kafka-integration.md
+(DG-15), realams fresh rebuild (orphaned token), listing PNG exports,
+deferred F10 tail / §2.17 / §2.5, Pro MaxNodes=10 vs PRD 1–2 reconcile.
+PR/merge + tag/release evidence appended below after merge.
 - **OPERATOR ACTIONS REQUIRED — YES (4, recorded per the session-open
   directive; none blocks S27's own work):** (1) AMS license today
   (operator-promised); (2) trial-license mint needs the vault privkey;

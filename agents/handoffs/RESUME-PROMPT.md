@@ -11,7 +11,71 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-27.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-28.md`)
+
+**Session 2026-07-13 result: D-089 — S27 DONE (★ OPERATOR MARKETPLACE
+DIRECTIVE executed end-to-end: prod rollout D-082..D-088 LIVE +
+trial-license lifecycle live-proven + one-command install + marketplace
+docs pack + v0.4.0).**
+- **★ OPERATOR DIRECTIVE (the S27 prompt): "rollout quick … marketplace
+  asap … installation easy … trial license key … ams license today."**
+  Interpretation rulings in D-089; ROADMAP-V2 **§2.18** is the new
+  top-priority backlog section; the planned F10/§2.17/§2.5 batch DEFERRED.
+- **★ PROD ROLLOUT EXECUTED** (the standing offer, operator-triggered):
+  `v0.3.0-34-g58a9c84`, runbook path (backup + `pre-d089` rollback tag +
+  stamped build + smoke green); CH 0009+0010 applied; boot self-proofs:
+  zero-mean sweep count=3 + first prod VoD billing event. Webhook still
+  fail-closed (signed 200 / unsigned 401).
+- **★ Trial lifecycle (RULE-1, NO contract CR):** lazy expiry in every
+  Manager reader — mid-run lapse ⇒ free entitlements + valid=false +
+  expiresAt RETAINED (three states distinguishable in the existing
+  LicenseInfo shape); boot-expired-key same honest state; injected clock;
+  once-only warn. **LIVE-PROVEN: 3-min pro key on a running server
+  degraded without restart; /analytics/audience 200→403.** V1: 7/7
+  mutations RED in pristine copies. licensegen grew -expires-minutes.
+- **★ One-command install (RULE-2):** migrations BAKED into the image
+  (`/usr/share/pulse/migrations` + ENV; config.go:210 honors it) + NEW
+  `deploy/quickstart/` (compose pinned `\${PULSE_IMAGE:-ghcr.io/aytekxr/
+  ams-pulse:0.4.0}`, 6-var .env.example incl. the vendor PUBKEY,
+  install.sh curl|bash-able). **V2 live clean-install vs the real AMS:
+  healthy ~60s, baked-path migrations, token printed, re-run honest.**
+  ⚠ Customers can't pull until the operator flips GHCR public (item 5).
+- **★ Web trial surface (RULE-3):** LicenseContext + TrialBanner
+  (amber ≤14d dismissable / red expired non-dismissable), tier badge
+  revived; 388 vitest (was 366), 66.83/61.95/56.12 vs 59/54/45.
+- **★ Marketplace pack (RULE-4):** NEW docs/compatibility.md +
+  docs/known-limitations.md (18) + docs/marketplace/ (DRAFT-INTERNAL);
+  checklist rows 16/17→PASS, 4/12 refreshed; scores recounted
+  **66.7 strict / 84.5 weighted** (verifier re-derived independently).
+  V3 PARTIAL → 4 must-fix (incl. a doc claiming the REMOVED Speed
+  fallback exists) all remediated same-session.
+- **Gates:** 24/24 `-race` 0 FAIL; coverage **76.0 → 76.1** (floor 70.2);
+  gofmt/vet/qa clean; contracts byte-untouched; web green; **v0.4.0
+  tagged at close (LOAD-BEARING — the quickstart pins its image).**
+- **Operator queue (operator-expected.md ⚡, 5 items):** AMS license
+  (promised, NOT landed by close — sweep s27open = 6th byte-identical
+  null delta), official trial-key mint (vault privkey), final-assessment
+  review (now gates upload), Ant Media marketplace contact, **GHCR
+  public flip (NEW, critical-path)**. CI promotions skip carry ×16.
+- **S28 carries:** AMS-INTEGRATION.md §4.5 stale (recording_gb claim,
+  BUG-002-era), kafka-integration.md (DG-15), realams fresh rebuild
+  (orphaned token — down -v sanctioned), listing PNG exports, Pro
+  MaxNodes=10 vs PRD 1–2 reconcile, deferred F10 tail / §2.17 / §2.5.
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-28.md` and execute it**
+(★ standing directive at its top: review the backlog + REVISE the plan;
+operator intake FIRST — AMS license landed? trial key minted? GHCR
+flipped? assessment reviewed? — then the highest-leverage batch; CI
+promotions if run date ≥07-23 [csp-e2e candidate, web-e2e ~07-25] else
+skip carry ×17; AMS re-sweep at open, observe-only — realams token still
+orphaned unless rebuilt). **PR-first, ≤2 pushes.** Check
+`docs/operator-expected.md` FIRST (5 items incl. the NEW GHCR flip).
+
+---
+
+## ▶ prior session context (S26, superseded by the above — original START HERE follows)
+
+## (superseded) ▶ START HERE (next session — execute `sessions/SESSION-27.md`)
 
 **Session 2026-07-13 result: D-088 — S26 DONE (★ early-warning polish batch:
 node-degraded predicate unified across alert+display; standalone zero-mean
