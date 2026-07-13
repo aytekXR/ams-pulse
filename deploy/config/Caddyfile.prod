@@ -147,3 +147,38 @@ yanki.beyondkaira.com {
 		reverse_proxy yanki-web:8140
 	}
 }
+
+# ── Bedirhan Demirel portfolio — bedirhandemirel.<domain> → host:3200 (Next.js next start) ──
+#
+# AUTHORITATIVE copy of the site block that fronts bedirhandemirel.beyondkaira.com
+# (this file is what pulse-prod-caddy-1 mounts as /etc/caddy/Caddyfile). A mirror
+# lives in the portfolio repo at ~/repo/bedo/deploy/Caddyfile.bedirhan.snippet so
+# the routing is auditable from there — keep the two in sync. This Caddy also
+# fronts the owner's OTHER production apps, so ALWAYS `caddy validate` before
+# reloading — a bad config is rejected atomically, never dropped. NEVER restart
+# the container; reload only. Full runbook: ~/repo/bedo/deploy/INSTALL.md.
+#
+# This block only terminates TLS + reverse-proxies. `header -Server` strips
+# Caddy's Server: fingerprint from proxied responses (defense in depth; the
+# global HTTP→HTTPS redirect's Server header is a separate shared-Caddy
+# concern). Upstream = VPS public IP (161.97.172.146): the shared Caddy runs in
+# a container and cannot reach the host's 127.0.0.1 — same proven host-process
+# path as the brier block. That is why the app binds -H 0.0.0.0 and :3200 must
+# be firewalled from the internet (INSTALL.md step 5).
+#
+# PREREQUISITE: a DNS A record bedirhandemirel.beyondkaira.com → 161.97.172.146
+# must exist and be propagated BEFORE the Caddy reload — Let's Encrypt issuance
+# fails without it (INSTALL.md step 1).
+bedirhandemirel.{$PULSE_DOMAIN} {
+    header -Server
+    reverse_proxy 161.97.172.146:3200 {
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Real-IP {remote_host}
+        header_up Host {host}
+    }
+    log {
+        output stdout
+        format json
+        level INFO
+    }
+}
