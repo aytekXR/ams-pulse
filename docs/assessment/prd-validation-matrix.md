@@ -134,13 +134,13 @@ hls.js and video.js within MVP+1.
 
 | Feature | Requirement / Acceptance Criterion | Verdict | Evidence | Notes |
 |---------|-----------------------------------|---------|----------|-------|
-| **F3 — Player QoE Beacon SDK** | **Overall** | **PARTIALLY** | — | Core SDK validated in CI and live deployment; player CPU overhead not measurable; integration documentation (MVP+1 item) not yet produced |
+| **F3 — Player QoE Beacon SDK** | **Overall** | **PARTIALLY** | — | Core SDK validated in CI and live deployment; player CPU overhead not measurable (NEEDS-CLARIFICATION N7); integration documentation authored S19/D-081 (`docs/beacon-sdk.md`, DG-07 DONE) |
 | | SDK < 15 KB gzipped | FULLY | CI: 3.52 KB gzip (Wave-3 measurement; no regression from Wave-2 3.44 KB despite VD-09/12/13 fixes adding code; N6) | Comfortably within budget (23% of the 15 KB limit). |
 | | One-line init with stream and customer metadata; session stitching | FULLY | TC-A-05 (S18; 3/3 PASS); TC-A-06 (S18; 3/3 PASS); AV-09 (beacon session confirmed in prod with viewer_minutes=0.3333) | Beacon round-trip confirmed against live Pulse collector on the real AMS deployment. Session UUID stitching implemented. |
 | | Events batched and sent at most every 10 s | FULLY | N8 (beacon round-trip accepted, no-error — CI + live); SDK design: sendBeacon with retry queue | Batching interval is a SDK configuration constant; retry queue is implemented. |
 | | Player CPU overhead < 1% | NEEDS-CLARIFICATION | Not measurable — VD-14 (deferred by design consensus; noted in ARCHITECTURE.md §4 N7 cell) | No reliable method to isolate SDK CPU contribution from the player and browser overhead in a controlled measurement. The target remains aspirational; a benchmark harness for this metric has not been defined. Ant Media team input requested: acceptable benchmark methodology? |
 | | Graceful no-op if the collector is unreachable | FULLY | TC-P-05 (S17; 2/2 PASS — HLS probe to non-existent stream returns success=false, error\_code=http\_4xx, no crash); SDK design: error swallowed, no exception thrown | SDK error path confirmed not to throw; events are dropped rather than crashing the player when the ingest endpoint is unreachable. |
-| | Documented integration for AMS JS SDK, hls.js and video.js (MVP+1) | MISSING | DG-07 (documentation-gaps.md: "beacon SDK integration guide not yet produced") | This is explicitly a PRD MVP+1 documentation deliverable. The runtime SDK integration points exist; the step-by-step operator guide covering adapter selection, token provisioning, and ingest URL has not yet been authored. Planned for S19 (WO-C). |
+| | Documented integration for AMS JS SDK, hls.js and video.js (MVP+1) | FULLY | `docs/beacon-sdk.md` authored S19/D-081 (DG-07 DONE; 452 lines; verified to exist); `docs/guides/beacon-sdk.md` also present (342 lines). Score corrected at S27/D-089 — the matrix was produced before DG-07 authoring completed at S19. | `docs/beacon-sdk.md` covers: §1 introduction, token provisioning, adapter selection (AMS WebRTC / hls.js / video.js / native video), `POST /ingest/beacon` URL, Pro+ gate, verifying events via `GET /api/v1/qoe/summary`. DG-07 status confirmed AUTHORED in `docs/assessment/documentation-gaps.md` S19 status note. |
 | | QoE startup time (startup\_p50\_ms) non-zero from rollup | FULLY | TC-A-05 (S18; 3/3 PASS); CI N10: startup\_p50\_ms=250.0 from rollup\_qoe\_1h (TestQuery\_QoeSummary\_RealStartupP50) | Rollup query is real (V3a fix confirmed); non-zero value confirmed in both CI and live deployment. |
 | | Rebuffer count/duration tracked | FULLY | TC-A-06 (S18; 3/3 PASS) | rebuffer\_ratio field in QoE rollup confirmed present and non-zero in test scenario. |
 
@@ -385,16 +385,26 @@ FULLY: 1 of 10 features (F10) · PARTIALLY: 9 of 10 features · MISSING: 0 · DI
 
 | Verdict | Count |
 |---------|-------|
-| FULLY | 43 |
+| FULLY | 44 |
 | PARTIALLY | 12 |
-| MISSING | 3 |
+| MISSING | 2 |
 | DIFFERENTLY | 7 |
 | NEEDS-CLARIFICATION | 1 |
 | **Total sub-rows** | **66** |
 
-MISSING sub-requirements: geo country-level accuracy (F2), SDK integration documentation
-(F3, MVP+1 item), error/rebuffer anomaly signals (F9). (recording\_gb accounting (F6) was
-MISSING through S22; BUG-002 FIXED S23/D-085 → FULLY.)
+MISSING sub-requirements: geo country-level accuracy (F2), error/rebuffer anomaly signals (F9).
+(recording\_gb accounting (F6) was MISSING through S22; BUG-002 FIXED S23/D-085 → FULLY.
+SDK integration documentation (F3) was MISSING at S19 matrix close; `docs/beacon-sdk.md`
+authored S19/D-081, DG-07 DONE, 452 lines — score corrected S27/D-089: MISSING → FULLY.)
+
+**Score recount (S27/D-089, F3 SDK-docs MISSING→FULLY):**
+
+| Method | Before (S19 close) | After (S27/D-089) | Delta |
+|--------|---------------------|-------------------|-------|
+| Method A strict (FULLY/total) | 43/66 = 65.2% | **44/66 = 66.7%** | +1.5 pp |
+| Method B weighted | (43×1.0 + 7×0.75 + 12×0.5 + 1×0.5 + 3×0.0)/66 = 54.75/66 = 83.0% | **(44×1.0 + 7×0.75 + 12×0.5 + 1×0.5 + 2×0.0)/66 = 55.75/66 = 84.5%** | +1.5 pp |
+
+Arithmetic check: 44.00 + 5.25 + 6.00 + 0.50 + 0.00 = 55.75; 55.75/66 = 0.8447... → 84.5%.
 
 DIFFERENTLY sub-requirements: node health CPU/RAM/network (F1 — absent via REST, requires
 Kafka), FPS (F4 — absent in AMS 3.x REST BroadcastDTO), packet loss/jitter for RTMP (F4 —

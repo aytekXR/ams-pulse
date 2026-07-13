@@ -71,7 +71,7 @@ deployment. The program covered:
 | Bitrate normalization accuracy | AMS 2,067,136 bits/s → Pulse 2,067 kbps, within ±10% |
 | Beacon SDK gzipped bundle | **3.52 KB** (limit: 15 KB) |
 | Pulse process memory at load | **18.6 MiB** peak @ 500 streams + 3,000 viewers (limit: 512 MiB) |
-| PRD sub-requirements FULLY met | **43 of 66** (65.2% simple; 83.0% weighted) |
+| PRD sub-requirements FULLY met | **44 of 66** (66.7% simple; 84.5% weighted) |
 | Architecture numeric criteria FULLY met | **33 of 36** (91.7%) |
 
 ### What was validated
@@ -133,10 +133,10 @@ deliverable). The arithmetic is shown in full below.
 
 | Verdict | Count | Meaning |
 |---------|------:|---------|
-| FULLY | 43 | Implemented and validated end-to-end against real AMS |
+| FULLY | 44 | Implemented and validated end-to-end against real AMS |
 | PARTIALLY | 12 | Core implemented; at least one sub-criterion missing or not live-validated |
 | DIFFERENTLY | 7 | Implemented via a method that differs from PRD spec; delta documented |
-| MISSING | 3 | Specified in PRD; not implemented or structurally non-functional |
+| MISSING | 2 | Specified in PRD; not implemented or structurally non-functional |
 | NEEDS-CLARIFICATION | 1 | Requirement ambiguous; Ant Media team input needed |
 | **Total** | **66** | |
 
@@ -145,7 +145,7 @@ deliverable). The arithmetic is shown in full below.
 > Counts only full compliance as "done."
 
 ```
-43 (FULLY) / 66 (total) = 65.2%
+44 (FULLY) / 66 (total) = 66.7%
 ```
 
 ### Method B — Weighted percentage (headline score)
@@ -154,14 +154,19 @@ deliverable). The arithmetic is shown in full below.
 > not as specified), PARTIALLY = 0.5, NEEDS-CLARIFICATION = 0.5, MISSING = 0.
 
 ```
-(43 × 1.0) + (7 × 0.75) + (12 × 0.5) + (1 × 0.5) + (3 × 0.0)
-  = 43.00 + 5.25 + 6.00 + 0.50 + 0.00
-  = 54.75
+(44 × 1.0) + (7 × 0.75) + (12 × 0.5) + (1 × 0.5) + (2 × 0.0)
+  = 44.00 + 5.25 + 6.00 + 0.50 + 0.00
+  = 55.75
 
-54.75 / 66 = 83.0%
+55.75 / 66 = 84.5%
 ```
 
-**Headline: Product Completeness = 83.0% (weighted) / 65.2% (strict)**
+**Headline: Product Completeness = 84.5% (weighted) / 66.7% (strict)**
+
+> **Score revision note (S27/D-089):** F3 SDK-docs sub-row updated MISSING → FULLY.
+> `docs/beacon-sdk.md` (452 lines) was authored at S19/D-081 (DG-07), but the matrix
+> was not updated at that time. The recount adds 1 FULLY, removes 1 MISSING.
+> Prior scores (as of S19 close): 65.2% strict / 83.0% weighted.
 
 ### Feature-level summary (F1–F10)
 
@@ -198,12 +203,13 @@ Phase 3 deliverable that shipped ahead of the nominal Phase 3 milestone.
 33 (FULLY) / 36 (total) = 91.7%
 ```
 
-The three sub-requirements with a MISSING verdict are:
+The two sub-requirements with a MISSING verdict are:
 1. **Geo country-level accuracy (F2)** — GeoLite2 mmdb not deployed.
-2. **SDK integration documentation (F3)** — MVP+1 item; runtime integration
-   points exist, step-by-step operator guide not yet authored.
-3. **Error and rebuffer anomaly signals (F9)** — `error_rate` and
+2. **Error and rebuffer anomaly signals (F9)** — `error_rate` and
    `rebuffer_ratio` confirmed absent from the anomaly evaluator.
+
+(SDK integration documentation (F3) was MISSING at S19 close. `docs/beacon-sdk.md`
+was authored at S19/D-081 (DG-07, 452 lines); score corrected at S27/D-089.)
 
 (Recording storage (recording\_gb) accounting (F6) was MISSING through S22;
 **BUG-002 FIXED S23/D-085** — VoD REST poll + `mv_recording_1d`, live-validated
@@ -225,20 +231,20 @@ TC-REC-01 with 0.02% reconciliation → verdict now FULLY.)
 | 1 | Working product against current AMS release | PASS | 46/50 scenario scripts PASS against AMS 3.0.3 Enterprise; 0 FAIL |
 | 2 | Core features functional end-to-end | PASS | Stream lifecycle, viewer counts, alerting, probes, QoE beacon all validated live |
 | 3 | No P0 severity open bugs | PASS | BUG-002 FIXED S23/D-085 (VoD REST poll, live-validated TC-REC-01); BUG-008 FIXED S24/D-086 (Group B from/to via flagHistoryBridge + anomaly_flag_events); no P0-roadmap bugs remain open (BUG-001 is low/no-user-impact) |
-| 4 | Integration documentation (AMS-side setup) | PARTIAL | `docs/AMS-INTEGRATION.md` exists; beacon SDK integration guide not yet produced (DG-07); webhook limitation not fully documented for operators |
+| 4 | Integration documentation (AMS-side setup) | PARTIAL | `docs/AMS-INTEGRATION.md` exists; `docs/beacon-sdk.md` authored S19/D-081 (452 lines, DG-07 DONE); `docs/AMS-INTEGRATION.md` §4.5 expanded (DG-04 DONE — webhook downstream impact, workarounds, D-V2-1 future path); §1.1 expanded (DG-11 DONE — implicit RTMP broadcast deletion admonition). Remaining open DGs: DG-01 (HLS CDN viewer count), DG-02 (RTMP -1 FAQ), DG-03 (FPS=0 Known Limitation), DG-05 (standalone CPU/mem blank §3.7), DG-06 (egress estimate), DG-08 (per-app CIDR prereq), DG-09 (lockout strategy), DG-10 (HLS flat URL form), DG-12 (applications/info 405), DG-13 (app reset detection), DG-14 (versionType "Enterprise Edition"), DG-15 (Kafka guide), DG-16 (speed_read_kbps), DG-17 (GeoLite2), DG-18 (RTMP packet loss semantics) |
 | 5 | API documentation / OpenAPI spec | PASS | OpenAPI spec exists; 51/52 operations response-body conformant; BUG-004/005/006/007/010 FIXED S20–S22; BUG-008 FIXED S24/D-086 (from/to probed); remaining parameter known-violations: BUG-009 ?tenant ×2 on GET /live (F6 backlog); 2 pinned in conformance registry; conformance registry: 37 probes / 2 known-violations / 47 exempt |
 | 6 | Self-hosted deployment guide | PASS | `deploy/` directory contains Docker Compose stack, `Caddyfile.prod`, and environment variable documentation |
 | 7 | Support channel defined | NEEDS-OPERATOR-CONTACT | No support SLA or support channel (email / forum / GitHub issues) has been publicly defined for Pulse v0.3.0 |
 | 8 | Licensing clearly stated | NEEDS-OPERATOR-CONTACT | Pulse uses a license-key model (PULSE\_LICENSE\_KEY); the public licensing terms (free/pro/enterprise tiers, self-hosted redistribution rights) are not yet published |
 | 9 | Marketplace revenue-share terms agreed | NEEDS-OPERATOR-CONTACT | The PRD cites 20–30% revenue share; this figure is **unverified** — it appears only in the PRD as a target and has not been negotiated or confirmed with Ant Media |
-| 10 | Listing category, screenshots, and description copy | NEEDS-OPERATOR-CONTACT | Marketplace listing assets (screenshots, short description, feature bullets) have not been prepared |
+| 10 | Listing category, screenshots, and description copy | NEEDS-OPERATOR-CONTACT | `docs/marketplace/listing-draft.md` authored D-089 S27 (DRAFT-INTERNAL: title, tagline, short description, 6 feature bullets, tier/pricing table, demand evidence, trial-key paragraph); `docs/marketplace/screenshot-list.md` authored D-089 S27 (ordered 6-shot plan; PNG export is pending manual step). Listing submission still requires operator contact with Ant Media marketplace team. |
 | 11 | Co-marketing / blog post process | NEEDS-OPERATOR-CONTACT | Operator must initiate contact with the Ant Media developer-relations or marketplace team |
-| 12 | Semantic versioning and release artifacts | PARTIAL | Git history uses conventional commits; no published release tag or signed binary artifact exists yet |
+| 12 | Semantic versioning and release artifacts | PARTIAL | v0.2.0 and v0.3.0 release tags published (cosign-signed multi-arch Docker images, SBOM + provenance, CI-gated tag pipeline; `ghcr.io/aytekxr/ams-pulse`). Residual gaps: GHCR image registry visibility is private pending operator decision O7; no binary tarball releases (Docker image is the only distribution artifact). Row stays PARTIAL until GHCR is made public. |
 | 13 | Security: token authentication on all API routes | PASS | Bearer token (`plt_…`) required on all Pulse API routes; confirmed in TC-H-01/H-02 (S17) |
 | 14 | No hard-coded secrets in committed code | PASS | `deploy/.env` is gitignored; secrets are not in committed files |
 | 15 | Privacy: viewer IP handling | PASS | Viewer IPs are SHA-256 hashed (`normalize.go:281`); no raw IP stored in ClickHouse |
-| 16 | AMS version compatibility disclosure | PARTIAL | Validation covers AMS 3.0.3; compatibility matrix for other AMS versions not documented |
-| 17 | Known limitations documented | PARTIAL | `docs/assessment/documentation-gaps.md` (DG-01 through DG-18) catalogs 18 gaps; operator-facing documentation not yet authored for all of them |
+| 16 | AMS version compatibility disclosure | PASS | `docs/compatibility.md` authored D-089 S27: live-validated AMS 3.0.3 Enterprise (46/50 PASS); mock-profile-only rows for 2.10.0/2.14.x/3.0.2 (real containers 404 on Docker Hub — stated honestly); per-version wire-format differences (v2.10 `speed` vs v2.14+ `bitrate`; `webRTCViewerCount` added 2.14.x; `currentFPS` absent in AMS 3.0.3 REST); AMS 3.x specifics (per-app REST paths, no HMAC webhook signing, no CPU/mem via REST standalone); recommendation: AMS 3.x, others mock-compat only. |
+| 17 | Known limitations documented | PASS | `docs/known-limitations.md` authored D-089 S27: 18 items, operator-facing tone (what it means for you + workaround/roadmap), priority-sorted, all claims traceable to primary evidence (DG series, TC IDs, AV triage). Supersedes internal-only `docs/assessment/documentation-gaps.md` for operator-facing disclosure. |
 
 **Demand evidence and positioning notes (S25/D-087):**
 - **ant-media/Ant-Media-Server#3122** (Prometheus exporter requested 2021, closed 2023 unbuilt; community workaround via `json_exporter` with a moved blog and lost dashboard) — Pulse's `/metrics` endpoint ships this natively, addressing a long-standing unmet community demand.
