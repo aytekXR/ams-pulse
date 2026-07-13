@@ -4961,9 +4961,167 @@ AMS-INTEGRATION.md §4.5 stale (BUG-002-era), kafka-integration.md
 (DG-15), realams fresh rebuild (orphaned token), listing PNG exports,
 deferred F10 tail / §2.17 / §2.5, Pro MaxNodes=10 vs PRD 1–2 reconcile.
 PR/merge + tag/release evidence appended below after merge.
+
+**S27 MERGE + RELEASE EVIDENCE (appended post-merge; rides S28's PR):**
+- **PR #40 MERGED** — squash `167f48d`, all 15 contexts green. One CI
+  round-trip first: `web` red (eslint no-undef `sessionStorage` — the
+  eslint globals whitelist lacked it; ORCH's local gate ran vitest+build
+  but NOT lint — an unfaithful CI repro, the exact `faithful-ci-
+  reproduction` memory class) + `web-e2e` red (the new app-root
+  LicenseProvider fetch to /admin/license was unmocked in
+  dashboard-render.spec.ts ⇒ proxy ECONNREFUSED ⇒ zero-console-error gate
+  tripped). Both fixed (sessionStorage global + a free-tier route mock),
+  Playwright re-proven 15/15 in the CI-image docker run BEFORE pushing.
+  **Push budget deviation recorded: 3 pushes** (branch + red-CI fix +
+  v0.4.0 tag) vs the ≤2 directive — the fix push was unavoidable
+  (enforce_admins; contexts must be green to merge).
+- **v0.4.0 tagged** on `167f48d`. **Release run 29263184543 FAILED at its
+  own preflight** — 'no successful ci run for 167f48d': the tag was
+  pushed minutes after the merge, before main's post-merge ci run
+  completed (queued at tag time). Not a code failure; the CI-gate did its
+  job. **Re-run auto-chained** behind main CI going green (gh run rerun
+  --failed). S28 item 5 verifies the green release + ghcr 0.4.0 image
+  exists (P0 if not — the quickstart pins it).
+- **RESOLVED same-session: release re-run GREEN** (main ci for 167f48d
+  green first, then run 29263184543 re-run completed success). **ghcr
+  image PUBLISHED: tags 0.4/0.4.0/latest, multi-arch amd64+arm64,
+  cosign .sig present** (manifest inspected). GitHub Release page
+  v0.4.0 created via gh (the workflow itself only builds/scans/signs —
+  the page is a separate step, matching the v0.3.0 precedent);
+  marked Latest. **S28 item 5 downgraded to a confirm-only check.**
+  Remaining customer-pull blocker: GHCR visibility (operator item 5).
 - **OPERATOR ACTIONS REQUIRED — YES (4, recorded per the session-open
   directive; none blocks S27's own work):** (1) AMS license today
   (operator-promised); (2) trial-license mint needs the vault privkey;
   (3) final-assessment DRAFT review — gates marketplace upload;
   (4) Ant Media marketplace contact (checklist rows 7–11) — gates the
   actual listing. Details + exact commands: operator-expected.md ⚡ TL;DR.
+
+---
+
+## D-090 — SESSION-28 (2026-07-13, OPEN): operator-intake gate + marketplace tail
+
+**S28 OPEN (intake + standing checks, all read-only):**
+- **Repo state at open:** main == origin/main @ `167f48d` (S27 merge);
+  no foreign commits/branches (D-062 hazard clear). Uncommitted working
+  tree = expected set only: decisions.md S27 post-merge evidence +
+  operator-expected.md Release-row refresh (both ride S28's PR) +
+  Caddyfile.prod on-disk vhost + .bak (D-082 standing — never revert,
+  never commit via session PR).
+- **★ OPERATOR INTAKE: ALL FIVE ITEMS STILL OPEN — action required
+  (recorded per the session-open directive; none blocks S28's own work):**
+  (1) **AMS license NOT landed** — s28open sweep = **7th byte-identical
+  null delta** vs the pre-expiry baseline (licence-status still 204,
+  Enterprise 3.0.3 build 20260504_1443, 4 apps; realams overview line
+  excluded — orphaned token, carry #3). (2) **trial key NOT minted**
+  (no operator message/key material). (3) **final-assessment review
+  still pending** (gates marketplace upload). (4) **Ant Media contact
+  not opened** (checklist rows 7–11). (5) **GHCR still PRIVATE** —
+  anonymous pull-token request → HTTP 401 (customers cannot
+  `docker pull ghcr.io/aytekxr/ams-pulse:0.4.0`; critical-path).
+  Re-surfaced in operator-expected.md ⚡ (S28-open re-check note).
+- **Item 5 confirm-only check PASSED:** release run 29263184543
+  status=completed conclusion=success; GitHub Release v0.4.0 live
+  (published 2026-07-13T16:04:05Z, non-draft, Latest).
+- **AMS observation:** antmedia container Up 34h (StartedAt still
+  2026-07-12T06:52Z — no post-lapse restart; boot-enforcement hypothesis
+  stays untested, observe-only). Prod healthz ok (ch/col/meta ok),
+  poll-errlines-15m=0, pulse-prod-pulse-1 Up 2h healthy (= S27 rollout,
+  expected).
+- **CI promotions:** run date 2026-07-13 < 2026-07-23 → skip carry ×17.
+- **Env note:** session shell lacked the docker supplementary group
+  (`id` vs `getent group docker` mismatch — membership on file);
+  workaround `sg docker -c "…"` for all docker commands this session.
+- **★ Carry #3 DONE (sanctioned realams rebuild):** `down -v` pulse-realams
+  ONLY (prod untouched) + `up -d --build` on main @`167f48d` (= v0.4.0
+  tree). Healthy in 10 s; migrations one-shot exit 0; **fresh harness
+  token auto-extracts again** (plt_3c35…, orphaned-token gotcha cleared);
+  healthz ch/col/meta ok; authed /live/overview sees the real AMS
+  (node beyondkaira-ams up, 1 publisher on LiveApp). The trial-banner
+  build now runs on the validation stack for browser-accept.
+- **PLAN REVISION (standing directive, post-scout):** 4 scouts (0 errors).
+  Batch = (W1) AMS-INTEGRATION.md FULL staleness remediation — audit found
+  4 tiers, not just §4.5: BUG-002 claims (A1/A2), §4.4 falsely claims the
+  /webhook/* Caddy route is missing + wrong port :8091→:8092 (A3/A4),
+  B6/A2/A7 fixes shipped-but-documented-open, ~19 stale line cites +
+  DG-05 §3.7 stub; (W2) NEW docs/kafka-integration.md (DG-15) —
+  code-authoritative topic `ams-server-events` (kafka.go:58; assessment
+  docs say ams-instance-stats — contradiction to be resolved in-doc),
+  honest AV-15 BLOCKED + plaintext-only disclosure; (W3) listing PNGs
+  SS1/SS2/SS4 via local Playwright vs brandkit dc.html RENDER-COPY
+  (dc.html pulls IBM Plex from Google-Fonts CDN — brandkit self-host
+  mandate violation, recorded for designer/operator, brandkit/ NOT
+  edited); SS3/SS5/SS6 have no source screens → operator-manual; PNGs
+  gitignored, script committed; (W4) §2.17.2 parity refactor [XS] +
+  §2.17.3 RULING: Option B contract CR drop unreachable "down" from
+  FleetNode status enum [XS; truer to AMS lifecycle — alerts unaffected,
+  evalNodeUpDown keys on absence; no UI reads "down"] + stale
+  license_gates_test.go header comment; (W5) §2.17.1 RULING: viewer_count
+  zero-mean KEPT as a real signal + documented (0 viewers is a true
+  measurement, first-viewer z-spike is a true statistical anomaly;
+  suppression = 2-line change later if operator overrules) + ROADMAP §2.5
+  stamped DONE-S10/D-068 (ledger drift, 2nd of its class after §2.4).
+  MaxNodes=10-vs-PRD → NEW operator decision item (enforcement complete;
+  value choice is pricing, not code). F10 tail + §2.5 (moot) stay
+  deferred. Deliberate contract CR recorded (enum shrink, regen
+  idempotent required).
+- **★ BATCH EXECUTED (workflow: 5 authors + 5 adversarial verifiers,
+  pipelined, 0 errors; ~675k subagent tokens):**
+  - **W1 AMS-INTEGRATION.md remediation** — all 4 audit tiers applied:
+    BUG-002 claims → shipped-state (restpoller pollVods, CH 0009, meta
+    0003, live 0.02% reconciliation); §4.4 REWRITTEN (the /webhook/*
+    Caddy route EXISTS at pulse:8092 — the doc was instructing operators
+    to add it, with the beacon port :8091 by mistake); webhook port
+    :8091→:8092 throughout; B6/A2/A7 hardening marked shipped w/ current
+    cites; ListVodsPaged+GetVersion added; AMS login-credential env vars
+    documented; §3.7 DG-05 stub; ~19 stale line cites fixed. V1 PARTIAL →
+    2 must-fix citations (OIDC secret range, client.go:388 body cap)
+    remediated by ORCH same-session.
+  - **W2 docs/kafka-integration.md NEW (DG-15)** — 429 lines,
+    code-authoritative (topic `ams-server-events`; the assessment docs'
+    `ams-instance-stats` name corrected with an operator caveat), AV-15
+    BLOCKED admonition prominent, plaintext-only/at-least-once/backoff
+    disclosed. V2 PARTIAL → 2 real catches remediated by ORCH, both
+    re-verified against source: healthz degrades on parse_errors>0 OR
+    lag>10000 (server.go:803); StartOffset zero-value = FirstOffset
+    (kafka-go consumergroup.go:243 — FIRST start with an uncommitted
+    group REPLAYS retained topic history once; the draft claimed
+    LastOffset/no-replay).
+  - **W3 listing screenshots** — NEW qa/marketplace/render-screenshots.mjs:
+    hermetic render (non-file:// requests aborted) of brandkit dc.html
+    via patched RENDER COPY (IBM Plex woff2 from web/node_modules
+    @fontsource — the dc.html's Google-Fonts CDN links violate the
+    brandkit self-host mandate; brandkit/ byte-untouched, finding filed
+    for the designer/operator). SS1/SS2/SS4 PNGs 1282×802 (1280×800 +
+    1px frame border), IBM Plex render visually verified, idempotent
+    re-run byte-stable; SS3/SS5/SS6 marked operator-manual (no source
+    screens exist). PNGs gitignored; script is the reproducible artifact.
+    V3 CONFIRMED_OK, 0 must-fix.
+  - **W4 code items** — §2.17.2: `alert.SupportedAnomalyMetrics()`
+    exported, parity test fail-fasts on canonical-set drift (**verifier
+    independently re-derived the RED proof**: fake 7th metric →
+    t.Fatalf naming it); §2.17.3 Option B contract CR: "down" dropped
+    from BOTH status enums (regen idempotent ×2, exactly 2 generated
+    lines changed); stale license_gates_test.go header comment fixed
+    (real path: server/internal/api/ — the charter's license/ path was
+    wrong, author corrected). V4 CONFIRMED_OK. **W4 deviation acted on
+    by ORCH: FleetPage.tsx "Down" stat tile removed** (computed
+    status=="down" — a TS type error post-regen AND a structurally-
+    permanent 0) + test fixture down→degraded. ORCH also derived the
+    SECOND hardcoded metric slice (validator-coverage test, line 44)
+    from the canonical set — same drift class, found by V4.
+  - **W5 rulings** — anomaly guide: zero-viewer/first-viewer subsection
+    (mechanics verified: no presence gate on viewers, effStddev 1e-9 ⇒
+    z≈1e9); ROADMAP §2.5 stamped DONE-S10/D-068 (ledger drift, 2nd class
+    member after §2.4); §2.17.1 RULED: KEEP + document. V5 PARTIAL →
+    session-jargon in the operator guide heading/body removed by ORCH.
+- **Gates (CI-faithful):** contracts job green (ajv ×3 valid, redocly
+  valid); server job in golang:1.25 docker (cache volumes): gofmt clean,
+  vet clean, **24/24 pkgs `-race` 0 FAIL**, coverage **76.1% ≥ 70.2**
+  (unchanged from S27), qa modules green; build step hit a docker-only
+  VCS-stamping artifact (dubious-ownership on the bind mount; not a code
+  failure) — re-run green with safe.directory. Web: gen:api regen
+  idempotent (only the 2 enum lines vs HEAD), build OK, **lint OK** (the
+  S27 lesson), vitest **388/388**, coverage 64.02/61.88/56.03 vs gates
+  59/54/45. Integration suite deferred to PR CI (no store/query
+  production change — S27 precedent).

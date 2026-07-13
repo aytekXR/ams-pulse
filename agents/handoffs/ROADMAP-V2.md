@@ -110,7 +110,7 @@ D-032 pin (review when the pin is lifted, not before).
 
 ---
 
-### 2.5  O(N²) rebuildSnapshot hot path  [M]
+### 2.5  O(N²) rebuildSnapshot hot path  [M] ✅ DONE S10 (D-068, commit 2d475a2 — O(N²) rebuildSnapshot → O(1) incremental snapshot deltas; retained rebuildSnapshot only on non-hot paths, aggregator.go:587 comment). Ledger drift, 2nd of its class after §2.4.
 
 **Why:** During D-065 WO-C the per-stream `ingest: health degraded` log storm was fixed by
 rate-limiting to one aggregated INFO/tick. The CPU cap was RAISED 0.5→1.0 vCPU in the same
@@ -414,16 +414,30 @@ discipline). Each is independent:
    "audience appeared" a wanted signal (keep, document) or noise
    (needs e.g. a min-mean floor or count-metric variance floor)? Write the
    ruling into the anomaly docs either way.
+   RULED S28 (D-090): kept + documented in docs/guides/anomaly-detection.md — 0 viewers is a real measurement; first-viewer z-spike is a true anomaly; suppression (observation-side skip mirroring the APILatencyMS>0 pattern) remains a 2-line follow-up if the operator overrules.
 2. **TestAnomalyMetricMapSwitchParity derives from a hardcoded 6-case
    slice [XS]** (wave3_d087_test.go:189) — refactor to iterate
    `supportedAnomalyMetrics` so a 7th metric cannot be added to the map
    while silently missing from the parity pin.
+   ✅ DONE S28 (D-090): `alert.SupportedAnomalyMetrics()` exported; the
+   parity test fail-fasts on any canonical metric without a case (RED
+   proof re-derived independently by the verifier: fake 7th metric →
+   t.Fatalf naming it); the second hardcoded slice found at
+   wave3_d087_test.go:44 (validator coverage) derived from the canonical
+   set too.
 3. **FleetNodes can never emit contracted status="down" [XS–S].**
    Eviction (D-087) removes a stale node from the snapshot entirely, so
    the pre-eviction window shows "up"→(gone); the contracted "down" enum
    value is unreachable. Decide: emit "down" during
    LastSeenAt>threshold-but-not-yet-evicted, or document the two-state
    reality and drop "down" from the enum (contract CR).
+   ✅ RULED + DONE S28 (D-090): Option B — deliberate contract CR drops
+   "down" from BOTH enum sites (NodeHealth.status + FleetNode.status;
+   [up, degraded]); truer to the AMS lifecycle (no native soft-down
+   state; the node_down ALERT keys on snapshot absence and is untouched).
+   Regen idempotent; dead web consumer removed (FleetPage "Down" tile
+   showed a structurally-permanent 0). Re-adding "down" later is an
+   additive CR if two-phase eviction is ever built.
 4. **DeleteZeroMeanNodeBaselines PG integration coverage [XS]** — the
    method is rebind-correct (verified) and SQLite-tested; add it to
    TestPG_AnomalyBaselines_RoundTrip when the PG integration suite next
@@ -899,6 +913,26 @@ operator answer, ORCH ruling recorded in D-086):
    are integration-covered, not unit-covered), gofmt/vet/contract-drift
    clean, full integration green (10 migrations idempotent). Prod untouched;
    a rollout now carries D-082..**D-086**.
+
+### S28 — operator-intake gate + marketplace tail ✅ DONE (D-090, 2026-07-13)
+
+1. **Intake:** all 5 operator items re-verified OPEN (7th null-delta sweep;
+   GHCR anonymous 401); v0.4.0 release confirm-only PASSED; NEW item 6
+   seeded (Pro MaxNodes pricing ruling — enforcement already built).
+2. **Docs:** kafka-integration.md NEW (DG-15, code-authoritative,
+   AV-15-BLOCKED honest; V2 caught 2 real behavior errors incl.
+   first-start FirstOffset replay) + AMS-INTEGRATION 4-tier de-stale
+   (~30 fixes) + DG-05 stub; DG rows marked AUTHORED.
+3. **Assets:** render-screenshots.mjs (hermetic brandkit render;
+   SS1/SS2/SS4 done, SS3/SS5/SS6 operator-manual; brandkit CDN-font
+   violation filed); PNGs gitignored.
+4. **Code:** §2.17.2 canonical-set parity guard (RED re-derived
+   independently) + §2.17.3 Option B contract CR ("down" dropped;
+   FleetPage dead tile removed) + §2.17.1 RULED keep+document + §2.5
+   stamped already-DONE-S10 (ledger drift, 2nd find).
+5. **Ops:** realams rebuilt on v0.4.0 (fresh token, orphan gotcha
+   cleared); 14 agents 0 errors; 24/24 -race, coverage 76.1, web
+   388/388+lint; promotions skip carry ×17.
 
 ### S27 — ★ operator marketplace directive: rollout + trial lifecycle + quickstart + docs pack ✅ DONE (D-089, 2026-07-13)
 

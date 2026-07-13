@@ -11,7 +11,66 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-28.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-29.md`)
+
+**Session 2026-07-13 result: D-090 — S28 DONE (★ operator-intake gate +
+marketplace tail: all 5 operator items re-verified still-open; DG-15 kafka
+doc + AMS-INTEGRATION 4-tier de-stale + 3 listing PNGs + §2.17.2/.3 done +
+realams on v0.4.0).**
+- **★ OPERATOR INTAKE (mission (a)): ALL FIVE items OPEN, re-verified
+  live** — 7th byte-identical sweep (license NOT applied); GHCR anonymous
+  pull 401 (still private); no key/review/contact signals. v0.4.0 release
+  confirm-only check PASSED (run success; Release page live 16:04Z;
+  signed multi-arch image on ghcr). **NEW operator item 6: Pro
+  MaxNodes=10 vs PRD §7.11 "1–2" — pricing decision, enforcement already
+  built (server.go:1632/license.go:118); listing-draft stays
+  NEEDS-RECONCILE until ruled.**
+- **★ Docs (W1/W2, adversarially verified):** NEW `docs/kafka-integration.md`
+  (DG-15; code-authoritative topic `ams-server-events` — corrects the
+  assessment docs' `ams-instance-stats`; AV-15-BLOCKED admonition;
+  plaintext-only; **first-start FirstOffset history-replay** — 2 V2
+  catches fixed vs source incl. healthz lag>10000 degradation);
+  AMS-INTEGRATION.md 4-tier remediation (~30 fixes: BUG-002-era claims,
+  §4.4 falsely-missing Caddy route, webhook port :8091→:8092, B6/A2/A7
+  shipped-status, ~19 line cites, DG-05 §3.7 stub). DG-05+DG-15 marked
+  AUTHORED.
+- **★ Marketplace assets (W3):** `qa/marketplace/render-screenshots.mjs`
+  — hermetic brandkit render (render-COPY font patch; **brandkit dc.html
+  Google-Fonts-CDN violation filed for designer**, brandkit untouched);
+  SS1/SS2/SS4 @1282×802 verified IBM-Plex-true; SS3/SS5/SS6
+  operator-manual (no source screens); PNGs gitignored.
+- **★ Code honesty (W4, RED-proof re-derived independently):**
+  `alert.SupportedAnomalyMetrics()` canonical accessor; parity +
+  validator tests fail-fast on set drift (§2.17.2); **deliberate
+  contract CR: "down" dropped from NodeHealth/FleetNode status enums**
+  (§2.17.3 Option B — structurally unreachable since D-087 eviction;
+  node_down ALERT untouched; FleetPage dead "Down" tile removed).
+- **Rulings/ledger (W5):** §2.17.1 RULED KEEP+documented (first-viewer
+  z-spike is a real signal; anomaly guide §new); **ROADMAP §2.5 found
+  ALREADY FIXED since S10/D-068, stamped** (2nd ledger-drift find).
+- **Gates:** 24/24 `-race` 0 FAIL; coverage **76.1** (floor 70.2); web
+  388/388 + lint + build; regen idempotent; contracts valid; realams
+  rebuilt on `167f48d` healthy 10s (fresh token — orphan gotcha cleared).
+  CI promotions skip carry ×17. 14 agents, 0 errors.
+- **S29 carries:** F10 tail [M] (probe-stats UI + RTMP AMF0), D-V2-1
+  unsigned-webhook (operator), SRT-loss validation [test-only vs live
+  AMS], browser-accept trial banner (realams :18090 now runs it),
+  marketplace upload prep the moment operator items land.
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-29.md` and execute it**
+(★ standing directive at its top: review the backlog + REVISE the plan;
+operator intake FIRST — now SIX items incl. the NEW MaxNodes pricing
+ruling; CI promotions if run date ≥07-23 [csp-e2e candidate, web-e2e
+~07-25] else skip carry ×18; AMS re-sweep at open, observe-only — a
+non-null diff = the operator's license landed, expected signal not
+incident). **PR-first, ≤2 pushes.** Check `docs/operator-expected.md`
+FIRST (6 items).
+
+---
+
+## ▶ prior session context (S27, superseded by the above — original START HERE follows)
+
+## (superseded) ▶ START HERE (next session — execute `sessions/SESSION-28.md`)
 
 **Session 2026-07-13 result: D-089 — S27 DONE (★ OPERATOR MARKETPLACE
 DIRECTIVE executed end-to-end: prod rollout D-082..D-088 LIVE +
