@@ -8,7 +8,7 @@
  *  - Delete confirm flow
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import type { Probe, ProbeResult, LicenseInfo } from "@/lib/api/types";
 
 // ─── Probe form validation (pure unit tests) ──────────────────────────────────
@@ -142,7 +142,7 @@ vi.mock("recharts", () => ({
 }));
 
 import { adminApi, probesApi } from "@/api/client";
-import { ProbesPage, ttfbColor, iceVariant } from "../ProbesPage";
+import { ProbesPage, ttfbColor, iceVariant, signalingVariant } from "../ProbesPage";
 
 const freeLicense: LicenseInfo = { tier: "free", valid: true };
 const proLicense: LicenseInfo = { tier: "pro", valid: true };
@@ -701,5 +701,177 @@ describe("iceVariant — ICE state to Badge variant", () => {
     expect(iceVariant("checking")).toBe("warning");
     expect(iceVariant("new")).toBe("warning");
     expect(iceVariant("")).toBe("warning");
+  });
+});
+
+// ─── signalingVariant — signaling state to Badge variant ─────────────────────
+//
+// app_accepted → success, app_rejected → error, everything else → muted.
+// Per W2 work order: neutral for handshake_complete/others.
+
+describe("signalingVariant — signaling state to Badge variant", () => {
+  it("'app_accepted' maps to success", () => {
+    expect(signalingVariant("app_accepted")).toBe("success");
+  });
+
+  it("'app_rejected' maps to error", () => {
+    expect(signalingVariant("app_rejected")).toBe("error");
+  });
+
+  it("'handshake_complete' maps to muted (neutral)", () => {
+    expect(signalingVariant("handshake_complete")).toBe("muted");
+  });
+
+  it("'offer_received' maps to muted (neutral)", () => {
+    expect(signalingVariant("offer_received")).toBe("muted");
+  });
+
+  it("error sub-states map to muted (signaling outcome is surfaced by Status column)", () => {
+    expect(signalingVariant("ws_error")).toBe("muted");
+    expect(signalingVariant("rtmp_error")).toBe("muted");
+    expect(signalingVariant("ws_timeout")).toBe("muted");
+    expect(signalingVariant("rtmp_timeout")).toBe("muted");
+    expect(signalingVariant("ws_refused")).toBe("muted");
+    expect(signalingVariant("rtmp_refused")).toBe("muted");
+  });
+
+  it("unknown/empty strings map to muted", () => {
+    expect(signalingVariant("")).toBe("muted");
+    expect(signalingVariant("unknown_state")).toBe("muted");
+  });
+});
+
+// ─── ProbesPage — Signaling column ───────────────────────────────────────────
+
+describe("ProbesPage signaling_state column", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(adminApi.getLicense).mockResolvedValue(proLicense);
+    vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
+  });
+
+  const baseRtcResult: ProbeResult = {
+    id: "r-sig-1",
+    probe_id: "probe-1",
+    ts: now - 30_000,
+    success: true,
+    ttfb_ms: null,
+  };
+
+  async function openResultsWithSignaling(results: ProbeResult[]) {
+    vi.mocked(probesApi.getResults).mockResolvedValue({ items: results, meta: {} });
+    render(<ProbesPage />);
+    await waitFor(() => expect(screen.getByText("Main HLS stream")).toBeInTheDocument());
+    const btns = screen.getAllByRole("button", { name: /view results for/i });
+    fireEvent.click(btns[0]);
+    await waitFor(() =>
+      expect(screen.getByText(/synthetic probe results/i)).toBeInTheDocument(),
+    );
+  }
+
+  it("renders 'Signaling' column header in results table", async () => {
+    await openResultsWithSignaling([baseRtcResult]);
+    expect(screen.getByText("Signaling")).toBeInTheDocument();
+  });
+
+  it("renders 'Connect' column header in results table", async () => {
+    await openResultsWithSignaling([baseRtcResult]);
+    expect(screen.getByText("Connect")).toBeInTheDocument();
+  });
+
+  it("renders badge for app_accepted signaling_state", async () => {
+    await openResultsWithSignaling([{ ...baseRtcResult, signaling_state: "app_accepted" }]);
+    expect(screen.getByText("app_accepted")).toBeInTheDocument();
+  });
+
+  it("renders badge for app_rejected signaling_state", async () => {
+    await openResultsWithSignaling([{ ...baseRtcResult, signaling_state: "app_rejected" }]);
+    expect(screen.getByText("app_rejected")).toBeInTheDocument();
+  });
+
+  it("renders badge for handshake_complete signaling_state", async () => {
+    await openResultsWithSignaling([{ ...baseRtcResult, signaling_state: "handshake_complete" }]);
+    expect(screen.getByText("handshake_complete")).toBeInTheDocument();
+  });
+
+  it("renders badge for offer_received signaling_state", async () => {
+    await openResultsWithSignaling([{ ...baseRtcResult, signaling_state: "offer_received" }]);
+    expect(screen.getByText("offer_received")).toBeInTheDocument();
+  });
+
+  it("renders dash when signaling_state is absent", async () => {
+    // No signaling_state key on baseRtcResult
+    await openResultsWithSignaling([{ ...baseRtcResult }]);
+    // None of the known signaling values should appear
+    expect(screen.queryByText("app_accepted")).toBeNull();
+    expect(screen.queryByText("handshake_complete")).toBeNull();
+    expect(screen.queryByText("offer_received")).toBeNull();
+  });
+
+  it("renders dash when signaling_state is null", async () => {
+    await openResultsWithSignaling([{ ...baseRtcResult, signaling_state: null }]);
+    expect(screen.queryByText("app_accepted")).toBeNull();
+    expect(screen.queryByText("handshake_complete")).toBeNull();
+  });
+});
+
+// ─── ProbesPage — Connect column ─────────────────────────────────────────────
+
+describe("ProbesPage connect_time_ms column", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(adminApi.getLicense).mockResolvedValue(proLicense);
+    vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
+  });
+
+  const baseResult: ProbeResult = {
+    id: "r-conn-1",
+    probe_id: "probe-1",
+    ts: now - 30_000,
+    success: true,
+    ttfb_ms: null,
+  };
+
+  async function openResultsWithConnect(results: ProbeResult[]) {
+    vi.mocked(probesApi.getResults).mockResolvedValue({ items: results, meta: {} });
+    render(<ProbesPage />);
+    await waitFor(() => expect(screen.getByText("Main HLS stream")).toBeInTheDocument());
+    const btns = screen.getAllByRole("button", { name: /view results for/i });
+    fireEvent.click(btns[0]);
+    await waitFor(() =>
+      expect(screen.getByText(/synthetic probe results/i)).toBeInTheDocument(),
+    );
+  }
+
+  it("renders connect_time_ms value in ms (e.g. '42 ms')", async () => {
+    await openResultsWithConnect([{ ...baseResult, connect_time_ms: 42 }]);
+    expect(screen.getByText("42 ms")).toBeInTheDocument();
+  });
+
+  it("renders '1 ms' for connect_time_ms=1 (minimum valid measured value)", async () => {
+    await openResultsWithConnect([{ ...baseResult, connect_time_ms: 1 }]);
+    expect(screen.getByText("1 ms")).toBeInTheDocument();
+  });
+
+  it("renders dash when connect_time_ms is null (connection failed / not applicable)", async () => {
+    await openResultsWithConnect([{ ...baseResult, connect_time_ms: null }]);
+    // No "ms" value should appear in the results table (TTFB is also null here;
+    // the probe list row may show its own TTFB so scope to the results table only)
+    const table = screen.getByRole("table", { name: /synthetic probe result rows/i });
+    expect(within(table).queryByText(/^\d+ ms$/)).toBeNull();
+  });
+
+  it("renders dash when connect_time_ms is 0 (server guarantees >=1 for real measurements)", async () => {
+    await openResultsWithConnect([{ ...baseResult, connect_time_ms: 0 }]);
+    // 0 is the not-measured sentinel — should not render "0 ms"
+    expect(screen.queryByText("0 ms")).toBeNull();
+  });
+
+  it("renders dash when connect_time_ms is absent", async () => {
+    await openResultsWithConnect([{ ...baseResult }]);
+    // No integer ms value should appear in the results table (scope to avoid
+    // the probe list row which may show its own TTFB)
+    const table = screen.getByRole("table", { name: /synthetic probe result rows/i });
+    expect(within(table).queryByText(/^\d+ ms$/)).toBeNull();
   });
 });

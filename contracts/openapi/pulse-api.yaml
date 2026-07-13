@@ -2716,10 +2716,13 @@ components:
             timed out before a server signaling message was received),
             ws_refused (TCP connection refused to the signaling endpoint),
             ws_error (WebSocket protocol or application-level error).
-            RTMP-specific codes: rtmp_timeout (TCP dial or S2 handshake
-            timed out before the handshake byte was fully read),
-            rtmp_refused (TCP connection refused to the RTMP endpoint),
-            rtmp_error (RTMP protocol-level or application error).
+            RTMP-specific codes: rtmp_timeout (TCP dial or handshake timed
+            out before S2 was fully read), rtmp_refused (TCP connection
+            refused), rtmp_error (protocol-level or application error),
+            rtmp_connect_timeout (AMF0 connect exchange timed out after the
+            handshake succeeded — server did not return _result or _error
+            within the probe deadline), rtmp_app_rejected (server replied
+            to the AMF0 connect command with _error).
             Segment codes: segment_too_large (first media segment exceeded the
             size cap; bitrate_kbps is 0, success stays true).
             ICE codes: ice_failed (pion ICE state machine reached failed;
@@ -2741,14 +2744,24 @@ components:
             null on connection failure or when not applicable.
             WebRTC: milliseconds from WebSocket dial to the first server
             signaling message received.
-            RTMP: milliseconds from TCP dial to the S2 handshake byte fully read.
+            RTMP: when the URL includes an app path segment, milliseconds from
+            TCP dial to the AMF0 _result or _error response fully parsed
+            (covers the full connect round-trip, not just the handshake);
+            also set on _error (app_rejected) since a rejection is a valid
+            timing sample. When the URL has no app path segment (legacy
+            handshake-only mode), milliseconds from TCP dial to S2 fully
+            read. Null on connection failure, protocol error, or timeout.
         signaling_state:
           type: [string, 'null']
           description: >-
             Final protocol state recorded by the probe; null for probes
             that do not use a signaling or handshake phase.
             WebRTC values: offer_received | ws_timeout | ws_refused | ws_error.
-            RTMP values: handshake_complete | rtmp_timeout | rtmp_refused | rtmp_error.
+            RTMP values: handshake_complete (TCP handshake complete, no app
+            segment in URL or AMF0 exchange timed out/failed after handshake) |
+            app_accepted (AMF0 connect succeeded: server returned _result) |
+            app_rejected (AMF0 connect rejected: server returned _error) |
+            rtmp_timeout | rtmp_refused | rtmp_error.
         ice_state:
           type: [string, 'null']
           description: >-

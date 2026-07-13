@@ -1,6 +1,106 @@
-# Operator TODO — the items only YOU can do (updated at SESSION-28 close, D-090, 2026-07-13; rides S28's PR)
+# Operator TODO — the items only YOU can do (updated at SESSION-29 close, D-091, 2026-07-14; rides S29's PR)
+
+## ⚡ TL;DR — expected from you right now (2026-07-14, SESSION-29 closed — D-091, F10 complete + SRT enforcement finding)
+
+> **Your six standing items are all still open** (re-verified live at S29
+> open: 8th byte-identical AMS sweep, GHCR still answering 401 to anonymous
+> pulls, no trial-key / assessment-review / Ant-Media-contact / MaxNodes
+> signals). They are unchanged from the S28 list below — **and item 1 (the
+> AMS license) got more urgent today:**
+>
+> **1. ★ Your SRT ingest is actively DOWN under the suspended license.**
+> S29 discovered the first real post-expiry enforcement: AMS rejects every
+> SRT publish with "License is suspended" (RTMP is unaffected — your
+> teststream keeps working). Eight byte-identical REST sweeps never showed
+> this because it's feature-level, not API-surface, enforcement — and it
+> bites WITHOUT a restart. When you apply the new license, say so: the
+> committed SRT validation scenario runs immediately and the Enterprise
+> surface gets re-validated.
+>
+> **2. Your caddy-vhost decision is CLOSED — by you.** Your commit
+> `80df0ab "bedirhan site"` on local main was adopted and carried to
+> origin with your authorship preserved. `origin/main` and live prod Caddy
+> now agree; the S20 redeploy hazard is gone.
+>
+> **3. NEW small ask — your PDF.** You dropped
+> `docs/ant-media-marketplace-opportunity-report.md.pdf` (8 pages) into
+> the repo on 07-13 ~23:38. It is left UNTRACKED (not committed — this
+> host has no PDF tooling, so its content is unread). Tell a session what
+> to do with it: commit to docs/? keep local? fold into the marketplace
+> pack?
+>
+> **4. NEW — your uipro directive is scoped and awaits one confirmation.**
+> "Refactor all UI/UX by uipro" is now **ROADMAP-V2 §2.19** (phased,
+> page-by-page waves, S30 starts the scoping work order). The recorded
+> assumption: **your brandkit tokens remain the binding design source
+> (D-071) and uipro drives the refactor method** — if you want uipro to
+> supersede brandkit values instead, say "uipro overrules brandkit".
+>
+> **FYI, no action needed — what S29 did autonomously:**
+> - **The last non-gated PRD feature tail (F10 probes) is COMPLETE.** The
+>   RTMP probe now performs the full AMF0 connect round-trip (proven live
+>   against your AMS tonight: application-level accept in one probe, with
+>   the real wire exchange committed as a regression fixture), and the
+>   probe results page finally shows the Signaling state and Connect time
+>   it was always storing.
+> - **A ready-to-run SRT packet-loss scenario is committed** — it
+>   SKIPs honestly today (with your license rejection captured as
+>   evidence) and becomes a real validation run the moment the license
+>   lands.
+> - **The customer-facing known-limitations doc grew 18→22 rows** — the
+>   biggest one: an honest disclosure that the Kafka consumer (the
+>   recommended workaround for blank fleet gauges) has never been
+>   validated against a real AMS broker. Two stale Kafka topic-name
+>   references were also corrected.
+> - **Process note:** the session survived a mid-build account spend-limit
+>   outage (you raised it — thanks); the half-finished work was adopted
+>   under the dead-workflow rules, everything re-verified, all gates
+>   green (24/24 race-clean, coverage 76.0%, web 407/407).
+
+## 🔎 What SESSION-29 did (2026-07-13/14, closed — D-091)
+
+| Area | Result |
+|---|---|
+| **Operator intake** | All six items re-verified live at open: none landed (8th byte-identical sweep; GHCR 401; no signals). Caddy-vhost standing item CLOSED via your own `80df0ab` commit (adopted, authorship preserved). Sweep-tool gotcha fixed: the handoff's `PULSE_TOKEN=<any>` prefix was suppressing token auto-extraction (false parse-err) — future sessions run it bare. |
+| **★ SRT enforcement finding** | First observable post-expiry enforcement: AMS EE SRTAdaptor rejects SRT publishes ("License is suspended") while RTMP works; no restart needed for it to bite. Blocked-scenario list updated (was EMPTY since S22); SRT validation re-gated on your license. |
+| **F10 tail complete** | RTMP AMF0 connect round-trip (hand-rolled, zero new deps, contract text-only change) — live-proven app-level accept vs your AMS + 281-byte wire fixture; ProbesPage gains Signaling + Connect columns (407 web tests, was 388). The adversarial net caught a real coverage hole (chunk-size renegotiation handler untested) — closed with a mutation-proven test. |
+| **Docs honesty** | known-limitations 18→22 (Kafka never live-validated / plaintext-only / replay+at-least-once / first-viewer spike intentional); AMS-INTEGRATION packet-loss semantics per protocol (RTMP masks loss, SRT shows post-ARQ only); every new claim independently cite-verified. |
+| **New directive scoped** | uipro UI/UX refactor → ROADMAP-V2 §2.19 (phased waves, brandkit-tokens-binding assumption recorded, S30 scoping WO). |
+| **Quality net** | 12 workflow agents (4 scouts + 4 authors + 4 adversarial verifiers), 0 errors post-resume; 2 verifier must-fixes remediated same-session with fresh RED proofs; 1 orchestrator false-green near-miss caught and documented. Gates: 24/24 Go pkgs race-clean, coverage 76.0% (floor 70.2), web 407/407 + lint + build, regen idempotent. CI promotions skip carry ×18. One PR. |
+
+## (superseded) S28-close header follows
 
 ## ⚡ TL;DR — expected from you right now (2026-07-13, SESSION-28 closed — D-090, marketplace tail)
+
+> **[S29-open re-check, 2026-07-13 20:46Z; updated mid-session 07-14]**
+> All SIX items below (the five marketplace items + the MaxNodes ruling)
+> re-verified live and **STILL OPEN**: 8th byte-identical AMS sweep (your
+> new license is not applied); GHCR anonymous pull still answers 401
+> (image private); no trial-key / assessment-review / Ant-Media-contact /
+> MaxNodes-ruling signals found. Nothing blocks the session's autonomous
+> work. (Full refresh of this file lands at S29 close.)
+>
+> **Mid-session updates (2026-07-14):**
+> - **★ Your SRT ingest is DOWN under the suspended license** — first
+>   real post-expiry enforcement observed: AMS rejects every SRT publish
+>   with "License is suspended" (RTMP is unaffected). Applying your new
+>   license (item 1) now also restores SRT; the SRT validation scenario
+>   is committed and will run the moment it lands.
+> - **Caddy-vhost decision: ANSWERED by your commit** — your
+>   `80df0ab "bedirhan site"` commit on local main was adopted; S29's
+>   close carries it to origin with your authorship preserved. This
+>   standing item is CLOSED.
+> - **Your PDF was found** (`docs/ant-media-marketplace-opportunity-report.md.pdf`,
+>   8 pp, dropped 07-13 ~21:38Z): left UNTRACKED (not committed — no
+>   text extraction on this host, content unread). **Small ask: say what
+>   sessions should do with it** (commit to docs/? keep local? fold into
+>   the marketplace pack?).
+> - **uipro directive acknowledged** → ROADMAP-V2 **§2.19** (full UI/UX
+>   refactor via the UI/UX Pro Max skill, phased; S30 scoping WO).
+>   **Small ask (assumption to confirm): brandkit tokens remain the
+>   binding design source (D-071) and uipro drives the method** — if you
+>   instead want uipro to supersede brandkit values, say "uipro overrules
+>   brandkit" and §2.19 gets re-ruled.
 
 > **Your FIVE marketplace items are all still open — S28 re-verified each
 > one live at open and none had landed** (7th byte-identical AMS sweep: the

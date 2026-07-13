@@ -5,16 +5,102 @@
 package prober
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 )
+
+// ─── Test helpers for AMF0 chunk exchange ─────────────────────────────────────
+
+// readRTMPMsgTest reads one complete RTMP message from conn (test-side helper).
+// Handles fmt=0 first chunk and fmt=3 continuations at 128-byte boundaries.
+// Returns msgType and the full payload.  Returns ("", nil, nil) on EOF.
+func readRTMPMsgTest(conn net.Conn) (msgType byte, payload []byte, err error) {
+	// Read basic header
+	var bh [1]byte
+	if _, err := io.ReadFull(conn, bh[:]); err != nil {
+		return 0, nil, err // may be EOF if prober already closed
+	}
+	fmt0 := (bh[0] >> 6) & 0x03
+	if fmt0 != 0 {
+		return 0, nil, fmt.Errorf("readRTMPMsgTest: expected fmt=0 for first chunk, got %d", fmt0)
+	}
+	// 11-byte message header (fmt=0)
+	var mh [11]byte
+	if _, err := io.ReadFull(conn, mh[:]); err != nil {
+		return 0, nil, fmt.Errorf("readRTMPMsgTest: message header: %v", err)
+	}
+	msgLen := int(mh[3])<<16 | int(mh[4])<<8 | int(mh[5])
+	msgType = mh[6]
+
+	payload = make([]byte, 0, msgLen)
+	rem := msgLen
+	firstChunk := true
+	for rem > 0 {
+		if !firstChunk {
+			// Continuation chunk basic header (fmt=3)
+			var cb [1]byte
+			if _, err := io.ReadFull(conn, cb[:]); err != nil {
+				return 0, nil, fmt.Errorf("readRTMPMsgTest: continuation header: %v", err)
+			}
+		}
+		firstChunk = false
+		n := 128
+		if n > rem {
+			n = rem
+		}
+		buf := make([]byte, n)
+		if _, err := io.ReadFull(conn, buf); err != nil {
+			return 0, nil, fmt.Errorf("readRTMPMsgTest: payload read: %v", err)
+		}
+		payload = append(payload, buf...)
+		rem -= n
+	}
+	return msgType, payload, nil
+}
+
+// sendAMF0CmdChunkTest sends a minimal AMF0 command chunk (fmt=0, csid=3, type=0x14).
+// Payload: command name string + txid number (1.0) + null (info placeholder).
+// Fits in a single 128-byte chunk for any realistic command name.
+func sendAMF0CmdChunkTest(conn net.Conn, cmdName string) error {
+	var payload []byte
+	// AMF0 string: type 0x02 + uint16 length + bytes
+	payload = append(payload, 0x02, byte(len(cmdName)>>8), byte(len(cmdName)))
+	payload = append(payload, []byte(cmdName)...)
+	// AMF0 number: type 0x00 + 8-byte IEEE 754 BE (1.0 = 0x3FF0_0000_0000_0000)
+	payload = append(payload, 0x00, 0x3F, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
+	// AMF0 null
+	payload = append(payload, 0x05)
+
+	msgLen := len(payload)
+	// Single chunk: fmt=0, csid=3 → basic header byte 0x03
+	chunk := make([]byte, 1+11+msgLen)
+	chunk[0] = 0x03
+	// timestamp = 0
+	chunk[1], chunk[2], chunk[3] = 0, 0, 0
+	// length
+	chunk[4] = byte(msgLen >> 16)
+	chunk[5] = byte(msgLen >> 8)
+	chunk[6] = byte(msgLen)
+	// type_id = 0x14 (AMF0 command)
+	chunk[7] = 0x14
+	// msg_stream_id = 0 (LE)
+	chunk[8], chunk[9], chunk[10], chunk[11] = 0, 0, 0, 0
+	copy(chunk[12:], payload)
+
+	if _, err := conn.Write(chunk); err != nil {
+		return fmt.Errorf("sendAMF0CmdChunkTest write: %v", err)
+	}
+	return nil
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -145,8 +231,10 @@ func sendS0S1S2(conn net.Conn, s0Version byte, c1 []byte, corruptS2 bool) error 
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-// TestProbeRTMP_Success verifies the full C0+C1 → S0+S1+S2 → C2 happy path.
-// Assertions: Success=true, ConnectTimeMs>=1, SignalingState="handshake_complete", ErrorCode="".
+// TestProbeRTMP_Success verifies the full C0+C1 → S0+S1+S2 → C2 → AMF0 connect
+// → _result happy path.  The mock server reads the connect command and replies
+// with AMF0 _result, so the prober should return SignalingState="app_accepted".
+// ConnectTimeMs is widened to dial→_result parsed (≥1 ms).
 func TestProbeRTMP_Success(t *testing.T) {
 	srv := newRTMPListener(t)
 	defer srv.close()
@@ -161,12 +249,17 @@ func TestProbeRTMP_Success(t *testing.T) {
 		if err := sendS0S1S2(conn, 0x03, c1, false); err != nil {
 			return err
 		}
-		// Read C2 (1536 bytes) — probe sends this best-effort; validate it arrived.
+		// Read C2 (1536 bytes).
 		c2 := make([]byte, 1536)
 		if _, err := io.ReadFull(conn, c2); err != nil {
 			return fmt.Errorf("read C2: %v", err)
 		}
-		return nil
+		// Read AMF0 connect command from probe.
+		// Ignore error: before the implementation lands, the prober closes here
+		// and the read returns EOF — the RED failure is in the assertion below.
+		_, _, _ = readRTMPMsgTest(conn)
+		// Send _result.
+		return sendAMF0CmdChunkTest(conn, "_result")
 	})
 
 	r := rtmpTestRunner()
@@ -176,7 +269,7 @@ func TestProbeRTMP_Success(t *testing.T) {
 	result := r.probeRTMP(ctx, rtmpConfig(srv.url("live")), rtmpResult())
 	srv.wait(t)
 
-	t.Logf("success result: success=%v code=%q state=%q connect_ms=%v msg=%q",
+	t.Logf("app-accepted result: success=%v code=%q state=%q connect_ms=%v msg=%q",
 		result.Success, result.ErrorCode, result.SignalingState, result.ConnectTimeMs, result.ErrorMsg)
 
 	if !result.Success {
@@ -189,14 +282,184 @@ func TestProbeRTMP_Success(t *testing.T) {
 	if *result.ConnectTimeMs < 1 {
 		t.Errorf("expected ConnectTimeMs >= 1 ms (1ms floor), got %d", *result.ConnectTimeMs)
 	}
-	if result.SignalingState != "handshake_complete" {
-		t.Errorf("expected SignalingState=handshake_complete, got %q", result.SignalingState)
+	// RED assertion: expects "app_accepted" (fails against current impl which returns "handshake_complete").
+	if result.SignalingState != "app_accepted" {
+		t.Errorf("expected SignalingState=app_accepted, got %q", result.SignalingState)
 	}
 	if result.ErrorCode != "" {
 		t.Errorf("expected empty ErrorCode on success, got %q", result.ErrorCode)
 	}
 	if result.ErrorMsg != "" {
 		t.Errorf("expected empty ErrorMsg on success, got %q", result.ErrorMsg)
+	}
+}
+
+// TestProbeRTMP_NoAppSegment pins the legacy behavior: when the RTMP URL has no
+// app path segment, the probe succeeds at handshake completion and returns
+// SignalingState="handshake_complete" without sending an AMF0 connect command.
+// Backward-compatibility test — must stay GREEN before and after implementation.
+func TestProbeRTMP_NoAppSegment(t *testing.T) {
+	srv := newRTMPListener(t)
+	defer srv.close()
+
+	srv.serveOnce(func(conn net.Conn) error {
+		conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+		c1, err := readC0C1(conn)
+		if err != nil {
+			return err
+		}
+		if err := sendS0S1S2(conn, 0x03, c1, false); err != nil {
+			return err
+		}
+		// Read C2 best-effort (probe may or may not send it before closing).
+		c2 := make([]byte, 1536)
+		_, _ = io.ReadFull(conn, c2)
+		// No AMF0 exchange — legacy path.
+		return nil
+	})
+
+	r := rtmpTestRunner()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// URL with no app path segment — triggers legacy handshake-only path.
+	noAppURL := "rtmp://" + srv.ln.Addr().String()
+	result := r.probeRTMP(ctx, rtmpConfig(noAppURL), rtmpResult())
+	srv.wait(t)
+
+	t.Logf("no-app result: success=%v code=%q state=%q connect_ms=%v",
+		result.Success, result.ErrorCode, result.SignalingState, result.ConnectTimeMs)
+
+	if !result.Success {
+		t.Fatalf("expected Success=true on no-app path, got false: code=%q", result.ErrorCode)
+	}
+	if result.ConnectTimeMs == nil {
+		t.Fatal("expected ConnectTimeMs != nil on handshake success")
+	}
+	if *result.ConnectTimeMs < 1 {
+		t.Errorf("expected ConnectTimeMs >= 1 ms, got %d", *result.ConnectTimeMs)
+	}
+	if result.SignalingState != "handshake_complete" {
+		t.Errorf("expected SignalingState=handshake_complete (legacy no-app path), got %q", result.SignalingState)
+	}
+}
+
+// TestProbeRTMP_AppRejected verifies that an AMF0 _error response maps to
+// success=false, ErrorCode="rtmp_app_rejected", SignalingState="app_rejected",
+// and ConnectTimeMs is still recorded (a rejection is a valid timing sample).
+func TestProbeRTMP_AppRejected(t *testing.T) {
+	srv := newRTMPListener(t)
+	defer srv.close()
+
+	srv.serveOnce(func(conn net.Conn) error {
+		conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+		c1, err := readC0C1(conn)
+		if err != nil {
+			return err
+		}
+		if err := sendS0S1S2(conn, 0x03, c1, false); err != nil {
+			return err
+		}
+		c2 := make([]byte, 1536)
+		if _, err := io.ReadFull(conn, c2); err != nil {
+			return fmt.Errorf("read C2: %v", err)
+		}
+		// Read connect command (ignore error in RED: prober doesn't send it yet).
+		_, _, _ = readRTMPMsgTest(conn)
+		// Send _error — app "rejected" triggers this path.
+		return sendAMF0CmdChunkTest(conn, "_error")
+	})
+
+	r := rtmpTestRunner()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result := r.probeRTMP(ctx, rtmpConfig(srv.url("rejected")), rtmpResult())
+	srv.wait(t)
+
+	t.Logf("app-rejected result: success=%v code=%q state=%q connect_ms=%v msg=%q",
+		result.Success, result.ErrorCode, result.SignalingState, result.ConnectTimeMs, result.ErrorMsg)
+
+	// RED: current impl returns success=true; after implementation: success=false.
+	if result.Success {
+		t.Error("expected Success=false on _error response")
+	}
+	if result.ErrorCode != "rtmp_app_rejected" {
+		t.Errorf("expected error_code=rtmp_app_rejected, got %q", result.ErrorCode)
+	}
+	if result.SignalingState != "app_rejected" {
+		t.Errorf("expected SignalingState=app_rejected, got %q", result.SignalingState)
+	}
+	// ConnectTimeMs must be set even on rejection (timing sample for the rejected path).
+	if result.ConnectTimeMs == nil {
+		t.Error("expected ConnectTimeMs != nil on app_rejected (rejection is a valid timing sample)")
+	}
+}
+
+// TestProbeRTMP_ConnectTimeout verifies that a server that completes the
+// handshake but never sends an AMF0 response causes ErrorCode="rtmp_connect_timeout"
+// and SignalingState="handshake_complete" (honest partial — handshake succeeded).
+func TestProbeRTMP_ConnectTimeout(t *testing.T) {
+	srv := newRTMPListener(t)
+	defer srv.close()
+
+	srv.serveOnce(func(conn net.Conn) error {
+		conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+		c1, err := readC0C1(conn)
+		if err != nil {
+			return err
+		}
+		if err := sendS0S1S2(conn, 0x03, c1, false); err != nil {
+			return err
+		}
+		// Read C2
+		c2 := make([]byte, 1536)
+		if _, err := io.ReadFull(conn, c2); err != nil {
+			return fmt.Errorf("read C2: %v", err)
+		}
+		// Read connect chunk (if it arrives) but send NO AMF0 response.
+		// Drain remaining writes so the prober blocks on reading, not writing.
+		_, _ = io.Copy(io.Discard, conn)
+		return nil
+	})
+
+	r := rtmpTestRunner()
+	// Short timeout: probe must fire before the server writes anything.
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	result := r.probeRTMP(ctx, rtmpConfig(srv.url("live")), rtmpResult())
+	elapsed := time.Since(start)
+
+	t.Logf("connect-timeout result: success=%v code=%q state=%q elapsed=%v",
+		result.Success, result.ErrorCode, result.SignalingState, elapsed)
+
+	// RED: current impl returns success=true immediately after C2; after
+	// implementation: probe blocks waiting for _result and times out.
+	if result.Success {
+		t.Error("expected Success=false on connect timeout")
+	}
+	if result.ErrorCode != "rtmp_connect_timeout" {
+		t.Errorf("expected error_code=rtmp_connect_timeout, got %q", result.ErrorCode)
+	}
+	if result.SignalingState != "handshake_complete" {
+		t.Errorf("expected SignalingState=handshake_complete (honest partial), got %q", result.SignalingState)
+	}
+	if result.ConnectTimeMs != nil {
+		t.Errorf("expected ConnectTimeMs=nil on connect timeout, got %d", *result.ConnectTimeMs)
+	}
+	if elapsed > 5*time.Second {
+		t.Errorf("test took too long (%v); expected to complete within 5 s", elapsed)
+	}
+
+	select {
+	case <-srv.done:
+	case <-time.After(3 * time.Second):
+		t.Log("warning: server goroutine did not exit within 3 s (non-fatal)")
 	}
 }
 
@@ -416,5 +679,38 @@ func TestProbeRTMP_MalformedURL(t *testing.T) {
 				t.Errorf("[%s] expected ConnectTimeMs=nil on failure", tc.name)
 			}
 		})
+	}
+}
+
+// TestReadAMF0Command_HonorsSetChunkSize pins the demuxer's SetChunkSize
+// (type 0x01) handling: after the server renegotiates a larger chunk size,
+// a command longer than the 128-byte default arrives as a SINGLE chunk. A
+// demuxer stuck at the default expects a continuation header at byte 128,
+// desyncs into the payload, and fails (S29 V1 mutation catch — the live AMS
+// fixture happens not to renegotiate, so only this test covers the handler).
+func TestReadAMF0Command_HonorsSetChunkSize(t *testing.T) {
+	var buf bytes.Buffer
+
+	// SetChunkSize(256): csid=2 fmt=0, ts=0, len=4, type=0x01, msg stream id=0.
+	buf.Write([]byte{0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00})
+	buf.Write([]byte{0x00, 0x00, 0x01, 0x00}) // 256 big-endian
+
+	// AMF0 _result command longer than the default chunk size — sent as a
+	// single chunk, valid only under the renegotiated size.
+	body := amf0EncodeString("_result")
+	body = append(body, amf0EncodeNumber(1)...)
+	body = append(body, amf0EncodeString(strings.Repeat("x", 150))...)
+	if len(body) <= rtmpDefaultChunkSz {
+		t.Fatalf("test body must exceed the default chunk size, got %d bytes", len(body))
+	}
+	buf.Write([]byte{0x03, 0x00, 0x00, 0x00, 0x00, byte(len(body) >> 8), byte(len(body)), 0x14, 0x00, 0x00, 0x00, 0x00})
+	buf.Write(body)
+
+	name, err := readAMF0Command(&buf)
+	if err != nil {
+		t.Fatalf("readAMF0Command with renegotiated chunk size: %v", err)
+	}
+	if name != "_result" {
+		t.Fatalf("expected _result, got %q", name)
 	}
 }

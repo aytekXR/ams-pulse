@@ -43,6 +43,28 @@ is a **0..1 fraction** (×100 → pct); `currentFPS` is **absent** from the REST
 broadcast object on AMS 3.0.3 (health scoring redistributes the FPS weight);
 `terminated_unexpectedly` is a real broadcast status (crash) → emit publish_end.
 
+> **`packetLostRatio` semantics per ingest protocol (DG-18, S29/D-091):**
+>
+> `packetLostRatio` and `packetsLost` in BroadcastDTO are populated by different
+> mechanisms depending on the ingest protocol. Getting this wrong leads to incorrect
+> monitoring decisions.
+>
+> | Protocol | `packetLostRatio` semantics | Note |
+> |----------|----------------------------|------|
+> | **RTMP** | Always **0** | TCP retransmission repairs network-level loss below the application layer before AMS observes the stream. Monitoring this field for RTMP ingest is not meaningful. (S18 TC-I-05 evidence: 10% netem loss on RTMP publisher → AMS ratio=0, bitrate=2 Mbps, status=broadcasting — TCP absorbed all loss.) |
+> | **SRT** | Post-ARQ loss at `srtReceiveLatencyInMs` | Reflects what remains **after** SRT error-correction. Pre-ARQ transport loss that SRT's ARQ mechanism repaired before delivering to AMS is invisible to Pulse. A `packetLostRatio=0` on SRT ingest may coexist with significant transport-layer loss if ARQ fully repaired it. |
+> | **WebRTC** | Raw UDP-layer loss | No ARQ masking; most faithful loss signal for network diagnostics. |
+>
+> See `docs/known-limitations.md` LIM-17 (do not duplicate its text here) and
+> `docs/assessment/final-assessment.md` §4.2 for operator-facing guidance.
+>
+> **S29/D-091 live SRT validation status:** TC-I-05-SRT was run on 2026-07-13 and
+> blocked by AMS EE license suspension (SRTAdaptor: "License is suspended. Not
+> accepting the stream"). RTMP ingest is unaffected. The scenario is committed at
+> `qa/realams/scenarios/TC-I-05-SRT-packet-loss.sh` and ready for re-run once the
+> license is renewed. Post-ARQ observation (publishType, packetLostRatio live value)
+> will be recorded on the first successful SRT run.
+
 > **⚠️ Implicit RTMP broadcasts (S17 live finding, D-079):**
 > AMS 3.0.3 auto-creates a broadcast object when an RTMP publisher connects
 > **without** a prior `POST /{app}/rest/v2/broadcasts/create`.  While the

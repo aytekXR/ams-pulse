@@ -1,6 +1,6 @@
 # Pulse — Known Limitations
 
-**Product:** Pulse v0.3.0 (D-089, S27)  
+**Product:** Pulse v0.3.0 (D-091, S29)  
 **Source:** `docs/assessment/documentation-gaps.md` (DG-01 through DG-18),
 `docs/assessment/final-assessment.md` §1 and Appendix B,
 `docs/assessment/capability-map.md`
@@ -22,11 +22,16 @@ set CPU or memory alert rules for a standalone AMS deployment.
 **Root cause:** AMS 3.x `GET /rest/v2/system-status` for standalone nodes returns
 only `{osName, osArch, javaVersion, processorCount}` — no CPU, memory, or disk
 fields (AV-06; `docs/assessment/capability-map.md` §5). These metrics are
-available on the `ams-instance-stats` Kafka topic.
+available via Kafka (topic `ams-server-events` — name is code-derived,
+`server/internal/collector/kafka/kafka.go:35,58,100`; not wire-validated against
+a live AMS broker, AV-15 BLOCKED — see LIM-19).
 
 **Workaround:** Set `PULSE_KAFKA_BROKERS=<your-kafka>` to activate the Kafka
-consumer (`server/internal/collector/kafka/`). If you run AMS in cluster mode,
-cluster-node REST responses include `cpuUsage` and `memoryUsage` fields.
+consumer (`server/internal/collector/kafka/`). **Read LIM-19 first** — the
+Kafka integration has never been live-validated against a real AMS broker; gauges
+may stay empty if the topic or field names do not match your AMS version. If you
+run AMS in cluster mode, cluster-node REST responses include `cpuUsage` and
+`memoryUsage` fields (no Kafka needed).
 
 **Roadmap:** DG-05; roadmap item P1 "Standalone CPU/mem/disk via Kafka"
 (`docs/assessment/final-assessment.md` §5).
@@ -89,8 +94,10 @@ FPS weight so a healthy 2 Mbps stream still scores above 80 (confirmed TC-I-06).
 
 **Root cause:** `currentFPS` is absent from the AMS 3.0.3 BroadcastDTO REST
 response (AV-04; `server/pkg/amsclient/client.go:97` comment). FPS data is
-available on the `ams-instance-stats` Kafka topic but the Kafka field name is
-unconfirmed (Q4 in `docs/assessment/final-assessment.md` §6; DG-03).
+expected on the `ams-server-events` Kafka topic (name code-derived,
+`server/internal/collector/kafka/kafka.go:35,58,100`; not wire-validated,
+AV-15 BLOCKED — see LIM-19); the Kafka FPS field name is also unconfirmed
+(Q4 in `docs/assessment/final-assessment.md` §6; DG-03).
 
 **Workaround:** Use the health score as the primary ingest-health signal rather
 than raw FPS. Enable Kafka (`PULSE_KAFKA_BROKERS`) if your deployment has a broker.
@@ -235,6 +242,93 @@ RTT/jitter/loss values as unvalidated. Report suspicious readings.
 
 ---
 
+### LIM-19: Kafka consumer never live-validated against a real AMS broker (AV-15 BLOCKED)
+
+**What it means for you:** Setting `PULSE_KAFKA_BROKERS` activates the Kafka
+consumer path — the only route to Fleet CPU/memory/disk gauges on standalone AMS
+(LIM-01) and to FPS data (LIM-04). The consumer is code-complete and covered by
+8 contract tests against an in-process fake broker. However, it has **never** been
+connected to a real AMS Kafka producer. The topic name (`ams-server-events`,
+code-derived — `server/internal/collector/kafka/kafka.go` lines 35, 58, 100), field
+names, and message shapes are unconfirmed against any AMS version. Gauges may stay
+permanently empty if the topic or field names do not match what your AMS version
+publishes.
+
+**Root cause:** AV-15 BLOCKED — no Kafka broker was deployed in any Pulse
+validation environment as of S27/D-089. The `kafka.go` package comment (lines 10–11)
+states this explicitly. Neither topic name (`ams-server-events`) nor any field name
+has been verified against a live AMS broker.
+
+**Workaround:** Before enabling the Kafka path in production, confirm the actual
+topic name and field names against your AMS version and `docs.antmedia.io`.
+Diagnostic steps: `docs/kafka-integration.md` §6.3. If `GET /healthz` shows
+`lag = 0` more than 30 seconds after connecting a broker, AMS is likely not
+publishing to `ams-server-events`, or the topic name differs — a silent failure
+with no parse errors in `/healthz` output.
+
+**Roadmap:** AV-15 validation requires a live Kafka broker connected to a real AMS
+instance. Until resolved, treat the Kafka ingest path as provisionally implemented
+(`docs/assessment/final-assessment.md` §5 P1 "Standalone CPU/mem/disk via Kafka").
+
+---
+
+### LIM-20: Kafka transport is plaintext-only — no TLS or SASL
+
+**What it means for you:** All Kafka traffic between Pulse and your broker is
+unencrypted and unauthenticated. There is no TLS transport encryption or SASL
+credential authentication support in this release. Any host that can reach your
+Kafka broker port can read or write messages without authentication.
+
+**Root cause:** The `kafkago.ReaderConfig` constructed in
+`server/internal/collector/kafka/kafka.go` lines 130–138 sets only `Brokers`,
+`GroupID`, `GroupTopics`, `StartOffset`, `MaxWait`, `MinBytes`, and `MaxBytes`.
+No `Dialer`, `TLS`, or `SASL` field is present (verified against current source;
+`docs/kafka-integration.md` §2.3 documents this constraint).
+
+**Workaround:** Restrict access to your Kafka broker port via network-layer controls
+(VPC ACLs, security groups, host firewall rules) so that only the Pulse container
+and AMS can reach it. Do not expose the Kafka broker port on an untrusted or
+public-facing network segment.
+
+**Roadmap:** TLS + SASL authentication is a P2 roadmap item for the Kafka source.
+
+---
+
+### LIM-21: Kafka at-least-once delivery and first-start history replay
+
+**What it means for you:** Two related behaviors affect Kafka event ingestion:
+
+1. **At-least-once delivery.** If the Pulse process crashes after processing a
+   message but before committing the Kafka offset, that message is redelivered on
+   the next startup. A duplicate metric row may appear in ClickHouse within the
+   crash window.
+
+2. **First-start history replay.** On the first start with a fresh `pulse-collector`
+   consumer group (no committed offsets on the broker), Pulse begins consuming from
+   the **earliest retained message** in the topic, not from the current position. All
+   history retained by your broker is ingested once. Subsequent restarts resume from
+   the committed offset — no re-replay.
+
+**Root cause:**
+
+1. The commit follows the write: `server/internal/collector/kafka/kafka.go`
+   lines 163–169 call `r.CommitMessages` after `processMessage` returns. A process
+   crash between the two leaves the offset uncommitted.
+2. `server/cmd/pulse/serve.go` lines 280–287 construct `kafkasrc.Config` without
+   setting `StartOffset`; the Go zero-value (`0`) flows into
+   `kafkago.ReaderConfig.StartOffset`. kafka-go treats `0` as `FirstOffset` for
+   consumer groups with no committed offsets (`consumergroup.go:243`; documented in
+   `docs/kafka-integration.md` §5.4). `DefaultConfig` (kafka.go:60) sets
+   `kafkago.LastOffset` but is not called by `serve.go`.
+
+**Workaround:** ClickHouse deduplication is not implemented for Kafka events; a
+crash-recovery replay may produce duplicate metric rows in the crash window. For
+the history replay: if your broker retains a large backlog (days or weeks), the
+first-start ingest may take time to process. A short broker retention policy
+(e.g., 1–2 hours) limits the replay volume on first connect.
+
+---
+
 ## Priority 3 — Configuration and semantic gotchas
 
 ### LIM-12: AMS VPS capacity limits stream count (AMS / OS constraint, not Pulse)
@@ -339,11 +433,57 @@ whether WHEP viewer counts are exposed separately.
 
 ---
 
+### LIM-22: First viewer on a zero-viewer-history stream fires an anomaly z-spike (intentional)
+
+**What it means for you:** If a stream has been live with zero viewers for more
+than approximately 30 minutes (the `MinSamples = 30` Welford warmup gate, one tick
+per minute), the anomaly detector builds a `mean = 0, stddev = 0` viewer baseline.
+When the first viewer connects, the detector fires a very high-sigma anomaly flag
+(approximately 10⁹ σ). This is logged and queryable via `GET /api/v1/anomalies`.
+
+This is **not a false alarm in the statistical sense** — "audience appeared after a
+long quiet period" is a genuine deviation from baseline behavior, and the ruling
+at S28/D-090 is to keep it (`docs/guides/anomaly-detection.md` §2 "Zero-viewer
+baselines and the first-viewer spike"; `docs/operator-expected.md` §2.17.1).
+
+**Root cause:** The viewer count is fed to the Welford accumulator unconditionally
+for every active stream tick — `0` is a real measurement, not a sentinel.
+After a zero-viewer history the effective-stddev floor at detection time collapses
+to `StddevAbsEpsilon = 1e-9`, producing
+`z = |1 − 0| / 1e-9 ≈ 10⁹` on first-viewer arrival. Spike mechanics verified in
+`docs/guides/anomaly-detection.md` §2. Contrast: `cpu_pct`/`mem_pct`/`disk_pct`
+use `CPUPCTReported`/`MemPCTReported`/`DiskPCTReported` presence flags to suppress
+false-zero feeding when the metric is absent (standalone REST — LIM-01); viewer
+count has no such guard because 0 is always a real value.
+
+**Workaround:** If the spike is noise for your deployment, raise `min_sigma` on
+viewer-metric queries:
+
+```
+GET /api/v1/anomalies?metric=viewers&min_sigma=10
+```
+
+A `min_sigma` of 10 suppresses the first-viewer spike while still surfacing
+sustained high-anomaly events.
+
+**Note — Enterprise tier required:** Anomaly detection is gated to Enterprise tier.
+`GET /api/v1/anomalies` returns `403 LICENSE_REQUIRED` on Free or Pro licenses
+(`server/internal/api/wave3.go` lines 4–5, 45–48;
+`server/internal/license/license.go` lines 356–363).
+
+**Roadmap:** An observation-side skip (analogous to the `APILatencyMS > 0`
+presence guard — a ~2-line change) remains an open follow-up option if operators
+determine this spike is systematically unwanted
+(`docs/guides/anomaly-detection.md` §2).
+
+---
+
 ## Changelog
 
 | Version | Change |
 |---------|--------|
 | D-089 (S27, 2026-07-13) | Initial document — 18 limitations from DG-01–DG-18 + final-assessment §1 + §4 |
+| D-091 (S29, 2026-07-13) | Added LIM-19..LIM-22: Kafka live-validation gap (AV-15), Kafka plaintext-only transport, at-least-once delivery + first-start history replay, first-viewer z-spike intentional ruling; corrected topic name ams-instance-stats → ams-server-events in LIM-01 + LIM-04 with code-derived caveat and AV-15 forward pointer; count 18 → 22 |
 
 ---
 

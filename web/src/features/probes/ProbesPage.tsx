@@ -423,6 +423,21 @@ export function iceVariant(state: string): "success" | "error" | "warning" {
   return "warning"; // "timeout"
 }
 
+/**
+ * Maps a signaling_state string to the Badge variant.
+ *
+ * Colour key (W2):
+ *   app_accepted  → success  (stream accepted by the AMS application)
+ *   app_rejected  → error    (stream rejected by the AMS application)
+ *   everything else → muted  (handshake_complete, offer_received, error substates,
+ *                             unknown) — outcome is already surfaced by the Status column.
+ */
+export function signalingVariant(state: string): "success" | "error" | "muted" {
+  if (state === "app_accepted") return "success";
+  if (state === "app_rejected") return "error";
+  return "muted";
+}
+
 interface ProbeResultsChartData {
   ts: number;
   ttfb_ms: number | null;
@@ -710,6 +725,12 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                       Bitrate
                     </th>
                     <th style={{ padding: "6px 10px", textAlign: "center", fontWeight: 600, color: "var(--color-muted)", whiteSpace: "nowrap" }}>
+                      Signaling
+                    </th>
+                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-muted)", whiteSpace: "nowrap" }}>
+                      Connect
+                    </th>
+                    <th style={{ padding: "6px 10px", textAlign: "center", fontWeight: 600, color: "var(--color-muted)", whiteSpace: "nowrap" }}>
                       ICE State
                     </th>
                     <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-muted)", whiteSpace: "nowrap" }}>
@@ -780,6 +801,31 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                         }}
                       >
                         {r.bitrate_kbps != null ? `${r.bitrate_kbps.toFixed(0)} kbps` : "—"}
+                      </td>
+                      {/* Signaling — badge for signaling_state; "—" when absent/null */}
+                      <td style={{ padding: "6px 10px", textAlign: "center", whiteSpace: "nowrap" }}>
+                        {r.signaling_state != null ? (
+                          <Badge label={r.signaling_state} variant={signalingVariant(r.signaling_state)} />
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      {/* Connect — connect_time_ms in ms; 0 and null/absent → "—"
+                          (0 is Go zero-value / not-measured sentinel; server guarantees >=1
+                          for real connection-time measurements) */}
+                      <td
+                        style={{
+                          padding: "6px 10px",
+                          textAlign: "right",
+                          color: "var(--color-muted)",
+                          fontFamily: "var(--font-mono)",
+                          fontSize: 12,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {r.connect_time_ms != null && r.connect_time_ms > 0
+                          ? `${r.connect_time_ms} ms`
+                          : "—"}
                       </td>
                       <td style={{ padding: "6px 10px", textAlign: "center", whiteSpace: "nowrap" }}>
                         {r.ice_state ? (
