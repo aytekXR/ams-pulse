@@ -60,7 +60,7 @@ const sampleNodes: FleetNode[] = [
   {
     node_id: "node-edge-2",
     role: "edge",
-    status: "down",
+    status: "degraded",
     last_seen: Date.now() - 300000,
     version: "2.8.5",
   },
@@ -118,7 +118,7 @@ describe("FleetPage rendering", () => {
     mockListNodes.mockResolvedValue({ items: sampleNodes, meta: {} });
     render(<FleetPage />, { wrapper });
     await waitFor(() => {
-      // 3 total, 1 up, 1 degraded, 1 down, 1 origin, 2 edge
+      // 3 total, 1 up, 2 degraded, 1 origin, 2 edge
       expect(screen.getByText("3")).toBeInTheDocument(); // total
     });
   });
