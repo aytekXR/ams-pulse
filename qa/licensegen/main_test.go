@@ -378,3 +378,132 @@ func TestBackcompatNoFlags(t *testing.T) {
 		t.Fatalf("expected exactly 2 stdout lines, got %d:\n%s", len(lines), stdout)
 	}
 }
+
+// ─── -expires-minutes flag (D-089 [XS]) ──────────────────────────────────────
+
+// TestExpiresMinutesPositive verifies that -expires-minutes 5 sets expires_at
+// within the expected range (now+4m to now+6m) in milliseconds.
+func TestExpiresMinutesPositive(t *testing.T) {
+	before := time.Now().UTC()
+	stdout, stderr, ok := runLicensegen(t, "-expires-minutes", "5", "-tier", "pro")
+	after := time.Now().UTC()
+	if !ok {
+		t.Fatalf("licensegen exited non-zero\nstderr: %s", stderr)
+	}
+
+	env := parseEnvLines(t, stdout)
+	parts := strings.SplitN(env["PULSE_LICENSE_KEY"], ".", 2)
+	if len(parts) != 2 {
+		t.Fatalf("invalid key format")
+	}
+	claimsData, err := base64.StdEncoding.DecodeString(parts[0])
+	if err != nil {
+		t.Fatalf("base64-decode claims: %v", err)
+	}
+
+	var c struct {
+		ExpiresAt *int64 `json:"expires_at"`
+	}
+	if err := json.Unmarshal(claimsData, &c); err != nil {
+		t.Fatalf("unmarshal claims: %v", err)
+	}
+	if c.ExpiresAt == nil {
+		t.Fatal("claims missing expires_at")
+	}
+
+	minMs := before.Add(4 * time.Minute).UnixMilli()
+	maxMs := after.Add(6 * time.Minute).UnixMilli()
+	if *c.ExpiresAt < minMs || *c.ExpiresAt > maxMs {
+		t.Errorf("expires_at=%d out of expected range [%d, %d] (4..6 minutes from now)",
+			*c.ExpiresAt, minMs, maxMs)
+	}
+}
+
+// TestExpiresMinutesZeroRejected verifies that -expires-minutes 0 causes a non-zero exit.
+func TestExpiresMinutesZeroRejected(t *testing.T) {
+	_, _, ok := runLicensegen(t, "-expires-minutes", "0")
+	if ok {
+		t.Fatal("expected non-zero exit for -expires-minutes 0")
+	}
+}
+
+// TestExpiresMinutesNegativeRejected verifies that a negative -expires-minutes value
+// causes a non-zero exit.
+func TestExpiresMinutesNegativeRejected(t *testing.T) {
+	_, _, ok := runLicensegen(t, "-expires-minutes=-3")
+	if ok {
+		t.Fatal("expected non-zero exit for -expires-minutes=-3")
+	}
+}
+
+// TestExpiresMutuallyExclusive verifies that combining -expires and -expires-minutes
+// causes a non-zero exit.
+func TestExpiresMutuallyExclusive(t *testing.T) {
+	_, stderr, ok := runLicensegen(t, "-expires", "30", "-expires-minutes", "5")
+	if ok {
+		t.Fatal("expected non-zero exit when both -expires and -expires-minutes are set")
+	}
+	if !strings.Contains(stderr, "mutually exclusive") {
+		t.Errorf("stderr does not mention 'mutually exclusive': %s", stderr)
+	}
+}
+
+// TestExpiresMinutesSignatureVerifies verifies that the license produced by
+// -expires-minutes carries a valid signature.
+func TestExpiresMinutesSignatureVerifies(t *testing.T) {
+	stdout, stderr, ok := runLicensegen(t, "-expires-minutes", "10", "-tier", "pro")
+	if !ok {
+		t.Fatalf("licensegen exited non-zero\nstderr: %s", stderr)
+	}
+
+	env := parseEnvLines(t, stdout)
+	pubKeyBytes, err := hex.DecodeString(env["PULSE_LICENSE_PUBKEY"])
+	if err != nil {
+		t.Fatalf("hex-decode public key: %v", err)
+	}
+	pubKey := ed25519.PublicKey(pubKeyBytes)
+
+	parts := strings.SplitN(env["PULSE_LICENSE_KEY"], ".", 2)
+	if len(parts) != 2 {
+		t.Fatalf("invalid key format")
+	}
+	claimsData, _ := base64.StdEncoding.DecodeString(parts[0])
+	sig, _ := base64.StdEncoding.DecodeString(parts[1])
+
+	if !ed25519.Verify(pubKey, claimsData, sig) {
+		t.Error("ed25519 signature verification FAILED for -expires-minutes key")
+	}
+}
+
+// TestExpiresBackcompat_DaysUnchanged verifies -expires days semantics are unchanged
+// when -expires-minutes is not set (regression guard).
+func TestExpiresBackcompat_DaysUnchanged(t *testing.T) {
+	before := time.Now().UTC()
+	stdout, stderr, ok := runLicensegen(t, "-expires", "7", "-tier", "pro")
+	after := time.Now().UTC()
+	if !ok {
+		t.Fatalf("licensegen exited non-zero\nstderr: %s", stderr)
+	}
+
+	env := parseEnvLines(t, stdout)
+	parts := strings.SplitN(env["PULSE_LICENSE_KEY"], ".", 2)
+	if len(parts) != 2 {
+		t.Fatalf("invalid key format")
+	}
+	claimsData, _ := base64.StdEncoding.DecodeString(parts[0])
+
+	var c struct {
+		ExpiresAt *int64 `json:"expires_at"`
+	}
+	if err := json.Unmarshal(claimsData, &c); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if c.ExpiresAt == nil {
+		t.Fatal("claims missing expires_at")
+	}
+	minMs := before.Add(6 * 24 * time.Hour).UnixMilli()
+	maxMs := after.Add(8 * 24 * time.Hour).UnixMilli()
+	if *c.ExpiresAt < minMs || *c.ExpiresAt > maxMs {
+		t.Errorf("expires_at=%d out of expected [%d, %d] (6..8 days)", *c.ExpiresAt, minMs, maxMs)
+	}
+}

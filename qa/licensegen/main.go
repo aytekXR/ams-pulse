@@ -2,15 +2,18 @@
 //
 // Usage:
 //
-//	go run . [-tier free|pro|business|enterprise] [-privkey <path>] [-expires <days>] >> "$GITHUB_ENV"
+//	go run . [-tier free|pro|business|enterprise] [-privkey <path>] \
+//	         [-expires <days>] [-expires-minutes <minutes>] >> "$GITHUB_ENV"
 //
 // Without -privkey it generates a fresh ed25519 key pair at runtime (CI mode).
 // With -privkey it loads the hex-encoded 64-byte private key from <path> and
 // derives the matching public key from it (production minting mode).
 //
-// Without -expires the license is perpetual (no expires_at claim).
+// Without -expires or -expires-minutes the license is perpetual (no expires_at claim).
 // With -expires <days> (positive integer) it sets expires_at to
 // time.Now().UTC() + days*24h, expressed as Unix epoch milliseconds.
+// With -expires-minutes <minutes> (positive integer, mutually exclusive with -expires)
+// it sets expires_at to time.Now().UTC() + minutes*1min — for live trial-flow demos.
 //
 // It signs a JSON claims blob and prints exactly two GITHUB_ENV-compatible
 // lines to stdout:
@@ -88,21 +91,32 @@ func run() error {
 	tierFlag := flag.String("tier", "pro", "license tier: free|pro|business|enterprise")
 	privkeyFlag := flag.String("privkey", "", "path to a file containing the hex-encoded ed25519 private key (128 hex chars = 64 bytes seed||pub)")
 	expiresFlag := flag.Int("expires", 0, "license validity in days (positive integer); omit for perpetual")
+	expiresMinutesFlag := flag.Int("expires-minutes", 0, "license validity in minutes (positive integer); mutually exclusive with -expires; for live trial-flow demos")
 	flag.Parse()
 
 	tier := *tierFlag
 
-	// Detect whether -expires was explicitly supplied on the command line.
+	// Detect whether -expires / -expires-minutes were explicitly supplied.
 	// flag.Visit only iterates flags that were actually set; this is the only
 	// reliable way to distinguish "not passed" from "passed with default value".
-	expiresExplicit := false
+	var expiresExplicit, expiresMinutesExplicit bool
 	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "expires" {
+		switch f.Name {
+		case "expires":
 			expiresExplicit = true
+		case "expires-minutes":
+			expiresMinutesExplicit = true
 		}
 	})
+
+	if expiresExplicit && expiresMinutesExplicit {
+		return fmt.Errorf("-expires and -expires-minutes are mutually exclusive")
+	}
 	if expiresExplicit && *expiresFlag <= 0 {
 		return fmt.Errorf("-expires must be a positive integer, got %d", *expiresFlag)
+	}
+	if expiresMinutesExplicit && *expiresMinutesFlag <= 0 {
+		return fmt.Errorf("-expires-minutes must be a positive integer, got %d", *expiresMinutesFlag)
 	}
 
 	claims, err := tierClaims(tier)
@@ -110,10 +124,15 @@ func run() error {
 		return err
 	}
 
-	// Set expires_at only when -expires was explicitly provided.
-	if expiresExplicit {
+	// Set expires_at only when an expiry flag was explicitly provided.
+	switch {
+	case expiresExplicit:
 		expiresAt := time.Now().UTC().Add(time.Duration(*expiresFlag) * 24 * time.Hour).UnixMilli()
 		claims["expires_at"] = expiresAt
+	case expiresMinutesExplicit:
+		expiresAt := time.Now().UTC().Add(time.Duration(*expiresMinutesFlag) * time.Minute).UnixMilli()
+		claims["expires_at"] = expiresAt
+		fmt.Fprintf(os.Stderr, "licensegen: expires-minutes=%d (demo/test mode)\n", *expiresMinutesFlag)
 	}
 
 	var pubKey ed25519.PublicKey

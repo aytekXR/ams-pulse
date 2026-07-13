@@ -184,8 +184,18 @@ func TestValid_SignedKeyIsValid(t *testing.T) {
 	}
 }
 
-// ─── Expired key → fail-open → Free tier ──────────────────────────────────────
+// ─── Expired key → honest state (D-089) ──────────────────────────────────────
 
+// TestNew_ExpiredKey_FallsBackToFree — UPDATED for D-089 honest-expiry semantics.
+//
+// OLD behaviour (removed): activate() returned an error for expired keys;
+// New() called setFree() producing {tier:free, valid:true, expiresAt:nil}.
+//
+// NEW behaviour: activate() succeeds (signature verified), stores the past
+// expiresAt, and the first reader call triggers maybeExpireLocked() which
+// produces the HONEST state: {tier:free, valid:false, expiresAt:past}.
+// This lets API consumers distinguish "never had a key" (valid=true, nil expiry)
+// from "had a trial that expired" (valid=false, past expiry) — RULE-1.
 func TestNew_ExpiredKey_FallsBackToFree(t *testing.T) {
 	pastMs := time.Now().Add(-24 * time.Hour).UnixMilli()
 	kf := generateKeys(t)
@@ -200,9 +210,20 @@ func TestNew_ExpiredKey_FallsBackToFree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("license.New: %v", err)
 	}
-	// activate() returns an error for expired keys; New() fails open → Free tier.
+
+	// Tier() triggers the lazy expiry check → honest free tier.
 	if mgr.Tier() != license.TierFree {
-		t.Errorf("expired key: want free tier (fail-open) got %q", mgr.Tier())
+		t.Errorf("expired key: want tier=%q (honest downgrade) got %q", license.TierFree, mgr.Tier())
+	}
+
+	// D-089: valid=false distinguishes expired-trial from no-key (which has valid=true).
+	if mgr.Valid() {
+		t.Error("expired key: want valid=false (RULE-1 three-state distinguishability)")
+	}
+
+	// D-089: expiresAt retained so UI can display "expired N days ago".
+	if mgr.ExpiresAt() == nil {
+		t.Error("expired key: ExpiresAt must be non-nil (past timestamp retained)")
 	}
 }
 
