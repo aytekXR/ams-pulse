@@ -12,11 +12,14 @@
  * (h) Clicking theme toggle calls setTheme with opposite value.
  * (i) Density control renders 3 segments (Default, Compact, Wall).
  * (j) Clicking a density segment calls setDensity.
+ * (k) TrialBanner absent when no expiry (daysRemaining null).
+ * (l) TrialBanner warning visible when 0 < daysRemaining <= 14.
  */
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { Layout } from "../Layout";
+import type { LicenseContextValue } from "@/lib/LicenseContext";
 
 // Layout uses clearToken from @/api/client when sign-out is clicked
 const mockClearToken = vi.fn();
@@ -31,6 +34,18 @@ const mockSetDensity = vi.fn();
 vi.mock("@/lib/ThemeContext", () => ({
   useTheme: () => ({ theme: "dark", setTheme: mockSetTheme }),
   useDensity: () => ({ density: "default", setDensity: mockSetDensity, rowHeight: 40 }),
+}));
+
+// Mock LicenseContext so TrialBanner inside Layout is under test control.
+// The default returns the "no expiry" state (null license, banner hidden).
+let licenseCtxValue: LicenseContextValue = {
+  license: null,
+  daysRemaining: null,
+  isTrialExpired: false,
+};
+
+vi.mock("@/lib/LicenseContext", () => ({
+  useLicense: () => licenseCtxValue,
 }));
 
 function Wrapped({ children = <div data-testid="content">Page</div>, wsConnected = false, tier }: {
@@ -122,5 +137,22 @@ describe("Layout", () => {
     render(<Wrapped />);
     fireEvent.click(screen.getByRole("button", { name: /compact/i }));
     expect(mockSetDensity).toHaveBeenCalledWith("compact");
+  });
+
+  it("(k) TrialBanner absent when daysRemaining is null (no expiry)", () => {
+    licenseCtxValue = { license: null, daysRemaining: null, isTrialExpired: false };
+    render(<Wrapped />);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("(l) TrialBanner warning alert present when 0 < daysRemaining <= 14", () => {
+    licenseCtxValue = {
+      license: { tier: "pro", valid: true, expires_at: Date.now() + 7 * 86400000 },
+      daysRemaining: 7,
+      isTrialExpired: false,
+    };
+    render(<Wrapped />);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("alert").textContent).toMatch(/License expires in 7 day/);
   });
 });

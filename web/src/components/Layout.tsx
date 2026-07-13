@@ -4,6 +4,7 @@ import type { LiveOverview } from "@/lib/api/types";
 import { useTheme } from "@/lib/ThemeContext";
 import { useDensity } from "@/lib/ThemeContext";
 import type { Density } from "@/lib/density";
+import { TrialBanner } from "@/components/TrialBanner";
 
 interface NavItem {
   to: string;
@@ -410,6 +411,9 @@ export function Layout({ children, wsConnected, overview: _overview, tier }: Lay
             {wsConnected ? "Live" : "Polling"}
           </div>
         </header>
+
+        {/* Trial / expiry banner — between header and main; flexShrink 0 preserves density modes */}
+        <TrialBanner />
 
         {/* Page content */}
         <main

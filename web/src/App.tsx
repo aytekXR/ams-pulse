@@ -21,6 +21,7 @@ import { AuthGate } from "@/components/AuthGate";
 import { Layout } from "@/components/Layout";
 import { ToastProvider } from "@/components/Toast";
 import { ThemeProvider, DensityProvider } from "@/lib/ThemeContext";
+import { LicenseProvider, useLicense } from "@/lib/LicenseContext";
 import { LiveDashboard } from "@/features/live/LiveDashboard";
 import { AnalyticsPage } from "@/features/analytics/AnalyticsPage";
 import { QoePage } from "@/features/qoe/QoePage";
@@ -34,13 +35,14 @@ import { SettingsPage } from "@/features/settings/SettingsPage";
 import { OnboardingWizard } from "@/features/settings/OnboardingWizard";
 import "@/styles/global.css";
 
-function AppRoutes() {
+function AppRoutesInner() {
   const [wsConnected, setWsConnected] = useState(false);
   const navigate = useNavigate();
+  const { license } = useLicense();
 
   return (
     <AuthGate>
-      <Layout wsConnected={wsConnected}>
+      <Layout wsConnected={wsConnected} tier={license?.tier}>
         <Routes>
           <Route path="/" element={<LiveDashboard onConnectionChange={setWsConnected} />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
@@ -67,6 +69,14 @@ function AppRoutes() {
         </Routes>
       </Layout>
     </AuthGate>
+  );
+}
+
+function AppRoutes() {
+  return (
+    <LicenseProvider>
+      <AppRoutesInner />
+    </LicenseProvider>
   );
 }
 
