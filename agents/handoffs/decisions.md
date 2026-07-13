@@ -4836,6 +4836,55 @@ ready for uploading to the marketplace with trial license key."
   billing + anomaly flag history + early-warning ladder + degraded-display
   consistency + zero-mean guard/sweep). Rollback path: retag pre-d089 +
   up -d.
+
+**S27 SCOUT RESULTS + ORCH RULINGS (4 scouts, 0 errors, ~330k tokens, recorded pre-build):**
+- **★ Scout headline (license): a mid-run trial expiry is INVISIBLE today** —
+  license loaded once at boot (serve.go:307), expiry checked only inside
+  activate() (license.go:388-395); a Pro trial crossing expires_at mid-run
+  keeps tier/entitlements/valid=true FOREVER until restart; boot with an
+  expired key silently falls to free discarding the error (license.go:187-190).
+- **RULE-1 (license, NO contract CR):** lazy expiry check in a locked
+  helper at the top of every Manager reader (Tier/Valid/all Check*):
+  expired ⇒ downgrade to freeTierEntitlements, set valid=false, **RETAIN
+  expiresAt**, slog once. Boot-with-expired-key: same honest state (free/
+  valid=false/expiresAt retained). No-key free semantics byte-unchanged.
+  The three states are distinguishable in the EXISTING LicenseInfo shape
+  (never-licensed {free,true,null} / active {pro,true,future} / degraded
+  {free,false,past}) ⇒ contracts/ stays byte-untouched. Test-injectable
+  `var now = time.Now`; mid-run + boot-expired + no-key pins; mutation
+  targets pre-declared (drop lazy check / clear expiresAt / valid stays
+  true ⇒ all must go RED).
+- **RULE-2 (install):** adopt scout 5-file plan — bake migrations into the
+  runtime image (COPY + ENV PULSE_MIGRATIONS_DIR=/usr/share/pulse/migrations;
+  env supported at config.go:210) + NEW deploy/quickstart/ (compose with
+  `image: \${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.0}`, 6-var
+  .env.example INCLUDING the vendor PULSE_LICENSE_PUBKEY [public key
+  material — the only value ever copied out of deploy/.env], install.sh
+  one-command path) + install.md Path A0. Repo verified PUBLIC ⇒ curl|bash
+  viable; **GHCR package still PRIVATE ⇒ O7 flip is now CRITICAL-PATH
+  operator item #5** (recorded in operator-expected.md). **v0.4.0 tag at
+  close** (quickstart pins it; also refreshes checklist row 12).
+- **RULE-3 (web UI, NO contract CR):** GET /admin/license already carries
+  tier/valid/expires_at ⇒ LicenseContext (single fetch at app root) +
+  TrialBanner in Layout between header and main (warning when
+  0<days≤14, session-dismissable; error non-dismissable when expired),
+  brandkit warning/error tokens only; App.tsx finally passes tier to the
+  Layout badge slot (dead since D-072). Client computes expiry from
+  expires_at (server valid is stale only pre-RULE-1-fix; belt+braces).
+- **RULE-4 (docs):** NEW docs/compatibility.md (row 16) +
+  docs/known-limitations.md (row 17, 18 items) + docs/marketplace/
+  {listing-draft,screenshot-list}.md (row 10, DRAFT-INTERNAL banner) +
+  stale-row fixes: final-assessment §3 row 4 (beacon-sdk.md EXISTS since
+  S19 — checklist self-inconsistent) + row 12 (v0.2.0/v0.3.0 releases
+  EXIST; residual = GHCR private + no binary tarballs) + prd-validation-
+  matrix F3 MISSING→FULLY with mechanical score recount + README current-
+  version line. kafka-integration.md (DG-15) + the AMS-INTEGRATION DG
+  batch → S28 (not marketplace-critical).
+- **Author fan-out: A1 license-go / A2 install / A3 web-ui / A4 docs —
+  disjoint single-writer scopes; no agent runs git state changes; ORCH
+  gates inline post-authors, then adversarial verify (V1 mutations in
+  pristine copies / V2 live quickstart clean-install on :28090 with a
+  branch-built image / V3 docs adversarial).**
 - **OPERATOR ACTIONS REQUIRED — YES (4, recorded per the session-open
   directive; none blocks S27's own work):** (1) AMS license today
   (operator-promised); (2) trial-license mint needs the vault privkey;

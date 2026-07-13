@@ -40,6 +40,15 @@
 >    checklist rows 7–11 all read NEEDS-OPERATOR-CONTACT. Only you can
 >    open that thread with the Ant Media team.
 >
+> 5. **★ NEW (scout-discovered, critical-path) — make the GHCR package
+>    public.** The one-command install being built today pulls
+>    `ghcr.io/aytekxr/ams-pulse` — which is still **private** (the old
+>    optional O7). No marketplace customer can `docker pull` until you
+>    flip it: github.com/aytekXR → Packages → `ams-pulse` → Package
+>    settings → Danger zone → Change visibility → **Public** (UI-only,
+>    ~30 seconds). The repo itself is already public; this is just the
+>    image package.
+>
 > **Standing, unchanged, non-blocking:** caddy-vhost merge decision
 > (say "merge the caddy vhost"). S27 close will refresh this file with
 > rollout + build results.
