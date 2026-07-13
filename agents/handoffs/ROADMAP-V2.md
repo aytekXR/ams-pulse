@@ -227,7 +227,7 @@ TDD.
 
 ---
 
-### 2.11  Native WebRTC / RTMP / DASH probes  [L per protocol] — ⚙ WebRTC PHASE 1 ✅ S12 (D-072) · RTMP PHASE 1 (handshake) + DASH (full MPD+segment) ✅ S13 (D-073) · **WebRTC PHASE 2a (pion ICE) ✅ S14 (D-074, 2026-07-10: ice_state connected|failed|timeout + CH 0007, live-verified ICE-connected vs real AMS 3.0.3 in 0.2s; PLUS the notification-skip signaling fix — real AMS sends subtrackAdded BEFORE the offer, the D-072 parse failed live-only, now fixed + mock mirrors it)** · **phase-2b (rtt/jitter/loss) ✅ S15 (D-075, 2026-07-10: rtt_ms/jitter_ms/loss_pct Nullable(Float32) CH 0008, key-absent semantics, ~2s ctx-bounded post-connect hold, pc.GetStats(); live vs real AMS 3.0.3: rtt 0.47 ms / jitter 22.33 ms / loss 0 in 2.2 s; remaining F10 tail = RTMP AMF0 connect + probe-stats UI surface)**
+### 2.11  Native WebRTC / RTMP / DASH probes  [L per protocol] — ⚙ WebRTC PHASE 1 ✅ S12 (D-072) · RTMP PHASE 1 (handshake) + DASH (full MPD+segment) ✅ S13 (D-073) · **WebRTC PHASE 2a (pion ICE) ✅ S14 (D-074, 2026-07-10: ice_state connected|failed|timeout + CH 0007, live-verified ICE-connected vs real AMS 3.0.3 in 0.2s; PLUS the notification-skip signaling fix — real AMS sends subtrackAdded BEFORE the offer, the D-072 parse failed live-only, now fixed + mock mirrors it)** · **phase-2b (rtt/jitter/loss) ✅ S15 (D-075, 2026-07-10: rtt_ms/jitter_ms/loss_pct Nullable(Float32) CH 0008, key-absent semantics, ~2s ctx-bounded post-connect hold, pc.GetStats(); live vs real AMS 3.0.3: rtt 0.47 ms / jitter 22.33 ms / loss 0 in 2.2 s; remaining F10 tail = RTMP AMF0 connect + probe-stats UI surface)** · **★ F10 TAIL DONE ✅ S29 (D-091, 2026-07-14): RTMP AMF0 connect round-trip (hand-rolled AMF0 + minimal chunk demuxer honoring SetChunkSize; app_accepted/app_rejected/rtmp_connect_timeout; description-only contract CR; live vs real AMS 3.0.3: app_accepted + 281-byte wire fixture committed) + probe-stats UI completed (ProbesPage Signaling badge + Connect ms columns — the S15-noted gap). §2.11 protocol matrix COMPLETE for implemented scopes.**
 
 **Why:** Current QoE probes are HLS-only; non-HLS streams return `not_probed` (stub from
 ROADMAP.md §1 audit). AMS supports WebRTC, RTMP, and DASH. Full QoE measurement requires
@@ -438,11 +438,12 @@ discipline). Each is independent:
    Regen idempotent; dead web consumer removed (FleetPage "Down" tile
    showed a structurally-permanent 0). Re-adding "down" later is an
    additive CR if two-phase eviction is ever built.
-4. **DeleteZeroMeanNodeBaselines PG integration coverage [XS]** — the
-   method is rebind-correct (verified) and SQLite-tested; add it to
-   TestPG_AnomalyBaselines_RoundTrip when the PG integration suite next
-   runs in a session. *(Addressed same-session if S26's gates allowed —
-   check D-088 close evidence before picking this up.)*
+4. **DeleteZeroMeanNodeBaselines PG integration coverage [XS]** — ✅ DONE
+   S26 (D-088): standalone `TestPG_DeleteZeroMeanNodeBaselines`
+   (server/internal/store/meta/meta_pg_integration_test.go:769), explicit
+   `-v` run PASS vs postgres:16 (D-088 close evidence). *(Ledger stamped
+   S29/D-091 — 3rd ledger-drift find after §2.4/§2.5; the test landed
+   same-session as the sweep, this row was never ticked.)*
 
 ### 2.18  Marketplace-readiness sprint  [M–L]  (OPERATOR-DIRECTED 2026-07-13, D-089 — ★ TOP PRIORITY, supersedes ordering of every non-gated item above) — ✅ ITEMS 1–5 DONE S27 (D-089, 2026-07-13: rollout live; trial lifecycle live-proven [7/7 mutations RED + live 3-min-key expiry]; quickstart live clean-install vs real AMS; rows 16/17→PASS + scores 66.7/84.5; listing draft INTERNAL). Item 6 (operator-gated) OPEN — 5 items in operator-expected.md ⚡ incl. NEW GHCR-public flip.
 
@@ -480,6 +481,42 @@ they gate the UPLOAD, not the build.
    Media marketplace contact — rows 7–11 (support channel, licensing
    terms publication, revenue share, category confirm, co-marketing);
    AMS license re-apply (promised 2026-07-13).
+
+### 2.19  Full UI/UX refactor via uipro ("UI/UX Pro Max" skill)  [L, phased]  (OPERATOR-DIRECTED 2026-07-14, S29 mid-session)
+
+**Directive (operator, verbatim intent):** "We have installed uipro to
+refactor ui … refactor the all ui/ux by uipro."
+**What exists today:** the `uipro` CLI v2.11.0 is installed globally
+(`~/.nvm/versions/node/v20.20.2/bin/uipro`) — it is an installer that adds
+the "UI/UX Pro Max" skill for AI coding assistants to a project
+(`uipro init`). The skill is NOT yet initialized in this repo (no
+`.claude/skills/` here or globally at directive time).
+**Relationship to D-071 (brandkit):** `brandkit/` remains the design
+source of truth — `tokens.json` colors/type/spacing authoritative, WCAG
+table binding, IBM Plex self-hosted only — unless the operator explicitly
+overrules D-071. uipro drives the refactor *method/quality*; brandkit
+constrains the *values*. If the skill's guidance conflicts with a brandkit
+token, the token wins and the conflict is filed for the operator/designer
+(same class as the S28 dc.html CDN-font finding).
+**Plan (phased, PR-gated):**
+1. **S30 scoping WO [S]:** `uipro init` in-repo (rides a session PR;
+   inspect what it installs BEFORE committing — third-party skill content
+   gets the same review as any vendored code), inventory the skill's
+   guidance, map it against `brandkit/design-system/tokens.json` +
+   `brandkit/documentation/design-rationale.md` §2, and produce a
+   page-by-page refactor wave plan (LiveOverview, Streams/StreamDetail,
+   Ingest, Probes, Fleet, Alerts, Anomalies, Reports/Billing, Settings,
+   app shell/nav) with per-wave acceptance gates.
+2. **Waves [M each]:** refactor per page-group under the skill, gates per
+   wave: vitest green + coverage floors (59/54/45), lint, build,
+   Playwright-docker visual/e2e (light+dark, reduced-motion, density
+   modes), WCAG table conformance re-checked, zero contract changes (UI
+   uses the public API only, ARCHITECTURE §3).
+3. **Close-out:** brandkit adoption ledger (§2.15) cross-updated; any
+   token-vs-skill conflicts resolved by operator ruling.
+**Sequencing:** behind the operator-gated §2.18 marketplace tail (upload
+prep stays first when unblocked); ahead of §2.9/§2.10/§2.12. Does NOT
+touch sdk/beacon-js (no UI) or server/.
 
 ---
 

@@ -595,7 +595,7 @@ func writeJSON(w http.ResponseWriter, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// ─── RTMP Handshake Listener ──────────────────────────────────────────────────
+// ─── RTMP Handshake + AMF0 Connect Listener ──────────────────────────────────
 
 // startRTMPListener binds addr, logs the effective address, then calls
 // serveRTMPOnListener. Calls log.Fatalf on bind failure; call in a goroutine.
@@ -620,17 +620,22 @@ func serveRTMPOnListener(ln net.Listener) {
 	}
 }
 
-// handleRTMPConn completes a single RTMP handshake and closes the connection.
+// handleRTMPConn completes an RTMP handshake and processes an optional AMF0
+// connect command, replying with _result or _error.
 //
 // Protocol:
 //
 //	C0 (1 B, must be 0x03) + C1 (1536 B)
 //	→ S0 (0x03) + S1 (1536 B) + S2 (echo of C1)
 //	→ C2 (1536 B)
+//	→ AMF0 connect command (optional, if app segment in URL)
+//	  → _result (app != "rejected") or _error (app == "rejected")
 //	→ close
 //
+// Deterministic rejection hook: when the connect command carries app="rejected",
+// the mock replies with an AMF0 _error so probe tests can exercise that path.
+//
 // A bad C0 version byte or any I/O error causes immediate close without reply.
-// One log line is emitted on successful completion.
 func handleRTMPConn(conn net.Conn) {
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
@@ -676,6 +681,180 @@ func handleRTMPConn(conn net.Conn) {
 	}
 
 	log.Printf("mock-ams: rtmp handshake complete from %s", conn.RemoteAddr())
+
+	// Read the optional AMF0 connect command. If none arrives within the deadline
+	// (e.g. probe only does handshake — no-app URL), the read will timeout and
+	// we close silently.
+	app, err := rtmpReadAMF0App(conn)
+	if err != nil {
+		// Client didn't send connect, or I/O error — close quietly.
+		return
+	}
+
+	// Deterministic rejection hook: app name "rejected" → _error.
+	cmdName := "_result"
+	if app == "rejected" {
+		cmdName = "_error"
+	}
+
+	if err := rtmpSendAMF0Response(conn, cmdName); err != nil {
+		return
+	}
+	log.Printf("mock-ams: rtmp AMF0 connect: app=%q → %s from %s", app, cmdName, conn.RemoteAddr())
+}
+
+// rtmpReadAMF0App reads one RTMP chunk carrying the AMF0 "connect" command from
+// conn and returns the value of the "app" property from the command object.
+// Returns ("", error) if the chunk cannot be read or parsed.
+// Handles the prober's chunked format: fmt=0 first chunk + fmt=3 continuations
+// at 128-byte boundaries.
+func rtmpReadAMF0App(conn net.Conn) (string, error) {
+	// Basic header (1 byte: fmt=0, csid=3 → 0x03)
+	var bh [1]byte
+	if _, err := io.ReadFull(conn, bh[:]); err != nil {
+		return "", fmt.Errorf("rtmp: connect basic header: %v", err)
+	}
+
+	// Message header (11 bytes for fmt=0)
+	var mh [11]byte
+	if _, err := io.ReadFull(conn, mh[:]); err != nil {
+		return "", fmt.Errorf("rtmp: connect message header: %v", err)
+	}
+	msgLen := int(mh[3])<<16 | int(mh[4])<<8 | int(mh[5])
+	if msgLen <= 0 || msgLen > 4096 {
+		return "", fmt.Errorf("rtmp: connect payload length %d out of range", msgLen)
+	}
+
+	// Read payload, possibly fragmented at 128-byte chunk boundaries.
+	payload := make([]byte, 0, msgLen)
+	rem := msgLen
+	first := true
+	for rem > 0 {
+		if !first {
+			// Continuation chunk basic header (fmt=3, 1 byte)
+			var cb [1]byte
+			if _, err := io.ReadFull(conn, cb[:]); err != nil {
+				return "", fmt.Errorf("rtmp: connect continuation header: %v", err)
+			}
+		}
+		first = false
+		n := 128
+		if n > rem {
+			n = rem
+		}
+		buf := make([]byte, n)
+		if _, err := io.ReadFull(conn, buf); err != nil {
+			return "", fmt.Errorf("rtmp: connect payload: %v", err)
+		}
+		payload = append(payload, buf...)
+		rem -= n
+	}
+
+	return rtmpAMF0ExtractApp(payload)
+}
+
+// rtmpAMF0ExtractApp parses the AMF0 payload of a "connect" command and returns
+// the "app" property value. The payload structure is:
+//
+//	string "connect" + number txid + object {app:string, tcUrl:string, ...} + end
+func rtmpAMF0ExtractApp(payload []byte) (string, error) {
+	// Skip command name string (type 0x02 + uint16 len + bytes)
+	if len(payload) < 3 || payload[0] != 0x02 {
+		return "", fmt.Errorf("amf0: expected string type at offset 0")
+	}
+	cmdLen := int(binary.BigEndian.Uint16(payload[1:3]))
+	offset := 3 + cmdLen
+
+	// Skip txid number (type 0x00 + 8 bytes)
+	if offset+9 > len(payload) || payload[offset] != 0x00 {
+		return "", fmt.Errorf("amf0: expected number type for txid at offset %d", offset)
+	}
+	offset += 9
+
+	// Expect AMF0 object (type 0x03)
+	if offset >= len(payload) || payload[offset] != 0x03 {
+		return "", fmt.Errorf("amf0: expected object type 0x03 at offset %d", offset)
+	}
+	offset++
+
+	// Iterate properties until end marker 0x00 0x00 0x09
+	for offset+2 < len(payload) {
+		if payload[offset] == 0x00 && payload[offset+1] == 0x00 && payload[offset+2] == 0x09 {
+			break // end marker
+		}
+
+		// Key: uint16 length + bytes (no type byte)
+		if offset+2 > len(payload) {
+			return "", fmt.Errorf("amf0: key length truncated at offset %d", offset)
+		}
+		keyLen := int(binary.BigEndian.Uint16(payload[offset : offset+2]))
+		offset += 2
+		if offset+keyLen > len(payload) {
+			return "", fmt.Errorf("amf0: key data truncated")
+		}
+		key := string(payload[offset : offset+keyLen])
+		offset += keyLen
+
+		// Value: type byte + data
+		if offset >= len(payload) {
+			return "", fmt.Errorf("amf0: value type missing for key %q", key)
+		}
+		valType := payload[offset]
+		offset++
+
+		switch valType {
+		case 0x02: // string
+			if offset+2 > len(payload) {
+				return "", fmt.Errorf("amf0: string length truncated for key %q", key)
+			}
+			vLen := int(binary.BigEndian.Uint16(payload[offset : offset+2]))
+			offset += 2
+			if offset+vLen > len(payload) {
+				return "", fmt.Errorf("amf0: string data truncated for key %q", key)
+			}
+			val := string(payload[offset : offset+vLen])
+			offset += vLen
+			if key == "app" {
+				return val, nil
+			}
+		case 0x00: // number (8 bytes)
+			offset += 8
+		case 0x01: // boolean (1 byte)
+			offset++
+		case 0x05: // null (no data)
+		default:
+			// Unknown type — cannot parse further; "app" not found
+			return "", nil
+		}
+	}
+	return "", nil // "app" key not present
+}
+
+// rtmpSendAMF0Response sends a minimal AMF0 command chunk (cmdName, txid 1.0, null info).
+// Single chunk: fmt=0, csid=3, type 0x14 — payload always fits in 128 bytes.
+func rtmpSendAMF0Response(conn net.Conn, cmdName string) error {
+	var payload []byte
+	// Command name string
+	payload = append(payload, 0x02, byte(len(cmdName)>>8), byte(len(cmdName)))
+	payload = append(payload, []byte(cmdName)...)
+	// txid number (1.0 = 0x3FF0000000000000 IEEE 754 BE)
+	payload = append(payload, 0x00, 0x3F, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
+	// null (command info placeholder)
+	payload = append(payload, 0x05)
+
+	msgLen := len(payload)
+	chunk := make([]byte, 1+11+msgLen)
+	chunk[0] = 0x03 // fmt=0, csid=3
+	chunk[1], chunk[2], chunk[3] = 0, 0, 0
+	chunk[4] = byte(msgLen >> 16)
+	chunk[5] = byte(msgLen >> 8)
+	chunk[6] = byte(msgLen)
+	chunk[7] = 0x14 // AMF0 command
+	chunk[8], chunk[9], chunk[10], chunk[11] = 0, 0, 0, 0
+	copy(chunk[12:], payload)
+
+	_, err := conn.Write(chunk)
+	return err
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────

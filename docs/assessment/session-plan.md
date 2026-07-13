@@ -311,7 +311,7 @@ S19: Phase 7 (PRD matrix) ◄── all scenario verdicts ◄──────�
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|-----------|
-| AMS trial license expired (2026-07-12) limits Enterprise features | High | Low | Operator-waived; observe-report; document blocked features |
+| AMS trial license lapsed (2026-07-12) limits Enterprise features | High | Low | Operator-waived; observe-report. **S29/D-091 update:** blocked=[SRT ingest] — SRTAdaptor "License is suspended" live evidence 2026-07-13; RTMP unaffected; TC-I-05-SRT committed + ready; closure post-licence-renewal. |
 | AMS brute-force lockout during automated tests | Medium | Medium | `auth.sh` called once per session; separate admin@ and aytek@ |
 | Real WebRTC viewers hard to simulate headlessly | Medium | Medium | Use Playwright + Chromium; fallback to mock data for unit test |
 | Anomaly baseline warmup (30 min in prod) slows S18 | High | Low | Pre-start publisher 30 min before session; or accept CI proxy |

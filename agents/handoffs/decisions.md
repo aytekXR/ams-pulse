@@ -5125,3 +5125,194 @@ PR/merge + tag/release evidence appended below after merge.
   S27 lesson), vitest **388/388**, coverage 64.02/61.88/56.03 vs gates
   59/54/45. Integration suite deferred to PR CI (no store/query
   production change — S27 precedent).
+
+**S28 MERGE EVIDENCE (appended at S29 open per protocol):** PR #41 MERGED
+2026-07-13T17:47:52Z, merge commit `d986162` (squash; all required contexts
+green). origin/main == HEAD at S29 open.
+
+## D-091 — SESSION-29 (2026-07-13, OPEN): operator-intake gate + highest-leverage tail
+
+**S29 OPEN (intake + standing checks, all read-only):**
+- **Repo state at open:** main == origin/main @ `d986162` (S28 merge);
+  no foreign commits/branches (D-062 hazard clear). Uncommitted working
+  tree = Caddyfile.prod on-disk vhost + .bak ONLY (D-082 standing —
+  never revert, never commit via session PR).
+- **★ OPERATOR INTAKE: ALL SIX ITEMS STILL OPEN — action required
+  (recorded per the session-open directive; none blocks S29's own work):**
+  (1) **AMS license NOT landed** — s29open sweep = **8th byte-identical
+  null delta** vs the pre-expiry baseline (licence-status still 204,
+  Enterprise 3.0.3 build 20260504_1443, 4 apps; realams overview line
+  VALID again — total_publishers=1, matches baseline). (2) **trial key
+  NOT minted** (no operator message/key material; oguz-testing.md
+  unchanged since 07-11). (3) **GHCR still PRIVATE** — anonymous
+  manifest GET for :0.4.0 → HTTP 401 (8th check; customers cannot
+  docker pull; critical-path). (4) **final-assessment review still
+  pending** (gates marketplace upload). (5) **Ant Media contact not
+  opened** (checklist rows 7–11). (6) **Pro MaxNodes ruling NOT given**
+  (listing draft stays NEEDS-RECONCILE). Re-stamped in
+  operator-expected.md ⚡ (S29-open re-check note).
+- **★ Sweep-instruction gotcha found+fixed in-flight:** SESSION-29.md's
+  literal `PULSE_TOKEN=<any>` prefix SUPPRESSES env.sh token
+  auto-extraction (env.sh:49 honors any non-empty override) → bogus
+  bearer → overview line parse-err (first s29open run,
+  20260713T204447Z — byte-identical to s28open which carried the same
+  artifact from the then-orphaned token). Re-ran WITHOUT the override
+  (20260713T204553Z): full NULL DELTA incl. the overview line.
+  SESSION-30.md must drop the PULSE_TOKEN prefix from the sweep
+  instruction (realams target auto-extracts since the S28 rebuild).
+- **AMS observation:** antmedia container StartedAt still
+  2026-07-12T06:52:55Z (no post-lapse restart; boot-enforcement
+  hypothesis stays untested, observe-only). Prod healthz ok
+  (ch/col/meta ok), poll-errlines-15m=0, pulse-prod-pulse-1 Up 7h
+  healthy on v0.3.0-34-g58a9c84 (S27 rollout stands; rollback tag
+  pre-d089 stands). realams stack Up 4h healthy on v0.4.0.
+- **CI promotions:** run date 2026-07-13 < 2026-07-23 → skip carry ×18.
+- **Env note:** session shell again lacks the docker supplementary
+  group → `sg docker -c "…"` for all docker commands (S28 note holds).
+- **★ NEW ENFORCEMENT FINDING (S2 scout, live AMS log 2026-07-13
+  20:57:47Z): SRT ingest is license-gated and NOW REJECTS —
+  `io.antmedia.enterprise.srt.SRTAdaptor: "License is suspended. Not
+  accepting the stream"` — while RTMP ingest continues unaffected
+  (teststream healthy).** This is the FIRST observable post-lapse
+  enforcement delta: the 8 byte-identical sweeps covered the REST
+  surface only; feature-level enforcement DOES bite for SRT without an
+  antmedia restart. S22's "blocked-scenario list EMPTY" is superseded:
+  blocked = [SRT ingest]. Consequence: the SRT loss validation
+  (final-assessment §5 P1) is BLOCKED on operator item 1 (new AMS
+  license); when the license lands, SRT re-validation joins the
+  re-validation set. Recorded for the assessment docs (W3).
+- **PLAN REVISION (standing directive, post-scout — 4 scouts, 0 errors):**
+  batch = **W1 [M]** RTMP AMF0 connect (probe_rtmp.go post-C2 chunk
+  layer: AMF0 `connect` → `_result`/`_error`; new signaling_state
+  values app_accepted/app_rejected; ConnectTimeMs widens dial→response;
+  no new CH column — LowCardinality(String); description-only contract
+  CR + regen; mock-ams AMF0 responder; TDD red-first; live fixture
+  self-captured vs real AMS per the D-072 pattern; ⚠ real servers send
+  control msgs (SetChunkSize/WindowAck/SetPeerBandwidth) before
+  `_result` — minimal chunk demux required, scope capped at connect
+  only, no NetStream); **W2 [S]** probe-stats UI completion — ProbesPage
+  Signaling column (signaling_state badge incl. the W1 values +
+  connect_time_ms), closes the S15-noted UI gap = F10 tail DONE;
+  **W3 [S]** SRT slice re-scoped doc+harness-only (license-BLOCKED):
+  committed TC-I-05-SRT scenario w/ license-gate SKIP exit 77 (runnable
+  the moment the license lands; exact cmd seq from scout — bridge
+  gateway 172.17.0.1:4200, streamid `#!::h=<app>/<id>,m=publish`,
+  jrottenberg/ffmpeg:4.1-alpine has libsrt, image local) + DG-18
+  variant note in AMS-INTEGRATION.md (RTMP TCP-masking + SRT post-ARQ
+  semantics, x-ref LIM-17/§4.2) + documentation-gaps DG-18 license-gate
+  note + final-assessment §5 SRT row → BLOCKED + expiry-observation
+  update (blocked-list no longer empty); **W4 [S]** known-limitations
+  parity: +LIM-19 (AV-15 never live-validated — disclosure-critical),
+  +LIM-20 (Kafka plaintext-only), +LIM-21 (at-least-once + first-start
+  FirstOffset replay), +LIM-22 (first-viewer z-spike, Enterprise-only
+  note), LIM-01/LIM-04 stale topic `ams-instance-stats`→
+  `ams-server-events` (with code-derived/unconfirmed caveat), stale
+  "18 disclosures" count sweep. ORCH inline: §2.17.4 ledger ✅ stamp
+  (TestPG_DeleteZeroMeanNodeBaselines exists,
+  meta_pg_integration_test.go:769 — 3rd ledger-drift find); D-V2-1
+  re-surface-only (operator-expected refresh at close). Deferred:
+  remote-WebRTC parity (needs 2nd host), F9 (sparsity gate),
+  AnomalyBaselineForMetric dead code (TODO(D-087) pin explicit),
+  GeoLite2 guide + scheduled-stream alerting + RTMP-pull viewers (P2,
+  below batch leverage).
+- **⚠ MID-SESSION INCIDENTS (recorded in-flight):** (1) **build workflow
+  died on the account monthly spend limit** — all 4 authors errored
+  (~261k subagent tokens in; W2 left its RED test suite in
+  ProbesPage.test.tsx, W4 left the LIM-01/LIM-04 topic-name fixes;
+  W1/W3 left no tree changes). Per the dead-workflow rule the partials
+  were inspected by ORCH and the resumed authors were ordered to ADOPT
+  AND GATE them (re-derive RED, verify cites) — never trusted as-is.
+  Operator raised the limit ("continue please"); workflow resumed with
+  amended prompts. (2) **D-062 concurrent-session class, 3rd
+  occurrence, NEW variant: operator committed DIRECTLY to local main**
+  — `80df0ab` "bedirhan site" (author aytek, 2026-07-13T21:11:23Z,
+  +35 lines = exactly the standing S20 bedirhan vhost;
+  `git diff 80df0ab -- Caddyfile.prod` empty ⇒ on-disk file identical;
+  live prod config untouched; NOT pushed — origin/main still d986162).
+  READ: this is the operator ANSWERING the standing caddy-vhost
+  decision (his own commit of his own change onto main). S29 close
+  will carry it to origin preserving authorship (direct main push if
+  branch protection allows, else disclosed prominently in the session
+  PR — NOT silently squashed). (3) **Unexpected untracked file**
+  `docs/ant-media-marketplace-opportunity-report.md.pdf` (717KB, 8pp,
+  mtime 2026-07-13 ~21:38Z, same window as the operator commit) —
+  operator-side artifact by name/timing; text extraction unavailable
+  on this host (no poppler); left untracked (NOT committed — not
+  session work, unread content); surfaced to operator at close.
+- **★ NEW OPERATOR DIRECTIVE (2026-07-14, mid-S29): full UI/UX refactor
+  via uipro** ("We have installed uipro to refactor ui … refactor the
+  all ui/ux by uipro"). Scoped + recorded as **ROADMAP-V2 §2.19** [L,
+  phased]: uipro CLI v2.11.0 present globally (installer for the
+  "UI/UX Pro Max" AI-assistant skill; NOT yet `uipro init`-ed in-repo);
+  ruling recorded in §2.19 — uipro = refactor method, brandkit tokens
+  stay authoritative per D-071 unless operator overrules; S30 gets the
+  scoping WO (init + inventory + wave plan), waves gated per §2.19.
+  Sequenced behind the operator-gated §2.18 upload tail.
+- **★ BATCH EXECUTED (workflow resumed post-limit: 4 authors + 4
+  adversarial verifiers, pipelined, 0 errors on resume; ~1.36M subagent
+  tokens across scout+build incl. the dead first attempt):**
+  - **W1 RTMP AMF0 connect (F10 tail) — DONE, live-validated:**
+    probe_rtmp.go post-C2 chunk layer (hand-rolled AMF0 encode/decode,
+    minimal demuxer: fmt 0–3 headers, extended timestamps, SetChunkSize
+    honored, 64KB cap, non-0x14 skipped); semantics: `_result`→
+    success+app_accepted (ConnectTimeMs widened dial→response),
+    `_error`→rtmp_app_rejected+app_rejected, deadline→
+    rtmp_connect_timeout+handshake_complete (honest partial), no-app
+    URL→legacy path pinned. mock-ams AMF0 responder (+app "rejected"
+    _error hook). Contract CR description-only; regen idempotent ×3.
+    **LIVE: rtmp://127.0.0.1:1935/LiveApp → app_accepted (AMS fmsVer
+    RED5/1,0,9,0); 281-byte wire fixture committed
+    (server/internal/prober/testdata/ams-connect-response.bin:
+    WindowAckSize+SetPeerBandwidth+StreamBegin+fragmented _result —
+    RTMP connect works under the suspended license, unlike SRT).**
+    3 TDD RED proofs recorded. V1 PARTIAL → must-fix REMEDIATED BY
+    ORCH: SetChunkSize handler had ZERO coverage (fixture never
+    renegotiates — the author's fixture description was factually
+    wrong, corrected) → NEW TestReadAMF0Command_HonorsSetChunkSize
+    (renegotiate-256 + single 172B chunk); mutation re-proven RED in a
+    pristine copy ('rtmp chunk: drain oversized: EOF') while the
+    fixture replay alone stays green — the exact hole V1 found.
+    **ORCH false-green near-miss during the re-proof: `cp -a` rc≠0 on
+    root-owned CH debris short-circuited the && chain — the first
+    "mutation RED" run tested the UNMUTATED copy and PASSed; caught
+    because PASS contradicted the expected RED. Memory pattern class
+    confirmed again.**
+  - **W2 probe-stats UI (F10 tail) — DONE:** ProbesPage Signaling
+    column (badge; all 10 server-emitted signaling_state values incl.
+    the new app_accepted/app_rejected; unknown→muted default pinned) +
+    Connect (ms) column; dead-agent RED tests adopted+gated (fresh RED
+    signatures re-derived). V2 CONFIRMED_OK: 407/407 vitest (was 388),
+    coverage 64.13/62.13/56.12 ≥ 59/54/45, lint+build clean, tokens
+    only, no e2e breakage (probes qa is API-level).
+  - **W3 SRT slice (license-BLOCKED, honest) — DONE:**
+    TC-I-05-SRT-packet-loss.sh committed (host-net ffmpeg+libsrt
+    publisher, ACF streamid, trap teardown, OBSERVATION framing,
+    license-gate SKIP 77 w/ evidence); ran once live → SKIP 77 with
+    the SRTAdaptor rejection line captured. AMS-INTEGRATION DG-18
+    variant note (RTMP TCP-masking / SRT post-ARQ / WebRTC UDP);
+    documentation-gaps DG-18 + final-assessment §5 SRT row → BLOCKED
+    (license) + scenario-ready; blocked-scenario list updated EMPTY→
+    [SRT ingest] (validation-environment/session-plan). V3 PARTIAL →
+    must-fix REMEDIATED BY ORCH: license-gate grep now filters by
+    ${STREAM_ID} (stale rejection line can no longer SKIP-mask an
+    unrelated failure); bash -n + shellcheck info-only (SC1091/trap
+    class, matches existing scenarios).
+  - **W4 known-limitations parity — DONE:** +LIM-19 (Kafka AV-15 never
+    live-validated, disclosure-critical + LIM-01 forward pointer),
+    +LIM-20 (plaintext-only, kafka.go:130-138 no TLS/SASL), +LIM-21
+    (at-least-once + first-start FirstOffset replay,
+    consumergroup.go:243 verified via module cache), +LIM-22
+    (first-viewer z-spike intentional, Enterprise-only,
+    StddevAbsEpsilon=1e-9 anomaly.go:95); LIM-01/LIM-04
+    ams-instance-stats→ams-server-events (code-derived caveat); count
+    refs 18→22 swept. V4 CONFIRMED_OK — every citation independently
+    re-verified.
+- **Gates (CI-faithful, post-remediation):** golang:1.25 docker
+  (cache volumes + safe.directory): gofmt EMPTY, vet clean, build ok,
+  **24/24 pkgs `-race` 0 FAIL**, coverage **76.1 → 76.0** (floor 70.2;
+  honest dilution — new prober wire code), no new t.Skip (census
+  byte-unchanged, V1-verified). Web (V2): 407/407 vitest,
+  64.13/62.13/56.12 vs 59/54/45, lint+build clean. Contracts:
+  description-only CR, regen idempotent ×3. Integration suite deferred
+  to PR CI (no store/query production change — S27/S28 precedent).
+  CI promotions skip carry ×18 (07-13/14 < 07-23).

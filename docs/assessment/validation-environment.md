@@ -627,7 +627,7 @@ echo "=== $SCENARIO: COMPLETE ==="
 | No `sudo` on VPS | Scout B known constraints | `tc`/`iptables` failure injection requires alternative (Docker disconnect) |
 | PULSE_AMS_APPLICATIONS may filter apps | Scout B `open_ams_apps` | Harness uses only the 8 open apps; note 403s in verdict |
 | per-app `remoteAllowedCIDR` blocks Pulse polling | Scout B note | `LiveApp` and `pulse-test` confirmed open; others may 403 |
-| AMS trial license expires 2026-07-12T12:09Z | `local_env.ams_trial_license_expiry` | Operator-waived; observe and report only; note blocked features |
+| AMS trial license lapsed 2026-07-12T12:09Z | `local_env.ams_trial_license_expiry` | Operator-waived; observe and report only. **S29/D-091 update:** blocked-scenario-list is no longer EMPTY. SRT ingest (TC-I-05-SRT) is license-blocked: SRTAdaptor "License is suspended" observed live 2026-07-13 (evidence: `qa/realams/evidence/S29-TC-I-05-SRT-20260713T215932Z/`). RTMP unaffected. Blocked=[SRT ingest]. |
 | Max 2 git pushes per session | Memory note | Harness scripts are local; commit evidence separately |
 | Docker root artifacts | Memory note | Clean up via `docker run --rm -v <dir>:/s alpine rm -rf /s/<target>` |
 
