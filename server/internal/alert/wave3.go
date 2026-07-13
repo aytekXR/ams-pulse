@@ -263,10 +263,22 @@ func (e *Evaluator) evalAnomalyNodes(ctx context.Context, snap *domain.LiveSnaps
 		var val float64
 		switch rule.Metric {
 		case "cpu_pct":
+			// D-088 presence guard: standalone AMS 3.x never reports cpu_pct.
+			// CPUPCTReported=false means the key was absent in the collector event.
+			// Comparing 0 to a real baseline would produce false alerts.
+			if !n.CPUPCTReported {
+				continue
+			}
 			val = n.CPUPCT
 		case "mem_pct":
+			if !n.MemPCTReported {
+				continue
+			}
 			val = n.MemPCT
 		case "disk_pct":
+			if !n.DiskPCTReported {
+				continue
+			}
 			val = n.DiskPCT
 		case "ams_api_latency_ms":
 			// Presence guard (D-075 key-absent semantics): APILatencyMS is only

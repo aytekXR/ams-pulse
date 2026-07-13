@@ -435,11 +435,11 @@ initiated as of this draft.
 
 Eleven bugs were found and filed by this program. The methodology (direct
 AMS REST cross-check, not UI-only assertions) produced real defects, not
-just scenario confirmations. BUG-002/003/004/005/006/007/008/010/011 have been fixed; BUG-009 is partially fixed; only BUG-001 (low, no user impact) remains open.
+just scenario confirmations. BUG-001/002/003/004/005/006/007/008/010/011 have been fixed; BUG-009 is partially fixed (the `?tenant` pair awaits a multi-tenancy data model — a product decision, not a defect). No open bugs remain.
 
 | ID | Severity | Title | Features Affected | Status |
 |----|----------|-------|-------------------|--------|
-| BUG-001 | Low | `amsclient.BroadcastStatistics()` is dead code — defined, tested, never called at runtime | F1 (no user impact; inline counts correct) | Confirmed; no user impact |
+| BUG-001 | Low | `amsclient.BroadcastStatistics()` is dead code — defined, tested, never called at runtime | F1 (no user impact; inline counts correct) | **FIXED S26/D-088**: dead code deleted (method + DTO + test + fixture); the live pipeline was never affected (inline BroadcastDTO counts) |
 | BUG-002 | **High** | `recording_gb` always 0 — VoD REST never polled; vodReady webhook blocked on AMS 3.0.3 (cannot HMAC-sign hooks) | F6 (recording/billing use case was structurally broken) | **FIXED S23/D-085**: VoD REST poll + persistent `vodId` seen-set + `mv_recording_1d` MV (migrations 0003 meta / 0009 ClickHouse); TDD (8 poller tests, MV integration test, 5 mutation proofs RED); live-validated TC-REC-01 3/3 vs real AMS (0.02% reconciliation) |
 | BUG-003 | Medium | Probe scheduler unconditionally respawned ALL probes on every 60 s refresh tick, resetting probe phase and producing duplicate result rows every 60 s | F10 (probe result timeseries had N+1/N+2 rows per expected-N window; filed root-cause hypothesis was wrong) | **FIXED S20/D-082** (PR #32); 4 regression tests; prober coverage 72.6%→74.3% |
 | BUG-004 | Medium | `GET /api/v1/qoe/ingest` declares `from`/`to` parameters but handler silently ignored them; production dashboard served all-time era-mixed buckets on every page load | F4 (windowed ingest health queries); F8 (OpenAPI contract violation) | **FIXED S20/D-082** (PR #32); 13 TDD subtests; api coverage 76.9%→78.0% |

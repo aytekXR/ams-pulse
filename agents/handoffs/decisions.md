@@ -115,6 +115,9 @@
   also grow zero-mean cpu/mem/disk baselines (D-074-era behavior, no
   presence guard on those metrics) — S26+ candidate alongside the
   FleetNodes display gap.
+- **S25 MERGE EVIDENCE (recorded at S26 open per protocol):** PR **#38**
+  MERGED 2026-07-12T22:31:25Z, merge commit `539c584` == origin/main at S26
+  open. (This line rides S26's PR — push budget.)
 
 
 Rulings on PRD ambiguities, scope, waivers, and contract-change approvals.
@@ -4576,3 +4579,175 @@ Operator queue unchanged (caddy-vhost + final-assessment review, both
 non-blocking). A prod rollout now carries D-082+D-083+D-084+**D-085**
 (BUG-002..010 fixes = the full API-correctness + billing release).
 PR/merge evidence appended below after merge (rides S24 if post-push).
+
+---
+
+## D-088 — SESSION-26 (2026-07-13): early-warning polish batch — FleetNodes degraded display + standalone zero-mean baseline guard (IN PROGRESS; evidence at close)
+
+**S26 OPEN facts (10:21Z–10:3xZ, recorded early per protocol):**
+- **Concurrent-session check: CLEAN.** HEAD == origin/main == `539c584`
+  (S25 PR #38 merged 22:31:25Z — merge evidence appended to D-087 above).
+  Tree carries only the known `Caddyfile.prod` delta (do-not-revert, D-082)
+  + the operator's `.bak`. Session branch `s26-d088`.
+- **AMS post-expiry re-sweep (s26open, 10:22Z): BYTE-IDENTICAL — 5th
+  consecutive null delta** (evidence S21-sweep-s26open-20260713T102218Z).
+  `antmedia` StartedAt still 2026-07-12T06:52:55Z (pre-lapse) → no
+  post-lapse restart; boot-time-enforcement hypothesis stays untested by
+  design. Observe-only unchanged.
+- **Operator intake: no answers arrived** (caddy-vhost + final-assessment
+  review + optional rollout [now D-082..D-087] re-surface at close, all
+  non-blocking). **No operator action required to proceed** — stated
+  explicitly per the session-open directive.
+- **★ STANDING BACKLOG-REVIEW DIRECTIVE — executed:** reviewed ROADMAP-V2
+  §2 (incl. §2.16 follow-up note) + final-assessment §5. Candidates:
+  FleetNodes degraded-display gap [XS, S25-verifier-seeded], standalone
+  zero-mean baseline guard [S, D-074-era false-alarm class], F10 tail [M],
+  BUG-001 [low], §2.4 dependabot policy [XS], §2.5 O(N²) [M, ~2-stream
+  prod = not urgent]; the rest operator-gated (Kafka, D-V2-1, tenant).
+  **Ruling: plan CONFIRMED as written** — the WO-A pair are both
+  correctness/honesty gaps in the S25 early-warning ladder's live surface
+  (an alerting node shows "up"; a never-reported metric grows a mean=0
+  baseline ⇒ first real report = instant false alarm — the exact class the
+  S25 presence guard prevents for ams_api_latency_ms). Stretch if capacity:
+  BUG-001 disposition + §2.4 policy doc [both XS].
+- **WO-B: CI promotions skip carry ×15** (07-13 < 07-23; csp-e2e candidate
+  opens 07-23, web-e2e ~07-25). **WO-C green:** 0 open PRs, dependabot 0,
+  protection intact (enforce_admins=true, 9 contexts, strict), prod healthz
+  all-ok + poll-errlines-15m=0, realams up 12 h on the S25 build
+  (ams_api_latency_ms baseline live).
+
+**S26 SCOUT RESULTS + ORCH RULINGS (4 scouts, 0 errors, ~316k tokens, recorded pre-build):**
+- **WO-A1 (FleetNodes display) RULED — unify, don't duplicate:** the gap is
+  query.go:359 (`CPUPCT>90` only; wave2.go:171 checks `CPUPCT>90 || MemPCT>90
+  || ConsecAPIErrors>=3`). Scout found FleetNodes ALSO missed the MemPCT arm,
+  and LiveOverview has a THIRD status computation (needs the same audit).
+  This session exists because two copies of one predicate drifted — the fix
+  is a SINGLE shared predicate in `domain` (method on LiveNodeStats) used by
+  query.FleetNodes, query.LiveOverview AND alert/wave2 evalNodeUpDown; the
+  wave2 refactor must keep wave2_d087_test.go green byte-for-byte (behavior
+  preserved). No contract CR (status enum [up,degraded,down] already
+  contracted, pulse-api.yaml:2537); no web change (FleetPage statusVariant
+  already renders degraded→warning). ConsecAPIErrors already on
+  LiveNodeStats — zero new plumbing.
+- **WO-A2 (presence guard) RULED — bool flags, NOT value==0:** scout B
+  verified value==0 is architecturally wrong (disk_pct=0 is a VALID cluster
+  reading; cluster path emits all 3 keys unconditionally). Design: three
+  `bool` fields on domain.LiveNodeStats (`CPUPCTReported/MemPCTReported/
+  DiskPCTReported`, json:"-"), set inside aggregator.onNodeStats's EXISTING
+  ok-blocks (aggregator.go:405-413 — presence is already detected there,
+  then thrown away; normalize.go:241 already honestly omits the keys at
+  source). Guards at ALL THREE S25 eval sites (anomaly.go:372 UpdateBaselines,
+  anomaly.go:598 ComputeFlags, wave3.go:275 evalAnomalyNodes), same structure
+  as the APILatencyMS guard. MUST-PIN both directions: standalone
+  (Reported=false → no baseline) AND cluster-zero (Reported=true + value 0 →
+  observed — the value>0 mutation must go RED).
+- **★ LIVE CENSUS (read-only, db+wal+shm copies):** the poison is REAL and
+  past MinSamples=30 in BOTH deployments — realams: cpu/mem/disk_pct
+  mean=0 stddev=0 n=733; prod: cpu/mem n=8813, disk n=3578 (all node
+  beyondkaira-ams). First real report would z-score vs effStddev=1e-9 ⇒
+  guaranteed instant false alarm. prod 'standalone'-node rows (cpu 15.0/mem
+  40.0, stddev=0, n=9198) are old test data, NOT this class — left intact.
+- **WO-A3 (cleanup) RULED — option (a), Detector-startup sweep, NOT a
+  migration:** new meta.Store `DeleteZeroMeanNodeBaselines(ctx, metrics)`
+  (backend-agnostic — PG parity free via the store layer; a numbered 0004
+  migration would need 6+ file copies for a data-only fix, and
+  applySchemaUpgrades is SQLite-only) called from Detector.Run() alongside
+  WarmHysteresis (the established boot hook). Predicate: metric IN
+  ('cpu_pct','mem_pct','disk_pct') AND mean=0 AND stddev=0 — NO sample_count
+  clause (the poisoned rows have n=733/8813), scope-agnostic, idempotent.
+  Sweep-scope ruling: ams_api_latency_ms zero-mean rows cannot exist
+  (guarded from birth, prod census confirms 0 rows); viewers/stream rows
+  untouched.
+- **Backlog notes seeded (observed, NOT built — scope discipline):**
+  (1) viewer_count zero-mean baselines (realams teststream n=733) — first
+  viewer ⇒ z>>4 flag; arguably by-design "audience appeared" signal;
+  needs a product ruling, §2.16-class note. (2) TestAnomalyMetricMapSwitchParity
+  hardcodes its 6-case slice instead of deriving from the map. (3) FleetNodes
+  never emits contracted status="down" (pre-eviction window invisible —
+  eviction removes the node from the snapshot entirely).
+- **Stretch RULED:** BUG-001 → DELETE this session [XS] (CodeGraph: sole
+  caller is its own test; viewer counts come from inline BroadcastDTO
+  fields; ~60 lines + 1 fixture; mock-ams /statistics stub STAYS — it
+  mirrors the real AMS surface). §2.4 dependabot policy → **ALREADY
+  DELIVERED** (docs/dependabot-policy.md, 209 lines, S9 WO-E — covers all 4
+  spec items incl. D-032 golang pin); ROADMAP-V2 §2.4 gets a ✅ DONE ledger
+  correction, zero build work. TODO(D-087) AnomalyBaselineForMetric stays
+  pinned (still dead code; S26 does not make it reachable).
+
+**S26 WO-A evidence (build + adversarial verify + gates, recorded pre-close):**
+- **The vertical (3 authors, 0 errors, all reds observed live in docker):**
+  A1: `domain.LiveNodeStats.Degraded()` single predicate (CPUPCT>90 ||
+  MemPCT>90 || ConsecAPIErrors>=3) — audit CONFIRMED LiveOverview was a
+  third drifted copy (also missing ConsecAPIErrors); FleetNodes,
+  LiveOverview and wave2 evalNodeUpDown all now call it;
+  wave2_d087_test.go untouched and green (behavior-preserving refactor);
+  11 new tests (4 red-first pins + boundary set; the =2→"up" FleetNodes
+  case was honestly logged as a pre-green regression guard, not a red pin).
+  A23: presence flags CPUPCTReported/MemPCTReported/DiskPCTReported
+  (json:"-") set in aggregator.onNodeStats's existing ok-blocks; guards at
+  all 3 S25 eval sites (UpdateBaselines, ComputeFlags, evalAnomalyNodes);
+  meta.Store.DeleteZeroMeanNodeBaselines (rebind, SQLite+PG) called from
+  Detector.Run() after WarmHysteresis via optional interface
+  `BaselineSweeper` (RECORDED DEVIATION from the ruling text: capability
+  type-assert instead of a BaselineStore method — keeps test fakes
+  compiling; V2 verified prod wiring passes *meta.Store so the assert
+  succeeds in production; the wiring pin TestDetector_Run_SweepCalled
+  covers invocation, the meta tests cover effect — both needed, scope
+  boundary documented by V1). 14 new tests incl. the anti-heuristic
+  cluster-zero pin. Failure-path fact (recorded): api_unreachable events
+  mutate ConsecAPIErrors in place and never touch flags; success polls
+  rebuild the struct so flags re-derive each poll — no stale-flag window
+  beyond one poll. A4: BUG-001 dead code DELETED (~60 lines + fixture;
+  grep BroadcastStatistics server/ = 0 hits; mock-ams stub retained).
+- **★ Adversarial verify (3 verifiers, 0 errors): V1 CONFIRMED_OK —
+  12/12 mutations RED in pristine copies** (predicate-arm drop, ±threshold,
+  query-level bypass, flag-set drop, guard drops ×3, value>0 heuristic
+  swap [the M7 anti-heuristic pin held: 'expected baseline to be observed
+  when flag=true even if value=0'], sweep-predicate widening, sweep no-op,
+  Run-call deletion). V2 CONFIRMED_OK — prod wiring verified live
+  (*meta.Store implements BaselineSweeper; sweep ACTIVE in production
+  boot path); JSON shape unchanged; parity pin undamaged; rebind PG-safe.
+  V3 PARTIAL → all 3 must-fix REMEDIATED same-session: ROADMAP-V2 §2.16
+  ✅ FIXED marker; BUG-001 status corrected in final-assessment.md +
+  prd-validation-matrix.md (+F1 note, +honest-absent mechanism note);
+  AMS-INTEGRATION.md method-table row removed; PLUS capability-map §2b
+  rewritten, TC-V-09 inverted to pin ABSENCE (bash -n + shellcheck clean;
+  re-run PASS 3/3 with fresh evidence), PG parity test added for the sweep
+  (V2's coverage-gap finding) — explicit -v run PASS 0.52s vs postgres:16.
+- **GATES (ORCH-run, repo-root mount, golang:1.25):** gofmt scan empty; vet
+  clean; `go test -race` **24/24 pkgs 0 FAIL**, api SKIP census 0 (D-028),
+  3 env-gated infra skip files byte-unchanged since 2d311d9; coverage
+  **75.9% → 76.0%** (floor 70.2); full `-tags integration` suite green vs
+  fresh CH 24.8 + postgres:16 service containers (api 53s, store/clickhouse
+  61s, meta 16s, query 29s — CI-faithful env); contracts/ + web/
+  byte-untouched (no CR, no gen:api needed). ROADMAP-V2 §2.17 seeded
+  (viewer_count zero-mean product ruling; parity-test map-derivation;
+  status="down" unreachable pre-eviction; PG sweep coverage — addressed
+  same-session).
+- **★ LIVE-VALIDATED (sweep + guard vs the REAL AMS, realams stack):**
+  rebuilt on the S26 tree WITHOUT `down -v` (meta volume deliberately
+  preserved so the poisoned rows survive into boot). Pre-boot census:
+  cpu/mem/disk_pct mean=0 stddev=0 **n=797** + healthy ams_api_latency_ms
+  (mean 4.49 ms). Boot log 2026-07-13T11:37:40Z: `anomaly: purged
+  zero-mean baselines on startup count=3`. Post-boot census: the 3
+  poisoned rows GONE; survivors intact per the ruling (ams_api_latency_ms
+  n=801 continuing, ingest_bitrate untouched, viewers zero-mean row
+  correctly NOT swept). Guard proof after live ticks: api_latency n
+  801→803 (ticks running) while cpu/mem/disk rows stayed **0** — the
+  presence guard prevents re-formation against the real standalone AMS.
+  healthz all-ok on :18090. Prod untouched. KNOWN STATE for S27: the
+  rebuild reset container logs → harness env.sh `plt_` extraction is
+  orphaned (memory realams-token-log-extract); SESSION-27.md carries the
+  gotcha.
+
+**S26 CLOSE (D-088):** Workflows: 4 scouts + 3 authors + 3 adversarial
+verifiers = 10 agents, 0 errors (~0.9M subagent tokens). WO-B skip carry
+×15 (07-13 < 07-23). WO-C green all session. Stretch landed: BUG-001
+deleted (last open bug → **0 open bugs**); §2.4 ledger-corrected (already
+delivered S9); §2.17 seeded (4 follow-ups, one addressed same-session).
+Branch `s26-d088`, ONE PR, ≤2 pushes. Operator queue unchanged
+(caddy-vhost + final-assessment review, both non-blocking). A prod rollout
+now carries D-082..**D-088** (every BUG-001..011 fix + recording billing +
+anomaly history + early-warning ladder + degraded-display consistency +
+the zero-mean guard/sweep).
+PR/merge evidence appended below after merge (rides S27 if post-push).

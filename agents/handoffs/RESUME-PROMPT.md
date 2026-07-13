@@ -11,7 +11,67 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-26.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-27.md`)
+
+**Session 2026-07-13 result: D-088 — S26 DONE (★ early-warning polish batch:
+node-degraded predicate unified across alert+display; standalone zero-mean
+baseline poison fixed cause-and-symptom, live-validated; BUG-001 deleted —
+0 open bugs).**
+- **★ WO-A1 (FleetNodes degraded display): worse than filed, fixed
+  structurally** — THREE drifted copies of one predicate (wave2 alert had
+  CPUPCT>90||MemPCT>90||ConsecAPIErrors>=3; FleetNodes checked ONLY CPU;
+  LiveOverview missed the ConsecAPIErrors arm) ⇒ a node firing the rung-2
+  node_degraded ALERT showed "up" on the Fleet page. Now ONE predicate
+  `domain.LiveNodeStats.Degraded()` used by all three (drift structurally
+  impossible); wave2_d087_test.go untouched+green. No contract CR (enum
+  already [up,degraded,down]); no web change (badge already renders).
+- **★ WO-A2/A3 (zero-mean baseline poison): cause AND symptom fixed** —
+  live census had cpu/mem/disk_pct mean=0 stddev=0 baselines at realams
+  n=733→797, prod n=8813 (first real report ⇒ z vs 1e-9 ⇒ instant false
+  alarm). Cause: presence flags (CPUPCTReported/... json:"-", set in
+  aggregator ok-blocks; value==0 heuristic RULED OUT — disk 0% is a valid
+  cluster reading, pinned by the M7 anti-heuristic mutation) guard all 3
+  eval sites. Symptom: `DeleteZeroMeanNodeBaselines` boot sweep
+  (Detector.Run after WarmHysteresis, optional BaselineSweeper interface —
+  V2 verified prod wiring satisfies it). **LIVE: rebuilt realams WITHOUT
+  down -v so the poison survived into boot → log `purged zero-mean
+  baselines on startup count=3` → census 3→0 while api_latency n kept
+  growing (801→803) and viewers/bitrate rows survived — guard holds vs the
+  real AMS.** viewers zero-mean = DIFFERENT class (real measurement) →
+  §2.17 product ruling, S27 candidate.
+- **Stretch:** BUG-001 dead code DELETED (**0 open bugs**; TC-V-09
+  inverted to pin absence, PASS 3/3); §2.4 dependabot policy found ALREADY
+  DELIVERED (S9) — ledger corrected; ROADMAP-V2 **§2.17** seeded (4
+  follow-ups; PG sweep coverage addressed same-session).
+- **Verify:** V1 CONFIRMED_OK **12/12 mutations RED in pristine copies**;
+  V2 CONFIRMED_OK (prod sweep wiring ACTIVE, JSON shape unchanged, rebind
+  PG-safe); V3 PARTIAL → all 3 must-fix (doc staleness) remediated
+  same-session + PG parity test added (explicit PASS vs postgres:16).
+- **Gates:** -race 24/24 0 FAIL (api SKIP census 0; 3 env-gated infra
+  skips byte-unchanged since 2d311d9); coverage **75.9 → 76.0** (floor
+  70.2); gofmt/vet clean; full `-tags integration` green vs CH 24.8 +
+  postgres:16 (CI-faithful); contracts/ + web/ byte-untouched.
+- **AMS post-expiry (s26open): byte-identical 5th null delta; still no
+  antmedia restart.** CI promotions skip carry ×15 (07-13 < 07-23).
+  Prod untouched; **a rollout now carries D-082..D-088** (BUG-001..011
+  all fixed + recording billing + anomaly history + early warning +
+  degraded display + zero-mean guard). **⚠ S27 gotcha:** realams container
+  logs reset by the rebuild → env.sh token extraction orphaned
+  (`realams-token-log-extract` memory; SESSION-27.md §3 carries it).
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-27.md` and execute it**
+(★ standing directive at its top: review the backlog + REVISE the plan;
+operator intake FIRST; CI promotions if run date ≥07-23 [csp-e2e candidate,
+web-e2e ~07-25] else skip carry ×16; candidates: F10 tail [M] + §2.17
+viewer_count ruling [S] / parity-map [XS] / status-down reachability [XS–S]
++ §2.5 O(N²) [M]; AMS re-sweep at open, observe-only — token gotcha noted).
+**PR-first, ≤2 pushes.** Check `docs/operator-expected.md` FIRST
+(caddy-vhost? final-assessment review? prod rollout now carries
+D-082..D-088).
+
+---
+
+## ▶ prior session context (S25, superseded by the above)
 
 **Session 2026-07-12/13 result: D-087 — S25 DONE (★ AMS early-warning ladder
 built + live-validated; BUG-011 fixed — node_down could never fire; F9

@@ -108,17 +108,21 @@ every Pulse claim cites a repo path.
 (agents/handoffs/real-ams-captures/broadcast-statistics_test123.json)
 
 **Pulse pipeline:**
-- `amsclient.BroadcastStatistics()` defined at `client.go:483` but has
-  **no caller in the active poll path** (open_questions item 1 in scout A).
-- This endpoint is effectively dead code at runtime.
+- `amsclient.BroadcastStatistics()` was dead code (no runtime caller —
+  BUG-001) and was **DELETED in S26/D-088**. Viewer counts come from the
+  inline BroadcastDTO fields (§2a), validated within ±2% (TC-V-03).
+- The endpoint's real-AMS wire shape (incl. `totalRTMPWatchersCount=-1` =
+  untracked) stays documented in
+  `agents/handoffs/real-ams-captures/broadcast-statistics_test123.json`;
+  the qa/mock-ams `/statistics` stub is retained to mirror the real
+  surface.
 
-**Coverage: MISSING (method exists, never called)**
+**Coverage: NOT CONSUMED (deliberate — S26/D-088, BUG-001 FIXED; inline
+counts cover the need with one list call instead of N per-stream calls)**
 
-**Assumptions to Validate:**
-- Confirm `BroadcastStatistics()` has no caller: `grep -r
-  "BroadcastStatistics" server/` (open question from scout A).
-- If the inline counts are accurate to within ±2% of the statistics
-  endpoint, the dead code may be intentional. Measure the delta.
+**Assumptions to Validate:** none remaining — the no-caller assumption was
+confirmed and resolved by deletion (S26); inline-count accuracy was
+validated ±2% (TC-V-03, S17).
 
 ---
 

@@ -95,7 +95,7 @@ already used by the license package.
 
 ---
 
-### 2.4  Dependabot steady-state policy  [XS]
+### 2.4  Dependabot steady-state policy  [XS] ✅ DONE S9 (ledger corrected S26/D-088: `docs/dependabot-policy.md` — 208 lines, S9 WO-E — already covers all four deliverable items incl. the D-032 golang pin; this entry had simply never been marked)
 
 **Why:** After S9 WO-B absorbs the 20 open PRs, Dependabot will keep opening new ones.
 Without a documented policy the operator faces an unbounded inbox with no guidance on merge
@@ -390,7 +390,45 @@ wired) fixed. **Follow-up [XS], seeded by the S25 verifier:** query.FleetNodes
 sets status="degraded" only on CPUPCT>90 — it ignores ConsecAPIErrors>=3, so a
 node firing the rung-2 node_degraded ALERT still shows status "up" on
 /fleet/nodes + the Fleet page (display-consistency gap; not contracted in the
-FleetNode schema; S26+ candidate).
+FleetNode schema; S26+ candidate). **✅ FIXED S26 (D-088)** — and the gap was
+wider than filed: FleetNodes also missed the MemPCT>90 arm, and LiveOverview
+carried a third drifted copy. All three now call the single predicate
+`domain.LiveNodeStats.Degraded()` (CPUPCT>90 || MemPCT>90 ||
+ConsecAPIErrors>=3) — alert and display can no longer drift. Same session:
+standalone zero-mean cpu/mem/disk baseline guard (presence flags) + boot-time
+sweep of the poisoned rows (live census: realams n=733, prod n=8813). See
+§2.17 for the S26-seeded follow-ups.
+
+---
+
+### 2.17  Anomaly/fleet honesty tail — S26-seeded follow-ups  [XS–S each]  (NEW, D-088)
+
+Observed during S26 (scouts + verifiers), deliberately not built (scope
+discipline). Each is independent:
+
+1. **viewer_count zero-mean baselines — needs a PRODUCT ruling first [S].**
+   A stream with 0 viewers for ≥30 ticks (live: realams teststream, n=733)
+   has a mean=0/stddev=0 baseline; the FIRST viewer produces z≫4 ⇒ anomaly
+   flag. Unlike cpu/mem/disk this is a REAL measurement (0 viewers is
+   true), so the presence-flag fix does not apply. Decide: is
+   "audience appeared" a wanted signal (keep, document) or noise
+   (needs e.g. a min-mean floor or count-metric variance floor)? Write the
+   ruling into the anomaly docs either way.
+2. **TestAnomalyMetricMapSwitchParity derives from a hardcoded 6-case
+   slice [XS]** (wave3_d087_test.go:189) — refactor to iterate
+   `supportedAnomalyMetrics` so a 7th metric cannot be added to the map
+   while silently missing from the parity pin.
+3. **FleetNodes can never emit contracted status="down" [XS–S].**
+   Eviction (D-087) removes a stale node from the snapshot entirely, so
+   the pre-eviction window shows "up"→(gone); the contracted "down" enum
+   value is unreachable. Decide: emit "down" during
+   LastSeenAt>threshold-but-not-yet-evicted, or document the two-state
+   reality and drop "down" from the enum (contract CR).
+4. **DeleteZeroMeanNodeBaselines PG integration coverage [XS]** — the
+   method is rebind-correct (verified) and SQLite-tested; add it to
+   TestPG_AnomalyBaselines_RoundTrip when the PG integration suite next
+   runs in a session. *(Addressed same-session if S26's gates allowed —
+   check D-088 close evidence before picking this up.)*
 
 ---
 
@@ -824,6 +862,29 @@ operator answer, ORCH ruling recorded in D-086):
    are integration-covered, not unit-covered), gofmt/vet/contract-drift
    clean, full integration green (10 migrations idempotent). Prod untouched;
    a rollout now carries D-082..**D-086**.
+
+### S26 — early-warning polish batch (§2.16 tail) + zero-mean guard ✅ DONE (D-088, 2026-07-13)
+
+All WOs executed (SESSION-26.md; open checks clean — s26open sweep
+byte-identical [5th null delta], no post-lapse antmedia restart; standing
+backlog-review directive executed: plan confirmed, stretch widened by
+scout findings):
+1. **WO-A1: node-degraded predicate UNIFIED** — three drifted copies
+   (wave2 alert / FleetNodes [CPU-only] / LiveOverview [no streak arm])
+   → one `domain.LiveNodeStats.Degraded()`; an alerting node can no longer
+   show "up" on the Fleet page. No contract CR; no web change.
+2. **WO-A2/A3: standalone zero-mean baseline poison fixed cause+symptom** —
+   presence flags (value==0 heuristic ruled out; anti-heuristic mutation
+   pin) at all 3 eval sites + `DeleteZeroMeanNodeBaselines` boot sweep.
+   **Live-validated on realams (meta preserved through rebuild): boot log
+   `purged zero-mean baselines on startup count=3`; census 3→0; guard held
+   over live ticks (api_latency n 801→803, node rows stayed 0).**
+3. **Stretch:** BUG-001 deleted (**0 open bugs**); §2.4 found already
+   delivered (ledger corrected); §2.17 seeded; PG sweep parity test added.
+4. **Verify/gates:** 12/12 mutations RED (pristine copies); V2 confirmed
+   prod sweep wiring ACTIVE; coverage 76.0 (floor 70.2); -race 24/24;
+   integration green (CI-faithful CH 24.8 + postgres:16). WO-B skip carry
+   ×15. 10 agents, 0 errors, one PR.
 
 ### S25 — AMS early-warning ladder (§2.16) + F9 sparsity gate ✅ DONE (D-087, 2026-07-12/13)
 

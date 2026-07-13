@@ -1,26 +1,28 @@
 #!/usr/bin/env bash
 # qa/realams/scenarios/TC-V-09-broadcaststatistics-deadcode.sh
 #
-# TC-V-09: BroadcastStatistics dead-code confirmation
+# TC-V-09: BroadcastStatistics dead-code ABSENCE confirmation (BUG-001 FIXED)
+#
+# HISTORY: through S25 this scenario confirmed the dead code EXISTED with no
+# callers (BUG-001 open: method at client.go:483, tested, never called).
+# S26/D-088 FIXED BUG-001 by deleting the method + DTO + test + fixture, so
+# the assertions inverted: the scenario now pins TOTAL ABSENCE — a
+# reintroduction of BroadcastStatistics without a runtime consumer would
+# regress BUG-001 and must fail here.
 #
 # Assertion matrix row (scenario-matrix.md):
 #   Steps:   1. grep -rn BroadcastStatistics server/ (production .go files only)
-#            2. Assert caller count OUTSIDE amsclient/client.go = 0  (BUG-001)
-#            3. Assert definition references in client.go >= 2  (struct + func)
-#            4. grep test files; assert test coverage >= 1  (function is tested)
+#            2. Assert caller count OUTSIDE amsclient/client.go = 0
+#            3. Assert definition references in client.go = 0  (deleted S26)
+#            4. grep test files; assert test references = 0  (deleted S26)
 #   AMS truth:    N/A (code inspection only)
-#   Pulse assert: grep returns ONLY the definition at server/pkg/amsclient/client.go;
-#                 no callers exist anywhere in server/
-#   Verdict:      PASS confirms dead code (no caller in production); FAIL would
-#                 indicate a new caller was added that this test didn't anticipate.
-#   BUG-001:      BroadcastStatistics endpoint dead code — method defined at
-#                 client.go:483 but zero production callers; the /{app}/rest/v2/
-#                 broadcasts/{id}/broadcast-statistics path is never polled by Pulse.
-#                 The endpoint's data (totalRTMPWatchersCount, totalHLSWatchersCount,
-#                 totalWebRTCWatchersCount, totalDASHWatchersCount) is redundant with
-#                 the inline viewer count fields on the broadcast object (the REAL
-#                 poll path). See also capture.sh comment: "NOT the BroadcastStatistics
-#                 endpoint, which is dead code Pulse never calls".
+#   Pulse assert: grep returns NOTHING anywhere in server/ — the symbol is gone.
+#                 Viewer counts come from inline BroadcastDTO fields (the REAL
+#                 poll path); the endpoint's wire shape stays documented in
+#                 agents/handoffs/real-ams-captures/broadcast-statistics_test123.json
+#                 and the qa/mock-ams /statistics stub is retained deliberately.
+#   Verdict:      PASS confirms the deletion holds; FAIL means BroadcastStatistics
+#                 was reintroduced — either wire it to a real consumer or delete it.
 #   Exit:    0 PASS | 1 FAIL (never 77 SKIP — premise is always met for grep)
 #
 # This script performs read-only grep only (no network calls, no docker) and
@@ -160,13 +162,13 @@ printf 'caller_count=%s  defn_count=%s  test_count=%s\n' \
 assert_eq "${_CALLER_COUNT}" "0" \
   "${SCENARIO} BUG-001: BroadcastStatistics production caller count outside client.go = 0 (dead code confirmed)" || true
 
-# The definition must exist in client.go (struct + method = at least 2 lines).
-assert_gte "${_DEFN_COUNT}" "2" \
-  "${SCENARIO} BroadcastStatistics definition references in client.go >= 2 (struct + func)" || true
+# The definition must be GONE from client.go (deleted S26/D-088, BUG-001 FIXED).
+assert_eq "${_DEFN_COUNT}" "0" \
+  "${SCENARIO} BroadcastStatistics definition references in client.go = 0 (deleted S26/D-088)" || true
 
-# Test coverage must exist (function is tested even though unused in production).
-assert_gte "${_TEST_COUNT}" "1" \
-  "${SCENARIO} BroadcastStatistics has >= 1 test reference (function is tested)" || true
+# The test was deleted with the method — no test references may remain.
+assert_eq "${_TEST_COUNT}" "0" \
+  "${SCENARIO} BroadcastStatistics test references = 0 (deleted with the method, S26/D-088)" || true
 
 # ── Verdict ────────────────────────────────────────────────────────────────────
 log "Writing verdict"

@@ -230,7 +230,8 @@ func TestAnomalyMetricMapSwitchParity(t *testing.T) {
 			snap: &domain.LiveSnapshot{
 				Streams: map[string]*domain.LiveStream{},
 				Nodes: map[string]*domain.LiveNodeStats{
-					"n1": {NodeID: "n1", DiskPCT: 85.0},
+					// D-088: DiskPCTReported=true (cluster path emits disk_pct key).
+					"n1": {NodeID: "n1", DiskPCT: 85.0, DiskPCTReported: true},
 				},
 			},
 			baseline: nodeBaseline("disk_pct", "n1", 30.0, 5.0, 30),

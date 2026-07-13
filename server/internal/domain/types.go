@@ -336,6 +336,24 @@ type LiveNodeStats struct {
 	// last success. Reset to 0 on any successful stats call. Drives the
 	// node_degraded rule (rung 2: ConsecAPIErrors >= 3 → degraded).
 	ConsecAPIErrors int `json:"consec_api_errors,omitempty"`
+
+	// D-088: presence flags — true when the respective key was present in the
+	// normalized collector event. Cluster AMS 3.x emits all three; standalone
+	// AMS 3.x omits cpu_pct/mem_pct/disk_pct (normalize.go:241). The anomaly
+	// detector guards on these flags to skip Welford updates and liveValues
+	// insertions for metrics that were never measured, preventing zero-mean
+	// baseline poisoning. Tagged json:"-" so the flags never appear in API
+	// responses or snapshot JSON payloads.
+	CPUPCTReported  bool `json:"-"`
+	MemPCTReported  bool `json:"-"`
+	DiskPCTReported bool `json:"-"`
+}
+
+// Degraded reports whether this node meets the node_degraded condition.
+// Single source of truth for node_degraded — alert (wave2 evalNodeUpDown) and
+// display (query FleetNodes/LiveOverview) must agree — D-088.
+func (n *LiveNodeStats) Degraded() bool {
+	return n.CPUPCT > 90 || n.MemPCT > 90 || n.ConsecAPIErrors >= 3
 }
 
 // LiveSnapshot is the in-memory aggregate state served to the dashboard.
