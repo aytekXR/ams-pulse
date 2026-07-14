@@ -43,9 +43,9 @@ describe("AlertsPage (msw)", () => {
 
   it("renders the three tab buttons (rules / channels / history)", () => {
     renderAlerts();
-    expect(screen.getByRole("button", { name: /rules/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /channels/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /history/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /rules/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /channels/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /history/i })).toBeInTheDocument();
   });
 
   it("renders rule name from GET /alerts/rules response", async () => {
@@ -157,7 +157,7 @@ describe("AlertsPage (msw)", () => {
   it("shows empty-state on Channels tab when API returns no channels", async () => {
     renderAlerts();
     await waitForRulesLoaded();
-    fireEvent.click(screen.getByRole("button", { name: /channels/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /channels/i }));
     await waitFor(() => {
       expect(
         screen.getByText(/no notification channels/i)
@@ -168,7 +168,7 @@ describe("AlertsPage (msw)", () => {
   it("shows empty-state on History tab when API returns no history", async () => {
     renderAlerts();
     await waitForRulesLoaded();
-    fireEvent.click(screen.getByRole("button", { name: /history/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /history/i }));
     await waitFor(() => {
       expect(screen.getByText(/no alert history/i)).toBeInTheDocument();
     });

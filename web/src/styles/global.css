@@ -81,6 +81,14 @@
   --space-8:  64px;
   --space-9:  96px;
 
+  /* Radius tokens (tokens.json radius.*) */
+  --radius-control: 8px;
+  --radius-card:    12px;
+  --radius-pill:    999px;
+
+  /* Touch target floor (tokens.json layout.minTouchTarget = 44) */
+  --min-touch:      44px;
+
   /* Badge semantic background vars (theme-aware; kept in :root for dark) */
   --color-success-bg:   rgba(44,229,167,0.12);
   --color-warning-bg:   rgba(255,178,36,0.12);
@@ -201,6 +209,19 @@ td[data-numeric] {
 @keyframes pulse-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* -------------------------------------------------------------------------
+ * Shared-component focus rings (Wave 0 — a11y, non-pixel change)
+ * Both classes use var(--color-link) so the ring colour is always the
+ * accessible link colour for the active theme (dark: #4FEDB9 / light: #087A59).
+ * outline-offset: 2px lands the ring on the card/page background, not on
+ * the element itself — confirmed readable in both themes per design-rationale §2.
+ * ------------------------------------------------------------------------- */
+.tier-gate-cta:focus-visible,
+.tabs-btn:focus-visible {
+  outline: 2px solid var(--color-link);
+  outline-offset: 2px;
 }
 
 /* Scrollbar (webkit) */

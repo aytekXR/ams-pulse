@@ -11,11 +11,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { reportsApi, adminApi, ApiError } from "@/api/client";
 import { DateRangePicker, defaultDateRange } from "@/features/analytics/DateRangePicker";
+import { Tabs } from "@/components/Tabs";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/Badge";
 import { useToast } from "@/components/Toast";
+import { TierGate } from "@/components/TierGate";
 import type {
   UsageReportResponse,
   ReportSchedule,
@@ -26,55 +28,6 @@ import type {
 } from "@/lib/api/types";
 
 type Tab = "usage" | "schedules" | "tenants";
-
-// ─── Tier gate ────────────────────────────────────────────────────────────────
-
-interface TierUpsellProps {
-  featureName: string;
-  tier: string;
-}
-
-function TierUpsell({ featureName, tier }: TierUpsellProps) {
-  return (
-    <div style={{
-      background: "var(--color-surface)",
-      border: "1px solid var(--color-border)",
-      borderRadius: 8,
-      padding: "3rem 2rem",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      gap: 16,
-      textAlign: "center",
-    }}>
-      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="1.5" aria-hidden>
-        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-      </svg>
-      <div>
-        <h2 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700 }}>{featureName} requires Business tier</h2>
-        <p style={{ margin: 0, fontSize: 14, color: "var(--color-secondary)", maxWidth: 400 }}>
-          You are currently on the <strong>{tier}</strong> plan. Upgrade to Business to unlock
-          usage reports, scheduled exports, and tenant mapping.
-        </p>
-      </div>
-      <a
-        href="/settings#license"
-        style={{
-          display: "inline-block",
-          background: "var(--color-accent)",
-          color: "var(--color-on-signal)",
-          borderRadius: 6,
-          padding: "10px 20px",
-          fontSize: 13,
-          fontWeight: 600,
-          textDecoration: "none",
-        }}
-      >
-        Upgrade License
-      </a>
-    </div>
-  );
-}
 
 // ─── Schedule form ────────────────────────────────────────────────────────────
 
@@ -506,7 +459,7 @@ function DeleteConfirm({ tenant, onConfirm, onCancel, deleting }: DeleteConfirmP
           style={{
             background: "rgba(255,92,104,0.1)",
             border: "1px solid rgba(255,92,104,0.4)",
-            color: "#FF5C68",
+            color: "var(--color-error)",
             borderRadius: 6,
             padding: "7px 14px",
             cursor: "pointer",
@@ -839,31 +792,29 @@ export function ReportsPage() {
 
       {/* Gate check */}
       {isGated ? (
-        <TierUpsell featureName="Usage Reports" tier={license?.tier ?? "free"} />
+        <TierGate
+          icon={
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="1.5" aria-hidden>
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+            </svg>
+          }
+          heading="Usage Reports requires Business tier"
+          tier={license?.tier ?? "free"}
+          upgradeText="Upgrade to Business to unlock usage reports, scheduled exports, and tenant mapping."
+          descriptionColor="var(--color-secondary)"
+        />
       ) : (
         <>
           {/* Tabs */}
-          <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--color-border)" }}>
-            {(["usage", "schedules", "tenants"] as Tab[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  borderBottom: `2px solid ${tab === t ? "var(--color-accent)" : "transparent"}`,
-                  color: tab === t ? "var(--color-text)" : "var(--color-muted)",
-                  padding: "8px 16px",
-                  cursor: "pointer",
-                  fontSize: 13,
-                  fontWeight: tab === t ? 600 : 400,
-                  textTransform: "capitalize",
-                }}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            tabs={[
+              { id: "usage", label: "Usage" },
+              { id: "schedules", label: "Schedules" },
+              { id: "tenants", label: "Tenants" },
+            ]}
+            activeTab={tab}
+            onTabChange={(id) => setTab(id as Tab)}
+          />
 
           {error && tab !== "tenants" && <ErrorBanner message={error} onRetry={tab === "usage" ? loadUsage : loadSchedules} />}
 
