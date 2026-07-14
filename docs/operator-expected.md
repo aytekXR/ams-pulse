@@ -1,6 +1,29 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-14, D-097 — SESSION-35)
+# Operator TODO — the items only YOU can do (updated 2026-07-15, D-098 — SESSION-36)
 
-## ⚡ TL;DR — the queue is UNCHANGED, but what it *blocks* just got much clearer.
+## ⚡ TL;DR — your queue is UNCHANGED. But "can a customer log in?" is now YES.
+
+You asked: **are we ready for user intake — how do customers sign up and log in?** S36 answered it
+by **executing** every auth path (161-agent adversarial audit, 51 findings → 29 confirmed). The
+honest answer was **"not until three things after login were fixed"** — and this session fixed all
+three (PR #53, merged, in prod):
+
+- **There is no "sign up."** Pulse is self-hosted, sold by licence key. The first credential is a
+  **bootstrap admin token printed to the container logs on first boot** (`docker compose logs pulse
+  | grep "FIRST RUN"`); the customer pastes it into the login screen. Login after that is that token
+  or OIDC/SSO. This works and always did.
+- **What was broken was everything *after* login:** (1) role labels were never enforced — a
+  read-only user could mint themselves an admin token; (2) a logged-in customer landed on an empty
+  dashboard with **no path** to the setup wizard; (3) a new API token flashed for 4 seconds then was
+  lost forever. All three are now fixed and gated.
+
+**So: a customer can now install (clone-and-build), log in, be walked into the wizard, connect their
+AMS, and see data.** The two blockers below are the only things standing between that and the *easy*
+one-command experience — and neither is a session's to fix.
+
+> **Nothing in your queue changed this session.** The two items below still outrank all session work.
+> Every other line is the same as D-097; re-verified live where possible.
+
+## ⚡ (D-097 context, still current) — what the queue *blocks*.
 
 S35 stopped feature work and ran an **empirical ship-readiness audit**: 42 agents that
 **executed** every documented command instead of reading it — clean-clone installs, the full
@@ -71,6 +94,40 @@ again. Still open: **G7** (above, needs your values), **G1** (no mobile viewport
 AAA 44×44 — confirm you accept AA).
 
 ---
+
+## 🔎 What SESSION-36 found & fixed (2026-07-15, D-098) — the user-intake audit
+
+**Fixed this session (PR #53 — code, tested, in prod):**
+1. **Privilege escalation** — any authenticated token had full admin rights; a `viewer`/`read`
+   token could mint itself an admin token. Now writes require an `admin` scope. *(Existing tokens
+   are unaffected — all four in prod are already admin-scoped.)*
+2. **Onboarding dead-end** — login landed on an empty dashboard with no way to reach the setup
+   wizard except guessing the URL. A first-time user with no sources is now walked into it.
+3. **Token-loss trap** — a new API token vanished after a 4-second toast. Now shown in a persistent
+   panel with a copy button, and you choose admin-vs-read when creating it.
+4. **`install.md` first-login steps were wrong** (token goes on the login screen, not the wizard;
+   corrected the verify-step endpoint; the token-loss recovery cost is now stated up front).
+
+**One audit alarm I investigated and DISMISSED (so you don't have to chase it):** an agent claimed
+"AMS credentials cross the internet in cleartext." **False** — `PULSE_AMS_AUTH_TOKEN` is empty in
+prod (nothing to send), AMS rejects anonymous API calls (403), and the collector is healthy
+(826k+ event rows, live). Pulse already warns about http-vs-https at boot. *The one real thing
+nearby:* **AMS port 5080 listens on `0.0.0.0` with no firewall rule** — that's an AMS hardening
+question for you, not a Pulse bug, and not urgent since the API requires auth.
+
+**Not blockers, but a buyer will ask — and we don't have them yet (funnel gaps, honest list):**
+
+| Gap | State | Sell-side implication |
+|---|---|---|
+| **Team management / invite a teammate** | API exists (`/admin/users` CRUD), **no UI** | Can't onboard a second human through the product; you'd mint them a token by hand |
+| **Audit trail** | None — no actor recorded on writes | Cannot serve SOC 2 / ISO 27001 buyers |
+| **OIDC/SSO licence gating** | Works, but **any tier can enable it** | The PRD prices SSO at Enterprise — this is unenforced revenue |
+| **Multi-tenant isolation** | `tenant` is a **reporting label**, not an access boundary | Cannot sell as multi-customer data isolation to resellers |
+| **Self-serve trial / billing / key delivery** | Manual operator action (mint + email) | No automated funnel; fine for first sales, not for scale |
+| **Licence-expiry alerting** | UI banner only (≤14 days) | A customer who doesn't open the dashboard gets no warning before downgrade |
+
+None of these block a first sale to a technical single-operator customer. They are the roadmap for
+"sell it to a team / a reseller." Flagged here so nothing is a surprise in a sales call.
 
 ## 🔎 What SESSION-35 found (2026-07-14, D-097)
 

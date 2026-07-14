@@ -1579,6 +1579,8 @@ export interface components {
         HealthStatus: {
             /** @enum {string} */
             status: "ok" | "degraded" | "down";
+            /** @description True when PULSE_AMS_URL was explicitly set (AMS configured via the environment rather than the ams_sources table). The web UI uses this to avoid pushing an env-configured deployment into the onboarding wizard when its ams_sources table is empty. */
+            ams_env_configured?: boolean;
             components: {
                 clickhouse: components["schemas"]["ComponentStatus"];
                 meta_store: components["schemas"]["ComponentStatus"];

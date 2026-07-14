@@ -2879,6 +2879,13 @@ components:
         status:
           type: string
           enum: [ok, degraded, down]
+        ams_env_configured:
+          type: boolean
+          description: >-
+            True when PULSE_AMS_URL was explicitly set (AMS configured via the
+            environment rather than the ams_sources table). The web UI uses this
+            to avoid pushing an env-configured deployment into the onboarding
+            wizard when its ams_sources table is empty.
         components:
           type: object
           required: [clickhouse, meta_store, collector]

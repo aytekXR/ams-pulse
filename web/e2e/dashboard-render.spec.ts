@@ -65,6 +65,25 @@ test.describe("Dashboard render", () => {
       route.fulfill({ status: 200, contentType: "application/json", body: STREAMS_BODY })
     );
 
+    // OnboardingGuard probes /healthz for ams_env_configured before deciding
+    // whether to send a source-less deployment to the wizard. Report an
+    // env-configured instance so it short-circuits and never leaves the dashboard
+    // (and so neither /healthz nor /admin/sources 502s against the absent backend).
+    await page.route("**/healthz", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ status: "ok", ams_env_configured: true }),
+      })
+    );
+    await page.route("/api/v1/admin/sources", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items: [{ id: "s1", name: "AMS", type: "rest_poll" }] }),
+      })
+    );
+
     // AuthGate mount-time checks: mock both /auth endpoints so the vite
     // preview /auth proxy (no backend on 8090 in CI) never answers 502.
     // /auth/me must be 200 here: Chromium logs ANY non-2xx resource load as

@@ -97,6 +97,7 @@ export function SettingsPage() {
   const [licenseKey, setLicenseKey] = useState("");
   const [savingLicense, setSavingLicense] = useState(false);
   const [newIngestToken, setNewIngestToken] = useState<TokenCreated | null>(null);
+  const [newApiToken, setNewApiToken] = useState<TokenCreated | null>(null);
   // S3 export form (env-ref names, never raw creds)
   const [s3Bucket, setS3Bucket] = useState("");
   const [s3Region, setS3Region] = useState("us-east-1");
@@ -138,8 +139,21 @@ export function SettingsPage() {
   const createApiToken = async () => {
     const name = prompt("Token name:");
     if (!name) return;
-    const result = await adminApi.createToken({ kind: "api", name, scopes: ["read"] });
-    toast(`Token created: ${result.token}`, "success");
+    // The scope decides whether the server accepts writes from this token
+    // (requireWriteScope). An admin token can mint further admin tokens, so it is
+    // never the silent default — the caller has to ask for it.
+    const admin = confirm(
+      "Grant this token admin (write) access?\n\n" +
+        "OK — admin: can change settings and create tokens.\n" +
+        "Cancel — read-only: can view data only.",
+    );
+    const result = await adminApi.createToken({
+      kind: "api",
+      name,
+      scopes: [admin ? "admin" : "read"],
+    });
+    setNewApiToken(result);
+    toast("API token created — copy it now, it won't be shown again", "success");
     void loadAll();
   };
 
@@ -319,6 +333,52 @@ export function SettingsPage() {
                     + New token
                   </button>
                 </div>
+                {/* Newly created API token (shown once — server hashes on creation and never returns plaintext again) */}
+                {newApiToken && (
+                  <div style={{
+                    background: "rgba(88,166,255,0.08)",
+                    border: "1px solid rgba(88,166,255,0.25)",
+                    borderRadius: 8,
+                    padding: "var(--space-4)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "var(--space-3)",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+                      <span style={{ fontWeight: 700, color: "var(--color-info)", fontSize: 13 }}>
+                        Token created — copy it now, it won't be shown again
+                      </span>
+                      <button
+                        onClick={() => setNewApiToken(null)}
+                        aria-label="Dismiss token"
+                        style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--color-info)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div style={{ ...infoBox, fontFamily: "var(--font-mono)", fontSize: 12, wordBreak: "break-all", position: "relative" }}>
+                      {newApiToken.token}
+                      <button
+                        onClick={() => void navigator.clipboard.writeText(newApiToken.token).then(() => toast("Token copied", "success"))}
+                        style={{
+                          position: "absolute",
+                          top: 8,
+                          right: 8,
+                          background: "var(--color-surface-2)",
+                          border: "1px solid var(--color-border)",
+                          color: "var(--color-secondary)",
+                          borderRadius: 4,
+                          padding: "2px 8px",
+                          cursor: "pointer",
+                          fontSize: 11,
+                        }}
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {tokens.length === 0 ? (
                   <EmptyState title="No API tokens" description="API tokens authenticate dashboard and API clients." />
                 ) : (

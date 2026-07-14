@@ -82,6 +82,12 @@ export async function stubApp(page: Page, options: StubAppOptions = {}): Promise
   );
 
   await page.route("**/auth/oidc/status", (route) => json(route, { enabled: false }));
+
+  // OnboardingGuard GETs /healthz on the dashboard and redirects a deployment
+  // with no AMS to the setup wizard. Report an env-configured instance so the
+  // guard short-circuits: no spec is testing onboarding, and without this every
+  // page that lands on "/" would be pulled into the wizard (or 502 on the probe).
+  await page.route("**/healthz", (route) => json(route, { status: "ok", ams_env_configured: true }));
 }
 
 /**

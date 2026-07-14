@@ -6315,3 +6315,108 @@ Smoke was **evidence, not the compose "Healthy" label**:
 
 `deploy/config/Caddyfile.prod` remains **uncommitted, dirty, and intact**. Confirmed it is in no
 commit of #51. **Never** `git reset --hard` / `checkout -- .` / `stash` / `clean` in this repo.
+
+---
+
+## D-098 — S36: user-intake audit + the three post-login blockers fixed (2026-07-15)
+
+**Trigger:** the operator asked *"are we ready for user intake? how do they sign up and log in?"* —
+a different question from S35's "can they install?". Answered by **executing** every auth path, not
+reading the docs, via a 161-agent adversarial workflow (7 investigation lenses → 3-refuter panel per
+finding → synthesis). **51 raw findings → 29 confirmed / 22 refuted.**
+
+### The answer: there is no "signup", and the post-login flow was broken
+
+Pulse is self-hosted and sold via signed licence keys — no registration, no SaaS. The **first
+credential** is a bootstrap token: on first boot with zero rows in `api_tokens`,
+`bootstrapIfFirstRun` (`server/internal/api/server.go`) mints one `plt_…` admin token and prints it
+to **stderr / container logs**, once. Login is that token (or OIDC/SSO). The bootstrap itself works;
+the audit's real findings were all **after** authentication.
+
+### Three code-fixable blockers — all fixed this session (PR #53)
+
+1. **Privilege escalation — role labels never enforced.** `bearerAuthMiddleware` checked token
+   validity + `kind=api`, never `Scopes`. A `viewer` OIDC token could `POST /api/v1/admin/tokens`
+   and mint itself admin. Fix: `requireWriteScope` on the `/api/v1` group.
+   - **Positive allowlist, not a blocklist.** Writes need `admin`; **empty scopes grandfathered**
+     (prod check: all 4 live tokens are `["admin"]`, none nil, `users`=0 rows — but the compat rule
+     is load-bearing for any pre-scope token). `GET/HEAD/OPTIONS` always pass.
+   - **The agent's first cut denied only `"viewer"` — the UI mints `"read"`.** So every real token
+     escaped and its suite was green against a wide-open path. Caught by the adversarial review;
+     I rewrote it and added a `read`-scope escalation test. **Mutation-proven:** that test FAILS
+     against the blocklist middleware (while all four of the agent's own `viewer` tests PASS) and
+     passes against the allowlist. This is D-096 lesson 2 again — *a green suite is not a working
+     feature*.
+
+2. **Onboarding dead-end.** Login landed on an empty dashboard; the functional `/onboarding` wizard
+   was reachable only by guessing the URL (zero `navigate`/`Link` to it in the codebase). Fix:
+   `OnboardingGuard` sends a user who lands on `/` with no configured AMS to the wizard. Fires
+   **only on `/`** so a deliberate trip to Settings is never hijacked (the reviewer's "trap"
+   concern), and fails open on fetch error.
+
+   **★ ROLLOUT-SAFETY CATCH — the pre-deploy check earned its keep.** The first version keyed the
+   redirect purely off `getSources()` (the `ams_sources` table). Before rolling prod I checked the
+   live meta store: **`ams_sources` = 0 rows**, yet the collector is healthily polling (826k+
+   events). Prod — and the documented quickstart — configure AMS via the **`PULSE_AMS_URL` env
+   var**, which never writes `ams_sources`. So the guard would have **redirected the live operator
+   into a "connect your first AMS" wizard on every login**, for a system running for weeks. Three
+   independent witnesses agreed: this prod check, my local Playwright dashboard test, and CI's
+   `csp-e2e` (whose mock-AMS dashboard test failed for the same reason). Fix: added
+   `ams_env_configured` (derived from `os.Getenv("PULSE_AMS_URL") != ""`) to the public `/healthz`
+   response (OpenAPI + `schema.d.ts` regenerated); the guard now checks `/healthz` first and
+   **never touches `getSources`** — nor redirects — when AMS is env-configured. A localStorage
+   dismissal flag (`pulse_onboarding_dismissed`, set when the wizard is skipped/completed) covers
+   the UI-mode user who declines setup. Net: an env-configured operator is **never** redirected,
+   not even once; a genuinely fresh install still gets guided. **Lesson: `getSources()` empty ≠
+   "unconfigured" — env-mode and UI-mode are two configuration paths, and a signal that only sees
+   one will misjudge the other. "RUN it, don't assume it" applies to your own fix, against prod
+   state, before rollout.**
+
+3. **Credential-loss trap.** New API-token value shown in a 4 s auto-dismissing toast, then
+   unrecoverable. Fix: the persistent copy-panel the ingest-token flow already uses; the create flow
+   now asks **admin vs read**, so the enforced scope is a deliberate choice, not a silent default.
+
+Plus `install.md` first-login corrections (token entered on the AuthGate login screen, **not** the
+wizard; verify step calls `POST /admin/sources/{id}/test`; token-loss recovery cost — delete meta DB,
+lose all config — stated up front, not buried).
+
+### Two audit findings I REFUTED with live evidence (did not propagate)
+
+- **"AMS credentials sent in cleartext over the public internet."** Overstated on every limb.
+  `PULSE_AMS_AUTH_TOKEN` is **empty** in prod (nothing to leak); AMS 403s an anonymous request (API
+  not open); the collector is healthy — `server_events` has 826k+ rows, newest timestamp is live.
+  Pulse already logs its own `WARN: AMS bearer token will travel in cleartext` at boot. What *is*
+  real: AMS:5080 listens on `0.0.0.0` with no ufw rule — an **AMS** exposure question for the
+  operator, not a Pulse defect.
+- The synthesis's severity inflation on "no billing / no marketplace site" — refuted (correct
+  sequencing for a pre-launch self-hosted tool; `brandkit/website/` exists).
+
+### Blockers a session CANNOT close (unchanged from D-097, re-verified live)
+
+- **⛔ GHCR image private** — anonymous manifest pull → **401**. Kills the one-command quickstart.
+  One operator click. Clone-and-build is unaffected and remains the promoted path.
+- **⏰ AMS licence expires 2026-07-27T13:45Z.** From ~07-25 this outranks GHCR: lapse + next
+  `antmedia` restart = total ingest death.
+
+### Non-blocker gaps surfaced (honest, for the funnel — not fixed)
+
+No team/user-invite UI (`/admin/users` CRUD exists in the API, no page); no audit trail (no actor on
+writes); OIDC not licence-gated (any tier can enable SSO); tenant is a reporting label, not an
+isolation boundary; no self-serve trial / billing / automated key delivery; no out-of-band licence
+expiry alert (UI banner only).
+
+### Gates
+
+Go (docker) **24/24 packages**, exit 0, `vet` + `gofmt` clean · web `tsc` + `eslint` clean ·
+vitest **638/638** (was 626, +12: authz read-scope, onboarding-guard incl. the anti-trap case,
+token-panel persistence, scope-choice) · Playwright (docker) **60/60** · `schema.d.ts` no drift.
+
+**Process lesson recorded:** Playwright tests the built `dist/`, not source. I narrowed the guard,
+re-ran Playwright against a **stale build**, and saw the same 13 failures — nearly re-debugged a
+fixed bug. Rebuild before every Playwright run. (13 → 1 → 0 once rebuilt; the last was a dashboard
+e2e that now legitimately calls `getSources` via the guard and needed its `/admin/sources` stub.)
+
+### Working-tree invariant
+
+`deploy/config/Caddyfile.prod` remains **uncommitted, dirty, intact** — confirmed not in PR #53.
+**Never** `git reset --hard` / `checkout -- .` / `stash` / `clean` in this repo.

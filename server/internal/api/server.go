@@ -99,6 +99,13 @@ type Config struct {
 	// Nil = OIDC disabled (no behaviour change to existing auth).
 	// S11 WO-C: SSO/OIDC phase 1.
 	OIDCConfig *OIDCProviderConfig
+
+	// AMSEnvConfigured reports whether PULSE_AMS_URL was explicitly set (i.e. the
+	// operator configured an AMS connection via the environment rather than the
+	// ams_sources table). Surfaced on /healthz so the web UI can tell an
+	// env-configured-but-source-empty deployment apart from a truly fresh install
+	// and not push a running operator into the onboarding wizard.
+	AMSEnvConfigured bool
 }
 
 // KafkaStatsProvider is the interface to the Kafka source for health reporting.
@@ -423,6 +430,7 @@ func (s *Server) buildRouter() {
 	// API v1 — bearer auth required.
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(s.bearerAuthMiddleware)
+		r.Use(s.requireWriteScope)
 
 		r.Get("/live/overview", s.handleLiveOverview)
 		r.Get("/live/streams", s.handleLiveStreams)
@@ -657,6 +665,58 @@ func (s *Server) bearerAuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// requireWriteScope denies mutating requests (POST, PUT, PATCH, DELETE) to any
+// token that is not permitted to write. GET, HEAD and OPTIONS always pass, so a
+// read-only token can still drive the entire UI.
+//
+// The rule is a positive one — a token writes only if canWrite says so. Stating
+// it as a blocklist ("deny viewer") is what made the first version of this
+// middleware useless: the Settings UI mints its tokens with scope "read", which
+// no blocklist of role names anticipated, so every UI-minted token kept full
+// write access — including POST /admin/tokens, which lets it mint itself an
+// admin token. Enumerate what may write, never what may not.
+func (s *Server) requireWriteScope(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet, http.MethodHead, http.MethodOptions:
+			next.ServeHTTP(w, r)
+			return
+		}
+		tok, _ := r.Context().Value(ctxTokenKey).(*meta.APIToken)
+		if tok == nil {
+			// bearerAuthMiddleware runs first and never forwards without a token;
+			// if that ordering ever changes, fail closed rather than open.
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing or invalid Authorization header")
+			return
+		}
+		if !canWrite(tok.Scopes) {
+			writeError(w, http.StatusForbidden, "FORBIDDEN",
+				`this token is read-only; the operation requires a token with the "admin" scope`)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// canWrite reports whether a token's scopes permit mutating requests.
+//
+// An empty scope list is grandfathered as admin: handleCreateToken leaves Scopes
+// nil when a caller omits the field, so tokens minted before scopes were enforced
+// carry none, and the store cannot distinguish "no scope recorded" from "no scope
+// required". Rejecting them would lock an operator out of their own instance.
+// Any explicit scope other than "admin" ("read", "viewer", …) is read-only.
+func canWrite(scopes []string) bool {
+	if len(scopes) == 0 {
+		return true
+	}
+	for _, s := range scopes {
+		if s == "admin" {
+			return true
+		}
+	}
+	return false
+}
+
 // downloadAuthMiddleware is like bearerAuthMiddleware but additionally accepts a
 // ?token= query parameter as a last resort. It is used only for file-download
 // routes (e.g. GET /api/v1/reports/export) where the browser issues the request
@@ -882,8 +942,9 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, httpStatus, map[string]any{
-		"status":     overallStatus,
-		"components": components,
+		"status":             overallStatus,
+		"components":         components,
+		"ams_env_configured": s.cfg.AMSEnvConfigured,
 	})
 }
 

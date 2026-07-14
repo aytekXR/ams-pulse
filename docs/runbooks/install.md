@@ -89,7 +89,9 @@ docker compose -f docker-compose.quickstart.yml --env-file .env logs pulse \
   | grep -oE 'plt_[a-f0-9]+' | head -1
 ```
 
-Open `http://localhost:8090` and enter the token in the onboarding wizard.
+Open `http://localhost:8090` and enter the token on the **Pulse login screen** (the
+first screen you see — not a step inside the onboarding wizard). The onboarding wizard
+starts automatically after you sign in, when no AMS sources are configured yet.
 
 ---
 
@@ -319,15 +321,29 @@ docker compose logs pulse | grep "FIRST RUN"
 #        Save this token; it will not be shown again.
 ```
 
-Copy the token. You will use it in the onboarding wizard.
+> **WARNING — save this token before closing the terminal.** The FIRST RUN bootstrap
+> token is printed exactly once and is never stored in plaintext anywhere. There is no
+> CLI command to recover or regenerate it (`pulse` subcommands are `serve`, `migrate`,
+> `version`, `diag`, `help` — there is no `token` or `reset-admin` command). If the
+> token is lost, the only recovery is to **delete the entire meta database** (Docker
+> default: `/var/lib/pulse/pulse_meta.db`; bare-metal default: `pulse.db` beside the
+> binary) and restart Pulse. Deleting the meta database wipes every configured source,
+> alert rule, API token, and system setting — full reconfiguration is required.
+> See [Troubleshooting](#troubleshooting) for the exact recovery steps.
+
+Copy the token. Open the UI and enter it on the **Pulse login screen** — the first
+screen you see when you navigate to the UI, before the onboarding wizard appears.
 
 **6. Complete the onboarding wizard**
 
-The wizard appears automatically on first login:
-1. **Welcome** — enter your admin token.
-2. **Add source** — confirm or edit the AMS REST URL and source name.
-3. **Verify** — Pulse pings AMS and shows the stream count.
-4. **Done** — the live dashboard opens.
+Open the UI (see URL table above). You will be greeted by the **Pulse login screen**
+(not the wizard). Enter the admin token from step 5 and click **Sign in**.
+
+The wizard starts automatically after login when no AMS sources are configured:
+1. **Welcome** — click "Get started".
+2. **Add source** — enter the AMS REST URL and source name.
+3. **Verify** — click "Test connection"; Pulse calls `POST /admin/sources/{id}/test`.
+4. **Done** — click "Go to live dashboard".
 
 **Expected time:** under 5 minutes from `make up` to live dashboard.
 
@@ -463,8 +479,9 @@ and load-balancer probes.
 
 **6. Open the dashboard and complete onboarding**
 
-Navigate to `http://localhost:8090`. Enter the admin token printed in step 4.
-Follow the 4-step onboarding wizard (same as Docker path, step 6 above).
+Navigate to `http://localhost:8090`. You will see the **Pulse login screen** — enter
+the admin token printed in step 4 and click **Sign in**. The onboarding wizard
+starts automatically after login (same 4-step flow as Docker path step 6 above).
 
 **QA-measured time (Wave 1 gate):**
 
@@ -481,31 +498,41 @@ Follow the 4-step onboarding wizard (same as Docker path, step 6 above).
 
 ## First-run wizard walkthrough
 
-The onboarding wizard runs automatically when no AMS sources are configured.
-It is a 4-step flow in the UI.
+Before the wizard is reachable you must sign in on the **Pulse login screen**
+(`web/src/components/AuthGate.tsx`). Open the UI, enter the admin token from the
+container or process logs (see the relevant path's step 5/6 above), and click
+**Sign in**. The login screen has a hint that reads "Generate a token in Settings →
+API Tokens" — this is circular for a brand-new install; ignore it. The token comes
+from the container logs as shown above.
+
+The onboarding wizard opens automatically after login when no AMS sources are
+configured. It is a 4-step flow in the UI.
 
 **Step 1 — Welcome**  
-Enter the admin token from the container/process logs. The wizard validates it
-against the API before proceeding.
+A welcome card listing the setup steps. Click **"Get started"** to proceed.
+There is no token input on this screen — the token was already accepted by the
+login screen that preceded it.
 
 **Step 2 — Add source**  
 Fields:
 - **Name** — label for this AMS instance (e.g., `production`, `staging`)
 - **AMS REST URL** — the AMS HTTP(S) endpoint, e.g. `http://10.0.1.10:5080`
-- **REST username** — AMS admin username (default: `admin`)
-- **Credential env var** — the name of the env var holding the AMS bearer token;
-  Pulse stores the reference, not the secret itself
+- **REST username** — AMS admin username (optional; default: `admin`)
+- **Credential env var** — the name of the environment variable holding the AMS
+  password; Pulse stores the variable name, not the secret itself
 - **Log path (optional)** — full path to the AMS analytics log file for
   low-latency event capture, e.g. `/var/log/antmedia/ant-media-server-analytics.log`
 
 **Step 3 — Verify**  
-Pulse calls `GET /api/v1/live/overview` and shows the AMS stream count.
-A green checkmark means Pulse can reach AMS REST and is collecting events.
-A red error typically means the REST URL or token is wrong — see
+Click **"Test connection"**. Pulse calls `POST /admin/sources/{id}/test`
+(`web/src/features/settings/OnboardingWizard.tsx` `handleTest()`; see also
+`web/src/api/client.ts` `testSource`). A success response with `reachable: true`
+shows the latency and AMS version; a failure shows the error reason.
+A red error typically means the REST URL or credentials are wrong — see
 [Troubleshooting](#troubleshooting) below.
 
 **Step 4 — Done**  
-The live dashboard opens. New streams appear within the poll interval
+Click **"Go to live dashboard"**. New streams appear within the poll interval
 (default 5 s; configurable via `PULSE_POLL_INTERVAL`).
 
 ---
@@ -622,7 +649,7 @@ license:
 | Dashboard shows no streams after publish | AMS token wrong or REST URL unreachable | Run `pulse diag` to see config + connectivity; check `PULSE_AMS_AUTH_TOKEN` |
 | `pulse migrate` exits with "connection refused" | ClickHouse not yet ready | Wait for ClickHouse healthcheck to pass; retry |
 | No admin token printed | Not a first run — tokens already exist | Generate a new token via `POST /api/v1/admin/tokens` using an existing admin token |
-| `FIRST RUN` token lost | Token is never stored in plaintext | Reset: delete the meta database file and restart; all existing data will need re-configuration |
+| `FIRST RUN` token lost | Token is printed once and never stored in plaintext; `pulse` has no token-recovery subcommand | **All configuration is destroyed in recovery.** Delete the meta database (`/var/lib/pulse/pulse_meta.db` in Docker; `pulse.db` beside the binary for bare-metal), then restart Pulse. A new FIRST RUN token is printed. Every source, alert rule, API token, and setting must be re-entered. See the WARNING block in step 5 above. |
 
 ### Diagnostic commands
 
