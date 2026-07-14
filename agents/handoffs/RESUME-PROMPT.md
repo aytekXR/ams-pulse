@@ -11,9 +11,25 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-36.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-37.md`)
 
-**Session 2026-07-14 result: D-097 — S35 DONE (PR #51 `425b04b`, prod `v0.4.0-11-g425b04b`).**
+**Session 2026-07-15 result: D-098 — S36 DONE (PR #53, user-intake blockers fixed, in prod).**
+
+**★★ S36 ALSO DISCARDED ITS OWN PLAN — right again.** S35 had planned "§2.16 AMS early-warning."
+The operator instead asked *"are we ready for user intake? how do they sign up and log in?"* — so
+S36 **executed** every auth path (161-agent adversarial audit, 51 findings → 29 confirmed). Answer:
+there is **no signup** (self-hosted, licence-key; first credential is a bootstrap token in the boot
+logs), and the flow **after** login was broken three ways — all now fixed:
+**(1)** role labels were never enforced (a read-only token could self-escalate to admin);
+**(2)** login landed on an empty dashboard with no path to the setup wizard;
+**(3)** new API tokens flashed for 4 s then were unrecoverable.
+Fixed, gated (Go 24/24 · vitest 638/638 · Playwright 60/60), merged, and rolled to prod.
+Full evidence: `decisions.md` D-098. Next goal: **§2.16 AMS early-warning** (deferred twice, still
+the strongest approved-unblocked candidate) — but re-read the standing-directive clause first.
+
+---
+
+### Prior session (for context): D-097 — S35 DONE (PR #51 `425b04b`, prod `v0.4.0-11-g425b04b`).
 
 **★★ S35 DISCARDED ITS OWN PLAN — and that was the right call.** S34 had planned "close two e2e
 gaps, then build §2.16". The operator instead asked *"have you finished all development? is

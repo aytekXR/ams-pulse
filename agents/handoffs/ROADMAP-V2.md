@@ -527,6 +527,36 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.21  User-intake — signup/login audit + the three post-login blockers  [S] ✅ DONE S36 (D-098, 2026-07-15, PR #53)
+
+Seeded by the operator's question *"are we ready for user intake? how do they sign up and log in?"* —
+answered by **executing** every auth path, not reading the docs. 161-agent adversarial audit
+(7 lenses → 3-refuter panel → synthesis); **51 raw findings → 29 confirmed / 22 refuted.**
+
+**The answer: there is no signup.** Pulse is self-hosted, sold by signed licence key. The first
+credential is a **bootstrap admin token** minted on first boot and printed to the container logs,
+once (`bootstrapIfFirstRun`). Login is that token or OIDC/SSO. Bootstrap works; the breakage was all
+**after** authentication:
+
+- ✅ **Privilege escalation closed.** `bearerAuthMiddleware` never read `Scopes`; a `viewer` OIDC
+  token could `POST /api/v1/admin/tokens` and self-escalate. Added `requireWriteScope` on `/api/v1`
+  — a **positive allowlist** (writes need `admin`; empty scopes grandfathered; reads always pass).
+  The implementer's first cut denied only `"viewer"` while the UI mints `"read"` — a fake fix, green
+  against a wide-open path; caught by adversarial review and **mutation-proven** with a read-scope
+  escalation test.
+- ✅ **Onboarding dead-end closed.** `OnboardingGuard` sends a user landing on `/` with zero sources
+  into the wizard; fires only on `/` so Settings is never hijacked; fails open on error.
+- ✅ **Credential-loss trap closed.** Persistent token copy-panel replacing the 4-second toast;
+  create flow now asks admin-vs-read.
+- ✅ `install.md` first-login steps corrected (token on the login screen, not the wizard; verify
+  step calls `POST /admin/sources/{id}/test`; token-loss recovery cost stated up front).
+- 🚫 **Refuted, not propagated:** "AMS creds in cleartext" — token empty, AMS 403s anon, collector
+  healthy (826k+ rows). Residual: AMS:5080 on `0.0.0.0`, no ufw — an **AMS** hardening note.
+- ⛔ **NOT fixable by a session:** GHCR visibility (still 401), AMS licence expiry (2026-07-27).
+
+**Non-blocker gaps surfaced (funnel, not fixed):** team/invite UI, audit trail, OIDC licence-gating,
+tenant isolation, self-serve trial/billing, out-of-band licence-expiry alerting. See D-098 table.
+
 ---
 
 ### 2.19  Full UI/UX refactor via uipro ("UI/UX Pro Max" skill)  [L, phased]  (OPERATOR-DIRECTED 2026-07-14, S29 mid-session)
