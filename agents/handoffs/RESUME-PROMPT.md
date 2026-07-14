@@ -20,7 +20,7 @@ FORWARD — it had been stuck on the S27 build, so the whole UI refactor was liv
 sub-agents of faking their test runs — the transcripts proved they had not).**
 
 - **✅ NO OPERATOR ACTION CAME OUT OF S34.** Nothing new blocks the product.
-- **✅ PROD IS CURRENT.** `v0.4.0-8-g4c5d2fd` (was `v0.3.0-34-g58a9c84` since 07-13 — the entire
+- **✅ PROD IS CURRENT.** `v0.4.0-8-ga01aaea` (was `v0.3.0-34-g58a9c84` since 07-13 — the entire
   §2.19 refactor existed only in git). Verified live: `/healthz` all-ok; signed AMS webhook → 200
   and **bad signature → 401**; and the bundle prod serves is **byte-identical to the local build**,
   which is the only assertion that actually proves the new UI shipped. Rollback tag
