@@ -1,7 +1,7 @@
 # Synthetic Probes Runbook (F10)
 
 **Status: Shipped (Wave 3-MVP + Wave-3-Plus)**
-**Tier: Pro and Enterprise**
+**Tier: Pro, Business and Enterprise**
 
 Pulse can periodically probe your stream URLs — fetching manifests, measuring
 time-to-first-byte (TTFB), and estimating bitrate — without relying on real
@@ -276,15 +276,15 @@ The probe runner is wired into the `pulse serve` process. It:
 
 ## Tier gate
 
-| Feature | Free | Pro | Enterprise |
-|---|---|---|---|
-| `POST/GET/PUT/DELETE /probes` | 403 LICENSE_REQUIRED | Allowed | Allowed |
-| `GET /probes/{id}/results` | 403 LICENSE_REQUIRED | Allowed | Allowed |
+| Feature | Free | Pro | Business | Enterprise |
+|---|---|---|---|---|
+| `POST/GET/PUT/DELETE /probes` | 403 LICENSE_REQUIRED | Allowed | Allowed | Allowed |
+| `GET /probes/{id}/results` | 403 LICENSE_REQUIRED | Allowed | Allowed | Allowed |
 
-The 403 response body:
+The 403 response body (example for a free-tier caller):
 
 ```json
-{ "code": "LICENSE_REQUIRED", "message": "Synthetic Probes requires Pro or Enterprise license" }
+{ "code": "LICENSE_REQUIRED", "message": "synthetic probes (F10) require Pro tier or higher (current: \"free\")" }
 ```
 
 ---

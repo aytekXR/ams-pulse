@@ -75,9 +75,10 @@ Every production deployment must carry the vendor public key:
 
 The customer then activates by any of:
 1. `PULSE_LICENSE_KEY=<key>` in the environment (picked up at boot),
-2. an offline file (`PULSE_LICENSE_FILE` path — file contains the key string),
-3. at runtime: `POST /api/v1/license/activate {"key":"<key>"}` (admin token;
-   takes effect immediately, `GET /api/v1/license` confirms tier/expiry).
+2. an offline file (`PULSE_LICENSE_FILE` — path to a file containing the key
+   string, read at startup via `license.New`),
+3. at runtime: `PUT /api/v1/admin/license {"key":"<key>"}` (admin bearer token;
+   takes effect immediately, `GET /api/v1/admin/license` confirms tier/expiry).
 
 ### 2.4 Security properties & caveats
 
@@ -91,6 +92,14 @@ The customer then activates by any of:
   overlap (accept old+new) only via a code change (post-GA backlog if needed).
 
 ## 3. Vendor key ceremony (production minting)
+
+> **The keypair ceremony is already complete for this deployment.**
+> The vendor private key has been generated and vaulted offline; the matching
+> `PULSE_LICENSE_PUBKEY` is deployed in production; a minted enterprise license
+> is running in production. **Do not repeat §3a–3c** — regenerating the keypair
+> would immediately invalidate the live production license and every key already
+> delivered to customers (see §3f). These steps exist for a future keypair
+> rotation or a net-new vendor deployment, not for day-to-day operation.
 
 ### 3a. Generate the production keypair — OFFLINE
 
@@ -145,46 +154,96 @@ cd qa/licensegen
 go run . -tier pro -privkey /secure/path/vendor.priv -expires 365
 ```
 
-- `-privkey` reads the 128-hex key from the file, signs with it, and prints
-  the matching public key as `PULSE_LICENSE_PUBKEY` (confirm it matches 3c).
-- `-expires 365` sets `expires_at` to now+365 days (Unix epoch ms). For
-  perpetual licenses, omit `-expires`.
-- Stdout is exactly two `KEY=value` lines; append `>> license.env` or copy
-  `PULSE_LICENSE_KEY` to the customer's delivery channel.
+Flags (all optional except `‑privkey` for production):
 
-The private key file is read at mint time on the operator machine and is never
-transmitted to or stored on any server.
+| Flag | Argument | Effect |
+|---|---|---|
+| `-tier` | `free\|pro\|business\|enterprise` | Tier to encode in the claims (default: `pro`). |
+| `-privkey` | path to file | Reads the 128-hex ed25519 private key from that file and derives the matching public key. Omit in CI to generate an ephemeral keypair per run. |
+| `-expires` | positive integer (days) | Sets `expires_at` to `now + N days` (Unix epoch ms). Omit for a perpetual license. Mutually exclusive with `-expires-minutes`. |
+| `-expires-minutes` | positive integer (minutes) | Sets `expires_at` to `now + N minutes`. For live trial-flow demos. Mutually exclusive with `-expires`. |
+
+Stdout is exactly two `KEY=value` lines:
+
+```
+PULSE_LICENSE_KEY=<base64(claims)>.<base64(sig)>
+PULSE_LICENSE_PUBKEY=<64-hex-public-key>
+```
+
+Append `>> license.env` or copy `PULSE_LICENSE_KEY` to the customer's delivery
+channel. The private key is read only at mint time and never transmitted.
 
 ### 3e. Verify activation
 
 Have the customer (or test yourself with `curl`):
 
 ```sh
-# Activate
-curl -s -X POST https://<pulse-host>/api/v1/license/activate \
+# Activate (PUT, not POST; path is /api/v1/admin/license)
+curl -s -X PUT https://<pulse-host>/api/v1/admin/license \
   -H "Authorization: Bearer <admin-token>" \
   -H "Content-Type: application/json" \
   -d '{"key":"<PULSE_LICENSE_KEY value>"}'
 
 # Confirm
-curl -s https://<pulse-host>/api/v1/license \
+curl -s https://<pulse-host>/api/v1/admin/license \
   -H "Authorization: Bearer <admin-token>"
-# → {"tier":"pro","valid":true,"expires_at":"2027-07-09T..."}
 ```
 
-A `valid: true` response with the correct `tier` and `expires_at` confirms the
-key was accepted by the deployed public key.
+A successful response (HTTP 200) looks like:
+
+```json
+{
+  "tier": "pro",
+  "valid": true,
+  "expires_at": 1815569297073,
+  "offline_file": false,
+  "limits": {
+    "max_nodes": 10,
+    "max_streams": null,
+    "retention_days": 90,
+    "data_api": true,
+    "white_label": false
+  }
+}
+```
+
+`expires_at` is a **Unix epoch millisecond integer** (not an ISO-8601 string),
+or `null` for perpetual licenses. `null` limits mean unlimited. A `valid: true`
+response with the correct `tier` confirms the key was accepted by the deployed
+public key.
+
+Error responses:
+- **400** `INVALID_JSON` — `key` field missing or empty body.
+- **422** `INVALID_LICENSE` — the key is malformed, or its signature did not
+  verify against the deployed `PULSE_LICENSE_PUBKEY`.
+
+> **An EXPIRED key does not return 422 — it returns `200`.** `activate()` verifies
+> the signature and deliberately does *not* reject a signed-but-expired key; expiry
+> is applied lazily on the first read, so the response comes back **`200` with
+> `"valid": false` and `"tier": "free"`**. The status line alone will tell you the
+> activation "succeeded." **Check the body, not the status code**: a key has only
+> truly taken effect when `valid` is `true` *and* `tier` is what you sold. Anything
+> that pattern-matches on 422 to detect an expired key will miss it silently.
 
 ### 3f. Key rotation
 
 There is no certificate revocation list (CRL). Existing keys remain valid
 until their `expires_at`. To rotate the vendor keypair:
 
+> **Ordering hazard — read before touching `PULSE_LICENSE_PUBKEY`.**
+> `PULSE_LICENSE_PUBKEY` is read exactly once, at `Manager.New()` (i.e. server
+> startup). Rolling the env var and restarting a node **immediately** downgrades
+> every outstanding customer key to Free tier on that node — `ed25519.Verify`
+> will fail for all keys signed by the old private key. Do not restart any node
+> with the new public key until you have re-minted **all** active customer
+> licenses with the new private key and delivered the new keys to customers.
+> Plan for a coordinated cutover window.
+
 1. Generate a new keypair (step 3a).
-2. Roll `PULSE_LICENSE_PUBKEY` to the new public key on **all** Pulse nodes
-   before re-minting any keys (a node still holding the old public key will
-   reject new keys signed by the new private key).
-3. Re-mint all active customer licenses with the new private key.
+2. Re-mint all active customer licenses with the new private key and deliver the
+   new `PULSE_LICENSE_KEY` values to each customer.
+3. Only after customers have confirmed receipt, roll `PULSE_LICENSE_PUBKEY` to
+   the new public key on all Pulse nodes and restart them.
 4. Securely delete or archive the old private key.
 
 Because old keys expire naturally, prefer short expiries (1 year) for

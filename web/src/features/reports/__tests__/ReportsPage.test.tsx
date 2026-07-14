@@ -117,6 +117,8 @@ describe("VD-36: cron presets are valid 5-field cron", () => {
 // ─── Tier-gate rendering ─────────────────────────────────────────────────────
 
 // Mock the necessary modules
+const mockDownloadExport = vi.fn();
+
 vi.mock("@/api/client", () => ({
   adminApi: {
     getLicense: vi.fn(),
@@ -124,6 +126,7 @@ vi.mock("@/api/client", () => ({
   reportsApi: {
     getUsage: vi.fn(),
     listSchedules: vi.fn(),
+    downloadExport: (...args: unknown[]) => mockDownloadExport(...args),
   },
   ApiError: class ApiError extends Error {
     status: number;
@@ -232,6 +235,62 @@ describe("ReportsPage tier gate", () => {
     expect(screen.getByRole("status")).toBeInTheDocument();
     // Unmount immediately to avoid act() teardown warnings
     unmount();
+  });
+});
+
+// ─── Export button tests ──────────────────────────────────────────────────────
+
+describe("ReportsPage export buttons (business tier)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("renders Export CSV button when licensed", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "business", valid: true });
+    const { reportsApi } = await import("@/api/client");
+    vi.mocked(reportsApi.getUsage).mockResolvedValue({
+      rows: [],
+      totals: { viewer_minutes: 0, peak_concurrency: 0, egress_gb: 0, recording_gb: 0 },
+      egress_method: "bitrate_x_watch_time",
+    });
+    render(<ReportsPage />);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /export csv/i })).toBeInTheDocument();
+    });
+  });
+
+  it("does NOT render Export PDF button", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "business", valid: true });
+    const { reportsApi } = await import("@/api/client");
+    vi.mocked(reportsApi.getUsage).mockResolvedValue({
+      rows: [],
+      totals: { viewer_minutes: 0, peak_concurrency: 0, egress_gb: 0, recording_gb: 0 },
+      egress_method: "bitrate_x_watch_time",
+    });
+    render(<ReportsPage />);
+    await waitFor(() => {
+      // Usage tab is visible, so the button area has rendered
+      expect(screen.getByRole("tab", { name: /usage/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: /export pdf/i })).toBeNull();
+  });
+
+  it("calls downloadExport with format=csv when Export CSV is clicked", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "business", valid: true });
+    const { reportsApi } = await import("@/api/client");
+    vi.mocked(reportsApi.getUsage).mockResolvedValue({
+      rows: [],
+      totals: { viewer_minutes: 0, peak_concurrency: 0, egress_gb: 0, recording_gb: 0 },
+      egress_method: "bitrate_x_watch_time",
+    });
+    render(<ReportsPage />);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /export csv/i })).toBeInTheDocument();
+    });
+    screen.getByRole("button", { name: /export csv/i }).click();
+    expect(mockDownloadExport).toHaveBeenCalledWith(
+      expect.objectContaining({ format: "csv" }),
+    );
   });
 });
 

@@ -749,10 +749,6 @@ export function ReportsPage() {
     reportsApi.downloadExport({ from: range.from, to: range.to, format: "csv" });
   };
 
-  const downloadPdf = () => {
-    reportsApi.downloadExport({ from: range.from, to: range.to, format: "pdf" });
-  };
-
   const createSchedule = async (data: ReportScheduleWrite) => {
     await reportsApi.createSchedule(data);
     toast("Schedule created", "success");
@@ -842,20 +838,6 @@ export function ReportsPage() {
                     }}
                   >
                     Export CSV
-                  </button>
-                  <button
-                    onClick={downloadPdf}
-                    style={{
-                      background: "var(--color-surface-2)",
-                      border: "1px solid var(--color-border)",
-                      color: "var(--color-secondary)",
-                      borderRadius: 6,
-                      padding: "6px 12px",
-                      cursor: "pointer",
-                      fontSize: 12,
-                    }}
-                  >
-                    Export PDF
                   </button>
                 </div>
               </div>

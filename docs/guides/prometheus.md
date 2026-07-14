@@ -10,16 +10,19 @@ Pulse exposes a Prometheus-compatible `/metrics` endpoint. This lets you scrape
 Pulse metrics into any Prometheus-compatible backend and build Grafana panels,
 PagerDuty/Alertmanager rules, or custom dashboards on top.
 
-The endpoint is bounded cardinality by design: only `node=` labels are used
-(no `stream_id` or `session_id`). This keeps the metric count predictable
-even on installations with thousands of concurrent streams.
+The endpoint is bounded cardinality by design: the five aggregate metrics carry
+no labels; `node=` labels appear only on the per-node CPU and memory metrics
+(no `stream_id` or `session_id` anywhere). This keeps the metric count
+predictable even on installations with thousands of concurrent streams.
 
 ---
 
 ## Enabling the scrape endpoint
 
-By default `/metrics` returns `401 Unauthorized`. Set `PULSE_METRICS_TOKEN`
-to enable scraping:
+The `/metrics` endpoint is available without a scrape token on Business or
+Enterprise tier (see [Known limitations](#known-limitations)). When
+`PULSE_METRICS_TOKEN` is set, every scrape request must supply it as a Bearer
+token:
 
 ```sh
 export PULSE_METRICS_TOKEN=my-secret-scrape-token
@@ -28,9 +31,9 @@ export PULSE_METRICS_TOKEN=my-secret-scrape-token
 Restart Pulse. The token can be any string; it is compared with a constant-time
 string comparison. Store it in a Kubernetes Secret (see Helm guide below).
 
-To disable the scrape token check (allow unauthenticated scraping on a closed
-network), leave `PULSE_METRICS_TOKEN` unset and send no `Authorization` header.
-In that case the endpoint returns 401 to prevent accidental exposure.
+If `PULSE_METRICS_TOKEN` is unset, the endpoint serves metrics without any
+token check — appropriate for a private network where the port is not exposed
+publicly.
 
 > **Security note:** The `/metrics` endpoint is not blocked by the admin Bearer token.
 > It uses its own token to allow Prometheus to scrape without an admin credential.
@@ -92,21 +95,58 @@ spec:
 
 ## Metric reference
 
-All metrics use the `pulse_` prefix and carry a `node` label where applicable.
-High-cardinality labels (`stream_id`, `session_id`) are deliberately absent.
+All metrics use the `pulse_` prefix. The five aggregate metrics carry no labels.
+The two per-node metrics carry a `node` label with one series per AMS node;
+when no nodes have reported yet the `HELP` and `TYPE` lines are emitted but no
+sample lines appear.
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `pulse_live_viewers` | gauge | `node` | Total current viewer count across all active streams on this node |
-| `pulse_live_streams` | gauge | `node` | Number of currently active streams (publisher connected) |
-| `pulse_live_publishers` | gauge | `node` | Number of active publisher connections (ingest) |
-| `pulse_ingest_bitrate_kbps` | gauge | `node` | Aggregate ingest bitrate in Kbps across all active streams |
-| `pulse_alerts_firing` | gauge | — | Number of alert rules currently in the `firing` state |
+| `pulse_live_viewers` | gauge | — | Total current viewer count across all active streams |
+| `pulse_live_streams` | gauge | — | Number of currently active streams (publisher connected) |
+| `pulse_live_publishers` | gauge | — | Number of active publisher connections (ingest) |
+| `pulse_ingest_bitrate_kbps` | gauge | — | Aggregate ingest bitrate in Kbps across all active streams |
+| `pulse_node_cpu_pct` | gauge | `node` | CPU utilization percent for each AMS node |
+| `pulse_node_mem_pct` | gauge | `node` | Memory utilization percent for each AMS node |
+| `pulse_alerts_firing` | gauge | — | Count of `alert_history` rows in the `firing` state — see the caveat below |
 
-**C-W2-09 verified (QA gate 2026-06-14):**
-- All 5 metrics present in exposition
-- 22 total metric lines (bounded)
-- Zero `stream_id` or `session_id` labels
+> **`pulse_alerts_firing` does not mean "rules firing right now."** It counts rows
+> in the alert history whose state is `firing`, over all time and capped at the
+> 1000 most recent. One rule that has fired on ten occasions contributes ten, and
+> a rule that has since resolved still contributes its historical firings. Treat it
+> as a cumulative event count, not a live gauge of current incidents — alerting on
+> `pulse_alerts_firing > 0` will page you for something that resolved last month.
+
+**Sample output** (Business tier, idle instance with no AMS nodes connected):
+
+```text
+# HELP pulse_live_viewers Current live viewer count
+# TYPE pulse_live_viewers gauge
+pulse_live_viewers 0
+# HELP pulse_live_streams Current active stream count
+# TYPE pulse_live_streams gauge
+pulse_live_streams 0
+# HELP pulse_live_publishers Current publishing stream count
+# TYPE pulse_live_publishers gauge
+pulse_live_publishers 0
+# HELP pulse_ingest_bitrate_kbps Aggregate ingest bitrate kbps
+# TYPE pulse_ingest_bitrate_kbps gauge
+pulse_ingest_bitrate_kbps 0
+# HELP pulse_node_cpu_pct Node CPU utilization percent
+# TYPE pulse_node_cpu_pct gauge
+# HELP pulse_node_mem_pct Node memory utilization percent
+# TYPE pulse_node_mem_pct gauge
+# HELP pulse_alerts_firing Total firing alert count
+# TYPE pulse_alerts_firing gauge
+pulse_alerts_firing 0
+```
+
+With one AMS node connected the two per-node metrics gain sample lines:
+
+```text
+pulse_node_cpu_pct{node="standalone"} 15
+pulse_node_mem_pct{node="standalone"} 40
+```
 
 ---
 
@@ -130,7 +170,7 @@ Import it via Dashboard → Import → Paste JSON.
       "targets": [
         {
           "datasource": "$datasource",
-          "expr": "sum(pulse_live_viewers)",
+          "expr": "pulse_live_viewers",
           "legendFormat": "viewers"
         }
       ],
@@ -150,7 +190,7 @@ Import it via Dashboard → Import → Paste JSON.
       "targets": [
         {
           "datasource": "$datasource",
-          "expr": "sum(pulse_live_streams)",
+          "expr": "pulse_live_streams",
           "legendFormat": "streams"
         }
       ],
@@ -164,7 +204,7 @@ Import it via Dashboard → Import → Paste JSON.
       "targets": [
         {
           "datasource": "$datasource",
-          "expr": "sum(pulse_live_publishers)",
+          "expr": "pulse_live_publishers",
           "legendFormat": "publishers"
         }
       ],
@@ -191,14 +231,14 @@ Import it via Dashboard → Import → Paste JSON.
     },
     {
       "id": 5,
-      "title": "Ingest Bitrate (Kbps) by Node",
+      "title": "Ingest Bitrate (Kbps)",
       "type": "timeseries",
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
       "targets": [
         {
           "datasource": "$datasource",
           "expr": "pulse_ingest_bitrate_kbps",
-          "legendFormat": "{{node}}"
+          "legendFormat": "ingest bitrate"
         }
       ],
       "fieldConfig": {"defaults": {"unit": "kbps", "min": 0}}
@@ -211,7 +251,7 @@ Import it via Dashboard → Import → Paste JSON.
       "targets": [
         {
           "datasource": "$datasource",
-          "expr": "sum(pulse_live_viewers)",
+          "expr": "pulse_live_viewers",
           "legendFormat": "viewers"
         }
       ],
@@ -226,7 +266,7 @@ Import it via Dashboard → Import → Paste JSON.
 
 ### Useful PromQL expressions
 
-**Viewers per node:**
+**Total live viewers:**
 ```promql
 pulse_live_viewers
 ```
@@ -239,7 +279,12 @@ sum_over_time(pulse_live_viewers[1h]) * 15 / 3600
 
 **Ingest total Mbps:**
 ```promql
-sum(pulse_ingest_bitrate_kbps) / 1000
+pulse_ingest_bitrate_kbps / 1000
+```
+
+**CPU by node:**
+```promql
+pulse_node_cpu_pct
 ```
 
 **Alert for streams going down:**
@@ -249,7 +294,7 @@ groups:
   - name: pulse
     rules:
       - alert: PulseNoStreams
-        expr: sum(pulse_live_streams) == 0
+        expr: pulse_live_streams == 0
         for: 5m
         labels:
           severity: critical
@@ -284,8 +329,10 @@ The Helm chart mounts `pulse-secrets` as environment variables via `envFrom.secr
 - **Bounded metrics only.** Per-stream or per-viewer cardinality metrics are not
   exposed via `/metrics`. Use the REST API (`/api/v1/live/streams`,
   `/api/v1/analytics/*`) or the Pulse UI for stream-level detail.
-- **Data API tier gate.** The `/metrics` endpoint is behind the Pro tier
-  (`CheckDataAPI` license check). Free tier returns `403 LICENSE_REQUIRED`.
+- **Business tier gate.** The `/metrics` endpoint requires Business or Enterprise
+  tier (`CheckPrometheus` license check). Free and Pro tiers receive
+  `403 LICENSE_REQUIRED` with body
+  `{"code":"LICENSE_REQUIRED","message":"Prometheus endpoint (F8) requires Business tier or higher (current: \"<tier>\")"}`.
   Set `PULSE_LICENSE_KEY` to upgrade, or use the Pulse UI directly (always available).
 
 **Phase-3 roadmap:** Additional QoE metrics (startup p50/p95, rebuffer ratio,

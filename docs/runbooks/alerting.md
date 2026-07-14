@@ -545,7 +545,7 @@ History entries include: `alert_id`, `rule_id`, `state`, `severity`, `ts`, `metr
 
 History is retained up to **1000 rows per rule** in the meta store. After every insert,
 `CreateAlertHistory` automatically prunes older rows for the same `rule_id`, keeping the
-newest 1000 (D-054, `AlertHistoryDefaultKeep=1000`, `meta.go:45`). A calendar-based TTL
+newest 1000 (D-054, `AlertHistoryDefaultKeep` in `meta.go`). A calendar-based TTL
 (e.g. delete rows older than N days) remains a Phase-3 roadmap item, but unbounded growth
 is not possible.
 

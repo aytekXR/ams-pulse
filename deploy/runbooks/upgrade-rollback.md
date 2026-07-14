@@ -188,7 +188,7 @@ rm -f /tmp/check-pulse_meta.db*
 
 ## ClickHouse DDL stance
 
-**Migrations are forward-only and frozen.** The DDL files in `contracts/db/ch/` and
+**Migrations are forward-only and frozen.** The DDL files in `contracts/db/clickhouse/` and
 `contracts/db/meta/` are immutable once merged; schema upgrades are additive
 (`ALTER TABLE ... ADD COLUMN`). There is no `down-migrate` path.
 
