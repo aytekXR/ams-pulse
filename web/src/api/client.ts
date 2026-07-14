@@ -115,6 +115,52 @@ async function apiFetch<T>(
   return res.json() as Promise<T>;
 }
 
+/**
+ * Download a file from an authenticated endpoint.
+ *
+ * A plain `window.location.href = url` cannot carry an Authorization header, so
+ * the only way to authenticate such a navigation is `?token=` in the query
+ * string — which leaks the token into access logs, proxy caches and browser
+ * history. `bearerAuthMiddleware` rejects it for exactly that reason
+ * (TestTokenInURL_Ignored). Fetching the body ourselves and handing the browser
+ * an object URL keeps the token in the header where it belongs, and works
+ * against every authenticated route rather than only the ones opted into
+ * `downloadAuthMiddleware`.
+ */
+async function downloadFile(path: string, fallbackName: string): Promise<void> {
+  const token = getToken();
+  const res = await fetch(`/api/v1${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (!res.ok) {
+    let body: ErrorResponse;
+    try {
+      body = (await res.json()) as ErrorResponse;
+    } catch {
+      body = { message: res.statusText, code: String(res.status) };
+    }
+    if (res.status === 401) {
+      window.dispatchEvent(new Event("pulse:auth:401"));
+    }
+    throw new ApiError(res.status, body);
+  }
+
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const match = /filename="?([^";]+)"?/.exec(disposition);
+  const filename = match?.[1] ?? fallbackName;
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ─── Live endpoints ───────────────────────────────────────────────────────────
 
 export const liveApi = {
@@ -164,12 +210,10 @@ export const analyticsApi = {
   },
 
   exportCsv: (params: { from: number; to: number; stream_id?: string; app?: string }) => {
-    const q = new URLSearchParams({ from: String(params.from), to: String(params.to) });
+    const q = new URLSearchParams({ from: String(params.from), to: String(params.to), format: "csv" });
     if (params.stream_id) q.set("stream_id", params.stream_id);
     if (params.app) q.set("app", params.app);
-    const token = getToken();
-    const url = `/api/v1/reports/export?${q}&format=csv${token ? `&token=${token}` : ""}`;
-    window.location.href = url;
+    return downloadFile(`/analytics/audience?${q}`, "audience.csv");
   },
 };
 
@@ -397,7 +441,7 @@ export const reportsApi = {
   deleteSchedule: (id: string) =>
     apiFetch<void>(`/reports/schedules/${id}`, { method: "DELETE" }),
 
-  downloadExport: (params: { from: number; to: number; format: "csv" | "pdf"; app?: string; tenant?: string }) => {
+  downloadExport: (params: { from: number; to: number; format: "csv"; app?: string; tenant?: string }) => {
     const q = new URLSearchParams({
       from: String(params.from),
       to: String(params.to),
@@ -405,9 +449,7 @@ export const reportsApi = {
     });
     if (params.app) q.set("app", params.app);
     if (params.tenant) q.set("tenant", params.tenant);
-    const token = getToken();
-    const url = `/api/v1/reports/export?${q}${token ? `&token=${token}` : ""}`;
-    window.location.href = url;
+    return downloadFile(`/reports/export?${q}`, "usage.csv");
   },
 };
 

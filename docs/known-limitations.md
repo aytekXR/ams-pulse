@@ -509,6 +509,26 @@ for this release.
 
 ---
 
+### LIM-24: PDF export is not implemented (Phase 3 feature)
+
+**What it means for you:** The Reports page offers only CSV export
+(`GET /api/v1/reports/export?format=csv`). The "Export PDF" button
+has been removed. Requesting `format=pdf` returns `501 NOT_IMPLEMENTED`.
+
+**Root cause:** White-label PDF generation is a PRD Phase 3 deliverable
+(`docs/prd-report.md` §7 Phase 3: "white-label PDF, air-gapped licensing").
+It requires a server-side rendering dependency (HTML→PDF) and per-operator
+branding assets that are not yet in scope. Shipping a button that 404s
+is worse than not shipping the button.
+
+**Workaround:** Use CSV export and open in a spreadsheet to generate a PDF
+from there, or use your browser's Print → Save as PDF on the reports page.
+
+**Roadmap:** Phase 3 (PRD §7). No ETA. File a feature request if this is
+blocking your use case.
+
+---
+
 ## Changelog
 
 | Version | Change |
@@ -516,6 +536,7 @@ for this release.
 | D-089 (S27, 2026-07-13) | Initial document — 18 limitations from DG-01–DG-18 + final-assessment §1 + §4 |
 | D-091 (S29, 2026-07-13) | Added LIM-19..LIM-22: Kafka live-validation gap (AV-15), Kafka plaintext-only transport, at-least-once delivery + first-start history replay, first-viewer z-spike intentional ruling; corrected topic name ams-instance-stats → ams-server-events in LIM-01 + LIM-04 with code-derived caveat and AV-15 forward pointer; count 18 → 22 |
 | D-093 (S31, 2026-07-14) | LIM-17 roadmap → Validation status: TC-I-05-SRT PASS (F3, first live SRT run, 2/2 assertions); added LIM-23: SRT streams attributed as RTMP in protocol breakdown (AMS-side publishType="RTMP" fact, F5, live-observed S31); updated product version header; count 22 → 23 |
+| D-094 (S32, 2026-07-14) | Added LIM-24: PDF export not implemented (Phase 3); removed Export PDF button from Reports page; implemented GET /api/v1/reports/export?format=csv; count 23 → 24 |
 
 ---
 

@@ -492,6 +492,17 @@ func (s *Server) buildRouter() {
 		r.Delete("/admin/users/{userId}", s.handleDeleteUser)
 	})
 
+	// Export download route: uses its own auth middleware that also accepts
+	// ?token= so that browser file downloads (window.location.href) work.
+	// A4 security: ?token= is intentionally NOT accepted on normal /api/v1/*
+	// routes (bearerAuthMiddleware enforces this). This group is a deliberate
+	// exception, analogous to the WS upgrade handler — the only two routes
+	// where browsers cannot supply an Authorization header.
+	r.Group(func(r chi.Router) {
+		r.Use(s.downloadAuthMiddleware)
+		r.Get("/api/v1/reports/export", s.handleReportExport)
+	})
+
 	// S11 WO-C: OIDC/SSO auth (non-versioned, no bearer auth required).
 	// Routes are always registered; handlers return 501 when OIDC is not configured.
 	r.Get("/auth/oidc/login", s.handleOIDCLogin)
@@ -646,11 +657,54 @@ func (s *Server) bearerAuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// downloadAuthMiddleware is like bearerAuthMiddleware but additionally accepts a
+// ?token= query parameter as a last resort. It is used only for file-download
+// routes (e.g. GET /api/v1/reports/export) where the browser issues the request
+// via window.location.href and cannot attach an Authorization header.
+//
+// A4 security: normal /api/v1/* routes continue to use bearerAuthMiddleware,
+// which rejects ?token= (TestTokenInURL_Ignored guards this). Only routes
+// explicitly opted into this middleware accept token-in-URL.
+func (s *Server) downloadAuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := extractBearerToken(r)
+		if token == "" {
+			if c, err := r.Cookie("pulse_session"); err == nil {
+				token = c.Value
+			}
+		}
+		if token == "" {
+			token = r.URL.Query().Get("token")
+		}
+		if token == "" {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing or invalid Authorization header")
+			return
+		}
+		tok, err := s.store.LookupToken(r.Context(), token)
+		if err != nil || tok == nil {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid token")
+			return
+		}
+		if tok.ExpiresAt != nil && *tok.ExpiresAt < time.Now().UnixMilli() {
+			writeError(w, http.StatusUnauthorized, "TOKEN_EXPIRED", "token expired")
+			return
+		}
+		if tok.Kind != "api" {
+			writeError(w, http.StatusForbidden, "WRONG_TOKEN_KIND",
+				fmt.Sprintf("this route requires an API token (kind=api); got kind=%q", tok.Kind))
+			return
+		}
+		go s.store.TouchToken(context.Background(), tok.ID)
+		ctx := context.WithValue(r.Context(), ctxTokenKey, tok)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 // extractBearerToken reads the bearer token from the Authorization header only.
 // Query-parameter token (?token=) is intentionally NOT supported here to prevent
 // tokens from leaking into access logs, proxy caches, and browser history.
-// The only exception is the WebSocket upgrade handler (handleLiveWS), which reads
-// ?token= directly because browsers cannot set custom headers on WS connections.
+// The only exception is file-download routes that use downloadAuthMiddleware
+// and the WebSocket upgrade handler (handleLiveWS), which reads ?token= directly.
 func extractBearerToken(r *http.Request) string {
 	auth := r.Header.Get("Authorization")
 	if strings.HasPrefix(auth, "Bearer ") {
