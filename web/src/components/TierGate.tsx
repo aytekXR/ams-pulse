@@ -30,14 +30,14 @@
  *   automatically. ReportsPage was already passing var(--color-secondary) explicitly
  *   and is unaffected.
  *
- * WCAG known gap (not fixable in Wave 0 — requires brandkit token change):
- *   Light-theme CTA: var(--color-on-signal) (#FFFFFF) on var(--color-accent)
- *   (#0BA678) = 3.12:1 at 13px — below 4.5:1 AA for normal text. Pre-existing
- *   from baseline 2f53414 (all three pages had it verbatim); Wave 0 neither
- *   introduced nor fixed it. NO waiver has been granted: the fix needs
- *   tokens.json color.light.accent → #087A59 (5.33:1), and brandkit/ is the
- *   operator's to change (D-071). Filed as operator gap G3
- *   (docs/operator-expected.md) and WAVE-PLAN.md §3 conflict C7 — OPEN.
+ * WCAG light-theme CTA — RESOLVED (G3, operator-approved 2026-07-14):
+ *   The CTA renders var(--color-on-signal) (#FFFFFF) on var(--color-accent). That was
+ *   3.12:1 in light theme — below the 4.5:1 AA bar for normal text — for as long as the
+ *   component existed (pre-existing at baseline 2f53414; Waves 0–2 neither caused nor could
+ *   fix it, because the fix is a brandkit token and brandkit/ is the operator's, D-071).
+ *   The operator approved the change: tokens.json color.light.signal is now #087A59
+ *   (5.33:1 on white) and signalHover is #07684C (6.79:1). The CTA now passes AA in BOTH
+ *   themes — dark was already 8.53:1. Gap G3 is CLOSED.
  *
  * Default descriptionMaxWidth: 400 (ReportsPage + AnomaliesPage)
  * Per-call-site override: 420 (ProbesPage)

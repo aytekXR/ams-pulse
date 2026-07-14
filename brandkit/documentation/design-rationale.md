@@ -37,17 +37,37 @@ AMS-module (not standalone app).
 
 Verified contrast ratios against WCAG 2.1:
 
+All ratios below were **recomputed from the WCAG 2.x sRGB relative-luminance formula** and
+corrected on 2026-07-14 (G5, operator-approved). Several were previously off; one was off by
+enough to **invert its conformance verdict** — see the muted row.
+
 | Pair | Ratio | Level |
 |---|---|---|
-| Text primary #E8EEF4 on bg #0A0E14 | ~16.5:1 | AAA |
-| Text secondary #9FB0C0 on bg #0A0E14 | ~9.1:1 | AAA |
-| Signal #2CE5A7 on bg #0A0E14 | ~12.9:1 | AAA |
-| On-signal ink #0A0E14 on #2CE5A7 (buttons) | ~12.9:1 | AAA |
-| Warning #FFB224 on #0A0E14 | ~10.4:1 | AAA |
-| Critical #FF5C68 on #0A0E14 | ~6.6:1 | AA (large + normal) |
-| Muted #5C6F80 on #0A0E14 | ~4.6:1 | AA — labels/captions only, never body copy |
-| Light theme: #10181F on #F7F9FA | ~16:1 | AAA |
-| Light theme signal #0BA678 on #FFFFFF | ~3.2:1 | Large text/icons + non-text UI only; body links use #087A59 if needed |
+| Text primary #E8EEF4 on bg #0A0E14 | 16.55:1 | AAA |
+| Text secondary #9FB0C0 on bg #0A0E14 | 8.70:1 | AAA |
+| Signal #2CE5A7 on bg #0A0E14 | 11.86:1 | AAA |
+| On-signal ink #0A0E14 on #2CE5A7 (buttons) | 11.86:1 | AAA |
+| Warning #FFB224 on #0A0E14 | 10.73:1 | AAA |
+| Critical #FF5C68 on #0A0E14 | 6.43:1 | AA (large + normal) |
+| **Muted #5C6F80 on #0A0E14** | **3.72:1** | **FAILS AA for normal text.** Large text (≥18.66px bold / ≥24px) and non-text UI only — **never** labels, captions or body copy |
+| Light theme: #10181F on #F7F9FA | 16.96:1 | AAA |
+| Light theme signal #087A59 on #FFFFFF | 5.33:1 | AA (normal text + CTA fill) |
+| Light theme signal-hover #07684C on #FFFFFF | 6.79:1 | AA |
+| Light theme info #1B5EAD on its 10% tint #E8EFF7 | 5.57:1 | AA |
+
+**⚠ The muted row was wrong, and the error was load-bearing.** It previously read `~4.6:1 —
+AA — labels/captions only`. The true ratio is **3.72:1**, which is *below* the 4.5:1 AA bar for
+normal text — so the guidance the row itself gave ("fine for labels/captions") was unsafe:
+labels and captions at 11–13px **are** normal text. Measured on the surfaces the product
+actually uses, `--color-muted` is **3.44:1 (dark) / 4.36:1 (light)** — failing AA everywhere it
+carried text. This is why the §2.19 UI waves replaced it with `textSecondary`
+(**8.03:1 dark / 7.00:1 light**) wherever it set a text colour. `textMuted` remains valid for
+borders, dividers and other non-text UI, where the 3:1 bar applies.
+
+**Rule of thumb this table now encodes:** a colour chosen to satisfy the 3:1 *graphics* bar is
+not automatically safe as *text*. Light-theme `signal`, `healthy`, `warning`, `critical` and
+`info` were all picked as graphic/status hues; only those listed above have been verified for
+text use.
 
 **Color-vision deficiency:** state is never encoded by hue alone. Healthy/warn/critical/offline
 each pair a fixed shape (dot / diamond / triangle / outlined dot) with the color, and warning
