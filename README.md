@@ -24,13 +24,28 @@ Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.4.0**).
 ```sh
 git clone https://github.com/aytekXR/ams-pulse.git && cd ams-pulse
 cp deploy/.env.example deploy/.env
-# edit deploy/.env — PULSE_SECRET_KEY (openssl rand -hex 32), your AMS URL + token
+# edit deploy/.env:
+#   PULSE_SECRET_KEY — generate with: openssl rand -hex 32
+#   PULSE_AMS_URL    — uncomment and set to your AMS REST base URL, e.g. http://10.0.1.10:5080
+#   PULSE_AMS_LOGIN_EMAIL / PULSE_AMS_LOGIN_PASSWORD — AMS admin credentials
 docker compose -p pulse-hardened \
   -f deploy/docker-compose.yml \
   -f deploy/docker-compose.hardened.yml \
+  -f deploy/docker-compose.real-ams.yml \
   --env-file deploy/.env \
   up -d --build
 ```
+
+> **PULSE_AMS_URL is required.** `docker-compose.hardened.yml` defaults to the built-in
+> mock-AMS for local QA; adding `docker-compose.real-ams.yml` (as shown above) routes
+> Pulse to your configured AMS URL instead. If PULSE_AMS_URL is unset, compose will
+> print `PULSE_AMS_URL must be set` and exit — see `deploy/.env.example` for the line
+> to uncomment.
+>
+> After the stack starts the UI is at **https://localhost:8443** (Caddy TLS, local CA —
+> your browser will show a certificate warning on first visit; import the root cert with
+> `docker cp pulse-hardened-caddy-1:/data/caddy/pki/authorities/local/root.crt /tmp/`
+> then add it to your trust store).  HTTP at http://localhost:8080 redirects to HTTPS.
 
 > Full walkthrough (incl. TLS/Caddy exposure, real-AMS wiring, backups — production runs
 > 5 compose overlays): [docs/runbooks/install.md](docs/runbooks/install.md) and

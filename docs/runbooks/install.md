@@ -287,11 +287,23 @@ at 10 s intervals). Pulse will wait for it via the `depends_on: clickhouse: cond
 
 **5. Open the UI and run first-run setup**
 
-Navigate to `http://your-server:8090` in a browser.
+The entry point depends on which compose path you ran:
 
-> With the default `make up` path the dev override publishes the UI on port 80.
-> With explicit `-f` flags the base compose only `expose`s 8090 inside the Docker
-> network — nothing is reachable from the host unless you added a `ports:` binding
+| Path | URL |
+|---|---|
+| **Plain path** (`make up` / `cd deploy && docker compose up -d`) | `http://your-server` (port 80, published on all interfaces by the dev override) or `http://localhost:8090` (loopback-only debug binding) |
+| **Hardened path** (README Quick Start — base + hardened + real-ams overlays) | **`https://localhost:8443`** (Caddy TLS terminator, loopback only). HTTP `http://localhost:8080` issues a 308 redirect to port 8443. |
+
+> **Hardened path — browser certificate warning (local CA):** Caddy issues a certificate
+> from its built-in local CA (`tls internal` in `deploy/config/Caddyfile`). To trust it:
+> ```sh
+> docker cp pulse-hardened-caddy-1:/data/caddy/pki/authorities/local/root.crt /tmp/
+> ```
+> Import `/tmp/root.crt` into your OS or browser trust store.  For production with a real
+> domain, follow `productionize.md` to switch to Let's Encrypt.
+>
+> With explicit `-f` flags (no override) the base compose only `expose`s 8090 inside the
+> Docker network — nothing is reachable from the host unless you added a `ports:` binding
 > (the image-pin example above binds `127.0.0.1:8090`) or fronted the stack with a
 > reverse proxy (see `productionize.md`).
 

@@ -29,6 +29,7 @@ services:
       PULSE_CLICKHOUSE_DATABASE: "pulse"
       PULSE_MIGRATIONS_DIR: "/contracts/db/clickhouse"
       PULSE_META_DSN: "/tmp/pulse_meta.db"
+      PULSE_SECRET_KEY: "${PULSE_SECRET_KEY:-}"
     volumes:
       - ../contracts:/contracts:ro
     depends_on:
