@@ -219,7 +219,8 @@ td[data-numeric] {
  * the element itself — confirmed readable in both themes per design-rationale §2.
  * ------------------------------------------------------------------------- */
 .tier-gate-cta:focus-visible,
-.tabs-btn:focus-visible {
+.tabs-btn:focus-visible,
+.filter-input:focus-visible {
   outline: 2px solid var(--color-link);
   outline-offset: 2px;
 }
