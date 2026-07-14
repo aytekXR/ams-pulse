@@ -1,3 +1,253 @@
+# Operator TODO — the items only YOU can do (updated 2026-07-14, D-095 — G3/G5/G6 APPLIED)
+
+## ⚡ TL;DR — G3, G5 and G6 are DONE. One new item (G7) needs you.
+
+> **You said "apply the G3/G5/G6 token fixes" — they are applied, verified and guarded.**
+>
+> | Gap | Was | Now |
+> |---|---|---|
+> | **G3** light "Upgrade License" CTA | 3.12:1 — **fails AA** | **5.33:1 — passes** (`color.light.signal` → `#087A59`) |
+> | **G6** light *info* Badge | 2.32:1 — **fails AA** | **5.57:1 — passes** (new `color.light.info` → `#1B5EAD`) |
+> | **G5** your WCAG table's muted row | claimed `~4.6:1 — AA` | **corrected to 3.72:1 — FAILS AA for normal text** |
+>
+> **One thing I changed that you did NOT explicitly approve — please sanity-check it.**
+> Your `signalHover` (`#099168`) was **already failing AA at 3.99:1**, and once the base signal
+> darkened to `#087A59`, the old hover became **lighter than the resting state** — which inverts
+> the hover affordance *and* drops the button back below AA the moment someone hovers it.
+> Shipping G3 without touching hover would have been a half-fix that still fails the gate, so I
+> darkened it to **`#07684C` (6.79:1)**. If you'd rather pick a different green, say so and I'll
+> swap it — everything else stands.
+>
+> **A guard now exists so G5 cannot happen again.** The contrast ratios are **recomputed from
+> `tokens.json` on every test run** (20 assertions). A hand-maintained table of ratios drifts
+> from the hexes it describes — that is exactly how the muted row went wrong. Now an AA failure
+> is a failing test, not a stale number in a document.
+>
+> ### ⛔ NEW — G7: three MORE badges fail AA in light theme (same defect class)
+>
+> Found while doing the above. It is not just *info*:
+>
+> | Light-theme Badge | Contrast (text on its own tint) | |
+> |---|---|---|
+> | success `#0BA678` | **2.73:1** | fails AA |
+> | warning `#B45309` | **4.25:1** | fails AA |
+> | error `#DC2626` | **4.13:1** | fails AA |
+>
+> (Dark theme is fine: 8.73 / 8.05 / 5.41.)
+>
+> **The root cause is systemic:** your light status colours were chosen to clear the **3:1
+> graphics** bar, and the Badge then uses them as **text**, which needs **4.5:1**.
+>
+> Fixing this needs **three new brandkit colour values — that is your call, not mine.** I did not
+> invent them. Say the word and I'll apply darker text variants (keeping the tints), or you can
+> supply the hexes.
+>
+> ### ⏰ Still the only real risk
+>
+> **Your AMS license expires 2026-07-27T13:45Z (13 days).** A lapse **plus the next restart of
+> `antmedia`** kills ALL ingest — both halves proven (D-092/D-093). Renew before 07-27.
+>
+> ### Still open (unchanged)
+>
+> - **G1** — do you support mobile viewports on form pages? (iOS zooms inputs under 16px.)
+>   Also decides **G4**.
+> - **G4** — touch targets: your `minTouchTarget=44` is **WCAG AAA**; the **AA** bar is 24×24,
+>   which your ~28px buttons already pass. Enforcing 44 makes every button visibly taller and
+>   fights your own desktop-density spec. Enforce it, or record 24×24 as the floor?
+> - **G2** — icon library (Phosphor / Lucide / stay iconless).
+> - **Marketplace:** GHCR public flip (~30 s — until then nobody can `docker pull`), trial-key
+>   mint, final-assessment review, Ant Media contact, Pro MaxNodes ruling (PRD says 1–2, code
+>   enforces 10), matbu/evrak vhost ruling.
+> - **Two design questions:** should Analytics' totals cards match the Live dashboard's larger
+>   ones? And an Ingest drop-chip is tinted `rgba(224,82,82,…)` — a red that is **in no token at
+>   all**, looks like drift from an older palette. Align it?
+>
+> ---
+>
+> ## (superseded) previous header follows
+
+# Operator TODO — the items only YOU can do (updated at SESSION-33 close, D-095, 2026-07-14)
+
+## ⚡ TL;DR — expected from you right now (2026-07-14 — §2.19 UI REFACTOR IS COMPLETE)
+
+> **The entire UI refactor is done — all six waves (0–5) have landed.** Every page now takes
+> its colours and spacing from your brandkit tokens instead of hardcoded values. 599 web tests
+> green, full browser suite green.
+>
+> ### ⛔ ONE THING BLOCKS THE MERGE — and only you can clear it
+>
+> **Branch `s33-uipro-wave2` (PR #47) cannot merge: branch protection requires 9 CI checks,
+> and `--admin` override is refused.** You asked me to skip CI and deliver fast — I can skip
+> *waiting* on CI, but I cannot skip it *at merge time*. Your options:
+> 1. **Let the checks run** and merge normally (they take ~8 minutes), or
+> 2. **Temporarily relax branch protection** on `main` and I'll merge immediately, or
+> 3. Merge it yourself from the GitHub UI with an admin override.
+>
+> Everything is pushed and waiting. Nothing else blocks.
+>
+> ### ⏰ THE ONE WITH A CLOCK (unchanged)
+>
+> **Your AMS license expires 2026-07-27T13:45Z (13 days).** A lapse alone is survivable; a
+> lapse **plus the next restart of `antmedia`** kills ALL ingest — both halves proven with
+> evidence (D-092/D-093). Renew before 07-27 and nothing else is needed.
+>
+> ### Six design rulings — all `tokens.json`/brandkit, so all yours (D-071)
+>
+> The UI is done *except* for these. None blocked the work; each is a one-value change.
+>
+> - **G5 — YOUR WCAG TABLE HAS A WRONG NUMBER, and it is load-bearing.**
+>   `brandkit/documentation/design-rationale.md` §2 says *"Muted #5C6F80 on #0A0E14 — ~4.6:1 —
+>   AA, labels/captions only"*. The real ratio is **3.72:1** — **below the 4.5:1 AA bar for
+>   normal text**. So the table's own advice ("fine for labels/captions") is unsafe: labels and
+>   captions at 11–12px *are* normal text. Measured on the app's real surfaces, `--color-muted`
+>   is **3.44:1 dark / 4.36:1 light**. This is why the waves replaced it with
+>   `--color-secondary` (8.03:1 / 7.00:1) everywhere it carried text. **Those fixes were right;
+>   the table is what needs correcting** — and every future design decision reads that table.
+> - **G4 — touch targets: a real fork.** `tokens.json layout.minTouchTarget = 44` is **WCAG
+>   AAA**; the **AA** bar is **24×24**, which your ~28px buttons already pass. Enforcing 44
+>   makes **every button visibly taller**, fighting your own desktop-density spec ("Tables:
+>   40px rows" — a NOC product). It also depends on **G1**. I **deferred** it rather than
+>   silently retheme your UI inside a refactor meant to move zero pixels.
+>   **Your call:** enforce 44 (looser, taller UI), or keep the compact density and record
+>   24×24 as the floor?
+> - **G3** — the "Upgrade License" CTA fails AA in light theme (3.12:1). Fix:
+>   `tokens.json color.light.accent` → `#087A59` (5.33:1).
+> - **G6** — the *info* Badge fails AA in light theme (**2.32:1**): `--color-info` (`#58A6FF`)
+>   is deliberately not overridden for light, so it renders pale-blue on pale-blue. Fix: add a
+>   `color.light.info` token (≈`#1B5EAD`).
+> - **G1** — do you support mobile viewports on form pages? (iOS zooms inputs under 16px; your
+>   body token is 14px.) Also feeds G4.
+> - **G2** — icon library: Phosphor, Lucide, or stay iconless? (The onboarding checkmark is a
+>   plain inline `<svg>` for now — no dependency was added while this is open.)
+>
+> Say **"apply the G3/G5/G6 token fixes"** and they land immediately.
+>
+> ### Two design questions (not bugs)
+>
+> - **Analytics' four totals cards are visually smaller** than the Live dashboard's (14px
+>   padding / 24px number vs 24px / 40px, and they ignore your density modes). The refactor
+>   **preserved that difference exactly** rather than "unify" it — that is a look-and-feel call.
+>   Should they match?
+> - **A drop-event chip on the Ingest page is tinted `rgba(224,82,82,…)`** — a red that **is
+>   not in your brandkit at all** (not `#FF5C68`, not `#DC2626`). It looks like drift from an
+>   older palette. Left untouched rather than silently retinted. Want it aligned?
+>
+> ### Still waiting on you (marketplace — unchanged)
+>
+> 1. **GHCR public flip** (~30 s) — until then no customer can `docker pull`.
+> 2. **Trial-key mint** (needs your vault privkey).
+> 3. **Final-assessment review** — gates the marketplace upload.
+> 4. **Ant Media marketplace contact.**
+> 5. **Pro MaxNodes ruling** — PRD says 1–2, code enforces 10.
+> 6. **matbu/evrak vhost ruling** — live prod serves `matbu.beyondkaira.com` from an on-disk
+>    Caddyfile block that `origin/main` lacks (it embeds your bcrypt hash; the repo is public).
+>    A clean-checkout redeploy would drop that site. Sessions keep hands off it.
+>
+> ### FYI, no action needed — what this session found
+>
+> - **The previous session shipped a tree it never committed.** S32's PR was still open, and
+>   its branch was missing a CSS rule that its own code comment and tests both promised. Its
+>   green test run had measured a file that never entered git. Fixed, with a guard that now
+>   pins both halves of every styling-class↔stylesheet contract.
+> - **Five of your six Settings tabs were unreachable by keyboard.** A hand-rolled tab bar
+>   announced itself as tabs and took the inactive ones out of the tab order, but had no arrow
+>   handler to reach them. Now uses the shared component, which has real keyboard navigation.
+> - **Your alert forms announced every validation error twice** to screen readers (the message
+>   was in the DOM twice). Fixed.
+> - **~16 tests that could never fail were deleted or rewritten.** They asserted things the
+>   test file computed itself, never rendering the app. One insisted the "healthy memory" bar
+>   is green while the app deliberately paints it **blue**.
+> - **One agent broke working code to satisfy a bad test it had just written** (it would have
+>   changed an icon's colour in light theme). Caught and reverted. A gate that makes the
+>   product worse is a bug, not a gate.
+>
+> ---
+>
+> ## (superseded) S33-Wave-2 header follows
+
+# Operator TODO — the items only YOU can do (updated at SESSION-33 close, D-095, 2026-07-14; rides S33's PR)
+
+## ⚡ TL;DR — expected from you right now (2026-07-14, SESSION-33 closed — D-095, §2.19 Wave 2 landed)
+
+> **Nothing is blocking the work. S33 ran fully autonomously.** But your list grew by
+> **three design rulings** — and one of them is that **your brandkit's own accessibility
+> table has a wrong number in it**, which I verified rather than assumed. Details below.
+>
+> **⏰ The one with a clock, unchanged and still the only real risk:**
+> **your AMS license expires 2026-07-27T13:45Z (13 days).** A lapse alone is survivable;
+> a lapse **plus the next restart of `antmedia`** kills ALL ingest, and both halves of that
+> are proven with evidence (D-092, D-093). Renew before 07-27 and nothing else is needed.
+>
+> ### Still waiting on you (in the order that unblocks the most)
+>
+> 1. **GHCR public flip** (~30 seconds) — until then no customer can `docker pull`.
+> 2. **G5 — YOUR WCAG TABLE IS WRONG (new, and it is load-bearing).**
+>    `brandkit/documentation/design-rationale.md` §2 says
+>    *"Muted #5C6F80 on #0A0E14 — ~4.6:1 — AA, labels/captions only"*.
+>    The real ratio, recomputed from the WCAG formula, is **3.72:1**. That is **below the
+>    4.5:1 AA bar for normal text** — so the rule the table itself states ("fine for
+>    labels/captions") is not safe: labels and captions at 11–12px *are* normal text.
+>    On the surfaces the app actually uses, `--color-muted` measures **3.44:1 dark /
+>    4.36:1 light** — failing AA everywhere it carried text.
+>    This is exactly why Waves 0 and 2 replaced `--color-muted` with `--color-secondary`
+>    (8.03:1 / 7.00:1) wherever it was used for text. **Those fixes were right; the table is
+>    what needs correcting.** That table is binding on every future wave, so a wrong number
+>    in it will keep producing wrong decisions. **Please fix the ratio** (and, if you like,
+>    restate what muted may legitimately be used for — on today's values, large text or
+>    non-text UI only). brandkit is yours; no session will edit it.
+> 3. **G4 — touch targets: a real design fork (new).** Your `tokens.json` says
+>    `layout.minTouchTarget = 44`. That 44 figure is **WCAG AAA**; the **AA** requirement is
+>    **24×24**, which your current ~28px buttons already pass. So enforcing 44 is *exceeding*
+>    AA, not reaching it — and it isn't free: **every button on every page gets visibly
+>    taller**, which fights your own desktop-density spec ("Tables: 40px rows, 13px text" —
+>    a NOC/ops product). It also depends on **G1**: if you don't support mobile, most of the
+>    argument for 44 goes away. Wave 2 **deferred** it rather than silently retheme your UI
+>    inside a refactor that was supposed to move zero pixels.
+>    **Your call:** enforce 44 everywhere (accepting a looser, taller UI), or keep the compact
+>    desktop density and record 24×24 as the floor?
+> 4. **G3 (unchanged) + G6 (new) — two one-value token fixes, both yours to authorise:**
+>    - **G3:** the "Upgrade License" CTA fails AA in light theme (3.12:1). Fix:
+>      `tokens.json color.light.accent` → `#087A59` (5.33:1).
+>    - **G6:** the *info* Badge fails AA in light theme (**2.32:1**) — `--color-info`
+>      (`#58A6FF`) is deliberately not overridden for light, so it renders pale-blue-on-pale-blue.
+>      Fix: add a `color.light.info` token (≈`#1B5EAD` reaches AA).
+>    Say **"apply the G3/G5/G6 token fixes"** and they land in the next wave.
+> 5. **Trial-key mint** (needs your vault privkey), **final-assessment review** (gates the
+>    marketplace upload), **Ant Media marketplace contact**, **Pro MaxNodes ruling**
+>    (PRD says 1–2, code enforces 10).
+> 6. **matbu/evrak vhost ruling** — live prod serves `matbu.beyondkaira.com` from an on-disk
+>    Caddyfile block that `origin/main` lacks (it embeds your bcrypt hash and the repo is
+>    public). A clean-checkout redeploy would drop that site. Sessions keep hands off it.
+> 7. **G1** (do you support mobile viewports on form pages?) and **G2** (icon library:
+>    Phosphor vs Lucide vs stay-iconless). Neither blocks anything yet; G1 now also feeds G4.
+> 8. **A design question, not a bug:** Analytics' four totals cards are visually smaller than
+>    the Live dashboard's (14px padding / 24px number vs 24px / 40px, and they don't respond
+>    to your density modes). Wave 2 preserved that difference exactly rather than "unify" it,
+>    because changing it is a look-and-feel decision. **Should they match the Live cards?**
+>
+> ### FYI, no action needed — what S33 did autonomously
+>
+> - **Caught a bug in how the LAST session shipped.** S32's pull request was still open, and
+>   it was missing a line: the code said "the focus ring for these inputs comes from
+>   global.css" and the tests said "yes, the class is there" — but **the actual CSS rule was
+>   never committed.** S32's tests had passed against a file on disk that never made it into
+>   git. So the QoE filter boxes would have shipped with no focus ring, behind a comment and
+>   two tests promising one. Fixed, and there is now a test that checks **both halves** —
+>   every styling class must have a real rule behind it, and every rule must have a user.
+> - **The second UI wave landed** (Analytics + Fleet now take their chart colours and spacing
+>   from your brandkit tokens; the Fleet cards/table switch became a proper shared component
+>   with real keyboard support).
+> - **Deleted 12 tests that could never fail.** They checked that your colour palette says
+>   what your colour palette says — they never rendered the page. One of them was worse: it
+>   asserted the "healthy memory" bar is green, while the app deliberately paints it **blue**
+>   (memory is a secondary metric, not a health signal). It was pinning a value the app never
+>   uses. Replaced with tests that read the actual rendered colour, and proven to fail when
+>   the app is deliberately broken.
+>
+> ---
+>
+> ## (superseded) S32-close header follows
+
 # Operator TODO — the items only YOU can do (updated at SESSION-32 close, D-094, 2026-07-14; rides S32's PR)
 
 ## ⚡ TL;DR — expected from you right now (2026-07-14, SESSION-32 closed — D-094, §2.19 Wave 1 landed)

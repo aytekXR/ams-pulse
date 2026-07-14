@@ -58,9 +58,20 @@ export interface TabsProps {
   tabs: TabItem[];
   activeTab: string;
   onTabChange: (id: string) => void;
+  /**
+   * Allow the tab strip to wrap onto multiple rows (Wave 4 — SettingsPage has six
+   * tabs and overflows a narrow viewport).
+   *
+   * This prop exists so SettingsPage can use THIS component instead of a hand-rolled
+   * copy. The copy it replaces had `role="tab"` and a roving tabIndex but no key
+   * handler — which does not merely under-deliver on the ARIA contract, it makes every
+   * inactive tab unreachable by keyboard (tabIndex=-1 removes them from the tab order,
+   * and no arrow handler puts them back).
+   */
+  wrap?: boolean;
 }
 
-export function Tabs({ tabs, activeTab, onTabChange }: TabsProps) {
+export function Tabs({ tabs, activeTab, onTabChange, wrap = false }: TabsProps) {
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   function handleKeyDown(e: KeyboardEvent<HTMLButtonElement>, index: number) {
@@ -92,6 +103,7 @@ export function Tabs({ tabs, activeTab, onTabChange }: TabsProps) {
       role="tablist"
       style={{
         display: "flex",
+        ...(wrap ? { flexWrap: "wrap" as const } : {}),
         gap: 0,
         borderBottom: "1px solid var(--color-border)",
       }}
@@ -120,6 +132,7 @@ export function Tabs({ tabs, activeTab, onTabChange }: TabsProps) {
               cursor: "pointer",
               fontSize: 13,
               fontWeight: isActive ? 600 : 400,
+              whiteSpace: "nowrap",
             }}
           >
             {item.label}

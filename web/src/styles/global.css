@@ -112,8 +112,14 @@
   --color-secondary:    #4A5B6B;
   --color-muted:        #6B7B88;
   --color-neutral:      #64748B;
-  --color-accent:       #0BA678;
-  --color-accent-hover: #099168;
+  /* G3 (operator-approved 2026-07-14): signal was #0BA678 — white-on-signal is 3.12:1,
+   * below the 4.5:1 AA bar the brandkit's own WCAG table requires. Now #087A59 = 5.33:1.
+   * signalHover follows it down: the old #099168 was 3.99:1 (already failing AA) and, against
+   * the new base, would have been LIGHTER than the resting state — inverting the affordance
+   * and dropping the CTA back below AA on hover. #07684C = 6.79:1.
+   * --color-success stays #0BA678: it is a status GRAPHIC (3:1 bar), not a text/CTA colour. */
+  --color-accent:       #087A59;
+  --color-accent-hover: #07684C;
   --color-on-signal:    #FFFFFF;
   --color-success:      #0BA678;
   /* warning in light uses B-scale amber for accessible contrast (tokens.json) */
@@ -121,17 +127,22 @@
   --color-error:        #DC2626;
   --color-error-bg:     rgba(220,38,38,0.1);
 
-  /* Accent RGB triplet for light signal #0BA678 */
-  --color-accent-rgb:   11,166,120;
+  /* Accent RGB triplet for light signal #087A59 (G3) */
+  --color-accent-rgb:   8,122,89;
 
   /* Body link: #087A59 per design-rationale §2 (light signal on white ~3.2:1
    * is large-text/icons only; body links need the darker value for AA body) */
   --color-link:         #087A59;
 
   /* Badge semantic backgrounds — light-tuned.
-   * --color-info/--color-info-bg intentionally NOT overridden: info is
-   * dataviz[1] (#58A6FF), theme-invariant like --chart-* (tokens.json has
-   * no light 'info' key — inheriting :root avoids inventing a value). */
+   *
+   * G6 (operator-approved 2026-07-14): --color-info IS now overridden for light.
+   * The old note said inheriting dataviz[1] (#58A6FF) "avoids inventing a value" — but the
+   * consequence was an info Badge rendering #58A6FF text on a 10% tint of itself over white:
+   * 2.32:1, far below AA. tokens.json now carries an explicit color.light.info (#1B5EAD),
+   * so the value is the operator's, not invented here. #1B5EAD on its own tint = 5.57:1. */
+  --color-info:         #1B5EAD;
+  --color-info-bg:      rgba(27,94,173,0.10);
   --color-success-bg:   rgba(11,166,120,0.12);
   --color-warning-bg:   rgba(180,83,9,0.12);
 }
@@ -213,16 +224,43 @@ td[data-numeric] {
 
 /* -------------------------------------------------------------------------
  * Shared-component focus rings (Wave 0 — a11y, non-pixel change)
- * Both classes use var(--color-link) so the ring colour is always the
+ * All classes use var(--color-link) so the ring colour is always the
  * accessible link colour for the active theme (dark: #4FEDB9 / light: #087A59).
  * outline-offset: 2px lands the ring on the card/page background, not on
  * the element itself — confirmed readable in both themes per design-rationale §2.
+ *
+ * A class here is a CONTRACT: the component sets the bare className, this rule
+ * supplies the ring. Nothing in TypeScript ties the two together, so
+ * styles/__tests__/focus-rings.test.ts pins both halves — a className with no
+ * rule is a false a11y promise, a rule with no className is dead CSS.
+ * Wave 2 adds .seg-btn (SegmentedControl), .btn-secondary and .picker-btn.
  * ------------------------------------------------------------------------- */
 .tier-gate-cta:focus-visible,
 .tabs-btn:focus-visible,
-.filter-input:focus-visible {
+.filter-input:focus-visible,
+.seg-btn:focus-visible,
+.btn-secondary:focus-visible,
+.picker-btn:focus-visible {
   outline: 2px solid var(--color-link);
   outline-offset: 2px;
+}
+
+/* -------------------------------------------------------------------------
+ * Screen-reader-only text (Wave 2 — colour-not-only compliance).
+ * Conveys state that is otherwise encoded in colour alone (e.g. the LoadBar
+ * fill hue, which is the only cue distinguishing a healthy node from a
+ * critical one). Visually removed, still in the accessibility tree.
+ * ------------------------------------------------------------------------- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Scrollbar (webkit) */

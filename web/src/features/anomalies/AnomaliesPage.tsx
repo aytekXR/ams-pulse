@@ -91,7 +91,7 @@ function AnomalyRow({ flag }: AnomalyRowProps) {
         style={{
           padding: "10px 12px",
           fontSize: 12,
-          color: "var(--color-muted)",
+          color: "var(--color-secondary)",
           maxWidth: 200,
           overflow: "hidden",
           textOverflow: "ellipsis",
@@ -109,8 +109,8 @@ function AnomalyRow({ flag }: AnomalyRowProps) {
         <span
           style={{
             fontSize: 11,
-            color: "var(--color-muted)",
-            marginLeft: 4,
+            color: "var(--color-secondary)",
+            marginLeft: "var(--space-1)",
           }}
         >
           (expected {flag.expected.toFixed(2)})
@@ -127,7 +127,7 @@ function AnomalyRow({ flag }: AnomalyRowProps) {
               ? "var(--color-error)"
               : delta < 0
                 ? "var(--color-info)"
-                : "var(--color-muted)",
+                : "var(--color-secondary)",
           fontFamily: "var(--font-mono)",
         }}
       >
@@ -162,7 +162,7 @@ function AnomalyRow({ flag }: AnomalyRowProps) {
         style={{
           padding: "10px 12px",
           fontSize: 11,
-          color: "var(--color-muted)",
+          color: "var(--color-secondary)",
           whiteSpace: "nowrap",
         }}
       >
@@ -279,7 +279,7 @@ export function AnomaliesPage() {
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 16,
+          gap: "var(--space-4)",
           marginBottom: 20,
         }}
       >
@@ -287,10 +287,10 @@ export function AnomaliesPage() {
           Anomaly Detection
         </h1>
         {/* Sigma selector */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: 13 }}>
           <label
             htmlFor="min-sigma-select"
-            style={{ color: "var(--color-muted)", fontWeight: 500 }}
+            style={{ color: "var(--color-secondary)", fontWeight: 500 }}
           >
             Sensitivity:
           </label>
@@ -303,7 +303,7 @@ export function AnomaliesPage() {
               border: "1px solid var(--color-border)",
               borderRadius: 4,
               color: "var(--color-text)",
-              padding: "4px 8px",
+              padding: "var(--space-1) var(--space-2)",
               fontSize: 13,
               cursor: "pointer",
             }}
@@ -363,7 +363,7 @@ export function AnomaliesPage() {
             overflow: "hidden",
           }}
         >
-          <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--color-border)", fontSize: 12, color: "var(--color-muted)" }}>
+          <div style={{ padding: "var(--space-3) var(--space-4)", borderBottom: "1px solid var(--color-border)", fontSize: 12, color: "var(--color-secondary)" }}>
             {flags.length} flag{flags.length !== 1 ? "s" : ""} · sensitivity σ ≥ {minSigma}
           </div>
           <div style={{ overflowX: "auto" }}>
@@ -375,11 +375,11 @@ export function AnomaliesPage() {
                 <tr style={{ background: "var(--color-surface-2)" }}>
                   <th
                     style={{
-                      padding: "8px 12px",
+                      padding: "var(--space-2) var(--space-3)",
                       textAlign: "left",
                       fontSize: 11,
                       fontWeight: 600,
-                      color: "var(--color-muted)",
+                      color: "var(--color-secondary)",
                       textTransform: "uppercase",
                       letterSpacing: "0.06em",
                     }}
@@ -388,11 +388,11 @@ export function AnomaliesPage() {
                   </th>
                   <th
                     style={{
-                      padding: "8px 12px",
+                      padding: "var(--space-2) var(--space-3)",
                       textAlign: "left",
                       fontSize: 11,
                       fontWeight: 600,
-                      color: "var(--color-muted)",
+                      color: "var(--color-secondary)",
                       textTransform: "uppercase",
                       letterSpacing: "0.06em",
                     }}
@@ -401,11 +401,11 @@ export function AnomaliesPage() {
                   </th>
                   <th
                     style={{
-                      padding: "8px 12px",
+                      padding: "var(--space-2) var(--space-3)",
                       textAlign: "right",
                       fontSize: 11,
                       fontWeight: 600,
-                      color: "var(--color-muted)",
+                      color: "var(--color-secondary)",
                       textTransform: "uppercase",
                       letterSpacing: "0.06em",
                     }}
@@ -414,11 +414,11 @@ export function AnomaliesPage() {
                   </th>
                   <th
                     style={{
-                      padding: "8px 12px",
+                      padding: "var(--space-2) var(--space-3)",
                       textAlign: "right",
                       fontSize: 11,
                       fontWeight: 600,
-                      color: "var(--color-muted)",
+                      color: "var(--color-secondary)",
                       textTransform: "uppercase",
                       letterSpacing: "0.06em",
                     }}
@@ -427,11 +427,11 @@ export function AnomaliesPage() {
                   </th>
                   <th
                     style={{
-                      padding: "8px 12px",
+                      padding: "var(--space-2) var(--space-3)",
                       textAlign: "right",
                       fontSize: 11,
                       fontWeight: 600,
-                      color: "var(--color-muted)",
+                      color: "var(--color-secondary)",
                       textTransform: "uppercase",
                       letterSpacing: "0.06em",
                     }}
@@ -440,11 +440,11 @@ export function AnomaliesPage() {
                   </th>
                   <th
                     style={{
-                      padding: "8px 12px",
+                      padding: "var(--space-2) var(--space-3)",
                       textAlign: "left",
                       fontSize: 11,
                       fontWeight: 600,
-                      color: "var(--color-muted)",
+                      color: "var(--color-secondary)",
                       textTransform: "uppercase",
                       letterSpacing: "0.06em",
                     }}
@@ -453,11 +453,11 @@ export function AnomaliesPage() {
                   </th>
                   <th
                     style={{
-                      padding: "8px 12px",
+                      padding: "var(--space-2) var(--space-3)",
                       textAlign: "left",
                       fontSize: 11,
                       fontWeight: 600,
-                      color: "var(--color-muted)",
+                      color: "var(--color-secondary)",
                       textTransform: "uppercase",
                       letterSpacing: "0.06em",
                     }}

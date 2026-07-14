@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import type { AlertChannel, AlertChannelWrite } from "@/lib/api/types";
 
 interface Props {
@@ -23,18 +23,31 @@ export function AlertChannelForm({ initial, onSave, onCancel }: Props) {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const validate = () => {
+  // Refs for auto-focus on first invalid field after submit failure.
+  const nameRef = useRef<HTMLInputElement>(null);
+  const emailToRef = useRef<HTMLInputElement>(null);
+  const webhookUrlRef = useRef<HTMLInputElement>(null);
+
+  // Returns the error map and calls setErrors.
+  const validate = (): Record<string, string> => {
     const errs: Record<string, string> = {};
     if (!name.trim()) errs.name = "Name is required";
     if (type === "email" && !emailTo.trim()) errs.emailTo = "Email address required";
     if ((type === "slack" || type === "webhook") && !webhookUrl.trim()) errs.webhookUrl = "URL required";
     setErrors(errs);
-    return Object.keys(errs).length === 0;
+    return errs;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
+    const errs = validate();
+    if (Object.keys(errs).length > 0) {
+      // Auto-focus the first invalid field so keyboard/AT users land on it.
+      if (errs.name) nameRef.current?.focus();
+      else if (errs.emailTo) emailToRef.current?.focus();
+      else if (errs.webhookUrl) webhookUrlRef.current?.focus();
+      return;
+    }
     setSaving(true);
     try {
       // AlertChannelConfig discriminated union — build per selected type
@@ -63,25 +76,36 @@ export function AlertChannelForm({ initial, onSave, onCancel }: Props) {
   const labelStyle: React.CSSProperties = {
     fontSize: 12,
     fontWeight: 500,
-    color: "var(--color-muted)",
+    color: "var(--color-secondary)",
     display: "flex",
     flexDirection: "column",
-    gap: 4,
+    gap: "var(--space-1)",
   };
 
   return (
     <form onSubmit={(e) => void handleSubmit(e)} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Each inline field error IS its own live region (role="alert"). An earlier draft
+          also mirrored every message into a separate sr-only aria-live div, duplicating the
+          text in the DOM and making screen readers announce each error twice. */}
+
       <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>{initial ? "Edit channel" : "New notification channel"}</h3>
 
       <label style={labelStyle}>
         Channel name *
         <input
+          ref={nameRef}
           style={{ ...inputStyle, borderColor: errors.name ? "var(--color-error)" : "var(--color-border)" }}
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Ops team Slack"
+          aria-invalid={errors.name ? true : undefined}
+          aria-describedby={errors.name ? "ch-name-error" : undefined}
         />
-        {errors.name && <span style={{ fontSize: 11, color: "var(--color-error)" }}>{errors.name}</span>}
+        {errors.name && (
+          <span id="ch-name-error" role="alert" style={{ fontSize: 11, color: "var(--color-error)" }}>
+            {errors.name}
+          </span>
+        )}
       </label>
 
       <label style={labelStyle}>
@@ -95,13 +119,20 @@ export function AlertChannelForm({ initial, onSave, onCancel }: Props) {
         <label style={labelStyle}>
           To address *
           <input
+            ref={emailToRef}
             type="email"
             style={{ ...inputStyle, borderColor: errors.emailTo ? "var(--color-error)" : "var(--color-border)" }}
             value={emailTo}
             onChange={(e) => setEmailTo(e.target.value)}
             placeholder="alerts@example.com"
+            aria-invalid={errors.emailTo ? true : undefined}
+            aria-describedby={errors.emailTo ? "ch-email-error" : undefined}
           />
-          {errors.emailTo && <span style={{ fontSize: 11, color: "var(--color-error)" }}>{errors.emailTo}</span>}
+          {errors.emailTo && (
+            <span id="ch-email-error" role="alert" style={{ fontSize: 11, color: "var(--color-error)" }}>
+              {errors.emailTo}
+            </span>
+          )}
         </label>
       )}
 
@@ -109,32 +140,39 @@ export function AlertChannelForm({ initial, onSave, onCancel }: Props) {
         <label style={labelStyle}>
           {type === "slack" ? "Slack webhook URL *" : "Webhook URL *"}
           <input
+            ref={webhookUrlRef}
             type="url"
             style={{ ...inputStyle, borderColor: errors.webhookUrl ? "var(--color-error)" : "var(--color-border)" }}
             value={webhookUrl}
             onChange={(e) => setWebhookUrl(e.target.value)}
             placeholder="https://hooks.slack.com/services/…"
+            aria-invalid={errors.webhookUrl ? true : undefined}
+            aria-describedby={errors.webhookUrl ? "ch-webhook-error" : undefined}
           />
-          {errors.webhookUrl && <span style={{ fontSize: 11, color: "var(--color-error)" }}>{errors.webhookUrl}</span>}
+          {errors.webhookUrl && (
+            <span id="ch-webhook-error" role="alert" style={{ fontSize: 11, color: "var(--color-error)" }}>
+              {errors.webhookUrl}
+            </span>
+          )}
         </label>
       )}
 
       {(type === "pagerduty" || type === "telegram") && (
-        <p style={{ margin: 0, fontSize: 12, color: "var(--color-muted)" }}>
+        <p style={{ margin: 0, fontSize: 12, color: "var(--color-secondary)" }}>
           Configure via environment variables — see documentation.
         </p>
       )}
 
-      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 4 }}>
+      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: "var(--space-1)" }}>
         <button
           type="button"
           onClick={onCancel}
           style={{
             background: "var(--color-surface-2)",
             border: "1px solid var(--color-border)",
-            color: "var(--color-muted)",
+            color: "var(--color-secondary)",
             borderRadius: 6,
-            padding: "8px 16px",
+            padding: "var(--space-2) var(--space-4)",
             cursor: "pointer",
             fontSize: 13,
           }}

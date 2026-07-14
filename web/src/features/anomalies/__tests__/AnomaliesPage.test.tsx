@@ -4,65 +4,21 @@
  *  - Tier-gated view (Enterprise required vs not)
  *  - Empty state when no anomalies
  *  - Sigma severity styling
- *  - Sensitivity selector changes query param
+ *  - Sensitivity selector a11y
+ *  - Wave 3 — color token and spacing source-read pins
+ *
+ * NOTE: Earlier versions of this file contained two tautological describe
+ * blocks — "AnomaliesPage tier gate logic" and "Anomaly sigma severity" —
+ * which tested functions defined *in the test file itself*, never the rendered
+ * component. Those were deleted per Rule 9. The same scenarios are covered
+ * by the render-level tests below (enterprise/non-enterprise gate, badge labels).
  */
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import type { AnomalyFlag, LicenseInfo } from "@/lib/api/types";
-
-// ─── Tier gate logic (pure unit tests — no rendering needed) ─────────────────
-
-function isTierEntitled(tier: string): boolean {
-  return tier === "enterprise";
-}
-
-describe("AnomaliesPage tier gate logic", () => {
-  it("enterprise tier is entitled", () => {
-    expect(isTierEntitled("enterprise")).toBe(true);
-  });
-
-  it("pro tier is NOT entitled for anomalies", () => {
-    expect(isTierEntitled("pro")).toBe(false);
-  });
-
-  it("free tier is NOT entitled for anomalies", () => {
-    expect(isTierEntitled("free")).toBe(false);
-  });
-});
-
-// ─── Sigma severity logic (pure unit tests) ────────────────────────────────────
-
-function sigmaSeverity(sigma: number): "error" | "warning" | "info" {
-  if (sigma >= 4) return "error";
-  if (sigma >= 3) return "warning";
-  return "info";
-}
-
-function sigmaLabel(sigma: number): string {
-  if (sigma >= 4) return "high";
-  if (sigma >= 3) return "medium";
-  return "low";
-}
-
-describe("Anomaly sigma severity", () => {
-  it("sigma >= 4 is error / high", () => {
-    expect(sigmaSeverity(4)).toBe("error");
-    expect(sigmaSeverity(5.2)).toBe("error");
-    expect(sigmaLabel(4.1)).toBe("high");
-  });
-
-  it("sigma >= 3 and < 4 is warning / medium", () => {
-    expect(sigmaSeverity(3)).toBe("warning");
-    expect(sigmaSeverity(3.9)).toBe("warning");
-    expect(sigmaLabel(3.5)).toBe("medium");
-  });
-
-  it("sigma >= 2 and < 3 is info / low", () => {
-    expect(sigmaSeverity(2)).toBe("info");
-    expect(sigmaSeverity(2.9)).toBe("info");
-    expect(sigmaLabel(2.5)).toBe("low");
-  });
-});
 
 // ─── Anomaly flag rendering ───────────────────────────────────────────────────
 
@@ -313,5 +269,103 @@ describe("AnomaliesPage — status-color CSS vars (B2 sweep)", () => {
       const styleText = deltaCell!.getAttribute("style") ?? deltaCell!.style.cssText;
       expect(styleText).toContain("var(--color-error)");
     });
+  });
+});
+
+// ─── Wave 3: colour token source-read pins ────────────────────────────────────
+//
+// AnomaliesPage has no Recharts charts, so all colour/token assertions here
+// target CSS custom properties rendered in inline styles that jsdom CAN read.
+
+describe("AnomaliesPage — Wave 3 color token pins (source-read)", () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(resolve(here, "../AnomaliesPage.tsx"), "utf-8");
+
+  it("no bare hex literals remain in source (RULE 10)", () => {
+    expect(src).not.toMatch(/#[0-9A-Fa-f]{6}/);
+  });
+
+  it("no var() fallbacks remain in CSS properties (RULE 4)", () => {
+    expect(src).not.toMatch(/var\(--color-[^)]+,\s*#[0-9A-Fa-f]{6}/);
+  });
+
+  it("--color-muted is not used in any text color property (RULE 5)", () => {
+    // --color-muted fails WCAG AA at normal text sizes; all text must use
+    // --color-secondary or a semantic signal token instead.
+    expect(src).not.toContain("var(--color-muted)");
+  });
+});
+
+// ─── Wave 3: rendered colour CSS vars (jsdom-visible) ─────────────────────────
+
+describe("AnomaliesPage — Wave 3 rendered colour CSS vars", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("sensitivity label text uses var(--color-secondary) not --color-muted", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue(enterpriseLicense);
+    vi.mocked(anomaliesApi.list).mockResolvedValue({ items: [], meta: { total: 0 } });
+    render(<AnomaliesPage />);
+    await waitFor(() => {
+      expect(screen.getByText(/sensitivity:/i)).toBeInTheDocument();
+    });
+    const label = screen.getByText(/sensitivity:/i);
+    const style = label.getAttribute("style") ?? label.style.cssText;
+    expect(style).toContain("var(--color-secondary)");
+    expect(style).not.toContain("var(--color-muted)");
+  });
+
+  it("zero-delta cell uses var(--color-secondary) for the neutral colour", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue(enterpriseLicense);
+    const zeroDeltaFlag: AnomalyFlag = {
+      id: "flag-zero",
+      metric: "cpu_usage",
+      scope: { node_id: null, app: null, stream_id: null },
+      observed: 50,
+      expected: 50, // delta = 0
+      sigma: 2.1,
+      ts: Date.now(),
+    };
+    vi.mocked(anomaliesApi.list).mockResolvedValue({ items: [zeroDeltaFlag], meta: { total: 1 } });
+    const { container } = render(<AnomaliesPage />);
+    await waitFor(() => {
+      expect(screen.getByText("cpu_usage")).toBeInTheDocument();
+    });
+    // A zero delta renders "+0.00", not "0.00": the sign prefix is applied when delta >= 0.
+    const tds = Array.from(container.querySelectorAll("td")) as HTMLElement[];
+    const deltaCell = tds.find((td) => td.textContent?.trim() === "+0.00");
+    expect(deltaCell).toBeDefined();
+    const style = deltaCell!.getAttribute("style") ?? deltaCell!.style.cssText;
+    expect(style).toContain("var(--color-secondary)");
+  });
+
+  it("sigma selector select uses htmlFor / id pair (keyboard a11y)", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue(enterpriseLicense);
+    vi.mocked(anomaliesApi.list).mockResolvedValue({ items: [], meta: { total: 0 } });
+    render(<AnomaliesPage />);
+    await waitFor(() => {
+      // getByLabelText resolves the label→control association
+      const select = screen.getByLabelText(/minimum sigma threshold/i);
+      expect(select.tagName).toBe("SELECT");
+    });
+  });
+
+  it("table header cells use var(--space-2) var(--space-3) padding (RULE 1 exact tokens)", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue(enterpriseLicense);
+    vi.mocked(anomaliesApi.list).mockResolvedValue({
+      items: [sampleFlags[0]],
+      meta: { total: 1 },
+    });
+    const { container } = render(<AnomaliesPage />);
+    await waitFor(() => {
+      expect(screen.getByText("viewers")).toBeInTheDocument();
+    });
+    const ths = Array.from(container.querySelectorAll("th")) as HTMLElement[];
+    expect(ths.length).toBeGreaterThan(0);
+    const firstTh = ths[0];
+    const style = firstTh.getAttribute("style") ?? firstTh.style.cssText;
+    // jsdom normalises CSS var() in inline styles to the literal string
+    expect(style).toMatch(/padding.*var\(--space-2\)/);
   });
 });

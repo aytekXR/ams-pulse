@@ -12,7 +12,7 @@
  *
  * Gate-aware: Pro+ upsell when not entitled (Free tier blocked).
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   LineChart,
   Line,
@@ -41,7 +41,7 @@ function SyntheticBadge() {
     <span
       style={{
         display: "inline-block",
-        background: "rgba(88,166,255,0.1)",
+        background: "var(--color-info-bg)",
         color: "var(--color-info)",
         border: "1px solid rgba(88,166,255,0.25)",
         borderRadius: 4,
@@ -122,15 +122,42 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
     initial ? probeToForm(initial) : defaultFormData,
   );
   const [formError, setFormError] = useState<string | null>(null);
+  const [invalidField, setInvalidField] = useState<string | null>(null);
+
+  // Refs for auto-focus on validation failure (a11y — uipro form pass)
+  const nameRef = useRef<HTMLInputElement>(null);
+  const urlRef = useRef<HTMLInputElement>(null);
+  const intervalRef = useRef<HTMLInputElement>(null);
+  const timeoutRef = useRef<HTMLInputElement>(null);
+
+  /** Map validation error message to the first invalid field's id. */
+  function pickInvalidField(err: string): string {
+    if (/name/i.test(err)) return "probe-name";
+    if (/url/i.test(err)) return "probe-url";
+    if (/interval/i.test(err)) return "probe-interval";
+    return "probe-timeout";
+  }
+
+  const fieldRefs: Record<string, React.RefObject<HTMLInputElement | null>> = {
+    "probe-name": nameRef,
+    "probe-url": urlRef,
+    "probe-interval": intervalRef,
+    "probe-timeout": timeoutRef,
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const err = validateProbeForm(form);
     if (err) {
       setFormError(err);
+      const fieldId = pickInvalidField(err);
+      setInvalidField(fieldId);
+      // Auto-focus first invalid field so screen readers announce the error
+      fieldRefs[fieldId]?.current?.focus();
       return;
     }
     setFormError(null);
+    setInvalidField(null);
     const body: ProbeWrite = {
       name: form.name.trim(),
       url: form.url.trim(),
@@ -142,22 +169,40 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
     await onSave(body);
   };
 
+  /**
+   * Field wrapper: renders label, input, optional hint, and inline field-level
+   * error (below the specific field that triggered validation failure).
+   * The id "probe-form-error" is stable and referenced by the invalid input's
+   * aria-describedby.
+   */
   const field = (
     id: string,
     label: string,
     input: React.ReactNode,
     hint?: string,
   ) => (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
       <label
         htmlFor={id}
-        style={{ fontSize: 12, fontWeight: 600, color: "var(--color-muted)" }}
+        style={{ fontSize: 12, fontWeight: 600, color: "var(--color-secondary)" }}
       >
         {label}
       </label>
       {input}
       {hint && (
-        <span style={{ fontSize: 11, color: "var(--color-muted)" }}>{hint}</span>
+        <span id={`${id}-hint`} style={{ fontSize: 11, color: "var(--color-secondary)" }}>
+          {hint}
+        </span>
+      )}
+      {/* Error region below the field — aria-live via role="alert" */}
+      {invalidField === id && formError && (
+        <span
+          id="probe-form-error"
+          role="alert"
+          style={{ fontSize: 12, color: "var(--color-error)" }}
+        >
+          {formError}
+        </span>
       )}
     </div>
   );
@@ -197,6 +242,7 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
         "Name",
         <input
           id="probe-name"
+          ref={nameRef}
           type="text"
           value={form.name}
           onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -204,6 +250,8 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
           style={inputStyle}
           required
           aria-required="true"
+          aria-invalid={invalidField === "probe-name" ? "true" : undefined}
+          aria-describedby={invalidField === "probe-name" ? "probe-form-error" : undefined}
         />,
       )}
 
@@ -212,6 +260,7 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
         "Stream URL",
         <input
           id="probe-url"
+          ref={urlRef}
           type="text"
           value={form.url}
           onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
@@ -219,6 +268,11 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
           style={inputStyle}
           required
           aria-required="true"
+          aria-invalid={invalidField === "probe-url" ? "true" : undefined}
+          aria-describedby={[
+            "probe-url-hint",
+            invalidField === "probe-url" ? "probe-form-error" : null,
+          ].filter(Boolean).join(" ") || undefined}
         />,
         "HLS, RTMP, DASH, or WebRTC URL",
       )}
@@ -250,12 +304,17 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
         "Interval (seconds)",
         <input
           id="probe-interval"
+          ref={intervalRef}
           type="number"
           min={30}
           value={form.interval_s}
           onChange={(e) => setForm((f) => ({ ...f, interval_s: e.target.value }))}
           style={inputStyle}
-          aria-describedby="probe-interval-hint"
+          aria-invalid={invalidField === "probe-interval" ? "true" : undefined}
+          aria-describedby={[
+            "probe-interval-hint",
+            invalidField === "probe-interval" ? "probe-form-error" : null,
+          ].filter(Boolean).join(" ")}
         />,
         "Minimum 30 seconds",
       )}
@@ -265,11 +324,14 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
         "Timeout (seconds)",
         <input
           id="probe-timeout"
+          ref={timeoutRef}
           type="number"
           min={1}
           value={form.timeout_s}
           onChange={(e) => setForm((f) => ({ ...f, timeout_s: e.target.value }))}
           style={inputStyle}
+          aria-invalid={invalidField === "probe-timeout" ? "true" : undefined}
+          aria-describedby={invalidField === "probe-timeout" ? "probe-form-error" : undefined}
         />,
       )}
 
@@ -286,23 +348,7 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
         </label>
       </div>
 
-      {formError && (
-        <div
-          role="alert"
-          style={{
-            background: "var(--color-error-bg, rgba(255,92,104,0.1))",
-            border: "1px solid var(--color-error, #FF5C68)",
-            borderRadius: 4,
-            padding: "8px 12px",
-            fontSize: 13,
-            color: "var(--color-error, #FF5C68)",
-          }}
-        >
-          {formError}
-        </div>
-      )}
-
-      <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+      <div style={{ display: "flex", gap: 10, marginTop: "var(--space-1)" }}>
         <button
           type="submit"
           disabled={saving}
@@ -326,7 +372,7 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
           disabled={saving}
           style={{
             background: "none",
-            color: "var(--color-muted)",
+            color: "var(--color-secondary)",
             border: "1px solid var(--color-border)",
             borderRadius: 6,
             padding: "8px 18px",
@@ -344,7 +390,7 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
 // ─── Probe results panel (synthetic labeling — the F10 acceptance) ────────────
 
 export function ttfbColor(ttfb: number | null): string {
-  if (ttfb == null) return "var(--color-muted)";
+  if (ttfb == null) return "var(--color-secondary)";
   if (ttfb < 200) return "var(--color-success)";
   if (ttfb < 500) return "var(--color-warning)";
   return "var(--color-error)";
@@ -427,7 +473,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
         border: "1px solid var(--color-border)",
         borderRadius: 8,
         overflow: "hidden",
-        marginTop: 8,
+        marginTop: "var(--space-2)",
       }}
       aria-label={`Probe results for ${probe.name}`}
     >
@@ -446,12 +492,12 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
         <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-info)" }}>
           Synthetic Probe Results
         </span>
-        <span style={{ fontSize: 12, color: "var(--color-muted)", marginLeft: 4 }}>
+        <span style={{ fontSize: 12, color: "var(--color-secondary)", marginLeft: 4 }}>
           — not organic viewer data
         </span>
         <div style={{ flex: 1 }} />
         <span
-          style={{ fontSize: 12, color: "var(--color-muted)", fontFamily: "var(--font-mono)" }}
+          style={{ fontSize: 12, color: "var(--color-secondary)", fontFamily: "var(--font-mono)" }}
         >
           {probe.name} · {probe.url}
         </span>
@@ -461,7 +507,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
           style={{
             background: "none",
             border: "none",
-            color: "var(--color-muted)",
+            color: "var(--color-secondary)",
             cursor: "pointer",
             padding: "2px 6px",
             fontSize: 16,
@@ -471,8 +517,23 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
         </button>
       </div>
 
-      <div style={{ padding: 16 }}>
-        {loading && <LoadingSpinner label="Loading synthetic probe results…" />}
+      <div style={{ padding: "var(--space-4)" }}>
+        {loading && (
+          <>
+            <LoadingSpinner label="Loading synthetic probe results…" />
+            {/* Chart skeleton — visual structure while timeline data loads */}
+            <div
+              data-testid="chart-skeleton"
+              aria-hidden
+              style={{
+                background: "var(--color-surface-2)",
+                borderRadius: 4,
+                height: 120,
+                marginTop: "var(--space-2)",
+              }}
+            />
+          </>
+        )}
         {error && <ErrorBanner message={error} onRetry={fetchResults} />}
 
         {!loading && !error && results.length === 0 && (
@@ -490,8 +551,8 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                 style={{
                   fontSize: 12,
                   fontWeight: 600,
-                  color: "var(--color-muted)",
-                  marginBottom: 8,
+                  color: "var(--color-secondary)",
+                  marginBottom: "var(--space-2)",
                   textTransform: "uppercase",
                   letterSpacing: "0.06em",
                 }}
@@ -504,12 +565,12 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                   <XAxis
                     dataKey="ts"
                     tickFormatter={formatTsShort}
-                    tick={{ fontSize: 10, fill: "var(--color-muted)" }}
+                    tick={{ fontSize: 10, fill: "var(--color-secondary)" }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={{ fontSize: 10, fill: "var(--color-muted)" }}
+                    tick={{ fontSize: 10, fill: "var(--color-secondary)" }}
                     axisLine={false}
                     tickLine={false}
                     width={40}
@@ -527,8 +588,8 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                       fontSize: 12,
                     }}
                   />
-                  <Legend wrapperStyle={{ fontSize: 11, color: "var(--color-muted)" }} />
-                  {/* 500ms warning threshold */}
+                  <Legend wrapperStyle={{ fontSize: 11, color: "var(--color-secondary)" }} />
+                  {/* 500ms warning threshold — amber dataviz[4] */}
                   <ReferenceLine y={500} stroke={CHART_COLORS[4]} strokeDasharray="4 2" />
                   <Line
                     type="monotone"
@@ -559,8 +620,8 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                   style={{
                     fontSize: 12,
                     fontWeight: 600,
-                    color: "var(--color-muted)",
-                    marginBottom: 8,
+                    color: "var(--color-secondary)",
+                    marginBottom: "var(--space-2)",
                     textTransform: "uppercase",
                     letterSpacing: "0.06em",
                   }}
@@ -576,12 +637,12 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                     <XAxis
                       dataKey="ts"
                       tickFormatter={formatTsShort}
-                      tick={{ fontSize: 10, fill: "var(--color-muted)" }}
+                      tick={{ fontSize: 10, fill: "var(--color-secondary)" }}
                       axisLine={false}
                       tickLine={false}
                     />
                     <YAxis
-                      tick={{ fontSize: 10, fill: "var(--color-muted)" }}
+                      tick={{ fontSize: 10, fill: "var(--color-secondary)" }}
                       axisLine={false}
                       tickLine={false}
                       width={40}
@@ -618,8 +679,8 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
               style={{
                 fontSize: 12,
                 fontWeight: 600,
-                color: "var(--color-muted)",
-                marginBottom: 8,
+                color: "var(--color-secondary)",
+                marginBottom: "var(--space-2)",
                 textTransform: "uppercase",
                 letterSpacing: "0.06em",
               }}
@@ -638,45 +699,45 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                         padding: "6px 10px",
                         textAlign: "left",
                         fontWeight: 600,
-                        color: "var(--color-muted)",
+                        color: "var(--color-secondary)",
                       }}
                     >
                       Time
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "center", fontWeight: 600, color: "var(--color-muted)" }}>
+                    <th style={{ padding: "6px 10px", textAlign: "center", fontWeight: 600, color: "var(--color-secondary)" }}>
                       Type
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "center", fontWeight: 600, color: "var(--color-muted)" }}>
+                    <th style={{ padding: "6px 10px", textAlign: "center", fontWeight: 600, color: "var(--color-secondary)" }}>
                       Status
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-muted)" }}>
+                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-secondary)" }}>
                       TTFB
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-muted)" }}>
+                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-secondary)" }}>
                       Segment TTFB
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-muted)" }}>
+                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-secondary)" }}>
                       Bitrate
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "center", fontWeight: 600, color: "var(--color-muted)", whiteSpace: "nowrap" }}>
+                    <th style={{ padding: "6px 10px", textAlign: "center", fontWeight: 600, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
                       Signaling
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-muted)", whiteSpace: "nowrap" }}>
+                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
                       Connect
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "center", fontWeight: 600, color: "var(--color-muted)", whiteSpace: "nowrap" }}>
+                    <th style={{ padding: "6px 10px", textAlign: "center", fontWeight: 600, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
                       ICE State
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-muted)", whiteSpace: "nowrap" }}>
+                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
                       RTT
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-muted)", whiteSpace: "nowrap" }}>
+                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
                       Jitter
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-muted)", whiteSpace: "nowrap" }}>
+                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
                       Loss
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "var(--color-muted)" }}>
+                    <th style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "var(--color-secondary)" }}>
                       Error
                     </th>
                   </tr>
@@ -690,7 +751,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                         background: r.success ? "transparent" : "rgba(255,92,104,0.04)",
                       }}
                     >
-                      <td style={{ padding: "6px 10px", color: "var(--color-muted)", whiteSpace: "nowrap" }}>
+                      <td style={{ padding: "6px 10px", color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
                         {new Date(r.ts).toLocaleString()}
                       </td>
                       {/* Synthetic label on every result row */}
@@ -729,7 +790,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                         style={{
                           padding: "6px 10px",
                           textAlign: "right",
-                          color: "var(--color-muted)",
+                          color: "var(--color-secondary)",
                           fontFamily: "var(--font-mono)",
                           fontSize: 12,
                         }}
@@ -751,7 +812,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                         style={{
                           padding: "6px 10px",
                           textAlign: "right",
-                          color: "var(--color-muted)",
+                          color: "var(--color-secondary)",
                           fontFamily: "var(--font-mono)",
                           fontSize: 12,
                           whiteSpace: "nowrap",
@@ -772,7 +833,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                         style={{
                           padding: "6px 10px",
                           textAlign: "right",
-                          color: "var(--color-muted)",
+                          color: "var(--color-secondary)",
                           fontFamily: "var(--font-mono)",
                           fontSize: 12,
                           whiteSpace: "nowrap",
@@ -784,7 +845,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                         style={{
                           padding: "6px 10px",
                           textAlign: "right",
-                          color: "var(--color-muted)",
+                          color: "var(--color-secondary)",
                           fontFamily: "var(--font-mono)",
                           fontSize: 12,
                           whiteSpace: "nowrap",
@@ -796,7 +857,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                         style={{
                           padding: "6px 10px",
                           textAlign: "right",
-                          color: "var(--color-muted)",
+                          color: "var(--color-secondary)",
                           fontFamily: "var(--font-mono)",
                           fontSize: 12,
                           whiteSpace: "nowrap",
@@ -848,11 +909,11 @@ function DeleteConfirm({ probeName, onConfirm, onCancel, deleting }: DeleteConfi
         background: "var(--color-surface)",
         border: "1px solid var(--color-error)",
         borderRadius: 8,
-        padding: 16,
+        padding: "var(--space-4)",
         maxWidth: 400,
         display: "flex",
         flexDirection: "column",
-        gap: 12,
+        gap: "var(--space-3)",
       }}
     >
       <p style={{ margin: 0, fontSize: 14, color: "var(--color-text)" }}>
@@ -860,7 +921,7 @@ function DeleteConfirm({ probeName, onConfirm, onCancel, deleting }: DeleteConfi
         configuration and stop all future runs. Historical results in ClickHouse are
         retained per the 90-day TTL.
       </p>
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: "var(--space-2)" }}>
         <button
           onClick={onConfirm}
           disabled={deleting}
@@ -883,7 +944,7 @@ function DeleteConfirm({ probeName, onConfirm, onCancel, deleting }: DeleteConfi
           disabled={deleting}
           style={{
             background: "none",
-            color: "var(--color-muted)",
+            color: "var(--color-secondary)",
             border: "1px solid var(--color-border)",
             borderRadius: 6,
             padding: "6px 14px",
@@ -930,7 +991,7 @@ function ProbeRow({
         style={{
           padding: "10px 12px",
           fontSize: 12,
-          color: "var(--color-muted)",
+          color: "var(--color-secondary)",
           fontFamily: "var(--font-mono)",
           maxWidth: 200,
           overflow: "hidden",
@@ -950,7 +1011,7 @@ function ProbeRow({
         style={{
           padding: "10px 12px",
           fontSize: 12,
-          color: "var(--color-muted)",
+          color: "var(--color-secondary)",
           textAlign: "right",
           fontFamily: "var(--font-mono)",
         }}
@@ -964,7 +1025,7 @@ function ProbeRow({
       {/* Last result */}
       <td style={{ padding: "10px 12px" }}>
         {lr ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: 12 }}>
             <Badge label={lr.success ? "ok" : "fail"} variant={lr.success ? "success" : "error"} />
             {lr.ttfb_ms != null && (
               <span
@@ -975,7 +1036,7 @@ function ProbeRow({
             )}
           </div>
         ) : (
-          <span style={{ fontSize: 12, color: "var(--color-muted)" }}>No results yet</span>
+          <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>No results yet</span>
         )}
       </td>
       {/* Actions */}
@@ -1002,7 +1063,7 @@ function ProbeRow({
             onClick={() => onEdit(probe)}
             style={{
               background: "none",
-              color: "var(--color-muted)",
+              color: "var(--color-secondary)",
               border: "1px solid var(--color-border)",
               borderRadius: 4,
               padding: "3px 9px",
@@ -1172,6 +1233,9 @@ export function ProbesPage() {
         </h1>
         <TierGate
           icon={
+            /* Plain SVG, not a Recharts prop: the browser resolves var() here and the
+               token is theme-aware. A CHART_COLORS[0] literal would hard-code the dark
+               signal green and render the wrong colour in light theme. */
             <svg
               width="48"
               height="48"
@@ -1200,7 +1264,7 @@ export function ProbesPage() {
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 16,
+          gap: "var(--space-4)",
           marginBottom: 20,
         }}
       >
@@ -1213,7 +1277,7 @@ export function ProbesPage() {
           disabled={loading}
           style={{
             background: "none",
-            color: "var(--color-muted)",
+            color: "var(--color-secondary)",
             border: "1px solid var(--color-border)",
             borderRadius: 6,
             padding: "6px 12px",
@@ -1253,10 +1317,10 @@ export function ProbesPage() {
           padding: "8px 14px",
           fontSize: 12,
           color: "var(--color-info)",
-          marginBottom: 16,
+          marginBottom: "var(--space-4)",
           display: "flex",
           alignItems: "center",
-          gap: 8,
+          gap: "var(--space-2)",
         }}
         role="note"
         aria-label="Synthetic probes notice"
@@ -1270,7 +1334,7 @@ export function ProbesPage() {
       </div>
 
       {error && (
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: "var(--space-4)" }}>
           <ErrorBanner message={error} onRetry={fetchProbes} />
         </div>
       )}
@@ -1292,7 +1356,7 @@ export function ProbesPage() {
 
       {/* Delete confirmation */}
       {confirmDelete && (
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: "var(--space-4)" }}>
           <DeleteConfirm
             probeName={confirmDelete.name}
             onConfirm={handleDeleteConfirm}
@@ -1303,7 +1367,7 @@ export function ProbesPage() {
       )}
 
       {loading && !error && (
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: "var(--space-4)" }}>
           <LoadingSpinner label="Loading probes…" />
         </div>
       )}
@@ -1360,11 +1424,11 @@ export function ProbesPage() {
                     <th
                       key={h}
                       style={{
-                        padding: "8px 12px",
+                        padding: "var(--space-2) var(--space-3)",
                         textAlign: h === "Interval" ? "right" : "left",
                         fontSize: 11,
                         fontWeight: 600,
-                        color: "var(--color-muted)",
+                        color: "var(--color-secondary)",
                         textTransform: "uppercase",
                         letterSpacing: "0.06em",
                         whiteSpace: "nowrap",

@@ -23,6 +23,7 @@ import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/Badge";
+import { CHART_COLORS, useStatusColors } from "@/lib/chartColors";
 import type { IngestHealthResponse, IngestStream } from "@/lib/api/types";
 
 function healthVariant(score: number): "success" | "warning" | "error" | "muted" {
@@ -44,6 +45,7 @@ interface StreamDetailProps {
 }
 
 function StreamDetail({ stream, onClose }: StreamDetailProps) {
+  const statusColors = useStatusColors();
   const chartData = stream.timeseries.map((b) => ({
     ts: new Date(b.ts).toLocaleTimeString(),
     bitrate: b.bitrate_kbps ? Math.round(b.bitrate_kbps) : 0,
@@ -66,21 +68,21 @@ function StreamDetail({ stream, onClose }: StreamDetailProps) {
       padding: 20,
       display: "flex",
       flexDirection: "column",
-      gap: 16,
+      gap: "var(--space-4)",
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 700, fontSize: 15 }}>{stream.stream_id}</div>
-          <div style={{ fontSize: 12, color: "var(--color-muted)" }}>{stream.app}{stream.node_id ? ` · ${stream.node_id}` : ""}</div>
+          <div style={{ fontSize: 12, color: "var(--color-secondary)" }}>{stream.app}{stream.node_id ? ` · ${stream.node_id}` : ""}</div>
         </div>
         <Badge label={`${stream.health_score.toFixed(0)}/100`} variant={healthVariant(stream.health_score)} />
         <button
           onClick={onClose}
-          title="Close"
+          aria-label="Close stream detail"
           style={{
             background: "none",
             border: "1px solid var(--color-border)",
-            color: "var(--color-muted)",
+            color: "var(--color-secondary)",
             borderRadius: 4,
             padding: "4px 10px",
             cursor: "pointer",
@@ -93,13 +95,17 @@ function StreamDetail({ stream, onClose }: StreamDetailProps) {
 
       {/* Drop events */}
       {dropTimes.length > 0 && (
-        <div style={{
-          background: "var(--color-error-bg, rgba(255,92,104,0.1))",
-          border: "1px solid var(--color-error, #FF5C68)",
-          borderRadius: 6,
-          padding: "10px 14px",
-        }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-error, #FF5C68)", marginBottom: 6 }}>
+        <div
+          aria-live="polite"
+          aria-label="Drop events"
+          style={{
+            background: "var(--color-error-bg)",
+            border: "1px solid var(--color-error)",
+            borderRadius: 6,
+            padding: "10px 14px",
+          }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-error)", marginBottom: 6 }}>
             Drop Events ({dropTimes.length})
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -109,7 +115,7 @@ function StreamDetail({ stream, onClose }: StreamDetailProps) {
                 borderRadius: 4,
                 padding: "2px 8px",
                 fontSize: 11,
-                color: "var(--color-error, #FF5C68)",
+                color: "var(--color-error)",
               }}>
                 {d.ts} — {d.reason}
               </span>
@@ -122,42 +128,42 @@ function StreamDetail({ stream, onClose }: StreamDetailProps) {
       {chartData.length > 0 && (
         <>
           <div style={{ background: "var(--color-surface-2)", borderRadius: 8, padding: 14 }}>
-            <h3 style={{ margin: "0 0 12px", fontSize: 12, fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            <h3 style={{ margin: "0 0 12px", fontSize: 12, fontWeight: 600, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
               Bitrate & FPS
             </h3>
             <ResponsiveContainer width="100%" height={180}>
               <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="ts" tick={{ fill: "var(--color-muted)", fontSize: 10 }} />
-                <YAxis yAxisId="bitrate" orientation="left" tick={{ fill: "var(--color-muted)", fontSize: 10 }} unit=" kbps" />
-                <YAxis yAxisId="fps" orientation="right" tick={{ fill: "var(--color-muted)", fontSize: 10 }} unit=" fps" />
+                <XAxis dataKey="ts" tick={{ fill: "var(--color-secondary)", fontSize: 10 }} />
+                <YAxis yAxisId="bitrate" orientation="left" tick={{ fill: "var(--color-secondary)", fontSize: 10 }} unit=" kbps" />
+                <YAxis yAxisId="fps" orientation="right" tick={{ fill: "var(--color-secondary)", fontSize: 10 }} unit=" fps" />
                 <Tooltip contentStyle={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 6, color: "var(--color-text)" }} />
-                <Legend wrapperStyle={{ fontSize: 11, color: "var(--color-muted)" }} />
+                <Legend wrapperStyle={{ fontSize: 11, color: "var(--color-secondary)" }} />
                 {dropTimes.map((d, i) => (
-                  <ReferenceLine key={i} x={d.ts} yAxisId="bitrate" stroke="var(--color-error, #FF5C68)" strokeDasharray="3 3" label={{ value: "drop", fontSize: 9, fill: "var(--color-error, #FF5C68)" }} />
+                  <ReferenceLine key={i} x={d.ts} yAxisId="bitrate" stroke={statusColors.critical} strokeDasharray="3 3" label={{ value: "drop", fontSize: 9, fill: statusColors.critical }} />
                 ))}
-                <Line yAxisId="bitrate" type="monotone" dataKey="bitrate" stroke="#58A6FF" dot={false} strokeWidth={2} name="Bitrate" />
-                <Line yAxisId="fps" type="monotone" dataKey="fps" stroke="#2CE5A7" dot={false} strokeWidth={2} name="FPS" />
+                <Line yAxisId="bitrate" type="monotone" dataKey="bitrate" stroke={CHART_COLORS[1]} dot={false} strokeWidth={2} name="Bitrate" />
+                <Line yAxisId="fps" type="monotone" dataKey="fps" stroke={CHART_COLORS[0]} dot={false} strokeWidth={2} name="FPS" />
               </LineChart>
             </ResponsiveContainer>
           </div>
 
           <div style={{ background: "var(--color-surface-2)", borderRadius: 8, padding: 14 }}>
-            <h3 style={{ margin: "0 0 12px", fontSize: 12, fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            <h3 style={{ margin: "0 0 12px", fontSize: 12, fontWeight: 600, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
               Packet Loss & Jitter
             </h3>
             <ResponsiveContainer width="100%" height={160}>
               <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="ts" tick={{ fill: "var(--color-muted)", fontSize: 10 }} />
-                <YAxis yAxisId="loss" orientation="left" tick={{ fill: "var(--color-muted)", fontSize: 10 }} unit="%" />
-                <YAxis yAxisId="jitter" orientation="right" tick={{ fill: "var(--color-muted)", fontSize: 10 }} unit=" ms" />
+                <XAxis dataKey="ts" tick={{ fill: "var(--color-secondary)", fontSize: 10 }} />
+                <YAxis yAxisId="loss" orientation="left" tick={{ fill: "var(--color-secondary)", fontSize: 10 }} unit="%" />
+                <YAxis yAxisId="jitter" orientation="right" tick={{ fill: "var(--color-secondary)", fontSize: 10 }} unit=" ms" />
                 <Tooltip contentStyle={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 6, color: "var(--color-text)" }} />
-                <Legend wrapperStyle={{ fontSize: 11, color: "var(--color-muted)" }} />
+                <Legend wrapperStyle={{ fontSize: 11, color: "var(--color-secondary)" }} />
                 {/* Threshold indicators */}
-                <ReferenceLine yAxisId="loss" y={1} stroke="var(--color-warning, #FFB224)" strokeDasharray="4 2" label={{ value: "1% threshold", fontSize: 9, fill: "var(--color-warning, #FFB224)" }} />
-                <Line yAxisId="loss" type="monotone" dataKey="pkt_loss" stroke="#FF5C68" dot={false} strokeWidth={2} name="Packet Loss %" />
-                <Line yAxisId="jitter" type="monotone" dataKey="jitter" stroke="#FFB224" dot={false} strokeWidth={2} name="Jitter ms" />
+                <ReferenceLine yAxisId="loss" y={1} stroke={statusColors.warning} strokeDasharray="4 2" label={{ value: "1% threshold", fontSize: 9, fill: statusColors.warning }} />
+                <Line yAxisId="loss" type="monotone" dataKey="pkt_loss" stroke={statusColors.critical} dot={false} strokeWidth={2} name="Packet Loss %" />
+                <Line yAxisId="jitter" type="monotone" dataKey="jitter" stroke={CHART_COLORS[4]} dot={false} strokeWidth={2} name="Jitter ms" />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -201,17 +207,17 @@ export function IngestPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)" }}>
         <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Ingest Health</h1>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
           <span style={{
             width: 7,
             height: 7,
             borderRadius: "50%",
-            background: loading ? "var(--color-warning, #FFB224)" : "var(--color-success, #2CE5A7)",
+            background: loading ? "var(--color-warning)" : "var(--color-success)",
             display: "inline-block",
-          }} />
-          <span style={{ fontSize: 12, color: "var(--color-muted)" }}>
+          }} aria-hidden="true" />
+          <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>
             {loading ? "Refreshing…" : "Live (15s)"}
           </span>
           <button
@@ -220,7 +226,7 @@ export function IngestPage() {
             style={{
               background: "var(--color-surface-2)",
               border: "1px solid var(--color-border)",
-              color: "var(--color-muted)",
+              color: "var(--color-secondary)",
               borderRadius: 4,
               padding: "4px 10px",
               cursor: "pointer",
@@ -258,7 +264,7 @@ export function IngestPage() {
                       padding: "10px 14px",
                       textAlign: h === "" ? "right" : "left",
                       fontSize: 11,
-                      color: "var(--color-muted)",
+                      color: "var(--color-secondary)",
                       textTransform: "uppercase",
                       letterSpacing: "0.06em",
                       fontWeight: 600,
@@ -280,11 +286,11 @@ export function IngestPage() {
                     onClick={() => setSelected(selected?.stream_id === s.stream_id ? null : s)}
                   >
                     <td style={{ padding: "10px 14px", fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: 12 }}>{s.stream_id}</td>
-                    <td style={{ padding: "10px 14px", color: "var(--color-muted)" }}>{s.app}</td>
-                    <td style={{ padding: "10px 14px", color: "var(--color-muted)", fontSize: 12 }}>{s.node_id ?? "—"}</td>
+                    <td style={{ padding: "10px 14px", color: "var(--color-secondary)" }}>{s.app}</td>
+                    <td style={{ padding: "10px 14px", color: "var(--color-secondary)", fontSize: 12 }}>{s.node_id ?? "—"}</td>
                     <td style={{ padding: "10px 14px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <div style={{
+                      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+                        <div data-testid="health-bar-bg" aria-hidden="true" style={{
                           width: 60,
                           height: 6,
                           background: "var(--color-surface-2)",
@@ -301,9 +307,9 @@ export function IngestPage() {
                         <Badge label={healthLabel(s.health_score)} variant={healthVariant(s.health_score)} />
                       </div>
                     </td>
-                    <td style={{ padding: "10px 14px", color: "var(--color-muted)", fontSize: 12 }}>
+                    <td style={{ padding: "10px 14px", color: "var(--color-secondary)", fontSize: 12 }}>
                       {(s.drop_events ?? []).length > 0 ? (
-                        <span style={{ color: "var(--color-error, #FF5C68)", fontWeight: 600 }}>
+                        <span style={{ color: "var(--color-error)", fontWeight: 600 }}>
                           {s.drop_events!.length} drop{s.drop_events!.length > 1 ? "s" : ""}
                         </span>
                       ) : "—"}
@@ -317,7 +323,7 @@ export function IngestPage() {
                         style={{
                           background: "none",
                           border: "1px solid var(--color-border)",
-                          color: "var(--color-muted)",
+                          color: "var(--color-secondary)",
                           borderRadius: 4,
                           padding: "3px 8px",
                           cursor: "pointer",

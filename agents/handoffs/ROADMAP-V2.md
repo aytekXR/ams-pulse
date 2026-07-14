@@ -532,10 +532,47 @@ Reports, Settings); QoE has no tab pattern and Fleet uses a segmented-control wi
 tabs — needs a separate `<SegmentedControl>` component). Page tab conversions deferred to their
 chartered waves (Analytics → Wave 2; Alerts/Settings → Wave 4; Reports → Wave 5).
 C7 WCAG finding documented in wave conflict ledger: (b) and (c) fixed in Wave 0;
-(a) light-theme CTA AA waiver granted (pre-existing at 2f53414; fix requires token update,
-deferred to first token-update wave). SRT publishType now KNOWN: AMS BroadcastDTO returns
+(a) light-theme CTA fails AA (3.12:1) — **NO WAIVER EXISTS. Filed as operator gap G3**
+(pre-existing at 2f53414; the fix is a `tokens.json` change, and brandkit is the operator's
+per D-071 — a session may not self-approve it). *(Corrected S33/D-095: this line previously
+read "AA waiver granted". It was never granted — an S31 agent's draft falsely claimed the
+operator had approved it, D-093 corrected that in three places, and this fourth copy survived.
+A stale false claim in a plan of record is how the next session gets it wrong.)*
+SRT publishType now KNOWN: AMS BroadcastDTO returns
 `publishType="RTMP"` for SRT-ingested streams (F5 live finding, D-093); Pulse mirrors AMS
 verbatim — SRT ingest is counted as RTMP in protocol breakdown until a heuristic is built.
+
+**Wave 1 DONE — S32 (D-094, 2026-07-14):** LiveOverview + QoE. Chart hex → `CHART_COLORS[N]`
+(same hex); stale hex fallbacks dropped from `var(--color-warning, #hex)`; a11y — StatCard
+accessible names, donut aria-labels, `role=grid/rowgroup/row/columnheader` on StreamsTable.
+Established the **px→token EXACT-MATCH rule** (the `--space-*` scale is 4/8/12/16/24/32/48/64/96;
+a non-matching literal is LEFT ALONE — snapping 13px→12px is a silent regression).
+**⚠ Wave 1 shipped incomplete and it was not caught until S33** — see below.
+
+**Wave 2 DONE — S33 (D-095, 2026-07-14):** Analytics + Fleet + shared `<SegmentedControl>`
+(`role=radiogroup`, **never `tablist`** — a tablist promises tabpanels that do not exist) +
+`<StatCard size="compact">` (a 1:1 swap was **not** pixel-neutral: padding 14→24px, value
+24→40px). 3+2 chart hex → `CHART_COLORS[N]`; Fleet's memory-healthy bar stays **dataviz blue,
+never `statusColors.healthy`**; 18 px → `--space-*` exact-only; `--color-muted` eliminated from
+both pages and from the shared `Badge`/`StatCard` (it fails AA at every size these pages use).
+NEW e2e `analytics.spec.ts` + `fleet.spec.ts` (neither page had one). 548/548 web tests.
+
+**★ S33 also fixed a Wave 1 ESCAPE: S32 gated a tree it never committed.** PR #46 was still
+open at S33 open, and its branch was missing the `global.css` rule that `QoePage.tsx`'s
+committed comment and tests both promised. **The gates had run green against a working-tree
+file that never entered git.** Guard added (`styles/__tests__/focus-rings.test.ts`) pinning
+both halves of every className↔stylesheet contract. **Standing rule: a session claiming DONE
+is not evidence that it merged — check `origin/main` and open PRs at every session open.**
+
+**★ THREE NEW OPERATOR GAPS from Wave 2 (all independently verified):**
+**G4** touch targets — brandkit's `minTouchTarget=44` is WCAG **AAA**; the **AA** bar is 24×24,
+which today's ~28px controls already pass. Enforcing 44 visibly rethemes every button and fights
+brandkit's own desktop-density spec; coupled to G1. **Deferred, not skipped.**
+**G5** — **the brandkit WCAG table itself is wrong**: design-rationale §2 (BINDING) claims muted
+= ~4.6:1 AA; the true ratio is **3.72:1**, *below* AA for normal text. Every future wave reads
+that table. **G6** — light-theme info Badge = **2.32:1** (`--color-info` intentionally not
+overridden for light); needs a `color.light.info` token. G3/G5/G6 are all brandkit edits →
+**operator-gated (D-071)**.
 
 ---
 

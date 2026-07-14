@@ -98,9 +98,9 @@ function ScheduleForm({ initial, onSave, onCancel }: ScheduleFormProps) {
   const labelStyle: React.CSSProperties = {
     display: "flex",
     flexDirection: "column",
-    gap: 4,
+    gap: "var(--space-1)",
     fontSize: 12,
-    color: "var(--color-muted)",
+    color: "var(--color-secondary)",
     fontWeight: 500,
   };
 
@@ -191,7 +191,7 @@ function ScheduleForm({ initial, onSave, onCancel }: ScheduleFormProps) {
           style={{
             background: "none",
             border: "1px solid var(--color-border)",
-            color: "var(--color-muted)",
+            color: "var(--color-secondary)",
             borderRadius: 6,
             padding: "7px 14px",
             cursor: "pointer",
@@ -253,9 +253,9 @@ function TenantForm({ initial, onSave, onCancel }: TenantFormProps) {
   const labelStyle: React.CSSProperties = {
     display: "flex",
     flexDirection: "column",
-    gap: 4,
+    gap: "var(--space-1)",
     fontSize: 12,
-    color: "var(--color-muted)",
+    color: "var(--color-secondary)",
     fontWeight: 500,
   };
 
@@ -322,9 +322,9 @@ function TenantForm({ initial, onSave, onCancel }: TenantFormProps) {
       <div style={{
         background: "var(--color-surface-2)",
         borderRadius: 6,
-        padding: "8px 12px",
+        padding: "var(--space-2) var(--space-3)",
         fontSize: 12,
-        color: "var(--color-muted)",
+        color: "var(--color-secondary)",
       }}>
         Provide at least one matcher: a stream pattern OR both meta tag key and value.
       </div>
@@ -375,7 +375,7 @@ function TenantForm({ initial, onSave, onCancel }: TenantFormProps) {
           style={{
             background: "none",
             border: "1px solid var(--color-border)",
-            color: "var(--color-muted)",
+            color: "var(--color-secondary)",
             borderRadius: 6,
             padding: "7px 14px",
             cursor: "pointer",
@@ -429,7 +429,7 @@ function DeleteConfirm({ tenant, onConfirm, onCancel, deleting }: DeleteConfirmP
         gap: 14,
       }}
     >
-      <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "var(--color-error, #FF5C68)" }}>
+      <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "var(--color-error)" }}>
         Delete tenant
       </h3>
       <p style={{ margin: 0, fontSize: 13, color: "var(--color-secondary)" }}>
@@ -443,7 +443,7 @@ function DeleteConfirm({ tenant, onConfirm, onCancel, deleting }: DeleteConfirmP
           style={{
             background: "none",
             border: "1px solid var(--color-border)",
-            color: "var(--color-muted)",
+            color: "var(--color-secondary)",
             borderRadius: 6,
             padding: "7px 14px",
             cursor: "pointer",
@@ -457,7 +457,7 @@ function DeleteConfirm({ tenant, onConfirm, onCancel, deleting }: DeleteConfirmP
           onClick={onConfirm}
           disabled={deleting}
           style={{
-            background: "rgba(255,92,104,0.1)",
+            background: "var(--color-error-bg)",
             border: "1px solid rgba(255,92,104,0.4)",
             color: "var(--color-error)",
             borderRadius: 6,
@@ -537,7 +537,7 @@ function TenantsTab({ onToast }: TenantsTabProps) {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ fontSize: 13, color: "var(--color-secondary)" }}>
           Tenants match streams by pattern or beacon meta tag for billing reconciliation.
@@ -585,7 +585,7 @@ function TenantsTab({ onToast }: TenantsTabProps) {
           description="Add a tenant to map streams to billing entities. Unmatched streams appear as 'unassigned' in usage reports."
         />
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
           {tenants.map((tenant) => (
             <div key={tenant.id}>
               {editTenant?.id === tenant.id ? (
@@ -604,14 +604,14 @@ function TenantsTab({ onToast }: TenantsTabProps) {
                     padding: "14px 16px",
                     display: "flex",
                     alignItems: "flex-start",
-                    gap: 12,
+                    gap: "var(--space-3)",
                   }}
                 >
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>
                       {tenant.name}
                     </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
                       {tenant.stream_pattern && (
                         <span style={{
                           background: "var(--color-surface-2)",
@@ -620,7 +620,7 @@ function TenantsTab({ onToast }: TenantsTabProps) {
                           padding: "2px 8px",
                           fontSize: 11,
                           fontFamily: "var(--font-mono)",
-                          color: "var(--color-muted)",
+                          color: "var(--color-secondary)",
                         }}>
                           pattern: {tenant.stream_pattern}
                         </span>
@@ -633,13 +633,13 @@ function TenantsTab({ onToast }: TenantsTabProps) {
                           padding: "2px 8px",
                           fontSize: 11,
                           fontFamily: "var(--font-mono)",
-                          color: "var(--color-muted)",
+                          color: "var(--color-secondary)",
                         }}>
                           {tenant.meta_tag_key}={tenant.meta_tag_value}
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: 11, color: "var(--color-muted)", marginTop: 6 }}>
+                    <div style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 6 }}>
                       Created {new Date(tenant.created_at).toLocaleDateString()}
                     </div>
                   </div>
@@ -650,7 +650,7 @@ function TenantsTab({ onToast }: TenantsTabProps) {
                       style={{
                         background: "none",
                         border: "1px solid var(--color-border)",
-                        color: "var(--color-muted)",
+                        color: "var(--color-secondary)",
                         borderRadius: 4,
                         padding: "3px 8px",
                         cursor: "pointer",
@@ -664,8 +664,8 @@ function TenantsTab({ onToast }: TenantsTabProps) {
                       aria-label={`Delete ${tenant.name}`}
                       style={{
                         background: "none",
-                        border: "1px solid var(--color-error, #FF5C68)",
-                        color: "var(--color-error, #FF5C68)",
+                        border: "1px solid var(--color-error)",
+                        color: "var(--color-error)",
                         borderRadius: 4,
                         padding: "3px 8px",
                         cursor: "pointer",
@@ -780,7 +780,7 @@ export function ReportsPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)" }}>
         <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Reports</h1>
         {license && (
           <Badge
@@ -820,16 +820,21 @@ export function ReportsPage() {
 
           {/* ── Usage tab ── */}
           {tab === "usage" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
+            <div
+              role="tabpanel"
+              id="tabpanel-usage"
+              aria-labelledby="tab-usage"
+              style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}
+            >
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-3)", alignItems: "flex-end" }}>
                 <DateRangePicker value={range} onChange={setRange} />
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: "var(--space-2)" }}>
                   <button
                     onClick={downloadCsv}
                     style={{
                       background: "var(--color-surface-2)",
                       border: "1px solid var(--color-border)",
-                      color: "var(--color-muted)",
+                      color: "var(--color-secondary)",
                       borderRadius: 6,
                       padding: "6px 12px",
                       cursor: "pointer",
@@ -843,7 +848,7 @@ export function ReportsPage() {
                     style={{
                       background: "var(--color-surface-2)",
                       border: "1px solid var(--color-border)",
-                      color: "var(--color-muted)",
+                      color: "var(--color-secondary)",
                       borderRadius: 6,
                       padding: "6px 12px",
                       cursor: "pointer",
@@ -867,13 +872,13 @@ export function ReportsPage() {
                     borderRadius: 6,
                     padding: "8px 14px",
                     fontSize: 12,
-                    color: "var(--color-muted)",
+                    color: "var(--color-secondary)",
                   }}>
                     Egress estimation method: <strong style={{ color: "var(--color-text)" }}>{usage.egress_method}</strong>
                   </div>
 
                   {/* Totals */}
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "var(--space-3)" }}>
                     {[
                       { label: "Viewer-Minutes", value: usage.totals.viewer_minutes.toFixed(0) },
                       { label: "Peak Concurrency", value: usage.totals.peak_concurrency.toLocaleString() },
@@ -886,7 +891,7 @@ export function ReportsPage() {
                         borderRadius: 8,
                         padding: "14px 16px",
                       }}>
-                        <div style={{ fontSize: 11, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500, marginBottom: 4 }}>{label}</div>
+                        <div style={{ fontSize: 11, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500, marginBottom: "var(--space-1)" }}>{label}</div>
                         <div style={{ fontSize: 22, fontWeight: 700 }}>{value}</div>
                       </div>
                     ))}
@@ -905,7 +910,7 @@ export function ReportsPage() {
                                 padding: "10px 14px",
                                 textAlign: h === "App" || h === "Stream" || h === "Tenant" ? "left" : "right",
                                 fontSize: 11,
-                                color: "var(--color-muted)",
+                                color: "var(--color-secondary)",
                                 textTransform: "uppercase",
                                 letterSpacing: "0.06em",
                                 fontWeight: 600,
@@ -923,8 +928,8 @@ export function ReportsPage() {
                           {usage.rows.map((row, i) => (
                             <tr key={i} style={{ borderTop: i === 0 ? "none" : "1px solid var(--color-border)" }}>
                               <td style={{ padding: "8px 14px" }}>{row.app}</td>
-                              <td style={{ padding: "8px 14px", color: "var(--color-muted)", fontSize: 12, fontFamily: "var(--font-mono)" }}>{row.stream_id ?? "—"}</td>
-                              <td style={{ padding: "8px 14px", color: "var(--color-muted)", fontSize: 12 }}>{row.tenant ?? "—"}</td>
+                              <td style={{ padding: "8px 14px", color: "var(--color-secondary)", fontSize: 12, fontFamily: "var(--font-mono)" }}>{row.stream_id ?? "—"}</td>
+                              <td style={{ padding: "8px 14px", color: "var(--color-secondary)", fontSize: 12 }}>{row.tenant ?? "—"}</td>
                               <td style={{ padding: "8px 14px", textAlign: "right" }}>{row.viewer_minutes.toFixed(0)}</td>
                               <td style={{ padding: "8px 14px", textAlign: "right" }}>{row.peak_concurrency.toLocaleString()}</td>
                               <td style={{ padding: "8px 14px", textAlign: "right" }}>{row.egress_gb.toFixed(2)}</td>
@@ -942,12 +947,23 @@ export function ReportsPage() {
 
           {/* ── Tenants tab ── */}
           {tab === "tenants" && (
-            <TenantsTab onToast={toast} />
+            <div
+              role="tabpanel"
+              id="tabpanel-tenants"
+              aria-labelledby="tab-tenants"
+            >
+              <TenantsTab onToast={toast} />
+            </div>
           )}
 
           {/* ── Schedules tab ── */}
           {tab === "schedules" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div
+              role="tabpanel"
+              id="tabpanel-schedules"
+              aria-labelledby="tab-schedules"
+              style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}
+            >
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <button
                   onClick={() => { setShowScheduleForm(true); setEditSchedule(null); }}
@@ -983,7 +999,7 @@ export function ReportsPage() {
                   {schedules.map((sched, i) => (
                     <div key={sched.id}>
                       {editSchedule?.id === sched.id ? (
-                        <div style={{ padding: 16 }}>
+                        <div style={{ padding: "var(--space-4)" }}>
                           <ScheduleForm
                             initial={sched}
                             onSave={(data) => updateSchedule(sched.id, data)}
@@ -994,13 +1010,13 @@ export function ReportsPage() {
                         <div style={{
                           display: "flex",
                           alignItems: "center",
-                          gap: 12,
-                          padding: "12px 16px",
+                          gap: "var(--space-3)",
+                          padding: "var(--space-3) var(--space-4)",
                           borderTop: i === 0 ? "none" : "1px solid var(--color-border)",
                         }}>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600 }}>{sched.cron}</div>
-                            <div style={{ fontSize: 11, color: "var(--color-muted)", marginTop: 3 }}>
+                            <div style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 3 }}>
                               {sched.format.toUpperCase()}
                               {sched.scope?.app ? ` · app: ${sched.scope.app}` : ""}
                               {sched.scope?.tenant ? ` · tenant: ${sched.scope.tenant}` : ""}
@@ -1010,13 +1026,13 @@ export function ReportsPage() {
                           <div style={{ display: "flex", gap: 6 }}>
                             <button
                               onClick={() => { setEditSchedule(sched); setShowScheduleForm(false); }}
-                              style={{ background: "none", border: "1px solid var(--color-border)", color: "var(--color-muted)", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 11 }}
+                              style={{ background: "none", border: "1px solid var(--color-border)", color: "var(--color-secondary)", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 11 }}
                             >
                               Edit
                             </button>
                             <button
                               onClick={() => void deleteSchedule(sched.id)}
-                              style={{ background: "none", border: "1px solid var(--color-error, #FF5C68)", color: "var(--color-error, #FF5C68)", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 11 }}
+                              style={{ background: "none", border: "1px solid var(--color-error)", color: "var(--color-error)", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 11 }}
                             >
                               Delete
                             </button>
