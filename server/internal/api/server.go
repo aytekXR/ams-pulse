@@ -99,6 +99,13 @@ type Config struct {
 	// Nil = OIDC disabled (no behaviour change to existing auth).
 	// S11 WO-C: SSO/OIDC phase 1.
 	OIDCConfig *OIDCProviderConfig
+
+	// AMSEnvConfigured reports whether PULSE_AMS_URL was explicitly set (i.e. the
+	// operator configured an AMS connection via the environment rather than the
+	// ams_sources table). Surfaced on /healthz so the web UI can tell an
+	// env-configured-but-source-empty deployment apart from a truly fresh install
+	// and not push a running operator into the onboarding wizard.
+	AMSEnvConfigured bool
 }
 
 // KafkaStatsProvider is the interface to the Kafka source for health reporting.
@@ -935,8 +942,9 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, httpStatus, map[string]any{
-		"status":     overallStatus,
-		"components": components,
+		"status":             overallStatus,
+		"components":         components,
+		"ams_env_configured": s.cfg.AMSEnvConfigured,
 	})
 }
 

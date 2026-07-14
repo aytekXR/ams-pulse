@@ -36,13 +36,21 @@ import { SettingsPage } from "@/features/settings/SettingsPage";
 import { OnboardingWizard } from "@/features/settings/OnboardingWizard";
 import "@/styles/global.css";
 
+/** localStorage key: set once the user has seen (skipped or completed) the wizard. */
+export const ONBOARDING_DISMISSED_KEY = "pulse_onboarding_dismissed";
+
 /**
- * Fires once per authenticated session (on mount of the authenticated subtree).
- * If the deployment has no AMS sources configured, sends the user to /onboarding
- * so they can add one before interacting with an empty dashboard.
- * Never redirects if the user is already on /onboarding.
- * A failed or errored sources fetch fails open — a network blip must not
- * displace a working user into the setup wizard.
+ * On landing on the dashboard, nudge a genuinely-new user toward the setup wizard
+ * so they are not stranded on an empty dashboard with no visible next step.
+ *
+ * Deliberately conservative, because "no AMS *source*" does NOT mean "not set up":
+ * production and the documented quickstart configure AMS via the PULSE_AMS_URL env
+ * var and never write the `ams_sources` table, so `getSources()` is legitimately
+ * empty on a fully-running instance. The guard therefore redirects **at most once
+ * ever** (persisted via ONBOARDING_DISMISSED_KEY, set when the wizard is skipped or
+ * completed) and only from `/`, so an env-configured operator sees the wizard once,
+ * dismisses it, and is never sent back — and can always reach Settings in between.
+ * A failed sources fetch fails open.
  */
 export function OnboardingGuard() {
   const navigate = useNavigate();
@@ -55,18 +63,33 @@ export function OnboardingGuard() {
     // with no sources could not open Settings to add one by hand — the guard would
     // yank them back to the wizard from every route, which is a trap, not a hint.
     if (checked.current || location.pathname !== "/") return;
+    // Already skipped/completed the wizard once — never nag again. This is what
+    // stops a UI-mode user who declined setup from being redirected on every login.
+    if (localStorage.getItem(ONBOARDING_DISMISSED_KEY)) return;
     checked.current = true;
 
     let cancelled = false;
-    adminApi
-      .getSources()
-      .then((res) => {
-        if (!cancelled && res.items.length === 0) {
-          navigate("/onboarding", { replace: true });
-        }
-      })
-      .catch(() => {
-        // Fail open — network error must not block a working user.
+    // Check /healthz first (unauthenticated): if AMS was configured via the
+    // environment, the deployment is set up regardless of the ams_sources table,
+    // so stop here and never touch getSources — that both protects a running
+    // operator from the wizard and spares the extra call. Only a deployment with
+    // no env AMS falls through to the source-list check.
+    fetch("/healthz")
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((health) => {
+        if (cancelled || health?.ams_env_configured) return;
+        return adminApi
+          .getSources()
+          .then((res) => {
+            // Fail open: redirect only when we positively know there are zero sources.
+            if (!cancelled && res.items.length === 0) {
+              navigate("/onboarding", { replace: true });
+            }
+          })
+          .catch(() => {
+            // Network error must not block a working user.
+          });
       });
 
     return () => {
@@ -99,7 +122,16 @@ function AppRoutesInner() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route
             path="/onboarding"
-            element={<OnboardingWizard onComplete={() => navigate("/")} />}
+            element={
+              <OnboardingWizard
+                onComplete={() => {
+                  // Remember the dismissal so a user who skips without adding a
+                  // source is not redirected back here on the next login.
+                  localStorage.setItem(ONBOARDING_DISMISSED_KEY, "1");
+                  navigate("/");
+                }}
+              />
+            }
           />
           <Route
             path="*"

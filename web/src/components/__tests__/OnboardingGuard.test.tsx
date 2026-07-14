@@ -1,15 +1,18 @@
 /**
  * OnboardingGuard — post-auth onboarding redirect tests.
  *
- * (a) authed + zero sources   → redirected to /onboarding
- * (b) authed + ≥1 source      → NOT redirected
- * (c) sources fetch throws    → NOT redirected (fail open)
- * (d) already on /onboarding  → NOT redirected (no double-trigger)
+ * (a) authed + zero sources + not env-configured → redirected to /onboarding
+ * (b) authed + ≥1 source                         → NOT redirected
+ * (c) sources fetch throws                        → NOT redirected (fail open)
+ * (d) already on /onboarding                      → NOT redirected (no double-trigger)
+ * (e) deliberate navigation elsewhere             → NOT hijacked
+ * (f) AMS env-configured (empty ams_sources)      → NOT redirected (protects operator)
+ * (g) dismissal flag already set                  → NOT redirected
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router-dom";
-import { OnboardingGuard } from "../../App";
+import { OnboardingGuard, ONBOARDING_DISMISSED_KEY } from "../../App";
 
 // ─── Mock adminApi ────────────────────────────────────────────────────────────
 //
@@ -27,6 +30,19 @@ vi.mock("@/api/client", () => ({
   setToken: vi.fn(),
   clearToken: vi.fn(),
 }));
+
+// The guard also GETs /healthz (unauthenticated) to read ams_env_configured.
+// Default stub: NOT env-configured, so the sources check decides. Individual
+// tests override this to exercise the env-configured branch.
+function stubHealthz(amsEnvConfigured = false) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: "ok", ams_env_configured: amsEnvConfigured }),
+    }),
+  );
+}
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 
@@ -67,10 +83,14 @@ function renderGuard(initialPath = "/") {
 describe("OnboardingGuard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
+    stubHealthz(false); // default: not env-configured
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
+    localStorage.clear();
   });
 
   it("(a) zero sources → redirected to /onboarding", async () => {
@@ -131,6 +151,37 @@ describe("OnboardingGuard", () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(mockGetSources).not.toHaveBeenCalled();
     expect(screen.getByTestId("path")).toHaveTextContent("/settings");
+    expect(screen.queryByTestId("onboarding")).not.toBeInTheDocument();
+  });
+
+  // The operator-protection case. Prod and the documented quickstart configure AMS
+  // via PULSE_AMS_URL and leave ams_sources empty. Such a deployment reports
+  // ams_env_configured=true and must NEVER be redirected — not even once — or the
+  // operator lands in a "connect your first AMS" wizard for a running system.
+  it("(f) AMS env-configured → NOT redirected, and getSources is never called", async () => {
+    stubHealthz(true);
+    mockGetSources.mockResolvedValue({ items: [], meta: {} });
+
+    renderGuard("/");
+
+    // Give the /healthz promise chain time to settle.
+    await new Promise((r) => setTimeout(r, 50));
+    // env-configured short-circuits before the source check — the operator is
+    // never even queried for sources, let alone redirected.
+    expect(mockGetSources).not.toHaveBeenCalled();
+    expect(screen.getByTestId("path")).toHaveTextContent("/");
+    expect(screen.queryByTestId("onboarding")).not.toBeInTheDocument();
+  });
+
+  it("(g) dismissal flag already set → NOT redirected, no fetch", async () => {
+    localStorage.setItem(ONBOARDING_DISMISSED_KEY, "1");
+    mockGetSources.mockResolvedValue({ items: [], meta: {} });
+
+    renderGuard("/");
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mockGetSources).not.toHaveBeenCalled();
+    expect(screen.getByTestId("path")).toHaveTextContent("/");
     expect(screen.queryByTestId("onboarding")).not.toBeInTheDocument();
   });
 });

@@ -465,6 +465,10 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		CORSAllowedOrigins: cfg.CORSAllowedOrigins, // A1: PULSE_CORS_ALLOWED_ORIGINS
 		AllowedWSOrigins:   cfg.AllowedWSOrigins,   // C2: PULSE_ALLOWED_WS_ORIGINS
 		OIDCConfig:         oidcCfg,                // S11 WO-C
+		// Explicit env config, not cfg.AMSBaseURL (which defaults to localhost and
+		// is therefore never empty). Distinguishes "operator set an AMS URL" from
+		// "fresh install on the default" for the onboarding guard.
+		AMSEnvConfigured: os.Getenv("PULSE_AMS_URL") != "",
 	}
 	apiServer := api.New(apiCfg, metaStore, agg, qsvc, lic, logger)
 	// Wire ClickHouse connection for /healthz probes (D-W1-002).

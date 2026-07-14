@@ -234,7 +234,55 @@ func TestAPI_Healthz_NoAuth(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Errorf("response is not valid JSON: %v", err)
 	}
+	// The default test server sets no AMS env, so the onboarding signal must be
+	// present and false (a genuinely fresh deployment).
+	if v, ok := body["ams_env_configured"]; !ok {
+		t.Errorf("ams_env_configured missing from /healthz body: %v", body)
+	} else if v != false {
+		t.Errorf("ams_env_configured: want false for a server with no AMS env, got %v", v)
+	}
 	t.Logf("PASS: GET /healthz → %d, body=%v", resp.StatusCode, body)
+}
+
+// TestAPI_Healthz_AMSEnvConfigured verifies the onboarding signal the web guard
+// depends on: a deployment whose AMS is configured via the environment reports
+// ams_env_configured=true, so the UI does not push a running operator into the
+// setup wizard when the ams_sources table happens to be empty.
+func TestAPI_Healthz_AMSEnvConfigured(t *testing.T) {
+	ctx := context.Background()
+	ddl, err := os.ReadFile(metaDDLPath(t))
+	if err != nil {
+		t.Fatalf("meta DDL not found: %v", err)
+	}
+	store, err := meta.New(ctx, "sqlite", ":memory:", "api-test-secret")
+	if err != nil {
+		t.Fatalf("meta.New: %v", err)
+	}
+	if err := store.MigrateEmbedded(ctx, string(ddl)); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	lic, _ := license.New("", "")
+	live := &fakeLiveProvider{}
+	qsvc := query.New(live, nil, lic)
+
+	srv := api.New(api.Config{ListenAddr: ":0", AMSEnvConfigured: true}, store, live, qsvc, lic, nil)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	defer store.Close()
+
+	resp, err := http.Get(ts.URL + "/healthz")
+	if err != nil {
+		t.Fatalf("GET /healthz: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	if body["ams_env_configured"] != true {
+		t.Errorf("ams_env_configured: want true, got %v", body["ams_env_configured"])
+	}
 }
 
 func TestAPI_Unauthorized_Returns401(t *testing.T) {

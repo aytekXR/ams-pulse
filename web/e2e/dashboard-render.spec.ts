@@ -65,9 +65,17 @@ test.describe("Dashboard render", () => {
       route.fulfill({ status: 200, contentType: "application/json", body: STREAMS_BODY })
     );
 
-    // OnboardingGuard fetches the source list on the dashboard and sends a user
-    // with none to the wizard. Return one source so this test stays on the
-    // dashboard (and so the request never 502s against the absent CI backend).
+    // OnboardingGuard probes /healthz for ams_env_configured before deciding
+    // whether to send a source-less deployment to the wizard. Report an
+    // env-configured instance so it short-circuits and never leaves the dashboard
+    // (and so neither /healthz nor /admin/sources 502s against the absent backend).
+    await page.route("**/healthz", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ status: "ok", ams_env_configured: true }),
+      })
+    );
     await page.route("/api/v1/admin/sources", (route) =>
       route.fulfill({
         status: 200,

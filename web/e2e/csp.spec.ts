@@ -201,6 +201,17 @@ test.describe("CSP — Caddy-fronted", () => {
       TOKEN_KEY
     );
 
+    // OnboardingGuard probes /healthz before deciding whether a source-less
+    // deployment needs the wizard. Report an env-configured instance so it stays
+    // on the dashboard deterministically, independent of the backend's env.
+    await page.route("**/healthz", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ status: "ok", ams_env_configured: true }),
+      })
+    );
+
     // Mock API endpoints so dashboard can render without real backend auth.
     await page.route("/api/v1/live/overview", (route) =>
       route.fulfill({
