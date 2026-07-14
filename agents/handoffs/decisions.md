@@ -6027,3 +6027,95 @@ green). origin/main == HEAD at S29 open.
 - **Gates:** web **619/619** (was 599) / 36 files; coverage 70.12/65.72/59.84 vs floors 59/54/45;
   lint + build clean; **Playwright 22/22** (full suite, light + dark). TierGate's stale
   "NO waiver has been granted" comment corrected.
+
+---
+
+## D-096 (S34, 2026-07-14 — OPEN): e2e for the six uncovered pages; two real a11y defects found and fixed; §2.3 ledger correction
+
+**Goal.** Close the largest residual-risk gap left by §2.19: Waves 3/4/5 rewrote six pages
+(Ingest, Anomalies, Alerts, Settings, Reports, Probes) and **not one of them had ever been
+driven in a real browser.** Unit tests were green throughout — which is precisely the problem,
+since the defects below are all invisible to jsdom.
+
+**Delivered.**
+- `web/e2e/support/stubs.ts` (NEW) — one canonical boot layer (`stubApp`/`json`/`collectErrors`).
+  Every page boots the same three requests (`/auth/me`, `/auth/oidc/status`,
+  `/api/v1/admin/license`); before this, each spec re-declared them and they were already
+  drifting between `analytics.spec.ts` and `fleet.spec.ts`. Tier is a parameter, because the
+  tier matrix is not uniform: **Reports** gates unless business|enterprise, **Anomalies** gates
+  unless enterprise, **Probes** gates ONLY free (it opens at pro — the opposite direction).
+- Six new specs, **38 tests**. Full Playwright suite **22 → 60 green**.
+
+**★ Two REAL defects, found only because a real browser was driven. Both fixed, both RED-proven.**
+1. **`AlertsPage` channel deletion still called native `window.confirm()`** (`AlertsPage.tsx:132`).
+   Wave 4 replaced the native confirm with an inline confirmation step for **rules** and missed
+   **channels** — two confirmation models for the same destructive verb. It survived because
+   **jsdom stubs `window.confirm`**, so no unit test ever saw a dialog. Now an inline
+   `data-testid="delete-channel-confirm"` mirroring the rule flow.
+2. **`ProbesPage` `DeleteConfirm` was a `role="dialog"` that behaved like a div.** No focus moved
+   into it on open (a screen-reader user was never told it appeared) and **Escape did nothing**.
+   Fixed: focus lands on the dialog container (`tabIndex={-1}`, so AT announces the label *and*
+   the body copy saying the delete is permanent — and so the destructive button is not one Enter
+   away), Escape cancels, focus returns to the trigger on unmount. Deliberately **NOT**
+   `aria-modal` and **no focus trap**: it renders inline, not as an overlay, and the page behind
+   it stays live — claiming otherwise would lie to AT.
+
+**★ A false green I nearly shipped, caught by the adversarial audit.** The Probes free-tier gate
+test stubbed no probes route. Delete the gate entirely and there is no data, so no table renders,
+and `expect(table).toHaveCount(0)` **still passes** — it was measuring the absent stub, not the
+gate. Now the route is stubbed even though the gated page never calls it, so the table's absence
+can only be the gate's doing. Four other WEAK verdicts fixed the same way (an `emulateMedia`
+call that pinned nothing because dark is the fallback; an `aria-live` assertion scoped to `form`
+that a mirror one tag outside would have escaped; a sigma re-fetch proven to fire but never to
+render; a `aria-labelledby` pointing at an id nobody asserted exists).
+
+**★ An accusation I got wrong, and the correction.** Chromium cannot launch on this host —
+`libatk-1.0.so.0`, `libgbm`, `libasound` are **not installed** and there is no sudo. On seeing
+every agent hit that error while still reporting `green: true`, I concluded they had fabricated
+their test runs. **They had not.** Reading the transcripts showed one had extracted the missing
+libraries from `.deb` packages into a scratch dir and set `LD_LIBRARY_PATH` — Chromium
+("Google Chrome for Testing 149.0.7827.55") really did run and the greens were real. The lesson
+is the one this repo keeps re-learning in the other direction: **check the evidence before
+asserting the conclusion**, including when the conclusion is "the agent lied."
+
+**⚠️ RUN E2E IN THE DOCKER IMAGE. Do not install anything, do not patch `LD_LIBRARY_PATH`.**
+Bare-metal Chromium **cannot launch on this host** — `libatk-1.0.so.0`, `libgbm` and `libasound`
+are not installed and there is no sudo. The sanctioned recipe was **already in SESSION-34's own
+gates section** and is how S33 got its 22/22:
+```sh
+cd web && sg docker -c "docker run --rm --network host -v \$PWD:/work -w /work \
+  -e CI=1 mcr.microsoft.com/playwright:v1.61.1-noble npx playwright test"
+# 60/60 (S34). Note: CI=1 disables reuseExistingServer, so free port 4173 first
+# (`pkill -f 'vite preview'`) or the run aborts with "port already used".
+```
+**This session wasted effort re-solving a solved problem**: I and the agents went straight to
+`npx playwright test`, hit the missing libraries, and improvised — one agent extracted the libs
+from `.deb` packages into `/tmp` and set `LD_LIBRARY_PATH` (it *worked*, and its greens were
+real, but it was never necessary). **Read the gates section of the session plan before running
+gates.** No operator action is needed here and `install-deps` is NOT required — the earlier draft
+of this entry said otherwise and was wrong. Two stray `.deb` files an agent downloaded into
+`web/` were deleted, not committed.
+
+**Also: the Go toolchain is not on PATH on this host.** The only copy is pre-commit's:
+`export PATH="/home/aytek/.cache/pre-commit/repoiavouv2x/golangenv-default/.go/bin:$PATH"` (go1.26.5).
+
+**Ledger correction — ROADMAP-V2 §2.3 was never open.** It has been carried as open work since
+S9, but `qa/licensegen` already exposes `-privkey`, `-expires` *and* an `-expires-minutes` flag
+the roadmap never asked for, with `flag.Visit` enforcing mutual exclusion. Verified:
+`go test ./qa/licensegen/...` → ok (8.6s). What actually remains is the **vendor key ceremony**,
+which is an operator action already tracked in `operator-expected.md` — not code.
+
+**Gates.** web **619/619** vitest / 36 files; coverage 67.47/65.30/59.65/69.98 vs floors
+59/54/45; lint + tsc + build clean; **Playwright 60/60** (was 22). Both src fixes RED-proven by
+mutation: neutering the dialog focus+Escape reddens exactly the 2 new a11y tests and nothing
+else; reverting the channel confirm to a direct API call reddens exactly the 2 new channel tests
+and nothing else.
+
+**Operator action required? NO — nothing new blocks the product, and nothing was needed from the
+operator this session.** The pre-existing blockers are unchanged and are listed in
+`operator-expected.md` — chief among them the **GHCR public flip** (without it no customer can
+`docker pull`) and the **AMS license expiring 2026-07-27T13:45Z (13 days)**.
+
+**Gates run in the sanctioned environment:** Playwright **60/60** via
+`mcr.microsoft.com/playwright:v1.61.1-noble` (CI-faithful), vitest 619/619, lint + tsc + build
+clean.

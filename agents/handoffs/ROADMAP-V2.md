@@ -76,9 +76,24 @@ decisions.md D-067 or the S10 decisions entry.
 
 ---
 
-### 2.3  qa/licensegen -privkey/-expires flags  [S]
+### 2.3  qa/licensegen -privkey/-expires flags  [S] ✅ DONE (ledger corrected S34/D-096: the flags were built and never ticked)
 
-**Why:** `docs/licensing.md §2.1` documents that `qa/licensegen` will accept a `-privkey
+**Ledger correction (S34, 2026-07-14).** This entry was carried as OPEN across every session
+handoff since S9, but the work is finished. `qa/licensegen/main.go` exposes `-privkey` (line 92),
+`-expires` (line 93) AND a third flag the roadmap never asked for, `-expires-minutes` (line 94,
+for live trial-flow demos). `flag.Visit` enforces `-expires`/`-expires-minutes` mutual exclusion.
+Verified S34: `go test ./qa/licensegen/...` → ok (8.6s), and `go run . -h` lists all four flags.
+The tests cover hex-length validation, signature verification under a supplied privkey, and the
+`-expires-minutes` signature path (`TestExpiresMinutesSignatureVerifies`).
+**What genuinely remains is NOT code — it is the vendor key ceremony** (generate the production
+ed25519 pair, sign a real key, verify Pulse accepts it under a `PULSE_LICENSE_PUBKEY` swap). That
+is an operator action and is tracked as such in `docs/operator-expected.md` (trial-key mint), not
+here.
+**Gotcha for future sessions:** the Go toolchain is NOT on the default PATH on this host. The only
+copy is pre-commit's:
+`export PATH="/home/aytek/.cache/pre-commit/repoiavouv2x/golangenv-default/.go/bin:$PATH"` (go1.26.5).
+
+**Why (original):** `docs/licensing.md §2.1` documents that `qa/licensegen` will accept a `-privkey
 <path>` flag (to use the vendor's production ed25519 key pair instead of the embedded dev
 key) and an `-expires <days>` flag (for time-boxed licenses). Without these flags the tool
 is dev/test-only; there is no supported code path for the vendor to mint production Pro+

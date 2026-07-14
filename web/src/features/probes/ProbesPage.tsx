@@ -901,10 +901,45 @@ interface DeleteConfirmProps {
 }
 
 function DeleteConfirm({ probeName, onConfirm, onCancel, deleting }: DeleteConfirmProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * A role="dialog" makes a promise to assistive tech that this component was not keeping:
+   * opening it left focus behind on the row's "Delete probe X" button, so a screen-reader
+   * user was never told the dialog existed, and Escape did nothing — the only way out was
+   * to find the Cancel button by hunting. (Found by the S34 e2e pass; the jsdom unit tests
+   * could not see it because focus and key dispatch are browser behaviour.)
+   *
+   * Focus lands on the dialog CONTAINER (tabIndex={-1}) rather than a button, because that
+   * is what makes AT announce the label plus the body copy — and the body copy is the part
+   * that says the deletion is permanent. Focusing "Delete" straight away would also put the
+   * destructive action one Enter keypress from the user.
+   *
+   * This is a NON-MODAL dialog: it renders inline in the page flow, not as an overlay, and
+   * the rest of the page stays live behind it. So it deliberately does NOT set aria-modal or
+   * trap Tab — either would tell AT the background is inert when it is not.
+   *
+   * On unmount, focus returns to whatever opened the dialog (the row's Delete button), so
+   * keyboard users are not dumped back at the top of the document.
+   */
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    return () => opener?.focus?.();
+  }, []);
+
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-label="Confirm probe deletion"
+      tabIndex={-1}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !deleting) {
+          e.stopPropagation();
+          onCancel();
+        }
+      }}
       style={{
         background: "var(--color-surface)",
         border: "1px solid var(--color-error)",
