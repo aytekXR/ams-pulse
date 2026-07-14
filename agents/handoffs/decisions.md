@@ -5474,3 +5474,19 @@ green). origin/main == HEAD at S29 open.
   load 20 tonight from concurrent operator sessions). §2.18 marketplace
   tail stays sequenced FIRST when the operator unblocks it (§2.19
   sequencing rule unchanged).
+- **★ S29 CI ESCAPE CAUGHT + FIXED (found by this session's own PR
+  net):** the `e2e` workflow has been RED ON MAIN since S29 merged
+  (772fb97 failure, 8a527ee failure; last green d986162/S28) — S29's
+  AMF0 upgrade makes the RTMP prober report `app_accepted` against
+  mock-ams (URL `rtmp://mock-ams:11935/live/...` HAS an app path ⇒
+  the AMF0 leg engages — deeper, correct behavior), but e2e.yml:272
+  still pinned the pre-S29 `handshake_complete` ⇒ 90 s poll timeout
+  with success=true items VISIBLE in the dump (false red; the check
+  was stale, not the product). S29's "12/12 contexts green" was
+  REQUIRED-contexts-only — e2e is NOT in branch-protection required
+  checks, so the red slipped by at S29 close. FIX (this PR):
+  e2e.yml pins `app_accepted` exactly (handshake_complete on an
+  app-URL probe would mean the AMF0 leg silently failed — the pin is
+  now tighter than before, not looser). Promotion of e2e to a
+  required context belongs to the standing date-gated CI-promotions
+  process (≥07-23), NOT flipped unilaterally here.

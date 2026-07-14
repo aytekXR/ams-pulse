@@ -269,7 +269,7 @@ jobs:
                   if (it.get('success') == True
                       and it.get('connect_time_ms') is not None
                       and it.get('connect_time_ms', 0) > 0
-                      and it.get('signaling_state', '') == 'handshake_complete'
+                      and it.get('signaling_state', '') == 'app_accepted'
                       and it.get('error_code', '') == ''):
                       print('yes')
                       sys.exit(0)
@@ -286,7 +286,7 @@ jobs:
             fi
             sleep 5
           done
-          echo "PASS: S13/WO-B' — RTMP probe success=true, connect_time_ms>0, signaling_state=handshake_complete"
+          echo "PASS: S13/WO-B' — RTMP probe success=true, connect_time_ms>0, signaling_state=app_accepted (S30: URL has an app path, the S29 AMF0 connect leg must engage; handshake_complete here would mean it silently did not)"
 
       # ── S13/WO-C': DASH probe → mock-ams MPD → success=true ─────────────────────
       - name: S13 WO-C' — create DASH probe pointing at mock-ams
