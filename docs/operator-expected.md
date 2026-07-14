@@ -1,6 +1,57 @@
-# Operator TODO — the items only YOU can do (updated at SESSION-31 close, D-093, 2026-07-14; rides S31's PR)
+# Operator TODO — the items only YOU can do (updated at SESSION-32 close, D-094, 2026-07-14; rides S32's PR)
 
-## ⚡ TL;DR — expected from you right now (2026-07-14, SESSION-31 closed — D-093, SRT live-validated + §2.19 Wave 0 landed)
+## ⚡ TL;DR — expected from you right now (2026-07-14, SESSION-32 closed — D-094, §2.19 Wave 1 landed)
+
+> **Your list is UNCHANGED since S31 — nothing new is asked of you, and nothing is
+> blocking the work.** S32 ran fully autonomously. Re-verified live at open: no
+> answers had arrived, GHCR is still private (anonymous pull → 401), and none of
+> it blocked the session.
+>
+> **The one with a clock, repeated because it is the only real risk:**
+> **⏰ your AMS license expires 2026-07-27T13:45Z (13 days).** A lapse on its own is
+> survivable — but a lapse **plus the next restart of `antmedia`** kills ALL ingest,
+> and both halves of that are now proven with evidence (D-092: lapsed + restart =
+> every publish refused; D-093: valid + restart = ingest fine). Renew before 07-27
+> and nothing else is needed from you.
+>
+> **Still waiting on you (all unchanged, in the order that unblocks the most):**
+> 1. **GHCR public flip** (~30 seconds) — until then no customer can `docker pull`.
+> 2. **G3 — the accessibility ruling only you can make.** The "Upgrade License" button
+>    fails WCAG AA contrast in light theme (3.12:1 vs the 4.5:1 your own brandkit
+>    requires). It is pre-existing, and the fix is a one-value change to YOUR brandkit
+>    (`tokens.json color.light.accent` → `#087A59`, 5.33:1). Sessions do not change
+>    brandkit without you (D-071). Say **"apply the G3 token fix"** and it lands next wave.
+> 3. **Trial-key mint** (needs your vault privkey), **final-assessment review** (gates the
+>    marketplace upload), **Ant Media marketplace contact**, **Pro MaxNodes ruling**
+>    (PRD says 1–2, code enforces 10).
+> 4. **matbu/evrak vhost ruling** — live prod serves `matbu.beyondkaira.com` from an
+>    on-disk Caddyfile block that `origin/main` lacks (it embeds your bcrypt hash and the
+>    repo is public). A clean-checkout redeploy would drop that site.
+> 5. **G1** (do you support mobile viewports on form pages? iOS zooms inputs under 16px;
+>    your body token is 14px) and **G2** (icon library: Phosphor vs Lucide vs stay-iconless).
+>    Neither blocks anything yet — the first form/icon wave will need them.
+>
+> **FYI, no action needed — what S32 did autonomously:** the second UI wave landed (the
+> live dashboard and QoE page now take their chart colours and spacing from your brandkit
+> tokens instead of hardcoded values, and the streams table finally has real screen-reader
+> semantics). Three things worth knowing, because they are the kind of bug that ships
+> silently:
+> - The build tried to tell screen readers that the Viewers and Bitrate columns were
+>   sortable. **They aren't** — there is no sort handler. That false promise was caught
+>   and removed before merge.
+> - Three of the new tests were **testing themselves rather than the app** (they asserted
+>   an expression written in the test file, so the app could break and they would still
+>   pass). All three were rewritten and then proven to fail when the app is deliberately
+>   broken.
+> - The colour fallbacks in the QoE page (`#FFB224`, `#FF5C68`) turned out to be **stale**:
+>   in light theme your real tokens are different colours entirely, so if those fallbacks
+>   had ever been used they would have rendered the wrong colour. Removed.
+>
+> ---
+>
+> ## (superseded) S31-close header follows
+
+## ⚡ TL;DR — expected from you at SESSION-31 close (2026-07-14, D-093, SRT live-validated + §2.19 Wave 0)
 
 > **Nothing is BLOCKING. Five standing items remain yours, one is new (G3), and
 > one has a deadline (your license, 13 days).**

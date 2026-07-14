@@ -11,7 +11,73 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-32.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-33.md`)
+
+**Session 2026-07-14 result: D-094 — S32 DONE (★ §2.19 Wave 1 landed: LiveOverview
++ QoE on brandkit tokens + real ARIA; ★★ the verify net caught the build shipping a
+FALSE ARIA PROMISE and three TAUTOLOGY tests; ★★ e2e caught a real regression the
+default gate list would have missed).**
+
+- **OPERATOR INTAKE: no new signals; all standing items OPEN.** No operator commits
+  or file drops since S31. GHCR anonymous pull still **401** (private). No trial-key
+  / assessment-review / Ant-Media-contact / MaxNodes / matbu signals. **G1, G2 and
+  G3 unanswered** — none blocks a wave (Wave 1 adds no forms, no icons; **G3 is a
+  `tokens.json` change a session may NOT self-approve**). ⏰ **License renewal due
+  2026-07-27T13:45Z.** AMS healthy at open (`s32open` sweep byte-identical to the
+  pre-expiry baseline; teststream broadcasting, `publishers=1`, 0 poll errors).
+- **★ §2.19 WAVE 1 DONE:** chart hex → `CHART_COLORS[N]` (same hex — ProtocolDonut
+  `[7]`, QoE `[1]`/`[4]`); **stale hex fallbacks dropped** from
+  `var(--color-warning, #FFB224)` / `var(--color-error, #FF5C68)` (both vars exist in
+  BOTH themes, and the light values `#B45309`/`#DC2626` DIFFER from the fallback hex —
+  they would have rendered the wrong colour if ever reached); a11y — StatCard
+  accessible names, donut aria-labels, `role=grid/rowgroup/row/columnheader` on
+  StreamsTable. Virtualization/columns/sort untouched.
+- **★★ THE px→TOKEN TRAP (binding for every remaining wave):** the `--space-*` scale
+  is 4/8/12/16/24/32/48/64/96. **Substitute ONLY where the token EQUALS the literal.**
+  Every non-matching literal (6/20/36/160/180/260/520px + all typography sizes) is
+  LEFT ALONE. **Snapping 13px → `var(--space-3)` (12px) is a silent 1px regression** —
+  these waves may not change pixels. Verifier re-derived all 26 substitutions: all EQUAL.
+- **★★ THE BUILD SHIPPED A FALSE ARIA PROMISE — caught pre-merge.** `aria-sort="none"`
+  was added to the Viewers/Bitrate headers, which have **no sort handler**. That lies
+  to assistive tech. Removed; tests now pin its ABSENCE.
+- **★★ THREE TAUTOLOGY TESTS — caught pre-merge.** Each asserted its own expression,
+  never the component (the ProtocolDonut one evaluated
+  `PROTOCOL_COLORS[key] ?? CHART_COLORS[7]` **in the test body** — swapping the
+  component's fallback to `[0]` left all 18 tests GREEN). All rewritten to render the
+  component; each **RED-proven** under sabotage. **A test that never touches the
+  component cannot fail for the component.**
+- **★★ e2e CAUGHT A REAL REGRESSION THE DEFAULT GATE LIST WOULD HAVE MISSED.**
+  `streams-virtualization.spec` is NOT in the §2.2 default Playwright set; it was run
+  because Wave 1 touches StreamsTable. Moving `role="grid"` to the header-owning
+  container (correct ARIA 1.2) meant the spec was setting `scrollTop` on the OUTER
+  `overflow:hidden` wrapper — **a silent no-op; the virtualizer never advanced.** Users
+  unaffected; the test's handle was wrong. Fixed with an explicit
+  `data-testid="streams-scroll"`. **STANDING RULE: run the specs of the components a
+  wave TOUCHES, not just the default gate list.**
+- **Gates:** web **515/515** (S31: 452) / 33 files; coverage **67.42/62.77/56.29** vs
+  floors 59/54/45; lint + build clean; gen:api in sync; **Playwright 10/10**;
+  `contracts/` + `brandkit/` + `package.json` byte-untouched; zero new hex/px in source.
+  No Go changes. **Honest note:** one `vitest --coverage` run reported 2 failures while
+  Playwright + a build ran concurrently (host load **19.8**) — two clean re-runs
+  returned 515/515. **Don't overlap gate runs with heavy jobs on this box.**
+  CI promotions **skip carry ×21**. Workflow: 8 agents, 0 errors.
+- **S33 carries:** §2.19 **Wave 2 (Analytics + Fleet) [M]** primary; **`<SegmentedControl>`
+  extraction** (Fleet's cards/table toggle is NOT a `<Tabs>` candidate — S31 finding, and
+  Wave 2 is the wave that touches Fleet); **G3 token fix [XS, operator-gated]**; license
+  renewal intake before 07-27; marketplace tail (operator items).
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-33.md` and execute it**
+(★ standing directive at its top: review the backlog + REVISE the plan; operator intake
+FIRST — six standing items + G1/G2/**G3**; AMS re-sweep at open WITHOUT any PULSE_TOKEN
+prefix; `ams-teststream` does NOT auto-restart across a reboot; **SRT publishes use the
+PLAIN streamid**; CI promotions if ≥07-23 else skip carry ×22). **PR-first, ≤2 pushes.**
+Check `docs/operator-expected.md` FIRST.
+
+---
+
+## ▶ prior session context (S31, superseded by the above — original START HERE follows)
+
+## (superseded) ▶ START HERE (execute `sessions/SESSION-32.md`)
 
 **Session 2026-07-14 result: D-093 — S31 DONE (★★ SRT INGEST LIVE-VALIDATED,
 FIRST EVER — TC-I-05-SRT PASS 2/2, blocked-scenario list now EMPTY; ★★ the

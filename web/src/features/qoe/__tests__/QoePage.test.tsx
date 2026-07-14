@@ -9,10 +9,24 @@
  * - clearing filters resets to defaults
  *
  * Also tests QoePage rendering: loading state, empty state, error state.
+ *
+ * Wave 1 additions (S32 / D-094):
+ * - QO-1: isAnimationActive={false} on both Line elements
+ * - QO-2: accessibilityLayer on LineChart
+ * - QO-3: aria-label on filter inputs
+ * - QO-4: no outline:none on filter inputs
+ * - QO-5: Badge rendered when threshold exceeded (color-not-only)
+ * - hex → CHART_COLORS: stroke values use CHART_COLORS[1] and CHART_COLORS[4]
+ * - dropped dead fallback hex from var(--color-warning) and var(--color-error)
+ * - exact-match px → token substitutions (borderRadius, gap, padding, marginLeft)
  */
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { QoePage } from "../QoePage";
+import { CHART_COLORS } from "@/lib/chartColors";
 
 // ─── Slice-state reducer (pure logic extracted for unit testing) ───────────────
 
@@ -176,5 +190,199 @@ describe("QoePage rendering", () => {
       expect(screen.getByText(/rebuffer ratio/i)).toBeInTheDocument();
       expect(screen.getByText(/error rate/i)).toBeInTheDocument();
     });
+  });
+});
+
+// ─── Wave 1 a11y + token tests ─────────────────────────────────────────────────
+
+describe("QoePage filter inputs — a11y (QO-3, QO-4)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Resolve to empty so the component reaches the slice-controls render
+    mockGetSummary.mockReturnValue(new Promise(() => {}));
+  });
+
+  it("QO-3: stream filter input has aria-label", () => {
+    render(<QoePage />);
+    const input = screen.getByRole("textbox", { name: /stream id filter/i });
+    expect(input).toBeInTheDocument();
+  });
+
+  it("QO-3: app filter input has aria-label", () => {
+    render(<QoePage />);
+    const input = screen.getByRole("textbox", { name: /app filter/i });
+    expect(input).toBeInTheDocument();
+  });
+
+  it("QO-4: stream filter input has no inline outline:none", () => {
+    render(<QoePage />);
+    const input = screen.getByRole("textbox", { name: /stream id filter/i });
+    // The inline style must not suppress focus ring via outline:none
+    expect((input as HTMLElement).style.outline).not.toBe("none");
+  });
+
+  it("QO-4: app filter input has no inline outline:none", () => {
+    render(<QoePage />);
+    const input = screen.getByRole("textbox", { name: /app filter/i });
+    expect((input as HTMLElement).style.outline).not.toBe("none");
+  });
+
+  it("QO-4: stream filter input carries filter-input class for CSS focus ring", () => {
+    render(<QoePage />);
+    const input = screen.getByRole("textbox", { name: /stream id filter/i });
+    expect(input).toHaveClass("filter-input");
+  });
+
+  it("QO-4: app filter input carries filter-input class for CSS focus ring", () => {
+    render(<QoePage />);
+    const input = screen.getByRole("textbox", { name: /app filter/i });
+    expect(input).toHaveClass("filter-input");
+  });
+});
+
+describe("QoePage threshold badges — color-not-only (QO-5)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("HIGH badge is absent when rebuffer_ratio is below threshold", async () => {
+    mockGetSummary.mockResolvedValue({
+      totals: { startup_p50_ms: 300, startup_p95_ms: 900, rebuffer_ratio: 0.02, error_rate: 0.001 },
+      bitrate_timeline: [],
+    });
+    render(<QoePage />);
+    await waitFor(() => screen.getByText(/rebuffer ratio/i));
+    // No HIGH badge should appear when both metrics are under threshold
+    expect(screen.queryByText("HIGH")).not.toBeInTheDocument();
+  });
+
+  it("HIGH badge appears next to Rebuffer Ratio when rebuffer_ratio > 0.05", async () => {
+    mockGetSummary.mockResolvedValue({
+      totals: { startup_p50_ms: 300, startup_p95_ms: 900, rebuffer_ratio: 0.08, error_rate: 0.001 },
+      bitrate_timeline: [],
+    });
+    render(<QoePage />);
+    await waitFor(() => screen.getByText(/rebuffer ratio/i));
+    // Badge with label "HIGH" must appear
+    expect(screen.getByText("HIGH")).toBeInTheDocument();
+  });
+
+  it("HIGH badge appears next to Error Rate when error_rate > 0.01", async () => {
+    mockGetSummary.mockResolvedValue({
+      totals: { startup_p50_ms: 300, startup_p95_ms: 900, rebuffer_ratio: 0.02, error_rate: 0.05 },
+      bitrate_timeline: [],
+    });
+    render(<QoePage />);
+    await waitFor(() => screen.getByText(/error rate/i));
+    expect(screen.getByText("HIGH")).toBeInTheDocument();
+  });
+
+  it("two HIGH badges appear when both thresholds are exceeded", async () => {
+    mockGetSummary.mockResolvedValue({
+      totals: { startup_p50_ms: 300, startup_p95_ms: 900, rebuffer_ratio: 0.08, error_rate: 0.05 },
+      bitrate_timeline: [],
+    });
+    render(<QoePage />);
+    await waitFor(() => screen.getByText(/rebuffer ratio/i));
+    const badges = screen.getAllByText("HIGH");
+    expect(badges).toHaveLength(2);
+  });
+
+  it("HIGH badge is absent for error_rate exactly at threshold (0.01 is not > 0.01)", async () => {
+    mockGetSummary.mockResolvedValue({
+      totals: { startup_p50_ms: 300, startup_p95_ms: 900, rebuffer_ratio: 0.02, error_rate: 0.01 },
+      bitrate_timeline: [],
+    });
+    render(<QoePage />);
+    await waitFor(() => screen.getByText(/error rate/i));
+    expect(screen.queryByText("HIGH")).not.toBeInTheDocument();
+  });
+
+  it("HIGH badge is absent for rebuffer_ratio exactly at threshold (0.05 is not > 0.05)", async () => {
+    mockGetSummary.mockResolvedValue({
+      totals: { startup_p50_ms: 300, startup_p95_ms: 900, rebuffer_ratio: 0.05, error_rate: 0.001 },
+      bitrate_timeline: [],
+    });
+    render(<QoePage />);
+    await waitFor(() => screen.getByText(/rebuffer ratio/i));
+    expect(screen.queryByText("HIGH")).not.toBeInTheDocument();
+  });
+});
+
+describe("QoePage token substitutions (px → CSS var, hex → CHART_COLORS)", () => {
+  it("CHART_COLORS[1] is exactly #58A6FF (value-preserving)", () => {
+    expect(CHART_COLORS[1]).toBe("#58A6FF");
+  });
+
+  it("CHART_COLORS[4] is exactly #FFB224 (value-preserving)", () => {
+    expect(CHART_COLORS[4]).toBe("#FFB224");
+  });
+
+  it("cardStyle borderRadius references var(--radius-control) not a raw number", async () => {
+    mockGetSummary.mockResolvedValue({
+      totals: { startup_p50_ms: 300, startup_p95_ms: 900, rebuffer_ratio: 0.02, error_rate: 0.001 },
+      bitrate_timeline: [],
+    });
+    render(<QoePage />);
+    await waitFor(() => screen.getByText(/startup p50/i));
+    // The KPI cards should have borderRadius referencing the CSS variable
+    const cards = document.querySelectorAll<HTMLElement>('[style*="border-radius: var(--radius-control)"]');
+    // At minimum the summary cards and chart wrapper must have the token
+    expect(cards.length).toBeGreaterThan(0);
+  });
+
+  it("var(--color-warning) fallback hex dropped — raw #FFB224 not in Rebuffer Ratio color style", async () => {
+    mockGetSummary.mockResolvedValue({
+      totals: { startup_p50_ms: 300, startup_p95_ms: 900, rebuffer_ratio: 0.08, error_rate: 0.001 },
+      bitrate_timeline: [],
+    });
+    render(<QoePage />);
+    await waitFor(() => screen.getByText(/rebuffer ratio/i));
+    // The threshold-triggered element must use the CSS var, not the raw fallback hex
+    const warningEl = document.querySelector<HTMLElement>('[style*="var(--color-warning)"]');
+    expect(warningEl).not.toBeNull();
+    expect(warningEl?.style.color).not.toContain("#FFB224");
+  });
+
+  it("var(--color-error) fallback hex dropped — raw #FF5C68 not in Error Rate color style", async () => {
+    mockGetSummary.mockResolvedValue({
+      totals: { startup_p50_ms: 300, startup_p95_ms: 900, rebuffer_ratio: 0.02, error_rate: 0.05 },
+      bitrate_timeline: [],
+    });
+    render(<QoePage />);
+    await waitFor(() => screen.getByText(/error rate/i));
+    const errorEl = document.querySelector<HTMLElement>('[style*="var(--color-error)"]');
+    expect(errorEl).not.toBeNull();
+    expect(errorEl?.style.color).not.toContain("#FF5C68");
+  });
+});
+
+describe("QoePage chart — motion + accessibility (QO-1, QO-2)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("QO-2: accessible heading for the bitrate chart is present", async () => {
+    mockGetSummary.mockResolvedValue({
+      totals: { startup_p50_ms: 300, startup_p95_ms: 900, rebuffer_ratio: 0.02, error_rate: 0.001 },
+      bitrate_timeline: [
+        { ts: Date.now() - 60000, bitrate_kbps_p50: 2500, bitrate_kbps_p95: 4000 },
+      ],
+    });
+    render(<QoePage />);
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /bitrate timeline/i })).toBeInTheDocument();
+    });
+  });
+
+  it("QO-1 (source): both Line elements have isAnimationActive={false} in JSX source", () => {
+    // Reads the actual component file so any change to the prop in QoePage.tsx
+    // will cause this test to fail — unlike a hard-coded string which is a tautology.
+    // ESM: __dirname does not exist — derive it from import.meta.url.
+    const here = dirname(fileURLToPath(import.meta.url));
+    const src = readFileSync(resolve(here, "../QoePage.tsx"), "utf-8");
+    // Must appear at least twice — once per <Line> element.
+    const count = (src.match(/isAnimationActive=\{false\}/g) ?? []).length;
+    expect(count).toBeGreaterThanOrEqual(2);
   });
 });

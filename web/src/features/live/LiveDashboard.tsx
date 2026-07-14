@@ -56,7 +56,7 @@ export function LiveDashboard({ onConnectionChange }: { onConnectionChange?: (v:
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-              gap: 12,
+              gap: "var(--space-3)",
             }}
           >
             <StatCard
@@ -93,17 +93,17 @@ export function LiveDashboard({ onConnectionChange }: { onConnectionChange?: (v:
 
           {/* Overview row: protocol donut + per-app breakdown */}
           <div
-            style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16, alignItems: "start" }}
+            style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: "var(--space-4)", alignItems: "start" }}
           >
             <div
               style={{
                 background: "var(--color-surface)",
                 border: "1px solid var(--color-border)",
-                borderRadius: 8,
-                padding: "16px",
+                borderRadius: "var(--radius-control)",
+                padding: "var(--space-4)",
               }}
             >
-              <h2 style={{ margin: "0 0 12px", fontSize: 13, fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              <h2 style={{ margin: "0 0 var(--space-3)", fontSize: 13, fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                 Protocol mix
               </h2>
               <ProtocolDonut data={overview?.protocol_mix ?? { webrtc: 0, hls: 0, rtmp: 0, dash: 0, other: 0 }} />
@@ -113,11 +113,11 @@ export function LiveDashboard({ onConnectionChange }: { onConnectionChange?: (v:
               style={{
                 background: "var(--color-surface)",
                 border: "1px solid var(--color-border)",
-                borderRadius: 8,
-                padding: "16px",
+                borderRadius: "var(--radius-control)",
+                padding: "var(--space-4)",
               }}
             >
-              <h2 style={{ margin: "0 0 12px", fontSize: 13, fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              <h2 style={{ margin: "0 0 var(--space-3)", fontSize: 13, fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                 By application
               </h2>
               {(overview?.apps ?? []).length === 0 ? (
@@ -126,9 +126,9 @@ export function LiveDashboard({ onConnectionChange }: { onConnectionChange?: (v:
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
                     <tr style={{ color: "var(--color-muted)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                      <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600 }}>App</th>
-                      <th style={{ textAlign: "right", padding: "4px 8px", fontWeight: 600 }}>Viewers</th>
-                      <th style={{ textAlign: "right", padding: "4px 8px", fontWeight: 600 }}>Publishers</th>
+                      <th style={{ textAlign: "left", padding: "var(--space-1) var(--space-2)", fontWeight: 600 }}>App</th>
+                      <th style={{ textAlign: "right", padding: "var(--space-1) var(--space-2)", fontWeight: 600 }}>Viewers</th>
+                      <th style={{ textAlign: "right", padding: "var(--space-1) var(--space-2)", fontWeight: 600 }}>Publishers</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -137,9 +137,9 @@ export function LiveDashboard({ onConnectionChange }: { onConnectionChange?: (v:
                         key={app.app}
                         style={{ borderTop: "1px solid var(--color-border)" }}
                       >
-                        <td style={{ padding: "8px", fontFamily: "var(--font-mono)", fontSize: 12 }}>{app.app}</td>
-                        <td style={{ padding: "8px", textAlign: "right" }}>{(app.viewers ?? 0).toLocaleString()}</td>
-                        <td style={{ padding: "8px", textAlign: "right" }}>{app.publishers ?? 0}</td>
+                        <td style={{ padding: "var(--space-2)", fontFamily: "var(--font-mono)", fontSize: 12 }}>{app.app}</td>
+                        <td style={{ padding: "var(--space-2)", textAlign: "right" }}>{(app.viewers ?? 0).toLocaleString()}</td>
+                        <td style={{ padding: "var(--space-2)", textAlign: "right" }}>{app.publishers ?? 0}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -150,7 +150,7 @@ export function LiveDashboard({ onConnectionChange }: { onConnectionChange?: (v:
 
           {/* Streams table (virtualized) */}
           <div>
-            <h2 style={{ margin: "0 0 12px", fontSize: 13, fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            <h2 style={{ margin: "0 0 var(--space-3)", fontSize: 13, fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
               Active streams ({streams.length.toLocaleString()})
             </h2>
             <StreamsTable streams={streams} />

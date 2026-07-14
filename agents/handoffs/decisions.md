@@ -5691,3 +5691,95 @@ green). origin/main == HEAD at S29 open.
   web / TC-I-05 scenario / docs) + S30's addendum `f703634`.
   **Only `deploy/config/Caddyfile.prod` remains uncommitted** — the
   operator's matbu block, D-062 4th ruling, still awaiting his decision.
+- **MERGE EVIDENCE (appended at S32 open):** PR **#45** merged
+  **2026-07-14T04:02:55Z**, squash commit `323d6f7` (now `main`); all CI
+  contexts green (server, web, web-e2e, e2e, csp-e2e, contracts, CodeQL,
+  docker-build, sdk, helm, compose). **D-093 CLOSED.**
+
+---
+
+## D-094 (S32, 2026-07-14 — OPEN): operator intake + §2.19 Wave 1 (LiveOverview + QoE)
+
+- **Session open 04:03Z**, ~1 min after the S31 merge. Branch
+  `s32-uipro-wave1` off `323d6f7`. Tree clean except the standing
+  `Caddyfile.prod` matbu block (untouched, D-062 4th).
+- **OPERATOR INTAKE: no new signals; all standing items OPEN.** No new
+  operator commits or file drops since S31. GHCR anonymous pull still
+  **401** (image private — the ~30 s flip). No trial-key /
+  assessment-review / Ant-Media-contact / MaxNodes / matbu signals.
+  **G1 (mobile input font-size), G2 (icon library) and the NEW G3
+  (light-theme CTA contrast, needs a `tokens.json` change) all
+  unanswered** — none blocks Wave 1 (it adds no form inputs and no
+  icons, and G3 is a brandkit change a session may not self-approve).
+  **⏰ License renewal due 2026-07-27T13:45Z** (13 days) — carried.
+- **AMS at open (`s32open` sweep):** healthy and back to the pre-expiry
+  baseline shape — Enterprise 3.0.3, 4 apps, **teststream broadcasting**
+  (`pulse-realams.overview.total_publishers=1`, HLS live manifest 200),
+  `pulse-prod.poll-errlines-15m=0`, prod healthz all-ok. Note for future
+  sessions: **`ams-teststream` does NOT auto-restart across a VPS
+  reboot** (`docker start ams-teststream`; it was restored at S31).
+- **CI promotions: skip carry ×21** (07-14 < the 07-23 gate).
+- **★ §2.19 WAVE 1 DONE (LiveOverview + QoE).** Chart hex →
+  `CHART_COLORS[N]` (same hex, value-preserving): ProtocolDonut's
+  `#7C93AD` Cell fallback → `[7]`; QoePage strokes `#58A6FF` → `[1]`,
+  `#FFB224` → `[4]`. Redundant hex fallbacks dropped from
+  `var(--color-warning, #FFB224)` / `var(--color-error, #FF5C68)` — both
+  vars are defined in BOTH themes, so the fallbacks were dead code **and
+  stale** (the light-theme values `#B45309` / `#DC2626` differ from the
+  fallback hex, so they would have rendered the WRONG colour if ever
+  reached). a11y: accessible names on StatCards (metric + unit), donut
+  aria-labels, `role=grid/rowgroup/row/columnheader` on StreamsTable.
+  Virtualization, columns and sort behaviour untouched.
+- **★ THE px→TOKEN TRAP, pre-empted and honoured.** The `--space-*`
+  scale is 4/8/12/16/24/32/48/64/96. **Substitution was allowed ONLY on
+  EXACT matches**; every non-matching literal (6px, 20px, 36px, 160px,
+  180px, 260px, 520px + all typography sizes) was **LEFT ALONE**.
+  Snapping 13px → `var(--space-3)` (12px) would be a silent 1px
+  regression, and this wave may not change pixels. Verifier re-derived
+  all 26 substitutions against the token values: **all EQUAL**.
+- **★ THE BUILD INTRODUCED A FALSE ARIA PROMISE — caught by verify.**
+  `aria-sort="none"` was placed on the Viewers/Bitrate headers, which
+  have **no sort handler at all**. That is a lie to assistive tech (it
+  advertises a sortable column that cannot be sorted). Removed; tests now
+  pin its ABSENCE so it cannot return without real sort machinery.
+- **★ THREE TAUTOLOGY TESTS caught by the test-quality verifier.** Each
+  asserted its own expression instead of the component — e.g. the
+  ProtocolDonut "unknown protocol" test evaluated
+  `PROTOCOL_COLORS[key] ?? CHART_COLORS[7]` **in the test body**, so
+  swapping the component's fallback to `CHART_COLORS[0]` left all 18
+  tests GREEN. Same class in StatCard (`getAttribute(...) ?? ""` made an
+  absent aria-label pass trivially) and QoePage (asserted a hard-coded
+  string literal). All three rewritten to render the component and assert
+  its output; each **RED-proven** under sabotage. **Class: a test that
+  never touches the component cannot fail for the component.**
+- **★★ e2e CAUGHT A REAL REGRESSION THE STANDARD GATE LIST WOULD HAVE
+  MISSED.** `streams-virtualization.spec` is NOT in the §2.2 default
+  Playwright set; it was added to this wave's gate because Wave 1 touches
+  StreamsTable. It failed. Cause: the a11y fix correctly moved
+  `role="grid"` to the container that owns the header rowgroup (ARIA 1.2
+  grid ownership) — but the spec drives the virtualizer by setting
+  `scrollTop` on the element with `role="grid"`, which is now the OUTER
+  `overflow:hidden` wrapper. **The scroll became a silent no-op and no new
+  rows rendered.** Users were never affected (the viewport still scrolls);
+  the TEST's handle was wrong. Fixed by giving the scroll viewport an
+  explicit `data-testid="streams-scroll"` and driving that.
+  **Standing lesson: when a wave touches a component, run ITS specs — not
+  just the default gate list.**
+- **PLAN CORRECTED AGAINST REALITY (again).** WAVE-PLAN claimed
+  LiveDashboard had "13 px" literals; the true count is **33 px
+  occurrences, of which 19 have an exact `--space-*` match**. QoePage's
+  "5 px" was likewise wrong. Corrected in the plan.
+- **GATES (S32):** web **515/515** tests / 33 files (S31: 452/32);
+  coverage **67.42 / 62.77 / 56.29** vs floors 59/54/45; lint + build
+  clean; **gen:api in sync**; **Playwright 10/10** (dashboard-render,
+  auth-gate, csp, prefs, **streams-virtualization**); `contracts/`,
+  `brandkit/` and `web/package.json` byte-untouched; zero new bare hex or
+  px in source. No Go changes (no §8 run due).
+  **Honest note — a load-induced flake:** one `vitest --coverage` run
+  reported 2 failures while Playwright + a build were running
+  concurrently (host load **19.8**). Two clean re-runs (with and without
+  coverage) returned 515/515. Recorded, not buried: gate runs on this box
+  should not overlap heavy jobs.
+- **Workflow:** 8 agents (2 scouts + 2 builders + 3 adversarial verifiers
+  + 1 remediation), **0 errors**. Verdicts: 1 CONFIRMED_OK, 2 PARTIAL →
+  4 must-fix, all remediated same-session with sabotage proofs.

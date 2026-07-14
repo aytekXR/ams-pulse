@@ -275,7 +275,24 @@ Anomalies, Probes + TenantsTab). TypeScript: zero errors.
 
 ---
 
-### Wave 1 — LiveOverview + QoE [M]
+### Wave 1 — LiveOverview + QoE [M] — ✅ DONE — S32 (D-094, 2026-07-14)
+
+> **PLAN CORRECTED AGAINST REALITY (S32).** The px counts below were wrong.
+> LiveDashboard has **33 px occurrences, 19 with an exact `--space-*` match** (not "13 px");
+> QoePage's "5 px" was likewise understated. **Binding rule learned and now applied to every
+> remaining wave: substitute ONLY where the token EQUALS the literal.** The `--space-*` scale is
+> 4/8/12/16/24/32/48/64/96 — a literal with no exact match (6px, 20px, 36px, 160px, 180px, 260px,
+> 520px, and every typography size) MUST be left alone. Snapping 13px to `var(--space-3)` (12px) is
+> a silent 1px regression; these waves may not change pixels.
+>
+> **Also landed:** the hex fallbacks in `var(--color-warning, #FFB224)` / `var(--color-error,
+> #FF5C68)` were not just redundant but **stale** — the light-theme token values (`#B45309` /
+> `#DC2626`) differ from the fallback hex, so they would have rendered the wrong colour if ever
+> reached. Dropped.
+>
+> **Gate lesson (binding for every later wave):** run the specs of the components the wave TOUCHES,
+> not only the §2.2 default Playwright set. `streams-virtualization.spec` is not in the default set
+> and it caught a real regression (see D-094).
 
 **Pages:** LiveOverview (scout size M), QoE (scout size S). Combined: M.
 
@@ -286,11 +303,13 @@ Anomalies, Probes + TenantsTab). TypeScript: zero errors.
 
 **What changes (method passes applied):**
 - ProtocolDonut: `#7C93AD` Cell fallback → `CHART_COLORS[7]` (scout: 1 residual hardcoded hex)
-- LiveDashboard: 13 hardcoded px values → `--space-*` tokens (scout: 13 px)
+- LiveDashboard: px → `--space-*` tokens — **exact matches only** (S32 truth: 33 px occurrences,
+  19 exact-match; the rest left alone by design)
 - QoePage: Recharts `stroke` props `#58A6FF` → `CHART_COLORS[1]`, `#FFB224` → `CHART_COLORS[4]`
 - QoePage: drop hex fallbacks from `var(--color-warning, #FFB224)` pattern — the tokens are
   confirmed stable; fallback hex is redundant and a future drift risk
-- QoePage: 5 hardcoded px → `--space-*` tokens (scout: 5 px)
+- QoePage: px → `--space-*` tokens — **exact matches only** (the "5 px" count was wrong; see the
+  correction note at the top of this wave)
 - uipro §1 accessibility pass: verify aria-labels on ProtocolDonut legend, StreamsTable column
   headers, StatCard metric values (aria-label describing the metric name + unit)
 - uipro §2 touch pass: verify StatCard and StreamsTable row touch targets ≥44pt
