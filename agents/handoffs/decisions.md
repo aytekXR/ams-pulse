@@ -6119,3 +6119,33 @@ operator this session.** The pre-existing blockers are unchanged and are listed 
 **Gates run in the sanctioned environment:** Playwright **60/60** via
 `mcr.microsoft.com/playwright:v1.61.1-noble` (CI-faithful), vitest 619/619, lint + tsc + build
 clean.
+
+### D-096 addendum — PROD ROLLOUT COMPLETE (2026-07-14T10:23Z)
+
+Prod had been stuck on the S27 build (`v0.3.0-34-g58a9c84`, 2026-07-13) — **the entire §2.19 UI
+refactor existed only in git.** Rolled forward to **`v0.4.0-8-g4c5d2fd`** (D-089..D-096), by the
+book (`deploy/runbooks/upgrade-rollback.md`), 5-overlay `DC_ARGS`:
+
+1. `config -q` → CONFIG_OK
+2. Rollback point tagged **`pulse-prod-pulse:pre-d096`**, verified to be the outgoing build
+3. Pre-upgrade backup: **exit 0**, both stores (CH zip + SQLite, 4.1 MB WAL copied)
+4. **Stamped** build (`compose build --build-arg …`, NOT `up -d --build`, which silently drops
+   build-args and stamps the binary `dev/unknown` — D-058 lesson b)
+5. Stamp asserted BEFORE deploy: `pulse v0.4.0-8-g4c5d2fd (commit 4c5d2fd, built …)` — not dev
+6. `up -d` → migrate one-shot exited clean, `pulse` healthy
+
+**Smoke — evidence, not the compose "Healthy" label:**
+- `/healthz` via public TLS: `status:ok`, all three components ok (clickhouse, collector, meta_store)
+- **Signed** AMS webhook → **200**; **bad signature → 401**. The negative case is the one that
+  matters: it proves HMAC verification is actually *enforced*, not merely present.
+- Resource limits read from `docker inspect`, not trusted from YAML: `memory=536870912`
+  `cpus=500000000` — exactly the runbook's expected values.
+- Logs: no ERROR, no panic.
+- **The new UI is genuinely being served:** prod returns `/assets/index-D0T7R04c.js`, byte-identical
+  to the locally built bundle. This is the assertion that actually proves the refactor shipped —
+  a healthy container tells you nothing about which bundle it serves.
+
+**Pre-rollout verification of the tree:** Go suite **24/24 packages ok, 0 FAIL** in CI-faithful
+`golang:1.25` docker. (Bare-metal `go build ./...` cannot run here: root-owned ClickHouse
+leftovers from 2026-06-30 — `internal/*/access`, `internal/*/preprocessed_configs`, gitignored,
+no sudo — make the tree untraversable. Another reason the gates mandate docker.)
