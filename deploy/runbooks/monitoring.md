@@ -51,7 +51,7 @@ sg docker -c "docker run --rm \
 ## alert_history growth
 
 `alert_history` is **self-capped at 1000 rows per `rule_id`** by `AlertHistoryDefaultKeep = 1000`
-(`server/internal/store/meta/meta.go:45`). `CreateAlertHistory` calls `PruneAlertHistory` after
+(`AlertHistoryDefaultKeep` in `server/internal/store/meta/meta.go`). `CreateAlertHistory` calls `PruneAlertHistory` after
 every insert; excess rows (oldest `ts ASC`, then `rowid ASC`) are deleted in one `DELETE`.
 The design is O(excess), not O(n²). **No operator action is needed for normal operation.**
 
@@ -100,7 +100,7 @@ df -h /    # host filesystem
 If `PULSE_METRICS_TOKEN` is set, scrapers must send `Authorization: Bearer <token>`;
 comparison is constant-time. Rate-limited at 10 rps / burst 20 per IP before token check.
 
-Verified: `server/internal/api/server.go:688-696`; `server/internal/license/license.go:351-357`.
+Verified: `handleMetrics` in `server/internal/api/server.go`; `CheckPrometheus` in `server/internal/license/license.go`.
 
 **The 7 registered metrics (all gauges, text/plain; version=0.0.4):**
 
@@ -114,7 +114,7 @@ Verified: `server/internal/api/server.go:688-696`; `server/internal/license/lice
 | `pulse_node_mem_pct` | `node` | Node memory utilization percent |
 | `pulse_alerts_firing` | — | Total firing alert count |
 
-Verified: `server/internal/api/server.go:725-749`. No `collector_errors_total` metric exists
+Verified: `handleMetrics` in `server/internal/api/server.go`. No `collector_errors_total` metric exists
 in this codebase.
 
 **Example Prometheus scrape config:**
@@ -201,15 +201,15 @@ sustained for more than a few minutes or paired with service-level errors.
 
 | WARN text (prefix match) | Source file | Meaning |
 |---|---|---|
-| `clickhouse: connect failed, retrying` | `store/clickhouse/clickhouse.go:118` | CH starting up or briefly unreachable (open failed); resolves on its own |
-| `clickhouse: ping failed, retrying` | `store/clickhouse/clickhouse.go:134` | CH opened but ping timed out; resolves on its own |
+| `clickhouse: connect failed, retrying` | `store/clickhouse/clickhouse.go:123` | CH starting up or briefly unreachable (open failed); resolves on its own |
+| `clickhouse: ping failed, retrying` | `store/clickhouse/clickhouse.go:139` | CH opened but ping timed out; resolves on its own |
 | `collector: source exited, restarting` | `collector/collector.go:87` | Supervisor restarted a poller after a crash; self-healing |
-| `restpoller: poll error` / `app poll error` | `collector/restpoller/restpoller.go:115,164` | Transient AMS REST call failure; next poll will retry |
-| `alert evaluator: list rules failed` | `alert/evaluator.go:266` | Transient SQLite read error listing rules; next tick retries |
-| `alert evaluator: list channels failed — registry not updated` | `alert/evaluator.go:305` | Transient SQLite read error listing channels; registry unchanged this tick, next tick retries |
+| `restpoller: poll error` / `app poll error` | `collector/restpoller/restpoller.go:152,238` | Transient AMS REST call failure; next poll will retry |
+| `alert evaluator: list rules failed` | `alert/evaluator.go:281` | Transient SQLite read error listing rules; next tick retries |
+| `alert evaluator: list channels failed — registry not updated` | `alert/evaluator.go:320` | Transient SQLite read error listing channels; registry unchanged this tick, next tick retries |
 | `alert: qoe_reader not configured — rebuffer_ratio/error_rate rules skipped this tick` | `alert/wave2.go:86` | QoEReader not wired (Free tier, or QoE collector not running); fires at most once per tick by design (D-062 G6) |
 | `alert: qoe_reader error — stream skipped for this tick` | `alert/wave2.go:94` | Transient QoE DB/CH error; stream skips one evaluation tick |
-| `clickhouse: server event channel full, dropping event` | `store/clickhouse/clickhouse.go:232` | Backpressure from bursty AMS; individual event dropped, no data loss beyond that event |
+| `clickhouse: server event channel full, dropping event` | `store/clickhouse/clickhouse.go:237` | Backpressure from bursty AMS; individual event dropped, no data loss beyond that event |
 | `kafka: commit offset failed` | `kafka.go:168` | Transient Kafka commit; will retry on next record |
 
 Verified: `grep -rn 'slog.Warn' server/ --include='*.go'` (excluding test files).
@@ -222,7 +222,7 @@ These WARNs indicate misconfiguration, a missing asset, or a potential security 
 |---|---|---|
 | `pulse: AMS bearer token will travel in cleartext` | `cmd/pulse/main.go:134` | Set `PULSE_AMS_URL` to `https://` for remote AMS hosts |
 | `geo: cannot open mmdb, geo enrichment disabled` | `collector/enrichment.go:121` | Mount a MaxMind GeoLite2-City.mmdb (see `docs/runbooks/install.md`) |
-| `pulse: webhook: could not load per-source secrets` / `pulse: webhook: decrypt per-source secret failed, skipping` | `cmd/pulse/serve.go:288,294` | Key mismatch or corrupt `PULSE_SECRET_KEY`; check that the key has not been rotated (rotating HMAC key invalidates stored secrets); restart may not fix without key restore |
+| `pulse: webhook: could not load per-source secrets` / `pulse: webhook: decrypt per-source secret failed, skipping` | `cmd/pulse/serve.go:380,386` | Key mismatch or corrupt `PULSE_SECRET_KEY`; check that the key has not been rotated (rotating HMAC key invalidates stored secrets); restart may not fix without key restore |
 | `webhook: invalid signature` | `collector/webhook/webhook.go:161` | AMS webhook secret misconfiguration or replay attack; verify the AMS-side `X-Ams-Signature` secret matches `PULSE_WEBHOOK_SECRET` / per-source secret |
-| `api: web UI assets not found; static serving disabled` | `api/server.go:430` | Deploy misconfiguration; the pulse binary must be built with web assets embedded |
-| `license: init failed, using free tier` | `cmd/pulse/serve.go:238` | Bad, expired, or malformed `PULSE_LICENSE_KEY`; check the value and re-deploy |
+| `api: web UI assets not found; static serving disabled` | `api/server.go` (`mountWebUI`) | Deploy misconfiguration; the pulse binary must be built with web assets embedded |
+| `license: init failed, using free tier` | `cmd/pulse/serve.go:309` | Bad, expired, or malformed `PULSE_LICENSE_KEY`; check the value and re-deploy |

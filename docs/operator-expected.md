@@ -1,3 +1,123 @@
+# Operator TODO — the items only YOU can do (updated 2026-07-14, D-097 — SESSION-35)
+
+## ⚡ TL;DR — the queue is UNCHANGED, but what it *blocks* just got much clearer.
+
+S35 stopped feature work and ran an **empirical ship-readiness audit**: 42 agents that
+**executed** every documented command instead of reading it — clean-clone installs, the full
+license ceremony against a live server, every env var and endpoint grepped against the code.
+It found **3 blockers and 10 majors**. Most are session-fixable and S35 is fixing them. The
+items below are the ones that are **yours** and cannot be fixed from a session.
+
+**Two corrections to what previous sessions told you. Both matter.**
+
+> **① "No customer can install Pulse" was WRONG — it was overstated.** There are two install
+> paths and they have **different fates**. The **clone-and-build** path (`git clone` →
+> `docker compose … up -d --build`, the README's *supported production path*) **builds from
+> source, never touches GHCR, and works** — verified end-to-end from a clean clone this
+> session: stack healthy in ~3.5 min, `/healthz` 200, first-run admin token as documented.
+> It is the **one-command quickstart** (`deploy/quickstart/`) that is dead, because it pulls
+> `ghcr.io/aytekxr/ams-pulse:0.4.0` from a private registry. So: a technical customer *can*
+> install Pulse today. A customer who follows the *easy* path cannot.
+>
+> **② The vendor key ceremony is DONE — do NOT redo it.** Previous versions of this file
+> listed "generate the production ed25519 pair" as an open ask. It was completed in **S16
+> (D-077)**: you generated the keypair, vaulted the private key, and a minted **enterprise
+> license runs in prod right now**. Regenerating it would **instantly invalidate every
+> outstanding key**. The remaining ask is only to mint a *trial* key from your vault key to
+> exercise the trial flow — see item 5.
+
+### 1. ⛔ GHCR IS STILL PRIVATE — one click, and it unblocks the product's front door.
+
+Anonymous `docker pull ghcr.io/aytekxr/ams-pulse:0.4.0` → **HTTP 401**. Confirmed again this
+session against an unauthenticated client (with `docker logout ghcr.io` first, so an ambient
+login could not mask it).
+
+**The image exists and is fine** — the v0.4.0 release run pushed and cosign-signed it
+successfully. The package's **visibility was simply never toggled to public**. This is a
+~30-second change in the package settings, and it is the difference between "curl | bash and
+you're running" and "read a runbook and compile it yourself." Every marketplace claim and the
+whole trial funnel depend on it.
+
+*(S35 made the failure honest in the meantime: `install.sh` now preflights the pull and prints
+an actionable message instead of Docker's raw `unauthorized`, and no longer strands a
+generated `.env` containing a secret on disk when it dies.)*
+
+### 2. ⏰ THE AMS LICENSE EXPIRES 2026-07-27T13:45Z — **13 DAYS**.
+
+The only item with a hard clock. A lapse **plus** the next `antmedia` restart = **total ingest
+death**, not degradation. Both arms are proven (D-092: restart enforcement refuses *all* new
+RTMP ingest; D-093: SRT is refused even *without* a restart). **From ~07-25 this outranks
+GHCR.**
+
+### Also waiting on you
+
+| # | Item | Why it needs you |
+|---|---|---|
+| 3 | **G7 — light-theme Badge contrast** | Three variants fail WCAG AA as **text**: success **2.73:1**, warning **4.25:1**, error **4.13:1**. Fixing needs **three new `brandkit/` values**, and `brandkit/` is yours (D-071) — **a session may not invent them**. Dark theme passes. This is the last *known* a11y defect. |
+| 4 | **Kafka fleet consumer — never wire-validated** | The fleet CPU/mem/disk gauges depend on a Kafka topic (`ams-server-events`) and field names that are **code-derived and have never been tested against a real broker** (the code's own comment admits it; LIM-19). If they're wrong, the gauges sit **empty with `parse_errors=0`** — a silent lie, the worst failure shape. Needs a **Kafka-enabled AMS lab**, which a session cannot conjure. |
+| 5 | **Trial-key mint** | Needs your **vault private key** (the ceremony itself is DONE — see ② above). Mint a short-expiry key with `cd qa/licensegen && go run . -tier pro -expires 14 -privkey <vault-key-file>` and confirm Pulse accepts it. The tooling works; S35 also **fixed the runbook that told you to verify it against a 404** (see below). |
+| 6 | **Final-assessment review** | Sign-off is yours; it gates the marketplace upload. |
+| 7 | **Ant Media contact** | Partner/marketplace outreach. |
+| 8 | **Pro MaxNodes ruling** | A product decision, not an engineering one. |
+| 9 | **matbu/evrak vhost ruling** | `deploy/config/Caddyfile.prod` stays **uncommitted on purpose** — it embeds a bcrypt hash and the repo is public. It stays dirty until you rule. |
+
+### Design gaps (unchanged)
+
+**G3, G5, G6 are applied and shipped** (light CTA passes AA in both themes; the binding WCAG
+table's wrong `textMuted` row is corrected; the light info Badge is no longer 2.32:1). A test
+recomputes every ratio **from `tokens.json` on each run**, so that table cannot silently rot
+again. Still open: **G7** (above, needs your values), **G1** (no mobile viewport — scope call),
+**G2** (no icon library — dependency/licensing call), **G4** (touch targets meet AA 24×24, not
+AAA 44×44 — confirm you accept AA).
+
+---
+
+## 🔎 What SESSION-35 found (2026-07-14, D-097)
+
+The audit **executed** the docs rather than reading them. That distinction is the whole story:
+every one of these had been reviewed by prior sessions and passed.
+
+**Blockers**
+1. **GHCR private** → the quickstart path is dead for every unauthenticated user. *(Yours — item 1.)*
+2. **`docs/licensing.md` §3e documents an activation API that does not exist.** It says
+   `POST /api/v1/license/activate` and `GET /api/v1/license`. The server registers
+   **`PUT /api/v1/admin/license`** and **`GET /api/v1/admin/license`** (`server.go:482-483`).
+   Wrong path **and** wrong method. Following your own runbook to verify a key you had just
+   sold would return **404** — and the natural conclusion is "the license key is broken" when
+   the key is fine and the *runbook* is broken. It sits under a heading literally titled
+   *"Verify activation."* **Fixed in S35**, plus a new customer-facing
+   `docs/guides/license-activation.md` (there was no doc telling a *buyer* how to turn on the
+   license they'd paid for).
+3. **`make up` / `docker compose up -d` — install.md's own primary command — always failed.**
+   `pulse-migrate` in `docker-compose.override.yml` had no `PULSE_SECRET_KEY`, so it exited
+   with *"PULSE_SECRET_KEY must be set"* before touching the database, and `pulse` never
+   started. **Fixed in S35.**
+
+**Majors (selection)**
+- **Export CSV / Export PDF were dead buttons.** The Reports page shipped both, wired to
+  `GET /api/v1/reports/export` — a route registered **nowhere in the server**. A paying
+  Business customer clicks Export and gets a hard 404. This is a *missing feature*, not a doc
+  bug. **S35 implemented it.**
+- **The README Quick Start silently monitored a MOCK AMS.** `docker-compose.hardened.yml`
+  unconditionally overrode `PULSE_AMS_URL` to `http://mock-ams:9090`, so a customer could edit
+  their real AMS address, run the documented command, and see **no data and no error**. The
+  worst first-run experience in the product. **Fixed in S35.**
+- **`docs/runbooks/probes.md` told Business customers they don't have probes.** `CheckProbes()`
+  gates **only Free** — Pro, Business and Enterprise all pass — but the doc said "Pro and
+  Enterprise" in three places, including the quoted 403 body. **Fixed in S35.**
+- **`docs/guides/prometheus.md` had a fabricated metric table** (a `{node=…}` label on four
+  metrics that carry no labels; two metrics that *do* carry it missing entirely) and named the
+  wrong tier and wrong gate function. Grafana panels built from it would show blank legends
+  and never say why. **Fixed in S35.**
+
+**What could NOT be tested here** (stated so it isn't mistaken for a pass): the Kafka consumer's
+wire behaviour (no broker — item 4), cosign signature verification (registry is private), and
+the multi-arch manifest (same reason).
+
+---
+
+## 📜 Historical log (previous sessions — kept for provenance)
+
 # Operator TODO — the items only YOU can do (updated 2026-07-14, D-096 — SESSION-34 closed)
 
 ## ⚡ TL;DR — NOTHING NEW IS ASKED OF YOU. Two old items are the whole story.
