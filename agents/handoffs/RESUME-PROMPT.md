@@ -11,36 +11,71 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-35.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-36.md`)
 
-**Session 2026-07-14 result: D-096 — S34 DONE (★★ e2e for the SIX pages that had NEVER been
-driven in a real browser; ★★ TWO REAL a11y defects found there and fixed; ★★ PROD ROLLED
-FORWARD — it had been stuck on the S27 build, so the whole UI refactor was live nowhere;
-★ a false green I nearly shipped, caught by the adversarial audit; ★ I wrongly accused the
-sub-agents of faking their test runs — the transcripts proved they had not).**
+**Session 2026-07-14 result: D-097 — S35 DONE (PR #51 `425b04b`, prod `v0.4.0-11-g425b04b`).**
 
-- **✅ NO OPERATOR ACTION CAME OUT OF S34.** Nothing new blocks the product.
-- **✅ PROD IS CURRENT.** `v0.4.0-8-ga01aaea` (was `v0.3.0-34-g58a9c84` since 07-13 — the entire
-  §2.19 refactor existed only in git). Verified live: `/healthz` all-ok; signed AMS webhook → 200
-  and **bad signature → 401**; and the bundle prod serves is **byte-identical to the local build**,
-  which is the only assertion that actually proves the new UI shipped. Rollback tag
-  `pulse-prod-pulse:pre-d096`; pre-upgrade backup clean.
-- **★★ THE PRODUCT IS STILL NOT SHIPPABLE, AND THE REASON IS NOT ENGINEERING.**
-  **GHCR is private** — anonymous `docker pull ghcr.io/aytekxr/ams-pulse` → **401**. Until the
-  operator flips it, **no customer can install Pulse** and every install doc is fiction. This
-  outranks all session work. Surface it first, every time.
-- **⏰ AMS LICENSE EXPIRES 2026-07-27T13:45Z (13 days).** The only item with a hard clock. From
-  ~07-25 it outranks even GHCR: a lapse **plus** the next `antmedia` restart = **total ingest
-  death** (D-092/D-093, both arms proven).
-- **★★★ §2.19 IS COMPLETE AND NOW LIVE. Do NOT plan another UI wave.** Remaining UI work is all
-  operator-gated: **G1** (mobile), **G2** (icons), **G4** (touch targets), **G7** (three light
-  Badge variants fail AA — needs three new brandkit values, so it is the operator's, D-071).
-- **🔧 READ THE GATES SECTION BEFORE RUNNING GATES.** Neither Playwright nor `go ./...` can run
-  bare-metal on this host; both need docker, and both recipes are in `sessions/SESSION-35.md`.
-  S34 wasted real effort re-solving both. Census: **web 619/619 vitest, 60/60 Playwright,
-  Go 24/24 packages.**
-- **★ Ledger fix:** ROADMAP §2.3 (`licensegen -privkey/-expires`) was **never open** — the flags
-  shipped long ago and were never ticked. Only the vendor **key ceremony** remains (operator).
+**★★ S35 DISCARDED ITS OWN PLAN — and that was the right call.** S34 had planned "close two e2e
+gaps, then build §2.16". The operator instead asked *"have you finished all development? is
+installation and generating license keys ready?"* — so S35 **executed** the docs rather than
+reading them. **The answer was no, on both counts.**
+
+42 agents ran every documented command against a live system; every finding then faced an
+adversarial verifier whose job was to kill it (**36 raw → 33 confirmed, 3 refuted**).
+**3 blockers, 10 majors.** Everything a session was permitted to fix is fixed, merged and **live
+in prod**.
+
+### What was actually broken (evidence: D-097)
+
+- **`GET /api/v1/reports/export` did not exist** — yet the Reports page shipped **Export CSV** and
+  **Export PDF** buttons wired to it. A paying Business customer clicked Export and got a **404**.
+  *A missing feature, not a doc bug.* **CSV implemented; PDF removed rather than left broken.**
+- **The analytics Export CSV button had never worked either** — it authenticated with `?token=` in
+  the URL, which `bearerAuthMiddleware` **deliberately ignores**, so it answered **401**.
+- **`docs/licensing.md` documented an activation API that does not exist** (`POST
+  /api/v1/license/activate` vs the real **`PUT /api/v1/admin/license`**) — under a heading titled
+  *"Verify activation."* Verifying a key you had just **sold** returned 404.
+- **`make up` / `docker compose up -d` — install.md's own primary command — always failed.**
+- **The README Quick Start silently monitored a MOCK AMS** — real address set, no data, no error.
+
+### Two things previous sessions told you that were WRONG
+
+- **"No customer can install Pulse" was overstated.** The **clone-and-build path works** (verified
+  from a clean clone; it never touches GHCR). Only the **one-command quickstart** is dead. Two
+  paths, two fates — never flatten them again.
+- **The vendor key ceremony is DONE** (S16/D-077), not open. Redoing it would **invalidate every
+  outstanding key**, including the enterprise licence in prod.
+
+### ★★ THE PRODUCT STILL IS NOT SHIPPABLE — AND IT IS STILL NOT ENGINEERING
+
+> **GHCR is private.** Anonymous pull → **401**, so the one-command quickstart is dead for every
+> user. **One click.** No session can do it.
+> **The AMS licence expires 2026-07-27T13:45Z.** From ~07-25 it outranks GHCR: a lapse **plus**
+> the next `antmedia` restart = **total ingest death** (D-092/D-093).
+
+### At open — VERIFY, do not assume (D-095)
+
+- `origin/main` should be **`425b04b`**; prod should print **`v0.4.0-11-g425b04b`**.
+- **Cheapest real check in the repo** — prove the S35 fix survived:
+  ```sh
+  curl -s -o /dev/null -w "%{http_code}\n" --resolve beyondkaira.com:443:161.97.172.146 \
+    "https://beyondkaira.com/api/v1/reports/export?from=1&to=2&format=csv"
+  # 401 = route exists (correct).  404 = the rollout did not survive; re-run the runbook.
+  ```
+
+### S36 goal
+
+**§2.16 AMS operational early-warning** — already OPERATOR-APPROVED (D-086 addendum), the largest
+unblocked feature left, and now first in line because S35 cleared the ship blockers ahead of it.
+Full candidate list, gates, and the binding lessons: **`sessions/SESSION-36.md`**.
+
+### Two lessons that cost real time — do not repeat them
+
+1. **RUN the doc; do not read it.** Every S35 blocker had passed prior review.
+2. **A gate you cannot point at in the repo is not a gate.** S35's own prompt asserted a
+   "hex-literal grep"; an agent reported it RED with 35 matches; **no such gate exists**. Trusting
+   it would have mangled nine files. (Same trap: `git diff --exit-code` reads RED against this
+   repo's permanently-dirty tree — scope drift checks to `schema.d.ts`.)
 
 ---
 

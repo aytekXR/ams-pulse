@@ -6200,3 +6200,118 @@ configuration*, disk now byte-identical to what Caddy is serving, `matbu.beyondk
    "exactly one dirty file: `deploy/config/Caddyfile.prod`". Assert the *presence* of that dirt.
 3. Bind mounts pin inodes. A container can keep serving a file that no longer exists on disk —
    so "prod still works" is **not** evidence that the config on disk is intact.
+
+---
+
+## D-097 — SESSION-35: the ship-readiness audit. Two of three install paths were dead, the licence ceremony was documented against endpoints that do not exist, and Export was a 404 button.
+
+**Date:** 2026-07-14 · **PR:** #51 (`425b04b`) · **Prod:** `v0.4.0-11-g425b04b`
+
+### Goal (revised mid-session — record the revision, per the standing directive)
+
+S34 planned S35 as *"close two e2e gaps, then build §2.16 early-warning."* **That plan was
+discarded.** The operator asked a plain question — *"have you finished all development? is
+installation and generating license keys ready?"* — and the honest way to answer it was to
+**execute** the docs rather than read them. The answer was no, on both counts, and the reasons
+outranked every item on the S35 candidate list.
+
+### Method — the only part of this worth copying
+
+Five probe agents **ran** what the docs claim: a clean-clone install of every documented path,
+the full licence ceremony against a live server with a throwaway keypair, an unauthenticated
+GHCR pull, every env var and endpoint grepped against the code. Then **every finding was handed
+to an adversarial verifier whose job was to kill it.** 36 raw findings → **33 confirmed, 3
+refuted.** The refuted ones matter: one auditor cited a file that does not exist and presented
+line-numbered "evidence" from it. Without the refutation pass that would have shipped.
+
+**The distinction that produced every real bug: prior sessions REVIEWED these docs and passed
+them. Reading a doc tells you it is plausible. Running it tells you it is true.**
+
+### What was actually broken
+
+1. **`GET /api/v1/reports/export` did not exist.** The Reports page shipped **Export CSV** and
+   **Export PDF** buttons wired to it; the route was registered nowhere in the router. A paying
+   Business customer clicked Export and got a **404**. This was a *missing feature*, not a doc
+   bug — so "development is finished" was simply false.
+   - CSV implemented, gated by `CheckReports()`, reusing the existing usage query.
+   - PDF **removed** rather than left broken (LIM-24). **A missing button beats a button that 404s.**
+2. **The analytics Export CSV button had never worked either — and for a subtler reason.** It
+   authenticated by putting `?token=` in the URL and letting the browser navigate. But
+   `bearerAuthMiddleware` **deliberately ignores** `?token=` (`TestTokenInURL_Ignored` guards
+   it), so it answered **401**. Downloads now send the token in the `Authorization` header and
+   save a blob — which fixes the 401 *and* keeps the token out of access logs, proxy caches and
+   browser history, which is exactly what that middleware's own comment asks for.
+3. **`docs/licensing.md` documented an activation API that does not exist.** It said
+   `POST /api/v1/license/activate` and `GET /api/v1/license`; the server registers
+   **`PUT /api/v1/admin/license`** and **`GET /api/v1/admin/license`** (`server.go:482-483`).
+   Wrong path **and** wrong method — under a heading titled **"Verify activation."** Following
+   the runbook to check a key you had just *sold* returned 404, and the natural conclusion is
+   *"the licence key is broken"* when the key is fine and the runbook is broken.
+4. **An expired key returns `200`, not `422`.** `activate()` carries an explicit
+   `NOTE: do NOT error here for already-expired keys` — the signature verifies, expiry is applied
+   lazily, and the response is `200` with `"valid": false` and `"tier": "free"`. Any client
+   pattern-matching on 422 misses expiry **silently**. Both docs now say: **check the body, not
+   the status code.**
+5. **`make up` / `docker compose up -d` — install.md's own primary command — always failed.**
+   `pulse-migrate` had no `PULSE_SECRET_KEY`, so it exited before touching the database.
+6. **The README Quick Start silently monitored a MOCK AMS.** The hardened overlay hardcodes
+   `PULSE_AMS_URL` to `mock-ams:9090`, so a customer could set their real AMS address, run the
+   documented command, and see **no data and no error**. The worst first-run experience the
+   product had.
+7. `prometheus.md` invented a `{node=}` label on four metrics that carry none and omitted the two
+   that do; named the wrong tier and the wrong gate function; and described `pulse_alerts_firing`
+   as live incidents when it counts **historical** rows (alerting on it would page you for
+   something that resolved last month). `probes.md` told **Business** customers they had no
+   probes (`CheckProbes()` gates only Free).
+
+### Two prior-session claims corrected
+
+- **"No customer can install Pulse" was overstated.** The clone-and-build path never touches
+  GHCR and **works** — verified end-to-end from a clean clone. It is the **quickstart** that is
+  dead. Two paths, two fates; do not flatten them again.
+- **The vendor key ceremony is DONE** (S16/D-077), not open. It had been carried as an operator
+  blocker. `licensing.md` now warns against redoing it: regenerating the keypair would
+  **invalidate every outstanding key**, including the enterprise licence running in prod.
+
+### A gate I invented, and nearly acted on
+
+The gate prompt asserted a "§2.2 hex-literal grep" over `web/src/features/`. An agent dutifully
+reported it **RED** with 35 matches. **No such gate exists** — `grep` across `.github/`,
+`scripts/`, `Makefile`, eslint config and the style tests finds nothing. The 35 matches are
+legitimate test assertions (`expect(CHART_COLORS[1]).toBe("#58A6FF")`). Had I trusted the
+report, I would have mangled nine files to satisfy a rule that is not real.
+
+> **Lesson: a gate you cannot point at in the repo is not a gate. Verify the rule exists before
+> obeying a red.** The same applies to the `git diff --exit-code` drift check — it reads as RED
+> against this repo's *permanently dirty* tree; scope it to `schema.d.ts`.
+
+### Gates
+
+vitest **626/626** (was 619) · coverage 68.77 / 65.85 / 60.99 vs floors 59/54/45 ·
+Playwright (docker) **60/60** · Go (docker) **24/24 packages**, exit 0, `vet` + `gofmt` clean ·
+lint + tsc + build clean · `schema.d.ts` no drift · compose config valid on every documented path ·
+CI **15/15** on #51.
+
+New tests are **mutation-proven**: breaking the tier gate or the CSV header reddens exactly its
+guarding test; reintroducing the token-in-URL bug reddens exactly the two download tests. The
+mutation was asserted to have **landed** before the RED was trusted (D-096 lesson 10).
+
+### Prod rollout
+
+Followed `deploy/runbooks/upgrade-rollback.md` exactly: `config -q` OK → tagged
+`pulse-prod-pulse:pre-d097` (→ `a01aaea`) → backup exit 0 → **stamped** build (not
+`up -d --build`, which drops build-args) → stamp asserted → `up -d`.
+
+Smoke was **evidence, not the compose "Healthy" label**:
+- `/healthz` all-ok through public TLS.
+- `GET /api/v1/reports/export` unauthenticated → **401**, where it returned **404** an hour
+  earlier. That single status-code change is the proof the route now exists.
+- Authenticated → **200**, `content-type: text/csv`, `content-disposition: attachment;
+  filename="usage-report-2026-07-14.csv"`, real header row. **The Export button works in prod.**
+- `?token=bogus` on `/analytics/audience` → **401**. The security property holds.
+- `matbu.beyondkaira.com` → **401**. The Caddyfile restored in D-096 is intact (7 vhost lines).
+
+### Working-tree invariant
+
+`deploy/config/Caddyfile.prod` remains **uncommitted, dirty, and intact**. Confirmed it is in no
+commit of #51. **Never** `git reset --hard` / `checkout -- .` / `stash` / `clean` in this repo.

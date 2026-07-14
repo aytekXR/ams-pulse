@@ -10,6 +10,73 @@ Before dispatching: re-read ROADMAP-V2 §2 and the final-assessment §5 roadmap 
 plan if a higher-leverage move exists.** This file is a starting point, not a contract. Record any
 revision in the D-097 open block.
 
+## ✅ OUTCOME — S35 is CLOSED (D-097, PR #51 `425b04b`, prod `v0.4.0-11-g425b04b`)
+
+**The plan in this file was DISCARDED, deliberately, under the standing directive's own
+"revise this plan if a higher-leverage move exists" clause.**
+
+This file had planned: *close two e2e gaps, then build §2.16*. Instead the operator asked
+*"have you finished all development? is installation and generating license keys ready?"* — and
+the only honest way to answer was to **execute** the docs rather than read them.
+
+**The answer was no, on both counts.** 42 agents ran every documented command against a live
+system; 36 raw findings went through an adversarial refutation pass → **33 confirmed, 3 refuted**.
+**3 blockers, 10 majors.** Everything a session was permitted to fix, S35 fixed and shipped.
+
+### What was actually broken (full evidence: D-097)
+
+1. **`GET /api/v1/reports/export` did not exist** — yet the Reports page shipped **Export CSV**
+   and **Export PDF** buttons wired to it. A paying Business customer clicked Export and got a
+   **404**. A *missing feature*, not a doc bug. **CSV implemented; PDF removed rather than left
+   broken (LIM-24).**
+2. **The analytics Export CSV button had never worked either.** It put `?token=` in the URL and
+   navigated — but `bearerAuthMiddleware` **deliberately ignores** `?token=`
+   (`TestTokenInURL_Ignored`), so it answered **401**. Downloads now authenticate via the
+   `Authorization` header and a blob, which also keeps the token out of logs and browser history.
+3. **`docs/licensing.md` documented an activation API that does not exist** — `POST
+   /api/v1/license/activate` vs the real **`PUT /api/v1/admin/license`**. Wrong path AND wrong
+   method, under a heading titled *"Verify activation."* Verifying a key you had just **sold**
+   returned 404.
+4. **An expired key returns `200`, not `422`** — check the body, not the status code.
+5. **`make up` / `docker compose up -d` — install.md's own primary command — always failed**
+   (`pulse-migrate` had no `PULSE_SECRET_KEY`).
+6. **The README Quick Start silently monitored a MOCK AMS** — a customer could set their real AMS
+   address and see no data and no error.
+7. `prometheus.md` had a fabricated metric table and the wrong tier; `probes.md` told **Business**
+   customers they had no probes.
+
+### Two prior-session claims corrected
+
+- **"No customer can install Pulse" was overstated.** Clone-and-build never touches GHCR and
+  **works**. Only the **quickstart** is dead. Two paths, two fates.
+- **The vendor key ceremony is DONE** (S16/D-077) — it had been carried as an open operator
+  blocker. Redoing it would invalidate every outstanding key.
+
+### A gate that did not exist
+
+This session's own gate prompt asserted a "§2.2 hex-literal grep"; an agent reported it **RED**
+with 35 matches. **No such gate exists anywhere in the repo.** The matches are legitimate test
+assertions. Trusting the report would have mangled nine files to satisfy an imaginary rule.
+**Verify a rule exists before obeying a red.**
+
+### Gates + rollout
+
+vitest **626/626** · Playwright **60/60** · Go **24/24** · lint/tsc/build clean · CI **15/15** ·
+prod rolled to `v0.4.0-11-g425b04b` and smoked with **evidence**: `/api/v1/reports/export`
+returns **401** where it returned **404** an hour earlier, and authenticated returns **200
+`text/csv`** with a real header row. `Caddyfile.prod` intact (7 matbu/evrak lines), in no commit.
+
+### Operator queue after S35 — unchanged, but sharper
+
+**GHCR private** (one click; kills the quickstart) and the **AMS licence expiring 2026-07-27**
+(13 days) still outrank everything a session can do. See `docs/operator-expected.md`.
+
+**➡ Next session: `SESSION-36.md`.**
+
+---
+
+## 📌 The original S35 plan (superseded — kept for provenance)
+
 ## ⛔ At open — verify, do not assume
 
 **★★ STANDING RULE (D-095): a session claiming "DONE" is NOT evidence that it landed.** S33 opened
