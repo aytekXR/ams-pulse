@@ -1,110 +1,122 @@
-# SESSION-34 — operator-intake gate + post-§2.19 (planned at S33 close, D-095)
+# SESSION-34 — e2e for the six uncovered pages (D-096) — **CLOSED 2026-07-14**
 
-> Written by SESSION-33 close (D-095, 2026-07-14). Paste-ready prompt for the next session.
-> Repo `/home/aytek/repo/ams-pulse` on VPS `161.97.172.146`. Read `RESUME-PROMPT.md` +
-> `ROADMAP-V2.md` §2 + the final-assessment §5 roadmap before dispatching.
+**Branch:** `s34-e2e-six-pages` · **Decision record:** D-096 in `agents/handoffs/decisions.md`
 
-## ⚡ STANDING DIRECTIVE (operator, 2026-07-12): review the backlog, revise this plan
+> ## ⚡ STANDING DIRECTIVE (operator, 2026-07-12) — CARRY THIS INTO SESSION-35
+> Before dispatching: re-read ROADMAP-V2 §2 and the final-assessment §5 roadmap and REVISE the
+> session plan if a higher-leverage move exists. The plan is a starting point, not a contract.
 
-Before dispatching: re-read ROADMAP-V2 §2 and the final-assessment §5 roadmap and REVISE this
-plan if a higher-leverage move exists. This file is a starting point, not a contract. Record any
-revision in the D-096 open block. Carry this header into SESSION-35.md.
+**S33 merge question (the plan's ⛔ blocker): RESOLVED.** PR #47 went green on all 15 checks and
+was merged; `main` reached `31f55b0` carrying §2.19 Waves 0–5, the S32 commit-escape fix, and the
+G3/G5/G6 token fixes. Nothing was stacked on an unmerged branch.
 
-## ⛔ FIRST: is S33 merged?
+**Chosen from the plan's candidates: #2** — "e2e coverage for the six pages that still have NONE
+… **Strongest technical candidate**." The plan was right.
 
-**S33 (branch `s33-uipro-wave2`, PR #47) was pushed but COULD NOT MERGE.** Branch protection
-requires 9 status checks and `gh pr merge --admin` is refused ("7 of 9 required status checks
-have not succeeded"). The operator directed "skip ci runs" — CI can be skipped as a *wait*, but
-not *at merge time*. The operator was asked to let the checks run, relax protection, or merge
-from the UI.
+---
 
-**At open:** `git log --oneline origin/main -3` and `gh pr list --state open`.
-- If **merged** → branch S34 off the new main and proceed.
-- If **still open** → check `gh pr checks 47`. If green, merge. If the operator has not acted,
-  **surface it as the top blocker** and do NOT stack new work on an unmerged branch.
+## Goal
 
-**★★ STANDING RULE (D-095): a session claiming "DONE" is NOT evidence that it landed.** S33
-opened to find S32's PR still open AND its branch missing a file its own gates had run against.
-Verify `origin/main` at every open.
+Waves 3/4/5 rewrote six pages — Ingest, Anomalies, Alerts, Settings, Reports, Probes — and
+**none had ever been driven in a real browser.** The unit suite was green throughout. That is not
+reassurance; it is the problem. Every defect found this session is one jsdom structurally cannot
+see: focus movement, key dispatch, native dialogs, the real ARIA tree.
 
-## Mission
+## What shipped
 
-Exit = (a) **operator intake applied.** The queue is now:
-  - **⛔ the S33 merge** (branch protection — needs the operator or the checks).
-  - **⏰ LICENSE RENEWAL — expires 2026-07-27T13:45Z.** From ~07-25 this is the TOP item: a
-    lapse **+** the next AMS restart = total ingest death (both arms proven, D-092/D-093).
-  - **SIX design gaps G1–G6** — ALL are `tokens.json`/brandkit edits, so **ONLY the operator may
-    authorise them (D-071).** **G5 is the highest-value: a WRONG RATIO IN A BINDING TABLE**
-    (design-rationale §2 claims muted = ~4.6:1 AA; it is **3.72:1**, below AA for normal text)
-    that every future design decision reads. G3/G5/G6 are one-value changes — apply them the
-    moment the operator rules, then re-run the WCAG pass.
-  - **Two design questions:** the Analytics StatCard size, and the off-brandkit
-    `rgba(224,82,82,…)` drop-chip tint on Ingest (a red that is in no token).
-  - **Six marketplace items** (GHCR flip, trial-key mint, assessment review, Ant Media contact,
-    MaxNodes ruling, matbu vhost).
-(b) **§2.19 IS COMPLETE — Waves 0–5 all landed (S31→S33). Do NOT plan another UI wave.** The
-    only remaining UI work is operator-gated (G1–G6).
-(c) **Pick the next highest-leverage work** — candidates below.
-(d) CI promotions if run date ≥ 2026-07-23 (else skip carry ×23).
-(e) standing re-checks + AMS observation at open. PR-first, ≤2 pushes.
+| | |
+|---|---|
+| `web/e2e/support/stubs.ts` | NEW. One canonical boot layer (`stubApp`/`json`/`collectErrors`). |
+| 6 new specs | 38 tests. Playwright suite **22 → 60 green**. |
+| `AlertsPage.tsx` | Channel deletion no longer calls native `window.confirm()`. |
+| `ProbesPage.tsx` | The delete `role="dialog"` now behaves like a dialog. |
+| `ROADMAP-V2.md` §2.3 | Ledger correction — it was never open. |
 
-## S34 candidates (pick by leverage after intake)
+The tier matrix is **not uniform**, which is why `stubApp` takes a tier: Reports gates unless
+business|enterprise, Anomalies gates unless enterprise, and **Probes gates only free** — it opens
+at pro, the opposite direction from the others.
 
-1. **G3 + G5 + G6 token fixes [XS each, operator-gated]** — instant, high value, the moment the
-   operator rules.
-2. **e2e coverage for the six pages that still have NONE** — Ingest, Anomalies, Alerts, Settings,
-   Reports, Probes. S33 wrote `analytics.spec.ts` + `fleet.spec.ts` from scratch; the other six
-   have unit tests but **no browser spec**. This is **real residual risk**: S32's regression was
-   caught *only* by a non-default spec, and Waves 3/4/5 changed all six of these pages.
-   **Strongest technical candidate.**
-3. **Prod rollout** — prod still runs `v0.3.0-34-g58a9c84` (since S27). A rollout now carries
-   **D-089..D-095**. The UI waves are web-only (no runtime behaviour change) but the bundle is
-   substantially different. Runbook: `deploy/runbooks/real-ams-go-live.md`.
-4. **Marketplace tail** — unblocks the moment the operator's items land.
-5. **D-V2-1 unsigned-webhook ingest mode [operator decision first]** — re-surface only.
+## The two real defects — both fixed, both RED-proven
 
-## ⚠️ Binding lessons from S33 — carry these into every wave
+**1. Alerts channel deletion used native `window.confirm()`** (`AlertsPage.tsx:132`). Wave 4 gave
+*rules* an inline confirmation step and missed *channels*, leaving two confirmation models for
+the same destructive verb. It survived for an instructive reason: **jsdom stubs
+`window.confirm`**, so no unit test ever saw a dialog at all. A whole class of bug hides there.
 
-1. **A className is a CONTRACT with the stylesheet.** `web/src/styles/__tests__/focus-rings.test.ts`
-   pins both halves (rule exists ⟺ a component uses it). **Any new bare styling className must be
-   added to that map**, or the guard is silently incomplete.
-2. **px → token: EXACT matches only** (scale 4/8/12/16/24/32/48/64/96). **And `width`/`height`/
-   `minWidth` are DIMENSIONS, not spacing — never `--space-*`.** Radii have their own tokens.
-3. **hex → `CHART_COLORS[N]` must be the SAME hex.** **`#FF5C68` is NOT in `CHART_COLORS`** — it
-   is `--color-error`. `CHART_COLORS[3]` is **pink** (`#F06BB2`).
-4. **Recharts RULE 3 is SCOPED:** no `var()` in a **data-series** prop (`<Line>`/`<Area>`/`<Bar>`
-   `stroke`/`fill`). **`var()` IS correct** on plain `<svg>` elements and on structural chart
-   chrome (CartesianGrid, axis ticks). A broader gate makes the product worse — S33 caught an
-   agent breaking working code to satisfy exactly such a test.
-5. **A test that never renders the component cannot fail for it.** ~16 deleted across S32/S33.
-   Also beware tests that can't fail for subtler reasons (an `[aria-hidden].length > 0`
-   assertion satisfied by a *different*, always-present element).
-6. **Verify a mutation LANDED before trusting a GREEN.** `perl -0pi` without `/g` hit a doc
-   comment instead of the JSX and reported a false green.
-7. **Never add ARIA the code cannot honour.** `role="tab"` + roving tabIndex with **no key
-   handler** does not merely under-deliver — it makes the tabs **keyboard-unreachable**.
-8. **`--color-muted` may not carry text** (3.44:1 dark / 4.36:1 light). Fine for non-text
-   (borders: the 3:1 bar applies).
+**2. The Probes delete dialog was a `role="dialog"` that behaved like a `<div>`.** Opening it left
+focus on the row button — a screen-reader user was never told it appeared — and Escape did
+nothing. Focus now lands on the dialog container (`tabIndex={-1}`), so AT announces the label
+*and* the body copy that says the deletion is permanent, and the destructive button is not one
+Enter keypress away. Escape cancels; focus returns to the trigger. It deliberately does **not**
+set `aria-modal` and does **not** trap Tab: it renders inline, not as an overlay, and the page
+behind it stays live. Claiming modality we don't implement would be a lie to assistive tech.
 
-## Gates (ORCH, before any commit)
+## The false green I nearly shipped
 
-- Web: `npm run gen:api && git diff --exit-code` (drift) + lint + build + `npx vitest run --coverage`
-  (floors 59/54/45; **S33 census: 599 tests / 35 files**) + Playwright-docker
-  (`mcr.microsoft.com/playwright:v1.61.1-noble`, `--network host`, mount `web/` at `/work`;
-  **S33 census: 22/22 full suite**) + WCAG re-check on changed components
-  (**design-rationale §2 is BINDING — but see G5: one of its rows is WRONG. Recompute; do not
-  trust it**) + zero contract changes + `brandkit/` byte-untouched.
-- **The §2.2 hex grep scans whole files — do NOT put hex literals in comments** in `src/features/`.
-- **Don't overlap gate runs with heavy jobs** (a vitest run flaked at host load 19.8).
-- Any Go change: FULL §8 (CI-faithful golang:1.25 docker, 0 FAIL / 0 unexpected SKIP, coverage
-  ≥ floor 70.2, gofmt, vet, contract-drift). Not expected.
-- docs/marketplace/ stays DRAFT-INTERNAL (D-081 external gate).
+The Probes free-tier gate test stubbed no probes route. **Delete the gate entirely and there is
+no data, so no table renders, and `expect(table).toHaveCount(0)` still passes** — it was measuring
+the absent stub, not the gate. The adversarial audit caught it. Four other assertions were weak in
+the same family and were tightened: an `emulateMedia` call that pinned nothing (dark is the
+fallback, so the test passed for the wrong reason); an `aria-live` check scoped to `form` that a
+mirror one tag outside would have escaped; a sigma re-fetch proven to *fire* but never to
+*render*; an `aria-labelledby` pointing at an id nobody asserted exists.
 
-## Closing protocol (ROADMAP §6)
+## Two things I got wrong (recorded because the next session will be tempted the same way)
 
-1. Commits per scope on a BRANCH; PR; **merge — and VERIFY the merge landed.** ≤2 pushes.
-1b. `codegraph sync` + `codegraph status`.
-2. decisions.md **D-096** evidence — append EARLY.
-3. RESUME-PROMPT ▶ START HERE → SESSION-35; ROADMAP-V2 ledgers.
-4. REFRESH `docs/operator-expected.md` + PushNotification.
-5. Write `sessions/SESSION-35.md` (carry the standing directive header).
+**1. I accused the agents of fabricating their test runs. They had not.** Chromium cannot launch
+bare-metal on this host, so when every agent hit that error and still reported `green: true`, I
+concluded they had faked it — and said so before checking. The transcripts showed one had
+extracted the missing libraries from `.deb` packages and set `LD_LIBRARY_PATH`; Chromium really
+ran, and the greens were real. **Check the evidence before asserting the conclusion — including
+when the conclusion is "the agent lied."**
+
+**2. I re-solved a solved problem.** The correct way to run e2e on this host was **already in this
+file's own gates section**, and is how S33 got 22/22. Neither I nor the agents read it before
+improvising. **Read the gates section before running gates.**
+
+## ⚠️ Running e2e on this host — the ONE right way
+
+Bare-metal Chromium **cannot launch** (`libatk-1.0.so.0`, `libgbm`, `libasound` are not installed;
+no sudo). Do not install anything and do not patch `LD_LIBRARY_PATH`. Use the image:
+
+```sh
+cd web && pkill -f 'vite preview'   # CI=1 disables reuseExistingServer; free 4173 first
+sg docker -c "docker run --rm --network host -v \$PWD:/work -w /work \
+  -e CI=1 mcr.microsoft.com/playwright:v1.61.1-noble npx playwright test"
+```
+
+**The Go toolchain is also not on PATH.** The only copy is pre-commit's:
+`export PATH="/home/aytek/.cache/pre-commit/repoiavouv2x/golangenv-default/.go/bin:$PATH"` (go1.26.5).
+
+## Gates
+
+- **Playwright 60/60** (was 22) in `mcr.microsoft.com/playwright:v1.61.1-noble` — CI-faithful
+- vitest **619/619** (36 files); coverage 67.47 / 65.30 / 59.65 / 69.98 vs floors 59 / 54 / 45
+- lint, `tsc --noEmit`, build — all clean
+- **RED proofs:** neutering the dialog focus + Escape reddens exactly the 2 new a11y tests and
+  nothing else; reverting the channel confirm to a direct API call reddens exactly the 2 new
+  channel tests and nothing else.
+
+## Operator action required? **No.**
+
+Nothing new blocks the product, and nothing was needed from the operator this session. The
+pre-existing blockers are unchanged — see `docs/operator-expected.md`. The two that matter:
+
+1. **GHCR is still private** (anonymous pull → 401). Until it is flipped, **no customer can
+   `docker pull` Pulse**, and every install doc and marketplace claim is fiction.
+2. **The AMS license expires 2026-07-27T13:45Z — 13 days.** The only item with a hard clock. A
+   lapse **plus** the next `antmedia` restart = total ingest death; both arms are proven
+   (D-092/D-093).
+
+## Still open
+
+- **Prod is 7 commits behind `main`** — still on the S27 build (`v0.3.0-34-g58a9c84`), so none of
+  D-089..D-096 is live. **Unblocked; it is S35's first task.**
+  Runbook: `deploy/runbooks/upgrade-rollback.md` (5-overlay `DC_ARGS`, tag a rollback point, take
+  a backup, **stamped** build, assert the stamp, `up -d`, smoke).
+- Design gaps **G1** (mobile), **G2** (icons), **G4** (touch targets), **G7** (three light Badge
+  variants fail AA: success 2.73:1, warning 4.25:1, error 4.13:1) — all need an operator ruling
+  (`brandkit/` is the operator's, D-071).
+- Roadmap §2.1, §2.6 (decision first), §2.7 (date-gated ≥2026-07-23), §2.12, §2.16, §2.17.
+- Coverage the audit flagged but that was out of scope here: the Reports **Schedules** tab is
+  never activated by any test, and no test drives the Probes **create** happy path.

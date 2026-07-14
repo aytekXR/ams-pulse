@@ -1,3 +1,74 @@
+# Operator TODO — the items only YOU can do (updated 2026-07-14, D-096 — SESSION-34 closed)
+
+## ⚡ TL;DR — NOTHING NEW IS ASKED OF YOU. Two old items are the whole story.
+
+SESSION-34 needed **no operator action** and introduced **no new blocker**. It added end-to-end
+browser coverage for the six pages that had none, fixed two real accessibility defects it found
+there, and **rolled prod forward** (details: D-096).
+
+**✅ PROD IS NOW CURRENT.** It had been stuck on the S27 build (`v0.3.0-34-g58a9c84`) since
+2026-07-13 — meaning the entire §2.19 UI refactor existed only in git. It now runs
+**`v0.4.0-8-g4c5d2fd`**, carrying D-089..D-096. Verified live, not assumed: `/healthz` all-ok;
+a signed AMS webhook returns 200 while a **bad signature returns 401**; and the bundle prod
+serves (`index-D0T7R04c.js`) is byte-identical to the local build, so the new UI really is the
+one being served. Rollback point tagged `pulse-prod-pulse:pre-d096`; a pre-upgrade backup of
+both stores completed clean.
+
+The queue below is unchanged from S33. Two items dominate everything else:
+
+> ### 1. ⛔ GHCR IS STILL PRIVATE — this is the single thing standing between us and customers.
+> An anonymous `docker pull ghcr.io/aytekxr/ams-pulse` returns **401**. Until you flip the
+> package to public, **no customer can install Pulse**. Every install doc, every marketplace
+> claim, and the entire trial flow are fiction until this is done. It is a ~30-second click in
+> the package's settings. **Nothing else on this list matters as much.**
+>
+> ### 2. ⏰ THE AMS LICENSE EXPIRES 2026-07-27T13:45Z — 13 DAYS.
+> This is the only item with a hard clock. A lapse **plus** the next `antmedia` restart =
+> **total ingest death** — not degradation, death. Both arms are proven (D-092: restart
+> enforcement refuses ALL new RTMP ingest; D-093: SRT is refused even without a restart).
+> From ~07-25 this becomes the top item on this list, ahead of GHCR.
+
+### Also waiting on you (unchanged)
+
+| # | Item | Why it needs you |
+|---|---|---|
+| 3 | **Trial-key mint** | The vendor key ceremony: generate the production ed25519 pair, sign a real key, verify Pulse accepts it under a `PULSE_LICENSE_PUBKEY` swap. **The tooling is DONE** — `qa/licensegen` already has `-privkey`, `-expires` and `-expires-minutes` (S34 ledger correction; the roadmap had wrongly carried this as open code work since S9). What is left is the ceremony, which needs your key. |
+| 4 | **Final-assessment review** | Sign-off is yours. |
+| 5 | **Ant Media contact** | Partner/marketplace outreach. |
+| 6 | **Pro MaxNodes ruling** | A product decision, not an engineering one. |
+| 7 | **matbu/evrak vhost ruling** | `deploy/config/Caddyfile.prod` is **still uncommitted on purpose** — it embeds a bcrypt hash and the repo is public. It stays dirty until you rule. |
+
+### Design gaps — `brandkit/` is yours (D-071), so these need your ruling
+
+You approved **G3, G5 and G6** on 2026-07-14 and they are **applied and shipped** (light CTA now
+passes AA in both themes; the binding WCAG table's wrong `textMuted` row is corrected; the light
+info Badge is no longer 2.32:1). A test now recomputes every ratio **from `tokens.json` on each
+run**, so that table cannot silently rot again.
+
+Still open:
+
+| Gap | What | Why it's yours |
+|---|---|---|
+| **G7** | Three **light-theme Badge variants fail AA**: success **2.73:1**, warning **4.25:1**, error **4.13:1** — all used as TEXT. | Fixing needs **three new brandkit values**. A session may not invent them. |
+| **G1** | No mobile viewport support at all. | Scope/product call. |
+| **G2** | No icon library — icons are hand-rolled SVG. | Dependency + licensing call. |
+| **G4** | Touch targets meet WCAG 2.2 AA (24×24), not the AAA 44×44 bar. | Deliberate; confirm you accept AA. |
+
+---
+
+## 🔎 What SESSION-34 did (2026-07-14, closed — D-096)
+
+| Area | Result |
+|---|---|
+| **★ e2e for six blind pages** | Ingest, Anomalies, Alerts, Settings, Reports, Probes had **never been driven in a real browser** — Waves 3/4/5 rewrote all six. 38 new tests; full Playwright suite **22 → 60 green**. |
+| **★ Two real a11y defects found + fixed** | (a) Alerts **channel** deletion still used native `window.confirm()` — Wave 4 upgraded *rules* to an inline confirm and missed *channels*. It hid because **jsdom stubs `window.confirm`**, so no unit test ever saw a dialog. (b) The Probes delete `role="dialog"` moved **no focus** on open and **ignored Escape** — a screen-reader user was never told it appeared. Both fixed, both RED-proven by mutation. |
+| **A false green, caught** | The Probes tier-gate test stubbed no data — so deleting the gate would render no table and the test would **still pass**. Caught by the adversarial audit; fixed, along with four weaker assertions in the same family. |
+| **Honesty** | I wrongly accused the sub-agents of faking their test runs; the transcripts proved they had not. Recorded in D-096 as a lesson, not buried. |
+| **Ledger** | ROADMAP §2.3 (`licensegen` flags) was **never open** — the flags shipped long ago and were never ticked. Corrected. |
+| **Ops** | Prod untouched. AMS untouched. No contract changes. `brandkit/` byte-untouched. |
+
+## (superseded) S33-close header follows
+
 # Operator TODO — the items only YOU can do (updated 2026-07-14, D-095 — G3/G5/G6 APPLIED)
 
 ## ⚡ TL;DR — G3, G5 and G6 are DONE. One new item (G7) needs you.

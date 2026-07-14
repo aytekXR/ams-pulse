@@ -60,6 +60,7 @@ export function AlertsPage() {
   const [testingChannel, setTestingChannel] = useState<string | null>(null);
   // Confirmation step for destructive rule deletion (replaces window.confirm).
   const [confirmDeleteRuleId, setConfirmDeleteRuleId] = useState<string | null>(null);
+  const [confirmDeleteChannelId, setConfirmDeleteChannelId] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -128,11 +129,26 @@ export function AlertsPage() {
     void loadAll();
   };
 
-  const deleteChannel = async (id: string) => {
-    if (!confirm("Delete this channel?")) return;
-    await alertsApi.deleteChannel(id);
+  /**
+   * Channel deletion mirrors the rule-deletion flow above.
+   *
+   * It used to call the native `confirm()`. Wave 4 replaced that with an inline confirmation
+   * step for RULES but missed CHANNELS, so the page had two different confirmation models for
+   * the same destructive verb (found by the S34 e2e pass). Native confirm() is worth removing
+   * on its own terms: it is unstyleable, it blocks the event loop, browsers increasingly
+   * suppress it, and — the reason it survived this long undetected — jsdom stubs it, so unit
+   * tests never saw a dialog at all.
+   */
+  const confirmDeleteChannel = async () => {
+    if (!confirmDeleteChannelId) return;
+    await alertsApi.deleteChannel(confirmDeleteChannelId);
     toast("Channel deleted", "info");
+    setConfirmDeleteChannelId(null);
     void loadAll();
+  };
+
+  const cancelDeleteChannel = () => {
+    setConfirmDeleteChannelId(null);
   };
 
   const testChannel = async (id: string) => {
@@ -324,6 +340,37 @@ export function AlertsPage() {
           {/* Channels panel */}
           {tab === "channels" && (
             <div role="tabpanel" id="panel-channels" aria-labelledby="tab-channels">
+              {/* Inline confirmation step for destructive channel deletion — same model as rules */}
+              {confirmDeleteChannelId && (
+                <div
+                  data-testid="delete-channel-confirm"
+                  style={{
+                    background: "var(--color-error-bg)",
+                    border: "1px solid var(--color-error)",
+                    borderRadius: 8,
+                    padding: "var(--space-3) var(--space-4)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "var(--space-3)",
+                    marginBottom: "var(--space-3)",
+                  }}
+                >
+                  <span style={{ flex: 1, fontSize: 13 }}>
+                    Delete this notification channel? Alert rules routing to it will stop
+                    notifying. This action cannot be undone.
+                  </span>
+                  <button
+                    style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
+                    onClick={() => void confirmDeleteChannel()}
+                  >
+                    Yes, delete
+                  </button>
+                  <button style={smBtnStyle} onClick={cancelDeleteChannel}>
+                    Cancel
+                  </button>
+                </div>
+              )}
+
               {channels.length === 0 ? (
                 <EmptyState
                   title="No notification channels"
@@ -365,7 +412,8 @@ export function AlertsPage() {
                       <button style={smBtnStyle} onClick={() => setEditingChannel(ch)}>Edit</button>
                       <button
                         style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
-                        onClick={() => void deleteChannel(ch.id)}
+                        onClick={() => setConfirmDeleteChannelId(ch.id)}
+                        aria-label={`Delete channel ${ch.name}`}
                       >
                         Delete
                       </button>
