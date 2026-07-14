@@ -15,9 +15,9 @@ revision in the D-097 open block.
 **★★ STANDING RULE (D-095): a session claiming "DONE" is NOT evidence that it landed.** S33 opened
 to find S32's PR still open AND its branch missing a file its own gates had run against. So:
 
-- `git log --oneline origin/main -3` — S34 (`4c5d2fd`, D-096) should be on `origin/main`.
+- `git log --oneline origin/main -3` — S34 (`a01aaea`, D-096) should be on `origin/main`.
 - `sg docker -c "docker compose -p pulse-prod … exec -T pulse /usr/local/bin/pulse version"` —
-  should print **`v0.4.0-8-g4c5d2fd`**. If it prints `v0.3.0-34-g58a9c84`, the S34 rollout did not
+  should print **`v0.4.0-8-ga01aaea`**. If it prints `v0.3.0-34-g58a9c84`, the S34 rollout did not
   survive; re-run `deploy/runbooks/upgrade-rollback.md`.
 - Re-check the operator queue live (do not trust the doc): GHCR anonymous pull, license expiry.
 

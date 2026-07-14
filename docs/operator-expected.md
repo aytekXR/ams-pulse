@@ -8,7 +8,7 @@ there, and **rolled prod forward** (details: D-096).
 
 **✅ PROD IS NOW CURRENT.** It had been stuck on the S27 build (`v0.3.0-34-g58a9c84`) since
 2026-07-13 — meaning the entire §2.19 UI refactor existed only in git. It now runs
-**`v0.4.0-8-g4c5d2fd`**, carrying D-089..D-096. Verified live, not assumed: `/healthz` all-ok;
+**`v0.4.0-8-ga01aaea`**, carrying D-089..D-096. Verified live, not assumed: `/healthz` all-ok;
 a signed AMS webhook returns 200 while a **bad signature returns 401**; and the bundle prod
 serves (`index-D0T7R04c.js`) is byte-identical to the local build, so the new UI really is the
 one being served. Rollback point tagged `pulse-prod-pulse:pre-d096`; a pre-upgrade backup of

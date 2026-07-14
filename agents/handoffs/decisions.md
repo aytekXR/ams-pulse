@@ -6123,7 +6123,7 @@ clean.
 ### D-096 addendum — PROD ROLLOUT COMPLETE (2026-07-14T10:23Z)
 
 Prod had been stuck on the S27 build (`v0.3.0-34-g58a9c84`, 2026-07-13) — **the entire §2.19 UI
-refactor existed only in git.** Rolled forward to **`v0.4.0-8-g4c5d2fd`** (D-089..D-096), by the
+refactor existed only in git.** Rolled forward to **`v0.4.0-8-ga01aaea`** (D-089..D-096), by the
 book (`deploy/runbooks/upgrade-rollback.md`), 5-overlay `DC_ARGS`:
 
 1. `config -q` → CONFIG_OK
@@ -6131,7 +6131,7 @@ book (`deploy/runbooks/upgrade-rollback.md`), 5-overlay `DC_ARGS`:
 3. Pre-upgrade backup: **exit 0**, both stores (CH zip + SQLite, 4.1 MB WAL copied)
 4. **Stamped** build (`compose build --build-arg …`, NOT `up -d --build`, which silently drops
    build-args and stamps the binary `dev/unknown` — D-058 lesson b)
-5. Stamp asserted BEFORE deploy: `pulse v0.4.0-8-g4c5d2fd (commit 4c5d2fd, built …)` — not dev
+5. Stamp asserted BEFORE deploy: `pulse v0.4.0-8-ga01aaea (commit a01aaea, built …)` — not dev
 6. `up -d` → migrate one-shot exited clean, `pulse` healthy
 
 **Smoke — evidence, not the compose "Healthy" label:**
@@ -6149,3 +6149,19 @@ book (`deploy/runbooks/upgrade-rollback.md`), 5-overlay `DC_ARGS`:
 `golang:1.25` docker. (Bare-metal `go build ./...` cannot run here: root-owned ClickHouse
 leftovers from 2026-06-30 — `internal/*/access`, `internal/*/preprocessed_configs`, gitignored,
 no sudo — make the tree untraversable. Another reason the gates mandate docker.)
+
+### D-096 addendum 2 — prod re-stamped to the mainline commit (2026-07-14T10:40Z)
+
+The first rollout was built from `4c5d2fd` (the pre-merge branch tip). PR #48 **squash-merged**, so
+that SHA is not on `main` — prod would have been reporting a version string pointing at a commit
+no future session could find on the mainline. Content was verified byte-identical
+(`git diff --quiet 4c5d2fd a01aaea -- server/ web/ contracts/ deploy/`), so the rebuild was a pure
+re-stamp with zero behaviour change.
+
+**Prod now runs `v0.4.0-8-ga01aaea` (commit `a01aaea` — on `main`).** Re-verified after the swap:
+`/healthz` all-ok; signed webhook → 200, **bad signature → 401**; UI bundle still
+`index-D0T7R04c.js`; zero ERROR/panic lines.
+
+**Lesson worth keeping:** when the merge strategy is squash, a stamped deploy built from the branch
+tip is stale the moment the PR lands. Either deploy *after* the merge, or re-stamp — but do not
+leave prod reporting a SHA that is not on `main`.
