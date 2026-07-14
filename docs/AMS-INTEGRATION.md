@@ -77,6 +77,14 @@ broadcast object on AMS 3.0.3 (health scoring redistributes the FPS weight);
 > sweeps). Operator takeaway: a suspended-license AMS looks healthy on REST but
 > refuses ALL new ingest after any restart. Evidence:
 > `qa/realams/evidence/S30-rtmp-license-block-20260713T2353Z/`.
+>
+> **Recovery, proven live (S30 late-session):** applying a fresh license key via
+> `POST /rest/v2/server-settings` (POST, not PUT — AMS returns 405 on PUT) does
+> NOT lift enforcement on a running server; the license state refreshes only at
+> boot. Key + `docker restart antmedia` restored RTMP ingest within ~90 s
+> (teststream re-accepted; post-license sweep byte-identical to the pre-expiry
+> baseline). Plan for one brief polling gap during the restart (~30 s of
+> Pulse poll errors, self-healing).
 
 > **⚠️ Implicit RTMP broadcasts (S17 live finding, D-079):**
 > AMS 3.0.3 auto-creates a broadcast object when an RTMP publisher connects

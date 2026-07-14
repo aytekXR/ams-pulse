@@ -2,19 +2,25 @@
 
 ## ⚡ TL;DR — expected from you right now (2026-07-14, SESSION-30 closed — D-092, AMS ingest-dead finding + §2.19 scoping done)
 
-> **1. ★★ URGENT ESCALATION: your AMS now refuses ALL new ingest — RTMP
-> included.** Your `antmedia` container crashed tonight (~22:14Z, resource
-> pressure while the VPS ran ~4 concurrent heavy sessions) and docker
-> auto-restarted it — the FIRST process restart since the license lapse.
-> That restart activated full enforcement: every new RTMP publish on every
-> app is now refused with "License is suspended and not accepting
-> connection" (SRT was already refusing since S29). The REST API still
-> reports "Enterprise Edition" unchanged — your server LOOKS healthy but
-> cannot accept any new stream. The teststream cannot be restarted (tried,
-> twice, evidence recorded). **Applying your new license is now the only
-> path to any live ingest** — say "AMS license applied" and the session
-> re-sweeps, restarts the teststream, runs the SRT validation scenario,
-> and re-validates the Enterprise surface.
+> **1. ✅ RESOLVED LATE-SESSION: you sent the license key and S30 applied
+> it — your ingest is BACK.** (The escalation stood for ~2 hours: your
+> `antmedia` crashed ~22:14Z, the auto-restart activated full enforcement,
+> and every new RTMP+SRT publish was refused while REST kept saying
+> "Enterprise".) What S30 did with your key: stored it ONLY in the
+> gitignored `oguz-testing.md`; applied via REST (heads-up: server-settings
+> updates are POST, not PUT); proved enforcement does NOT lift on a running
+> server → restarted `antmedia` (your ingest was dead anyway);
+> **teststream re-accepted within seconds, Pulse sees 1 publisher again,
+> and the post-license sweep is byte-identical to your PRE-expiry
+> baseline** (only diff: 6 poll-error lines during the ~30 s restart
+> window, self-healed). SRT validation cleared its license gate for the
+> first time but hit AMS's high-CPU admission guard (VPS at load 14 from
+> concurrent sessions) — it re-runs automatically in a quiet window.
+>
+> **⏰ ONE NEW DATE FOR YOU: this key expires 2026-07-27T13:45Z (13
+> days).** The enforcement model is now proven: a lapse spares running
+> streams and RTMP until the NEXT restart — then ALL ingest dies. Renew
+> before 07-27 (or expect the same recovery: new key + restart).
 >
 > **2. Your PDF: handled per your staging.** You (or your shell) staged
 > `docs/ant-media-marketplace-opportunity-report.md.pdf` at 01:29 tonight —
@@ -50,12 +56,12 @@
 > step / (c) document the gap in the evrak runbook. Sessions keep hands
 > off the file until you rule.
 >
-> **5. Your FIVE standing marketplace items — all still open, re-verified
-> at S30 open** (9th byte-identical sweep pre-dated the finding above;
-> GHCR anonymous pull still denied): AMS license (item 1 above, now
-> urgent), official trial-key mint (vault privkey), final-assessment
-> review (gates upload), Ant Media marketplace contact, GHCR public flip
-> (~30 s), Pro MaxNodes ruling (PRD says 1–2, code enforces 10).
+> **5. Your FOUR remaining standing marketplace items — re-verified at
+> S30 open, still open** (GHCR anonymous pull still denied; the AMS
+> license itself is now DONE — see item 1): official trial-key mint
+> (vault privkey), final-assessment review (gates upload), Ant Media
+> marketplace contact, GHCR public flip (~30 s), Pro MaxNodes ruling
+> (PRD says 1–2, code enforces 10).
 >
 > **FYI, no action needed — what S30 did autonomously:** operator intake
 > re-verified live; the restart-enforcement question answered with

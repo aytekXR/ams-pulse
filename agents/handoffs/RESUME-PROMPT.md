@@ -74,13 +74,28 @@ operator staging).**
   all-ok, 0 poll errlines); pulse-realams healthy; AMS never touched
   (publish probes = the sanctioned S22 class). CI promotions skip
   carry ×19. Workflow: 6 agents, 0 errors.
+- **★★★ LATE-SESSION (post-#44-merge): THE LICENSE LANDED AND WAS
+  APPLIED — INGEST RESTORED.** Operator pasted the key (stored ONLY in
+  gitignored oguz-testing.md; expires **2026-07-27T13:45Z**). Applied
+  via REST POST /rest/v2/server-settings (PUT → 405, the S18 pattern;
+  success:true + readback) — enforcement did NOT lift while running →
+  `docker restart antmedia` (operator-sanctioned) → **teststream
+  ACCEPTED, count=1, HLS flowing, realams publishers=1; s30postlicense
+  sweep BYTE-IDENTICAL to the pre-expiry baseline** except 6 prod
+  poll-errlines all inside the 00:44:28–:55Z restart window
+  (self-healed). TC-I-05-SRT: license gate CLEARED (handshake reached
+  the ACF callback, first time ever) but rejected by AMS's
+  high-resource guard (load 14) — re-run needs a low-load window;
+  scenario-gap filed (resource-rejection mislabels as FAIL, add SKIP
+  arm, XS). Evidence + full detail: D-092 addendum (rides S31 PR).
 - **S31 carries:** §2.19 Wave 0 [S] primary (TierGate + Tabs
   extraction per WAVE-PLAN §4 W0; full web gates incl. gen:api drift +
-  Playwright light/dark); license-landing trigger = re-sweep + restart
-  teststream + TC-I-05-SRT + Enterprise re-validation (now ALSO
-  restores basic ingest); matbu ruling; G1/G2 asks; marketplace tail
-  the moment operator items land; CI promotions if ≥07-23 else skip
-  carry ×20.
+  Playwright light/dark); **TC-I-05-SRT re-run in a low-load window
+  [license gate cleared — resource window only] + TC-I-05 SKIP-arm fix
+  [XS]**; **license renewal intake before 2026-07-27** (post-lapse
+  restart = ingest death, proven); Enterprise-surface re-validation
+  tail if any; matbu ruling; G1/G2 asks; marketplace tail the moment
+  operator items land; CI promotions if ≥07-23 else skip carry ×20.
 
 **▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-31.md` and execute it**
 (★ standing directive at its top: review the backlog + REVISE the plan;

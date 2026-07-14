@@ -5490,3 +5490,35 @@ green). origin/main == HEAD at S29 open.
   now tighter than before, not looser). Promotion of e2e to a
   required context belongs to the standing date-gated CI-promotions
   process (≥07-23), NOT flipped unilaterally here.
+- **★★★ LICENSE LANDED (operator, mid-S30 post-merge continuation) —
+  APPLIED + INGEST RESTORED, LIVE-VALIDATED.** The operator pasted the
+  new AMS license key + expiry (2026-07-27T13:45:19Z) into the session.
+  Key stored ONLY in gitignored `oguz-testing.md` (never committed;
+  this ledger deliberately omits it). Application path: authed REST
+  `PUT /rest/v2/server-settings` → **405** (the S18 POST-not-PUT
+  pattern holds for server-settings too) → **POST → success:true**,
+  readback confirmed the new key. **No-restart test: enforcement did
+  NOT lift** (teststream still "License is suspended…") ⇒ the runtime
+  license state only refreshes at boot → `docker restart antmedia`
+  (operator-sanctioned by intent; ingest was already dead, so zero
+  operational cost) → clean boot 00:44:34Z → **teststream ACCEPTED:
+  Up, broadcasts count=1, HLS keyframes, mux speed ~1.0;
+  pulse-realams total_publishers=1.** Post-license sweep
+  (s30postlicense 00:48Z): **byte-identical to the PRE-EXPIRY baseline
+  except `pulse-prod.poll-errlines-15m=6`** — all 6 clustered
+  00:44:28–:55Z (the restart window: refused→timeout→500 during boot),
+  none since, healthz all-ok. RTMP leaves the blocked-scenario list.
+- **TC-I-05-SRT first post-license run: license gate GONE, resource
+  gate hit.** The SRT handshake reached the SRTAdaptor ACF callback
+  for the FIRST time (S29 never got past the license refusal), but was
+  rejected "because there is high resource usage in the server" (VPS
+  load 14 — concurrent operator sessions + the teststream's own x264
+  encode). **Scenario-logic gap filed (S31, XS): TC-I-05's gate only
+  distinguishes license-suspension vs real-defect — a resource-guard
+  rejection mislabels as FAIL.** Retry armed on load<6 this session;
+  else S31 re-runs in a quiet window. Blocked list now: [SRT ingest —
+  resource-window only, no longer license].
+- **NEW STANDING INTAKE ITEM: license expires 2026-07-27T13:45Z**
+  (13-day window) — renewal intake before 07-27 or ingest dies again
+  at the NEXT AMS restart after lapse (the D-092 enforcement model:
+  lapse alone spares running streams + RTMP until a restart).
