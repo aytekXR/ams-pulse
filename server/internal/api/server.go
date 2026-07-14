@@ -423,6 +423,7 @@ func (s *Server) buildRouter() {
 	// API v1 — bearer auth required.
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(s.bearerAuthMiddleware)
+		r.Use(s.requireWriteScope)
 
 		r.Get("/live/overview", s.handleLiveOverview)
 		r.Get("/live/streams", s.handleLiveStreams)
@@ -655,6 +656,58 @@ func (s *Server) bearerAuthMiddleware(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, ctxAuthMethodKey, authMethod)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// requireWriteScope denies mutating requests (POST, PUT, PATCH, DELETE) to any
+// token that is not permitted to write. GET, HEAD and OPTIONS always pass, so a
+// read-only token can still drive the entire UI.
+//
+// The rule is a positive one — a token writes only if canWrite says so. Stating
+// it as a blocklist ("deny viewer") is what made the first version of this
+// middleware useless: the Settings UI mints its tokens with scope "read", which
+// no blocklist of role names anticipated, so every UI-minted token kept full
+// write access — including POST /admin/tokens, which lets it mint itself an
+// admin token. Enumerate what may write, never what may not.
+func (s *Server) requireWriteScope(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet, http.MethodHead, http.MethodOptions:
+			next.ServeHTTP(w, r)
+			return
+		}
+		tok, _ := r.Context().Value(ctxTokenKey).(*meta.APIToken)
+		if tok == nil {
+			// bearerAuthMiddleware runs first and never forwards without a token;
+			// if that ordering ever changes, fail closed rather than open.
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing or invalid Authorization header")
+			return
+		}
+		if !canWrite(tok.Scopes) {
+			writeError(w, http.StatusForbidden, "FORBIDDEN",
+				`this token is read-only; the operation requires a token with the "admin" scope`)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// canWrite reports whether a token's scopes permit mutating requests.
+//
+// An empty scope list is grandfathered as admin: handleCreateToken leaves Scopes
+// nil when a caller omits the field, so tokens minted before scopes were enforced
+// carry none, and the store cannot distinguish "no scope recorded" from "no scope
+// required". Rejecting them would lock an operator out of their own instance.
+// Any explicit scope other than "admin" ("read", "viewer", …) is read-only.
+func canWrite(scopes []string) bool {
+	if len(scopes) == 0 {
+		return true
+	}
+	for _, s := range scopes {
+		if s == "admin" {
+			return true
+		}
+	}
+	return false
 }
 
 // downloadAuthMiddleware is like bearerAuthMiddleware but additionally accepts a

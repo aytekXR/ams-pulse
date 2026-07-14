@@ -65,6 +65,17 @@ test.describe("Dashboard render", () => {
       route.fulfill({ status: 200, contentType: "application/json", body: STREAMS_BODY })
     );
 
+    // OnboardingGuard fetches the source list on the dashboard and sends a user
+    // with none to the wizard. Return one source so this test stays on the
+    // dashboard (and so the request never 502s against the absent CI backend).
+    await page.route("/api/v1/admin/sources", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items: [{ id: "s1", name: "AMS", type: "rest_poll" }] }),
+      })
+    );
+
     // AuthGate mount-time checks: mock both /auth endpoints so the vite
     // preview /auth proxy (no backend on 8090 in CI) never answers 502.
     // /auth/me must be 200 here: Chromium logs ANY non-2xx resource load as
