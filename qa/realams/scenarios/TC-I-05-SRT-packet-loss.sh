@@ -48,16 +48,42 @@
 #   This bridge-path variant is NOT implemented here to keep the primary run
 #   simple. It is a follow-on exercise using the TC-I-05 netem sidecar pattern.
 #
-# LICENSE GATE (implemented below):
+# ADMISSION GATES (implemented below):
 #   After starting the publisher, if the broadcast does NOT appear in AMS REST
-#   within 30 s, check antmedia container logs (last 5 min) for "License is suspended":
-#     → FOUND:     SKIP exit 77 — expected first-run outcome (S29/D-091)
-#     → NOT FOUND: FAIL exit 1  — real defect; SRT should be accepted without licence block
+#   within 30 s, AMS refused admission. There are TWO distinct environmental
+#   refusals, both keyed to OUR streamid in the antmedia logs, and neither is a
+#   Pulse defect:
+#
+#   (a) LICENSE gate — "License is suspended. Not accepting the stream"
+#       → SKIP exit 77. Observed S29/D-091 (lapsed trial). CLEARED at S30: the
+#         operator's new key was applied and ingest was restored.
+#
+#   (b) RESOURCE gate (S31, D-093) — AMS's StatsCollector admission guard refuses
+#       ANY new publish (SRT and RTMP alike) while host CPU exceeds its limit:
+#           StatsCollector - Not enough resource. Due to high cpu load: 86 cpu limit: 75
+#           SRTAdaptor     - Not accepting stream(<our streamid>) because there is
+#                            high resource usage in the server
+#       → SKIP exit 77. Before S31 this mislabelled as FAIL ("real defect"), which
+#         is exactly the false-red D-092 filed: the S30 post-license run reached the
+#         SRTAdaptor ACF callback for the FIRST time (proving the license gate was
+#         gone) and was then rejected purely because the VPS was at load 14 from
+#         concurrent sessions. A busy box is not a broken product.
+#
+#   Anything else (no matching log line) → FAIL exit 1, a real defect.
+#
+#   Both arms grep for OUR ${STREAM_ID} so a stale rejection from a prior attempt
+#   inside the log window cannot SKIP-mask an unrelated failure (S29 V3 must-fix).
+#
+# RUNNING THIS SCENARIO: check host load first (`uptime`). AMS measures CPU itself
+#   and refuses admission above 75% — re-run in a quiet window (load < ~6) rather
+#   than reading a resource SKIP as a product signal. Host load is recorded in the
+#   evidence for every run.
 #
 # Exit codes:
-#   0   PASS — broadcast established; structural assertions pass (license valid)
-#   1   FAIL — SRT ingest rejected for unknown reason (not a licence error)
-#   77  SKIP — AMS EE licence suspended gates SRT ingest
+#   0   PASS — broadcast established; structural assertions pass
+#   1   FAIL — SRT ingest refused for an unknown reason (real defect)
+#   77  SKIP — AMS refused admission for an environmental reason: licence suspended
+#              (gate a) or high-CPU admission guard (gate b). verdict.txt says which.
 #
 set -euo pipefail
 
@@ -78,12 +104,20 @@ EPOCH="$(date +%s)"
 STREAM_ID="val-i05-srt-${EPOCH}"
 SRT_CNAME="pulse-srt-val-i05-${EPOCH}"
 
-# ACF streamid format confirmed vs AMS logs.
-# Variable set before use; '#' inside double-quotes is literal, not a comment.
-_SRT_STREAMID="#!::h=LiveApp/${STREAM_ID},m=publish"
+# SRT streamid format — plain "<scope>/<streamId>", live-proven vs this AMS (S31).
+#
+# NOT the SRT Access Control ("#!::h=...,m=publish") form. AMS EE 3.0.3's
+# SRTAdaptor splits the streamid on '/' and treats the left side as the app
+# scope WITHOUT stripping the ACF prefix, so an ACF streamid is rejected:
+#   ERROR SRTAdaptor - There is no scope for incoming stream id.
+#                      Parsed scope: #!::h=LiveApp, stream id: <ours>
+# Both ACF spellings (h= and r=) fail the same way; the plain form ingests.
+# This was invisible until S31: the license gate (S29) and the CPU admission
+# guard (S30) both refused the connection before the parser was ever reached.
+_SRT_STREAMID="LiveApp/${STREAM_ID}"
 _SRT_URL="srt://127.0.0.1:4200?streamid=${_SRT_STREAMID}"
 
-EVIDENCE_DIR="${EVIDENCE_ROOT}/S29-${SCENARIO}-$(date -u +%Y%m%dT%H%M%SZ)"
+EVIDENCE_DIR="${EVIDENCE_ROOT}/${SCENARIO}-$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "${EVIDENCE_DIR}"
 export EVIDENCE_DIR
 
@@ -101,9 +135,16 @@ trap cleanup EXIT
 
 log "STREAM_ID=${STREAM_ID}  SRT_CNAME=${SRT_CNAME}"
 log "SRT_URL=${_SRT_URL}"
-log "ACF streamid: ${_SRT_STREAMID}"
-printf 'scenario: %s\nstream_id: %s\nsrt_cname: %s\nsrt_url: %s\n' \
-  "${SCENARIO}" "${STREAM_ID}" "${SRT_CNAME}" "${_SRT_URL}" \
+log "SRT streamid: ${_SRT_STREAMID}"
+
+# Host load at launch — AMS refuses admission above its own CPU limit (75%), so a
+# busy box produces an environmental SKIP, not a product signal. Recorded for every
+# run so a SKIP verdict can always be attributed after the fact.
+_HOST_LOAD="$(uptime | sed 's/.*load average: //')"
+log "host load average (1/5/15 min): ${_HOST_LOAD}"
+
+printf 'scenario: %s\nstream_id: %s\nsrt_cname: %s\nsrt_url: %s\nhost_load_at_launch: %s\n' \
+  "${SCENARIO}" "${STREAM_ID}" "${SRT_CNAME}" "${_SRT_URL}" "${_HOST_LOAD}" \
   > "${EVIDENCE_DIR}/run-params.txt"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -116,7 +157,9 @@ printf 'scenario: %s\nstream_id: %s\nsrt_cname: %s\nsrt_url: %s\n' \
 # The ACF streamid '#!::h=...' is double-quoted inside the inner sh -c command
 # (via escaped quotes \"...\") so /bin/sh does not interpret '#' as a comment.
 #
-# -t 50: bounded publisher duration (slightly longer than the 30 s poll window).
+# -t 90: bounded publisher duration. Must outlast the 30 s admission poll + the
+#   45 s bitrate-settle budget (Phase 3) + Pulse's own 15 s collector interval,
+#   so the stream is still live when both AMS and Pulse are sampled.
 # -f mpegts: standard MPEG-TS container for SRT transport.
 #
 log "Phase 1: launching SRT publisher (jrottenberg/ffmpeg:4.1-alpine --network host)"
@@ -129,7 +172,7 @@ _pub_result="$(sg docker -c "docker run -d \
   -f lavfi -i 'sine=frequency=1000:sample_rate=44100' \
   -c:v libx264 -preset veryfast -b:v 1000k \
   -c:a aac -b:a 128k \
-  -t 50 \
+  -t 90 \
   -f mpegts \"${_SRT_URL}\"" \
   2>&1 || echo "LAUNCH_FAILED")"
 
@@ -207,18 +250,53 @@ if [ "${_broadcasting}" -eq 0 ]; then
       printf 'Closure criterion: live SRT observation run post-license (DG-18, S29/D-091).\n'
     } > "${EVIDENCE_DIR}/verdict.txt"
     exit 77
-  else
-    log "FAIL: broadcast not found and no licence-suspension log found — real defect"
-    {
-      echo "FAIL"
-      printf 'Broadcast %s never appeared in AMS within 30 s.\n' "${STREAM_ID}"
-      printf 'No "License is suspended" line found in antmedia logs (last 5 min).\n'
-      printf 'This is a real defect — SRT ingest should be accepted or explicitly rejected.\n'
-      printf 'Investigate: AMS SRT adaptor configuration, port 4200 availability, ACF streamid format.\n'
-      printf 'Evidence: %s/\n' "${EVIDENCE_DIR}"
-    } > "${EVIDENCE_DIR}/verdict.txt"
-    exit 1
   fi
+
+  # RESOURCE GATE (S31/D-093). AMS's StatsCollector refuses ANY new publish while
+  # host CPU is above its limit (default 75%) — the SRTAdaptor logs the refusal with
+  # OUR streamid verbatim. This is an environmental refusal on a contended box, NOT a
+  # product defect: before this arm existed it mislabelled as FAIL "real defect"
+  # (D-092 filed exactly this false-red). Keyed to ${STREAM_ID} so a stale line from a
+  # prior attempt cannot mask an unrelated failure.
+  if printf '%s' "${_ams_logs}" | grep -q "Not accepting stream.*${STREAM_ID}.*high resource usage"; then
+    _resource_line="$(printf '%s' "${_ams_logs}" | grep "Not accepting stream.*${STREAM_ID}.*high resource usage" | tail -1)"
+    # The StatsCollector line carries the actual CPU reading vs AMS's limit. It has no
+    # streamid, so pull the last one in the window (best-effort context, not the key).
+    _cpu_line="$(printf '%s' "${_ams_logs}" | grep "Not enough resource" | tail -1 || true)"
+    log "RESOURCE GATE TRIGGERED: ${_resource_line}"
+    [ -n "${_cpu_line}" ] && log "AMS CPU reading: ${_cpu_line}"
+    {
+      echo "SKIP"
+      printf 'Reason: AMS refused admission because host CPU exceeded its resource limit.\n'
+      printf 'This is an ENVIRONMENTAL refusal on a contended VPS, not a Pulse defect and\n'
+      printf 'not a license signal — AMS applies this guard to SRT and RTMP alike.\n'
+      printf '\n'
+      printf 'The SRT license gate is CLEARED (S30): the handshake reached the SRTAdaptor\n'
+      printf 'ACF callback, which a suspended license refuses outright.\n'
+      printf '\n'
+      printf 'SRTAdaptor log line:  %s\n' "${_resource_line}"
+      printf 'StatsCollector line:  %s\n' "${_cpu_line:-(not captured in window)}"
+      printf 'Host load at launch:  %s\n' "${_HOST_LOAD}"
+      printf 'Evidence log:  %s/antmedia-log-snippet.txt\n' "${EVIDENCE_DIR}"
+      printf '\n'
+      printf 'Action: re-run in a quiet window (host load < ~6). No code change is implied.\n'
+    } > "${EVIDENCE_DIR}/verdict.txt"
+    exit 77
+  fi
+
+  log "FAIL: broadcast not found; no licence-suspension and no resource-guard log line — real defect"
+  {
+    echo "FAIL"
+    printf 'Broadcast %s never appeared in AMS within 30 s.\n' "${STREAM_ID}"
+    printf 'Neither refusal signature was found in antmedia logs (last 5 min) for this streamid:\n'
+    printf '  - "License is suspended"          (license gate)\n'
+    printf '  - "...high resource usage..."     (CPU admission guard)\n'
+    printf 'This is a real defect — SRT ingest should be accepted or explicitly rejected.\n'
+    printf 'Investigate: AMS SRT adaptor configuration, port 4200 availability, ACF streamid format.\n'
+    printf 'Host load at launch: %s\n' "${_HOST_LOAD}"
+    printf 'Evidence: %s/\n' "${EVIDENCE_DIR}"
+  } > "${EVIDENCE_DIR}/verdict.txt"
+  exit 1
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -242,8 +320,29 @@ fi
 #
 log "Phase 3: collecting SRT ingest metrics (observation mode)"
 
-# Allow AMS to collect initial baseline metrics after the broadcaster appears
-sleep 5
+# AMS reports `bitrate` from a rolling measurement window, so it is legitimately
+# 0 for the first seconds of an accepted broadcast. Sampling once right after
+# status=broadcasting therefore reads 0 and fails the flow assertion on a stream
+# that is ingesting perfectly (observed S31 — a scenario defect, not a product
+# defect). Poll for the stat to populate, bounded, and record every sample so a
+# genuinely dead ingest still fails honestly.
+_BITRATE_BUDGET_S=45
+_bitrate_samples=""
+_ams_bitrate=0
+_i=0
+while [ "${_i}" -lt $(( _BITRATE_BUDGET_S / 3 )) ]; do
+  _ams_bitrate="$(curl -s -m 10 -b "${AMS_COOKIE_FILE}" \
+    "${AMS_URL}/LiveApp/rest/v2/broadcasts/${STREAM_ID}" \
+    | jq '.bitrate // 0' 2>/dev/null || echo 0)"
+  _bitrate_samples="${_bitrate_samples}$(( _i * 3 ))s=${_ams_bitrate} "
+  if [ "$(awk -v b="${_ams_bitrate}" 'BEGIN { print (b > 0) ? 1 : 0 }')" -eq 1 ]; then
+    log "AMS bitrate populated after $(( _i * 3 )) s: ${_ams_bitrate} bps"
+    break
+  fi
+  sleep 3
+  _i=$(( _i + 1 ))
+done
+log "bitrate samples: ${_bitrate_samples}"
 
 capture_ams "/LiveApp/rest/v2/broadcasts/${STREAM_ID}" "srt-post-start"
 _ams_raw="$(curl -s -m 10 -b "${AMS_COOKIE_FILE}" \
