@@ -84,8 +84,13 @@ test.describe("Streams virtualization", () => {
       // Footer shows the total count (StreamsTable.tsx line 205)
       await expect(page.getByText("500 streams")).toBeVisible();
 
-      // Scroll to the bottom of the virtual container — virtualizer re-renders last rows
-      await grid.evaluate((el) => {
+      // Scroll to the bottom of the virtual container — virtualizer re-renders last rows.
+      // The scrollable element is NOT the grid: role="grid" owns the header rowgroup
+      // (ARIA 1.2 grid ownership, S32/D-094), so it sits on the outer, overflow:hidden
+      // wrapper. Driving the virtualizer means scrolling the viewport div itself —
+      // scrolling the grid element is a silent no-op that renders no new rows.
+      const scroller = page.getByTestId("streams-scroll");
+      await scroller.evaluate((el) => {
         el.scrollTop = el.scrollHeight;
       });
 

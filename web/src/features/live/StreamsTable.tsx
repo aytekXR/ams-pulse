@@ -59,68 +59,84 @@ export function StreamsTable({ streams }: Props) {
   const virtualItems = rowVirtualizer.getVirtualItems();
   const totalHeight = rowVirtualizer.getTotalSize();
 
+  // ST-5: `id: "7%"` was orphaned — referenced nowhere in rendered header or
+  // data cells. Removed. The seven active columns sum to 93% of row width.
   const colWidths = useMemo(
-    () => ({ stream: "25%", app: "12%", node: "13%", state: "10%", viewers: "10%", bitrate: "13%", health: "10%", id: "7%" }),
+    () => ({ stream: "25%", app: "12%", node: "13%", state: "10%", viewers: "10%", bitrate: "13%", health: "10%" }),
     [],
   );
 
+  // ST-1/ST-2: padding uses --space-3 (exact 12px match).
   const headerStyle: React.CSSProperties = {
     fontSize: 11,
     fontWeight: 600,
     color: "var(--color-muted)",
     textTransform: "uppercase",
     letterSpacing: "0.07em",
-    padding: "0 12px",
+    padding: "0 var(--space-3)",
     textAlign: "left" as const,
   };
 
+  // ST-3: padding uses --space-3 (exact 12px match).
   const cellStyle: React.CSSProperties = {
-    padding: "0 12px",
+    padding: "0 var(--space-3)",
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   };
 
   return (
+    // ST-1: role="grid" moves to the outermost container so the header rowgroup
+    // is owned by the grid element (ARIA 1.2 grid ownership requirement).
     <div
+      role="grid"
+      aria-label="Active streams"
+      aria-rowcount={streams.length + 1}
       style={{
         background: "var(--color-surface)",
         border: "1px solid var(--color-border)",
-        borderRadius: 8,
+        borderRadius: "var(--radius-control)",
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
       }}
     >
-      {/* Header */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          height: 36,
-          borderBottom: "1px solid var(--color-border)",
-          background: "var(--color-surface-2)",
-          flexShrink: 0,
-        }}
-        role="row"
-        aria-rowindex={1}
-      >
-        <div style={{ ...headerStyle, width: colWidths.stream }}>Stream</div>
-        <div style={{ ...headerStyle, width: colWidths.app }}>App</div>
-        <div style={{ ...headerStyle, width: colWidths.node }}>Node</div>
-        <div style={{ ...headerStyle, width: colWidths.state }}>State</div>
-        <div style={{ ...headerStyle, width: colWidths.viewers, textAlign: "right" as const }}>Viewers</div>
-        <div style={{ ...headerStyle, width: colWidths.bitrate, textAlign: "right" as const }}>Bitrate</div>
-        <div style={{ ...headerStyle, width: colWidths.health }}>Health</div>
+      {/* ST-1: rowgroup wrapper owns the header row so screen readers can
+          associate column headers with data cells. */}
+      <div role="rowgroup">
+        {/* ST-2: role="columnheader" on each header cell.
+            aria-sort is intentionally absent until click handlers are added. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            height: 36,
+            borderBottom: "1px solid var(--color-border)",
+            background: "var(--color-surface-2)",
+            flexShrink: 0,
+          }}
+          role="row"
+          aria-rowindex={1}
+        >
+          <div role="columnheader" style={{ ...headerStyle, width: colWidths.stream }}>Stream</div>
+          <div role="columnheader" style={{ ...headerStyle, width: colWidths.app }}>App</div>
+          <div role="columnheader" style={{ ...headerStyle, width: colWidths.node }}>Node</div>
+          <div role="columnheader" style={{ ...headerStyle, width: colWidths.state }}>State</div>
+          <div role="columnheader" style={{ ...headerStyle, width: colWidths.viewers, textAlign: "right" as const }}>Viewers</div>
+          <div role="columnheader" style={{ ...headerStyle, width: colWidths.bitrate, textAlign: "right" as const }}>Bitrate</div>
+          <div role="columnheader" style={{ ...headerStyle, width: colWidths.health }}>Health</div>
+        </div>
       </div>
 
-      {/* Virtualized body */}
+      {/* Scroll viewport — parentRef bound here; no ARIA role (ST-1: grid is on
+          the outer container; this div is purely a scroll container).
+          data-testid: role="grid" no longer sits on the scrollable element, so
+          e2e needs an explicit handle to drive the virtualizer (see
+          e2e/streams-virtualization.spec.ts). */}
       <div
         ref={parentRef}
+        data-testid="streams-scroll"
         style={{ overflowY: "auto", maxHeight: 520, flex: 1 }}
-        role="grid"
-        aria-label="Active streams"
-        aria-rowcount={streams.length + 1}
       >
         {streams.length === 0 ? (
           <div
@@ -136,6 +152,7 @@ export function StreamsTable({ streams }: Props) {
             No active streams
           </div>
         ) : (
+          // ST-1: second rowgroup owns all virtualised data rows.
           <div style={{ height: totalHeight, position: "relative" }} role="rowgroup">
             {virtualItems.map((virtualRow) => {
               const stream = streams[virtualRow.index];
@@ -159,7 +176,10 @@ export function StreamsTable({ streams }: Props) {
                   role="row"
                   aria-rowindex={virtualRow.index + 2}
                 >
+                  {/* ST-3: role="rowheader" on the identifying stream-id cell;
+                      remaining cells get role="gridcell". */}
                   <div
+                    role="rowheader"
                     style={{
                       ...cellStyle,
                       width: colWidths.stream,
@@ -171,22 +191,22 @@ export function StreamsTable({ streams }: Props) {
                   >
                     {stream.stream_id ?? "—"}
                   </div>
-                  <div style={{ ...cellStyle, width: colWidths.app, color: "var(--color-muted)" }}>
+                  <div role="gridcell" style={{ ...cellStyle, width: colWidths.app, color: "var(--color-muted)" }}>
                     {stream.app ?? "—"}
                   </div>
-                  <div style={{ ...cellStyle, width: colWidths.node, color: "var(--color-muted)", fontSize: 12 }}>
+                  <div role="gridcell" style={{ ...cellStyle, width: colWidths.node, color: "var(--color-muted)", fontSize: 12 }}>
                     {stream.node_id ?? "—"}
                   </div>
-                  <div style={{ ...cellStyle, width: colWidths.state }}>
+                  <div role="gridcell" style={{ ...cellStyle, width: colWidths.state }}>
                     <Badge label={stream.publisher_state ?? "unknown"} variant={stateVariant(stream.publisher_state)} />
                   </div>
-                  <div style={{ ...cellStyle, width: colWidths.viewers, textAlign: "right" }}>
+                  <div role="gridcell" style={{ ...cellStyle, width: colWidths.viewers, textAlign: "right" }}>
                     {(stream.viewers ?? 0).toLocaleString()}
                   </div>
-                  <div style={{ ...cellStyle, width: colWidths.bitrate, textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 12 }}>
+                  <div role="gridcell" style={{ ...cellStyle, width: colWidths.bitrate, textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 12 }}>
                     {fmtBitrate(stream.bitrate_kbps)}
                   </div>
-                  <div style={{ ...cellStyle, width: colWidths.health }}>
+                  <div role="gridcell" style={{ ...cellStyle, width: colWidths.health }}>
                     <Badge label={healthLabel(stream.health_score)} variant={healthVariant(stream.health_score)} />
                   </div>
                 </div>
@@ -196,7 +216,7 @@ export function StreamsTable({ streams }: Props) {
         )}
       </div>
 
-      {/* Footer count */}
+      {/* Footer count — no ARIA role; purely informational text. */}
       <div
         style={{
           padding: "6px 12px",
