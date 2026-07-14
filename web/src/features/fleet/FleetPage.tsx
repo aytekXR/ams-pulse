@@ -12,8 +12,9 @@ import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/Badge";
+import { SegmentedControl } from "@/components/SegmentedControl";
 import type { FleetNode } from "@/lib/api/types";
-import { useStatusColors } from "@/lib/chartColors";
+import { useStatusColors, CHART_COLORS } from "@/lib/chartColors";
 
 function statusVariant(status: string): "success" | "warning" | "error" {
   if (status === "up") return "success";
@@ -40,7 +41,7 @@ export function cpuStatus(pct: number): "critical" | "warning" | "healthy" {
 
 /**
  * Pure threshold function — maps mem % to a status tier string.
- * Note: mem "healthy" uses dataviz blue (#58A6FF), not status green,
+ * Note: mem "healthy" renders CHART_COLORS[1] (dataviz blue), not status green,
  * because memory at low levels is a normal secondary metric.
  * Exported so tests can verify threshold logic independently of rendering.
  */
@@ -50,7 +51,16 @@ export function memStatus(pct: number): "critical" | "warning" | "healthy" {
   return "healthy";
 }
 
-function LoadBar({ value, color }: { value: number; color: string }) {
+/**
+ * LoadBar — a filled bar whose HUE encodes the threshold tier.
+ *
+ * `status` is the tier the colour represents. It is rendered as screen-reader-only
+ * text so the tier reaches the accessibility tree instead of living only in a hex
+ * value that assistive tech cannot report. (The visible "85%" already carries the
+ * underlying datum for sighted users, colour-blind included — the tier is a pure
+ * function of that number — so the hue is a redundant encoding, not the sole one.)
+ */
+function LoadBar({ value, color, status }: { value: number; color: string; status: string }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
       <div style={{
@@ -61,17 +71,27 @@ function LoadBar({ value, color }: { value: number; color: string }) {
         overflow: "hidden",
         minWidth: 60,
       }}>
-        <div style={{
-          width: `${Math.min(value, 100)}%`,
-          height: "100%",
-          background: color,
-          borderRadius: 3,
-          transition: "width var(--motion-base)",
-        }} />
+        {/* data-testid: the fill's HUE is the whole point of this component and it
+            lives only in an inline style, so the tests need a stable handle on it.
+            Without one they can only re-assert the palette constants they imported —
+            which is what the old FleetPage colour tests did, and why a swap of the
+            memory-healthy colour to status-green would have left them all green. */}
+        <div
+          data-testid="loadbar-fill"
+          data-status={status}
+          style={{
+            width: `${Math.min(value, 100)}%`,
+            height: "100%",
+            background: color,
+            borderRadius: 3,
+            transition: "width var(--motion-base)",
+          }}
+        />
       </div>
-      <span style={{ fontSize: 11, color: "var(--color-muted)", width: 32, textAlign: "right" }}>
+      <span style={{ fontSize: 11, color: "var(--color-secondary)", width: 32, textAlign: "right" }}>
         {value.toFixed(0)}%
       </span>
+      <span className="sr-only">{status}</span>
     </div>
   );
 }
@@ -100,34 +120,35 @@ function NodeCard({ node }: NodeCardProps) {
       flexDirection: "column",
       gap: 10,
     }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: "var(--space-2)" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 13, fontFamily: "var(--font-mono)" }}>{node.node_id}</div>
           {node.version && (
-            <div style={{ fontSize: 11, color: "var(--color-muted)", marginTop: 2 }}>v{node.version}</div>
+            <div style={{ fontSize: 11, color: "var(--color-secondary)", marginTop: 2 }}>v{node.version}</div>
           )}
         </div>
         <Badge label={node.role} variant={roleVariant(node.role)} />
         <Badge label={node.status} variant={statusVariant(node.status)} />
       </div>
 
-      <div style={{ fontSize: 12, color: "var(--color-muted)" }}>
+      <div style={{ fontSize: 12, color: "var(--color-secondary)" }}>
         Last seen: {lastSeenLabel(node.last_seen)}
       </div>
 
       {node.cpu_pct != null && (
         <div>
-          <div style={{ fontSize: 11, color: "var(--color-muted)", marginBottom: 3 }}>CPU</div>
+          <div style={{ fontSize: 11, color: "var(--color-secondary)", marginBottom: 3 }}>CPU</div>
           <LoadBar
             value={node.cpu_pct}
             color={statusColors[cpuStatus(node.cpu_pct)]}
+            status={cpuStatus(node.cpu_pct)}
           />
         </div>
       )}
 
       {node.mem_pct != null && (
         <div>
-          <div style={{ fontSize: 11, color: "var(--color-muted)", marginBottom: 3 }}>Memory</div>
+          <div style={{ fontSize: 11, color: "var(--color-secondary)", marginBottom: 3 }}>Memory</div>
           <LoadBar
             value={node.mem_pct}
             color={
@@ -135,14 +156,18 @@ function NodeCard({ node }: NodeCardProps) {
                 ? statusColors.critical
                 : memStatus(node.mem_pct) === "warning"
                   ? statusColors.warning
-                  : '#58A6FF' // dataviz blue — "normal" memory, not a status signal
+                  // Dataviz blue, NOT statusColors.healthy: normal memory is a
+                  // secondary metric, not a health signal. Same hex as before —
+                  // CHART_COLORS[1] just names the intent (WAVE-PLAN §4 W2).
+                  : CHART_COLORS[1]
             }
+            status={memStatus(node.mem_pct)}
           />
         </div>
       )}
 
       {(node.net_in_mbps != null || node.net_out_mbps != null) && (
-        <div style={{ display: "flex", gap: 12, fontSize: 12, color: "var(--color-muted)" }}>
+        <div style={{ display: "flex", gap: "var(--space-3)", fontSize: 12, color: "var(--color-secondary)" }}>
           {node.net_in_mbps != null && <span>↓ {node.net_in_mbps.toFixed(1)} Mbps</span>}
           {node.net_out_mbps != null && <span>↑ {node.net_out_mbps.toFixed(1)} Mbps</span>}
         </div>
@@ -189,26 +214,39 @@ export function FleetPage() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)" }}>
         <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Fleet</h1>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{
-            width: 7,
-            height: 7,
-            borderRadius: "50%",
-            background: loading ? "var(--color-warning, #FFB224)" : "var(--color-success, #2CE5A7)",
-            display: "inline-block",
-          }} />
-          <span style={{ fontSize: 12, color: "var(--color-muted)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+          {/* The hex fallbacks these var() calls used to carry were dead AND stale:
+              --color-warning and --color-success are defined in BOTH themes, so the
+              fallback was unreachable — and each theme's light value differs from the
+              fallback it carried, so had one ever been reached it would have painted
+              the wrong colour. Same defect Wave 1 removed from QoePage. */}
+          {/* Decorative: the sibling text ("Refreshing…" / "Auto-refresh (30s)")
+              already states this. Giving the dot its own role would announce the
+              same fact twice — and role="status" here would collide with the
+              LoadingSpinner's live region. */}
+          <span
+            aria-hidden="true"
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: "50%",
+              background: loading ? "var(--color-warning)" : "var(--color-success)",
+              display: "inline-block",
+            }}
+          />
+          <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>
             {loading ? "Refreshing…" : "Auto-refresh (30s)"}
           </span>
           <button
             onClick={load}
             disabled={loading}
+            className="btn-secondary"
             style={{
               background: "var(--color-surface-2)",
               border: "1px solid var(--color-border)",
-              color: "var(--color-muted)",
+              color: "var(--color-secondary)",
               borderRadius: 4,
               padding: "4px 10px",
               cursor: "pointer",
@@ -217,33 +255,26 @@ export function FleetPage() {
           >
             Refresh
           </button>
-          {/* View toggle */}
-          <div style={{ display: "flex", border: "1px solid var(--color-border)", borderRadius: 4, overflow: "hidden" }}>
-            {(["cards", "table"] as const).map((v) => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                style={{
-                  background: view === v ? "var(--color-surface-2)" : "transparent",
-                  border: "none",
-                  color: view === v ? "var(--color-text)" : "var(--color-muted)",
-                  padding: "4px 10px",
-                  cursor: "pointer",
-                  fontSize: 11,
-                  fontWeight: view === v ? 600 : 400,
-                  textTransform: "capitalize",
-                }}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
+          {/* View toggle — a segmented control (fill-background active state), never
+              a <Tabs>: see SegmentedControl.tsx for why it is a radiogroup, not a
+              tablist. Labels are passed pre-capitalised; the old markup capitalised
+              a lowercase value in CSS, which let the DOM text and the accessible
+              name drift apart. */}
+          <SegmentedControl
+            aria-label="Fleet view"
+            value={view}
+            onChange={(v) => setView(v as "cards" | "table")}
+            items={[
+              { value: "cards", label: "Cards" },
+              { value: "table", label: "Table" },
+            ]}
+          />
         </div>
       </div>
 
       {/* Aggregate header */}
       {nodes.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "var(--space-3)" }}>
           {[
             { label: "Total Nodes", value: nodes.length },
             { label: "Up", value: upCount },
@@ -255,9 +286,9 @@ export function FleetPage() {
               background: "var(--color-surface)",
               border: "1px solid var(--color-border)",
               borderRadius: 8,
-              padding: "12px 16px",
+              padding: "var(--space-3) var(--space-4)",
             }}>
-              <div style={{ fontSize: 11, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500, marginBottom: 4 }}>
+              <div style={{ fontSize: 11, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500, marginBottom: "var(--space-1)" }}>
                 {label}
               </div>
               <div style={{ fontSize: 22, fontWeight: 700 }}>{value}</div>
@@ -266,7 +297,7 @@ export function FleetPage() {
         </div>
       )}
 
-      <p style={{ margin: 0, fontSize: 12, color: "var(--color-muted)" }}>
+      <p style={{ margin: 0, fontSize: 12, color: "var(--color-secondary)" }}>
         Nodes are auto-discovered within 2 minutes of first contact. Origin and edge nodes are de-duplicated by node_id.
       </p>
 
@@ -280,7 +311,7 @@ export function FleetPage() {
           description="Cluster nodes will appear here once Pulse detects them. Discovery takes up to 2 minutes from first contact."
         />
       ) : view === "cards" ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "var(--space-4)" }}>
           {nodes.map((node) => <NodeCard key={node.node_id} node={node} />)}
         </div>
       ) : (
@@ -289,7 +320,7 @@ export function FleetPage() {
             <thead style={{ background: "var(--color-surface-2)" }}>
               <tr>
                 {["Node ID", "Role", "Status", "Last Seen", "Version", "CPU", "Memory", "Network"].map((h) => (
-                  <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>
+                  <th key={h} scope="col" style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>
                     {h}
                   </th>
                 ))}
@@ -301,13 +332,14 @@ export function FleetPage() {
                   <td style={{ padding: "10px 14px", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600 }}>{node.node_id}</td>
                   <td style={{ padding: "10px 14px" }}><Badge label={node.role} variant={roleVariant(node.role)} /></td>
                   <td style={{ padding: "10px 14px" }}><Badge label={node.status} variant={statusVariant(node.status)} /></td>
-                  <td style={{ padding: "10px 14px", color: "var(--color-muted)", fontSize: 12 }}>{lastSeenLabel(node.last_seen)}</td>
-                  <td style={{ padding: "10px 14px", color: "var(--color-muted)", fontSize: 12 }}>{node.version ?? "—"}</td>
+                  <td style={{ padding: "10px 14px", color: "var(--color-secondary)", fontSize: 12 }}>{lastSeenLabel(node.last_seen)}</td>
+                  <td style={{ padding: "10px 14px", color: "var(--color-secondary)", fontSize: 12 }}>{node.version ?? "—"}</td>
                   <td style={{ padding: "10px 14px", minWidth: 100 }}>
                     {node.cpu_pct != null ? (
                       <LoadBar
                         value={node.cpu_pct}
                         color={statusColors[cpuStatus(node.cpu_pct)]}
+                        status={cpuStatus(node.cpu_pct)}
                       />
                     ) : "—"}
                   </td>
@@ -320,12 +352,13 @@ export function FleetPage() {
                             ? statusColors.critical
                             : memStatus(node.mem_pct) === "warning"
                               ? statusColors.warning
-                              : '#58A6FF' // dataviz blue — normal memory level
+                              : CHART_COLORS[1] // dataviz blue — normal memory level
                         }
+                        status={memStatus(node.mem_pct)}
                       />
                     ) : "—"}
                   </td>
-                  <td style={{ padding: "10px 14px", fontSize: 12, color: "var(--color-muted)" }}>
+                  <td style={{ padding: "10px 14px", fontSize: 12, color: "var(--color-secondary)" }}>
                     {node.net_in_mbps != null || node.net_out_mbps != null ? (
                       <span>↓{(node.net_in_mbps ?? 0).toFixed(1)} ↑{(node.net_out_mbps ?? 0).toFixed(1)} Mbps</span>
                     ) : "—"}

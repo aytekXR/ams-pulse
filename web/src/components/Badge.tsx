@@ -17,7 +17,12 @@ const variantStyles: Record<NonNullable<Props["variant"]>, { bg: string; color: 
   warning: { bg: "var(--color-warning-bg)", color: "var(--color-warning)" },
   error:   { bg: "var(--color-error-bg)",   color: "var(--color-error)" },
   info:    { bg: "var(--color-info-bg)",     color: "var(--color-info)" },
-  muted:   { bg: "var(--color-surface-2)",  color: "var(--color-muted)" },
+  // --color-secondary, not --color-muted: at 11px the badge label is normal
+  // text, and muted gives 3.50:1 (dark) / 4.36:1 (light) on --color-surface-2 —
+  // below the 4.5:1 the brandkit WCAG table requires. Reached from FleetPage
+  // (edge-role badges, Wave 2's surface) and AlertsPage (disabled/muted rules).
+  // Wave 2 WCAG pass.
+  muted:   { bg: "var(--color-surface-2)",  color: "var(--color-secondary)" },
 };
 
 export function Badge({ label, variant = "default" }: Props) {

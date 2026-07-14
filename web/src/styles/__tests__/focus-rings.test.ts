@@ -20,11 +20,21 @@ import { describe, it, expect } from "vitest";
 const here = dirname(fileURLToPath(import.meta.url));
 const css = readFileSync(resolve(here, "../global.css"), "utf-8");
 
-/** class name → the component source that opts into it */
-const FOCUS_RING_CONTRACT: Record<string, string> = {
-  "tier-gate-cta": "../../components/TierGate.tsx",
-  "tabs-btn": "../../components/Tabs.tsx",
-  "filter-input": "../../features/qoe/QoePage.tsx",
+/** class name → the component sources that opt into it (at least one must use it) */
+const FOCUS_RING_CONTRACT: Record<string, string[]> = {
+  "tier-gate-cta": ["../../components/TierGate.tsx"],
+  "tabs-btn": ["../../components/Tabs.tsx"],
+  "filter-input": [
+    "../../features/qoe/QoePage.tsx",
+    "../../features/analytics/DateRangePicker.tsx",
+  ],
+  // Wave 2
+  "seg-btn": ["../../components/SegmentedControl.tsx"],
+  "btn-secondary": [
+    "../../features/analytics/AnalyticsPage.tsx",
+    "../../features/fleet/FleetPage.tsx",
+  ],
+  "picker-btn": ["../../features/analytics/DateRangePicker.tsx"],
 };
 
 /**
@@ -55,10 +65,12 @@ describe("focus-ring CSS contract", () => {
   );
 
   it.each(Object.entries(FOCUS_RING_CONTRACT))(
-    ".%s is actually used by %s (no dead focus-ring CSS)",
-    (cls, componentPath) => {
-      const src = readFileSync(resolve(here, componentPath), "utf-8");
-      expect(src).toContain(`className="${cls}"`);
+    ".%s is actually used by a component (no dead focus-ring CSS)",
+    (cls, componentPaths) => {
+      const users = componentPaths.filter((p) =>
+        readFileSync(resolve(here, p), "utf-8").includes(`className="${cls}"`),
+      );
+      expect(users, `no component sets className="${cls}"`).not.toHaveLength(0);
     },
   );
 });

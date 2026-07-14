@@ -15,6 +15,8 @@ import { Tabs } from "@/components/Tabs";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { EmptyState } from "@/components/EmptyState";
+import { StatCard } from "@/features/live/StatCard";
+import { CHART_COLORS } from "@/lib/chartColors";
 import type {
   AudienceResponse,
   GeoResponse,
@@ -73,14 +75,15 @@ export function AnalyticsPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)" }}>
         <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Analytics</h1>
         <button
           onClick={exportCsv}
+          className="btn-secondary"
           style={{
             background: "var(--color-surface-2)",
             border: "1px solid var(--color-border)",
-            color: "var(--color-muted)",
+            color: "var(--color-secondary)",
             borderRadius: 6,
             padding: "6px 12px",
             cursor: "pointer",
@@ -111,30 +114,26 @@ export function AnalyticsPage() {
       ) : (
         <>
           {tab === "audience" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {/* Totals row — AudienceTotals: { views, uniques, watch_time_s, peak_concurrency } */}
+            <div
+              role="tabpanel"
+              id="panel-audience"
+              aria-labelledby="tab-audience"
+              tabIndex={0}
+              style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}
+            >
+              {/* Totals row — AudienceTotals: { views, uniques, watch_time_s, peak_concurrency }
+                  Uses the shared <StatCard size="compact">: same geometry as the inline markup
+                  it replaces, and it brings the role="group" accessible name the inline cards
+                  never had. */}
               {totals && (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "var(--space-3)" }}>
                   {[
                     { label: "Total Views", value: (totals.views ?? 0).toLocaleString() },
                     { label: "Unique Viewers", value: (totals.uniques ?? 0).toLocaleString() },
                     { label: "Watch Time", value: `${Math.round((totals.watch_time_s ?? 0) / 3600)}h` },
                     { label: "Peak Concurrency", value: (totals.peak_concurrency ?? 0).toLocaleString() },
                   ].map((s) => (
-                    <div
-                      key={s.label}
-                      style={{
-                        background: "var(--color-surface)",
-                        border: "1px solid var(--color-border)",
-                        borderRadius: 8,
-                        padding: "14px 16px",
-                      }}
-                    >
-                      <div style={{ fontSize: 11, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500, marginBottom: 4 }}>
-                        {s.label}
-                      </div>
-                      <div style={{ fontSize: 24, fontWeight: 700 }}>{s.value}</div>
-                    </div>
+                    <StatCard key={s.label} size="compact" label={s.label} value={s.value} />
                   ))}
                 </div>
               )}
@@ -151,17 +150,24 @@ export function AnalyticsPage() {
                     background: "var(--color-surface)",
                     border: "1px solid var(--color-border)",
                     borderRadius: 8,
-                    padding: 16,
+                    padding: "var(--space-4)",
                   }}
                 >
-                  <h2 style={{ margin: "0 0 16px", fontSize: 13, fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  <h2 style={{ margin: "0 0 var(--space-4)", fontSize: 13, fontWeight: 600, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                     Audience over time
                   </h2>
                   <ResponsiveContainer width="100%" height={280}>
-                    <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                    {/* accessibilityLayer: Recharts keyboard navigation + per-point
+                        announcements. The three series are also distinguished by their
+                        Legend names, so the chart is not colour-only. */}
+                    <LineChart
+                      data={chartData}
+                      margin={{ top: 4, right: 16, left: 0, bottom: 0 }}
+                      accessibilityLayer
+                    >
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                      <XAxis dataKey="ts" tick={{ fill: "var(--color-muted)", fontSize: 11 }} />
-                      <YAxis tick={{ fill: "var(--color-muted)", fontSize: 11 }} />
+                      <XAxis dataKey="ts" tick={{ fill: "var(--color-secondary)", fontSize: 11 }} />
+                      <YAxis tick={{ fill: "var(--color-secondary)", fontSize: 11 }} />
                       <Tooltip
                         contentStyle={{
                           background: "var(--color-surface)",
@@ -170,10 +176,12 @@ export function AnalyticsPage() {
                           color: "var(--color-text)",
                         }}
                       />
-                      <Legend wrapperStyle={{ fontSize: 12, color: "var(--color-muted)" }} />
-                      <Line type="monotone" dataKey="views" stroke="#58A6FF" dot={false} strokeWidth={2} name="Views" />
-                      <Line type="monotone" dataKey="uniques" stroke="#2CE5A7" dot={false} strokeWidth={2} name="Uniques" />
-                      <Line type="monotone" dataKey="peak" stroke="#FFB224" dot={false} strokeWidth={2} name="Peak concurrent" />
+                      <Legend wrapperStyle={{ fontSize: 12, color: "var(--color-secondary)" }} />
+                      {/* stroke= is an SVG presentation attribute: it needs a literal hex,
+                          not var(--chart-N). Same hex as before, named by dataviz index. */}
+                      <Line type="monotone" dataKey="views" stroke={CHART_COLORS[1]} dot={false} strokeWidth={2} name="Views" />
+                      <Line type="monotone" dataKey="uniques" stroke={CHART_COLORS[0]} dot={false} strokeWidth={2} name="Uniques" />
+                      <Line type="monotone" dataKey="peak" stroke={CHART_COLORS[4]} dot={false} strokeWidth={2} name="Peak concurrent" />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -182,81 +190,85 @@ export function AnalyticsPage() {
           )}
 
           {tab === "geo" && (
-            geo && (geo.rows ?? []).length > 0 ? (
-              <div
-                style={{
-                  background: "var(--color-surface)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 8,
-                  overflow: "hidden",
-                }}
-              >
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead style={{ background: "var(--color-surface-2)" }}>
-                    <tr>
-                      {["Country", "Views", "Unique Viewers", "Watch Time"].map((h) => (
-                        <th key={h} style={{ padding: "10px 14px", textAlign: h === "Country" ? "left" : "right", fontSize: 11, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* GeoRow: { country, region?, views, uniques, watch_time_s } */}
-                    {(geo.rows ?? []).map((row) => (
-                      <tr key={row.country} style={{ borderTop: "1px solid var(--color-border)" }}>
-                        <td style={{ padding: "8px 14px" }}>{row.country ?? "Unknown"}</td>
-                        <td style={{ padding: "8px 14px", textAlign: "right" }}>{(row.views ?? 0).toLocaleString()}</td>
-                        <td style={{ padding: "8px 14px", textAlign: "right" }}>{(row.uniques ?? 0).toLocaleString()}</td>
-                        <td style={{ padding: "8px 14px", textAlign: "right" }}>{Math.round((row.watch_time_s ?? 0) / 60)}m</td>
+            <div role="tabpanel" id="panel-geo" aria-labelledby="tab-geo" tabIndex={0}>
+              {geo && (geo.rows ?? []).length > 0 ? (
+                <div
+                  style={{
+                    background: "var(--color-surface)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 8,
+                    overflow: "hidden",
+                  }}
+                >
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead style={{ background: "var(--color-surface-2)" }}>
+                      <tr>
+                        {["Country", "Views", "Unique Viewers", "Watch Time"].map((h) => (
+                          <th key={h} scope="col" style={{ padding: "10px 14px", textAlign: h === "Country" ? "left" : "right", fontSize: 11, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <EmptyState
-                title="No geo data"
-                description="Geographic breakdown will appear here once data is collected."
-              />
-            )
+                    </thead>
+                    <tbody>
+                      {/* GeoRow: { country, region?, views, uniques, watch_time_s } */}
+                      {(geo.rows ?? []).map((row) => (
+                        <tr key={row.country} style={{ borderTop: "1px solid var(--color-border)" }}>
+                          <td style={{ padding: "8px 14px" }}>{row.country ?? "Unknown"}</td>
+                          <td style={{ padding: "8px 14px", textAlign: "right" }}>{(row.views ?? 0).toLocaleString()}</td>
+                          <td style={{ padding: "8px 14px", textAlign: "right" }}>{(row.uniques ?? 0).toLocaleString()}</td>
+                          <td style={{ padding: "8px 14px", textAlign: "right" }}>{Math.round((row.watch_time_s ?? 0) / 60)}m</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <EmptyState
+                  title="No geo data"
+                  description="Geographic breakdown will appear here once data is collected."
+                />
+              )}
+            </div>
           )}
 
           {tab === "device" && (
-            device && (device.rows ?? []).length > 0 ? (
-              <div
-                style={{
-                  background: "var(--color-surface)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 8,
-                  overflow: "hidden",
-                }}
-              >
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead style={{ background: "var(--color-surface-2)" }}>
-                    <tr>
-                      {["Device", "Browser", "OS", "Views"].map((h) => (
-                        <th key={h} style={{ padding: "10px 14px", textAlign: h === "Views" ? "right" : "left", fontSize: 11, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* DeviceRow: { device, os, browser, protocol, views, uniques, watch_time_s } */}
-                    {(device.rows ?? []).map((row, i) => (
-                      <tr key={i} style={{ borderTop: "1px solid var(--color-border)" }}>
-                        <td style={{ padding: "8px 14px" }}>{row.device ?? "Unknown"}</td>
-                        <td style={{ padding: "8px 14px" }}>{row.browser ?? "—"}</td>
-                        <td style={{ padding: "8px 14px" }}>{row.os ?? "—"}</td>
-                        <td style={{ padding: "8px 14px", textAlign: "right" }}>{(row.views ?? 0).toLocaleString()}</td>
+            <div role="tabpanel" id="panel-device" aria-labelledby="tab-device" tabIndex={0}>
+              {device && (device.rows ?? []).length > 0 ? (
+                <div
+                  style={{
+                    background: "var(--color-surface)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 8,
+                    overflow: "hidden",
+                  }}
+                >
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead style={{ background: "var(--color-surface-2)" }}>
+                      <tr>
+                        {["Device", "Browser", "OS", "Views"].map((h) => (
+                          <th key={h} scope="col" style={{ padding: "10px 14px", textAlign: h === "Views" ? "right" : "left", fontSize: 11, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <EmptyState
-                title="No device data"
-                description="Device breakdown will appear here once player beacon data is collected."
-              />
-            )
+                    </thead>
+                    <tbody>
+                      {/* DeviceRow: { device, os, browser, protocol, views, uniques, watch_time_s } */}
+                      {(device.rows ?? []).map((row, i) => (
+                        <tr key={i} style={{ borderTop: "1px solid var(--color-border)" }}>
+                          <td style={{ padding: "8px 14px" }}>{row.device ?? "Unknown"}</td>
+                          <td style={{ padding: "8px 14px" }}>{row.browser ?? "—"}</td>
+                          <td style={{ padding: "8px 14px" }}>{row.os ?? "—"}</td>
+                          <td style={{ padding: "8px 14px", textAlign: "right" }}>{(row.views ?? 0).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <EmptyState
+                  title="No device data"
+                  description="Device breakdown will appear here once player beacon data is collected."
+                />
+              )}
+            </div>
           )}
         </>
       )}

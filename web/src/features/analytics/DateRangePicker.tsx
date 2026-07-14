@@ -35,7 +35,7 @@ export function DateRangePicker({ value, onChange }: Props) {
   };
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
       {PRESETS.map((preset) => (
         <button
           key={preset.label}
@@ -45,10 +45,12 @@ export function DateRangePicker({ value, onChange }: Props) {
             onChange({ label: preset.label, from: now - diff, to: now });
             setShowCustom(false);
           }}
+          aria-pressed={value.label === preset.label}
+          className="picker-btn"
           style={{
             background: value.label === preset.label ? "var(--color-accent)" : "var(--color-surface-2)",
             border: "1px solid var(--color-border)",
-            color: value.label === preset.label ? "var(--color-on-signal)" : "var(--color-muted)",
+            color: value.label === preset.label ? "var(--color-on-signal)" : "var(--color-secondary)",
             borderRadius: 6,
             padding: "6px 12px",
             cursor: "pointer",
@@ -61,10 +63,13 @@ export function DateRangePicker({ value, onChange }: Props) {
       ))}
       <button
         onClick={() => setShowCustom((v) => !v)}
+        aria-pressed={value.label === "Custom"}
+        aria-expanded={showCustom}
+        className="picker-btn"
         style={{
           background: value.label === "Custom" ? "var(--color-accent)" : "var(--color-surface-2)",
           border: "1px solid var(--color-border)",
-          color: value.label === "Custom" ? "var(--color-on-signal)" : "var(--color-muted)",
+          color: value.label === "Custom" ? "var(--color-on-signal)" : "var(--color-secondary)",
           borderRadius: 6,
           padding: "6px 12px",
           cursor: "pointer",
@@ -80,42 +85,50 @@ export function DateRangePicker({ value, onChange }: Props) {
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 8,
+            gap: "var(--space-2)",
             background: "var(--color-surface)",
             border: "1px solid var(--color-border)",
             borderRadius: 8,
-            padding: "8px 12px",
+            padding: "var(--space-2) var(--space-3)",
           }}
         >
+          {/* aria-label, not a visible <label>: the row is a compact inline
+              control strip with no room for field labels, and the placeholder
+              of a datetime-local input is the format hint, not a name. */}
           <input
             type="datetime-local"
+            aria-label="Custom range start"
             value={customFrom}
             onChange={(e) => setCustomFrom(e.target.value)}
+            className="filter-input"
             style={{
               background: "var(--color-surface-2)",
               border: "1px solid var(--color-border)",
               borderRadius: 4,
-              padding: "4px 8px",
+              padding: "var(--space-1) var(--space-2)",
               color: "var(--color-text)",
               fontSize: 12,
             }}
           />
-          <span style={{ color: "var(--color-muted)", fontSize: 12 }}>to</span>
+          <span style={{ color: "var(--color-secondary)", fontSize: 12 }}>to</span>
           <input
             type="datetime-local"
+            aria-label="Custom range end"
             value={customTo}
             onChange={(e) => setCustomTo(e.target.value)}
+            className="filter-input"
             style={{
               background: "var(--color-surface-2)",
               border: "1px solid var(--color-border)",
               borderRadius: 4,
-              padding: "4px 8px",
+              padding: "var(--space-1) var(--space-2)",
               color: "var(--color-text)",
               fontSize: 12,
             }}
           />
           <button
             onClick={applyCustom}
+            className="picker-btn"
             style={{
               background: "var(--color-accent)",
               border: "none",

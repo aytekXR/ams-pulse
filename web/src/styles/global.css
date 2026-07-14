@@ -213,16 +213,43 @@ td[data-numeric] {
 
 /* -------------------------------------------------------------------------
  * Shared-component focus rings (Wave 0 — a11y, non-pixel change)
- * Both classes use var(--color-link) so the ring colour is always the
+ * All classes use var(--color-link) so the ring colour is always the
  * accessible link colour for the active theme (dark: #4FEDB9 / light: #087A59).
  * outline-offset: 2px lands the ring on the card/page background, not on
  * the element itself — confirmed readable in both themes per design-rationale §2.
+ *
+ * A class here is a CONTRACT: the component sets the bare className, this rule
+ * supplies the ring. Nothing in TypeScript ties the two together, so
+ * styles/__tests__/focus-rings.test.ts pins both halves — a className with no
+ * rule is a false a11y promise, a rule with no className is dead CSS.
+ * Wave 2 adds .seg-btn (SegmentedControl), .btn-secondary and .picker-btn.
  * ------------------------------------------------------------------------- */
 .tier-gate-cta:focus-visible,
 .tabs-btn:focus-visible,
-.filter-input:focus-visible {
+.filter-input:focus-visible,
+.seg-btn:focus-visible,
+.btn-secondary:focus-visible,
+.picker-btn:focus-visible {
   outline: 2px solid var(--color-link);
   outline-offset: 2px;
+}
+
+/* -------------------------------------------------------------------------
+ * Screen-reader-only text (Wave 2 — colour-not-only compliance).
+ * Conveys state that is otherwise encoded in colour alone (e.g. the LoadBar
+ * fill hue, which is the only cue distinguishing a healthy node from a
+ * critical one). Visually removed, still in the accessibility tree.
+ * ------------------------------------------------------------------------- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Scrollbar (webkit) */
