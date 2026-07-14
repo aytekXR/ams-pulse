@@ -5984,3 +5984,46 @@ green). origin/main == HEAD at S29 open.
   `borderBottom` — non-text, 3:1 applies, passes both themes; correctly left alone.
 - **§2.19 IS COMPLETE.** Waves 0–5 all landed (S31 → S33). Remaining UI work is
   **operator-gated only**: G1–G6.
+
+### D-095 addendum 2 — G3/G5/G6 CLOSED by operator ruling; G7 filed
+
+- **Operator ruling 2026-07-14: "apply the G3/G5/G6 token fixes."** First session permitted to
+  edit `brandkit/` (D-071). Applied surgically — the token file's formatting is preserved
+  (a `json.dump` round-trip reflowed 78 lines and was reverted; the final diff is 6 lines).
+- **G3 CLOSED.** `color.light.signal` `#0BA678` → **`#087A59`** (white-on-signal **3.12:1 →
+  5.33:1**). **★ The ruling did not name `signalHover`, but the approved fix FORCES it:** the old
+  hover `#099168` was **already failing AA (3.99:1)** and, against the corrected signal, would
+  have been **LIGHTER than the resting state** — inverting the affordance and dropping the CTA
+  back below AA on hover. → **`#07684C` (6.79:1)**. Shipping G3 alone would have been a half-fix
+  that still failed the gate. Applied and flagged, not silently absorbed.
+  `--color-success` stays `#0BA678` — it is a status **graphic** (3:1 bar), not a text/CTA colour.
+- **G6 CLOSED.** **`info` was never a token at all** — it lived only in `global.css`, whose
+  comment said inheriting dataviz[1] (`#58A6FF`) "avoids inventing a value". The consequence was
+  `#58A6FF` **text** on a 10% tint of itself over white = **2.32:1**. Now explicit in BOTH themes:
+  `color.dark.info = #58A6FF` (documents the existing, passing 6.21:1) and
+  `color.light.info = #1B5EAD` (**5.57:1**).
+- **G5 CLOSED.** Every row of the design-rationale §2 WCAG table recomputed from the WCAG 2.x
+  sRGB formula. **The muted row was wrong in a way that INVERTED ITS VERDICT:** claimed
+  `~4.6:1 — AA — labels/captions only`; the true ratio is **3.72:1**, *below* the 4.5:1
+  normal-text bar. **The row's own guidance was therefore unsafe** — labels and captions at
+  11–13px *are* normal text. Four other rows were merely imprecise (12.9 vs 11.86, 16 vs 16.96)
+  with no verdict change; corrected anyway. **This retroactively justifies the
+  muted→textSecondary sweeps in Waves 0–5.**
+- **★ NEW GUARD `web/src/styles/__tests__/wcag-tokens.test.ts` (20 tests).** **A hand-maintained
+  table of ratios drifts from the hexes it describes — that is exactly how G5 happened.** The
+  ratios are now **recomputed from `tokens.json` on every test run**, so an AA failure is a RED
+  TEST instead of a wrong table. Pins the CTA in both themes AND both states (including that
+  **hover must be DARKER than rest**), the info Badge in both themes, and — deliberately — that
+  `textMuted` **FAILS** the 4.5 bar while clearing the 3:1 non-text bar, so any future "fix" to
+  muted forces the table and the usage guidance to be revisited together.
+  **RED-proven:** restoring the three pre-fix hexes fails exactly the 3 G3/G6 assertions.
+- **★★ G7 FILED, NOT FIXED — the same defect class, found during this pass.** **All three
+  remaining light-theme Badge variants also fail AA as text on their own tints:**
+  **success 2.73:1, warning 4.25:1, error 4.13:1** (dark theme passes: 8.73 / 8.05 / 5.41).
+  Root cause is systemic: **the light status hexes were chosen to clear the 3:1 GRAPHICS bar and
+  are then used as TEXT.** Fixing them needs **three new brandkit values — an operator decision,
+  not a session's.** The operator approved G3/G5/G6; G7 is new information and is **reported, not
+  self-approved** (the D-093 lesson: sessions do not self-approve operator decisions).
+- **Gates:** web **619/619** (was 599) / 36 files; coverage 70.12/65.72/59.84 vs floors 59/54/45;
+  lint + build clean; **Playwright 22/22** (full suite, light + dark). TierGate's stale
+  "NO waiver has been granted" comment corrected.

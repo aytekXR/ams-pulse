@@ -1,3 +1,71 @@
+# Operator TODO — the items only YOU can do (updated 2026-07-14, D-095 — G3/G5/G6 APPLIED)
+
+## ⚡ TL;DR — G3, G5 and G6 are DONE. One new item (G7) needs you.
+
+> **You said "apply the G3/G5/G6 token fixes" — they are applied, verified and guarded.**
+>
+> | Gap | Was | Now |
+> |---|---|---|
+> | **G3** light "Upgrade License" CTA | 3.12:1 — **fails AA** | **5.33:1 — passes** (`color.light.signal` → `#087A59`) |
+> | **G6** light *info* Badge | 2.32:1 — **fails AA** | **5.57:1 — passes** (new `color.light.info` → `#1B5EAD`) |
+> | **G5** your WCAG table's muted row | claimed `~4.6:1 — AA` | **corrected to 3.72:1 — FAILS AA for normal text** |
+>
+> **One thing I changed that you did NOT explicitly approve — please sanity-check it.**
+> Your `signalHover` (`#099168`) was **already failing AA at 3.99:1**, and once the base signal
+> darkened to `#087A59`, the old hover became **lighter than the resting state** — which inverts
+> the hover affordance *and* drops the button back below AA the moment someone hovers it.
+> Shipping G3 without touching hover would have been a half-fix that still fails the gate, so I
+> darkened it to **`#07684C` (6.79:1)**. If you'd rather pick a different green, say so and I'll
+> swap it — everything else stands.
+>
+> **A guard now exists so G5 cannot happen again.** The contrast ratios are **recomputed from
+> `tokens.json` on every test run** (20 assertions). A hand-maintained table of ratios drifts
+> from the hexes it describes — that is exactly how the muted row went wrong. Now an AA failure
+> is a failing test, not a stale number in a document.
+>
+> ### ⛔ NEW — G7: three MORE badges fail AA in light theme (same defect class)
+>
+> Found while doing the above. It is not just *info*:
+>
+> | Light-theme Badge | Contrast (text on its own tint) | |
+> |---|---|---|
+> | success `#0BA678` | **2.73:1** | fails AA |
+> | warning `#B45309` | **4.25:1** | fails AA |
+> | error `#DC2626` | **4.13:1** | fails AA |
+>
+> (Dark theme is fine: 8.73 / 8.05 / 5.41.)
+>
+> **The root cause is systemic:** your light status colours were chosen to clear the **3:1
+> graphics** bar, and the Badge then uses them as **text**, which needs **4.5:1**.
+>
+> Fixing this needs **three new brandkit colour values — that is your call, not mine.** I did not
+> invent them. Say the word and I'll apply darker text variants (keeping the tints), or you can
+> supply the hexes.
+>
+> ### ⏰ Still the only real risk
+>
+> **Your AMS license expires 2026-07-27T13:45Z (13 days).** A lapse **plus the next restart of
+> `antmedia`** kills ALL ingest — both halves proven (D-092/D-093). Renew before 07-27.
+>
+> ### Still open (unchanged)
+>
+> - **G1** — do you support mobile viewports on form pages? (iOS zooms inputs under 16px.)
+>   Also decides **G4**.
+> - **G4** — touch targets: your `minTouchTarget=44` is **WCAG AAA**; the **AA** bar is 24×24,
+>   which your ~28px buttons already pass. Enforcing 44 makes every button visibly taller and
+>   fights your own desktop-density spec. Enforce it, or record 24×24 as the floor?
+> - **G2** — icon library (Phosphor / Lucide / stay iconless).
+> - **Marketplace:** GHCR public flip (~30 s — until then nobody can `docker pull`), trial-key
+>   mint, final-assessment review, Ant Media contact, Pro MaxNodes ruling (PRD says 1–2, code
+>   enforces 10), matbu/evrak vhost ruling.
+> - **Two design questions:** should Analytics' totals cards match the Live dashboard's larger
+>   ones? And an Ingest drop-chip is tinted `rgba(224,82,82,…)` — a red that is **in no token at
+>   all**, looks like drift from an older palette. Align it?
+>
+> ---
+>
+> ## (superseded) previous header follows
+
 # Operator TODO — the items only YOU can do (updated at SESSION-33 close, D-095, 2026-07-14)
 
 ## ⚡ TL;DR — expected from you right now (2026-07-14 — §2.19 UI REFACTOR IS COMPLETE)
