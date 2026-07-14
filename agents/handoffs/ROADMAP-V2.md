@@ -497,6 +497,38 @@ they gate the UPLOAD, not the build.
    terms publication, revenue share, category confirm, co-marketing);
    AMS license re-apply (promised 2026-07-13).
 
+### 2.20  Ship-readiness — install paths, licence ceremony, Export  [S] ✅ DONE S35 (D-097, 2026-07-14, PR #51)
+
+Seeded by the operator's question *"have you finished all development? is installation and
+generating license keys ready?"* — answered by **executing** the docs, not reading them. 42 agents;
+36 raw findings → **33 confirmed / 3 refuted** after an adversarial pass. **3 blockers, 10 majors.**
+
+- ✅ **`GET /api/v1/reports/export` implemented.** It did not exist — yet Reports shipped **Export
+  CSV** and **Export PDF** buttons wired to it, so a paying Business customer got a **404**. A
+  *missing feature*, not a doc bug. CSV implemented + tier-gated; **PDF removed rather than left
+  broken (LIM-24)**.
+- ✅ **Authenticated downloads.** The analytics Export CSV button had never worked: it used
+  `?token=` in the URL, which `bearerAuthMiddleware` deliberately ignores → **401**. Now the
+  `Authorization` header + a blob, which also keeps the token out of logs and browser history.
+- ✅ **`docs/licensing.md` activation ceremony corrected** — it documented `POST
+  /api/v1/license/activate`; the server registers **`PUT /api/v1/admin/license`**. Wrong path AND
+  method, under a heading titled *"Verify activation."* Plus: an **expired key returns 200, not
+  422**. New customer-facing `docs/guides/license-activation.md`.
+- ✅ **Install paths repaired** — `make up` / `docker compose up -d` always failed
+  (`pulse-migrate` had no `PULSE_SECRET_KEY`); the README Quick Start **silently monitored a mock
+  AMS**. The GHCR quickstart remains **operator-blocked** (private package), but now fails
+  honestly instead of surfacing a raw Docker error.
+- ✅ `prometheus.md` metric table / tier / gate-fn corrected; `probes.md` no longer tells
+  **Business** customers they have no probes.
+- ⛔ **NOT fixable by a session:** GHCR visibility (one click), Kafka fleet-consumer live
+  validation (needs a Kafka-enabled AMS lab), G7 brandkit values.
+
+**Ledger correction:** *"No customer can install Pulse"* (carried since S33) was **overstated** —
+clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
+**The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
+
+---
+
 ### 2.19  Full UI/UX refactor via uipro ("UI/UX Pro Max" skill)  [L, phased]  (OPERATOR-DIRECTED 2026-07-14, S29 mid-session)
 
 **Directive (operator, verbatim intent):** "We have installed uipro to
