@@ -11,7 +11,91 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-30.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-31.md`)
+
+**Session 2026-07-13/14 result: D-092 — S30 DONE (★★ AMS INGEST-DEAD
+FINDING: the S22 restart-enforcement hypothesis CONFIRMED — the first
+post-lapse AMS restart (crash 22:14Z + docker auto-restart) extended
+license enforcement to ALL new RTMP ingest while REST stays
+byte-identical Enterprise; ★ §2.19 SCOPING WO COMPLETE: 6-wave plan +
+vendored-skill DO_NOT_COMMIT ruling; ★ PDF disposition CLOSED by
+operator staging).**
+- **★ OPERATOR INTAKE (mission (a)): all items OPEN, re-verified live**
+  — 9th byte-identical REST sweep (license NOT landed; sweep run bare
+  per the S29 PULSE_TOKEN gotcha); GHCR anonymous still denied; no
+  key/review/contact/MaxNodes signals. **PDF CLOSED:** the operator
+  staged it pre-session (01:29:54 index mtime) = "commit to docs/";
+  content READ for the first time (dockerized poppler — the host has
+  none): it is a RENDERING of the already-public docs/prd-report.md
+  (heading-diff clean) → committed as staged, zero new exposure,
+  "drop the pdf" reverses. His two Caddyfile .bak deletions = his own
+  cleanup, closed. **matbu vhost ruling still pending** (on-disk
+  Caddyfile block stays uncommitted — bcrypt hash, public repo, D-062
+  4th). uipro-vs-brandkit assumption STANDS unconfirmed.
+- **★★ AMS INGEST-DEAD (the headline):** antmedia crashed ~22:14Z
+  under VPS load 20 (concurrent operator sessions: hayati flutter
+  tests + evrak pilot + 3 claude), docker auto-restarted 22:21:31Z =
+  FIRST post-lapse process restart (boot history in-log: 07-12 06:53Z
+  pre-lapse → 07-13 22:21Z). Post-restart: REST byte-identical BUT
+  every new RTMP publish refused — `AcceptOnlyStreamsInDataStore -
+  License is suspended and not accepting connection` (both apps,
+  fresh ids; the first teststream-retry rejection was the CPU guard
+  at load 20 — red herring, correctly separated). Teststream CANNOT
+  return until the license lands; blocked-scenario list now [SRT
+  ingest, RTMP ingest (new), any fresh-publish scenario]. Docs
+  corrected: AMS-INTEGRATION "RTMP unaffected" de-staled + S30 note;
+  validation-environment §9 row. Evidence:
+  `qa/realams/evidence/S30-rtmp-license-block-20260713T2353Z/`.
+  operator-expected item 1 ESCALATED (his AMS looks healthy on REST
+  but accepts no new streams).
+- **★ §2.19 SCOPING WO (mission (b)) DONE** — workflow 6 agents (3
+  scouts + author + 2 adversarial verifiers), 0 errors. `uipro init
+  --ai claude --offline` ran (CLI v2.11.0; 143 files / 7 skills).
+  **Vendored verdict DO_NOT_COMMIT + independent commit-gate REJECTED:
+  core ui-ux-pro-max has NO license grant (public-repo blocker);
+  design/ makes live Gemini calls; CDN-font content ×74; ui-styling
+  pushes shadcn/Tailwind (stack absent). RULING: .claude/skills/
+  local-only + GITIGNORED, bootstrap in WAVE-PLAN §1.1b.** Plan:
+  `agents/handoffs/wave-uipro/WAVE-PLAN.md` — method (search.py
+  targeted queries, values ALWAYS discarded for tokens), conflict
+  ledger C1–C6 all token-wins + operator gaps G1 (mobile ≥16px input
+  font vs 14px body token) / G2 (icon library ruling), 6 waves: W0
+  Shared Surface [S] (TierGate triplicated ×3 pages + Tabs pattern ×6
+  → extract), W1 Live+QoE, W2 Analytics+Fleet, W3 Ingest+Anomalies,
+  W4 Alerts+Settings [M each], W5 Reports+Probes [L]. Ground truth:
+  404 web tests / 30 files; 21 residual hex (all Recharts stroke= →
+  CHART_COLORS[], never var()); ~200 px literals. **planVerify
+  PARTIAL → must-fix remediated same-session** (drafted plan dropped
+  the gen:api drift gate — re-added verbatim; C3 citation fixed).
+  **Wave 0 → S31** (the plan's own honest call; W0 = real web change
+  needing full gates on a contended box).
+- **Gates:** docs-only session (no Go/web/contract changes) — no code
+  gates due; PR CI runs the full suite. Prod healthy at open (healthz
+  all-ok, 0 poll errlines); pulse-realams healthy; AMS never touched
+  (publish probes = the sanctioned S22 class). CI promotions skip
+  carry ×19. Workflow: 6 agents, 0 errors.
+- **S31 carries:** §2.19 Wave 0 [S] primary (TierGate + Tabs
+  extraction per WAVE-PLAN §4 W0; full web gates incl. gen:api drift +
+  Playwright light/dark); license-landing trigger = re-sweep + restart
+  teststream + TC-I-05-SRT + Enterprise re-validation (now ALSO
+  restores basic ingest); matbu ruling; G1/G2 asks; marketplace tail
+  the moment operator items land; CI promotions if ≥07-23 else skip
+  carry ×20.
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-31.md` and execute it**
+(★ standing directive at its top: review the backlog + REVISE the plan;
+operator intake FIRST — five standing items + matbu ruling + G1/G2 +
+uipro/brandkit confirmation; AMS re-sweep at open WITHOUT any
+PULSE_TOKEN prefix, observe-only — a non-null diff OR a teststream
+publish suddenly ACCEPTED = the license landed → run the full
+re-validation chain; NEVER restart/fix AMS). **PR-first, ≤2 pushes.**
+Check `docs/operator-expected.md` FIRST.
+
+---
+
+## ▶ prior session context (S29, superseded by the above — original START HERE follows)
+
+## (superseded) ▶ START HERE (next session — execute `sessions/SESSION-30.md`)
 
 **Session 2026-07-13/14 result: D-091 — S29 DONE (★ F10 TAIL COMPLETE:
 RTMP AMF0 connect live-validated + probe-stats UI columns; ★ FIRST

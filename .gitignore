@@ -67,3 +67,9 @@ qa/licensegen/licensegen
 
 # Marketplace screenshot PNGs — binary blobs; script is the reproducible artifact
 docs/marketplace/screenshots/
+
+# uipro-installed skill content (S30/D-092): local-only, NEVER commit —
+# the core ui-ux-pro-max skill has no license grant (public-repo
+# redistribution blocker) + bundle carries CDN-font/Gemini-caller content.
+# Bootstrap: agents/handoffs/wave-uipro/WAVE-PLAN.md §1.1b.
+.claude/skills/

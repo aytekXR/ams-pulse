@@ -60,10 +60,23 @@ broadcast object on AMS 3.0.3 (health scoring redistributes the FPS weight);
 >
 > **S29/D-091 live SRT validation status:** TC-I-05-SRT was run on 2026-07-13 and
 > blocked by AMS EE license suspension (SRTAdaptor: "License is suspended. Not
-> accepting the stream"). RTMP ingest is unaffected. The scenario is committed at
+> accepting the stream"). The scenario is committed at
 > `qa/realams/scenarios/TC-I-05-SRT-packet-loss.sh` and ready for re-run once the
 > license is renewed. Post-ARQ observation (publishType, packetLostRatio live value)
 > will be recorded on the first successful SRT run.
+>
+> **S30/D-092 update — RTMP is no longer unaffected after a process restart:**
+> the first post-lapse AMS restart (2026-07-13 22:21Z, crash + docker
+> auto-restart) extended enforcement to ALL new ingest. Post-restart, every
+> RTMP publish attempt — existing or fresh stream id, any app — is refused
+> with `AcceptOnlyStreamsInDataStore - License is suspended and not accepting
+> connection` (the license check is injected into the publish-accept chain
+> even when `AcceptOnlyStreamsInDataStore` itself is not activated). Streams
+> already publishing at the lapse had kept running (~34 h) until the restart;
+> the REST surface still reports Enterprise Edition unchanged (9 byte-identical
+> sweeps). Operator takeaway: a suspended-license AMS looks healthy on REST but
+> refuses ALL new ingest after any restart. Evidence:
+> `qa/realams/evidence/S30-rtmp-license-block-20260713T2353Z/`.
 
 > **⚠️ Implicit RTMP broadcasts (S17 live finding, D-079):**
 > AMS 3.0.3 auto-creates a broadcast object when an RTMP publisher connects

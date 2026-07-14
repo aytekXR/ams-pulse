@@ -517,6 +517,11 @@ token, the token wins and the conflict is filed for the operator/designer
 **Sequencing:** behind the operator-gated §2.18 marketplace tail (upload
 prep stays first when unblocked); ahead of §2.9/§2.10/§2.12. Does NOT
 touch sdk/beacon-js (no UI) or server/.
+**Scoping WO DONE — S30 (D-092, 2026-07-14):** vendored-skill review (DO_NOT_COMMIT verdict on
+full bundle; ui-ux-pro-max core IN scope, design/ui-styling/slides OUT), conflict ledger (6
+C-items resolved token-wins; 2 operator gaps G1/G2 filed), 6-wave page-group plan with
+binding per-wave acceptance gates. Wave plan: `agents/handoffs/wave-uipro/WAVE-PLAN.md`.
+Wave 0 (Shared Surface [S]) is the recommended first wave → S31 after §2.18 gate clears.
 
 ---
 
