@@ -458,7 +458,22 @@ and QoE `__tests__` must pass.
 
 ---
 
-### Wave 3 — Ingest + Anomalies [M]
+### Wave 3 — Ingest + Anomalies [M] — ✅ DONE — S33 (D-095, 2026-07-14)
+
+> **★★ THE PLAN'S OPEN COLOUR QUESTION WAS A FALSE DICHOTOMY.** It asked whether Ingest's
+> `#FF5C68` was an error event (→ `--color-error`) or a plain dataviz series (→
+> `CHART_COLORS[3]`). **Neither guess was safe: `#FF5C68` IS NOT IN `CHART_COLORS` AT ALL.**
+> It strokes the **Packet Loss** line, and `CHART_COLORS[3]` is `#F06BB2` — **pink**.
+> Resolution: it is `--color-error`, routed through `useStatusColors().critical` so it is
+> theme-correct. Dark renders identically; **light theme is FIXED** (it had been hard-coding
+> the dark red instead of `#DC2626`).
+> Bitrate/FPS/Jitter → `CHART_COLORS[1]`/`[0]`/`[4]` (same hex). ReferenceLines → JS values.
+> Two tautology suites deleted (they tested helpers defined *inside the test file*).
+> `rgba(224,82,82,0.15)` drop-chip tint LEFT ALONE + reported: its base hex isn't even a
+> brandkit colour and its alpha matches no token — retinting it silently was not this wave's
+> call.
+
+### (superseded) Wave 3 — original plan
 
 **Pages:** Ingest (scout M), Anomalies (scout M). Combined: M.
 
@@ -489,7 +504,20 @@ question above is resolved.
 
 ---
 
-### Wave 4 — Alerts + Settings [M]
+### Wave 4 — Alerts + Settings [M] — ✅ DONE — S33 (D-095, 2026-07-14)
+
+> **★★ SettingsPage's hand-rolled tab bar was a KEYBOARD TRAP, not just a false promise.**
+> It had `role="tab"` + a **roving `tabIndex`** but **no key handler** — so every inactive tab
+> was `tabIndex=-1` (out of the tab order) with no Arrow handler to reach it. **Five of six
+> Settings tabs were unreachable by keyboard.** Replaced with the shared `<Tabs>`; a `wrap`
+> prop was added to `<Tabs>` (the only reason the local copy existed).
+> **★★ Both alert forms announced every error TWICE** — each message was mirrored into a
+> separate `sr-only aria-live` div *and* rendered inline. Removed: **the inline message IS the
+> live region** (`role="alert"`), and it is what `aria-describedby` points at. One error, one
+> node. Two tests had *pinned the duplicate* and were replaced.
+> OnboardingWizard checkmark → inline `<svg>` (**G2 unanswered → no icon dependency added**).
+
+### (superseded) Wave 4 — original plan
 
 **Pages:** Alerts (scout M), Settings (scout M, 668 lines + OnboardingWizard 363 lines).
 Combined: M.
@@ -523,7 +551,23 @@ must stay green.
 
 ---
 
-### Wave 5 — Reports + Probes [L]
+### Wave 5 — Reports + Probes [L] — ✅ DONE — S33 (D-095, 2026-07-14)
+
+> **★★★ A TEST FORCED PRODUCTION CODE TO GET WORSE — the sharpest lesson of the wave.**
+> The implementer wrote a file-wide assertion banning **all** `stroke="var(--color-…)"`. To
+> satisfy its own test it swapped the TierGate's **plain `<svg>` icon** to a `CHART_COLORS[0]`
+> literal — **wrong colour in light theme** (`--color-accent` is `#0BA678` there) — and swapped
+> **CartesianGrid** off `--color-border` onto a far lighter neutral, diverging from every other
+> chart page. Both reverted.
+> **BINDING CLARIFICATION of RULE 3 (Recharts):** the rule is *"no `var()` in a Recharts
+> DATA-SERIES prop"*, **not** *"no `var()` anywhere"*. `var()` is correct and theme-aware on
+> plain SVG elements and on structural chart chrome (CartesianGrid, axis ticks). Scope the
+> gate to `<Line>`/`<Area>`/`<Bar>`; a broader one will make the product worse.
+> Probes strokes → `CHART_COLORS[4]`/`[1]`/`[2]`/`[0]` (same hex); ProbeForm a11y.
+> ReportsPage needed no change; its single `--color-muted` is a dotted `borderBottom`
+> (non-text → 3:1 applies → passes both themes), correctly left alone.
+
+### (superseded) Wave 5 — original plan
 
 **Pages:** Reports (scout L, 1085 lines), Probes (scout L, 1457 lines). Combined: L.
 Wave 5 MAY need to split into 5a (Reports) + 5b (Probes) at the S34/S35 boundary if a single

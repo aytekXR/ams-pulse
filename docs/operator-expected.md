@@ -1,3 +1,102 @@
+# Operator TODO — the items only YOU can do (updated at SESSION-33 close, D-095, 2026-07-14)
+
+## ⚡ TL;DR — expected from you right now (2026-07-14 — §2.19 UI REFACTOR IS COMPLETE)
+
+> **The entire UI refactor is done — all six waves (0–5) have landed.** Every page now takes
+> its colours and spacing from your brandkit tokens instead of hardcoded values. 599 web tests
+> green, full browser suite green.
+>
+> ### ⛔ ONE THING BLOCKS THE MERGE — and only you can clear it
+>
+> **Branch `s33-uipro-wave2` (PR #47) cannot merge: branch protection requires 9 CI checks,
+> and `--admin` override is refused.** You asked me to skip CI and deliver fast — I can skip
+> *waiting* on CI, but I cannot skip it *at merge time*. Your options:
+> 1. **Let the checks run** and merge normally (they take ~8 minutes), or
+> 2. **Temporarily relax branch protection** on `main` and I'll merge immediately, or
+> 3. Merge it yourself from the GitHub UI with an admin override.
+>
+> Everything is pushed and waiting. Nothing else blocks.
+>
+> ### ⏰ THE ONE WITH A CLOCK (unchanged)
+>
+> **Your AMS license expires 2026-07-27T13:45Z (13 days).** A lapse alone is survivable; a
+> lapse **plus the next restart of `antmedia`** kills ALL ingest — both halves proven with
+> evidence (D-092/D-093). Renew before 07-27 and nothing else is needed.
+>
+> ### Six design rulings — all `tokens.json`/brandkit, so all yours (D-071)
+>
+> The UI is done *except* for these. None blocked the work; each is a one-value change.
+>
+> - **G5 — YOUR WCAG TABLE HAS A WRONG NUMBER, and it is load-bearing.**
+>   `brandkit/documentation/design-rationale.md` §2 says *"Muted #5C6F80 on #0A0E14 — ~4.6:1 —
+>   AA, labels/captions only"*. The real ratio is **3.72:1** — **below the 4.5:1 AA bar for
+>   normal text**. So the table's own advice ("fine for labels/captions") is unsafe: labels and
+>   captions at 11–12px *are* normal text. Measured on the app's real surfaces, `--color-muted`
+>   is **3.44:1 dark / 4.36:1 light**. This is why the waves replaced it with
+>   `--color-secondary` (8.03:1 / 7.00:1) everywhere it carried text. **Those fixes were right;
+>   the table is what needs correcting** — and every future design decision reads that table.
+> - **G4 — touch targets: a real fork.** `tokens.json layout.minTouchTarget = 44` is **WCAG
+>   AAA**; the **AA** bar is **24×24**, which your ~28px buttons already pass. Enforcing 44
+>   makes **every button visibly taller**, fighting your own desktop-density spec ("Tables:
+>   40px rows" — a NOC product). It also depends on **G1**. I **deferred** it rather than
+>   silently retheme your UI inside a refactor meant to move zero pixels.
+>   **Your call:** enforce 44 (looser, taller UI), or keep the compact density and record
+>   24×24 as the floor?
+> - **G3** — the "Upgrade License" CTA fails AA in light theme (3.12:1). Fix:
+>   `tokens.json color.light.accent` → `#087A59` (5.33:1).
+> - **G6** — the *info* Badge fails AA in light theme (**2.32:1**): `--color-info` (`#58A6FF`)
+>   is deliberately not overridden for light, so it renders pale-blue on pale-blue. Fix: add a
+>   `color.light.info` token (≈`#1B5EAD`).
+> - **G1** — do you support mobile viewports on form pages? (iOS zooms inputs under 16px; your
+>   body token is 14px.) Also feeds G4.
+> - **G2** — icon library: Phosphor, Lucide, or stay iconless? (The onboarding checkmark is a
+>   plain inline `<svg>` for now — no dependency was added while this is open.)
+>
+> Say **"apply the G3/G5/G6 token fixes"** and they land immediately.
+>
+> ### Two design questions (not bugs)
+>
+> - **Analytics' four totals cards are visually smaller** than the Live dashboard's (14px
+>   padding / 24px number vs 24px / 40px, and they ignore your density modes). The refactor
+>   **preserved that difference exactly** rather than "unify" it — that is a look-and-feel call.
+>   Should they match?
+> - **A drop-event chip on the Ingest page is tinted `rgba(224,82,82,…)`** — a red that **is
+>   not in your brandkit at all** (not `#FF5C68`, not `#DC2626`). It looks like drift from an
+>   older palette. Left untouched rather than silently retinted. Want it aligned?
+>
+> ### Still waiting on you (marketplace — unchanged)
+>
+> 1. **GHCR public flip** (~30 s) — until then no customer can `docker pull`.
+> 2. **Trial-key mint** (needs your vault privkey).
+> 3. **Final-assessment review** — gates the marketplace upload.
+> 4. **Ant Media marketplace contact.**
+> 5. **Pro MaxNodes ruling** — PRD says 1–2, code enforces 10.
+> 6. **matbu/evrak vhost ruling** — live prod serves `matbu.beyondkaira.com` from an on-disk
+>    Caddyfile block that `origin/main` lacks (it embeds your bcrypt hash; the repo is public).
+>    A clean-checkout redeploy would drop that site. Sessions keep hands off it.
+>
+> ### FYI, no action needed — what this session found
+>
+> - **The previous session shipped a tree it never committed.** S32's PR was still open, and
+>   its branch was missing a CSS rule that its own code comment and tests both promised. Its
+>   green test run had measured a file that never entered git. Fixed, with a guard that now
+>   pins both halves of every styling-class↔stylesheet contract.
+> - **Five of your six Settings tabs were unreachable by keyboard.** A hand-rolled tab bar
+>   announced itself as tabs and took the inactive ones out of the tab order, but had no arrow
+>   handler to reach them. Now uses the shared component, which has real keyboard navigation.
+> - **Your alert forms announced every validation error twice** to screen readers (the message
+>   was in the DOM twice). Fixed.
+> - **~16 tests that could never fail were deleted or rewritten.** They asserted things the
+>   test file computed itself, never rendering the app. One insisted the "healthy memory" bar
+>   is green while the app deliberately paints it **blue**.
+> - **One agent broke working code to satisfy a bad test it had just written** (it would have
+>   changed an icon's colour in light theme). Caught and reverted. A gate that makes the
+>   product worse is a bug, not a gate.
+>
+> ---
+>
+> ## (superseded) S33-Wave-2 header follows
+
 # Operator TODO — the items only YOU can do (updated at SESSION-33 close, D-095, 2026-07-14; rides S33's PR)
 
 ## ⚡ TL;DR — expected from you right now (2026-07-14, SESSION-33 closed — D-095, §2.19 Wave 2 landed)

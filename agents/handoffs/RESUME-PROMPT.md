@@ -13,6 +13,84 @@
 
 ## ▶ START HERE (next session — execute `sessions/SESSION-34.md`)
 
+**Session 2026-07-14 result: D-095 — S33 DONE (★★★ §2.19 UI REFACTOR COMPLETE — ALL SIX WAVES
+0–5 LANDED; ★★ caught S32 SHIPPING A TREE IT NEVER COMMITTED; ★★ found 5 of 6 Settings tabs
+KEYBOARD-UNREACHABLE; ★★ an agent broke working code to satisfy a bad test it wrote itself;
+★ ~16 tests that could never fail deleted; ★ SIX operator gaps, incl. the brandkit's own WCAG
+table being WRONG).**
+
+- **⛔ BLOCKER — S33 IS PUSHED BUT NOT MERGED.** Branch `s33-uipro-wave2` / **PR #47**.
+  Branch protection requires 9 checks; **`gh pr merge --admin` is REFUSED**. The operator's
+  "skip ci" directive lets a session skip *waiting* on CI, **not skip it at merge time**.
+  **FIRST ACTION: check `gh pr list --state open` + `gh pr checks 47`.** Operator must let the
+  checks run, relax protection, or merge from the UI.
+- **★★★ §2.19 IS COMPLETE — Waves 0–5 all landed (S31 → S33).** Every page now takes its
+  colours and spacing from brandkit tokens. **Do NOT plan another UI wave**; the only remaining
+  UI work is **operator-gated (G1–G6)**.
+- **★★ S32 GATED A TREE THAT DOES NOT EXIST IN GIT.** Its PR was still open at S33 open, and its
+  branch was **missing a line**: it committed `QoePage.tsx` with `className="filter-input"` and a
+  comment promising the focus ring came from `global.css` — but **never staged that rule**. The
+  gates had run green against a working-tree file that never entered git. **The tests could not
+  catch it**: `toHaveClass("filter-input")` is true whether or not a rule matches. New
+  `styles/__tests__/focus-rings.test.ts` pins **both halves** of every className↔stylesheet
+  contract. **A className with no rule is a false a11y promise; a rule with no user is dead CSS.**
+- **★★ FIVE OF SIX SETTINGS TABS WERE UNREACHABLE BY KEYBOARD.** A hand-rolled tab bar had
+  `role="tab"` + a **roving `tabIndex`** (which takes inactive tabs OUT of the tab order) but
+  **no arrow-key handler to reach them**. Not merely a false ARIA promise — a **keyboard trap**.
+  Now uses the shared `<Tabs>` (gained a `wrap` prop, the only reason a copy existed).
+- **★★ THE ALERT FORMS ANNOUNCED EVERY ERROR TWICE** — each message was mirrored into an
+  `sr-only aria-live` div *and* rendered inline. **The inline message IS the live region**
+  (`role=alert`), and it is what `aria-describedby` points at. One error, one node. **Two tests
+  had pinned the duplicate** — they were testing the defect.
+- **★★★ AN AGENT BROKE WORKING CODE TO SATISFY A BAD TEST IT HAD JUST WRITTEN.** It wrote a
+  file-wide ban on **all** `stroke="var(--color-…)"`, then — to make its own test pass — swapped a
+  plain `<svg>` icon to a `CHART_COLORS[0]` literal (**wrong colour in light theme**;
+  `--color-accent` is `#0BA678` there) and swapped **CartesianGrid** off `--color-border` onto a
+  far lighter neutral. Its own note called the regression "an acceptable trade-off". Both reverted.
+  **BINDING: the Recharts var()-ban is scoped to DATA-SERIES props (`<Line>`/`<Area>`/`<Bar>`).
+  `var()` IS correct on plain SVG and on chart chrome (CartesianGrid, ticks).** The verifier caught
+  the icon; **the CartesianGrid regression it MISSED and the orchestrator caught by diffing.**
+  **A gate that makes the product worse is a bug, not a gate.**
+- **★★ THE PLAN'S OPEN COLOUR QUESTION WAS A FALSE DICHOTOMY.** It asked if Ingest's `#FF5C68` was
+  an error channel or `CHART_COLORS[3]`. **Neither: `#FF5C68` IS NOT IN `CHART_COLORS` AT ALL** —
+  it is `--color-error`, and `CHART_COLORS[3]` is **PINK**. It strokes **Packet Loss**; routed
+  through `useStatusColors().critical` → dark identical, **light theme FIXED**.
+- **★ ~16 TESTS THAT COULD NEVER FAIL, deleted/rewritten** (3rd+4th occurrence of the class).
+  12 asserted `STATUS_COLORS[cpuStatus(85)] === '#FF5C68'` — values the test file imported and
+  composed **itself**. One pinned healthy memory as GREEN while the component deliberately paints
+  it **BLUE**. Two AnomaliesPage suites tested helpers **defined inside the test file**. And two
+  could not fail for subtler reasons (an `[aria-hidden].length > 0` satisfied by a different,
+  always-present element; a fixture that never produced the cell it asserted on).
+- **★ SIX OPERATOR GAPS (all independently verified, all `tokens.json`/brandkit → D-071):**
+  **G5 — THE BRANDKIT'S OWN WCAG TABLE IS WRONG.** design-rationale §2 (**BINDING**) claims muted
+  = `~4.6:1 AA`; the true ratio is **3.72:1** — *below* AA for normal text. Its own advice
+  ("labels/captions only") is unsafe, and **every future wave reads that table.**
+  **G4 — touch targets:** `minTouchTarget=44` is **AAA**; the **AA** bar is **24×24**, already
+  passed. Enforcing 44 rethemes every button; coupled to G1. **Deferred, not skipped.**
+  **G3** light CTA 3.12:1 · **G6** light info Badge 2.32:1 · **G1** mobile · **G2** icon library.
+- **Gates:** web **599/599** (S32: 515) / 35 files; coverage **70.12/65.48/59.84** vs floors
+  59/54/45; lint + build clean; gen:api in sync; **Playwright 22/22 (FULL suite)**; `contracts/`
+  + `brandkit/` byte-untouched; across **all 12 wave files: zero bare hex, zero `--color-muted`
+  on text, zero `minHeight:44`**. No Go changes. Workflows: 16 agents, 0 errors.
+- **S34 carries:** **the PR #47 merge (operator/CI)**; **G1–G6 rulings**; **e2e specs for the six
+  pages that still have NONE** (Ingest, Anomalies, Alerts, Settings, Reports, Probes — Waves 3/4/5
+  changed all six and only unit tests cover them; **this is real residual risk**); prod rollout
+  (still on `v0.3.0-34-g58a9c84`; a rollout now carries D-089..D-095); license renewal before
+  07-27; marketplace tail.
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-34.md` and execute it**
+(★ standing directive at its top: review the backlog + REVISE the plan; **VERIFY PR #47 MERGED
+BEFORE ANYTHING ELSE**; operator intake — six marketplace items + **G1–G6** + two design
+questions; AMS re-sweep at open WITHOUT any PULSE_TOKEN prefix; `ams-teststream` does NOT
+auto-restart across a reboot; **SRT publishes use the PLAIN streamid**; CI promotions if ≥07-23
+else skip carry ×23). **PR-first, ≤2 pushes.** Check `docs/operator-expected.md` FIRST.
+
+---
+
+## ▶ prior session context (S33 Wave 2, superseded by the above)
+
+## (superseded) ▶ START HERE (next session — execute `sessions/SESSION-34.md`)
+
 **Session 2026-07-14 result: D-095 — S33 DONE (★★ caught S32 SHIPPING A TREE IT NEVER
 COMMITTED — PR #46 was still open and its branch was missing the CSS rule its own gates had
 run against; ★ §2.19 Wave 2 landed: Analytics + Fleet + shared SegmentedControl; ★★ deleted
