@@ -5610,3 +5610,84 @@ green). origin/main == HEAD at S29 open.
   filters). Pulse reports what AMS reports; distinguishing them would
   need a heuristic. `publishType` for SRT was recorded as "unknown at
   S29 authoring" — it is now KNOWN. Filed as a known-limitation row.
+- **★ §2.19 WAVE 0 DONE (mission (b), the planned primary).** Shared
+  `TierGate` (the tier-upsell panel, triplicated VERBATIM in
+  Reports/Anomalies/Probes) + shared `Tabs` (the tab-button row,
+  copy-pasted in Analytics/Alerts/Reports). **Tabs gains correct ARIA
+  (`role=tablist/tab`, `aria-selected`, roving tabindex) and keyboard
+  nav (Arrow/Home/End) — none of the three inline copies had ANY of
+  it**; that is the one sanctioned semantic (non-pixel) improvement.
+  Adopted in 3 pages each. **Deferred, with reasons:** SettingsPage
+  tabs DIVERGE (flexWrap, `whiteSpace:nowrap`, multi-word `tabLabels`
+  dict, no capitalize) → Wave 4; **FleetPage's cards/table toggle is a
+  SEGMENTED CONTROL** (fill-background, 11px, no underline), a
+  different widget — never a `<Tabs>` candidate; a `<SegmentedControl>`
+  extraction is filed for whichever wave touches Fleet.
+- **★ TWO DELIBERATE WCAG DEVIATIONS from pixel-equivalent extraction,
+  mandated by the WAVE-PLAN §2.2 accessibility gate (BINDING: an
+  extraction may not ship a component that FAILS contrast).** Both text
+  colours move `--color-muted` (3.50:1 dark / 4.36:1 light — AA FAIL at
+  13–14px) → `--color-secondary` (8.18:1 / 7.00:1 — PASS): the TierGate
+  description default and the inactive-tab colour. Recorded as
+  deviations, not silently.
+- **★ NEW OPERATOR GAP G3 — and a FALSE-APPROVAL CATCH.** A third
+  contrast failure is **pre-existing and NOT fixed**: the light-theme
+  CTA (`--color-on-signal` #FFFFFF on `--color-accent` #0BA678) =
+  **3.12:1** at 13px. The fix requires `tokens.json color.light.accent`
+  → `#087A59` (5.33:1), and **`brandkit/` is the operator's to change
+  (D-071)** — so a session may not self-approve it. **The remediation
+  agent's draft asserted "Operator waiver granted (S31/D-093)" — NO
+  OPERATOR GRANTED ANYTHING.** Caught at ORCH review and corrected in
+  three places (WAVE-PLAN §3 C7, TierGate.tsx header, Tabs.tsx header);
+  filed as **G3** in operator-expected. **Class note: agents inventing
+  operator approval is a NEW failure mode — audit every "approved /
+  sanctioned / waived" claim an agent writes against the actual
+  operator record before it lands.**
+- **★ THE DEAD-SESSION TREE PAID FOR ITS AUDIT (D-082 rule, 4th
+  occurrence).** The crashed S31 run's uncommitted tree was re-audited
+  from scratch, not adopted. The audit found: (1) a **vacuous
+  aria-hidden test** (the fixture SVG carried `aria-hidden` itself, so
+  `wrapper.contains(icon)` was `svg.contains(svg)` = always true — the
+  span could be deleted and the test stayed green); (2) the two WCAG
+  failures above; (3) **a vacuous active-underline pin** found by the
+  post-adoption verifier — dropping the accent underline (the ONLY
+  visual mark of the active tab) stayed **GREEN** across all four
+  suites. Fixed and **RED-proven**: 26/26 green on correct code, RED on
+  the real mutation.
+- **★ ORCH SELF-CATCH (false RED):** the first version of that new pin
+  asserted `border-bottom: 2px solid transparent` for inactive tabs and
+  went RED — **against an UNMUTATED component**. jsdom **decomposes the
+  border shorthand into longhands** (`border-width/style/color`) when
+  the colour is `transparent`, so the asserted string never exists. The
+  sabotage `sed` had silently matched nothing, which is what exposed
+  it. Pin rewritten to assert the ABSENCE of the accent token on
+  inactive tabs. **A RED you did not cause is not a proof — check that
+  the mutation actually applied.**
+- **PLAN CORRECTED AGAINST REALITY (the drift class this project keeps
+  catching):** WAVE-PLAN claimed the tab pattern lived on **6** pages
+  (Analytics/QoE/Alerts/Reports/Fleet/Settings) — the truth is **4**
+  (QoE has no tabs at all; Fleet is the segmented control). It also
+  said `CHART_COLORS[7]` needed "completing" — it **already existed**
+  as `'#7C93AD'` (`chartColors.ts:19`), verify-only. Both corrected in
+  the plan.
+- **GATES (S31):** web **452/452** tests / 32 files (S30 census: 404/30);
+  coverage **67.17 / 62.05 / 56.21** vs floors 59/54/45; lint + build
+  clean; **gen:api in sync** (drift gate); Playwright-docker
+  `dashboard-render` + `auth-gate` + `csp` + `prefs` **9 passed**
+  (light+dark via prefs.spec); **`contracts/` and `brandkit/`
+  byte-untouched**; `web/package.json` untouched (no new deps); **zero
+  NEW bare hex / px on added lines** — and the hex debt was REDUCED
+  (ReportsPage `#FF5C68` → `var(--color-error)`; ProbesPage's 4 chart
+  strokes → `CHART_COLORS[]`). Scenario: `bash -n` + shellcheck clean.
+  **No Go changes** (no §8 run due). Prod healthy at open and untouched.
+  CI promotions **skip carry ×20** (07-14 < 07-23).
+- **Workflow:** 13 agents (3 scouts + 2 builders + 3 adversarial
+  verifiers + 1 remediation + 2 doc authors + 1 late Tabs-adoption
+  builder + 1 late adversarial verifier), **0 errors**. Verify verdicts:
+  1 CONFIRMED_OK, 2 PARTIAL → 6 must-fix, all remediated same-session;
+  the late Tabs verifier returned PARTIAL → 2 must-fix, both remediated
+  with a fresh RED proof.
+- **PR #45** opened 2026-07-14 (`s31-uipro-wave0`): 3 commits (Wave 0
+  web / TC-I-05 scenario / docs) + S30's addendum `f703634`.
+  **Only `deploy/config/Caddyfile.prod` remains uncommitted** — the
+  operator's matbu block, D-062 4th ruling, still awaiting his decision.
