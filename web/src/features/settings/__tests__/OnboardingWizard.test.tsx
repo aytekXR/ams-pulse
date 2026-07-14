@@ -7,6 +7,9 @@
  * (c) "Get started" button advances to the source step.
  * (d) Source step — form fields and Back/Add source buttons present.
  * (e) Validation — empty name + URL shows error on submit.
+ * (f) Wave 4: SVG checkmark replaces the &#10003; entity on the done step.
+ * (g) Wave 4: Escape route — "Skip setup" button is always visible.
+ * (h) Wave 4: Back navigation preserves source form state.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
@@ -88,6 +91,89 @@ describe("OnboardingWizard", () => {
     fireEvent.click(screen.getByRole("button", { name: /add source/i }));
     await waitFor(() => {
       expect(screen.getByText(/name and rest url are required/i)).toBeInTheDocument();
+    });
+  });
+});
+
+// ── (f) Wave 4: SVG checkmark on done step ──────────────────────────────────
+
+describe("OnboardingWizard — done step SVG checkmark (Wave 4)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // createSource succeeds → wizard can reach the done step via verify
+    mockCreateSource.mockResolvedValue({ id: "src-1" });
+  });
+
+  it("done step renders an SVG element instead of a text checkmark", async () => {
+    render(<OnboardingWizard onComplete={vi.fn()} />);
+    // Navigate to done step: welcome -> source -> verify -> done
+    fireEvent.click(screen.getByRole("button", { name: /get started/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText(/production cluster/i)).toBeInTheDocument());
+    // Fill required fields
+    fireEvent.change(screen.getByPlaceholderText(/production cluster/i), { target: { value: "Prod" } });
+    fireEvent.change(screen.getByPlaceholderText(/your-ams-server/i), { target: { value: "http://ams:5080" } });
+    fireEvent.click(screen.getByRole("button", { name: /add source/i }));
+    // At verify step
+    await waitFor(() => expect(screen.getByRole("heading", { name: /verify connection/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    // At done step
+    await waitFor(() => expect(screen.getByRole("heading", { name: /you are connected/i })).toBeInTheDocument());
+    // SVG must be present; the old ✓ entity should NOT appear as a plain text node
+    const svgEl = document.querySelector("svg[aria-hidden='true']");
+    expect(svgEl).toBeInTheDocument();
+    // The raw checkmark entity text "✓" should not be present as visible text
+    expect(screen.queryByText("✓")).not.toBeInTheDocument();
+  });
+});
+
+// ── (g) Wave 4: Escape route ─────────────────────────────────────────────────
+
+describe("OnboardingWizard — escape route (Wave 4)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("'Skip setup' button is visible on the welcome step", () => {
+    render(<OnboardingWizard onComplete={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /skip setup/i })).toBeInTheDocument();
+  });
+
+  it("'Skip setup' button calls onComplete", () => {
+    const onComplete = vi.fn();
+    render(<OnboardingWizard onComplete={onComplete} />);
+    fireEvent.click(screen.getByRole("button", { name: /skip setup/i }));
+    expect(onComplete).toHaveBeenCalledOnce();
+  });
+
+  it("'Skip setup' button remains visible on the source step", async () => {
+    render(<OnboardingWizard onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /get started/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText(/production cluster/i)).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /skip setup/i })).toBeInTheDocument();
+  });
+});
+
+// ── (h) Wave 4: Back navigation preserves form state ──────────────────────────
+
+describe("OnboardingWizard — state-preserving back navigation (Wave 4)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("Back from source step to welcome preserves typed values", async () => {
+    render(<OnboardingWizard onComplete={vi.fn()} />);
+    // Go to source step
+    fireEvent.click(screen.getByRole("button", { name: /get started/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText(/production cluster/i)).toBeInTheDocument());
+    // Type a name
+    fireEvent.change(screen.getByPlaceholderText(/production cluster/i), { target: { value: "My AMS" } });
+    // Go back to welcome
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: /welcome to pulse/i })).toBeInTheDocument());
+    // Return to source step — field should still have the typed value
+    fireEvent.click(screen.getByRole("button", { name: /get started/i }));
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("My AMS")).toBeInTheDocument();
     });
   });
 });

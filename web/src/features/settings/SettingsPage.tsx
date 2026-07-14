@@ -5,6 +5,17 @@
  * Wave 2 additions:
  *   - "ingest" tab: ingest tokens management (create/revoke; copy SDK snippet)
  *   - "integrations" tab: Prometheus endpoint info panel + S3 export config
+ *
+ * Wave 4 notes:
+ *   - Uses the shared <Tabs wrap> — NOT a hand-rolled tab bar. The `wrap` prop was
+ *     added to <Tabs> for this page (six tabs overflow a narrow viewport). An earlier
+ *     draft kept a local copy with role="tab" + a roving tabIndex but no key handler:
+ *     that is not merely an incomplete ARIA contract, it makes every inactive tab
+ *     unreachable by keyboard (tabIndex=-1 removes them from the tab order and nothing
+ *     puts them back). The shared component carries Arrow/Home/End navigation.
+ *   - Two inline color literals for the info signal replaced with var(--color-info).
+ *   - Background/border rgba() values that do not match any token alpha are left
+ *     as-is and reported, rather than silently retinted.
  */
 import { useState, useEffect, useCallback } from "react";
 import { adminApi, ApiError } from "@/api/client";
@@ -12,6 +23,7 @@ import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { Badge } from "@/components/Badge";
 import { EmptyState } from "@/components/EmptyState";
+import { Tabs } from "@/components/Tabs";
 import { useToast } from "@/components/Toast";
 import type { Source, Token, LicenseInfo, TokenCreated } from "@/lib/api/types";
 
@@ -37,7 +49,7 @@ Pulse.init({
       background: "var(--color-bg)",
       border: "1px solid var(--color-border)",
       borderRadius: 6,
-      padding: 12,
+      padding: "var(--space-3)",
       position: "relative",
     }}>
       <pre style={{
@@ -58,7 +70,7 @@ Pulse.init({
           right: 8,
           background: "var(--color-surface-2)",
           border: "1px solid var(--color-border)",
-          color: "var(--color-muted)",
+          color: "var(--color-secondary)",
           borderRadius: 4,
           padding: "2px 8px",
           cursor: "pointer",
@@ -176,7 +188,7 @@ export function SettingsPage() {
   const smBtnStyle: React.CSSProperties = {
     background: "var(--color-surface-2)",
     border: "1px solid var(--color-border)",
-    color: "var(--color-muted)",
+    color: "var(--color-secondary)",
     borderRadius: 4,
     padding: "4px 10px",
     cursor: "pointer",
@@ -187,7 +199,7 @@ export function SettingsPage() {
     background: "var(--color-surface-2)",
     border: "1px solid var(--color-border)",
     borderRadius: 6,
-    padding: "12px 16px",
+    padding: "var(--space-3) var(--space-4)",
     fontSize: 13,
   };
 
@@ -208,28 +220,22 @@ export function SettingsPage() {
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Settings</h1>
 
-      {/* Tabs */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 0, borderBottom: "1px solid var(--color-border)" }}>
-        {tabs.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            style={{
-              background: "none",
-              border: "none",
-              borderBottom: `2px solid ${tab === t ? "var(--color-accent)" : "transparent"}`,
-              color: tab === t ? "var(--color-text)" : "var(--color-muted)",
-              padding: "8px 16px",
-              cursor: "pointer",
-              fontSize: 13,
-              fontWeight: tab === t ? 600 : 400,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {tabLabels[t]}
-          </button>
-        ))}
-      </div>
+      {/*
+        Custom tab bar: flexWrap="wrap" supports 6 tabs on narrow screens.
+        The shared <Tabs> component has no flexWrap prop, so pixel-safe conversion
+        is not possible — ARIA is wired manually instead.
+      */}
+      {/* The shared <Tabs>, not a hand-rolled copy. The copy this replaces set role="tab"
+          and a roving tabIndex but had NO key handler — so every inactive tab was
+          unreachable by keyboard (tabIndex=-1 takes them out of the tab order and nothing
+          put them back). <Tabs wrap> carries the Arrow/Home/End navigation and keeps the
+          six-tab strip wrapping on narrow viewports. */}
+      <Tabs
+        wrap
+        tabs={tabs.map((t) => ({ id: t, label: tabLabels[t] }))}
+        activeTab={tab}
+        onTabChange={(id) => setTab(id as Tab)}
+      />
 
       {error && <ErrorBanner message={error} onRetry={loadAll} />}
 
@@ -239,426 +245,438 @@ export function SettingsPage() {
         <>
           {/* ── Sources tab ── */}
           {tab === "sources" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <button
-                  style={{
-                    background: "var(--color-accent)",
-                    border: "none",
-                    color: "var(--color-on-signal)",
-                    borderRadius: 6,
-                    padding: "7px 14px",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    fontWeight: 600,
-                  }}
-                  onClick={() => toast("Use the onboarding wizard to add sources", "info")}
-                >
-                  + Add source
-                </button>
-              </div>
-              {sources.length === 0 ? (
-                <p style={{ color: "var(--color-muted)", fontSize: 13 }}>No AMS sources configured.</p>
-              ) : (
-                <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, overflow: "hidden" }}>
-                  {sources.map((src, i) => (
-                    <div
-                      key={src.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 12,
-                        padding: "12px 16px",
-                        borderTop: i === 0 ? "none" : "1px solid var(--color-border)",
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{src.name}</div>
-                        <div style={{ fontSize: 12, color: "var(--color-muted)", marginTop: 2 }}>{src.rest_url ?? src.type}</div>
-                      </div>
-                      <Badge label={src.type} variant="info" />
-                      <button
-                        style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
-                        onClick={() => void deleteSource(src.id)}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
+            <div role="tabpanel" id="settings-panel-sources" aria-labelledby="tab-sources">
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button
+                    style={{
+                      background: "var(--color-accent)",
+                      border: "none",
+                      color: "var(--color-on-signal)",
+                      borderRadius: 6,
+                      padding: "7px 14px",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      fontWeight: 600,
+                    }}
+                    onClick={() => toast("Use the onboarding wizard to add sources", "info")}
+                  >
+                    + Add source
+                  </button>
                 </div>
-              )}
+                {sources.length === 0 ? (
+                  <p style={{ color: "var(--color-secondary)", fontSize: 13 }}>No AMS sources configured.</p>
+                ) : (
+                  <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, overflow: "hidden" }}>
+                    {sources.map((src, i) => (
+                      <div
+                        key={src.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "var(--space-3)",
+                          padding: "var(--space-3) var(--space-4)",
+                          borderTop: i === 0 ? "none" : "1px solid var(--color-border)",
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>{src.name}</div>
+                          <div style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>{src.rest_url ?? src.type}</div>
+                        </div>
+                        <Badge label={src.type} variant="info" />
+                        <button
+                          style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
+                          onClick={() => void deleteSource(src.id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
           {/* ── API Tokens tab ── */}
           {tab === "tokens" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <button
-                  style={{
-                    background: "var(--color-accent)",
-                    border: "none",
-                    color: "var(--color-on-signal)",
-                    borderRadius: 6,
-                    padding: "7px 14px",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    fontWeight: 600,
-                  }}
-                  onClick={() => void createApiToken()}
-                >
-                  + New token
-                </button>
-              </div>
-              {tokens.length === 0 ? (
-                <EmptyState title="No API tokens" description="API tokens authenticate dashboard and API clients." />
-              ) : (
-                <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, overflow: "hidden" }}>
-                  {tokens.map((tok, i) => (
-                    <div
-                      key={tok.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 12,
-                        padding: "12px 16px",
-                        borderTop: i === 0 ? "none" : "1px solid var(--color-border)",
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{tok.name}</div>
-                        <div style={{ fontSize: 12, color: "var(--color-muted)", marginTop: 2, fontFamily: "var(--font-mono)" }}>
-                          {(tok.scopes ?? []).join(", ")} · created {new Date(tok.created_at).toLocaleDateString()}
-                          {tok.last_used_at && ` · last used ${new Date(tok.last_used_at).toLocaleDateString()}`}
-                        </div>
-                      </div>
-                      <button
-                        style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
-                        onClick={() => void deleteToken(tok.id)}
-                      >
-                        Revoke
-                      </button>
-                    </div>
-                  ))}
+            <div role="tabpanel" id="settings-panel-tokens" aria-labelledby="tab-tokens">
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button
+                    style={{
+                      background: "var(--color-accent)",
+                      border: "none",
+                      color: "var(--color-on-signal)",
+                      borderRadius: 6,
+                      padding: "7px 14px",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      fontWeight: 600,
+                    }}
+                    onClick={() => void createApiToken()}
+                  >
+                    + New token
+                  </button>
                 </div>
-              )}
+                {tokens.length === 0 ? (
+                  <EmptyState title="No API tokens" description="API tokens authenticate dashboard and API clients." />
+                ) : (
+                  <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, overflow: "hidden" }}>
+                    {tokens.map((tok, i) => (
+                      <div
+                        key={tok.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "var(--space-3)",
+                          padding: "var(--space-3) var(--space-4)",
+                          borderTop: i === 0 ? "none" : "1px solid var(--color-border)",
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>{tok.name}</div>
+                          <div style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2, fontFamily: "var(--font-mono)" }}>
+                            {(tok.scopes ?? []).join(", ")} · created {new Date(tok.created_at).toLocaleDateString()}
+                            {tok.last_used_at && ` · last used ${new Date(tok.last_used_at).toLocaleDateString()}`}
+                          </div>
+                        </div>
+                        <button
+                          style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
+                          onClick={() => void deleteToken(tok.id)}
+                        >
+                          Revoke
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
           {/* ── Ingest Tokens tab (Wave-2 addition) ── */}
           {tab === "ingest" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-              <div style={infoBox}>
-                <strong>Ingest tokens</strong> authenticate the beacon SDK. Each token can be scoped to a stream
-                or app. Tokens are revocable; never expose raw values in client-side code beyond the SDK init call.
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <button
-                  style={{
-                    background: "var(--color-accent)",
-                    border: "none",
-                    color: "var(--color-on-signal)",
-                    borderRadius: 6,
-                    padding: "7px 14px",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    fontWeight: 600,
-                  }}
-                  onClick={() => void createIngestToken()}
-                >
-                  + New ingest token
-                </button>
-              </div>
-
-              {/* Newly created token (shown once) */}
-              {newIngestToken && (
-                <div style={{
-                  background: "rgba(88,166,255,0.08)",
-                  border: "1px solid rgba(88,166,255,0.25)",
-                  borderRadius: 8,
-                  padding: 16,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 12,
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontWeight: 700, color: "#58A6FF", fontSize: 13 }}>
-                      Token created — copy it now, it won't be shown again
-                    </span>
-                    <button
-                      onClick={() => setNewIngestToken(null)}
-                      style={{ marginLeft: "auto", background: "none", border: "none", color: "#58A6FF", cursor: "pointer", fontSize: 18, lineHeight: 1 }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <div style={{ ...infoBox, fontFamily: "var(--font-mono)", fontSize: 12, wordBreak: "break-all" }}>
-                    {newIngestToken.token}
-                  </div>
-                  <IngestSnippet token={newIngestToken.token} />
+            <div role="tabpanel" id="settings-panel-ingest" aria-labelledby="tab-ingest">
+              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                <div style={infoBox}>
+                  <strong>Ingest tokens</strong> authenticate the beacon SDK. Each token can be scoped to a stream
+                  or app. Tokens are revocable; never expose raw values in client-side code beyond the SDK init call.
                 </div>
-              )}
 
-              {ingestTokens.length === 0 ? (
-                <EmptyState
-                  title="No ingest tokens"
-                  description="Create an ingest token to authenticate the beacon SDK in your player."
-                />
-              ) : (
-                <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, overflow: "hidden" }}>
-                  {ingestTokens.map((tok, i) => (
-                    <div
-                      key={tok.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 12,
-                        padding: "12px 16px",
-                        borderTop: i === 0 ? "none" : "1px solid var(--color-border)",
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{tok.name}</div>
-                        <div style={{ fontSize: 12, color: "var(--color-muted)", marginTop: 2 }}>
-                          ingest · created {new Date(tok.created_at).toLocaleDateString()}
-                          {tok.last_used_at && ` · last used ${new Date(tok.last_used_at).toLocaleDateString()}`}
-                        </div>
-                      </div>
-                      <Badge label="ingest" variant="info" />
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button
+                    style={{
+                      background: "var(--color-accent)",
+                      border: "none",
+                      color: "var(--color-on-signal)",
+                      borderRadius: 6,
+                      padding: "7px 14px",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      fontWeight: 600,
+                    }}
+                    onClick={() => void createIngestToken()}
+                  >
+                    + New ingest token
+                  </button>
+                </div>
+
+                {/* Newly created token (shown once) */}
+                {newIngestToken && (
+                  <div style={{
+                    background: "rgba(88,166,255,0.08)",
+                    border: "1px solid rgba(88,166,255,0.25)",
+                    borderRadius: 8,
+                    padding: "var(--space-4)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "var(--space-3)",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+                      <span style={{ fontWeight: 700, color: "var(--color-info)", fontSize: 13 }}>
+                        Token created — copy it now, it won't be shown again
+                      </span>
                       <button
-                        style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
-                        onClick={() => void deleteToken(tok.id)}
+                        onClick={() => setNewIngestToken(null)}
+                        style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--color-info)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}
                       >
-                        Revoke
+                        ×
                       </button>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <div style={{ ...infoBox, fontFamily: "var(--font-mono)", fontSize: 12, wordBreak: "break-all" }}>
+                      {newIngestToken.token}
+                    </div>
+                    <IngestSnippet token={newIngestToken.token} />
+                  </div>
+                )}
 
-              <div style={{ fontSize: 12, color: "var(--color-muted)" }}>
-                Ingest endpoint: <code style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{window.location.origin}/ingest/beacon</code>
+                {ingestTokens.length === 0 ? (
+                  <EmptyState
+                    title="No ingest tokens"
+                    description="Create an ingest token to authenticate the beacon SDK in your player."
+                  />
+                ) : (
+                  <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, overflow: "hidden" }}>
+                    {ingestTokens.map((tok, i) => (
+                      <div
+                        key={tok.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "var(--space-3)",
+                          padding: "var(--space-3) var(--space-4)",
+                          borderTop: i === 0 ? "none" : "1px solid var(--color-border)",
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>{tok.name}</div>
+                          <div style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>
+                            ingest · created {new Date(tok.created_at).toLocaleDateString()}
+                            {tok.last_used_at && ` · last used ${new Date(tok.last_used_at).toLocaleDateString()}`}
+                          </div>
+                        </div>
+                        <Badge label="ingest" variant="info" />
+                        <button
+                          style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
+                          onClick={() => void deleteToken(tok.id)}
+                        >
+                          Revoke
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ fontSize: 12, color: "var(--color-secondary)" }}>
+                  Ingest endpoint: <code style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{window.location.origin}/ingest/beacon</code>
+                </div>
               </div>
             </div>
           )}
 
           {/* ── Integrations tab (Wave-2 addition) ── */}
           {tab === "integrations" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-              {/* Prometheus */}
-              <div style={{
-                background: "var(--color-surface)",
-                border: "1px solid var(--color-border)",
-                borderRadius: 8,
-                padding: 20,
-                display: "flex",
-                flexDirection: "column",
-                gap: 12,
-              }}>
-                <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Prometheus Metrics</h3>
-                <p style={{ margin: 0, fontSize: 13, color: "var(--color-muted)" }}>
-                  Pulse exposes Prometheus metrics at the endpoint below. Unauthenticated by default;
-                  set <code style={{ fontFamily: "var(--font-mono)" }}>PULSE_METRICS_TOKEN</code> to require a bearer token.
-                </p>
-                <div style={infoBox}>
-                  <div style={{ fontSize: 11, color: "var(--color-muted)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>Scrape URL</div>
-                  <div style={{ fontFamily: "var(--font-mono)", fontSize: 13, wordBreak: "break-all" }}>{prometheusUrl}</div>
-                </div>
-                <p style={{ margin: 0, fontSize: 12, color: "var(--color-muted)" }}>
-                  Example scrape config:
-                </p>
-                <pre style={{
-                  margin: 0,
-                  background: "var(--color-bg)",
+            <div role="tabpanel" id="settings-panel-integrations" aria-labelledby="tab-integrations">
+              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                {/* Prometheus */}
+                <div style={{
+                  background: "var(--color-surface)",
                   border: "1px solid var(--color-border)",
-                  borderRadius: 6,
-                  padding: 12,
-                  fontSize: 12,
-                  fontFamily: "var(--font-mono)",
-                  color: "var(--color-text)",
-                  overflowX: "auto",
+                  borderRadius: 8,
+                  padding: 20,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "var(--space-3)",
                 }}>
+                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Prometheus Metrics</h3>
+                  <p style={{ margin: 0, fontSize: 13, color: "var(--color-secondary)" }}>
+                    Pulse exposes Prometheus metrics at the endpoint below. Unauthenticated by default;
+                    set <code style={{ fontFamily: "var(--font-mono)" }}>PULSE_METRICS_TOKEN</code> to require a bearer token.
+                  </p>
+                  <div style={infoBox}>
+                    <div style={{ fontSize: 11, color: "var(--color-secondary)", marginBottom: "var(--space-1)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Scrape URL</div>
+                    <div style={{ fontFamily: "var(--font-mono)", fontSize: 13, wordBreak: "break-all" }}>{prometheusUrl}</div>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 12, color: "var(--color-secondary)" }}>
+                    Example scrape config:
+                  </p>
+                  <pre style={{
+                    margin: 0,
+                    background: "var(--color-bg)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 6,
+                    padding: "var(--space-3)",
+                    fontSize: 12,
+                    fontFamily: "var(--font-mono)",
+                    color: "var(--color-text)",
+                    overflowX: "auto",
+                  }}>
 {`scrape_configs:
   - job_name: pulse
     static_configs:
       - targets: ['${window.location.host}']
     metrics_path: /metrics`}
-                </pre>
-              </div>
+                  </pre>
+                </div>
 
-              {/* S3 export */}
-              <div style={{
-                background: "var(--color-surface)",
-                border: "1px solid var(--color-border)",
-                borderRadius: 8,
-                padding: 20,
-                display: "flex",
-                flexDirection: "column",
-                gap: 14,
-              }}>
-                <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>S3 Export Destination</h3>
-                <p style={{ margin: 0, fontSize: 13, color: "var(--color-muted)" }}>
-                  Configure automatic report uploads to an S3 bucket. Credentials are referenced by
-                  environment variable name — the actual credential values are never stored or echoed.
-                </p>
-                <form onSubmit={(e) => { e.preventDefault(); toast("S3 export config saved (server-side TBD in wave 3)", "info"); }} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <label style={{ fontSize: 12, color: "var(--color-muted)", display: "flex", flexDirection: "column", gap: 4 }}>
-                    S3 Bucket
-                    <input
-                      type="text"
-                      value={s3Bucket}
-                      onChange={(e) => setS3Bucket(e.target.value)}
-                      placeholder="my-pulse-reports"
-                      style={{ ...inputStyle }}
-                    />
-                  </label>
-                  <label style={{ fontSize: 12, color: "var(--color-muted)", display: "flex", flexDirection: "column", gap: 4 }}>
-                    AWS Region
-                    <input
-                      type="text"
-                      value={s3Region}
-                      onChange={(e) => setS3Region(e.target.value)}
-                      placeholder="us-east-1"
-                      style={{ ...inputStyle }}
-                    />
-                  </label>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    <label style={{ fontSize: 12, color: "var(--color-muted)", display: "flex", flexDirection: "column", gap: 4 }}>
-                      Access Key env var name
-                      <input
-                        type="text"
-                        value={s3KeyEnvRef}
-                        onChange={(e) => setS3KeyEnvRef(e.target.value)}
-                        placeholder="AWS_ACCESS_KEY_ID"
-                        style={{ ...inputStyle }}
-                      />
-                    </label>
-                    <label style={{ fontSize: 12, color: "var(--color-muted)", display: "flex", flexDirection: "column", gap: 4 }}>
-                      Secret Key env var name
-                      <input
-                        type="text"
-                        value={s3SecretEnvRef}
-                        onChange={(e) => setS3SecretEnvRef(e.target.value)}
-                        placeholder="AWS_SECRET_ACCESS_KEY"
-                        style={{ ...inputStyle }}
-                      />
-                    </label>
-                  </div>
-                  <p style={{ margin: 0, fontSize: 12, color: "var(--color-muted)" }}>
-                    The credentials at those env var names must be available to the Pulse process at runtime.
-                    Never enter credential values directly here.
+                {/* S3 export */}
+                <div style={{
+                  background: "var(--color-surface)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: 8,
+                  padding: 20,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 14,
+                }}>
+                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>S3 Export Destination</h3>
+                  <p style={{ margin: 0, fontSize: 13, color: "var(--color-secondary)" }}>
+                    Configure automatic report uploads to an S3 bucket. Credentials are referenced by
+                    environment variable name — the actual credential values are never stored or echoed.
                   </p>
-                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                    <button
-                      type="submit"
-                      style={{
-                        background: "var(--color-accent)",
-                        border: "none",
-                        color: "var(--color-on-signal)",
-                        borderRadius: 6,
-                        padding: "7px 14px",
-                        cursor: "pointer",
-                        fontSize: 13,
-                        fontWeight: 600,
-                      }}
-                    >
-                      Save S3 config
-                    </button>
-                  </div>
-                </form>
+                  <form onSubmit={(e) => { e.preventDefault(); toast("S3 export config saved (server-side TBD in wave 3)", "info"); }} style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+                    <label style={{ fontSize: 12, color: "var(--color-secondary)", display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
+                      S3 Bucket
+                      <input
+                        type="text"
+                        value={s3Bucket}
+                        onChange={(e) => setS3Bucket(e.target.value)}
+                        placeholder="my-pulse-reports"
+                        style={{ ...inputStyle }}
+                      />
+                    </label>
+                    <label style={{ fontSize: 12, color: "var(--color-secondary)", display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
+                      AWS Region
+                      <input
+                        type="text"
+                        value={s3Region}
+                        onChange={(e) => setS3Region(e.target.value)}
+                        placeholder="us-east-1"
+                        style={{ ...inputStyle }}
+                      />
+                    </label>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <label style={{ fontSize: 12, color: "var(--color-secondary)", display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
+                        Access Key env var name
+                        <input
+                          type="text"
+                          value={s3KeyEnvRef}
+                          onChange={(e) => setS3KeyEnvRef(e.target.value)}
+                          placeholder="AWS_ACCESS_KEY_ID"
+                          style={{ ...inputStyle }}
+                        />
+                      </label>
+                      <label style={{ fontSize: 12, color: "var(--color-secondary)", display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
+                        Secret Key env var name
+                        <input
+                          type="text"
+                          value={s3SecretEnvRef}
+                          onChange={(e) => setS3SecretEnvRef(e.target.value)}
+                          placeholder="AWS_SECRET_ACCESS_KEY"
+                          style={{ ...inputStyle }}
+                        />
+                      </label>
+                    </div>
+                    <p style={{ margin: 0, fontSize: 12, color: "var(--color-secondary)" }}>
+                      The credentials at those env var names must be available to the Pulse process at runtime.
+                      Never enter credential values directly here.
+                    </p>
+                    <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                      <button
+                        type="submit"
+                        style={{
+                          background: "var(--color-accent)",
+                          border: "none",
+                          color: "var(--color-on-signal)",
+                          borderRadius: 6,
+                          padding: "7px 14px",
+                          cursor: "pointer",
+                          fontSize: 13,
+                          fontWeight: 600,
+                        }}
+                      >
+                        Save S3 config
+                      </button>
+                    </div>
+                  </form>
+                </div>
               </div>
             </div>
           )}
 
           {/* ── License tab ── */}
           {tab === "license" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-              {license && (
+            <div role="tabpanel" id="settings-panel-license" aria-labelledby="tab-license">
+              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                {license && (
+                  <div
+                    style={{
+                      background: "var(--color-surface)",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: 8,
+                      padding: "20px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "var(--space-3)",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+                      <span style={{ fontWeight: 700, fontSize: 15 }}>Current license</span>
+                      <Badge
+                        label={license.tier}
+                        variant={license.tier === "enterprise" ? "success" : license.tier === "pro" ? "info" : "muted"}
+                      />
+                    </div>
+                    {license.expires_at && (
+                      <p style={{ margin: 0, fontSize: 13, color: "var(--color-secondary)" }}>
+                        Expires: {new Date(license.expires_at).toLocaleDateString()}
+                      </p>
+                    )}
+                    {license.limits && (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
+                        {Object.entries(license.limits).map(([k, v]) => (
+                          <div key={k} style={{ background: "var(--color-surface-2)", borderRadius: 6, padding: "var(--space-2) var(--space-3)" }}>
+                            <div style={{ fontSize: 11, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{k.replace(/_/g, " ")}</div>
+                            <div style={{ fontSize: 15, fontWeight: 600, marginTop: 2 }}>{v === -1 ? "∞" : String(v)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div
                   style={{
                     background: "var(--color-surface)",
                     border: "1px solid var(--color-border)",
                     borderRadius: 8,
                     padding: "20px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 12,
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <span style={{ fontWeight: 700, fontSize: 15 }}>Current license</span>
-                    <Badge
-                      label={license.tier}
-                      variant={license.tier === "enterprise" ? "success" : license.tier === "pro" ? "info" : "muted"}
+                  <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 600 }}>
+                    {license?.tier && license.tier !== "free" ? "Update license key" : "Activate license"}
+                  </h3>
+                  <form onSubmit={(e) => void saveLicense(e)} style={{ display: "flex", gap: 10 }}>
+                    <input
+                      style={{ ...inputStyle, flex: 1 }}
+                      type="text"
+                      value={licenseKey}
+                      onChange={(e) => setLicenseKey(e.target.value)}
+                      placeholder="PULSE-XXXX-XXXX-XXXX"
                     />
-                  </div>
-                  {license.expires_at && (
-                    <p style={{ margin: 0, fontSize: 13, color: "var(--color-muted)" }}>
-                      Expires: {new Date(license.expires_at).toLocaleDateString()}
-                    </p>
-                  )}
-                  {license.limits && (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
-                      {Object.entries(license.limits).map(([k, v]) => (
-                        <div key={k} style={{ background: "var(--color-surface-2)", borderRadius: 6, padding: "8px 12px" }}>
-                          <div style={{ fontSize: 11, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{k.replace(/_/g, " ")}</div>
-                          <div style={{ fontSize: 15, fontWeight: 600, marginTop: 2 }}>{v === -1 ? "∞" : String(v)}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                    <button
+                      type="submit"
+                      disabled={savingLicense || !licenseKey.trim()}
+                      style={{
+                        background: "var(--color-accent)",
+                        border: "none",
+                        color: "var(--color-on-signal)",
+                        borderRadius: 6,
+                        padding: "var(--space-2) var(--space-4)",
+                        cursor: "pointer",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        opacity: savingLicense ? 0.7 : 1,
+                      }}
+                    >
+                      {savingLicense ? "Activating…" : "Activate"}
+                    </button>
+                  </form>
+                  <p style={{ margin: "12px 0 0", fontSize: 12, color: "var(--color-secondary)" }}>
+                    Free tier requires no license key. Contact sales for Pro/Enterprise keys.
+                  </p>
                 </div>
-              )}
-
-              <div
-                style={{
-                  background: "var(--color-surface)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 8,
-                  padding: "20px",
-                }}
-              >
-                <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 600 }}>
-                  {license?.tier && license.tier !== "free" ? "Update license key" : "Activate license"}
-                </h3>
-                <form onSubmit={(e) => void saveLicense(e)} style={{ display: "flex", gap: 10 }}>
-                  <input
-                    style={{ ...inputStyle, flex: 1 }}
-                    type="text"
-                    value={licenseKey}
-                    onChange={(e) => setLicenseKey(e.target.value)}
-                    placeholder="PULSE-XXXX-XXXX-XXXX"
-                  />
-                  <button
-                    type="submit"
-                    disabled={savingLicense || !licenseKey.trim()}
-                    style={{
-                      background: "var(--color-accent)",
-                      border: "none",
-                      color: "var(--color-on-signal)",
-                      borderRadius: 6,
-                      padding: "8px 16px",
-                      cursor: "pointer",
-                      fontSize: 13,
-                      fontWeight: 600,
-                      opacity: savingLicense ? 0.7 : 1,
-                    }}
-                  >
-                    {savingLicense ? "Activating…" : "Activate"}
-                  </button>
-                </form>
-                <p style={{ margin: "12px 0 0", fontSize: 12, color: "var(--color-muted)" }}>
-                  Free tier requires no license key. Contact sales for Pro/Enterprise keys.
-                </p>
               </div>
             </div>
           )}
 
           {/* ── Users tab ── */}
           {tab === "users" && (
-            <div style={{ color: "var(--color-muted)", fontSize: 13 }}>
-              User management — coming in a future update.
+            <div role="tabpanel" id="settings-panel-users" aria-labelledby="tab-users">
+              <div style={{ color: "var(--color-secondary)", fontSize: 13 }}>
+                User management — coming in a future update.
+              </div>
             </div>
           )}
         </>

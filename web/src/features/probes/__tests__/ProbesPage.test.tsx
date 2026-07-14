@@ -1,102 +1,25 @@
 /**
  * Probes page tests (F10):
  *  - Probe list rendering (name, url, protocol, interval, enabled, last_result)
- *  - Create form validation (interval < 30 rejected, URL required, name required)
+ *  - Create form validation — render-level (tautological pure-fn copy removed per RULE 9)
  *  - Probe results rendering with SYNTHETIC labeling
  *  - Tier-gated views (Free blocked / Pro+ entitled)
  *  - Synthetic-labeling present on results
  *  - Delete confirm flow
+ *  - ProbeForm a11y: aria-invalid, aria-describedby, auto-focus (uipro form pass)
+ *  - Chart colour pins via source assertions (RULE 9)
+ *  - Chart skeleton loading state
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { ReactNode } from "react";
 import type { Probe, ProbeResult, LicenseInfo } from "@/lib/api/types";
+import { ThemeProvider } from "@/lib/ThemeContext";
 
-// ─── Probe form validation (pure unit tests) ──────────────────────────────────
-
-interface ProbeFormData {
-  name: string;
-  url: string;
-  protocol: string;
-  interval_s: string;
-  timeout_s: string;
-  enabled: boolean;
-}
-
-function validateProbeForm(data: ProbeFormData): string | null {
-  if (!data.name.trim()) return "Name is required";
-  if (!data.url.trim()) return "URL is required";
-  try {
-    new URL(data.url.trim());
-  } catch {
-    return "URL must be a valid URL (include http:// or rtmp://)";
-  }
-  const interval = Number(data.interval_s);
-  if (!Number.isInteger(interval) || interval < 30) {
-    return "Interval must be an integer ≥ 30 seconds";
-  }
-  const timeout = Number(data.timeout_s);
-  if (!Number.isInteger(timeout) || timeout < 1) {
-    return "Timeout must be a positive integer";
-  }
-  return null;
-}
-
-describe("ProbeForm validation", () => {
-  const base: ProbeFormData = {
-    name: "Test probe",
-    url: "https://example.com/live/stream.m3u8",
-    protocol: "hls",
-    interval_s: "60",
-    timeout_s: "10",
-    enabled: true,
-  };
-
-  it("valid form returns null", () => {
-    expect(validateProbeForm(base)).toBeNull();
-  });
-
-  it("interval < 30 is rejected", () => {
-    expect(validateProbeForm({ ...base, interval_s: "29" })).toMatch(/≥ 30/);
-  });
-
-  it("interval = 30 is accepted", () => {
-    expect(validateProbeForm({ ...base, interval_s: "30" })).toBeNull();
-  });
-
-  it("interval = 0 is rejected", () => {
-    expect(validateProbeForm({ ...base, interval_s: "0" })).toMatch(/≥ 30/);
-  });
-
-  it("non-integer interval is rejected", () => {
-    expect(validateProbeForm({ ...base, interval_s: "45.5" })).toMatch(/≥ 30/);
-  });
-
-  it("empty name is rejected", () => {
-    expect(validateProbeForm({ ...base, name: "" })).toMatch(/name is required/i);
-  });
-
-  it("whitespace-only name is rejected", () => {
-    expect(validateProbeForm({ ...base, name: "   " })).toMatch(/name is required/i);
-  });
-
-  it("empty URL is rejected", () => {
-    expect(validateProbeForm({ ...base, url: "" })).toMatch(/url is required/i);
-  });
-
-  it("invalid URL is rejected", () => {
-    expect(validateProbeForm({ ...base, url: "not-a-url" })).toMatch(/valid url/i);
-  });
-
-  it("rtmp:// URL is accepted", () => {
-    expect(validateProbeForm({ ...base, url: "rtmp://example.com/live/stream" })).toBeNull();
-  });
-
-  it("timeout < 1 is rejected", () => {
-    expect(validateProbeForm({ ...base, timeout_s: "0" })).toMatch(/positive integer/i);
-  });
-});
-
-// ─── Component tests ──────────────────────────────────────────────────────────
+// ─── Module mocks ─────────────────────────────────────────────────────────────
 
 vi.mock("@/api/client", () => ({
   probesApi: {
@@ -143,6 +66,14 @@ vi.mock("recharts", () => ({
 
 import { adminApi, probesApi } from "@/api/client";
 import { ProbesPage, ttfbColor, iceVariant, signalingVariant } from "../ProbesPage";
+
+// ─── ThemeProvider wrapper ─────────────────────────────────────────────────────
+// ProbeResultsPanel calls useStatusColors() → requires ThemeProvider context.
+function wrapper({ children }: { children: ReactNode }) {
+  return <ThemeProvider>{children}</ThemeProvider>;
+}
+
+// ─── Test fixtures ────────────────────────────────────────────────────────────
 
 const freeLicense: LicenseInfo = { tier: "free", valid: true };
 const proLicense: LicenseInfo = { tier: "pro", valid: true };
@@ -210,6 +141,8 @@ const sampleResults: ProbeResult[] = [
   },
 ];
 
+// ─── Tier gate ────────────────────────────────────────────────────────────────
+
 describe("ProbesPage tier gate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -217,14 +150,14 @@ describe("ProbesPage tier gate", () => {
 
   it("shows loading spinner while license loads", () => {
     vi.mocked(adminApi.getLicense).mockReturnValue(new Promise(() => {}));
-    const { unmount } = render(<ProbesPage />);
+    const { unmount } = render(<ProbesPage />, { wrapper });
     expect(screen.getByRole("status")).toBeInTheDocument();
     unmount();
   });
 
   it("shows upsell when license is 'free'", async () => {
     vi.mocked(adminApi.getLicense).mockResolvedValue(freeLicense);
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => {
       expect(
         screen.getByText(/synthetic probes requires pro tier/i),
@@ -234,7 +167,7 @@ describe("ProbesPage tier gate", () => {
 
   it("shows upgrade link when gated", async () => {
     vi.mocked(adminApi.getLicense).mockResolvedValue(freeLicense);
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => {
       expect(screen.getByRole("link", { name: /upgrade license/i })).toBeInTheDocument();
     });
@@ -243,7 +176,7 @@ describe("ProbesPage tier gate", () => {
   it("shows probe list when license is 'pro'", async () => {
     vi.mocked(adminApi.getLicense).mockResolvedValue(proLicense);
     vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => {
       expect(screen.getByText("Main HLS stream")).toBeInTheDocument();
     });
@@ -253,12 +186,14 @@ describe("ProbesPage tier gate", () => {
   it("shows probe list when license is 'enterprise'", async () => {
     vi.mocked(adminApi.getLicense).mockResolvedValue(enterpriseLicense);
     vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => {
       expect(screen.getByText("Main HLS stream")).toBeInTheDocument();
     });
   });
 });
+
+// ─── Probe list rendering ─────────────────────────────────────────────────────
 
 describe("ProbesPage probe list rendering", () => {
   beforeEach(() => {
@@ -268,7 +203,7 @@ describe("ProbesPage probe list rendering", () => {
 
   it("renders probe names", async () => {
     vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => {
       expect(screen.getByText("Main HLS stream")).toBeInTheDocument();
       expect(screen.getByText("Backup stream")).toBeInTheDocument();
@@ -277,7 +212,7 @@ describe("ProbesPage probe list rendering", () => {
 
   it("renders protocol badges", async () => {
     vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => {
       // Badge renders text-transform: uppercase via CSS but DOM text is lowercase
       expect(screen.getByText("hls")).toBeInTheDocument();
@@ -287,7 +222,7 @@ describe("ProbesPage probe list rendering", () => {
 
   it("renders enabled/off status badges", async () => {
     vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => {
       expect(screen.getByText("on")).toBeInTheDocument();
       expect(screen.getByText("off")).toBeInTheDocument();
@@ -296,7 +231,7 @@ describe("ProbesPage probe list rendering", () => {
 
   it("renders last result TTFB", async () => {
     vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => {
       expect(screen.getByText("150 ms")).toBeInTheDocument();
     });
@@ -304,7 +239,7 @@ describe("ProbesPage probe list rendering", () => {
 
   it("renders last result status ok/fail", async () => {
     vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => {
       // Probe 1 has last_result success=true → "ok" badge
       // Probe 2 has last_result success=false → "fail" badge
@@ -315,7 +250,7 @@ describe("ProbesPage probe list rendering", () => {
 
   it("shows empty state when no probes", async () => {
     vi.mocked(probesApi.list).mockResolvedValue({ items: [], meta: {} });
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => {
       expect(screen.getByText(/no probes configured/i)).toBeInTheDocument();
     });
@@ -323,7 +258,7 @@ describe("ProbesPage probe list rendering", () => {
 
   it("shows error banner on fetch failure", async () => {
     vi.mocked(probesApi.list).mockRejectedValue(new Error("network error"));
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => {
       expect(screen.getByRole("alert")).toBeInTheDocument();
     });
@@ -331,12 +266,14 @@ describe("ProbesPage probe list rendering", () => {
 
   it("renders synthetic notice banner", async () => {
     vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => {
       expect(screen.getByRole("note", { name: /synthetic probes notice/i })).toBeInTheDocument();
     });
   });
 });
+
+// ─── Create form validation — render-level ────────────────────────────────────
 
 describe("ProbesPage create form validation", () => {
   beforeEach(() => {
@@ -346,7 +283,7 @@ describe("ProbesPage create form validation", () => {
   });
 
   async function openForm() {
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => {
       expect(screen.getByText(/no probes configured/i)).toBeInTheDocument();
     });
@@ -409,6 +346,193 @@ describe("ProbesPage create form validation", () => {
   });
 });
 
+// ─── ProbeForm a11y — uipro form pass ────────────────────────────────────────
+
+describe("ProbeForm a11y — aria-invalid, aria-describedby, error placement", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(adminApi.getLicense).mockResolvedValue(proLicense);
+    vi.mocked(probesApi.list).mockResolvedValue({ items: [], meta: {} });
+  });
+
+  async function openForm() {
+    render(<ProbesPage />, { wrapper });
+    await waitFor(() => screen.getByText(/no probes configured/i));
+    fireEvent.click(screen.getByText("+ New Probe"));
+    await waitFor(() => screen.getByLabelText(/create probe form/i));
+  }
+
+  it("sets aria-invalid on name input when name is empty on submit", async () => {
+    await openForm();
+    fireEvent.submit(screen.getByLabelText(/create probe form/i));
+    await waitFor(() => {
+      const nameInput = document.getElementById("probe-name");
+      expect(nameInput).toHaveAttribute("aria-invalid", "true");
+    });
+  });
+
+  it("error element has role='alert' placed below the failing field", async () => {
+    await openForm();
+    fireEvent.submit(screen.getByLabelText(/create probe form/i));
+    await waitFor(() => {
+      const alert = screen.getByRole("alert");
+      expect(alert).toHaveTextContent(/name is required/i);
+    });
+  });
+
+  it("invalid name input has aria-describedby referencing probe-form-error", async () => {
+    await openForm();
+    fireEvent.submit(screen.getByLabelText(/create probe form/i));
+    await waitFor(() => {
+      const nameInput = document.getElementById("probe-name");
+      expect(nameInput).toHaveAttribute("aria-describedby", "probe-form-error");
+    });
+  });
+
+  it("error element has id='probe-form-error' (aria contract fulfilled)", async () => {
+    await openForm();
+    fireEvent.submit(screen.getByLabelText(/create probe form/i));
+    await waitFor(() => {
+      expect(document.getElementById("probe-form-error")).toBeInTheDocument();
+    });
+  });
+
+  it("sets aria-invalid on interval input when interval < 30", async () => {
+    await openForm();
+    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Test" } });
+    fireEvent.change(screen.getByLabelText(/stream url/i), {
+      target: { value: "https://example.com/stream.m3u8" },
+    });
+    fireEvent.change(screen.getByLabelText(/interval/i), { target: { value: "10" } });
+    fireEvent.submit(screen.getByLabelText(/create probe form/i));
+    await waitFor(() => {
+      const intervalInput = document.getElementById("probe-interval");
+      expect(intervalInput).toHaveAttribute("aria-invalid", "true");
+    });
+  });
+
+  it("interval input references its hint via aria-describedby even when valid", async () => {
+    await openForm();
+    // Without submitting — the interval input should already reference its hint
+    const intervalInput = document.getElementById("probe-interval");
+    expect(intervalInput?.getAttribute("aria-describedby")).toContain("probe-interval-hint");
+  });
+});
+
+// ─── Chart skeleton loading state ─────────────────────────────────────────────
+
+describe("ProbeResultsPanel — chart skeleton", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(adminApi.getLicense).mockResolvedValue(proLicense);
+    vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
+  });
+
+  it("shows chart-skeleton div while probe results are loading", async () => {
+    // getResults never resolves — keeps the panel in loading state
+    vi.mocked(probesApi.getResults).mockReturnValue(new Promise(() => {}));
+
+    const { unmount } = render(<ProbesPage />, { wrapper });
+    await waitFor(() => screen.getByText("Main HLS stream"));
+
+    const resultsBtns = screen.getAllByRole("button", { name: /view results for/i });
+    fireEvent.click(resultsBtns[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chart-skeleton")).toBeInTheDocument();
+    });
+
+    unmount();
+  });
+
+  it("hides chart-skeleton once results load", async () => {
+    vi.mocked(probesApi.getResults).mockResolvedValue({ items: sampleResults, meta: {} });
+
+    render(<ProbesPage />, { wrapper });
+    await waitFor(() => screen.getByText("Main HLS stream"));
+
+    const resultsBtns = screen.getAllByRole("button", { name: /view results for/i });
+    fireEvent.click(resultsBtns[0]);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("chart-skeleton")).toBeNull();
+    });
+  });
+});
+
+// ─── Chart colour pins — source assertions (RULE 9) ──────────────────────────
+//
+// Recharts stroke props cannot be directly asserted via jsdom because Line is
+// mocked to null. Source-reading assertions are the accepted method for SVG
+// props that jsdom cannot see (RULE 9).
+
+describe("ProbesPage chart colour pins (source assertions)", () => {
+  const src = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../ProbesPage.tsx"), "utf-8");
+
+  it("TTFB Line uses CHART_COLORS[1] (blue — primary series)", () => {
+    // Verify the real source binds the correct index; catching wrong-index bugs
+    expect(src).toContain('stroke={CHART_COLORS[1]}');
+  });
+
+  it("Segment TTFB Line uses CHART_COLORS[2] (purple — secondary series)", () => {
+    expect(src).toContain('stroke={CHART_COLORS[2]}');
+  });
+
+  it("Bitrate Line uses CHART_COLORS[0] (green — healthy/first series)", () => {
+    expect(src).toContain('stroke={CHART_COLORS[0]}');
+  });
+
+  it("warning ReferenceLine uses CHART_COLORS[4] (amber — warning series)", () => {
+    expect(src).toContain('stroke={CHART_COLORS[4]}');
+  });
+
+  it("no dataviz line uses CHART_COLORS[3] which would be incorrectly pink", () => {
+    // CHART_COLORS[3] is dataviz pink, not an error/status colour
+    expect(src).not.toMatch(/stroke=\{CHART_COLORS\[3\]\}/);
+  });
+
+  /**
+   * The rule is "no var() string in a RECHARTS DATA-SERIES prop", NOT "no var() anywhere".
+   *
+   * A file-wide `expect(src).not.toMatch(/stroke="var\(--color-/)` was written here first,
+   * and it did real damage: to satisfy it, the implementation swapped the TierGate's plain
+   * <svg> icon to a CHART_COLORS[0] literal (which renders the WRONG colour in light theme —
+   * the accent token is #0BA678 there) and swapped CartesianGrid off --color-border onto a
+   * far lighter neutral. A test that forces production code to get worse is not a gate, it
+   * is a bug. Both were reverted; the over-broad assertion is gone.
+   *
+   * var() is correct and theme-aware on plain SVG elements and on structural chart chrome
+   * (CartesianGrid), exactly as every other chart page in this app does it.
+   */
+  it("data-series <Line> strokes are JS values, never var() strings", () => {
+    // `<Line\s` — NOT `<Line`, which also matches <LineChart>, whose body contains the
+    // CartesianGrid's legitimate var(--color-border).
+    const lineStrokes = [...src.matchAll(/<Line\s[\s\S]{0,300}?\/>/g)].map((m) => m[0]);
+    expect(lineStrokes.length).toBeGreaterThan(0);
+    for (const line of lineStrokes) {
+      expect(line).not.toMatch(/stroke="var\(/);
+    }
+  });
+
+  it("CartesianGrid keeps --color-border, like every other chart page", () => {
+    // Structural grid chrome, not a data series. statusColors.neutral (#8296A8) would be a
+    // drastically lighter grid than --color-border (#1E2833) — a visible regression.
+    expect(src).toContain('<CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />');
+    expect(src).not.toContain("stroke={statusColors.neutral}");
+  });
+
+  it("the decorative TierGate icon uses the theme-aware accent token, not a hard-coded hex", () => {
+    // Anchored to the <svg> element so it cannot be satisfied by a Recharts <Line> elsewhere
+    // in the file — the failure mode of the test this replaces.
+    const svg = src.match(/<svg[\s\S]*?<\/svg>/);
+    expect(svg).not.toBeNull();
+    expect(svg![0]).toContain('stroke="var(--color-accent)"');
+    expect(svg![0]).not.toMatch(/stroke=\{CHART_COLORS\[\d\]\}/);
+  });
+});
+
+// ─── Synthetic labeling ───────────────────────────────────────────────────────
+
 describe("ProbesPage synthetic labeling", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -422,7 +546,7 @@ describe("ProbesPage synthetic labeling", () => {
       meta: {},
     });
 
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => {
       expect(screen.getByText("Main HLS stream")).toBeInTheDocument();
     });
@@ -449,7 +573,7 @@ describe("ProbesPage synthetic labeling", () => {
       meta: {},
     });
 
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => {
       expect(screen.getByText("Main HLS stream")).toBeInTheDocument();
     });
@@ -464,7 +588,7 @@ describe("ProbesPage synthetic labeling", () => {
 
   it("shows synthetic notice banner on the main probes page", async () => {
     vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => {
       const notice = screen.getByRole("note", { name: /synthetic probes notice/i });
       expect(notice).toBeInTheDocument();
@@ -479,7 +603,7 @@ describe("ProbesPage synthetic labeling", () => {
       meta: {},
     });
 
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => expect(screen.getByText("Main HLS stream")).toBeInTheDocument());
 
     const resultsBtns = screen.getAllByRole("button", { name: /view results for/i });
@@ -512,7 +636,7 @@ describe("ProbesPage WebRTC columns", () => {
 
   async function openWebRTCResults(results: ProbeResult[]) {
     vi.mocked(probesApi.getResults).mockResolvedValue({ items: results, meta: {} });
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => expect(screen.getByText("Main HLS stream")).toBeInTheDocument());
     const btns = screen.getAllByRole("button", { name: /view results for/i });
     fireEvent.click(btns[0]);
@@ -602,6 +726,8 @@ describe("ProbesPage WebRTC columns", () => {
   });
 });
 
+// ─── Delete confirm ───────────────────────────────────────────────────────────
+
 describe("ProbesPage delete confirm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -610,7 +736,7 @@ describe("ProbesPage delete confirm", () => {
   });
 
   it("shows delete confirm dialog when delete clicked", async () => {
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => expect(screen.getByText("Main HLS stream")).toBeInTheDocument());
 
     const deleteButtons = screen.getAllByRole("button", { name: /delete probe/i });
@@ -622,7 +748,7 @@ describe("ProbesPage delete confirm", () => {
   });
 
   it("cancel dismiss the delete confirm", async () => {
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => expect(screen.getByText("Main HLS stream")).toBeInTheDocument());
 
     const deleteButtons = screen.getAllByRole("button", { name: /delete probe/i });
@@ -648,8 +774,8 @@ describe("ProbesPage delete confirm", () => {
 // Thresholds: <200 → success, <500 → warning, ≥500 → error, null → muted.
 
 describe("ttfbColor — pure threshold logic", () => {
-  it("returns var(--color-muted) when ttfb is null", () => {
-    expect(ttfbColor(null)).toBe("var(--color-muted)");
+  it("returns var(--color-secondary) when ttfb is null (RULE 5 — null maps to secondary, not muted)", () => {
+    expect(ttfbColor(null)).toBe("var(--color-secondary)");
   });
 
   it("returns var(--color-success) for ttfb < 200ms", () => {
@@ -760,7 +886,7 @@ describe("ProbesPage signaling_state column", () => {
 
   async function openResultsWithSignaling(results: ProbeResult[]) {
     vi.mocked(probesApi.getResults).mockResolvedValue({ items: results, meta: {} });
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => expect(screen.getByText("Main HLS stream")).toBeInTheDocument());
     const btns = screen.getAllByRole("button", { name: /view results for/i });
     fireEvent.click(btns[0]);
@@ -834,7 +960,7 @@ describe("ProbesPage connect_time_ms column", () => {
 
   async function openResultsWithConnect(results: ProbeResult[]) {
     vi.mocked(probesApi.getResults).mockResolvedValue({ items: results, meta: {} });
-    render(<ProbesPage />);
+    render(<ProbesPage />, { wrapper });
     await waitFor(() => expect(screen.getByText("Main HLS stream")).toBeInTheDocument());
     const btns = screen.getAllByRole("button", { name: /view results for/i });
     fireEvent.click(btns[0]);

@@ -58,6 +58,8 @@ export function AlertsPage() {
   const [editingRule, setEditingRule] = useState<AlertRule | null | "new">(null);
   const [editingChannel, setEditingChannel] = useState<AlertChannel | null | "new">(null);
   const [testingChannel, setTestingChannel] = useState<string | null>(null);
+  // Confirmation step for destructive rule deletion (replaces window.confirm).
+  const [confirmDeleteRuleId, setConfirmDeleteRuleId] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -96,11 +98,22 @@ export function AlertsPage() {
     void loadAll();
   };
 
-  const deleteRule = async (id: string) => {
-    if (!confirm("Delete this alert rule?")) return;
-    await alertsApi.deleteRule(id);
+  /** Initiates the delete confirmation step; does NOT call the API directly. */
+  const requestDeleteRule = (id: string) => {
+    setConfirmDeleteRuleId(id);
+  };
+
+  /** Called when the user confirms deletion in the inline confirmation UI. */
+  const confirmDeleteRule = async () => {
+    if (!confirmDeleteRuleId) return;
+    await alertsApi.deleteRule(confirmDeleteRuleId);
     toast("Rule deleted", "info");
+    setConfirmDeleteRuleId(null);
     void loadAll();
+  };
+
+  const cancelDeleteRule = () => {
+    setConfirmDeleteRuleId(null);
   };
 
   const saveChannel = async (data: AlertChannelWrite) => {
@@ -154,7 +167,7 @@ export function AlertsPage() {
   const smBtnStyle: React.CSSProperties = {
     background: "var(--color-surface-2)",
     border: "1px solid var(--color-border)",
-    color: "var(--color-muted)",
+    color: "var(--color-secondary)",
     borderRadius: 4,
     padding: "4px 10px",
     cursor: "pointer",
@@ -173,7 +186,7 @@ export function AlertsPage() {
         )}
       </div>
 
-      {/* Tabs */}
+      {/* Tabs — shared component emits id="tab-{id}" on each button */}
       <Tabs
         tabs={[
           { id: "rules", label: "Rules" },
@@ -193,7 +206,7 @@ export function AlertsPage() {
             background: "var(--color-surface)",
             border: "1px solid var(--color-border)",
             borderRadius: 10,
-            padding: 24,
+            padding: "var(--space-5)",
           }}
         >
           <AlertRuleForm
@@ -211,7 +224,7 @@ export function AlertsPage() {
             background: "var(--color-surface)",
             border: "1px solid var(--color-border)",
             borderRadius: 10,
-            padding: 24,
+            padding: "var(--space-5)",
           }}
         >
           <AlertChannelForm
@@ -226,144 +239,183 @@ export function AlertsPage() {
         <LoadingSpinner />
       ) : (
         <>
+          {/* Rules panel — aria-labelledby references the id="tab-rules" button emitted by <Tabs> */}
           {tab === "rules" && (
-            rules.length === 0 ? (
-              <EmptyState
-                title="No alert rules"
-                description="Create a rule to start monitoring your streams and infrastructure."
-                action={<button style={btnStyle} onClick={() => setEditingRule("new")}>Create first rule</button>}
-              />
-            ) : (
-              <div
-                style={{
-                  background: "var(--color-surface)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 8,
-                  overflow: "hidden",
-                }}
-              >
-                {rules.map((rule, i) => (
-                  <div
-                    key={rule.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                      padding: "12px 16px",
-                      borderTop: i === 0 ? "none" : "1px solid var(--color-border)",
-                    }}
+            <div role="tabpanel" id="panel-rules" aria-labelledby="tab-rules">
+              {/* Inline confirmation step for destructive rule deletion */}
+              {confirmDeleteRuleId && (
+                <div
+                  data-testid="delete-rule-confirm"
+                  style={{
+                    background: "var(--color-error-bg)",
+                    border: "1px solid var(--color-error)",
+                    borderRadius: 8,
+                    padding: "var(--space-3) var(--space-4)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "var(--space-3)",
+                    marginBottom: "var(--space-3)",
+                  }}
+                >
+                  <span style={{ flex: 1, fontSize: 13 }}>
+                    Delete this alert rule? This action cannot be undone.
+                  </span>
+                  <button
+                    style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
+                    onClick={() => void confirmDeleteRule()}
                   >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{ruleDisplayName(rule)}</div>
-                      <div style={{ fontSize: 12, color: "var(--color-muted)", marginTop: 2 }}>
-                        {rule.metric} {rule.operator} {rule.threshold} · window {rule.window_s}s · cooldown {rule.cooldown_s}s
+                    Yes, delete
+                  </button>
+                  <button style={smBtnStyle} onClick={cancelDeleteRule}>
+                    Cancel
+                  </button>
+                </div>
+              )}
+
+              {rules.length === 0 ? (
+                <EmptyState
+                  title="No alert rules"
+                  description="Create a rule to start monitoring your streams and infrastructure."
+                  action={<button style={btnStyle} onClick={() => setEditingRule("new")}>Create first rule</button>}
+                />
+              ) : (
+                <div
+                  style={{
+                    background: "var(--color-surface)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 8,
+                    overflow: "hidden",
+                  }}
+                >
+                  {rules.map((rule, i) => (
+                    <div
+                      key={rule.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "var(--space-3)",
+                        padding: "var(--space-3) var(--space-4)",
+                        borderTop: i === 0 ? "none" : "1px solid var(--color-border)",
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{ruleDisplayName(rule)}</div>
+                        <div style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>
+                          {rule.metric} {rule.operator} {rule.threshold} · window {rule.window_s}s · cooldown {rule.cooldown_s}s
+                        </div>
                       </div>
+                      <Badge label={rule.severity} variant={severityVariant(rule.severity)} />
+                      {!rule.enabled && <Badge label="disabled" variant="muted" />}
+                      {rule.enabled && rule.muted && <Badge label="muted" variant="muted" />}
+                      <button style={smBtnStyle} onClick={() => setEditingRule(rule)}>Edit</button>
+                      <button
+                        style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
+                        onClick={() => requestDeleteRule(rule.id)}
+                      >
+                        Delete
+                      </button>
                     </div>
-                    <Badge label={rule.severity} variant={severityVariant(rule.severity)} />
-                    {!rule.enabled && <Badge label="disabled" variant="muted" />}
-                    {rule.enabled && rule.muted && <Badge label="muted" variant="muted" />}
-                    <button style={smBtnStyle} onClick={() => setEditingRule(rule)}>Edit</button>
-                    <button
-                      style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
-                      onClick={() => void deleteRule(rule.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
+          {/* Channels panel */}
           {tab === "channels" && (
-            channels.length === 0 ? (
-              <EmptyState
-                title="No notification channels"
-                description="Add a channel to receive alerts via email, Slack, or webhook."
-                action={<button style={btnStyle} onClick={() => setEditingChannel("new")}>Add channel</button>}
-              />
-            ) : (
-              <div
-                style={{
-                  background: "var(--color-surface)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 8,
-                  overflow: "hidden",
-                }}
-              >
-                {channels.map((ch, i) => (
-                  <div
-                    key={ch.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                      padding: "12px 16px",
-                      borderTop: i === 0 ? "none" : "1px solid var(--color-border)",
-                    }}
-                  >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{ch.name}</div>
-                      <div style={{ fontSize: 12, color: "var(--color-muted)", marginTop: 2 }}>{ch.type}</div>
+            <div role="tabpanel" id="panel-channels" aria-labelledby="tab-channels">
+              {channels.length === 0 ? (
+                <EmptyState
+                  title="No notification channels"
+                  description="Add a channel to receive alerts via email, Slack, or webhook."
+                  action={<button style={btnStyle} onClick={() => setEditingChannel("new")}>Add channel</button>}
+                />
+              ) : (
+                <div
+                  style={{
+                    background: "var(--color-surface)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 8,
+                    overflow: "hidden",
+                  }}
+                >
+                  {channels.map((ch, i) => (
+                    <div
+                      key={ch.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "var(--space-3)",
+                        padding: "var(--space-3) var(--space-4)",
+                        borderTop: i === 0 ? "none" : "1px solid var(--color-border)",
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{ch.name}</div>
+                        <div style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>{ch.type}</div>
+                      </div>
+                      <Badge label={ch.type} variant="info" />
+                      <button
+                        style={{ ...smBtnStyle, color: "var(--color-accent-hover)", borderColor: "var(--color-accent)" }}
+                        onClick={() => void testChannel(ch.id)}
+                        disabled={testingChannel === ch.id}
+                      >
+                        {testingChannel === ch.id ? "Sending…" : "Test fire"}
+                      </button>
+                      <button style={smBtnStyle} onClick={() => setEditingChannel(ch)}>Edit</button>
+                      <button
+                        style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
+                        onClick={() => void deleteChannel(ch.id)}
+                      >
+                        Delete
+                      </button>
                     </div>
-                    <Badge label={ch.type} variant="info" />
-                    <button
-                      style={{ ...smBtnStyle, color: "var(--color-accent-hover)", borderColor: "var(--color-accent)" }}
-                      onClick={() => void testChannel(ch.id)}
-                      disabled={testingChannel === ch.id}
-                    >
-                      {testingChannel === ch.id ? "Sending…" : "Test fire"}
-                    </button>
-                    <button style={smBtnStyle} onClick={() => setEditingChannel(ch)}>Edit</button>
-                    <button
-                      style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
-                      onClick={() => void deleteChannel(ch.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
+          {/* History panel */}
           {tab === "history" && (
-            history.length === 0 ? (
-              <EmptyState
-                title="No alert history"
-                description="Fired alerts will appear here."
-              />
-            ) : (
-              <div
-                style={{
-                  background: "var(--color-surface)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 8,
-                  overflow: "hidden",
-                }}
-              >
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead style={{ background: "var(--color-surface-2)" }}>
-                    <tr>
-                      {["Rule ID", "Severity", "State", "Time", "Value"].map((h) => (
-                        <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {history.map((entry) => (
-                      <tr key={entry.id} style={{ borderTop: "1px solid var(--color-border)" }}>
-                        <td style={{ padding: "8px 14px", fontWeight: 500, fontFamily: "var(--font-mono)", fontSize: 12 }}>{entry.rule_id}</td>
-                        <td style={{ padding: "8px 14px" }}><Badge label={entry.severity} variant={severityVariant(entry.severity)} /></td>
-                        <td style={{ padding: "8px 14px" }}><Badge label={entry.state} variant={stateVariant(entry.state)} /></td>
-                        <td style={{ padding: "8px 14px", color: "var(--color-muted)", fontFamily: "var(--font-mono)", fontSize: 12 }}>{fmtTs(entry.ts)}</td>
-                        <td style={{ padding: "8px 14px", fontFamily: "var(--font-mono)", fontSize: 12 }}>{entry.value != null ? String(entry.value) : "—"}</td>
+            <div role="tabpanel" id="panel-history" aria-labelledby="tab-history">
+              {history.length === 0 ? (
+                <EmptyState
+                  title="No alert history"
+                  description="Fired alerts will appear here."
+                />
+              ) : (
+                <div
+                  style={{
+                    background: "var(--color-surface)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 8,
+                    overflow: "hidden",
+                  }}
+                >
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead style={{ background: "var(--color-surface-2)" }}>
+                      <tr>
+                        {["Rule ID", "Severity", "State", "Time", "Value"].map((h) => (
+                          <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )
+                    </thead>
+                    <tbody>
+                      {history.map((entry) => (
+                        <tr key={entry.id} style={{ borderTop: "1px solid var(--color-border)" }}>
+                          <td style={{ padding: "8px 14px", fontWeight: 500, fontFamily: "var(--font-mono)", fontSize: 12 }}>{entry.rule_id}</td>
+                          <td style={{ padding: "8px 14px" }}><Badge label={entry.severity} variant={severityVariant(entry.severity)} /></td>
+                          <td style={{ padding: "8px 14px" }}><Badge label={entry.state} variant={stateVariant(entry.state)} /></td>
+                          <td style={{ padding: "8px 14px", color: "var(--color-secondary)", fontFamily: "var(--font-mono)", fontSize: 12 }}>{fmtTs(entry.ts)}</td>
+                          <td style={{ padding: "8px 14px", fontFamily: "var(--font-mono)", fontSize: 12 }}>{entry.value != null ? String(entry.value) : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           )}
         </>
       )}

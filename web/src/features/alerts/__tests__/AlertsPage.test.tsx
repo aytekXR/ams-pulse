@@ -174,3 +174,102 @@ describe("AlertsPage (msw)", () => {
     });
   });
 });
+
+// ── Tab panel ARIA wiring (Wave 4) ─────────────────────────────────────────
+
+describe("AlertsPage — tabpanel ARIA wiring", () => {
+  it("rules tab panel has role='tabpanel' after load", async () => {
+    renderAlerts();
+    await waitForRulesLoaded();
+    const panel = screen.getByRole("tabpanel");
+    expect(panel).toBeInTheDocument();
+  });
+
+  it("rules tabpanel id matches aria-labelledby to the rules tab button id", async () => {
+    renderAlerts();
+    await waitForRulesLoaded();
+    const panel = screen.getByRole("tabpanel");
+    const labelledBy = panel.getAttribute("aria-labelledby");
+    expect(labelledBy).toBe("tab-rules");
+    // The element with that id must actually exist
+    const tabButton = document.getElementById("tab-rules");
+    expect(tabButton).toBeInTheDocument();
+  });
+
+  it("channels tabpanel has correct id and aria-labelledby after tab switch", async () => {
+    renderAlerts();
+    await waitForRulesLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: /channels/i }));
+    await waitFor(() => {
+      const panel = screen.getByRole("tabpanel");
+      expect(panel.id).toBe("panel-channels");
+      expect(panel.getAttribute("aria-labelledby")).toBe("tab-channels");
+      const tabButton = document.getElementById("tab-channels");
+      expect(tabButton).toBeInTheDocument();
+    });
+  });
+
+  it("history tabpanel has correct id and aria-labelledby after tab switch", async () => {
+    renderAlerts();
+    await waitForRulesLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: /history/i }));
+    await waitFor(() => {
+      const panel = screen.getByRole("tabpanel");
+      expect(panel.id).toBe("panel-history");
+      expect(panel.getAttribute("aria-labelledby")).toBe("tab-history");
+      const tabButton = document.getElementById("tab-history");
+      expect(tabButton).toBeInTheDocument();
+    });
+  });
+});
+
+// ── Delete rule confirmation step (Wave 4) ──────────────────────────────────
+
+describe("AlertsPage — delete rule confirmation", () => {
+  it("clicking Delete shows an inline confirmation prompt (no window.confirm)", async () => {
+    renderAlerts();
+    await waitForRulesLoaded();
+    // Click the Delete button for the rule
+    fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+    // Inline confirmation should appear
+    await waitFor(() => {
+      expect(screen.getByTestId("delete-rule-confirm")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/cannot be undone/i)).toBeInTheDocument();
+  });
+
+  it("Cancel in confirmation dismisses the prompt without deleting", async () => {
+    renderAlerts();
+    await waitForRulesLoaded();
+    fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+    await waitFor(() => expect(screen.getByTestId("delete-rule-confirm")).toBeInTheDocument());
+    // Click the "Cancel" button in the confirmation panel (no rule form is open here)
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    await waitFor(() => {
+      expect(screen.queryByTestId("delete-rule-confirm")).not.toBeInTheDocument();
+    });
+    // The rule is still visible
+    expect(screen.getByText("High CPU Alert")).toBeInTheDocument();
+  });
+
+  it("'Yes, delete' in confirmation calls DELETE endpoint", async () => {
+    let deleteCalled = false;
+    server.use(
+      http.delete("http://localhost/api/v1/alerts/rules/rule-1", () => {
+        deleteCalled = true;
+        return HttpResponse.json({}, { status: 204 });
+      })
+    );
+
+    renderAlerts();
+    await waitForRulesLoaded();
+    fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+    await waitFor(() => expect(screen.getByTestId("delete-rule-confirm")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /yes, delete/i }));
+
+    await waitFor(() => {
+      expect(deleteCalled).toBe(true);
+    });
+  });
+});

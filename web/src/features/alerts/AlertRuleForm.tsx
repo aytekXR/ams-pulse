@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import type { AlertRule, AlertRuleWrite } from "@/lib/api/types";
 
 interface Props {
@@ -69,6 +69,11 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Refs for auto-focus on first invalid field after submit failure.
+  const nameRef = useRef<HTMLInputElement>(null);
+  const thresholdRef = useRef<HTMLInputElement>(null);
+  const sigmaRef = useRef<HTMLInputElement>(null);
+
   // Handle rule type switch: enforce constraints when switching to anomaly.
   const handleRuleTypeChange = (newType: "threshold" | "anomaly") => {
     setRuleType(newType);
@@ -82,7 +87,8 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
     }
   };
 
-  const validate = (): boolean => {
+  // Returns the error map and calls setErrors; caller checks Object.keys(errs).length.
+  const validate = (): Record<string, string> => {
     const errs: Record<string, string> = {};
     if (!name.trim()) errs.name = "Name is required";
 
@@ -97,12 +103,19 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
     }
 
     setErrors(errs);
-    return Object.keys(errs).length === 0;
+    return errs;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
+    const errs = validate();
+    if (Object.keys(errs).length > 0) {
+      // Auto-focus the first invalid field so keyboard/AT users land on it.
+      if (errs.name) nameRef.current?.focus();
+      else if (errs.threshold) thresholdRef.current?.focus();
+      else if (errs.sigma) sigmaRef.current?.focus();
+      return;
+    }
     setSaving(true);
     try {
       const scope: AlertRuleWrite["scope"] = {};
@@ -138,13 +151,13 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
   const fieldStyle: React.CSSProperties = {
     display: "flex",
     flexDirection: "column",
-    gap: 4,
+    gap: "var(--space-1)",
   };
 
   const labelStyle: React.CSSProperties = {
     fontSize: 12,
     fontWeight: 500,
-    color: "var(--color-muted)",
+    color: "var(--color-secondary)",
   };
 
   const inputStyle: React.CSSProperties = {
@@ -156,15 +169,20 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
     fontSize: 13,
     outline: "none",
   };
-
   return (
-    <form onSubmit={(e) => void handleSubmit(e)} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <form onSubmit={(e) => void handleSubmit(e)} style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+      {/* Each inline field error IS its own live region (role="alert" on the message span),
+          so it is announced where it appears and again via aria-describedby when the field
+          takes focus. An earlier draft ALSO mirrored every message into a separate sr-only
+          aria-live div — which put the same text in the DOM twice and made a screen reader
+          announce each error twice over. Removed: one error, one node. */}
       <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>{initial ? "Edit rule" : "New alert rule"}</h3>
 
       {/* Rule type -- S11 WO-B: anomaly mode switch */}
       <div style={fieldStyle}>
-        <label style={labelStyle}>Rule type</label>
+        <label htmlFor="rule-rule-type" style={labelStyle}>Rule type</label>
         <select
+          id="rule-rule-type"
           aria-label="Rule type"
           style={inputStyle}
           value={ruleType}
@@ -175,21 +193,31 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
         </select>
       </div>
 
+      {/* Name */}
       <div style={fieldStyle}>
-        <label style={labelStyle}>Name *</label>
+        <label htmlFor="rule-name" style={labelStyle}>Name *</label>
         <input
+          id="rule-name"
+          ref={nameRef}
           style={{ ...inputStyle, borderColor: errors.name ? "var(--color-error)" : "var(--color-border)" }}
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. High CPU alert"
+          aria-invalid={errors.name ? true : undefined}
+          aria-describedby={errors.name ? "rule-name-error" : undefined}
         />
-        {errors.name && <span style={{ fontSize: 11, color: "var(--color-error)" }}>{errors.name}</span>}
+        {errors.name && (
+          <span id="rule-name-error" role="alert" style={{ fontSize: 11, color: "var(--color-error)" }}>
+            {errors.name}
+          </span>
+        )}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+      {/* Metric / Operator / Threshold  —or—  Metric / Sigma / MinSamples */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "var(--space-3)" }}>
         <div style={fieldStyle}>
-          <label style={labelStyle}>Metric</label>
-          <select style={inputStyle} value={metric} onChange={(e) => setMetric(e.target.value)}>
+          <label htmlFor="rule-metric" style={labelStyle}>Metric</label>
+          <select id="rule-metric" style={inputStyle} value={metric} onChange={(e) => setMetric(e.target.value)}>
             {(ruleType === "anomaly" ? ANOMALY_METRICS : METRICS).map((m) => (
               <option key={m} value={m}>{m}</option>
             ))}
@@ -199,8 +227,9 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
         {ruleType === "threshold" ? (
           <>
             <div style={fieldStyle}>
-              <label style={labelStyle}>Operator</label>
+              <label htmlFor="rule-operator" style={labelStyle}>Operator</label>
               <select
+                id="rule-operator"
                 style={inputStyle}
                 value={operator}
                 onChange={(e) => setOperator(e.target.value as "gt" | "lt" | "gte" | "lte" | "eq")}
@@ -209,16 +238,22 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
               </select>
             </div>
             <div style={fieldStyle}>
-              <label style={labelStyle}>Threshold *</label>
+              <label htmlFor="rule-threshold" style={labelStyle}>Threshold *</label>
               <input
+                id="rule-threshold"
+                ref={thresholdRef}
                 style={{ ...inputStyle, borderColor: errors.threshold ? "var(--color-error)" : "var(--color-border)" }}
                 type="number"
                 value={threshold}
                 onChange={(e) => setThreshold(e.target.value)}
                 placeholder="0"
+                aria-invalid={errors.threshold ? true : undefined}
+                aria-describedby={errors.threshold ? "rule-threshold-error" : undefined}
               />
               {errors.threshold && (
-                <span style={{ fontSize: 11, color: "var(--color-error)" }}>{errors.threshold}</span>
+                <span id="rule-threshold-error" role="alert" style={{ fontSize: 11, color: "var(--color-error)" }}>
+                  {errors.threshold}
+                </span>
               )}
             </div>
           </>
@@ -226,23 +261,30 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
           <>
             {/* Anomaly mode: sigma and min_samples replace operator+threshold */}
             <div style={fieldStyle}>
-              <label style={labelStyle}>Sigma</label>
+              <label htmlFor="rule-sigma" style={labelStyle}>Sigma</label>
               <input
+                id="rule-sigma"
                 aria-label="Sigma"
+                ref={sigmaRef}
                 style={{ ...inputStyle, borderColor: errors.sigma ? "var(--color-error)" : "var(--color-border)" }}
                 type="number"
                 step="0.1"
                 value={sigma}
                 onChange={(e) => setSigma(e.target.value)}
                 placeholder="4.0"
+                aria-invalid={errors.sigma ? true : undefined}
+                aria-describedby={errors.sigma ? "rule-sigma-error" : undefined}
               />
               {errors.sigma && (
-                <span style={{ fontSize: 11, color: "var(--color-error)" }}>{errors.sigma}</span>
+                <span id="rule-sigma-error" role="alert" style={{ fontSize: 11, color: "var(--color-error)" }}>
+                  {errors.sigma}
+                </span>
               )}
             </div>
             <div style={fieldStyle}>
-              <label style={labelStyle}>Min Samples</label>
+              <label htmlFor="rule-min-samples" style={labelStyle}>Min Samples</label>
               <input
+                id="rule-min-samples"
                 aria-label="Min Samples"
                 style={inputStyle}
                 type="number"
@@ -255,18 +297,20 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
         )}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+      {/* Severity / Window / Cooldown */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "var(--space-3)" }}>
         <div style={fieldStyle}>
-          <label style={labelStyle}>Severity</label>
-          <select style={inputStyle} value={severity} onChange={(e) => setSeverity(e.target.value as typeof severity)}>
+          <label htmlFor="rule-severity" style={labelStyle}>Severity</label>
+          <select id="rule-severity" style={inputStyle} value={severity} onChange={(e) => setSeverity(e.target.value as typeof severity)}>
             {SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         <div style={fieldStyle}>
-          <label style={labelStyle}>
+          <label htmlFor="rule-window" style={labelStyle}>
             Window{ruleType === "anomaly" ? " (locked 3600 s)" : ""}
           </label>
           <select
+            id="rule-window"
             style={{ ...inputStyle, opacity: ruleType === "anomaly" ? 0.6 : 1 }}
             value={ruleType === "anomaly" ? 3600 : windowS}
             onChange={(e) => setWindowS(Number(e.target.value))}
@@ -276,8 +320,9 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
           </select>
         </div>
         <div style={fieldStyle}>
-          <label style={labelStyle}>Cooldown (s)</label>
+          <label htmlFor="rule-cooldown" style={labelStyle}>Cooldown (s)</label>
           <input
+            id="rule-cooldown"
             style={inputStyle}
             type="number"
             value={cooldownS}
@@ -288,27 +333,28 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
       </div>
 
       {/* Scope (optional) */}
-      <details style={{ background: "var(--color-surface-2)", borderRadius: 6, padding: "12px" }}>
-        <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--color-muted)", fontWeight: 500 }}>
+      <details style={{ background: "var(--color-surface-2)", borderRadius: 6, padding: "var(--space-3)" }}>
+        <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--color-secondary)", fontWeight: 500 }}>
           Scope (optional -- leave blank to match all)
         </summary>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "var(--space-3)", marginTop: "var(--space-3)" }}>
           <div style={fieldStyle}>
-            <label style={labelStyle}>Stream ID</label>
-            <input style={inputStyle} value={scopeStreamId} onChange={(e) => setScopeStreamId(e.target.value)} placeholder="any" />
+            <label htmlFor="rule-scope-stream" style={labelStyle}>Stream ID</label>
+            <input id="rule-scope-stream" style={inputStyle} value={scopeStreamId} onChange={(e) => setScopeStreamId(e.target.value)} placeholder="any" />
           </div>
           <div style={fieldStyle}>
-            <label style={labelStyle}>App</label>
-            <input style={inputStyle} value={scopeApp} onChange={(e) => setScopeApp(e.target.value)} placeholder="any" />
+            <label htmlFor="rule-scope-app" style={labelStyle}>App</label>
+            <input id="rule-scope-app" style={inputStyle} value={scopeApp} onChange={(e) => setScopeApp(e.target.value)} placeholder="any" />
           </div>
           <div style={fieldStyle}>
-            <label style={labelStyle}>Node ID</label>
-            <input style={inputStyle} value={scopeNodeId} onChange={(e) => setScopeNodeId(e.target.value)} placeholder="any" />
+            <label htmlFor="rule-scope-node" style={labelStyle}>Node ID</label>
+            <input id="rule-scope-node" style={inputStyle} value={scopeNodeId} onChange={(e) => setScopeNodeId(e.target.value)} placeholder="any" />
           </div>
         </div>
-        <div style={{ marginTop: 12, ...fieldStyle }}>
-          <label style={labelStyle}>Group by dimension (e.g. stream_id, app, node_id)</label>
+        <div style={{ marginTop: "var(--space-3)", ...fieldStyle }}>
+          <label htmlFor="rule-group-by" style={labelStyle}>Group by dimension (e.g. stream_id, app, node_id)</label>
           <input
+            id="rule-group-by"
             style={inputStyle}
             value={groupBy}
             onChange={(e) => setGroupBy(e.target.value)}
@@ -318,8 +364,8 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
       </details>
 
       {/* enabled / muted -- distinct controls per CR-2 */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: 13, cursor: "pointer" }}>
           <input
             type="checkbox"
             checked={enabled}
@@ -328,7 +374,7 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
           />
           Enabled (rule is evaluated; uncheck to pause without deleting)
         </label>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: 13, cursor: "pointer" }}>
           <input
             type="checkbox"
             checked={muted}
@@ -339,16 +385,16 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
         </label>
       </div>
 
-      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 4 }}>
+      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: "var(--space-1)" }}>
         <button
           type="button"
           onClick={onCancel}
           style={{
             background: "var(--color-surface-2)",
             border: "1px solid var(--color-border)",
-            color: "var(--color-muted)",
+            color: "var(--color-secondary)",
             borderRadius: 6,
-            padding: "8px 16px",
+            padding: "var(--space-2) var(--space-4)",
             cursor: "pointer",
             fontSize: 13,
           }}

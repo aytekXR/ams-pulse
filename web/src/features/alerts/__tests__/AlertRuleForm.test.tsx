@@ -1,5 +1,5 @@
 /**
- * Alert rule form validation tests.
+ * Alert rule form validation and a11y tests.
  */
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
@@ -89,7 +89,115 @@ describe("AlertRuleForm", () => {
   });
 });
 
+// ── ARIA wiring tests (Wave 4) ──────────────────────────────────────────────
+
+describe("AlertRuleForm — a11y: label/input association", () => {
+  it("name input is associated with its label via htmlFor/id", () => {
+    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    // getByLabelText finds the input by its associated label text
+    expect(screen.getByLabelText(/^name \*/i)).toBeInTheDocument();
+  });
+
+  it("threshold input is associated with its label via htmlFor/id", () => {
+    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.getByLabelText(/^threshold \*/i)).toBeInTheDocument();
+  });
+});
+
+describe("AlertRuleForm — a11y: aria-invalid + aria-describedby on error", () => {
+  it("name input gains aria-invalid when name validation fails", async () => {
+    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
+    await waitFor(() => {
+      const nameInput = screen.getByLabelText(/^name \*/i);
+      expect(nameInput).toHaveAttribute("aria-invalid", "true");
+    });
+  });
+
+  it("name input aria-describedby points to the visible error span id", async () => {
+    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
+    await waitFor(() => {
+      const nameInput = screen.getByLabelText(/^name \*/i);
+      const describedById = nameInput.getAttribute("aria-describedby");
+      expect(describedById).toBeTruthy();
+      // The element with that id must exist in the DOM and contain the error text
+      const errorEl = document.getElementById(describedById!);
+      expect(errorEl).toBeInTheDocument();
+      expect(errorEl?.textContent).toMatch(/name is required/i);
+    });
+  });
+
+  it("threshold input gains aria-invalid when threshold validation fails", async () => {
+    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    // Fill name so only threshold fails
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. High CPU/i), { target: { value: "Test" } });
+    fireEvent.change(screen.getByPlaceholderText("0"), { target: { value: "abc" } });
+    fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
+    await waitFor(() => {
+      const thresholdInput = screen.getByLabelText(/^threshold \*/i);
+      expect(thresholdInput).toHaveAttribute("aria-invalid", "true");
+    });
+  });
+
+  it("name input loses aria-invalid once a valid name is entered and form re-validates", async () => {
+    render(<AlertRuleForm onSave={vi.fn().mockResolvedValue(undefined)} onCancel={vi.fn()} />);
+    // Trigger name error
+    fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
+    await waitFor(() => expect(screen.getByText(/name is required/i)).toBeInTheDocument());
+    // Fix name and submit again with a valid threshold
+    fireEvent.change(screen.getByLabelText(/^name \*/i), { target: { value: "Fixed name" } });
+    fireEvent.change(screen.getByPlaceholderText("0"), { target: { value: "90" } });
+    fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
+    await waitFor(() => {
+      expect(screen.queryByText(/name is required/i)).not.toBeInTheDocument();
+    });
+  });
+});
+
+/**
+ * The error message is announced by the INLINE message itself (role="alert"), which is also
+ * what aria-describedby points the field at. One error, one node.
+ *
+ * These replace two tests that pinned a separate sr-only aria-live div mirroring every
+ * message. That div put the same text in the DOM twice, so a screen reader announced each
+ * error twice — and the duplicate is what made getByText("Name is required") ambiguous.
+ * Those tests were pinning the defect.
+ */
+describe("AlertRuleForm — a11y: the inline error is the live region", () => {
+  it("the error message is announced (role=alert) and appears exactly ONCE in the DOM", async () => {
+    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
+
+    // An empty submit trips BOTH name and threshold, so there are legitimately two alerts —
+    // one per invalid field. What must not happen is the same message appearing twice.
+    const alerts = await screen.findAllByRole("alert");
+    expect(alerts.some((a) => /name is required/i.test(a.textContent ?? ""))).toBe(true);
+
+    // Exactly one node carries the text — no mirrored copy.
+    expect(screen.getAllByText(/name is required/i)).toHaveLength(1);
+    // And no orphaned duplicate live region survives.
+    expect(document.querySelector("[aria-live='polite']")).toBeNull();
+  });
+
+  it("the invalid field is marked and points at that same message node", async () => {
+    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
+
+    const nameInput = await screen.findByLabelText(/name/i);
+    await waitFor(() => expect(nameInput).toHaveAttribute("aria-invalid", "true"));
+
+    const describedBy = nameInput.getAttribute("aria-describedby");
+    expect(describedBy).toBe("rule-name-error");
+    // The reference must RESOLVE — an aria-describedby pointing at nothing is not a label.
+    const target = document.getElementById(describedBy!);
+    expect(target).not.toBeNull();
+    expect(target).toHaveTextContent(/name is required/i);
+  });
+});
+
 // ── D-087: metric list content pins ────────────────────────────────────────
+
 describe("AlertRuleForm — metric list content (D-087)", () => {
   it("ANOMALY_METRICS includes ams_api_latency_ms", () => {
     render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
@@ -119,6 +227,7 @@ describe("AlertRuleForm — metric list content (D-087)", () => {
 });
 
 // ── S11 WO-B: anomaly rule type tests ──────────────────────────────────────
+
 describe("AlertRuleForm — anomaly rule type (S11 WO-B)", () => {
   it("renders threshold fields by default", () => {
     render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
@@ -153,6 +262,18 @@ describe("AlertRuleForm — anomaly rule type (S11 WO-B)", () => {
     fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
     await waitFor(() => {
       expect(screen.getByText(/sigma must be a positive number/i)).toBeInTheDocument();
+    });
+  });
+
+  it("sigma input gains aria-invalid when sigma validation fails", async () => {
+    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/rule type/i), { target: { value: "anomaly" } });
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. High CPU/i), { target: { value: "Test" } });
+    fireEvent.change(screen.getByLabelText(/sigma/i), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
+    await waitFor(() => {
+      const sigmaInput = screen.getByLabelText(/sigma/i);
+      expect(sigmaInput).toHaveAttribute("aria-invalid", "true");
     });
   });
 

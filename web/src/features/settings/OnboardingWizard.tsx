@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { adminApi, ApiError } from "@/api/client";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import type { SourceWrite } from "@/lib/api/types";
@@ -26,27 +26,51 @@ export function OnboardingWizard({ onComplete }: Props) {
   const [testStatus, setTestStatus] = useState<"idle" | "testing" | "ok" | "fail">("idle");
   const [testMessage, setTestMessage] = useState<string>("");
 
+  // Refs for focus management between steps.
+  const getStartedRef = useRef<HTMLButtonElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const testButtonRef = useRef<HTMLButtonElement>(null);
+  const doneButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Move focus to the first interactive element when the step changes.
+  useEffect(() => {
+    switch (step) {
+      case "source":
+        nameInputRef.current?.focus();
+        break;
+      case "verify":
+        testButtonRef.current?.focus();
+        break;
+      case "done":
+        doneButtonRef.current?.focus();
+        break;
+      default:
+        // welcome: user just landed, no focus shift needed
+        break;
+    }
+  }, [step]);
+
   const inputStyle: React.CSSProperties = {
     display: "block",
     width: "100%",
     background: "var(--color-surface-2)",
     border: "1px solid var(--color-border)",
     borderRadius: 6,
-    padding: "8px 12px",
+    padding: "var(--space-2) var(--space-3)",
     color: "var(--color-text)",
     fontSize: 13,
     outline: "none",
     boxSizing: "border-box",
-    marginTop: 4,
+    marginTop: "var(--space-1)",
   };
 
   const labelStyle: React.CSSProperties = {
     fontSize: 12,
     fontWeight: 500,
-    color: "var(--color-muted)",
+    color: "var(--color-secondary)",
     display: "flex",
     flexDirection: "column",
-    gap: 4,
+    gap: "var(--space-1)",
   };
 
   const cardStyle: React.CSSProperties = {
@@ -111,9 +135,9 @@ export function OnboardingWizard({ onComplete }: Props) {
   return (
     <div style={{ minHeight: "60vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
       {/* Step indicator */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 32 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-6)" }}>
         {["Welcome", "Add source", "Verify", "Done"].map((label, i) => (
-          <div key={label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div key={label} style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
             <div style={{
               width: 28,
               height: 28,
@@ -125,11 +149,11 @@ export function OnboardingWizard({ onComplete }: Props) {
               border: `1px solid ${i <= stepIdx ? "var(--color-accent)" : "var(--color-border)"}`,
               fontSize: 12,
               fontWeight: 600,
-              color: i <= stepIdx ? "var(--color-on-signal)" : "var(--color-muted)",
+              color: i <= stepIdx ? "var(--color-on-signal)" : "var(--color-secondary)",
             }}>
               {i + 1}
             </div>
-            <span style={{ fontSize: 12, color: i <= stepIdx ? "var(--color-text)" : "var(--color-muted)", fontWeight: i === stepIdx ? 600 : 400 }}>
+            <span style={{ fontSize: 12, color: i <= stepIdx ? "var(--color-text)" : "var(--color-secondary)", fontWeight: i === stepIdx ? 600 : 400 }}>
               {label}
             </span>
             {i < 3 && <div style={{ width: 24, height: 1, background: "var(--color-border)" }} />}
@@ -141,24 +165,25 @@ export function OnboardingWizard({ onComplete }: Props) {
         <div style={cardStyle}>
           <div style={{ textAlign: "center" }}>
             <h2 style={{ margin: "0 0 8px", fontSize: 22, fontWeight: 700 }}>Welcome to Pulse</h2>
-            <p style={{ margin: 0, color: "var(--color-muted)", fontSize: 14 }}>
+            <p style={{ margin: 0, color: "var(--color-secondary)", fontSize: 14 }}>
               Self-hosted analytics and monitoring for Ant Media Server.
               This wizard will help you connect your first AMS instance in under 15 minutes.
             </p>
           </div>
-          <ul style={{ margin: 0, padding: "0 0 0 20px", color: "var(--color-muted)", fontSize: 13, lineHeight: 2 }}>
+          <ul style={{ margin: 0, padding: "0 0 0 20px", color: "var(--color-secondary)", fontSize: 13, lineHeight: 2 }}>
             <li>Connect your AMS REST API endpoint</li>
             <li>Verify the connection and credentials</li>
             <li>Get your ingest and API tokens</li>
           </ul>
           <button
+            ref={getStartedRef}
             onClick={() => setStep("source")}
             style={{
               background: "var(--color-accent)",
               border: "none",
               color: "var(--color-on-signal)",
               borderRadius: 8,
-              padding: "12px",
+              padding: "var(--space-3)",
               cursor: "pointer",
               fontSize: 15,
               fontWeight: 600,
@@ -176,6 +201,7 @@ export function OnboardingWizard({ onComplete }: Props) {
             <label style={labelStyle}>
               Name *
               <input
+                ref={nameInputRef}
                 style={inputStyle}
                 value={sourceData.name}
                 onChange={(e) => setSourceData((d) => ({ ...d, name: e.target.value }))}
@@ -191,7 +217,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                 onChange={(e) => setSourceData((d) => ({ ...d, rest_url: e.target.value }))}
                 placeholder="http://your-ams-server:5080"
               />
-              <span style={{ fontSize: 11, color: "var(--color-muted)" }}>
+              <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>
                 The base URL of your AMS instance — Pulse calls the REST API at port 5080 by default.
               </span>
             </label>
@@ -212,7 +238,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                 onChange={(e) => setSourceData((d) => ({ ...d, credential_env_ref: e.target.value }))}
                 placeholder="AMS_ADMIN_PASSWORD"
               />
-              <span style={{ fontSize: 11, color: "var(--color-muted)" }}>
+              <span style={{ fontSize: 11, color: "var(--color-secondary)" }}>
                 Environment variable name holding the AMS password — never stored plaintext.
               </span>
             </label>
@@ -233,9 +259,9 @@ export function OnboardingWizard({ onComplete }: Props) {
                 style={{
                   background: "var(--color-surface-2)",
                   border: "1px solid var(--color-border)",
-                  color: "var(--color-muted)",
+                  color: "var(--color-secondary)",
                   borderRadius: 6,
-                  padding: "8px 16px",
+                  padding: "var(--space-2) var(--space-4)",
                   cursor: "pointer",
                   fontSize: 13,
                 }}
@@ -267,11 +293,12 @@ export function OnboardingWizard({ onComplete }: Props) {
       {step === "verify" && (
         <div style={cardStyle}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Verify connection</h2>
-          <p style={{ margin: 0, color: "var(--color-muted)", fontSize: 13 }}>
+          <p style={{ margin: 0, color: "var(--color-secondary)", fontSize: 13 }}>
             Source created. Test the connection to confirm Pulse can reach your AMS instance.
           </p>
           {testStatus === "idle" && (
             <button
+              ref={testButtonRef}
               onClick={() => void handleTest()}
               style={{
                 background: "var(--color-accent)",
@@ -289,12 +316,12 @@ export function OnboardingWizard({ onComplete }: Props) {
           )}
           {testStatus === "testing" && <LoadingSpinner label="Testing connection…" />}
           {testStatus === "ok" && (
-            <div style={{ background: "rgba(44,229,167,0.1)", border: "1px solid var(--color-success)", borderRadius: 8, padding: "12px 16px", color: "var(--color-success)", fontSize: 13 }}>
+            <div style={{ background: "rgba(44,229,167,0.1)", border: "1px solid var(--color-success)", borderRadius: 8, padding: "var(--space-3) var(--space-4)", color: "var(--color-success)", fontSize: 13 }}>
               {testMessage}
             </div>
           )}
           {testStatus === "fail" && (
-            <div style={{ background: "var(--color-error-bg)", border: "1px solid var(--color-error)", borderRadius: 8, padding: "12px 16px", color: "var(--color-error)", fontSize: 13 }}>
+            <div style={{ background: "var(--color-error-bg)", border: "1px solid var(--color-error)", borderRadius: 8, padding: "var(--space-3) var(--space-4)", color: "var(--color-error)", fontSize: 13 }}>
               {testMessage}
             </div>
           )}
@@ -304,9 +331,9 @@ export function OnboardingWizard({ onComplete }: Props) {
               style={{
                 background: "var(--color-surface-2)",
                 border: "1px solid var(--color-border)",
-                color: "var(--color-muted)",
+                color: "var(--color-secondary)",
                 borderRadius: 6,
-                padding: "8px 16px",
+                padding: "var(--space-2) var(--space-4)",
                 cursor: "pointer",
                 fontSize: 13,
               }}
@@ -318,9 +345,9 @@ export function OnboardingWizard({ onComplete }: Props) {
               style={{
                 background: testStatus === "ok" ? "var(--color-success)" : "var(--color-surface-2)",
                 border: `1px solid ${testStatus === "ok" ? "var(--color-success)" : "var(--color-border)"}`,
-                color: testStatus === "ok" ? "var(--color-on-signal)" : "var(--color-muted)",
+                color: testStatus === "ok" ? "var(--color-on-signal)" : "var(--color-secondary)",
                 borderRadius: 6,
-                padding: "8px 20px",
+                padding: "var(--space-2) var(--space-4)",
                 cursor: "pointer",
                 fontSize: 13,
                 fontWeight: 600,
@@ -335,20 +362,40 @@ export function OnboardingWizard({ onComplete }: Props) {
       {step === "done" && (
         <div style={cardStyle}>
           <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>&#10003;</div>
+            {/*
+              Inline SVG checkmark — G2 (icon-library ruling) is unresolved,
+              so a plain <svg> is used instead of any icon dependency.
+            */}
+            <svg
+              aria-hidden="true"
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              style={{ color: "var(--color-success)", display: "block", margin: "0 auto var(--space-3)" }}
+            >
+              <path
+                d="M20 6L9 17L4 12"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
             <h2 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 700 }}>You are connected!</h2>
-            <p style={{ margin: 0, color: "var(--color-muted)", fontSize: 14 }}>
+            <p style={{ margin: 0, color: "var(--color-secondary)", fontSize: 14 }}>
               Pulse is now collecting data from your AMS source. Head to the live dashboard to see streams.
             </p>
           </div>
           <button
+            ref={doneButtonRef}
             onClick={onComplete}
             style={{
               background: "var(--color-accent)",
               border: "none",
               color: "var(--color-on-signal)",
               borderRadius: 8,
-              padding: "12px",
+              padding: "var(--space-3)",
               cursor: "pointer",
               fontSize: 15,
               fontWeight: 600,
@@ -358,6 +405,22 @@ export function OnboardingWizard({ onComplete }: Props) {
           </button>
         </div>
       )}
+
+      {/* Escape route: always visible. Lets the user dismiss the wizard without completing it. */}
+      <button
+        type="button"
+        onClick={onComplete}
+        style={{
+          background: "none",
+          border: "none",
+          color: "var(--color-secondary)",
+          cursor: "pointer",
+          fontSize: 12,
+          marginTop: "var(--space-5)",
+        }}
+      >
+        Skip setup
+      </button>
     </div>
   );
 }
