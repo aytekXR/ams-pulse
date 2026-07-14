@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { analyticsApi, ApiError } from "@/api/client";
 import { DateRangePicker, defaultDateRange } from "./DateRangePicker";
+import { Tabs } from "@/components/Tabs";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { EmptyState } from "@/components/EmptyState";
@@ -95,27 +96,15 @@ export function AnalyticsPage() {
       {error && <ErrorBanner message={error} onRetry={load} />}
 
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--color-border)" }}>
-        {(["audience", "geo", "device"] as Tab[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            style={{
-              background: "none",
-              border: "none",
-              borderBottom: `2px solid ${tab === t ? "var(--color-accent)" : "transparent"}`,
-              color: tab === t ? "var(--color-text)" : "var(--color-muted)",
-              padding: "8px 16px",
-              cursor: "pointer",
-              fontSize: 13,
-              fontWeight: tab === t ? 600 : 400,
-              textTransform: "capitalize",
-            }}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        tabs={[
+          { id: "audience", label: "Audience" },
+          { id: "geo", label: "Geo" },
+          { id: "device", label: "Device" },
+        ]}
+        activeTab={tab}
+        onTabChange={(id) => setTab(id as Tab)}
+      />
 
       {loading ? (
         <LoadingSpinner label="Loading analytics…" />

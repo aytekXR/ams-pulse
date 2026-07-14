@@ -15,12 +15,16 @@ this header into SESSION-32.md.
 
 ## Mission
 
-Exit = (a) **operator intake applied** — FIVE standing marketplace items
-(operator-expected.md ⚡ item 5) PLUS: **AMS license landed?** → THE trigger
-(his AMS is ingest-DEAD since the 07-13 restart): re-sweep shows delta OR a
-teststream publish is suddenly ACCEPTED → record delta + restart teststream
-(runbook §5 command) + run `TC-I-05-SRT-packet-loss.sh` for real +
-re-validate the Enterprise surface; **matbu vhost ruling?** → execute option
+Exit = (a) **operator intake applied** — FOUR remaining standing items
+(operator-expected.md ⚡ item 5: trial key, assessment review, Ant Media
+contact, GHCR flip, MaxNodes) PLUS: **TC-I-05-SRT re-run in a low-load
+window** (license landed and was applied at S30 late-session — ingest
+RESTORED; the SRT license gate is cleared, only AMS's high-CPU admission
+guard blocked the first run at load 14; check `uptime` < ~6 before the
+run) + **add the TC-I-05 resource-guard SKIP arm [XS]** (a resource
+rejection currently mislabels as FAIL); **license renewal note:** key
+expires **2026-07-27T13:45Z** — surface the renewal from ~07-25;
+**matbu vhost ruling?** → execute option
 (a)/(b)/(c) per answer; **G1/G2 design gaps answered?** → fold into
 WAVE-PLAN conflict ledger; **uipro-vs-brandkit confirmation** → if "uipro
 overrules brandkit", re-rule §2.19 BEFORE Wave 0; PDF: "drop the pdf" →
@@ -56,17 +60,18 @@ residual verify — NO design-value changes, pure extraction; full web gates
    The session shell may lack the docker group — `sg docker -c "…"`.
 3. **AMS state at open.** `bash qa/realams/harness/expiry-sweep.sh
    s31open` — NO PULSE_TOKEN prefix (S29 gotcha). Known truth since
-   S30: AMS is INGEST-DEAD (all new RTMP+SRT publishes refused
-   "License is suspended…" since the 22:21Z 07-13 restart; REST
-   byte-identical Enterprise; teststream CANNOT return). The sweep
-   diff vs `S21-sweep-preexpiry-20260712T014135Z/stable.txt` will show
-   the teststream-down rows — that part is EXPECTED, not a delta. A
-   REST delta OR an accepted publish ⇒ the license landed → run the
-   Mission (a) chain. NEVER restart/fix AMS. VPS load note: check
-   `uptime` before Playwright/gates — concurrent operator sessions
-   pushed load to 20 on 07-13 (AMS's own 75% CPU guard then refuses
-   publishes for the OTHER reason — don't confuse the two rejections;
-   evidence pattern in D-092).
+   S30 late-session: **the new license is APPLIED and ingest is
+   RESTORED** (key expires 2026-07-27T13:45Z; key itself lives only in
+   gitignored oguz-testing.md). Expect the sweep byte-identical to
+   `S21-sweep-preexpiry-20260712T014135Z/stable.txt` (teststream up).
+   A teststream-down row = the S14/S22 ffmpeg-crash class → restart it
+   (runbook §5) — publishes are accepted again. NEVER restart/fix AMS
+   without cause; the ONE sanctioned restart pattern is the license
+   dance (apply key via REST POST, then restart — proven S30). VPS
+   load note: check `uptime` before Playwright/gates AND before any
+   publish scenario — AMS's 75% CPU admission guard refuses RTMP *and*
+   SRT under host load (two distinct rejection strings, both
+   documented in D-092; neither is a license signal now).
 4. **Prod runs v0.3.0-34-g58a9c84 since S27.** Read-only health check
    at open; **next rollout carries D-089..D-092** (docs-only D-092
    adds nothing runtime — rollout value unchanged since S29).

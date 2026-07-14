@@ -14,76 +14,8 @@ import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/Badge";
+import { TierGate } from "@/components/TierGate";
 import type { AnomalyFlag, LicenseInfo, AlertScope } from "@/lib/api/types";
-
-// ─── Tier gate ────────────────────────────────────────────────────────────────
-
-interface TierUpsellProps {
-  tier: string;
-}
-
-function TierUpsell({ tier }: TierUpsellProps) {
-  return (
-    <div
-      style={{
-        background: "var(--color-surface)",
-        border: "1px solid var(--color-border)",
-        borderRadius: 8,
-        padding: "3rem 2rem",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 16,
-        textAlign: "center",
-      }}
-    >
-      <svg
-        width="48"
-        height="48"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="var(--color-accent)"
-        strokeWidth="1.5"
-        aria-hidden
-      >
-        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-        <line x1="12" y1="9" x2="12" y2="13" />
-        <line x1="12" y1="17" x2="12.01" y2="17" />
-      </svg>
-      <div>
-        <h2 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700 }}>
-          Anomaly Detection requires Enterprise tier
-        </h2>
-        <p
-          style={{
-            margin: 0,
-            fontSize: 14,
-            color: "var(--color-muted)",
-            maxWidth: 400,
-          }}
-        >
-          You are currently on the <strong>{tier}</strong> plan. Upgrade to Enterprise
-          to unlock anomaly detection, baseline learning, and deviation alerts.
-        </p>
-      </div>
-      <a
-        href="/settings#license"
-        style={{
-          display: "inline-block",
-          background: "var(--color-accent)",
-          color: "var(--color-on-signal)",
-          borderRadius: 6,
-          padding: "10px 20px",
-          fontSize: 13,
-          fontWeight: 600,
-          textDecoration: "none",
-        }}
-      >
-        Upgrade License
-      </a>
-    </div>
-  );
-}
 
 // ─── Sigma severity ───────────────────────────────────────────────────────────
 
@@ -316,7 +248,26 @@ export function AnomaliesPage() {
     return (
       <div style={{ maxWidth: 700, margin: "0 auto", paddingTop: 40 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 24px" }}>Anomaly Detection</h1>
-        <TierUpsell tier={license.tier} />
+        <TierGate
+          icon={
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--color-accent)"
+              strokeWidth="1.5"
+              aria-hidden
+            >
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+          }
+          heading="Anomaly Detection requires Enterprise tier"
+          tier={license.tier}
+          upgradeText="Upgrade to Enterprise to unlock anomaly detection, baseline learning, and deviation alerts."
+        />
       </div>
     );
   }

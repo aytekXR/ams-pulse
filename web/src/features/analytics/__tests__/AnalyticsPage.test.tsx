@@ -74,9 +74,9 @@ describe("AnalyticsPage rendering", () => {
 
   it("(b) audience/geo/device tab buttons are rendered", () => {
     render(<AnalyticsPage />);
-    expect(screen.getByRole("button", { name: /^audience$/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^geo$/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^device$/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /^audience$/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /^geo$/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /^device$/i })).toBeInTheDocument();
   });
 
   it("(c) empty state — shows no-data message when timeseries is empty", async () => {
@@ -105,7 +105,7 @@ describe("AnalyticsPage rendering", () => {
   it("(e) geo tab — shows no geo data empty state", async () => {
     render(<AnalyticsPage />);
     await waitFor(() => { expect(screen.queryByText(/loading/i)).not.toBeInTheDocument(); });
-    fireEvent.click(screen.getByRole("button", { name: /^geo$/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /^geo$/i }));
     await waitFor(() => {
       expect(screen.getByText(/no geo data/i)).toBeInTheDocument();
     });
@@ -114,7 +114,7 @@ describe("AnalyticsPage rendering", () => {
   it("(e) device tab — shows no device data empty state", async () => {
     render(<AnalyticsPage />);
     await waitFor(() => { expect(screen.queryByText(/loading/i)).not.toBeInTheDocument(); });
-    fireEvent.click(screen.getByRole("button", { name: /^device$/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /^device$/i }));
     await waitFor(() => {
       expect(screen.getByText(/no device data/i)).toBeInTheDocument();
     });

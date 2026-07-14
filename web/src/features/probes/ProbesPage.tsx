@@ -25,80 +25,14 @@ import {
   ReferenceLine,
 } from "recharts";
 import { probesApi, adminApi, ApiError } from "@/api/client";
+import { CHART_COLORS } from "@/lib/chartColors";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/Badge";
 import { useToast } from "@/components/Toast";
+import { TierGate } from "@/components/TierGate";
 import type { Probe, ProbeWrite, ProbeResult, LicenseInfo } from "@/lib/api/types";
-
-// ─── Tier gate ────────────────────────────────────────────────────────────────
-
-interface TierUpsellProps {
-  tier: string;
-}
-
-function TierUpsell({ tier }: TierUpsellProps) {
-  return (
-    <div
-      style={{
-        background: "var(--color-surface)",
-        border: "1px solid var(--color-border)",
-        borderRadius: 8,
-        padding: "3rem 2rem",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 16,
-        textAlign: "center",
-      }}
-    >
-      <svg
-        width="48"
-        height="48"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="var(--color-accent)"
-        strokeWidth="1.5"
-        aria-hidden
-      >
-        <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
-      </svg>
-      <div>
-        <h2 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700 }}>
-          Synthetic Probes requires Pro tier
-        </h2>
-        <p
-          style={{
-            margin: 0,
-            fontSize: 14,
-            color: "var(--color-muted)",
-            maxWidth: 420,
-          }}
-        >
-          You are currently on the <strong>{tier}</strong> plan. Upgrade to Pro or
-          Enterprise to create synthetic stream probes and monitor playback health
-          from outside your infrastructure.
-        </p>
-      </div>
-      <a
-        href="/settings#license"
-        style={{
-          display: "inline-block",
-          background: "var(--color-accent)",
-          color: "var(--color-on-signal)",
-          borderRadius: 6,
-          padding: "10px 20px",
-          fontSize: 13,
-          fontWeight: 600,
-          textDecoration: "none",
-        }}
-      >
-        Upgrade License
-      </a>
-    </div>
-  );
-}
 
 // ─── Synthetic label badge ────────────────────────────────────────────────────
 
@@ -595,11 +529,11 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                   />
                   <Legend wrapperStyle={{ fontSize: 11, color: "var(--color-muted)" }} />
                   {/* 500ms warning threshold */}
-                  <ReferenceLine y={500} stroke="#FFB224" strokeDasharray="4 2" />
+                  <ReferenceLine y={500} stroke={CHART_COLORS[4]} strokeDasharray="4 2" />
                   <Line
                     type="monotone"
                     dataKey="ttfb_ms"
-                    stroke="#58A6FF"
+                    stroke={CHART_COLORS[1]}
                     strokeWidth={2}
                     dot={false}
                     connectNulls={false}
@@ -608,7 +542,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                   <Line
                     type="monotone"
                     dataKey="segment_ttfb_ms"
-                    stroke="#A78BFA"
+                    stroke={CHART_COLORS[2]}
                     strokeWidth={2}
                     dot={false}
                     connectNulls={false}
@@ -669,7 +603,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                     <Line
                       type="monotone"
                       dataKey="bitrate_kbps"
-                      stroke="#2CE5A7"
+                      stroke={CHART_COLORS[0]}
                       strokeWidth={2}
                       dot={false}
                       name="Bitrate (kbps)"
@@ -1236,7 +1170,25 @@ export function ProbesPage() {
         <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 24px" }}>
           Synthetic Probes
         </h1>
-        <TierUpsell tier={license.tier} />
+        <TierGate
+          icon={
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--color-accent)"
+              strokeWidth="1.5"
+              aria-hidden
+            >
+              <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+            </svg>
+          }
+          heading="Synthetic Probes requires Pro tier"
+          tier={license.tier}
+          upgradeText="Upgrade to Pro or Enterprise to create synthetic stream probes and monitor playback health from outside your infrastructure."
+          descriptionMaxWidth={420}
+        />
       </div>
     );
   }

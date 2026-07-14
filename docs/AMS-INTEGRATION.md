@@ -58,12 +58,52 @@ broadcast object on AMS 3.0.3 (health scoring redistributes the FPS weight);
 > See `docs/known-limitations.md` LIM-17 (do not duplicate its text here) and
 > `docs/assessment/final-assessment.md` §4.2 for operator-facing guidance.
 >
-> **S29/D-091 live SRT validation status:** TC-I-05-SRT was run on 2026-07-13 and
-> blocked by AMS EE license suspension (SRTAdaptor: "License is suspended. Not
-> accepting the stream"). The scenario is committed at
-> `qa/realams/scenarios/TC-I-05-SRT-packet-loss.sh` and ready for re-run once the
-> license is renewed. Post-ARQ observation (publishType, packetLostRatio live value)
-> will be recorded on the first successful SRT run.
+> **S31/D-093 live SRT validation status: PASS (first live run, 2026-07-14T02:29:45Z)**
+> TC-I-05-SRT passed 2/2 assertions (evidence: `qa/realams/evidence/TC-I-05-SRT-20260714T022945Z/`):
+> `status=broadcasting` after 2 s; `bitrate=1148432 bps`; `packetLostRatio=0.0`;
+> `packetsLost=0`; Pulse-side `packet_loss_pct=0`. The scenario also uncovered a streamid
+> format bug (see NOTE below) and produced the first live observation of SRT publishType.
+>
+> **NOTE — SRT publish URL format (AMS EE 3.0.3, live-validated S31/D-093):**
+> The WORKING form is the plain streamid:
+>
+> ```
+> srt://<host>:4200?streamid=<App>/<streamId>
+> ```
+>
+> Example: `srt://ams.example.com:4200?streamid=LiveApp/mystream`
+>
+> **The SRT Access-Control Framework (ACF) form is REJECTED** by AMS EE 3.0.3's
+> SRTAdaptor. Both ACF spellings were probed live and both fail with the same
+> error:
+> - `#!::h=<App>/<streamId>,m=publish` (hostname field)
+> - `#!::r=<App>/<streamId>,m=publish` (resource field)
+>
+> Verbatim AMS log line (observed live, S31/D-093):
+>
+> ```
+> ERROR i.a.enterprise.srt.SRTAdaptor - There is no scope for incoming stream id.
+>   Parsed scope: #!::h=LiveApp, stream id: val-i05-srt-...,
+>   original srt stream id: #!::h=LiveApp/val-i05-srt-...,m=publish
+> ```
+>
+> Root cause: SRTAdaptor splits the streamid on `/` and treats the left side as the
+> app scope WITHOUT stripping the ACF prefix first. The parsed scope becomes the
+> literal prefix string (e.g. `#!::h=LiveApp`), which AMS cannot resolve to a scope.
+> The scenario (`qa/realams/scenarios/TC-I-05-SRT-packet-loss.sh`) was corrected in
+> S31 to use the plain form — that is the form that ingested cleanly and produced
+> the PASS result above.
+>
+> **NOTE — SRT publishType:** AMS BroadcastDTO reports `publishType="RTMP"` for SRT-ingested
+> streams (live-observed 2026-07-14). Pulse copies AMS's `publishType` verbatim
+> (`server/pkg/amsclient/client.go:88`). Therefore SRT ingest is counted as RTMP in Pulse's
+> protocol breakdown (ProtocolDonut / protocol filters). Pulse cannot distinguish SRT from
+> RTMP without a heuristic; it reports what AMS reports. This was listed as "unknown at S29
+> authoring" and is now KNOWN and recorded.
+>
+> Prior blocked runs: S29/D-091 (2026-07-13, license suspended); S30 late-session (license
+> gate cleared but VPS load=14 triggered AMS high-resource-usage guard). Both pre-dates;
+> superseded by the S31 PASS above.
 >
 > **S30/D-092 update — RTMP is no longer unaffected after a process restart:**
 > the first post-lapse AMS restart (2026-07-13 22:21Z, crash + docker
@@ -77,6 +117,14 @@ broadcast object on AMS 3.0.3 (health scoring redistributes the FPS weight);
 > sweeps). Operator takeaway: a suspended-license AMS looks healthy on REST but
 > refuses ALL new ingest after any restart. Evidence:
 > `qa/realams/evidence/S30-rtmp-license-block-20260713T2353Z/`.
+>
+> **Recovery, proven live (S30 late-session):** applying a fresh license key via
+> `POST /rest/v2/server-settings` (POST, not PUT — AMS returns 405 on PUT) does
+> NOT lift enforcement on a running server; the license state refreshes only at
+> boot. Key + `docker restart antmedia` restored RTMP ingest within ~90 s
+> (teststream re-accepted; post-license sweep byte-identical to the pre-expiry
+> baseline). Plan for one brief polling gap during the restart (~30 s of
+> Pulse poll errors, self-healing).
 
 > **⚠️ Implicit RTMP broadcasts (S17 live finding, D-079):**
 > AMS 3.0.3 auto-creates a broadcast object when an RTMP publisher connects

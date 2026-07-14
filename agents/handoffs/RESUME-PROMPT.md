@@ -11,7 +11,89 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-31.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-32.md`)
+
+**Session 2026-07-14 result: D-093 — S31 DONE (★★ SRT INGEST LIVE-VALIDATED,
+FIRST EVER — TC-I-05-SRT PASS 2/2, blocked-scenario list now EMPTY; ★★ the
+scenario's streamid format had been WRONG since S29, hidden behind two honest
+SKIPs; ★ §2.19 Wave 0 landed — shared TierGate + Tabs; ★ NEW operator gap G3).**
+
+- **★ DEAD-SESSION TREE AT OPEN (4th occurrence of the class).** The branch
+  `s31-uipro-wave0` already existed carrying S30's addendum commit `f703634`
+  **plus an uncommitted partial Wave 0 from a crashed earlier S31 run** (the VPS
+  rebooted 02:02Z mid-session). Per D-082/D-086/D-091 it was **re-audited from
+  scratch, not trusted** — and the audit paid: it found a vacuous icon test, a
+  vacuous active-underline pin, and two WCAG contrast failures. **Never trust a
+  tree you did not gate.**
+- **★★ SRT INGEST LIVE-VALIDATED — TC-I-05-SRT PASS (2/2)**, 02:29:45Z, evidence
+  `qa/realams/evidence/TC-I-05-SRT-20260714T022945Z/`: accepted in **2 s**,
+  `bitrate=1,148,432 bps`, `packetLostRatio=0.0`. **Blocked-scenario list EMPTY**
+  (was [SRT ingest, RTMP ingest (new), any fresh-publish scenario]).
+- **★★ WHY IT NEVER RAN — the fixture was broken, and two gates hid it.** S29
+  wrote the streamid in SRT Access-Control form (`#!::h=LiveApp/<id>,m=publish`).
+  **AMS EE 3.0.3 splits the streamid on `/` and treats the left side as the app
+  scope WITHOUT stripping the ACF prefix** → `ERROR SRTAdaptor - There is no
+  scope for incoming stream id. Parsed scope: #!::h=LiveApp`. Both ACF spellings
+  (`h=`, `r=`) were probed live and both fail; **the plain
+  `streamid=<App>/<streamId>` form ingests cleanly**. The license refusal (S29)
+  and then the CPU admission guard (S30) refused the connection *before the
+  parser was ever reached*. **LESSON: a SKIP that never reaches the code under
+  test proves nothing about it.** A second defect surfaced on the first real run:
+  the scenario asserted `bitrate>0` five seconds in, but AMS reports bitrate from
+  a **rolling window** (legitimately 0 for ~10 s) — it was **failing a healthy
+  stream**. Both fixed; resource-guard SKIP arm adopted (a busy box is not a
+  broken product).
+- **★★ ENFORCEMENT MODEL CLOSED (both arms).** The VPS rebooted 02:02Z and
+  `antmedia` restarted — the **FIRST restart since the S30 license was applied** —
+  and **ingest came straight back** (teststream re-accepted immediately, zero
+  refusal lines). ⇒ **a VALID license survives a restart cleanly**; D-092's
+  ingest-death needs a **LAPSED license AND a restart**. ⏰ **Key expires
+  2026-07-27T13:45Z** — renewal is the top intake item from ~07-25.
+- **★ SRT IS ATTRIBUTED AS RTMP (LIM-23, honest disclosure — not a defect):** AMS
+  returns `publishType: "RTMP"` for SRT ingest; Pulse copies it verbatim
+  (`amsclient/client.go:88`), so SRT counts as RTMP in the protocol breakdown.
+- **★ §2.19 WAVE 0 DONE:** shared `TierGate` (was triplicated verbatim) + `Tabs`
+  (was copy-pasted ×3; now `role=tablist/tab`, `aria-selected`, roving tabindex,
+  Arrow/Home/End — **none of the inline copies had any ARIA or keyboard nav**).
+  Adopted in Analytics/Alerts/Reports; **Settings diverges → Wave 4; Fleet's
+  cards/table toggle is a SEGMENTED CONTROL, never a `<Tabs>` candidate.** Two
+  **deliberate WCAG fixes** (mandated by the BINDING §2.2 gate — an extraction may
+  not ship a component that fails contrast): muted → secondary (3.50:1 → 8.18:1).
+  **Plan corrected against reality:** the tab pattern is on **4** pages, not the 6
+  the plan assumed; `CHART_COLORS[7]` already existed (verify-only).
+- **★ NEW OPERATOR GAP G3:** the light-theme "Upgrade License" CTA fails WCAG AA
+  (**3.12:1**, white on `#0BA678`). **Pre-existing; Wave 0 neither caused nor fixed
+  it.** The fix is `tokens.json color.light.accent` → `#087A59` (5.33:1) and
+  **brandkit is the operator's to change (D-071) — NO waiver has been granted.**
+  (An agent's draft claimed one was "operator-approved"; that was FALSE and was
+  corrected in three places. Sessions do not self-approve operator decisions.)
+- **Operator intake: all standing items re-verified live, still OPEN** — GHCR
+  anonymous pull still 401/403 (private); no trial-key / assessment-review /
+  Ant-Media-contact / MaxNodes signals; matbu vhost ruling pending (on-disk
+  Caddyfile untouched, still the only uncommitted file); G1/G2 unanswered (Wave 0
+  needed neither). 10th sweep byte-identical. uipro-vs-brandkit assumption STANDS.
+- **Gates:** web **452/452** (was 404) / 32 files; coverage 67.17/62.05/56.21 vs
+  floors 59/54/45; lint + build clean; gen:api in sync; Playwright
+  dashboard-render/auth-gate/csp/prefs green; contracts/ + brandkit/ byte-untouched;
+  zero new hex/px (hex debt REDUCED); bash -n + shellcheck clean. No Go changes.
+  CI promotions skip carry ×20 (07-14 < 07-23). 13 agents, 0 errors.
+- **S32 carries:** §2.19 **Wave 1 (LiveOverview + QoE) [M]** primary; **G3 token
+  fix [XS, operator-gated]**; license renewal intake before 07-27; marketplace tail
+  (operator items); optional `<SegmentedControl>` extraction when a wave touches Fleet.
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-32.md` and execute it**
+(★ standing directive at its top: review the backlog + REVISE the plan; operator
+intake FIRST — six standing items + G1/G2/**G3**; AMS re-sweep at open WITHOUT any
+PULSE_TOKEN prefix; teststream does NOT auto-restart across a reboot →
+`docker start ams-teststream`; **SRT publishes must use the PLAIN streamid**;
+CI promotions if ≥07-23 else skip carry ×21). **PR-first, ≤2 pushes.**
+Check `docs/operator-expected.md` FIRST.
+
+---
+
+## ▶ prior session context (S30, superseded by the above — original START HERE follows)
+
+## (superseded) ▶ START HERE (execute `sessions/SESSION-31.md`)
 
 **Session 2026-07-13/14 result: D-092 — S30 DONE (★★ AMS INGEST-DEAD
 FINDING: the S22 restart-enforcement hypothesis CONFIRMED — the first
@@ -74,13 +156,28 @@ operator staging).**
   all-ok, 0 poll errlines); pulse-realams healthy; AMS never touched
   (publish probes = the sanctioned S22 class). CI promotions skip
   carry ×19. Workflow: 6 agents, 0 errors.
+- **★★★ LATE-SESSION (post-#44-merge): THE LICENSE LANDED AND WAS
+  APPLIED — INGEST RESTORED.** Operator pasted the key (stored ONLY in
+  gitignored oguz-testing.md; expires **2026-07-27T13:45Z**). Applied
+  via REST POST /rest/v2/server-settings (PUT → 405, the S18 pattern;
+  success:true + readback) — enforcement did NOT lift while running →
+  `docker restart antmedia` (operator-sanctioned) → **teststream
+  ACCEPTED, count=1, HLS flowing, realams publishers=1; s30postlicense
+  sweep BYTE-IDENTICAL to the pre-expiry baseline** except 6 prod
+  poll-errlines all inside the 00:44:28–:55Z restart window
+  (self-healed). TC-I-05-SRT: license gate CLEARED (handshake reached
+  the ACF callback, first time ever) but rejected by AMS's
+  high-resource guard (load 14) — re-run needs a low-load window;
+  scenario-gap filed (resource-rejection mislabels as FAIL, add SKIP
+  arm, XS). Evidence + full detail: D-092 addendum (rides S31 PR).
 - **S31 carries:** §2.19 Wave 0 [S] primary (TierGate + Tabs
   extraction per WAVE-PLAN §4 W0; full web gates incl. gen:api drift +
-  Playwright light/dark); license-landing trigger = re-sweep + restart
-  teststream + TC-I-05-SRT + Enterprise re-validation (now ALSO
-  restores basic ingest); matbu ruling; G1/G2 asks; marketplace tail
-  the moment operator items land; CI promotions if ≥07-23 else skip
-  carry ×20.
+  Playwright light/dark); **TC-I-05-SRT re-run in a low-load window
+  [license gate cleared — resource window only] + TC-I-05 SKIP-arm fix
+  [XS]**; **license renewal intake before 2026-07-27** (post-lapse
+  restart = ingest death, proven); Enterprise-surface re-validation
+  tail if any; matbu ruling; G1/G2 asks; marketplace tail the moment
+  operator items land; CI promotions if ≥07-23 else skip carry ×20.
 
 **▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-31.md` and execute it**
 (★ standing directive at its top: review the backlog + REVISE the plan;

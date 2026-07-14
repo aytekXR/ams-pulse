@@ -186,7 +186,7 @@ describe("ReportsPage tenants tab", () => {
     });
     render(<ReportsPage />);
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /tenants/i })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: /tenants/i })).toBeInTheDocument();
     });
   });
 
@@ -197,7 +197,7 @@ describe("ReportsPage tenants tab", () => {
     await waitFor(() => {
       expect(screen.getByText(/requires business tier/i)).toBeInTheDocument();
     });
-    expect(screen.queryByRole("button", { name: /tenants/i })).toBeNull();
+    expect(screen.queryByRole("tab", { name: /tenants/i })).toBeNull();
   });
 
   it("hides tenants tab when tier is free (upsell shown instead)", async () => {
@@ -206,7 +206,7 @@ describe("ReportsPage tenants tab", () => {
     await waitFor(() => {
       expect(screen.getByText(/requires business tier/i)).toBeInTheDocument();
     });
-    expect(screen.queryByRole("button", { name: /tenants/i })).toBeNull();
+    expect(screen.queryByRole("tab", { name: /tenants/i })).toBeNull();
   });
 
   it("renders tenant list after clicking tenants tab", async () => {
@@ -217,9 +217,9 @@ describe("ReportsPage tenants tab", () => {
     });
     render(<ReportsPage />);
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /tenants/i })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: /tenants/i })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("button", { name: /tenants/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /tenants/i }));
     await waitFor(() => {
       expect(screen.getByText("Acme Corp")).toBeInTheDocument();
       expect(screen.getByText("Beta Inc")).toBeInTheDocument();
@@ -233,8 +233,8 @@ describe("ReportsPage tenants tab", () => {
       meta: { total: 1, next_cursor: null },
     });
     render(<ReportsPage />);
-    await waitFor(() => screen.getByRole("button", { name: /tenants/i }));
-    fireEvent.click(screen.getByRole("button", { name: /tenants/i }));
+    await waitFor(() => screen.getByRole("tab", { name: /tenants/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /tenants/i }));
     await waitFor(() => {
       expect(screen.getByText(/pattern: live\/acme-%/)).toBeInTheDocument();
     });
@@ -247,8 +247,8 @@ describe("ReportsPage tenants tab", () => {
       meta: { total: 1, next_cursor: null },
     });
     render(<ReportsPage />);
-    await waitFor(() => screen.getByRole("button", { name: /tenants/i }));
-    fireEvent.click(screen.getByRole("button", { name: /tenants/i }));
+    await waitFor(() => screen.getByRole("tab", { name: /tenants/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /tenants/i }));
     await waitFor(() => {
       expect(screen.getByText("tenant_id=beta")).toBeInTheDocument();
     });
@@ -262,8 +262,8 @@ describe("ReportsPage tenants tab", () => {
       meta: { total: 0, next_cursor: null },
     });
     render(<ReportsPage />);
-    await waitFor(() => screen.getByRole("button", { name: /tenants/i }));
-    fireEvent.click(screen.getByRole("button", { name: /tenants/i }));
+    await waitFor(() => screen.getByRole("tab", { name: /tenants/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /tenants/i }));
     await waitFor(() => {
       expect(screen.getByText(/no tenants configured/i)).toBeInTheDocument();
     });
@@ -277,8 +277,8 @@ describe("ReportsPage tenants tab", () => {
       meta: { total: 0, next_cursor: null },
     });
     render(<ReportsPage />);
-    await waitFor(() => screen.getByRole("button", { name: /tenants/i }));
-    fireEvent.click(screen.getByRole("button", { name: /tenants/i }));
+    await waitFor(() => screen.getByRole("tab", { name: /tenants/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /tenants/i }));
     await waitFor(() => screen.getByText(/\+ new tenant/i));
     fireEvent.click(screen.getByText(/\+ new tenant/i));
     await waitFor(() => {
@@ -293,8 +293,8 @@ describe("ReportsPage tenants tab", () => {
       meta: { total: 1, next_cursor: null },
     });
     render(<ReportsPage />);
-    await waitFor(() => screen.getByRole("button", { name: /tenants/i }));
-    fireEvent.click(screen.getByRole("button", { name: /tenants/i }));
+    await waitFor(() => screen.getByRole("tab", { name: /tenants/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /tenants/i }));
     await waitFor(() => screen.getByLabelText(/delete acme corp/i));
     fireEvent.click(screen.getByLabelText(/delete acme corp/i));
     await waitFor(() => {
@@ -319,8 +319,8 @@ describe("ReportsPage tenants tab", () => {
       updated_at: Date.now(),
     });
     render(<ReportsPage />);
-    await waitFor(() => screen.getByRole("button", { name: /tenants/i }));
-    fireEvent.click(screen.getByRole("button", { name: /tenants/i }));
+    await waitFor(() => screen.getByRole("tab", { name: /tenants/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /tenants/i }));
     await waitFor(() => screen.getByText(/\+ new tenant/i));
     fireEvent.click(screen.getByText(/\+ new tenant/i));
     await waitFor(() => screen.getByTestId("tenant-form"));
@@ -354,8 +354,8 @@ describe("ReportsPage tenants tab", () => {
     });
     vi.mocked(adminApi.deleteTenant).mockResolvedValue(undefined);
     render(<ReportsPage />);
-    await waitFor(() => screen.getByRole("button", { name: /tenants/i }));
-    fireEvent.click(screen.getByRole("button", { name: /tenants/i }));
+    await waitFor(() => screen.getByRole("tab", { name: /tenants/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /tenants/i }));
     await waitFor(() => screen.getByLabelText(/delete acme corp/i));
     fireEvent.click(screen.getByLabelText(/delete acme corp/i));
     await waitFor(() => screen.getByTestId("delete-confirm"));

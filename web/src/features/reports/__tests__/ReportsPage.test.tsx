@@ -182,7 +182,7 @@ describe("ReportsPage tier gate", () => {
       expect(screen.getByText(/requires business tier/i)).toBeInTheDocument();
     });
     // Usage tabs must NOT appear
-    expect(screen.queryByRole("button", { name: /usage/i })).toBeNull();
+    expect(screen.queryByRole("tab", { name: /usage/i })).toBeNull();
   });
 
   // VD-01: business tier IS entitled for reports
@@ -200,7 +200,7 @@ describe("ReportsPage tier gate", () => {
     });
     render(<ReportsPage />);
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /usage/i })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: /usage/i })).toBeInTheDocument();
     });
     // should NOT show upsell on business tier
     expect(screen.queryByText(/requires business tier/i)).toBeNull();
@@ -219,7 +219,7 @@ describe("ReportsPage tier gate", () => {
     });
     render(<ReportsPage />);
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /schedules/i })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: /schedules/i })).toBeInTheDocument();
     });
     expect(screen.queryByText(/requires business tier/i)).toBeNull();
   });
