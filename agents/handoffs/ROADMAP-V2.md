@@ -522,6 +522,20 @@ full bundle; ui-ux-pro-max core IN scope, design/ui-styling/slides OUT), conflic
 C-items resolved token-wins; 2 operator gaps G1/G2 filed), 6-wave page-group plan with
 binding per-wave acceptance gates. Wave plan: `agents/handoffs/wave-uipro/WAVE-PLAN.md`.
 Wave 0 (Shared Surface [S]) is the recommended first wave → S31 after §2.18 gate clears.
+**Wave 0 DONE — S31 (D-093, 2026-07-14):** `TierGate` extracted from the triplicated
+inline `TierUpsell` pattern in Reports/Anomalies/Probes; `Tabs` component created (keyboard
+nav, ARIA roles, roving tabIndex); `global.css` extended with 4 radius/touch tokens + shared
+focus-ring block; all three page files adopt `<TierGate>`; 44 unit tests pass (TierGate.test +
+Tabs.test). CHART_COLORS[7] (`'#7C93AD'`) confirmed present — no change needed. Tab-site
+inventory corrected: 4 pages carry the identical inline tab pattern (Analytics, Alerts,
+Reports, Settings); QoE has no tab pattern and Fleet uses a segmented-control widget (not
+tabs — needs a separate `<SegmentedControl>` component). Page tab conversions deferred to their
+chartered waves (Analytics → Wave 2; Alerts/Settings → Wave 4; Reports → Wave 5).
+C7 WCAG finding documented in wave conflict ledger: (b) and (c) fixed in Wave 0;
+(a) light-theme CTA AA waiver granted (pre-existing at 2f53414; fix requires token update,
+deferred to first token-update wave). SRT publishType now KNOWN: AMS BroadcastDTO returns
+`publishType="RTMP"` for SRT-ingested streams (F5 live finding, D-093); Pulse mirrors AMS
+verbatim — SRT ingest is counted as RTMP in protocol breakdown until a heuristic is built.
 
 ---
 

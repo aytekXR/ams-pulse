@@ -1,6 +1,77 @@
-# Operator TODO — the items only YOU can do (updated at SESSION-30 close, D-092, 2026-07-14; rides S30's PR)
+# Operator TODO — the items only YOU can do (updated at SESSION-31 close, D-093, 2026-07-14; rides S31's PR)
 
-## ⚡ TL;DR — expected from you right now (2026-07-14, SESSION-30 closed — D-092, AMS ingest-dead finding + §2.19 scoping done)
+## ⚡ TL;DR — expected from you right now (2026-07-14, SESSION-31 closed — D-093, SRT live-validated + §2.19 Wave 0 landed)
+
+> **Nothing is BLOCKING. Five standing items remain yours, one is new (G3), and
+> one has a deadline (your license, 13 days).**
+>
+> **1. ⏰ THE ONE WITH A CLOCK: your AMS license expires 2026-07-27T13:45Z.**
+> Tonight proved both halves of the enforcement model, so the risk is now exact:
+> your VPS rebooted at ~02:02Z and `antmedia` restarted — **the first restart
+> since your key was applied — and ingest came straight back** (the teststream
+> was re-accepted immediately, zero refusals). So a *valid* license survives a
+> restart fine. What kills ingest is a *lapsed* license **+** a restart — which
+> is exactly what will happen after 07-27 if the key isn't renewed. Renew before
+> then and nothing else is needed.
+>
+> **2. ★ YOUR SRT INGEST WORKS — proven live for the first time tonight.**
+> TC-I-05-SRT **PASSED** (2/2) against your AMS: the stream was accepted in 2
+> seconds, 1,148,432 bps, zero packet loss. **The blocked-scenario list is now
+> EMPTY for the first time in the project.** Two things were found getting there,
+> and one of them is useful to you directly:
+> - **The SRT publish URL format matters.** Your AMS EE 3.0.3 only accepts the
+>   plain form `srt://<host>:4200?streamid=<App>/<streamId>`. The standard SRT
+>   Access-Control form (`#!::h=...` or `#!::r=...`) is **rejected** — its parser
+>   splits on `/` without stripping the prefix, so it looks for an app literally
+>   named `#!::h=LiveApp`. Our own test scenario had been using the ACF form
+>   since S29, and the license block (S29) then the CPU guard (S30) had been
+>   refusing the connection *before* the parser was ever reached — so the broken
+>   format was invisible behind two honest SKIPs. Documented in AMS-INTEGRATION.md.
+> - **FYI, an honest disclosure (LIM-23):** your AMS reports SRT streams as
+>   `publishType: "RTMP"`, so Pulse's protocol breakdown counts SRT ingests as
+>   RTMP. Pulse reports what AMS reports; telling them apart would need a guess.
+>
+> **3. ★ NEW — G3, a design ruling only you can make (accessibility).**
+> The "Upgrade License" button fails WCAG AA contrast **in light theme**: white
+> text on `--color-accent` (#0BA678) = **3.12:1**, below the 4.5:1 the brandkit's
+> own WCAG table requires. This is **pre-existing** (it was in all three pages
+> before tonight; Wave 0 neither caused nor fixed it). The fix is a one-value
+> brandkit change — `tokens.json color.light.accent` → **#087A59** (5.33:1) —
+> and **brandkit is yours (D-071), so no session will change it without you.**
+> Say **"apply the G3 token fix"** and the next wave lands it. Dark theme is fine
+> (8.53:1). Two smaller contrast failures in the same pass were fixable in code
+> without touching your tokens, and were fixed.
+>
+> **4. Your matbu/evrak vhost ruling is STILL PENDING (unchanged).** Live prod
+> serves `matbu.beyondkaira.com` from an on-disk Caddyfile block that `origin/main`
+> lacks (it embeds your bcrypt hash; the repo is public). A clean-checkout redeploy
+> would drop that site. Options: (a) commit with the hash / (b) commit with a
+> placeholder + a runbook step / (c) document the gap in the evrak runbook.
+> Sessions keep hands off the file until you rule.
+>
+> **5. Your FOUR standing marketplace items — re-verified at S31 open, still
+> open:** GHCR public flip (~30 s, still answering 401/403 to anonymous pulls —
+> customers cannot `docker pull` until you flip it), official trial-key mint
+> (needs your vault privkey), final-assessment review (gates the upload), Ant
+> Media marketplace contact, and the Pro MaxNodes ruling (PRD says 1–2, code
+> enforces 10).
+>
+> **Also still open, both small (unchanged from S30):** G1 — do you support mobile
+> viewports on form pages? (iOS zooms inputs under 16px; your body token is 14px.)
+> G2 — which icon library (Phosphor vs Lucide vs stay-iconless)? Wave 0 needed
+> neither, so nothing is blocked.
+>
+> **FYI, no action needed — what S31 did autonomously:** first §2.19 wave landed
+> (shared `TierGate` + `Tabs` components extracted; the duplicated upsell panel
+> and the copy-pasted tab bar are now single components with real keyboard/ARIA
+> support — 451 web tests green, up from 404); the dead-session tree left behind
+> by a crashed earlier run was re-verified from scratch rather than trusted, and
+> the audit caught a vacuous test and two contrast failures; the SRT scenario's
+> broken streamid and an assert-too-early bug were both fixed and re-run live.
+>
+> ---
+>
+> ## (superseded) S30-close header follows
 
 > **1. ✅ RESOLVED LATE-SESSION: you sent the license key and S30 applied
 > it — your ingest is BACK.** (The escalation stood for ~2 hours: your

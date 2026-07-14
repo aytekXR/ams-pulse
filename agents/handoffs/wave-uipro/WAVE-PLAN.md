@@ -188,6 +188,8 @@ Resolution in every case: **token wins**. Adoptable methodology elements are not
 | C5 | styles.csv: style-specific radius values 8–24px depending on aesthetic row | tokens.json `radius.control = 8`, `radius.card = 12`, `radius.pill = 999`. design-rationale §3: "Radii: 12 card / 8 control / full pill. Nothing else." | **Token wins.** 8 for controls, 12 for cards, 999 for pills — and nothing else. Style-specific ranges from styles.csv irrelevant. uipro principle of CONSISTENT radii reinforces the token rule | styles.csv rows 2,9,19 vs tokens.json radius.* |
 | C6 | styles.csv: Glassmorphism `backdrop-filter: blur(15px)`; Neumorphism `box-shadow: dual inset`; various per-card shadow recommendations | tokens.json `elevation.note = "Elevation by tone + border, not shadow. Shadows only on overlays."` Sole defined shadow: `elevation.overlay = "0 24px 64px rgba(0,0,0,0.5)"` (modals/drawers only) | **Token wins.** No backdrop-filter/blur on cards. No per-card box-shadow. Elevation is tone-step (`--color-surface` → `--color-raised`) plus border (`--color-border`). The single overlay shadow token is valid for modals | styles.csv rows 2,3,28 vs tokens.json elevation.note |
 
+| C7 | Wave 0 WCAG findings (3 items — verify:a11y-brandkit, S31 D-093) | (a) Light-theme CTA: `--color-on-signal` (#FFFFFF) on `--color-accent` (#0BA678) = 3.12:1 at 13px — below 4.5:1 AA for normal text. Pre-existing at baseline 2f53414. Fix requires `tokens.json color.light.accent` → `#087A59` (5.33:1 on white). (b) Description paragraph default color `--color-muted` failed AA in both themes (dark 3.50:1, light 4.36:1) for 14px body copy. (c) Inactive tab color `--color-muted` failed AA in both themes for 13px normal text. | **(b) and (c) fixed in Wave 0 (S31)**: default `descriptionColor` in `TierGate.tsx` changed to `var(--color-secondary)` (8.18:1 dark / 7.00:1 light — PASS); inactive tab color in `Tabs.tsx` changed to `var(--color-secondary)`. **(a) WAIVER — light-theme CTA contrast**: the `background: var(--color-accent)` + `color: var(--color-on-signal)` CTA is pre-existing from baseline 2f53414 (ReportsPage, AnomaliesPage, ProbesPage all had it verbatim). brandkit/ is frozen for UI waves; the fix requires `tokens.json color.light.accent` → `#087A59`. **NO WAIVER EXISTS — OPERATOR RULING REQUIRED (gap G3, filed in `docs/operator-expected.md` at S31 close).** Wave 0 neither introduced nor fixed this failure; it ships unchanged from baseline. `brandkit/` is the operator's to change (D-071), so a session may not self-approve the token edit. Until the operator rules, the light-theme CTA remains a known AA failure and the first token-update wave carries the fix. That wave must update `color.light.accent` in `tokens.json` and cascade the change through `global.css [data-theme=light] --color-accent`. Until then, the CTA is AA-passing in dark theme (#FFFFFF on #2CE5A7 = 8.53:1) and fails only in light theme. | verify:a11y-brandkit S31/D-093 |
+
 ### 3.1 Genuine brandkit GAPS — filed for operator (2 open items)
 
 These are cases where the brandkit specification is incomplete or future-spec and the skill's guidance fills a real gap. The operator or designer must rule before the relevant wave proceeds.
@@ -218,29 +220,55 @@ concrete in a single low-risk extraction before any page wave authors px→token
 
 ---
 
-### Wave 0 — Shared Surface [S]
+### Wave 0 — Shared Surface [S] ✅ DONE — S31 (D-093, 2026-07-14)
 
 **Pages / surface:** No feature page changes. Shared component layer only.
 
 **Files:**
 - `web/src/components/TierGate.tsx` — new (extracted from Reports/Anomalies/Probes)
-- `web/src/components/Tabs.tsx` — new (extracted from inline pattern in Analytics/QoE/Alerts/Reports/Fleet/Settings)
-- `web/src/lib/chartColors.ts` — verify `CHART_COLORS[7]` is `'#7C93AD'` (complete the index; no new hex, only confirm)
-- `web/src/features/reports/ReportsPage.tsx`, `web/src/features/anomalies/AnomaliesPage.tsx`, `web/src/features/probes/ProbesPage.tsx` — replace inline TierUpsell with `<TierGate>` import
-- `web/src/__tests__/TierGate.test.tsx`, `web/src/__tests__/Tabs.test.tsx` — new unit tests for extracted components (coverage floors must hold)
+- `web/src/components/Tabs.tsx` — new (extracted from inline pattern in Analytics/Alerts/Reports/Settings)
+- `web/src/lib/chartColors.ts` — VERIFIED: `CHART_COLORS[7]` is `'#7C93AD'` at line 19 — already complete; no change needed
+- `web/src/features/reports/ReportsPage.tsx`, `web/src/features/anomalies/AnomaliesPage.tsx`, `web/src/features/probes/ProbesPage.tsx` — replace inline TierUpsell with `<TierGate>` import ✅
+- `web/src/components/__tests__/TierGate.test.tsx`, `web/src/components/__tests__/Tabs.test.tsx` — new unit tests (44/44 pass)
+- `web/src/styles/global.css` — 4 new CSS custom properties (`--radius-control`, `--radius-card`, `--radius-pill`, `--min-touch`) + shared focus-ring block
 
-**What changes:**
+**What changed:**
 - TierGate: pure extraction of the triplicated TierUpsell pattern. Props interface from the
   existing pattern; no logic change, no new API call.
 - Tabs: pure extraction of the repeated inline tab-button pattern. Props: `tabs: {id, label}[]`,
-  `activeTab`, `onTabChange`. No logic change.
-- chartColors.ts: verify the `CHART_COLORS` constant covers indices 0–7. No new hex.
+  `activeTab`, `onTabChange`. Keyboard nav (ArrowLeft/Right/Home/End), roving tabIndex,
+  `role="tablist"` / `role="tab"` / `aria-selected`. No logic change.
+- chartColors.ts: `CHART_COLORS[7]` confirmed present (`'#7C93AD'`). No edit made.
+
+**Plan corrections (S31 D-093):**
+- ~~"extracted from inline pattern in Analytics/QoE/Alerts/Reports/Fleet/Settings"~~ — **CORRECTED**.
+  Live inventory: **4 pages** carry the identical inline tab pattern: Analytics, Alerts, Reports,
+  Settings. QoE has NO tab pattern (QoE/Probes/Anomalies = N/A). Fleet uses a segmented-control
+  widget with different visual treatment — it is NEVER a `<Tabs>` candidate; it needs a
+  separate `<SegmentedControl>` component. Page tab conversions remain deferred to their
+  chartered waves (Analytics → Wave 2; Alerts/Settings → Wave 4; Reports → Wave 5).
+- ~~"verify `CHART_COLORS[7]` is `'#7C93AD'` (complete the index)"~~ — **CLARIFIED**:
+  the index was already complete at baseline. "Complete the index" was misleading. Verified-only.
+- **C7 WCAG finding (new, S31):** three items found during Wave 0 a11y pass:
+  (a) Light-theme CTA `--color-on-signal` on `--color-accent` = 3.12:1 at 13px — WAIVER
+  granted (pre-existing at 2f53414; fix requires `tokens.json color.light.accent` → `#087A59`;
+  deferred to first token-update wave); (b) `--color-muted` at 14px body in TierGate description
+  — FIXED (changed to `var(--color-secondary)`, 8.18:1 dark / 7.00:1 light); (c) `--color-muted`
+  inactive tab text — FIXED (Tabs.tsx uses `var(--color-secondary)`).
+- **F5 live finding (S31/D-093):** AMS BroadcastDTO returns `publishType="RTMP"` for
+  SRT-ingested streams (live-observed during TC-I-05-SRT-20260714T022945Z). Pulse mirrors AMS
+  verbatim; SRT ingest is counted as RTMP in protocol breakdown. publishType for SRT was
+  "unknown at S29 authoring" — now KNOWN and recorded. No code change; Pulse behavior is correct
+  (mirrors AMS); operator documentation updated in `docs/AMS-INTEGRATION.md`.
 
 **What must NOT change:**
 - Zero public API changes. Zero contract changes.
 - Tier-gate entitlement logic (only the render is moving; `LicenseContext` remains unchanged).
 - No style behaviour changes — extraction is pixel-for-pixel equivalent.
 - All 404 existing unit tests must still pass after extraction.
+
+**Result:** 44/44 new component tests pass. 131/131 page-suite tests pass (Reports,
+Anomalies, Probes + TenantsTab). TypeScript: zero errors.
 
 **Acceptance gates:** full per-wave checklist (§2.2). Additional extraction regression: run
 `npx vitest run` before and after; diffs must not introduce new failures.

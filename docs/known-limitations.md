@@ -1,6 +1,6 @@
 # Pulse — Known Limitations
 
-**Product:** Pulse v0.3.0 (D-091, S29)  
+**Product:** Pulse v0.3.0 (D-093, S31)  
 **Source:** `docs/assessment/documentation-gaps.md` (DG-01 through DG-18),
 `docs/assessment/final-assessment.md` §1 and Appendix B,
 `docs/assessment/capability-map.md`
@@ -411,8 +411,9 @@ even when the SRT link has meaningful transport-level loss (DG-18;
 **Workaround:** Monitor SRT link health at the network level (e.g., sFlow, netflow,
 SRT socket statistics from the publisher side) for pre-ARQ loss.
 
-**Roadmap:** P1 "SRT loss validation against live SRT ingest"
-(`docs/assessment/final-assessment.md` §5).
+**Validation status:** TC-I-05-SRT PASS (2/2 assertions, S31/D-093, 2026-07-14T02:29:45Z).
+`packetLostRatio=0.0` on a clean loss run confirmed correct post-ARQ semantics.
+See `docs/assessment/final-assessment.md` §5 and `docs/AMS-INTEGRATION.md` §1.1.
 
 ---
 
@@ -478,12 +479,43 @@ determine this spike is systematically unwanted
 
 ---
 
+### LIM-23: SRT streams are attributed as RTMP in Pulse's protocol breakdown
+
+**What it means for you:** When a publisher connects via SRT, Pulse reports that
+stream as `protocol=RTMP` in protocol breakdown charts (ProtocolDonut) and protocol
+filter dropdowns. A deployment that mixes SRT and RTMP ingest will overcount RTMP
+publishers and show zero SRT publishers.
+
+**Root cause:** AMS 3.0.3 EE's `BroadcastDTO` reports `publishType="RTMP"` for
+SRT-ingested streams. This was live-observed during the first successful SRT ingest
+validation run (S31/D-093, 2026-07-14T02:29:45Z; evidence:
+`qa/realams/evidence/TC-I-05-SRT-20260714T022945Z/`). Pulse reads `publishType`
+verbatim at `server/pkg/amsclient/client.go:88` (field `PublishType`; the inline
+comment at that line documents the known value set as `"webrtc|rtmp|hls"` — `"srt"`
+is absent because AMS 3.0.3 does not emit it). This value is stored and forwarded
+to the UI without transformation. Distinguishing SRT from RTMP would require an
+out-of-band heuristic (e.g., matching the publisher's source port to AMS's SRT
+listen port 4200); no such heuristic is implemented.
+
+**Workaround:** Cross-reference SRT publisher counts using the AMS Management Console
+directly. As a supplementary signal: RTMP ingest always shows `packetLostRatio=0`
+(LIM-08, TCP absorbs loss); SRT may show non-zero post-ARQ `packetLostRatio` on a
+degraded link (LIM-17). On a clean link both protocols show 0, so the signal only
+helps on impaired links.
+
+**Roadmap:** Accurate SRT attribution requires AMS to emit `publishType="SRT"` in
+BroadcastDTO, or a port-based heuristic added to the collector. No change is planned
+for this release.
+
+---
+
 ## Changelog
 
 | Version | Change |
 |---------|--------|
 | D-089 (S27, 2026-07-13) | Initial document — 18 limitations from DG-01–DG-18 + final-assessment §1 + §4 |
 | D-091 (S29, 2026-07-13) | Added LIM-19..LIM-22: Kafka live-validation gap (AV-15), Kafka plaintext-only transport, at-least-once delivery + first-start history replay, first-viewer z-spike intentional ruling; corrected topic name ams-instance-stats → ams-server-events in LIM-01 + LIM-04 with code-derived caveat and AV-15 forward pointer; count 18 → 22 |
+| D-093 (S31, 2026-07-14) | LIM-17 roadmap → Validation status: TC-I-05-SRT PASS (F3, first live SRT run, 2/2 assertions); added LIM-23: SRT streams attributed as RTMP in protocol breakdown (AMS-side publishType="RTMP" fact, F5, live-observed S31); updated product version header; count 22 → 23 |
 
 ---
 

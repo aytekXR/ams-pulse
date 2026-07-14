@@ -5522,3 +5522,91 @@ green). origin/main == HEAD at S29 open.
   (13-day window) — renewal intake before 07-27 or ingest dies again
   at the NEXT AMS restart after lapse (the D-092 enforcement model:
   lapse alone spares running streams + RTMP until a restart).
+- **MERGE EVIDENCE (appended at S31 open):** PR **#44** merged
+  **2026-07-14T00:37:14Z**, merge commit `2f53414` (now `main`). The
+  late-session addendum commit `f703634` was authored after the merge
+  and rides S31's PR. **D-092 CLOSED.**
+
+---
+
+## D-093 (S31, 2026-07-14 — OPEN): operator intake + §2.19 Wave 0 + SRT ingest live-validated
+
+- **Session open 02:23Z.** Tree state at open: branch `s31-uipro-wave0`
+  already existed carrying `f703634` (S30's addendum, unpushed) **plus
+  an uncommitted partial Wave 0 from a DEAD earlier S31 attempt**
+  (TierGate.tsx + its test, untracked; Reports/Anomalies/Probes pages
+  modified; TC-I-05 SKIP-arm patch — all written 01:21–01:31Z, before
+  the VPS reboot killed the session). **D-082/D-086/D-091 rule applied:
+  the dead tree was NOT trusted** — adopted only through an independent
+  equivalence audit + adversarial verify + fresh mutation proofs (see
+  Wave 0 below). `Caddyfile.prod` matbu block left untouched (D-062
+  4th; operator ruling still pending).
+- **★ VPS REBOOT ~02:02Z (uptime 21 min at open) — not session-caused.**
+  All prod/realams/evrak/yanki containers came back healthy; prod
+  healthz all-ok, 0 poll-errlines. `antmedia` restarted at boot.
+- **★★ POST-REBOOT LICENSE PROOF (the D-092 model completed).** That
+  boot was the **FIRST `antmedia` process restart since the S30 license
+  was applied**. `ams-teststream` had exited(255) at reboot (the
+  S14/S22 ffmpeg class) → restarted (sanctioned) → **AMS ACCEPTED the
+  RTMP publish immediately** (`status=broadcasting`, `publishType=RTMP`,
+  count=1; **zero** "License is suspended" / refusal lines).
+  ⇒ **A VALID license survives an AMS restart cleanly.** The D-092
+  ingest-death finding therefore requires *lapse* **+** *restart* — a
+  restart alone is harmless. The enforcement model is now closed on
+  both arms (lapsed+restart = ingest dead; valid+restart = fine).
+- **OPERATOR INTAKE (mission (a)): all standing items STILL OPEN,
+  re-verified live at open.** (1) **AMS license: DONE/landed at S30** —
+  and now proven restart-durable (above); renewal still due before
+  **2026-07-27T13:45Z**. (2) GHCR anonymous pull still DENIED (tags/list
+  401, manifest 403 — image private, the ~30 s flip). (3) no trial-key
+  signal; (4) no assessment-review signal; (5) no Ant-Media-contact
+  signal; (6) no MaxNodes ruling; (7) matbu vhost ruling unanswered
+  (on-disk Caddyfile untouched); (8) G1/G2 design gaps unanswered →
+  Wave 0 needed neither (no form inputs, no icons added — G2 deferred
+  intact); (9) uipro-vs-brandkit confirmation unanswered → **the
+  recorded assumption STANDS** (brandkit tokens binding, uipro = method,
+  D-071) and Wave 0 was executed under it. **10th sweep (`s31open`,
+  02:23Z): byte-identical to the pre-expiry baseline** except the
+  teststream-down rows (explained above; restored minutes later).
+  **None block autonomous work.**
+- **★★ SRT INGEST LIVE-VALIDATED — TC-I-05-SRT PASS (2/2), the first
+  real run in the project's history** (02:29:45Z; evidence
+  `qa/realams/evidence/TC-I-05-SRT-20260714T022945Z/`):
+  `status=broadcasting` after **2 s**, `bitrate=1,148,432 bps`,
+  `packetLostRatio=0.0`, `packetsLost=0`, Pulse-side
+  `packet_loss_pct=0`. **The blocked-scenario list is now EMPTY**
+  (was [SRT ingest, RTMP ingest (new), any fresh-publish scenario]).
+- **★ WHY IT NEVER RAN: the scenario's SRT streamid format was WRONG,
+  and two successive gates had been hiding it.** S29 authored the
+  streamid in SRT Access-Control form (`#!::h=LiveApp/<id>,m=publish`);
+  the license refusal (S29) and then the CPU admission guard (S30) both
+  refused the connection *before AMS's parser was ever reached*, so the
+  format was never exercised. With a valid license and a quiet box, the
+  handshake finally reached the parser and AMS said:
+  `ERROR SRTAdaptor - There is no scope for incoming stream id.
+  Parsed scope: #!::h=LiveApp, stream id: val-i05-srt-…` — **AMS EE
+  3.0.3 splits the streamid on `/` and treats the left side as the app
+  scope WITHOUT stripping the ACF prefix.** Both ACF spellings were
+  probed live and both are rejected identically (`h=` and `r=`); the
+  **plain `streamid=<App>/<streamId>` form ingests cleanly** (probe:
+  150 frames/6 s accepted, `SRT Source … stream id:srtprobeA
+  scope:LiveApp`). Scenario fixed to the plain form. **Lesson: a SKIP
+  that never reaches the code under test proves nothing about it** —
+  two sessions of honest SKIPs masked a broken fixture.
+- **★ SECOND SCENARIO DEFECT (assert-too-early), found by the first
+  real run and fixed:** AMS reports `bitrate` from a rolling window, so
+  it is legitimately **0 for the first ~10 s** of a perfectly healthy
+  broadcast. TC-I-05 sampled once, 5 s in, and **FAILED a flowing
+  stream**. Now it polls for the stat to populate (bounded 45 s; live
+  samples `0s=0 3s=0 6s=0 9s=0 12s=1148432`) and the publisher runs 90 s
+  so Pulse's 15 s collector also sees the stream. Both scenario fixes
+  gated (`bash -n` + shellcheck clean).
+- **★ SRT IS ATTRIBUTED AS RTMP (product-visible, honest disclosure —
+  NOT a Pulse defect).** AMS's BroadcastDTO returns
+  `publishType: "RTMP"` for an SRT-ingested stream (live-observed).
+  Pulse copies AMS's `publishType` verbatim
+  (`server/pkg/amsclient/client.go:88`), so **SRT ingests are counted as
+  RTMP in Pulse's protocol breakdown** (ProtocolDonut, protocol
+  filters). Pulse reports what AMS reports; distinguishing them would
+  need a heuristic. `publishType` for SRT was recorded as "unknown at
+  S29 authoring" — it is now KNOWN. Filed as a known-limitation row.

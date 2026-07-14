@@ -56,16 +56,27 @@ document. S19 should fix all five in a single `docs/AMS-INTEGRATION.md` editing 
 
 ## Prioritized Authoring Plan for S19
 
+> **S31 status (D-093, 2026-07-14): DG-18 CLOSED** — Live SRT validation
+> TC-I-05-SRT PASS (2/2 assertions, 2026-07-14T02:29:45Z; evidence:
+> `qa/realams/evidence/TC-I-05-SRT-20260714T022945Z/`): `status=broadcasting`,
+> `bitrate=1148432 bps`, `packetLostRatio=0.0`, Pulse `packet_loss_pct=0`.
+> Post-ARQ semantics confirmed: clean 0% loss run → ratio=0 (expected).
+> SRT publishType live-observed: AMS reports `publishType="RTMP"` for SRT-ingested
+> streams (F5 finding, D-093); Pulse mirrors AMS verbatim. Additional finding: AMS
+> SRTAdaptor requires plain streamId form `LiveApp/<id>`; ACF prefix forms rejected.
+> `docs/AMS-INTEGRATION.md` updated with S31 PASS record and both new findings.
+> **DG-18 is CLOSED** — the documentation gap is filled; no further validation needed.
+>
+> *Prior blocked runs superseded:* S29/D-091 (license suspended); S30 late-session
+> (license gate cleared, hit VPS high-resource-usage guard at load=14).
+>
 > **S29 status (D-091, 2026-07-13): DG-18 variant note AUTHORED** — the
 > `packetLostRatio` per-protocol semantics note (RTMP always 0 / SRT post-ARQ /
 > WebRTC UDP-native) was added to `docs/AMS-INTEGRATION.md` §1.1 as a callout
 > table after the D-029v real-wire units paragraph. Live SRT ingest validation
-> (TC-I-05-SRT-packet-loss.sh) was run on 2026-07-13 and **BLOCKED** by AMS EE
-> license suspension: SRTAdaptor logged "License is suspended. Not accepting the
-> stream:#!::h=LiveApp/val-i05-srt-1783979972,m=publish" (evidence:
-> `qa/realams/evidence/S29-TC-I-05-SRT-20260713T215932Z/`). The scenario is
-> committed and ready. DG-18 CLOSURE requires a live SRT observation run
-> post-license-renewal to record publishType and confirm post-ARQ semantics.
+> (TC-I-05-SRT-packet-loss.sh) was run on 2026-07-13 and blocked by AMS EE
+> license suspension (evidence: `qa/realams/evidence/S29-TC-I-05-SRT-20260713T215932Z/`).
+> Superseded by S31 PASS above.
 >
 > **S28 status (D-090, 2026-07-13): DG-15 and DG-05 are AUTHORED** — DG-15
 > created `docs/kafka-integration.md` (code-authoritative guide: topic
