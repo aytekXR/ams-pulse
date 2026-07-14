@@ -11,7 +11,95 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-33.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-34.md`)
+
+**Session 2026-07-14 result: D-095 — S33 DONE (★★ caught S32 SHIPPING A TREE IT NEVER
+COMMITTED — PR #46 was still open and its branch was missing the CSS rule its own gates had
+run against; ★ §2.19 Wave 2 landed: Analytics + Fleet + shared SegmentedControl; ★★ deleted
+12 tests that could never fail; ★ THREE new operator gaps — including the brandkit's own WCAG
+table being WRONG).**
+
+- **OPERATOR INTAKE: no new signals; all standing items OPEN; NONE blocked Wave 2.** No
+  operator commits or file drops since S32. GHCR anonymous pull still **401** (private). No
+  trial-key / assessment-review / Ant-Media-contact / MaxNodes / matbu signals. G1/G2
+  unanswered (Wave 2 adds no forms, no icons). **G3 unanswered** (a `tokens.json` change a
+  session may NOT self-approve). ⏰ **License renewal due 2026-07-27T13:45Z** (13 d at open).
+  AMS healthy at open (`s33open` sweep **byte-identical** to baseline; teststream
+  broadcasting, `publishers=1`, 0 poll errors). **CI promotions skip carry ×22.**
+- **★★ THE HEADLINE — S32 GATED A TREE THAT DOES NOT EXIST IN GIT.** At S33 open, **PR #46
+  was still OPEN** (S32's docs said "DONE"; `origin/main` was still at S31). And its branch
+  was **missing a line**: S32 committed `QoePage.tsx` with `className="filter-input"` and a
+  comment promising *"focus ring provided by `.filter-input:focus-visible` in global.css"* —
+  but **never staged that global.css rule**. Working-tree mtime (04:42Z) **predates** the
+  commit (05:24Z): the gates ran green against a file that was never committed. Merging as-is
+  would have shipped two filter inputs with **no branded focus ring**, behind a comment and
+  two tests promising one.
+- **★★ WHY THE TESTS COULDN'T CATCH IT — a whole blind spot, now closed.** They asserted
+  `toHaveClass("filter-input")`, which is true **whether or not any rule matches the class**.
+  Nothing in TypeScript ties a bare className to a stylesheet. **A className with no rule is
+  a false a11y promise; a rule with no user is dead CSS.** New `styles/__tests__/
+  focus-rings.test.ts` pins **both halves** for every CSS-only class, parsing the real
+  stylesheet. **RED-proven against S32's actual commit.** Fixed on the branch that caused it;
+  PR #46 re-gated 15/15 and **merged**. **STANDING RULE: verify the previous session actually
+  merged — "DONE" in a doc is not evidence that it landed.**
+- **★ §2.19 WAVE 2 DONE (Analytics + Fleet).** Chart hex → `CHART_COLORS[N]` (same hex);
+  Fleet's memory-healthy bar stays **dataviz blue, never `statusColors.healthy`**; 18 px →
+  `--space-*` **exact matches only**; **`<SegmentedControl>` extracted** (`role=radiogroup`,
+  **NOT `tablist`** — a tablist promises tabpanels that don't exist, the same false-promise
+  class as S32's `aria-sort`); **`<StatCard size="compact">`** (a 1:1 swap was NOT
+  pixel-neutral: padding 14→24px, value 24→40px). `--color-muted` eliminated from both pages
+  + shared `Badge`/`StatCard` (it fails AA at every size these pages use).
+- **★ THE PLAN WAS WRONG IN THREE PLACES, all corrected against reality:** Fleet's
+  `var(--color-warning, #hex)` fallbacks were **dead AND stale** (drop them, don't keep them);
+  **`width: 32` is a DIMENSION, not spacing** — never `--space-*`; the StatCard swap needed a
+  variant. **The px→token trap now has a cousin: width/height/minWidth are not spacing.**
+- **★★ 12 TAUTOLOGICAL TESTS DELETED.** Each asserted `STATUS_COLORS[cpuStatus(85)] ===
+  '#FF5C68'` — two values the test file imported and composed **itself**, never rendering the
+  component. **One was worse than vacuous:** it pinned healthy memory as GREEN while the
+  component deliberately paints it **BLUE** — asserting a value the component never uses, with
+  **no render-level pin on the real behaviour at all**. Replaced with DOM-reading pins in both
+  themes. **4 mutations RED-proven** — and **one of my own mutations produced a FALSE GREEN**
+  (`perl` without `/g` hit a doc comment, not the JSX). **Verify a mutation LANDED before
+  trusting a green** (D-091 class, 2nd occurrence).
+- **★ THREE NEW OPERATOR GAPS (all verified, not asserted):**
+  **G4 — touch targets:** brandkit's `minTouchTarget=44` is **WCAG AAA**; the **AA** bar is
+  **24×24**, which today's ~28px buttons already pass. Enforcing 44 would visibly retheme every
+  button and fights brandkit's own desktop-density spec. **Deferred, not skipped** — a
+  pixel-neutral wave may not make that call. Coupled to G1.
+  **G5 — the brandkit WCAG table is WRONG:** design-rationale §2 (BINDING) claims muted =
+  **~4.6:1 AA**; recomputed it is **3.72:1** — *below* AA for normal text. **The table's own
+  guidance is unsafe, and every future wave reads that table.** This retroactively justifies
+  the muted→secondary sweeps.
+  **G6 — light-theme info Badge = 2.32:1** (`--color-info` is intentionally not overridden for
+  light). Needs a `color.light.info` token. All three are brandkit/`tokens.json` → **operator's
+  to authorise (D-071).**
+- **★ NEW e2e: `analytics.spec.ts` + `fleet.spec.ts`** — **neither page had one.** The Analytics
+  spec pins the **real Recharts SVG stroke attributes** (jsdom structurally cannot) and they are
+  byte-identical to the pre-refactor hex.
+- **Gates:** web **548/548** (S32: 515) / 35 files; coverage **67.93/63.37/57.11** vs floors
+  59/54/45; lint + build clean; gen:api in sync; **Playwright 16/16** (default four + the two
+  new specs); `contracts/` + `brandkit/` byte-untouched; zero bare hex + zero `--color-muted`
+  on both pages. No Go changes. Workflow: 10 agents, 0 errors.
+- **S34 carries:** §2.19 **Wave 3 (Ingest + Anomalies) [M]** primary — **★ it carries an
+  unresolved colour question the plan could not settle: an Ingest series uses `#FF5C68`, and
+  whether it means "error" (→ `var(--color-error)`) or is a plain dataviz series (→
+  `CHART_COLORS[3]` = `#F06BB2`, a DIFFERENT hex) must be read from the code, not guessed**;
+  **G3+G5+G6 token fixes [XS, operator-gated]**; **G4 ruling**; license renewal before 07-27;
+  marketplace tail (operator items).
+
+**▶ FIRST ACTION — open `agents/handoffs/sessions/SESSION-34.md` and execute it**
+(★ standing directive at its top: review the backlog + REVISE the plan; operator intake
+FIRST — six standing items + **G1…G6** + the StatCard look question; **VERIFY S33 ACTUALLY
+MERGED before trusting it**; AMS re-sweep at open WITHOUT any PULSE_TOKEN prefix;
+`ams-teststream` does NOT auto-restart across a reboot; **SRT publishes use the PLAIN
+streamid**; CI promotions if ≥07-23 else skip carry ×23). **PR-first, ≤2 pushes.**
+Check `docs/operator-expected.md` FIRST.
+
+---
+
+## ▶ prior session context (S32, superseded by the above — original START HERE follows)
+
+## (superseded) ▶ START HERE (next session — execute `sessions/SESSION-33.md`)
 
 **Session 2026-07-14 result: D-094 — S32 DONE (★ §2.19 Wave 1 landed: LiveOverview
 + QoE on brandkit tokens + real ARIA; ★★ the verify net caught the build shipping a

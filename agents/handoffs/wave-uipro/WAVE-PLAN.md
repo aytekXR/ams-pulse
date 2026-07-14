@@ -208,6 +208,52 @@ brandkit design-rationale §5 (future spec): "Icon set — commission or curate 
 Gap: Lucide sprint is unscheduled. Until it lands, a library must be chosen and kept consistent within and across waves.  
 **Operator question:** Adopt Phosphor (uipro recommendation) as the bridge library until the Lucide sprint, or prefer Lucide directly (aligning with the future brandkit direction)? Either way, one library must be locked before any wave that adds icons; mixing is forbidden. Stroke consistency (1.75px per future brandkit spec) applies regardless of which library is chosen.
 
+**G4 — Touch-target minimum (NEW, S33/D-095; affects every remaining wave):**
+brandkit `tokens.json layout.minTouchTarget = 44`. uipro SKILL.md §2 asks for 44×44pt.
+The pages' existing controls are ~28px tall (padding `4px 10px` / `6px 12px` at 11–12px text).
+
+The 44 figure is **WCAG 2.1 SC 2.5.5 — Level AAA**. The Level **AA** requirement is
+**WCAG 2.2 SC 2.5.8 Target Size (Minimum) = 24×24 CSS px**, which the current controls
+already satisfy. So enforcing 44 is *exceeding* AA, not *reaching* it — and it is not free:
+it visibly retextures every button on every page, and it contradicts brandkit's own
+desktop-density spec in design-rationale §3 ("Tables: 40px rows, 13px table text" — a
+product designed for NOC/ops screens). It is also entangled with **G1**: if no mobile
+viewport is supported, the touch-target argument largely evaporates.
+
+Wave 2 **deferred** it rather than ship a silent visual change under a refactor chartered as
+pixel-neutral.
+**Operator question:** Enforce `minTouchTarget = 44` across the UI (accepting that every
+button gets taller and the desktop density loosens), or keep the current compact desktop
+density and record 24×24 (WCAG 2.2 AA) as the binding floor? This blocks any wave that would
+enforce 44pt.
+
+**G5 — The brandkit WCAG table itself has a wrong number (NEW, S33/D-095):**
+`brandkit/documentation/design-rationale.md` §2 is **BINDING** (CLAUDE.md). Its row
+*"Muted #5C6F80 on #0A0E14 | ~4.6:1 | AA — labels/captions only, never body copy"* is
+**incorrect**. Recomputed from the WCAG 2.x sRGB relative-luminance formula: the true ratio
+is **3.72:1**.
+
+That matters because 3.72 is **below the 4.5:1 AA bar for normal text** — it only clears the
+3:1 large-text bar. The table's own guidance ("labels/captions only") was written against a
+number that is too high, and labels/captions at 11–12px *are* normal text. On the actual
+surfaces the app uses, `--color-muted` measures **3.44:1 dark / 4.36:1 light** — failing AA
+everywhere it was used for text.
+
+This is why Wave 0 and Wave 2 replaced `--color-muted` with `--color-secondary` (8.03:1 dark
+/ 7.00:1 light) wherever it carried text. Those fixes were correct; the table is what is wrong.
+**Operator action:** correct the ratio in the WCAG table (and, if desired, restate what
+`--color-muted` may legitimately be used for — on current values, only large text or
+non-text UI). brandkit is yours (D-071); no session will edit it.
+
+**G6 — `Badge` info variant fails AA in light theme (NEW, S33/D-095):**
+`global.css` deliberately does **not** override `--color-info` (`#58A6FF`) in the light theme
+(there is an explicit comment saying so). In light theme the info Badge therefore renders
+`#58A6FF` text on a composited `#EEF6FF` background = **2.32:1**, far below AA.
+Reached today from AlertsPage; any page may use it.
+**Operator action:** add a `color.light.info` token (something around `#1B5EAD` reaches AA on
+that background). This is a `tokens.json` change — **operator-gated**; Wave 2 did not invent
+a value.
+
 ---
 
 ## 4. Wave plan
@@ -328,7 +374,59 @@ Anomalies, Probes + TenantsTab). TypeScript: zero errors.
 
 ---
 
-### Wave 2 — Analytics + Fleet [M]
+### Wave 2 — Analytics + Fleet [M] — ✅ DONE — S33 (D-095, 2026-07-14)
+
+> **PLAN CORRECTED AGAINST REALITY (S33).** Three items below were wrong:
+>
+> 1. **"Fleet: `var(--color-*, #hex)` fallbacks — leave alone"** — WRONG. Re-derived from
+>    `global.css`: `--color-warning` and `--color-success` are defined in **both** themes,
+>    so the fallback is **unreachable**, and the light values (`#B45309` / `#0BA678`)
+>    **differ** from the fallback hex — it would have painted the wrong colour if ever
+>    reached. **Dropped**, exactly as Wave 1 did on QoE.
+> 2. **"`width: 32` → `var(--space-6)`"** — WRONG, and it is the px→token trap wearing a
+>    different hat. **Width is a dimension, not spacing.** The `--space-*` scale may only
+>    replace spacing properties. Caught by the adversarial verifier; the scout had it wrong.
+> 3. **"inline stat-card grids replaced with `<StatCard>`"** — INCOMPLETE. A 1:1 swap is
+>    **not pixel-neutral**: the default `<StatCard>` is density-token-driven
+>    (`--card-padding` 24px, `--metric-size` 40px) while the Analytics cards are fixed
+>    14px/24px. Shipped as **`<StatCard size="compact">`**, carrying the Analytics geometry
+>    verbatim. Whether Analytics *should* adopt the density-responsive look is a **design
+>    decision filed for the operator**, not one a refactor may make.
+>
+> **★ TOUCH TARGETS ARE NOT A FREE WIN (binding for every remaining wave).** The drafted
+> spec wanted `minHeight: 44` on every button. brandkit's `layout.minTouchTarget = 44` is
+> **WCAG 2.1 SC 2.5.5 = AAA**; the **AA** requirement is **WCAG 2.2 SC 2.5.8 = 24×24**,
+> which the existing ~28px controls already meet. Enforcing 44 **visibly retextures every
+> button**, contradicts brandkit's own desktop-density spec ("Tables: 40px rows"), and is
+> **coupled to the unanswered G1**. Filed as **G4** — a pixel-neutral wave may not make it.
+>
+> **★ A className is a CONTRACT with the stylesheet.** S32 shipped
+> `className="filter-input"` with no matching rule (see D-095). `styles/__tests__/
+> focus-rings.test.ts` now pins both halves for every CSS-only class. **Any wave adding a
+> bare className for styling must add it to that map.**
+
+**Pages:** Analytics (scout M), Fleet (scout M). Combined: M+.
+
+**What shipped (S33):**
+- Analytics: 3 Recharts strokes → `CHART_COLORS[1]`/`[0]`/`[4]` (same hex); 5 px → `--space-*`;
+  `<StatCard size="compact">` adoption; `role=tabpanel` wiring on all three panels (Wave 0
+  deferred panel-side ARIA to the page wave — this is that wave); `accessibilityLayer`;
+  `scope="col"`; `--color-muted` eliminated.
+- Fleet: 2× memory-healthy `#58A6FF` → `CHART_COLORS[1]` (still dataviz blue, **never**
+  `statusColors.healthy`); stale var() fallbacks dropped; 8 px → `--space-*`;
+  `<SegmentedControl>` extracted; sr-only tier on LoadBar; `--color-muted` eliminated.
+- Shared: `Badge` muted variant + `StatCard` labels → `--color-secondary` (both were AA
+  failures reached from Wave 2's surface).
+- NEW e2e `analytics.spec.ts` + `fleet.spec.ts` — neither page had a spec.
+
+**Result:** web 548/548 / 35 files; coverage 67.93/63.37/57.11 vs floors 59/54/45;
+Playwright 16/16; contracts/ + brandkit/ byte-untouched; zero bare hex, zero `--color-muted`
+on both pages. 12 tautological palette tests deleted and replaced with render-level pins;
+4 mutations RED-proven.
+
+---
+
+### Wave 2 — original plan (superseded by the above)
 
 **Pages:** Analytics (scout M), Fleet (scout M). Combined: M+.
 

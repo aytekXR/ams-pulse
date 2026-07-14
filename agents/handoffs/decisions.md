@@ -5783,3 +5783,142 @@ green). origin/main == HEAD at S29 open.
 - **Workflow:** 8 agents (2 scouts + 2 builders + 3 adversarial verifiers
   + 1 remediation), **0 errors**. Verdicts: 1 CONFIRMED_OK, 2 PARTIAL →
   4 must-fix, all remediated same-session with sabotage proofs.
+
+---
+
+## D-095 (S33, 2026-07-14 — OPEN): operator intake + §2.19 Wave 2 (Analytics + Fleet) + the S32 commit escape
+
+- **Session open 05:35Z.** Branch `s33-uipro-wave2` off `cf43f97` (= main after
+  the S32 merge, below). Tree clean except the standing `Caddyfile.prod` matbu
+  block (untouched, D-062 5th).
+- **★★ THE HEADLINE: S32 GATED A TREE IT NEVER COMMITTED — caught at open.**
+  **PR #46 was still OPEN at S33 open** (S32 wrote its close docs and its
+  RESUME-PROMPT said "S32 DONE", but the merge never happened; `origin/main` was
+  still at S31's `323d6f7`). Worse, the branch was **missing a line**: S32
+  committed `QoePage.tsx` carrying `className="filter-input"` and a comment
+  reading *"outline:none removed; focus ring provided by
+  `.filter-input:focus-visible` in global.css"* — but **never staged the
+  `global.css` rule that provides it**. Working-tree mtime 04:42Z **predates**
+  commit `24db41d` (05:24Z): the file was edited, the gates ran green against it,
+  and the commit then took a subset. **D-094's "515/515 green" was measured on a
+  tree that does not exist in git.** Merging #46 as it stood would have shipped
+  two QoE filter inputs whose branded focus ring simply was not there (UA default
+  only), behind a comment and two tests promising it was.
+- **★★ WHY THE TESTS COULD NOT CATCH IT — a whole class of blind spot.** The two
+  tests assert `toHaveClass("filter-input")`. That is true **whether or not any
+  rule matches the class**. Nothing in TypeScript ties a bare `className` to a
+  stylesheet, so the two halves can drift apart silently. **A className with no
+  rule behind it is a false accessibility promise; a rule with no className using
+  it is dead CSS.** Fixed structurally: new
+  `web/src/styles/__tests__/focus-rings.test.ts` pins **both halves** for every
+  CSS-only contract class — the rule must exist in `global.css` **with a real
+  `outline`** (parsed from the stylesheet, not hard-coded), **and** a component
+  must actually set the class. **RED-proven against the exact tree S32 committed:**
+  `AssertionError: expected [ 'tier-gate-cta', 'tabs-btn' ] to include 'filter-input'`.
+  Fixed on the branch that caused it (`52dad8f`), CI re-run 15/15 green, **PR #46
+  merged** → main `cf43f97`. Wave 2 then extends the guard to `.seg-btn`,
+  `.btn-secondary`, `.picker-btn`.
+- **OPERATOR INTAKE: no new signals; all standing items OPEN; NONE blocks Wave 2.**
+  No operator commits or file drops since S32. GHCR anonymous pull still **401**
+  (token-auth 403 — image private). No trial-key / assessment-review /
+  Ant-Media-contact / MaxNodes / matbu signals. G1/G2 unanswered — Wave 2 adds no
+  form inputs and no icons, so neither blocks. **G3 unanswered** — a `tokens.json`
+  change a session may NOT self-approve (D-071). ⏰ **License expires
+  2026-07-27T13:45Z (13 d 8 h at open)** — top intake item from ~07-25.
+- **AMS at open (`s33open` sweep): BYTE-IDENTICAL to the s32open baseline.**
+  Enterprise 3.0.3, 4 apps, teststream broadcasting (`broadcasts-count.LiveApp=1`,
+  HLS manifest 200), `pulse-realams.total_publishers=1`, prod healthz all-ok,
+  `poll-errlines-15m=0`. `ams-teststream` already up (no restart needed). AMS never
+  touched. **CI promotions: skip carry ×22** (07-14 < the 07-23 gate).
+- **★ §2.19 WAVE 2 DONE (Analytics + Fleet + SegmentedControl).** Pixel-neutral.
+  - **Colour (same hex, named by intent):** Analytics 3 Recharts strokes →
+    `CHART_COLORS[1]`/`[0]`/`[4]`; Fleet 2× `#58A6FF` memory-healthy LoadBar →
+    `CHART_COLORS[1]` — **still dataviz blue, NOT `statusColors.healthy`** (normal
+    memory is a secondary metric, not a health signal).
+  - **★ Fleet's `var(--color-warning, #FFB224)` fallbacks DROPPED — the plan said
+    leave them, and the plan was wrong.** Re-derived from `global.css`:
+    `--color-warning` and `--color-success` are defined in **both** themes, so the
+    fallback was **unreachable**; and the light values (`#B45309` / `#0BA678`)
+    **differ** from the fallback hex, so had one ever been reached it would have
+    painted the wrong colour. Identical to the Wave 1 finding on QoE.
+  - **px → token:** 18 substitutions, **EXACT matches only** (scale
+    4/8/12/16/24/32/48/64/96). Every non-matching literal (6/10/11/13/14/20/22 px,
+    all font sizes, all radii) **LEFT ALONE**. **`width: 32` was proposed for
+    `--space-6` and REJECTED — width is a dimension, not spacing** (adversarial
+    verifier's MUST-FIX; the scout had it wrong).
+  - **`<SegmentedControl>` extracted** from Fleet's cards/table toggle, pixel-exact:
+    **`role=radiogroup`/`radio` + `aria-checked`, NOT `tablist`.** A tablist
+    promises tabpanels; this toggle reveals no separate region. **Announcing tabs
+    with nothing to move to is the same false-promise class as S32's
+    `aria-sort="none"` on unsortable columns.** Roving tabIndex, Arrow/Home/End with
+    wrap, selection-follows-focus.
+  - **`<StatCard size="compact">`** adopted by Analytics' inline totals grid. **A 1:1
+    swap was NOT pixel-neutral** (padding 14→24px, value 24→40px — the default card
+    is density-token-driven), so the variant carries the Analytics geometry verbatim.
+    The swap **gains `role=group` accessible names the inline cards never had.**
+    Whether Analytics *should* adopt the density-responsive look is a **design call
+    filed for the operator, not assumed by a refactor**.
+- **★ WCAG: `--color-muted` eliminated from both pages + the shared `Badge` (muted
+  variant) and `StatCard` labels.** Independently re-derived: muted is **3.44:1
+  dark / 4.36:1 light on `--color-surface`** — below AA for normal text at *every*
+  size these pages use (11–13px). `--color-secondary` gives 8.03:1 / 7.00:1. Also:
+  `accessibilityLayer` on the LineChart; **`role=tabpanel` wiring on all three
+  Analytics panels** (Wave 0 explicitly deferred this to the page wave — Analytics
+  IS that wave); `scope="col"` on table headers; accessible names on the
+  DateRangePicker custom-range inputs; sr-only tier text on the LoadBar.
+- **★★ TOUCH TARGETS DEFERRED — a decision, not an omission (NEW GAP G4).** The
+  drafted spec said add `minHeight: 44` to every button. **Rejected and filed
+  instead.** brandkit's `layout.minTouchTarget = 44` is **WCAG 2.1 SC 2.5.5 = AAA**;
+  the **AA** bar is **WCAG 2.2 SC 2.5.8 = 24×24**, which these ~28px controls
+  already clear. Enforcing 44 would **visibly retheme every button on both pages**,
+  contradicts brandkit's own desktop-density spec ("Tables: 40px rows, 13px table
+  text"), and is **coupled to the unanswered G1** (mobile viewport support). A
+  refactor chartered as pixel-neutral does not get to make that call.
+- **★★ THE BRANDKIT'S OWN WCAG TABLE IS WRONG (NEW GAP G5) — verified, not
+  asserted.** `brandkit/documentation/design-rationale.md` §2 (**BINDING** per
+  CLAUDE.md) claims *"Muted #5C6F80 on #0A0E14 | ~4.6:1 | AA — labels/captions
+  only"*. Recomputed from the WCAG 2.x sRGB formula: **3.72:1**. That is **not AA
+  for normal text** (needs 4.5) — it only clears the 3:1 large-text bar. The table's
+  own guidance ("labels/captions only") was written against a number that is too
+  high, and labels/captions at 11–12px **are** normal text. **This retroactively
+  justifies the muted→secondary sweep** Wave 0 started and Wave 2 completed.
+  brandkit is the operator's (D-071) — **filed, not edited.**
+- **★ NEW GAP G6: `Badge` info variant fails AA in light theme.** `--color-info`
+  (`#58A6FF`) is **intentionally not overridden** in light (global.css comment), so
+  in light theme it renders on a composited `#EEF6FF` background = **2.32:1**.
+  Needs a `color.light.info` token — **a `tokens.json` change, operator-gated.**
+  Wave 2 did not invent the value.
+- **★★ TESTS: 12 TAUTOLOGICAL FleetPage PALETTE TESTS DELETED.** Each asserted
+  `STATUS_COLORS[cpuStatus(85)] === '#FF5C68'` — **two values the test file imported
+  and composed itself**, never rendering the component. **One was worse than
+  vacuous:** it pinned `STATUS_COLORS[memStatus(50)] === '#2CE5A7'` while the
+  component **deliberately paints healthy memory BLUE** — it asserted a value the
+  component never uses, and the intentional dataviz-blue choice had **no render-level
+  pin at all**. Replaced with pins that read the fill off the DOM in both themes.
+- **Mutation-proven RED** (each in a restored-clean tree, restore verified
+  byte-identical): **M1** memory-healthy `CHART_COLORS[1]` → `statusColors.healthy`
+  → **2 RED**; **M2** `radiogroup`/`radio` → `tablist`/`tab` → **15 RED**; **M3**
+  inactive `--color-secondary` → `--color-muted` → SG-6 RED; **M4** roving tabIndex
+  removed → SG-3 RED.
+- **★ FALSE-GREEN CAUGHT IN MY OWN HARNESS (the D-091 class, 2nd occurrence).** M2
+  first came back **GREEN (36 passed)**. The cause was not a vacuous test: `perl -0pi
+  -e 's/role="radiogroup"/.../'` **without `/g`** replaced only the **first**
+  occurrence in the file — which was **the doc comment**, not the JSX. The component
+  was never mutated. **A mutation you did not verify landed is not a mutation.**
+  Re-run with `/g` and a grep proving the JSX changed: 15 RED, as it should be.
+- **★ NEW e2e: `analytics.spec.ts` + `fleet.spec.ts`** — **neither page had one.**
+  Per S32's standing rule (run the specs of what a wave TOUCHES, not the default
+  list). The Analytics spec pins the **real Recharts SVG `stroke` attributes** — a
+  check jsdom structurally cannot make — and they come back **byte-identical to the
+  pre-refactor hex** (`#58A6FF`, `#2CE5A7`, `#FFB224`). The Fleet spec drives the
+  SegmentedControl by **keyboard** in a real browser.
+- **Gates:** web **548/548** (S32: 515; +6 focus-ring guard, +27 Wave 2) / 35 files;
+  coverage **67.93 / 63.37 / 57.11** vs floors 59/54/45; lint + build clean; gen:api
+  in sync; **Playwright 16/16** (default four + the two new specs); `contracts/` +
+  `brandkit/` **byte-untouched**; **zero bare hex and zero `--color-muted`** in both
+  pages. No Go changes. Load 7.6–9.5 throughout (well under the 19.8 flake
+  threshold). Workflow: 10 agents, 0 errors.
+- **S34 carries:** §2.19 **Wave 3 (Ingest + Anomalies) [M]** primary; **G3 + G5 + G6
+  token fixes [XS, operator-gated — all three are `tokens.json`/brandkit edits]**;
+  **G4 touch-target ruling** (blocks any wave that would enforce 44pt); license
+  renewal intake before 07-27; marketplace tail (operator items).
