@@ -5316,3 +5316,161 @@ green). origin/main == HEAD at S29 open.
   description-only CR, regen idempotent ×3. Integration suite deferred
   to PR CI (no store/query production change — S27/S28 precedent).
   CI promotions skip carry ×18 (07-13/14 < 07-23).
+- **CLOSE EVIDENCE (S29): PR #42 MERGED** 2026-07-13 → squash `772fb97`
+  (12/12 contexts green incl. csp-e2e + matrix-test). **PR #43 MERGED**
+  23:24:13Z → squash `8a527ee` — the operator's caddy-vhost commit
+  carried to origin (direct main push rejected by branch protection →
+  one-commit PR under his account; strict up-to-dateness required an
+  API update-branch + full re-run, all green). **origin/main now has
+  the bedirhan vhost — the S20 redeploy-drop hazard is CLOSED.**
+  2 pushes total (session branch + carry branch).
+- **⚠ D-062 4th OCCURRENCE (caught AT close, post-#43-merge):** a
+  concurrent session appended a NEW ~99-line `matbu.{$PULSE_DOMAIN}`
+  vhost (evrak document-pilot app: basic_auth + healthz-404 +
+  reverse_proxy evrak-app:8000) to the ON-DISK Caddyfile.prod
+  (+ its own `.bak-evrak-20260714`), between S29's byte-identity check
+  (~22:3xZ, diff vs 80df0ab empty) and the post-merge reconcile. The
+  look-before-overwrite diff caught it — nothing was overwritten; local
+  main fast-forwarded via MIXED reset (ref+index only, worktree
+  untouched). **RULING: the matbu block is deliberately NOT committed
+  to ams-pulse — the repo is PUBLIC and the block embeds a bcrypt
+  basic_auth hash** (the evrak session's own comments state the hash
+  lives only in the shared on-disk Caddyfile, never a repo). Standing
+  state again: live prod HAS a vhost origin/main LACKS (this time with
+  a secrets reason). Operator decision filed in operator-expected:
+  commit-with-hash (public exposure) / commit-with-placeholder+runbook
+  / accept-and-document the redeploy gap in the evrak project's own
+  runbook. Never revert the on-disk file (D-082 standing, now BINDING
+  for the matbu block too).
+
+## D-092 (S30, 2026-07-13/14 — OPEN): operator-intake gate + §2.19 uipro scoping
+
+- **Session open ~23:36Z 07-13** (~12 min after S29's PR #43 merge).
+  Tree state verified: local main == origin/main @ 8a527ee; the three
+  uncommitted worktree items are all known S29-close artifacts
+  (decisions.md close-evidence + operator-expected matbu item — both
+  ride THIS session's PR; Caddyfile.prod matbu block — NEVER commit,
+  D-062-4th ruling stands). No new foreign work found.
+- **OPERATOR INTAKE (mission (a)): ALL ITEMS STILL OPEN, re-verified
+  live at open.** (1) AMS license NOT landed — **9th byte-identical
+  REST sweep** (s30open 23:38Z, run bare per the S29 PULSE_TOKEN
+  gotcha; only delta vs baseline AND vs s29open = teststream-down rows,
+  explained below); (2) GHCR anonymous pull token still DENIED
+  (private); (3) no trial-key signal; (4) no assessment-review signal;
+  (5) no Ant-Media-contact signal; (6) no MaxNodes ruling;
+  (7) PDF disposition unanswered (file untracked, mtime 21:38Z 07-13
+  unchanged); (8) uipro-vs-brandkit confirmation unanswered → the
+  recorded assumption STANDS (brandkit tokens binding, uipro = method,
+  D-071); (9) matbu vhost ruling unanswered (on-disk file untouched).
+  **None block autonomous work → session proceeds per SESSION-30.md.**
+- **★ FIRST POST-LAPSE AMS RESTART OBSERVED (the S22 standing
+  hypothesis finally tested).** `antmedia` CRASHED ~22:14Z 07-13
+  (MuxAdaptor exception spam in log) → docker auto-restart, up
+  22:21:31Z (RestartCount=3; boot history in-log: 06-28×2, 07-10,
+  07-12 06:53Z pre-lapse, 07-13 22:21Z = the ONLY post-lapse boot).
+  **Boot-time-enforcement answer: NO REST-surface change at boot** —
+  post-restart sweep byte-identical to the pre-expiry baseline (still
+  Enterprise Edition 3.0.3 20260504_1443, 4 apps, settings intact);
+  SRT adaptor starts+listens :4200; a LicenceService.checkOnlineLicense
+  exception appears in the boot log (online check errors, boot
+  proceeds). Enforcement remains feature-level only (S29 SRT finding).
+  NOT operator action (crash, not license application) — observe-only
+  held, AMS never touched.
+- **Teststream (S22-sanctioned probe): down at open** — ffmpeg
+  exited(1) when AMS crashed. Restart attempted 01:41 local →
+  **REJECTED by AMS's own resource guard** ("Not enough resource. Due
+  to high cpu load: 92 cpu limit: 75", RTMPHandler refused ingest) —
+  **ENVIRONMENTAL, NOT license enforcement**: host load avg 20.5
+  (11.3/11.9 GB RAM, no swap) from concurrent operator sessions
+  (hayati flutter test runners, evrak pilot create-user/alembic, 2×
+  clickhouse, 3+ claude sessions). AMS container itself idle (5% CPU).
+  The 22:14Z AMS crash is plausibly the same resource pressure.
+  Teststream retry deferred until load drops (task tracked); RTMP
+  publish-accept post-restart therefore UNANSWERED at open — the
+  rejection message is the S18 ENV-LIMIT class, not a license delta.
+  TC-I-05-SRT NOT run (license still lapsed ⇒ honest SKIP; and under
+  this load any SRT result would be ambiguous anyway).
+- **Prod health at open:** healthz all-ok (ch/col/meta), 0 poll error
+  lines 15m. pulse-realams healthy (7h up), overview reachable.
+- **CI promotions: skip carry ×19** (run date 07-13/14 < 07-23).
+- **uipro state at open:** CLI v2.11.0 global (~/.nvm .../bin/uipro);
+  NOT init-ed (no .claude/skills in-repo or global) — matches §2.19.
+- **★ PDF DISPOSITION CLOSED (operator action + content verification).**
+  At 01:29:54 local (~4 min before this session opened; .git/index
+  mtime) the operator staged the PDF (`git add`, 717 KB) and deleted
+  both his `.bak-bedirhan/.bak-evrak` Caddyfile backups — read as his
+  answer to the S29 ask: "commit to docs/". Before honoring it, the
+  content was READ for the first time (S29 couldn't — no host PDF
+  tooling; S30 used dockerized poppler): it is a RENDERING OF THE
+  ALREADY-COMMITTED-AND-PUBLIC `docs/prd-report.md` (identical title/
+  classification/date, heading-level diff clean — the 2 apparent
+  diffs are pdftotext artifacts; revenue tables byte-similar). The
+  "Internal strategy document" classification therefore adds NO new
+  exposure — the markdown twin has been public since D-069. RULING:
+  commit as staged on the session branch (own attributed commit);
+  cost = a 717 KB binary duplicate in history; operator can say
+  "drop the pdf" anytime (tree-remove, history retains). The .bak
+  deletions are the operator exercising "yours to keep or delete" —
+  housekeeping note closed.
+- **★★ RESTART-ENFORCEMENT HYPOTHESIS CONFIRMED — RTMP INGEST NOW
+  LICENSE-BLOCKED (the answer S22 waited for).** Teststream retry #2
+  (23:52Z, load 6.6, AMS CPU-guard silent) refused: "You are not
+  allowed to publish the stream teststream". Fresh-id cross-probes on
+  TWO apps (s30probe1985@pulse-test, s30probe30221@LiveApp) both
+  refused with the definitive line: **`AcceptOnlyStreamsInDataStore -
+  License is suspended and not accepting connection`** (license check
+  injected in the publish-accept chain even with the setting itself
+  not activated). Combined truth: pre-restart the lapse only bit SRT
+  (S29); post-restart it bites ALL new ingest — while the REST surface
+  stays byte-identical Enterprise (9 sweeps). Streams live at the
+  lapse had survived ~34 h until the crash. **Operational: the
+  operator's AMS is now ingest-dead for new connections; teststream
+  CANNOT return until the license lands; blocked-scenario list grows
+  to [SRT ingest, RTMP ingest (new), any fresh-publish scenario].**
+  Docs updated same-session: AMS-INTEGRATION.md S30 note ("RTMP no
+  longer unaffected"), validation-environment.md §9 row. Evidence:
+  `qa/realams/evidence/S30-rtmp-license-block-20260713T2353Z/`.
+  AMS itself never touched (probes were publish attempts only —
+  the same sanctioned class as the S22 teststream restart).
+- **★ §2.19 SCOPING WO DONE (mission (b)) — workflow s30-uipro-scoping:
+  6 agents (3 scouts + 1 author + 2 adversarial verifiers), 0 errors,
+  545k tokens.** `uipro init --ai claude --offline` ran in-repo (CLI
+  v2.11.0; 143 files / 2.8 MB / 7 skills). **Vendored review verdict
+  DO_NOT_COMMIT + independent commit-gate verifier REJECTED** (converging
+  evidence): core ui-ux-pro-max skill has NO license grant (public-repo
+  redistribution blocker — decisive even for a pruned subset);
+  design/{cip,logo,icon}/generate.py make LIVE Gemini API calls;
+  design-system/generate-slide.py hardcodes fonts.googleapis.com +
+  SKILL.md embeds cdn.jsdelivr.net (binding self-hosted-only violations,
+  the S28 dc.html class ×74 in typography.csv); ui-styling pushes
+  shadcn/Tailwind (zero such deps in web/package.json) + runs npx at
+  runtime; ui-styling LICENSE.txt Apache-2.0 with UNFILLED copyright
+  template. **RULING: .claude/skills/ = local-only, GITIGNORED** (all
+  sessions run on this VPS; bootstrap documented in WAVE-PLAN §1.1b);
+  only ui-ux-pro-max/scripts/search.py + checklists + charts/react CSV
+  rows are in-scope for waves, values always discarded for tokens.
+- **Wave plan authored + adversarially verified:**
+  `agents/handoffs/wave-uipro/WAVE-PLAN.md` (~440 lines) — method
+  (targeted search.py invocations, per-wave binding checklist), 6-item
+  conflict ledger C1–C6 (ALL resolved token-wins) + 2 genuine gaps for
+  operator/designer (G1 mobile input font-size vs 14px body token;
+  G2 icon library ruling), 6 waves: W0 Shared Surface [S] (TierGate +
+  Tabs extraction — TierUpsell is TRIPLICATED verbatim across Reports/
+  Anomalies/Probes; inline tab pattern ×6 pages), W1 LiveOverview+QoE
+  [M], W2 Analytics+Fleet [M], W3 Ingest+Anomalies [M], W4 Alerts+
+  Settings [M], W5 Reports+Probes [L]. Inventory ground truth: 404
+  vitest tests / 30 files; 21 residual hardcoded hex (all Recharts
+  stroke= — CHART_COLORS[] is the fix, var() stringifies); ~200 px
+  literals (probes 44, reports 32); ROADMAP §2.19 ledger line appended.
+  **planVerify PARTIAL → 1 must-fix REMEDIATED same-session** (the
+  plan had dropped the gen:api drift gate vs SESSION-30 §Gates — gate
+  re-added verbatim) **+ 1 citation fix** (C3 elastic.out is motion.csv
+  No=3, not 9/11). commitVerify REJECTED → resolved by the gitignore
+  ruling above (no commit attempted).
+- **Wave-0-this-session decision: NO — Wave 0 → S31** (the plan's own
+  honest recommendation; mission (b)'s IF-clause resolves false: the
+  scoping WO was the session's [S] budget, W0 is real web-code change
+  requiring full web gates incl. Playwright-docker on a box that hit
+  load 20 tonight from concurrent operator sessions). §2.18 marketplace
+  tail stays sequenced FIRST when the operator unblocks it (§2.19
+  sequencing rule unchanged).

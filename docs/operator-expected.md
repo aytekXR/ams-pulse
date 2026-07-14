@@ -1,4 +1,84 @@
-# Operator TODO — the items only YOU can do (updated at SESSION-29 close, D-091, 2026-07-14; rides S29's PR)
+# Operator TODO — the items only YOU can do (updated at SESSION-30 close, D-092, 2026-07-14; rides S30's PR)
+
+## ⚡ TL;DR — expected from you right now (2026-07-14, SESSION-30 closed — D-092, AMS ingest-dead finding + §2.19 scoping done)
+
+> **1. ★★ URGENT ESCALATION: your AMS now refuses ALL new ingest — RTMP
+> included.** Your `antmedia` container crashed tonight (~22:14Z, resource
+> pressure while the VPS ran ~4 concurrent heavy sessions) and docker
+> auto-restarted it — the FIRST process restart since the license lapse.
+> That restart activated full enforcement: every new RTMP publish on every
+> app is now refused with "License is suspended and not accepting
+> connection" (SRT was already refusing since S29). The REST API still
+> reports "Enterprise Edition" unchanged — your server LOOKS healthy but
+> cannot accept any new stream. The teststream cannot be restarted (tried,
+> twice, evidence recorded). **Applying your new license is now the only
+> path to any live ingest** — say "AMS license applied" and the session
+> re-sweeps, restarts the teststream, runs the SRT validation scenario,
+> and re-validates the Enterprise surface.
+>
+> **2. Your PDF: handled per your staging.** You (or your shell) staged
+> `docs/ant-media-marketplace-opportunity-report.md.pdf` at 01:29 tonight —
+> taken as your "commit to docs/" answer. Before committing, S30 finally
+> READ it (dockerized poppler): it is a PDF rendering of
+> `docs/prd-report.md`, which has been committed and public since June —
+> so no new exposure. It is committed as staged. It IS a 717 KB binary
+> duplicate; say "drop the pdf" anytime to remove it from the tree.
+> (Your two Caddyfile `.bak` deletions were also noticed — nothing needed.)
+>
+> **3. Your uipro directive: scoping is DONE.** The full wave plan is at
+> `agents/handoffs/wave-uipro/WAVE-PLAN.md`: 6 waves, page-by-page, with
+> binding per-wave gates; Wave 0 (shared-component extraction) starts S31.
+> **One honesty call you should know about: the skill files uipro
+> installed are NOT committed to the repo** — the core skill ships with
+> no license (committing it to your PUBLIC repo would be redistribution
+> without a granted right), and parts of the bundle hardcode Google-Fonts
+> CDN links and live Gemini API calls. The skill works fine installed
+> locally on this VPS (gitignored; bootstrap documented). Your recorded
+> assumption stands: **brandkit tokens remain binding, uipro drives
+> method** — say "uipro overrules brandkit" if you want the opposite.
+> **Two small design gaps found for you/your designer (G1/G2 in the wave
+> plan):** G1 — mobile inputs need ≥16px font to avoid iOS zoom, but your
+> body token is 14px (needs a ruling for touch layouts); G2 — the skill
+> recommends a single icon library; the app currently has no icon-library
+> dependency (Phosphor vs Lucide vs stay-iconless — your call, XS either way).
+>
+> **4. Your matbu/evrak vhost ruling is STILL PENDING (unchanged).** Live
+> prod serves `matbu.beyondkaira.com` from the on-disk Caddyfile that
+> `origin/main` lacks (deliberately uncommitted — embeds your bcrypt
+> hash; repo is public). A clean-checkout redeploy would drop that site.
+> Options (a) commit with hash / (b) commit with placeholder + runbook
+> step / (c) document the gap in the evrak runbook. Sessions keep hands
+> off the file until you rule.
+>
+> **5. Your FIVE standing marketplace items — all still open, re-verified
+> at S30 open** (9th byte-identical sweep pre-dated the finding above;
+> GHCR anonymous pull still denied): AMS license (item 1 above, now
+> urgent), official trial-key mint (vault privkey), final-assessment
+> review (gates upload), Ant Media marketplace contact, GHCR public flip
+> (~30 s), Pro MaxNodes ruling (PRD says 1–2, code enforces 10).
+>
+> **FYI, no action needed — what S30 did autonomously:** operator intake
+> re-verified live; the restart-enforcement question answered with
+> evidence (the hypothesis stood open since S22); §2.19 scoping WO
+> executed end-to-end (3 scouts + author + 2 adversarial verifiers; 1
+> dropped-gate must-fix caught and remediated same-session); docs updated
+> honestly (AMS-INTEGRATION "RTMP unaffected" claim was made stale by
+> tonight's restart — corrected with evidence); blocked-scenario list
+> grew to [SRT ingest, RTMP ingest (new), any fresh-publish scenario];
+> prod healthy at open (healthz all-ok, 0 poll errors); CI promotions
+> skip carry ×19 (gate opens 07-23).
+
+## 🔎 What SESSION-30 did (2026-07-13/14, closed — D-092)
+
+| Area | Result |
+|---|---|
+| **Operator intake** | All items re-verified live at open: none landed (9th byte-identical sweep; GHCR denied; no key/review/contact/MaxNodes signals). PDF disposition CLOSED per your staging (content verified = public prd-report.md duplicate). Your .bak cleanups acknowledged. |
+| **★ Restart-enforcement finding** | First post-lapse AMS restart observed (crash 22:14Z + docker auto-restart 22:21Z). Answer to the S22 hypothesis: REST surface unchanged at boot, but ALL new RTMP ingest now refused ("License is suspended and not accepting connection", both apps, fresh ids — evidence `qa/realams/evidence/S30-rtmp-license-block-20260713T2353Z/`). Your AMS is ingest-dead until the license lands. Docs corrected same-session. |
+| **§2.19 scoping WO** | `uipro init` in-repo + full vendored review (verdict DO_NOT_COMMIT: no license on the core skill, Gemini callers, CDN-font content — skill kept local+gitignored, bootstrap documented); 6-wave page-by-page plan with binding gates at `agents/handoffs/wave-uipro/WAVE-PLAN.md`; 6-item conflict ledger all resolved token-wins; 2 operator gaps filed (G1 mobile font-size, G2 icon library); inventory ground truth: 404 web tests, 21 residual hex (all Recharts strokes), ~200 px literals, TierUpsell triplicated. Wave 0 → S31. |
+| **Quality net** | Workflow: 6 agents (3 scouts + author + 2 adversarial verifiers), 0 errors. planVerify caught a dropped gen:api gate in the drafted plan — remediated same-session; commitVerify independently re-derived the DO_NOT_COMMIT verdict. Teststream retry attempted twice (resource-guard red herring correctly separated from the real license refusal). |
+| **Ops** | Docs-only session (no Go/web/contract changes). Prod untouched, healthy at open. AMS never touched (publish probes only — the sanctioned S22 class). CI promotions skip carry ×19. One PR. |
+
+## (superseded) S29-close header follows
 
 ## ⚡ TL;DR — expected from you right now (2026-07-14, SESSION-29 closed — D-091, F10 complete + SRT enforcement finding)
 
@@ -29,7 +109,22 @@
 > to do with it: commit to docs/? keep local? fold into the marketplace
 > pack?
 >
-> **4. NEW — your uipro directive is scoped and awaits one confirmation.**
+> **4. NEW (found at S29 close) — your matbu/evrak vhost needs a ruling.**
+> A concurrent session appended a `matbu.beyondkaira.com` vhost (evrak
+> pilot, ~99 lines incl. a bcrypt basic_auth hash) to the ON-DISK prod
+> Caddyfile tonight. It is deliberately NOT committed: this repo is
+> PUBLIC and the block embeds the auth hash (your evrak session's own
+> comments say the hash lives only in the shared Caddyfile). So once
+> again live prod serves a vhost that `origin/main` lacks — a redeploy
+> from a clean checkout would drop `matbu.beyondkaira.com`. Pick one:
+> (a) "commit matbu vhost" (accepts public exposure of the bcrypt hash),
+> (b) "commit matbu with placeholder hash" (+ a runbook step to restore
+> the real hash on redeploy), or (c) leave it and document the gap in
+> the evrak project's runbook. Until you rule, sessions keep the on-disk
+> file untouched (standing D-082 rule). Your `.bak-evrak-20260714` and
+> `.bak-bedirhan-20260712` files are also left untouched.
+>
+> **5. NEW — your uipro directive is scoped and awaits one confirmation.**
 > "Refactor all UI/UX by uipro" is now **ROADMAP-V2 §2.19** (phased,
 > page-by-page waves, S30 starts the scoping work order). The recorded
 > assumption: **your brandkit tokens remain the binding design source
