@@ -6438,3 +6438,88 @@ e2e that now legitimately calls `getSources` via the guard and needed its `/admi
 
 `deploy/config/Caddyfile.prod` remains **uncommitted, dirty, intact** — confirmed not in PR #53.
 **Never** `git reset --hard` / `checkout -- .` / `stash` / `clean` in this repo.
+
+---
+
+## D-099 — S37 (2026-07-15): tier-entitlement enforcement audit + SSO licence-gating (PR #71)
+
+**Plan revision at open (standing-directive clause).** SESSION-37.md and RESUME-PROMPT named
+§2.16 AMS early-warning as the goal, "deferred twice." **Verify-at-open proved that stale:**
+ROADMAP-V2 §2.16 is **✅ BUILT S25 (D-087) + ✅ FIXED S26 (D-088)** — the 3-rung ladder shipped two
+sessions ago. The "deferred twice" note was a planning error propagated across S35/S36 handoffs.
+
+**Revised S37 goal:** audit whether every paid-tier **entitlement is actually ENFORCED, not
+decorative** — the exact bug class S36/D-098 found (token `Scopes` were stored but never checked) —
+and fix the gaps. **Confirmed lead gap:** SSO/OIDC. The PRD prices SSO at Enterprise
+(`prd-report.md:358`), but `license.Entitlements` has **no SSO field** and the `/auth/oidc/*` routes
+are gated **nowhere** — any tier, including Free, can enable SSO. Same shape as the whole audit:
+a `Check*` that exists but is never called, or a paid feature with no gate at all.
+
+**Operator action required: NONE.** Pure engineering; safe for prod (OIDC disabled there, 0 users,
+Enterprise licence). The two standing operator blockers are unchanged and re-verified live this
+session: **GHCR still private (anon manifest → 401)**; **AMS licence expires 2026-07-27T13:45Z**.
+Neither blocks this work; both still outrank all session work for a first sale.
+
+Verify-at-open census: `origin/main` = `7d31194` (S36); prod `v0.4.0-13-g3ed3c7f`; `/healthz`
+`ams_env_configured=true` (S36 fix live); working tree clean but for `Caddyfile.prod`.
+
+### CLOSE (2026-07-15) — six enforcement gaps fixed, adversarially verified
+
+**Scope: the whole audit was "is every paid entitlement ENFORCED, or merely stored?"** Six gaps of
+the D-098 shape (`Check*` exists but is never called, or a paid feature with no gate at all) — five
+found by the audit, a sixth by the close-out adversarial review:
+
+1. **SSO/OIDC → Enterprise.** Added `license.CheckSSO()` (Enterprise-only). Gated `handleOIDCLogin`
+   and `handleOIDCCallback` (after the `s.oidc==nil` 501 check; **logout deliberately left open** so
+   a downgraded admin can still sign out) and made `handleOIDCStatus` report `enabled=false` when
+   unlicensed so the SPA hides the button. Closes the D-098 "unenforced revenue" funnel-gap row.
+2. **White-label report headers → `white_label` entitlement.** Added `CheckWhiteLabel()`; gated the
+   header on `handleCreate/UpdateReportSchedule` and dropped it on the scheduler timer path.
+3. **Alert-channel type on update + test-fire.** `CheckChannelAllowed(row.Type)` added to
+   `handleUpdateAlertChannel` and `handleTestAlertChannel` (create was already gated) — no more
+   email→webhook upgrade or paid test-fire on a Free/Pro tenant.
+4. **Scheduler timer-path licence re-check.** `reports.Scheduler` gained a `LicenseChecker` +
+   `SetLicense` (wired in `serve.go`); `runSchedule` skips entirely if `CheckReports()` fails and
+   drops white-label if `CheckWhiteLabel()` fails — a schedule created while licensed stops after a
+   downgrade.
+5. **Retention clamp on the analytics reads.** `GeoBreakdown`, `DeviceBreakdown`, `QoeSummary`,
+   `IngestTimeseries` now call `s.applyRetention` (only `AudienceAnalytics` did before).
+6. **★ Adversarial-review catch — `QueryProbeResults` retention + untested callback gate.** The
+   7-agent review (5 dimensions → refuter-verified; 2 CONFIRMED, 0 uncertain) found **(a)** the
+   probe-results read path forwarded caller `from`/`to` straight to ClickHouse — a Free tenant could
+   read 365 days of probe history (HIGH, enforcement-gap); and **(b)** the `handleOIDCCallback`
+   `CheckSSO` gate had **no test** — deletable with zero failures (MED, the S36 vacuous-test trap,
+   which my own harness comment had wrongly claimed was covered). Both fixed in the same PR and
+   mutation-proven.
+
+**Verification.** Go: `internal/{license,query,reports,api}` + full `./...` suite green (24 pkgs),
+`gofmt` clean. Web: `tsc --noEmit` + vitest green (zero web files changed → Playwright, which runs
+against stubbed APIs on a byte-identical `dist/`, cannot regress from a server-only change; S36
+census was 60/60). **Mutation-proven:** each of the six guards removed → its test *and only its test*
+failed RED, then restored (e.g. deleting the `GeoBreakdown` clamp failed only `TestGeoBreakdown_*`;
+the four sibling retention tests stayed green — proving the capturing-`fakeConn` mechanism is
+non-vacuous). The OIDC test harness now mints an **Enterprise** licence (SSO requires it), which is
+the honest tier for a harness that exercises a working SSO flow.
+
+**Design ruling — `MaxStreams` NOT gated (recorded, not an omission).** Every shipped tier sets
+`MaxStreams=-1` (unlimited), and Pulse is **observe-only** — it cannot refuse an AMS ingest, so there
+is no enforcement point. A finite `MaxStreams` on a custom key is a product decision (warn-in-UI vs
+nothing), not engineering. Pairs with the open Pro-MaxNodes operator ruling.
+
+**Operator action: NONE** (re-confirmed at close). Blockers unchanged, re-verified live: GHCR anon
+manifest → **401** (after `docker logout`); AMS licence expiry **2026-07-27T13:45Z (12 days)**.
+
+**Prod: rolled forward at close (evidence, not the compose label).** Rollback point tagged
+`pulse-prod-pulse:pre-d099`; pre-upgrade backup exit 0; STAMPED build (`--build-arg` on `build`, then
+`up -d` without `--build`) asserted **`pulse v0.4.0-15-g9f1d658 (commit 9f1d658, built
+2026-07-15T08:01:38Z)`** before deploy. Post-swap smoke: `/healthz` `status:ok`,
+`ams_env_configured:true`, components `{clickhouse, collector, meta_store} = ok`; **the S37 code path
+proven live** — `GET /auth/oidc/status` → `200 {"enabled":false}` (tier-aware handler running on the
+Enterprise licence, OIDC off); signed webhook → `200`; logs clean (no ERROR/panic); collector live at
+**850,103** `server_events` rows (up from S36's ~832k — ingest flowing). Behaviorally the change is
+inert in prod (Enterprise licence passes every gate; retention unbounded) — the deploy keeps the SHA
+current, which was the S34/S36 hygiene lesson.
+
+**Docs at close:** operator-expected.md refreshed (queue unchanged, no operator action); ROADMAP-V2
+§2.22 ledger; SESSION-38 plan (team-management UI / licence-expiry alerting candidates); RESUME-PROMPT
+▶ START HERE → S38. Landed in a follow-up docs PR.

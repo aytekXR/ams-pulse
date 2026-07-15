@@ -11,21 +11,25 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-37.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-38.md`)
 
-**Session 2026-07-15 result: D-098 — S36 DONE (PR #53, user-intake blockers fixed, in prod).**
+**Session 2026-07-15 result: D-099 — S37 DONE (PR #71, tier-entitlement enforcement, in prod).**
 
-**★★ S36 ALSO DISCARDED ITS OWN PLAN — right again.** S35 had planned "§2.16 AMS early-warning."
-The operator instead asked *"are we ready for user intake? how do they sign up and log in?"* — so
-S36 **executed** every auth path (161-agent adversarial audit, 51 findings → 29 confirmed). Answer:
-there is **no signup** (self-hosted, licence-key; first credential is a bootstrap token in the boot
-logs), and the flow **after** login was broken three ways — all now fixed:
-**(1)** role labels were never enforced (a read-only token could self-escalate to admin);
-**(2)** login landed on an empty dashboard with no path to the setup wizard;
-**(3)** new API tokens flashed for 4 s then were unrecoverable.
-Fixed, gated (Go 24/24 · vitest 638/638 · Playwright 60/60), merged, and rolled to prod.
-Full evidence: `decisions.md` D-098. Next goal: **§2.16 AMS early-warning** (deferred twice, still
-the strongest approved-unblocked candidate) — but re-read the standing-directive clause first.
+**★★ S37 DISCARDED ITS OWN PLAN — right again (three sessions running).** SESSION-37.md named
+"§2.16 AMS early-warning," but a `grep` of ROADMAP-V2 at open proved it had **already shipped S25/S26
+(D-087/D-088)** — the "deferred twice" note was a planning error propagated across handoffs. So S37
+became a **tier-entitlement enforcement audit** — generalizing the D-098 bug class (*capability stored
+but never checked*) across every paid feature. **Six gaps fixed:** SSO/OIDC now Enterprise-gated
+(closing the D-098 "unenforced revenue" funnel row); white-label report headers, alert-channel type
+(update + test-fire), the report scheduler's timer, and retention on five analytics/probe read paths.
+The close-out **adversarial review caught two gaps in my own sweep** — an unclamped probe-results read
+and an *untested* callback gate (deletable with zero failures, the S36 vacuous-test trap) — both fixed
+and mutation-proven. Gated (Go 24/24 · gofmt · web tsc+vitest; every guard mutation-proven RED),
+merged, rolled to prod. Full evidence: `decisions.md` D-099.
+
+**Next goal candidate: team-management UI** (`/admin/users` CRUD exists, no page — highest-value
+sell-readiness gap) or out-of-band licence-expiry alerting — **but re-verify against the ROADMAP
+ledger and re-read the standing-directive clause first** (S37's lesson: the named goal was stale).
 
 ---
 

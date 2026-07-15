@@ -1,6 +1,45 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-15, D-098 — SESSION-36)
+# Operator TODO — the items only YOU can do (updated 2026-07-15, D-099 — SESSION-37)
 
-## ⚡ TL;DR — your queue is UNCHANGED. But "can a customer log in?" is now YES.
+## ⚡ TL;DR — NO operator action required. Your queue is UNCHANGED (re-verified live).
+
+S37 was **server-side entitlement-enforcement hardening** — no operator step, no new blocker,
+behaviorally **inert on your prod** (Enterprise licence, 0 users, OIDC off → every gate passes).
+The two items below still outrank everything a session can do; both re-checked live this session:
+**GHCR still private** (anonymous manifest pull → **401**, checked after `docker logout`), **AMS
+licence expires 2026-07-27T13:45Z — 12 days**.
+
+**What S37 fixed (the D-098 bug class, generalized).** D-098 found *capabilities are stored but
+never checked* (token scopes existed; writes were ungated). The same shape was audited across every
+paid feature and fixed:
+
+- **SSO/OIDC is now Enterprise-gated.** It was priced at Enterprise (PRD §7) but the `/auth/oidc/*`
+  routes were gated **nowhere** — any tier, including Free, could turn SSO on. This was the
+  **"unenforced revenue" funnel gap from the D-098 table below** — now closed (login, callback and
+  the status endpoint all check the licence; logout stays open so a downgraded admin can still sign out).
+- **White-label report headers** now require the `white_label` entitlement (Enterprise) — enforced on
+  schedule create/update **and** on the scheduler's timer, so a downgraded schedule drops its branding.
+- **Alert-channel type** is now gated on **update** and **test-fire** (it was only gated on create) —
+  a Free/Pro tenant can no longer upgrade a channel to a paid type or fire a paid test.
+- **The report scheduler re-checks the licence on every fire** — a schedule created while licensed
+  stops generating after a downgrade.
+- **Retention is now enforced on five read paths** (analytics geo/device/QoE/ingest + probe results)
+  that previously let a Free tenant read past its 7-day window; only audience analytics clamped before.
+
+**Honest disclosure (not buried).** An adversarial review of my own work caught **two real gaps I had
+missed** — the probe-results read was left unclamped, and the OIDC *callback* gate had no test (it was
+deletable with zero failures, the exact S36 vacuous-test trap). Both are fixed and mutation-proven in
+the same PR (#71).
+
+**On item 8 (Pro MaxNodes) — a companion, no new action:** `MaxStreams` is the same shape but needs
+**no gate** — every shipped tier is `-1` (unlimited), and Pulse is **observe-only**: it cannot stop
+AMS from ingesting a stream, so there is no enforcement point. A *finite* `MaxStreams` on a custom key
+would be a product ruling (warn-in-UI vs nothing), not engineering. Nothing to do unless you sell such a key.
+
+**✅ Prod is current.** Rolled forward at S37 close to **`v0.4.0-15-g9f1d658`** (was `-13-g3ed3c7f`),
+verified live: `/healthz` all-ok, collector flowing (850k+ events), the new SSO status endpoint
+answering `200 {"enabled":false}`, signed webhook 200, logs clean. Rollback point `pre-d099` tagged.
+
+## ⚡ (D-098 context, still current) — "can a customer log in?" is YES.
 
 You asked: **are we ready for user intake — how do customers sign up and log in?** S36 answered it
 by **executing** every auth path (161-agent adversarial audit, 51 findings → 29 confirmed). The
