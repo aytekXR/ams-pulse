@@ -11,32 +11,47 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-40.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-41.md`)
 
-**Session 2026-07-15 result: D-101 — S39 DONE (PR #75, out-of-band licence-expiry alerting, in prod).**
+**Session 2026-07-15 result: D-102 — S40 DONE (PR #77, audit trail — actor on every admin/config write, in prod).**
 
-**★ S39 CONFIRMED its plan (first non-pivot in five sessions).** The standing-clause re-read at open found
-candidate 1 was still the highest-leverage unblocked move, so S39 built it as scoped: a **`license_expiry`
-alert metric** that warns through the operator's configured channels when the Pulse key is within N days of
-expiry — closing the D-098 gap where the only warning was a UI banner (a customer who never opens the
-dashboard got nothing). It is a **faithful mirror of `cert_expiry`**: a "days until expiry" scalar injected
-via `LicenseExpiryChecker`, dispatched by the evaluator's metric switch, delivered through the normal
-channel path; `serve.go` adapts `license.Manager.ExpiresAt()`. Free/perpetual/no-key licences are skipped
-(`ok=false`, cannot false-alarm); expired keys fire. No API/schema/web change. Rule:
-`{metric:"license_expiry", operator:"lt", threshold:14}`. **The adversarial review (clean) still moved the
-work** — it flagged that all three unit tests called the setter directly, so nothing proved `serve.go`
-wires the checker into the *real* evaluator; I added a **`wireAlertLicenseExpiry` seam + a mutation-proven
-wiring pin** (raising this above `cert_expiry`, which has none). Gated (Go 24/24 · gofmt · two guards
-mutation-proven RED), merged, rolled to prod **`v0.4.0-19-g38111c9`** (evidence smoke green). **Operator
-action: none for the build** — a `license_expiry` rule + a channel are still operator-created (same as
-`cert_expiry`). Full evidence: `decisions.md` D-101.
+**★ S40 CONFIRMED its plan (second non-pivot running).** Built the compliance foundation the S36–S39 arc was
+missing: an append-only **`audit_log`** recording "who changed what, when" for every mutating admin/config
+API call (gates SOC 2 / ISO 27001 buyers). `s.audit(...)` is threaded into **24 handlers** (create/update/
+delete of alert rules & channels, users, tokens, probes, report schedules, AMS sources, tenants + licence
+activation); the actor comes from the bearer token already in `ctxTokenKey` (no new middleware); `detail` is
+a non-sensitive summary only. `GET /admin/audit-log` reads it back (keyset, newest-first). Migration 0004
+(SQLite idempotent + PG embed); OpenAPI + `schema.d.ts`. **Documented out-of-scope, not silent:** the two
+`/test` fires, `/auth/oidc/logout`, and OIDC auto-provisioning (different actor model). **The adversarial
+review found + I fixed one real defect** — two update handlers audited *after* the post-update re-fetch
+guards, so a committed mutation could go unrecorded on a failed re-read (moved the audit before the
+re-fetch). CI caught a PG migration-parity gap (fixed); the `csp-e2e` flake recurred (required `web-e2e`
+green). Gated (Go 24/24 · web tsc+vitest+build · guard mutation-proven RED), merged, rolled to prod
+**`v0.4.0-21-g0b7decc`** — migration 0004 proven live (WAL-aware copy: `audit_log` present, 10 columns).
+Full evidence: `decisions.md` D-102.
 
-**Next goal candidate: audit trail — actor on every write** [M–L] (no "who changed what, when" on mutating
-API calls; gates SOC 2 / ISO 27001 buyers — the natural next step after the S36–S39 auth/entitlement/
-correctness arc). Bounded alternatives: the two S34 e2e gaps [S], the dead `PULSE_LICENSE_OFFLINE_FILE`
-path [XS], or seeding a default `license_expiry` rule [XS, product-ruling first]. Team-management UI stays
-**blocked on the operator's model ruling**; §2.7 CI promotions unlock **2026-07-23**. **Re-verify against
-the ledger + re-read the standing clause first.**
+**⚠ NEW operator item surfaced by S40:** the **AMS trial expiry is documented inconsistently** —
+`deploy/runbooks/self-hosted-ams.md` says **2026-07-12**, the ledger says **2026-07-27** (live-verified
+S37–S39). If it's 07-12 it has ALREADY lapsed. Could not re-verify live (AMS creds operator-only). **Operator
+must confirm.** See `operator-expected.md`.
+
+**Next goal candidate: audit trail Phase 2** — an **audit-log web UI** (the read endpoint has no page; the
+typed schema already exists) and/or **auditing OIDC auto-provisioning** (`oidc.go` CreateUser, distinct actor
+model). Bounded alternatives: the two S34 e2e gaps [S], the dead `PULSE_LICENSE_OFFLINE_FILE` path [XS].
+Team-management UI stays **blocked on the operator's model ruling**; §2.7 CI promotions unlock **2026-07-23**.
+**Re-verify against the ledger + re-read the standing clause first.**
+
+---
+
+### Prior session (for context): D-101 — S39 DONE (PR #75, out-of-band licence-expiry alerting, in prod).
+
+**★ S39 CONFIRMED its plan.** Built a **`license_expiry`** alert metric (faithful `cert_expiry` mirror) that
+warns through the operator's channels when the Pulse key nears expiry — closing the D-098 UI-banner-only gap.
+`serve.go` adapts `license.Manager.ExpiresAt()`; free/perpetual keys are skipped, expired keys fire. The
+adversarial review (clean) still moved the work: it flagged that the unit tests called the setter directly,
+so I added a **`wireAlertLicenseExpiry` seam + mutation-proven wiring pin** proving `serve.go` wires the
+checker into the real evaluator. Merged, rolled to prod `v0.4.0-19-g38111c9`. Operator action: none for the
+build (rule + channel still operator-created). Full evidence: `decisions.md` D-101.
 
 ---
 

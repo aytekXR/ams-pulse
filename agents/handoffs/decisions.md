@@ -6683,3 +6683,85 @@ though it covers the *Pulse* key, not the *AMS* key).
 **Docs at close:** D-101 CLOSED (this block); ROADMAP-V2 §2.24; SESSION-39 result appended;
 `operator-expected.md` header refreshed (no action for the fix; rule-creation note); RESUME-PROMPT
 ▶ START HERE → SESSION-40; `sessions/SESSION-40.md` written. Follow-up docs PR.
+
+## D-102 — S40 (2026-07-15): CLOSED — audit trail (actor on every write)
+
+**Goal (SESSION-40 candidate 1, verified viable at open).** Close the compliance gap "no actor is
+recorded on mutating API calls — no 'who changed what, when'." This gates SOC 2 / ISO 27001 buyers and is
+the natural next step after the S36–S39 auth/entitlement/correctness arc. A read-only scout confirmed the
+gap is real (zero existing audit infrastructure) and the actor is already in the request context.
+
+**Design.** Append-only `audit_log` table in the meta store; every mutating admin/config handler calls a
+best-effort `s.audit(...)` after its store write succeeds; `GET /api/v1/admin/audit-log` reads it back
+newest-first with the standard `ts:id` keyset cursor.
+- **Store** (`store/meta/audit.go`): `AuditEntry` + `CreateAuditLog` + `ListAuditLog` (ts DESC, id DESC).
+  Table has NO FKs to api_tokens/users — a row must survive token revocation and user deletion.
+- **Migration 0004**: SQLite via the idempotent `applySchemaUpgrades` block (mirrors vod_poll_state 0003);
+  Postgres via `EmbeddedDDLPostgres` (`embeddedPGDDL0004`). Source of truth in `contracts/db/meta/`.
+- **Capture** (`api/audit.go`): `actorFrom(r)` pulls the `*meta.APIToken` from `ctxTokenKey` (no new
+  middleware); `s.audit(r, action, object_type, object_id, detail)` writes the row on a cancel-detached
+  context, logging-but-not-failing on error (audit must not be a write-path SPOF). `detail` is a small
+  NON-SENSITIVE JSON summary (name/type/role) — never a secret.
+- **Coverage**: 24 handlers — create/update/delete of alert rules & channels, users, tokens, probes,
+  report schedules, AMS sources, tenants + licence activation. **Documented out-of-scope (not silent):**
+  the two `/test` fires, `/auth/oidc/logout`, and OIDC auto-provisioning (`oidc.go` CreateUser — different
+  actor model). **OIDC-provisioning audit is the top Phase-2 follow-up.**
+- **Read scope**: `GET /admin/audit-log` is a plain GET, readable by any authenticated token — consistent
+  with `GET /admin/users` and `GET /admin/tokens` (which also reveal sensitive registry data). Tightening
+  audit reads to admin-only would be a separate hardening ruling.
+- **Contract**: `AuditEntry` + `AuditLogPage` + `listAuditLog` in OpenAPI; `schema.d.ts` regenerated.
+
+**Operator action required: NONE.** Server-side feature; behaviorally inert until an admin makes changes,
+then it silently records them. No new blocker.
+
+Verify-at-open census: `origin/main` = `043314a` (S39 docs); prod `v0.4.0-19-g38111c9` (S39, live);
+GHCR anon → 401; AMS expiry 2026-07-27 (ledger value).
+
+**Shipped (PR #77, squash `0b7decc`, merged to `origin/main`).** The audit trail exactly as designed. All 24
+mutating handlers emit `s.audit(...)` on their success path; `GET /admin/audit-log` reads it back.
+
+**Verification.** `gofmt`; `go vet`; full Go suite green (24 pkgs); web `tsc`+`vitest`+`build` green. **Two
+guards mutation-proven**: removing `s.audit` from `handleCreateUser` turned only `TestAudit_UserCreate_Recorded`
+RED (S38 user tests stayed green). Store tests assert DESC ordering + cursor advancement; 2 param-conformance
+probes added (floors bumped 86→88 spec params, minProbes→37). No `MUTATION` markers remain.
+
+**Adversarial review (1 agent) → 1 real defect, fixed.** It confirmed **no secret leakage** (all 24 `detail`
+payloads checked against `AlertChannelRow`/`APIToken`/`AMSSourceRow`/`ReportScheduleRow` — only
+name/type/role/kind/scopes/cron/metric, never config_enc/pw_hash/token-hash/credentials/licence-key),
+correct migration (idempotent SQLite `applySchemaUpgrades` + PG embed) and correct DESC keyset pagination,
+and non-vacuous tests. **The defect:** `handleUpdateUser` + `handleUpdateProbe` placed `s.audit` *after* the
+post-update re-fetch guards, so a committed mutation would go unrecorded if the re-read nil'd (concurrent
+delete) or errored — **fixed** by auditing immediately after the store write (before the re-fetch), matching
+every other update handler. Also bounded the best-effort audit write to a 5 s cancel-detached context.
+
+**CI:** all required checks green. `server` first failed on `TestPG_MigrationParity` (the PG embed records
+`schema_migrations` 0004 but the test's SQLite side applied only 0001–0003) — **fixed** by adding the 0004
+DDL to the SQLite combined migration; re-ran green. `csp-e2e` (non-required, continue-on-error) flaked once
+on the known Caddy-fronted `Live Dashboard` `toBeVisible` timeout and the required `web-e2e` (same render)
+was green — a backend/contract/types-only change cannot affect the dashboard.
+
+**Prod: rolled forward at close.** Rollback `pulse-prod-pulse:pre-d102` = `v0.4.0-19-g38111c9` (S39);
+pre-upgrade backup exit 0; STAMPED build asserted **`pulse v0.4.0-21-g0b7decc`** (commit `0b7decc`, built
+`2026-07-15T10:52:05Z`) — not dev/unknown — before `up -d`. Post-swap smoke (evidence): `/healthz` all-ok +
+`ams_env_configured:true`; running stamp `-21-g0b7decc`; signed webhook → **200**; limits `512M/0.5cpu`; boot
+logs clean (no ERROR/panic/schema-upgrade error). **Migration 0004 proven live** via a WAL-aware SQLite copy:
+`audit_log` present with all 10 columns `[id, ts, actor_token_id, actor_user_id, actor_name, action,
+object_type, object_id, remote_addr, detail_json]`. Side-effect-free — no prod audit rows were written (only
+admin mutations write them; none were made).
+
+**Operator action: NONE for the build.** BUT a documentation discrepancy on the AMS trial expiry was found
+and is a NEW operator item (see operator-expected): `deploy/runbooks/self-hosted-ams.md` says the AMS trial
+**expires 2026-07-12**, while this ledger has carried **2026-07-27T13:45Z** (marked live-verified S37–S39).
+These conflict. I could NOT independently re-verify the live value this session (AMS admin creds are
+operator-only in `oguz-testing.md`), and because AMS enforces the licence only on **restart** (S30), prod
+still ingesting does not disambiguate. **If the true expiry is 07-12 it has already lapsed** and the next
+`antmedia` restart kills ingest — so the operator should confirm the real AMS licence expiry directly. GHCR
+anon → 401 (unchanged).
+
+**Phase-2 follow-ups (documented, not gaps):** audit OIDC auto-provisioning (`oidc.go` CreateUser — distinct
+actor model); an audit-log web UI (the read endpoint has no page yet); optional admin-only gating of the
+audit read (currently any authenticated token, consistent with `/admin/users`+`/admin/tokens`).
+
+**Docs at close:** D-102 CLOSED (this block); ROADMAP-V2 §2.25; SESSION-40 result appended;
+`operator-expected.md` refreshed (NEW AMS-expiry-verification item); RESUME-PROMPT ▶ START HERE → SESSION-41;
+`sessions/SESSION-41.md` written. Follow-up docs PR.

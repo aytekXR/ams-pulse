@@ -122,3 +122,34 @@ just overturns it.
 5. Write `sessions/SESSION-41.md` (carry the standing-directive header).
 6. **Roll prod forward** if server/web code changed, per `deploy/runbooks/upgrade-rollback.md` — STAMPED
    build (`--build-arg` on `build`, then `up -d` WITHOUT `--build`); smoke with **evidence**.
+
+---
+
+## ✅ RESULT — S40 DONE (D-102, PR #77, 2026-07-15)
+
+**Chose candidate 1 (audit trail) — confirmed by the standing-clause re-read + a read-only scout** (the gap
+was real: zero existing audit infra, actor already in context). Built the whole thing: an append-only
+`audit_log` table, `s.audit(...)` threaded into all **24** mutating admin/config handlers, and
+`GET /admin/audit-log` (keyset, newest-first). Actor from the bearer token in `ctxTokenKey` — no new
+middleware. `detail` is non-sensitive only. Migration 0004 (SQLite idempotent + PG embed); OpenAPI +
+`schema.d.ts`. **Documented out-of-scope** (test-fires, logout, OIDC provisioning) — not silent.
+
+**Gates:** full Go suite (24 pkgs) · `gofmt`/`vet` · web `tsc`+`vitest`+`build`; capture mutation-proven RED;
+store DESC/cursor tests; 2 param-conformance probes (floors bumped). **Adversarial review → 1 real defect
+fixed** (update handlers audited after the re-fetch guards → committed mutation could go unrecorded on a
+failed re-read; moved the audit before the re-fetch) + bounded the audit ctx to 5 s. **No secret leakage**
+(all 24 `detail` payloads verified).
+
+**CI:** `server` first RED on `TestPG_MigrationParity` (PG embed records 0004, test's SQLite side applied
+only 0001–0003) — fixed by adding 0004 to the SQLite combined migration; re-ran green. `csp-e2e` flaked
+(known `Live Dashboard` `toBeVisible` timeout; required `web-e2e` green; backend-only change).
+
+**Prod rolled forward:** rollback `pre-d102` = `v0.4.0-19-g38111c9`; backup exit 0; STAMPED build
+**`v0.4.0-21-g0b7decc`** deployed; evidence smoke green (healthz all-ok, stamp `-21-g0b7decc`, webhook 200,
+limits `512M/0.5cpu`, logs clean). **Migration 0004 proven live** — WAL-aware SQLite copy shows `audit_log`
+with all 10 columns. Side-effect-free (no prod audit rows written).
+
+**Operator action: NONE for the build.** NEW operator item surfaced: **AMS trial expiry is documented
+inconsistently** — `deploy/runbooks/self-hosted-ams.md` says 2026-07-12, the ledger says 2026-07-27
+(live-verified S37–S39). Could not re-verify live this session (AMS creds operator-only). If it's 07-12 it
+has **already lapsed**; operator must confirm. GHCR anon → 401 (unchanged). Full evidence: `decisions.md` D-102.

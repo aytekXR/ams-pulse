@@ -1,26 +1,35 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-15, D-101 — SESSION-39)
+# Operator TODO — the items only YOU can do (updated 2026-07-15, D-102 — SESSION-40)
 
-> **S39 (D-101) added NO new item to your queue.** It shipped a new **`license_expiry` alert metric** so
-> the alert engine can warn through your configured channels before the *Pulse* licence key expires — a
-> server-side feature, no operator step, **inert until someone creates a rule** (see the one *optional*
-> note below). Item 10 (the team-management model ruling from S38) is still the only *product decision*
-> waiting on you. The two hard blockers are re-verified live and still on top: **GHCR 401** and **AMS
-> licence expiry 2026-07-27 — 12 days.** Prod rolled forward to **`v0.4.0-19-g38111c9`** at S39 close
-> (smoke: `/healthz` all-ok, running stamp `-19-g38111c9`, signed webhook 200, logs clean).
+> **S40 (D-102) added ONE new item that needs YOU: confirm the true AMS trial-licence expiry** — the docs
+> disagree (see ⚠ below). The build itself needs no operator step: S40 shipped an **audit trail** (records
+> who changed what/when for every admin/config change), a server-side feature, inert until an admin makes a
+> change. Item 10 (the team-management model ruling) still waits on you. GHCR is still private (**401**).
+> Prod rolled forward to **`v0.4.0-21-g0b7decc`** at S40 close (smoke: `/healthz` all-ok, running stamp
+> `-21-g0b7decc`, signed webhook 200, logs clean, `audit_log` table proven live).
 
-## ⚡ TL;DR — NO operator action required. Your queue is UNCHANGED (re-verified live).
+## ⚠️ NEW — CONFIRM THE AMS LICENCE EXPIRY (the docs disagree; this is urgent if the earlier date is right).
 
-S39 was a **server-side alerting feature** — no operator step, no new blocker, behaviorally **inert on
-your prod until a `license_expiry` rule + channel exist** (Enterprise licence, 0 users, OIDC off). The two
-items below still outrank everything a session can do; both re-checked live this session:
-**GHCR still private** (anonymous manifest pull → **401**, checked after `docker logout`), **AMS
-licence expires 2026-07-27T13:45Z — 12 days**.
+Two Pulse docs give **different** AMS trial-licence expiry dates:
+- `deploy/runbooks/self-hosted-ams.md` says the trial **expires 2026-07-12** (already past — today is 07-15).
+- This ledger has carried **2026-07-27T13:45Z**, marked "live-verified" in S37–S39.
 
-**◦ Optional (NOT a blocker) — turn the new licence-expiry warning ON.** S39 added the mechanism, not a
-default rule (same stance as `cert_expiry`). To have Pulse warn you before its own key downgrades, create
-an alert channel and a rule `{metric:"license_expiry", operator:"lt", threshold:14}` via the API/UI. Until
-then the metric is dormant. NB: this watches the **Pulse** key, not the **AMS** key — the 2026-07-27 AMS
-expiry above is still a separate, manual thing only you can renew.
+An autonomous session **cannot** resolve this: the AMS admin credentials are yours only (`oguz-testing.md`),
+and because AMS enforces the licence **only on restart** (S30 finding), the fact that prod is still ingesting
+does NOT tell us which date is correct. **Please check the real expiry in the AMS admin console.** If it is
+07-12 the licence has **already lapsed** and the next `antmedia` restart = total ingest death — far more
+urgent than "07-27, ~12 days" implies. Then tell us the true date so we can correct the runbook + ledger.
+
+## ⚡ TL;DR — one confirmation needed (AMS expiry, above); the S40 build needs NO operator action.
+
+S40 was a **server-side audit trail** — no operator step, no new blocker, behaviorally **inert until an
+admin changes something**, then it silently records it (Enterprise licence, 0 users, OIDC off). The standing
+hard blocker unchanged: **GHCR still private** (anonymous manifest pull → **401**, checked after
+`docker logout`).
+
+**◦ Optional (NOT a blocker) — turn the licence-expiry warning ON (from S39).** The `license_expiry` alert
+metric ships but has no default rule. To have Pulse warn you before its own *Pulse* key downgrades, create
+an alert channel + a rule `{metric:"license_expiry", operator:"lt", threshold:14}`. NB: that watches the
+**Pulse** key, not the **AMS** key — the AMS expiry above is a separate, manual renewal only you can do.
 
 **What S37 fixed (the D-098 bug class, generalized).** D-098 found *capabilities are stored but
 never checked* (token scopes existed; writes were ungated). The same shape was audited across every
