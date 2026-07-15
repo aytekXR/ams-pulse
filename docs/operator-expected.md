@@ -1,12 +1,13 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-15, D-103 — SESSION-41)
+# Operator TODO — the items only YOU can do (updated 2026-07-15, D-104 — SESSION-42)
 
-> **S41 (D-103) needs NO operator action.** It shipped the **Audit Log web page** — a read-only view of the
-> S40 audit trail (who changed what, when, from where), reachable from the left nav at `/audit-log`. Web-only;
-> no new server behaviour, no new blocker. **The ONE open confirmation is still the AMS trial-licence expiry**
-> (the docs disagree — see ⚠ below; carried from S40, still unresolved). Item 10 (the team-management model
-> ruling) still waits on you. GHCR is still private (**401**). Prod rolled forward to **`v0.4.0-23-ga44691b`**
-> at S41 close (smoke: `/healthz` all-ok, running stamp `-23-ga44691b`, limits `512M/0.5cpu`, logs clean; the
-> new Audit Log UI proven served — its strings are in the live JS bundle).
+> **S42 (D-104) needs NO operator action.** It extended the audit trail to cover **OIDC/SSO first-login user
+> provisioning** — the one account-creation path that wasn't recorded (a user auto-created on first SSO login
+> now leaves a `user.provision` entry showing the SSO subject, role, and groups). Server-side; **dormant until
+> you configure OIDC** (SSO is off in prod), so nothing changes in your current setup. No new blocker. **The
+> ONE open confirmation is still the AMS trial-licence expiry** (the docs disagree — see ⚠ below; carried from
+> S40, still unresolved). Item 10 (the team-management model ruling) still waits on you. GHCR is still private
+> (**401**). Prod rolled forward to **`v0.4.0-25-g6a0226d`** at S42 close (smoke: `/healthz` all-ok, running
+> stamp `-25-g6a0226d`, webhook signature 200, limits `512M/0.5cpu`, logs clean).
 
 ## ⚠️ NEW — CONFIRM THE AMS LICENCE EXPIRY (the docs disagree; this is urgent if the earlier date is right).
 

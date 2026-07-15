@@ -527,6 +527,25 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.27  Audit trail Phase 2 tail — audit OIDC first-login provisioning  [S] ✅ DONE S42 (D-104, 2026-07-15, PR #81)
+
+Closed the last unaudited mutating path: `oidc.go` provisions a user on first SSO login OUTSIDE
+`handleCreateUser`, so that creation was never recorded (S40 documented it as out-of-scope). New
+`oidcHandler.auditProvision` writes a `user.provision` `audit_log` entry — **actor model differs**: no bearer
+token exists pre-session, so the SSO subject provisions itself (`actor_user_id == object_id`,
+`actor_token_id` empty, `actor_name = "oidc:<sub>"`, `detail = {role, via, groups}`). Placed **only in the
+create branch** (after the re-fetch that populates `user.ID`), so provisioning is audited **once per user**,
+not per login, and never in the concurrent-UNIQUE-race branch (the winning login audits it). Same best-effort
+contract as `s.audit` (cancel-detached, 5 s-bounded, log-on-failure).
+
+**Gates:** Go 24/24 · vet · gofmt; web `tsc`+`build`+vitest 650; new
+`TestOIDC_Callback_FirstLogin_AuditsProvision` **mutation-proven RED**; **adversarial review → no real
+defects**. CI all required green. **Operator action: none** (dormant until OIDC is configured; off in prod).
+Prod rolled forward to **`v0.4.0-25-g6a0226d`** (smoke: healthz all-ok, webhook 200, limits `512M/0.5cpu`,
+logs clean). Every user-creation path is now audited.
+
+---
+
 ### 2.26  Audit trail Phase 2 — audit-log web UI  [S] ✅ DONE S41 (D-103, 2026-07-15, PR #79)
 
 Surfaced the S40 audit trail in the SPA: `GET /admin/audit-log` shipped in S40 but had no page. Added an
