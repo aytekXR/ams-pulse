@@ -527,6 +527,36 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.22  Tier-entitlement enforcement — "enforced, not decorative"  [S] ✅ DONE S37 (D-099, 2026-07-15, PR #71)
+
+Generalized the D-098 bug class (*capability stored but never checked*) into an audit of **every paid
+entitlement**. Six gaps of that exact shape — a `Check*` that exists but is never called, or a paid
+feature with no gate at all — five from the audit, a sixth from the close-out adversarial review:
+
+- ✅ **SSO/OIDC → Enterprise.** Priced at Enterprise (PRD §7) but `/auth/oidc/*` gated **nowhere**.
+  Added `license.CheckSSO()`; gated login + callback (after the `s.oidc==nil` 501; **logout left open**)
+  + made `/auth/oidc/status` report `enabled=false` unlicensed. **Closes the D-098 "unenforced
+  revenue" funnel-gap row.**
+- ✅ **White-label report headers → `white_label`.** `CheckWhiteLabel()` on schedule create/update
+  **and** the scheduler timer path (drops branding after a downgrade).
+- ✅ **Alert-channel type on update + test-fire** (create was already gated).
+- ✅ **Scheduler re-checks the licence per fire** — a schedule created while licensed stops after a
+  downgrade (the HTTP CRUD gate can't cover the timer).
+- ✅ **Retention clamp on Geo/Device/QoE/Ingest** reads (only `AudienceAnalytics` clamped before).
+- ✅ **★ Review-caught:** `QueryProbeResults` forwarded caller `from`/`to` unclamped (Free tenant →
+  365 d of probe history, HIGH); and the `handleOIDCCallback` `CheckSSO` gate had **no test** — the
+  S36 vacuous-test trap, which my own harness comment wrongly claimed was covered (MED). Both fixed,
+  both mutation-proven. Adversarial workflow: 5 dimensions → refuter panel, **2 CONFIRMED / 0 uncertain.**
+
+**Design ruling:** `MaxStreams` NOT gated — every shipped tier is `-1` (unlimited) and Pulse is
+observe-only (no ingest-refusal point). A finite `MaxStreams` is a product decision, not engineering.
+
+**Gates:** Go 24/24 + `gofmt`; web `tsc` + vitest; every guard mutation-proven RED. No web files
+changed. **Operator action: none;** blockers unchanged (GHCR 401, AMS expiry 2026-07-27). Prod rolled
+forward at close (behaviorally inert on the Enterprise prod licence).
+
+---
+
 ### 2.21  User-intake — signup/login audit + the three post-login blockers  [S] ✅ DONE S36 (D-098, 2026-07-15, PR #53)
 
 Seeded by the operator's question *"are we ready for user intake? how do they sign up and log in?"* —
