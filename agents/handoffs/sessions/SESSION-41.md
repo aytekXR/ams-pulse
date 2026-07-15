@@ -111,3 +111,25 @@ S38 overturned its plan, S39 & S40 confirmed theirs; the clause cuts both ways.
 5. Write `sessions/SESSION-42.md` (carry the standing-directive header).
 6. **Roll prod forward** if server/web code changed, per `deploy/runbooks/upgrade-rollback.md` — STAMPED
    build (`--build-arg` on `build`, then `up -d` WITHOUT `--build`); smoke with **evidence**.
+
+---
+
+## ✅ RESULT — S41 DONE (D-103, PR #79, 2026-07-15)
+
+**Chose candidate 1 (audit-log web UI) — the self-contained half of "audit trail Phase 2."** Added
+`AuditLogPage.tsx` (read-only table + cursor "Load more", mirroring `AnomaliesPage`, no tier gate),
+`adminApi.listAuditLog`, the `AuditEntry`/`AuditLogPage` type re-exports, and the router + left-nav wiring.
+Web-only — no Go/contract change (the endpoint + schema shipped in S40).
+
+**Gates:** `tsc` · **650 vitest** (incl. 10 new — states, actor fallback, load-more append + cursor param,
+design-token pins) · `build`. **3 Playwright e2e** proven green in the official
+`mcr.microsoft.com/playwright:v1.61.1-jammy` image (the local host lacks browser libs — the dockerised
+image is the correct local runner; the `--with-deps` CI path needs root). CI all required checks green
+(web-e2e, csp-e2e, e2e) — no flake this round.
+
+**Prod rolled forward:** rollback `pre-d103` = `v0.4.0-21-g0b7decc`; backup exit 0; STAMPED build
+**`v0.4.0-23-ga44691b`** deployed; evidence smoke green (healthz all-ok, stamp `-23-ga44691b`, limits
+`512M/0.5cpu`, logs clean). **New UI proven served** — the live JS bundle contains the AuditLogPage strings.
+
+**Operator action: NONE.** The carried AMS-expiry-confirmation item persists (runbook 07-12 vs ledger 07-27).
+GHCR anon → 401. Full evidence: `decisions.md` D-103.

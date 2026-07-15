@@ -527,6 +527,23 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.26  Audit trail Phase 2 — audit-log web UI  [S] ✅ DONE S41 (D-103, 2026-07-15, PR #79)
+
+Surfaced the S40 audit trail in the SPA: `GET /admin/audit-log` shipped in S40 but had no page. Added an
+**Audit Log** page (`web/src/features/audit-log/AuditLogPage.tsx`) — a read-only table (Time / Actor /
+Action / Object / Object ID / Source IP) with cursor **"Load more"** pagination, mirroring `AnomaliesPage`.
+No tier gate (a core admin feature; admin-only via auth). Router + left-nav wired; `adminApi.listAuditLog`
+added; `AuditEntry`/`AuditLogPage` re-exported. **No Go/contract change** (the endpoint + schema were S40).
+
+**Gates:** `tsc` · 650 vitest (incl. 10 new: states, actor fallback, load-more append + cursor param,
+design-token pins) · `build`; **3 Playwright e2e** proven in the official Playwright docker image. CI all
+green. **Operator action: none.** Live: the served JS bundle contains the page (proven at deploy).
+
+**Phase-2 tail still open:** OIDC auto-provisioning audit (`oidc.go` CreateUser — distinct actor model);
+optional admin-only gating of the audit read. → SESSION-42 candidates.
+
+---
+
 ### 2.25  Audit trail — actor on every admin/config write  [M] ✅ DONE S40 (D-102, 2026-07-15, PR #77)
 
 Closed the compliance gap "no actor is recorded on mutating API calls — no 'who changed what, when'" that

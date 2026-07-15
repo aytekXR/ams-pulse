@@ -1,11 +1,12 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-15, D-102 — SESSION-40)
+# Operator TODO — the items only YOU can do (updated 2026-07-15, D-103 — SESSION-41)
 
-> **S40 (D-102) added ONE new item that needs YOU: confirm the true AMS trial-licence expiry** — the docs
-> disagree (see ⚠ below). The build itself needs no operator step: S40 shipped an **audit trail** (records
-> who changed what/when for every admin/config change), a server-side feature, inert until an admin makes a
-> change. Item 10 (the team-management model ruling) still waits on you. GHCR is still private (**401**).
-> Prod rolled forward to **`v0.4.0-21-g0b7decc`** at S40 close (smoke: `/healthz` all-ok, running stamp
-> `-21-g0b7decc`, signed webhook 200, logs clean, `audit_log` table proven live).
+> **S41 (D-103) needs NO operator action.** It shipped the **Audit Log web page** — a read-only view of the
+> S40 audit trail (who changed what, when, from where), reachable from the left nav at `/audit-log`. Web-only;
+> no new server behaviour, no new blocker. **The ONE open confirmation is still the AMS trial-licence expiry**
+> (the docs disagree — see ⚠ below; carried from S40, still unresolved). Item 10 (the team-management model
+> ruling) still waits on you. GHCR is still private (**401**). Prod rolled forward to **`v0.4.0-23-ga44691b`**
+> at S41 close (smoke: `/healthz` all-ok, running stamp `-23-ga44691b`, limits `512M/0.5cpu`, logs clean; the
+> new Audit Log UI proven served — its strings are in the live JS bundle).
 
 ## ⚠️ NEW — CONFIRM THE AMS LICENCE EXPIRY (the docs disagree; this is urgent if the earlier date is right).
 
