@@ -80,6 +80,7 @@ A disabled rule's `muted` state is not surfaced — it has no effect until the r
 | `node_down` | Fleet discovery | Fires when a cluster node is absent from the live snapshot (not seen within `3 × PollInterval`). Use a scope `node_id` to target a specific node, or leave scope empty to monitor all nodes. |
 | `node_degraded` | Fleet discovery | Fires when a cluster node transitions to `status=degraded` |
 | `cert_expiry` | TLS dial to host | Fires when TLS certificate days_left < threshold (e.g. `threshold: 30`) |
+| `license_expiry` | Pulse licence key | Fires when the licence key expires in fewer than `threshold` **days** (e.g. `operator: lt, threshold: 14`). Global — leave `scope` empty. A perpetual key (no expiry) or the free/no-key fallback never fires. This is the out-of-band counterpart to the dashboard's expiry banner: a customer who never opens the UI still gets warned through their channels before the key downgrades. Example rule: `{"name":"licence expiring","metric":"license_expiry","operator":"lt","threshold":14,"severity":"critical","channel_ids":["<your-channel>"]}`. |
 
 > **QoE metrics (`rebuffer_ratio`, `error_rate`) — what you need:**
 > These rules read the `rollup_qoe_1h` ClickHouse aggregate table via the QoE reader

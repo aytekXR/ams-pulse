@@ -400,6 +400,85 @@ func TestWireAlertQoEReader_ReaderWired(t *testing.T) {
 	}
 }
 
+// ─── D-101 wiring pin: wireAlertLicenseExpiry ────────────────────────────────
+
+// TestWireAlertLicenseExpiry_CheckerWired is the D-101 wiring-seam pin.
+//
+// It verifies that wireAlertLicenseExpiry (serve.go) wires the licence-expiry
+// checker into the alert evaluator: with a FakeLicenseChecker reporting 10 days
+// until expiry, a "license_expiry lt 14" rule FIRES (10 < 14); without the checker
+// the rule is silently skipped and no notification fires. The three unit tests in
+// license_expiry_test.go call ev.SetLicenseChecker directly, so only this pin
+// catches serve.go forgetting to wire the checker into the real evaluator.
+//
+// Compile-time catch: if wireAlertLicenseExpiry is deleted from serve.go this file
+// fails to compile — the m3 RED, analogous to TestWireAlertQoEReader_ReaderWired.
+func TestWireAlertLicenseExpiry_CheckerWired(t *testing.T) {
+	ctx := context.Background()
+
+	store, err := meta.New(ctx, "sqlite", ":memory:", "test-secret-key")
+	if err != nil {
+		t.Fatalf("meta.New: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+	ddlBytes, readErr := os.ReadFile("../../../contracts/db/meta/0001_init.sql")
+	if readErr != nil {
+		t.Skipf("meta DDL not found (run from repo root): %v", readErr)
+	}
+	if err := store.MigrateEmbedded(ctx, string(ddlBytes)); err != nil {
+		t.Fatalf("MigrateEmbedded: %v", err)
+	}
+
+	// Rule: license_expiry < 14 days — fires when the checker reports 10 days left.
+	// Without a checker (nil) the rule is silently skipped → no notification.
+	_, err = store.CreateAlertRule(ctx, meta.AlertRuleRow{
+		Name: "wiring-pin-license-lt14", Metric: "license_expiry", Operator: "lt",
+		Threshold: 14, WindowS: 0, ScopeJSON: "{}", Severity: "critical",
+		CooldownS: 86400, Enabled: true, Muted: false,
+		MaintenanceWindows: "[]", ChannelIDs: `["c1"]`,
+	})
+	if err != nil {
+		t.Fatalf("CreateAlertRule: %v", err)
+	}
+
+	reg := channels.NewRegistry()
+	reg.Register("c1", &channels.NoopChannel{})
+
+	clock := alert.NewFakeClock(time.Now().UTC())
+	ev := alert.New(alert.Config{
+		TickInterval: 5 * time.Second,
+		BaseURL:      "http://localhost",
+	}, &qoeWiringFakeLive{}, store, reg, clock, nil)
+
+	// D-101 wiring: FakeLicenseChecker reports 10 days until expiry (< 14 → fires).
+	wireAlertLicenseExpiry(ev, alert.FakeLicenseChecker{Days: 10, HasExpiry: true})
+
+	var mu sync.Mutex
+	var notifs [][]byte
+	ev.SetNotifySink(func(p []byte) {
+		mu.Lock()
+		notifs = append(notifs, p)
+		mu.Unlock()
+	})
+
+	// WindowS=0 → tick1 sets pendingSince, tick2 fires (window already elapsed).
+	for i := 0; i < 2; i++ {
+		clock.Advance(1 * time.Second)
+		ev.TickOnce(ctx)
+	}
+
+	mu.Lock()
+	n := len(notifs)
+	mu.Unlock()
+
+	if n == 0 {
+		t.Error("D-101 wiring pin FAIL: license_expiry rule did not fire — " +
+			"wireAlertLicenseExpiry did not call SetLicenseChecker, or was not called from serve.go")
+	} else {
+		t.Logf("PASS D-101 wiring pin: license_expiry rule fired (checker=FakeLicenseChecker{10d}, threshold=14)")
+	}
+}
+
 // TestNodeEvictionThreshold_ThreeTimesPollInterval pins the 3× multiplier
 // (D-087 verify M8): the freeze-detection lead time (~15 s at the 5 s default)
 // depends on it, and no behavioral test discriminates the exact value.

@@ -134,6 +134,9 @@ type Evaluator struct {
 	// Wave 2: TLS cert expiry checker (nil = cert_expiry rules skipped).
 	certChecker CertExpiryChecker
 
+	// S39: licence-key expiry checker (nil = license_expiry rules skipped).
+	licenseChecker LicenseExpiryChecker
+
 	// D-062: QoE reader for rebuffer_ratio / error_rate from ClickHouse rollups.
 	// nil = these rules are skipped with a WARN log (one per tick).
 	qoeReader QoEReader
@@ -213,6 +216,14 @@ func (e *Evaluator) SetCertChecker(checker CertExpiryChecker) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.certChecker = checker
+}
+
+// SetLicenseChecker configures the licence-key expiry checker for license_expiry
+// rules. If not set, license_expiry rules are silently skipped.
+func (e *Evaluator) SetLicenseChecker(checker LicenseExpiryChecker) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.licenseChecker = checker
 }
 
 // SetQoEReader wires the ClickHouse QoE reader for rebuffer_ratio and error_rate rules.
@@ -382,6 +393,11 @@ func (e *Evaluator) evaluateRule(ctx context.Context, rule meta.AlertRuleRow, sn
 			// Cert expiry uses a real TLS checker in production; nil checker = skip.
 			if e.certChecker != nil {
 				evals = e.evalCertExpiry(ctx, rule, scope, e.certChecker)
+			}
+		case "license_expiry":
+			// S39: warn before the licence key expires. nil checker = skip.
+			if e.licenseChecker != nil {
+				evals = e.evalLicenseExpiry(rule, scope, e.licenseChecker)
 			}
 		default:
 			evals = e.evalGenericMetric(snap, scope, rule)

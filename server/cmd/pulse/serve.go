@@ -507,6 +507,9 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	// Wired to the evaluator to enable TLS cert monitoring.
 	certChecker := alert.NewCertChecker(10 * time.Second)
 	alertEval.SetCertChecker(certChecker)
+	// S39 (D-101): licence-key expiry checker for license_expiry alert rules —
+	// warn through the operator's channels before the key downgrades.
+	wireAlertLicenseExpiry(alertEval, licenseExpiryChecker{lic: lic})
 	wireAlertQoEReader(alertEval, qsvc)          // D-062: honest rebuffer_ratio/error_rate from ClickHouse rollup_qoe_1h
 	wireAlertAnomalyReader(alertEval, metaStore) // S11 WO-B: Welford baseline reader for anomaly rules
 
@@ -743,6 +746,40 @@ func wireAlertAnomalyReader(eval *alert.Evaluator, store alert.AnomalyBaselineRe
 	if store != nil {
 		eval.SetAnomalyBaselineReader(store)
 	}
+}
+
+// wireAlertLicenseExpiry wires the licence-key expiry checker to the alert evaluator
+// so license_expiry rules receive the real days-until-expiry from *license.Manager.
+// Without this call the evaluator silently skips license_expiry rules each tick — the
+// operator would never be warned before the key downgrades, and no unit test that
+// calls SetLicenseChecker directly would catch the omission.
+//
+// D-101 wiring pin: serve_wiring_test.go calls this function directly; deleting it
+// causes the test file to fail to compile (analogous to wireAlertQoEReader / D-062).
+func wireAlertLicenseExpiry(eval *alert.Evaluator, checker alert.LicenseExpiryChecker) {
+	if checker != nil {
+		eval.SetLicenseChecker(checker)
+	}
+}
+
+// licenseExpiryChecker adapts *license.Manager to alert.LicenseExpiryChecker for
+// license_expiry rules (S39/D-101). A nil expiry (perpetual key or free fallback)
+// reports ok=false so the rule is skipped; an already-expired key clamps to 0 days.
+type licenseExpiryChecker struct{ lic *license.Manager }
+
+func (c licenseExpiryChecker) DaysUntilExpiry() (float64, bool) {
+	if c.lic == nil {
+		return 0, false
+	}
+	exp := c.lic.ExpiresAt()
+	if exp == nil {
+		return 0, false
+	}
+	days := time.Until(*exp).Hours() / 24
+	if days < 0 {
+		days = 0
+	}
+	return days, true
 }
 
 // wireNodeEviction starts the stale-node eviction goroutine (BUG-011 fix, D-087).
