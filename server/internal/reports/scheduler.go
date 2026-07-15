@@ -40,8 +40,9 @@ type Scheduler struct {
 	cfg        SchedulerConfig
 	accountant *Accountant
 	meta       *meta.Store
-	alertStore HistoryWriter // may be nil
-	s3         *S3Uploader   // may be nil
+	alertStore HistoryWriter  // may be nil
+	lic        LicenseChecker // may be nil (no gating — tests, and pre-license callers)
+	s3         *S3Uploader    // may be nil
 	logger     *slog.Logger
 	mu         sync.Mutex
 	stopCh     chan struct{}
@@ -53,6 +54,15 @@ type Scheduler struct {
 // meta.Store satisfies this interface.
 type HistoryWriter interface {
 	CreateAlertHistory(ctx context.Context, h meta.AlertHistoryRow) error
+}
+
+// LicenseChecker gates scheduled execution by tier. Defined here to avoid an
+// import cycle with the license package; *license.Manager satisfies it. The HTTP
+// handlers gate schedule CRUD, but a schedule created while licensed keeps firing
+// after a downgrade — this is where that is caught on the execution path.
+type LicenseChecker interface {
+	CheckReports() error
+	CheckWhiteLabel() error
 }
 
 // NewScheduler creates a Scheduler.
@@ -79,6 +89,12 @@ func NewScheduler(cfg SchedulerConfig, accountant *Accountant, ms *meta.Store, l
 // SetAlertStore wires an alert history writer for schedule failure notifications.
 func (s *Scheduler) SetAlertStore(w HistoryWriter) {
 	s.alertStore = w
+}
+
+// SetLicense wires the license checker that gates scheduled execution. Nil (the
+// default) disables gating, preserving existing test behaviour.
+func (s *Scheduler) SetLicense(l LicenseChecker) {
+	s.lic = l
 }
 
 // Start launches the scheduler loop in a background goroutine.
@@ -136,6 +152,16 @@ func (s *Scheduler) runDue(ctx context.Context) {
 
 // runSchedule executes one schedule entry.
 func (s *Scheduler) runSchedule(ctx context.Context, sched meta.ReportScheduleRow) error {
+	// Reports are Business+. A schedule created while licensed must not keep
+	// generating after a downgrade — the HTTP CRUD gate cannot cover the timer.
+	if s.lic != nil {
+		if err := s.lic.CheckReports(); err != nil {
+			s.logger.Warn("reports: skipping scheduled run — tier no longer licensed",
+				"schedule_id", sched.ID, "error", err)
+			return nil
+		}
+	}
+
 	sc := parseScheduleScope(sched.ScopeJSON)
 
 	// Determine time range: previous calendar month.
@@ -166,10 +192,13 @@ func (s *Scheduler) runSchedule(ctx context.Context, sched meta.ReportScheduleRo
 		format = FormatCSV
 	}
 
-	// Parse white-label header.
+	// Parse white-label header — but only honour it if the tier still licenses
+	// white-label branding (Enterprise). A downgraded schedule generates plain.
 	var wlHeader *WhitelabelHeader
 	if sched.WhitelabelHeader.Valid {
-		wlHeader = ParseWhitelabelHeader(sched.WhitelabelHeader.String)
+		if s.lic == nil || s.lic.CheckWhiteLabel() == nil {
+			wlHeader = ParseWhitelabelHeader(sched.WhitelabelHeader.String)
+		}
 	}
 
 	opts := StatementOptions{

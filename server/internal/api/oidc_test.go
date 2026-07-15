@@ -239,6 +239,25 @@ func setupOIDCTestServer(t *testing.T, defaultRole string, groupRoleMap map[stri
 // setupOIDCTestServerRedirect is setupOIDCTestServer with an explicit redirect
 // URL — used to test the Secure cookie flag under an https redirect URL.
 func setupOIDCTestServerRedirect(t *testing.T, defaultRole string, groupRoleMap map[string]string, redirectURL string) *oidcTestEnv {
+	// SSO/OIDC is an Enterprise entitlement (S37, D-099). A harness that exercises
+	// a WORKING SSO flow must therefore be Enterprise-licensed; the CheckSSO gate
+	// on login/callback/status would otherwise 403. The free-tier gate itself is
+	// covered by setupOIDCTestServerTier + TestOIDCGate_* below.
+	licKey, licCleanup := makeTestEnterpriseLicense(t)
+	t.Cleanup(licCleanup)
+	lic, err := license.New(licKey, "")
+	if err != nil {
+		t.Fatalf("setupOIDCTestServer: license.New (enterprise): %v", err)
+	}
+	if lic.Tier() != license.TierEnterprise {
+		t.Fatalf("setupOIDCTestServer: expected enterprise tier, got %q", lic.Tier())
+	}
+	return setupOIDCTestServerTier(t, defaultRole, groupRoleMap, redirectURL, lic)
+}
+
+// setupOIDCTestServerTier is setupOIDCTestServerRedirect with an explicit license
+// manager, so tests can exercise the SSO tier gate on non-Enterprise tiers.
+func setupOIDCTestServerTier(t *testing.T, defaultRole string, groupRoleMap map[string]string, redirectURL string, lic *license.Manager) *oidcTestEnv {
 	t.Helper()
 	ctx := context.Background()
 
@@ -274,7 +293,6 @@ func setupOIDCTestServerRedirect(t *testing.T, defaultRole string, groupRoleMap 
 		Scopes:    []string{"admin"},
 	})
 
-	lic, _ := license.New("", "")
 	live := &fakeLiveProvider{}
 	qsvc := query.New(live, nil, lic)
 

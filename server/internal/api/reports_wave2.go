@@ -118,6 +118,14 @@ func (s *Server) handleCreateReportSchedule(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusUnprocessableEntity, "INVALID_SCHEDULE", err.Error())
 		return
 	}
+	// White-label headers are an Enterprise entitlement; reports themselves are
+	// only Business, so CheckReports above is not sufficient to gate branding.
+	if row.WhitelabelHeader.Valid {
+		if err := s.lic.CheckWhiteLabel(); err != nil {
+			writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+			return
+		}
+	}
 
 	now := time.Now()
 	nextRun := reports.NextCronTime(row.Cron, now)
@@ -155,6 +163,13 @@ func (s *Server) handleUpdateReportSchedule(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "INVALID_SCHEDULE", err.Error())
 		return
+	}
+	// White-label headers are Enterprise-only (see create handler).
+	if row.WhitelabelHeader.Valid {
+		if err := s.lic.CheckWhiteLabel(); err != nil {
+			writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+			return
+		}
 	}
 	row.ID = id
 	row.CreatedAt = existing.CreatedAt

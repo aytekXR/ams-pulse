@@ -520,6 +520,10 @@ func (s *Service) QueryProbeResults(ctx context.Context, probeID string, from, t
 	if s.probeResultQuerier == nil {
 		return nil, nil
 	}
+	// Clamp to the license retention window — the HTTP handler forwards an
+	// explicit ?from= straight through, so without this a Free tenant could read
+	// probe history past its retention horizon (parity with the analytics reads).
+	from, to = s.applyRetention(from, to)
 	return s.probeResultQuerier.QueryProbeResults(ctx, probeID, from, to, limit, cursor)
 }
 
@@ -551,6 +555,9 @@ func (s *Service) GeoBreakdown(ctx context.Context, p GeoParams) ([]GeoRow, erro
 	if s.conn == nil {
 		return []GeoRow{}, nil
 	}
+
+	// Clamp the range to the license retention window (same as AudienceAnalytics).
+	p.From, p.To = s.applyRetention(p.From, p.To)
 
 	groupBy := "geo_country"
 	selectRegion := ""
@@ -645,6 +652,9 @@ func (s *Service) DeviceBreakdown(ctx context.Context, p DeviceParams) ([]Device
 	if s.conn == nil {
 		return []DeviceRow{}, nil
 	}
+
+	// Clamp the range to the license retention window.
+	p.From, p.To = s.applyRetention(p.From, p.To)
 
 	where, args := buildSessionTimeWhere(p.From, p.To)
 	if p.App != "" {
@@ -755,6 +765,9 @@ func (s *Service) QoeSummary(ctx context.Context, p QoeParams) (*QoeSummaryResul
 	if s.conn == nil {
 		return empty, nil
 	}
+
+	// Clamp the range to the license retention window.
+	p.From, p.To = s.applyRetention(p.From, p.To)
 
 	table := "rollup_qoe_1h"
 	if p.Interval == "day" {
@@ -938,6 +951,11 @@ func (s *Service) IngestTimeseries(ctx context.Context, p IngestTimeseriesParams
 	if s.conn == nil {
 		return empty, nil
 	}
+
+	// Clamp the range to the license retention window. applyRetention also fills
+	// a zero From/To with [now-retention, now], so an unbounded request can no
+	// longer read past the retention horizon.
+	p.From, p.To = s.applyRetention(p.From, p.To)
 
 	bucketSec := p.BucketSeconds
 	if bucketSec <= 0 {
