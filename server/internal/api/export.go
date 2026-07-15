@@ -7,10 +7,8 @@
 package api
 
 import (
-	"encoding/csv"
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/pulse-analytics/pulse/server/internal/reports"
@@ -76,31 +74,7 @@ func (s *Server) handleReportExport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 
-	cw := csv.NewWriter(w)
-	_ = cw.Write([]string{
-		"app", "stream_id", "tenant",
-		"viewer_minutes", "peak_concurrency",
-		"egress_gb", "recording_gb", "egress_method",
-	})
-	for _, row := range report.Rows {
-		streamID := ""
-		if row.StreamID != nil {
-			streamID = *row.StreamID
-		}
-		tenant := ""
-		if row.Tenant != nil {
-			tenant = *row.Tenant
-		}
-		_ = cw.Write([]string{
-			row.App,
-			streamID,
-			tenant,
-			strconv.FormatFloat(row.ViewerMinutes, 'f', 4, 64),
-			strconv.FormatInt(row.PeakConcurrency, 10),
-			strconv.FormatFloat(row.EgressGB, 'f', 6, 64),
-			strconv.FormatFloat(row.RecordingGB, 'f', 6, 64),
-			row.EgressMethod,
-		})
-	}
-	cw.Flush()
+	// Row cells are formula-neutralized (CSV injection) by reports.WriteUsageCSV.
+	// Headers are already committed, so a write error here can only be logged.
+	_ = reports.WriteUsageCSV(w, report)
 }

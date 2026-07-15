@@ -171,11 +171,14 @@ func (h *oidcHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	sig := signHMAC(h.hmacKey, cookiePayload)
 	signed := cookiePayload + "." + hex.EncodeToString(sig)
 
-	// Set state cookie (HttpOnly, SameSite=Lax, 10-minute TTL).
+	// Set state cookie (HttpOnly, SameSite=Lax, 10-minute TTL). Secure on HTTPS
+	// deployments — it carries the PKCE code_verifier, so it must not travel over
+	// plaintext HTTP. Mirrors the pulse_session cookie policy in handleCallback.
 	http.SetCookie(w, &http.Cookie{
 		Name:     "pulse_oidc_state",
 		Value:    signed,
 		HttpOnly: true,
+		Secure:   strings.HasPrefix(h.cfg.RedirectURL, "https://"),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   600,
 		Path:     "/",
@@ -381,6 +384,7 @@ func (h *oidcHandler) handleCallback(w http.ResponseWriter, r *http.Request) {
 		Name:     "pulse_oidc_state",
 		Value:    "",
 		HttpOnly: true,
+		Secure:   strings.HasPrefix(h.cfg.RedirectURL, "https://"),
 		MaxAge:   -1,
 		Path:     "/",
 	})
@@ -448,6 +452,7 @@ func (h *oidcHandler) handleLogout(w http.ResponseWriter, r *http.Request) {
 		Name:     "pulse_session",
 		Value:    "",
 		HttpOnly: true,
+		Secure:   strings.HasPrefix(h.cfg.RedirectURL, "https://"),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 		Path:     "/",

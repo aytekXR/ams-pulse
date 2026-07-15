@@ -580,6 +580,60 @@ func TestOIDC_Login_StateCookie_HttpOnly(t *testing.T) {
 	}
 }
 
+// TestOIDC_Login_StateCookie_SecureOnHTTPS: when the configured redirect URL is
+// https, the pulse_oidc_state cookie (which carries the PKCE code_verifier) must
+// carry Secure=true so it never travels over plaintext HTTP. Mirrors the session
+// cookie policy proven by TestOIDC_Callback_SecureCookie_HTTPSRedirectURL.
+// Mutation proof: drop the Secure field from the state cookie in handleLogin → RED.
+func TestOIDC_Login_StateCookie_SecureOnHTTPS(t *testing.T) {
+	env := setupOIDCTestServerRedirect(t, "viewer", nil, "https://pulse.example.com/auth/oidc/callback")
+
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	resp, err := client.Get(env.srv.URL + "/auth/oidc/login")
+	if err != nil {
+		t.Fatalf("GET /auth/oidc/login: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var found bool
+	for _, c := range resp.Cookies() {
+		if c.Name == "pulse_oidc_state" {
+			found = true
+			if !c.Secure {
+				t.Error("pulse_oidc_state must have Secure=true when the OIDC redirect URL is https")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no pulse_oidc_state cookie in login response")
+	}
+}
+
+// TestOIDC_Login_StateCookie_NotSecureOnHTTP: on a plaintext-http deployment
+// (e.g. local testing) the state cookie must NOT be Secure, or the browser would
+// refuse to send it back and every login would fail. Pins the conditional so a
+// future "always Secure" change cannot silently break http deployments.
+func TestOIDC_Login_StateCookie_NotSecureOnHTTP(t *testing.T) {
+	env := setupOIDCTestServer(t, "viewer", nil) // default http://example.com redirect
+
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	resp, err := client.Get(env.srv.URL + "/auth/oidc/login")
+	if err != nil {
+		t.Fatalf("GET /auth/oidc/login: %v", err)
+	}
+	defer resp.Body.Close()
+
+	for _, c := range resp.Cookies() {
+		if c.Name == "pulse_oidc_state" && c.Secure {
+			t.Error("pulse_oidc_state must NOT be Secure on an http redirect URL (would break login)")
+		}
+	}
+}
+
 // ─── Callback failure paths ───────────────────────────────────────────────────
 
 func TestOIDC_Callback_MissingCode_400(t *testing.T) {
