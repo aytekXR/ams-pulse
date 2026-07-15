@@ -11,9 +11,29 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-38.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-39.md`)
 
-**Session 2026-07-15 result: D-099 — S37 DONE (PR #71, tier-entitlement enforcement, in prod).**
+**Session 2026-07-15 result: D-100 — S38 DONE (PR #73, /admin/users correctness, in prod).**
+
+**★★ S38 DISCARDED ITS OWN PLAN — right again (four sessions running).** SESSION-38.md named the
+**team-management UI** (`/admin/users` CRUD exists, no page — the top D-098 funnel gap). Verify-at-open
+found the feature is **advisory, not real**: the stored per-user `role` **does not govern SSO sessions**
+(OIDC re-maps role from IdP groups on every login and never reads the stored value) and **there is no
+password login** (SSO auto-provisions users). So a UI role-edit would change nothing. S38 instead **fixed
+the API's real correctness bugs** — `handleUpdateUser` blanked the username on a role-only edit, returned
+200 for a missing id, and echoed a fabricated `created_at:0`; create accepted any role and 500'd on
+duplicates — and **deferred the UI + password-login to an operator product ruling** (operator-expected
+item 10). Full-replace matching the contract, role allowlist, duplicate→409, 409 documented in the spec.
+Gated (Go 24/24 · web tsc+vitest · schema.d.ts in sync; every guard mutation-proven RED; adversarial
+review → 3 findings all fixed), merged, rolled to prod. Full evidence: `decisions.md` D-100.
+
+**Next goal candidate: out-of-band licence-expiry alerting** (the alert engine has no `license_expiry`
+metric; only a UI banner warns — relevant to the operator's OWN 07-27 expiry). Team-management UI is
+**blocked on the operator's model ruling**. **Re-verify against the ledger + re-read the standing clause first.**
+
+---
+
+### Prior session (for context): D-099 — S37 DONE (PR #71, tier-entitlement enforcement, in prod).
 
 **★★ S37 DISCARDED ITS OWN PLAN — right again (three sessions running).** SESSION-37.md named
 "§2.16 AMS early-warning," but a `grep` of ROADMAP-V2 at open proved it had **already shipped S25/S26

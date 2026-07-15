@@ -1,4 +1,11 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-15, D-099 — SESSION-37)
+# Operator TODO — the items only YOU can do (updated 2026-07-15, D-100 — SESSION-38)
+
+> **S38 (D-100) added ONE new item to your queue: item 10 — a team-management model ruling** (see the
+> table below). It is a *product decision*, not a blocker. Everything else is unchanged: S38 was a
+> server-side correctness fix (`/admin/users` handlers), no operator step, inert on your prod. The two
+> hard blockers (GHCR 401, AMS expiry 2026-07-27 — **12 days**) are re-verified live and still on top.
+> Prod rolled forward to **`v0.4.0-17-g34c2221`** at S38 close (smoke: `/healthz` all-ok, the new role
+> validation answering `400` live, logs clean).
 
 ## ⚡ TL;DR — NO operator action required. Your queue is UNCHANGED (re-verified live).
 
@@ -122,6 +129,7 @@ GHCR.**
 | 7 | **Ant Media contact** | Partner/marketplace outreach. |
 | 8 | **Pro MaxNodes ruling** | A product decision, not an engineering one. |
 | 9 | **matbu/evrak vhost ruling** | `deploy/config/Caddyfile.prod` stays **uncommitted on purpose** — it embeds a bcrypt hash and the repo is public. It stays dirty until you rule. |
+| 10 | **★ NEW — team-management model ruling** | S38 was going to build the team-management UI (the top D-098 funnel gap) but found the feature is **currently advisory**: the stored per-user `role` **does not govern SSO sessions** (OIDC re-maps role from IdP groups on every login and never reads the stored value), and **there is no password login** (SSO auto-provisions users). So "invite a teammate" has no real flow, and a role you set in a UI wouldn't change anyone's permissions. **Decide the intended model** before a UI is built: (a) SSO-group-driven roles only (then the UI just *views* users + maps groups→roles), (b) add password login + make the stored role authoritative (a real auth feature), or (c) leave it as-is. S38 hardened the underlying API's correctness in the meantime (D-100) so whichever you choose starts from a sound base. |
 
 ### Design gaps (unchanged)
 
