@@ -11,7 +11,37 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-45.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-46.md`)
+
+**Session 2026-07-16 result: D-107 — S45 DONE (PR #87, reports-scheduler correctness — edit-silences-schedule BLOCKER + Monthly-preset-fires-daily).**
+
+**★ S45 fixed the single highest-severity finding of the S44 audit (13 bugs).** Both re-verified against the
+code, mutation-proven, adversarially reviewed → SHIP:
+- **BLOCKER** — `PUT /api/v1/reports/schedules/{id}` rebuilt the row from the body, NULLing `next_run_at`;
+  `ListDueReportSchedules` filters `next_run_at IS NOT NULL`, so **editing any schedule silently stopped it
+  firing forever**. The update handler now recomputes `next_run_at` + preserves `last_run_at` (create-handler
+  pattern).
+- **Monthly preset fired daily** — the UI's default `0 6 1 * *` preset dropped the day-of-month in the 5-field
+  cron parser. `nextCronTime` now honors DOM (Vixie OR-semantics); weekly/daily unaffected.
+
+Gates: full Go suite **24/24**; both mutation-proven RED; no contract/web/brandkit change; **prod rolled forward
+to `v0.4.0-31-g2787dcd`** (was `-29-ga280b56`; rollback tag `pre-d107`; smoke green — healthz ok, webhook 200).
+Full evidence: `decisions.md` D-107.
+
+**★ SESSION-46 = the entitlement + WS-auth cluster (S44 audit, 2 findings), then S47 = audit-integrity (6).**
+Ranked in `sessions/SESSION-46.md`: probe-runner ignores `CheckProbes()` on the background tick (S37 class,
+`prober.go:101` — may need a license-manager wiring seam); `handleLiveWS` ignores validated cookie auth
+(`server.go:1091`) → OIDC users can't open the live WS. **Re-verify each against the code before building.**
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
+ledger 07-27) — operator-only. GHCR anon → 401. **§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE at
+open; if eligible it's a clean win.**
+
+---
+
+## ▶ prior session context (S44, superseded by the above)
+
+## (superseded) ▶ START HERE (execute `sessions/SESSION-45.md`)
 
 **Session 2026-07-15 result: D-106 — S44 DONE (PR #85, security hardening — CSV formula injection + SMTP creds encrypted + OIDC state cookie Secure).**
 
