@@ -1766,7 +1766,7 @@ export interface components {
             actor_user_id?: string;
             /** @description display name of the token/actor */
             actor_name?: string;
-            /** @description verb form: <object_type>.<create|update|delete|activate|revoke> */
+            /** @description verb form: <object_type>.<create|update|delete|activate|revoke|provision> */
             action: string;
             /** @description e.g. alert_rule, alert_channel, user, token, probe, report_schedule, ams_source, tenant, license */
             object_type: string;

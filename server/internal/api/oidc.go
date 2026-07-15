@@ -328,6 +328,11 @@ func (h *oidcHandler) handleCallback(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "user created but not found")
 				return
 			}
+			// Record the first-login provisioning in the audit trail (D-104).
+			// Only this branch actually created a user; the UNIQUE-race branch
+			// above observed a row a concurrent login had already created, which
+			// that login audits — auditing here as well would double-count.
+			h.auditProvision(r, user, groups)
 		}
 	}
 
@@ -382,6 +387,42 @@ func (h *oidcHandler) handleCallback(w http.ResponseWriter, r *http.Request) {
 
 	// ── 12. Redirect to SPA root ──────────────────────────────────────────────
 	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+// auditProvision records the audit_log entry for an OIDC first-login user
+// provisioning (D-104). Unlike Server.audit, the actor is NOT a bearer token —
+// the SSO subject provisions itself on first login, before any session exists —
+// so the actor is taken from the freshly created user (actor == object here).
+//
+// It shares Server.audit's best-effort contract: the insert is detached from
+// request cancellation and time-bounded, so a user row that already committed
+// still leaves a durable record even if the client disconnects, while a stalled
+// store write cannot hang the login. A write failure is logged, never surfaced —
+// audit availability must not become part of the login write path.
+func (h *oidcHandler) auditProvision(r *http.Request, user *meta.User, groups []string) {
+	detail := map[string]any{"role": user.Role, "via": "oidc"}
+	if len(groups) > 0 {
+		detail["groups"] = groups
+	}
+	detailJSON := ""
+	if b, err := json.Marshal(detail); err == nil {
+		detailJSON = string(b)
+	}
+	e := meta.AuditEntry{
+		ActorUserID: user.ID,
+		ActorName:   user.Username,
+		Action:      "user.provision",
+		ObjectType:  "user",
+		ObjectID:    user.ID,
+		RemoteAddr:  r.RemoteAddr,
+		DetailJSON:  detailJSON,
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
+	defer cancel()
+	if err := h.store.CreateAuditLog(ctx, e); err != nil {
+		h.logger.Error("api: oidc provision audit write failed",
+			"error", err, "user_id", user.ID, "username", user.Username)
+	}
 }
 
 // ─── Logout handler ───────────────────────────────────────────────────────────
