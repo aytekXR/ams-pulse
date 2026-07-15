@@ -6408,8 +6408,26 @@ expiry alert (UI banner only).
 ### Gates
 
 Go (docker) **24/24 packages**, exit 0, `vet` + `gofmt` clean · web `tsc` + `eslint` clean ·
-vitest **638/638** (was 626, +12: authz read-scope, onboarding-guard incl. the anti-trap case,
-token-panel persistence, scope-choice) · Playwright (docker) **60/60** · `schema.d.ts` no drift.
+vitest **640/640** (was 626, +14: authz read-scope + read-escalation, onboarding-guard incl. the
+anti-trap, env-configured, and dismissal-flag cases, token-panel persistence, scope-choice) ·
+Playwright (docker) **60/60** · `schema.d.ts` regenerated (no drift). CI **15/15** on #53
+(including `csp-e2e`, which the guard fix un-broke).
+
+### Prod rollout — evidence, not the compose "Healthy" label (D-095)
+
+Rolled forward per `deploy/runbooks/upgrade-rollback.md`: tagged rollback point `pre-d098`
+(→ `v0.4.0-11-g425b04b`), manual backup exit 0 (SQLite verified), **stamped** build (not
+`up -d --build`), stamp asserted, `up -d`. Prod now runs **`pulse v0.4.0-13-g3ed3c7f`**
+(commit `3ed3c7f`). Smoked live via public TLS:
+
+- `/healthz` → `status: ok`, **`ams_env_configured: true`** — the operator is NOT redirected to the
+  onboarding wizard (the exact trap the pre-rollout DB check caught).
+- **Admin token → `POST /api/v1/admin/tokens` → 201.** The operator is **not locked out**; writes
+  work. (This was the single highest rollout risk from `requireWriteScope`.)
+- **A minted read-scoped token → `POST /api/v1/admin/tokens` → 403.** The privilege-escalation path
+  is closed **in prod** — it would have returned 201 before this session. Same token →
+  `GET /live/overview` → 200 (reads work). Temp tokens deleted afterwards (204).
+- Collector healthy: `server_events` 832k+ rows, newest timestamp live. No ingest disruption.
 
 **Process lesson recorded:** Playwright tests the built `dist/`, not source. I narrowed the guard,
 re-ran Playwright against a **stale build**, and saw the same 13 failures — nearly re-debugged a

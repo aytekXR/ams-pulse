@@ -18,10 +18,16 @@ operator's question exposed three post-login blockers. Do the same if the eviden
 
 **★★ STANDING RULE (D-095): a session claiming "DONE" is NOT evidence that it landed.**
 
-- `git log --oneline origin/main -3` — S36 (`D-098`, PR #53) should be on `origin/main`.
-- Prod should print the S36 build:
+- `git log --oneline origin/main -3` — S36 (`3ed3c7f`, D-098, PR #53) should be on `origin/main`.
+- Prod should print **`v0.4.0-13-g3ed3c7f`** (rolled forward at S36 close):
   ```sh
   sg docker -c "docker exec pulse-prod-pulse-1 /usr/local/bin/pulse version"
+  ```
+- `/healthz` should report **`ams_env_configured: true`** (else the operator gets bounced to the
+  onboarding wizard — regression):
+  ```sh
+  curl -sf --resolve beyondkaira.com:443:161.97.172.146 https://beyondkaira.com/healthz \
+    | python3 -c "import sys,json;print(json.load(sys.stdin).get('ams_env_configured'))"
   ```
 - **Prove the S36 fix is live** — the role gate is the cheapest real check:
   ```sh
