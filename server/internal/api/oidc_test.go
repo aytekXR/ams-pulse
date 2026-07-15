@@ -940,6 +940,78 @@ func TestOIDC_Callback_Success_TokenInStore(t *testing.T) {
 	}
 }
 
+// TestOIDC_Callback_FirstLogin_AuditsProvision pins D-104: the first SSO login
+// for a new subject provisions a user OUTSIDE handleCreateUser, so that creation
+// must still land in the audit trail — with the SSO subject as the actor, since
+// there is no bearer token on the login path. A repeat login by the same subject
+// must NOT add a second provision entry: provisioning happens once per user,
+// logins are unbounded. Deleting the h.auditProvision call turns this RED.
+func TestOIDC_Callback_FirstLogin_AuditsProvision(t *testing.T) {
+	env := setupOIDCTestServer(t, "", map[string]string{"ops-admins": "admin"})
+	env.mock.mu.Lock()
+	env.mock.groups = []string{"ops-admins"}
+	env.mock.mu.Unlock()
+
+	// First login → provisions the user.
+	stateCookieVal, stateParam := env.doLogin(t)
+	resp := env.doCallback(t, stateCookieVal, stateParam)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("first login: expected 302, got %d", resp.StatusCode)
+	}
+
+	provisions := func() []meta.AuditEntry {
+		t.Helper()
+		entries, err := env.store.ListAuditLog(context.Background(), 50, "")
+		if err != nil {
+			t.Fatalf("ListAuditLog: %v", err)
+		}
+		var out []meta.AuditEntry
+		for _, e := range entries {
+			if e.Action == "user.provision" {
+				out = append(out, e)
+			}
+		}
+		return out
+	}
+
+	prov := provisions()
+	if len(prov) != 1 {
+		t.Fatalf("expected exactly 1 user.provision audit entry after first login, got %d", len(prov))
+	}
+	e := prov[0]
+	if e.ObjectType != "user" {
+		t.Errorf("object_type: got %q, want user", e.ObjectType)
+	}
+	if !strings.HasPrefix(e.ActorName, "oidc:") {
+		t.Errorf("actor_name: got %q, want an oidc:<sub> prefix", e.ActorName)
+	}
+	// The SSO subject provisions itself: actor == object, both the new user id.
+	if e.ActorUserID == "" || e.ActorUserID != e.ObjectID {
+		t.Errorf("expected actor_user_id == object_id (self-provision), got actor=%q object=%q",
+			e.ActorUserID, e.ObjectID)
+	}
+	// No bearer token exists on the SSO provisioning path.
+	if e.ActorTokenID != "" {
+		t.Errorf("expected empty actor_token_id (no bearer token on SSO provisioning), got %q", e.ActorTokenID)
+	}
+	// detail records the granted role + provenance for the security audit.
+	if !strings.Contains(e.DetailJSON, `"role":"admin"`) {
+		t.Errorf("detail should record the granted role admin, got %q", e.DetailJSON)
+	}
+
+	// Second login by the SAME subject → user already exists → NO new provision.
+	stateCookieVal2, stateParam2 := env.doLogin(t)
+	resp2 := env.doCallback(t, stateCookieVal2, stateParam2)
+	resp2.Body.Close()
+	if resp2.StatusCode != http.StatusFound {
+		t.Fatalf("second login: expected 302, got %d", resp2.StatusCode)
+	}
+	if got := len(provisions()); got != 1 {
+		t.Errorf("provisioning must be once-per-user: expected 1 user.provision entry after a repeat login, got %d", got)
+	}
+}
+
 func TestOIDC_Callback_Success_SessionTTL(t *testing.T) {
 	env := setupOIDCTestServer(t, "viewer", nil)
 

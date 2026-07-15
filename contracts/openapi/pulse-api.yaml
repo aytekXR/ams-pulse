@@ -3208,7 +3208,7 @@ components:
           description: display name of the token/actor
         action:
           type: string
-          description: "verb form: <object_type>.<create|update|delete|activate|revoke>"
+          description: "verb form: <object_type>.<create|update|delete|activate|revoke|provision>"
         object_type:
           type: string
           description: e.g. alert_rule, alert_channel, user, token, probe, report_schedule, ams_source, tenant, license

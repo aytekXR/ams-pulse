@@ -7,16 +7,16 @@ package api
 // context (bearerAuthMiddleware stashes the *meta.APIToken under ctxTokenKey), so
 // no new middleware is needed. GET /api/v1/admin/audit-log reads the trail back.
 //
-// Scope (v1, deliberate — NOT silent gaps):
+// Scope (deliberate — NOT silent gaps):
 //   Covered: create/update/delete of alert rules & channels, users, tokens,
-//     probes, report schedules, AMS sources, tenants; plus licence activation.
+//     probes, report schedules, AMS sources, tenants; plus licence activation;
+//     plus OIDC first-login user provisioning (D-104) — that path has no bearer
+//     token, so it records the SSO subject as the actor via
+//     oidcHandler.auditProvision rather than s.audit/actorFrom.
 //   Out of scope, by design:
 //     - Test/connectivity actions (POST .../channels/{id}/test, .../sources/{id}/test)
 //       — they fire a probe, they do not change stored state.
 //     - Session logout (POST /auth/oidc/logout) — no resource is mutated.
-//     - OIDC auto-provisioning (oidc.go creates a user on first SSO login) — the
-//       actor there is the SSO flow, not an admin token, so it needs a distinct
-//       actor model. This is the top Phase-2 follow-up (see D-102).
 
 import (
 	"context"
