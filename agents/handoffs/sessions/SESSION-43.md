@@ -124,3 +124,29 @@ S38 overturned its plan, S39/S40/S41/S42 confirmed theirs; the clause cuts both 
 5. Write `sessions/SESSION-44.md` (carry the standing-directive header).
 6. **Roll prod forward** if server/web code changed, per `deploy/runbooks/upgrade-rollback.md` — STAMPED
    build (`--build-arg` on `build`, then `up -d` WITHOUT `--build`); smoke with **evidence**.
+
+---
+
+## ✅ RESULT — S43 DONE (D-105, PR #83, 2026-07-15)
+
+**★ Overturned the lead candidate at verify-at-open (the clause cut both ways).** Candidate 1 (admin-gate the
+audit read) was refuted against the code: `requireWriteScope` (server.go:690) deliberately lets ALL reads
+through and gates only writes on the `admin` scope — so the audit read follows the uniform "reads open" model
+(same as `GET /admin/users`, `/admin/tokens`). Gating just it is inconsistent; gating the whole read surface
+is a product ruling (and would 403 the S41 AuditLogPage for viewer SSO users). → deferred to operator.
+Candidate 3 (`PULSE_LICENSE_OFFLINE_FILE`) was also overturned — the whole `config.Load` is an unwired
+`HOOK(BE-02)` skeleton, so it's not XS. **Built candidate 2 instead.**
+
+**Built: the two S34 e2e gaps** [test-only]. `probes.spec.ts` create happy-path (valid submit → POST →
+appended + form closed); `reports.spec.ts` Schedules tab activation (click → GET schedules → row renders, not
+empty state). **16/16** in the Playwright docker image. **Mutation-proven non-vacuous**: removing the
+probe-append and the schedules fetch-on-activate turns EXACTLY these two RED, 14 others green. `tsc`+`eslint`
+clean; CI all required green.
+
+**Prod: NOT rolled forward — test-only.** Only `web/e2e/*.spec.ts` changed (not part of the served bundle),
+so prod correctly stays **`v0.4.0-25-g6a0226d`** (S42). No adversarial-review agent this round — test-only +
+mutation proof is the strongest non-vacuousness evidence.
+
+**Operator action: NONE for the build.** Two NEW soft (non-blocking) operator/ruling items recorded: audit-read
+access model (ruling); the BE-02 config skeleton (wire or delete). AMS-expiry-confirmation item persists.
+GHCR anon → 401. Full evidence: `decisions.md` D-105.
