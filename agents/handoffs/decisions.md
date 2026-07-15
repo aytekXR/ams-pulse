@@ -6816,3 +6816,71 @@ distinct actor model); optional admin-only gating of the audit read. Carried to 
 **Docs at close:** D-103 CLOSED (this block); ROADMAP-V2 §2.26; SESSION-41 result appended;
 `operator-expected.md` refreshed (AMS-expiry item persists); RESUME-PROMPT ▶ START HERE → SESSION-42;
 `sessions/SESSION-42.md` written. Follow-up docs PR.
+
+---
+
+## D-104 — S42 (2026-07-15): CLOSED — audit trail Phase 2 tail (audit OIDC first-login provisioning)
+
+**Goal (SESSION-42 candidate 1).** Close the one mutating path the S40 audit trail deliberately left
+out-of-scope: `oidc.go` provisions a user on **first SSO login**, OUTSIDE the audited `handleCreateUser`
+path, so that account creation was never recorded. S40's `audit.go` doc comment named this as the top
+Phase-2 follow-up. This makes the trail cover every user-creation path.
+
+**Design.** New `oidcHandler.auditProvision(r, user, groups)` writes a `user.provision` `audit_log` entry.
+The **actor model differs from `s.audit`**: on the OIDC callback there is no bearer token yet (the session is
+being established), so the actor cannot come from `ctxTokenKey`. The SSO subject provisions **itself** —
+`actor_user_id == object_id` (the new user's UUID), `actor_token_id` empty, `actor_name = "oidc:<sub>"`,
+`detail = {role, via:"oidc", groups}`. Same best-effort contract as `s.audit`: cancel-detached
+(`context.WithoutCancel`) + 5 s-bounded, log-on-failure — a committed provisioning still leaves a durable
+record, and audit availability never becomes part of the login write path.
+
+**Placement (exactly-once).** The call sits **only in the branch that actually created the user** (after the
+`CreateUser`-succeeded re-fetch that populates `user.ID` — `CreateUser` is a value receiver, so the caller's
+struct needs the `GetUserByUsername` re-fetch to carry the generated ID). The UNIQUE-race branch
+(concurrent first-login loser) re-fetches a row a winning login already created — and that winner audits it,
+so auditing in the race branch too would double-count. A repeat login by an existing subject skips the whole
+`if user == nil` block, so provisioning is audited **once per user**, not once per login.
+
+**Operator action required: NONE.** Server-side; behaviourally inert until an operator configures OIDC
+(off in prod: 0 users, SSO disabled). Latent-correctness — when OIDC IS used, first logins now audit.
+
+Verify-at-open census: `origin/main` = `f04d375` (S41 docs); prod `v0.4.0-23-ga44691b` (S41, live — Audit Log
+UI proven served); GHCR anon → 401. Candidate confirmed real+viable against the code before building
+(`audit.go` names it; `oidc.go:302-332` is the provisioning branch; `oidc_test.go` has a rich callback
+harness — `setupOIDCTestServer`/`doLogin`/`doCallback` against a real store).
+
+**Shipped (PR #81, squash `6a0226d`, merged to `origin/main`).** Server-side + a generated-types touch:
+- `oidc.go` — `auditProvision` method + the single call in the create branch.
+- `audit.go` — scope doc comment updated: OIDC provisioning is now **covered**, not a documented gap.
+- OpenAPI `action` description adds `provision`; `schema.d.ts` regenerated (free-form string, no structural
+  change).
+- `oidc_test.go` — `TestOIDC_Callback_FirstLogin_AuditsProvision`: asserts the entry, the self-provision
+  `actor == object` identity, empty `actor_token_id`, the granted role in `detail`, and once-per-user
+  (a repeat login adds no second entry). **Mutation-proven RED** (remove the call → `got 0`).
+
+**Verification.** Go: full suite green (24/24 packages), `go vet`, `gofmt` clean. Web: `tsc` + `build` +
+`vitest` 650 pass (one `AlertsPage` failure under concurrent-load contention on this box; passes 18/18 in
+isolation — unrelated, the only web change is a generated JSDoc comment). CI: all required checks green
+(server, contracts, web, web-e2e, csp-e2e, e2e — no flake). **Adversarial review (independent agent): NO
+real defects** — all six refute-targets (exactly-once, actor==object with populated ID, best-effort
+non-blocking, no nil-deref, genuinely-RED test, no secrets in detail) verified against the code; the one note
+(synchronous ≤5 s tail-latency ceiling) is the pre-existing `s.audit` design, not new.
+
+**Prod: rolled forward at close.** Rollback `pulse-prod-pulse:pre-d104` = `v0.4.0-23-ga44691b` (S41);
+pre-upgrade backup exit 0; STAMPED build asserted **`pulse v0.4.0-25-g6a0226d`** (commit `6a0226d`, built
+`2026-07-15T12:21:21Z`) — not dev/unknown — before `up -d`. Post-swap smoke (evidence): `/healthz` all-ok +
+`ams_env_configured:true` (clickhouse/collector/meta_store all ok); running stamp `-25-g6a0226d`; webhook
+signature 200; limits `512M/0.5cpu` (`memory=536870912 cpus=500000000`); logs clean. **Proof the S42 code is
+live is the version stamp** — the provisioning-audit path is dormant until OIDC is configured, so no live
+provision entry can (or should) be manufactured in prod.
+
+**Operator action: NONE.** Carried operator item unchanged: **confirm the true AMS trial expiry** (runbook
+07-12 vs ledger 07-27 — see operator-expected/D-102). GHCR anon → 401.
+
+**Remaining audit-trail Phase-2 tail:** every user-creation path is now audited. Optional follow-ups
+(SESSION-43 candidates): admin-scope gating of the `GET /admin/audit-log` read (currently auth-gated, not
+admin-scope-gated); the two S34 e2e gaps; the dead `PULSE_LICENSE_OFFLINE_FILE` path.
+
+**Docs at close:** D-104 CLOSED (this block); ROADMAP-V2 §2.27; SESSION-42 result appended;
+`operator-expected.md` refreshed (AMS-expiry item persists); RESUME-PROMPT ▶ START HERE → SESSION-43;
+`sessions/SESSION-43.md` written. This docs PR.

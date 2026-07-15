@@ -11,20 +11,24 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-42.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-43.md`)
 
-**Session 2026-07-15 result: D-103 — S41 DONE (PR #79, audit-log web UI — the trail is now visible in the SPA, in prod).**
+**Session 2026-07-15 result: D-104 — S42 DONE (PR #81, audit OIDC first-login provisioning — every user-creation path is now recorded, in prod).**
 
-**★ S41 CONFIRMED its plan (third non-pivot running).** Completed the self-contained half of "audit trail
-Phase 2": a read-only **Audit Log** page (`/audit-log`) that surfaces the S40 `GET /admin/audit-log` endpoint
-so operators can actually SEE who changed what, when, and from where. `AuditLogPage.tsx` mirrors `AnomaliesPage`
-(table + cursor "Load more" + Refresh; newest-first; **no tier gate** — the trail is a core admin feature),
-`adminApi.listAuditLog` calls the typed endpoint, and the router + left-nav are wired. **Web-only — zero Go
-or contract change** (S40 already shipped the endpoint + `AuditEntry`/`AuditLogPage` schema). Gated (tsc ·
-**650 vitest** incl. 10 new — states, actor fallback, load-more append + cursor param, design-token pins ·
-build · **3 Playwright e2e** green in `mcr.microsoft.com/playwright:v1.61.1-jammy`). CI all-green this round
-(no `csp-e2e` flake). Merged, rolled to prod **`v0.4.0-23-ga44691b`** — the new UI proven served (AuditLogPage
-strings present in the live JS bundle). Full evidence: `decisions.md` D-103.
+**★ S42 CONFIRMED its plan (fourth non-pivot running).** Closed the one mutating path the S40 audit trail
+deliberately left out: `oidc.go` provisions a user on **first SSO login** OUTSIDE the audited
+`handleCreateUser` path, so that creation was never recorded (S40's own doc comment named it the top Phase-2
+follow-up). New `oidcHandler.auditProvision` writes a `user.provision` `audit_log` entry with a **different
+actor model** — no bearer token exists pre-session, so the SSO subject provisions itself
+(`actor_user_id == object_id`, `actor_token_id` empty, `actor_name = "oidc:<sub>"`, `detail = {role,via,groups}`).
+Placed **only in the create branch** (after the re-fetch that populates `user.ID`) → audited once per user,
+never in the concurrent-UNIQUE-race branch (the winning login audits it). Same best-effort contract as
+`s.audit` (cancel-detached, 5 s-bounded, log-on-failure). `audit.go` scope comment updated (now covered);
+OpenAPI `action` desc += `provision`; `schema.d.ts` regenerated. Gated (Go 24/24 · vet · gofmt · web
+tsc+build+vitest 650; new test **mutation-proven RED**; **adversarial review → no real defects**). CI all
+required green. Merged, rolled to prod **`v0.4.0-25-g6a0226d`** (smoke: healthz all-ok, webhook 200, limits
+`512M/0.5cpu`, logs clean). The path is dormant until OIDC is configured (off in prod), so the version stamp
+is the proof of deploy. Full evidence: `decisions.md` D-104.
 
 **⚠ CARRIED operator item (from S40, still unresolved):** the **AMS trial expiry is documented inconsistently** —
 `deploy/runbooks/self-hosted-ams.md` says **2026-07-12**, the ledger says **2026-07-27** (live-verified
@@ -32,12 +36,24 @@ S37–S39). If it's 07-12 it has ALREADY lapsed. Cannot re-verify live (AMS cred
 the licence only on restart, so live-ingesting doesn't disambiguate). **Operator must confirm.** See
 `operator-expected.md`.
 
-**Next goal candidate: audit trail Phase-2 tail** — **audit OIDC auto-provisioning** (`oidc.go` CreateUser
-creates users on first SSO login outside `handleCreateUser`, so those creations aren't recorded; design the
-SSO-subject actor model and capture it). Bounded alternatives: optional **admin-only gating of the audit
-read**, the two S34 e2e gaps [S], the dead `PULSE_LICENSE_OFFLINE_FILE` path [XS]. Team-management UI stays
-**blocked on the operator's model ruling**; §2.7 CI promotions unlock **2026-07-23** (check the date at open).
+**Next goal candidate (SESSION-43):** the audit trail now covers every user-creation path. Remaining bounded
+tail: **admin-scope gating of the `GET /admin/audit-log` read** (currently auth-gated but not
+admin-scope-gated — a read-only token can read the whole trail; product ruling first), the **two S34 e2e gaps**
+[S], the dead **`PULSE_LICENSE_OFFLINE_FILE`** path [XS]. Team-management UI stays **blocked on the operator's
+model ruling**; §2.7 CI promotions unlock **2026-07-23** (check the date at open — today is 07-15).
 **Re-verify against the ledger + re-read the standing clause first.**
+
+---
+
+### Prior session (for context): D-103 — S41 DONE (PR #79, audit-log web UI — the trail is visible in the SPA, in prod).
+
+**★ S41 CONFIRMED its plan.** Completed the self-contained half of "audit trail Phase 2": a read-only
+**Audit Log** page (`/audit-log`) surfacing the S40 `GET /admin/audit-log` endpoint. `AuditLogPage.tsx`
+mirrors `AnomaliesPage` (table + cursor "Load more" + Refresh; **no tier gate** — core admin feature);
+router + left-nav wired. **Web-only — zero Go/contract change.** Gated (tsc · 650 vitest incl. 10 new · build
+· 3 Playwright e2e in the docker image); CI all-green (no `csp-e2e` flake). Merged, rolled to prod
+**`v0.4.0-23-ga44691b`** — UI proven served (AuditLogPage strings in the live JS bundle). Full evidence:
+`decisions.md` D-103.
 
 ---
 

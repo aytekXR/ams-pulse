@@ -124,3 +124,31 @@ S38 overturned its plan, S39/S40/S41 confirmed theirs; the clause cuts both ways
 5. Write `sessions/SESSION-43.md` (carry the standing-directive header).
 6. **Roll prod forward** if server/web code changed, per `deploy/runbooks/upgrade-rollback.md` — STAMPED
    build (`--build-arg` on `build`, then `up -d` WITHOUT `--build`); smoke with **evidence**.
+
+---
+
+## ✅ RESULT — S42 DONE (D-104, PR #81, 2026-07-15)
+
+**Chose candidate 1 (audit OIDC first-login provisioning) — the documented Phase-2 tail.** Verified real +
+viable at open: `audit.go`'s own scope comment named it the top follow-up; `oidc.go:302-332` is the
+provisioning branch; the callback test harness (`setupOIDCTestServer`/`doLogin`/`doCallback`) drives a full
+first-login against a real store. New `oidcHandler.auditProvision` writes a `user.provision` audit entry —
+**actor model differs from `s.audit`**: no bearer token exists pre-session, so the SSO subject provisions
+itself (`actor_user_id == object_id`, `actor_token_id` empty, `actor_name = "oidc:<sub>"`). Placed **only in
+the create branch** (after the `GetUserByUsername` re-fetch that populates `user.ID` — `CreateUser` is a value
+receiver) → once per user, never in the UNIQUE-race branch. Best-effort like `s.audit` (cancel-detached, 5 s,
+log-on-failure). `audit.go` scope comment updated (now covered); OpenAPI `action` desc += `provision`;
+`schema.d.ts` regenerated.
+
+**Gates:** Go 24/24 · `vet` · `gofmt`; web `tsc`+`build`+vitest 650 (one `AlertsPage` load-flake, 18/18 in
+isolation — unrelated). `TestOIDC_Callback_FirstLogin_AuditsProvision` **mutation-proven RED** (remove call
+→ got 0). **Adversarial review (independent agent) → NO real defects** (all six refute-targets held). CI all
+required green — no flake.
+
+**Prod rolled forward:** rollback `pre-d104` = `v0.4.0-23-ga44691b`; backup exit 0; STAMPED build
+**`v0.4.0-25-g6a0226d`** deployed; evidence smoke green (healthz all-ok, stamp `-25-g6a0226d`, webhook 200,
+limits `512M/0.5cpu`, logs clean). The provisioning-audit path is dormant until OIDC is configured (off in
+prod), so the **version stamp is the proof the code is live** — no live provision entry manufactured in prod.
+
+**Operator action: NONE.** The carried AMS-expiry-confirmation item persists (runbook 07-12 vs ledger 07-27).
+GHCR anon → 401. Full evidence: `decisions.md` D-104.
