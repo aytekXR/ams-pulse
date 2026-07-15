@@ -174,6 +174,15 @@ func (s *Server) handleUpdateReportSchedule(w http.ResponseWriter, r *http.Reque
 	}
 	row.ID = id
 	row.CreatedAt = existing.CreatedAt
+	// reportScheduleFromAPI parses only the request body, so NextRunAt/LastRunAt
+	// come back nil. Writing those as-is NULLs next_run_at, and
+	// ListDueReportSchedules filters on `next_run_at IS NOT NULL` — so an edited
+	// schedule would never fire again. Preserve the run history and recompute the
+	// next fire from the (possibly changed) cron, exactly as the create handler does.
+	row.LastRunAt = existing.LastRunAt
+	nextRun := reports.NextCronTime(row.Cron, time.Now())
+	nextRunMS := nextRun.UnixMilli()
+	row.NextRunAt = &nextRunMS
 	if err := s.store.UpdateReportSchedule(r.Context(), row); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return

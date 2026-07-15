@@ -284,24 +284,23 @@ func NextCronTime(cronExpr string, from time.Time) time.Time {
 }
 
 // nextCronTime computes the next fire time for a cron expression.
-// Uses the alert cron parser (3-field "min hour weekday" format).
-// For standard 5-field crons, we fall back to a 1-month interval.
+// Honors min/hour/day-of-month/weekday (D-107); the month field is ignored.
+// If cron parsing fails, defaults to a 1-month interval.
 func nextCronTime(cronExpr string, from time.Time) time.Time {
-	// Try the 3-field simple cron parser (from alert/wave2.go).
-	// For monthly schedules, many deployments will use "0 0 *" (midnight daily).
-	// If cron parsing fails, default to next month.
-	min, hour, weekday, err := parseCronSimple3Field(cronExpr)
+	min, hour, dom, weekday, err := parseCronFieldsInternal(cronExpr)
 	if err != nil {
 		// Unknown format — schedule next month.
 		return from.AddDate(0, 1, 0)
 	}
 
-	// Find the next time matching min/hour/weekday from `from`.
-	t := from.Add(time.Minute)      // start from next minute
-	for i := 0; i < 60*24*32; i++ { // search up to 32 days ahead
+	// Find the next minute matching min/hour/dom/weekday from `from`. The window
+	// is ~1 year so a day-of-month that skips short months (e.g. dom=31) is still
+	// found; a monthly schedule exits within ~31 days.
+	t := from.Add(time.Minute)       // start from next minute
+	for i := 0; i < 60*24*366; i++ { // search up to ~1 year ahead
 		if (min < 0 || t.Minute() == min) &&
 			(hour < 0 || t.Hour() == hour) &&
-			(weekday < 0 || int(t.Weekday()) == weekday) {
+			cronDayMatches(t, dom, weekday) {
 			return t.Truncate(time.Minute)
 		}
 		t = t.Add(time.Minute)
@@ -309,10 +308,15 @@ func nextCronTime(cronExpr string, from time.Time) time.Time {
 	return from.AddDate(0, 1, 0) // fallback
 }
 
-// parseCronSimple3Field is a thin wrapper so scheduler doesn't import the alert package.
-// Duplicates wave2.go's parseCronSimple but without the import cycle.
-func parseCronSimple3Field(expr string) (min, hour, weekday int, err error) {
-	// defer to the package-local implementation in wave2-compatible form.
-	// The alert package's parseCronSimple is unexported; we inline it here.
-	return parseCronFieldsInternal(expr)
+// cronDayMatches implements standard cron day-of-month / day-of-week semantics:
+// when BOTH fields are restricted the day matches if EITHER matches (Vixie cron
+// OR-semantics); otherwise each restricted field must match and a wildcard (-1)
+// always matches.
+func cronDayMatches(t time.Time, dom, weekday int) bool {
+	domSet := dom >= 0
+	wdaySet := weekday >= 0
+	if domSet && wdaySet {
+		return t.Day() == dom || int(t.Weekday()) == weekday
+	}
+	return (dom < 0 || t.Day() == dom) && (weekday < 0 || int(t.Weekday()) == weekday)
 }
