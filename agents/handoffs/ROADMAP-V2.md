@@ -527,6 +527,21 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.29  Security hardening + 13-bug adversarial audit  [S shipped; M–L backlog]  ✅ SECURITY CLUSTER DONE S44 (D-106, 2026-07-15, PR #85)
+
+**★★ S44 ran an 8-finder adversarial audit → 13 CONFIRMED defects, 0 refuted** (the "backlog is thinning"
+claim was wrong). Shipped the **security cluster** (3 fixes, PR #85, all mutation-proven + 2 adversarial
+reviews → SHIP): (1) **CSV formula injection** — export + statement CSV neutralize publisher-controlled
+`app`/`stream_id`/`tenant` cells via shared `reports.CSVSafeCell`/`UsageCSVRecord`/`WriteUsageCSV` (OWASP
+single-quote); (2) **email/SMTP creds** now encrypted at rest (`secretFields` += `password`/`username`);
+(3) **OIDC `pulse_oidc_state` cookie** `Secure` on https. No contract/web/brandkit change; prod rolled forward.
+
+**★ The other 10 findings are the S45–S47 backlog (real, verified, autonomous)** — see `sessions/SESSION-45.md`
++ D-106: BLOCKER `PUT /reports/schedules/{id}` NULLs `next_run_at` (silences the schedule); `nextCronTime`
+drops DOM (Monthly fires daily); probe-runner ignores `CheckProbes()` on the tick (S37 class); `handleLiveWS`
+ignores cookie auth; `handleDeleteUser`/`handleRevokeToken` false-audit+204 on missing id (S38 class);
+create-user/token audit-after-refetch (S40 class); token `kind` no allowlist; anomaly `>` vs `>=` boundary.
+
 ### 2.28  Close the two S34 e2e gaps — probes-create + reports-schedules  [S, test-only] ✅ DONE S43 (D-105, 2026-07-15, PR #83)
 
 Drove the two documented S34 e2e coverage gaps end-to-end: (a) `probes.spec.ts` probe **create happy-path**

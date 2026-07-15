@@ -6945,3 +6945,82 @@ re-ranked accordingly.
 **Docs at close:** D-105 CLOSED (this block); ROADMAP-V2 §2.28; SESSION-43 result appended;
 `operator-expected.md` refreshed (2 new soft items + AMS-expiry persists); RESUME-PROMPT ▶ START HERE →
 SESSION-44; `sessions/SESSION-44.md` written. This docs PR.
+
+## D-106 — S44 (2026-07-15): CLOSED — security hardening (CSV injection, SMTP creds, OIDC cookie) + a 13-bug audit (PR #85)
+
+**★★ S44 CONFIRMED its plan AND overturned the "backlog is thinning" narrative.** SESSION-44's honest job
+(per the S43 handoff) was: re-verify the CI-promotion date (07-15 < 07-23 → not eligible; correctly skipped),
+then pick a bounded hygiene candidate and surface that the big moves are operator-gated. Instead of defaulting
+to test hygiene, S44 followed the standing directive ("revise if a higher-leverage move exists") and ran an
+**8-finder adversarial correctness/security audit** (workflow `wf_1f18593d-af7`, 34 agents, 0 errors) across
+the server handler families, each finding refuted-by-default by 2 independent skeptics. **Result: 13 CONFIRMED
+defects, 0 refuted** — a blocker, several majors (2 security), and correctness bugs across scheduler, auth,
+entitlement, and audit-integrity. The "clean-autonomous work is thinning" claim (S43/S44 handoffs) was wrong:
+there is real, verified, autonomous engineering — it just needed an audit to find.
+
+**Shipped this session — the SECURITY cluster (3 fixes, PR #85), each personally verified + mutation-proven:**
+
+1. **CSV formula injection [security/major].** `GET /api/v1/reports/export` (`export.go`) and the white-label
+   statement generator (`reports/statement.go generateCSV`) wrote publisher-controlled columns
+   (`app`/`stream_id`/`tenant` — an AMS application/stream name is chosen by whoever publishes; scanned from
+   ClickHouse `rollup_usage_1d` at `accounting.go:251,257`) into CSV cells with no neutralization of leading
+   formula triggers (`= + - @`, tab, CR). `encoding/csv` does not escape these, so a stream named
+   `=cmd|'/c calc'!A0` (or `=HYPERLINK(...)`) became a **live formula** on spreadsheet open — and
+   `known-limitations.md:524` explicitly directs operators to open the export in a spreadsheet. **Fix:** a
+   shared `reports.CSVSafeCell` (single-quote prefix, OWASP CSV-Injection mitigation) + `reports.UsageCSVRecord`
+   (the neutralized 8-col detail record) used by BOTH writers; `export.go` delegates to the new
+   `reports.WriteUsageCSV`. Numeric columns unchanged; benign output byte-identical (correctness reviewer
+   confirmed). The audience-analytics CSV (`server.go:1221`) is integer-only → already safe (both reviewers
+   confirmed). Totals-row `EgressMethod` also neutralized for consistency (security-review follow-up).
+
+2. **Email/SMTP alert-channel credentials stored plaintext [security/major].** `alertChannelFromAPI`'s
+   `secretFields` allowlist (`server.go:2448`) omitted the email `password`/`username` keys, so they were
+   serialized into `config_public` in cleartext (`config_enc` left empty). The leak was SILENT because
+   `factory.BuildChannelFromRow` merges public+decrypted config on read, so delivery worked either way.
+   **Fix:** added `password`/`username` to the allowlist → encrypted at rest. Backward-compatible (the merge
+   recovers creds for both old plaintext and new encrypted rows); prod has 0 email channels.
+
+3. **OIDC login state cookie missing `Secure` [security/major].** `pulse_oidc_state` (`oidc.go:175`, carries
+   the PKCE `code_verifier`) set `HttpOnly`+`SameSite=Lax` but not `Secure`, so a browser could transmit it
+   over plaintext HTTP on an HTTPS deployment. **Fix:** `Secure: strings.HasPrefix(h.cfg.RedirectURL,
+   "https://")`, mirroring the existing `pulse_session` policy (`oidc.go:368`); the callback/logout cookie
+   clears carry the same guard for consistency (security-review follow-up).
+
+**Verification.** gofmt/vet clean; **full Go suite 24/24 packages**. Three new test groups **mutation-proven
+RED** on a throwaway copy (`/tmp/mut`, real tree untouched): (a) reports CSV — reverting `CSVSafeCell` prints
+the raw `=1+2,-9,@tenant` formula row; (b) SMTP — reverting the allowlist puts the plaintext password
+`smtp_secret_xyz_do_not_leak` in `config_public` + empty `config_enc`; (c) OIDC — dropping `Secure` fails
+`SecureOnHTTPS` while `NotSecureOnHTTP`/`HttpOnly` stay green (clean attribution). **Two independent
+adversarial reviewers (security + correctness lenses) → SHIP, no exploitable defect / no regression**; the
+only follow-ups (totals-row consistency, cookie-clear consistency) were applied. No `contracts/`/`brandkit/`/
+`web/` change (no `gen:api`/Playwright needed; the `contracts` CI check confirmed no schema drift).
+
+**Prod: rolled forward** (server *source* changed) per `deploy/runbooks/upgrade-rollback.md` — STAMPED build,
+rollback tag `pre-d106`, pre-upgrade backup rc=0 (keep-7 pruned). New prod stamp: **`v0.4.0-29-ga280b56`**
+(was `v0.4.0-25-g6a0226d`). Evidence smoke: `/healthz` all-ok (`ams_env_configured:true`, clickhouse/collector/
+meta_store ok); running `pulse version` = `v0.4.0-29-ga280b56`; signed AMS webhook → **200**; logs no ERROR/panic.
+
+**Operator action required: NONE for the build.** Carried operator items unchanged: **confirm the true AMS
+trial expiry** (runbook 07-12 vs ledger 07-27 — the one time-sensitive item); GHCR anon → 401; the S43 soft
+rulings (audit-read model, BE-02 config); item 10 (team-management model). No NEW operator item from S44.
+
+**★ THE S45–S47 BACKLOG (the other 10 confirmed findings — real, verified, autonomous).** Full file:line +
+failure scenarios in `sessions/SESSION-45.md`. Ranked:
+- **BLOCKER — `PUT /reports/schedules/{id}` NULLs `next_run_at`/`last_run_at`** (`reports_wave2.go:177`) →
+  editing any schedule silently stops it firing. Highest severity of the 13. → S45 primary.
+- **MAJOR — `nextCronTime` drops the day-of-month field for 5-field cron** (`cron.go:39`) → the "Monthly"
+  UI preset fires daily. → S45.
+- **MAJOR — probe runner ignores `CheckProbes()` on the background tick** (`prober.go:101`, S37 class) → S46.
+- **MAJOR — `handleLiveWS` ignores validated cookie auth** (`server.go:1091`) → OIDC users can't open the
+  live WS. → S46.
+- **MAJOR ×2 — `handleDeleteUser`/`handleRevokeToken` emit a false audit entry + 204 for a non-existent id**
+  (`server.go:2180`/`2045`, S38 missing-id class; finding 6 had a split verdict — re-verify) → S47.
+- **MINOR ×3 — create-user/create-token audit-after-refetch** (S40 class, `server.go:2115`/`2031`); **token
+  `kind` has no allowlist** (`server.go:2010`); **anomaly `>` vs `>=` boundary** (`wave3.go:250` vs
+  `anomaly.go:532`). → S47.
+
+**Docs at close:** D-106 CLOSED (this block); CHANGELOG `[Unreleased]` Security section; `known-limitations.md`
+LIM-24 workaround note + changelog row; ROADMAP-V2 §2.29 (S44) + §2.7 date carry; `operator-expected.md`
+refreshed (no new item; audit backlog noted); RESUME-PROMPT ▶ START HERE → SESSION-45; `sessions/SESSION-45.md`
+written carrying the 10-finding backlog. Audit evidence: workflow `wf_1f18593d-af7`; scratch
+`audit-findings.md`.
