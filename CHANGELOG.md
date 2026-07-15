@@ -33,6 +33,20 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
   a browser could transmit it over plaintext HTTP on an HTTPS deployment. It now
   mirrors the `pulse_session` policy (`Secure` when the redirect URL is https).
 
+### Fixed
+
+- **Editing a report schedule no longer silences it (D-107).** `PUT
+  /api/v1/reports/schedules/{id}` rebuilt the row from the request body, which
+  NULLed `next_run_at`; the scheduler selects due schedules with `next_run_at IS
+  NOT NULL`, so any edited schedule stopped firing permanently. The update handler
+  now recomputes `next_run_at` from the (possibly changed) cron and preserves
+  `last_run_at`, matching the create handler.
+- **The "Monthly" report-schedule preset now fires monthly, not daily (D-107).**
+  The 5-field cron parser dropped the day-of-month field, so the UI's default
+  preset `0 6 1 * *` ("Monthly, 1st of month, 6 AM UTC") matched the next 06:00 on
+  *any* day. `nextCronTime` now honors day-of-month (standard Vixie cron
+  dom/weekday semantics); weekly/daily presets are unaffected.
+
 ---
 
 ## [0.3.0] - 2026-07-11
