@@ -4,8 +4,8 @@ import _ "embed"
 
 // EmbeddedDDLPostgres is the complete PostgreSQL meta store schema: migration
 // 0001 (tables + indexes) followed immediately by migration 0002 (anomaly rule
-// columns) and 0003 (vod_poll_state seen-set table). All files are applied in
-// order by MigrateEmbedded when backend == "postgres".
+// columns), 0003 (vod_poll_state seen-set table) and 0004 (audit_log table). All
+// files are applied in order by MigrateEmbedded when backend == "postgres".
 //
 // Source files are kept in sync with the contracts directory. They are exact
 // copies EXCEPT for two provenance comment lines prepended to each embedded
@@ -18,6 +18,8 @@ import _ "embed"
 //	   server/internal/store/meta/sql/postgres_0002_anomaly_alert_rule.sql
 //	cp contracts/db/meta/postgres/0003_vod_poll_state.sql \
 //	   server/internal/store/meta/sql/postgres_0003_vod_poll_state.sql
+//	cp contracts/db/meta/postgres/0004_audit_log.sql \
+//	   server/internal/store/meta/sql/postgres_0004_audit_log.sql
 
 //go:embed sql/postgres_0001_init.sql
 var embeddedPGDDL0001 string
@@ -28,6 +30,9 @@ var embeddedPGDDL0002 string
 //go:embed sql/postgres_0003_vod_poll_state.sql
 var embeddedPGDDL0003 string
 
+//go:embed sql/postgres_0004_audit_log.sql
+var embeddedPGDDL0004 string
+
 // EmbeddedDDLPostgres concatenates all PG migration files in version order.
 // MigrateEmbedded routes here when backend == "postgres".
-var EmbeddedDDLPostgres = embeddedPGDDL0001 + "\n" + embeddedPGDDL0002 + "\n" + embeddedPGDDL0003
+var EmbeddedDDLPostgres = embeddedPGDDL0001 + "\n" + embeddedPGDDL0002 + "\n" + embeddedPGDDL0003 + "\n" + embeddedPGDDL0004

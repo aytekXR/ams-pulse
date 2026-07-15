@@ -498,6 +498,10 @@ func (s *Server) buildRouter() {
 		r.Post("/admin/users", s.handleCreateUser)
 		r.Put("/admin/users/{userId}", s.handleUpdateUser)
 		r.Delete("/admin/users/{userId}", s.handleDeleteUser)
+
+		// Audit trail (S40 / D-102): read-only view of who changed what, when.
+		// Capture happens in the mutating handlers above via s.audit(...).
+		r.Get("/admin/audit-log", s.handleListAuditLog)
 	})
 
 	// Export download route: uses its own auth middleware that also accepts
@@ -1470,6 +1474,7 @@ func (s *Server) handleCreateAlertRule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "alert_rule.create", "alert_rule", created.ID, map[string]any{"name": created.Name, "metric": created.Metric})
 	writeJSON(w, http.StatusCreated, alertRuleToAPI(created))
 }
 
@@ -1501,6 +1506,7 @@ func (s *Server) handleUpdateAlertRule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "alert_rule.update", "alert_rule", id, map[string]any{"name": row.Name, "metric": row.Metric})
 	updated, _ := s.store.GetAlertRule(r.Context(), id)
 	writeJSON(w, http.StatusOK, alertRuleToAPI(*updated))
 }
@@ -1515,6 +1521,7 @@ func (s *Server) handleDeleteAlertRule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "alert_rule.delete", "alert_rule", id, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1570,6 +1577,7 @@ func (s *Server) handleCreateAlertChannel(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "alert_channel.create", "alert_channel", created.ID, map[string]any{"type": created.Type, "name": created.Name})
 	writeJSON(w, http.StatusCreated, alertChannelToAPI(created))
 }
 
@@ -1602,6 +1610,7 @@ func (s *Server) handleUpdateAlertChannel(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "alert_channel.update", "alert_channel", id, map[string]any{"type": row.Type, "name": row.Name})
 	updated, _ := s.store.GetAlertChannel(r.Context(), id)
 	writeJSON(w, http.StatusOK, alertChannelToAPI(*updated))
 }
@@ -1616,6 +1625,7 @@ func (s *Server) handleDeleteAlertChannel(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "alert_channel.delete", "alert_channel", id, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1783,6 +1793,7 @@ func (s *Server) handleCreateSource(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "ams_source.create", "ams_source", created.ID, map[string]any{"name": created.Name})
 	writeJSON(w, http.StatusCreated, amsSourceToAPI(created))
 }
 
@@ -1809,6 +1820,7 @@ func (s *Server) handleUpdateSource(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "ams_source.update", "ams_source", id, map[string]any{"name": row.Name})
 	updated, _ := s.store.GetAMSSource(r.Context(), id)
 	writeJSON(w, http.StatusOK, amsSourceToAPI(*updated))
 }
@@ -1823,6 +1835,7 @@ func (s *Server) handleDeleteSource(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "ams_source.delete", "ams_source", id, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1952,6 +1965,8 @@ func (s *Server) handleActivateLicense(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "INVALID_LICENSE", err.Error())
 		return
 	}
+	// Record the activation, but never the key itself.
+	s.audit(r, "license.activate", "license", "", nil)
 	writeJSON(w, http.StatusOK, licenseToAPI(s.lic))
 }
 
@@ -2022,14 +2037,18 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	if m, ok := resp.(map[string]any); ok {
 		m["token"] = rawToken
 	}
+	// Record who minted the token — never the raw token or its hash.
+	s.audit(r, "token.create", "token", created.ID, map[string]any{"name": created.Name, "kind": created.Kind, "scopes": created.Scopes})
 	writeJSON(w, http.StatusCreated, resp)
 }
 
 func (s *Server) handleRevokeToken(w http.ResponseWriter, r *http.Request) {
-	if err := s.store.DeleteToken(r.Context(), chi.URLParam(r, "tokenId")); err != nil {
+	id := chi.URLParam(r, "tokenId")
+	if err := s.store.DeleteToken(r.Context(), id); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "token.revoke", "token", id, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -2098,6 +2117,7 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "user created but not found")
 		return
 	}
+	s.audit(r, "user.create", "user", created.ID, map[string]any{"username": created.Username, "role": created.Role})
 	writeJSON(w, http.StatusCreated, userToAPI(*created))
 }
 
@@ -2139,6 +2159,9 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	// Audit the committed change here — before the re-fetch — so a concurrent delete
+	// that nils the re-read (below) cannot leave a durable mutation unrecorded.
+	s.audit(r, "user.update", "user", id, map[string]any{"username": username, "role": role})
 	// Return the actual stored row, not an echo of the request with a fabricated
 	// created_at:0. A nil here means the row was deleted concurrently (between the
 	// existence check and the update) — report that honestly as 404, not 500.
@@ -2155,10 +2178,12 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
-	if err := s.store.DeleteUser(r.Context(), chi.URLParam(r, "userId")); err != nil {
+	id := chi.URLParam(r, "userId")
+	if err := s.store.DeleteUser(r.Context(), id); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "user.delete", "user", id, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 

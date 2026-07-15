@@ -347,6 +347,7 @@ func (s *Server) handleCreateProbe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "probe.create", "probe", created.ID, map[string]any{"name": created.Name, "protocol": created.Protocol})
 	writeJSON(w, http.StatusCreated, probeToAPI(created))
 }
 
@@ -421,6 +422,9 @@ func (s *Server) handleUpdateProbe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	// Audit the committed change before the re-fetch, so a failed re-read cannot
+	// leave a durable mutation unrecorded (uses the merged in-memory row).
+	s.audit(r, "probe.update", "probe", probeID, map[string]any{"name": existing.Name})
 
 	updated, err := s.store.GetProbe(r.Context(), probeID)
 	if err != nil || updated == nil {
@@ -453,6 +457,7 @@ func (s *Server) handleDeleteProbe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "probe.delete", "probe", probeID, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 

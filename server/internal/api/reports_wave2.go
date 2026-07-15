@@ -137,6 +137,7 @@ func (s *Server) handleCreateReportSchedule(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "report_schedule.create", "report_schedule", created.ID, map[string]any{"cron": created.Cron})
 	writeJSON(w, http.StatusCreated, reportScheduleToAPI(created))
 }
 
@@ -177,6 +178,7 @@ func (s *Server) handleUpdateReportSchedule(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "report_schedule.update", "report_schedule", id, map[string]any{"cron": row.Cron})
 	updated, _ := s.store.GetReportSchedule(r.Context(), id)
 	writeJSON(w, http.StatusOK, reportScheduleToAPI(*updated))
 }
@@ -198,6 +200,7 @@ func (s *Server) handleDeleteReportSchedule(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "report_schedule.delete", "report_schedule", id, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -269,6 +272,7 @@ func (s *Server) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "tenant.create", "tenant", created.ID, map[string]any{"name": created.Name})
 	writeJSON(w, http.StatusCreated, tenantToAPI(created))
 }
 
@@ -328,6 +332,7 @@ func (s *Server) handleUpdateTenant(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "tenant.update", "tenant", id, map[string]any{"name": row.Name})
 	updated, _ := s.store.GetTenant(r.Context(), id)
 	writeJSON(w, http.StatusOK, tenantToAPI(*updated))
 }
@@ -348,6 +353,7 @@ func (s *Server) handleDeleteTenant(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	s.audit(r, "tenant.delete", "tenant", id, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
