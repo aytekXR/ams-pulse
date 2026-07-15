@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"strconv"
 	"time"
 )
@@ -75,6 +76,73 @@ func GenerateStatement(report *UsageReport, opts StatementOptions) (*GeneratedSt
 	}
 }
 
+// CSVSafeCell neutralizes a CSV cell against spreadsheet formula injection
+// (OWASP "CSV Injection"). A spreadsheet may evaluate a cell whose first byte is
+// one of = + - @, a tab (0x09), or a carriage return (0x0D) as a live formula
+// (e.g. =HYPERLINK, =cmd|'/c ...') when the file is opened. Prefixing such a cell
+// with a single quote makes Excel, Google Sheets, and LibreOffice render it as a
+// literal string. Cells that do not begin with a trigger byte are returned
+// unchanged, so numeric columns (always non-negative here) are unaffected.
+//
+// This matters because the usage-export columns app/stream_id/tenant are
+// publisher-controlled (an AMS application/stream name is chosen by whoever
+// publishes) and docs/known-limitations.md directs operators to open the export
+// in a spreadsheet.
+func CSVSafeCell(s string) string {
+	if s == "" {
+		return s
+	}
+	switch s[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "'" + s
+	}
+	return s
+}
+
+// UsageCSVRecord returns the CSV cells for one usage detail row, with the
+// operator/publisher-controlled text columns neutralized via CSVSafeCell. It is
+// the single record builder shared by the statement generator (generateCSV) and
+// the reports-export handler (WriteUsageCSV) so both stay formula-safe from one
+// implementation.
+func UsageCSVRecord(row UsageRow) []string {
+	streamID := ""
+	if row.StreamID != nil {
+		streamID = *row.StreamID
+	}
+	tenant := ""
+	if row.Tenant != nil {
+		tenant = *row.Tenant
+	}
+	return []string{
+		CSVSafeCell(row.App),
+		CSVSafeCell(streamID),
+		CSVSafeCell(tenant),
+		strconv.FormatFloat(row.ViewerMinutes, 'f', 4, 64),
+		strconv.FormatInt(row.PeakConcurrency, 10),
+		strconv.FormatFloat(row.EgressGB, 'f', 6, 64),
+		strconv.FormatFloat(row.RecordingGB, 'f', 6, 64),
+		CSVSafeCell(row.EgressMethod),
+	}
+}
+
+// WriteUsageCSV writes the header row and the neutralized detail rows for report
+// to w. It backs GET /api/v1/reports/export; the byte-level formula neutralization
+// is proven by the reports-package tests (the api handler cannot be unit-driven
+// with rows without a live ClickHouse Accountant).
+func WriteUsageCSV(w io.Writer, report *UsageReport) error {
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{
+		"app", "stream_id", "tenant",
+		"viewer_minutes", "peak_concurrency",
+		"egress_gb", "recording_gb", "egress_method",
+	})
+	for _, row := range report.Rows {
+		_ = cw.Write(UsageCSVRecord(row))
+	}
+	cw.Flush()
+	return cw.Error()
+}
+
 // generateCSV produces a CSV-format statement.
 func generateCSV(report *UsageReport, opts StatementOptions, now time.Time) (*GeneratedStatement, error) {
 	var buf bytes.Buffer
@@ -102,36 +170,20 @@ func generateCSV(report *UsageReport, opts StatementOptions, now time.Time) (*Ge
 		"egress_gb", "recording_gb", "egress_method",
 	})
 
-	// Detail rows.
+	// Detail rows (formula-neutralized via the shared UsageCSVRecord).
 	for _, r := range report.Rows {
-		streamID := ""
-		if r.StreamID != nil {
-			streamID = *r.StreamID
-		}
-		tenant := ""
-		if r.Tenant != nil {
-			tenant = *r.Tenant
-		}
-		_ = w.Write([]string{
-			r.App,
-			streamID,
-			tenant,
-			strconv.FormatFloat(r.ViewerMinutes, 'f', 4, 64),
-			strconv.FormatInt(r.PeakConcurrency, 10),
-			strconv.FormatFloat(r.EgressGB, 'f', 6, 64),
-			strconv.FormatFloat(r.RecordingGB, 'f', 6, 64),
-			r.EgressMethod,
-		})
+		_ = w.Write(UsageCSVRecord(r))
 	}
 
-	// Totals row.
+	// Totals row. EgressMethod is an internal constant today, but neutralize it
+	// too so the whole CSV stays formula-safe if it ever becomes configurable.
 	_ = w.Write([]string{
 		"TOTAL", "", "",
 		strconv.FormatFloat(report.Totals.ViewerMinutes, 'f', 4, 64),
 		strconv.FormatInt(report.Totals.PeakConcurrency, 10),
 		strconv.FormatFloat(report.Totals.EgressGB, 'f', 6, 64),
 		strconv.FormatFloat(report.Totals.RecordingGB, 'f', 6, 64),
-		report.EgressMethod,
+		CSVSafeCell(report.EgressMethod),
 	})
 
 	w.Flush()

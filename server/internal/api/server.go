@@ -2448,6 +2448,10 @@ func alertChannelFromAPI(body map[string]any, store *meta.Store) (meta.AlertChan
 	secretFields := map[string]bool{
 		"slack_webhook_url": true, "telegram_bot_token": true,
 		"pagerduty_routing_key": true, "webhook_secret": true,
+		// Email/SMTP auth pair — encrypted at rest, not stored in config_public.
+		// factory.BuildChannelFromRow merges public+decrypted config on read, so
+		// existing channels keep working and new ones no longer leak credentials.
+		"password": true, "username": true,
 	}
 	publicConfig := make(map[string]any)
 	secretConfig := make(map[string]any)

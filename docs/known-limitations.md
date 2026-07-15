@@ -523,6 +523,9 @@ is worse than not shipping the button.
 
 **Workaround:** Use CSV export and open in a spreadsheet to generate a PDF
 from there, or use your browser's Print → Save as PDF on the reports page.
+(The CSV is formula-injection-safe as of D-106 — publisher-controlled cells that
+begin with `= + - @` are neutralized, so opening the export in a spreadsheet
+cannot execute an injected formula.)
 
 **Roadmap:** Phase 3 (PRD §7). No ETA. File a feature request if this is
 blocking your use case.
@@ -537,6 +540,7 @@ blocking your use case.
 | D-091 (S29, 2026-07-13) | Added LIM-19..LIM-22: Kafka live-validation gap (AV-15), Kafka plaintext-only transport, at-least-once delivery + first-start history replay, first-viewer z-spike intentional ruling; corrected topic name ams-instance-stats → ams-server-events in LIM-01 + LIM-04 with code-derived caveat and AV-15 forward pointer; count 18 → 22 |
 | D-093 (S31, 2026-07-14) | LIM-17 roadmap → Validation status: TC-I-05-SRT PASS (F3, first live SRT run, 2/2 assertions); added LIM-23: SRT streams attributed as RTMP in protocol breakdown (AMS-side publishType="RTMP" fact, F5, live-observed S31); updated product version header; count 22 → 23 |
 | D-094 (S32, 2026-07-14) | Added LIM-24: PDF export not implemented (Phase 3); removed Export PDF button from Reports page; implemented GET /api/v1/reports/export?format=csv; count 23 → 24 |
+| D-106 (S44, 2026-07-15) | Security hardening (not a new limitation): CSV export/statements now neutralize formula-injection cells (LIM-24 workaround note updated); email/SMTP channel creds encrypted at rest; OIDC state cookie Secure on HTTPS. No count change |
 
 ---
 

@@ -10,7 +10,28 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ## [Unreleased]
 
-Nothing yet — next changes land here.
+### Security
+
+- **CSV export/statements are now formula-injection-safe (D-106).** The usage
+  export (`GET /api/v1/reports/export`) and white-label statement generator wrote
+  publisher-controlled columns (`app`, `stream_id`, `tenant` — an AMS
+  application/stream name is chosen by whoever publishes) into CSV without
+  neutralizing leading formula triggers (`= + - @`, tab, CR). A stream named
+  `=cmd|'/c calc'!A0` (or `=HYPERLINK(...)`) became a live formula when the
+  operator opened the file in Excel/Sheets/LibreOffice — which
+  `docs/known-limitations.md` explicitly directs them to do. Both writers now go
+  through a shared `reports.CSVSafeCell`/`UsageCSVRecord` that prefixes such cells
+  with a single quote (OWASP CSV Injection mitigation); numeric columns are
+  unchanged. Output is byte-identical for benign data.
+- **Email/SMTP alert-channel credentials are encrypted at rest (D-106).** The
+  `password`/`username` of an email channel were serialized into `config_public`
+  in plaintext (the `secretFields` allowlist omitted them); they are now encrypted
+  into `config_enc` like every other channel secret. Existing channels keep working
+  (the factory merges public + decrypted config on read).
+- **OIDC login state cookie is `Secure` on HTTPS (D-106).** The `pulse_oidc_state`
+  cookie (which carries the PKCE `code_verifier`) lacked the `Secure` attribute, so
+  a browser could transmit it over plaintext HTTP on an HTTPS deployment. It now
+  mirrors the `pulse_session` policy (`Secure` when the redirect URL is https).
 
 ---
 
