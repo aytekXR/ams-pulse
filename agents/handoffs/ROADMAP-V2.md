@@ -527,6 +527,31 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.23  /admin/users CRUD correctness (team-management foundation)  [S] ✅ DONE S38 (D-100, 2026-07-15, PR #73)
+
+Set out to build the **team-management UI** (top D-098 funnel gap: `/admin/users` CRUD exists, no page).
+Verify-at-open found the feature is **advisory, not real**, and the API had bugs — so S38 fixed the API
+correctness and **deferred the UI to a product ruling** (operator item 10):
+
+- **Why the UI is deferred:** the stored `user.Role` is **non-authoritative** — OIDC re-maps role from
+  IdP groups on every login (`oidc.go` `mapGroupsToRole` → session `Scopes:[]string{role}`) and never
+  reads the stored value; and **there is no password-login route** (SSO auto-provisions users). So a
+  role set in a UI wouldn't govern anyone's permissions, and "invite a teammate" has no flow. The intended
+  model (SSO-group-driven only / add password login / make stored role authoritative) is an operator call.
+- ✅ **`handleUpdateUser` correctness:** was an unconditional `SET username=?, role=?` — a role-only edit
+  **blanked the username**, a missing id returned **200**, and the response was an **echo with
+  `created_at:0`**. Now: 404 on missing id; full-replace requiring both fields (matches
+  `UserWrite required:[username,role]` — omitted field → 400, not a silent blank); role validated;
+  returns the **real stored row**; concurrent-delete race → 404 not 500.
+- ✅ **`handleCreateUser`:** role allowlist (`admin`|`viewer`); duplicate username → **409** (was 500).
+- ✅ **Contract:** declared `409` on POST/PUT `/admin/users`; `schema.d.ts` regenerated (adversarial-review finding).
+
+**Gates:** Go api+meta + full suite green; `gofmt`; web `tsc` + vitest; `schema.d.ts` in sync. Every
+guard mutation-proven RED. Adversarial review (1 agent) → 3 findings (409 spec gap, partial-vs-full-replace,
+TOCTOU 500), all fixed. **Operator action: none for the fix;** one product ruling surfaced (item 10).
+
+---
+
 ### 2.22  Tier-entitlement enforcement — "enforced, not decorative"  [S] ✅ DONE S37 (D-099, 2026-07-15, PR #71)
 
 Generalized the D-098 bug class (*capability stored but never checked*) into an audit of **every paid

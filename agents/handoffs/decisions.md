@@ -6523,3 +6523,88 @@ current, which was the S34/S36 hygiene lesson.
 **Docs at close:** operator-expected.md refreshed (queue unchanged, no operator action); ROADMAP-V2
 §2.22 ledger; SESSION-38 plan (team-management UI / licence-expiry alerting candidates); RESUME-PROMPT
 ▶ START HERE → S38. Landed in a follow-up docs PR.
+
+## D-100 — S38 (2026-07-15): /admin/users API correctness (team-management foundation) (PR #73)
+
+**Plan revision at open (standing-directive clause).** SESSION-38.md named the **team-management UI**
+(`/admin/users` CRUD exists server-side, no page) as the top candidate. Verify-at-open confirmed the
+CRUD routes exist — but reading the auth path revealed the feature is **not the clean high-value win it
+appeared to be**, and its backend has real bugs:
+
+- **The stored `user.Role` is NON-authoritative.** OIDC computes the session's scope FRESH from IdP
+  groups on every login (`oidc.go:295` `mapGroupsToRole` → `oidc.go:353` `Scopes:[]string{role}`) and
+  **never reads the stored role**. The `users` row is a display/registry value that can drift from the
+  live group mapping. So a team-UI that edits "role" would edit an advisory field, not real permissions.
+- **There is no password-login route** (only `/auth/oidc/*`). `checkPassword`/`hashPassword` exist but
+  no handler authenticates against `users.pw_hash`. So "invite a teammate with a password" **does not
+  exist as a flow** — SSO users auto-provision on first login. Building that flow is a **product ruling**
+  (what does "add a user" mean without password login?), not a session's call.
+- **The CRUD handlers had genuine correctness bugs** (independent of the above): `handleUpdateUser` did
+  an unconditional `SET username=?, role=?`, so a role-only edit **blanked the username**, a missing id
+  returned **200 not 404**, and the response was an **echo of the request with a fabricated
+  `created_at:0`**; `handleCreateUser`/`handleUpdateUser` accepted **any role string**; a duplicate
+  username surfaced as **500 instead of 409**.
+
+**Revised S38 goal:** fix the `/admin/users` **correctness** bugs — the unambiguous, completable subset
+that any future team UI needs and that stands on its own merit — and **defer the team-management UI +
+password-login to a product ruling** (recorded for the operator). Fixes: `GetUserByID` store method;
+`handleUpdateUser` fetches-existing→404, partial-update preserves omitted fields, validates role,
+returns the real stored row; `handleCreateUser` validates role and maps duplicate→409; a `validUserRole`
+allowlist (`admin`|`viewer`). These are correctness/UX, **not an authz change** (role stays non-authoritative).
+
+**Operator action required: NONE for the fix.** But **one product ruling is newly surfaced** (added to
+operator-expected): *team-management is currently advisory* — the stored role does not govern SSO
+sessions and there is no password login, so before investing in a team-management UI the operator must
+decide the intended model (SSO-group-driven roles only? add password login? make the stored role
+authoritative?). Standing blockers unchanged, re-verified live at S37 close: GHCR 401; AMS expiry
+2026-07-27 (12 days).
+
+Verify-at-open census: `origin/main` = `98b75bd` (S37 docs); prod `v0.4.0-15-g9f1d658` (S37, live-verified);
+`/healthz` all-ok, collector 850k events; working tree clean but for `Caddyfile.prod`.
+
+### CLOSE (2026-07-15) — three handler bugs fixed, adversarially reviewed, contract synced
+
+**Fixes (server/internal/api/server.go + store/meta/meta.go):**
+1. **`handleUpdateUser`** — was `SET username=?, role=?` unconditionally: a role-only edit **blanked the
+   username**, a missing id returned **200**, and the body was an **echo with `created_at:0`**. Now: fetch
+   existing → **404** if missing; **full replace** requiring both fields (matches `UserWrite
+   required:[username,role]` — an omitted field is a **400**, which is what actually prevents the blank);
+   role validated; returns the **real stored row** (`GetUserByID`, new); a concurrent-delete race (row
+   gone between the check and the re-fetch) maps to **404, not 500**.
+2. **`handleCreateUser`** — role allowlist (`validUserRole`: `admin`|`viewer`); duplicate username → **409**
+   (was a bare 500 via the unique constraint).
+3. **Contract** — declared **`409`** on `POST`/`PUT /admin/users` in `contracts/openapi/pulse-api.yaml`
+   (the `Conflict` component already existed); regenerated `web/src/lib/api/schema.d.ts` (two lines, the
+   only drift).
+
+**Why the team-management UI was NOT built (the actual S38 finding).** The `users` row is a
+**display/registry** value, not an authorization record: OIDC computes the session scope from IdP groups
+on every login and never reads the stored role, and there is no password-login route. So the UI would edit
+a field that governs nothing. Deferred to an **operator product ruling** (operator-expected item 10):
+SSO-group-driven only / add password login / make the stored role authoritative. The API is now correct,
+so whichever model is chosen starts from a sound base.
+
+**Verification.** Go `internal/api` + `internal/store/meta` + full `./...` suite green (24 pkgs); `gofmt`
+clean; web `tsc` + vitest green; `schema.d.ts` in sync (`gen:api` produced exactly the two 409 lines).
+**Every guard mutation-proven RED** (role allowlist, the required-field/blanking guard) — removing it
+failed its test and only its test. **Adversarial review (1 agent)** surfaced three findings — the 409 spec
+gap, a partial-vs-full-replace contract mismatch (fixed by choosing full-replace to match the spec), and a
+TOCTOU 500 — **all three fixed** in the same PR. CI: all required checks green; `csp-e2e` (non-required,
+continue-on-error) flaked once on a Caddy-fronted `toBeVisible()` timeout and **passed on re-run** —
+`web-e2e` (same dashboard render, required) was green throughout, and the change touches no web source.
+
+**Prod: rolled forward at close.** Rollback point `pulse-prod-pulse:pre-d100`; pre-upgrade backup exit 0;
+STAMPED build asserted **`pulse v0.4.0-17-g34c2221`** before deploy. Post-swap smoke (evidence): `/healthz`
+all-ok + `ams_env_configured:true`, components `{clickhouse,collector,meta_store}=ok`; admin token
+authorized (`GET /admin/users` → 200); **the S38 fix proven live** — `POST /api/v1/admin/users` with role
+`"root"` → **400 `{"code":"INVALID_PARAM","message":"role must be 'admin' or 'viewer'"}`** (the role
+allowlist running in prod; **side-effect-free — the invalid body is rejected before any INSERT, so no
+smoke user was created**); logs clean. The duplicate→409 path is covered by tests, not exercised in prod to
+avoid writing a throwaway row. (Behaviorally the change is inert on prod's Enterprise licence + token auth;
+the deploy keeps the SHA current.)
+
+**Operator action: NONE for the fix;** one product ruling surfaced (item 10). Standing blockers unchanged,
+re-verified live: GHCR anon → 401; AMS expiry 2026-07-27 (12 days).
+
+**Docs at close:** operator-expected item 10 (team-management ruling); ROADMAP-V2 §2.23; SESSION-39 plan
+(out-of-band licence-expiry alerting as the lead candidate); RESUME-PROMPT ▶ START HERE → S39. Follow-up docs PR.
