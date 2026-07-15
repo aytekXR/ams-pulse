@@ -527,6 +527,22 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.28  Close the two S34 e2e gaps — probes-create + reports-schedules  [S, test-only] ✅ DONE S43 (D-105, 2026-07-15, PR #83)
+
+Drove the two documented S34 e2e coverage gaps end-to-end: (a) `probes.spec.ts` probe **create happy-path**
+(valid submit → `POST /probes` → returned probe appended + form closed); (b) `reports.spec.ts` Reports
+**Schedules tab activation** (click tab → `GET /reports/schedules` → row renders, not the empty state). Both
+**mutation-proven non-vacuous** (removing the append and the fetch-on-activate turns exactly these two RED,
+14 others green) — addressing the project's repeated vacuous-e2e failure mode. 16/16 in the Playwright docker
+image; `tsc`+`eslint` clean; CI all green. **Test-only — no src/contract change, no prod deploy.**
+
+**★ Two verify-at-open overturns (S38-style):** SESSION-43's lead candidate (admin-scope-gating the audit
+read) deviates from the deliberate reads-open/writes-gated model (`requireWriteScope`) → a **product ruling**,
+deferred to operator; candidate 3 (`PULSE_LICENSE_OFFLINE_FILE`) is entangled with the unwired `HOOK(BE-02)`
+config skeleton → not XS. Both recorded as operator/ruling items. **Operator action: none for the build.**
+
+---
+
 ### 2.27  Audit trail Phase 2 tail — audit OIDC first-login provisioning  [S] ✅ DONE S42 (D-104, 2026-07-15, PR #81)
 
 Closed the last unaudited mutating path: `oidc.go` provisions a user on first SSO login OUTSIDE

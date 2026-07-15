@@ -6884,3 +6884,64 @@ admin-scope-gated); the two S34 e2e gaps; the dead `PULSE_LICENSE_OFFLINE_FILE` 
 **Docs at close:** D-104 CLOSED (this block); ROADMAP-V2 §2.27; SESSION-42 result appended;
 `operator-expected.md` refreshed (AMS-expiry item persists); RESUME-PROMPT ▶ START HERE → SESSION-43;
 `sessions/SESSION-43.md` written. This docs PR.
+
+---
+
+## D-105 — S43 (2026-07-15): CLOSED — closed the two S34 e2e gaps (+ two verify-at-open overturns)
+
+**★ S43 OVERTURNED its own lead candidate at verify-at-open (S38-style, the clause cutting both ways).**
+SESSION-43 named candidate 1 (**admin-scope-gating the `GET /admin/audit-log` read**) as the strongest
+continuation. Verify-at-open against the code refuted it: `requireWriteScope` (server.go:690) is a
+**deliberate, documented model** — GET/HEAD/OPTIONS pass through unconditionally; only *writes* require the
+`admin` scope ("Enumerate what may write, never what may not," the S36/D-098 positive-allowlist). So the
+audit-log read follows the *uniform* "all reads open to any authenticated token" design that also governs
+`GET /admin/users`, `GET /admin/tokens`, etc. Gating *only* the audit read would be an inconsistent
+special-case; gating the whole admin-read surface is a genuine **product ruling** (and would break the S41
+AuditLogPage for `viewer`-role SSO users). → deferred to the operator (new operator-expected item). Candidate
+3 (**`PULSE_LICENSE_OFFLINE_FILE`**) was *also* overturned: the whole `config.Load` (the YAML+env config
+system) is an entirely-unwired `HOOK(BE-02)` skeleton stub (`main.go:108`, `config.go:16` — never replaced),
+so "reconcile" means wiring the config system (large) or deleting a documented skeleton (a ruling) — not XS.
+
+**Built instead: candidate 2 — the two S34 e2e coverage gaps** [S, test-only]. The clean, unblocked pick.
+- `probes.spec.ts` — probe **create happy-path**: a valid submit fires `POST /api/v1/probes`, the returned
+  probe is appended to the list, and the form closes (previously only the invalid-URL React-validation path
+  and the delete flow were driven).
+- `reports.spec.ts` — Reports **Schedules tab activation**: clicking the tab fires
+  `GET /api/v1/reports/schedules` and renders the fetched row (cron), not the empty state (previously the tab
+  was asserted *visible* but never *activated*, so `loadSchedules()` — the tab-change effect — was never run).
+
+**Operator action required: NONE** for the build. Two NEW soft (non-blocking) operator/ruling items recorded
+(see operator-expected): (i) audit-read access model — admin-only vs any-authenticated; (ii) the BE-02 config
+skeleton — wire the YAML config system or delete the ghost. Neither blocks anything.
+
+Verify-at-open census: `origin/main` = `c54dd3c` (S42 docs); prod `v0.4.0-25-g6a0226d` (S42, live — version
+stamp confirms the OIDC-provision audit code is deployed); GHCR anon → 401. **AMS expiry: unresolved doc
+discrepancy (07-12 vs 07-27) — operator item, carried from D-102.**
+
+**Shipped (PR #83, squash `ddc423e`, merged to `origin/main`).** Test-only: two e2e specs, no src/contract
+change.
+
+**Verification.** Both specs pass **16/16** in the official `mcr.microsoft.com/playwright:v1.61.1-jammy`
+image. **Mutation-proven non-vacuous** — removing the probe-append (`setProbes([...prev, created])`) and the
+schedules fetch-on-activate (`if (tab === "schedules") loadSchedules()`) turns **exactly these two tests RED**
+while all 14 others stay green (proving they pin real component behavior, not just that a request fired). This
+addresses the project's repeated e2e failure mode (vacuous/tautological tests: S32/S33/S34). `tsc` + `eslint`
+clean. CI: all required checks green (e2e, web-e2e, csp-e2e, server, web, contracts). No adversarial-review
+agent was spawned this round — the change is test-only and the mutation proof is the strongest available
+non-vacuousness evidence.
+
+**Prod: NOT rolled forward — test-only.** No server/web *source* changed (only `web/e2e/*.spec.ts`, which are
+not part of the served bundle), so prod correctly stays **`v0.4.0-25-g6a0226d`** (S42). Rolling forward would
+produce a byte-identical app bundle.
+
+**Operator action: NONE.** Carried operator item unchanged: **confirm the true AMS trial expiry** (runbook
+07-12 vs ledger 07-27). GHCR anon → 401.
+
+**Backlog note (thinning clean-autonomous work):** with the two overturns, the top remaining backlog items
+increasingly need operator input or a future date — audit-read model (ruling), BE-02 config (ruling/large),
+default `license_expiry` rule (ruling), §2.7 CI promotions (date-gated ≥ 2026-07-23). SESSION-44 candidates
+re-ranked accordingly.
+
+**Docs at close:** D-105 CLOSED (this block); ROADMAP-V2 §2.28; SESSION-43 result appended;
+`operator-expected.md` refreshed (2 new soft items + AMS-expiry persists); RESUME-PROMPT ▶ START HERE →
+SESSION-44; `sessions/SESSION-44.md` written. This docs PR.

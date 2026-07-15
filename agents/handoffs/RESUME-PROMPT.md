@@ -11,37 +11,53 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-43.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-44.md`)
 
-**Session 2026-07-15 result: D-104 — S42 DONE (PR #81, audit OIDC first-login provisioning — every user-creation path is now recorded, in prod).**
+**Session 2026-07-15 result: D-105 — S43 DONE (PR #83, closed the two S34 e2e gaps; overturned two candidates at verify-at-open).**
 
-**★ S42 CONFIRMED its plan (fourth non-pivot running).** Closed the one mutating path the S40 audit trail
-deliberately left out: `oidc.go` provisions a user on **first SSO login** OUTSIDE the audited
-`handleCreateUser` path, so that creation was never recorded (S40's own doc comment named it the top Phase-2
-follow-up). New `oidcHandler.auditProvision` writes a `user.provision` `audit_log` entry with a **different
-actor model** — no bearer token exists pre-session, so the SSO subject provisions itself
-(`actor_user_id == object_id`, `actor_token_id` empty, `actor_name = "oidc:<sub>"`, `detail = {role,via,groups}`).
-Placed **only in the create branch** (after the re-fetch that populates `user.ID`) → audited once per user,
-never in the concurrent-UNIQUE-race branch (the winning login audits it). Same best-effort contract as
-`s.audit` (cancel-detached, 5 s-bounded, log-on-failure). `audit.go` scope comment updated (now covered);
-OpenAPI `action` desc += `provision`; `schema.d.ts` regenerated. Gated (Go 24/24 · vet · gofmt · web
-tsc+build+vitest 650; new test **mutation-proven RED**; **adversarial review → no real defects**). CI all
-required green. Merged, rolled to prod **`v0.4.0-25-g6a0226d`** (smoke: healthz all-ok, webhook 200, limits
-`512M/0.5cpu`, logs clean). The path is dormant until OIDC is configured (off in prod), so the version stamp
-is the proof of deploy. Full evidence: `decisions.md` D-104.
+**★ S43 OVERTURNED its own lead candidate at verify-at-open (the clause cut both ways).** SESSION-43 named
+admin-scope-gating the `GET /admin/audit-log` read as the lead; the code refuted it — `requireWriteScope`
+(server.go:690) deliberately lets ALL reads through and gates only *writes* on the `admin` scope, so the audit
+read follows the uniform "reads open to any authenticated token" model (same as `GET /admin/users`,
+`/admin/tokens`). Gating just it is inconsistent; gating the whole read surface is a **product ruling** (and
+would 403 the S41 AuditLogPage for viewer SSO users). Candidate 3 (`PULSE_LICENSE_OFFLINE_FILE`) was also
+overturned — the whole `config.Load` is an unwired `HOOK(BE-02)` skeleton, so not XS. **Built candidate 2
+instead: the two S34 e2e gaps** [test-only] — `probes.spec.ts` create happy-path (valid submit → POST →
+appended + form closed) and `reports.spec.ts` Schedules tab activation (click → GET schedules → row renders,
+not empty state). **16/16** in the Playwright docker image; **mutation-proven non-vacuous** (removing the
+probe-append and the schedules fetch-on-activate turns EXACTLY these two RED, 14 others green — addressing the
+project's repeated vacuous-e2e failure mode). `tsc`+`eslint` clean; CI all green. **Test-only — no src change,
+so prod correctly stays `v0.4.0-25-g6a0226d`** (no roll-forward). Full evidence: `decisions.md` D-105.
 
 **⚠ CARRIED operator item (from S40, still unresolved):** the **AMS trial expiry is documented inconsistently** —
 `deploy/runbooks/self-hosted-ams.md` says **2026-07-12**, the ledger says **2026-07-27** (live-verified
-S37–S39). If it's 07-12 it has ALREADY lapsed. Cannot re-verify live (AMS creds operator-only; AMS enforces
-the licence only on restart, so live-ingesting doesn't disambiguate). **Operator must confirm.** See
-`operator-expected.md`.
+S37–S39). If it's 07-12 it has ALREADY lapsed. Cannot re-verify live (AMS creds operator-only). **Operator
+must confirm.** See `operator-expected.md`.
 
-**Next goal candidate (SESSION-43):** the audit trail now covers every user-creation path. Remaining bounded
-tail: **admin-scope gating of the `GET /admin/audit-log` read** (currently auth-gated but not
-admin-scope-gated — a read-only token can read the whole trail; product ruling first), the **two S34 e2e gaps**
-[S], the dead **`PULSE_LICENSE_OFFLINE_FILE`** path [XS]. Team-management UI stays **blocked on the operator's
-model ruling**; §2.7 CI promotions unlock **2026-07-23** (check the date at open — today is 07-15).
-**Re-verify against the ledger + re-read the standing clause first.**
+**⚠ TWO NEW soft (non-blocking) operator/ruling items from S43** (see operator-expected): (i) **audit-read
+access model** — admin-only vs any-authenticated (currently any authenticated token can read the whole trail,
+consistent with the reads-open model; tightening it is a product choice); (ii) **the BE-02 config skeleton** —
+`config.Load` (the YAML+env config system incl. `PULSE_LICENSE_OFFLINE_FILE`) is entirely unwired; wire it or
+delete the ghost.
+
+**★ Backlog note — clean-autonomous work is thinning.** After S43's overturns, the top remaining items
+increasingly need operator input or a future date: audit-read model (ruling), BE-02 config (ruling/large),
+default `license_expiry` rule (ruling), team-management UI (blocked, item 10), §2.7 CI promotions (date-gated
+**≥ 2026-07-23** — NOT yet eligible; today is 07-15). SESSION-44 should **re-verify the date** and re-read the
+standing clause; the highest-leverage moves may now be operator-gated. Remaining purely-autonomous candidates
+are lower-leverage hygiene (further e2e/unit coverage, doc reconciliation).
+
+---
+
+### Prior session (for context): D-104 — S42 DONE (PR #81, audit OIDC first-login provisioning — every user-creation path recorded, in prod).
+
+**★ S42 CONFIRMED its plan.** Closed the one mutating path S40 left out: `oidc.go` provisions a user on first
+SSO login OUTSIDE the audited `handleCreateUser` path. New `oidcHandler.auditProvision` writes a
+`user.provision` entry with a different actor model (no bearer token pre-session → the SSO subject provisions
+itself: `actor_user_id == object_id`, `actor_token_id` empty). Placed only in the create branch → once per
+user. Gated (Go 24/24 · web 650; new test mutation-proven RED; **adversarial review → no defects**). Merged,
+rolled to prod **`v0.4.0-25-g6a0226d`** (smoke green). Dormant until OIDC is configured, so the version stamp
+is the proof of deploy. Full evidence: `decisions.md` D-104.
 
 ---
 

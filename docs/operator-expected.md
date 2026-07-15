@@ -1,13 +1,33 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-15, D-104 — SESSION-42)
+# Operator TODO — the items only YOU can do (updated 2026-07-15, D-105 — SESSION-43)
 
-> **S42 (D-104) needs NO operator action.** It extended the audit trail to cover **OIDC/SSO first-login user
-> provisioning** — the one account-creation path that wasn't recorded (a user auto-created on first SSO login
-> now leaves a `user.provision` entry showing the SSO subject, role, and groups). Server-side; **dormant until
-> you configure OIDC** (SSO is off in prod), so nothing changes in your current setup. No new blocker. **The
-> ONE open confirmation is still the AMS trial-licence expiry** (the docs disagree — see ⚠ below; carried from
-> S40, still unresolved). Item 10 (the team-management model ruling) still waits on you. GHCR is still private
-> (**401**). Prod rolled forward to **`v0.4.0-25-g6a0226d`** at S42 close (smoke: `/healthz` all-ok, running
-> stamp `-25-g6a0226d`, webhook signature 200, limits `512M/0.5cpu`, logs clean).
+> **S43 (D-105) needs NO operator action for the build.** It closed two end-to-end test-coverage gaps
+> (probe-create and the Reports Schedules tab) — test-only, so nothing shipped to prod (it correctly stays
+> **`v0.4.0-25-g6a0226d`**). But S43's investigation surfaced **TWO NEW small product rulings that are yours**
+> (both non-blocking — see the ⚑ section below): (1) who may READ the audit log, and (2) what to do with an
+> unwired config-file skeleton. **The ONE time-sensitive confirmation is still the AMS trial-licence expiry**
+> (the docs disagree — see ⚠ below; carried from S40, still unresolved). Item 10 (team-management model ruling)
+> still waits on you. GHCR is still private (**401**).
+>
+> **⚑ Heads-up on the road ahead:** the clean, build-only work is thinning out. Several of the next
+> high-value items now need a decision from you (the two below, the team-management model, a default
+> licence-expiry alert rule) or a date (the CI-hardening step unlocks 2026-07-23). Autonomous sessions will
+> keep going on lower-risk hygiene, but the biggest remaining moves increasingly wait on your input.
+
+## ⚑ NEW (S43) — two small product rulings, neither blocking anything
+
+**A. Who may READ the audit log?** Today any authenticated operator token can read `GET /admin/audit-log`
+(who-changed-what + source IPs). That is **consistent with how the whole product works** — every "read" is
+open to any valid token, and only *writes* require an admin-scoped token (a deliberate design). A read-only
+(`viewer`) SSO user can therefore see the audit trail, the user list, and the token list. If you want the
+audit log (or the whole admin-read surface) restricted to **admins only**, say so and we'll add the gate —
+but note it would also hide the new Audit Log page from viewer-role SSO users. Left as-is (open to any
+authenticated operator) until you rule, because tightening it is a product choice, not a clear bug.
+
+**B. The `PULSE_LICENSE_OFFLINE_FILE` config path.** The whole YAML/env **config-file loader** it belongs to
+(`config.Load`) is a **skeleton that was never wired in** (`HOOK(BE-02)` — the app reads config another way
+today). So that env var, and the entire YAML-config feature, currently do nothing. Two options: (i) we finish
+wiring the YAML config system (a real feature — precedence, schema, tests), or (ii) we delete the dead
+skeleton so it stops looking like a supported feature. **Which do you want?** Neither is urgent.
 
 ## ⚠️ NEW — CONFIRM THE AMS LICENCE EXPIRY (the docs disagree; this is urgent if the earlier date is right).
 
