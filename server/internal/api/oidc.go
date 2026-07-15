@@ -511,7 +511,11 @@ func generateSessionToken() (string, error) {
 //
 //	GET /auth/oidc/status → 200 {"enabled": bool}
 func (s *Server) handleOIDCStatus(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]bool{"enabled": s.oidc != nil})
+	// SSO is Enterprise-only: report enabled only when OIDC is both configured AND
+	// licensed, so the SPA does not advertise a login button an unlicensed tier
+	// cannot use (handleOIDCLogin would 403).
+	enabled := s.oidc != nil && s.lic.CheckSSO() == nil
+	writeJSON(w, http.StatusOK, map[string]bool{"enabled": enabled})
 }
 
 // handleAuthMe returns the identity of the currently authenticated principal.

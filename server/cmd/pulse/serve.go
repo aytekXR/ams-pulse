@@ -534,6 +534,9 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	}, accountant, metaStore, logger)
 	// Wire alert history for schedule failure notifications.
 	reportScheduler.SetAlertStore(metaStore)
+	// Gate scheduled execution by tier — a schedule created while licensed must
+	// stop generating (and drop white-label branding) after a downgrade.
+	reportScheduler.SetLicense(lic)
 
 	reportGen := &reports.Generator{
 		Accountant: accountant,

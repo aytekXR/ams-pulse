@@ -407,6 +407,29 @@ func (m *Manager) CheckPrometheus() error {
 	return nil
 }
 
+// CheckSSO returns nil if the tier includes SSO / OIDC login.
+// SSO is an Enterprise-only feature (PRD §7.11 Enterprise row). Free, Pro and
+// Business are blocked — the OIDC login/callback routes return 403 and the
+// status endpoint reports SSO disabled so the SPA does not offer the button.
+func (m *Manager) CheckSSO() error {
+	if m.Tier() != TierEnterprise {
+		return fmt.Errorf("SSO / OIDC login requires Enterprise tier (current: %q)", m.Tier())
+	}
+	return nil
+}
+
+// CheckWhiteLabel returns nil if the tier includes white-label PDF report headers.
+// Gated on the WhiteLabel entitlement (Enterprise per the tier tables, but a
+// custom key may grant it), mirroring CheckDataAPI. Callers must apply this
+// before honouring a schedule's white-label header, else any tier could brand
+// its reports.
+func (m *Manager) CheckWhiteLabel() error {
+	if !m.Entitlements().WhiteLabel {
+		return fmt.Errorf("white-label report headers require a license with white_label enabled (current tier: %q)", m.Tier())
+	}
+	return nil
+}
+
 // ─── Activation ───────────────────────────────────────────────────────────────
 
 // activate parses and validates a license key.

@@ -120,6 +120,10 @@ type fakeConn struct {
 	qi         int
 	rowQueue   []fakeRowResp
 	ri         int
+	// capturedArgs records the args of every Query/QueryRow call, in order, so
+	// tests can assert what actually reached the WHERE clause (e.g. a retention
+	// clamp on `from`). Additive: existing tests that never read it are unaffected.
+	capturedArgs [][]any
 }
 
 type fakeQueryResp struct {
@@ -146,7 +150,8 @@ func newFakeConn() *fakeConn { return &fakeConn{} }
 
 // driver.Conn implementation.
 
-func (c *fakeConn) Query(_ context.Context, _ string, _ ...any) (driver.Rows, error) {
+func (c *fakeConn) Query(_ context.Context, _ string, args ...any) (driver.Rows, error) {
+	c.capturedArgs = append(c.capturedArgs, args)
 	if c.qi < len(c.queryQueue) {
 		r := c.queryQueue[c.qi]
 		c.qi++
@@ -155,7 +160,8 @@ func (c *fakeConn) Query(_ context.Context, _ string, _ ...any) (driver.Rows, er
 	return newFakeRows(), nil // default: empty rows, no error
 }
 
-func (c *fakeConn) QueryRow(_ context.Context, _ string, _ ...any) driver.Row {
+func (c *fakeConn) QueryRow(_ context.Context, _ string, args ...any) driver.Row {
+	c.capturedArgs = append(c.capturedArgs, args)
 	if c.ri < len(c.rowQueue) {
 		r := c.rowQueue[c.ri]
 		c.ri++
@@ -212,13 +218,18 @@ func (f *fixedSnapLive) Subscribe() (<-chan *domain.LiveSnapshot, func()) {
 	return ch, func() {}
 }
 
-// fakeProbeQuerier mocks the ProbeResultQuerier interface.
+// fakeProbeQuerier mocks the ProbeResultQuerier interface. It records the from/to
+// it was called with so tests can assert the retention clamp reached the store.
 type fakeProbeQuerier struct {
 	results []domain.ProbeResult
 	err     error
+	gotFrom time.Time
+	gotTo   time.Time
 }
 
-func (f *fakeProbeQuerier) QueryProbeResults(_ context.Context, _ string, _, _ time.Time, _ int, _ string) ([]domain.ProbeResult, error) {
+func (f *fakeProbeQuerier) QueryProbeResults(_ context.Context, _ string, from, to time.Time, _ int, _ string) ([]domain.ProbeResult, error) {
+	f.gotFrom = from
+	f.gotTo = to
 	return f.results, f.err
 }
 

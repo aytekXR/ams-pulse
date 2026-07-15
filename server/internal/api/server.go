@@ -601,6 +601,10 @@ func (s *Server) handleOIDCLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotImplemented, "NOT_CONFIGURED", "OIDC is not configured on this server")
 		return
 	}
+	if err := s.lic.CheckSSO(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
 	s.oidc.handleLogin(w, r)
 }
 
@@ -609,6 +613,10 @@ func (s *Server) handleOIDCLogin(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 	if s.oidc == nil {
 		writeError(w, http.StatusNotImplemented, "NOT_CONFIGURED", "OIDC is not configured on this server")
+		return
+	}
+	if err := s.lic.CheckSSO(); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
 		return
 	}
 	s.oidc.handleCallback(w, r)
@@ -1582,6 +1590,12 @@ func (s *Server) handleUpdateAlertChannel(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusUnprocessableEntity, "INVALID_CHANNEL", err.Error())
 		return
 	}
+	// Gate the resolved channel type, mirroring create: without this a Free tenant
+	// could upgrade a channel to a paid type (e.g. email → slack) unlicensed.
+	if err := s.lic.CheckChannelAllowed(row.Type); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+		return
+	}
 	row.ID = id
 	row.CreatedAt = existing.CreatedAt
 	if err := s.store.UpdateAlertChannel(r.Context(), row); err != nil {
@@ -1610,6 +1624,12 @@ func (s *Server) handleTestAlertChannel(w http.ResponseWriter, r *http.Request) 
 	row, err := s.store.GetAlertChannel(r.Context(), id)
 	if err != nil || row == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "channel not found")
+		return
+	}
+	// Firing a test delivery to a paid channel type is a paid action: gate it so a
+	// Free (or downgraded) tenant cannot send live Slack/PagerDuty/webhook tests.
+	if err := s.lic.CheckChannelAllowed(row.Type); err != nil {
+		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
 		return
 	}
 	ch, err := buildChannelFromRow(s.store, row)
