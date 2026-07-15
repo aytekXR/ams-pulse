@@ -134,6 +134,10 @@ func sqliteSchemaVersions(t *testing.T) []string {
 	if err != nil {
 		t.Skipf("cannot read 0003_vod_poll_state.sql: %v", err)
 	}
+	ddl0004, err := os.ReadFile("../../../../contracts/db/meta/0004_audit_log.sql")
+	if err != nil {
+		t.Skipf("cannot read 0004_audit_log.sql: %v", err)
+	}
 
 	// Use a temp file so we can read schema_migrations via a raw connection.
 	tmp, err := os.CreateTemp("", "meta_parity_*.db")
@@ -150,7 +154,7 @@ func sqliteSchemaVersions(t *testing.T) []string {
 	}
 	// Apply all DDL files in one call to avoid the applySchemaUpgrades
 	// double-column issue (see function doc above).
-	combined := string(ddl0001) + "\n" + string(ddl0002) + "\n" + string(ddl0003)
+	combined := string(ddl0001) + "\n" + string(ddl0002) + "\n" + string(ddl0003) + "\n" + string(ddl0004)
 	if err := s.MigrateEmbedded(ctx, combined); err != nil {
 		_ = s.Close()
 		t.Fatalf("sqliteSchemaVersions: MigrateEmbedded combined: %v", err)

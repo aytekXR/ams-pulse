@@ -372,6 +372,47 @@ func (s *Store) applySchemaUpgrades(ctx context.Context) error {
 		}
 	}
 
+	// ── audit_log table (S40 0004) ───────────────────────────────────────────
+	// The 0004_audit_log.sql migration creates the append-only audit trail. We
+	// create it (and its ts-desc index) here idempotently so that SQLite databases
+	// initialised via MigrateEmbedded (which embeds only 0001) also get the table
+	// on startup — no separate migration runner is needed.
+	rows5, err := s.queryContext(ctx, "PRAGMA table_info(audit_log)")
+	if err == nil {
+		hasTable := false
+		for rows5.Next() {
+			hasTable = true
+			var cid int
+			var name, ctype string
+			var notNull int
+			var dflt sql.NullString
+			var pk int
+			_ = rows5.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk)
+		}
+		_ = rows5.Close()
+		if !hasTable {
+			if _, err := s.execContext(ctx,
+				`CREATE TABLE IF NOT EXISTS audit_log (
+				    id             TEXT    NOT NULL PRIMARY KEY,
+				    ts             INTEGER NOT NULL,
+				    actor_token_id TEXT    NOT NULL DEFAULT '',
+				    actor_user_id  TEXT    NOT NULL DEFAULT '',
+				    actor_name     TEXT    NOT NULL DEFAULT '',
+				    action         TEXT    NOT NULL,
+				    object_type    TEXT    NOT NULL,
+				    object_id      TEXT    NOT NULL DEFAULT '',
+				    remote_addr    TEXT    NOT NULL DEFAULT '',
+				    detail_json    TEXT    NOT NULL DEFAULT ''
+				)`); err != nil {
+				return fmt.Errorf("schema upgrade: create audit_log: %w", err)
+			}
+			if _, err := s.execContext(ctx,
+				`CREATE INDEX IF NOT EXISTS idx_audit_log_ts ON audit_log(ts DESC, id DESC)`); err != nil {
+				return fmt.Errorf("schema upgrade: create idx_audit_log_ts: %w", err)
+			}
+		}
+	}
+
 	return nil
 }
 

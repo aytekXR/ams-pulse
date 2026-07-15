@@ -1285,6 +1285,30 @@ paths:
         "422": { $ref: "#/components/responses/UnprocessableEntity" }
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /admin/audit-log:
+    get:
+      operationId: listAuditLog
+      tags: [admin]
+      summary: List audit-trail entries (newest first)
+      description: |
+        Append-only record of who changed what, when, for every mutating admin/config
+        API call (alert rules & channels, users, tokens, probes, report schedules, AMS
+        sources, tenants, licence activation). Returned newest-first with opaque keyset
+        pagination. Entries are never modified or deleted and survive the revocation or
+        deletion of the token/user that produced them.
+      parameters:
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Paginated audit-log page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogPage"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /admin/tokens:
     get:
       operationId: listTokens
@@ -3151,6 +3175,53 @@ components:
             $ref: "#/components/schemas/User"
         meta:
           $ref: "#/components/schemas/PaginatedMeta"
+
+    # ── Admin: Audit trail ────────────────────────────────────
+    AuditLogPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEntry"
+        meta:
+          $ref: "#/components/schemas/PaginatedMeta"
+
+    AuditEntry:
+      type: object
+      required: [id, ts, action, object_type]
+      properties:
+        id:
+          type: string
+        ts:
+          type: integer
+          description: Unix epoch ms
+        actor_token_id:
+          type: string
+          description: id of the API token that made the change
+        actor_user_id:
+          type: string
+          description: users.id for OIDC-minted sessions; empty for service tokens
+        actor_name:
+          type: string
+          description: display name of the token/actor
+        action:
+          type: string
+          description: "verb form: <object_type>.<create|update|delete|activate|revoke>"
+        object_type:
+          type: string
+          description: e.g. alert_rule, alert_channel, user, token, probe, report_schedule, ams_source, tenant, license
+        object_id:
+          type: string
+          description: id of the affected resource; empty for singletons/bulk
+        remote_addr:
+          type: string
+          description: source IP of the request
+        detail:
+          type: object
+          additionalProperties: true
+          description: optional non-sensitive context (e.g. name, type); omitted when absent
 
     User:
       type: object

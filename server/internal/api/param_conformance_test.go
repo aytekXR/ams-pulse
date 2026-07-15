@@ -1377,6 +1377,52 @@ func TestParamConformance(t *testing.T) {
 			},
 		},
 
+		// ── GET /admin/audit-log (S40/D-102) ─────────────────────────────────────
+		"GET /admin/audit-log ?limit": {
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				// Each mutating call generates one audit row; two creates → two rows.
+				for i := 1; i <= 2; i++ {
+					postConformanceItem(t, bizTs.URL, "/api/v1/admin/users", bizTok, map[string]any{
+						"username": fmt.Sprintf("audit-lim-%d", i), "role": "viewer", "password": "x",
+					})
+				}
+				items, nc := getListPage(t, bizTs.URL, "/api/v1/admin/audit-log?limit=1", bizTok)
+				if len(items) != 1 {
+					t.Errorf("?limit=1: got %d items, want 1", len(items))
+				} else {
+					t.Logf("PASS ?limit=1: 1 item returned")
+				}
+				if nc == "" {
+					t.Errorf("?limit=1: next_cursor empty, want non-empty")
+				} else {
+					t.Logf("PASS ?limit=1: next_cursor=%q", nc)
+				}
+			},
+		},
+		"GET /admin/audit-log ?cursor": {
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				for i := 1; i <= 2; i++ {
+					postConformanceItem(t, bizTs.URL, "/api/v1/admin/users", bizTok, map[string]any{
+						"username": fmt.Sprintf("audit-cur-%d", i), "role": "viewer", "password": "x",
+					})
+				}
+				_, nc := getListPage(t, bizTs.URL, "/api/v1/admin/audit-log?limit=1", bizTok)
+				if nc == "" {
+					t.Fatal("?cursor: no next_cursor from page 1; need >= 2 audit rows")
+				}
+				items2, _ := getListPage(t, bizTs.URL, "/api/v1/admin/audit-log?limit=50&cursor="+url.QueryEscape(nc), bizTok)
+				if len(items2) < 1 {
+					t.Errorf("?cursor: page2 has %d items, want >= 1", len(items2))
+				} else {
+					t.Logf("PASS ?cursor: page2 has %d item(s)", len(items2))
+				}
+			},
+		},
+
 		// ── GET /admin/tenants ───────────────────────────────────────────────────
 		"GET /admin/tenants ?limit": {
 			disp: paramProbe,
@@ -1459,7 +1505,8 @@ func TestParamConformance(t *testing.T) {
 	//     (e.g. a $ref refactor that doc.Validate does not catch), the gate
 	//     must go loud instead of vacuously passing. Lower this constant only
 	//     for an intentional spec shrink.
-	const minSpecParams = 86
+	// S40/D-102: +2 for GET /admin/audit-log ?limit/?cursor → 88.
+	const minSpecParams = 88
 	if len(specParams) < minSpecParams {
 		t.Errorf("param-conformance: enumerated only %d spec query params, "+
 			"expected >= %d — spec load may be incomplete", len(specParams), minSpecParams)
@@ -1507,8 +1554,9 @@ func TestParamConformance(t *testing.T) {
 	//  + 4 BUG-008 Group A (anomalies ?app/?stream/?limit/?cursor) added by F2 (S22/D-084)
 	//  + 2 BUG-007 cursor probes (alerts/history ?cursor, probes/results ?cursor) added by F3 (S22/D-084)
 	//  + 2 BUG-008 Group B (anomalies ?from/?to) promoted from known-violation S24/D-086
-	//  = 37 total probes. Floor = 37 - 2 = 35.
-	const minProbes = 35
+	//  + 2 S40/D-102 audit-log (admin/audit-log ?limit/?cursor)
+	//  = 39 total probes. Floor = 39 - 2 = 37.
+	const minProbes = 37
 	if probesRan < minProbes {
 		t.Errorf("param-conformance: only %d probe(s) ran (need >= %d); "+
 			"check that probe entries are not all skipping", probesRan, minProbes)

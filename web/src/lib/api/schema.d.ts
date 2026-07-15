@@ -771,6 +771,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/audit-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List audit-trail entries (newest first)
+         * @description Append-only record of who changed what, when, for every mutating admin/config
+         *     API call (alert rules & channels, users, tokens, probes, report schedules, AMS
+         *     sources, tenants, licence activation). Returned newest-first with opaque keyset
+         *     pagination. Entries are never modified or deleted and survive the revocation or
+         *     deletion of the token/user that produced them.
+         */
+        get: operations["listAuditLog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/tokens": {
         parameters: {
             query?: never;
@@ -1727,6 +1751,33 @@ export interface components {
         UserList: {
             items: components["schemas"]["User"][];
             meta: components["schemas"]["PaginatedMeta"];
+        };
+        AuditLogPage: {
+            items: components["schemas"]["AuditEntry"][];
+            meta: components["schemas"]["PaginatedMeta"];
+        };
+        AuditEntry: {
+            id: string;
+            /** @description Unix epoch ms */
+            ts: number;
+            /** @description id of the API token that made the change */
+            actor_token_id?: string;
+            /** @description users.id for OIDC-minted sessions; empty for service tokens */
+            actor_user_id?: string;
+            /** @description display name of the token/actor */
+            actor_name?: string;
+            /** @description verb form: <object_type>.<create|update|delete|activate|revoke> */
+            action: string;
+            /** @description e.g. alert_rule, alert_channel, user, token, probe, report_schedule, ams_source, tenant, license */
+            object_type: string;
+            /** @description id of the affected resource; empty for singletons/bulk */
+            object_id?: string;
+            /** @description source IP of the request */
+            remote_addr?: string;
+            /** @description optional non-sensitive context (e.g. name, type); omitted when absent */
+            detail?: {
+                [key: string]: unknown;
+            };
         };
         User: {
             id: string;
@@ -3281,6 +3332,33 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             422: components["responses"]["UnprocessableEntity"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listAuditLog: {
+        parameters: {
+            query?: {
+                /** @description Maximum items per page (max 500) */
+                limit?: components["parameters"]["limit"];
+                /** @description Pagination cursor from previous response `next_cursor` */
+                cursor?: components["parameters"]["cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated audit-log page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditLogPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
             500: components["responses"]["InternalError"];
         };
     };
