@@ -7024,3 +7024,61 @@ LIM-24 workaround note + changelog row; ROADMAP-V2 §2.29 (S44) + §2.7 date car
 refreshed (no new item; audit backlog noted); RESUME-PROMPT ▶ START HERE → SESSION-45; `sessions/SESSION-45.md`
 written carrying the 10-finding backlog. Audit evidence: workflow `wf_1f18593d-af7`; scratch
 `audit-findings.md`.
+
+## D-107 — S45 (2026-07-16): CLOSED — reports scheduler correctness (edit-silences-schedule BLOCKER + Monthly-fires-daily) (PR #87)
+
+**S45 CONFIRMED its plan.** SESSION-45 named the reports-scheduler cluster from the D-106 audit (the single
+highest-severity finding of the 13 + its sibling). Both were re-verified against the code at open (S43 lesson —
+the audit is a signal, not a licence to skip verification), built, mutation-proven, and adversarially reviewed
+(→ SHIP, no must-fix; both should-fixes applied).
+
+**1. BLOCKER — `PUT /api/v1/reports/schedules/{id}` silenced the schedule.** `handleUpdateReportSchedule`
+(`reports_wave2.go`) rebuilt the row from `reportScheduleFromAPI`, which returns `NextRunAt=nil, LastRunAt=nil`
+(it parses only the request body). `UpdateReportSchedule` writes `next_run_at=?` from that nil → **NULL**, and
+`ListDueReportSchedules` selects `WHERE next_run_at IS NOT NULL AND next_run_at <= ?` — so an edited schedule
+was **dropped from the due-set forever**. A Business customer editing their weekly report silently lost it.
+**Fix:** after copying `ID`/`CreatedAt` from the existing row, also `row.LastRunAt = existing.LastRunAt` and
+recompute `row.NextRunAt = NextCronTime(row.Cron, now)` — exactly the create handler's pattern (recompute is
+correct because the cron may have changed on the edit). Verified end-to-end at open: `reportScheduleFromAPI`
+nils both fields → `UpdateReportSchedule` NULLs them → `ListDueReportSchedules` filters them out.
+
+**2. Monthly preset fired DAILY.** The UI's **default** schedule preset (`ReportsPage.tsx:35`,
+`CRON_PRESETS[0]`) is "Monthly (1st of month, 6 AM UTC)" = `0 6 1 * *`. The 5-field cron parser
+(`cron.go parseCronFieldsInternal`) **dropped the day-of-month field** (kept only min/hour/weekday), so
+`nextCronTime` matched the next 06:00 on *any* day → the default preset fired **every day**. **Fix:**
+`parseCronFieldsInternal` now returns `dom`; `nextCronTime` honors it via a new `cronDayMatches` implementing
+standard Vixie cron dom/weekday semantics (**both restricted → OR; else each restricted field must match, a
+`*`/-1 wildcard always matches**). Search window widened 32d→~1y so any dom (incl. 31, which can be ~60d out
+from a short month) resolves; performance is negligible (a create/update-time computation). The redundant
+`parseCronSimple3Field` wrapper (only caller was `nextCronTime`) was removed. Weekly/daily presets unchanged;
+the month field stays ignored (no preset uses it; docstring corrected to say so — a should-fix from the review).
+
+**Verification.** gofmt/vet clean; **full Go suite 24/24**. Both fixes **mutation-proven RED** on a throwaway
+copy (`/tmp/mutA`, `/tmp/mut`, real tree untouched): (a) reverting the update-handler recompute (via a
+perl-*range* anchored on the update-unique `row.LastRunAt = existing.LastRunAt` line, so the byte-identical
+create-handler lines stay intact — S45 lesson: identical sibling text over-matches and yields a build-fail, not
+a clean RED) → `next_run_at` NULL after edit → the schedule-update test fails at the "permanently silenced"
+assertion; (b) forcing `dom = -1` in `cronDayMatches` → `0 6 1 * *` from 14 Jun resolves to 15 Jun (daily) →
+the dom test fails. The existing `TestGuard_VD36_FiveFieldCronParsing` now resolves `0 6 1 * *` → the 1st of
+next month (still passes — it only asserted "before the 1-month fallback"). **Adversarial review (1 agent,
+high effort) → SHIP, no must-fix**; two should-fixes applied (docstring accuracy; the `cronDayMatches` OR-branch
+now has two dedicated test cases pinning both arms). No `contracts/`/`web/`/`brandkit/` change.
+
+**Prod: rolled forward** (server *source* changed) per `deploy/runbooks/upgrade-rollback.md` — STAMPED build,
+rollback tag `pre-d107`, pre-upgrade backup rc=0. New prod stamp: **`v0.4.0-31-g2787dcd`** (was
+`v0.4.0-29-ga280b56`). Evidence smoke: `/healthz` all-ok (`ams_env_configured:true`); running `pulse version` =
+`v0.4.0-31-g2787dcd`; signed AMS webhook → **200**; logs no ERROR/panic.
+
+**Operator action required: NONE.** Carried operator items unchanged: **confirm the true AMS trial expiry**
+(runbook 07-12 vs ledger 07-27); GHCR anon → 401; the S43 soft rulings; item 10 (team-management model). No new
+operator item from S45.
+
+**Remaining S44-audit backlog (8 findings → S46/S47).** S46 = entitlement + WS auth (probe-runner ignores
+`CheckProbes()` on the background tick, S37 class, `prober.go:101`; `handleLiveWS` ignores cookie auth,
+`server.go:1091`). S47 = audit integrity + hardening (`handleDeleteUser`/`handleRevokeToken` false-audit+204 on
+missing id — re-verify the split-verdict revoke-token finding; create-user/token audit-after-refetch, S40 class;
+token `kind` allowlist; anomaly `>` vs `>=` boundary). Full detail: `sessions/SESSION-46.md`.
+
+**Docs at close:** D-107 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed section; ROADMAP-V2 §2.29 updated;
+RESUME-PROMPT ▶ START HERE → SESSION-46; `operator-expected.md` refreshed (no new item); `sessions/SESSION-46.md`
+written carrying the S46/S47 backlog.

@@ -536,11 +536,15 @@ reviews → SHIP): (1) **CSV formula injection** — export + statement CSV neut
 single-quote); (2) **email/SMTP creds** now encrypted at rest (`secretFields` += `password`/`username`);
 (3) **OIDC `pulse_oidc_state` cookie** `Secure` on https. No contract/web/brandkit change; prod rolled forward.
 
-**★ The other 10 findings are the S45–S47 backlog (real, verified, autonomous)** — see `sessions/SESSION-45.md`
-+ D-106: BLOCKER `PUT /reports/schedules/{id}` NULLs `next_run_at` (silences the schedule); `nextCronTime`
-drops DOM (Monthly fires daily); probe-runner ignores `CheckProbes()` on the tick (S37 class); `handleLiveWS`
-ignores cookie auth; `handleDeleteUser`/`handleRevokeToken` false-audit+204 on missing id (S38 class);
-create-user/token audit-after-refetch (S40 class); token `kind` no allowlist; anomaly `>` vs `>=` boundary.
+**★ The other 10 findings are the S45–S47 backlog (real, verified, autonomous).** Progress:
+- ✅ **S45 (D-107, PR #87)** — reports-scheduler cluster: the `PUT /reports/schedules/{id}` **BLOCKER** (NULLed
+  `next_run_at` → silenced the schedule) + `nextCronTime` dropping day-of-month (default "Monthly" preset fired
+  daily). Both mutation-proven + adversarially reviewed.
+- ⏳ **S46** — entitlement + WS auth: probe-runner ignores `CheckProbes()` on the tick (S37 class); `handleLiveWS`
+  ignores cookie auth.
+- ⏳ **S47** — audit integrity + hardening: `handleDeleteUser`/`handleRevokeToken` false-audit+204 on missing id
+  (S38 class); create-user/token audit-after-refetch (S40 class); token `kind` no allowlist; anomaly `>` vs `>=`
+  boundary. Full detail: `sessions/SESSION-46.md`.
 
 ### 2.28  Close the two S34 e2e gaps — probes-create + reports-schedules  [S, test-only] ✅ DONE S43 (D-105, 2026-07-15, PR #83)
 
