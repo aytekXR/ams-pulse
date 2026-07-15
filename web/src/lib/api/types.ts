@@ -53,6 +53,10 @@ export type DeviceRow = Schemas["DeviceRow"];
 export type ErrorResponse = Schemas["Error"];
 export type PaginatedMeta = Schemas["PaginatedMeta"];
 
+// ─── Audit trail (D-102) ──────────────────────────────────────────────────────
+export type AuditEntry = Schemas["AuditEntry"];
+export type AuditLogPage = Schemas["AuditLogPage"];
+
 export type HealthStatus = Schemas["HealthStatus"];
 
 export type QoeSummaryResponse = Schemas["QoeSummaryResponse"];

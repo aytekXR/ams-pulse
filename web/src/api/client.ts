@@ -47,6 +47,7 @@ import type {
   Probe,
   ProbeWrite,
   ProbeResultList,
+  AuditLogPage,
 } from "@/lib/api/types";
 import type { components } from "@/lib/api/schema.d.ts";
 
@@ -349,6 +350,15 @@ export const adminApi = {
 
   deleteUser: (id: string) =>
     apiFetch<void>(`/admin/users/${id}`, { method: "DELETE" }),
+
+  // ── Audit trail (D-102): read-only "who changed what, when" ──
+  listAuditLog: (params?: { limit?: number; cursor?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.cursor) q.set("cursor", params.cursor);
+    const qs = q.toString() ? `?${q}` : "";
+    return apiFetch<AuditLogPage>(`/admin/audit-log${qs}`);
+  },
 
   // ── Tenant CRUD (F6 multi-tenant billing; Business tier only) ──
   listTenants: (params?: { limit?: number; cursor?: string }) => {

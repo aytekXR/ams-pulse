@@ -32,6 +32,7 @@ import { ReportsPage } from "@/features/reports/ReportsPage";
 import { FleetPage } from "@/features/fleet/FleetPage";
 import { AnomaliesPage } from "@/features/anomalies/AnomaliesPage";
 import { ProbesPage } from "@/features/probes/ProbesPage";
+import { AuditLogPage } from "@/features/audit-log/AuditLogPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import { OnboardingWizard } from "@/features/settings/OnboardingWizard";
 import "@/styles/global.css";
@@ -119,6 +120,7 @@ function AppRoutesInner() {
           <Route path="/fleet" element={<FleetPage />} />
           <Route path="/anomalies" element={<AnomaliesPage />} />
           <Route path="/probes" element={<ProbesPage />} />
+          <Route path="/audit-log" element={<AuditLogPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route
             path="/onboarding"
