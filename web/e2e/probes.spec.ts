@@ -220,7 +220,56 @@ test.describe("ProbesPage", () => {
       await expect(trigger).toBeFocused();
     });
 
-    // ── (c) Form validation — one role=alert per bad field ───────────────
+    // ── (c) Create — happy-path fires POST and appends the new probe ──────
+    //
+    // The (d) test drives only the invalid-URL React-validation path. This pins
+    // the SUCCESS path end-to-end: a valid submit fires POST /api/v1/probes and
+    // the returned probe is appended to the list and the form closes. Uncovered
+    // by e2e until S43 (D-105) — only validation and delete were driven before.
+    test("create happy-path: valid submit POSTs and appends the new probe", async ({ page }) => {
+      const CREATED = {
+        id: "probe-new",
+        name: "New Origin Probe",
+        url: "https://example.com/live/new.m3u8",
+        protocol: "hls",
+        interval_s: 60,
+        timeout_s: 10,
+        enabled: true,
+        created_at: now,
+        last_result: null,
+      };
+      // Query-less /probes matches ONLY the POST; the beforeEach GET stub uses
+      // /probes?limit=100, so the two routes never collide.
+      await page.route(/\/api\/v1\/probes$/, (route) => {
+        if (route.request().method() === "POST") return json(route, CREATED, 201);
+        return route.fallback();
+      });
+
+      await page.goto("/probes");
+      await expect(page.getByText("Main HLS stream")).toBeVisible();
+      // The new probe must not be present before the create.
+      await expect(page.getByText("New Origin Probe")).toHaveCount(0);
+
+      await page.getByRole("button", { name: "+ New Probe" }).click();
+      await expect(page.getByRole("form", { name: "Create probe form" })).toBeVisible();
+
+      await page.getByLabel("Name").fill("New Origin Probe");
+      await page.getByLabel("Stream URL").fill("https://example.com/live/new.m3u8");
+
+      // Capture the POST before clicking so there is no race.
+      const postReq = page.waitForRequest(
+        (req) => req.url().includes("/api/v1/probes") && req.method() === "POST",
+      );
+      await page.getByRole("button", { name: "Create Probe" }).click();
+      await postReq;
+
+      // Proof the response was HANDLED, not just sent: the returned probe is in
+      // the list and the create form has closed.
+      await expect(page.getByText("New Origin Probe")).toBeVisible();
+      await expect(page.getByRole("form", { name: "Create probe form" })).toHaveCount(0);
+    });
+
+    // ── (d) Form validation — one role=alert per bad field ───────────────
     //
     // Uses the invalid-URL case: name="Test Probe" (passes native `required`),
     // url="not-a-url" (passes native `required` because non-empty; input is

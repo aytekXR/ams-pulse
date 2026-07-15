@@ -112,6 +112,50 @@ test.describe("Reports", () => {
   });
 
   /**
+   * Schedules tab activation: clicking the Schedules tab fires
+   * GET /api/v1/reports/schedules and RENDERS the returned rows. Uncovered by
+   * e2e until S43 (D-105): the tab was asserted visible but never activated, so
+   * the tab-change effect that calls loadSchedules() was never driven.
+   *
+   * Non-vacuous: if activation did not fire the fetch (or it were unstubbed),
+   * `schedules` would stay empty and the "No scheduled exports" empty state would
+   * render instead of the cron row.
+   */
+  test("schedules tab: activating it fetches and renders schedules", async ({ page }) => {
+    await stubApp(page, { tier: "business" });
+    await page.route("**/api/v1/reports/usage**", (route) => json(route, EMPTY_USAGE));
+    const SCHEDULES = {
+      items: [
+        {
+          id: "sched-1",
+          cron: "0 9 * * 1",
+          format: "csv",
+          scope: { app: "live" },
+          created_at: 1700000000000,
+          updated_at: 1700000000000,
+        },
+      ],
+      meta: { total: 1, next_cursor: null },
+    };
+    await page.route("**/api/v1/reports/schedules", (route) => json(route, SCHEDULES));
+
+    await page.goto("/reports");
+    await expect(page.getByRole("tab", { name: "Schedules" })).toBeVisible();
+
+    // Capture the fetch before activating the tab so there is no race.
+    const schedReq = page.waitForRequest((req) =>
+      req.url().includes("/api/v1/reports/schedules"),
+    );
+    await page.getByRole("tab", { name: "Schedules" }).click();
+    await schedReq;
+
+    // The tabpanel shows the fetched row (cron), NOT the empty state.
+    await expect(page.getByRole("tabpanel", { name: "Schedules" })).toBeVisible();
+    await expect(page.getByText("0 9 * * 1")).toBeVisible();
+    await expect(page.getByText("No scheduled exports")).toHaveCount(0);
+  });
+
+  /**
    * Usage tabpanel: real ARIA wiring.
    *
    * Goes red if: the `aria-labelledby` attribute is removed from the tabpanel, or
