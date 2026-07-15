@@ -527,6 +527,30 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.25  Audit trail — actor on every admin/config write  [M] ✅ DONE S40 (D-102, 2026-07-15, PR #77)
+
+Closed the compliance gap "no actor is recorded on mutating API calls — no 'who changed what, when'" that
+**gates SOC 2 / ISO 27001 buyers**. An append-only `audit_log` table records every admin/config mutation;
+`GET /api/v1/admin/audit-log` reads it back newest-first with keyset pagination.
+
+- **24 handlers** emit `s.audit(...)` on success: create/update/delete of alert rules & channels, users,
+  tokens, probes, report schedules, AMS sources, tenants + licence activation. The actor comes from the
+  bearer token already in the request context (`ctxTokenKey`) — **no new middleware**. `detail` is a
+  non-sensitive summary; **never** a secret (adversarial-review-verified across all 24 sites).
+- **No FKs** to api_tokens/users — a row survives token revocation and user deletion. Best-effort write on a
+  5 s cancel-detached context (audit is not a write-path SPOF, nor may it hang the response).
+- **Migration 0004**: SQLite via idempotent `applySchemaUpgrades`; Postgres via `EmbeddedDDLPostgres`.
+- **Documented out-of-scope (not silent):** the two `/test` fires, `/auth/oidc/logout`, and OIDC
+  auto-provisioning (different actor model — the top Phase-2 follow-up, with an audit-log web UI).
+
+**Gates:** full Go suite (24 pkgs) · `gofmt`/`vet` · web `tsc`+`vitest`+`build`; guard mutation-proven RED;
+2 param-conformance probes. Adversarial review (1 agent): no secret leakage, migration/pagination correct,
+**1 real defect found+fixed** (two update handlers audited after the re-fetch guards → could drop a committed
+mutation on a failed re-read). **Operator action: none** — but a NEW operator item surfaced: the AMS trial
+expiry is documented inconsistently (runbook 2026-07-12 vs ledger 2026-07-27) and needs operator confirmation.
+
+---
+
 ### 2.24  Out-of-band licence-expiry alerting (`license_expiry` metric)  [S] ✅ DONE S39 (D-101, 2026-07-15, PR #75)
 
 Closed the D-098 funnel gap "licence-expiry warning is a **UI banner only** — a customer who never opens
