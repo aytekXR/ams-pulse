@@ -1,19 +1,26 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-15, D-100 — SESSION-38)
+# Operator TODO — the items only YOU can do (updated 2026-07-15, D-101 — SESSION-39)
 
-> **S38 (D-100) added ONE new item to your queue: item 10 — a team-management model ruling** (see the
-> table below). It is a *product decision*, not a blocker. Everything else is unchanged: S38 was a
-> server-side correctness fix (`/admin/users` handlers), no operator step, inert on your prod. The two
-> hard blockers (GHCR 401, AMS expiry 2026-07-27 — **12 days**) are re-verified live and still on top.
-> Prod rolled forward to **`v0.4.0-17-g34c2221`** at S38 close (smoke: `/healthz` all-ok, the new role
-> validation answering `400` live, logs clean).
+> **S39 (D-101) added NO new item to your queue.** It shipped a new **`license_expiry` alert metric** so
+> the alert engine can warn through your configured channels before the *Pulse* licence key expires — a
+> server-side feature, no operator step, **inert until someone creates a rule** (see the one *optional*
+> note below). Item 10 (the team-management model ruling from S38) is still the only *product decision*
+> waiting on you. The two hard blockers are re-verified live and still on top: **GHCR 401** and **AMS
+> licence expiry 2026-07-27 — 12 days.** Prod rolled forward to **`v0.4.0-19-g38111c9`** at S39 close
+> (smoke: `/healthz` all-ok, running stamp `-19-g38111c9`, signed webhook 200, logs clean).
 
 ## ⚡ TL;DR — NO operator action required. Your queue is UNCHANGED (re-verified live).
 
-S37 was **server-side entitlement-enforcement hardening** — no operator step, no new blocker,
-behaviorally **inert on your prod** (Enterprise licence, 0 users, OIDC off → every gate passes).
-The two items below still outrank everything a session can do; both re-checked live this session:
+S39 was a **server-side alerting feature** — no operator step, no new blocker, behaviorally **inert on
+your prod until a `license_expiry` rule + channel exist** (Enterprise licence, 0 users, OIDC off). The two
+items below still outrank everything a session can do; both re-checked live this session:
 **GHCR still private** (anonymous manifest pull → **401**, checked after `docker logout`), **AMS
 licence expires 2026-07-27T13:45Z — 12 days**.
+
+**◦ Optional (NOT a blocker) — turn the new licence-expiry warning ON.** S39 added the mechanism, not a
+default rule (same stance as `cert_expiry`). To have Pulse warn you before its own key downgrades, create
+an alert channel and a rule `{metric:"license_expiry", operator:"lt", threshold:14}` via the API/UI. Until
+then the metric is dormant. NB: this watches the **Pulse** key, not the **AMS** key — the 2026-07-27 AMS
+expiry above is still a separate, manual thing only you can renew.
 
 **What S37 fixed (the D-098 bug class, generalized).** D-098 found *capabilities are stored but
 never checked* (token scopes existed; writes were ungated). The same shape was audited across every

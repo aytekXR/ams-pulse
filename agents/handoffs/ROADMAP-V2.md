@@ -527,6 +527,29 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.24  Out-of-band licence-expiry alerting (`license_expiry` metric)  [S] ✅ DONE S39 (D-101, 2026-07-15, PR #75)
+
+Closed the D-098 funnel gap "licence-expiry warning is a **UI banner only** — a customer who never opens
+the dashboard gets no warning before a tier downgrade." Added a **`license_expiry`** alert metric so the
+alert engine warns through the operator's configured channels (email/Slack/Telegram/PagerDuty/webhook)
+when the Pulse key is within N days of expiry. Rule: `{metric:"license_expiry", operator:"lt", threshold:14}`.
+
+- **Faithful mirror of `cert_expiry`:** a non-ClickHouse scalar ("days until expiry") injected via
+  `LicenseExpiryChecker`, dispatched by the evaluator's metric switch, evaluated against the rule
+  operator/threshold, delivered through the normal channel path. `serve.go` adapts `license.Manager.ExpiresAt()`.
+- **Key-state semantics:** free / perpetual / no-key → `ok=false` → **skipped** (cannot false-alarm);
+  valid & expiring → evaluates; already-expired → clamps to 0 days → fires.
+- **No API/schema/web change** — metrics are not enum-constrained (`cert_expiry` is API-creatable the same
+  way; verified, not assumed). Operator creates the rule + a channel, exactly as for `cert_expiry`.
+
+**Gates:** `gofmt`; `go build ./...`; full Go suite green (24 pkgs). Two guards mutation-proven RED — the
+perpetual-skip guard **and** a new **`wireAlertLicenseExpiry` wiring pin** (added on adversarial-review
+feedback: the unit tests call the setter directly, so only the pin proves `serve.go` actually wires the
+checker into the real evaluator — raising this above `cert_expiry`, which has no pin). Adversarial review
+(1 agent): **no defects.** **Operator action: none for the build** (rule + channel still operator-created).
+
+---
+
 ### 2.23  /admin/users CRUD correctness (team-management foundation)  [S] ✅ DONE S38 (D-100, 2026-07-15, PR #73)
 
 Set out to build the **team-management UI** (top D-098 funnel gap: `/admin/users` CRUD exists, no page).

@@ -11,25 +11,48 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-39.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-40.md`)
 
-**Session 2026-07-15 result: D-100 — S38 DONE (PR #73, /admin/users correctness, in prod).**
+**Session 2026-07-15 result: D-101 — S39 DONE (PR #75, out-of-band licence-expiry alerting, in prod).**
 
-**★★ S38 DISCARDED ITS OWN PLAN — right again (four sessions running).** SESSION-38.md named the
-**team-management UI** (`/admin/users` CRUD exists, no page — the top D-098 funnel gap). Verify-at-open
-found the feature is **advisory, not real**: the stored per-user `role` **does not govern SSO sessions**
-(OIDC re-maps role from IdP groups on every login and never reads the stored value) and **there is no
-password login** (SSO auto-provisions users). So a UI role-edit would change nothing. S38 instead **fixed
-the API's real correctness bugs** — `handleUpdateUser` blanked the username on a role-only edit, returned
-200 for a missing id, and echoed a fabricated `created_at:0`; create accepted any role and 500'd on
-duplicates — and **deferred the UI + password-login to an operator product ruling** (operator-expected
-item 10). Full-replace matching the contract, role allowlist, duplicate→409, 409 documented in the spec.
-Gated (Go 24/24 · web tsc+vitest · schema.d.ts in sync; every guard mutation-proven RED; adversarial
-review → 3 findings all fixed), merged, rolled to prod. Full evidence: `decisions.md` D-100.
+**★ S39 CONFIRMED its plan (first non-pivot in five sessions).** The standing-clause re-read at open found
+candidate 1 was still the highest-leverage unblocked move, so S39 built it as scoped: a **`license_expiry`
+alert metric** that warns through the operator's configured channels when the Pulse key is within N days of
+expiry — closing the D-098 gap where the only warning was a UI banner (a customer who never opens the
+dashboard got nothing). It is a **faithful mirror of `cert_expiry`**: a "days until expiry" scalar injected
+via `LicenseExpiryChecker`, dispatched by the evaluator's metric switch, delivered through the normal
+channel path; `serve.go` adapts `license.Manager.ExpiresAt()`. Free/perpetual/no-key licences are skipped
+(`ok=false`, cannot false-alarm); expired keys fire. No API/schema/web change. Rule:
+`{metric:"license_expiry", operator:"lt", threshold:14}`. **The adversarial review (clean) still moved the
+work** — it flagged that all three unit tests called the setter directly, so nothing proved `serve.go`
+wires the checker into the *real* evaluator; I added a **`wireAlertLicenseExpiry` seam + a mutation-proven
+wiring pin** (raising this above `cert_expiry`, which has none). Gated (Go 24/24 · gofmt · two guards
+mutation-proven RED), merged, rolled to prod **`v0.4.0-19-g38111c9`** (evidence smoke green). **Operator
+action: none for the build** — a `license_expiry` rule + a channel are still operator-created (same as
+`cert_expiry`). Full evidence: `decisions.md` D-101.
 
-**Next goal candidate: out-of-band licence-expiry alerting** (the alert engine has no `license_expiry`
-metric; only a UI banner warns — relevant to the operator's OWN 07-27 expiry). Team-management UI is
-**blocked on the operator's model ruling**. **Re-verify against the ledger + re-read the standing clause first.**
+**Next goal candidate: audit trail — actor on every write** [M–L] (no "who changed what, when" on mutating
+API calls; gates SOC 2 / ISO 27001 buyers — the natural next step after the S36–S39 auth/entitlement/
+correctness arc). Bounded alternatives: the two S34 e2e gaps [S], the dead `PULSE_LICENSE_OFFLINE_FILE`
+path [XS], or seeding a default `license_expiry` rule [XS, product-ruling first]. Team-management UI stays
+**blocked on the operator's model ruling**; §2.7 CI promotions unlock **2026-07-23**. **Re-verify against
+the ledger + re-read the standing clause first.**
+
+---
+
+### Prior session (for context): D-100 — S38 DONE (PR #73, /admin/users correctness, in prod).
+
+**★★ S38 DISCARDED ITS OWN PLAN — right again.** SESSION-38.md named the **team-management UI**
+(`/admin/users` CRUD exists, no page — the top D-098 funnel gap). Verify-at-open found the feature is
+**advisory, not real**: the stored per-user `role` **does not govern SSO sessions** (OIDC re-maps role from
+IdP groups on every login and never reads the stored value) and **there is no password login** (SSO
+auto-provisions users). So a UI role-edit would change nothing. S38 instead **fixed the API's real
+correctness bugs** — `handleUpdateUser` blanked the username on a role-only edit, returned 200 for a missing
+id, and echoed a fabricated `created_at:0`; create accepted any role and 500'd on duplicates — and
+**deferred the UI + password-login to an operator product ruling** (operator-expected item 10). Full-replace
+matching the contract, role allowlist, duplicate→409, 409 documented in the spec. Gated (Go 24/24 · web
+tsc+vitest · schema.d.ts in sync; every guard mutation-proven RED; adversarial review → 3 findings all
+fixed), merged, rolled to prod. Full evidence: `decisions.md` D-100.
 
 ---
 

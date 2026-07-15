@@ -6608,3 +6608,78 @@ re-verified live: GHCR anon → 401; AMS expiry 2026-07-27 (12 days).
 
 **Docs at close:** operator-expected item 10 (team-management ruling); ROADMAP-V2 §2.23; SESSION-39 plan
 (out-of-band licence-expiry alerting as the lead candidate); RESUME-PROMPT ▶ START HERE → S39. Follow-up docs PR.
+
+## D-101 — S39 (2026-07-15): CLOSED — out-of-band licence-expiry alerting
+
+**Goal (from SESSION-39, unrevised — verified viable at open).** Close the D-098 funnel gap "licence-expiry
+alerting: UI banner only → a customer who never opens the dashboard gets no warning before downgrade." Add
+a **`license_expiry`** alert-rule metric so the alert engine warns through the operator's configured channels
+(email/Slack/PagerDuty/webhook) when the licence key is within N days of expiry.
+
+**Design — mirror the existing `cert_expiry` mechanism (alert/wave2.go).** cert_expiry is the exact precedent:
+a non-ClickHouse scalar ("days until expiry") injected via an interface (`CertExpiryChecker` + `SetCertChecker`),
+dispatched by the evaluator's metric switch, evaluated against the rule's operator/threshold, delivered through
+the normal channel path. license_expiry adds: `LicenseExpiryChecker{ DaysUntilExpiry() (days float64, ok bool) }`
+(ok=false → perpetual/no-key licence, nothing to warn), `evalLicenseExpiry`, evaluator `SetLicenseChecker` +
+a `case "license_expiry"`, and a serve.go adapter over `license.Manager.ExpiresAt()` (already public). No metric
+allowlist exists (unknown metrics fall to evalGenericMetric), so rule creation needs no change. A rule is
+`{metric:"license_expiry", operator:"lt", threshold:14}`.
+
+**Operator action required: NONE for the build.** (An operator must still CREATE the rule + a channel for it
+to deliver — same as cert_expiry; a future session may seed a default rule.) Standing blockers unchanged.
+
+Verify-at-open census: `origin/main` = `d6e4a57` (S38 docs); prod `v0.4.0-17-g34c2221` (S38, live-verified);
+`Manager.ExpiresAt()` public (license.go:290); `cert_expiry` precedent at alert/wave2.go:277.
+
+**Shipped (PR #75, squash `38111c9`, merged to `origin/main`).** The `license_expiry` metric exactly as
+designed — no scope revision was needed (the standing-directive re-read at open confirmed it remained the
+highest-leverage unblocked move, directly relevant to the operator's own 07-27 expiry):
+
+- `alert/license_expiry.go` — `LicenseExpiryChecker{ DaysUntilExpiry() (days float64, ok bool) }`,
+  `FakeLicenseChecker`, `evalLicenseExpiry` (global scope, single `"license"` result; `ok=false` →
+  perpetual/free/no-key → no result → cannot fire).
+- `alert/evaluator.go` — `licenseChecker` field + `SetLicenseChecker` + dispatch `case "license_expiry"`,
+  byte-for-byte the shape of the `cert_expiry` case.
+- `cmd/pulse/serve.go` — `licenseExpiryChecker` adapter over `license.Manager.ExpiresAt()`
+  (nil expiry → `ok=false`; already-expired → clamp to 0 days → fires) wired via a **`wireAlertLicenseExpiry`
+  seam** (added on review — see below).
+- Rule shape `{metric:"license_expiry", operator:"lt", threshold:14}`; no OpenAPI/enum/web change
+  (metrics are not enum-constrained; `cert_expiry` is API-creatable the same way — confirmed, not assumed).
+- `docs/runbooks/alerting.md` — `license_expiry` row in the supported-metrics table.
+
+**Verification.** `gofmt` clean; `go build ./...` OK; **full `go test ./...` green (24 pkgs)**. Two guards
+**mutation-proven RED** (each removed → only its own test fails, then restored):
+1. the perpetual-skip `if !ok { return nil }` in `evalLicenseExpiry` (`TestLicenseExpiry_Perpetual_NoFire`);
+2. the checker wiring in `wireAlertLicenseExpiry` (`TestWireAlertLicenseExpiry_CheckerWired`).
+No `MUTATION`/`MUTATION-PROOF` markers remain in `server/`.
+
+**Adversarial review (1 agent) → NO defects,** but it named one gap I acted on: the three unit tests all
+call `ev.SetLicenseChecker` directly, so **nothing proved `serve.go` actually wires the checker into the
+real evaluator** — a silent prod-unwire would leave every unit test green while the alert never fires. I
+extracted a `wireAlertLicenseExpiry` seam (mirroring the D-062 `wireAlertQoEReader` pin) and added
+`TestWireAlertLicenseExpiry_CheckerWired`, which fires a `license_expiry` rule through the real evaluator
+and is mutation-proven. This raises `license_expiry` **above** the `cert_expiry` precedent, which has no
+such pin. The review also confirmed: the notify-sink assertion truly proves delivery (it is downstream of
+`fire()`→`deliver()`), the dispatch is a faithful mirror, `ExpiresAt()` covers all four key states
+(free/perpetual → skip; valid → evaluate; expired → fire), the two negative tests are distinguishable from
+each other, and there is no metric-allowlist gap.
+
+**Prod: rolled forward at close.** Rollback point `pulse-prod-pulse:pre-d101` = `v0.4.0-17-g34c2221` (S38);
+pre-upgrade backup exit 0 (CH `pulse-20260715-093219.zip` + SQLite); STAMPED build asserted
+**`pulse v0.4.0-19-g38111c9`** (commit `38111c9`, built `2026-07-15T09:32:34Z`) — not dev/unknown — before
+`up -d`. Post-swap smoke (evidence): `/healthz` all-ok + `ams_env_configured:true`, components
+`{clickhouse,collector,meta_store}=ok`; **running container prints `v0.4.0-19-g38111c9`** (the license_expiry
+build — the metric is compiled in and `wireAlertLicenseExpiry` runs at boot); signed webhook → **200**;
+resource limits `memory=536870912 cpus=500000000` (0.5 CPU); logs clean (no ERROR/panic). The feature is
+behaviorally inert until an operator **creates a `license_expiry` rule + a channel** — so no prod rule was
+created (side-effect-free smoke), consistent with `cert_expiry`.
+
+**Operator action: NONE for the build.** One standing note (not new, not a blocker): for the alert to
+deliver, an operator must create the rule + a channel — the same as `cert_expiry`; a future session may
+seed a default rule. Standing blockers unchanged, re-verified live: GHCR anon pull → 401; **AMS licence
+expires 2026-07-27T13:45Z — 12 days** (this metric is exactly the class of warning that lapse motivates,
+though it covers the *Pulse* key, not the *AMS* key).
+
+**Docs at close:** D-101 CLOSED (this block); ROADMAP-V2 §2.24; SESSION-39 result appended;
+`operator-expected.md` header refreshed (no action for the fix; rule-creation note); RESUME-PROMPT
+▶ START HERE → SESSION-40; `sessions/SESSION-40.md` written. Follow-up docs PR.
