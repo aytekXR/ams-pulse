@@ -11,11 +11,39 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-41.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-42.md`)
 
-**Session 2026-07-15 result: D-102 — S40 DONE (PR #77, audit trail — actor on every admin/config write, in prod).**
+**Session 2026-07-15 result: D-103 — S41 DONE (PR #79, audit-log web UI — the trail is now visible in the SPA, in prod).**
 
-**★ S40 CONFIRMED its plan (second non-pivot running).** Built the compliance foundation the S36–S39 arc was
+**★ S41 CONFIRMED its plan (third non-pivot running).** Completed the self-contained half of "audit trail
+Phase 2": a read-only **Audit Log** page (`/audit-log`) that surfaces the S40 `GET /admin/audit-log` endpoint
+so operators can actually SEE who changed what, when, and from where. `AuditLogPage.tsx` mirrors `AnomaliesPage`
+(table + cursor "Load more" + Refresh; newest-first; **no tier gate** — the trail is a core admin feature),
+`adminApi.listAuditLog` calls the typed endpoint, and the router + left-nav are wired. **Web-only — zero Go
+or contract change** (S40 already shipped the endpoint + `AuditEntry`/`AuditLogPage` schema). Gated (tsc ·
+**650 vitest** incl. 10 new — states, actor fallback, load-more append + cursor param, design-token pins ·
+build · **3 Playwright e2e** green in `mcr.microsoft.com/playwright:v1.61.1-jammy`). CI all-green this round
+(no `csp-e2e` flake). Merged, rolled to prod **`v0.4.0-23-ga44691b`** — the new UI proven served (AuditLogPage
+strings present in the live JS bundle). Full evidence: `decisions.md` D-103.
+
+**⚠ CARRIED operator item (from S40, still unresolved):** the **AMS trial expiry is documented inconsistently** —
+`deploy/runbooks/self-hosted-ams.md` says **2026-07-12**, the ledger says **2026-07-27** (live-verified
+S37–S39). If it's 07-12 it has ALREADY lapsed. Cannot re-verify live (AMS creds operator-only; AMS enforces
+the licence only on restart, so live-ingesting doesn't disambiguate). **Operator must confirm.** See
+`operator-expected.md`.
+
+**Next goal candidate: audit trail Phase-2 tail** — **audit OIDC auto-provisioning** (`oidc.go` CreateUser
+creates users on first SSO login outside `handleCreateUser`, so those creations aren't recorded; design the
+SSO-subject actor model and capture it). Bounded alternatives: optional **admin-only gating of the audit
+read**, the two S34 e2e gaps [S], the dead `PULSE_LICENSE_OFFLINE_FILE` path [XS]. Team-management UI stays
+**blocked on the operator's model ruling**; §2.7 CI promotions unlock **2026-07-23** (check the date at open).
+**Re-verify against the ledger + re-read the standing clause first.**
+
+---
+
+### Prior session (for context): D-102 — S40 DONE (PR #77, audit trail — actor on every admin/config write, in prod).
+
+**★ S40 CONFIRMED its plan.** Built the compliance foundation the S36–S39 arc was
 missing: an append-only **`audit_log`** recording "who changed what, when" for every mutating admin/config
 API call (gates SOC 2 / ISO 27001 buyers). `s.audit(...)` is threaded into **24 handlers** (create/update/
 delete of alert rules & channels, users, tokens, probes, report schedules, AMS sources, tenants + licence
@@ -26,20 +54,8 @@ a non-sensitive summary only. `GET /admin/audit-log` reads it back (keyset, newe
 review found + I fixed one real defect** — two update handlers audited *after* the post-update re-fetch
 guards, so a committed mutation could go unrecorded on a failed re-read (moved the audit before the
 re-fetch). CI caught a PG migration-parity gap (fixed); the `csp-e2e` flake recurred (required `web-e2e`
-green). Gated (Go 24/24 · web tsc+vitest+build · guard mutation-proven RED), merged, rolled to prod
-**`v0.4.0-21-g0b7decc`** — migration 0004 proven live (WAL-aware copy: `audit_log` present, 10 columns).
-Full evidence: `decisions.md` D-102.
-
-**⚠ NEW operator item surfaced by S40:** the **AMS trial expiry is documented inconsistently** —
-`deploy/runbooks/self-hosted-ams.md` says **2026-07-12**, the ledger says **2026-07-27** (live-verified
-S37–S39). If it's 07-12 it has ALREADY lapsed. Could not re-verify live (AMS creds operator-only). **Operator
-must confirm.** See `operator-expected.md`.
-
-**Next goal candidate: audit trail Phase 2** — an **audit-log web UI** (the read endpoint has no page; the
-typed schema already exists) and/or **auditing OIDC auto-provisioning** (`oidc.go` CreateUser, distinct actor
-model). Bounded alternatives: the two S34 e2e gaps [S], the dead `PULSE_LICENSE_OFFLINE_FILE` path [XS].
-Team-management UI stays **blocked on the operator's model ruling**; §2.7 CI promotions unlock **2026-07-23**.
-**Re-verify against the ledger + re-read the standing clause first.**
+green). Gated, merged, rolled to prod **`v0.4.0-21-g0b7decc`** — migration 0004 proven live (WAL-aware copy:
+`audit_log` present, 10 columns). Full evidence: `decisions.md` D-102.
 
 ---
 

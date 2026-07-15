@@ -6765,3 +6765,54 @@ audit read (currently any authenticated token, consistent with `/admin/users`+`/
 **Docs at close:** D-102 CLOSED (this block); ROADMAP-V2 §2.25; SESSION-40 result appended;
 `operator-expected.md` refreshed (NEW AMS-expiry-verification item); RESUME-PROMPT ▶ START HERE → SESSION-41;
 `sessions/SESSION-41.md` written. Follow-up docs PR.
+
+## D-103 — S41 (2026-07-15): CLOSED — audit trail Phase 2 (audit-log web UI)
+
+**Goal (SESSION-41 candidate 1).** Complete the S40 audit trail by surfacing it in the SPA: the read
+endpoint `GET /admin/audit-log` shipped in S40 but had no page. Add an **Audit Log** page so operators can
+actually SEE who changed what/when without hitting the API by hand.
+
+**Design (mirrors `AnomaliesPage`).** New `web/src/features/audit-log/AuditLogPage.tsx` — read-only table
+(Time / Actor / Action / Object / Object ID / Source IP), `adminApi.listAuditLog({limit,cursor})`, cursor
+**"Load more"** pagination (append), loading/empty/error states via the shared `LoadingSpinner`/`EmptyState`/
+`ErrorBanner`/`Badge` primitives and `var(--*)` design tokens. **No tier gate** — the audit trail is a core
+admin feature, not a paid capability (matches `SettingsPage`); it is admin-only via the existing auth. Wired
+into the router (`App.tsx`) + left-nav (`Layout.tsx`). Types (`AuditEntry`/`AuditLogPage`) re-exported from
+`lib/api/types.ts`; no OpenAPI change (the schema already exists from S40).
+
+**Operator action required: NONE.** Pure web addition consuming an existing endpoint.
+
+Verify-at-open census: `origin/main` = `6538763` (S40 docs); prod `v0.4.0-21-g0b7decc` (S40, live —
+`audit_log` table proven present); GHCR anon → 401. **AMS expiry: unresolved doc discrepancy (07-12 vs
+07-27) — operator item, carried from D-102.**
+
+**Shipped (PR #79, squash `a44691b`, merged to `origin/main`).** The Audit Log page exactly as designed —
+web-only, consuming the S40 endpoint; no Go/contract change.
+- `features/audit-log/AuditLogPage.tsx` — read-only table (Time / Actor / Action / Object / Object ID /
+  Source IP), `adminApi.listAuditLog({limit,cursor})`, cursor **"Load more"** append pagination, shared
+  primitives + `var(--*)` tokens, no tier gate (admin-only via auth). Router + left-nav wired;
+  `AuditEntry`/`AuditLogPage` re-exported from `lib/api/types.ts`.
+
+**Verification.** `tsc` clean; **650 vitest pass** (39 files) incl. **10 new** (loading/table/empty/error,
+actor fallback to short token id, **Load-more appends + uses the cursor param**, no-button-on-last-page,
+design-token source-read pins); `build` green. **3 Playwright e2e** proven green in the official
+`mcr.microsoft.com/playwright:v1.61.1-jammy` image (mount-clean, table render, cursor load-more append) —
+the local host lacks browser libs, so the dockerised image is the correct local runner. CI: all required
+checks green (web-e2e, csp-e2e, e2e all passed — no flake this round).
+
+**Prod: rolled forward at close.** Rollback `pulse-prod-pulse:pre-d103` = `v0.4.0-21-g0b7decc` (S40);
+pre-upgrade backup exit 0; STAMPED build asserted **`pulse v0.4.0-23-ga44691b`** (commit `a44691b`, built
+`2026-07-15T11:36:04Z`) — not dev/unknown — before `up -d`. Post-swap smoke (evidence): `/healthz` all-ok +
+`ams_env_configured:true`; running stamp `-23-ga44691b`; limits `512M/0.5cpu`; logs clean. **The new UI is
+proven served** — the live JS bundle (`/assets/index-Bgd5UnTR.js`) contains the AuditLogPage strings
+("No audit entries yet" / "Audit Log").
+
+**Operator action: NONE.** Pure web addition. Carried operator item unchanged: **confirm the true AMS trial
+expiry** (runbook 07-12 vs ledger 07-27 — see operator-expected/D-102). GHCR anon → 401.
+
+**Remaining audit-trail Phase-2 tail:** OIDC auto-provisioning is still not audited (`oidc.go` CreateUser —
+distinct actor model); optional admin-only gating of the audit read. Carried to SESSION-42 candidates.
+
+**Docs at close:** D-103 CLOSED (this block); ROADMAP-V2 §2.26; SESSION-41 result appended;
+`operator-expected.md` refreshed (AMS-expiry item persists); RESUME-PROMPT ▶ START HERE → SESSION-42;
+`sessions/SESSION-42.md` written. Follow-up docs PR.
