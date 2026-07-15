@@ -1,3 +1,19 @@
+# Operator TODO — the items only YOU can do (updated 2026-07-15, D-106 — SESSION-44)
+
+> **S44 (D-106) needs NO operator action for the build.** It shipped a **security-hardening** PR (#85): the
+> CSV export/statements no longer let a publisher inject a spreadsheet formula via a crafted stream name; email/
+> SMTP alert-channel credentials are now encrypted at rest instead of stored in plaintext; and the OIDC login
+> state cookie is now `Secure` on HTTPS. All three are code-only fixes, mutation-proven, adversarially
+> reviewed, and rolled to prod — nothing for you to do. (S44 also ran an adversarial audit that found **13
+> confirmed bugs**; the other 10 are queued as autonomous work for S45–S47 — no operator input needed.)
+>
+> **The ONE time-sensitive item is unchanged: confirm the true AMS trial-licence expiry** (the docs disagree —
+> `self-hosted-ams.md` says 2026-07-12, this ledger says 2026-07-27; see ⚠ below). GHCR is still private
+> (**401**). The S43 soft rulings (audit-read model, BE-02 config) and item 10 (team-management model) still
+> wait on you, but none blocks the autonomous backlog.
+
+## (previous header — D-105, SESSION-43)
+
 # Operator TODO — the items only YOU can do (updated 2026-07-15, D-105 — SESSION-43)
 
 > **S43 (D-105) needs NO operator action for the build.** It closed two end-to-end test-coverage gaps

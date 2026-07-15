@@ -11,7 +11,47 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-44.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-45.md`)
+
+**Session 2026-07-15 result: D-106 — S44 DONE (PR #85, security hardening — CSV formula injection + SMTP creds encrypted + OIDC state cookie Secure).**
+
+**★★ S44 ran an 8-finder adversarial audit at open and found 13 CONFIRMED, mutation-checkable defects (0
+refuted) — reversing the S43/S44 "clean-autonomous work is thinning" claim.** With the CI-promotion date gate
+not yet met (07-15 < 07-23) and every big item operator-gated, S44 followed the standing directive ("revise if
+a higher-leverage move exists") and audited the server handler families instead of defaulting to hygiene. It
+**shipped the security cluster** (3 fixes, PR #85, D-106), each personally verified + mutation-proven, both
+adversarial reviews → SHIP:
+- **CSV formula injection** — export + white-label statement CSV wrote publisher-controlled `app`/`stream_id`/
+  `tenant` cells with no formula neutralization (a stream named `=cmd|...` runs on spreadsheet open, which the
+  docs tell operators to do). Fixed via shared `reports.CSVSafeCell`/`UsageCSVRecord`/`WriteUsageCSV`.
+- **Email/SMTP creds** were stored plaintext in `config_public` (`secretFields` omitted `password`/`username`);
+  now encrypted at rest (backward-compatible — the factory merges public+decrypted on read).
+- **OIDC `pulse_oidc_state`** cookie (carries the PKCE verifier) lacked `Secure`; now `Secure` on https.
+
+Gates: full Go suite **24/24**; new tests mutation-proven RED; no contract/web/brandkit change; **prod rolled
+forward to `v0.4.0-29-ga280b56`** (was `-25-g6a0226d`; rollback tag `pre-d106`; smoke green — healthz ok,
+signed webhook 200). Full evidence: `decisions.md` D-106.
+
+**★ SESSION-45 = the audit backlog (the other 10 findings — real, verified, autonomous).** Ranked in
+`sessions/SESSION-45.md`: **BLOCKER** `PUT /reports/schedules/{id}` NULLs `next_run_at` (editing a schedule
+silently stops it) → S45 primary; `nextCronTime` drops day-of-month (Monthly fires daily) → S45; probe-runner
+ignores `CheckProbes()` on the tick + `handleLiveWS` ignores cookie auth → S46; `handleDeleteUser`/
+`handleRevokeToken` false-audit+204 on missing id + create-audit-ordering + token-kind allowlist + anomaly
+boundary → S47. **Re-verify each against the code before building** (S38/S43 lesson — the audit is a strong
+signal, not a licence to skip verification).
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` says
+2026-07-12, ledger says 2026-07-27) — if 07-12 it has already lapsed and the next `antmedia` restart = ingest
+death. Operator-only to resolve (AMS creds in `oguz-testing.md`). GHCR anon → 401. See `operator-expected.md`.
+
+**§2.7 CI promotions** unlock **≥ 2026-07-23** — a clean win when eligible (`web-e2e`/`csp-e2e` green the last
+several rounds). CHECK THE DATE at S45 open; if ≥ 07-23, do it.
+
+---
+
+## ▶ prior session context (S43, superseded by the above)
+
+## (superseded) ▶ START HERE (execute `sessions/SESSION-44.md`)
 
 **Session 2026-07-15 result: D-105 — S43 DONE (PR #83, closed the two S34 e2e gaps; overturned two candidates at verify-at-open).**
 
