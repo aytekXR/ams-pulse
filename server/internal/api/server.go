@@ -2077,9 +2077,19 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "INVALID_PARAM", "username and role required")
 		return
 	}
+	if !validUserRole(role) {
+		writeError(w, http.StatusBadRequest, "INVALID_PARAM", "role must be 'admin' or 'viewer'")
+		return
+	}
 	now := time.Now().UnixMilli()
 	u := meta.User{Username: username, PwHash: hashPassword(password), Role: role, CreatedAt: now, UpdatedAt: now}
 	if err := s.store.CreateUser(r.Context(), u); err != nil {
+		// A duplicate username is a client error, not a 500 — the unique
+		// constraint on users.username is the only expected failure here.
+		if isUniqueConstraintError(err) {
+			writeError(w, http.StatusConflict, "CONFLICT", "a user with that username already exists")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
@@ -2093,18 +2103,55 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "userId")
+	// Fail with 404 rather than silently UPDATE-ing zero rows and returning 200.
+	existing, err := s.store.GetUserByID(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		return
+	}
+	if existing == nil {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "user not found")
+		return
+	}
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_JSON", "invalid request body")
 		return
 	}
+	// Full replace, matching the UserWrite contract (required: [username, role]).
+	// Requiring both fields is what prevents the old blanking bug: a role-only
+	// body is now a 400, not a silent SET username=''.
 	username, _ := body["username"].(string)
 	role, _ := body["role"].(string)
+	if username == "" || role == "" {
+		writeError(w, http.StatusBadRequest, "INVALID_PARAM", "username and role required")
+		return
+	}
+	if !validUserRole(role) {
+		writeError(w, http.StatusBadRequest, "INVALID_PARAM", "role must be 'admin' or 'viewer'")
+		return
+	}
 	if err := s.store.UpdateUser(r.Context(), id, username, role); err != nil {
+		if isUniqueConstraintError(err) {
+			writeError(w, http.StatusConflict, "CONFLICT", "a user with that username already exists")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"id": id, "username": username, "role": role, "created_at": 0})
+	// Return the actual stored row, not an echo of the request with a fabricated
+	// created_at:0. A nil here means the row was deleted concurrently (between the
+	// existence check and the update) — report that honestly as 404, not 500.
+	updated, err := s.store.GetUserByID(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		return
+	}
+	if updated == nil {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "user not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, userToAPI(*updated))
 }
 
 func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
@@ -2505,6 +2552,12 @@ func tokenToAPI(t meta.APIToken) any {
 		"expires_at":   t.ExpiresAt,
 		"last_used_at": t.LastUsedAt,
 	}
+}
+
+// validUserRole reports whether role is one of the two roles the system defines
+// (meta.User.Role: "admin" | "viewer"; the OIDC group mapping emits the same set).
+func validUserRole(role string) bool {
+	return role == "admin" || role == "viewer"
 }
 
 func userToAPI(u meta.User) map[string]any {

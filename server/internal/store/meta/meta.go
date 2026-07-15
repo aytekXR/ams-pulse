@@ -425,6 +425,21 @@ func (s *Store) GetUserByUsername(ctx context.Context, username string) (*User, 
 	return &u, nil
 }
 
+// GetUserByID fetches a user by id. Returns (nil, nil) when not found.
+func (s *Store) GetUserByID(ctx context.Context, id string) (*User, error) {
+	row := s.queryRowContext(ctx,
+		`SELECT id, username, pw_hash, role, created_at, updated_at FROM users WHERE id = ?`,
+		id)
+	var u User
+	if err := row.Scan(&u.ID, &u.Username, &u.PwHash, &u.Role, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &u, nil
+}
+
 // ListUsers returns users ordered by created_at ASC, id ASC.
 // limit<=0 means no LIMIT (unbounded); cursor="" means first page.
 func (s *Store) ListUsers(ctx context.Context, limit int, cursor string) ([]User, error) {
