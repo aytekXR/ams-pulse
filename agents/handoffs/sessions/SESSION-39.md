@@ -111,3 +111,36 @@ out to be advisory (non-authoritative role, no password login) so it pivoted to 
 5. Write `sessions/SESSION-40.md` (carry the standing-directive header).
 6. **Roll prod forward** if server/web code changed, per `deploy/runbooks/upgrade-rollback.md` — STAMPED
    build (`--build-arg` on `build`, then `up -d` WITHOUT `--build`); smoke with **evidence**.
+
+---
+
+## ✅ RESULT — S39 DONE (D-101, PR #75, 2026-07-15)
+
+**Chose candidate 1 (out-of-band licence-expiry alerting) — the standing-directive re-read confirmed it
+was still the highest-leverage unblocked move.** Unlike S35–S38, this plan needed **no pivot**: the goal
+was viable exactly as scoped (`Manager.ExpiresAt()` public, `cert_expiry` a clean precedent, no metric
+allowlist to change).
+
+**Delivered:** a `license_expiry` alert metric mirroring `cert_expiry` — `LicenseExpiryChecker` +
+`evalLicenseExpiry` (`alert/license_expiry.go`), evaluator field/setter/dispatch case, a `serve.go`
+adapter over `ExpiresAt()` wired through a **`wireAlertLicenseExpiry` seam**, plus the supported-metrics
+runbook row. Rule shape `{metric:"license_expiry", operator:"lt", threshold:14}`; free/perpetual keys are
+skipped (`ok=false`), expired keys fire. No API/schema/web change.
+
+**At-open census (verified live):** `origin/main` = `d6e4a57`; prod = `v0.4.0-17-g34c2221` (S38) — the S38
+fix was proven live at S38 close (invalid role → 400); `/healthz` `ams_env_configured:true`.
+
+**Gates:** `gofmt` clean · `go build ./...` OK · full Go suite green (24 pkgs). **Two guards mutation-proven
+RED** (perpetual-skip guard; the wiring pin) — the pin was added in response to the adversarial review,
+which flagged that all three unit tests called the setter directly and thus never proved `serve.go` wires
+the checker. Adversarial review otherwise clean (delivery path, dispatch mirror, all four key states, test
+non-vacuity, no allowlist gap).
+
+**Prod rolled forward:** rollback `pre-d101` = `v0.4.0-17-g34c2221`; backup exit 0; STAMPED build
+**`v0.4.0-19-g38111c9`** deployed; evidence smoke green (healthz all-ok, running stamp = `-19-g38111c9`,
+signed webhook 200, limits `512M/0.5cpu`, logs clean). Feature inert until an operator creates the rule +
+a channel (side-effect-free smoke — no prod rule created).
+
+**Operator action: NONE for the build.** Standing note: rule + channel are operator-created (same as
+`cert_expiry`). Blockers re-verified live: GHCR anon → 401; AMS expiry 2026-07-27 (12 days). Full evidence:
+`decisions.md` D-101.
