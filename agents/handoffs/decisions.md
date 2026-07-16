@@ -8418,3 +8418,55 @@ checks + CodeQL green on the first run (no flake this session).
 remain — 0 HIGH, 1 MEDIUM, 4 LOW); RESUME-PROMPT ▶ START HERE → SESSION-71; `operator-expected.md` (no new action;
 [20] product call carried); `sessions/SESSION-70.md` CLOSED; `sessions/SESSION-71.md` written. Prod rolled forward +
 smoke green. **No operator action required.**
+
+## D-133 — S71 (2026-07-16): SHIPPED — license cluster ([12] log activation failures, [23] tier validation, [24] pubkey err2)
+
+**Open facts.** `origin/main` = `036be09` (S70 docs, PR #135); HEAD == origin/main; `git status` shows only the
+do-not-commit `deploy/config/Caddyfile.prod` dirty. Branch `s71-d133`. Date 2026-07-16 (§2.7 gate still locked until
+2026-07-23). Backlog at open: 5 remain (1 MEDIUM [12], 4 LOW [22]/[23]/[24]/[25]). Scope: the license cluster — all in
+`server/internal/license/license.go`, a coherent one-package PR that clears the **last remaining MEDIUM** ([12]). Each
+re-verified against the code (line refs matched exactly — no drift).
+
+**[12] MEDIUM — `New()` silently discarded `activate()`/file-read errors.** Line 208 blanked the error with `_ = err`
+under a comment claiming it was "record[ed] in logs", but no log call followed; the offline branch discarded `err2`
+with no log at all. **Fix:** `New()` now emits `licenseLog.Load().Warn(...)` on all three fail-open degrade paths
+(invalid inline key; offline file unreadable; offline file bad contents). The pure no-key path still `setFree()`s
+silently (that is the normal default, not a failure). Operator can now distinguish "key rejected" from "no key".
+
+**[23] LOW — unvalidated tier bypasses `CheckProbes`/`CheckBeaconIngest`.** `activate()` stored `Tier(c.Tier)` with no
+validation, and the two checks gated with a negative `t == TierFree` test, so any non-"free" string (a vendor-side tier
+typo like "enterprise_lite", or an absent tier → "") was granted Pro+ access, with `buildEntitlements` mapping absent
+node/retention claims to unlimited. **Fix (two layers, took the fuller CORE since the audit flagged the capacity grant
+too):** (a) `activate()` validates `c.Tier` against the four known tiers and rejects anything else → `New()` falls open
+to Free, `Refresh()` returns 422 INVALID_LICENSE (the validation precedes `m.mu.Lock`, so a failed activation leaves the
+current license intact — verified the `handleActivateLicense` caller at server.go:1961); (b) `CheckProbes`/
+`CheckBeaconIngest` now use positive membership matching the 5 sibling checks. **Confirmed LOW** (per the audit
+verifier): ed25519 signature verification runs BEFORE tier parsing and the vendor private key is not in the repo, so
+this is defense-in-depth against a vendor-side mistake, not an externally exploitable bypass.
+
+**[24] LOW — wrong error variable in the pubkey fallback.** When `PULSE_LICENSE_PUBKEY` decodes cleanly but to the
+wrong length (`err == nil`), the dev-mode `GenerateKey` fallback wrapped `err` (nil) on failure → the opaque "init
+public key: <nil>". **Fix:** wrap `err2` (the real cause). Added a `generateKey` package-var seam (mirrors the existing
+`var now = time.Now`) + `SetGenerateKey` in export_test.go so the otherwise-unreachable failure is testable.
+
+**Verification.** New tests: `s71_d133_test.go` (external: [12] inline + both offline sub-branches via the
+`installCaptureLogger` buffer; [23] activate-rejects-unknown-tier + free capacity + gates refuse; [24] injected
+`GenerateKey` failure asserts `errors.Is(err, sentinel)`), `s71_d133_internal_test.go` (white-box: `CheckProbes`/
+`CheckBeaconIngest` positive-membership on a directly-constructed unknown-tier `Manager`, since the public API no longer
+admits one). Full suite **25/25**; gofmt + vet clean. **Mutation-proven — 6 mutants, all killed:** the 3 [12] Warn
+paths, [23] activate-validation, [23] positive-membership (both gates), [24] err2-wrap.
+
+**Adversarial review (3 lenses — entitlement-semantics / error-logging / regression-tests; 3 agents, 41 tool calls,
+~170k tokens). 0 findings** — a genuinely clean review (finders read the code and each concluded no defect), consistent
+with my independent check that the one behavior change (`Refresh()` now 422s on an unknown-tier key) is an improvement
+with no state corruption and no key leak in the error string.
+
+**Shipped (PR #136, squash `c477660`, merged to `origin/main`).** Prod rolled forward to **`v0.4.0-80-gc477660`**; all
+5 smoke checks green (version stamp, healthz 200, signed webhook 200, limits 512M/0.5cpu, 0 error lines). CI: all 15
+checks + CodeQL green on the first run (no flake).
+
+**Docs at close:** D-133 SHIPPED (this block, prod `v0.4.0-80-gc477660`); CHANGELOG [Unreleased] Fixed;
+`S62-AUDIT-FINDINGS.md` [12]/[23]/[24] ✅ DONE; ROADMAP-V2 §2.31 (**23 resolved: 22 shipped + 1 defer-by-ruling / 2
+remain — 0 HIGH, 0 MEDIUM, 2 LOW: [22]+[25]**; ★ all HIGH+MEDIUM done); RESUME-PROMPT ▶ START HERE → SESSION-72;
+`operator-expected.md` (no new action; [20] product call carried); `sessions/SESSION-71.md` CLOSED;
+`sessions/SESSION-72.md` written. Prod rolled forward + smoke green. **No operator action required.**
