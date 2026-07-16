@@ -10,6 +10,18 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Two AMS apps can host the same stream id without colliding (D-111).** AMS
+  stream identity is `(app, streamId)`, but two collector paths keyed only on the
+  bare `streamId`. (1) The REST-poll deduplicator dropped the second app's
+  `publish_start`/`end` when both apps had a stream with the same id in one dedup
+  window, so that app never appeared in ClickHouse; its key now includes `app`.
+  (2) The live-snapshot aggregator, whose per-stream map is keyed by bare
+  `streamId` (last-write-wins), evicted the *other* app's still-active stream when
+  one ended; the delete is now guarded by pointer equality so only the owning
+  stream removes its entry. (Found by the S48 subsystem audit, findings [1]+[2].)
+
 ### Security
 
 - **Audience analytics is scoped to the requested tenant (D-110).** `GET

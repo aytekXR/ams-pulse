@@ -527,7 +527,7 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.30  Fresh subsystem adversarial audit (16 findings)  [1 shipped; 15 backlog]  ⏳ IN PROGRESS S48 (D-110, 2026-07-16, PR #93)
+### 2.30  Fresh subsystem adversarial audit (16 findings)  [3 shipped; 13 backlog]  ⏳ IN PROGRESS S48→S49 (D-110/D-111, 2026-07-16, PR #93/#95)
 
 With the S44 13-bug backlog closed (§2.29) and the §2.7 CI-promotion gate not yet open (07-16 < 07-23), **S48
 followed the standing re-scan mandate and ran a fresh adversarial audit of the subsystems the S44 audit never
@@ -537,10 +537,18 @@ swept** (collector, amsclient, reports, cluster, clickhouse): 7 finders + refute
   `AudienceAnalytics` omitted the `AND tenant = ?` filter its 3 sibling analytics queries all apply, so
   `?tenant=X` returned every tenant's audience rollups. Re-verified against the code; mutation-proven; prod
   `v0.4.0-37-g5e822e7`.
-- ⏳ **15 findings remain** (5 HIGH, 7 MEDIUM, 3 LOW) → S49+. Notable HIGH: cross-app StreamID collision
-  (dedup + aggregator, one root cause); `amsclient` streamID URL-escaping; scheduled-report period off-by-one;
-  cluster edge-stream status. Each must be re-verified against the code before building. Full list + fixes:
-  `S48-AUDIT-FINDINGS.md`; plan: `sessions/SESSION-49.md`.
+- ✅ **S49 (D-111, PR #95)** — shipped the **cross-app StreamID collision** cluster (findings [1]+[2], one root
+  cause: AMS identity is `(app, streamId)` but two collector paths keyed on the bare `streamId`). (1) `dedup.go`
+  `dedupKey` gained `app` (was dropping the 2nd app's `publish_start`/`end` in one window). (2) `aggregator.go`
+  `snapRemoveStream` now guards its bare-`StreamID` map delete with a pointer-equality check (was evicting the
+  other app's still-active stream). Re-verified against the code (the existing cross-app test passed trivially;
+  guard is the proportionate fix — residual last-write shadowing is documented/self-healing, full rekey would
+  break the alert groupKey lookup); mutation-proven ×2; 3-lens review (4 findings, all refuted); prod
+  `v0.4.0-39-gc08ad6a`.
+- ⏳ **13 findings remain** (3 HIGH, 7 MEDIUM, 3 LOW) → S50+. Notable HIGH: `amsclient` streamID URL-escaping [3];
+  scheduled-report period off-by-one [4] (+ local-vs-UTC `nextCronTime` [15], same file); cluster edge-stream
+  status [5]. Each must be re-verified against the code before building. Full list + fixes:
+  `S48-AUDIT-FINDINGS.md`; plan: `sessions/SESSION-50.md`.
 
 ### 2.29  Security hardening + 13-bug adversarial audit  [S shipped; M–L backlog]  ✅ SECURITY CLUSTER DONE S44 (D-106, 2026-07-15, PR #85)
 

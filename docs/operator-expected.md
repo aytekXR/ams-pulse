@@ -1,4 +1,18 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-110 — SESSION-48)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-111 — SESSION-49)
+
+> **S49 (D-111) needs NO operator action.** This session shipped the top HIGH cluster of the subsystem audit — a
+> **cross-app stream-id collision**. Antmedia stream identity is `(application, streamId)`, but two internal paths
+> only looked at the bare stream id, so if **two of your AMS applications happened to host a stream with the same
+> name on the same node**, (1) the second one's start/stop could be silently dropped from analytics/billing, and
+> (2) the live dashboard could momentarily drop the surviving stream from its per-stream list. Both are fixed and
+> live (`v0.4.0-39-gc08ad6a`). The remaining 13 audit findings are queued for upcoming sessions (recorded in
+> `agents/handoffs/S48-AUDIT-FINDINGS.md`); none needs you.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
+> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none
+> blocks the autonomous work.
+
+## (previous header — D-110, SESSION-48)
 
 > **S48 (D-110) needs NO operator action.** With the S44 audit backlog closed, this session ran a **fresh
 > adversarial audit of the previously un-audited subsystems** and found 16 real issues; it shipped the most

@@ -11,7 +11,45 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-49.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-50.md`)
+
+**Session 2026-07-16 result: D-111 — S49 DONE (PR #95). Shipped the cross-app StreamID collision cluster (S48-audit findings [1]+[2], one root cause).**
+
+**★ S49 took the top HIGH cluster of the S48-audit backlog** (CI-promotion gate still shut, 07-16 < 07-23). AMS
+stream identity is `(app, streamId)`, but two collector paths keyed on the bare `streamId`, so two apps hosting the
+same bare stream id on one node collided:
+- **[1] `collector/dedup.go`** — `dedupKey` omitted `App`, so within one dedup window the 2nd app's
+  `publish_start`/`end` was deduped away and never reached ClickHouse. Fix: add `app` to the key.
+- **[2] `collector/aggregator/aggregator.go`** — `snapshot.Streams` is bare-`StreamID`-keyed (last-write-wins);
+  `snapRemoveStream`'s unconditional delete evicted the *other* app's still-active stream. Fix: pointer-equality
+  guard on the delete.
+
+**★ Re-verify-before-build paid off:** the existing `TestAggregator_CrossAppStreamID_NoCollision` **passed
+trivially** (the ending app never had a `publish_start`, so `snapRemoveStream` never fired). The guard is the
+**proportionate** fix — the residual last-write shadowing (when the *visible* stream ends) is the documented
+last-write-wins behavior and self-heals on the next stats event; a full compound-key rekey would break the
+bare-`stream_id` groupKey lookup in `alert/evaluator.go`, so it's deliberately out of scope. The `Deduplicator` is
+restpoller-private (webhook writes directly to its sink) → adding `App` can't regress cross-source dedup.
+
+Gates: full Go suite **24/24**; **mutation-proven ×2** (remove `app` → dedup unit + restpoller integration tests
+RED; unconditional delete → aggregator test RED, control GREEN); **3-lens adversarial review** (7 agents) → 4
+findings, all refuted; **prod rolled forward to `v0.4.0-39-gc08ad6a`** (was `-37-g5e822e7`; rollback tag
+`pre-d111`; smoke green + `/live/streams` → 200 live). Full evidence: `decisions.md` D-111.
+
+**★ SESSION-50 = keep working the S48-audit backlog: 13 findings remain** (3 HIGH, 7 MEDIUM, 3 LOW) in
+`S48-AUDIT-FINDINGS.md`. Next HIGH cluster options: **[3]** `amsclient` streamID URL-path-escaping (`client.go:475`
+— AMS wire formats live in `pkg/amsclient` per ARCHITECTURE §3); **[4]** scheduled-report period off-by-one
+(`scheduler.go:169` — bundle **[15]** local-vs-UTC `nextCronTime` at `:233`, same file); **[5]** cluster
+edge-stream status ignored (`discovery.go:264`). **Each is an AGENT finding — re-verify against the code before
+building** (S38/S43/S46/S47/S49 lesson — [2] was subtler than its one-line summary); one scope per PR. **§2.7 CI
+promotions unlock ≥ 2026-07-23 — CHECK THE DATE at open; if eligible it's a clean win.**
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
+ledger 07-27) — operator-only. GHCR anon → 401 — operator-only. No new operator action from S49.
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-49.md`)
 
 **Session 2026-07-16 result: D-110 — S48 DONE (PR #93). Ran a FRESH subsystem audit → 16 findings; shipped the most severe (a cross-tenant data-isolation leak).**
 
