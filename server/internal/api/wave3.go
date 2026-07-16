@@ -20,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/pulse-analytics/pulse/server/internal/ssrfguard"
 	"github.com/pulse-analytics/pulse/server/internal/store/meta"
 )
 
@@ -310,6 +311,12 @@ func (s *Server) handleCreateProbe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "INVALID_PROBE", "url is required")
 		return
 	}
+	// D-130 [21]: reject SSRF-prone URLs (disallowed scheme, or an IP-literal host
+	// in a restricted range such as the cloud-metadata endpoint) at the boundary.
+	if err := ssrfguard.ValidateProbeURL(body.URL); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "INVALID_PROBE", err.Error())
+		return
+	}
 	if body.IntervalS < 30 {
 		writeError(w, http.StatusUnprocessableEntity, "INVALID_PROBE", "interval_s must be >= 30")
 		return
@@ -386,6 +393,15 @@ func (s *Server) handleUpdateProbe(w http.ResponseWriter, r *http.Request) {
 	if body.IntervalS != 0 && body.IntervalS < 30 {
 		writeError(w, http.StatusUnprocessableEntity, "INVALID_PROBE", "interval_s must be >= 30")
 		return
+	}
+	// D-130 [21]: validate the URL only when the update supplies one — an omitted
+	// url leaves the stored (already-validated) value untouched. Same SSRF guard
+	// as create; without it the merge below would accept an unvalidated URL.
+	if body.URL != "" {
+		if err := ssrfguard.ValidateProbeURL(body.URL); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "INVALID_PROBE", err.Error())
+			return
+		}
 	}
 	if body.Protocol != "" {
 		switch body.Protocol {

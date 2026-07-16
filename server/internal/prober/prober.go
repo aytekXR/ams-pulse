@@ -34,6 +34,7 @@ import (
 	"io"
 	"log/slog"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -45,6 +46,7 @@ import (
 	"nhooyr.io/websocket/wsjson"
 
 	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/pulse-analytics/pulse/server/internal/ssrfguard"
 )
 
 // segBodyCapBytes is the maximum number of bytes read from a media segment body
@@ -144,10 +146,33 @@ func New(cfg Config, source domain.ProbeConfigSource, store ResultStore, logger 
 		logger:          logger,
 		clock:           clock,
 		entitlementGate: cfg.EntitlementGate,
-		client: &http.Client{
-			// Timeout is overridden per-probe using the context deadline.
-			Timeout: 0,
-		},
+		client:          newGuardedClient(),
+	}
+}
+
+// newGuardedClient builds the prober's HTTP client. It clones the stdlib default
+// transport (preserving its TLS/idle-connection defaults) and swaps in a dialer
+// whose Control hook refuses restricted addresses (ssrfguard.DialControl) — the
+// single choke point that makes every HTTP probe path (HLS, DASH, reachability)
+// and the WebRTC WS handshake (which reuses this client) SSRF-safe, including
+// across HTTP redirects. Timeout stays 0: each probe bounds itself with the
+// per-probe context deadline (D-130 [21]).
+func newGuardedClient() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		Control:   ssrfguard.DialControl,
+	}).DialContext
+	// Disable the inherited ProxyFromEnvironment (D-130 review): with an egress
+	// proxy set, the transport would dial the *proxy* — which passes DialControl —
+	// and the proxy would then resolve and connect to the probe's real host,
+	// bypassing the resolved-IP guard entirely. The prober dials probe targets
+	// directly so the Control hook always sees the true destination address.
+	transport.Proxy = nil
+	return &http.Client{
+		Timeout:   0,
+		Transport: transport,
 	}
 }
 
@@ -783,8 +808,13 @@ func (r *Runner) probeWebRTC(ctx context.Context, p domain.ProbeConfig, result d
 	// including query params, so pass rawURL directly.
 	dialStart := time.Now()
 
+	// Route the WS handshake through the guarded HTTP client so its dial is
+	// vetted by ssrfguard.DialControl (D-130 [21]) — a ws://169.254.169.254/…
+	// signaling URL is refused before any socket connects. The client's Timeout
+	// is 0, which nhooyr requires (it relies on ctx for cancellation).
 	conn, _, err := websocket.Dial(ctx, rawURL, &websocket.DialOptions{
 		CompressionMode: websocket.CompressionDisabled,
+		HTTPClient:      r.client,
 	})
 	if err != nil {
 		errStr := err.Error()
