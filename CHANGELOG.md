@@ -32,6 +32,14 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
   title can no longer inject email headers via CR/LF. (4) The Telegram dashboard link is now
   attribute-escaped (defense-in-depth).
 
+- **Synthetic RTMP probe hardened against hostile servers (D-128).** The RTMP probe
+  reassembles chunks from the monitored server, which may be untrusted. Two
+  memory-exhaustion vectors are closed: the chunk demuxer now caps the number of
+  distinct chunk streams it tracks (an attacker could otherwise open all 65,536 and
+  buffer ~4 GB), and it no longer makes a throwaway per-message copy of
+  silently-ignored control messages (which a hostile server could stream at 64 KiB
+  each to drive sustained allocation). (Found by the S62 subsystem audit, finding
+  [13]; the second vector was surfaced by an adversarial review of the fix.)
 - **Synthetic DASH probe hardened against hostile manifests (D-127).** The DASH
   probe fetches and parses an MPD manifest from the monitored server, which may be
   untrusted. Three memory-exhaustion vectors are closed, any of which a single

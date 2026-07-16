@@ -11,7 +11,46 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-66.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-67.md`)
+
+**Session 2026-07-16 result: D-128 — S66 shipped the prober RTMP DoS cluster (S62 finding [13] + a review-found sink). ★ Prober subsystem fully swept.**
+
+**★ S66** shipped the **prober RTMP DoS** cluster in `server/internal/prober/probe_rtmp.go` (the RTMP probe
+reassembles chunks from an UNTRUSTED server): [13] `readAMF0Command` now caps distinct CSID states at
+`maxCSIDStates=256` (was unbounded → 65,536 × 64 KiB ≈ 4.3 GB heap → OOM). **A 4-lens adversarial review confirmed 2
+findings, 0 refuted:** (a) the demuxer copied EVERY completed message (64 KiB make+copy) before dispatch, even
+silently-skipped control types → per-message GC-pressure DoS within the cap — **fixed** (reads `st.buf` in place); (b)
+a `uint16`-truncation NIT on the operator write path — **declined + logged**. **Re-verification:** the ledger's
+off-by-one `>`→`>=` was **declined** (once the count is capped the exact-64-KiB case is bounded to 16 MiB; `>` matches
+the documented "up to 64 KB" inclusive cap; the review's off-by-one lens agreed). Full suite 24/24; mutation-proven ×2.
+**Prod `v0.4.0-70-g5a070cc`.** Evidence: `decisions.md` D-128.
+
+**No operator action from S66** (internal hardening).
+
+**★ SESSION-67 = continue the S62 backlog: 15 remain (0 HIGH, 11 MEDIUM, 4 LOW)** in `S62-AUDIT-FINDINGS.md`.
+**Suggested next scope: the alert-evaluator cluster ([7]+[8]+[9] MEDIUM, all in `server/internal/alert/evaluator.go`)**
+— three correctness bugs in the alert evaluation loop, one file:
+- **[7] `evaluator.go:757`** `evalNodeMetric` reads `n.CPUPCT`/`MemPCT`/`DiskPCT` WITHOUT the D-088 presence guards
+  (`CPUPCTReported` etc.). AMS 3.x nodes never emit these → they sit at 0.0 with Reported=false, so a `node_cpu lt 50`
+  rule fires a FALSE alert every tick. `evalAnomalyNodes` (wave3.go:281-296) already has the exact guard to mirror.
+- **[8] `evalStreamOffline`** hardcodes `value=0.0` and bypasses `compare` → the operator's threshold is silently
+  ignored and the notification value is wrong. **RE-VERIFY:** is this intended (offline = binary) or a real bug? Take
+  the verified CORE.
+- **[9] `evalLicenseExpiry`** returns nil for a perpetual/no-key license → a previously-fired expiry alert is
+  permanently stuck in 'firing' (never resolves). **RE-VERIFY** the resolve path.
+- **Then:** anomaly ([18] `scopeJSON` raw-concat without escaping the ID fields → wrong stream attribution; hysteresis)
+  → license → api. **⚠ [20] audit-log admin gate — RE-VERIFY vs D-105 FIRST** (likely DEFER).
+
+**Each is an AGENT finding — re-verify against the code before building** (take the verified core; trace the existing
+evaluator tests first — S49). **§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE at open.**
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
+ledger 07-27) — operator-only. GHCR anon → 401 — operator-only. No blocking operator action from S66. The S63 email
+STARTTLS behavior note remains in `operator-expected.md` (informational).
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-66.md`)
 
 **Session 2026-07-16 result: D-127 — S65 shipped the prober DASH untrusted-input cluster (S62 findings [3]/[4], the last 2 HIGH). ★ ALL 6 S62 HIGH now shipped.**
 

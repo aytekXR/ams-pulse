@@ -1,3 +1,17 @@
+> ## ✅ SESSION-66 CLOSED (2026-07-16, D-128) — PR #126 merged `5a070cc`, prod `v0.4.0-70-g5a070cc` (smoke green)
+> **Shipped:** prober RTMP DoS cluster ([13] + a review-found sink) — completes the prober subsystem's untrusted-input
+> hardening. [13] `readAMF0Command` now caps distinct CSID states at `maxCSIDStates=256` (was unbounded → 65,536 ×
+> 64 KiB ≈ 4.3 GB heap → OOM). **A 4-lens adversarial review (6 agents, refute-by-default) confirmed 2 findings, 0
+> refuted:** (a) the demuxer copied EVERY completed message (64 KiB make+copy) before dispatch, even silently-skipped
+> control types → per-message GC-pressure DoS within the cap — **fixed** (reads `st.buf` in place); (b) a NIT
+> (`amf0EncodeString` uint16 truncation on the operator write path) — **declined + logged**. **Re-verification call:**
+> the ledger's off-by-one `>`→`>=` was **declined** — once the state COUNT is capped the exact-64-KiB case is bounded to
+> 16 MiB, so it carries no DoS benefit and `>` matches the documented "up to 64 KB" inclusive cap (the review's
+> off-by-one lens agreed). New `probe_rtmp_s66_test.go` (mutation-proven ×2 incl. a `runtime.MemStats` byte-budget
+> test). Full suite 24/24; gofmt + vet clean. **Ledger:** [13] ✅ DONE; **15 remain (0 HIGH, 11 MEDIUM, 4 LOW); prober
+> subsystem fully swept.** **No operator action.** **Next (SESSION-67):** alert-evaluator cluster ([7] D-088 presence
+> guards + stream_offline compare + license_expiry stuck-firing) — see `sessions/SESSION-67.md`.
+
 # SESSION-66 — planned at S65 close (D-127)
 
 > Written by SESSION-65 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
