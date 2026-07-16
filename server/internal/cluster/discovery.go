@@ -261,7 +261,12 @@ func (d *Discovery) IsEdgeStream(streamID string) bool {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	for _, n := range d.nodes {
-		if n.Role == "edge" && n.ActiveStreams > 0 {
+		// Exclude edges marked "down": poll() sets Status="down" on a stale node
+		// but never clears its last-polled ActiveStreams, so a crashed edge would
+		// otherwise keep this true forever and permanently suppress origin viewer
+		// counts (the aggregator skips origin viewer_count when IsEdgeStream is
+		// true). A "degraded" edge is still up and serving, so it still counts.
+		if n.Role == "edge" && n.Status != "down" && n.ActiveStreams > 0 {
 			return true
 		}
 	}
