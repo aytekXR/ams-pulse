@@ -1,3 +1,16 @@
+> ## ✅ SESSION-64 CLOSED (2026-07-16, D-126) — PR #122 merged `fede961`, prod `v0.4.0-66-gfede961` (smoke green)
+> **Shipped:** reports_wave2 post-mutation re-fetch cluster — [6] HIGH `handleUpdateReportSchedule` (DROPPED the
+> redundant re-fetch: row is authoritative, no `updated_at` in the response → structurally eliminates the nil-deref +
+> a DB round-trip), [5] HIGH `handleUpdateTenant` (KEPT the re-fetch — `updated_at` is stamped inside the store and
+> not returned in row — but GUARDED it, mirroring `handleUpdateProbe`), [19] MEDIUM (SPLIT transient-error→500 from
+> missing-row→404 in the three existence checks). **Verify-at-open confirmed all line numbers + the store behavior**
+> that decided drop-vs-guard per handler. New `reports_wave2_s64_internal_test.go` (deterministic [19] proof via a
+> pre-canceled request ctx — 500 not 404, mutation-proven) + `reports_wave2_s64_test.go` (update responses render
+> fresh values; genuine missing row still 404; [6] non-vacuity checked). Full suite 24/24; gofmt + vet clean;
+> self-review (no auth/contract/semantic surface). **Ledger:** [5]/[6]/[19] ✅ DONE; **18 S62 findings remain**
+> (2 HIGH, 12 MEDIUM, 4 LOW). **No operator action.** **Next (SESSION-65):** prober untrusted-input cluster (the 2
+> remaining HIGH — [3] MPD `io.LimitReader`, [4] printf-format) — see `sessions/SESSION-65.md`.
+
 # SESSION-64 — planned at S63 close (D-125)
 
 > Written by SESSION-63 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS

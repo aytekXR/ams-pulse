@@ -11,7 +11,47 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-64.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-65.md`)
+
+**Session 2026-07-16 result: D-126 — S64 shipped the reports_wave2 post-mutation re-fetch cluster (S62 findings [5]/[6]/[19]).**
+
+**★ S64** continued the S62 backlog HIGH-first with the **reports_wave2 re-fetch cluster** — three findings, one file
+(`server/internal/api/reports_wave2.go`), one root anti-pattern (post-mutation re-fetch swallowed the store error with
+`_` and dereferenced a possibly-nil pointer; the initial existence check collapsed a transient store error into a 404).
+**Re-verified each vs the code and took the verified CORE per handler:** [6] HIGH `handleUpdateReportSchedule` —
+**DROPPED** the redundant re-fetch (row already holds every field the response renders; no `updated_at` in the
+response) → structurally eliminates the nil-deref + a DB round-trip; [5] HIGH `handleUpdateTenant` — **KEPT** the
+re-fetch (`updated_at` is stamped inside `UpdateTenant` and NOT returned in row, and `tenantToAPI` emits it) but
+**GUARDED** it, mirroring `handleUpdateProbe`; [19] MEDIUM — **SPLIT** transient-error(→500 INTERNAL_ERROR) from
+missing-row(→404 NOT_FOUND) in all three existence checks. Full suite 24/24; [19] **deterministically mutation-proven**
+via an internal test that drives a pre-canceled request ctx (bypasses auth → `database/sql` returns `ctx.Err()`) →
+500 not 404; self-review (no auth/contract/semantic surface). **Prod `v0.4.0-66-gfede961`.** Evidence: `decisions.md`
+D-126.
+
+**No operator action from S64** (internal robustness — no config/contract change).
+
+**★ SESSION-65 = continue the S62 backlog HIGH-first: 18 remain (2 HIGH, 12 MEDIUM, 4 LOW)** in
+`S62-AUDIT-FINDINGS.md`. **Suggested next scope: the prober untrusted-input cluster** — the 2 remaining HIGH, both in
+the DASH/MPD prober path (`server/internal/prober/`):
+- **[3] HIGH** MPD prober reads the manifest response body **unbounded** into memory — an attacker-controlled (or
+  hostile) manifest endpoint can OOM the prober. Fix: cap with `io.LimitReader` (re-verify the exact file/func +
+  choose a sane cap; mirror any existing capped reads elsewhere in the prober).
+- **[4] HIGH** attacker-controlled string used as a **printf format** → wrong-arg/`%!(` corruption or a giant
+  allocation. Fix: use a constant format with `%s` (`fmt.Sprintf("%s", v)`, not `fmt.Sprintf(v)`). Re-verify the sink.
+- May bundle the same-subsystem **[MEDIUM] RTMP CSID map cap** if it's a clean fit; otherwise keep it for the
+  alert-evaluator/anomaly clusters that follow. **⚠ [20] audit-log admin gate — RE-VERIFY vs D-105 FIRST** (likely
+  DEFER as the deliberate "reads-open" model, or escalate as an operator ruling — do NOT "fix" a decision).
+
+**Each is an AGENT finding — re-verify against the code before building** (take the verified core; S63 downgraded [11],
+S64 dropped-vs-guarded per handler). **§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE at open.**
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
+ledger 07-27) — operator-only. GHCR anon → 401 — operator-only. No blocking operator action from S64. The S63 email
+STARTTLS behavior note remains in `operator-expected.md` (informational).
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-64.md`)
 
 **Session 2026-07-16 result: D-125 — S63 shipped the alert-channels security cluster (S62 findings [1]/[2]/[10]/[11]).**
 

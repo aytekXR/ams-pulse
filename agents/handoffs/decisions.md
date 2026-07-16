@@ -7984,3 +7984,49 @@ one file/one pattern), then **prober untrusted-input** (MPD LimitReader + printf
 **Docs at close:** D-125 SHIPPED (this block); CHANGELOG Security; `S62-AUDIT-FINDINGS.md` [1]/[2]/[10]/[11] ✅ DONE;
 ROADMAP-V2 §2.31 (4 shipped); RESUME-PROMPT ▶ START HERE → SESSION-64; `operator-expected.md` refreshed (STARTTLS
 behavior note); `sessions/SESSION-63.md` CLOSED; `sessions/SESSION-64.md` written.
+
+## D-126 — S64 (2026-07-16): SHIPPED — reports_wave2 post-mutation re-fetch cluster (S62 [5]+[6] HIGH, [19] MEDIUM)
+
+**Code:** PR #122 `fede961` (merged, 15/15 checks). **Prod rolled forward to `v0.4.0-66-gfede961`** (rollback anchor
+`pulse-prod-pulse:pre-d126` = `v0.4.0-64-g5172150`); smoke green (healthz 200, version stamp confirmed, signed
+webhook 200, limits 512M/0.5cpu, logs clean). Close-docs in a follow-up docs-only PR.
+
+**S64 OPEN facts (recorded early per protocol):** origin/main at `935efe0` (D-125 close-docs PR #121; code shipped
+in #120 `5172150`). Prod `v0.4.0-64-g5172150` (S63 alert-channels). Tree carries only the known `Caddyfile.prod`
+delta. Branch `s64-d126`. Full suite baseline green pre-change.
+
+**Scope — one file (`server/internal/api/reports_wave2.go`), one root anti-pattern** (post-mutation re-fetch swallows
+the store error with `_` and dereferences a possibly-nil pointer; sibling `err != nil || row == nil` collapses a
+transient store error into a 404). **Re-verified each finding against the code before deciding the fix** (lesson 1 —
+take the verified CORE, incl. NARROWER/BROADER per handler):
+
+- **[6] HIGH `handleUpdateReportSchedule:191` — DROP the re-fetch (BROADER than the audit's guard).** Verified
+  `reportScheduleToAPI` emits **no** `updated_at`, and `row` already holds every field it renders (id/cron/format/
+  scope/created_at/tenant_mapping/whitelabel_header/last_run_at/next_run_at — all set before the write). So the
+  re-fetch was pure redundancy; rendering `reportScheduleToAPI(row)` **structurally eliminates** the nil-deref (no
+  `*updated` at all) AND removes a DB round-trip + the concurrent-DELETE race window. Stronger than the audit's
+  suggested guard. Mirrors the create handler (line 141 uses the value in hand).
+- **[5] HIGH `handleUpdateTenant:345` — KEEP the re-fetch, ADD the guard.** Verified the re-fetch is **load-bearing**
+  here: `tenantToAPI` DOES emit `updated_at`, which `UpdateTenant` stamps *inside* the store (`t.UpdatedAt = nowMS()`)
+  and does **not** return — so `row` lacks the fresh value; only a re-fetch yields the DB-authoritative `updated_at`.
+  Added `if err != nil || updated == nil { writeError(500, INTERNAL_ERROR, "failed to fetch updated tenant") }`,
+  mirroring the in-repo reference `handleUpdateProbe` (wave3.go:429-433). **Honest limitation:** with a concrete
+  `*meta.Store` (no interface seam) the guard's failure branch is not black-box reproducible — the DB works for the
+  whole handler; closing it breaks auth first. The reference guard ships **untested** for the same reason; this one
+  matches it and is covered by the happy-path test + code review. (Considered making `UpdateTenant` return the row to
+  eliminate the guard, but that expands the store API / meta tests beyond the one-file CORE — deferred as scope creep.)
+- **[19] MEDIUM `:154/:297/:313` — SPLIT `err`(→500 INTERNAL_ERROR) from `row==nil`(→404 NOT_FOUND)** in the three
+  initial existence checks (`handleUpdateReportSchedule`, `handleGetTenant`, `handleUpdateTenant`). A transient store
+  error (DB down, ctx deadline) was reported to clients as a definitive 404 → SDK/UI cache invalidators mark an
+  existing resource permanently absent. **Deterministically mutation-proven** via an internal (`package api`) test
+  that calls the handler directly with a pre-canceled context (bypasses auth; `database/sql` returns `ctx.Err()`
+  before touching the driver) → asserts **500**, not 404. Positive control: a genuine missing row (real store,
+  `ErrNoRows` → `(nil,nil)`) still yields **404**.
+
+**Review:** correctness/robustness fix, no auth/contract/semantic-surface change; [6] drop verified byte-identical
+response. Clean mutation proof on [19] + happy-path proofs on [5]/[6] → careful self-review (lesson 3).
+
+**Docs at close:** D-126 SHIPPED (this block, prod `v0.4.0-66-gfede961`); CHANGELOG Fixed; `S62-AUDIT-FINDINGS.md`
+[5]/[6]/[19] ✅ DONE; ROADMAP-V2 §2.31 (7 shipped / 18 remain); RESUME-PROMPT ▶ START HERE → SESSION-65;
+`operator-expected.md` refreshed (no operator action — internal robustness); `sessions/SESSION-64.md` CLOSED;
+`sessions/SESSION-65.md` written (prober untrusted-input cluster). Prod rolled forward + smoke green.
