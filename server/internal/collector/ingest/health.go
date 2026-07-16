@@ -169,7 +169,12 @@ func (h *HealthTracker) OnViewerSession(_ domain.ViewerSession) {}
 func (h *HealthTracker) onIngestStats(ev domain.ServerEvent) {
 	key := ev.NodeID + "/" + ev.App + "/" + ev.StreamID
 	now := time.UnixMilli(ev.TS).UTC()
-	if now.IsZero() {
+	// Guard a missing/zero timestamp against the INT64 field, not now.IsZero():
+	// time.UnixMilli(0) is 1970-01-01 UTC, which is NOT the Go zero time, so
+	// now.IsZero() never fires for ev.TS==0. That left LastSeen stamped at 1970,
+	// and the next SweepStale immediately evicted the publisher with a false
+	// "source gone" warning. Fall back to wall-clock time for a non-positive TS.
+	if ev.TS <= 0 {
 		now = time.Now()
 	}
 

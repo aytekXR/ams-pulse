@@ -423,3 +423,42 @@ func countPerStreamInfoLines(s string) int {
 	}
 	return n
 }
+
+// TestIngestHealth_ZeroTS_NotFalselyEvicted is the S53 regression test (D-115)
+// for S48 finding [7]. An ingest_stats event with TS==0 (a zero-value
+// domain.ServerEvent, or any collector path that omits the timestamp) must not
+// stamp LastSeen at 1970 and get immediately swept as "source gone".
+//
+// time.UnixMilli(0).UTC().IsZero() is false (it's 1970-01-01, not the Go zero
+// time), so the old `if now.IsZero()` guard never fired; the fix checks
+// `if ev.TS <= 0` and falls back to time.Now().
+func TestIngestHealth_ZeroTS_NotFalselyEvicted(t *testing.T) {
+	tracker := New(Config{SourceGoneTimeout: time.Minute}, nil)
+
+	tracker.OnServerEvent(domain.ServerEvent{
+		Type:     domain.EventIngestStats,
+		TS:       0, // missing/zero timestamp
+		NodeID:   "n1",
+		App:      "live",
+		StreamID: "zerots",
+		Data: map[string]any{
+			"bitrate_kbps": float64(2500),
+			"fps":          float64(30),
+		},
+	})
+
+	// Non-vacuous: the publisher must actually be tracked.
+	if _, ok := tracker.GetPublisher("n1", "live", "zerots"); !ok {
+		t.Fatal("publisher not tracked after ingest_stats with TS==0")
+	}
+
+	// With the fix LastSeen ≈ now, so a sweep with a 1-minute timeout must NOT
+	// evict it. With the bug LastSeen==1970 → evicted → returns 1.
+	if stale := tracker.SweepStale(); stale != 0 {
+		t.Fatalf("SweepStale evicted %d publisher(s) after a TS==0 event; want 0 "+
+			"(time.UnixMilli(0) is 1970, not the Go zero time — the guard must check ev.TS<=0)", stale)
+	}
+	if _, ok := tracker.GetPublisher("n1", "live", "zerots"); !ok {
+		t.Fatal("publisher was falsely evicted as 'source gone' after a TS==0 event")
+	}
+}
