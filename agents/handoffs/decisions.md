@@ -7226,3 +7226,47 @@ product-viability AND candidate-status before building). §2.7 CI-promotion date
 **Docs at close:** D-109 CLOSED (this block); CHANGELOG `[Unreleased]` Security+Fixed; ROADMAP-V2 §2.29 marked
 backlog CLOSED; RESUME-PROMPT ▶ START HERE → SESSION-48; `operator-expected.md` refreshed (no new item);
 `sessions/SESSION-48.md` written (re-scan mandate, no queued findings).
+
+---
+
+## D-110 — S48 (2026-07-16): CLOSED — fresh subsystem audit (16 findings) + shipped the tenant-isolation leak (PR #93)
+
+**Context.** The S44 audit backlog was closed at D-109, so SESSION-48 followed the standing re-scan mandate. The
+CI-promotion date gate (§2.7) opens ≥ 2026-07-23 (today 07-16, not eligible), so the highest-leverage move was a
+**fresh adversarial audit of the subsystems the S44 audit never swept** (collector, amsclient, reports, cluster,
+clickhouse). The audit (7 finders + refute-by-default verifiers, 27 agents) returned **16 CONFIRMED findings
+(6 HIGH, 7 MEDIUM, 3 LOW), 4 refuted** — reaffirming that un-audited code holds real work. All 16 are recorded in
+`agents/handoffs/S48-AUDIT-FINDINGS.md` (with fix + mutation notes) for SESSION-49+ to work through in clusters.
+
+**Shipped this session: the single most severe finding — a cross-tenant data-isolation leak.**
+`GET /api/v1/analytics/audience?tenant=X` returned **every tenant's** audience rollups: `Service.AudienceAnalytics`
+(`query.go`) built its WHERE with the app/stream filters but **omitted the `AND tenant = ?` clause** that its three
+sibling analytics queries (`GeoBreakdown`/`DeviceBreakdown`/`QoeSummary`) all apply. **Re-verified against the
+code** before building: `AudienceParams` has a `Tenant` field, the `rollup_audience_1h/1d` tables carry a `tenant`
+column (part of their ORDER BY key), and the three siblings filter on it while Audience did not. **Scoped check:**
+`IngestTimeseries` is NOT the same class (no `Tenant` param; `server_events` has no tenant column — stream/app/node
+scoped by design), so Audience was the sole gap. **Fix:** add the identical `if p.Tenant != "" { where += " AND
+tenant = ?" }` block (parameterized; no behavior change when no tenant is supplied, matching the siblings).
+
+**Verification.** gofmt/vet clean; **full Go suite 24/24**. New `s48_tenant_isolation_test.go` (two tests, via the
+`fakeConn.capturedArgs` seam) asserts the tenant value reaches the query args and composes with app/stream;
+**mutation-proven RED** (a Python-targeted neuter of *only* Audience's block — anchored on the unique
+`rollup_audience` comment so the three sibling filters stay intact — turns both RED). A defensive scan confirmed no
+other analytics query omits the tenant filter on a tenant-bearing table. The fix is mechanical (mirrors 3 proven
+siblings) and was verified against the code + the audit's refute-by-default pass; no separate review workflow.
+
+**Prod: rolled forward** (server *source* changed) — STAMPED build, rollback tag `pre-d110`, backup rc=0. New prod
+stamp: **`v0.4.0-37-g5e822e7`** (was `v0.4.0-35-g56167eb`). Smoke: `/healthz` all-ok; `pulse version` =
+`v0.4.0-37-g5e822e7`; signed webhook → 200; logs clean; **live functional:** `GET /analytics/audience?tenant=…` →
+**200** (the tenant filter is applied, query executes cleanly).
+
+**Operator action required: NONE.** Carried items unchanged (AMS trial-expiry doc discrepancy; GHCR 401).
+
+**★ Remaining S48-audit backlog: 15 findings (5 HIGH, 7 MEDIUM, 3 LOW)** in `S48-AUDIT-FINDINGS.md`. Notable HIGH:
+cross-app StreamID collision in dedup + aggregator (2 findings, one root cause); `amsclient` streamID not
+URL-escaped; scheduled-report period off-by-one; cluster edge-stream status ignored. SESSION-49 works the next
+cluster (re-verify each against the code first — this is an agent-produced list).
+
+**Docs at close:** D-110 CLOSED (this block); CHANGELOG `[Unreleased]` Security; ROADMAP-V2 §2.30 added;
+RESUME-PROMPT ▶ START HERE → SESSION-49; `operator-expected.md` refreshed (no new item); `sessions/SESSION-48.md`
+CLOSED; `sessions/SESSION-49.md` + `S48-AUDIT-FINDINGS.md` (finding marked ✅) carry the remaining 15.

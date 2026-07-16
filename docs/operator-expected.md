@@ -1,4 +1,16 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-109 — SESSION-47)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-110 — SESSION-48)
+
+> **S48 (D-110) needs NO operator action.** With the S44 audit backlog closed, this session ran a **fresh
+> adversarial audit of the previously un-audited subsystems** and found 16 real issues; it shipped the most
+> severe — a **cross-tenant data leak** where the audience-analytics endpoint returned every tenant's data
+> instead of the requested one. That is fixed and live (`v0.4.0-37-g5e822e7`). The remaining 15 findings are
+> queued for upcoming sessions (recorded in `agents/handoffs/S48-AUDIT-FINDINGS.md`); none needs you.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
+> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none
+> blocks the autonomous work.
+
+## (previous header — D-109, SESSION-47)
 
 > **S47 (D-109) needs NO operator action.** It shipped the **final 5 findings of the S44 audit plus a
 > password-hashing fix** — with that, **the entire 13-bug audit backlog is closed**. Highlights: a

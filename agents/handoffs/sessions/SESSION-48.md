@@ -1,5 +1,11 @@
 # SESSION-48 — planned at S47 close (D-109)
 
+> **✅ CLOSED 2026-07-16 (D-110, PR #93).** Took candidate #2: ran a fresh adversarial audit of the un-swept
+> subsystems → **16 CONFIRMED findings** (`agents/handoffs/S48-AUDIT-FINDINGS.md`). Shipped the most severe — a
+> cross-tenant data-isolation leak in `AudienceAnalytics` (D-110, prod `v0.4.0-37-g5e822e7`). **15 findings
+> remain** for SESSION-49+. Full evidence: `decisions.md` D-110. (CI-promotion gate was not yet open — 07-16 <
+> 07-23.)
+
 > Written by SESSION-47 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > Read `RESUME-PROMPT.md` + `ROADMAP-V2.md` §2 + `decisions.md` D-106…D-109 before dispatching.

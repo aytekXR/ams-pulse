@@ -12,6 +12,12 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Security
 
+- **Audience analytics is scoped to the requested tenant (D-110).** `GET
+  /api/v1/analytics/audience?tenant=X` returned every tenant's audience rollups
+  because the query omitted the `tenant` filter that the geo, device and QoE
+  analytics queries already applied — a cross-tenant data-isolation leak. The
+  audience query now filters by tenant like its siblings. (Found by a fresh
+  adversarial audit of previously un-audited subsystems.)
 - **Passwords are never hashed with a fast digest (D-109, CWE-916).** The password
   hasher used bcrypt but fell back to a single SHA-256 (a crackable, GPU-friendly
   digest) if bcrypt errored — which happens for passwords longer than 72 bytes.

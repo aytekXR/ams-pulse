@@ -527,6 +527,21 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.30  Fresh subsystem adversarial audit (16 findings)  [1 shipped; 15 backlog]  ⏳ IN PROGRESS S48 (D-110, 2026-07-16, PR #93)
+
+With the S44 13-bug backlog closed (§2.29) and the §2.7 CI-promotion gate not yet open (07-16 < 07-23), **S48
+followed the standing re-scan mandate and ran a fresh adversarial audit of the subsystems the S44 audit never
+swept** (collector, amsclient, reports, cluster, clickhouse): 7 finders + refute-by-default verifiers (27 agents)
+→ **16 CONFIRMED (6 HIGH, 7 MEDIUM, 3 LOW), 4 refuted.** All recorded in `agents/handoffs/S48-AUDIT-FINDINGS.md`.
+- ✅ **S48 (D-110, PR #93)** — shipped the most severe: a **cross-tenant data-isolation leak** —
+  `AudienceAnalytics` omitted the `AND tenant = ?` filter its 3 sibling analytics queries all apply, so
+  `?tenant=X` returned every tenant's audience rollups. Re-verified against the code; mutation-proven; prod
+  `v0.4.0-37-g5e822e7`.
+- ⏳ **15 findings remain** (5 HIGH, 7 MEDIUM, 3 LOW) → S49+. Notable HIGH: cross-app StreamID collision
+  (dedup + aggregator, one root cause); `amsclient` streamID URL-escaping; scheduled-report period off-by-one;
+  cluster edge-stream status. Each must be re-verified against the code before building. Full list + fixes:
+  `S48-AUDIT-FINDINGS.md`; plan: `sessions/SESSION-49.md`.
+
 ### 2.29  Security hardening + 13-bug adversarial audit  [S shipped; M–L backlog]  ✅ SECURITY CLUSTER DONE S44 (D-106, 2026-07-15, PR #85)
 
 **★★ S44 ran an 8-finder adversarial audit → 13 CONFIRMED defects, 0 refuted** (the "backlog is thinning"
