@@ -263,11 +263,17 @@ func continueWebRTCICE(
 				if o := time.Duration(testRTPStatsHoldOverride.Load()); o > 0 {
 					hold = o
 				}
+				// time.NewTimer + defer Stop so an early ctx cancellation releases the
+				// timer from the runtime heap immediately, instead of leaking it for the
+				// full hold as an abandoned time.After would (D-134/S72 [25]). This block
+				// returns on both select arms, so the defer runs once, right after.
+				holdTimer := time.NewTimer(hold)
+				defer holdTimer.Stop()
 				select {
 				case <-ctx.Done():
 					// ctx expired during hold — stats absent, but ICE was connected.
 					return result
-				case <-time.After(hold):
+				case <-holdTimer.C:
 					// Hold complete; collect stats.
 				}
 				result = collectWebRTCStats(pc, ssrcCh, result)
