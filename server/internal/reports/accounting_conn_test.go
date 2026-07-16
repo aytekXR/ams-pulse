@@ -286,6 +286,10 @@ func TestAcctConn_ComputeUsage_DayMode_HappyPath(t *testing.T) {
 	if r.EgressMethod != reports.EgressMethodBitrateXWatchTime {
 		t.Errorf("EgressMethod: got %q, want %q", r.EgressMethod, reports.EgressMethodBitrateXWatchTime)
 	}
+	// VD-41 (audit [10]): every row used the bitrate model → report-level = bitrate.
+	if rep.EgressMethod != reports.EgressMethodBitrateXWatchTime {
+		t.Errorf("report EgressMethod: got %q, want %q", rep.EgressMethod, reports.EgressMethodBitrateXWatchTime)
+	}
 }
 
 // ─── ComputeUsage — egress_bytes > 0 → AMSRestStats method (VD-37) ───────────
@@ -322,6 +326,43 @@ func TestAcctConn_ComputeUsage_DayMode_EgressBytes(t *testing.T) {
 	if r.RecordingGB != 0.5 {
 		t.Errorf("RecordingGB: got %f, want 0.5", r.RecordingGB)
 	}
+	// VD-41 (audit [10]): the only row used byte counters → report-level =
+	// byte-counter. Before the fix this was hardcoded to bitrate_x_watch_time.
+	if rep.EgressMethod != reports.EgressMethodAMSRestStatsByteCounter {
+		t.Errorf("report EgressMethod: got %q, want %q", rep.EgressMethod, reports.EgressMethodAMSRestStatsByteCounter)
+	}
+}
+
+// ─── ComputeUsage — mixed egress methods → report-level "mixed" (VD-41, audit [10]) ─
+
+func TestAcctConn_ComputeUsage_DayMode_MixedEgressMethod(t *testing.T) {
+	// Two streams in the daily path: s1 has no byte-counter data (egress_bytes=0 →
+	// bitrate model), s2 has byte-counter data (egress_bytes>0 → byte-counter). The
+	// aggregate Totals.EgressGB blends both, so the report-level disclosure must be
+	// "mixed" — neither pure label describes the report honestly.
+	bitrateRow := []any{"live", "s1", float64(100.0), uint64(0), uint64(0)}
+	byteRow := []any{"live", "s2", float64(50.0), uint64(1_000_000_000), uint64(0)}
+
+	conn := newAcctFakeConn().
+		withQuery(acctNewFakeRows(), nil).                   // concurrencyPeaks: empty
+		withQuery(acctNewFakeRows(bitrateRow, byteRow), nil) // main usage: 2 rows
+
+	acct := reports.NewAccountant(conn, nil)
+	rep, err := acct.ComputeUsage(context.Background(), reports.UsageParams{
+		From: time.Now().AddDate(0, -1, 0),
+		To:   time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rep.Rows) != 2 {
+		t.Fatalf("want 2 rows, got %d", len(rep.Rows))
+	}
+	// Both methods contributed → "mixed". Before VD-41 this field was hardcoded to
+	// bitrate_x_watch_time regardless of the rows, falsely disclosing pure bitrate.
+	if rep.EgressMethod != reports.EgressMethodMixed {
+		t.Errorf("report EgressMethod: got %q, want %q", rep.EgressMethod, reports.EgressMethodMixed)
+	}
 }
 
 // ─── ComputeUsage — hour mode ─────────────────────────────────────────────────
@@ -353,6 +394,10 @@ func TestAcctConn_ComputeUsage_HourMode(t *testing.T) {
 	// hour mode always uses bitrate_x_watch_time
 	if r.EgressMethod != reports.EgressMethodBitrateXWatchTime {
 		t.Errorf("EgressMethod: got %q, want bitrate_x_watch_time", r.EgressMethod)
+	}
+	// VD-41 (audit [10]): hour path never takes the bytes branch → report-level = bitrate.
+	if rep.EgressMethod != reports.EgressMethodBitrateXWatchTime {
+		t.Errorf("report EgressMethod: got %q, want bitrate_x_watch_time", rep.EgressMethod)
 	}
 }
 
@@ -427,6 +472,46 @@ func TestAcctConn_ComputeUsage_TenantFilter(t *testing.T) {
 	// Only the tenant-a-stream row should survive the filter.
 	if len(rep.Rows) != 1 {
 		t.Errorf("want 1 row after tenant filter, got %d", len(rep.Rows))
+	}
+}
+
+// ─── ComputeUsage — tenant-excluded byte-counter row must not skew disclosure ─
+
+// Regression guard (VD-41 / audit [10]): the egress-method trackers must count
+// ONLY rows that survive the tenant filter. The excluded row here carries
+// byte-counter data (egress_bytes>0); the surviving row is bitrate. If a future
+// change moved the sawByteCounter/sawBitrate assignments before the tenant
+// `continue`, the excluded row would leak into the report as a false "mixed"
+// disclosure — this test pins the correct placement.
+func TestAcctConn_ComputeUsage_TenantFilter_ExcludedByteCounterRow_NotMixed(t *testing.T) {
+	included := []any{"live", "tenant-a-stream", float64(10.0), uint64(0), uint64(0)}          // bitrate, kept
+	excluded := []any{"live", "other-stream", float64(20.0), uint64(1_000_000_000), uint64(0)} // byte-counter, filtered out
+
+	conn := newAcctFakeConn().
+		withQuery(acctNewFakeRows(), nil). // concurrencyPeaks empty
+		withQuery(acctNewFakeRows(included, excluded), nil)
+
+	tm := reports.NewTenantMatcher([]meta.TenantRow{
+		{ID: "1", Name: "tenant-a", StreamPattern: "tenant-a-*"},
+	})
+	acct := reports.NewAccountant(conn, nil)
+	acct.SetTenantMatcher(tm)
+
+	rep, err := acct.ComputeUsage(context.Background(), reports.UsageParams{
+		From:   time.Now().AddDate(0, -1, 0),
+		To:     time.Now(),
+		Tenant: "tenant-a",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rep.Rows) != 1 {
+		t.Fatalf("want 1 row after tenant filter, got %d", len(rep.Rows))
+	}
+	// The surviving row is bitrate; the excluded byte-counter row must not contribute.
+	if rep.EgressMethod != reports.EgressMethodBitrateXWatchTime {
+		t.Errorf("report EgressMethod: got %q, want %q (excluded byte-counter row must not leak into disclosure)",
+			rep.EgressMethod, reports.EgressMethodBitrateXWatchTime)
 	}
 }
 
