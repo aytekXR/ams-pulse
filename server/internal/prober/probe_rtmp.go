@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/pulse-analytics/pulse/server/internal/ssrfguard"
 )
 
 // rtmpDefaultPort is used when no port is present in the rtmp:// URL.
@@ -85,8 +86,10 @@ func (r *Runner) probeRTMP(ctx context.Context, p domain.ProbeConfig, result dom
 	addr := net.JoinHostPort(host, port)
 
 	// ── 2. Dial ──────────────────────────────────────────────────────────────
+	// D-130 [21]: the Control hook refuses a restricted resolved address (e.g.
+	// rtmp://169.254.169.254/…) before the socket connects — DNS-rebinding-safe.
 	dialStart := time.Now()
-	dialer := &net.Dialer{}
+	dialer := &net.Dialer{Control: ssrfguard.DialControl}
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		code, sigState := classifyRTMPNetError(ctx, err)
