@@ -1,4 +1,23 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-131 — SESSION-69)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-132 — SESSION-70)
+
+> **S70 (D-132) needs NO operator action.** This session fixed three correctness bugs in the anomaly-flag detector:
+> (1) opening the live anomalies view (`GET /anomalies`) could stop the anomaly from being written to the historical
+> audit trail — the read now never interferes with the recorded event stream, and the live view keeps showing an active
+> anomaly on every refresh instead of hiding it after the first look; (2) the "quiet period" after an anomaly fires was
+> one tick shorter than documented, and a restart could log a duplicate anomaly event — both corrected; (3) anomalies on
+> streams/nodes whose ID contains an unusual character (a quote or backslash) were being attributed to the wrong stream —
+> IDs are now handled safely, and the alert engine uses the exact same key so its anomaly rules can't miss. All internal
+> accuracy fixes — **nothing to configure.** Live in prod (`v0.4.0-78-g1076442`, rolled forward; smoke green: healthz
+> 200, signed webhook 200, limits 512M/0.5cpu, clean logs).
+>
+> **The ONE decision still waiting on you is the [20] audit-log read access model** (from S68 — see the D-130 block
+> below): keep admin *reads* open to any authenticated token (status quo, recommended), or gate the whole admin-read
+> surface behind the `admin` scope (which would remove the audit page from viewer-role users). No rush; non-blocking.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs 07-27;
+> see ⚠ below). GHCR is still private (**401**). The S63 email-STARTTLS behavior note below still applies.
+
+## (previous header — D-131, SESSION-69)
 
 > **S69 (D-131) needs NO operator action.** This session fixed two correctness bugs in the HLS synthetic probe: (1) a
 > stream serving a zero-duration/malformed `#EXTINF` segment was reported as "healthy" without the probe ever fetching
