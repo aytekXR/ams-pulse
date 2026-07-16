@@ -60,6 +60,11 @@ import (
 // now is the package-level time source. Overridden in tests via SetNow (export_test.go).
 var now = time.Now
 
+// generateKey is the package-level ed25519 key generator, seamed so the dev-mode
+// fallback in New (malformed PULSE_LICENSE_PUBKEY) is testable. Overridden in tests
+// via SetGenerateKey (export_test.go); mirrors the `now` pattern above.
+var generateKey = ed25519.GenerateKey
+
 // licenseLog is the package-level logger for license lifecycle events.
 // Use SetLogger to override (typically in tests or at process startup).
 var licenseLog atomic.Pointer[slog.Logger]
@@ -190,9 +195,12 @@ func New(licenseKey, offlineFile string) (*Manager, error) {
 	pubKeyBytes, err := hex.DecodeString(pubKeyHex)
 	if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
 		// Fallback: generate a random key so the manager still works (dev mode).
-		pubKeyBytes2, privKey, err2 := ed25519.GenerateKey(nil)
+		pubKeyBytes2, privKey, err2 := generateKey(nil)
 		if err2 != nil {
-			return nil, fmt.Errorf("license: init public key: %w", err)
+			// Wrap err2 (the actual GenerateKey failure), not err — in the
+			// length-mismatch sub-path err is nil, so wrapping it would yield the
+			// opaque "init public key: <nil>" (D-133/S71 [24]).
+			return nil, fmt.Errorf("license: init public key: %w", err2)
 		}
 		_ = privKey
 		m.pubKey = pubKeyBytes2
@@ -203,18 +211,23 @@ func New(licenseKey, offlineFile string) (*Manager, error) {
 	// Try to load a license key.
 	if licenseKey != "" {
 		if err := m.activate(licenseKey); err != nil {
-			// Fail open — use Free tier but record the error in logs.
+			// Fail open — use Free tier, but record the rejection so the operator can
+			// tell "key rejected" apart from "no key configured" (D-133/S71 [12]).
 			m.setFree()
-			_ = err // callers can ignore; free tier is still usable
+			licenseLog.Load().Warn("license: activation failed, degrading to free tier", "error", err)
 		}
 	} else if offlineFile != "" {
 		data, err := os.ReadFile(offlineFile)
 		if err == nil {
 			if err2 := m.activate(strings.TrimSpace(string(data))); err2 != nil {
 				m.setFree()
+				licenseLog.Load().Warn("license: offline file activation failed, degrading to free tier",
+					"file", offlineFile, "error", err2)
 			}
 		} else {
 			m.setFree()
+			licenseLog.Load().Warn("license: offline file unreadable, degrading to free tier",
+				"file", offlineFile, "error", err)
 		}
 	} else {
 		m.setFree()
@@ -347,7 +360,9 @@ func (m *Manager) CheckDataAPI() error {
 // Probes require Pro tier or higher (§7.11 pricing table).
 func (m *Manager) CheckProbes() error {
 	t := m.Tier()
-	if t == TierFree {
+	// Positive membership (matches the 5 sibling checks) — an unknown tier string is
+	// blocked, not silently granted access as the old `t == TierFree` gate did (D-133/S71 [23]).
+	if t != TierPro && t != TierBusiness && t != TierEnterprise {
 		return fmt.Errorf("synthetic probes (F10) require Pro tier or higher (current: %q)", t)
 	}
 	return nil
@@ -389,7 +404,9 @@ func (m *Manager) CheckReports() error {
 // Free tier returns 403.
 func (m *Manager) CheckBeaconIngest() error {
 	t := m.Tier()
-	if t == TierFree {
+	// Positive membership (matches the 5 sibling checks) — an unknown tier string is
+	// blocked, not silently granted access as the old `t == TierFree` gate did (D-133/S71 [23]).
+	if t != TierPro && t != TierBusiness && t != TierEnterprise {
 		return fmt.Errorf("QoE beacon ingest (F3) requires Pro tier or higher (current: %q)", t)
 	}
 	return nil
@@ -456,6 +473,18 @@ func (m *Manager) activate(key string) error {
 	var c claims
 	if err := json.Unmarshal(claimsData, &c); err != nil {
 		return fmt.Errorf("license: parse claims: %w", err)
+	}
+
+	// Validate the tier against the known set. An unrecognized tier (a vendor-side
+	// typo, e.g. "enterprise_lite") must NOT be trusted: the negative-gated checks
+	// would treat any non-"free" string as paid, and buildEntitlements maps absent
+	// node/retention claims to unlimited. Rejecting here fails the activation, so New
+	// falls open to Free rather than granting a privileged unknown tier (D-133/S71 [23]).
+	switch Tier(c.Tier) {
+	case TierFree, TierPro, TierBusiness, TierEnterprise:
+		// known tier
+	default:
+		return fmt.Errorf("license: unknown tier %q", c.Tier)
 	}
 
 	// Parse expiry (if present). Expiry enforcement is done lazily via
