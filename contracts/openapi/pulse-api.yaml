@@ -129,8 +129,10 @@ paths:
           client merges into its local state.
         - **`heartbeat`** — `{"type":"heartbeat","ts":<epoch_ms>}` sent every 30 s.
 
-        Authentication: bearer token in `Authorization` header or `token` query
-        parameter (WebSocket clients may not set headers).
+        Authentication: bearer token in `Authorization` header, `token` query
+        parameter (WebSocket clients may not set headers), or the `pulse_session`
+        cookie (OIDC/SSO browser sessions). All three are validated the same way
+        as file downloads.
 
         Message envelope schema:
         ```json
@@ -145,6 +147,7 @@ paths:
       security:
         - bearerAuth: []
         - wsTokenQuery: []
+        - cookieAuth: []
       responses:
         "101":
           description: WebSocket upgrade accepted
@@ -1593,6 +1596,14 @@ components:
       in: query
       name: token
       description: Bearer token passed as query param for WebSocket upgrades
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: pulse_session
+      description: >
+        Session token set by the OIDC/SSO callback (HttpOnly, SameSite=Lax).
+        Accepted on browser-initiated routes that cannot attach an
+        `Authorization` header — the WebSocket upgrade and file downloads.
 
   parameters:
     from:
