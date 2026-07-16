@@ -1,5 +1,11 @@
 # SESSION-46 — planned at S45 close (D-107)
 
+> **✅ CLOSED 2026-07-16 (D-108, PR #89).** Both candidates shipped: (1) probe-runner entitlement gate
+> (`prober.Config.EntitlementGate` → `lic.CheckProbes`); (2) live-WS auth — finding 2 was subtler than ranked
+> below (a route/middleware mismatch, not just a handler bug), so the route was **moved** to
+> `downloadAuthMiddleware` and the handler reads `ctxTokenKey`. Full evidence + the verify-before-build note:
+> `decisions.md` D-108. S47 candidates (findings 3–6) carried to `sessions/SESSION-47.md`.
+
 > Written by SESSION-45 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > Read `RESUME-PROMPT.md` + `ROADMAP-V2.md` §2 + the S44 audit backlog (D-106) before dispatching.

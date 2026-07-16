@@ -11,27 +11,32 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-46.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-47.md`)
 
-**Session 2026-07-16 result: D-107 — S45 DONE (PR #87, reports-scheduler correctness — edit-silences-schedule BLOCKER + Monthly-preset-fires-daily).**
+**Session 2026-07-16 result: D-108 — S46 DONE (PR #89, entitlement + WS-auth cluster — runtime probe gate + live-WS cookie/token auth).**
 
-**★ S45 fixed the single highest-severity finding of the S44 audit (13 bugs).** Both re-verified against the
-code, mutation-proven, adversarially reviewed → SHIP:
-- **BLOCKER** — `PUT /api/v1/reports/schedules/{id}` rebuilt the row from the body, NULLing `next_run_at`;
-  `ListDueReportSchedules` filters `next_run_at IS NOT NULL`, so **editing any schedule silently stopped it
-  firing forever**. The update handler now recomputes `next_run_at` + preserves `last_run_at` (create-handler
-  pattern).
-- **Monthly preset fired daily** — the UI's default `0 6 1 * *` preset dropped the day-of-month in the 5-field
-  cron parser. `nextCronTime` now honors DOM (Vixie OR-semantics); weekly/daily unaffected.
+**★ S46 shipped the two MAJOR findings of the S44 audit's entitlement/WS cluster.** Both re-verified against the
+code (finding 2 was subtler than the audit stated), mutation-proven, adversarially reviewed → SHIP:
+- **Probe runner ignored entitlement on the background tick** (S37 "enforced, not decorative"). CRUD gated
+  `CheckProbes()` but `executeProbe` ran every enabled probe → a Pro→Free downgrade kept probing. New
+  `prober.Config.EntitlementGate` (wired to `lic.CheckProbes`) is checked before each probe; `Tier()` is
+  RWMutex-guarded so it's race-free.
+- **`GET /live/ws` rejected browser sessions** — the audit said "handler ignores `ctxTokenKey`"; the real defect
+  was a **route/middleware mismatch**: the route sat under header/cookie-only `bearerAuthMiddleware` while the
+  handler re-extracted from header/`?token=` — so OIDC cookie users AND the browser's `?token=` connect path both
+  401'd. Moved to `downloadAuthMiddleware` + read validated `ctxTokenKey` (also gains `kind=api` + expiry).
 
-Gates: full Go suite **24/24**; both mutation-proven RED; no contract/web/brandkit change; **prod rolled forward
-to `v0.4.0-31-g2787dcd`** (was `-29-ga280b56`; rollback tag `pre-d107`; smoke green — healthz ok, webhook 200).
-Full evidence: `decisions.md` D-107.
+Gates: full Go suite **24/24** (api re-run `-count=1` after the spec edit); both mutation-proven RED; adversarial
+review (2 refuted, 1 LOW should-fix fixed — OpenAPI `/live/ws` now documents the `pulse_session` `cookieAuth`
+path; `schema.d.ts` regen); **prod rolled forward to `v0.4.0-33-g4fe5a10`** (was `v0.4.0-31-g2787dcd`;
+rollback tag `pre-d108`; smoke green — healthz ok, webhook 200, `/live/ws` 401-not-404 route-move verified live).
+Full evidence: `decisions.md` D-108.
 
-**★ SESSION-46 = the entitlement + WS-auth cluster (S44 audit, 2 findings), then S47 = audit-integrity (6).**
-Ranked in `sessions/SESSION-46.md`: probe-runner ignores `CheckProbes()` on the background tick (S37 class,
-`prober.go:101` — may need a license-manager wiring seam); `handleLiveWS` ignores validated cookie auth
-(`server.go:1091`) → OIDC users can't open the live WS. **Re-verify each against the code before building.**
+**★ SESSION-47 = the FINAL S44-audit cluster: audit integrity + hardening (6 findings).** Ranked in
+`sessions/SESSION-47.md`: `handleDeleteUser`/`handleRevokeToken` false-audit+204 on a missing id (S38 class —
+**re-verify the split-verdict revoke-token finding first**); create-user/token audit-after-refetch (S40 class);
+token `kind` allowlist (D-098); anomaly `>` vs `>=` boundary. **After S47 the 13-bug backlog is fully closed** —
+re-scan ROADMAP-V2 §2 for the next track. **Re-verify each against the code before building.**
 
 **⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
 ledger 07-27) — operator-only. GHCR anon → 401. **§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE at
