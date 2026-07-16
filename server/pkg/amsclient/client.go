@@ -471,8 +471,17 @@ func (c *Client) ListBroadcastsPaged(ctx context.Context, app string) ([]Broadca
 
 // WebRTCClientStats returns per-peer WebRTC quality stats for a stream.
 // Path: /{app}/rest/v2/broadcasts/{streamID}/webrtc-client-stats/0/100
+//
+// streamID is publisher-chosen (set via the RTMP/WebRTC publish URL) and AMS
+// returns it verbatim, so it may contain characters that are significant in a
+// URL — '#' starts a fragment, '?' a query, '/' a new path segment. Without
+// url.PathEscape the request silently targets the wrong AMS endpoint (e.g.
+// "test#peer" → GET /.../broadcasts/test, the single-broadcast detail route),
+// which returns null/an object and drops the stats through the err==nil gate in
+// the poller. app is AMS/operator-controlled (not publisher-chosen) and is left
+// raw, matching the sibling list path-builders.
 func (c *Client) WebRTCClientStats(ctx context.Context, app, streamID string) ([]WebRTCClientStatsDTO, error) {
-	path := fmt.Sprintf("/%s/rest/v2/broadcasts/%s/webrtc-client-stats/0/100", app, streamID)
+	path := fmt.Sprintf("/%s/rest/v2/broadcasts/%s/webrtc-client-stats/0/100", app, url.PathEscape(streamID))
 	var result []WebRTCClientStatsDTO
 	if err := c.getJSON(ctx, path, &result); err != nil {
 		return nil, err
