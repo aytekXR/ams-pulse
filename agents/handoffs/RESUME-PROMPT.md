@@ -11,7 +11,47 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-69.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-70.md`)
+
+**Session 2026-07-16 result: D-131 — S69 shipped the HLS manifest parse-correctness pair ([14] zero-EXTINF, [15] resolveURI). ★ Prober HLS/DASH/RTMP now all swept.**
+
+**★ S69** fixed two `probeHLS` parsing bugs (PR #132, prod `v0.4.0-76-g79cb591`):
+- **[14]** `parseHLSManifest` now captures a media segment behind a zero-duration or malformed `#EXTINF` (via a
+  `pendingExtInf` flag) instead of dropping it and misreporting the playlist as a healthy empty master. No new
+  divide-by-zero (the bitrate step already guards `segmentDurationS > 0`).
+- **[15]** `resolveURI` now uses net/url RFC-3986 `ResolveReference` (mirroring `resolveDASHRef`), so protocol-relative
+  `//host/seg.ts` and absolute-path references resolve to the correct host. SSRF-safe via the S68 guarded client.
+- Review fix: a non-http-scheme segment URI in a hostile manifest is classified `parse`, not `network`.
+Mutation-proven (3 mutants); full suite 25/25; adversarial review (3 lenses) found 1 minor issue, fixed pre-merge.
+**No operator action.** Evidence: `decisions.md` D-131.
+
+**★ SESSION-70 = continue the S62 backlog: 8 remain (0 HIGH, 4 MEDIUM, 4 LOW)** in `S62-AUDIT-FINDINGS.md`.
+Re-read ROADMAP-V2 §2.31 + the ledger and pick the highest-leverage move; verify-at-open against the code. Suggested
+lead — the **anomaly cluster [16]+[17]+[18]** (all in `server/internal/anomaly/anomaly.go`, coherent one-file PR):
+- **[16] MEDIUM** — `detectFlagsLocked` unconditionally arms the shared hysteresis map, so a `GET /anomalies`
+  (ComputeFlags/HTTP path) suppresses the next tick-path flag-store write. Fix: a `setHysteresis bool` param (false from
+  ComputeFlags). **Verifier softened severity** (not "permanent" — repeat polling during cooldown does NOT re-arm; real
+  impact is transient anomalies + a concurrent-race) — re-verify and take the true CORE.
+- **[17] MEDIUM** — off-by-one cooldown (decrement-before-detect + `rem<=1` delete → N-1 suppressed ticks). Fix: initial
+  `hysteresisTicks + 1` (smallest change) OR delete-condition `rem<=0`. **Verifier: PRD budget still met** (contract vs
+  doc, low impact).
+- **[18] MEDIUM** — `scopeJSON` builds JSON by unescaped string concat → an ID containing `"` truncates/mis-attributes
+  the stream in anomaly events. Fix: escape (or `encoding/json.Marshal`) the ID fields; make `parseScopeJSON` round-trip.
+- **Alternatives:** [12] MEDIUM (`New()` discards `activate()` errors) standalone; or the LOW cluster [22] (cert_expiry
+  `lt 0` never fires — returns 0 not -1 for expired), [23]/[24], [25].
+
+**Each is an AGENT finding — re-verify against the code before building** (S66 declined an off-by-one, S67 overturned two
+impls, S68 narrowed RFC-1918, S69 review caught a classify regression). Anomaly [16]/[17] are STATE-MACHINE surface →
+run the adversarial-review workflow. **§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE at open** (today
+2026-07-16, still locked).
+
+**⚠ CARRIED operator items (unchanged):** the **[20] audit-read product call** (operator-expected.md — keep reads open
+or gate the whole admin-read surface); AMS trial-expiry doc discrepancy (07-12 vs 07-27); GHCR anon → 401; the S63
+email-STARTTLS behavior note (informational).
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-69.md`)
 
 **Session 2026-07-16 result: D-130 — S68 shipped the probe-URL SSRF guard ([21]) and DEFERRED the audit-log admin gate ([20]) as a product ruling.**
 

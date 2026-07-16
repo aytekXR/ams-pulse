@@ -67,6 +67,18 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **HLS synthetic-probe manifest parsing (D-131).** Two correctness fixes in the HLS
+  probe, which parses an untrusted manifest served by the monitored AMS/CDN: (1) a media
+  segment preceded by a zero-duration or malformed `#EXTINF` was silently dropped and the
+  playlist misreported as an empty master, so the probe returned "healthy" (`Success=true`,
+  bitrate 0) **without ever fetching the segment** — it now captures and fetches the segment
+  (bitrate is still only computed when the duration is > 0, so no divide-by-zero), turning a
+  broken segment into an honest error; (2) segment/variant URIs are now resolved with RFC-3986
+  reference resolution, so protocol-relative (`//cdn/seg.ts`) and absolute-path (`/seg.ts`)
+  references resolve to the correct host instead of being concatenated onto the base path and
+  misdirecting the fetch. A segment URI carrying a non-HTTP scheme in a hostile manifest is now
+  classified as a `parse` error rather than `network`. (Found by the S62 subsystem audit,
+  findings [14] and [15].)
 - **Alert evaluator correctness — three metric-evaluator fixes (D-129).** From the
   S62 subsystem audit: (1) **node CPU/mem/disk threshold rules no longer false-fire
   on nodes that don't report that field** — a standalone AMS 3.x node omits cpu/mem/disk,

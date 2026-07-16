@@ -1,4 +1,20 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-130 — SESSION-68)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-131 — SESSION-69)
+
+> **S69 (D-131) needs NO operator action.** This session fixed two correctness bugs in the HLS synthetic probe: (1) a
+> stream serving a zero-duration/malformed `#EXTINF` segment was reported as "healthy" without the probe ever fetching
+> the segment — it now fetches and measures it, so a broken segment surfaces as a real error; (2) probes of streams
+> whose manifests use protocol-relative (`//cdn/…`) or absolute-path segment URLs now hit the correct host instead of a
+> mangled one. All internal probe-accuracy fixes — **nothing to configure.** Live in prod (`v0.4.0-76-g79cb591`, rolled
+> forward; smoke green: healthz 200, signed webhook 200, limits 512M/0.5cpu, clean logs).
+>
+> **The ONE decision still waiting on you is the [20] audit-log read access model** (from S68 — see the D-130 block
+> below): keep admin *reads* open to any authenticated token (status quo, recommended), or gate the whole admin-read
+> surface behind the `admin` scope (which would remove the audit page from viewer-role users). No rush; non-blocking.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs 07-27;
+> see ⚠ below). GHCR is still private (**401**). The S63 email-STARTTLS behavior note below still applies.
+
+## (previous header — D-130, SESSION-68)
 
 > **S68 (D-130): one NEW product decision for you, plus a shipped security fix (no action).**
 >

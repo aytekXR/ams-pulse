@@ -8301,3 +8301,54 @@ adjudicated decision (no longer "pending re-check").
 [21] ✅ DONE + [20] ✅ DEFER-BY-RULING; ROADMAP-V2 §2.31 (15 resolved: 14 shipped + 1 defer-by-ruling / 10 remain —
 0 HIGH, 6 MEDIUM, 4 LOW); RESUME-PROMPT ▶ START HERE → SESSION-69; `operator-expected.md` (new top block — [20] product call);
 `sessions/SESSION-68.md` CLOSED; `sessions/SESSION-69.md` written. Prod rolled forward + smoke green.
+
+## D-131 — S69 (2026-07-16): SHIPPED — HLS manifest parse correctness ([14] zero-EXTINF, [15] resolveURI)
+
+**Open facts.** `origin/main` = `4394312` (S68 docs, PR #131); HEAD == origin/main; `git status` shows only the
+do-not-commit `deploy/config/Caddyfile.prod` dirty. Branch `s69-d131`. Date 2026-07-16 (§2.7 gate still locked until
+2026-07-23). Backlog at open: 10 remain (6 MEDIUM, 4 LOW). Scope: the prober-HLS correctness pair (coherent, same
+subsystem just swept in S66/S68, both in `probeHLS`'s parsing helpers).
+
+**[14] parseHLSManifest zero-duration #EXTINF drops the segment.** The segment-capture guard was `if pendingDuration >
+0`, so a segment preceded by `#EXTINF:0.000` (or any `#EXTINF` whose duration fails to parse) fell through and the
+playlist was misreported as an empty master → `probeHLS` returned `Success=true, BitrateKbps=0` **without ever
+fetching the segment** (silently masking a broken/degraded stream). **Fix:** added `pendingExtInf bool` — set true in
+the `#EXTINF` handler, false in the `#EXT-X-STREAM-INF` handler (symmetric with the existing `pendingVariant` reset) —
+and changed the guard to `if pendingExtInf`. Verified safe: the bitrate step already guards `segmentDurationS > 0`
+(prober.go:610), so a captured zero-duration segment is now fetched + TTFB-measured with `BitrateKbps=0` and **no
+divide-by-zero** — a real reachability check replaces the fake healthy-empty result, and a 404/timeout on that segment
+now surfaces honestly.
+
+**[15] resolveURI mishandles protocol-relative / absolute-path segment URIs.** The old body only special-cased
+`http(s)://` prefixes then did last-slash string concatenation, so a network-path reference `//cdn.example.com/seg.ts`
+was concatenated onto the base path (`…/hls//cdn.example.com/seg.ts`) → wrong host, false segment-fetch errors for
+healthy CDN-fronted streams. **Fix (BROADER, correct):** replaced the body with net/url `ResolveReference` (RFC 3986),
+mirroring the sibling `resolveDASHRef` — now protocol-relative, absolute-path (`/seg.ts`), dot-segment, and absolute
+references all resolve to the correct host. SSRF-safe: the resolved URL is still fetched via the S68 ssrfguard-guarded
+`r.client`, so a manifest resolving to an internal address is blocked at dial.
+
+**Verification.** New `s69_d131_test.go` (internal `package prober`): 5 parse tests + a resolveURI table (relative /
+absolute / protocol-relative / absolute-path / dot-segment / scheme-inheritance). Full suite **25/25**; gofmt + vet
+clean. **Mutation-proven (2 mutants, both killed):** M1 reverts `[14]` to the old `dur>0` capture (zero/malformed
+tests redden, normal-EXTINF stays green → precision confirmed); M2 neutralises resolveURI (the protocol-relative table
+reddens). Adversarial review (3 lenses — regression / parse-edgecase / ssrf-interaction) in flight.
+
+**Shipped (PR #132, squash `79cb591`, merged to `origin/main`).** Prod rolled forward to **`v0.4.0-76-g79cb591`**;
+all 5 smoke checks green (version stamp, healthz 200, signed webhook 200, limits 512M/0.5cpu, 0 error lines). CI note:
+`csp-e2e` flaked once (a Playwright `toBeVisible` timeout on the mocked-API dashboard render — unrelated to this
+Go-only change); passed on re-run.
+
+**Adversarial review (3 lenses — regression / parse-edgecase / ssrf-interaction; 4 agents). 1 CONFIRMED (minor), 0
+refuted — fixed in-PR before merge:** a segment/variant URI carrying a non-http scheme (`javascript:`/`file:`/`data:`)
+in a malicious manifest was rejected by the transport before any dial (so ssrfguard is never reached — no bypass) but
+`classifyHTTPError` labelled the failure `"network"` instead of `"parse"`. My [15] net/url change shifted this path
+(the old string-concat would have mangled it onto the base host), so the classifier now maps `"unsupported protocol
+scheme"` → `"parse"` (malformed manifest content). No security impact; diagnostic honesty only. The regression and
+ssrf-interaction lenses found nothing (each probeHLS fetch confirmed to use the guarded `r.client`; existing HLS tests
+unaffected by the resolveURI rewrite).
+
+**Docs at close:** D-131 SHIPPED (this block, prod `v0.4.0-76-g79cb591`); CHANGELOG Fixed; `S62-AUDIT-FINDINGS.md`
+[14]/[15] ✅ DONE; ROADMAP-V2 §2.31 (17 resolved: 16 shipped + 1 defer-by-ruling / 8 remain — 0 HIGH, 4 MEDIUM, 4 LOW);
+RESUME-PROMPT ▶ START HERE → SESSION-70; `operator-expected.md` (no new action; [20] product call carried);
+`sessions/SESSION-69.md` CLOSED; `sessions/SESSION-70.md` written. Prod rolled forward + smoke green. **No operator
+action required.**
