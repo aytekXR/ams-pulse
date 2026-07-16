@@ -875,3 +875,65 @@ func TestGetVersion_500ReturnsError(t *testing.T) {
 		t.Fatal("500 must surface as an error, got nil")
 	}
 }
+
+// TestWebRTCClientStats_EscapesStreamID is the S50 regression test (D-112) for
+// S48 finding [3]: a publisher-chosen streamID with a URL-significant character
+// must be percent-escaped so the request reaches the webrtc-client-stats endpoint
+// rather than silently hitting the single-broadcast detail route.
+//
+// The server records r.URL.EscapedPath(): with the fix, "test#peer" arrives as
+// the escaped segment "test%23peer"; without it, url.Parse treats '#' as a
+// fragment and everything after is dropped, so the path truncates at "test".
+func TestWebRTCClientStats_EscapesStreamID(t *testing.T) {
+	cases := []struct {
+		name         string
+		streamID     string
+		wantEscPath  string
+		wantStripped bool // pre-fix behavior would truncate the path here
+	}{
+		{
+			name:        "hash_is_escaped_not_fragment",
+			streamID:    "test#peer",
+			wantEscPath: "/LiveApp/rest/v2/broadcasts/test%23peer/webrtc-client-stats/0/100",
+		},
+		{
+			name:        "space_is_escaped",
+			streamID:    "my stream",
+			wantEscPath: "/LiveApp/rest/v2/broadcasts/my%20stream/webrtc-client-stats/0/100",
+		},
+		{
+			// Positive control: a normal id is byte-identical after escaping, so
+			// the common path is unchanged (no regression for ordinary streams).
+			name:        "normal_id_unchanged",
+			streamID:    "test123",
+			wantEscPath: "/LiveApp/rest/v2/broadcasts/test123/webrtc-client-stats/0/100",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotPath atomic.Value
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath.Store(r.URL.EscapedPath())
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(`[{"statId":"peer-1","videoJitter":1.5}]`)) //nolint:errcheck
+			}))
+			defer srv.Close()
+
+			stats, err := newTestClient(srv).WebRTCClientStats(context.Background(), "LiveApp", tc.streamID)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			got, _ := gotPath.Load().(string)
+			if got != tc.wantEscPath {
+				t.Errorf("escaped request path = %q, want %q\n"+
+					"(streamID %q must be url.PathEscape'd so it reaches the webrtc-client-stats endpoint)",
+					got, tc.wantEscPath, tc.streamID)
+			}
+			// With the correct endpoint reached, the stats decode and are returned.
+			if len(stats) != 1 || stats[0].StatID != "peer-1" {
+				t.Errorf("expected 1 stat with statId=peer-1, got %+v", stats)
+			}
+		})
+	}
+}
