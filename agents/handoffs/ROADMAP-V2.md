@@ -547,9 +547,16 @@ single-quote); (2) **email/SMTP creds** now encrypted at rest (`secretFields` +=
   re-extracted the token itself → moved to `downloadAuthMiddleware` + read validated `ctxTokenKey` (also gains
   `kind=api` + expiry). Both mutation-proven; adversarial review (2 refuted, 1 LOW spec should-fix → fixed:
   OpenAPI `/live/ws` now documents the `cookieAuth` path).
-- ⏳ **S47** — audit integrity + hardening: `handleDeleteUser`/`handleRevokeToken` false-audit+204 on missing id
-  (S38 class); create-user/token audit-after-refetch (S40 class); token `kind` no allowlist; anomaly `>` vs `>=`
-  boundary. Full detail: `sessions/SESSION-46.md`.
+- ✅ **S47 (D-109, PR #91) — the 13-bug backlog is now FULLY CLOSED.** Audit integrity + hardening: phantom
+  `user.delete`/`token.revoke` audit on a missing id — but the OpenAPI contract deliberately documents idempotent
+  204-on-missing, so the fix keeps 204 and only suppresses the phantom audit (`meta.ErrNotFound` on 0 rows);
+  create-user/token audit moved before the re-fetch (S40 class); token `kind` positive-allowlist `{api, ingest}`
+  → 422; anomaly eval `>` → `>=` to match detect. Plus a CodeQL-surfaced CWE-916: removed `hashPassword`'s
+  SHA-256 fallback (reject >72-byte passwords → 422; legacy `sha256:` verify kept). 8 mutations RED; review clean.
+
+**★★ The S44 13-bug adversarial-audit backlog is now FULLY CLOSED** (S44 security · S45 scheduler · S46
+entitlement+WS · S47 audit-integrity+hardening). SESSION-48 has no queued audit findings — per the standing
+directive it re-scans §2 / assessment §5 for the next-highest-leverage track. Full detail: `decisions.md` D-106…D-109.
 
 ### 2.28  Close the two S34 e2e gaps — probes-create + reports-schedules  [S, test-only] ✅ DONE S43 (D-105, 2026-07-15, PR #83)
 

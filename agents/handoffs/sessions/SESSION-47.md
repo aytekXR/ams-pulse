@@ -1,5 +1,11 @@
 # SESSION-47 — planned at S46 close (D-108)
 
+> **✅ CLOSED 2026-07-16 (D-109, PR #91).** All 5 findings shipped + a CodeQL-surfaced password CWE-916.
+> Verify-before-build overturned 1a/1b's ranked premise: the OpenAPI contract deliberately documents idempotent
+> 204-on-missing, so the fix keeps 204 and only suppresses the phantom audit entry. 8 mutations RED; review clean
+> (1 medium test-accuracy finding accepted + corrected). **The S44 13-bug backlog is now fully closed.** Full
+> evidence: `decisions.md` D-109. Next: `sessions/SESSION-48.md` (re-scan mandate — no queued findings).
+
 > Written by SESSION-46 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > Read `RESUME-PROMPT.md` + `ROADMAP-V2.md` §2 + the S44 audit backlog (D-106) before dispatching.

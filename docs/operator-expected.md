@@ -1,4 +1,19 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-108 — SESSION-46)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-109 — SESSION-47)
+
+> **S47 (D-109) needs NO operator action.** It shipped the **final 5 findings of the S44 audit plus a
+> password-hashing fix** — with that, **the entire 13-bug audit backlog is closed**. Highlights: a
+> phantom audit entry was written when deleting/revoking a non-existent user/token (the delete stays idempotent,
+> but the fabricated log line is gone); API tokens now reject a bogus `kind`; anomaly alerts fire consistently at
+> the exact sigma threshold; and passwords are never downgraded to a fast SHA-256 hash (over-long passwords are
+> rejected with a clear error; your existing logins are unaffected). All code-only, mutation-proven, reviewed, and
+> rolled to prod (`v0.4.0-35-g56167eb`).
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
+> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 (team-management model)
+> still wait on you; none blocks the autonomous work. **The audit backlog is now empty** — the next session
+> re-scans the roadmap for the next-highest-leverage track.
+
+## (previous header — D-108, SESSION-46)
 
 > **S46 (D-108) needs NO operator action.** It fixed two MAJOR findings from the S44 audit: **synthetic probes
 > kept running after a tenant downgraded below the probe tier** (the background scheduler didn't re-check the
