@@ -21,6 +21,16 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
   ages past the window. **Default off** — the signing contract is unchanged until you enable
   it and update your signing proxy to send the timestamp (see `docs/AMS-INTEGRATION.md` §4.7).
   (Found by the S48 subsystem audit, finding [8].)
+- **Alert notification channels hardened (D-125).** Four fixes from the S62 subsystem audit:
+  (1) **Email STARTTLS now fails closed** — if `STARTTLS=true` and the TLS upgrade fails, the
+  send aborts instead of silently continuing on a plaintext socket (which had sent the message
+  and any SMTP AUTH credentials in cleartext). **Behavior change:** `STARTTLS=true` is now
+  *mandatory* TLS, not opportunistic — set `STARTTLS=false` if you intend a plaintext relay.
+  (2) **Telegram bot token no longer leaks into logs** — transport errors from the Bot API call
+  embedded the token-bearing URL; the token is now redacted from returned/logged errors.
+  (3) **SMTP Subject header injection closed** — a publisher-controlled stream name in the alert
+  title can no longer inject email headers via CR/LF. (4) The Telegram dashboard link is now
+  attribute-escaped (defense-in-depth).
 
 ### Fixed
 

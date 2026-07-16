@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -53,6 +54,20 @@ func NewTelegramChannelWithURL(cfg TelegramConfig, apiURLTemplate string) *Teleg
 // Name returns "telegram".
 func (t *TelegramChannel) Name() string { return "telegram" }
 
+// redact removes the bot token from an error's text so the secret never reaches
+// logs. Returns a plain error (unwrappable chain intentionally dropped) because
+// the underlying *url.Error embeds the token-bearing URL in its message.
+func (t *TelegramChannel) redact(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	if t.cfg.BotToken != "" {
+		msg = strings.ReplaceAll(msg, t.cfg.BotToken, "REDACTED")
+	}
+	return errors.New(msg)
+}
+
 // Send delivers a notification via Telegram Bot API sendMessage.
 func (t *TelegramChannel) Send(ctx context.Context, payload []byte) error {
 	var n map[string]any
@@ -77,13 +92,16 @@ func (t *TelegramChannel) Send(ctx context.Context, payload []byte) error {
 	apiURL := fmt.Sprintf(urlTemplate, t.cfg.BotToken)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(bodyBytes))
 	if err != nil {
-		return fmt.Errorf("telegram channel: build request: %w", err)
+		return fmt.Errorf("telegram channel: build request: %w", t.redact(err))
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := t.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("telegram channel: send: %w", err)
+		// t.redact strips the bot token: client.Do returns a *url.Error whose text
+		// embeds the full request URL (…/bot<token>/sendMessage), which would
+		// otherwise leak the secret to whatever logs this returned error.
+		return fmt.Errorf("telegram channel: send: %w", t.redact(err))
 	}
 	defer resp.Body.Close()
 
@@ -139,7 +157,7 @@ func buildTelegramMessage(n map[string]any) string {
 		}
 	}
 	if url, ok := n["dashboard_url"].(string); ok && url != "" {
-		b.WriteString(fmt.Sprintf("<a href=\"%s\">Open Dashboard</a>\n", url))
+		b.WriteString(fmt.Sprintf("<a href=\"%s\">Open Dashboard</a>\n", escapeHTMLAttr(url)))
 	}
 
 	return b.String()
@@ -150,4 +168,13 @@ func escapeHTML(s string) string {
 	s = strings.ReplaceAll(s, "<", "&lt;")
 	s = strings.ReplaceAll(s, ">", "&gt;")
 	return s
+}
+
+// escapeHTMLAttr escapes a value for use inside a double-quoted HTML attribute
+// (Telegram HTML parse mode). escapeHTML covers &,<,>; this also escapes the
+// double-quote so the value cannot break out of the href="…" attribute. Defense
+// in depth: dashboard_url is currently operator-derived (baseURL+"/alerts"), but
+// it is the one field rendered into markup unescaped.
+func escapeHTMLAttr(s string) string {
+	return strings.ReplaceAll(escapeHTML(s), "\"", "&quot;")
 }

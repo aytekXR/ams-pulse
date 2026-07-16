@@ -66,7 +66,13 @@ type EmailConfig struct {
 	Username string
 	// Password for SMTP AUTH (optional).
 	Password string
-	// STARTTLS enables TLS upgrade (default true for port 587).
+	// STARTTLS controls the TLS upgrade for the SMTP session. It is NOT
+	// auto-enabled (the zero value is false); set it explicitly:
+	//   false — no STARTTLS; the session is plaintext. Use this for a local /
+	//     loopback relay that does not offer TLS (and knows it is plaintext).
+	//   true  — STARTTLS is MANDATORY (D-125): if the upgrade fails, Send returns
+	//     an error and does NOT fall back to plaintext, so the message body and any
+	//     SMTP AUTH credentials are never sent in cleartext after a TLS downgrade.
 	STARTTLS bool
 }
 
@@ -92,31 +98,9 @@ func (e *EmailChannel) Name() string { return "email" }
 // Send delivers a notification via SMTP.
 // The payload is a JSON-encoded alert notification (alert-notification.schema.json).
 func (e *EmailChannel) Send(ctx context.Context, payload []byte) error {
-	// Parse payload to build subject.
 	var n map[string]any
 	_ = json.Unmarshal(payload, &n)
-	title, _ := n["title"].(string)
-	state, _ := n["state"].(string)
-	severity, _ := n["severity"].(string)
-	isTest, _ := n["test"].(bool)
-
-	subject := fmt.Sprintf("[Pulse Alert] %s", title)
-	if isTest {
-		subject = "[Pulse TEST] " + subject
-	}
-	body := buildEmailBody(n)
-
-	msg := strings.Builder{}
-	msg.WriteString(fmt.Sprintf("From: %s\r\n", e.cfg.From))
-	msg.WriteString(fmt.Sprintf("To: %s\r\n", e.cfg.To))
-	msg.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
-	msg.WriteString("MIME-Version: 1.0\r\n")
-	msg.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
-	msg.WriteString("\r\n")
-	msg.WriteString(body)
-	msg.WriteString("\r\n")
-	_ = state
-	_ = severity
+	msg := buildEmailMessage(e.cfg, n)
 
 	host, _, _ := net.SplitHostPort(e.cfg.SMTPAddr)
 
@@ -143,8 +127,11 @@ func (e *EmailChannel) Send(ctx context.Context, payload []byte) error {
 	if e.cfg.STARTTLS {
 		tlsCfg := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
 		if err := smtpClient.StartTLS(tlsCfg); err != nil {
-			// Non-fatal if TLS not supported (e.g. test SMTP server).
-			_ = err
+			// Fail closed: the operator requested STARTTLS, so a failed upgrade must
+			// abort rather than silently continue on a plaintext connection — which
+			// would transmit the message body (and any SMTP AUTH credentials) in
+			// cleartext after a TLS downgrade.
+			return fmt.Errorf("email channel: STARTTLS upgrade failed: %w", err)
 		}
 	}
 
@@ -166,7 +153,7 @@ func (e *EmailChannel) Send(ctx context.Context, payload []byte) error {
 	if err != nil {
 		return fmt.Errorf("email channel: DATA: %w", err)
 	}
-	if _, err := fmt.Fprint(wc, msg.String()); err != nil {
+	if _, err := fmt.Fprint(wc, msg); err != nil {
 		wc.Close()
 		return fmt.Errorf("email channel: write body: %w", err)
 	}
@@ -175,6 +162,39 @@ func (e *EmailChannel) Send(ctx context.Context, payload []byte) error {
 	}
 	_ = smtpClient.Quit()
 	return nil
+}
+
+// buildEmailMessage renders the RFC822 message for an alert notification. Header
+// values derived from the (publisher-influenced) payload — notably the Subject,
+// which embeds the alert title and thus the stream_id scope — are stripped of CR
+// and LF via sanitizeHeaderValue to prevent SMTP header injection (a stream named
+// "x\r\nBcc: attacker@evil" must not inject a Bcc header).
+func buildEmailMessage(cfg EmailConfig, n map[string]any) string {
+	title, _ := n["title"].(string)
+	isTest, _ := n["test"].(bool)
+
+	subject := fmt.Sprintf("[Pulse Alert] %s", title)
+	if isTest {
+		subject = "[Pulse TEST] " + subject
+	}
+	body := buildEmailBody(n)
+
+	msg := strings.Builder{}
+	msg.WriteString(fmt.Sprintf("From: %s\r\n", sanitizeHeaderValue(cfg.From)))
+	msg.WriteString(fmt.Sprintf("To: %s\r\n", sanitizeHeaderValue(cfg.To)))
+	msg.WriteString(fmt.Sprintf("Subject: %s\r\n", sanitizeHeaderValue(subject)))
+	msg.WriteString("MIME-Version: 1.0\r\n")
+	msg.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
+	msg.WriteString("\r\n")
+	msg.WriteString(body)
+	msg.WriteString("\r\n")
+	return msg.String()
+}
+
+// sanitizeHeaderValue strips CR and LF so a payload-derived value cannot inject
+// additional SMTP headers. RFC 5322 header values are single-line by definition.
+func sanitizeHeaderValue(s string) string {
+	return strings.NewReplacer("\r", " ", "\n", " ").Replace(s)
 }
 
 func buildEmailBody(n map[string]any) string {
