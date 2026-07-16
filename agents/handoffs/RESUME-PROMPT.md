@@ -11,30 +11,28 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-48.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-49.md`)
 
-**Session 2026-07-16 result: D-109 — S47 DONE (PR #91, audit-integrity + hardening). ★ The S44 13-bug audit backlog is now FULLY CLOSED.**
+**Session 2026-07-16 result: D-110 — S48 DONE (PR #93). Ran a FRESH subsystem audit → 16 findings; shipped the most severe (a cross-tenant data-isolation leak).**
 
-**★ S47 shipped the final 5 audit findings + a CodeQL-surfaced password weakness.** All re-verified against the
-code first (5-agent workflow → all CONFIRMED); verify-before-build **overturned the ranked premise of 1a/1b**;
-8 mutations all caught RED; adversarial review → SHIP:
-- **1a/1b phantom audit** — delete/revoke of a bogus id audited a fabricated `user.delete`/`token.revoke`. The
-  audit said "return 404" but the OpenAPI contract **deliberately documents idempotent 204-on-missing** → the real
-  fix keeps 204 and suppresses the phantom audit (`meta.ErrNotFound` when `RowsAffected==0`; audit only real deletes).
-- **2 audit-after-refetch** (S40 class, create side) → pre-assign the id, audit before the re-fetch.
-- **3 token `kind` allowlist** `{api, ingest}` → 422 (OIDC/bootstrap use direct store calls, unaffected).
-- **4 anomaly boundary** — `wave3.go` eval `>` → `>=` to match the detect path (both stream + node).
-- **5 password CWE-916** — `hashPassword` fell back to fast SHA-256 on bcrypt error; removed it (fail closed),
-  reject >72-byte passwords with 422; `checkPassword` keeps legacy `sha256:` verify (backward compatible).
+**★ S48 re-scanned per the standing directive** (S44 backlog closed; CI-promotion gate not open until 07-23) and
+ran a **fresh adversarial audit of the un-swept subsystems** (collector, amsclient, reports, cluster, clickhouse) —
+7 finders + refute-by-default verifiers → **16 CONFIRMED (6 HIGH, 7 MEDIUM, 3 LOW), 4 refuted.** All recorded in
+`agents/handoffs/S48-AUDIT-FINDINGS.md`.
 
-Gates: full Go suite **24/24**; 8 mutations RED; review 0 code defects (1 medium test-accuracy finding accepted +
-corrected — finding-2 ordering isn't HTTP-discriminable with a concrete `*meta.Store`); no contract/web change;
-**prod rolled forward to `v0.4.0-35-g56167eb`** (was `-33-g4fe5a10`; rollback tag `pre-d109`; smoke green +
-allowlist/password 422s verified live). Full evidence: `decisions.md` D-109.
+**Shipped the top finding — cross-tenant leak:** `GET /analytics/audience?tenant=X` returned EVERY tenant's audience
+rollups — `AudienceAnalytics` omitted the `AND tenant = ?` filter its 3 sibling analytics queries all apply
+(re-verified against code; `rollup_audience` has a tenant column). Fix mirrors the siblings; mutation-proven RED
+(neutering only Audience's block); `IngestTimeseries` confirmed NOT affected (no tenant param/column).
 
-**★ SESSION-48 = NO queued audit findings — the S44 backlog is closed.** Per the standing directive, **re-scan
-ROADMAP-V2 §2 and assessment §5 for the next-highest-leverage track** (verify product-viability AND candidate-status
-before building — S38/S43 overturned their leads). Candidate angles noted in `sessions/SESSION-48.md`. **§2.7 CI
+Gates: full Go suite **24/24**; mutation-proven; no contract/web change; **prod rolled forward to
+`v0.4.0-37-g5e822e7`** (was `-35-g56167eb`; rollback tag `pre-d110`; smoke green + `audience?tenant=…` → 200 live).
+Full evidence: `decisions.md` D-110.
+
+**★ SESSION-49 = work the S48-audit backlog: 15 findings remain** (5 HIGH, 7 MEDIUM, 3 LOW) in
+`S48-AUDIT-FINDINGS.md`. Next HIGH cluster options: cross-app StreamID collision (dedup + aggregator, one root
+cause); `amsclient` streamID URL-escaping; scheduled-report period off-by-one; cluster edge-stream status. **Each
+is an AGENT finding — re-verify against the code before building** (S38/S43/S46/S47 lesson); one scope per PR. **§2.7 CI
 promotions unlock ≥ 2026-07-23 — CHECK THE DATE at open; if eligible it's a clean win.**
 
 **⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
