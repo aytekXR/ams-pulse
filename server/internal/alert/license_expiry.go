@@ -16,6 +16,14 @@ import (
 	"github.com/pulse-analytics/pulse/server/internal/store/meta"
 )
 
+// perpetualLicenseDays is the sentinel "days until expiry" reported for a perpetual /
+// no-key licence. Deliberately bounded and float32-safe (~100 years): the OpenAPI alert
+// value field is format:float, and math.MaxFloat64 (~1.8e308) overflowed float32 clients
+// to +Inf and rendered as "1.8e+308" in the history UI (D-129 review). ok=false is what
+// actually prevents firing — this value is purely the informational number persisted /
+// delivered on the resolve, so a large-but-readable "effectively never" is all it needs.
+const perpetualLicenseDays = 36500
+
 // LicenseExpiryChecker reports how many days remain until the licence key expires.
 // ok=false means the licence has no expiry set at all (a perpetual key, or the
 // free/no-key fallback) — there is nothing to warn about, so such rules are skipped.
@@ -36,11 +44,18 @@ func (f FakeLicenseChecker) DaysUntilExpiry() (float64, bool) { return f.Days, f
 
 // evalLicenseExpiry evaluates a license_expiry rule against the injected checker.
 // The licence is global (no per-stream scope), so it yields a single result keyed
-// "license". A perpetual licence (ok=false) yields no result — the rule cannot fire.
+// "license". A perpetual licence (ok=false) yields a single ok=false result so a
+// previously-firing alert resolves; it can never itself fire.
 func (e *Evaluator) evalLicenseExpiry(rule meta.AlertRuleRow, _ domain.AlertScope, checker LicenseExpiryChecker) []evalResult {
 	days, ok := checker.DaysUntilExpiry()
 	if !ok {
-		return nil // perpetual / no-key licence — nothing to warn about
+		// D-129: a perpetual / no-key licence has "nothing to warn about", but we must
+		// still emit a result so processEvaluation can RESOLVE a previously-firing
+		// near-expiry alert. The state machine has no stale-state sweep — an absent
+		// groupKey stays firing forever (returning nil here left the alert stuck).
+		// ok=false is terminal: perpetual can only resolve, never fire, whatever the
+		// operator. The value is a bounded, float32-safe sentinel (see the const).
+		return []evalResult{{groupKey: "license", value: perpetualLicenseDays, ok: false}}
 	}
 	return []evalResult{{
 		groupKey: "license",
