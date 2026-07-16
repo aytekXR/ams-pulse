@@ -11,7 +11,42 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-51.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-52.md`)
+
+**Session 2026-07-16 result: D-113 — S51 DONE (PR #99). Shipped the reports-scheduler date/tz cluster (S48-audit findings [4]+[15]).**
+
+**★ S51 took the reports-scheduler cluster** (CI-promotion gate still shut, 07-16 < 07-23). Two coherent findings in
+`internal/reports/scheduler.go`:
+- **[4] period off-by-one** — the monthly statement's inclusive upper bound was `time.Date(now.Year(), now.Month(),
+  1)` (first of the CURRENT month), and the daily-rollup query is `bucket >= ? AND bucket <= ?` against a Date
+  column, so that day's rows bled into the previous month (over-count + mislabelled period). Fix: pure
+  `previousCalendarMonthUTC(now)` → inclusive [first, last]-of-prev-month.
+- **[15] cron local-vs-UTC** — `nextCronTime` read `t.Hour()/Day()/…` in the seed's Location; callers seed with
+  local `time.Now()` while the pipeline is UTC → non-UTC hosts fired at 06:00 local. Fix: normalize the seed to UTC
+  INSIDE `nextCronTime` (DRY; latent on this UTC prod, real for non-UTC installs). **Design note (S50 lesson):**
+  took the verified core, not the audit's literal "3 call sites" suggestion.
+
+Gates: full Go suite **24/24**; vet clean; **mutation-proven ×2** (revert `to` → period test RED; remove `from.UTC()`
+→ EST seed returns 11:00 UTC, cron case RED); **2-lens review** → 0 findings; **prod rolled forward to
+`v0.4.0-43-g7c206a9`** (was `-41-g60f2a13`; rollback tag `pre-d113`; smoke green + `/reports/schedules` → 200 live).
+Full evidence: `decisions.md` D-113.
+
+**★ SESSION-52 = keep working the S48-audit backlog: 10 findings remain** (1 HIGH, 6 MEDIUM, 3 LOW) in
+`S48-AUDIT-FINDINGS.md`. Next: the **last HIGH — [5] cluster edge-stream status ignored** (`cluster/discovery.go:264`
+`IsEdgeStream` — a downed edge node keeps its stale non-zero `ActiveStreams`, so `IsEdgeStream` stays true forever →
+the aggregator permanently suppresses origin viewer counts; `poll()` marks `Status="down"` at `:209` but never
+clears `ActiveStreams`; fix adds `n.Status != "down"` to the predicate; `mockClusterClient.setNodes` in
+`discovery_test.go` is reusable). Then the MEDIUM/LOW batch ([7] beacon TS==0, [8] webhook replay, [9] prevStatus
+leak, [10] egress-method disclosure, [11]/[12]/[13] clickhouse, [14] 413 heuristic, [16] dup node_stats). **Each is
+an AGENT finding — re-verify against the code before building**; one scope per PR. **§2.7 CI promotions unlock ≥
+2026-07-23 — CHECK THE DATE at open.**
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
+ledger 07-27) — operator-only. GHCR anon → 401 — operator-only. No new operator action from S51.
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-51.md`)
 
 **Session 2026-07-16 result: D-112 — S50 DONE (PR #97). Shipped S48-audit finding [3] — `amsclient` streamID URL-path-escaping.**
 

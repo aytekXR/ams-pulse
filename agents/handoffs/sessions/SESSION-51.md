@@ -1,5 +1,12 @@
 # SESSION-51 — planned at S50 close (D-112)
 
+> **✅ CLOSED 2026-07-16 (D-113, PR #99).** Took cluster 1 — the reports-scheduler date/tz cluster (S48-audit
+> findings [4]+[15]). [4] the monthly statement's inclusive upper bound was first-of-CURRENT-month → that day bled
+> into the previous month; extracted `previousCalendarMonthUTC(now)`. [15] `nextCronTime` read cron fields in the
+> seed's local tz → normalized the seed to UTC inside the function (latent on UTC prod, real for non-UTC installs).
+> Full Go suite 24/24; mutation-proven ×2; 2-lens review (0 findings); prod `v0.4.0-43-g7c206a9`. **10 S48-audit
+> findings remain** → SESSION-52. Evidence: `decisions.md` D-113. (CI-promotion gate still shut — 07-16 < 07-23.)
+
 > Written by SESSION-50 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > Read `RESUME-PROMPT.md` + `agents/handoffs/S48-AUDIT-FINDINGS.md` before dispatching.

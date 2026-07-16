@@ -12,6 +12,17 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **Scheduled monthly reports cover the correct calendar month (D-113).** The
+  previous-month statement used an inclusive end bound set to the first day of the
+  *current* month, so that day's usage rolled into the prior month's report
+  (over-counting viewer-minutes, egress and peak concurrency, and mislabelling the
+  period end). The range is now the first-to-last day of the previous month.
+- **Report schedule cron times are interpreted in UTC (D-113).** The next-run
+  calculation read the cron hour/day in the server's local timezone while the rest
+  of the reporting pipeline is UTC, so on a non-UTC-configured host a schedule like
+  "0 6 1 * *" fired at 06:00 local instead of 06:00 UTC. The cron seed is now
+  normalized to UTC. (No effect on UTC-configured servers.) (Both found by the S48
+  subsystem audit, findings [4] and [15].)
 - **WebRTC QoE stats are collected for streams whose id contains a URL-special
   character (D-112).** AMS stream ids are chosen by the publisher; one containing
   `#`, `?`, a space or `/` (e.g. `test#peer`) broke the `webrtc-client-stats`

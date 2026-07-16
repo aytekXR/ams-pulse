@@ -7389,3 +7389,58 @@ code first.
 **Docs at close:** D-112 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (finding [3]
 ✅); RESUME-PROMPT ▶ START HERE → SESSION-51; `operator-expected.md` refreshed (no new item);
 `sessions/SESSION-50.md` CLOSED; `sessions/SESSION-51.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 12.
+
+---
+
+## D-113 — S51 (2026-07-16): CLOSED — reports-scheduler period off-by-one + cron UTC (findings [4]+[15], PR #99)
+
+**Context.** SESSION-51 took the reports-scheduler date/timezone cluster — two coherent S48-audit findings in one
+file (`internal/reports/scheduler.go`). CI-promotion gate still shut (07-16 < 07-23). Both re-verified against the
+code before building.
+
+**Finding [4] — period off-by-one.** `runSchedule` set the monthly statement's upper bound to
+`time.Date(now.Year(), now.Month(), 1, ...)` — the **first day of the current month**. The daily-rollup query
+(`accounting.go` day path, which the scheduler always hits via `Interval:"day"`) filters `bucket >= ? AND bucket <=
+?` — **inclusive** — against a **Date** column, so `bucket = first-of-this-month` rows satisfied `<= to` and bled
+into the previous month's statement (over-counting viewer-minutes/egress/peak; the period end was also mislabelled
+in the filename/header since the same `to` flows into `StatementOptions`). **Verified** the inclusive bound at
+`accounting.go:180/204/371` and that `fetchConcurrencyPeaks` uses the same shape. **Fix:** extracted a pure
+`previousCalendarMonthUTC(now) → [first-of-prev-month, last-of-prev-month]` (both inclusive); `runSchedule` uses it.
+
+**Finding [15] — cron interpreted in local time.** `nextCronTime` searches minute-by-minute reading
+`t.Hour()/t.Minute()/t.Day()/t.Weekday()` in the **seed's Location**; the three call sites (`scheduler.go:233`,
+`reports_wave2.go:130/183`) seed with `time.Now()` (local) while the rest of the pipeline is UTC. On a non-UTC host
+`"0 6 1 * *"` resolved to 06:00 **local** (e.g. 11:00 UTC on `America/New_York`), drifting from the UTC period
+boundary. **Fix:** normalize the seed with `from = from.UTC()` at the top of `nextCronTime`.
+
+**★ Design decision (S50 lesson — take the verified core, not the literal suggestion).** The audit proposed adding
+`.UTC()` at each of the 3 call sites; instead I normalized **inside `nextCronTime`** — DRY, protects all callers
+(incl. future ones), and is directly provable via the exported `NextCronTime` wrapper. **Latency note:** prod runs
+UTC (`TZ` unset → `time.Local == UTC`), so [15] was **latent on this deployment**; it is a real correctness bug for
+non-UTC self-hosted installs. Recorded honestly rather than overstated.
+
+**Verification.** gofmt/vet clean; **full Go suite 24/24**. New internal `TestPreviousCalendarMonthUTC` (mid-month,
+first-of-month, Jan→Dec year rollback, short non-leap Feb, non-UTC-`now` normalization) + a non-UTC-seed case in
+`TestNextCronTime_HonorsDayOfMonth` (existing cron cases all use UTC seeds → unaffected by the normalization).
+**Mutation-proven ×2:** reverting `to` to first-of-current-month turns the period test RED across multiple months;
+removing `from.UTC()` returns `2026-07-01T06:00-05:00` (= 11:00 UTC) for an EST seed, turning the cron case RED
+(`.Equal` instant comparison). **Independent 2-lens adversarial review** (period correctness/consumers + cron
+regression, refute-by-default): **0 findings**.
+
+**Prod: rolled forward** (server *source* changed) — STAMPED build, rollback tag `pre-d113`, backup rc=0. New prod
+stamp: **`v0.4.0-43-g7c206a9`** (was `v0.4.0-41-g60f2a13`). Smoke: `/healthz` all-ok; `pulse version` =
+`v0.4.0-43-g7c206a9`; signed webhook → 200; limits 512M/0.5cpu; logs clean; **live functional:** `GET
+/api/v1/reports/schedules` → **200** `{items,meta}` (reports subsystem serves cleanly on the new binary; scheduler
+goroutine started with no error).
+
+**Operator action required: NONE.** Carried items unchanged (AMS trial-expiry doc discrepancy 07-12 vs 07-27; GHCR
+anon → 401 — both operator-only).
+
+**★ Remaining S48-audit backlog: 10 findings (1 HIGH, 6 MEDIUM, 3 LOW)** in `S48-AUDIT-FINDINGS.md`. Findings [4]
+and [15] marked ✅ DONE. Next: the last HIGH — **[5]** cluster edge-stream status ignored
+(`cluster/discovery.go:264`). Then the MEDIUM/LOW cluster ([7]/[9]/[10]/[8]/[11]/[12]/[13]/[14]/[16]). Re-verify
+each against the code first.
+
+**Docs at close:** D-113 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (findings
+[4]+[15] ✅); RESUME-PROMPT ▶ START HERE → SESSION-52; `operator-expected.md` refreshed (no new item);
+`sessions/SESSION-51.md` CLOSED; `sessions/SESSION-52.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 10.
