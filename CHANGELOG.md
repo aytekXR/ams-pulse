@@ -12,6 +12,12 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Security
 
+- **Synthetic probes now stop at runtime when a tenant downgrades below the probe
+  tier (D-108).** The HTTP probe-CRUD handlers gate `CheckProbes()` (403 on Free),
+  but the background probe scheduler executed every enabled probe regardless — a
+  tenant that downgraded Pro→Free kept probing indefinitely. The runner now checks
+  a per-probe entitlement gate (wired to the license manager's `CheckProbes`) before
+  each execution and skips the probe when the tier no longer permits it.
 - **CSV export/statements are now formula-injection-safe (D-106).** The usage
   export (`GET /api/v1/reports/export`) and white-label statement generator wrote
   publisher-controlled columns (`app`, `stream_id`, `tenant` — an AMS
@@ -35,6 +41,15 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **The live dashboard WebSocket now accepts browser (cookie / `?token=`) auth
+  (D-108).** `GET /api/v1/live/ws` sat behind the header/cookie-only bearer
+  middleware while its handler re-extracted the token from the header/`?token=`
+  only — so an OIDC `pulse_session` cookie session (no header) was rejected, and a
+  browser connecting via `?token=` (the only method a browser can use for a
+  WebSocket) was blocked by the middleware before the handler ran. The route now
+  uses the same auth path as file downloads (header / `pulse_session` cookie /
+  `?token=`) and reads the validated token from request context. This path also
+  enforces `kind=api` + expiry, which the previous inline lookup did not.
 - **Editing a report schedule no longer silences it (D-107).** `PUT
   /api/v1/reports/schedules/{id}` rebuilt the row from the request body, which
   NULLed `next_run_at`; the scheduler selects due schedules with `next_run_at IS

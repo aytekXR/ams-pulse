@@ -1,14 +1,23 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-107 — SESSION-45)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-108 — SESSION-46)
+
+> **S46 (D-108) needs NO operator action.** It fixed two MAJOR findings from the S44 audit: **synthetic probes
+> kept running after a tenant downgraded below the probe tier** (the background scheduler didn't re-check the
+> licence — the entitlement was "decorative"), and the **live-dashboard WebSocket rejected browser logins** (an
+> OIDC cookie session or a browser `?token=` connection was 401'd because the socket sat behind header-only
+> auth). Both are code-only fixes, mutation-proven, adversarially reviewed, and rolled to prod. If you use
+> SSO/OIDC, the live dashboard now opens over your session cookie.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
+> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 (team-management model)
+> still wait on you; none blocks the autonomous work (the S44 audit has ~6 findings left, queued for S47).
+
+## (previous header — D-107, SESSION-45)
 
 > **S45 (D-107) needs NO operator action.** It fixed two reports-scheduler bugs from the S44 audit — the
 > highest-severity one: **editing any report schedule silently stopped it from ever firing again** (the update
 > path wiped its next-run time), and the **default "Monthly" schedule preset was firing daily** (the cron parser
 > ignored the day-of-month). Both are code-only fixes, mutation-proven, adversarially reviewed, and rolled to
 > prod. If you have report schedules configured, they now behave correctly on edit and on the Monthly preset.
->
-> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
-> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 (team-management model)
-> still wait on you; none blocks the autonomous work (the S44 audit still has ~6 findings queued for S46/S47).
 
 ## (previous header — D-106, SESSION-44)
 

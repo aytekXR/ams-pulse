@@ -7082,3 +7082,75 @@ token `kind` allowlist; anomaly `>` vs `>=` boundary). Full detail: `sessions/SE
 **Docs at close:** D-107 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed section; ROADMAP-V2 §2.29 updated;
 RESUME-PROMPT ▶ START HERE → SESSION-46; `operator-expected.md` refreshed (no new item); `sessions/SESSION-46.md`
 written carrying the S46/S47 backlog.
+
+---
+
+## D-108 — S46 (2026-07-16): CLOSED — entitlement + WS-auth cluster (runtime probe gate + live-WS cookie/token auth) (PR #89)
+
+**Context.** S46 continued working the S44 adversarial-audit backlog (13 confirmed bugs; security cluster shipped
+S44/D-106, scheduler cluster S45/D-107). This is the **entitlement + WS-auth cluster** — the two MAJOR findings
+ranked in `sessions/SESSION-46.md`. Both were **re-verified against the code before building** (D-095 standing
+rule); the second finding turned out subtler than the audit stated (see below).
+
+**1. Probe runner ignored entitlement on the background tick (S37 "enforced, not decorative" class).** The HTTP
+CRUD handlers gate `CheckProbes()` (403 on Free), but `Runner.executeProbe` (`prober.go`) ran every enabled probe
+regardless — a tenant that downgraded **Pro→Free kept probing** via the background scheduler. **Fix:** added
+`prober.Config.EntitlementGate func() error`, stored on `Runner`, checked at the **top of `executeProbe`** (log
+Debug + `return` on non-nil error, before any request/result write); wired `EntitlementGate: lic.CheckProbes` in
+`serve.go`. Verified the wiring seam existed (the license `*Manager` is already constructed in `newServer`; no new
+plumbing beyond the config field). `license.Manager.Tier()` is `sync.RWMutex`-guarded, so the per-probe call is
+race-free even under many concurrent probe goroutines.
+
+**2. `GET /api/v1/live/ws` rejected browser sessions — subtler than the audit stated.** The audit said "the handler
+ignores the validated `ctxTokenKey`". Verification found the real defect was a **route/middleware mismatch**: the
+route sat under `bearerAuthMiddleware` (header/cookie only — `?token=` **intentionally rejected**, A4), while
+`handleLiveWS` re-extracted from header/`?token=` and ran its **own** `LookupToken`. Net effect: (a) an OIDC
+`pulse_session` cookie user (no header) was 401'd by the handler even though the middleware had validated the
+cookie; and (b) the browser's `?token=` (the actual connect path, `web/src/api/client.ts:570`) was rejected by
+`bearerAuthMiddleware` before the handler ever ran. **Correct fix = move the route to the `downloadAuthMiddleware`
+group** (header / `pulse_session` cookie / `?token=`) **and** simplify `handleLiveWS` to read the validated token
+from `ctxTokenKey`. This fixes header + cookie + `?token=` together. The new path also enforces `kind=="api"` +
+expiry (which the old inline `LookupToken` did **not** — strictly *safer*); `requireWriteScope` was already a no-op
+on the WS GET (it short-circuits GET/HEAD/OPTIONS), so dropping it from the group changes nothing. **This validated
+the "verify before building" discipline — building the audit's literal claim would have been wrong.**
+
+**Verification.** gofmt/vet clean; **full Go suite 24/24** (api re-run fresh `-count=1` after the spec edit, since
+Go test caching does not track the runtime-read spec file). Two new tests, **both mutation-proven RED** on a
+throwaway copy (real tree untouched):
+- `prober/entitlement_gate_test.go` — drives the real `Run` loop against a **working** HLS origin so a skip proves
+  the gate (not a probe failure); gated arm asserts 0 results + 0 `RecordResult`; nil-gate arm is the positive
+  control (≥1 result, so the harness isn't vacuous). Neutering the gate (`err != nil && false`) → gated arm RED.
+- `api/s46_live_ws_auth_test.go` — `?token=`, `pulse_session` cookie, invalid token, no-creds. Reverting the route
+  to the bearer group → `?token=` case RED; making the handler ignore `ctxTokenKey` (require a header) → cookie
+  case RED. (Mutation 3 needed a `#`-delimited perl substitution — the `{`-terminated replacement unbalanced
+  brace delimiters; a small tooling note, not a test issue.)
+
+**Adversarial review (3 lenses — ws-auth-bypass, prober-gate, regression/test-adequacy — each finding refuted by
+default).** 2 findings **refuted** (WRONG_TOKEN_KIND and expired-token "behavioral changes with no test" — not
+real defects), **1 LOW confirmed and fixed**: the OpenAPI spec for `/live/ws` documented only bearer + `?token=`
+but the endpoint now genuinely accepts the `pulse_session` cookie. **Contract fix:** added a `cookieAuth`
+(`in: cookie`, `pulse_session`) security scheme, referenced it in `/live/ws` `security`, corrected the description;
+`web/src/lib/api/schema.d.ts` regenerated (`npm run gen:api`) — only the JSDoc comment changed (openapi-typescript
+7 does not emit security schemes as types); web `tsc` clean.
+
+**Prod: rolled forward** (server *source* changed) per `deploy/runbooks/upgrade-rollback.md` — STAMPED build,
+rollback tag `pre-d108`, pre-upgrade backup rc=0. New prod stamp: **`v0.4.0-33-g4fe5a10`** (was
+`v0.4.0-31-g2787dcd`). Evidence smoke: `/healthz` all-ok (`ams_env_configured:true`, all components ok); running
+`pulse version` = `v0.4.0-33-g4fe5a10`; signed AMS webhook → **200**; limits `512M/0.5cpu`; logs no ERROR/panic.
+**S46 functional wiring verified live:** the moved `GET /api/v1/live/ws` returns **401 (not 404)** with the
+`downloadAuthMiddleware` messages — no-auth → "missing or invalid Authorization header", `?token=bogus` →
+"invalid token" — confirming the route move + the `?token=` validation path landed in prod (a still-bearer route
+would not reach the `?token=` "invalid token" branch).
+
+**Operator action required: NONE.** Carried operator items unchanged: **confirm the true AMS trial expiry**
+(runbook 07-12 vs ledger 07-27); GHCR anon → 401; the S43 soft rulings. No new operator item from S46.
+
+**Remaining S44-audit backlog (6 findings → S47).** S47 = audit integrity + hardening:
+`handleDeleteUser`/`handleRevokeToken` false-audit+204 on missing id (S38 class — **re-verify the split-verdict
+revoke-token finding first**); create-user/token audit-after-refetch (S40 class); token `kind` allowlist
+(positive-allowlist, D-098); anomaly `>` vs `>=` boundary (`alert/wave3.go` eval vs `anomaly.go` detect). Full
+detail: `sessions/SESSION-47.md`.
+
+**Docs at close:** D-108 CLOSED (this block); CHANGELOG `[Unreleased]` Security+Fixed; ROADMAP-V2 §2.29 updated;
+RESUME-PROMPT ▶ START HERE → SESSION-47; `operator-expected.md` refreshed (no new item); `sessions/SESSION-47.md`
+written carrying the 6 remaining audit findings.

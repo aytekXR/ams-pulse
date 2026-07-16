@@ -540,8 +540,13 @@ single-quote); (2) **email/SMTP creds** now encrypted at rest (`secretFields` +=
 - ✅ **S45 (D-107, PR #87)** — reports-scheduler cluster: the `PUT /reports/schedules/{id}` **BLOCKER** (NULLed
   `next_run_at` → silenced the schedule) + `nextCronTime` dropping day-of-month (default "Monthly" preset fired
   daily). Both mutation-proven + adversarially reviewed.
-- ⏳ **S46** — entitlement + WS auth: probe-runner ignores `CheckProbes()` on the tick (S37 class); `handleLiveWS`
-  ignores cookie auth.
+- ✅ **S46 (D-108, PR #89)** — entitlement + WS auth: the probe runner ignored `CheckProbes()` on the background
+  tick (S37 "enforced, not decorative" — a downgraded tenant kept probing) → new `prober.Config.EntitlementGate`
+  wired to `lic.CheckProbes`, checked before every probe; and `GET /live/ws` rejected browser sessions (OIDC
+  cookie + browser `?token=`) because the route sat behind header-only bearer middleware while the handler
+  re-extracted the token itself → moved to `downloadAuthMiddleware` + read validated `ctxTokenKey` (also gains
+  `kind=api` + expiry). Both mutation-proven; adversarial review (2 refuted, 1 LOW spec should-fix → fixed:
+  OpenAPI `/live/ws` now documents the `cookieAuth` path).
 - ⏳ **S47** — audit integrity + hardening: `handleDeleteUser`/`handleRevokeToken` false-audit+204 on missing id
   (S38 class); create-user/token audit-after-refetch (S40 class); token `kind` no allowlist; anomaly `>` vs `>=`
   boundary. Full detail: `sessions/SESSION-46.md`.
