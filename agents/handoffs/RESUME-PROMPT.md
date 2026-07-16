@@ -11,7 +11,46 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-52.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-53.md`)
+
+**Session 2026-07-16 result: D-114 — S52 DONE (PR #101). Shipped the last HIGH audit finding [5] — cluster edge-stream status. ★ ALL 6 HIGH findings now shipped.**
+
+**★ S52 took the last HIGH** (CI-promotion gate still shut, 07-16 < 07-23). `cluster/discovery.go` `IsEdgeStream`
+checked only `Role=="edge" && ActiveStreams>0` — no Status check. `poll()` marks a crashed/removed edge
+`Status="down"` (`:209`) but never clears its `ActiveStreams`, so a downed edge kept `IsEdgeStream` true forever →
+the aggregator's VD-03 dedup (`aggregator.go:344`) permanently **skipped origin viewer_count** (froze origin viewer
+totals at 0) even though the origin was the only node left serving. Fix: `n.Status != "down"` (degraded still
+counts). Mutation-proven (5-case table); adversarial review refuted a split-brain double-count concern (single
+origin-pointed restpoller → no second `stream_stats` series).
+
+Gates: full Go suite **24/24**; vet clean; **mutation-proven**; **1-lens review** → 1 finding refuted; **prod rolled
+forward to `v0.4.0-45-g0ab487f`** (was `-43-g7c206a9`; rollback tag `pre-d114`; smoke green + `/fleet/nodes` → 200
+live). Full evidence: `decisions.md` D-114.
+
+**★★ MILESTONE: all 6 HIGH S48-audit findings shipped.** **★ SESSION-53 = the MEDIUM/LOW batch: 9 findings remain**
+(0 HIGH, 7 MEDIUM, 2 LOW) in `S48-AUDIT-FINDINGS.md`. Candidates (verify each against the code first; one scope per
+PR):
+- **[7] MEDIUM** `ingest/health.go:172` — `time.IsZero()` never fires for `ev.TS==0` (`time.UnixMilli(0)` is 1970,
+  not Go zero) → publisher stamped 1970 → false "source gone" eviction; fix `if ev.TS <= 0`. **Clean first pick.**
+- **[9] MEDIUM** `restpoller.go:455` `detectEnded` leaks `p.prevStatus` for non-broadcasting streams that vanish.
+- **[10] MEDIUM** `accounting.go:350` `UsageReport.EgressMethod` hardcoded → CSV/PDF header misstates F6 method.
+- **[14] LOW** `beacon.go:352` 413 detection uses a byte-count heuristic vs `errors.As(&http.MaxBytesError)`.
+- **[11]/[12]/[13] MEDIUM** clickhouse (⚠ **[12] needs a migration — FIVE places**; [11] wrong column names zero
+  the anomaly baseline; [13] per-item PrepareBatch → partial commit).
+- **[16] LOW** `discovery.go:145` duplicate node_stats on same resolved key.
+- **[8] MEDIUM** webhook replay — **verify product-viability**: needs a new `X-Ams-Timestamp` header + AMS signing
+  convention; may be operator/contract-gated, not a pure code fix.
+
+**Each is an AGENT finding — re-verify against the code before building** (S49 [2] subtler than summary; S50/S51
+took the verified core not the literal suggestion). **§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE at
+open.**
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
+ledger 07-27) — operator-only. GHCR anon → 401 — operator-only. No new operator action from S52.
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-52.md`)
 
 **Session 2026-07-16 result: D-113 — S51 DONE (PR #99). Shipped the reports-scheduler date/tz cluster (S48-audit findings [4]+[15]).**
 

@@ -1,5 +1,13 @@
 # SESSION-52 — planned at S51 close (D-113)
 
+> **✅ CLOSED 2026-07-16 (D-114, PR #101).** Took the last HIGH — S48-audit finding [5]: `cluster/discovery.go`
+> `IsEdgeStream` had no Status check, so a crashed edge (marked `down` but with stale non-zero `ActiveStreams`) kept
+> `IsEdgeStream` true forever → the aggregator's VD-03 dedup permanently suppressed origin viewer counts. Fix:
+> `n.Status != "down"` (degraded still counts). Full Go suite 24/24; mutation-proven (5-case table); 1-lens review
+> (1 finding refuted — split-brain double-count impossible with a single origin-pointed restpoller); prod
+> `v0.4.0-45-g0ab487f`. **★ All 6 HIGH audit findings now shipped; 9 MEDIUM/LOW remain** → SESSION-53. Evidence:
+> `decisions.md` D-114. (CI-promotion gate still shut — 07-16 < 07-23.)
+
 > Written by SESSION-51 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > Read `RESUME-PROMPT.md` + `agents/handoffs/S48-AUDIT-FINDINGS.md` before dispatching.

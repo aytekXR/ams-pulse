@@ -1,4 +1,19 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-113 — SESSION-51)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-114 — SESSION-52)
+
+> **S52 (D-114) needs NO operator action.** This session fixed the **last of the six high-severity** subsystem-audit
+> findings: in an origin+edge cluster, a **crashed edge node kept origin viewer counts stuck at 0**. Pulse skips the
+> origin's viewer count while an edge is serving a stream (the origin's number already includes edge viewers), but a
+> downed edge was still treated as "serving" because its last-known stream count was never cleared — so origin
+> viewer totals never recovered even after the edge was gone and the origin was the only node left. Downed edges are
+> now excluded from that check. Fixed and live (`v0.4.0-45-g0ab487f`). **★ With this, all six high-severity audit
+> findings are shipped; 9 lower-severity findings remain**, queued for upcoming sessions
+> (`agents/handoffs/S48-AUDIT-FINDINGS.md`); none needs you.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
+> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none
+> blocks the autonomous work.
+
+## (previous header — D-113, SESSION-51)
 
 > **S51 (D-113) needs NO operator action.** This session fixed two subsystem-audit findings in the scheduled-report
 > engine: (1) the **monthly statement's date range was off by one day** — the first day of the *current* month was
