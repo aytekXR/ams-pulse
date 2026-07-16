@@ -11,7 +11,44 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-68.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-69.md`)
+
+**Session 2026-07-16 result: D-130 — S68 shipped the probe-URL SSRF guard ([21]) and DEFERRED the audit-log admin gate ([20]) as a product ruling.**
+
+**★ S68 [21]** shipped a new shared `internal/ssrfguard` package (PR #130, prod `v0.4.0-74-g2621c03`): probe URLs are
+now scheme-allowlisted at the API boundary (422) and, authoritatively, a `net.Dialer.Control` hook refuses — at dial
+time on the DNS-*resolved* IP, across all three prober dial paths (HTTP/RTMP/WS) — link-local (incl. IMDSv4
+`169.254.169.254` + NAT64/IPv4-compat embeddings), IMDSv6 `fd00:ec2::254`, and unspecified. **Verified CORE narrower
+than the ledger:** loopback + RFC-1918/ULA are intentionally ALLOWED (self-hosted AMS is internal — B4/A6 ruling);
+blanket RFC-1918 denial would break the primary use case. 11/11 mutants killed; full suite 25/25. **The 5-lens
+adversarial review caught + fixed 4 defects pre-merge (2 MAJOR: a `ProxyFromEnvironment` bypass and a NAT64-prefix
+bypass).** Evidence: `decisions.md` D-130.
+
+**★ S68 [20] DEFERRED (no code):** viewer-token audit-log read is the deliberate reads-open model (D-105/S43), not a
+gap. **NEW operator product-call** logged in `operator-expected.md` (adjudicated either/or — keep reads open, or gate
+the whole admin-read surface and lose the viewer-role audit page). No longer "pending re-check".
+
+**★ SESSION-69 = continue the S62 backlog: 10 remain (0 HIGH, 6 MEDIUM, 4 LOW)** in `S62-AUDIT-FINDINGS.md`.
+Re-read ROADMAP-V2 §2.31 + the ledger and **pick the highest-leverage next move**; verify-at-open against the code
+(take the verified CORE — S66 declined an off-by-one, S67 overturned two impls, S68 narrowed RFC-1918). Candidate
+clusters:
+- **prober HLS [14] zero-duration EXTINF / [15] protocol-relative URI** — same subsystem just swept; bounded parse
+  correctness. Coherent lead candidate.
+- **flags hysteresis [16]/[17]** (anomaly flag flapping) and **anomaly [18] scopeJSON escaping** — anomaly cluster.
+- **license [12]/[23]/[24]** — licence tier/error handling.
+- **LOW [22] cert_expiry lt-0 never-fires / [25]** — small correctness nits.
+
+**Each is an AGENT finding — re-verify against the code before building.** Untrusted-input / state-machine / security
+surface → run the adversarial-review workflow (it has caught real pre-merge defects in S65/S66/S67/S68).
+**§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE at open** (today 2026-07-16, still locked).
+
+**⚠ CARRIED operator items (unchanged):** AMS trial-expiry doc discrepancy (07-12 vs 07-27) — operator-only; GHCR anon
+→ 401 — operator-only; the S63 email-STARTTLS behavior note (informational). **NEW:** the [20] audit-read product call
+(see operator-expected.md).
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-68.md`)
 
 **Session 2026-07-16 result: D-129 — S67 shipped the alert-evaluator correctness cluster (S62 findings [7]+[8]+[9]). ★ Alert-evaluator subsystem swept.**
 

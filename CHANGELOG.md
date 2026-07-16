@@ -12,6 +12,20 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Security
 
+- **Synthetic-probe URL SSRF guard (D-130).** Operator-stored probe URLs are fetched by the
+  prober from inside the server's trust boundary. Previously a URL was accepted with no scheme
+  or host validation, so an admin-scoped token could point a probe at the cloud instance-metadata
+  endpoint (`http://169.254.169.254/…` → IAM-credential escalation), other link-local/unspecified
+  addresses, or a non-HTTP scheme (`file://`, `gopher://`), and read reachability/TTFB back via
+  probe results. A new `ssrfguard` policy now (a) rejects disallowed schemes at the API boundary
+  (allowlist: http, https, ws, wss, rtmp, rtmps) → **422**, and (b) refuses, at *dial time* on the
+  DNS-resolved IP, any connection to link-local (incl. IMDSv4 `169.254.169.254` and NAT64-embedded
+  forms), IMDSv6 `fd00:ec2::254`, or the unspecified address — across every prober dial path (HLS/
+  DASH/reachability HTTP client, RTMP, WebRTC signaling), DNS-rebinding-safe and re-checked per HTTP
+  redirect hop, with `HTTP(S)_PROXY` disabled so a proxy cannot dial the destination behind the
+  guard. **Loopback and private RFC-1918/ULA addresses remain allowed** — self-hosted AMS nodes are
+  routinely on internal networks (consistent with the B4/A6 AMS-source-test ruling). (Found by the
+  S62 subsystem audit, finding [21].)
 - **Opt-in webhook replay protection (D-123).** The AMS webhook endpoint authenticated
   each request's HMAC signature but had no freshness check, so a captured, validly-signed
   webhook could be replayed indefinitely (duplicate stream-start/stop/recording events).

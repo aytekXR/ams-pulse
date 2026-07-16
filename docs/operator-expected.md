@@ -1,4 +1,29 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-129 — SESSION-67)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-130 — SESSION-68)
+
+> **S68 (D-130): one NEW product decision for you, plus a shipped security fix (no action).**
+>
+> **① SHIPPED, no action — probe-URL SSRF guard ([21]).** Synthetic probes now refuse to connect to cloud
+> instance-metadata / link-local / unspecified addresses (the classic SSRF credential-theft target) and reject
+> non-standard URL schemes; disallowed URLs get a 422. **Loopback and private (RFC-1918) addresses are still allowed** —
+> so probing an AMS node on your internal network (e.g. `http://10.x`/`192.168.x`/Docker `172.x`) keeps working exactly
+> as before. Live in prod (`v0.4.0-74-g2621c03`, rolled forward; smoke green: healthz 200, signed webhook 200, limits
+> 512M/0.5cpu, clean logs). Nothing to configure.
+>
+> **② DECISION NEEDED — audit-log read access model ([20], adjudicated product call).** A `viewer`-scoped token (or
+> viewer-role SSO user) can read `GET /admin/audit-log`, which lists actor IDs/names, IP addresses, and the detail of
+> every config change. I re-verified this and it is **working as designed**: it follows the same deliberate "all
+> authenticated reads are open" model that also governs `GET /admin/users` and `GET /admin/tokens` (the S43/D-105
+> ruling). I did **not** change it, because gating *only* the audit read would be inconsistent, and gating the *whole*
+> admin-read surface by admin scope **would break the audit-log page for your viewer-role users**. **Your call:** (a)
+> keep reads open (status quo, recommended unless you have low-trust viewer tokens), or (b) ask me to gate the whole
+> admin-read surface behind the `admin` scope (accepting that viewer-role users lose the audit page and other admin
+> read pages). This is the same item that has appeared as "pending re-check" for several sessions — it is now resolved
+> to a clean either/or decision; no further code investigation is needed, just your preference.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs 07-27;
+> see ⚠ below). GHCR is still private (**401**). The S63 email-STARTTLS behavior note below still applies.
+
+## (previous header — D-129, SESSION-67)
 
 > **S67 (D-129) needs NO operator action.** This session fixed three internal correctness bugs in the alert evaluator:
 > (1) node CPU/mem/disk threshold rules no longer false-alarm on a node that doesn't report that metric (standalone
