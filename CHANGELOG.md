@@ -12,6 +12,12 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **Cluster fleet metrics no longer double-count a node when the AMS cluster API
+  returns a duplicate entry (D-119).** If two node records resolved to the same
+  identity (for example both missing their node ID and IP), each poll emitted two
+  `node_stats` events for that one node — doubling its CPU/memory/network figures in
+  ClickHouse and showing a phantom extra node on the fleet page. Each node is now
+  counted once per poll. (Found by the S48 subsystem audit, finding [16].)
 - **Player-beacon (QoE) events now save atomically, with accurate ingest metrics
   (D-118).** The ClickHouse writer opened a separate insert for every beacon item
   in a flush, so a transient failure partway through committed the earlier items
