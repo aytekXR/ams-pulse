@@ -710,11 +710,21 @@ type evalResult struct {
 	anomalyInfo *anomalyEvalInfo
 }
 
+// evalStreamOffline yields a binary "offline" metric per stream: value 1.0 when the
+// stream is offline, 0.0 when online, evaluated against the rule operator/threshold
+// via compare (D-129). The default rule is { operator: "eq", threshold: 1 }, so it
+// fires exactly when offline. Previously this hardcoded value=0 and ok=!active, which
+// (a) reported a misleading value=0 on a firing alert and (b) ignored the rule's
+// operator/threshold entirely. Offline detection is unchanged: scoped = absent from
+// the snapshot, wildcard = present-but-inactive.
 func (e *Evaluator) evalStreamOffline(snap *domain.LiveSnapshot, scope domain.AlertScope, rule meta.AlertRuleRow) []evalResult {
 	var results []evalResult
 	if scope.StreamID != "" {
-		_, active := snap.Streams[scope.StreamID]
-		results = append(results, evalResult{groupKey: scope.StreamID, value: 0, ok: !active})
+		val := 0.0
+		if _, present := snap.Streams[scope.StreamID]; !present {
+			val = 1.0 // offline: the scoped stream is absent from the snapshot
+		}
+		results = append(results, evalResult{groupKey: scope.StreamID, value: val, ok: compare(val, rule.Operator, rule.Threshold)})
 		return results
 	}
 	for sid, s := range snap.Streams {
@@ -724,7 +734,11 @@ func (e *Evaluator) evalStreamOffline(snap *domain.LiveSnapshot, scope domain.Al
 		if scope.NodeID != "" && s.NodeID != scope.NodeID {
 			continue
 		}
-		results = append(results, evalResult{groupKey: sid, value: 0, ok: !s.Active})
+		val := 0.0
+		if !s.Active {
+			val = 1.0 // offline: present in the snapshot but not active
+		}
+		results = append(results, evalResult{groupKey: sid, value: val, ok: compare(val, rule.Operator, rule.Threshold)})
 	}
 	return results
 }
@@ -761,13 +775,27 @@ func (e *Evaluator) evalNodeMetric(snap *domain.LiveSnapshot, scope domain.Alert
 			continue
 		}
 		var val float64
+		var reported bool
 		switch field {
 		case "cpu_pct":
-			val = n.CPUPCT
+			val, reported = n.CPUPCT, n.CPUPCTReported
 		case "mem_pct":
-			val = n.MemPCT
+			val, reported = n.MemPCT, n.MemPCTReported
 		case "disk_pct":
-			val = n.DiskPCT
+			val, reported = n.DiskPCT, n.DiskPCTReported
+		}
+		// D-088 / D-129 presence guard: a node that did not report this field
+		// (standalone AMS 3.x omits cpu/mem/disk keys) leaves val at 0. Comparing
+		// that phantom 0 to the threshold false-fires lt-rules. But we must NOT just
+		// skip the node: processEvaluation has no stale-state sweep, so a previously-
+		// firing alert would stick forever if a node stops reporting the field (e.g.
+		// an AMS 5.x→3.x downgrade — D-129 review). Emit ok=false instead: never fires
+		// on missing data, and lets a firing alert resolve. (evalAnomalyNodes uses a
+		// bare `continue` — anomaly rules need a baseline+samples, so skipping is right
+		// there; the threshold path can safely treat "unreported" as "not firing".)
+		if !reported {
+			results = append(results, evalResult{groupKey: nodeID, value: 0, ok: false})
+			continue
 		}
 		results = append(results, evalResult{groupKey: nodeID, value: val, ok: compare(val, rule.Operator, rule.Threshold)})
 	}
