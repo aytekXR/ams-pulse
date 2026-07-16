@@ -65,6 +65,17 @@ type EnvConfig struct {
 	// WebhookSharedSecret for HMAC validation.
 	WebhookSharedSecret string
 
+	// WebhookRequireTimestamp enables webhook replay protection (X-Ams-Timestamp
+	// freshness + timestamp-bound HMAC; audit finding [8], D-123). Default false.
+	// Enable ONLY when the signing sender is updated to send + sign the timestamp
+	// (docs/AMS-INTEGRATION.md §4), else every webhook 401s (fail-closed).
+	WebhookRequireTimestamp bool
+
+	// WebhookTimestampSkew is the ± acceptance window for X-Ams-Timestamp when
+	// WebhookRequireTimestamp is true (PULSE_WEBHOOK_TIMESTAMP_SKEW, a Go duration
+	// like "5m" or "30s"). Zero (unset) → the handler default of 5 minutes.
+	WebhookTimestampSkew time.Duration
+
 	// LogLevel is the log level (debug|info|warn|error).
 	LogLevel string
 
@@ -234,6 +245,14 @@ func loadEnvConfig() (EnvConfig, error) {
 		return cfg, err
 	}
 	cfg.WebhookSharedSecret = webhookSecret
+	cfg.WebhookRequireTimestamp = os.Getenv("PULSE_WEBHOOK_REQUIRE_TIMESTAMP") == "true"
+	if v := os.Getenv("PULSE_WEBHOOK_TIMESTAMP_SKEW"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return cfg, fmt.Errorf("PULSE_WEBHOOK_TIMESTAMP_SKEW: %w", err)
+		}
+		cfg.WebhookTimestampSkew = d
+	}
 
 	metricsToken, err := config.GetSecret("PULSE_METRICS_TOKEN")
 	if err != nil {

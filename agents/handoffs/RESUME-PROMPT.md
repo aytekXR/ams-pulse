@@ -11,7 +11,45 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-61.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-62.md`)
+
+**Session 2026-07-16 result: D-123 — S61 SHIPPED the last S48-audit finding [8] (opt-in webhook replay protection). ★★ S48 AUDIT COMPLETE.**
+
+**★ S61 took [8] webhook replay** and verified product-viability FIRST (the gate): AMS lifecycle webhooks are
+**UNSIGNED** (`AMS-INTEGRATION.md §4.5`), so `X-Ams-Signature` is a **Pulse-defined** contract — Pulse can extend it
+without an operator dependency (the webhook listener is live in prod; the smoke posts a signed webhook expecting
+200). Shipped a **backward-compatible, opt-in** check: `PULSE_WEBHOOK_REQUIRE_TIMESTAMP` (default **off** → bare-body
+HMAC, byte-for-byte the original, zero ingest risk) + `PULSE_WEBHOOK_TIMESTAMP_SKEW` (default 5m); ON path requires a
+fresh `X-Ams-Timestamp` (±window) + binds the **canonical** decimal ts into the HMAC. Full suite 24/24;
+mutation-proven ×3 (window, binding, boundary); **3-lens adversarial review** (10 agents, 7 confirmed/0 refuted/0
+blockers → addressed 5, deferred 1 per-source override as YAGNI). Docs `AMS-INTEGRATION.md §4.7`. **Prod rolled
+forward** (default-off → smoke green). Full evidence: `decisions.md` D-123.
+
+**★★ S48 SUBSYSTEM AUDIT COMPLETE — all 16 findings triaged: 14 SHIPPED, 2 DEFERRED** ([11] D-121 dead-code dup of
+D-087; [12] D-122 vestigial `rollup_usage_1d.peak_concurrency`, impact refuted, D-018). The `S48-AUDIT-FINDINGS.md`
+ledger is fully closed.
+
+**★ SESSION-62 = re-read the STANDING DIRECTIVE and choose the next highest-leverage move** (the S48 backlog no
+longer sets the agenda). Verify each candidate against the code/ROADMAP before committing (S37/S48 lesson: named
+goals go stale). Ranked candidates:
+1. **A FRESH adversarial audit of an un-swept subsystem** — this is the standing re-scan mandate and has been the
+   highest-yield move all along (S44 audited handlers → 13 bugs; S48 audited collector/amsclient/reports/cluster/
+   clickhouse → 16). **Not yet deep-audited:** `server/internal/api` handler families S44 didn't cover,
+   `alert/evaluator` + `alert/channels`, `license`, `probe/prober`, `anomaly`, the **web SPA data layer**
+   (`web/src`), and the **SDK** (`sdk/beacon-js`). Run the same 7-finder + refute-by-default verify workflow; persist
+   to a new `SNN-AUDIT-FINDINGS.md`; then work the findings one-scope-per-PR as in S49→S61.
+2. **§2.7 CI-promotion win** — IF today ≥ **2026-07-23**, promote `web-e2e`/`csp-e2e` off `continue-on-error` (both
+   green through the bake). **CHECK THE DATE at open** (07-16 < 07-23 → still shut as of S61).
+3. Operator-gated items stay operator-gated (GHCR 401, AMS licence expiry, item 10, S43 rulings) — do not spin.
+
+**Recommended: option 1 (fresh audit), unless today ≥ 07-23** (then bundle option 2 as a quick clean win first).
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
+ledger 07-27) — operator-only. GHCR anon → 401 — operator-only. No new operator action from S61.
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-61.md`)
 
 **Session 2026-07-16 result: D-122 — S60 DEFERRED S48-audit finding [12] (no migration shipped — vestigial column parked by D-018).**
 

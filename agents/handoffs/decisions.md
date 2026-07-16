@@ -7832,3 +7832,59 @@ code/integration docs and either ship or record it as an operator/contract depen
 + 1 remaining); RESUME-PROMPT ▶ START HERE → SESSION-61; `operator-expected.md` refreshed (no new item);
 `sessions/SESSION-60.md` CLOSED; `sessions/SESSION-61.md` + `S48-AUDIT-FINDINGS.md` carry the remaining [8]. (No
 CHANGELOG entry — no user-facing change.)
+
+## D-123 — S61 (2026-07-16): SHIPPED — audit finding [8] webhook replay: opt-in `X-Ams-Timestamp` replay protection ★ S48 AUDIT COMPLETE
+
+**Context.** SESSION-61 took the last open S48-audit finding [8] (`collector/webhook/webhook.go` — `validateHMAC`
+authenticates but has NO freshness check, so any captured signed webhook can be replayed indefinitely, injecting
+duplicate stream-start/end/recording events).
+
+**Product-viability verification (the reason this ships instead of operator-gating).** SESSION-61's plan flagged [8]
+as possibly operator/contract-gated. Verified against the code + `docs/AMS-INTEGRATION.md §4.5`: **AMS lifecycle
+webhooks are UNSIGNED** — AMS's `listenerHookURL` has no HMAC-secret or custom-header field. The `X-Ams-Signature`
+HMAC convention is therefore **Pulse-defined**, for an HMAC-capable sender (a signing proxy / custom middleware). Since
+Pulse already dictates that contract, it can extend it — and the webhook listener IS live in prod (the smoke test
+posts a body-only-signed webhook expecting 200). So this is shippable WITHOUT an operator dependency, provided it's
+backward-compatible.
+
+**Decision: SHIP a backward-compatible, opt-in replay check.** New `RequireTimestamp` (env
+`PULSE_WEBHOOK_REQUIRE_TIMESTAMP`, default **false**) + `TimestampSkew` (env `PULSE_WEBHOOK_TIMESTAMP_SKEW`, default
+**5m**). When **off**, the signed payload is the bare body — byte-for-byte the original contract (zero ingest risk;
+existing/prod smoke unaffected). When **on**: require a fresh `X-Ams-Timestamp` (Unix seconds) within ±skew and bind
+it into the HMAC — the sender signs `sha256=hex(HMAC(<canonical-decimal-ts> + "." + <raw-body>, secret))`. The ±window
+is the replay bound (no nonce store; GitHub/Stripe model). A hard requirement was rejected: it would break the
+fail-closed contract for existing senders — the opt-in gate is the minimal correctness wrapper, not scope creep.
+
+**Verification.** Full Go suite **24/24**; gofmt/vet clean. **Mutation-proven ×3** on throwaway copies: (M1) window
+guard `||`→`&&` → stale+future tests redden; (M2) revert the timestamp binding to body-only → fresh-accepted +
+body-only-rejected redden; (M3) boundary `<`→`<=` → the exact-edge boundary test reddens. Backward-compat proven by
+`TestReplay_DisabledByDefault` (off + body-only sig + no timestamp → 200).
+
+**Adversarial review (multi-lens workflow, this was a genuine auth-surface change).** 3 lenses (security /
+backward-compat / Go-correctness) → refute-by-default verify pass, 10 agents. **7 confirmed (6 distinct), 0 refuted,
+0 blockers, no forgery/exploit.** Addressed 5 in this PR: env-wired `TimestampSkew` (was hardcoded 5m with no knob);
+sign the **canonical** decimal timestamp (raw `+`/leading-zero headers would false-401); clearer out-of-window log
+(`ts`/`now`/`skew_limit_s` instead of a signed delta); plural "ALL senders incl. per-source B7" doc-comment;
+boundary + non-canonical tests. **Deferred 1 (documented):** a per-source `SourceRequireTimestamp` override map for
+incremental multi-source rollout — YAGNI for an opt-in guard on a currently-unused path, and it would need meta-store
+plumbing (per-source secrets come from the meta store, not env); the global flag + "roll out in lockstep" docs are the
+proportionate MVP.
+
+**Docs.** `docs/AMS-INTEGRATION.md` §4.7 (operator-facing hardened contract) + §4.3 pointer + §6 env-table rows;
+`CHANGELOG` Added.
+
+**Prod.** Server source changed → rolled prod forward (default-off, so the signed-webhook smoke still returns 200).
+Rollback image tag `pre-d123`.
+
+**Operator action required: NONE.** Replay protection is opt-in; to ENABLE it an operator must first update their
+signing proxy to send + sign `X-Ams-Timestamp`, then set `PULSE_WEBHOOK_REQUIRE_TIMESTAMP=true` (documented, not a
+blocker). Carried items unchanged (AMS trial-expiry 07-12 vs 07-27; GHCR anon → 401).
+
+**★★ S48 SUBSYSTEM AUDIT COMPLETE — all 16 findings triaged: 14 SHIPPED, 2 DEFERRED ([11] D-121 dead code / D-087;
+[12] D-122 vestigial column / D-018).** SESSION-62 re-reads the standing directive and picks the next
+highest-leverage move (likely a FRESH adversarial audit of an un-swept subsystem, or the §2.7 CI-promotion win once
+today ≥ 2026-07-23).
+
+**Docs at close:** D-123 SHIPPED (this block); CHANGELOG Added; S48-AUDIT-FINDINGS.md [8] ✅ DONE; ROADMAP-V2 §2.30
+(14 shipped, 2 deferred — audit COMPLETE); RESUME-PROMPT ▶ START HERE → SESSION-62; `operator-expected.md` refreshed
+(opt-in, no action); `sessions/SESSION-61.md` CLOSED; `sessions/SESSION-62.md` written.

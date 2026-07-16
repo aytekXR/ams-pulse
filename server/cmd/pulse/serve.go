@@ -392,10 +392,12 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 				}
 			}
 			wh := webhooksrc.New(webhooksrc.Config{
-				NodeID:        cfg.AMSNodeID,
-				SharedSecret:  cfg.WebhookSharedSecret,
-				SourceSecrets: sourceSecrets,
-				ListenAddr:    cfg.WebhookListenAddr,
+				NodeID:           cfg.AMSNodeID,
+				SharedSecret:     cfg.WebhookSharedSecret,
+				SourceSecrets:    sourceSecrets,
+				ListenAddr:       cfg.WebhookListenAddr,
+				RequireTimestamp: cfg.WebhookRequireTimestamp,
+				TimestampSkew:    cfg.WebhookTimestampSkew,
 			}, fanout, logger)
 			sources = append(sources, wh)
 			logger.Info("pulse: webhook source configured",

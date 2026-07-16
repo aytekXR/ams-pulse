@@ -1,5 +1,20 @@
 # SESSION-61 — planned at S60 close (D-122)
 
+> **✅ CLOSED 2026-07-16 (D-123). SHIPPED S48-audit finding [8] — opt-in webhook replay protection. ★ S48 AUDIT COMPLETE.**
+> Product-viability verified FIRST (the plan's key gate): AMS lifecycle webhooks are UNSIGNED (`AMS-INTEGRATION.md
+> §4.5`), so `X-Ams-Signature` is a **Pulse-defined** contract → Pulse can extend it without an operator dependency
+> (the webhook listener is live in prod; the smoke posts a signed webhook expecting 200). **Shipped a
+> backward-compatible, opt-in check:** `PULSE_WEBHOOK_REQUIRE_TIMESTAMP` (default **off** → bare-body HMAC,
+> byte-for-byte the original, zero ingest risk) + `PULSE_WEBHOOK_TIMESTAMP_SKEW` (default 5m). ON path: require a fresh
+> `X-Ams-Timestamp` (±window) and bind the **canonical** decimal ts into the HMAC (`sha256=hex(HMAC(ts+"."+body))`).
+> Full Go suite **24/24**; **mutation-proven ×3** (window `||`→`&&`; binding revert; boundary `<`→`<=`);
+> backward-compat test. **3-lens adversarial review** (security/backward-compat/correctness, 10 agents) → **7
+> confirmed / 0 refuted / 0 blockers, no forgery** → addressed 5 (env-wire skew, canonical ts, clearer log, plural B7
+> comment, boundary+non-canonical tests, docs), **deferred 1** (per-source override map — YAGNI, needs meta-store
+> plumbing). Docs: `AMS-INTEGRATION.md §4.7`, CHANGELOG Added. **Prod rolled forward** (server source changed;
+> default-off → signed-webhook smoke 200; rollback tag `pre-d123`). Evidence: `decisions.md` D-123. **★★ S48 audit
+> COMPLETE: 14 shipped, 2 deferred ([11],[12]).** → SESSION-62 picks the next highest-leverage move.
+
 > Written by SESSION-60 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE for the full ranked candidate list** + `S48-AUDIT-FINDINGS.md`.

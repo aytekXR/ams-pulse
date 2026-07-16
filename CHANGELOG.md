@@ -10,6 +10,18 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ## [Unreleased]
 
+### Security
+
+- **Opt-in webhook replay protection (D-123).** The AMS webhook endpoint authenticated
+  each request's HMAC signature but had no freshness check, so a captured, validly-signed
+  webhook could be replayed indefinitely (duplicate stream-start/stop/recording events).
+  Setting `PULSE_WEBHOOK_REQUIRE_TIMESTAMP=true` now requires each request to carry a fresh
+  `X-Ams-Timestamp` header (within ±`PULSE_WEBHOOK_TIMESTAMP_SKEW`, default 5 min) and to
+  sign the timestamp-bound payload, so a captured request can no longer be replayed once it
+  ages past the window. **Default off** — the signing contract is unchanged until you enable
+  it and update your signing proxy to send the timestamp (see `docs/AMS-INTEGRATION.md` §4.7).
+  (Found by the S48 subsystem audit, finding [8].)
+
 ### Fixed
 
 - **The beacon ingest endpoint returns the right error when a client upload is cut
