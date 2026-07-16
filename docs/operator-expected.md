@@ -1,18 +1,29 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-121 — SESSION-59)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-122 — SESSION-60)
+
+> **S60 (D-122) needs NO operator action.** This session reviewed a subsystem-audit finding about the daily usage
+> rollup table not summing its "peak concurrency" column. On investigation, that column is **never actually read** —
+> the real peak-concurrency figure in both billing reports and the dashboard comes from a separate, purpose-built
+> table (added by an earlier approved decision, D-018) that computes it correctly. So the flagged column is harmless
+> leftover data, and the audit's suggested fix would have been useless (nothing reads it) and even misleading if it
+> ever were read. No database migration and **no code/behavior change** — production stays `v0.4.0-57-g36c16ed`.
+> **All six high-severity audit findings plus seven lower-severity ones are shipped; two are now deferred** (both
+> turned out to be harmless dead/leftover code already handled by prior decisions); **one finding remains: [8]
+> webhook replay protection.** That one is a possible **contract change with Ant Media / your webhook signing proxy** —
+> the next session will check whether AMS actually sends a timestamp header; if it does not, I'll flag it here as
+> something needing your (or the proxy's) configuration, because a half-measure could break live webhook ingest.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
+> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none
+> blocks the autonomous work.
+
+## (previous header — D-121, SESSION-59)
 
 > **S59 (D-121) needs NO operator action.** This session reviewed a subsystem-audit finding about the anomaly-baseline
 > query using wrong column names. The wrong names are real, but that code path is **not wired to anything** (dead
 > code) and an earlier decision (D-087) already deliberately parked it until the ClickHouse-based anomaly baselines
 > are turned on with real traffic. So there was nothing to fix in production: the session recorded the exact fix
 > needed as an inline note for whoever wires it up later, and made **no code/behavior change** — production stays
-> `v0.4.0-57-g36c16ed`. **All six high-severity audit findings plus seven lower-severity ones are shipped; one is now
-> deferred (dead code); 2 findings remain** — a database migration ([12] usage rollup peak-concurrency) and a
-> product/contract decision ([8] webhook replay protection). If [8] turns out to need a signing-proxy/header contract
-> with Ant Media, that will be flagged here when the session reaches it (`agents/handoffs/S48-AUDIT-FINDINGS.md`).
->
-> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
-> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none
-> blocks the autonomous work.
+> `v0.4.0-57-g36c16ed`.
 
 ## (previous header — D-120, SESSION-58)
 

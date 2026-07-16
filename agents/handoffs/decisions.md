@@ -7777,3 +7777,58 @@ change → NO prod roll** (comment-only, byte-identical binary; prod stays `v0.4
 HERE → SESSION-60; `operator-expected.md` refreshed (no new item); `sessions/SESSION-59.md` CLOSED;
 `sessions/SESSION-60.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 2 actionable. (No CHANGELOG entry — no
 user-facing change.)
+
+## D-122 — S60 (2026-07-16): DEFERRED — audit finding [12] impact refuted; `rollup_usage_1d.peak_concurrency` is intentionally-unread vestigial (D-018 CR-VD38) (no migration shipped)
+
+**Context.** SESSION-60 opened on finding [12] (`0001_init.sql:358` — `rollup_usage_1d` is
+`SummingMergeTree((viewer_minutes, egress_bytes, recording_bytes))` with `peak_concurrency` a plain `UInt32` NOT in
+the sum-columns list → the audit claims "after a background merge `sum(peak_concurrency)` collapses to 1 → billing
+shows near-zero peak"). Plan was: ship a new forward-only migration adding `peak_concurrency` to the engine list.
+
+**Re-verification (the reason NOT to ship the migration).** Two structural facts overturn the audit's IMPACT (not
+its mechanism — the column genuinely isn't summed):
+- **First re-verify catch — the migration sequence is NOT at 0004.** The ClickHouse migrations dir already runs
+  through **0010** (`0002_concurrency_rollup … 0010_anomaly_flag_events`); the "next = 0005" carried in the plans was
+  the *meta-store* audit_log 0004, a different lineage. So even the mechanical premise ("add 0005") was stale.
+- **Decisive catch — NOTHING reads `rollup_usage_1d.peak_concurrency`.** A whole-repo grep confirms every
+  peak_concurrency READ comes from an **AggregatingMergeTree** table via `maxMerge`, never the SummingMergeTree:
+  - **Billing** (`reports/accounting.go`): the primary path (`else` branch, `:221-228`) selects only
+    `sum(viewer_minutes)/sum(egress_bytes)/sum(recording_bytes)` — no peak. Peak comes from
+    `a.fetchConcurrencyPeaks` (`:389-412`) → `toInt64(maxMerge(peak_concurrency)) FROM rollup_concurrency_1d`. The
+    hour-fallback and `Reconcile` (`:466-472`, viewer-minutes only) likewise never read the SummingMergeTree peak.
+    The code literally documents it (`:209-210`): *"peak_concurrency is no longer read from rollup_usage_1d (it
+    stored toUInt32(1) per session — a session-count proxy, not true concurrency). True peak comes from
+    rollup_concurrency_1d."*
+  - **Analytics timeseries** (`query.go:273-285`): `maxMerge(peak_concurrency)` FROM `rollup_audience_1h/1d`
+    (`AggregateFunction(max, UInt32)`), not `rollup_usage_1d`.
+  - **Web** (`ReportsPage.tsx:866`) shows `usage.totals.peak_concurrency`, which the API fills from the
+    `rollup_concurrency_1d`-sourced value above. Correct end-to-end.
+- **Already a human-approved, tested design — D-018 CR-VD38 (2026-06-15).** That decision created
+  `0002_concurrency_rollup.sql` (`rollup_concurrency_1d` AggregatingMergeTree, `maxState(viewer_count)` from
+  `server_events` — the AMS-authoritative instantaneous concurrent count) *specifically* to source true windowed peak
+  and survive session-stitching edge cases, with `TestAccountant_CHIntegration` proving "TRUE windowed max … drift
+  0.0000%" (D-019). "Do NOT edit `0001_init.sql`" is stated in D-018 itself.
+
+**Ruling: DEFER, do not fix.** The audit's proposed fix is (1) **inert** — no reader; (2) **semantically wrong if
+ever read** — summing `toUInt32(1)` per session yields session-count, not peak concurrency, so it wouldn't make the
+column "correct", just differently wrong; making it truly correct would duplicate exactly what `rollup_concurrency_1d`
+already does; and (3) **risky** — a live `ALTER TABLE … MODIFY ENGINE` on the billing table for zero benefit. This
+is the same shape as [11]/D-087: a real structural oddity whose impact is nullified by surrounding code that already
+routes around it by deliberate decision.
+
+**What shipped (documentation only, NO code/DDL/schema change).** Nothing added to the code — the live read-path is
+already definitively pinned (`accounting.go:209-211`), and `0001_init.sql` is immutable (editing it, even a comment,
+risks the golden-file DDL-parity CI check and violates the forward-only rule). **No prod roll** (no binary/schema
+change; prod stays `v0.4.0-57-g36c16ed`).
+
+**Operator action required: NONE.** Carried items unchanged (AMS trial-expiry 07-12 vs 07-27; GHCR anon → 401).
+
+**★ Remaining S48-audit backlog: 1 finding — [8] webhook replay (MEDIUM), product/contract-gated.** Shipped 13;
+[11] + [12] deferred (dead/vestigial code parked by prior decisions). [8] needs product-viability verification
+(does AMS / the signing proxy actually send an `X-Ams-Timestamp` header?) — SESSION-61 will verify it against the
+code/integration docs and either ship or record it as an operator/contract dependency.
+
+**Docs at close:** D-122 DEFERRED (this block); ROADMAP-V2 §2.30 updated ([12] ⏸️ DEFERRED, 13 shipped + 2 deferred
++ 1 remaining); RESUME-PROMPT ▶ START HERE → SESSION-61; `operator-expected.md` refreshed (no new item);
+`sessions/SESSION-60.md` CLOSED; `sessions/SESSION-61.md` + `S48-AUDIT-FINDINGS.md` carry the remaining [8]. (No
+CHANGELOG entry — no user-facing change.)
