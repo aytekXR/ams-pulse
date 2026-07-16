@@ -1,4 +1,20 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-120 — SESSION-58)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-121 — SESSION-59)
+
+> **S59 (D-121) needs NO operator action.** This session reviewed a subsystem-audit finding about the anomaly-baseline
+> query using wrong column names. The wrong names are real, but that code path is **not wired to anything** (dead
+> code) and an earlier decision (D-087) already deliberately parked it until the ClickHouse-based anomaly baselines
+> are turned on with real traffic. So there was nothing to fix in production: the session recorded the exact fix
+> needed as an inline note for whoever wires it up later, and made **no code/behavior change** — production stays
+> `v0.4.0-57-g36c16ed`. **All six high-severity audit findings plus seven lower-severity ones are shipped; one is now
+> deferred (dead code); 2 findings remain** — a database migration ([12] usage rollup peak-concurrency) and a
+> product/contract decision ([8] webhook replay protection). If [8] turns out to need a signing-proxy/header contract
+> with Ant Media, that will be flagged here when the session reaches it (`agents/handoffs/S48-AUDIT-FINDINGS.md`).
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
+> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none
+> blocks the autonomous work.
+
+## (previous header — D-120, SESSION-58)
 
 > **S58 (D-120) needs NO operator action.** This session fixed a subsystem-audit finding: the beacon (player
 > telemetry) ingest endpoint returned the wrong error when a client's upload was cut off mid-request — a dropped
@@ -9,10 +25,6 @@
 > needs a product decision), queued for upcoming sessions (`agents/handoffs/S48-AUDIT-FINDINGS.md`); none needs you
 > yet — if the webhook-replay finding [8] turns out to need a signing-proxy/header contract, that will be flagged
 > here when it comes up.
->
-> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
-> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none
-> blocks the autonomous work.
 
 ## (previous header — D-119, SESSION-57)
 

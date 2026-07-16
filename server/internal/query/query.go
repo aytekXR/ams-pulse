@@ -1089,6 +1089,22 @@ func (s *Service) AnomalyBaselineForMetric(ctx context.Context, metric, streamID
 	switch metric {
 	case "viewer_count":
 		// Aggregate live viewer counts from server_events over the lookback window.
+		//
+		// KNOWN LATENT BUG — deferred, not a live defect (audit finding [11], D-121;
+		// first flagged in D-087 as "query.go:1081 latent bug, A2 to assess"): this
+		// query names columns that DO NOT EXIST. server_events has `viewer_count` (not
+		// `viewers`) and `ts` (not `event_time`) per 0001_init.sql:48,58. Against real
+		// ClickHouse it errors "Unknown identifier", is caught below, and returns a
+		// silent zero baseline.
+		//
+		// DELIBERATELY NOT FIXED HERE: AnomalyBaselineForMetric is DEAD CODE — no
+		// non-test callers, and the live anomaly.Detector uses meta-store Welford
+		// baselines, not ClickHouse (D-087). The whole F9 ClickHouse-baseline path is
+		// GATED on real traffic (D-087 sparsity ruling). When this function is first
+		// wired to a live endpoint/detector, fix the columns
+		// (viewers→viewer_count, event_time→ts) TOGETHER WITH the default-branch
+		// metric-allowlist redesign below — a piecemeal column fix now would be an
+		// incomplete change to unreachable code. See decisions.md D-121.
 		q := `SELECT avg(viewers) AS mean, stddevPop(viewers) AS stddev, count() AS n
 		      FROM server_events
 		      WHERE event_time >= now() - INTERVAL ? SECOND`
