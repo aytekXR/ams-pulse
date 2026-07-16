@@ -1,5 +1,14 @@
 # SESSION-69 — planned at S68 close (D-130)
 
+> ## ✅ CLOSED (2026-07-16, D-131) — SHIPPED [14] + [15]
+> Prober HLS parse-correctness pair shipped (PR #132, prod `v0.4.0-76-g79cb591`): [14] `parseHLSManifest` captures a
+> segment behind a zero/malformed `#EXTINF` (`pendingExtInf` flag) instead of misreporting an empty master; [15]
+> `resolveURI` uses net/url RFC-3986 resolution so protocol-relative/absolute-path URIs hit the right host. 3/3 mutants
+> killed; suite 25/25; 3-lens adversarial review found 1 minor classify issue (unsupported-scheme → `parse`), fixed
+> pre-merge. See `decisions.md` D-131 and `sessions/SESSION-70.md` for the next scope (anomaly cluster [16]/[17]/[18]).
+> Everything below is the original pre-session plan (historical).
+
+
 > Written by SESSION-68 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE + `agents/handoffs/S62-AUDIT-FINDINGS.md`** (the 25-finding ledger).

@@ -527,7 +527,7 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.31  Second fresh subsystem audit — un-swept subsystems (25 findings)  [15 resolved (14 shipped + 1 defer-by-ruling) — 10 remain (0 HIGH, 6 MEDIUM, 4 LOW); ★ ALL 6 HIGH shipped, alert-evaluator + prober + probe-SSRF swept; [20] audit-read deferred as product ruling]  ⏳ IN PROGRESS S62→S68 (D-124…D-130, 2026-07-16, PR #119…#130)
+### 2.31  Second fresh subsystem audit — un-swept subsystems (25 findings)  [17 resolved (16 shipped + 1 defer-by-ruling) — 8 remain (0 HIGH, 4 MEDIUM, 4 LOW); ★ ALL 6 HIGH shipped, alert-evaluator + prober (RTMP/DASH/HLS) + probe-SSRF swept; [20] audit-read deferred as product ruling]  ⏳ IN PROGRESS S62→S69 (D-124…D-131, 2026-07-16, PR #119…#132)
 
 With the §2.30 (S48) audit COMPLETE, SESSION-62 followed the standing re-scan mandate and ran a **fresh adversarial
 audit of the subsystems S44/S48 never swept** — `alert/evaluator`+`alert/channels`, `license`, `prober`, `anomaly`,
