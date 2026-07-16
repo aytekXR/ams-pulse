@@ -52,6 +52,13 @@ type mockConn struct {
 	// call blocks/delays. Buffered (capacity >= expected signals) so senders
 	// never block on it.
 	beforeSend chan<- struct{}
+
+	// Send-failure injection (finding [13]): when sendErr != nil, the sendFailOnCall-th
+	// (1-indexed) Send() returns sendErr WITHOUT committing its rows. Default zero
+	// value never fails, so existing tests are unaffected.
+	sendCalls      int
+	sendFailOnCall int
+	sendErr        error
 }
 
 func newMockConn() *mockConn { return &mockConn{} }
@@ -149,6 +156,12 @@ func (b *mockBatch) Send() error {
 	}
 
 	b.conn.mu.Lock()
+	b.conn.sendCalls++
+	if b.conn.sendErr != nil && b.conn.sendCalls == b.conn.sendFailOnCall {
+		b.conn.callLog = append(b.conn.callLog, "send-fail")
+		b.conn.mu.Unlock()
+		return b.conn.sendErr
+	}
 	switch {
 	case strings.Contains(b.query, "server_events"):
 		b.conn.serverRows += b.rowCount
@@ -536,4 +549,95 @@ func TestDrain_ConcurrentSendDuringClose(t *testing.T) {
 		t.Fatal("Close() did not return within 5s during concurrent sends")
 	}
 	// No panics → test passes.
+}
+
+// ─── insertBeaconEvents atomicity (finding [13] / D-118) ──────────────────────
+
+// countSends returns how many successful "send" entries the call log holds.
+func countSends(log []string) int {
+	n := 0
+	for _, e := range log {
+		if e == "send" {
+			n++
+		}
+	}
+	return n
+}
+
+// makeBeaconEventWithItems builds one BeaconEvent carrying n heartbeat items.
+func makeBeaconEventWithItems(n int) domain.BeaconEvent {
+	items := make([]domain.BeaconItem, n)
+	for i := range items {
+		items[i] = domain.BeaconItem{Type: "heartbeat", TS: time.Now().UnixMilli()}
+	}
+	return domain.BeaconEvent{
+		Version:   1,
+		SessionID: "sess-atomic",
+		StreamID:  "stream-atomic",
+		App:       "live",
+		Events:    items,
+	}
+}
+
+// TestInsertBeaconEvents_SingleBatchPerFlush proves the whole flush uses ONE
+// PrepareBatch + ONE Send (mirroring insertServerEvents), not one per item. The
+// previous per-item shape issued N Sends for an N-item flush; reverting the fix makes
+// countSends() != 1 and reddens this test.
+func TestInsertBeaconEvents_SingleBatchPerFlush(t *testing.T) {
+	conn := newMockConn()
+	store := newTestStore(conn, 100)
+	batch := []domain.BeaconEvent{makeBeaconEventWithItems(3)}
+
+	if err := store.insertBeaconEvents(context.Background(), batch); err != nil {
+		t.Fatalf("insertBeaconEvents: unexpected error: %v", err)
+	}
+	if _, beaconRows, _ := conn.rowsByType(); beaconRows != 3 {
+		t.Errorf("beaconRows: got %d, want 3", beaconRows)
+	}
+	if got := countSends(conn.callLogSnapshot()); got != 1 {
+		t.Errorf("Send() calls: got %d, want 1 (one PrepareBatch+Send per flush, not one per item)", got)
+	}
+}
+
+// TestInsertBeaconEvents_NeverPartiallyCommits proves atomicity: when a Send fails
+// partway through a multi-item flush, ClickHouse ends up with ALL or NONE of the rows —
+// never a partial subset. The previous per-item shape committed the items before the
+// failing one (a partial commit), which this test catches.
+func TestInsertBeaconEvents_NeverPartiallyCommits(t *testing.T) {
+	// Fail the 2nd physical Send. With the fix there is only one Send (call 1), so the
+	// flush succeeds atomically (all 3 rows). With the per-item bug there are 3 Sends:
+	// item 0 commits (call 1), item 1's Send fails (call 2) → a partial 1-row commit.
+	conn := newMockConn()
+	conn.sendErr = fmt.Errorf("simulated send failure")
+	conn.sendFailOnCall = 2
+	store := newTestStore(conn, 100)
+	batch := []domain.BeaconEvent{makeBeaconEventWithItems(3)}
+
+	err := store.insertBeaconEvents(context.Background(), batch)
+	_, beaconRows, _ := conn.rowsByType()
+
+	if beaconRows != 0 && beaconRows != 3 {
+		t.Errorf("partial commit: got %d beacon rows, want 0 or 3 (per-item PrepareBatch commits a subset before the failing Send)", beaconRows)
+	}
+	if err == nil && beaconRows != 3 {
+		t.Errorf("err==nil but beaconRows=%d (want 3)", beaconRows)
+	}
+}
+
+// TestInsertBeaconEvents_AtomicFailureCommitsNothing is a positive control for the
+// fix's failure path: when the batch Send fails, zero rows are committed and the error
+// propagates so the flusher (correctly) skips crediting s.inserted.
+func TestInsertBeaconEvents_AtomicFailureCommitsNothing(t *testing.T) {
+	conn := newMockConn()
+	conn.sendErr = fmt.Errorf("simulated send failure")
+	conn.sendFailOnCall = 1 // fail the very first Send
+	store := newTestStore(conn, 100)
+	batch := []domain.BeaconEvent{makeBeaconEventWithItems(3)}
+
+	if err := store.insertBeaconEvents(context.Background(), batch); err == nil {
+		t.Fatal("insertBeaconEvents: expected error on Send failure, got nil")
+	}
+	if _, beaconRows, _ := conn.rowsByType(); beaconRows != 0 {
+		t.Errorf("beaconRows after failed flush: got %d, want 0 (nothing committed)", beaconRows)
+	}
 }

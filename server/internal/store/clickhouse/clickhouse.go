@@ -545,12 +545,20 @@ func (s *Store) insertServerEvents(ctx context.Context, batch []domain.ServerEve
 }
 
 func (s *Store) insertBeaconEvents(ctx context.Context, batch []domain.BeaconEvent) error {
+	// One PrepareBatch + one Send for the whole flush, mirroring insertServerEvents /
+	// insertViewerSessions. The previous shape opened a fresh batch and Sent it per
+	// item, so each item committed to ClickHouse independently: a mid-batch Send
+	// failure partial-committed items 0..M-1 while the flusher treated the whole
+	// batch as failed (it skips s.inserted and clears the batch without re-queue), so
+	// the metrics disagreed with what was actually stored. A single batch makes the
+	// flush atomic — on error nothing commits, matching the flusher's all-or-nothing
+	// accounting. (D-118 / audit finding [13].)
+	b, err := s.conn.PrepareBatch(ctx, fmt.Sprintf("INSERT INTO %s.beacon_events", s.db))
+	if err != nil {
+		return fmt.Errorf("prepare batch: %w", err)
+	}
 	for _, ev := range batch {
 		for _, item := range ev.Events {
-			b, err := s.conn.PrepareBatch(ctx, fmt.Sprintf("INSERT INTO %s.beacon_events", s.db))
-			if err != nil {
-				return err
-			}
 			d := item.Data
 			if d == nil {
 				d = map[string]any{}
@@ -598,14 +606,11 @@ func (s *Store) insertBeaconEvents(ctx context.Context, batch []domain.BeaconEve
 				clientOS,
 				clientBrowser,
 			); err != nil {
-				return err
-			}
-			if err := b.Send(); err != nil {
-				return err
+				return fmt.Errorf("append row: %w", err)
 			}
 		}
 	}
-	return nil
+	return b.Send()
 }
 
 func (s *Store) insertViewerSessions(ctx context.Context, batch []domain.ViewerSession) error {
