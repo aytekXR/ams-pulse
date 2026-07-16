@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -278,5 +279,201 @@ func TestEndToEndWebhookTCPListener(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	if sink.Len() != 1 {
 		t.Errorf("(b) expected sink to still have 1 event after bad-sig request, got %d", sink.Len())
+	}
+}
+
+// ─── Replay protection (audit finding [8], D-123) ───────────────────────────────
+
+const tsTestBody = `{"action":"liveStreamStarted","streamId":"s1","app":"live"}`
+
+// hmacSignTS signs the timestamped payload "<ts>.<body>" — the contract Pulse
+// expects from the sender when RequireTimestamp is on.
+func hmacSignTS(ts string, body []byte, secret string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(ts + "."))
+	mac.Write(body)
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
+}
+
+// newTSHandler builds a RequireTimestamp handler with a frozen clock at base so
+// the ±window can be exercised deterministically.
+func newTSHandler(t *testing.T, base time.Time) (*Handler, *fakeSink) {
+	t.Helper()
+	sink := &fakeSink{}
+	h := New(Config{
+		NodeID:           "test-node",
+		SharedSecret:     testSecret,
+		ListenAddr:       ":0",
+		RequireTimestamp: true,
+		TimestampSkew:    5 * time.Minute,
+	}, sink, nil)
+	h.now = func() time.Time { return base }
+	return h, sink
+}
+
+// postTS posts to /webhook/ams with both signature and timestamp headers (each
+// omitted when empty).
+func postTS(t *testing.T, h *Handler, body []byte, sigHeader, tsHeader string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/webhook/ams", bytes.NewReader(body))
+	if sigHeader != "" {
+		req.Header.Set("X-Ams-Signature", sigHeader)
+	}
+	if tsHeader != "" {
+		req.Header.Set("X-Ams-Timestamp", tsHeader)
+	}
+	rr := httptest.NewRecorder()
+	h.HTTPHandler().ServeHTTP(rr, req)
+	return rr
+}
+
+// TestReplay_FreshTimestampAccepted: a fresh, correctly timestamp-bound signature
+// is accepted and the event forwarded.
+func TestReplay_FreshTimestampAccepted(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0)
+	h, sink := newTSHandler(t, base)
+
+	body := []byte(tsTestBody)
+	ts := "1700000000" // == base
+	sig := hmacSignTS(ts, body, testSecret)
+
+	rr := postTS(t, h, body, sig, ts)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 for fresh timestamped request, got %d", rr.Code)
+	}
+	if sink.Len() != 1 {
+		t.Fatalf("expected 1 event in sink, got %d", sink.Len())
+	}
+}
+
+// TestReplay_StaleTimestampRejected is the core replay-protection proof: a
+// request captured and replayed beyond the ±window is rejected even though its
+// signature is valid for its (old) timestamp. Mutation target: the window guard.
+func TestReplay_StaleTimestampRejected(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0)
+	h, sink := newTSHandler(t, base)
+
+	body := []byte(tsTestBody)
+	ts := "1699999000" // base - 1000s > 5-min skew
+	sig := hmacSignTS(ts, body, testSecret)
+
+	rr := postTS(t, h, body, sig, ts)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for stale timestamp (replay), got %d", rr.Code)
+	}
+	if sink.Len() != 0 {
+		t.Fatalf("expected 0 events for stale timestamp, got %d", sink.Len())
+	}
+}
+
+// TestReplay_FutureTimestampRejected guards the upper bound of the window.
+func TestReplay_FutureTimestampRejected(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0)
+	h, _ := newTSHandler(t, base)
+
+	body := []byte(tsTestBody)
+	ts := "1700001000" // base + 1000s > 5-min skew
+	sig := hmacSignTS(ts, body, testSecret)
+
+	rr := postTS(t, h, body, sig, ts)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for future timestamp, got %d", rr.Code)
+	}
+}
+
+// TestReplay_BoundaryTimestamps exercises the exact edges of the ±skew window
+// (a closed interval, per the strict-inequality guard) so a one-character
+// mutation `<`→`<=` or `>`→`>=` is caught immediately.
+func TestReplay_BoundaryTimestamps(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0)
+	skew := int64(300) // must match newTSHandler's 5*time.Minute
+
+	cases := []struct {
+		name     string
+		tsOffset int64
+		wantCode int
+	}{
+		{"lower-boundary-accepted", -skew, http.StatusOK},
+		{"lower-boundary-minus-1-rejected", -skew - 1, http.StatusUnauthorized},
+		{"upper-boundary-accepted", skew, http.StatusOK},
+		{"upper-boundary-plus-1-rejected", skew + 1, http.StatusUnauthorized},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, _ := newTSHandler(t, base)
+			body := []byte(tsTestBody)
+			ts := strconv.FormatInt(base.Unix()+tc.tsOffset, 10)
+			sig := hmacSignTS(ts, body, testSecret)
+			rr := postTS(t, h, body, sig, ts)
+			if rr.Code != tc.wantCode {
+				t.Fatalf("ts offset %+d: expected %d, got %d", tc.tsOffset, tc.wantCode, rr.Code)
+			}
+		})
+	}
+}
+
+// TestReplay_NonCanonicalTimestampAccepted proves the signed payload uses the
+// CANONICAL decimal timestamp: a sender that sends a non-canonical header
+// ("+1700000000") but signs over the canonical form ("1700000000.<body>") is
+// still accepted, because the server also signs over the canonical form.
+func TestReplay_NonCanonicalTimestampAccepted(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0)
+	h, sink := newTSHandler(t, base)
+
+	body := []byte(tsTestBody)
+	canonical := "1700000000"
+	sig := hmacSignTS(canonical, body, testSecret) // sign over the canonical form
+	rr := postTS(t, h, body, sig, "+1700000000")   // send a non-canonical header
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 for non-canonical header signed canonically, got %d", rr.Code)
+	}
+	if sink.Len() != 1 {
+		t.Fatalf("expected 1 event, got %d", sink.Len())
+	}
+}
+
+// TestReplay_MissingTimestampRejected: RequireTimestamp on + no X-Ams-Timestamp
+// header → 401 (a body-only signer is rejected until it sends a timestamp).
+func TestReplay_MissingTimestampRejected(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0)
+	h, _ := newTSHandler(t, base)
+
+	body := []byte(tsTestBody)
+	rr := postTS(t, h, body, hmacSign(body, testSecret), "")
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for missing timestamp, got %d", rr.Code)
+	}
+}
+
+// TestReplay_BodyOnlySignatureRejected proves the timestamp is BOUND into the
+// HMAC: a fresh timestamp with a body-only signature (as if the timestamp were
+// stripped from the signed payload) is rejected. Mutation target: the binding.
+func TestReplay_BodyOnlySignatureRejected(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0)
+	h, _ := newTSHandler(t, base)
+
+	body := []byte(tsTestBody)
+	ts := "1700000000"
+	bodyOnlySig := hmacSign(body, testSecret) // signs body, NOT "<ts>.<body>"
+
+	rr := postTS(t, h, body, bodyOnlySig, ts)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for body-only signature under RequireTimestamp, got %d", rr.Code)
+	}
+}
+
+// TestReplay_DisabledByDefault is the backward-compatibility proof: with
+// RequireTimestamp off (the default), a body-only signature with NO timestamp
+// header is accepted exactly as before — no regression to existing senders.
+func TestReplay_DisabledByDefault(t *testing.T) {
+	h, sink := newTestHandler(t, testSecret) // RequireTimestamp defaults to false
+
+	body := []byte(tsTestBody)
+	rr := postTS(t, h, body, hmacSign(body, testSecret), "") // no timestamp header
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 with RequireTimestamp off, got %d", rr.Code)
+	}
+	if sink.Len() != 1 {
+		t.Fatalf("expected 1 event with RequireTimestamp off, got %d", sink.Len())
 	}
 }

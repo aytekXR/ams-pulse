@@ -1,4 +1,23 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-122 — SESSION-60)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-123 — SESSION-61)
+
+> **S61 (D-123) needs NO operator action — but adds an OPTIONAL security hardening you may want later.** This session
+> closed the **last** open subsystem-audit finding: the AMS webhook endpoint checked each request's signature but had
+> no freshness check, so a captured, validly-signed webhook could in principle be **replayed**. Pulse now offers
+> **opt-in** replay protection, **off by default** (so nothing changes and no webhook breaks). Live in prod
+> (`v0.4.0-…`, rolled forward; default-off path smoke-verified). **★ With this, all 16 audit findings are resolved
+> (14 fixed, 2 deferred as harmless dead/leftover code).**
+>
+> **If — and only if — you want to turn replay protection ON later:** your webhook **signing proxy** (AMS itself does
+> not sign webhooks) must be updated to send an `X-Ams-Timestamp` header and sign the timestamp-bound payload, then
+> set `PULSE_WEBHOOK_REQUIRE_TIMESTAMP=true`. Full instructions: `docs/AMS-INTEGRATION.md` §4.7. Until you do that,
+> leave it off — enabling it before the proxy is updated would 401 every webhook. **This is entirely optional; the
+> REST poller remains the supported AMS ingest path and needs none of this.**
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
+> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none
+> blocks the autonomous work.
+
+## (previous header — D-122, SESSION-60)
 
 > **S60 (D-122) needs NO operator action.** This session reviewed a subsystem-audit finding about the daily usage
 > rollup table not summing its "peak concurrency" column. On investigation, that column is **never actually read** —

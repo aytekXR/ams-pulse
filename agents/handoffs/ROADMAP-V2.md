@@ -527,7 +527,7 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.30  Fresh subsystem adversarial audit (16 findings)  [13 shipped — ALL 6 HIGH done; 2 DEFERRED; 1 MEDIUM remaining ([8], product/contract-gated)]  ⏳ IN PROGRESS S48→S60 (D-110…D-122, 2026-07-16, PR #93…#115)
+### 2.30  Fresh subsystem adversarial audit (16 findings)  [★ COMPLETE — 14 shipped (ALL 6 HIGH); 2 DEFERRED ([11],[12])]  ✅ DONE S48→S61 (D-110…D-123, 2026-07-16, PR #93…#NNN)
 
 With the S44 13-bug backlog closed (§2.29) and the §2.7 CI-promotion gate not yet open (07-16 < 07-23), **S48
 followed the standing re-scan mandate and ran a fresh adversarial audit of the subsystems the S44 audit never
@@ -611,10 +611,17 @@ swept** (collector, amsclient, reports, cluster, clickhouse): 7 finders + refute
   0.0000%). `accounting.go:209-210` documents the column as an unread "session-count proxy." The audit's fix would be
   inert, semantically wrong if ever read (summing `toUInt32(1)`/session = session-count), and risky (live `ALTER …
   MODIFY ENGINE`). Also: the migration lineage is already at **0010**, not 0004. No code/DDL change; no prod roll.
-- ⏳ **1 finding remains → S61: ⚠ [8] webhook replay (MEDIUM, product/contract-gated).** No freshness check; fix
-  needs a new `X-Ams-Timestamp` header + a ±window check folded into the HMAC — a CONTRACT change with AMS / the
-  signing proxy. **Verify product-viability FIRST** (does AMS/the proxy actually send a timestamp header?); if not,
-  it's operator/contract-gated. Full list + fixes: `S48-AUDIT-FINDINGS.md`; plan: `sessions/SESSION-61.md`.
+- ✅ **S61 (D-123) — shipped [8] webhook replay protection (opt-in). ★ LAST finding — audit COMPLETE.** Verified
+  product-viability first: AMS lifecycle webhooks are UNSIGNED (`AMS-INTEGRATION.md §4.5`), so `X-Ams-Signature` is a
+  Pulse-defined contract → Pulse can extend it without an operator dependency. Shipped a **backward-compatible**
+  `PULSE_WEBHOOK_REQUIRE_TIMESTAMP` (default off) + `PULSE_WEBHOOK_TIMESTAMP_SKEW` (default 5m): off = bare-body HMAC
+  byte-for-byte (zero ingest risk); on = fresh `X-Ams-Timestamp` (±window) + canonical timestamp-bound HMAC. Full
+  suite 24/24; mutation-proven ×3; 3-lens adversarial review (10 agents, 7 confirmed/0 refuted/0 blockers → addressed
+  5, deferred 1 per-source override as YAGNI). Docs `AMS-INTEGRATION.md §4.7`. Prod rolled forward (default-off →
+  smoke green).
+- **★★ S48 AUDIT COMPLETE: all 16 findings triaged — 14 SHIPPED, 2 DEFERRED** ([11] D-121 dead code / D-087; [12]
+  D-122 vestigial column / D-018). SESSION-62 picks the next highest-leverage move (fresh subsystem audit, or the
+  §2.7 CI-promotion win once today ≥ 2026-07-23). Full list: `S48-AUDIT-FINDINGS.md`; plan: `sessions/SESSION-62.md`.
 
 ### 2.29  Security hardening + 13-bug adversarial audit  [S shipped; M–L backlog]  ✅ SECURITY CLUSTER DONE S44 (D-106, 2026-07-15, PR #85)
 

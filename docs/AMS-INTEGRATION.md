@@ -446,6 +446,11 @@ Fail-closed: `validateHMAC` returns `false` when `secret == ""` so a misconfigur
 instance cannot accidentally accept unsigned webhooks even if `serve.go`'s own
 guard were bypassed.
 
+> If `PULSE_WEBHOOK_REQUIRE_TIMESTAMP=true` (opt-in replay protection, §4.7) the signed
+> payload changes: the sender must also send an `X-Ams-Timestamp` header and sign
+> `<decimal-unix-seconds>.<raw-body>` (not the bare body). A sender still using the
+> body-only contract above will get **401 invalid signature** — see §4.7.
+
 ### 4.4 Caddy route for the webhook path
 
 The `/webhook/*` route is **already present** in `deploy/config/Caddyfile.prod`
@@ -560,6 +565,43 @@ services:
 For production behind Caddy, the Caddy route above is preferred (single exposed
 port, TLS, no direct host port binding).
 
+### 4.7 Optional: webhook replay protection (`X-Ams-Timestamp`)
+
+By default the webhook HMAC is computed over the request body alone, so a captured,
+validly-signed webhook can be replayed indefinitely (audit finding [8], D-123). To
+close that gap, Pulse offers **opt-in** replay protection.
+
+Set `PULSE_WEBHOOK_REQUIRE_TIMESTAMP=true` (default `false`). When enabled, every
+webhook request must additionally:
+
+- carry an **`X-Ams-Timestamp`** header — the Unix time **in seconds** at which the
+  sender signed the request;
+- be **fresh** — within ±`PULSE_WEBHOOK_TIMESTAMP_SKEW` (a Go duration, default `5m`)
+  of the Pulse host clock; stale or future-dated requests get **401**; and
+- be signed over the **timestamp-bound payload**, not the bare body:
+
+  ```
+  X-Ams-Signature: sha256=<hex(HMAC-SHA256(<decimal-unix-seconds> + "." + <raw-body>, secret))>
+  ```
+
+  where `<decimal-unix-seconds>` is the value sent in `X-Ams-Timestamp`, in canonical
+  decimal form (Pulse canonicalizes the header before verifying, so a leading `+` or
+  zeros are tolerated).
+
+The ±window is the replay bound — there is no nonce store, so a captured request simply
+can no longer be replayed once it ages past the window. This matches the GitHub/Stripe
+webhook-signing model.
+
+> **⚠️ Fail-closed, and GLOBAL.** Enabling this flag changes the signing contract for
+> the legacy `/webhook/ams` route AND every per-source `/webhook/ams/{name}` route (B7)
+> at once. Enable it ONLY after **every** sender — the shared signing proxy and each
+> per-source sender — is updated to send `X-Ams-Timestamp` and sign the timestamp-bound
+> payload; otherwise those senders get **401** on every request. There is no per-source
+> override yet (D-123), so roll it out in lockstep across all senders.
+
+Tighten the window on high-value deployments with e.g. `PULSE_WEBHOOK_TIMESTAMP_SKEW=30s`;
+widen it if a remote signing proxy has meaningful clock skew against the Pulse host.
+
 ---
 
 ## 5. Security
@@ -620,6 +662,8 @@ Complete table of `PULSE_*` variables relevant to AMS integration, read from
 | `PULSE_POLL_INTERVAL` | REST poll interval (Go duration, e.g. `5s`, `10s`) | `5s` | No |
 | `PULSE_WEBHOOK_ADDR` | Webhook HTTP listen address (e.g. `:8092`); empty = disabled | _(empty)_ | No |
 | `PULSE_WEBHOOK_SECRET` | HMAC-SHA256 secret for webhook signature validation; supports `_FILE` convention | _(empty)_ | Required if PULSE_WEBHOOK_ADDR is set |
+| `PULSE_WEBHOOK_REQUIRE_TIMESTAMP` | Opt-in webhook replay protection (`X-Ams-Timestamp` freshness + timestamp-bound HMAC); see §4.7 | `false` | No |
+| `PULSE_WEBHOOK_TIMESTAMP_SKEW` | ± acceptance window for `X-Ams-Timestamp` when the above is `true` (Go duration) | `5m` | No |
 | `PULSE_KAFKA_BROKERS` | Comma-separated Kafka broker addresses; empty = disabled | _(empty)_ | No |
 | `PULSE_KAFKA_GROUP_ID` | Kafka consumer group ID | `pulse-collector` | No |
 | `PULSE_LISTEN_ADDR` | Main API listen address | `:8090` | No |
