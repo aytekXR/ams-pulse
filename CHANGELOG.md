@@ -12,6 +12,14 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **Usage reports now disclose the egress method they actually used (D-117).**
+  The report-level "Egress method" line on billing statements (CSV/PDF) and the
+  `egress_method` API field were hardcoded to `bitrate_x_watch_time` even when the
+  figures were driven by AMS REST byte counters — a false methodology disclosure
+  (PRD F6). The report now reflects the method actually used: `bitrate_x_watch_time`,
+  `ams_rest_stats_byte_counter`, or `mixed` when a single report blends both across
+  its streams. Per-row disclosure was already correct and is unchanged. (Found by the
+  S48 subsystem audit, finding [10].)
 - **The REST poller no longer leaks memory for idle streams that come and go
   (D-116).** The poller tracked the last-seen status of every stream but only
   cleaned up entries for streams that had been actively broadcasting; an

@@ -1,5 +1,14 @@
 # SESSION-55 — planned at S54 close (D-116)
 
+> **✅ CLOSED 2026-07-16 (D-117, PR #107).** Took finding [10] — `reports/accounting.go` `ComputeUsage` returned the
+> report-level `egress_method` hardcoded to `bitrate_x_watch_time` even when per-row egress came from AMS byte
+> counters, so the F6 CSV/PDF disclosure header lied. Re-verified beyond the audit's literal fix: the daily path can
+> be **mixed** (`Totals.EgressGB` blends both), so "any→byte-counter" is just the mirror over-claim. Shipped a 3-way
+> report-level disclosure (`bitrate_x_watch_time` / `ams_rest_stats_byte_counter` / new **`mixed`**), tracked across
+> the included rows. Full Go suite 24/24; mutation-proven ×3 (incl. a tenant-exclusion regression guard); 3-lens
+> review (0 confirmed); prod `v0.4.0-51-ge5577f7`. **6 MEDIUM/LOW findings remain** → SESSION-56. Evidence:
+> `decisions.md` D-117. (CI-promotion gate still shut — 07-16 < 07-23.)
+
 > Written by SESSION-54 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE for the full ranked candidate list** + `S48-AUDIT-FINDINGS.md`.

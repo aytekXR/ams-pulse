@@ -1,4 +1,19 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-116 — SESSION-54)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-117 — SESSION-55)
+
+> **S55 (D-117) needs NO operator action.** This session fixed a subsystem-audit finding: usage/billing reports
+> **disclosed the wrong egress-estimation method** — the statement's "Egress method" line and the `egress_method`
+> API field always said `bitrate_x_watch_time`, even when the figures actually came from AMS REST byte counters
+> (PRD F6 requires an accurate methodology disclosure). Reports now state the method actually used
+> (`bitrate_x_watch_time`, `ams_rest_stats_byte_counter`, or `mixed` when one report blends both across its streams).
+> Fixed and live (`v0.4.0-51-ge5577f7`). **All six high-severity audit findings plus four lower-severity ones are
+> now shipped; 6 lower-severity findings remain**, queued for upcoming sessions
+> (`agents/handoffs/S48-AUDIT-FINDINGS.md`); none needs you.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
+> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none
+> blocks the autonomous work.
+
+## (previous header — D-116, SESSION-54)
 
 > **S54 (D-116) needs NO operator action.** This session fixed a subsystem-audit finding: the analytics REST poller
 > **slowly leaked memory** on long-running servers — it kept a per-stream tracking entry for every stream it ever

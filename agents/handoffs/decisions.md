@@ -7570,3 +7570,51 @@ replay (product-viability) last.
 **Docs at close:** D-116 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (finding [9]
 ✅); RESUME-PROMPT ▶ START HERE → SESSION-55; `operator-expected.md` refreshed (no new item);
 `sessions/SESSION-54.md` CLOSED; `sessions/SESSION-55.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 7.
+
+## D-117 — S55 (2026-07-16): CLOSED — report-level egress_method disclosure reflects the actual method (finding [10], PR #107)
+
+**Context.** SESSION-55 continued the MEDIUM/LOW batch (CI-promotion gate still shut, 07-16 < 07-23). Took finding
+[10] in `reports/accounting.go` `ComputeUsage`.
+
+**Finding [10] — the F6 egress-method disclosure lied.** `ComputeUsage` returned `UsageReport.EgressMethod`
+hardcoded to `EgressMethodBitrateXWatchTime`, even when per-row egress was derived from AMS REST byte counters
+(`EgressMethodAMSRestStatsByteCounter`, set in the `egress_bytes>0` branch at `:302`). The CSV/PDF F6 disclosure
+header (`# Egress method: …`) and the API `egress_method` field therefore misstated the methodology behind the
+report's aggregate figures. **Re-verified against the code** — and found the audit's literal fix ("set report-level
+to byte-counter when the bytes branch is taken") is itself incomplete: `isHour` is fixed per call, so the daily
+(`!isHour`) path can be **mixed** (some rows byte-counter, some bitrate-fallback) and `Totals.EgressGB` blends both.
+The audit's "any→byte-counter" would then *over-claim* precision on a mixed report — the mirror of the original bug.
+
+**Fix (verified CORE — broader than the audit's suggested scope).** Track which methods actually contributed across
+the **included** rows (`sawByteCounter`/`sawBitrate`, recorded *after* the tenant-filter `continue`), then disclose
+a 3-way report-level value: both present → **`mixed`** (new `EgressMethodMixed` constant); only byte counters →
+`ams_rest_stats_byte_counter`; only bitrate or an empty report → `bitrate_x_watch_time` (F6 default). Per-row
+`EgressMethod` is unchanged. `egress_method` is a free-text `string` (no enum; verified **no consumer branches** on
+the value — Go/CSV/PDF/web render it as text), so the OpenAPI description + regenerated `schema.d.ts` document
+`"mixed"` with no breaking contract change (drift guard passes — regenerated in node:22 to match CI byte-for-byte).
+
+**Verification.** gofmt/vet clean; **full Go suite 24/24**. Extended the three existing report-level tests (pure
+bitrate, pure byte-counter, hour→bitrate) + new `TestAcctConn_ComputeUsage_DayMode_MixedEgressMethod` (2 rows, one
+each → "mixed") + regression guard `…_TenantFilter_ExcludedByteCounterRow_NotMixed` (an excluded byte-counter row
+must NOT leak into the disclosure). **Mutation-proven ×3:** M1 (`mixed`→byte-counter, the naive audit fix) reddens
+ONLY the mixed test; M2 (`sawByteCounter` never set) reddens byte-counter+mixed; the regression mutation (trackers
+moved before the tenant `continue`) reddens ONLY the exclusion test. **Review:** 3-lens adversarial workflow
+(correctness / disclosure-semantics-scope / test-quality) + refute-by-default verify — **0 confirmed findings** (the
+one surfaced test-coverage note was refuted as speculative; its invariant is now pinned by the regression guard).
+
+**Prod: rolled forward** (server *source* changed) — STAMPED build, rollback image tag `pre-d117`
+(→ `v0.4.0-49-g6d60f53`), backup rc=0. New prod stamp: **`v0.4.0-51-ge5577f7`** (was `v0.4.0-49-g6d60f53`). Smoke:
+`/healthz` all-ok (`ams_env_configured:true`); `pulse version` = `v0.4.0-51-ge5577f7`; signed webhook → 200; limits
+512M/0.5cpu; logs clean.
+
+**Operator action required: NONE.** Carried items unchanged (AMS trial-expiry doc discrepancy 07-12 vs 07-27;
+GHCR anon → 401).
+
+**★ Remaining S48-audit backlog: 6 findings (4 MEDIUM, 2 LOW)** in `S48-AUDIT-FINDINGS.md`. Finding [10] ✅ DONE.
+Next: [13] clickhouse per-item PrepareBatch, [16] dup node_stats, [14] beacon 413; [11] anomaly baseline columns
+(needs a SQL-text/real-CH seam); [12] SummingMergeTree migration (FIVE places) + [8] webhook replay
+(product-viability) last.
+
+**Docs at close:** D-117 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (finding [10]
+✅, 10 shipped); RESUME-PROMPT ▶ START HERE → SESSION-56; `operator-expected.md` refreshed (no new item);
+`sessions/SESSION-55.md` CLOSED; `sessions/SESSION-56.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 6.
