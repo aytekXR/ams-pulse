@@ -527,7 +527,7 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.30  Fresh subsystem adversarial audit (16 findings)  [11 shipped — ALL 6 HIGH done; 5 MEDIUM/LOW backlog]  ⏳ IN PROGRESS S48→S56 (D-110…D-118, 2026-07-16, PR #93…#109)
+### 2.30  Fresh subsystem adversarial audit (16 findings)  [12 shipped — ALL 6 HIGH done; 4 MEDIUM/LOW backlog]  ⏳ IN PROGRESS S48→S57 (D-110…D-119, 2026-07-16, PR #93…#111)
 
 With the S44 13-bug backlog closed (§2.29) and the §2.7 CI-promotion gate not yet open (07-16 < 07-23), **S48
 followed the standing re-scan mandate and ran a fresh adversarial audit of the subsystems the S44 audit never
@@ -582,10 +582,16 @@ swept** (collector, amsclient, reports, cluster, clickhouse): 7 finders + refute
   `inserted` and silently dropping the rest. Fix: one `PrepareBatch` + one `Send` for the flush (mirror
   `insertServerEvents`/`insertViewerSessions`) → atomic. Mutation-proven (spliced the exact original per-item func
   back → 2 distinguisher tests redden); self-review (mechanical); prod `v0.4.0-53-g500aabb`.
-- ⏳ **5 findings remain** (0 HIGH, 3 MEDIUM, 2 LOW) → S57+: [16] dup node_stats, [14] beacon 413 heuristic, [11]
-  anomaly baseline columns (needs a SQL-text/real-CH seam); ⚠ [12] clickhouse migration (FIVE places) + [8] webhook
-  replay (product-viability) last. Each must be re-verified against the code before building. Full list + fixes:
-  `S48-AUDIT-FINDINGS.md`; plan: `sessions/SESSION-57.md`.
+- ✅ **S57 (D-119, PR #111)** — shipped **[16] cluster duplicate node_stats**. `poll()` set `seen[nodeID]`
+  unconditionally and processed every DTO, so two DTOs resolving to the same key (both missing NodeID+IP → "")
+  overwrote `d.nodes` AND emitted a second `node_stats` event → 2x node metrics + a phantom node. Fix: dedup guard
+  at the top of the loop (`seen` now backs both dedup and the stale-check). Mutation-proven (drop the guard's
+  `continue` → dedup test reddens `got 2 want 1`, positive control green); self-review (mechanical); prod
+  `v0.4.0-55-ge13eb1f`.
+- ⏳ **4 findings remain** (0 HIGH, 3 MEDIUM, 1 LOW) → S58+: [14] beacon 413 heuristic; [11] anomaly baseline columns
+  (needs a SQL-text/real-CH seam); ⚠ [12] clickhouse migration (FIVE places) + [8] webhook replay
+  (product-viability) last. Each must be re-verified against the code before building. Full list + fixes:
+  `S48-AUDIT-FINDINGS.md`; plan: `sessions/SESSION-58.md`.
 
 ### 2.29  Security hardening + 13-bug adversarial audit  [S shipped; M–L backlog]  ✅ SECURITY CLUSTER DONE S44 (D-106, 2026-07-15, PR #85)
 

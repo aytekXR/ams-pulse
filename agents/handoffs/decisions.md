@@ -7658,3 +7658,39 @@ SummingMergeTree migration (FIVE places) + [8] webhook replay (product-viability
 **Docs at close:** D-118 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (finding [13]
 ✅, 11 shipped); RESUME-PROMPT ▶ START HERE → SESSION-57; `operator-expected.md` refreshed (no new item);
 `sessions/SESSION-56.md` CLOSED; `sessions/SESSION-57.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 5.
+
+## D-119 — S57 (2026-07-16): CLOSED — duplicate node keys deduped in cluster poll (finding [16], PR #111)
+
+**Context.** SESSION-57 continued the MEDIUM/LOW batch (CI-promotion gate still shut, 07-16 < 07-23). Took finding
+[16] in `cluster/discovery.go` `poll()`.
+
+**Finding [16] — duplicate node_stats on colliding node keys.** `poll()` set `seen[nodeID]` unconditionally and
+processed every `ClusterNodeDTO`, so two DTOs resolving to the same key (e.g. both missing `NodeID` and `IP` → `""`,
+or duplicate `NodeID`s) each overwrote `d.nodes[nodeID]` AND appended a separate `node_stats` event to `pending` —
+both emitted to the sink, 2x-inflating that node's ClickHouse metrics and showing a phantom node in the fleet view.
+**Verified**: the `seen` map was consulted only for the stale-check (`discovery.go:206`), never for dedup.
+
+**Fix.** Guard the top of the loop — if the resolved key is already in `seen`, log and `continue`. The `seen` map now
+serves both roles (intra-poll dedup + stale detection); genuinely distinct nodes are unaffected. (LOW severity.)
+
+**Verification.** gofmt/vet clean; **full Go suite 24/24**. New `TestDiscovery_DuplicateNodeKey_EmitsOnce` (two
+colliding DTOs → exactly one `node_stats` emit, `NodeCount==1`) + `TestDiscovery_DistinctNodes_EmitEach` (positive
+control: two distinct nodes still emit twice). **Mutation-proven**: dropping the guard's `continue` on a throwaway
+copy reddens the dedup test (`got 2, want 1`) while the positive control stays green. **Review:** careful
+self-review — a single-guard mechanical fix, mutation-proven (S53/S54/S56 precedent).
+
+**Prod: rolled forward** (server *source* changed) — STAMPED build, rollback image tag `pre-d119`
+(→ `v0.4.0-53-g500aabb`), backup rc=0. New prod stamp: **`v0.4.0-55-ge13eb1f`** (was `v0.4.0-53-g500aabb`). Smoke:
+`/healthz` all-ok (`ams_env_configured:true`); `pulse version` = `v0.4.0-55-ge13eb1f`; signed webhook → 200; limits
+512M/0.5cpu; logs clean.
+
+**Operator action required: NONE.** Carried items unchanged (AMS trial-expiry doc discrepancy 07-12 vs 07-27;
+GHCR anon → 401).
+
+**★ Remaining S48-audit backlog: 4 findings (3 MEDIUM, 1 LOW)** in `S48-AUDIT-FINDINGS.md`. Finding [16] ✅ DONE.
+Next: [14] beacon 413 heuristic; [11] anomaly baseline columns (needs a SQL-text/real-CH seam); [12] SummingMergeTree
+migration (FIVE places) + [8] webhook replay (product-viability) last.
+
+**Docs at close:** D-119 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (finding [16]
+✅, 12 shipped); RESUME-PROMPT ▶ START HERE → SESSION-58; `operator-expected.md` refreshed (no new item);
+`sessions/SESSION-57.md` CLOSED; `sessions/SESSION-58.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 4.

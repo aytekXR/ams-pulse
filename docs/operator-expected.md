@@ -1,4 +1,18 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-118 — SESSION-56)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-119 — SESSION-57)
+
+> **S57 (D-119) needs NO operator action.** This session fixed a subsystem-audit finding: when the AMS cluster API
+> returned a duplicate node record (two entries resolving to the same identity — e.g. both missing their node ID
+> and IP), each poll double-counted that node — emitting two `node_stats` events, so its CPU/memory/network figures
+> were doubled in the database and a phantom extra node showed on the fleet page. Each node is now counted once per
+> poll. Fixed and live (`v0.4.0-55-ge13eb1f`). **All six high-severity audit findings plus six lower-severity ones
+> are now shipped; 4 lower-severity findings remain**, queued for upcoming sessions
+> (`agents/handoffs/S48-AUDIT-FINDINGS.md`); none needs you.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
+> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none
+> blocks the autonomous work.
+
+## (previous header — D-118, SESSION-56)
 
 > **S56 (D-118) needs NO operator action.** This session fixed a subsystem-audit finding: player-beacon
 > (quality-of-experience) events were written to the database one row at a time, so a transient failure partway
