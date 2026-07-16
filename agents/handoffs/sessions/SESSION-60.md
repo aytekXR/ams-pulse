@@ -1,5 +1,21 @@
 # SESSION-60 — planned at S59 close (D-121)
 
+> **⏸️ CLOSED 2026-07-16 (D-122). DEFERRED S48-audit finding [12] — no migration shipped.** Took [12]
+> (`0001_init.sql:358` — `rollup_usage_1d` SummingMergeTree omits `peak_concurrency` from the sum-list). The
+> mechanism is real (the column isn't summed) BUT the impact is **REFUTED**: a whole-repo grep confirms **nothing
+> reads `rollup_usage_1d.peak_concurrency`** — every peak READ comes from an AggregatingMergeTree via `maxMerge`
+> (billing `accounting.go:389-412` → `rollup_concurrency_1d`; analytics `query.go:285` → `rollup_audience_1h/1d`; web
+> `ReportsPage.tsx:866` shows the API value fed from those). `accounting.go:209-210` documents the column as an unread
+> "session-count proxy, not true concurrency." This is a human-approved, integration-tested design — **D-018 CR-VD38**
+> created `0002_concurrency_rollup.sql` for exactly this (`TestAccountant_CHIntegration`: TRUE windowed max, drift
+> 0.0000%, D-019) and states "Do NOT edit `0001_init.sql`." **Ruling: DEFER** — the audit's fix would be inert (no
+> reader), semantically wrong if ever read (summing `toUInt32(1)`/session = session-count, not peak), and risky (live
+> `ALTER … MODIFY ENGINE` on the billing table). Also caught: the CH migration lineage is already at **0010**, not 0004
+> ("next=0005" was the meta-store audit_log lineage). No code/DDL change (live read-path already pinned at
+> `accounting.go:209-211`); **no prod roll** (prod stays `v0.4.0-57-g36c16ed`). **1 finding remains: [8] webhook
+> replay (product/contract-gated)** → SESSION-61. Evidence: `decisions.md` D-122. (CI-promotion gate still shut —
+> 07-16 < 07-23.)
+
 > Written by SESSION-59 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE for the full ranked candidate list** + `S48-AUDIT-FINDINGS.md`.

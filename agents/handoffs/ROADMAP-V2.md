@@ -527,7 +527,7 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.30  Fresh subsystem adversarial audit (16 findings)  [13 shipped — ALL 6 HIGH done; 1 DEFERRED; 2 MEDIUM actionable]  ⏳ IN PROGRESS S48→S59 (D-110…D-121, 2026-07-16, PR #93…#114)
+### 2.30  Fresh subsystem adversarial audit (16 findings)  [13 shipped — ALL 6 HIGH done; 2 DEFERRED; 1 MEDIUM remaining ([8], product/contract-gated)]  ⏳ IN PROGRESS S48→S60 (D-110…D-122, 2026-07-16, PR #93…#115)
 
 With the S44 13-bug backlog closed (§2.29) and the §2.7 CI-promotion gate not yet open (07-16 < 07-23), **S48
 followed the standing re-scan mandate and ran a fresh adversarial audit of the subsystems the S44 audit never
@@ -603,10 +603,18 @@ swept** (collector, amsclient, reports, cluster, clickhouse): 7 finders + refute
   explicit deferral is churn with zero prod impact, and a piecemeal column fix would be incomplete (needs the
   default-branch metric-allowlist redesign D-087 describes, done TOGETHER when wired). Shipped an inline deferral pin
   at `query.go:1092`. **No prod roll** (comment-only; prod stays `v0.4.0-57-g36c16ed`).
-- ⏳ **2 findings remain (both MEDIUM, actionable)** → S60+: ⚠ [12] SummingMergeTree `peak_concurrency` (needs a
-  NEW forward-only migration `0005` + `ALTER TABLE … MODIFY ENGINE`, FIVE wiring places; do NOT edit 0001); ⚠ [8]
-  webhook replay (needs product-viability verification — new `X-Ams-Timestamp` header + signing-proxy convention, may
-  be operator/contract-gated). Full list + fixes: `S48-AUDIT-FINDINGS.md`; plan: `sessions/SESSION-60.md`.
+- ⏸️ **S60 (D-122) — DEFERRED [12] SummingMergeTree `peak_concurrency` (no migration shipped).** Mechanism real
+  (`peak_concurrency` isn't in the sum-list) but impact REFUTED: a whole-repo grep confirms **nothing reads
+  `rollup_usage_1d.peak_concurrency`** — every peak READ comes from an AggregatingMergeTree via `maxMerge` (billing →
+  `rollup_concurrency_1d`; analytics → `rollup_audience_1h/1d`), a human-approved design (**D-018 CR-VD38** created
+  `0002_concurrency_rollup.sql` for exactly this; `TestAccountant_CHIntegration` proves TRUE windowed max, drift
+  0.0000%). `accounting.go:209-210` documents the column as an unread "session-count proxy." The audit's fix would be
+  inert, semantically wrong if ever read (summing `toUInt32(1)`/session = session-count), and risky (live `ALTER …
+  MODIFY ENGINE`). Also: the migration lineage is already at **0010**, not 0004. No code/DDL change; no prod roll.
+- ⏳ **1 finding remains → S61: ⚠ [8] webhook replay (MEDIUM, product/contract-gated).** No freshness check; fix
+  needs a new `X-Ams-Timestamp` header + a ±window check folded into the HMAC — a CONTRACT change with AMS / the
+  signing proxy. **Verify product-viability FIRST** (does AMS/the proxy actually send a timestamp header?); if not,
+  it's operator/contract-gated. Full list + fixes: `S48-AUDIT-FINDINGS.md`; plan: `sessions/SESSION-61.md`.
 
 ### 2.29  Security hardening + 13-bug adversarial audit  [S shipped; M–L backlog]  ✅ SECURITY CLUSTER DONE S44 (D-106, 2026-07-15, PR #85)
 

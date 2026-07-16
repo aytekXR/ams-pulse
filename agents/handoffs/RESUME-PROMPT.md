@@ -11,7 +11,52 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-60.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-61.md`)
+
+**Session 2026-07-16 result: D-122 — S60 DEFERRED S48-audit finding [12] (no migration shipped — vestigial column parked by D-018).**
+
+**★ S60 took finding [12]** (`0001_init.sql:358` — `rollup_usage_1d` SummingMergeTree omits `peak_concurrency` from
+the sum-list). Re-verification CONFIRMED the mechanism (the column isn't summed) BUT **REFUTED the impact**: a
+whole-repo grep proves **nothing reads `rollup_usage_1d.peak_concurrency`** — every peak READ comes from an
+AggregatingMergeTree via `maxMerge` (billing `accounting.go:389-412` → `rollup_concurrency_1d`; analytics
+`query.go:285` → `rollup_audience_1h/1d`; the web reads the API value fed from those). `accounting.go:209-210`
+documents the column as an unread "session-count proxy, not true concurrency." This is a human-approved,
+integration-tested design — **D-018 CR-VD38** created `0002_concurrency_rollup.sql` for exactly this
+(`TestAccountant_CHIntegration`: TRUE windowed max, drift 0.0000%) and says "Do NOT edit `0001_init.sql`." **Ruling:
+DEFER** — the audit's fix would be inert (no reader), semantically wrong if ever read (summing `toUInt32(1)`/session =
+session-count, not peak), and risky (live `ALTER … MODIFY ENGINE`). Also caught: the CH migration lineage is already
+at **0010**, not 0004. **No prod roll** (no code/DDL change; prod stays `v0.4.0-57-g36c16ed`). Full evidence:
+`decisions.md` D-122.
+
+**★ SESSION-61 = the LAST S48-audit finding: [8] webhook replay** (MEDIUM, product/contract-gated) in
+`S48-AUDIT-FINDINGS.md`. `collector/webhook/webhook.go:160` — `validateHMAC` proves the body was signed but has NO
+freshness check, so any captured signed webhook can be replayed indefinitely (duplicate stream-start/end/recording
+events injected into the pipeline). The textbook fix adds a new `X-Ams-Timestamp` header + a ±5-min window check
+folded into the HMAC input. **⚠ This is a CONTRACT change with AMS / the signing proxy — VERIFY PRODUCT-VIABILITY
+FIRST:**
+- **Read `docs/AMS-INTEGRATION.md`, the webhook handler, and the signing-proxy setup** (grep `X-Ams-Signature`,
+  `validateHMAC`, any `deploy/` signing-proxy config) to determine **whether AMS (or the deployed proxy) actually
+  SENDS a timestamp header today.** AMS's native webhook likely does NOT.
+- **If it does NOT:** a strict timestamp check would reject every real webhook → **live ingest breakage.** This is
+  then **operator/contract-gated** — record the blocker in `operator-expected.md` + the session log (the signing
+  proxy must be taught to add+sign a timestamp, OR AMS must send one) and DO NOT ship a half-measure. This is a
+  legitimate human-dependency STOP per the standing directive.
+- **If a viable path exists** (e.g. the signing proxy is ours and can add+sign a timestamp): design it as a
+  backward-compatible, config-gated check (default-off until the proxy sends the header, so existing deployments
+  don't break), mutation-prove it, and ship. Consider the multi-lens adversarial workflow (security + contract).
+
+**This is the last open finding.** After [8] resolves (ship OR operator-gate), the S48 audit backlog is fully
+triaged (13 shipped, [11]+[12] deferred, [8] shipped-or-gated). At that point re-read the standing directive and
+ROADMAP-V2 §2 and **choose the next-highest-leverage move** — likely a FRESH adversarial audit of an un-swept
+subsystem (as S48 itself was), OR, if today ≥ 2026-07-23, the §2.7 CI-promotion win. **§2.7 CI promotions unlock ≥
+2026-07-23 — CHECK THE DATE at open.**
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
+ledger 07-27) — operator-only. GHCR anon → 401 — operator-only. No new operator action from S60.
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-60.md`)
 
 **Session 2026-07-16 result: D-121 — S59 DEFERRED S48-audit finding [11] (no fix shipped — dead code parked by D-087).**
 
