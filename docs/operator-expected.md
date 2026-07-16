@@ -1,4 +1,19 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-117 — SESSION-55)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-118 — SESSION-56)
+
+> **S56 (D-118) needs NO operator action.** This session fixed a subsystem-audit finding: player-beacon
+> (quality-of-experience) events were written to the database one row at a time, so a transient failure partway
+> through a flush could store some rows while the writer reported the whole flush as failed — under-counting the
+> "inserted" metric and dropping the rest without a retry. Each flush is now a single atomic insert (matching the
+> other two writers): on failure nothing is stored, so the metrics always match reality. Fixed and live
+> (`v0.4.0-53-g500aabb`). **All six high-severity audit findings plus five lower-severity ones are now shipped; 5
+> lower-severity findings remain**, queued for upcoming sessions (`agents/handoffs/S48-AUDIT-FINDINGS.md`); none
+> needs you.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
+> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none
+> blocks the autonomous work.
+
+## (previous header — D-117, SESSION-55)
 
 > **S55 (D-117) needs NO operator action.** This session fixed a subsystem-audit finding: usage/billing reports
 > **disclosed the wrong egress-estimation method** — the statement's "Egress method" line and the `egress_method`

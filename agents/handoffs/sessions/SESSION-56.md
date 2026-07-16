@@ -1,5 +1,13 @@
 # SESSION-56 — planned at S55 close (D-117)
 
+> **✅ CLOSED 2026-07-16 (D-118, PR #109).** Took finding [13] — `store/clickhouse/clickhouse.go`
+> `insertBeaconEvents` opened a fresh `PrepareBatch`+`Send` per `BeaconItem`, so a mid-batch `Send` failure
+> partial-committed items 0..M-1 while the flusher counted the whole flush as failed (under-reported `inserted`,
+> silently dropped the rest). Fix: one `PrepareBatch` + one `Send` for the flush (mirror `insertServerEvents`/
+> `insertViewerSessions`) → atomic. Full Go suite 24/24; mutation-proven by splicing the exact original per-item
+> func back in (2 distinguisher tests redden); self-review (mechanical). Prod `v0.4.0-53-g500aabb`. **5 MEDIUM/LOW
+> findings remain** → SESSION-57. Evidence: `decisions.md` D-118. (CI-promotion gate still shut — 07-16 < 07-23.)
+
 > Written by SESSION-55 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE for the full ranked candidate list** + `S48-AUDIT-FINDINGS.md`.
