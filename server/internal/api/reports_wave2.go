@@ -151,7 +151,13 @@ func (s *Server) handleUpdateReportSchedule(w http.ResponseWriter, r *http.Reque
 	}
 	id := chi.URLParam(r, "scheduleId")
 	existing, err := s.store.GetReportSchedule(r.Context(), id)
-	if err != nil || existing == nil {
+	if err != nil {
+		// A transient store error (DB down, ctx deadline) must not masquerade as a
+		// definitive 404 — clients that treat 404 as "deleted" would drop a live row.
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load schedule")
+		return
+	}
+	if existing == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "schedule not found")
 		return
 	}
@@ -188,8 +194,12 @@ func (s *Server) handleUpdateReportSchedule(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	s.audit(r, "report_schedule.update", "report_schedule", id, map[string]any{"cron": row.Cron})
-	updated, _ := s.store.GetReportSchedule(r.Context(), id)
-	writeJSON(w, http.StatusOK, reportScheduleToAPI(*updated))
+	// row already holds every field reportScheduleToAPI emits (id/cron/format/scope/
+	// created_at/tenant_mapping/whitelabel_header/last_run_at/next_run_at — all set
+	// above before the write; the response carries no updated_at). Render it directly
+	// instead of re-fetching: the old re-fetch swallowed its error and nil-dereferenced
+	// if a concurrent DELETE landed between the commit and the read (S62 [6]).
+	writeJSON(w, http.StatusOK, reportScheduleToAPI(row))
 }
 
 // handleDeleteReportSchedule serves DELETE /api/v1/reports/schedules/{scheduleId}.
@@ -294,7 +304,11 @@ func (s *Server) handleGetTenant(w http.ResponseWriter, r *http.Request) {
 	}
 	id := chi.URLParam(r, "tenantId")
 	t, err := s.store.GetTenant(r.Context(), id)
-	if err != nil || t == nil {
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load tenant")
+		return
+	}
+	if t == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "tenant not found")
 		return
 	}
@@ -310,7 +324,11 @@ func (s *Server) handleUpdateTenant(w http.ResponseWriter, r *http.Request) {
 	}
 	id := chi.URLParam(r, "tenantId")
 	existing, err := s.store.GetTenant(r.Context(), id)
-	if err != nil || existing == nil {
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load tenant")
+		return
+	}
+	if existing == nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "tenant not found")
 		return
 	}
@@ -342,7 +360,15 @@ func (s *Server) handleUpdateTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "tenant.update", "tenant", id, map[string]any{"name": row.Name})
-	updated, _ := s.store.GetTenant(r.Context(), id)
+	// Re-fetch to return the DB-authoritative row: updated_at is stamped inside
+	// UpdateTenant and not reflected in row, and tenantToAPI emits it. Guard the read
+	// so a concurrent DELETE or transient store error can't nil-deref (S62 [5];
+	// mirrors handleUpdateProbe).
+	updated, err := s.store.GetTenant(r.Context(), id)
+	if err != nil || updated == nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to fetch updated tenant")
+		return
+	}
 	writeJSON(w, http.StatusOK, tenantToAPI(*updated))
 }
 
