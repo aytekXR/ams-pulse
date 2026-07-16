@@ -527,7 +527,7 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.30  Fresh subsystem adversarial audit (16 findings)  [9 shipped — ALL 6 HIGH done; 7 MEDIUM/LOW backlog]  ⏳ IN PROGRESS S48→S54 (D-110…D-116, 2026-07-16, PR #93…#105)
+### 2.30  Fresh subsystem adversarial audit (16 findings)  [10 shipped — ALL 6 HIGH done; 6 MEDIUM/LOW backlog]  ⏳ IN PROGRESS S48→S55 (D-110…D-117, 2026-07-16, PR #93…#107)
 
 With the S44 13-bug backlog closed (§2.29) and the §2.7 CI-promotion gate not yet open (07-16 < 07-23), **S48
 followed the standing re-scan mandate and ran a fresh adversarial audit of the subsystems the S44 audit never
@@ -569,11 +569,17 @@ swept** (collector, amsclient, reports, cluster, clickhouse): 7 finders + refute
   `broadcasting` keys, so idle/created streams that vanished from AMS leaked forever. Fix: decouple eviction
   (`stale`, all disappeared app-scoped keys) from emission (`ended`, broadcasting-only). Mutation-proven; prod
   `v0.4.0-49-g6d60f53`. (Also: added a CI **gofmt gate** learning to agent memory — `gofmt -l` before push.)
-- ⏳ **7 findings remain** (0 HIGH, 5 MEDIUM, 2 LOW) → S55+: [10] reports egress-method disclosure, [13] clickhouse
-  per-item PrepareBatch, [16] dup node_stats, [14] beacon 413 heuristic, [11] anomaly baseline columns (needs a
-  SQL-text/real-CH seam); ⚠ [12] clickhouse migration (FIVE places) + [8] webhook replay (product-viability) last.
-  Each must be re-verified against the code before building. Full list + fixes: `S48-AUDIT-FINDINGS.md`; plan:
-  `sessions/SESSION-55.md`.
+- ✅ **S55 (D-117, PR #107)** — shipped **[10] reports egress-method disclosure**. `ComputeUsage` returned the
+  report-level `egress_method` hardcoded to `bitrate_x_watch_time` even when per-row egress came from AMS byte
+  counters → the F6 CSV/PDF disclosure header lied. Re-verified beyond the audit's literal fix: the daily path can
+  be **mixed** (aggregate `Totals.EgressGB` blends both), so "any→byte-counter" is just the mirror over-claim. Fix:
+  3-way report-level disclosure (`bitrate_x_watch_time` / `ams_rest_stats_byte_counter` / new **`mixed`**), tracked
+  across the included rows. Free-text string (no enum) — OpenAPI + `schema.d.ts` document `"mixed"`. Mutation-proven
+  ×3; 3-lens review (0 confirmed); prod `v0.4.0-51-ge5577f7`.
+- ⏳ **6 findings remain** (0 HIGH, 4 MEDIUM, 2 LOW) → S56+: [13] clickhouse per-item PrepareBatch, [16] dup
+  node_stats, [14] beacon 413 heuristic, [11] anomaly baseline columns (needs a SQL-text/real-CH seam); ⚠ [12]
+  clickhouse migration (FIVE places) + [8] webhook replay (product-viability) last. Each must be re-verified against
+  the code before building. Full list + fixes: `S48-AUDIT-FINDINGS.md`; plan: `sessions/SESSION-56.md`.
 
 ### 2.29  Security hardening + 13-bug adversarial audit  [S shipped; M–L backlog]  ✅ SECURITY CLUSTER DONE S44 (D-106, 2026-07-15, PR #85)
 

@@ -11,7 +11,49 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-55.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-56.md`)
+
+**Session 2026-07-16 result: D-117 — S55 DONE (PR #107). Shipped S48-audit finding [10] — report-level egress-method disclosure.**
+
+**★ S55** (MEDIUM/LOW batch; CI-promotion gate still shut, 07-16 < 07-23). `reports/accounting.go` `ComputeUsage`
+returned the report-level `egress_method` hardcoded to `bitrate_x_watch_time` even when per-row egress came from AMS
+byte counters (set in the `egress_bytes>0` branch) → the F6 CSV/PDF disclosure header lied. **Re-verified BEYOND the
+audit's literal fix:** the daily path can be **mixed** (some rows byte-counter, some bitrate-fallback) and the
+aggregate `Totals.EgressGB` blends both, so "any→byte-counter" would over-claim precision — the mirror of the
+original bug. Fix: a **3-way** report-level disclosure (`bitrate_x_watch_time` / `ams_rest_stats_byte_counter` / new
+**`mixed`**), tracked across the included rows; per-row disclosure unchanged. Free-text string (no enum) — OpenAPI
+description + regenerated `schema.d.ts` document `"mixed"`. Mutation-proven ×3; 3-lens adversarial review (0
+confirmed). **Prod `v0.4.0-51-ge5577f7`.** Full evidence: `decisions.md` D-117.
+
+**★ SESSION-56 = continue the MEDIUM/LOW batch: 6 findings remain** (0 HIGH, 4 MEDIUM, 2 LOW) in
+`S48-AUDIT-FINDINGS.md`. Suggested order (verify each against the code first; one scope per PR; **run `gofmt -l`
+before pushing**):
+- **[13] MEDIUM** `store/clickhouse/clickhouse.go:550` — `insertBeaconEvents` does `PrepareBatch` per item →
+  partial commit + wrong (`inserted`/`dropped`) metrics on a mid-batch failure. Fix: hoist `PrepareBatch`, one
+  `Send()` after all appends (mirror `insertServerEvents`/`insertViewerSessions`). `mockConn`/`mockBatch` already in
+  `drain_test.go`. **Clean next pick.**
+- **[16] LOW** `cluster/discovery.go:145` — two DTOs resolving to the same key (both empty NodeID+IP → "") emit
+  duplicate node_stats. Fix: dedup guard at the top of the poll loop (`seen` map already exists).
+- **[14] LOW** `collector/beacon/beacon.go:352` — 413 detection uses `len(body) >= maxBodyBytes-1` instead of
+  `errors.As(err, &http.MaxBytesError)`; a 65535-byte body that then ECONNRESETs wrongly returns 413.
+- **[11] MEDIUM** `query/query.go:1084` — `AnomalyBaselineForMetric` viewer_count case uses `avg(viewers)`/
+  `event_time` but the columns are `viewer_count`/`ts` → silent zero baseline. ⚠ Needs a **SQL-text assertion seam
+  or real-CH test** — the fake conn returns fixed values regardless of SQL, so a naive unit test is VACUOUS.
+- **⚠ [12] MEDIUM** `contracts/db/clickhouse/0001_init.sql:358` — `peak_concurrency` missing from the
+  SummingMergeTree column list. **Needs a migration (FIVE places, next = 0005) + `ALTER TABLE … MODIFY ENGINE`.**
+  Heaviest; do late.
+- **⚠ [8] MEDIUM** `collector/webhook/webhook.go:160` webhook replay — **verify product-viability**: needs a new
+  `X-Ams-Timestamp` header + AMS/signing-proxy convention; may be operator/contract-gated, not a pure code fix.
+
+**Each is an AGENT finding — re-verify against the code before building** (take the verified core — narrower OR
+broader than the audit's scope, per S50/S51 vs S55). **§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE at open.**
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
+ledger 07-27) — operator-only. GHCR anon → 401 — operator-only. No new operator action from S55.
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-55.md`)
 
 **Session 2026-07-16 result: D-116 — S54 DONE (PR #105). Shipped S48-audit finding [9] — restpoller prevStatus map leak.**
 
