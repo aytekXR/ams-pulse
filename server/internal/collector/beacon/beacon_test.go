@@ -260,6 +260,48 @@ func TestBeacon_OverSize_413(t *testing.T) {
 	t.Logf("PASS: oversized body → 413")
 }
 
+// errAfterReader yields payload bytes across reads, then returns readErr — it simulates
+// a client connection that drops mid-body.
+type errAfterReader struct {
+	payload []byte
+	off     int
+	readErr error
+}
+
+func (r *errAfterReader) Read(p []byte) (int, error) {
+	if r.off < len(r.payload) {
+		n := copy(p, r.payload[r.off:])
+		r.off += n
+		return n, nil
+	}
+	return 0, r.readErr
+}
+
+// TestBeacon_ReadErrorNotMisreportedAs413 proves finding [14]: a read error that is NOT a
+// size-limit breach must return 400 READ_ERROR, even when the bytes read so far reach
+// maxBodyBytes-1. The old byte-count heuristic (len(body) >= maxBodyBytes-1) misreported
+// such a failure as 413. Detection is now by error type (*http.MaxBytesError).
+func TestBeacon_ReadErrorNotMisreportedAs413(t *testing.T) {
+	h, _, tok := setupBeaconHandler(t)
+	// 65535 bytes (maxBodyBytes-1) — within the 64 KB limit — then a connection-reset
+	// style error that is NOT an *http.MaxBytesError.
+	body := &errAfterReader{
+		payload: bytes.Repeat([]byte("x"), 64*1024-1),
+		readErr: fmt.Errorf("simulated connection reset mid-body"),
+	}
+	req := httptest.NewRequest(http.MethodPost, "/ingest/beacon", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Pulse-Ingest-Token", tok)
+	rr := httptest.NewRecorder()
+	h.Handle(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("read error on a sub-limit body: got %d, want 400 READ_ERROR (byte-count heuristic misreports as 413): %s",
+			rr.Code, rr.Body.String())
+	}
+	t.Logf("PASS: mid-body read error → 400 READ_ERROR (not 413)")
+}
+
 func TestBeacon_RateLimit_429(t *testing.T) {
 	// Use a very low rate limit to trigger 429 quickly.
 	validToken := "rate-test-token"

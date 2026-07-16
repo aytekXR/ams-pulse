@@ -21,6 +21,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -349,7 +350,13 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		if len(body) >= maxBodyBytes-1 {
+		// Distinguish "too large" from a genuine read failure by ERROR TYPE, not by
+		// byte count. http.MaxBytesReader returns *http.MaxBytesError only when the
+		// body actually exceeds the limit. A read error (e.g. the client connection
+		// resets mid-body) on a body whose bytes so far happen to reach maxBodyBytes-1
+		// must be reported as 400 READ_ERROR, not 413. (D-120 / audit finding [14].)
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
 			writeBeaconError(w, http.StatusRequestEntityTooLarge, "REQUEST_TOO_LARGE",
 				fmt.Sprintf("body exceeds %d KB limit", maxBodyBytes/1024))
 			return
