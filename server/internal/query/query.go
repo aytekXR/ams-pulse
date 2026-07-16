@@ -261,6 +261,14 @@ func (s *Service) AudienceAnalytics(ctx context.Context, p AudienceParams) (*Aud
 		where += " AND stream_id = ?"
 		args = append(args, p.Stream)
 	}
+	// S48 (D-110): tenant isolation. AudienceAnalytics omitted the tenant filter
+	// that its sibling analytics queries (geo/devices/qoe) all apply, so a caller
+	// scoping to ?tenant=X received every tenant's audience data. The
+	// rollup_audience tables carry a tenant column (part of their ORDER BY key).
+	if p.Tenant != "" {
+		where += " AND tenant = ?"
+		args = append(args, p.Tenant)
+	}
 
 	// rollup_audience_1h / rollup_audience_1d (AggregatingMergeTree) column names:
 	//   bucket (DateTime for 1h, Date for 1d), views, uniq_viewers,
