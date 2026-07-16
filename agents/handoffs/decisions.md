@@ -7444,3 +7444,47 @@ each against the code first.
 **Docs at close:** D-113 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (findings
 [4]+[15] ✅); RESUME-PROMPT ▶ START HERE → SESSION-52; `operator-expected.md` refreshed (no new item);
 `sessions/SESSION-51.md` CLOSED; `sessions/SESSION-52.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 10.
+
+---
+
+## D-114 — S52 (2026-07-16): CLOSED — IsEdgeStream ignores downed edges; ★ ALL 6 HIGH audit findings shipped (finding [5], PR #101)
+
+**Context.** SESSION-52 took the **last HIGH** of the S48-audit backlog — finding [5] in `cluster/discovery.go`.
+CI-promotion gate still shut (07-16 < 07-23). Re-verified against the code before building.
+
+**Finding [5] — `IsEdgeStream` ignored node Status.** The predicate was `n.Role == "edge" && n.ActiveStreams > 0`,
+with **no Status check**. `poll()` marks a stale (crashed/removed) edge `Status="down"` (`discovery.go:209`) but
+**never clears its last-polled `ActiveStreams`**, so a crashed edge kept `IsEdgeStream` true forever. `IsEdgeStream`
+drives the VD-03 origin/edge viewer dedup at `aggregator.go:344`: when an edge serves a stream the origin's
+`viewer_count` already includes edge viewers, so the origin's `viewer_count` is **skipped** to avoid double-count.
+A permanently-true `IsEdgeStream` therefore **permanently suppressed origin viewer counts (frozen at 0)** after an
+edge crashed — even though the origin was then the only node serving traffic. **Verified** the impact at
+`aggregator.go:342-346` and that `poll()` never resets `ActiveStreams`. **Fix:** add `n.Status != "down"` to the
+predicate (a `"degraded"` edge is still up/serving, so it still counts — guard is `!= "down"`, not `== "ok"`).
+
+**Verification.** gofmt/vet clean; **full Go suite 24/24**. New table-driven `TestIsEdgeStream_ExcludesDownEdge`
+(down+stale-active → false [the fix]; healthy → true [positive control]; **degraded → true** [pins `!= "down"`];
+zero-active → false; down-only → false), seeding `d.nodes` directly (internal `package cluster` test).
+**Mutation-proven:** removing the guard turns both down-edge cases RED, the rest stay GREEN. **Independent
+adversarial review:** 1 candidate finding ("split-brain post-StaleTimeout double-count") **refuted** — Pulse runs a
+single origin-pointed amsclient/restpoller, other cluster nodes emit only `node_stats` (never a second
+`stream_stats` viewer_count series), so there is no second count to double; in the split-brain case the NEW code is
+*more* correct than the OLD (which suppressed origin to 0).
+
+**Prod: rolled forward** (server *source* changed) — STAMPED build, rollback tag `pre-d114`, backup rc=0. New prod
+stamp: **`v0.4.0-45-g0ab487f`** (was `v0.4.0-43-g7c206a9`). Smoke: `/healthz` all-ok; `pulse version` =
+`v0.4.0-45-g0ab487f`; signed webhook → 200; limits 512M/0.5cpu; logs clean; **live functional:** `GET
+/api/v1/fleet/nodes` → **200** (the cluster-discovery snapshot the guard reads serves cleanly on the new binary).
+
+**Operator action required: NONE.** Carried items unchanged (AMS trial-expiry doc discrepancy 07-12 vs 07-27; GHCR
+anon → 401 — both operator-only).
+
+**★★ MILESTONE — all 6 HIGH S48-audit findings are now shipped** ([6] D-110, [1]+[2] D-111, [3] D-112, [4] D-113,
+[5] D-114). **9 findings remain: 7 MEDIUM + 2 LOW** (`S48-AUDIT-FINDINGS.md`). Finding [5] marked ✅ DONE.
+SESSION-53 works the MEDIUM/LOW batch — candidates: [7] ingest `time.IsZero` for TS==0, [9] restpoller `prevStatus`
+leak, [10] reports egress-method disclosure, [14] beacon 413 heuristic, [11]/[12]/[13] clickhouse, [16] dup
+node_stats, [8] webhook replay (verify product-viability — may be operator-gated). Re-verify each against the code.
+
+**Docs at close:** D-114 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (finding [5]
+✅, all-HIGH-done milestone); RESUME-PROMPT ▶ START HERE → SESSION-53; `operator-expected.md` refreshed (no new
+item); `sessions/SESSION-52.md` CLOSED; `sessions/SESSION-53.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 9.

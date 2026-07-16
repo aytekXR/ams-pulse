@@ -12,6 +12,14 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **Origin viewer counts recover after an edge node goes down (D-114).** In an
+  origin+edge cluster, Pulse skips the origin's viewer count for a stream while an
+  edge is serving it (the origin's number already includes edge viewers). But a
+  crashed edge was marked "down" without clearing its last-known active-stream
+  count, so it was treated as still-serving forever — permanently suppressing
+  origin viewer totals to 0 even though the origin was the only node left serving.
+  Downed edges are now excluded from that check. (Found by the S48 subsystem audit,
+  finding [5] — the last of the six high-severity findings.)
 - **Scheduled monthly reports cover the correct calendar month (D-113).** The
   previous-month statement used an inclusive end bound set to the first day of the
   *current* month, so that day's usage rolled into the prior month's report

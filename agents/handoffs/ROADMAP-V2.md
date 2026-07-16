@@ -527,7 +527,7 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.30  Fresh subsystem adversarial audit (16 findings)  [6 shipped; 10 backlog]  ⏳ IN PROGRESS S48→S51 (D-110…D-113, 2026-07-16, PR #93/#95/#97/#99)
+### 2.30  Fresh subsystem adversarial audit (16 findings)  [7 shipped — ALL 6 HIGH done; 9 MEDIUM/LOW backlog]  ⏳ IN PROGRESS S48→S52 (D-110…D-114, 2026-07-16, PR #93/#95/#97/#99/#101)
 
 With the S44 13-bug backlog closed (§2.29) and the §2.7 CI-promotion gate not yet open (07-16 < 07-23), **S48
 followed the standing re-scan mandate and ran a fresh adversarial audit of the subsystems the S44 audit never
@@ -556,10 +556,16 @@ swept** (collector, amsclient, reports, cluster, clickhouse): 7 finders + refute
   [15] `nextCronTime` read cron fields in the seed's local tz while the pipeline is UTC → normalized the seed to
   UTC inside the function (DRY; latent on UTC prod, real for non-UTC installs). Mutation-proven ×2; 2-lens review
   (0 findings); prod `v0.4.0-43-g7c206a9`.
-- ⏳ **10 findings remain** (1 HIGH, 6 MEDIUM, 3 LOW) → S52+. Last HIGH: cluster edge-stream status [5]
-  (`discovery.go:264`). Then the MEDIUM/LOW batch ([7]/[8]/[9]/[10]/[11]/[12]/[13]/[14]/[16]). Each must be
-  re-verified against the code before building. Full list + fixes: `S48-AUDIT-FINDINGS.md`; plan:
-  `sessions/SESSION-52.md`.
+- ✅ **S52 (D-114, PR #101)** — shipped **[5] cluster edge-stream status** (the **last HIGH**). `IsEdgeStream`
+  had no Status check, so a crashed edge (marked `down` but with stale non-zero `ActiveStreams`) stayed "serving"
+  forever → the aggregator permanently suppressed origin viewer counts (VD-03 dedup). Fix: `n.Status != "down"`
+  (degraded still counts). Mutation-proven; review refuted a split-brain concern; prod `v0.4.0-45-g0ab487f`.
+  **★ All 6 HIGH audit findings are now shipped.**
+- ⏳ **9 findings remain** (0 HIGH, 7 MEDIUM, 2 LOW) → S53+: [7] ingest TS==0 IsZero, [8] webhook replay (verify
+  product-viability — may be operator-gated), [9] restpoller prevStatus leak, [10] reports egress-method
+  disclosure, [11]/[12]/[13] clickhouse (⚠ [12] needs a migration — FIVE places), [14] beacon 413 heuristic, [16]
+  dup node_stats. Each must be re-verified against the code before building. Full list + fixes:
+  `S48-AUDIT-FINDINGS.md`; plan: `sessions/SESSION-53.md`.
 
 ### 2.29  Security hardening + 13-bug adversarial audit  [S shipped; M–L backlog]  ✅ SECURITY CLUSTER DONE S44 (D-106, 2026-07-15, PR #85)
 
