@@ -66,6 +66,18 @@ func TestNextCronTime_HonorsDayOfMonth(t *testing.T) {
 			from: time.Date(2026, 6, 30, 8, 0, 0, 0, time.UTC), // Tue 30 Jun; next Mon is 6 Jul
 			want: time.Date(2026, 7, 1, 6, 0, 0, 0, time.UTC),  // Wed 1 Jul (dom arm, before next Mon)
 		},
+		// S51 / D-113 (S48 finding [15]): the cron must be interpreted in UTC even
+		// when the caller seeds it with a non-UTC (local-timezone) time. The seed
+		// below is 2026-06-14 03:00 in UTC-5, i.e. 2026-06-14 08:00 UTC. nextCronTime
+		// normalises the seed to UTC, so "0 6 1 * *" resolves to 06:00 UTC on Jul 1.
+		// Without that normalisation it would search in UTC-5 and return 06:00 UTC-5
+		// (= 11:00 UTC), which .Equal would reject — making this case mutation-proof.
+		{
+			name: "non-UTC seed is interpreted in UTC (finding 15)",
+			cron: "0 6 1 * *",
+			from: time.Date(2026, 6, 14, 3, 0, 0, 0, time.FixedZone("minus5", -5*3600)),
+			want: time.Date(2026, 7, 1, 6, 0, 0, 0, time.UTC),
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

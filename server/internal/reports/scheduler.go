@@ -164,10 +164,8 @@ func (s *Scheduler) runSchedule(ctx context.Context, sched meta.ReportScheduleRo
 
 	sc := parseScheduleScope(sched.ScopeJSON)
 
-	// Determine time range: previous calendar month.
-	now := time.Now().UTC()
-	to := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-	from := to.AddDate(0, -1, 0)
+	// Determine time range: the previous calendar month, inclusive on both ends.
+	from, to := previousCalendarMonthUTC(time.Now())
 
 	params := UsageParams{
 		From:     from,
@@ -244,6 +242,22 @@ func (s *Scheduler) runSchedule(ctx context.Context, sched meta.ReportScheduleRo
 	return nil
 }
 
+// previousCalendarMonthUTC returns the [from, to] range covering the calendar
+// month immediately before now, in UTC. Both bounds are day-granular and
+// INCLUSIVE: the daily-rollup queries use `bucket >= from AND bucket <= to`
+// against a Date column, so `to` must be the LAST day of the previous month.
+// Using the first day of the CURRENT month here (the historical bug) let that
+// day's rows satisfy `bucket <= to` and bleed into the previous month's
+// statement, over-counting viewer-minutes/egress/peak and mislabelling the
+// period end in the filename and header.
+func previousCalendarMonthUTC(now time.Time) (from, to time.Time) {
+	nowUTC := now.UTC()
+	firstOfThisMonth := time.Date(nowUTC.Year(), nowUTC.Month(), 1, 0, 0, 0, 0, time.UTC)
+	from = firstOfThisMonth.AddDate(0, -1, 0) // first day of the previous month
+	to = firstOfThisMonth.AddDate(0, 0, -1)   // last day of the previous month
+	return from, to
+}
+
 // storeArtifact writes the statement to the artifacts directory.
 func (s *Scheduler) storeArtifact(stmt *GeneratedStatement) error {
 	if err := os.MkdirAll(s.cfg.ArtifactsDir, 0o755); err != nil {
@@ -287,6 +301,14 @@ func NextCronTime(cronExpr string, from time.Time) time.Time {
 // Honors min/hour/day-of-month/weekday (D-107); the month field is ignored.
 // If cron parsing fails, defaults to a 1-month interval.
 func nextCronTime(cronExpr string, from time.Time) time.Time {
+	// The whole reporting pipeline is UTC (period math, ClickHouse storage, and
+	// next_run_at is persisted as an absolute UnixMilli). Interpret the cron
+	// fields in UTC regardless of the server's local timezone — otherwise a
+	// schedule like "0 6 1 * *" created on a non-UTC host fires at 06:00 LOCAL
+	// (e.g. 11:00 UTC on America/New_York) instead of 06:00 UTC, drifting from
+	// the UTC period boundary. Callers may pass time.Now() (local); normalise here
+	// so every call site is correct and this is provable via the exported wrapper.
+	from = from.UTC()
 	min, hour, dom, weekday, err := parseCronFieldsInternal(cronExpr)
 	if err != nil {
 		// Unknown format — schedule next month.
