@@ -448,14 +448,24 @@ func (p *Poller) detectEnded(app string, current []amsclient.BroadcastDTO) {
 		currentIDs[prefix+b.StreamID] = true
 	}
 
+	// Evict ALL of this app's disappeared streams from prevStatus, but emit
+	// publish_end only for those that were "broadcasting". Gating the eviction on
+	// "broadcasting" (the old bug) leaked every idle/created stream that was seen
+	// once and then removed from AMS — prevStatus grew without bound. Decouple the
+	// two: `stale` drives eviction (any status), `ended` drives event emission.
 	p.mu.Lock()
 	var ended []string
+	var stale []string
 	for key, status := range p.prevStatus {
-		if status == "broadcasting" && strings.HasPrefix(key, prefix) && !currentIDs[key] {
+		if !strings.HasPrefix(key, prefix) || currentIDs[key] {
+			continue // another app's key, or still present this poll
+		}
+		stale = append(stale, key)
+		if status == "broadcasting" {
 			ended = append(ended, key)
 		}
 	}
-	for _, key := range ended {
+	for _, key := range stale {
 		delete(p.prevStatus, key)
 	}
 	p.mu.Unlock()
