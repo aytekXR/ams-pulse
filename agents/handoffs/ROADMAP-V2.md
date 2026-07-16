@@ -527,7 +527,7 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.30  Fresh subsystem adversarial audit (16 findings)  [12 shipped — ALL 6 HIGH done; 4 MEDIUM/LOW backlog]  ⏳ IN PROGRESS S48→S57 (D-110…D-119, 2026-07-16, PR #93…#111)
+### 2.30  Fresh subsystem adversarial audit (16 findings)  [13 shipped — ALL 6 HIGH done; 3 MEDIUM backlog]  ⏳ IN PROGRESS S48→S58 (D-110…D-120, 2026-07-16, PR #93…#113)
 
 With the S44 13-bug backlog closed (§2.29) and the §2.7 CI-promotion gate not yet open (07-16 < 07-23), **S48
 followed the standing re-scan mandate and ran a fresh adversarial audit of the subsystems the S44 audit never
@@ -588,10 +588,17 @@ swept** (collector, amsclient, reports, cluster, clickhouse): 7 finders + refute
   at the top of the loop (`seen` now backs both dedup and the stale-check). Mutation-proven (drop the guard's
   `continue` → dedup test reddens `got 2 want 1`, positive control green); self-review (mechanical); prod
   `v0.4.0-55-ge13eb1f`.
-- ⏳ **4 findings remain** (0 HIGH, 3 MEDIUM, 1 LOW) → S58+: [14] beacon 413 heuristic; [11] anomaly baseline columns
-  (needs a SQL-text/real-CH seam); ⚠ [12] clickhouse migration (FIVE places) + [8] webhook replay
-  (product-viability) last. Each must be re-verified against the code before building. Full list + fixes:
-  `S48-AUDIT-FINDINGS.md`; plan: `sessions/SESSION-58.md`.
+- ✅ **S58 (D-120, PR #113)** — shipped **[14] beacon 413 detection**. The handler classified 413-vs-400 by
+  `len(body) >= maxBodyBytes-1`, so a mid-body connection reset on a large-but-in-limit body was misreported as 413.
+  Fix: detect the limit breach by ERROR TYPE (`errors.As(err, &*http.MaxBytesError)`). Verified CORE narrower than
+  the audit — KEPT the post-read exact-boundary check (audit wrongly called it unreachable; `MaxBytesReader` doesn't
+  error on a body of exactly `maxBodyBytes`). Mutation-proven (revert to the heuristic → new test reddens `got 413
+  want 400`, `OverSize_413` green); self-review (mechanical); prod `v0.4.0-57-g36c16ed`.
+- ⏳ **3 findings remain (ALL MEDIUM — the harder tail)** → S59+: [11] anomaly baseline wrong columns (needs a
+  SQL-text assertion seam or real-CH test — the fake conn is vacuous); ⚠ [12] SummingMergeTree `peak_concurrency`
+  (needs a migration, FIVE places, next = 0005); ⚠ [8] webhook replay (needs product-viability verification — new
+  `X-Ams-Timestamp` header + signing-proxy convention, may be operator/contract-gated). All clean/mechanical
+  findings are done. Full list + fixes: `S48-AUDIT-FINDINGS.md`; plan: `sessions/SESSION-59.md`.
 
 ### 2.29  Security hardening + 13-bug adversarial audit  [S shipped; M–L backlog]  ✅ SECURITY CLUSTER DONE S44 (D-106, 2026-07-15, PR #85)
 

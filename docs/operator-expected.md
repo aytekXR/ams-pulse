@@ -1,4 +1,20 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-119 — SESSION-57)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-120 — SESSION-58)
+
+> **S58 (D-120) needs NO operator action.** This session fixed a subsystem-audit finding: the beacon (player
+> telemetry) ingest endpoint returned the wrong error when a client's upload was cut off mid-request — a dropped
+> connection during a large-but-within-limit upload was reported as "413 Request Too Large" instead of a "400" read
+> error. It now tells a genuine size-limit breach apart from a broken connection by the actual error type. Fixed and
+> live (`v0.4.0-57-g36c16ed`). **All six high-severity audit findings plus seven lower-severity ones are now
+> shipped; 3 findings remain** (the harder tail — one needs a real-ClickHouse test, one needs a DB migration, one
+> needs a product decision), queued for upcoming sessions (`agents/handoffs/S48-AUDIT-FINDINGS.md`); none needs you
+> yet — if the webhook-replay finding [8] turns out to need a signing-proxy/header contract, that will be flagged
+> here when it comes up.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
+> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none
+> blocks the autonomous work.
+
+## (previous header — D-119, SESSION-57)
 
 > **S57 (D-119) needs NO operator action.** This session fixed a subsystem-audit finding: when the AMS cluster API
 > returned a duplicate node record (two entries resolving to the same identity — e.g. both missing their node ID
