@@ -32,6 +32,17 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
   title can no longer inject email headers via CR/LF. (4) The Telegram dashboard link is now
   attribute-escaped (defense-in-depth).
 
+- **Synthetic DASH probe hardened against hostile manifests (D-127).** The DASH
+  probe fetches and parses an MPD manifest from the monitored server, which may be
+  untrusted. Three memory-exhaustion vectors are closed, any of which a single
+  crafted manifest could use to OOM the prober: (1) the manifest body is now read
+  through a 16 MiB limit before XML decode (the media-segment read was already
+  capped); (2) the `$Number%…$` segment-template width is validated against a
+  bounded `%0<width>d` allowlist, so a hostile `%999999999d` can no longer make the
+  formatter allocate ~1 GB; (3) the `$RepresentationID$` template substitution is
+  now size-bounded before expansion. (Found by the S62 subsystem audit, findings
+  [3]/[4]; the third vector was surfaced by an adversarial review of the fix.)
+
 ### Fixed
 
 - **Report-schedule and tenant update/read endpoints no longer misreport a

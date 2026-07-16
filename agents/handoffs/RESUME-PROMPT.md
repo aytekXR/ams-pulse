@@ -11,7 +11,44 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-65.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-66.md`)
+
+**Session 2026-07-16 result: D-127 — S65 shipped the prober DASH untrusted-input cluster (S62 findings [3]/[4], the last 2 HIGH). ★ ALL 6 S62 HIGH now shipped.**
+
+**★ S65** continued the S62 backlog with the **prober DASH untrusted-input cluster** in
+`server/internal/prober/probe_dash.go` (the DASH probe parses an MPD manifest from an UNTRUSTED probed server; one
+crafted manifest could OOM the prober): [3] MPD manifest body now **`io.LimitReader`-capped** (16 MiB) before
+xml.Decode (the segment body was already capped at 32 MiB — the manifest was the gap); [4] the `$Number%<spec>$`
+printf format is now **positive-allowlisted** (`^%0?\d{0,3}d$`) so a hostile `%999999999d` degrades to plain decimal
+instead of a ~1 GB `fmt.Sprintf`. **A 4-lens adversarial review (10 agents, refute-by-default) found — and the same PR
+fixed — a sibling sink I'd missed:** `$RepresentationID$` `strings.ReplaceAll` was itself unbounded (count×len(id) →
+TB-scale within the 16 MiB body cap), now bounded by `maxExpandedTemplateBytes` (64 KiB). Full suite 24/24;
+mutation-proven ×4; 1 review finding refuted correctly. **Prod `v0.4.0-68-g2a122fd`.** Evidence: `decisions.md` D-127.
+
+**No operator action from S65** (internal hardening — no config/contract change).
+
+**★ SESSION-66 = continue the S62 backlog: 16 remain (0 HIGH — all HIGH shipped — 12 MEDIUM, 4 LOW)** in
+`S62-AUDIT-FINDINGS.md`. **Suggested next scope: prober RTMP DoS ([13] MEDIUM)** — completes the prober subsystem's
+untrusted-input hardening, same "hostile probed server → OOM" threat model as S65:
+- **[13] MEDIUM** `probe_rtmp.go:437` — `readAMF0Command` allocates a new `*rtmpCSIDState` + map entry for every unseen
+  CSID; the 3-byte-form basic header admits 65,536 CSID values, each accumulating up to 65,536 bytes → ~4.3 GB heap
+  within the probe deadline. **Fix:** cap the number of live CSID states (e.g. `maxCSIDStates = 256` — real RTMP uses a
+  handful). **Also** the ledger notes an off-by-one: the per-message guard at `:506` is `st.length > rtmpMaxMsgSize`
+  (strict `>`), so an exactly-65,536-byte message slips through — change to `>=`. Re-verify both vs the code.
+- **Then:** alert-evaluator ([7] D-088 presence guards, stream_offline compare, license_expiry stuck-firing) → anomaly
+  ([18] scopeJSON escaping, hysteresis) → license → api. **⚠ [20] audit-log admin gate — RE-VERIFY vs D-105 FIRST**
+  (likely DEFER as the deliberate "reads-open" model, or escalate as an operator ruling).
+
+**Each is an AGENT finding — re-verify against the code before building** (take the verified core; S65's review even
+found a sink the finding didn't name). **§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE at open.**
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
+ledger 07-27) — operator-only. GHCR anon → 401 — operator-only. No blocking operator action from S65. The S63 email
+STARTTLS behavior note remains in `operator-expected.md` (informational).
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-65.md`)
 
 **Session 2026-07-16 result: D-126 — S64 shipped the reports_wave2 post-mutation re-fetch cluster (S62 findings [5]/[6]/[19]).**
 

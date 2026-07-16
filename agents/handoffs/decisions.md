@@ -8030,3 +8030,59 @@ response. Clean mutation proof on [19] + happy-path proofs on [5]/[6] → carefu
 [5]/[6]/[19] ✅ DONE; ROADMAP-V2 §2.31 (7 shipped / 18 remain); RESUME-PROMPT ▶ START HERE → SESSION-65;
 `operator-expected.md` refreshed (no operator action — internal robustness); `sessions/SESSION-64.md` CLOSED;
 `sessions/SESSION-65.md` written (prober untrusted-input cluster). Prod rolled forward + smoke green.
+
+## D-127 — S65 (2026-07-16): SHIPPED — prober DASH untrusted-input hardening (S62 [3]+[4] HIGH + review-found RepID sink)
+
+**Code:** PR #124 `2a122fd` (merged, 15/15 checks). **Prod rolled forward to `v0.4.0-68-g2a122fd`** (rollback anchor
+`pulse-prod-pulse:pre-d127` = `v0.4.0-66-gfede961`); smoke green (healthz 200, version stamp confirmed, signed
+webhook 200, limits 512M/0.5cpu, logs clean). Close-docs in a follow-up docs-only PR. **This clears both remaining
+S62 HIGH findings — the backlog is now MEDIUM/LOW only.**
+
+**S65 OPEN facts (recorded early per protocol):** origin/main at `0fdd4ac` (D-126 close-docs PR #123; code #122
+`fede961`). Prod `v0.4.0-66-gfede961`. Tree carries only the known `Caddyfile.prod` delta. Branch `s65-d127`. Full
+suite baseline green pre-change.
+
+**Scope — the 2 remaining S62 HIGH, both in `server/internal/prober/probe_dash.go`** (the DASH synthetic probe parses
+an MPD manifest from an UNTRUSTED probed server). One threat model: a hostile manifest drives the prober into a
+gigabyte allocation → OOM. **Re-verified both vs the code** (line numbers had shifted from the ledger; findings hold):
+
+- **[3] HIGH — MPD manifest read unbounded.** `probeDASH` passed `resp.Body` straight to `parseMPD`/`xml.Decoder`,
+  which materialises the whole document; a manifest with millions of elements allocates GBs. The *segment* body was
+  already capped (`io.LimitReader(segResp.Body, segBodyCapBytes+1)`, 32 MiB) — the manifest was the gap. **Fix:**
+  `parseMPD(io.LimitReader(resp.Body, maxMPDBodyBytes), p.URL)` with `const maxMPDBodyBytes = 16 << 20` (16 MiB —
+  ~100× any real manifest, incl. long-VOD SegmentList; an over-cap body truncates → decode fails → probe reported as
+  a `parse` failure, same as any malformed manifest).
+- **[4] HIGH — attacker-controlled printf format.** `expandSegmentTemplate` extracted the `$Number%<spec>$` format
+  via `reNumberFmt = \$Number%[^$]+\$` and passed `spec` verbatim to `fmt.Sprintf(spec, number)`; `$Number%999999999d$`
+  → ~1 GB pad. **Fix (positive allowlist, D-098):** only honour the DASH-defined form via
+  `reSafeNumberSpec = ^%0?\d{0,2}d$` (optional zero-pad, width ≤ 99, conversion `d`); anything else degrades to plain
+  `%d`. Per ISO/IEC 23009-1 §5.3.9.4.4 the only legal form is `%0<width>d`, so no legit manifest is affected.
+
+**Tests (`probe_dash_s65_test.go`, mutation-proven):** oversized-manifest (valid MPD + 17 MiB comment pad) → the cap
+truncates → `ErrorCode="parse"`, `Success=false` (reverting the LimitReader flips it to Success=true → RED);
+`%9999999d` width → bounded `seg_5.m4s` fallback (reverting the allowlist blows the length past the bound → RED);
+positive controls: `%05d`→`seg_00005.m4s`, plain `$Number$`/`$RepresentationID$` unchanged. Full suite 24/24; gofmt +
+vet clean.
+
+**Review:** untrusted-input parser hardening incl. a format-string sink → ran the **multi-lens adversarial review
+workflow** (4 lenses: allowlist-bypass / manifest-cap / missed-sink / regression → refute-by-default verify, 10
+agents). **3 confirmed, all addressed in the same PR before merge; 1 refuted correctly** (the "struct tree ~2× the
+raw bytes" claim — a constant-factor overhead, not a cap bypass):
+- **(missed sink — MEDIUM, arguably HIGH)** `expandSegmentTemplate`'s `$RepresentationID$` substitution was itself
+  unbounded — `strings.ReplaceAll` allocates `count×len(id)` up front, so many `$RepresentationID$` tokens × a long
+  `id` reach **TB-scale even within the 16 MiB body cap**. The [4] fix guarded the printf sink but missed this
+  structurally-identical sibling. **Fixed:** bound the expansion by `maxExpandedTemplateBytes` (64 KiB) before
+  `ReplaceAll`; over-bound → return "" (unresolvable segment URL → clean probe failure, not OOM). Mutation-proven.
+- **(NIT)** the 2-digit width bound degraded spec-legal `%100d`. **Fixed:** widened `reSafeNumberSpec` to `\d{0,3}`
+  (width ≤ 999, ≤ ~1 KB). Positive control added.
+- **(LOW)** 16 MiB cap could false-fail a pathological >16 MiB archive SegmentList. **Accepted + documented** as a
+  deliberate stability bound (AMS is live-first; its DASH muxing is disabled — D-073). The manifest-cap comment now
+  states the tradeoff honestly rather than over-claiming "~100× any real manifest".
+
+The review materially improved the fix — the RepresentationID sink would have left the prover OOM-able despite the
+[3]/[4] fixes. This is exactly why a security-surface change gets the adversarial workflow, not self-review (lesson 3).
+
+**Docs at close:** D-127 SHIPPED (this block, prod `v0.4.0-68-g2a122fd`); CHANGELOG Security; `S62-AUDIT-FINDINGS.md`
+[3]/[4] ✅ DONE; ROADMAP-V2 §2.31 (9 shipped / 16 remain — 0 HIGH); RESUME-PROMPT ▶ START HERE → SESSION-66;
+`operator-expected.md` refreshed (no operator action — internal hardening); `sessions/SESSION-65.md` CLOSED;
+`sessions/SESSION-66.md` written (prober RTMP DoS [13]). Prod rolled forward + smoke green.
