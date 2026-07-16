@@ -307,3 +307,49 @@ func TestDiscovery_PollDoesNotHoldLockDuringSinkEmit(t *testing.T) {
 		t.Fatal("expected the reentrant sink to receive the node_stats event")
 	}
 }
+
+// ─── Duplicate node key dedup (finding [16] / D-119) ──────────────────────────
+
+// TestDiscovery_DuplicateNodeKey_EmitsOnce proves finding [16]: two DTOs that resolve
+// to the same key (both missing NodeID and IP → "") must be deduped within a poll. The
+// buggy loop processed each DTO independently — overwriting d.nodes and appending a
+// SECOND node_stats event — which 2x-inflated node metrics and showed a phantom node.
+// The dedup guard skips the colliding DTO, so exactly one event is emitted.
+func TestDiscovery_DuplicateNodeKey_EmitsOnce(t *testing.T) {
+	sink := &captureSink{}
+	mock := &mockClusterClient{
+		nodes: []amsclient.ClusterNodeDTO{
+			{NodeID: "", IP: "", Role: "origin", CPUUsage: 10},
+			{NodeID: "", IP: "", Role: "origin", CPUUsage: 20},
+		},
+	}
+	d := New(Config{PollInterval: time.Minute, NodeID: "local"}, mock, sink, nil)
+
+	d.poll(context.Background())
+
+	if got := sink.count.Load(); got != 1 {
+		t.Errorf("node_stats emits for a duplicate node key: got %d, want 1 (the colliding DTO must be deduped)", got)
+	}
+	if got := d.NodeCount(); got != 1 {
+		t.Errorf("NodeCount for a duplicate key: got %d, want 1", got)
+	}
+}
+
+// TestDiscovery_DistinctNodes_EmitEach is a positive control: the dedup guard must not
+// suppress genuinely distinct nodes — two different keys emit two node_stats events.
+func TestDiscovery_DistinctNodes_EmitEach(t *testing.T) {
+	sink := &captureSink{}
+	mock := &mockClusterClient{
+		nodes: []amsclient.ClusterNodeDTO{
+			{NodeID: "n1", IP: "10.0.0.1", Role: "origin"},
+			{NodeID: "n2", IP: "10.0.0.2", Role: "edge"},
+		},
+	}
+	d := New(Config{PollInterval: time.Minute, NodeID: "local"}, mock, sink, nil)
+
+	d.poll(context.Background())
+
+	if got := sink.count.Load(); got != 2 {
+		t.Errorf("node_stats emits for 2 distinct nodes: got %d, want 2 (dedup must not over-suppress)", got)
+	}
+}

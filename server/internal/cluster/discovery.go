@@ -145,6 +145,17 @@ func (d *Discovery) poll(ctx context.Context) {
 		if nodeID == "" {
 			nodeID = n.IP
 		}
+		// Deduplicate within this poll cycle. Two DTOs that resolve to the same key
+		// (e.g. both missing NodeID and IP → "") would otherwise each overwrite
+		// d.nodes[nodeID] and append a second node_stats event to pending, emitting
+		// duplicate metrics for one logical node (a phantom node in the fleet view).
+		// The seen map already backs the stale-check below; consulting it here before
+		// setting it makes it serve both roles. (D-119 / audit finding [16].)
+		if _, dup := seen[nodeID]; dup {
+			d.logger.Warn("cluster: duplicate node key in poll response, skipping",
+				"node_id", nodeID)
+			continue
+		}
 		seen[nodeID] = struct{}{}
 
 		role := n.Role
