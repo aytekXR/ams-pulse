@@ -1,5 +1,14 @@
 # SESSION-58 — planned at S57 close (D-119)
 
+> **✅ CLOSED 2026-07-16 (D-120, PR #113).** Took finding [14] — `collector/beacon/beacon.go` classified 413-vs-400
+> with `len(body) >= maxBodyBytes-1`, so a mid-body connection reset on a large-but-in-limit body was misreported as
+> 413. Fix: detect the limit breach by ERROR TYPE (`errors.As(err, &*http.MaxBytesError)`). **Verified CORE narrower
+> than the audit**: KEPT the post-read exact-boundary check (the audit wrongly called it unreachable — `MaxBytesReader`
+> does not error on a body of exactly `maxBodyBytes`). Full Go suite 24/24; mutation-proven (revert to heuristic →
+> new test reddens `got 413 want 400`, `OverSize_413` green); self-review (mechanical, LOW). Prod
+> `v0.4.0-57-g36c16ed`. **3 findings remain (ALL MEDIUM — the harder tail)** → SESSION-59. Evidence: `decisions.md`
+> D-120. (CI-promotion gate still shut — 07-16 < 07-23.)
+
 > Written by SESSION-57 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE for the full ranked candidate list** + `S48-AUDIT-FINDINGS.md`.

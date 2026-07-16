@@ -7694,3 +7694,45 @@ migration (FIVE places) + [8] webhook replay (product-viability) last.
 **Docs at close:** D-119 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (finding [16]
 ✅, 12 shipped); RESUME-PROMPT ▶ START HERE → SESSION-58; `operator-expected.md` refreshed (no new item);
 `sessions/SESSION-57.md` CLOSED; `sessions/SESSION-58.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 4.
+
+## D-120 — S58 (2026-07-16): CLOSED — beacon 413 detected by error type, not byte count (finding [14], PR #113)
+
+**Context.** SESSION-58 continued the MEDIUM/LOW batch (CI-promotion gate still shut, 07-16 < 07-23). Took finding
+[14] in `collector/beacon/beacon.go`.
+
+**Finding [14] — 413 misclassification.** After `io.ReadAll`, the beacon handler classified 413-vs-400 with
+`len(body) >= maxBodyBytes-1`. A read error that is NOT a size-limit breach (e.g. the client connection resets
+mid-body) on a body whose bytes-so-far reach 65535 was misreported as **413 REQUEST_TOO_LARGE** instead of **400
+READ_ERROR**. **Verified** against `http.MaxBytesReader` semantics.
+
+**Fix (verified CORE — narrower than the audit).** Detect the limit breach by ERROR TYPE:
+`var maxErr *http.MaxBytesError; errors.As(err, &maxErr)` — which `MaxBytesReader` returns only when the body
+actually exceeds the limit. A genuine read error now yields 400. **The audit also suggested removing the post-read
+`len(body) >= maxBodyBytes` check as "unreachable" — that is WRONG:** `MaxBytesReader` does NOT error on a body of
+exactly `maxBodyBytes`, so that check legitimately catches the exact-boundary case (a clean 64 KB body → 413).
+Removing it would silently relax the limit by one byte, so it was **kept unchanged**.
+
+**Verification.** gofmt/vet clean; **full Go suite 24/24**. New `TestBeacon_ReadErrorNotMisreportedAs413`
+(65535-byte body via a custom reader, then a non-`MaxBytesError` read error → 400). **Mutation-proven**: reverting
+to the byte-count heuristic (+ dropping the now-unused `errors` import) reddens the new test (`got 413, want 400`)
+while the existing `TestBeacon_OverSize_413` (genuine 70 KB oversize → 413) stays green. **Review:** careful
+self-review — a single-branch mechanical fix, mutation-proven (S53/S54/S56/S57 precedent).
+
+**Prod: rolled forward** (server *source* changed) — STAMPED build, rollback image tag `pre-d120`
+(→ `v0.4.0-55-ge13eb1f`), backup rc=0. New prod stamp: **`v0.4.0-57-g36c16ed`** (was `v0.4.0-55-ge13eb1f`). Smoke:
+`/healthz` all-ok (`ams_env_configured:true`); `pulse version` = `v0.4.0-57-g36c16ed`; signed webhook → 200; limits
+512M/0.5cpu; logs clean.
+
+**Operator action required: NONE.** Carried items unchanged (AMS trial-expiry doc discrepancy 07-12 vs 07-27;
+GHCR anon → 401).
+
+**★ Remaining S48-audit backlog: 3 findings (ALL MEDIUM — the harder tail)** in `S48-AUDIT-FINDINGS.md`. Finding
+[14] ✅ DONE. All clean/mechanical findings are now shipped; the remaining three each need more than a code tweak:
+**[11]** anomaly baseline wrong columns (needs a SQL-text assertion seam or real-CH test — the fake conn is
+vacuous), **[12]** SummingMergeTree `peak_concurrency` (needs a migration — FIVE places, next = 0005), **[8]**
+webhook replay (needs product-viability verification — new `X-Ams-Timestamp` header + signing-proxy convention;
+may be operator/contract-gated).
+
+**Docs at close:** D-120 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (finding [14]
+✅, 13 shipped); RESUME-PROMPT ▶ START HERE → SESSION-59; `operator-expected.md` refreshed (no new item);
+`sessions/SESSION-58.md` CLOSED; `sessions/SESSION-59.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 3.

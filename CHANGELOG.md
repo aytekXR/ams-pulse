@@ -12,6 +12,13 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **The beacon ingest endpoint returns the right error when a client upload is cut
+  off (D-120).** A dropped connection partway through a large-but-in-limit upload
+  was misreported as `413 Request Entity Too Large` instead of `400` (read error),
+  because the code guessed "too large" from the byte count rather than the actual
+  error. It now distinguishes a genuine size-limit breach from a broken connection
+  by error type, so clients get an accurate status. (Found by the S48 subsystem
+  audit, finding [14].)
 - **Cluster fleet metrics no longer double-count a node when the AMS cluster API
   returns a duplicate entry (D-119).** If two node records resolved to the same
   identity (for example both missing their node ID and IP), each poll emitted two

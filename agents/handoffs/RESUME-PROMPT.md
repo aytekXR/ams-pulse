@@ -11,7 +11,42 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-58.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-59.md`)
+
+**Session 2026-07-16 result: D-120 — S58 DONE (PR #113). Shipped S48-audit finding [14] — beacon 413 detection by error type.**
+
+**★ S58** (MEDIUM/LOW batch; CI-promotion gate still shut, 07-16 < 07-23). `collector/beacon/beacon.go` classified
+413-vs-400 with `len(body) >= maxBodyBytes-1`, so a mid-body connection reset on a large-but-in-limit body was
+misreported as 413. Fix: detect the limit breach by ERROR TYPE (`errors.As(err, &*http.MaxBytesError)`). Verified
+CORE narrower than the audit — KEPT the post-read exact-boundary check (the audit wrongly called it unreachable;
+`MaxBytesReader` doesn't error on a body of exactly `maxBodyBytes`). Mutation-proven (revert to heuristic → new test
+reddens `got 413 want 400`, `OverSize_413` green); self-review (mechanical, LOW). **Prod `v0.4.0-57-g36c16ed`.**
+Full evidence: `decisions.md` D-120.
+
+**★ SESSION-59 = the HARDER TAIL: 3 findings remain (ALL MEDIUM)** in `S48-AUDIT-FINDINGS.md`. All clean/mechanical
+findings are shipped; each remaining one needs more than a code tweak (verify each against the code first; one
+scope per PR; **run `gofmt -l` before pushing**):
+- **[11] MEDIUM** `query/query.go:1084` — `AnomalyBaselineForMetric` viewer_count case uses `avg(viewers)`/
+  `event_time` but the columns are `viewer_count`/`ts` → silent zero baseline. Fix is a 1-line rename; **the real
+  work is a NON-VACUOUS test** — the fake conn ignores SQL text, so add a SQL-text assertion seam (capture the query
+  string, assert `viewer_count`/`ts`) OR a real-CH integration test. **Next pick.**
+- **⚠ [12] MEDIUM** `contracts/db/clickhouse/0001_init.sql:358` — `peak_concurrency` missing from the
+  SummingMergeTree column list → underreported after a merge. **Needs a NEW migration `0005` (`ALTER TABLE … MODIFY
+  ENGINE`), FIVE wiring places; do NOT edit 0001 (forward-only).**
+- **⚠ [8] MEDIUM** `collector/webhook/webhook.go:160` webhook replay — no freshness check. Fix needs a new
+  `X-Ams-Timestamp` header + window check folded into the HMAC — a **CONTRACT change with AMS/the signing proxy**.
+  **Verify product-viability FIRST**; may be operator/contract-gated (record in `operator-expected.md`, not a pure
+  code fix).
+
+**Each is an AGENT finding — re-verify against the code before building** (take the verified core). **§2.7 CI
+promotions unlock ≥ 2026-07-23 — CHECK THE DATE at open.**
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
+ledger 07-27) — operator-only. GHCR anon → 401 — operator-only. No new operator action from S58.
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-58.md`)
 
 **Session 2026-07-16 result: D-119 — S57 DONE (PR #111). Shipped S48-audit finding [16] — cluster duplicate node_stats.**
 
