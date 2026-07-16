@@ -36,6 +36,14 @@ const (
 	// column. This method is more accurate than the bitrate×watch_time model.
 	// VD-37: set on UsageRow when the egressBytes > 0 branch is taken.
 	EgressMethodAMSRestStatsByteCounter = "ams_rest_stats_byte_counter"
+
+	// EgressMethodMixed is the report-level disclosure used when a single report
+	// blends both methods across its rows — e.g. a daily report where some streams
+	// carry AMS REST byte-counter data (egress_bytes > 0) while others fall back to
+	// the bitrate model. The aggregate Totals.EgressGB is then a blend of both, so
+	// neither pure label describes it honestly. Per-row EgressMethod still records
+	// the exact method for each row. (VD-41 / audit [10] / D-117.)
+	EgressMethodMixed = "mixed"
 )
 
 // kbpsToGBPerMinute converts viewer-minutes at a given kbps to GB.
@@ -282,6 +290,10 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 
 	var resultRows []UsageRow
 	var totals UsageTotals
+	// VD-41 (audit [10], D-117): track which egress methods actually contributed to
+	// the report so the report-level disclosure below reflects the aggregate reality
+	// (a daily report can mix byte-counter and bitrate-model rows).
+	var sawByteCounter, sawBitrate bool
 	for k, v := range byKey {
 		// Tenant lookup.
 		tenantName := tm.Resolve(k.stream, nil)
@@ -302,6 +314,11 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 			egressMethod = EgressMethodAMSRestStatsByteCounter
 		} else {
 			egressGB = kbpsToGBPerMinute(v.viewerMinutes, defaultBitrateKbps)
+		}
+		if egressMethod == EgressMethodAMSRestStatsByteCounter {
+			sawByteCounter = true
+		} else {
+			sawBitrate = true
 		}
 		recordingGB := float64(v.recordingBytes) * bytesToGB
 
@@ -344,10 +361,22 @@ func (a *Accountant) ComputeUsage(ctx context.Context, p UsageParams) (*UsageRep
 	totals.EgressGB = roundToDecimal(totals.EgressGB, 6)
 	totals.RecordingGB = roundToDecimal(totals.RecordingGB, 6)
 
+	// VD-41 (audit [10], D-117): report-level egress_method must describe the
+	// methodology behind the aggregate figures, not a hardcoded constant. Both
+	// methods present → "mixed"; only byte counters → byte-counter; only bitrate or
+	// an empty report → bitrate (the F6 default).
+	reportEgressMethod := EgressMethodBitrateXWatchTime
+	switch {
+	case sawByteCounter && sawBitrate:
+		reportEgressMethod = EgressMethodMixed
+	case sawByteCounter:
+		reportEgressMethod = EgressMethodAMSRestStatsByteCounter
+	}
+
 	return &UsageReport{
 		Rows:         resultRows,
 		Totals:       totals,
-		EgressMethod: EgressMethodBitrateXWatchTime,
+		EgressMethod: reportEgressMethod,
 	}, nil
 }
 

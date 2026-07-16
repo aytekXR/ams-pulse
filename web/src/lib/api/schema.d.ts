@@ -1366,7 +1366,8 @@ export interface components {
             totals: components["schemas"]["UsageTotals"];
             /**
              * @description Documents how egress was estimated (always included per F6 spec).
-             *     Example: "bitrate_x_watch_time" or "ams_rest_stats_byte_counter".
+             *     Example: "bitrate_x_watch_time", "ams_rest_stats_byte_counter", or
+             *     "mixed" when a single report blends both methods across its rows.
              */
             egress_method: string;
         };
