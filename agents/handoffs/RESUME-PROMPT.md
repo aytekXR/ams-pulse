@@ -11,7 +11,49 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-70.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-71.md`)
+
+**Session 2026-07-16 result: D-132 — S70 shipped the anomaly-flag cluster ([16] read-path arming, [17] cooldown off-by-one, [18] scopeJSON escaping). ★ anomaly-flag path now swept; last S62 MEDIUM is [12].**
+
+**★ S70** fixed three anomaly-detector flag-path bugs (PR #134, prod `v0.4.0-78-g1076442`):
+- **[16]** `ComputeFlags` (the `GET /anomalies` read) no longer arms the shared hysteresis cooldown, so it can't make
+  the next detection tick skip the ClickHouse `anomaly_flag_events` write (a `setHysteresis bool` — false from the read
+  path). Aligns with ADR-0009 §4; `GET /anomalies` is now a true point-in-time snapshot reporting an active anomaly on
+  every poll. Took the verified CORE (the audit's "permanent via polling" scenario was overstated).
+- **[17]** a fired flag now suppresses exactly `HysteresisTicks` ticks (arm to `+1`, since `decrementHysteresis` — now
+  an extracted method — runs before detection). Review follow-on: `WarmHysteresis` made consistent (`+1`) so a restart
+  no longer re-fires early with a duplicate audit event.
+- **[18]** baseline scope keys are JSON-escaped (`jsonEscapeStr`; normal IDs kept byte-identical so baselines aren't
+  reset on upgrade) and `parseScopeJSON` round-trips via `encoding/json`. Review follow-on: the alert evaluator's
+  `scopeJSONAnomaly` now delegates to the exported canonical `anomaly.ScopeJSON` (single source of truth — a divergent
+  copy would silently miss baselines for special-char IDs).
+Mutation-proven (6 mutants); full suite 25/25; 3-lens adversarial review found 3 CONFIRMED (1 MAJOR), all fixed
+pre-merge, 1 refuted. **No operator action.** Evidence: `decisions.md` D-132.
+
+**★ SESSION-71 = continue the S62 backlog: 5 remain (0 HIGH, 1 MEDIUM, 4 LOW)** in `S62-AUDIT-FINDINGS.md`.
+Re-read ROADMAP-V2 §2.31 + the ledger and pick the highest-leverage move; verify-at-open against the code. Suggested
+lead — the **license cluster [12] + [23] (+ [24])** (all in `server/internal/license/`, coherent one-package PR that
+clears the **last remaining MEDIUM**):
+- **[12] MEDIUM** — `New()` silently discards `activate()` errors; the comment claims logging that never happens. Verify
+  what `activate()` can fail on and whether a discarded error leaves the detector in a wrong entitlement state.
+- **[23] LOW** — an unvalidated tier string in `activate()` bypasses `CheckProbes`/`CheckBeaconIngest` entitlement gates.
+- **[24] LOW** — wrong error variable wrapped in the pubkey-init fallback (`err` instead of `err2`) — a diagnostic bug.
+- **Then the last two LOW to close the audit:** **[22]** (`CertChecker.DaysUntilExpiry` returns 0 not -1 for an expired
+  cert → a `cert_expiry lt 0` rule never fires) and **[25]** (`continueWebRTCICE` leaks a `time.After` timer on ctx
+  cancel during the stats hold — prober).
+
+**Each is an AGENT finding — re-verify against the code before building** (S66 declined an off-by-one, S67 overturned two
+impls, S68 narrowed RFC-1918, S69 review caught a classify regression, S70 review caught a WarmHysteresis off-by-one +
+an alert scope-key mirror divergence). License entitlement state is semantics surface → run the adversarial-review
+workflow. **§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE at open** (today 2026-07-16, still locked).
+
+**⚠ CARRIED operator items (unchanged):** the **[20] audit-read product call** (operator-expected.md — keep reads open
+or gate the whole admin-read surface); AMS trial-expiry doc discrepancy (07-12 vs 07-27); GHCR anon → 401; the S63
+email-STARTTLS behavior note (informational).
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-70.md`)
 
 **Session 2026-07-16 result: D-131 — S69 shipped the HLS manifest parse-correctness pair ([14] zero-EXTINF, [15] resolveURI). ★ Prober HLS/DASH/RTMP now all swept.**
 

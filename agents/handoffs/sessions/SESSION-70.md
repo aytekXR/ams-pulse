@@ -1,5 +1,19 @@
 # SESSION-70 — planned at S69 close (D-131)
 
+> ## ✅ CLOSED (2026-07-16, D-132) — SHIPPED [16] + [17] + [18]
+> The anomaly-flag cluster shipped (PR #134, prod `v0.4.0-78-g1076442`): [16] `ComputeFlags` (the `GET /anomalies` read)
+> no longer arms the shared hysteresis cooldown, so an on-read poll can't suppress the tick-path `InsertAnomalyFlagEvent`
+> (a `setHysteresis bool`, false from the read path; ADR-0009 §4 aligned — the read is now a true point-in-time snapshot);
+> [17] a fired flag suppresses exactly `HysteresisTicks` ticks (arm to `+1`; decrement loop extracted to
+> `decrementHysteresis()`); [18] scope keys are JSON-escaped (`jsonEscapeStr`, byte-identical for normal IDs) and
+> `parseScopeJSON` round-trips via `encoding/json`. 6/6 mutants killed; suite 25/25; 3-lens adversarial review found 3
+> CONFIRMED (1 MAJOR `WarmHysteresis` restart off-by-one + a MINOR alert `scopeJSONAnomaly` mirror divergence, both fixed
+> pre-merge by arming `WarmHysteresis` to `+1` and exporting the canonical `anomaly.ScopeJSON` for the alert mirror to
+> delegate to), 1 refuted. **No operator action.** See `decisions.md` D-132 and `sessions/SESSION-71.md` for the next
+> scope (license cluster [12]/[23]/[24], then LOW [22]/[25] to close the audit). Everything below is the original
+> pre-session plan (historical).
+
+
 > Written by SESSION-69 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE + `agents/handoffs/S62-AUDIT-FINDINGS.md`** (the 25-finding ledger).

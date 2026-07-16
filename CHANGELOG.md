@@ -67,6 +67,21 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **Anomaly flag detector — hysteresis + scope-key correctness (D-132).** Three fixes in the
+  anomaly detector's flag path, from the S62 subsystem audit: (1) an `GET /anomalies` HTTP read
+  (`ComputeFlags`) could arm the shared hysteresis cooldown and make the next detection tick skip
+  writing the flag event, dropping the anomaly from the ClickHouse audit trail — the read path no
+  longer arms the cooldown (it is now a true point-in-time snapshot that reports an active anomaly
+  on every poll; the persist/tick path remains the sole writer, per ADR-0009 §4); (2) the cooldown
+  suppressed one tick fewer than the documented `HysteresisTicks` (the decrement ran before
+  detection) — a fired flag now suppresses exactly `HysteresisTicks` ticks, and the restart-dedup
+  path (`WarmHysteresis`) was made consistent so a restart no longer re-fires early with a duplicate
+  event; (3) the baseline scope key was built by unescaped string concatenation, so a stream/node ID
+  containing a `"` corrupted the key and mis-attributed anomaly events to the wrong stream — IDs are
+  now JSON-escaped (and parsed back with a real JSON decode), with normal IDs kept byte-identical so
+  baselines are not reset on upgrade. The alert evaluator's scope-key builder now delegates to the
+  same canonical function so its baseline lookups can't silently diverge. (Found by the S62 subsystem
+  audit, findings [16], [17], and [18].)
 - **HLS synthetic-probe manifest parsing (D-131).** Two correctness fixes in the HLS
   probe, which parses an untrusted manifest served by the monitored AMS/CDN: (1) a media
   segment preceded by a zero-duration or malformed `#EXTINF` was silently dropped and the

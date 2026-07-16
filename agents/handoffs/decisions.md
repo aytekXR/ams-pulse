@@ -8352,3 +8352,69 @@ unaffected by the resolveURI rewrite).
 RESUME-PROMPT ▶ START HERE → SESSION-70; `operator-expected.md` (no new action; [20] product call carried);
 `sessions/SESSION-69.md` CLOSED; `sessions/SESSION-70.md` written. Prod rolled forward + smoke green. **No operator
 action required.**
+
+## D-132 — S70 (2026-07-16): SHIPPED — anomaly flag cluster ([16] read-path arming, [17] cooldown off-by-one, [18] scopeJSON escaping)
+
+**Open facts.** `origin/main` = `894e282` (S69 docs, PR #133); HEAD == origin/main; `git status` shows only the
+do-not-commit `deploy/config/Caddyfile.prod` dirty. Branch `s70-d132`. Date 2026-07-16 (§2.7 gate still locked until
+2026-07-23). Backlog at open: 8 remain (4 MEDIUM, 4 LOW). Scope: the three anomaly-flag findings, all in
+`server/internal/anomaly/anomaly.go` — a coherent single-file cluster ([16]+[17] share the hysteresis mechanism, [18]
+is scopeJSON). Each re-verified against the code; took the verified CORE.
+
+**[16] MEDIUM — shared hysteresis map: `ComputeFlags` (HTTP read) could suppress tick-path persistence.**
+`detectFlagsLocked` (shared by `checkFlags` tick path + `ComputeFlags` read path) armed the cooldown unconditionally
+on a new fire. An `GET /anomalies` poll that detected an anomaly armed the cooldown; the next `UpdateBaselines` tick
+then found `rem>0` and skipped `InsertAnomalyFlagEvent`, so the ClickHouse `anomaly_flag_events` audit trail missed
+the anomaly. **Fix:** added a `setHysteresis bool` param — `checkFlags` passes `true`, `ComputeFlags` passes `false`;
+the `rem>0` *read* check is unchanged in both, only the *set* is guarded. This matches **ADR-0009 §4** (arming is a
+responsibility of the tick/persist path; `ComputeFlags` is the "on-demand ephemeral" read). Consequence: `GET
+/anomalies` is now a true point-in-time snapshot that reports an active anomaly on **every** poll rather than hiding it
+after the first — the pre-existing `TestAnomaly_Injection_OneFlag` encoded the old read-arms behaviour and was updated
+to the ADR-aligned semantics. **Took the verified CORE:** the audit's "permanent via 60 s polling" scenario was
+overstated (repeat polls during the cooldown hit the `continue`, never re-arming); the real impact is transient
+anomalies (resolve within the 600 s window) + the concurrent-race in the decrement→checkFlags gap.
+
+**[17] MEDIUM — off-by-one cooldown (N-1 suppressed instead of N).** `decrementHysteresis` runs before detection each
+tick and deletes at `rem<=1`, so arming to `hysteresisTicks` suppressed only N-1 ticks vs the documented N. **Fix:**
+arm a fresh fire to `hysteresisTicks + 1` (the smallest localized change; the +1 absorbs the pre-detection decrement).
+Extracted the decrement loop from `UpdateBaselines` into a `decrementHysteresis()` method so the cooldown duration is
+unit-testable without Welford baseline drift. PRD false-alarm budget still met (this is a doc/contract fix, not a
+budget violation).
+
+**[18] MEDIUM — scopeJSON unescaped concat → wrong stream attribution.** `scopeJSON` built the baseline scope key by
+raw string concat, so an ID containing `"` produced invalid JSON and `parseScopeJSON` (tolerant scan) truncated it at
+the first quote, mis-attributing anomaly events. **Fix:** added `jsonEscapeStr` (escapes `"`, `\`, and ASCII control
+bytes; short-circuits to return the input **unchanged** when none are present, so normal IDs serialize byte-identically
+to the pre-D-132 format and stored baseline keys are **not reset on upgrade**). `parseScopeJSON` now uses
+`encoding/json.Unmarshal` with a fallback to the legacy tolerant scan for pre-D-132 malformed rows. To preserve
+byte-identity for the common case, `encoding/json.Marshal` was deliberately **not** used (it HTML-escapes `<>&` and is
+heavier); the manual escaper is byte-minimal.
+
+**Verification.** New tests: `s70_d132_internal_test.go` (white-box: exact cooldown-tick spacing, read-pass-does-not-arm,
+scopeJSON round-trip + byte-identity + legacy fallback, WarmHysteresis arming), `s70_d132_flag_test.go` (black-box
+[16] through the public API), `s70_d132_scope_test.go` in the **alert** package (scope-key parity). Full suite **25/25**;
+gofmt + vet clean. **Mutation-proven — 6 mutants, all killed:** [17] undercount; [16] read-path arming (internal +
+black-box); [18] unescaped concat; [18] inverted `json.Unmarshal` branch; WarmHysteresis undercount; alert-mirror
+raw-concat reversion.
+
+**Adversarial review (3 lenses — state-machine / json-escaping / regression-contract; 7 agents). 3 CONFIRMED, 1
+refuted — all fixed pre-merge:** (1) **MAJOR** `WarmHysteresis` armed to `hysteresisTicks` while the fresh-fire path
+now arms to `+1`, so a restart with an active anomaly re-fired one tick early (a **duplicate** audit event — the exact
+thing `WarmHysteresis` exists to prevent); now arms to `+1`. (2) **MINOR (real regression)** the alert evaluator's
+`scopeJSONAnomaly` was a raw-concat **mirror** of `scopeJSON`; my [18] escaping made it diverge, so a special-char ID
+would make `GetAnomalyBaseline` miss the row and the alert rule silently never fire — **exported the canonical
+`anomaly.ScopeJSON`** and made the alert mirror delegate to it (single source of truth; `alert` already imports
+`anomaly`, no cycle). (3) **MINOR** test-gap on the WarmHysteresis tick count — closed by a direct arming-value
+assertion. The **refuted** finding (a `t.Skip` vs `t.Fatal` on a black-box setup guard) was correctly refuted (two
+other tests independently pin [16]); the guard was still upgraded to `t.Fatal` for defence-in-depth. The json-escaping
+lens found nothing (control-byte, UTF-8, backslash-at-end, and byte-identity all verified).
+
+**Shipped (PR #134, squash `1076442`, merged to `origin/main`).** Prod rolled forward to **`v0.4.0-78-g1076442`**; all
+5 smoke checks green (version stamp, healthz 200, signed webhook 200, limits 512M/0.5cpu, 0 error lines). CI: all 15
+checks + CodeQL green on the first run (no flake this session).
+
+**Docs at close:** D-132 SHIPPED (this block, prod `v0.4.0-78-g1076442`); CHANGELOG [Unreleased] Fixed;
+`S62-AUDIT-FINDINGS.md` [16]/[17]/[18] ✅ DONE; ROADMAP-V2 §2.31 (20 resolved: 19 shipped + 1 defer-by-ruling / 5
+remain — 0 HIGH, 1 MEDIUM, 4 LOW); RESUME-PROMPT ▶ START HERE → SESSION-71; `operator-expected.md` (no new action;
+[20] product call carried); `sessions/SESSION-70.md` CLOSED; `sessions/SESSION-71.md` written. Prod rolled forward +
+smoke green. **No operator action required.**
