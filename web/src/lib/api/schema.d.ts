@@ -65,8 +65,10 @@ export interface paths {
          *       client merges into its local state.
          *     - **`heartbeat`** — `{"type":"heartbeat","ts":<epoch_ms>}` sent every 30 s.
          *
-         *     Authentication: bearer token in `Authorization` header or `token` query
-         *     parameter (WebSocket clients may not set headers).
+         *     Authentication: bearer token in `Authorization` header, `token` query
+         *     parameter (WebSocket clients may not set headers), or the `pulse_session`
+         *     cookie (OIDC/SSO browser sessions). All three are validated the same way
+         *     as file downloads.
          *
          *     Message envelope schema:
          *     ```json

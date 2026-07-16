@@ -78,6 +78,13 @@ type Config struct {
 	// the source.  Default: 60 s.  Set to a shorter duration in tests to drive
 	// the refresh loop through the injected FakeClock.
 	RefreshInterval time.Duration
+
+	// EntitlementGate, if non-nil, is checked before every probe execution. When
+	// it returns a non-nil error the probe is skipped (no request, no result).
+	// Wired to license.Manager.CheckProbes so a tenant that downgrades to a tier
+	// without synthetic probes stops probing at runtime — the HTTP CRUD gate alone
+	// left the background runner unenforced (S37 "enforced, not decorative" class).
+	EntitlementGate func() error
 }
 
 // Clock abstracts time for deterministic testing.
@@ -99,12 +106,13 @@ type probeExecRequest struct {
 
 // Runner is the probe scheduler and executor.
 type Runner struct {
-	cfg    Config
-	source domain.ProbeConfigSource
-	store  ResultStore
-	logger *slog.Logger
-	clock  Clock
-	client *http.Client
+	cfg             Config
+	source          domain.ProbeConfigSource
+	store           ResultStore
+	logger          *slog.Logger
+	clock           Clock
+	client          *http.Client
+	entitlementGate func() error
 }
 
 // New creates a Runner. Pass a custom clock (e.g. FakeClock) for testing.
@@ -130,11 +138,12 @@ func New(cfg Config, source domain.ProbeConfigSource, store ResultStore, logger 
 		clock = realClock{}
 	}
 	return &Runner{
-		cfg:    cfg,
-		source: source,
-		store:  store,
-		logger: logger,
-		clock:  clock,
+		cfg:             cfg,
+		source:          source,
+		store:           store,
+		logger:          logger,
+		clock:           clock,
+		entitlementGate: cfg.EntitlementGate,
 		client: &http.Client{
 			// Timeout is overridden per-probe using the context deadline.
 			Timeout: 0,
@@ -325,6 +334,17 @@ func (r *Runner) jitter(interval time.Duration) time.Duration {
 
 // executeProbe runs a single probe check and writes the result.
 func (r *Runner) executeProbe(ctx context.Context, p domain.ProbeConfig) {
+	// Runtime entitlement enforcement: a tenant that downgraded below the probe
+	// tier must stop probing even though the schedule goroutines are still running
+	// (the HTTP CRUD gate does not reach the background runner).
+	if r.entitlementGate != nil {
+		if err := r.entitlementGate(); err != nil {
+			r.logger.Debug("prober: skipping probe — entitlement check failed",
+				"probe_id", p.ID, "error", err)
+			return
+		}
+	}
+
 	timeoutS := p.TimeoutS
 	if timeoutS <= 0 {
 		timeoutS = 10

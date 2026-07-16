@@ -550,7 +550,11 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	// Wave 3 (WO-302): Wire F10 ProbeConfigSource + probe runner.
 	// BE-02 implements MetaProbeConfigSource over the meta probes table.
 	probeSource := meta.NewProbeConfigSource(metaStore)
-	probeRunnerInstance := prober.New(prober.Config{Workers: 4}, probeSource, store, logger, nil)
+	// EntitlementGate: a tenant that downgrades below the probe tier stops probing
+	// at runtime, not just at the HTTP CRUD boundary (S37 / D-108).
+	probeRunnerInstance := prober.New(
+		prober.Config{Workers: 4, EntitlementGate: lic.CheckProbes},
+		probeSource, store, logger, nil)
 
 	// Wire probe result querier into query service for GET /probes/{id}/results.
 	qsvc.SetProbeResultQuerier(store)

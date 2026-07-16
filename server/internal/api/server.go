@@ -434,7 +434,9 @@ func (s *Server) buildRouter() {
 
 		r.Get("/live/overview", s.handleLiveOverview)
 		r.Get("/live/streams", s.handleLiveStreams)
-		r.Get("/live/ws", s.handleLiveWS)
+		// /live/ws is registered under downloadAuthMiddleware (below) — browsers
+		// cannot set an Authorization header on a WebSocket, so it needs the same
+		// header/cookie/?token= auth as file downloads.
 
 		r.Get("/analytics/audience", s.handleAudienceAnalytics)
 		r.Get("/analytics/geo", s.handleGeoAnalytics)
@@ -504,15 +506,16 @@ func (s *Server) buildRouter() {
 		r.Get("/admin/audit-log", s.handleListAuditLog)
 	})
 
-	// Export download route: uses its own auth middleware that also accepts
-	// ?token= so that browser file downloads (window.location.href) work.
-	// A4 security: ?token= is intentionally NOT accepted on normal /api/v1/*
-	// routes (bearerAuthMiddleware enforces this). This group is a deliberate
-	// exception, analogous to the WS upgrade handler — the only two routes
-	// where browsers cannot supply an Authorization header.
+	// Browser-initiated routes that cannot attach an Authorization header: file
+	// downloads (window.location.href) and the WebSocket upgrade. Both use
+	// downloadAuthMiddleware, which accepts header, pulse_session cookie, or
+	// ?token= and validates the token into ctxTokenKey. A4 security: ?token= is
+	// intentionally NOT accepted on normal /api/v1/* routes (bearerAuthMiddleware
+	// enforces this). WS is a read stream (GET), so no requireWriteScope is needed.
 	r.Group(func(r chi.Router) {
 		r.Use(s.downloadAuthMiddleware)
 		r.Get("/api/v1/reports/export", s.handleReportExport)
+		r.Get("/api/v1/live/ws", s.handleLiveWS)
 	})
 
 	// S11 WO-C: OIDC/SSO auth (non-versioned, no bearer auth required).
@@ -1089,20 +1092,13 @@ type wsMessage struct {
 }
 
 func (s *Server) handleLiveWS(w http.ResponseWriter, r *http.Request) {
-	// Browsers cannot set custom headers on WebSocket connections, so we also
-	// accept ?token= here (WS-only exception). extractBearerToken reads only the
-	// Authorization header; we fall back to the query param explicitly.
-	token := extractBearerToken(r)
-	if token == "" {
-		token = r.URL.Query().Get("token")
-	}
-	if token == "" {
+	// Auth is handled by downloadAuthMiddleware (header / pulse_session cookie /
+	// ?token=), which validated the token and stashed it in ctxTokenKey. Reading
+	// it here — instead of re-extracting from the header/query — is what lets an
+	// OIDC cookie-session user open the socket (the old header/?token=-only path
+	// rejected them); it also removes a redundant second LookupToken.
+	if tok, _ := r.Context().Value(ctxTokenKey).(*meta.APIToken); tok == nil {
 		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing token")
-		return
-	}
-	tok, err := s.store.LookupToken(r.Context(), token)
-	if err != nil || tok == nil {
-		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid token")
 		return
 	}
 
