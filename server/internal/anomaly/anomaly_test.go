@@ -116,8 +116,14 @@ func (f *variableStreamLive) Subscribe() (<-chan *domain.LiveSnapshot, func()) {
 }
 
 // TestAnomaly_Injection_OneFlag verifies that an injected N-sigma deviation
-// produces exactly one flag (not a storm — hysteresis works).
+// produces exactly one flag per metric on a single ComputeFlags read.
 // Uses alternating values during warm-up so stddev > 0.
+//
+// D-132 [16]: ComputeFlags is the ephemeral GET /anomalies read path and does
+// NOT arm the shared hysteresis cooldown (arming belongs to the tick/persist
+// path — ADR-0009 §4). Two consecutive reads with no intervening tick therefore
+// BOTH report the still-active anomaly; tick-path dedup is verified separately
+// (TestFlagStore_HysteresisSuppressesReFire, TestDetectFlagsLocked_CooldownSuppressesExactlyNTicks).
 func TestAnomaly_Injection_OneFlag(t *testing.T) {
 	store := &fakeBaselineStore{}
 	live := &variableStreamLive{viewerCount: 100}
@@ -194,15 +200,17 @@ func TestAnomaly_Injection_OneFlag(t *testing.T) {
 	t.Logf("PASS: injected deviation → 1 flag (sigma=%.2f observed=%.1f expected=%.2f)",
 		flags[0].Sigma, flags[0].Observed, flags[0].Expected)
 
-	// Calling ComputeFlags again immediately should produce 0 flags (hysteresis).
+	// D-132 [16]: an immediate second read (no intervening UpdateBaselines tick)
+	// must STILL report the active anomaly — ComputeFlags does not arm the cooldown,
+	// so the ephemeral GET /anomalies snapshot never hides a live anomaly.
 	flags2, err := det.ComputeFlags(ctx, 3.0)
 	if err != nil {
 		t.Fatalf("ComputeFlags (2nd call): %v", err)
 	}
-	if len(flags2) != 0 {
-		t.Errorf("hysteresis failed: expected 0 flags on re-check, got %d", len(flags2))
+	if len(flags2) != 1 {
+		t.Errorf("expected the still-active anomaly on re-read (read path must not arm cooldown), got %d flags", len(flags2))
 	}
-	t.Logf("PASS: hysteresis → 0 flags on re-check immediately after first flag")
+	t.Logf("PASS: ephemeral read reports the active anomaly on every poll (D-132 [16])")
 }
 
 // TestAnomaly_BelowThreshold_NoFlag verifies that a below-threshold wobble

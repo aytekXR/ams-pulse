@@ -50,8 +50,10 @@ package anomaly
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -253,8 +255,12 @@ func (d *Detector) SetFlagStore(s FlagEventStore) {
 // startup, preventing duplicate flag events after a process restart (ADR-0009 §5).
 //
 // windowSecs = hysteresisTicks × tickInterval.Seconds() (default: 10 × 60 = 600 s).
-// For each (metric, scope) pair returned by the store, hysteresis is set to
-// hysteresisTicks so the next tick is suppressed for the full cooldown window.
+// For each (metric, scope) pair returned by the store, hysteresis is armed to
+// hysteresisTicks+1 — identical to a fresh fire in detectFlagsLocked — so the
+// next hysteresisTicks ticks are suppressed. The +1 absorbs the decrementHysteresis
+// pass that runs before detection on each tick; without it the restart path would
+// suppress one tick fewer than a fresh fire and re-fire early, writing a duplicate
+// audit event (D-132 [17], the exact restart-dedup case this method exists to prevent).
 //
 // No-op when flagStore is nil. Store errors are returned to the caller (Run logs
 // and continues); the detector remains safe to use with an empty hysteresis map.
@@ -269,7 +275,7 @@ func (d *Detector) WarmHysteresis(ctx context.Context) error {
 	}
 	d.mu.Lock()
 	for _, k := range keys {
-		d.hysteresis[hysteresisKey{metric: k.Metric, scope: k.Scope}] = d.hysteresisTicks
+		d.hysteresis[hysteresisKey{metric: k.Metric, scope: k.Scope}] = d.hysteresisTicks + 1
 	}
 	d.mu.Unlock()
 	return nil
@@ -330,16 +336,8 @@ func (d *Detector) UpdateBaselines(ctx context.Context) error {
 	// DetectedAt=tickAt. The existing 'now' int64 below stays as-is (different purpose).
 	tickAt := time.Now().UTC()
 
-	// Update hysteresis counters (decrement each tick).
-	d.mu.Lock()
-	for k, rem := range d.hysteresis {
-		if rem <= 1 {
-			delete(d.hysteresis, k)
-		} else {
-			d.hysteresis[k] = rem - 1
-		}
-	}
-	d.mu.Unlock()
+	// Update hysteresis counters (decrement each tick, before checkFlags detects).
+	d.decrementHysteresis()
 
 	now := time.Now().UnixMilli()
 	const windowS = 3600 // 1-hour rolling window
@@ -353,7 +351,7 @@ func (d *Detector) UpdateBaselines(ctx context.Context) error {
 	var obs []observation
 
 	for streamID, s := range snap.Streams {
-		scope := scopeJSON("", "", streamID)
+		scope := ScopeJSON("", "", streamID)
 		obs = append(obs, observation{
 			metric: "viewers",
 			scope:  AnomalyBaselineRow{Metric: "viewers", Scope: scope, WindowS: windowS},
@@ -368,7 +366,7 @@ func (d *Detector) UpdateBaselines(ctx context.Context) error {
 	}
 
 	for nodeID, n := range snap.Nodes {
-		nodeScope := scopeJSON(nodeID, "", "")
+		nodeScope := ScopeJSON(nodeID, "", "")
 		// D-088: guard on presence flags — standalone AMS 3.x omits cpu/mem/disk
 		// (normalize.go:241). Feeding zero-value observations would poison the Welford
 		// baseline toward zero, causing false alarms when the node later reports real data.
@@ -497,6 +495,24 @@ func (d *Detector) UpdateBaselines(ctx context.Context) error {
 	return nil
 }
 
+// decrementHysteresis ticks every in-memory cooldown counter down by one and
+// removes entries that reach zero. Called once at the top of each UpdateBaselines
+// tick, BEFORE detectFlagsLocked runs, so a counter freshly armed to
+// hysteresisTicks+1 yields exactly hysteresisTicks suppressed ticks (D-132 [17]).
+// Takes d.mu; extracted from UpdateBaselines so the cooldown duration is unit
+// testable without Welford baseline drift.
+func (d *Detector) decrementHysteresis() {
+	d.mu.Lock()
+	for k, rem := range d.hysteresis {
+		if rem <= 1 {
+			delete(d.hysteresis, k)
+		} else {
+			d.hysteresis[k] = rem - 1
+		}
+	}
+	d.mu.Unlock()
+}
+
 // detectedFlag is the output of detectFlagsLocked: one detection result whose
 // caller translates into either an AnomalyFlag (ComputeFlags) or an
 // AnomalyFlagEvent (checkFlags). Hysteresis has already been set for each entry.
@@ -512,7 +528,14 @@ type detectedFlag struct {
 //
 // Replicates the minSamples guard and effStddev epsilon logic exactly so both
 // ComputeFlags and checkFlags produce consistent results.
-func (d *Detector) detectFlagsLocked(baselines []AnomalyBaselineRow, liveValues map[string]float64, sigmaThreshold float64) []detectedFlag {
+//
+// setHysteresis controls whether a new fire arms the shared cooldown map.
+// checkFlags (the UpdateBaselines tick path, sole writer of the persistent
+// flag-event audit trail) passes true; ComputeFlags (the HTTP GET /anomalies
+// read path) passes false so an on-read poll cannot arm the cooldown and make
+// the next tick skip InsertAnomalyFlagEvent (D-132 [16]). Both paths still
+// honour an already-set cooldown (the rem>0 check below).
+func (d *Detector) detectFlagsLocked(baselines []AnomalyBaselineRow, liveValues map[string]float64, sigmaThreshold float64, setHysteresis bool) []detectedFlag {
 	var out []detectedFlag
 	for _, b := range baselines {
 		if b.SampleCount < d.minSamples {
@@ -538,7 +561,12 @@ func (d *Detector) detectFlagsLocked(baselines []AnomalyBaselineRow, liveValues 
 		if rem := d.hysteresis[hk]; rem > 0 {
 			continue // still in cooldown
 		}
-		d.hysteresis[hk] = d.hysteresisTicks
+		if setHysteresis {
+			// hysteresisTicks+1: decrementHysteresis runs before this detection on
+			// every tick, so +1 makes exactly hysteresisTicks subsequent ticks
+			// suppressed vs the documented N-1 undercount (D-132 [17]).
+			d.hysteresis[hk] = d.hysteresisTicks + 1
+		}
 
 		out = append(out, detectedFlag{baseline: b, observed: observed, zScore: z})
 	}
@@ -558,7 +586,7 @@ func (d *Detector) detectFlagsLocked(baselines []AnomalyBaselineRow, liveValues 
 // at-most-once undercount is acceptable (no phantom re-fires on the next tick).
 func (d *Detector) checkFlags(ctx context.Context, tickAt time.Time, baselines []AnomalyBaselineRow, liveValues map[string]float64) {
 	d.mu.Lock()
-	detected := d.detectFlagsLocked(baselines, liveValues, d.defaultSigma)
+	detected := d.detectFlagsLocked(baselines, liveValues, d.defaultSigma, true)
 	d.mu.Unlock()
 
 	if d.flagStore == nil {
@@ -615,12 +643,12 @@ func (d *Detector) ComputeFlags(ctx context.Context, sigmaThreshold float64) ([]
 	// Build live values map.
 	liveValues := make(map[string]float64) // key = "metric:scopeJSON"
 	for streamID, s := range snap.Streams {
-		ss := scopeJSON("", "", streamID)
+		ss := ScopeJSON("", "", streamID)
 		liveValues["viewers:"+ss] = float64(s.ViewerCount)
 		liveValues["ingest_bitrate_kbps:"+ss] = s.IngestBitrate
 	}
 	for nodeID, n := range snap.Nodes {
-		ns := scopeJSON(nodeID, "", "")
+		ns := ScopeJSON(nodeID, "", "")
 		// D-088: presence guards mirror UpdateBaselines — key absent from liveValues
 		// when the metric was not reported by the node. detectFlagsLocked skips any
 		// baseline whose liveKey is absent, so stale zero-mean baselines cannot fire
@@ -648,7 +676,7 @@ func (d *Detector) ComputeFlags(ctx context.Context, sigmaThreshold float64) ([]
 	now := time.Now().UnixMilli()
 
 	d.mu.Lock()
-	detected := d.detectFlagsLocked(baselines, liveValues, sigmaThreshold)
+	detected := d.detectFlagsLocked(baselines, liveValues, sigmaThreshold, false)
 	d.mu.Unlock()
 
 	flags := make([]AnomalyFlag, 0, len(detected))
@@ -668,19 +696,23 @@ func (d *Detector) ComputeFlags(ctx context.Context, sigmaThreshold float64) ([]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// scopeJSON builds the canonical JSON scope string for a baseline key.
-// Only non-empty fields are included.
-func scopeJSON(nodeID, app, streamID string) string {
+// ScopeJSON builds the canonical JSON scope string for a baseline key.
+// Only non-empty fields are included. It is the SINGLE source of truth for the
+// anomaly_baselines scope key: the alert evaluator (alert.scopeJSONAnomaly)
+// delegates here so a lookup key is always byte-identical to the stored key,
+// including the D-132 [18] escaping — a divergent copy would silently miss
+// baselines for IDs containing quotes/backslashes/control bytes.
+func ScopeJSON(nodeID, app, streamID string) string {
 	// Build minimal JSON without full encoding overhead.
 	var parts []string
 	if nodeID != "" {
-		parts = append(parts, `"node_id":"`+nodeID+`"`)
+		parts = append(parts, `"node_id":"`+jsonEscapeStr(nodeID)+`"`)
 	}
 	if app != "" {
-		parts = append(parts, `"app":"`+app+`"`)
+		parts = append(parts, `"app":"`+jsonEscapeStr(app)+`"`)
 	}
 	if streamID != "" {
-		parts = append(parts, `"stream_id":"`+streamID+`"`)
+		parts = append(parts, `"stream_id":"`+jsonEscapeStr(streamID)+`"`)
 	}
 	if len(parts) == 0 {
 		return "{}"
@@ -694,6 +726,46 @@ func scopeJSON(nodeID, app, streamID string) string {
 	}
 	result += "}"
 	return result
+}
+
+// jsonEscapeStr escapes a string for safe embedding inside a JSON string literal
+// in ScopeJSON. It handles the quote and backslash — the [18] mis-attribution bug,
+// where an ID containing `"` truncated the parsed scope — plus ASCII control bytes,
+// which encoding/json rejects on the parseScopeJSON round-trip. For the common case
+// (an ID with none of these) it returns s unchanged, so persisted baseline scope
+// keys stay byte-identical to the pre-D-132 format and baselines are not reset on
+// upgrade.
+func jsonEscapeStr(s string) string {
+	if !strings.ContainsFunc(s, func(r rune) bool {
+		return r == '"' || r == '\\' || r < 0x20
+	}) {
+		return s
+	}
+	const hex = "0123456789abcdef"
+	var b strings.Builder
+	b.Grow(len(s) + 8)
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '"':
+			b.WriteString(`\"`)
+		case c == '\\':
+			b.WriteString(`\\`)
+		case c == '\n':
+			b.WriteString(`\n`)
+		case c == '\r':
+			b.WriteString(`\r`)
+		case c == '\t':
+			b.WriteString(`\t`)
+		case c < 0x20:
+			b.WriteString(`\u00`)
+			b.WriteByte(hex[c>>4])
+			b.WriteByte(hex[c&0xf])
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
 }
 
 // baselineKey returns the unique index key for a baseline.
@@ -723,14 +795,29 @@ func itoa(n int) string {
 	return string(buf[pos:])
 }
 
-// parseScopeJSON parses a scope JSON string into an AlertScope.
-// Minimal parser for the canonical format produced by scopeJSON above.
+// parseScopeJSON parses a scope JSON string into an AlertScope. The canonical
+// format is produced by ScopeJSON (RFC-8259 JSON with escaped ID fields since
+// D-132), so a real JSON unmarshal round-trips IDs containing quotes/backslashes.
+// Legacy pre-D-132 rows may hold raw unescaped quotes that fail json.Unmarshal;
+// for those it falls back to the tolerant extractJSONString scan (best-effort —
+// a truncated legacy value cannot be recovered).
 func parseScopeJSON(s string) domain.AlertScope {
 	var scope domain.AlertScope
 	if s == "" || s == "{}" {
 		return scope
 	}
-	// Simple extraction without full JSON unmarshal.
+	var raw struct {
+		NodeID   string `json:"node_id"`
+		App      string `json:"app"`
+		StreamID string `json:"stream_id"`
+	}
+	if err := json.Unmarshal([]byte(s), &raw); err == nil {
+		scope.NodeID = raw.NodeID
+		scope.App = raw.App
+		scope.StreamID = raw.StreamID
+		return scope
+	}
+	// Fallback: legacy/malformed row — tolerant scan of the flat object.
 	if v := extractJSONString(s, "node_id"); v != "" {
 		scope.NodeID = v
 	}
