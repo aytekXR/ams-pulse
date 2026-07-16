@@ -1,11 +1,22 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-115 — SESSION-53)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-116 — SESSION-54)
+
+> **S54 (D-116) needs NO operator action.** This session fixed a subsystem-audit finding: the analytics REST poller
+> **slowly leaked memory** on long-running servers — it kept a per-stream tracking entry for every stream it ever
+> saw, but only cleaned up entries for streams that had been actively broadcasting, so idle inputs that came and
+> went accumulated forever. All disappeared streams are now cleaned up. Fixed and live (`v0.4.0-49-g6d60f53`).
+> **All six high-severity audit findings plus three lower-severity ones are now shipped; 7 lower-severity findings
+> remain**, queued for upcoming sessions (`agents/handoffs/S48-AUDIT-FINDINGS.md`); none needs you.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
+> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none
+> blocks the autonomous work.
+
+## (previous header — D-115, SESSION-53)
 
 > **S53 (D-115) needs NO operator action.** This session fixed a subsystem-audit finding: an **ingest-health event
 > that arrived without a timestamp was recorded as if last seen in 1970**, so the next staleness sweep immediately
 > dropped that publisher with a false "source gone" warning and hid its real health. The timestamp check is now
-> correct. Fixed and live (`v0.4.0-47-gd32b165`). **All six high-severity audit findings plus two lower-severity
-> ones are now shipped; 8 lower-severity findings remain**, queued for upcoming sessions
-> (`agents/handoffs/S48-AUDIT-FINDINGS.md`); none needs you.
+> correct. Fixed and live (`v0.4.0-47-gd32b165`). None needs you.
 >
 > **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
 > 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none

@@ -1,5 +1,13 @@
 # SESSION-54 — planned at S53 close (D-115)
 
+> **✅ CLOSED 2026-07-16 (D-116, PR #105).** Took finding [9] — `restpoller.go` `detectEnded` only evicted
+> `broadcasting` `prevStatus` keys, so idle/created streams that vanished from AMS leaked forever. Fix: decouple
+> eviction (`stale`, all disappeared app-scoped keys) from emission (`ended`, broadcasting-only). Full Go suite
+> 24/24; mutation-proven; D-029 app-scoping invariant guarded by the existing multiapp test; prod
+> `v0.4.0-49-g6d60f53`. ⚠ Hit the CI **gofmt gate** (local `go build && go vet` misses it) → force-push + memory
+> `ci-gofmt-gate`. **7 MEDIUM/LOW findings remain** → SESSION-55. Evidence: `decisions.md` D-116. (CI-promotion gate
+> still shut — 07-16 < 07-23.)
+
 > Written by SESSION-53 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE for the full ranked candidate list** + `S48-AUDIT-FINDINGS.md`.

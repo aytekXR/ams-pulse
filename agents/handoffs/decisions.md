@@ -7527,3 +7527,46 @@ clickhouse SummingMergeTree migration and [8] webhook replay (product-viability 
 **Docs at close:** D-115 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (finding [7]
 ✅); RESUME-PROMPT ▶ START HERE → SESSION-54; `operator-expected.md` refreshed (no new item);
 `sessions/SESSION-53.md` CLOSED; `sessions/SESSION-54.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 8.
+
+---
+
+## D-116 — S54 (2026-07-16): CLOSED — restpoller prevStatus map leak fixed (finding [9], PR #105)
+
+**Context.** SESSION-54 continued the MEDIUM/LOW batch. CI-promotion gate still shut (07-16 < 07-23). Took finding
+[9] in `collector/restpoller/restpoller.go`.
+
+**Finding [9] — unbounded `prevStatus` growth.** `pollApp` records every broadcast's status in `p.prevStatus`
+(`idle`, `created`, `broadcasting`, …), but `detectEnded` only evicted keys whose status was `"broadcasting"`. A
+non-broadcasting stream (an idle IP-camera input, a created-but-never-started stream) that later disappeared from
+the AMS list was **never removed** — the map grew without bound (one leaked entry per ever-seen idle/created stream
+later deleted from AMS). **Verified** at `restpoller.go:400` (writes every status) and the old `detectEnded` loop
+(`status == "broadcasting"` gate on the deletion set). **Fix:** decouple eviction from emission — `stale` collects
+every disappeared key of THIS app (any status, prefix-scoped) and drives the map delete; `ended` keeps the
+`"broadcasting"` guard and drives `publish_end` emission. App-prefix scoping (D-029) is unchanged.
+
+**Verification.** gofmt/vet clean; **full Go suite 24/24**. New internal `TestDetectEnded_EvictsDisappeared-
+NonBroadcasting` (seed idle + broadcasting, both disappear → both evicted, a different app's key untouched, exactly
+one `publish_end` for the broadcasting one). **Mutation-proven:** reverting the eviction loop to iterate `ended`
+leaves the idle key in `prevStatus` → test RED; the existing D-029 `TestRestPoller_MultiApp_NoFalseEnd`
+(cross-app app-scoping invariant) stays GREEN. **Review:** careful self-review — the critical cross-app invariant is
+guarded by the passing D-029 test and the leak is mutation-proven; no separate review workflow.
+
+**★ Process note (new memory).** CI has a **gofmt gate** in the `server` job (`gofmt -l .`) that runs before the
+tests; my local `go build && go vet` gate does NOT catch formatting, so a comment-alignment nit passed locally and
+failed CI (30 s), costing one force-push + re-run. Fixed by `gofmt -w` + amend. Persisted to agent memory
+(`ci-gofmt-gate`) — **add `gofmt -l` to the local gate for every Go-editing session.**
+
+**Prod: rolled forward** (server *source* changed) — STAMPED build, rollback tag `pre-d116`, backup rc=0. New prod
+stamp: **`v0.4.0-49-g6d60f53`** (was `v0.4.0-47-gd32b165`). Smoke: `/healthz` all-ok; `pulse version` =
+`v0.4.0-49-g6d60f53`; signed webhook → 200; limits 512M/0.5cpu; logs clean; restpoller polling real AMS.
+
+**Operator action required: NONE.** Carried items unchanged (AMS trial-expiry doc discrepancy; GHCR anon → 401).
+
+**★ Remaining S48-audit backlog: 7 findings (5 MEDIUM, 2 LOW)** in `S48-AUDIT-FINDINGS.md`. Finding [9] ✅ DONE.
+Next: [10] reports egress-method disclosure, [13] clickhouse per-item PrepareBatch, [16] dup node_stats, [14] beacon
+413; [11] anomaly baseline columns (needs a SQL-text/real-CH seam); [12] SummingMergeTree migration + [8] webhook
+replay (product-viability) last.
+
+**Docs at close:** D-116 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (finding [9]
+✅); RESUME-PROMPT ▶ START HERE → SESSION-55; `operator-expected.md` refreshed (no new item);
+`sessions/SESSION-54.md` CLOSED; `sessions/SESSION-55.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 7.
