@@ -44,6 +44,35 @@ import (
 // replaced BEFORE the plain $Number$ substitution to prevent partial expansion.
 var reNumberFmt = regexp.MustCompile(`\$Number%[^$]+\$`)
 
+// reSafeNumberSpec matches the ONLY printf specifier DASH defines for $Number$:
+// an optional zero-pad flag and a small decimal width, conversion 'd'
+// (ISO/IEC 23009-1 §5.3.9.4.4, e.g. %d, %5d, %05d).  Width digits are bounded to
+// three (≤ 999) so a hostile manifest cannot smuggle a huge width like
+// $Number%999999999d$ — which would make fmt.Sprintf pad the number to ~1 GB.
+// (Real DASH widths are 1–2 digits; 3 leaves comfortable headroom while the ≤999
+// bound keeps any single expansion under ~1 KB.)
+var reSafeNumberSpec = regexp.MustCompile(`^%0?\d{0,3}d$`)
+
+// maxMPDBodyBytes caps the MPD manifest body read before XML decode.  Unlike the
+// segment body (segBodyCapBytes), the manifest is metadata — a live or short-VOD
+// manifest is well under this.  A hostile probed server can otherwise return a
+// manifest with millions of elements and drive xml.Decoder into a multi-GB
+// allocation → OOM.  A body larger than this cap truncates, the decode fails, and
+// the probe is reported as a parse failure (Success=false) — the same outcome as
+// any malformed manifest.  Tradeoff (accepted): a pathologically large archive
+// manifest (e.g. a dense multi-representation SegmentList > 16 MiB) is reported as
+// a parse failure rather than probed — a deliberate bound favouring prober
+// stability over covering giant-archive DASH origins (AMS itself is live-first).
+const maxMPDBodyBytes = 16 << 20 // 16 MiB
+
+// maxExpandedTemplateBytes bounds the output of expandSegmentTemplate.  A real
+// SegmentTemplate @media is a short URL template, but both it and the
+// Representation @id are attacker-controlled; strings.ReplaceAll allocates
+// count×len(id) up front, so many "$RepresentationID$" tokens × a long id could
+// reach TB-scale even within the 16 MiB body cap.  64 KiB is far above any real
+// segment URL yet keeps the expansion bounded.
+const maxExpandedTemplateBytes = 64 << 10 // 64 KiB
+
 // ─── MPD XML types ────────────────────────────────────────────────────────────
 // All struct field tags use unqualified local names only; no namespace is
 // specified, so encoding/xml matches any DASH-IF namespace variant
@@ -148,7 +177,10 @@ func (r *Runner) probeDASH(ctx context.Context, p domain.ProbeConfig, result dom
 	}
 
 	// ── Step 2: parse MPD ──────────────────────────────────────────────────────
-	segmentURI, segmentDurationS, err := parseMPD(resp.Body, p.URL)
+	// Cap the manifest body: xml.Decoder materialises the whole document, so an
+	// unbounded read lets a hostile server OOM the prober (mirrors the segment cap
+	// at segBodyCapBytes below).
+	segmentURI, segmentDurationS, err := parseMPD(io.LimitReader(resp.Body, maxMPDBodyBytes), p.URL)
 	if err != nil {
 		result.Success = false
 		result.ErrorCode = "parse"
@@ -364,11 +396,29 @@ func parseMPD(body io.Reader, baseURL string) (segmentURI string, segmentDuratio
 // The printf-width form is substituted before the plain form to prevent
 // partial-match corruption when both patterns are present.
 func expandSegmentTemplate(media, repID string, number int) string {
+	// media and repID are both attacker-controlled (from the probed server's
+	// manifest). strings.ReplaceAll allocates count×len(repID) up front, so a media
+	// of many "$RepresentationID$" tokens × a long id can reach TB-scale even within
+	// the 16 MiB manifest-body cap. A real segment template is a short URL — refuse
+	// to expand one whose $RepresentationID$ product, or raw size, blows past the
+	// bound; the empty result yields an unresolvable segment URL (probe fails on the
+	// segment fetch) rather than an OOM.
+	if len(media) > maxExpandedTemplateBytes ||
+		strings.Count(media, "$RepresentationID$")*len(repID) > maxExpandedTemplateBytes {
+		return ""
+	}
 	out := strings.ReplaceAll(media, "$RepresentationID$", repID)
 	// Printf-width $Number%<spec>$: replace first (before plain $Number$).
 	out = reNumberFmt.ReplaceAllStringFunc(out, func(m string) string {
 		// m is e.g. "$Number%05d$"; extract the format specifier "%05d".
 		spec := m[len("$Number") : len(m)-1]
+		if !reSafeNumberSpec.MatchString(spec) {
+			// The spec comes straight from the (untrusted) manifest. A malformed
+			// or oversized width like "%999999999d" would make fmt.Sprintf pad the
+			// number to ~1 GB. Only a bounded DASH %0<width>d form is honoured;
+			// anything else degrades to plain decimal.
+			return fmt.Sprintf("%d", number)
+		}
 		return fmt.Sprintf(spec, number)
 	})
 	// Plain $Number$ (no format specifier).
