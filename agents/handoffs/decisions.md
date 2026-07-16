@@ -7873,8 +7873,10 @@ proportionate MVP.
 **Docs.** `docs/AMS-INTEGRATION.md` §4.7 (operator-facing hardened contract) + §4.3 pointer + §6 env-table rows;
 `CHANGELOG` Added.
 
-**Prod.** Server source changed → rolled prod forward (default-off, so the signed-webhook smoke still returns 200).
-Rollback image tag `pre-d123`.
+**Prod.** Server source changed → rolled prod forward to **`v0.4.0-61-g28812db`** (was `v0.4.0-57-g36c16ed`; PR #117;
+rollback image tag `pre-d123`). Smoke green: healthz 200, version stamp ≠ dev, **signed webhook (body-only, no
+timestamp) → 200** (default-off backward-compat confirmed live), bad-sig → 401 (fail-closed), limits 512M/0.5cpu,
+logs clean.
 
 **Operator action required: NONE.** Replay protection is opt-in; to ENABLE it an operator must first update their
 signing proxy to send + sign `X-Ams-Timestamp`, then set `PULSE_WEBHOOK_REQUIRE_TIMESTAMP=true` (documented, not a

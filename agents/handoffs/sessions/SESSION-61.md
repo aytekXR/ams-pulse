@@ -77,7 +77,7 @@ Re-read the standing directive + ROADMAP-V2 §2 and choose the next-highest-leve
 
 ## ⛔ At open — verify, do not assume (D-095)
 
-- `git log --oneline origin/main -4` — S60 (D-122, PR #NNN — docs-only) should be on `origin/main`.
+- `git log --oneline origin/main -4` — S60 (D-122, PR #116 — docs-only) should be on `origin/main`.
 - Prod should print **`v0.4.0-57-g36c16ed`** (UNCHANGED — S59 + S60 were both no-code/no-DDL deferrals). `/healthz`
   all-ok, `ams_env_configured:true`. **[8] rolls prod forward ONLY if it ships as a code change** (not if gated).
 - Operator queue: GHCR anon → 401; AMS trial-expiry doc discrepancy (07-12 vs 07-27) — operator-only.
