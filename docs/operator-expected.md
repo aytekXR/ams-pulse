@@ -1,4 +1,23 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-132 — SESSION-70)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-133 — SESSION-71)
+
+> **S71 (D-133) needs NO operator action.** This session hardened the license manager: (1) if a configured licence key
+> is rejected (bad signature, unreadable/garbled offline file), the server now **logs a warning** and runs on Free tier
+> — previously that failure was silent, so you couldn't tell a rejected key from an unconfigured one; (2) a key with an
+> unrecognized tier name is now rejected and treated as Free instead of being trusted as a paid tier; (3) a misleading
+> startup error message (when `PULSE_LICENSE_PUBKEY` is malformed) now reports the real cause. All internal robustness —
+> **nothing to configure.** Live in prod (`v0.4.0-80-gc477660`, rolled forward; smoke green: healthz 200, signed webhook
+> 200, limits 512M/0.5cpu, clean logs). **NOTE:** the log-visibility fix means that if your production licence key is
+> ever rejected, you'll now see a `license: activation failed` warning in the logs — that is the intended new signal, not
+> a regression.
+>
+> **The ONE decision still waiting on you is the [20] audit-log read access model** (from S68 — see the D-130 block
+> below): keep admin *reads* open to any authenticated token (status quo, recommended), or gate the whole admin-read
+> surface behind the `admin` scope (which would remove the audit page from viewer-role users). No rush; non-blocking.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs 07-27;
+> see ⚠ below). GHCR is still private (**401**). The S63 email-STARTTLS behavior note below still applies.
+
+## (previous header — D-132, SESSION-70)
 
 > **S70 (D-132) needs NO operator action.** This session fixed three correctness bugs in the anomaly-flag detector:
 > (1) opening the live anomalies view (`GET /anomalies`) could stop the anomaly from being written to the historical

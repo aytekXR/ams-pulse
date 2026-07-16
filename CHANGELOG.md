@@ -67,6 +67,16 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **License manager — error visibility, tier validation, diagnostics (D-133).** Three fixes from
+  the S62 subsystem audit: (1) when a configured license key is **rejected** (bad signature, malformed,
+  unreadable offline file), the server now logs a warning and degrades to Free tier — previously the
+  error was silently discarded, so an operator could not tell a rejected key from an unconfigured one;
+  (2) an **unrecognized tier** in a (validly-signed) key is now rejected and degraded to Free instead of
+  being trusted as a paid tier with unlimited capacity — the probe and beacon-ingest entitlement gates
+  were tightened to match the other feature gates; (3) a misleading diagnostic when a malformed
+  `PULSE_LICENSE_PUBKEY` triggered the dev-mode key fallback now reports the real underlying error. All
+  internal robustness fixes — nothing to configure. (Found by the S62 subsystem audit, findings [12],
+  [23], and [24].)
 - **Anomaly flag detector — hysteresis + scope-key correctness (D-132).** Three fixes in the
   anomaly detector's flag path, from the S62 subsystem audit: (1) an `GET /anomalies` HTTP read
   (`ComputeFlags`) could arm the shared hysteresis cooldown and make the next detection tick skip

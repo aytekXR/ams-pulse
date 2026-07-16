@@ -11,7 +11,45 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-71.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-72.md`)
+
+**Session 2026-07-16 result: D-133 — S71 shipped the license cluster ([12] log activation failures, [23] tier validation, [24] pubkey err2). ★ ALL S62 HIGH+MEDIUM now done — only 2 LOW remain ([22], [25]).**
+
+**★ S71** fixed three license-manager bugs (PR #136, prod `v0.4.0-80-gc477660`):
+- **[12]** `New()` now logs a Warn on every fail-open degrade path (invalid inline key, offline file unreadable, offline
+  file bad contents) instead of silently discarding the error — operator can tell "key rejected" from "no key".
+- **[23]** `activate()` validates the tier against the 4 known values (rejects unknown → fail-open to Free, closing the
+  unlimited-capacity grant; `Refresh()` → 422, current license preserved), and `CheckProbes`/`CheckBeaconIngest` use
+  positive membership like their 5 sibling checks.
+- **[24]** the dev-mode pubkey fallback wraps the real `GenerateKey` error (`err2`), not the nil `err`; added a
+  `generateKey` test seam mirroring the existing `now` seam.
+Mutation-proven (6 mutants); full suite 25/25; 3-lens adversarial review found **0** findings. **No operator action.**
+Evidence: `decisions.md` D-133.
+
+**★ SESSION-72 = FINISH the S62 audit: only 2 LOW remain** in `S62-AUDIT-FINDINGS.md` (0 HIGH, 0 MEDIUM). Closing both
+completes the entire second subsystem audit (25 findings: 22 shipped + [20] deferred + these 2). Re-verify each at open:
+- **[22] LOW** — `CertChecker.DaysUntilExpiry` returns 0 (not -1) for an already-expired cert, so a `cert_expiry lt 0`
+  alert rule never fires (ledger ~line 407). Verify the checker + the alert-rule evaluation path; the fix likely returns
+  a negative day count (or the rule path treats expired as < 0) so the rule can fire. Small, self-contained.
+- **[25] LOW** — `continueWebRTCICE` does not stop the `time.After(hold)` timer on context cancellation during the stats
+  hold, leaking a runtime timer (ledger ~line 448, `server/internal/prober`). Use a `time.NewTimer` + `defer t.Stop()`
+  (or a `select` that drains). Standalone.
+- These two are unrelated (cert-checker vs prober WebRTC) — either a single close-out PR or one each. Prober [25] is
+  WebRTC/state surface → adversarial-review candidate; [22] is small enough for self-review.
+
+**Each is an AGENT finding — re-verify against the code before building** (S66 declined an off-by-one, S67 overturned two
+impls, S68 narrowed RFC-1918, S69 review caught a classify regression, S70 review caught a WarmHysteresis off-by-one + an
+alert scope-key mirror divergence, S71 review was clean). **§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE at
+open** (today 2026-07-16, still locked). **After the audit closes, re-read ROADMAP-V2 §2 / assessment §5 for the next
+highest-leverage roadmap item** (the S62 backlog will be empty).
+
+**⚠ CARRIED operator items (unchanged):** the **[20] audit-read product call** (operator-expected.md — keep reads open
+or gate the whole admin-read surface); AMS trial-expiry doc discrepancy (07-12 vs 07-27); GHCR anon → 401; the S63
+email-STARTTLS behavior note (informational).
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-71.md`)
 
 **Session 2026-07-16 result: D-132 — S70 shipped the anomaly-flag cluster ([16] read-path arming, [17] cooldown off-by-one, [18] scopeJSON escaping). ★ anomaly-flag path now swept; last S62 MEDIUM is [12].**
 

@@ -1,5 +1,16 @@
 # SESSION-71 — planned at S70 close (D-132)
 
+> ## ✅ CLOSED (2026-07-16, D-133) — SHIPPED [12] + [23] + [24]
+> The license cluster shipped (PR #136, prod `v0.4.0-80-gc477660`): [12] `New()` logs a Warn on every fail-open degrade
+> path instead of silently discarding the error; [23] `activate()` validates the tier against the 4 known values
+> (unknown → fail-open to Free / `Refresh` 422; also closes the unlimited-capacity grant) and `CheckProbes`/
+> `CheckBeaconIngest` use positive membership like their 5 siblings; [24] the dev-mode pubkey fallback wraps the real
+> `GenerateKey` error (`err2`) via a new `generateKey` test seam. 6/6 mutants killed; suite 25/25; 3-lens adversarial
+> review found **0** findings (clean). **This clears the last S62 MEDIUM — only 2 LOW remain ([22] cert_expiry, [25]
+> webrtc timer).** **No operator action.** See `decisions.md` D-133 and `sessions/SESSION-72.md` for the final close-out.
+> Everything below is the original pre-session plan (historical).
+
+
 > Written by SESSION-70 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE + `agents/handoffs/S62-AUDIT-FINDINGS.md`** (the 25-finding ledger).
