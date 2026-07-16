@@ -11,7 +11,45 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-62.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-63.md`)
+
+**Session 2026-07-16 result: D-124 — S62 ran a fresh adversarial audit of the un-swept subsystems → 25 confirmed findings (new ledger).**
+
+**★ S62** followed the standing re-scan mandate (the §2.30 S48 audit is COMPLETE) and audited the subsystems S44/S48
+never swept — `alert/evaluator`+`alert/channels`, `license`, `prober`, `anomaly`, and the `api` handler families not
+in S44. Same workflow (7 finders + refute-by-default verifiers, 33 agents) → **26 raw → 25 CONFIRMED (6 HIGH, 15
+MEDIUM, 4 LOW), 1 refuted.** All in **`agents/handoffs/S62-AUDIT-FINDINGS.md`** (full mechanism/scenario/mutation/fix
+per finding). No code shipped — the deliverable is the audit + durable ledger (mirrors S48's ledger creation). Full
+evidence: `decisions.md` D-124, ROADMAP-V2 §2.31.
+
+**★ SESSION-63 = start WORKING the S62 backlog, HIGH-first, one coherent scope per PR** (re-verify each against the
+code → take the verified CORE → mutation-prove → 24/24 → review → PR → CI → merge → prod roll → docs, exactly as the
+S49→S61 arc). **6 HIGH findings; suggested first clusters:**
+- **alert-channels security (FIRST):** [ledger 1] STARTTLS error silently discarded (`channels.go:147`, `_ = err` →
+  return) + [ledger 2] Telegram bot token leaked into `slog.Warn` error logs (`telegram.go:86`). Both HIGH secret/
+  transport-security. Can bundle the MEDIUM injection pair ([ledger 7] SMTP CRLF subject injection, [ledger 8]
+  Telegram HTML injection) since same 2 files. **⚠ [1]/STARTTLS re-verify:** Go's `smtp.PlainAuth.Start()` already
+  refuses a non-TLS non-localhost server (partial mitigation) — the fix (don't discard the STARTTLS error) is still
+  correct but scope the scenario honestly.
+- **reports_wave2 re-fetch:** the two nil-deref panics ([ledger for handleUpdateTenant + handleUpdateReportSchedule],
+  `reports_wave2.go`) + the transient-DB-error-as-404 — one file, one re-fetch pattern (mirrors the S40/D-102 fix).
+- **prober untrusted-input:** MPD unbounded read (`io.LimitReader`) + printf-format injection (`probe_dash.go`) +
+  RTMP CSID map growth (`probe_rtmp.go`).
+
+**⚠ RE-VERIFY caveat — [24] audit-log admin gate (`audit.go`):** may DUPLICATE the S43/D-105 **"reads-open" product
+ruling** (reads are deliberately open to any authenticated token — tightening is a product choice, not a bug).
+Re-verify vs D-105 before building; likely DEFER or escalate as an operator ruling, NOT a silent tightening.
+
+**Each is an AGENT finding — re-verify against the code before building** (take the verified core — NARROWER, BROADER,
+or DEFER, per the S48 arc). **§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE at open** (if ≥ 07-23, the
+`web-e2e`/`csp-e2e` promotion is a quick clean win to bundle).
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
+ledger 07-27) — operator-only. GHCR anon → 401 — operator-only. No new operator action from S62.
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-62.md`)
 
 **Session 2026-07-16 result: D-123 — S61 SHIPPED the last S48-audit finding [8] (opt-in webhook replay protection). ★★ S48 AUDIT COMPLETE.**
 

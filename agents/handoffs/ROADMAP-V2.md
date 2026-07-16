@@ -527,6 +527,23 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.31  Second fresh subsystem audit — un-swept subsystems (25 findings)  [0 shipped — 6 HIGH, 15 MEDIUM, 4 LOW]  ⏳ IN PROGRESS S62→ (D-124, 2026-07-16)
+
+With the §2.30 (S48) audit COMPLETE, SESSION-62 followed the standing re-scan mandate and ran a **fresh adversarial
+audit of the subsystems S44/S48 never swept** — `alert/evaluator`+`alert/channels`, `license`, `prober`, `anomaly`,
+and the `api` handler families not covered by S44. Same workflow (7 finders + refute-by-default verifiers, 33 agents)
+→ **26 raw → 25 CONFIRMED (6 HIGH, 15 MEDIUM, 4 LOW), 1 refuted.** All in `agents/handoffs/S62-AUDIT-FINDINGS.md`
+(full mechanism/scenario/mutation/fix per finding).
+- **6 HIGH:** STARTTLS silent-discard → SMTP cred risk (`channels.go`); Telegram token in error logs (`telegram.go`);
+  unbounded MPD read (`probe_dash.go`); attacker-controlled printf format → GB alloc (`probe_dash.go`); two nil-deref
+  panics in the reports_wave2 update re-fetch paths (`reports_wave2.go`).
+- **Re-verify caveats:** [24] audit-log admin gate may DUPLICATE the S43/D-105 "reads-open" product ruling
+  (re-verify → likely DEFER/escalate); [1]/STARTTLS partially mitigated by Go's `smtp.PlainAuth` non-TLS guard (fix
+  still correct, narrower scenario). Each finding is an AGENT finding — re-verify + take the verified CORE.
+- **Plan:** fixes begin S63, HIGH-first, coherent clusters, one scope per PR (re-verify → mutation-prove → 24/24 →
+  review → PR → CI → merge → prod roll), exactly as the S49→S61 arc worked §2.30. Suggested order: alert-channels
+  security → reports_wave2 re-fetch → prober untrusted-input → the rest. Plan: `sessions/SESSION-63.md`.
+
 ### 2.30  Fresh subsystem adversarial audit (16 findings)  [★ COMPLETE — 14 shipped (ALL 6 HIGH); 2 DEFERRED ([11],[12])]  ✅ DONE S48→S61 (D-110…D-123, 2026-07-16, PR #93…#117)
 
 With the S44 13-bug backlog closed (§2.29) and the §2.7 CI-promotion gate not yet open (07-16 < 07-23), **S48

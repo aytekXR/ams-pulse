@@ -1,4 +1,23 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-123 — SESSION-61)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-124 — SESSION-62)
+
+> **S62 (D-124) needs NO operator action.** With the first subsystem audit fully resolved, this session ran a
+> **second fresh internal audit** of the parts of the codebase not previously reviewed (alerting, notification
+> channels, licensing, the probe engine, anomaly detection, and some API handlers). It found **25 confirmed issues**
+> (6 higher-severity, incl. a couple of security hardening items around SMTP/Telegram notifications and the probe
+> engine, and two crash-on-bad-input API bugs) and recorded them in `agents/handoffs/S62-AUDIT-FINDINGS.md`. **No code
+> changed this session** — these are queued to be fixed one at a time in upcoming sessions, each verified and reviewed,
+> exactly as the previous audit backlog was worked. None needs you.
+>
+> **One item MAY come back to you as a product decision:** the audit flagged that any authenticated user (not just
+> admins) can read the admin audit log. That's actually the **existing, deliberate "reads are open to any
+> authenticated token" design** (an S43 ruling) — I'll re-check it against that decision before changing anything; if
+> it should be tightened, that's your call to make, not a silent change.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
+> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none
+> blocks the autonomous work.
+
+## (previous header — D-123, SESSION-61)
 
 > **S61 (D-123) needs NO operator action — but adds an OPTIONAL security hardening you may want later.** This session
 > closed the **last** open subsystem-audit finding: the AMS webhook endpoint checked each request's signature but had
