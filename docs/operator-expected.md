@@ -4,7 +4,8 @@
 > closed the **last** open subsystem-audit finding: the AMS webhook endpoint checked each request's signature but had
 > no freshness check, so a captured, validly-signed webhook could in principle be **replayed**. Pulse now offers
 > **opt-in** replay protection, **off by default** (so nothing changes and no webhook breaks). Live in prod
-> (`v0.4.0-…`, rolled forward; default-off path smoke-verified). **★ With this, all 16 audit findings are resolved
+> (`v0.4.0-61-g28812db`, rolled forward; default-off path smoke-verified — signed webhook still 200). **★ With this,
+> all 16 audit findings are resolved
 > (14 fixed, 2 deferred as harmless dead/leftover code).**
 >
 > **If — and only if — you want to turn replay protection ON later:** your webhook **signing proxy** (AMS itself does

@@ -527,7 +527,7 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.30  Fresh subsystem adversarial audit (16 findings)  [★ COMPLETE — 14 shipped (ALL 6 HIGH); 2 DEFERRED ([11],[12])]  ✅ DONE S48→S61 (D-110…D-123, 2026-07-16, PR #93…#NNN)
+### 2.30  Fresh subsystem adversarial audit (16 findings)  [★ COMPLETE — 14 shipped (ALL 6 HIGH); 2 DEFERRED ([11],[12])]  ✅ DONE S48→S61 (D-110…D-123, 2026-07-16, PR #93…#117)
 
 With the S44 13-bug backlog closed (§2.29) and the §2.7 CI-promotion gate not yet open (07-16 < 07-23), **S48
 followed the standing re-scan mandate and ran a fresh adversarial audit of the subsystems the S44 audit never

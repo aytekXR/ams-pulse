@@ -42,9 +42,9 @@ dead/vestigial; S61 [8] shipped opt-in after product-viability verification).
 
 ## ⛔ At open — verify, do not assume (D-095)
 
-- `git log --oneline origin/main -4` — S61 (D-123, PR #NNN — code + docs) should be on `origin/main`.
-- Prod should print **`v0.4.0-59-g…`** (rolled forward at S61 for the webhook change; the exact stamp is in D-123 /
-  the S61 close). `/healthz` all-ok, `ams_env_configured:true`. **Signed-webhook smoke should still be 200** (the
+- `git log --oneline origin/main -4` — S61 (D-123, PR #117 — code + docs) should be on `origin/main`.
+- Prod should print **`v0.4.0-61-g28812db`** (rolled forward at S61 for the webhook change; rollback image tag
+  `pre-d123`). `/healthz` all-ok, `ams_env_configured:true`. **Signed-webhook smoke should still be 200** (the
   replay check is default-off).
 - **§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE.**
 - Operator queue: GHCR anon → 401; AMS trial-expiry doc discrepancy (07-12 vs 07-27) — operator-only.
