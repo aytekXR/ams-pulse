@@ -163,7 +163,9 @@ type anomalyEvalInfo struct {
 //
 //	effStddev = max(stddev, max(StddevRelEpsilon*|mean|, StddevAbsEpsilon))
 //
-// A result with ok=true means z > effectiveSigma (condition met for fire() path).
+// A result with ok=true means z >= effectiveSigma, matching the detect-path
+// boundary in anomaly.go (D-109 — the eval path used strict > and silently
+// disagreed with detect on a z exactly at the sigma threshold).
 // The anomalyInfo field carries baseline mean and sigma for the notification payload.
 func (e *Evaluator) evalAnomalyMetric(ctx context.Context, snap *domain.LiveSnapshot, scope domain.AlertScope, rule meta.AlertRuleRow) []evalResult {
 	// Obtain the reader under the lock.
@@ -247,7 +249,7 @@ func (e *Evaluator) evalAnomalyStreams(ctx context.Context, snap *domain.LiveSna
 
 		effStddev := math.Max(baseline.Stddev, math.Max(anomaly.StddevRelEpsilon*math.Abs(baseline.Mean), anomaly.StddevAbsEpsilon))
 		z := math.Abs(val-baseline.Mean) / effStddev
-		ok := z > effectiveSigma
+		ok := z >= effectiveSigma
 
 		results = append(results, evalResult{
 			groupKey: sid,
@@ -322,7 +324,7 @@ func (e *Evaluator) evalAnomalyNodes(ctx context.Context, snap *domain.LiveSnaps
 
 		effStddev := math.Max(baseline.Stddev, math.Max(anomaly.StddevRelEpsilon*math.Abs(baseline.Mean), anomaly.StddevAbsEpsilon))
 		z := math.Abs(val-baseline.Mean) / effStddev
-		ok := z > effectiveSigma
+		ok := z >= effectiveSigma
 
 		results = append(results, evalResult{
 			groupKey: nodeID,
