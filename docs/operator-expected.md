@@ -1,4 +1,27 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-124 — SESSION-62)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-125 — SESSION-63)
+
+> **S63 (D-125) needs NO action to keep things running — but there is ONE email-alert behavior change to be aware of.**
+> This session started fixing the S62 audit findings, beginning with hardening the alert **notification channels**:
+> email now refuses to send if you asked for STARTTLS (encryption) but the upgrade fails, the Telegram bot token no
+> longer leaks into error logs, and a couple of injection gaps (email Subject header, Telegram link) are closed. Live
+> in prod (`v0.4.0-64-g5172150`, rolled forward; smoke green).
+>
+> **⚠ Email STARTTLS is now "mandatory" instead of "best-effort."** Previously, if you configured an email alert
+> channel with STARTTLS on but your SMTP server didn't actually support TLS, Pulse would **silently send the email
+> (and your SMTP username/password) in plaintext.** That was a security bug. Now, if STARTTLS is on and the upgrade
+> fails, the send **fails** (and is recorded as a delivery failure) rather than falling back to plaintext. **If you
+> intentionally use a plaintext local relay,** set that channel's **STARTTLS to false** — then it sends plaintext with
+> no error, as before. **If you rely on TLS,** nothing changes as long as your server supports it. No action needed
+> unless you were (unknowingly) depending on the silent plaintext fallback.
+>
+> The remaining 21 audit findings are queued for upcoming sessions, worked one at a time, each verified and reviewed.
+> **The audit-log access-model item** (any authenticated user can read the admin audit log) is still pending re-check
+> against the existing S43 "reads-open" ruling before any change — that one may come back to you as a product call.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
+> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you.
+
+## (previous header — D-124, SESSION-62)
 
 > **S62 (D-124) needs NO operator action.** With the first subsystem audit fully resolved, this session ran a
 > **second fresh internal audit** of the parts of the codebase not previously reviewed (alerting, notification

@@ -7937,3 +7937,50 @@ alert-evaluator, anomaly, license, prober-core, and api clusters.
 **Docs at close:** D-124 (this block); `S62-AUDIT-FINDINGS.md` created (25 findings); ROADMAP-V2 §2.31 (new audit
 tracker); RESUME-PROMPT ▶ START HERE → SESSION-63; `operator-expected.md` refreshed (no action); `sessions/SESSION-62.md`
 CLOSED; `sessions/SESSION-63.md` written. (No CHANGELOG entry — no code change.)
+
+## D-125 — S63 (2026-07-16): SHIPPED — alert-channels security cluster (S62 findings [1]/[2]/[10]/[11])
+
+**Context.** SESSION-63 opened the S62 backlog HIGH-first with the alert-channels security cluster (2 HIGH + 2
+MEDIUM/LOW, all in `server/internal/alert/channels/{channels,telegram}.go`). Re-verified each against the code:
+- **[1] HIGH STARTTLS silent-discard** — `_ = err` after `StartTLS` continued on a plaintext socket → body + SMTP AUTH
+  creds in cleartext. **Fix:** fail closed (return the error). Verifier caveat honored: Go's `smtp.PlainAuth.Start`
+  already refuses a non-TLS non-localhost server, so the residual real exposure was a localhost relay / no-auth body.
+- **[2] HIGH Telegram token leak** — `client.Do` returns a `*url.Error` embedding `…/bot<token>/sendMessage`, so
+  returning it leaked the token to logs. **Fix:** `t.redact()` strips the token from returned errors.
+- **[10] MEDIUM SMTP Subject CRLF injection** — the publisher-controlled `stream_id` flows into the alert title →
+  Subject header with no CR/LF stripping. **Fix:** extracted a pure `buildEmailMessage` that sanitizes header values.
+- **[11] DOWNGRADED to LOW** — `dashboard_url` unescaped in `<a href>`. Re-verify found it is ONLY ever the operator's
+  own `baseURL+"/alerts"` (test-fire path), NOT attacker-controlled → no live exploit. Fixed anyway as
+  defense-in-depth (`escapeHTMLAttr` escapes `"`). Honest severity, per the take-the-verified-CORE discipline.
+
+**Verification.** Full Go suite **24/24**; gofmt/vet clean. **All four mutation-proven** (revert each → its test
+reddens; the token mutation prints the leaked token). New `channels_security_test.go` includes a fake SMTP server that
+454s STARTTLS but completes the happy path, so the fail-closed mutation makes `Send` *silently succeed on plaintext*
+(non-vacuous).
+
+**Adversarial review (multi-lens, this was a genuine auth/transport-security change).** 2 lenses → verify pass, 6
+agents. **2 CONFIRMED (both `major`), 2 refuted, 0 blockers.** Both confirmed were about STARTTLS *config semantics*,
+not defects in the fix: (a) the `EmailConfig.STARTTLS` doc comment lied ("default true for port 587" — never applied);
+(b) the fix changes `STARTTLS=true` from opportunistic to **mandatory**, so a transient TLS failure now aborts
+delivery (visibly — a `delivery_failure` row — not silently). **Resolution: keep fail-closed** (it is exactly what the
+audit demanded; the operator already has both knobs — `STARTTLS=false` = intentional plaintext, `true` = mandatory
+TLS; re-adding an "opportunistic fallback" opt-out would just wrap the vulnerability in a flag) and address both via
+**documentation** — corrected the doc comment + a CHANGELOG behavior-change note + an operator-expected note. Refuted:
+`javascript:` URI in the href (dashboard_url is operator-derived + Telegram sanitizes href schemes server-side) and
+the redact error-chain drop (no caller does `errors.Is` on these).
+
+**Prod.** Server source changed → rolled prod forward to **`v0.4.0-64-g5172150`** (was `-61-g28812db`; PR #120;
+rollback tag `pre-d125`). Smoke green: healthz 200, version ≠ dev, signed webhook 200, limits 512M/0.5cpu, logs clean.
+
+**Operator action: NONE required, but ONE behavior-change to be aware of** — if an operator enabled email alerts with
+`STARTTLS=true` against a server that does NOT actually support TLS (relying on the old silent plaintext fallback),
+alert emails will now FAIL (fail-closed) rather than send in cleartext. Fix: set `STARTTLS=false` for an intentional
+plaintext relay, or fix the SMTP server's TLS. Recorded in `operator-expected.md`.
+
+**★ S62 backlog: 4 shipped ([1],[2],[10],[11]); 21 remain (4 HIGH, 13 MEDIUM, 4 LOW).** SESSION-64 continues HIGH-first
+— suggested next: the **reports_wave2 re-fetch cluster** (the two nil-deref panics + the transient-DB-error-as-404,
+one file/one pattern), then **prober untrusted-input** (MPD LimitReader + printf-format + RTMP CSID map).
+
+**Docs at close:** D-125 SHIPPED (this block); CHANGELOG Security; `S62-AUDIT-FINDINGS.md` [1]/[2]/[10]/[11] ✅ DONE;
+ROADMAP-V2 §2.31 (4 shipped); RESUME-PROMPT ▶ START HERE → SESSION-64; `operator-expected.md` refreshed (STARTTLS
+behavior note); `sessions/SESSION-63.md` CLOSED; `sessions/SESSION-64.md` written.

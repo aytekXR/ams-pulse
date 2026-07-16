@@ -11,7 +11,47 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-63.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-64.md`)
+
+**Session 2026-07-16 result: D-125 — S63 shipped the alert-channels security cluster (S62 findings [1]/[2]/[10]/[11]).**
+
+**★ S63** opened the S62 backlog HIGH-first with the **alert-channels security cluster** in
+`server/internal/alert/channels/`: [1] email STARTTLS now **fails closed** (was silent plaintext fallback of the body
++ SMTP AUTH creds); [2] Telegram bot token **redacted** from returned/logged errors (`client.Do`'s `*url.Error`
+embedded the token-bearing URL); [10] SMTP Subject **CR/LF-sanitized** (publisher `stream_id` → alert title → header
+injection); [11] **DOWNGRADED to LOW** on re-verify (dashboard_url is operator-derived, no live exploit) + href-escaped
+anyway. Full suite 24/24; **mutation-proven ×4** (fake SMTP server 454s STARTTLS but completes the happy path);
+**2-lens adversarial review** → 2 major (both STARTTLS *config semantics* — kept fail-closed, resolved via docs;
+**behavior change: `STARTTLS=true` is now mandatory TLS**) + 2 refuted. **Prod `v0.4.0-64-g5172150`.** Full evidence:
+`decisions.md` D-125.
+
+**⚠ NEW operator-relevant note (not blocking):** the STARTTLS fail-closed change means an operator who enabled email
+alerts with `STARTTLS=true` against a server that does NOT support TLS will now get **delivery failures** (visible, a
+`delivery_failure` row) instead of silent plaintext. Fix: `STARTTLS=false` for an intentional plaintext relay, or fix
+the SMTP TLS. In `operator-expected.md`.
+
+**★ SESSION-64 = continue the S62 backlog HIGH-first: 21 remain (4 HIGH, 13 MEDIUM, 4 LOW)** in
+`S62-AUDIT-FINDINGS.md`. **Suggested next scope: the reports_wave2 re-fetch cluster** (one file, one pattern — mirrors
+the S40/D-102 fix):
+- **[HIGH]** `reports_wave2.go` `handleUpdateTenant` — nil-deref panic in the post-update re-fetch (a `nil` row from
+  the re-fetch is dereferenced → crash the request). **[HIGH]** `handleUpdateReportSchedule` — the same nil-deref
+  panic in its re-fetch. **[MEDIUM]** a transient DB error in the tenant/schedule fetch paths is returned as
+  `404 NOT_FOUND` (masks a real error as "gone"). Re-verify the actual re-fetch code; guard the nil + distinguish
+  not-found from error. Mutation: a fake store returning `(nil, nil)` / a transient error → assert no panic / correct
+  status.
+- **Then:** prober untrusted-input ([HIGH] MPD `io.LimitReader` + [HIGH] printf-format injection + [MEDIUM] RTMP CSID
+  map cap), alert-evaluator, anomaly, license, prober-core, api. **⚠ [24] audit-log admin gate — RE-VERIFY vs D-105
+  FIRST** (likely DEFER as the deliberate "reads-open" model or escalate as an operator ruling).
+
+**Each is an AGENT finding — re-verify against the code before building** (take the verified core; S63 downgraded [11],
+narrowed [1]'s scenario). **§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE at open.**
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
+ledger 07-27) — operator-only. GHCR anon → 401 — operator-only. No blocking operator action from S63.
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-63.md`)
 
 **Session 2026-07-16 result: D-124 — S62 ran a fresh adversarial audit of the un-swept subsystems → 25 confirmed findings (new ledger).**
 
