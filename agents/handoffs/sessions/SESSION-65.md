@@ -1,3 +1,17 @@
+> ## ✅ SESSION-65 CLOSED (2026-07-16, D-127) — PR #124 merged `2a122fd`, prod `v0.4.0-68-g2a122fd` (smoke green)
+> **Shipped:** prober DASH untrusted-input cluster ([3]+[4], the last 2 S62 HIGH) — [3] MPD manifest body now
+> `io.LimitReader`-capped (16 MiB) before xml.Decode (segment body was already capped; manifest was the gap); [4]
+> `$Number%<spec>$` printf format positive-allowlisted (`^%0?\d{0,3}d$`) so a hostile `%999999999d` degrades to plain
+> decimal. **A 4-lens adversarial review (10 agents, refute-by-default) found a sibling sink my fix missed — now also
+> fixed:** `$RepresentationID$` `strings.ReplaceAll` was unbounded (count×len(id) → TB-scale within the 16 MiB body
+> cap), now bounded by `maxExpandedTemplateBytes` (64 KiB). Review also widened the width bound 2→3 digits (spec-legal
+> %100d) and documented the LOW large-archive-manifest tradeoff honestly; 1 finding refuted correctly. New
+> `probe_dash_s65_test.go` (mutation-proven ×4). Full suite 24/24; gofmt + vet clean. **Ledger:** [3]/[4] ✅ DONE;
+> **★ ALL 6 S62 HIGH now shipped; 16 remain (0 HIGH, 12 MEDIUM, 4 LOW).** **No operator action.** **Next (SESSION-66):**
+> prober RTMP DoS ([13] MEDIUM — unbounded CSID state map + off-by-one guard, `probe_rtmp.go`) — see `sessions/SESSION-66.md`.
+> **★ Lesson reinforced:** the adversarial workflow earned its cost — the RepresentationID sink would have left the
+> prober OOM-able despite the [3]/[4] fixes. Security-surface changes get the workflow, not self-review.
+
 # SESSION-65 — planned at S64 close (D-126)
 
 > Written by SESSION-64 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS

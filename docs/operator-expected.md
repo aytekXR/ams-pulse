@@ -1,4 +1,20 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-126 — SESSION-64)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-127 — SESSION-65)
+
+> **S65 (D-127) needs NO operator action.** This session hardened the synthetic **DASH probe** against hostile
+> monitored servers: a crafted manifest could previously make the prober allocate gigabytes and crash. Three
+> memory-exhaustion paths are closed (manifest size cap, segment-number format allowlist, representation-id expansion
+> cap). All internal hardening — **no configuration or behavior change you need to act on.** Live in prod
+> (`v0.4.0-68-g2a122fd`, rolled forward; smoke green). **This clears the last of the S62 audit's HIGH findings** — the
+> remaining 16 are MEDIUM/LOW, worked one at a time in upcoming sessions.
+>
+> **The audit-log access-model item** (any authenticated user can read the admin audit log) is still pending re-check
+> against the existing S43 "reads-open" ruling before any change — that one may come back to you as a product call.
+> The S63 email-STARTTLS behavior note below still applies.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs 07-27;
+> see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you.
+
+## (previous header — D-126, SESSION-64)
 
 > **S64 (D-126) needs NO operator action.** This session fixed three internal robustness bugs in the report-schedule
 > and tenant admin endpoints: an update handler could crash (and report a false failure) if the row it was reading back

@@ -527,7 +527,7 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.31  Second fresh subsystem audit — un-swept subsystems (25 findings)  [7 shipped — 18 remain (2 HIGH, 12 MEDIUM, 4 LOW)]  ⏳ IN PROGRESS S62→S64 (D-124…D-126, 2026-07-16, PR #119…#122)
+### 2.31  Second fresh subsystem audit — un-swept subsystems (25 findings)  [9 shipped — 16 remain (0 HIGH, 12 MEDIUM, 4 LOW); ★ ALL 6 HIGH shipped]  ⏳ IN PROGRESS S62→S65 (D-124…D-127, 2026-07-16, PR #119…#124)
 
 With the §2.30 (S48) audit COMPLETE, SESSION-62 followed the standing re-scan mandate and ran a **fresh adversarial
 audit of the subsystems S44/S48 never swept** — `alert/evaluator`+`alert/channels`, `license`, `prober`, `anomaly`,
@@ -554,11 +554,19 @@ and the `api` handler families not covered by S44. Same workflow (7 finders + re
   [19] MEDIUM — SPLIT transient-error(→500) from missing-row(→404) in the three existence checks. Full suite 24/24;
   [19] deterministically mutation-proven via a pre-canceled-ctx internal test; self-review (no auth/contract surface).
   Prod `v0.4.0-66-gfede961`.
-- ⏳ **18 remain (2 HIGH, 12 MEDIUM, 4 LOW)** → S65+. Suggested order: **prober untrusted-input** (the 2 remaining
-  HIGH — [3] MPD unbounded read → `io.LimitReader`, [4] attacker-controlled printf format → GB alloc; possibly +
-  RTMP CSID map cap MEDIUM) → alert-evaluator → anomaly → license → prober-core → api. **⚠ [20] audit-log admin gate:
-  re-verify vs D-105 "reads-open" ruling first (likely DEFER).** Fixes continue HIGH-first, one scope per PR. Plan:
-  `sessions/SESSION-65.md`.
+- ✅ **S65 (D-127, PR #124)** — shipped the **prober DASH untrusted-input cluster** (findings [3]/[4], the last 2
+  HIGH). [3] MPD manifest body now `io.LimitReader`-capped (16 MiB) before xml.Decode (segment body was already
+  capped; manifest was the gap); [4] `$Number%<spec>$` printf format now positive-allowlisted (`^%0?\d{0,3}d$`) so a
+  hostile `%999999999d` degrades to plain decimal. **A 4-lens adversarial review found — and this PR also fixed — a
+  sibling sink:** `$RepresentationID$` `strings.ReplaceAll` was itself unbounded (TB-scale within the body cap), now
+  bounded by `maxExpandedTemplateBytes` (64 KiB). Full suite 24/24; mutation-proven ×4; 1 review finding refuted. Prod
+  `v0.4.0-68-g2a122fd`. **★ ALL 6 S62 HIGH now shipped.**
+- ⏳ **16 remain (0 HIGH, 12 MEDIUM, 4 LOW)** → S66+. Suggested order: **prober RTMP DoS** ([13] MEDIUM `probe_rtmp.go`
+  — unbounded CSID state map, 65,536 × 64 KB = 4 GB, + the off-by-one `>` vs `>=` guard; same "hostile probed server
+  → OOM" theme, completes the prober subsystem) → alert-evaluator ([7] D-088 presence guards, stream_offline compare,
+  license_expiry stuck-firing) → anomaly ([18] scopeJSON escaping, hysteresis) → license → api. **⚠ [20] audit-log
+  admin gate: re-verify vs D-105 "reads-open" ruling first (likely DEFER).** One coherent scope per PR. Plan:
+  `sessions/SESSION-66.md`.
 
 ### 2.30  Fresh subsystem adversarial audit (16 findings)  [★ COMPLETE — 14 shipped (ALL 6 HIGH); 2 DEFERRED ([11],[12])]  ✅ DONE S48→S61 (D-110…D-123, 2026-07-16, PR #93…#117)
 
