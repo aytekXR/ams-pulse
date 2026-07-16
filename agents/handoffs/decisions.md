@@ -8141,3 +8141,91 @@ tasked it with hunting OTHER unbounded allocations (S65's review found a missed 
 [13] ✅ DONE; ROADMAP-V2 §2.31 (10 shipped / 15 remain); RESUME-PROMPT ▶ START HERE → SESSION-67;
 `operator-expected.md` refreshed (no operator action — internal hardening); `sessions/SESSION-66.md` CLOSED;
 `sessions/SESSION-67.md` written (alert-evaluator cluster). Prod rolled forward + smoke green.
+
+## D-129 — S67 (2026-07-16): SHIPPED — alert-evaluator correctness cluster (S62 [7]+[8]+[9] MEDIUM)
+
+**Code:** PR #128 `b43a912` (merged, 15/15 checks + CodeQL). **Prod rolled forward to `v0.4.0-72-gb43a912`** (rollback
+anchor `pulse-prod-pulse:pre-d129` = `v0.4.0-70-g5a070cc`); smoke green (version stamp confirmed, healthz 200, signed
+webhook 200, limits 512M/0.5cpu, logs clean 0 errors).
+
+**S67 OPEN facts (recorded early per protocol):** concurrent-session check CLEAN — HEAD == origin/main == `c6f97e8`
+(D-128 close-docs PR #127). Prod `v0.4.0-70-g5a070cc`. Tree carries only the known `Caddyfile.prod` delta (do-not-revert,
+D-082/D-096). Session branch `s67-d129`. Full suite baseline green pre-change.
+
+**Scope — three independent correctness bugs in the alert evaluator's metric evaluators** (`server/internal/alert/`),
+all verified against the code via codegraph at open. Each is a state-machine or comparison-semantics gap, not
+untrusted-input hardening.
+
+- **[7] MEDIUM — `evalNodeMetric` missing the D-088 presence guards (`evaluator.go`).** The `node_cpu`/`node_mem`/
+  `node_disk` threshold evaluator read `n.CPUPCT`/`MemPCT`/`DiskPCT` unconditionally, unlike its anomaly sibling
+  `evalAnomalyNodes` (wave3.go), which skips a node whose field was not reported (`CPUPCTReported=false`). A standalone
+  AMS 3.x node never reports cpu/mem/disk → the field defaults to `0` → a `node_cpu lt 50`-type rule fires a false
+  alert on the phantom 0. **Fix (verified CORE, refined post-review):** guard on the presence flag, but — unlike
+  `evalAnomalyNodes`, which bare-`continue`s — emit `evalResult{value:0, ok:false}` for the unreported field instead
+  of skipping the node. The adversarial review found that a bare skip introduces a *stuck-firing* regression: a node
+  that fired while reporting cpu (e.g. 95%) then stops reporting it (an AMS 5.x→3.x downgrade; `onNodeStats` refreshes
+  `LastSeenAt` so the node is never evicted) would be skipped forever → `processEvaluation` (no stale-state sweep)
+  never resolves it. Emitting `ok=false` still prevents the phantom-0 false-fire AND lets a firing alert resolve —
+  and it exactly preserves the *pre-existing* prod behavior for `gt`-rules (which already resolved via
+  `compare(0,"gt",90)=false`), so [7] becomes the minimal change from current prod: only the `lt`-rule false-fire
+  case flips. (Anomaly rules keep `continue` — they need a baseline+samples, so skipping is right there; the divergence
+  is documented at the guard.)
+- **[8] MEDIUM — `evalStreamOffline` hardcoded value + bypassed `compare()` (`evaluator.go`).** Both branches emitted
+  `evalResult{value: 0, ok: !active}` — so (a) a *firing* stream_offline alert reported `value=0` in the notification
+  (contradicting the `eq 1` threshold a webhook consumer sees) and (b) the rule's operator/threshold were ignored
+  entirely (every sibling evaluator — node_down, node_degraded, qoe, viewer_drop, generic — uses `compare()`). **Fix
+  (verified CORE):** emit a binary metric (`value=1.0` offline / `0.0` online) and `ok: compare(val, rule.Operator,
+  rule.Threshold)`. Offline *detection* is unchanged (scoped = absent from snapshot; wildcard = present-but-inactive).
+  **Regression bound (verified + review-confirmed, NO code change — documented behavior change):** the API
+  (`alertRuleFromAPI`, server.go) does NOT constrain operator/threshold per-metric, so a hand-crafted non-standard
+  operator (`lt 1` / `lte 0` / `eq 0`) now *inverts* (fires online, silent offline) — because the fix honors the
+  configured predicate, which is correct for a threshold evaluator (the old code's operator-blindness WAS the [8]
+  bug). This is **unreachable via the UI** (the web `AlertRuleForm` METRICS list omits `stream_offline` entirely) and
+  only via raw REST with a semantically nonsensical config. The documented/default/seeded rule is `eq 1`
+  (DefaultRulePack, wave2.go), which fires **identically** old-vs-new (offline→`compare(1,"eq",1)`=true; online→false)
+  with no spurious resolve/fire on deploy. Deploy safety was verified by GET-ing prod's live alert rules (side-effect-
+  free) → no non-canonical `stream_offline` rule exists, so this prod rollout is behavior-neutral. Documented in
+  CHANGELOG + operator-expected for operators who script rules via the API.
+- **[9] MEDIUM — `evalLicenseExpiry` never resolves a perpetual-transition (`license_expiry.go`).** For a perpetual /
+  no-key licence (checker `ok=false`) it `return nil`. But `processEvaluation` has NO stale-state sweep — the
+  firing→resolved transition only runs when it is *called* with `conditionMet=false` for that groupKey. Returning nil
+  means a previously-firing near-expiry alert (e.g. 10 days left) never sees the "license" groupKey again after the
+  licence is renewed to perpetual → it stays `firing` forever. **Fix (verified CORE, refined post-review):** return
+  `[]evalResult{{groupKey: "license", value: perpetualLicenseDays, ok: false}}` (groupKey matches the firing key
+  exactly; `ok=false` is terminal — perpetual can only *resolve*, never fire, honoring the "nothing to warn about"
+  invariant). The value is a bounded `const perpetualLicenseDays = 36500` (~100 years), **not** `math.MaxFloat64`:
+  the adversarial review found the OpenAPI alert `value` field is `format: float` (float32, max ~3.4e38), so
+  `math.MaxFloat64` (~1.8e308) overflows to `+Inf` on a strict float32 client and renders as `"1.8e+308"` in the
+  history-table UI (`AlertsPage.tsx` `String(entry.value)`). Since `ok=false` (not `compare`) is what prevents firing,
+  the value is purely the informational number persisted/delivered on the resolve — a bounded, readable
+  "effectively never" is all it needs. A *fresh* perpetual licence still never fires (existing
+  `TestLicenseExpiry_Perpetual_NoFire` stays green).
+
+**Tests (`s67_d129_test.go`, mutation-proven — 10 new + existing license suite):** driven through the real
+`TickOnce`+`SetNotifySink` harness. [7]: cpu/mem/disk unreported → no fire (3), reported cpu=95 `gt 90` → fires
+(positive control), **fire-then-field-disappears → resolves** (the review-regression test). [8]: scoped-absent +
+wildcard-inactive fire with `value==1.0` (2), scoped-present → no fire, offline under `eq 0` → no fire (the
+discriminating compare-respected test). [9]: fire at 10 days then swap to perpetual → second notification is
+`resolved` AND its `value ≤ MaxFloat32` (the float32-contract assertion). **Mutation proof (6 mutants on a throwaway
+`/mut` copy, all killed):** force `reported=true` reddens the 3 [7]-unreported tests (control + resolve pass); guard
+`skip`-instead-of-`ok:false` reddens ONLY the field-disappears resolve test; `val 1.0→0.0` reddens both value tests +
+compare-respected; wildcard `compare→true` (isolated) reddens ONLY compare-respected; sentinel `36500→3.5e38`
+(float32-overflow) reddens ONLY the resolve value-bound assertion; license `return nil` reddens ONLY the resolve test
+while Perpetual_NoFire stays green. Full suite 24/24; gofmt clean.
+
+**Review:** subtle firing/resolve state-machine semantics → ran the multi-lens adversarial review workflow (4 lenses:
+regression / semantic-intent / edge-case / blast-radius → refute-by-default verifiers; 11 agents, 6 confirmed / 1
+refuted). It caught **two real defects in the first-pass implementation, both fixed in this PR before merge:**
+(a) the [7] bare-`continue` guard introduced a stuck-firing regression (fixed → emit `ok=false`, see [7] above);
+(b) the [9] `math.MaxFloat64` value overflowed the OpenAPI `format:float` contract and rendered as garbage in the
+history UI (fixed → bounded `perpetualLicenseDays` sentinel, see [9] above). It also confirmed the [8] non-canonical-
+operator inversion (accepted as the intended, UI-unreachable behavior change — documented, prod verified clean) and
+refuted 1 (a stale doc comment whose failure scenario was hypothetical — the comment was tidied anyway). Strong
+evidence the adversarial workflow belongs on state-machine/semantics changes, not just untrusted-input parsing.
+
+**Docs at close:** D-129 SHIPPED (this block, prod `v0.4.0-72-gb43a912`); CHANGELOG Fixed; `S62-AUDIT-FINDINGS.md`
+[7]/[8]/[9] ✅ DONE; ROADMAP-V2 §2.31 (13 shipped / 12 remain — 0 HIGH, 8 MEDIUM, 4 LOW); RESUME-PROMPT ▶ START HERE →
+SESSION-68; `operator-expected.md` refreshed (no operator action — internal correctness; stream_offline operator
+behavior-change documented for API-scripters, prod verified clean); `sessions/SESSION-67.md` CLOSED;
+`sessions/SESSION-68.md` written (security cluster: [20] audit-log admin gate re-verify vs D-105 + [21] probe-URL SSRF).
+Prod rolled forward + smoke green. **No operator action required.**

@@ -1,5 +1,10 @@
 # SESSION-67 — planned at S66 close (D-128)
 
+> ✅ **CLOSED 2026-07-16 — SHIPPED as D-129** (PR #128, prod `v0.4.0-72-gb43a912`). All three findings [7]/[8]/[9]
+> implemented, mutation-proven (6 mutants), full suite 24/24, 4-lens adversarial review (11 agents; caught + fixed a
+> [7] stuck-firing regression and a [9] float32-overflow before merge). Smoke green; no operator action. Next:
+> SESSION-68 (security cluster [20]+[21]). See `decisions.md` D-129 for full evidence.
+
 > Written by SESSION-66 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE + `agents/handoffs/S62-AUDIT-FINDINGS.md`** (the 25-finding ledger).

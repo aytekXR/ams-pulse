@@ -1,4 +1,25 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-128 — SESSION-66)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-129 — SESSION-67)
+
+> **S67 (D-129) needs NO operator action.** This session fixed three internal correctness bugs in the alert evaluator:
+> (1) node CPU/mem/disk threshold rules no longer false-alarm on a node that doesn't report that metric (standalone
+> AMS 3.x), and now correctly clear if a node stops reporting it; (2) a `stream_offline` alert now shows the right value
+> and honors its rule's operator/threshold; (3) a licence-expiry alert now clears when you renew to a perpetual licence
+> (it previously stayed stuck "firing"). All internal — **no configuration or API change you need to act on.** Live in
+> prod (`v0.4.0-72-gb43a912`, rolled forward; smoke green: healthz 200, signed webhook 200, limits 512M/0.5cpu, clean logs).
+>
+> **One behavior note for anyone scripting alert rules via the raw API** (not the UI): a `stream_offline` rule now
+> evaluates its operator/threshold like every other metric — use `eq 1` (or `gt 0`) to fire when a stream goes offline.
+> The default seeded rule is `eq 1` and is unaffected, and I verified your prod instance carries only that canonical
+> rule — so this rollout changed no live behavior. The UI never exposed stream_offline's operator, so UI-made rules are fine.
+>
+> **The audit-log access-model item** (any authenticated user can read the admin audit log) is next up — SESSION-68 will
+> re-check it against the S43 "reads-open" ruling before any change, and it may come back to you as a product call. The
+> S63 email-STARTTLS behavior note below still applies.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs 07-27;
+> see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you.
+
+## (previous header — D-128, SESSION-66)
 
 > **S66 (D-128) needs NO operator action.** This session hardened the synthetic **RTMP probe** against hostile
 > monitored servers: a malicious server could previously make the prober buffer gigabytes of chunk data (or churn

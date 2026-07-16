@@ -53,6 +53,22 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **Alert evaluator correctness — three metric-evaluator fixes (D-129).** From the
+  S62 subsystem audit: (1) **node CPU/mem/disk threshold rules no longer false-fire
+  on nodes that don't report that field** — a standalone AMS 3.x node omits cpu/mem/disk,
+  which was read as a real `0` and tripped `lt`-style thresholds; the evaluator now skips
+  the comparison for an unreported field (and still resolves a firing alert if a node
+  stops reporting). (2) **`stream_offline` alerts now carry the correct value and honor
+  the rule's operator/threshold** — the notification `value` was hardcoded to `0` even
+  when firing (now `1.0` offline / `0.0` online) and the configured operator/threshold
+  were ignored. **Behavior change:** a `stream_offline` rule now evaluates its operator
+  like every other metric; the default/seeded `eq 1` rule is unaffected, but a hand-crafted
+  non-canonical operator (e.g. `lt 1`) that previously fired-on-offline-regardless now
+  follows its literal predicate — use `eq 1` (or `gt 0`) to fire when a stream goes offline.
+  (3) **a `license_expiry` alert now resolves when the licence is renewed to perpetual** —
+  it previously stayed stuck in `firing` forever. (Found by the S62 subsystem audit,
+  findings [7]/[8]/[9]; an adversarial review of the fix caught and corrected a stuck-firing
+  regression and a float32-range value overflow before merge.)
 - **Report-schedule and tenant update/read endpoints no longer misreport a
   transient database error, or crash on a concurrent delete (D-126).** Three
   robustness fixes from the S62 subsystem audit, all in the admin/reports handlers:

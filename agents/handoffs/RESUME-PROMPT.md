@@ -11,7 +11,49 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-67.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-68.md`)
+
+**Session 2026-07-16 result: D-129 — S67 shipped the alert-evaluator correctness cluster (S62 findings [7]+[8]+[9]). ★ Alert-evaluator subsystem swept.**
+
+**★ S67** shipped three correctness fixes in `server/internal/alert/` (PR #128, prod `v0.4.0-72-gb43a912`):
+- **[7]** `evalNodeMetric` now guards on the D-088 presence flags — but emits `ok=false` (NOT a bare `continue`) so a
+  node that stops reporting a field RESOLVES a firing alert instead of sticking. The 4-lens adversarial review caught
+  the bare-continue stuck-firing regression (AMS 5.x→3.x downgrade) and it was fixed before merge.
+- **[8]** `evalStreamOffline` now emits a binary value (1.0 offline / 0.0 online) and honors the rule
+  operator/threshold via `compare`. **Behavior change (documented):** stream_offline honors its operator; the default
+  seeded `eq 1` is unaffected; the UI omits stream_offline; prod GET-verified to carry only `eq 1` → behavior-neutral.
+- **[9]** `evalLicenseExpiry` now emits an `ok=false` result (bounded float32-safe `perpetualLicenseDays=36500`, NOT
+  `math.MaxFloat64` — review caught the OpenAPI `format:float` overflow + history-UI garbage) for a perpetual licence,
+  so a previously-firing near-expiry alert resolves.
+10 new tests, mutation-proven (6 mutants); full suite 24/24; adversarial review 11 agents (6 confirmed → 2 first-pass
+defects fixed before merge / 1 refuted). Evidence: `decisions.md` D-129.
+
+**No operator action from S67** (internal correctness; one stream_offline operator behavior-note for API-scripters,
+prod verified behavior-neutral).
+
+**★ SESSION-68 = continue the S62 backlog: 12 remain (0 HIGH, 8 MEDIUM, 4 LOW)** in `S62-AUDIT-FINDINGS.md`.
+**Suggested next scope: the two SECURITY MEDIUMs — [20] + [21]** (prioritize security over the remaining correctness
+edge-cases):
+- **⚠ [20] `GET /admin/audit-log` — viewer-scoped token can read the full audit log (missing admin gate).**
+  **RE-VERIFY vs D-105 FIRST** — D-105 shipped the audit-log UI ledger and may already gate it by admin scope; if so,
+  DEFER [20] with a documented reason. If still open, it may be a product call (the S43 "reads-open" ruling) → surface
+  to the operator rather than unilaterally tightening.
+- **[21] `server/internal/prober` — probe URL accepted without scheme/host validation → stored-SSRF.** The prober
+  fetches an operator-stored URL; without validation it can be pointed at internal addresses (169.254.169.254,
+  localhost). Untrusted-outbound → strong adversarial-review candidate. Verify current validation (if any) at open.
+- **Then:** prober HLS ([14] zero-duration EXTINF, [15] protocol-relative URI), flags hysteresis ([16]/[17]),
+  anomaly ([18] scopeJSON escaping), license ([12]/[23]/[24]), plus LOW [22]/[25].
+
+**Each is an AGENT finding — re-verify against the code before building** (take the verified core; for [20] the
+re-verify may DEFER). **§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE at open.**
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
+ledger 07-27) — operator-only. GHCR anon → 401 — operator-only. No blocking operator action from S67. The S63 email
+STARTTLS behavior note remains in `operator-expected.md` (informational).
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-67.md`)
 
 **Session 2026-07-16 result: D-128 — S66 shipped the prober RTMP DoS cluster (S62 finding [13] + a review-found sink). ★ Prober subsystem fully swept.**
 
