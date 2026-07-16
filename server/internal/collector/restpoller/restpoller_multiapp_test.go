@@ -204,4 +204,26 @@ waitForAppBEnd:
 			"test is misconfigured (app-A stream must be seen as broadcasting)",
 			appA, sharedStreamID)
 	}
+
+	// ── Phase 4: app-B's publish_start must NOT be swallowed by the deduplicator ──
+	//
+	// S49 / D-111 regression (S48 finding [1]). In poll cycle 1 both apps broadcast
+	// "test123" on node-1 within the same dedup window. app-A is polled first and
+	// seeds the dedup key; app-B's publish_start collides and — before the dedupKey
+	// gained an App field — was silently dropped, so PetarTest2/test123 never
+	// reached the sink (nor ClickHouse). Assert it was received.
+	var appBStartSeen bool
+	for _, ev := range allEvents {
+		if ev.Type == domain.EventStreamPublishStart &&
+			ev.App == appB && ev.StreamID == sharedStreamID {
+			appBStartSeen = true
+			break
+		}
+	}
+	if !appBStartSeen {
+		t.Errorf("D-111 regression: stream_publish_start for %s/%s was dropped — "+
+			"the deduplicator collided it with %s/%s because dedupKey omits App "+
+			"(AMS identity is app/streamId; add App back to dedupKey)",
+			appB, sharedStreamID, appA, sharedStreamID)
+	}
 }
