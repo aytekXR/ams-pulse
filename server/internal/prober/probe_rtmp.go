@@ -27,6 +27,15 @@ const rtmpDefaultPort = "1935"
 // rtmpMaxMsgSize caps the per-message accumulation buffer in the chunk demuxer.
 const rtmpMaxMsgSize = 64 * 1024
 
+// maxCSIDStates caps the number of distinct chunk-stream-ID (CSID) states the
+// demuxer tracks.  The 3-byte basic-header form admits 65,536 CSID values, each
+// able to accumulate up to rtmpMaxMsgSize bytes; without a cap a hostile server
+// that passes the handshake could stream chunks across all of them and grow the
+// states map to ~4 GB of heap within the probe deadline, OOM-killing the prober
+// (and with it every other configured probe).  A real RTMP peer uses only a
+// handful of chunk streams (control, command, media), so 256 is ample headroom.
+const maxCSIDStates = 256
+
 // rtmpDefaultChunkSz is the RTMP default incoming chunk size (per spec §5.4.1).
 const rtmpDefaultChunkSz = 128
 
@@ -436,6 +445,12 @@ func readAMF0Command(r io.Reader) (string, error) {
 
 		st, ok := states[csid]
 		if !ok {
+			// Bound the number of live CSID states: a hostile server can otherwise
+			// open all 65,536 3-byte-form CSIDs, each buffering up to rtmpMaxMsgSize,
+			// for ~4 GB of heap within the probe deadline.
+			if len(states) >= maxCSIDStates {
+				return "", fmt.Errorf("rtmp chunk: too many chunk streams (limit %d)", maxCSIDStates)
+			}
 			st = new(rtmpCSIDState)
 			states[csid] = st
 		}
@@ -549,34 +564,36 @@ func readAMF0Command(r io.Reader) (string, error) {
 			continue // more chunks needed for this message
 		}
 
-		// Complete — process and reset accumulator
-		msgType := st.typeID
-		msgBuf := make([]byte, len(st.buf))
-		copy(msgBuf, st.buf)
-		st.buf = st.buf[:0]
-
-		switch msgType {
+		// Complete — dispatch on message type, then reset the accumulator.
+		// Read directly from st.buf; do NOT copy it first. Only 0x01 and 0x14 read
+		// the payload, and both consume it immediately (0x01 reads 4 bytes before the
+		// next chunk reuses the buffer; 0x14 returns). A per-message copy for the
+		// silently-skipped types (0x04/0x05/0x06/unknown) would let a hostile server
+		// stream 64 KiB skipped messages and drive sustained transient heap
+		// allocation despite the CSID-state cap.
+		switch st.typeID {
 		case 0x01: // SetChunkSize
-			if len(msgBuf) >= 4 {
-				n := int(binary.BigEndian.Uint32(msgBuf[:4]) & 0x7FFFFFFF)
+			if len(st.buf) >= 4 {
+				n := int(binary.BigEndian.Uint32(st.buf[:4]) & 0x7FFFFFFF)
 				if n > 0 && n <= rtmpMaxMsgSize {
 					chunkSize = n
 				}
 			}
 
 		case 0x14: // AMF0 Command (invoke) — what we're waiting for
-			if len(msgBuf) == 0 {
+			if len(st.buf) == 0 {
 				return "", fmt.Errorf("rtmp: empty AMF0 command payload")
 			}
-			name, _, err := amf0DecodeString(msgBuf, 0)
+			name, _, err := amf0DecodeString(st.buf, 0)
 			if err != nil {
 				return "", fmt.Errorf("rtmp: AMF0 command name: %w", err)
 			}
 			return name, nil
 
 			// Types 0x04 (UserControl), 0x05 (WindowAckSize), 0x06 (SetPeerBandwidth)
-			// and all other types: skip silently.
+			// and all other types: skip silently (no allocation).
 		}
+		st.buf = st.buf[:0]
 	}
 }
 
