@@ -12,6 +12,13 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **WebRTC QoE stats are collected for streams whose id contains a URL-special
+  character (D-112).** AMS stream ids are chosen by the publisher; one containing
+  `#`, `?`, a space or `/` (e.g. `test#peer`) broke the `webrtc-client-stats`
+  request URL — the poller silently hit the wrong AMS endpoint and dropped that
+  stream's viewer-side quality metrics with no error. The stream id is now
+  percent-escaped before it goes into the path. Ordinary ids are unaffected
+  (byte-identical). (Found by the S48 subsystem audit, finding [3].)
 - **Two AMS apps can host the same stream id without colliding (D-111).** AMS
   stream identity is `(app, streamId)`, but two collector paths keyed only on the
   bare `streamId`. (1) The REST-poll deduplicator dropped the second app's

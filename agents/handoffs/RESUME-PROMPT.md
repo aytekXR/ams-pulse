@@ -11,7 +11,39 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-50.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-51.md`)
+
+**Session 2026-07-16 result: D-112 — S50 DONE (PR #97). Shipped S48-audit finding [3] — `amsclient` streamID URL-path-escaping.**
+
+**★ S50 took the next self-contained HIGH** (CI-promotion gate still shut, 07-16 < 07-23). `amsclient`
+`WebRTCClientStats` built its path with a bare `fmt.Sprintf`, so a **publisher-chosen** stream id with a
+URL-significant char (`#`/`?`/space/`/`) made `http.NewRequestWithContext`'s `url.Parse` split the path — `test#peer`
+→ GET `/{app}/rest/v2/broadcasts/test` (single-broadcast detail route) → AMS returns null → nil slice + nil error →
+`restpoller.go:420`'s `err==nil` gate silently drops that stream's WebRTC QoE stats. **Fix:**
+`url.PathEscape(streamID)`; `app` left raw (AMS/operator-controlled — the audit refuted app/nodeID escaping);
+`WebRTCClientStats` is the only path-builder with a publisher-controlled segment (single fix point). PathEscape is a
+no-op for ordinary ids → byte-identical common path.
+
+Gates: full Go suite **24/24**; vet clean; **mutation-proven** (revert → path truncates at `test`, hash subtest RED;
+normal-id control GREEN); **2-lens adversarial review** (AMS-wire + over-escaping) → 0 findings; **prod rolled
+forward to `v0.4.0-41-g60f2a13`** (was `-39-gc08ad6a`; rollback tag `pre-d112`; smoke green + restpoller polling
+real AMS cleanly). Full evidence: `decisions.md` D-112.
+
+**★ SESSION-51 = keep working the S48-audit backlog: 12 findings remain** (2 HIGH, 7 MEDIUM, 3 LOW) in
+`S48-AUDIT-FINDINGS.md`. Next HIGH cluster: **[4]** scheduled-report period off-by-one (`reports/scheduler.go:169` —
+`to` is first-of-current-month + inclusive `bucket <= ?` pulls July-1 rows into the June statement; **bundle [15]**
+`nextCronTime`/`NextCronTime` seeded with local-tz `time.Now()` at `scheduler.go:233` + `reports_wave2.go:130/183`);
+then **[5]** cluster edge-stream status (`cluster/discovery.go:264` — downed edge keeps stale `ActiveStreams` →
+origin viewer counts suppressed). **Each is an AGENT finding — re-verify against the code before building**
+(S38/S43/S46/S47/S49 lesson); one scope per PR. **§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE at
+open.**
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
+ledger 07-27) — operator-only. GHCR anon → 401 — operator-only. No new operator action from S50.
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-50.md`)
 
 **Session 2026-07-16 result: D-111 — S49 DONE (PR #95). Shipped the cross-app StreamID collision cluster (S48-audit findings [1]+[2], one root cause).**
 
