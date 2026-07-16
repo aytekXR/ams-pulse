@@ -129,16 +129,13 @@ var metricAliases = map[string]string{
 // ─── scopeJSONAnomaly ─────────────────────────────────────────────────────────
 
 // scopeJSONAnomaly builds the canonical scope string used as the anomaly_baselines key.
-// Mirrors the unexported scopeJSON helper in the anomaly package (anomaly.go:414).
+// It DELEGATES to anomaly.ScopeJSON so the lookup key is byte-identical to the key the
+// Detector stored — including the D-132 [18] escaping of quotes/backslashes/control bytes.
+// A hand-rolled copy here would silently diverge for special-char IDs and make
+// GetAnomalyBaseline miss the row (alert rule never fires); see D-132.
 // Only one of nodeID or streamID should be non-empty for the supported metrics.
 func scopeJSONAnomaly(nodeID, streamID string) string {
-	if nodeID != "" {
-		return `{"node_id":"` + nodeID + `"}`
-	}
-	if streamID != "" {
-		return `{"stream_id":"` + streamID + `"}`
-	}
-	return "{}"
+	return anomaly.ScopeJSON(nodeID, "", streamID)
 }
 
 // ─── evalAnomalyMetric ───────────────────────────────────────────────────────
