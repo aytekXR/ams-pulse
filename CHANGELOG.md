@@ -12,6 +12,16 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Security
 
+- **Passwords are never hashed with a fast digest (D-109, CWE-916).** The password
+  hasher used bcrypt but fell back to a single SHA-256 (a crackable, GPU-friendly
+  digest) if bcrypt errored — which happens for passwords longer than 72 bytes.
+  The fallback is removed (hashing fails closed instead), and creating a user with
+  an over-long password now returns 422. Existing users with legacy `sha256:`
+  password rows continue to authenticate (backward compatible).
+- **API token `kind` is validated against an allowlist (D-109).** `POST
+  /admin/tokens` accepted any `kind`, storing e.g. a `kind:"superadmin"` token that
+  authenticates nowhere (a dead but valid-looking credential). It now accepts only
+  `api` and `ingest` (422 otherwise) — the two kinds the auth layer honors.
 - **Synthetic probes now stop at runtime when a tenant downgrades below the probe
   tier (D-108).** The HTTP probe-CRUD handlers gate `CheckProbes()` (403 on Free),
   but the background probe scheduler executed every enabled probe regardless — a
@@ -41,6 +51,21 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **Deleting or revoking a non-existent user/token no longer writes a phantom
+  audit entry (D-109).** `DELETE /admin/users/{id}` and `DELETE /admin/tokens/{id}`
+  are idempotent (204 even for a missing id, by design), but they recorded a
+  fabricated `user.delete` / `token.revoke` in the audit log for ids that never
+  existed. The audit entry is now written only when a row was actually removed; the
+  idempotent 204 is unchanged.
+- **The default-preset and boundary anomaly alerts fire consistently (D-109).** An
+  observed value whose z-score landed exactly on the configured sigma threshold was
+  flagged by the detection pass but silently suppressed by the alert-evaluation pass
+  (`>` vs `>=`). Both paths now use the same inclusive boundary.
+- **A committed user/token create is always audited (D-109).** The create handlers
+  recorded the audit entry after a response re-fetch that could return nil (a
+  concurrent-delete race), leaving the committed create unrecorded — the same class
+  fixed for updates in the S40 audit work. The create is now audited before the
+  re-fetch.
 - **The live dashboard WebSocket now accepts browser (cookie / `?token=`) auth
   (D-108).** `GET /api/v1/live/ws` sat behind the header/cookie-only bearer
   middleware while its handler re-extracted the token from the header/`?token=`

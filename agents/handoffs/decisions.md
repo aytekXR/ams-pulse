@@ -7154,3 +7154,75 @@ detail: `sessions/SESSION-47.md`.
 **Docs at close:** D-108 CLOSED (this block); CHANGELOG `[Unreleased]` Security+Fixed; ROADMAP-V2 §2.29 updated;
 RESUME-PROMPT ▶ START HERE → SESSION-47; `operator-expected.md` refreshed (no new item); `sessions/SESSION-47.md`
 written carrying the 6 remaining audit findings.
+
+---
+
+## D-109 — S47 (2026-07-16): CLOSED — audit-integrity + hardening; the S44 13-bug backlog is fully closed (PR #91)
+
+**Context.** S47 shipped the FINAL cluster of the S44 adversarial audit (13 confirmed bugs; S44/S45/S46 shipped
+the first 8). **All 6 remaining findings were re-verified against the code first** (a 5-agent verification
+workflow → all CONFIRMED, 0 refuted, resolving the split-verdict revoke-token finding as real). Verify-before-build
+paid off again: findings 1a/1b as *ranked* ("return 404") were **overturned by the OpenAPI contract**.
+
+**1a/1b — phantom audit on delete/revoke of a non-existent id (S38 missing-id class).** `handleDeleteUser` /
+`handleRevokeToken` ignored `RowsAffected`, so deleting a bogus id audited a fabricated `user.delete` /
+`token.revoke`. The audit ranked the fix as "404 not 204", but the OpenAPI spec **deliberately documents
+idempotent 204-on-missing** for both routes ("callers must not rely on 404"). So the real defect is only the
+**phantom audit entry**, not the status. **Fix:** `meta.Store.DeleteUser`/`DeleteToken` return a new package
+sentinel `meta.ErrNotFound` when `RowsAffected==0`; the handlers keep the idempotent 204 but audit **only** when a
+row was actually removed. The one other `DeleteToken` caller (`oidc.go` logout) already discards its error, so it
+is unaffected.
+
+**2 — create audit lost on a nil re-fetch (S40 class — fixed for UPDATE in S40, missed for CREATE).**
+`handleCreateUser` / `handleCreateToken` audited AFTER the response re-fetch guard, so a committed create could go
+unrecorded if the re-fetch nilled. **Fix:** pre-assign the row id (`uuid.NewString`; the store honors a pre-set
+id) and audit the committed create BEFORE the re-fetch, mirroring the proven `handleUpdateUser` ordering.
+
+**3 — token `kind` had no allowlist.** `POST /admin/tokens` stored any `kind` (e.g. `"superadmin"`) — a token that
+authenticates nowhere (dead row). **Fix:** positive allowlist `{api, ingest}` → **422** (D-098; the 422 is already
+in the spec). The auth layer only ever recognizes `"api"` (bearer/download middleware) and `"ingest"` (beacon), so
+the allowlist is exactly right. OIDC session tokens and the bootstrap admin token use **direct store calls** with
+`kind="api"` and bypass the handler → unaffected.
+
+**4 — anomaly sigma boundary.** The eval/fire path (`wave3.go`, both stream and node) used strict `z > sigma`,
+while the detect path (`anomaly.go`, `if z < sigma continue`) is inclusive (`>=`). A z **exactly at** the threshold
+fired on detect but was silently suppressed on eval. **Fix:** `wave3.go` now uses `>=` on both eval paths to match
+detect.
+
+**5 — password-hashing weak fallback (CWE-916, CodeQL-flagged).** CodeQL failed the PR (1 new HIGH) — `hashPassword`
+used bcrypt but **fell back to a fast SHA-256 digest on bcrypt error** (bcrypt errors on >72-byte passwords), a
+crackable password hash. The alert surfaced because finding 2 moved `hashPassword(password)` onto a changed line;
+the weakness itself predates S47. Rather than game the scanner, **fixed the real weakness**: removed the SHA-256
+fallback (fail closed to an unusable empty hash), and `handleCreateUser` now rejects >72-byte passwords with 422.
+`checkPassword` still verifies any legacy `sha256:` rows already in the DB (backward compatible; existing users
+unaffected). Confirmed no existing password test regresses (they cover bcrypt + legacy-verify, not the fallback).
+
+**Verification.** gofmt/vet clean; **full Go suite 24/24** (fresh `-count=1`). Three new test files, **8 mutations
+all caught RED** on a throwaway copy: store `RowsAffected` (1a+1b), both handler audit-guards, the `token.create`
+audit, the kind allowlist, the anomaly boundary operator, the SHA-256 password fallback, and the over-long-password
+guard. **Adversarial review (3 lenses, refute-by-default): 0 code defects; 1 medium test-accuracy finding
+accepted** — `TestAudit_TokenCreate_Recorded` proves creates ARE audited but cannot discriminate finding-2's
+audit-BEFORE-refetch **ordering** (the only discriminating case, a nil re-fetch after a committed create, is a
+concurrent-delete race unreachable through the HTTP surface with a concrete `*meta.Store`; converting `s.store` to
+an interface seam was judged out of scope for a defensive reorder that mirrors the already-proven S40 fix). The
+test's claims were corrected to not overclaim, and the limitation is recorded honestly here and in the test.
+
+**Prod: rolled forward** (server *source* changed) per `deploy/runbooks/upgrade-rollback.md` — STAMPED build,
+rollback tag `pre-d109`, pre-upgrade backup rc=0. New prod stamp: **`v0.4.0-35-g56167eb`** (was
+`v0.4.0-33-g4fe5a10`). Evidence smoke: `/healthz` all-ok (`ams_env_configured:true`); running `pulse version` =
+`v0.4.0-35-g56167eb`; signed AMS webhook → **200**; limits `512M/0.5cpu`; logs no ERROR/panic. **S47 functional
+verified LIVE** (admin token, side-effect-free rejections): `POST /admin/tokens {kind:"superadmin"}` → **422**
+("kind must be one of: api, ingest"); `POST /admin/users` with a 100-byte password → **422** ("password must be at
+most 72 bytes"); `GET /admin/tokens` → 200.
+
+**Operator action required: NONE.** Carried operator items unchanged: **confirm the true AMS trial expiry** (runbook
+07-12 vs ledger 07-27); GHCR anon → 401; the S43 soft rulings. No new operator item from S47.
+
+**★ The S44 13-bug adversarial-audit backlog is now FULLY CLOSED** (S44 security cluster, S45 scheduler, S46
+entitlement+WS, S47 audit-integrity+hardening). SESSION-48 has no queued audit findings — per the standing
+directive it must **re-scan ROADMAP-V2 §2 / assessment §5 for the next-highest-leverage track** (verify
+product-viability AND candidate-status before building). §2.7 CI-promotion date gate opens **2026-07-23**.
+
+**Docs at close:** D-109 CLOSED (this block); CHANGELOG `[Unreleased]` Security+Fixed; ROADMAP-V2 §2.29 marked
+backlog CLOSED; RESUME-PROMPT ▶ START HERE → SESSION-48; `operator-expected.md` refreshed (no new item);
+`sessions/SESSION-48.md` written (re-scan mandate, no queued findings).

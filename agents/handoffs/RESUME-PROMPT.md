@@ -11,32 +11,31 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-47.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-48.md`)
 
-**Session 2026-07-16 result: D-108 — S46 DONE (PR #89, entitlement + WS-auth cluster — runtime probe gate + live-WS cookie/token auth).**
+**Session 2026-07-16 result: D-109 — S47 DONE (PR #91, audit-integrity + hardening). ★ The S44 13-bug audit backlog is now FULLY CLOSED.**
 
-**★ S46 shipped the two MAJOR findings of the S44 audit's entitlement/WS cluster.** Both re-verified against the
-code (finding 2 was subtler than the audit stated), mutation-proven, adversarially reviewed → SHIP:
-- **Probe runner ignored entitlement on the background tick** (S37 "enforced, not decorative"). CRUD gated
-  `CheckProbes()` but `executeProbe` ran every enabled probe → a Pro→Free downgrade kept probing. New
-  `prober.Config.EntitlementGate` (wired to `lic.CheckProbes`) is checked before each probe; `Tier()` is
-  RWMutex-guarded so it's race-free.
-- **`GET /live/ws` rejected browser sessions** — the audit said "handler ignores `ctxTokenKey`"; the real defect
-  was a **route/middleware mismatch**: the route sat under header/cookie-only `bearerAuthMiddleware` while the
-  handler re-extracted from header/`?token=` — so OIDC cookie users AND the browser's `?token=` connect path both
-  401'd. Moved to `downloadAuthMiddleware` + read validated `ctxTokenKey` (also gains `kind=api` + expiry).
+**★ S47 shipped the final 5 audit findings + a CodeQL-surfaced password weakness.** All re-verified against the
+code first (5-agent workflow → all CONFIRMED); verify-before-build **overturned the ranked premise of 1a/1b**;
+8 mutations all caught RED; adversarial review → SHIP:
+- **1a/1b phantom audit** — delete/revoke of a bogus id audited a fabricated `user.delete`/`token.revoke`. The
+  audit said "return 404" but the OpenAPI contract **deliberately documents idempotent 204-on-missing** → the real
+  fix keeps 204 and suppresses the phantom audit (`meta.ErrNotFound` when `RowsAffected==0`; audit only real deletes).
+- **2 audit-after-refetch** (S40 class, create side) → pre-assign the id, audit before the re-fetch.
+- **3 token `kind` allowlist** `{api, ingest}` → 422 (OIDC/bootstrap use direct store calls, unaffected).
+- **4 anomaly boundary** — `wave3.go` eval `>` → `>=` to match the detect path (both stream + node).
+- **5 password CWE-916** — `hashPassword` fell back to fast SHA-256 on bcrypt error; removed it (fail closed),
+  reject >72-byte passwords with 422; `checkPassword` keeps legacy `sha256:` verify (backward compatible).
 
-Gates: full Go suite **24/24** (api re-run `-count=1` after the spec edit); both mutation-proven RED; adversarial
-review (2 refuted, 1 LOW should-fix fixed — OpenAPI `/live/ws` now documents the `pulse_session` `cookieAuth`
-path; `schema.d.ts` regen); **prod rolled forward to `v0.4.0-33-g4fe5a10`** (was `v0.4.0-31-g2787dcd`;
-rollback tag `pre-d108`; smoke green — healthz ok, webhook 200, `/live/ws` 401-not-404 route-move verified live).
-Full evidence: `decisions.md` D-108.
+Gates: full Go suite **24/24**; 8 mutations RED; review 0 code defects (1 medium test-accuracy finding accepted +
+corrected — finding-2 ordering isn't HTTP-discriminable with a concrete `*meta.Store`); no contract/web change;
+**prod rolled forward to `v0.4.0-35-g56167eb`** (was `-33-g4fe5a10`; rollback tag `pre-d109`; smoke green +
+allowlist/password 422s verified live). Full evidence: `decisions.md` D-109.
 
-**★ SESSION-47 = the FINAL S44-audit cluster: audit integrity + hardening (6 findings).** Ranked in
-`sessions/SESSION-47.md`: `handleDeleteUser`/`handleRevokeToken` false-audit+204 on a missing id (S38 class —
-**re-verify the split-verdict revoke-token finding first**); create-user/token audit-after-refetch (S40 class);
-token `kind` allowlist (D-098); anomaly `>` vs `>=` boundary. **After S47 the 13-bug backlog is fully closed** —
-re-scan ROADMAP-V2 §2 for the next track. **Re-verify each against the code before building.**
+**★ SESSION-48 = NO queued audit findings — the S44 backlog is closed.** Per the standing directive, **re-scan
+ROADMAP-V2 §2 and assessment §5 for the next-highest-leverage track** (verify product-viability AND candidate-status
+before building — S38/S43 overturned their leads). Candidate angles noted in `sessions/SESSION-48.md`. **§2.7 CI
+promotions unlock ≥ 2026-07-23 — CHECK THE DATE at open; if eligible it's a clean win.**
 
 **⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
 ledger 07-27) — operator-only. GHCR anon → 401. **§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE at
