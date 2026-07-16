@@ -631,6 +631,7 @@ func parseHLSManifest(body io.Reader, baseURL string) (segmentURI string, segmen
 
 	isM3U := false
 	var pendingDuration float64
+	pendingExtInf := false  // true when the previous tag line was #EXTINF — captures a segment even when its duration is 0 or malformed (D-131 [14])
 	pendingVariant := false // true when the previous line was #EXT-X-STREAM-INF
 
 	for scanner.Scan() {
@@ -654,6 +655,7 @@ func parseHLSManifest(body io.Reader, baseURL string) (segmentURI string, segmen
 			var dur float64
 			fmt.Sscanf(info, "%f", &dur) //nolint:errcheck
 			pendingDuration = dur
+			pendingExtInf = true
 			pendingVariant = false
 			continue
 		}
@@ -661,6 +663,7 @@ func parseHLSManifest(body io.Reader, baseURL string) (segmentURI string, segmen
 		if strings.HasPrefix(line, "#EXT-X-STREAM-INF") {
 			// Master playlist stream entry — next non-comment line is the variant URI.
 			pendingVariant = true
+			pendingExtInf = false
 			continue
 		}
 
@@ -670,8 +673,11 @@ func parseHLSManifest(body io.Reader, baseURL string) (segmentURI string, segmen
 		}
 
 		// Non-comment, non-empty line: either a segment URI or a variant URI.
-		if pendingDuration > 0 {
-			// Preceded by #EXTINF → this is a media segment.
+		if pendingExtInf {
+			// Preceded by #EXTINF → this is a media segment. Capture it even when the
+			// parsed duration is 0 (or malformed) so it is fetched/measured instead of
+			// being silently dropped and misreported as a healthy empty master; the
+			// bitrate step already guards `segmentDurationS > 0` (D-131 [14]).
 			uri := resolveURI(line, baseURL)
 			return uri, pendingDuration, false, "", nil
 		}
@@ -692,16 +698,23 @@ func parseHLSManifest(body io.Reader, baseURL string) (segmentURI string, segmen
 	return "", 0, true, "", nil
 }
 
-// resolveURI resolves a potentially relative URI against the base playlist URL.
+// resolveURI resolves a segment/variant URI against the base playlist URL using
+// RFC 3986 reference resolution (net/url), so absolute, absolute-path (/seg.ts),
+// protocol-relative (//host/seg.ts), and dot-segment references all resolve to the
+// correct host and path. The prior last-slash string concatenation mishandled
+// //host and /abs-path references, silently misdirecting segment fetches to the
+// base host (D-131 [15]). Mirrors resolveDASHRef.
 func resolveURI(uri, base string) string {
-	if strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") {
+	refURL, err := url.Parse(uri)
+	if err != nil || refURL.IsAbs() {
+		// Absolute or unparseable ref — use as-is.
 		return uri
 	}
-	// Simple path resolution: replace everything after the last '/' in base.
-	if idx := strings.LastIndex(base, "/"); idx >= 0 {
-		return base[:idx+1] + uri
+	baseURL, err := url.Parse(base)
+	if err != nil {
+		return uri
 	}
-	return uri
+	return baseURL.ResolveReference(refURL).String()
 }
 
 // probeReachability performs a minimal HTTP GET and marks the result as
@@ -956,6 +969,12 @@ func classifyHTTPError(err error) string {
 		return "dns"
 	case strings.Contains(msg, "connection refused"):
 		return "conn_refused"
+	case strings.Contains(msg, "unsupported protocol scheme"):
+		// A segment/variant URI extracted from an untrusted manifest carried a
+		// non-http(s) scheme (javascript:, file:, data:, …). The transport rejects
+		// it before any dial — this is malformed manifest content, not a network
+		// fault, so classify it like the request-build failure path (D-131 review).
+		return "parse"
 	default:
 		return "network"
 	}
