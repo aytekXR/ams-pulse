@@ -527,7 +527,7 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.30  Fresh subsystem adversarial audit (16 findings)  [7 shipped — ALL 6 HIGH done; 9 MEDIUM/LOW backlog]  ⏳ IN PROGRESS S48→S52 (D-110…D-114, 2026-07-16, PR #93/#95/#97/#99/#101)
+### 2.30  Fresh subsystem adversarial audit (16 findings)  [8 shipped — ALL 6 HIGH done; 8 MEDIUM/LOW backlog]  ⏳ IN PROGRESS S48→S53 (D-110…D-115, 2026-07-16, PR #93…#103)
 
 With the S44 13-bug backlog closed (§2.29) and the §2.7 CI-promotion gate not yet open (07-16 < 07-23), **S48
 followed the standing re-scan mandate and ran a fresh adversarial audit of the subsystems the S44 audit never
@@ -561,11 +561,14 @@ swept** (collector, amsclient, reports, cluster, clickhouse): 7 finders + refute
   forever → the aggregator permanently suppressed origin viewer counts (VD-03 dedup). Fix: `n.Status != "down"`
   (degraded still counts). Mutation-proven; review refuted a split-brain concern; prod `v0.4.0-45-g0ab487f`.
   **★ All 6 HIGH audit findings are now shipped.**
-- ⏳ **9 findings remain** (0 HIGH, 7 MEDIUM, 2 LOW) → S53+: [7] ingest TS==0 IsZero, [8] webhook replay (verify
-  product-viability — may be operator-gated), [9] restpoller prevStatus leak, [10] reports egress-method
-  disclosure, [11]/[12]/[13] clickhouse (⚠ [12] needs a migration — FIVE places), [14] beacon 413 heuristic, [16]
-  dup node_stats. Each must be re-verified against the code before building. Full list + fixes:
-  `S48-AUDIT-FINDINGS.md`; plan: `sessions/SESSION-53.md`.
+- ✅ **S53 (D-115, PR #103)** — shipped **[7] ingest zero-timestamp guard**. `onIngestStats` guarded a missing TS
+  with `if now.IsZero()`, but `time.UnixMilli(0)` is 1970 (not the Go zero time), so a `TS==0` event stamped
+  `LastSeen=1970` → `SweepStale` falsely evicted the publisher ("source gone"). Fix: `if ev.TS <= 0`.
+  Mutation-proven; prod `v0.4.0-47-gd32b165`.
+- ⏳ **8 findings remain** (0 HIGH, 6 MEDIUM, 2 LOW) → S54+: [9] restpoller prevStatus leak, [10] reports
+  egress-method disclosure, [11]/[13] clickhouse, [16] dup node_stats, [14] beacon 413 heuristic; ⚠ [12] clickhouse
+  migration (FIVE places) + [8] webhook replay (product-viability) last. Each must be re-verified against the code
+  before building. Full list + fixes: `S48-AUDIT-FINDINGS.md`; plan: `sessions/SESSION-54.md`.
 
 ### 2.29  Security hardening + 13-bug adversarial audit  [S shipped; M–L backlog]  ✅ SECURITY CLUSTER DONE S44 (D-106, 2026-07-15, PR #85)
 

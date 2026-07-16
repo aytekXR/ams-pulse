@@ -11,7 +11,46 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-53.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-54.md`)
+
+**Session 2026-07-16 result: D-115 — S53 DONE (PR #103). Shipped S48-audit finding [7] — ingest zero-timestamp guard.**
+
+**★ S53 opened the MEDIUM/LOW batch** (all 6 HIGH done; CI-promotion gate still shut, 07-16 < 07-23).
+`collector/ingest/health.go` `onIngestStats` guarded a missing timestamp with `if now.IsZero()` after
+`now := time.UnixMilli(ev.TS).UTC()` — but `time.UnixMilli(0)` is 1970-01-01, NOT the Go zero time, so the guard
+never fired for `TS==0`: `LastSeen` was stamped 1970 and the next `SweepStale` falsely evicted the publisher
+("source gone"). Fix: `if ev.TS <= 0`. Mutation-proven (revert → 1970 stamp in the sweep log → test RED); careful
+self-review (mechanical fix to a broken guard). **Prod `v0.4.0-47-gd32b165`.** Full evidence: `decisions.md` D-115.
+
+**★ SESSION-54 = continue the MEDIUM/LOW batch: 8 findings remain** (0 HIGH, 6 MEDIUM, 2 LOW) in
+`S48-AUDIT-FINDINGS.md`. Suggested order (verify each against the code first; one scope per PR):
+- **[9] MEDIUM** `restpoller.go:455` `detectEnded` — only removes `p.prevStatus` for `status=="broadcasting"`, so
+  idle/created streams that vanish from AMS leak forever (unbounded map). Fix: evict ALL disappeared keys; keep the
+  `broadcasting` guard only for event emission.
+- **[10] MEDIUM** `accounting.go:350` — `UsageReport.EgressMethod` hardcoded to `bitrate_x_watch_time` even when
+  per-row used `ams_rest_stats_byte_counter` (set at `:302`) → CSV/PDF F6 disclosure header wrong.
+- **[13] MEDIUM** `clickhouse.go:550` — `insertBeaconEvents` does `PrepareBatch` per item → partial commit + wrong
+  metrics on mid-batch failure. Fix: hoist `PrepareBatch`, one `Send()` (mirror `insertServerEvents`); `mockConn`/
+  `mockBatch` in `drain_test.go`.
+- **[16] LOW** `discovery.go:145` — two DTOs on the same resolved key emit duplicate node_stats. Dedup guard.
+- **[14] LOW** `beacon.go:352` — 413 detection uses a byte-count heuristic vs `errors.As(&http.MaxBytesError)`.
+- **[11] MEDIUM** `query.go:1084` — `AnomalyBaselineForMetric` viewer_count case uses `avg(viewers)`/`event_time`
+  (columns are `viewer_count`/`ts`) → silent zero baseline. ⚠ Needs a **SQL-text assertion seam or real-CH test** —
+  the existing fake conn returns fixed values regardless of SQL, so a naive unit test is VACUOUS.
+- **⚠ [12] MEDIUM** `0001_init.sql:358` — `peak_concurrency` missing from SummingMergeTree column list. **Needs a
+  migration (FIVE places, next = 0005) + `ALTER TABLE … MODIFY ENGINE`.** Heaviest; do late.
+- **⚠ [8] MEDIUM** `webhook.go:160` webhook replay — **verify product-viability**: needs a new `X-Ams-Timestamp`
+  header + AMS/signing-proxy convention; may be operator/contract-gated, not a pure code fix.
+
+**Each is an AGENT finding — re-verify against the code before building** (take the verified core, not the literal
+suggestion). **§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE at open.**
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
+ledger 07-27) — operator-only. GHCR anon → 401 — operator-only. No new operator action from S53.
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-53.md`)
 
 **Session 2026-07-16 result: D-114 — S52 DONE (PR #101). Shipped the last HIGH audit finding [5] — cluster edge-stream status. ★ ALL 6 HIGH findings now shipped.**
 

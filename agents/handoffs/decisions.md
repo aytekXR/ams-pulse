@@ -7488,3 +7488,42 @@ node_stats, [8] webhook replay (verify product-viability — may be operator-gat
 **Docs at close:** D-114 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (finding [5]
 ✅, all-HIGH-done milestone); RESUME-PROMPT ▶ START HERE → SESSION-53; `operator-expected.md` refreshed (no new
 item); `sessions/SESSION-52.md` CLOSED; `sessions/SESSION-53.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 9.
+
+---
+
+## D-115 — S53 (2026-07-16): CLOSED — ingest zero-timestamp guard fixed (finding [7], PR #103)
+
+**Context.** SESSION-53 opened the MEDIUM/LOW batch (all 6 HIGH done at D-114). CI-promotion gate still shut (07-16
+< 07-23). Took the cleanest MEDIUM — finding [7] in `collector/ingest/health.go`.
+
+**Finding [7] — broken zero-timestamp guard.** `onIngestStats` computed `now := time.UnixMilli(ev.TS).UTC()` then
+guarded with `if now.IsZero() { now = time.Now() }`. But `time.UnixMilli(0)` is **1970-01-01 UTC**, not the Go zero
+time (year 1), so `IsZero()` never fires for `ev.TS==0` — the intended fallback was **dead code**. A publisher whose
+`ingest_stats` carried `TS==0` (a zero-value `ServerEvent` or any path that omits the timestamp) got `LastSeen`
+stamped 1970, and the next `SweepStale` (~5 s in prod) evicted it with a false `"ingest: source gone"` warning,
+hiding real upstream health. **Verified** the mechanism at `health.go:171-174/203` and `SweepStale` at `:247`. This
+is a fix to a **broken existing guard** — unambiguous author intent. **Fix:** `if ev.TS <= 0` (guards the int64
+field directly, also covers negative sentinels); positive-TS path unchanged.
+
+**Verification.** gofmt/vet clean; **full Go suite 24/24**. New `TestIngestHealth_ZeroTS_NotFalselyEvicted` (feed a
+`TS==0` event; assert publisher tracked + `SweepStale` does not evict). **Mutation-proven:** reverting to
+`if now.IsZero()` stamps `LastSeen=1970` (visible in the sweep log) and `SweepStale` evicts it (returns 1) → test
+RED; the existing `SourceGone` test (genuine staleness) stays GREEN. **Review:** careful self-review only — a
+one-predicate fix to a demonstrably-broken guard, mutation-proven with a positive control (S48-tenant precedent);
+no separate review workflow.
+
+**Prod: rolled forward** (server *source* changed) — STAMPED build, rollback tag `pre-d115`, backup rc=0. New prod
+stamp: **`v0.4.0-47-gd32b165`** (was `v0.4.0-45-g0ab487f`). Smoke: `/healthz` all-ok; `pulse version` =
+`v0.4.0-47-gd32b165`; signed webhook → 200; limits 512M/0.5cpu; logs clean (**no false `source gone`** on the live
+ingest path).
+
+**Operator action required: NONE.** Carried items unchanged (AMS trial-expiry doc discrepancy; GHCR anon → 401).
+
+**★ Remaining S48-audit backlog: 8 findings (6 MEDIUM, 2 LOW)** in `S48-AUDIT-FINDINGS.md`. Finding [7] ✅ DONE.
+Next: [9] restpoller `prevStatus` leak, [10] reports egress-method disclosure, [13] clickhouse per-item PrepareBatch,
+[16] dup node_stats, [11] anomaly baseline columns (needs a SQL-text/real-CH seam — fake conn is vacuous); [12]
+clickhouse SummingMergeTree migration and [8] webhook replay (product-viability check) last.
+
+**Docs at close:** D-115 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (finding [7]
+✅); RESUME-PROMPT ▶ START HERE → SESSION-54; `operator-expected.md` refreshed (no new item);
+`sessions/SESSION-53.md` CLOSED; `sessions/SESSION-54.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 8.
