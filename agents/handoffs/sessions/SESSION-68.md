@@ -1,5 +1,15 @@
 # SESSION-68 — planned at S67 close (D-129)
 
+> ## ✅ CLOSED (2026-07-16, D-130) — SHIPPED [21], DEFERRED [20]
+> **[21] probe-URL SSRF** shipped (PR #130, prod `v0.4.0-74-g2621c03`): new `internal/ssrfguard` — scheme allowlist +
+> dial-time `net.Dialer.Control` guard on the resolved IP across HTTP/RTMP/WS paths, denying link-local/metadata/NAT64/
+> unspecified while intentionally ALLOWING loopback + RFC-1918 (B4/A6 ruling — narrower than the ledger's literal fix).
+> 11/11 mutants killed; suite 25/25; 5-lens adversarial review caught + fixed 4 defects pre-merge (2 MAJOR: proxy
+> bypass, NAT64 prefix). **[20] audit-log admin gate DEFERRED** as the deliberate reads-open product ruling (D-105/S43)
+> → escalated to the operator as an adjudicated product call (operator-expected.md). See `decisions.md` D-130 and
+> `sessions/SESSION-69.md` for the next scope. Everything below is the original pre-session plan (historical).
+
+
 > Written by SESSION-67 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE + `agents/handoffs/S62-AUDIT-FINDINGS.md`** (the 25-finding ledger).

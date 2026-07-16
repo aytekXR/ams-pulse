@@ -8229,3 +8229,75 @@ SESSION-68; `operator-expected.md` refreshed (no operator action — internal co
 behavior-change documented for API-scripters, prod verified clean); `sessions/SESSION-67.md` CLOSED;
 `sessions/SESSION-68.md` written (security cluster: [20] audit-log admin gate re-verify vs D-105 + [21] probe-URL SSRF).
 Prod rolled forward + smoke green. **No operator action required.**
+
+## D-130 — S68 (2026-07-16): SHIPPED — probe-URL SSRF guard ([21]); audit-log gate ([20]) DEFERRED as product ruling
+
+**Open facts.** `origin/main` = `2734707` (S67 docs, PR #129); HEAD == origin/main; `git status` shows only the
+do-not-commit `deploy/config/Caddyfile.prod` dirty. Branch `s68-d130`. Date 2026-07-16 (§2.7 CI-promotion gate still
+locked until 2026-07-23 — not relevant here). S62 backlog at open: 12 remain (0 HIGH, 8 MEDIUM, 4 LOW). This session
+takes the two SECURITY MEDIUMs.
+
+**[20] audit-log admin gate — DEFERRED, adjudicated as a PRODUCT RULING (no code).** Re-verified against the code
+and against D-105/S43. Confirmed at the code level: `requireWriteScope` (server.go:696-699) passes GET/HEAD/OPTIONS
+unconditionally; `handleListAuditLog` (audit.go:92) has no scope check; a `viewer`-scoped token can read the full
+audit trail (actor IDs, remote_addr, action detail). **But this is the deliberate reads-open model, not an unintended
+gap** — D-105 (S43) already named admin-gating this exact read as its lead candidate and *overturned it at
+verify-at-open*: the audit read is uniform with `GET /admin/users` and `GET /admin/tokens`, which equally expose admin
+metadata to any authenticated reader; gating only the audit read is an inconsistent special-case, and gating the whole
+admin-read surface is a product choice that would **break the S41 AuditLogPage for viewer-role SSO users**. D-124 (S62)
+reaffirmed "likely DEFER or escalate as a ruling." **Resolution: close [20] as DEFER-BY-RULING** (not another
+"pending re-check"), and escalate decisively to the operator as an adjudicated product call — see operator-expected.md.
+No unilateral tightening (it could break the operator's own viewer-role tooling / the shipped AuditLogPage).
+
+**[21] probe-URL SSRF — REAL FIX, verified CORE narrower than the ledger's literal scope.** Confirmed:
+`handleCreateProbe`/`handleUpdateProbe` (wave3.go) do zero URL validation beyond non-empty; the prober's `http.Client`
+(prober.go:147), the RTMP raw `net.Dialer` (probe_rtmp.go:89) and the WebRTC WS dial (prober.go:786) apply no host
+restriction → an admin-scoped token can store `url=http://169.254.169.254/…` and read reachability/TTFB via probe
+results (cloud-metadata SSRF → IAM-cred escalation). **Deviation from the ledger (documented):** the finding's literal
+fix denies all RFC-1918 — that would break the *primary* use case (self-hosted AMS is routinely on private IPs; this
+deployment reaches AMS over a Docker `172.x` bridge) AND contradicts the established **B4/A6 ruling** (server.go:1910:
+"Private/loopback IPs are intentionally allowed — real AMS nodes are often on internal networks"). Verified CORE:
+- **New leaf pkg `internal/ssrfguard`**: `IsDenied(ip)` denies link-local (`169.254.0.0/16` incl. IMDSv4
+  `169.254.169.254`, IPv6 `fe80::/10`, link-local multicast), unspecified (`0.0.0.0`/`::`), and IMDSv6 `fd00:ec2::254`;
+  **allows loopback + RFC-1918/ULA + public** (B4/A6 consistency; keeps the httptest-loopback prober suite green).
+  `DialControl` (a `net.Dialer.Control` hook) enforces it at dial time on the *resolved* IP → DNS-rebinding-safe and
+  redirect-safe (every redirect hop re-dials through it). `ValidateProbeURL` enforces a scheme allowlist
+  `{http,https,ws,wss,rtmp,rtmps}` (kills `file://`/`gopher://`) + rejects IP-literal denied hosts at the API boundary
+  for a clean 422.
+- **api/wave3.go**: `ValidateProbeURL` in create + update → 422 INVALID_PROBE.
+- **prober**: thread `ssrfguard.DialControl` through the http.Client transport (HLS/DASH/reachability), the RTMP
+  `net.Dialer`, and the WebRTC WS client (`DialOptions.HTTPClient`).
+
+**Shipped (PR #130, squash `2621c03`, merged to `origin/main`).** Prod rolled forward to **`v0.4.0-74-g2621c03`**;
+all 5 smoke checks green (version stamp, healthz 200, signed webhook 200, limits 512M/0.5cpu, 0 error lines). A second
+commit regenerated `web/src/lib/api/schema.d.ts` (openapi-typescript drift check on the new PUT-422 declaration —
+mechanical codegen, no behavior change).
+
+**Verification.** 3 new test files (`ssrfguard_test.go` unit table, `wave3_ssrf_s68_test.go` API-boundary 422,
+`ssrf_wiring_s68_test.go` dial-guard wiring for HTTP/RTMP/WS incl. proxy-disabled + loopback-allowed proofs). **11/11
+mutants killed** (every test non-vacuous, incl. per-path wiring and the two review-fix regressions). Full Go suite
+**25/25**; gofmt + vet clean; redocly OpenAPI lint clean.
+
+**Adversarial review (5 lenses — ssrf-bypass / ip-policy / regression / boundary-vs-dial / defer-[20]; 9 agents,
+refute-by-default verifiers). 4 CONFIRMED, 0 refuted — all fixed in-PR before merge:**
+- **MAJOR proxy bypass** — the cloned `http.DefaultTransport` inherited `Proxy: ProxyFromEnvironment`; with an egress
+  proxy set the guard would only vet the proxy IP and the proxy would resolve+dial the metadata host. Fixed:
+  `transport.Proxy = nil`.
+- **MAJOR NAT64 `64:ff9b::/96`** — `To4()` does not extract the embedded IPv4, so `64:ff9b::169.254.169.254` slipped
+  past `IsDenied` and would route to IMDS on NAT64 networks. Fixed: `embeddedIPv4` normalises NAT64 + IPv4-compatible
+  + IPv4-mapped embeddings before the policy check.
+- **NIT IPv4-compatible `::a.b.c.d`** — same root cause, same fix.
+- **MINOR contract** — `PUT /probes/{probeId}` did not declare 422 (pre-existing; `interval_s` already returned an
+  undeclared 422). Fixed: declared `422` (matches `POST`). Strong evidence the review belongs on any untrusted-outbound
+  change — it caught two real metadata-reachable bypasses a passing test suite did not.
+
+**[20] audit-log admin gate — DEFERRED, adjudicated (no code).** Resolution stands after review (the defer-[20] lens
+found no material difference from `GET /admin/users`/`/admin/tokens`): it is the deliberate reads-open model (D-105/S43),
+not an unintended gap. **Operator action: a product call** — decide whether to gate the whole admin-*read* surface by
+admin scope (would break the viewer-role AuditLogPage) or keep reads open. Logged in operator-expected.md as an
+adjudicated decision (no longer "pending re-check").
+
+**Docs at close:** D-130 SHIPPED (this block, prod `v0.4.0-74-g2621c03`); CHANGELOG Security/Fixed; `S62-AUDIT-FINDINGS.md`
+[21] ✅ DONE + [20] ✅ DEFER-BY-RULING; ROADMAP-V2 §2.31 (15 resolved: 14 shipped + 1 defer-by-ruling / 10 remain —
+0 HIGH, 6 MEDIUM, 4 LOW); RESUME-PROMPT ▶ START HERE → SESSION-69; `operator-expected.md` (new top block — [20] product call);
+`sessions/SESSION-68.md` CLOSED; `sessions/SESSION-69.md` written. Prod rolled forward + smoke green.
