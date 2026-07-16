@@ -7339,3 +7339,53 @@ cluster edge-stream status ignored. Re-verify each against the code first (agent
 **Docs at close:** D-111 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (findings
 [1]+[2] ✅); RESUME-PROMPT ▶ START HERE → SESSION-50; `operator-expected.md` refreshed (no new item);
 `sessions/SESSION-49.md` CLOSED; `sessions/SESSION-50.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 13.
+
+---
+
+## D-112 — S50 (2026-07-16): CLOSED — amsclient streamID URL-path-escaping (finding [3], PR #97)
+
+**Context.** SESSION-50 took the next cluster of the S48-audit backlog. CI-promotion gate still shut (07-16 <
+07-23), so the highest-leverage move was the top remaining self-contained HIGH: **finding [3] — `amsclient`
+`WebRTCClientStats` did not URL-path-escape the publisher-chosen `streamID`.**
+
+**Mechanism (re-verified against the code).** AMS stream ids are publisher-chosen (set via the RTMP/WebRTC publish
+URL) and AMS returns them verbatim. `client.go:475` built the path with a bare `fmt.Sprintf(".../broadcasts/%s/
+webrtc-client-stats/0/100", app, streamID)` and handed it to `http.NewRequestWithContext`, which runs `url.Parse`
+on `baseURL+path`. A `streamID` with a URL-significant char broke the request **silently**: `"test#peer"` → the
+`#` starts a URL fragment → `url.Parse` yields Path `/{app}/rest/v2/broadcasts/test` (the single-broadcast detail
+route) → AMS returns `null`/an object → `json` decodes to a **nil slice with nil error** → `restpoller.go:420`'s
+`err==nil` gate drops the viewer-side QoE stats with no log, for every broadcasting stream whose id has a special
+char. Confirmed the sole caller (`restpoller.go:420`) and that `doGet` (`client.go:334`) parses `baseURL+path`.
+
+**Fix.** `url.PathEscape(streamID)` (`net/url` already imported at `client.go:22`). **`app` is left raw** — it is
+AMS/operator-controlled, not publisher-chosen; the S48 audit explicitly **refuted** escaping `app` in the sibling
+list-builders and `nodeID` in `NodeInfo`. **Scope was verified minimal:** `WebRTCClientStats` is the *only*
+path-builder with a publisher-controlled path segment (the other four — `ListBroadcasts`/`Paged`, `ListVods`/
+`Paged` — interpolate only `app` + numeric offset/size), so this is a single fix point. `url.PathEscape` is a no-op
+for ordinary alphanumeric ids, so the common path is **byte-identical** (no regression).
+
+**Verification.** gofmt/vet clean; **full Go suite 24/24**. New table-driven `TestWebRTCClientStats_EscapesStreamID`
+(`test#peer`, `my stream`, and a `test123` positive control) captures `r.URL.EscapedPath()` on an httptest server.
+**Mutation-proven:** reverting to a bare `streamID` truncates the observed path at `/LiveApp/rest/v2/broadcasts/
+test` (the `#` fragment), turning the hash subtest RED while the normal-id control stays GREEN. **Independent 2-lens
+adversarial review** (AMS-wire correctness / over-escaping regression, refute-by-default): **0 findings** — both
+reviewers read the repo and confirmed the escaping reaches the right endpoint and is byte-identical for ordinary
+ids.
+
+**Prod: rolled forward** (server *source* changed — `amsclient` compiles into the binary) — STAMPED build, rollback
+tag `pre-d112`, backup rc=0. New prod stamp: **`v0.4.0-41-g60f2a13`** (was `v0.4.0-39-gc08ad6a`). Smoke: `/healthz`
+all-ok; `pulse version` = `v0.4.0-41-g60f2a13`; signed webhook → 200; limits 512M/0.5cpu; logs clean; **live
+functional:** the restpoller resumed polling the real AMS cleanly (`restpoller: starting`, 5 s interval; no
+amsclient/webrtc errors; only the pre-existing benign cleartext-token WARN).
+
+**Operator action required: NONE.** Carried items unchanged (AMS trial-expiry doc discrepancy 07-12 vs 07-27; GHCR
+anon → 401 — both operator-only).
+
+**★ Remaining S48-audit backlog: 12 findings (2 HIGH, 7 MEDIUM, 3 LOW)** in `S48-AUDIT-FINDINGS.md`. Finding [3]
+marked ✅ DONE. Next HIGH candidates for SESSION-51: **[4]** scheduled-report period off-by-one (bundle **[15]**
+local-vs-UTC `nextCronTime` — same file); **[5]** cluster edge-stream status ignored. Re-verify each against the
+code first.
+
+**Docs at close:** D-112 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (finding [3]
+✅); RESUME-PROMPT ▶ START HERE → SESSION-51; `operator-expected.md` refreshed (no new item);
+`sessions/SESSION-50.md` CLOSED; `sessions/SESSION-51.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 12.

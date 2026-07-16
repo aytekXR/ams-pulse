@@ -1,5 +1,13 @@
 # SESSION-50 — planned at S49 close (D-111)
 
+> **✅ CLOSED 2026-07-16 (D-112, PR #97).** Took cluster 1 — S48-audit finding [3]: `amsclient`
+> `WebRTCClientStats` did not URL-path-escape the publisher-chosen `streamID`, so a stream id with a URL-special
+> char (`#`/`?`/space) made `url.Parse` target the wrong AMS endpoint and dropped its WebRTC QoE stats through the
+> poller's `err==nil` gate. Fix: `url.PathEscape(streamID)` (`app` left raw — audit-refuted; single fix point).
+> Full Go suite 24/24; mutation-proven (revert → path truncates at `test`); 2-lens review (0 findings); prod
+> `v0.4.0-41-g60f2a13`. **12 S48-audit findings remain** → SESSION-51. Evidence: `decisions.md` D-112.
+> (CI-promotion gate still shut — 07-16 < 07-23.)
+
 > Written by SESSION-49 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > Read `RESUME-PROMPT.md` + `agents/handoffs/S48-AUDIT-FINDINGS.md` before dispatching.

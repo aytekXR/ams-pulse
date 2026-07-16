@@ -1,4 +1,17 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-111 — SESSION-49)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-112 — SESSION-50)
+
+> **S50 (D-112) needs NO operator action.** This session fixed a subsystem-audit finding: **WebRTC quality metrics
+> were silently dropped for any stream whose id contains a URL-special character** (`#`, `?`, a space, `/` — stream
+> ids are chosen by whoever publishes). The analytics poller was building the stats request URL without escaping the
+> stream id, so it hit the wrong AMS endpoint and quietly discarded that stream's viewer-side quality data. Fixed
+> and live (`v0.4.0-41-g60f2a13`); ordinary stream ids were never affected. The remaining 12 audit findings are
+> queued for upcoming sessions (recorded in `agents/handoffs/S48-AUDIT-FINDINGS.md`); none needs you.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
+> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none
+> blocks the autonomous work.
+
+## (previous header — D-111, SESSION-49)
 
 > **S49 (D-111) needs NO operator action.** This session shipped the top HIGH cluster of the subsystem audit — a
 > **cross-app stream-id collision**. Antmedia stream identity is `(application, streamId)`, but two internal paths
