@@ -527,7 +527,7 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.30  Fresh subsystem adversarial audit (16 findings)  [4 shipped; 12 backlog]  ⏳ IN PROGRESS S48→S50 (D-110/D-111/D-112, 2026-07-16, PR #93/#95/#97)
+### 2.30  Fresh subsystem adversarial audit (16 findings)  [6 shipped; 10 backlog]  ⏳ IN PROGRESS S48→S51 (D-110…D-113, 2026-07-16, PR #93/#95/#97/#99)
 
 With the S44 13-bug backlog closed (§2.29) and the §2.7 CI-promotion gate not yet open (07-16 < 07-23), **S48
 followed the standing re-scan mandate and ran a fresh adversarial audit of the subsystems the S44 audit never
@@ -550,9 +550,16 @@ swept** (collector, amsclient, reports, cluster, clickhouse): 7 finders + refute
   `url.Parse` target the wrong AMS endpoint → WebRTC QoE stats silently dropped through the poller's `err==nil`
   gate. Fix: `url.PathEscape(streamID)` (`app` left raw — audit-refuted; the other 4 path-builders have no
   streamID, so single fix point). Mutation-proven; 2-lens review (0 findings); prod `v0.4.0-41-g60f2a13`.
-- ⏳ **12 findings remain** (2 HIGH, 7 MEDIUM, 3 LOW) → S51+. Notable HIGH: scheduled-report period off-by-one [4]
-  (+ local-vs-UTC `nextCronTime` [15], same file); cluster edge-stream status [5]. Each must be re-verified against
-  the code before building. Full list + fixes: `S48-AUDIT-FINDINGS.md`; plan: `sessions/SESSION-51.md`.
+- ✅ **S51 (D-113, PR #99)** — shipped the **reports-scheduler date/tz cluster [4]+[15]**. [4] the monthly
+  statement's inclusive upper bound was first-of-CURRENT-month, so that day's daily-rollup rows (`bucket <= ?`)
+  bled into the previous month → extracted `previousCalendarMonthUTC(now)` (inclusive [first,last]-of-prev-month).
+  [15] `nextCronTime` read cron fields in the seed's local tz while the pipeline is UTC → normalized the seed to
+  UTC inside the function (DRY; latent on UTC prod, real for non-UTC installs). Mutation-proven ×2; 2-lens review
+  (0 findings); prod `v0.4.0-43-g7c206a9`.
+- ⏳ **10 findings remain** (1 HIGH, 6 MEDIUM, 3 LOW) → S52+. Last HIGH: cluster edge-stream status [5]
+  (`discovery.go:264`). Then the MEDIUM/LOW batch ([7]/[8]/[9]/[10]/[11]/[12]/[13]/[14]/[16]). Each must be
+  re-verified against the code before building. Full list + fixes: `S48-AUDIT-FINDINGS.md`; plan:
+  `sessions/SESSION-52.md`.
 
 ### 2.29  Security hardening + 13-bug adversarial audit  [S shipped; M–L backlog]  ✅ SECURITY CLUSTER DONE S44 (D-106, 2026-07-15, PR #85)
 

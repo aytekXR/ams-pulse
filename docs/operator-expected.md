@@ -1,4 +1,19 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-112 — SESSION-50)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-113 — SESSION-51)
+
+> **S51 (D-113) needs NO operator action.** This session fixed two subsystem-audit findings in the scheduled-report
+> engine: (1) the **monthly statement's date range was off by one day** — the first day of the *current* month was
+> pulled into the previous month's report, slightly over-counting usage and mislabelling the period; and (2)
+> **report schedule times were computed in the server's local timezone** instead of UTC, so on a non-UTC-configured
+> host a "1st of the month at 06:00" schedule would fire at 06:00 local rather than 06:00 UTC. Both are fixed and
+> live (`v0.4.0-43-g7c206a9`). **Your deployment runs in UTC, so the timezone issue never affected it** — it matters
+> only for non-UTC self-hosted installs. The remaining 10 audit findings are queued for upcoming sessions (recorded
+> in `agents/handoffs/S48-AUDIT-FINDINGS.md`); none needs you.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
+> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none
+> blocks the autonomous work.
+
+## (previous header — D-112, SESSION-50)
 
 > **S50 (D-112) needs NO operator action.** This session fixed a subsystem-audit finding: **WebRTC quality metrics
 > were silently dropped for any stream whose id contains a URL-special character** (`#`, `?`, a space, `/` — stream
