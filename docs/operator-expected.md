@@ -1,4 +1,20 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-127 — SESSION-65)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-128 — SESSION-66)
+
+> **S66 (D-128) needs NO operator action.** This session hardened the synthetic **RTMP probe** against hostile
+> monitored servers: a malicious server could previously make the prober buffer gigabytes of chunk data (or churn
+> memory) and crash. The demuxer now caps the number of chunk streams it tracks and avoids a wasteful per-message copy.
+> All internal hardening — **no configuration or behavior change you need to act on.** Live in prod
+> (`v0.4.0-70-g5a070cc`, rolled forward; smoke green). **The prober subsystem is now fully swept** (HLS/DASH/RTMP);
+> 15 audit findings remain (all MEDIUM/LOW), worked one at a time in upcoming sessions.
+>
+> **The audit-log access-model item** (any authenticated user can read the admin audit log) is still pending re-check
+> against the existing S43 "reads-open" ruling before any change — that one may come back to you as a product call.
+> The S63 email-STARTTLS behavior note below still applies.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs 07-27;
+> see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you.
+
+## (previous header — D-127, SESSION-65)
 
 > **S65 (D-127) needs NO operator action.** This session hardened the synthetic **DASH probe** against hostile
 > monitored servers: a crafted manifest could previously make the prober allocate gigabytes and crash. Three

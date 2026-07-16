@@ -527,7 +527,7 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.31  Second fresh subsystem audit — un-swept subsystems (25 findings)  [9 shipped — 16 remain (0 HIGH, 12 MEDIUM, 4 LOW); ★ ALL 6 HIGH shipped]  ⏳ IN PROGRESS S62→S65 (D-124…D-127, 2026-07-16, PR #119…#124)
+### 2.31  Second fresh subsystem audit — un-swept subsystems (25 findings)  [10 shipped — 15 remain (0 HIGH, 11 MEDIUM, 4 LOW); ★ ALL 6 HIGH shipped, prober subsystem swept]  ⏳ IN PROGRESS S62→S66 (D-124…D-128, 2026-07-16, PR #119…#126)
 
 With the §2.30 (S48) audit COMPLETE, SESSION-62 followed the standing re-scan mandate and ran a **fresh adversarial
 audit of the subsystems S44/S48 never swept** — `alert/evaluator`+`alert/channels`, `license`, `prober`, `anomaly`,
@@ -561,12 +561,17 @@ and the `api` handler families not covered by S44. Same workflow (7 finders + re
   sibling sink:** `$RepresentationID$` `strings.ReplaceAll` was itself unbounded (TB-scale within the body cap), now
   bounded by `maxExpandedTemplateBytes` (64 KiB). Full suite 24/24; mutation-proven ×4; 1 review finding refuted. Prod
   `v0.4.0-68-g2a122fd`. **★ ALL 6 S62 HIGH now shipped.**
-- ⏳ **16 remain (0 HIGH, 12 MEDIUM, 4 LOW)** → S66+. Suggested order: **prober RTMP DoS** ([13] MEDIUM `probe_rtmp.go`
-  — unbounded CSID state map, 65,536 × 64 KB = 4 GB, + the off-by-one `>` vs `>=` guard; same "hostile probed server
-  → OOM" theme, completes the prober subsystem) → alert-evaluator ([7] D-088 presence guards, stream_offline compare,
-  license_expiry stuck-firing) → anomaly ([18] scopeJSON escaping, hysteresis) → license → api. **⚠ [20] audit-log
-  admin gate: re-verify vs D-105 "reads-open" ruling first (likely DEFER).** One coherent scope per PR. Plan:
-  `sessions/SESSION-66.md`.
+- ✅ **S66 (D-128, PR #126)** — shipped the **prober RTMP DoS** cluster (finding [13] + a review-found sink),
+  completing the prober subsystem's untrusted-input hardening. [13] `readAMF0Command` now caps distinct CSID states at
+  `maxCSIDStates=256` (was unbounded → ~4.3 GB); a 4-lens adversarial review also found + fixed a per-message 64 KiB
+  copy for silently-skipped message types (GC-pressure DoS within the cap). Off-by-one (`>`→`>=`) declined as
+  immaterial once the count is capped (review agreed); a `uint16`-truncation NIT declined + logged. Full suite 24/24;
+  mutation-proven; 2 review findings confirmed (both addressed), 0 refuted. Prod `v0.4.0-70-g5a070cc`.
+- ⏳ **15 remain (0 HIGH, 11 MEDIUM, 4 LOW)** → S67+. Suggested order: **alert-evaluator** ([7] `evalNodeMetric`
+  missing D-088 presence guards → false threshold alerts on AMS 3.x nodes; stream_offline compare bypass;
+  license_expiry stuck-firing) → **anomaly** ([18] `scopeJSON` raw-concat without escaping the ID fields → wrong
+  stream attribution; hysteresis) → license → api. **⚠ [20] audit-log admin gate: re-verify vs D-105 "reads-open"
+  ruling first (likely DEFER).** One coherent scope per PR. Plan: `sessions/SESSION-67.md`.
 
 ### 2.30  Fresh subsystem adversarial audit (16 findings)  [★ COMPLETE — 14 shipped (ALL 6 HIGH); 2 DEFERRED ([11],[12])]  ✅ DONE S48→S61 (D-110…D-123, 2026-07-16, PR #93…#117)
 

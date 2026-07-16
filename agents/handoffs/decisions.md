@@ -8086,3 +8086,58 @@ The review materially improved the fix — the RepresentationID sink would have 
 [3]/[4] ✅ DONE; ROADMAP-V2 §2.31 (9 shipped / 16 remain — 0 HIGH); RESUME-PROMPT ▶ START HERE → SESSION-66;
 `operator-expected.md` refreshed (no operator action — internal hardening); `sessions/SESSION-65.md` CLOSED;
 `sessions/SESSION-66.md` written (prober RTMP DoS [13]). Prod rolled forward + smoke green.
+
+## D-128 — S66 (2026-07-16): SHIPPED — prober RTMP CSID-state cap + per-message-copy removal (S62 [13] MEDIUM + review-found sink)
+
+**Code:** PR #126 `5a070cc` (merged, 15/15 checks). **Prod rolled forward to `v0.4.0-70-g5a070cc`** (rollback anchor
+`pulse-prod-pulse:pre-d128` = `v0.4.0-68-g2a122fd`); smoke green (healthz 200, version stamp confirmed, signed
+webhook 200, limits 512M/0.5cpu, logs clean). Close-docs in a follow-up docs-only PR.
+
+**S66 OPEN facts (recorded early per protocol):** origin/main at `f861df0` (D-127 close-docs PR #125; code #124
+`2a122fd`). Prod `v0.4.0-68-g2a122fd`. Tree carries only the known `Caddyfile.prod` delta. Branch `s66-d128`. Full
+suite baseline green pre-change.
+
+**Scope — `server/internal/prober/probe_rtmp.go`, the RTMP chunk demuxer** (`readAMF0Command`) which parses chunks
+from an UNTRUSTED probed server. Completes the prober subsystem's untrusted-input hardening (same threat model as the
+S65 DASH work).
+
+- **[13] MEDIUM — unbounded CSID state map.** A new `*rtmpCSIDState` + map entry was allocated for every unseen CSID
+  with no cap. The 3-byte basic-header form admits 65,536 CSID values (64..65,599), each accumulating up to
+  `rtmpMaxMsgSize` (64 KiB) → ~4.3 GB heap within the probe deadline (OOM-kills the prober, aborting ALL probes).
+  **Fix (verified CORE):** `const maxCSIDStates = 256`; before creating a new state,
+  `if len(states) >= maxCSIDStates { return "", fmt.Errorf("rtmp chunk: too many chunk streams (limit %d)", …) }`.
+  256 is ample (real RTMP uses a handful of chunk streams). Bounds the demuxer to ≤ 256 × 64 KiB = 16 MiB.
+- **Off-by-one (`>` vs `>=` at the oversized-message guard) — DECLINED (NARROWER, re-verified).** The ledger [13]
+  also suggested changing `st.length > rtmpMaxMsgSize` to `>=` so an exactly-64-KiB message is rejected. **Re-verified:
+  once `maxCSIDStates` bounds the buffer COUNT, the exact-64-KiB case allocates at most 256 × 64 KiB = 16 MiB — the
+  off-by-one carries no DoS benefit.** And `>` matches the documented "up to 64 KB" *inclusive* cap (comments at :27,
+  :400); changing to `>=` would slightly contradict that and reject a boundary-size message for no security gain (no
+  legit AMF0 command approaches 64 KiB anyway). Declining it is the honest verified CORE (lesson 1 — take the CORE,
+  not the audit's literal scope). *If the adversarial review finds a real residual DoS from the exact-64-KiB path
+  despite the state cap, revisit.*
+
+**Tests (`probe_rtmp_s66_test.go`, mutation-proven):** `readAMF0Command` fed 257 distinct 3-byte-form CSIDs (each a
+0-length skipped message) → returns "too many chunk streams" (removing the guard → the test reddens: it gets a
+basic-header EOF error instead). Positive control: 8 CSIDs (< cap) → never the cap error. Full suite 24/24; gofmt +
+vet clean.
+
+**Review:** untrusted-input DoS hardening on the RTMP demuxer → ran the **multi-lens adversarial review workflow**
+(4 lenses: cap-bypass / other-sinks / off-by-one / regression → refute-by-default, 6 agents). The SESSION-66 plan
+tasked it with hunting OTHER unbounded allocations (S65's review found a missed sink). **2 confirmed, 0 refuted:**
+- **(other-sinks — MEDIUM, fixed in the same PR)** `readAMF0Command` copied EVERY completed message
+  (`make([]byte, len(st.buf))` + `copy`) before the type dispatch — even the silently-skipped control types
+  (0x04/0x05/0x06). Within the CSID cap, an attacker can `SetChunkSize(65536)` then stream large skipped messages,
+  forcing a discarded 64 KiB allocation per message (sustained GC pressure the state-count cap does NOT cover).
+  **Fixed:** the dispatch now reads `st.buf` in place (0x14 returns immediately; 0x01 reads 4 bytes before the buffer
+  is reused; skipped types allocate nothing) — mutation-proven via a `runtime.MemStats` byte-budget test.
+- **(other-sinks — NIT, DECLINED + logged)** `amf0EncodeString` silently truncates a `uint16` length for a >65,535-byte
+  string. This is the OUTGOING/write path built from the OPERATOR-configured probe URL (app name / tcURL), not the
+  untrusted server, and AMF0 physically cannot represent a longer string — so it is a cosmetic write-path quality NIT,
+  not a security issue. Declined for scope coherence (this PR is the untrusted-input read-path DoS); noted here for a
+  future prober-core cleanup. The off-by-one (`>`→`>=`) decline held up under the `off-by-one` lens (no residual DoS
+  once the state cap bounds the buffer count).
+
+**Docs at close:** D-128 SHIPPED (this block, prod `v0.4.0-70-g5a070cc`); CHANGELOG Security; `S62-AUDIT-FINDINGS.md`
+[13] ✅ DONE; ROADMAP-V2 §2.31 (10 shipped / 15 remain); RESUME-PROMPT ▶ START HERE → SESSION-67;
+`operator-expected.md` refreshed (no operator action — internal hardening); `sessions/SESSION-66.md` CLOSED;
+`sessions/SESSION-67.md` written (alert-evaluator cluster). Prod rolled forward + smoke green.
