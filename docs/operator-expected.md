@@ -1,4 +1,21 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-125 — SESSION-63)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-126 — SESSION-64)
+
+> **S64 (D-126) needs NO operator action.** This session fixed three internal robustness bugs in the report-schedule
+> and tenant admin endpoints: an update handler could crash (and report a false failure) if the row it was reading back
+> was deleted at the same moment, and a temporary database hiccup while loading a schedule or tenant was being reported
+> to callers as a definitive "not found" (404) instead of a server error (500). All three are internal correctness
+> fixes — **no configuration, API contract, or behavior change you need to act on.** Live in prod
+> (`v0.4.0-66-gfede961`, rolled forward; smoke green: healthz 200, signed webhook 200, limits 512M/0.5cpu, clean logs).
+>
+> The remaining **18 S62 audit findings** (2 HIGH, 12 MEDIUM, 4 LOW) are queued for upcoming sessions, worked one at a
+> time, each verified and mutation-tested. **The audit-log access-model item** (any authenticated user can read the
+> admin audit log) is still pending re-check against the existing S43 "reads-open" ruling before any change — that one
+> may come back to you as a product call. The S63 email-STARTTLS behavior note below still applies.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs 07-27;
+> see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you.
+
+## (previous header — D-125, SESSION-63)
 
 > **S63 (D-125) needs NO action to keep things running — but there is ONE email-alert behavior change to be aware of.**
 > This session started fixing the S62 audit findings, beginning with hardening the alert **notification channels**:

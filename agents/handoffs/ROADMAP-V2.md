@@ -527,7 +527,7 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.31  Second fresh subsystem audit — un-swept subsystems (25 findings)  [4 shipped — 21 remain (4 HIGH, 13 MEDIUM, 4 LOW)]  ⏳ IN PROGRESS S62→S63 (D-124…D-125, 2026-07-16, PR #119…#120)
+### 2.31  Second fresh subsystem audit — un-swept subsystems (25 findings)  [7 shipped — 18 remain (2 HIGH, 12 MEDIUM, 4 LOW)]  ⏳ IN PROGRESS S62→S64 (D-124…D-126, 2026-07-16, PR #119…#122)
 
 With the §2.30 (S48) audit COMPLETE, SESSION-62 followed the standing re-scan mandate and ran a **fresh adversarial
 audit of the subsystems S44/S48 never swept** — `alert/evaluator`+`alert/channels`, `license`, `prober`, `anomaly`,
@@ -547,10 +547,18 @@ and the `api` handler families not covered by S44. Same workflow (7 finders + re
   fixed (dashboard_url href-escaped — but it's operator-derived, no live exploit). Full suite 24/24; mutation-proven
   ×4 (fake SMTP server for STARTTLS); 2-lens review → 2 major (STARTTLS config semantics — kept fail-closed, resolved
   via docs; behavior change: `STARTTLS=true` now mandatory) + 2 refuted. Prod `v0.4.0-64-g5172150`.
-- ⏳ **21 remain (4 HIGH, 13 MEDIUM, 4 LOW)** → S64+. Suggested order: **reports_wave2 re-fetch** (two nil-deref
-  panics + transient-DB-error-as-404, one file/pattern) → **prober untrusted-input** (MPD LimitReader + printf-format
-  + RTMP CSID map) → alert-evaluator → anomaly → license → prober-core → api. **⚠ [24] audit-log gate: re-verify vs
-  D-105 first (likely DEFER).** Fixes continue HIGH-first, one scope per PR. Plan: `sessions/SESSION-64.md`.
+- ✅ **S64 (D-126, PR #122)** — shipped the **reports_wave2 post-mutation re-fetch cluster** (findings [5]/[6]/[19]).
+  [6] HIGH `handleUpdateReportSchedule` — DROPPED the redundant re-fetch (row is authoritative; no updated_at in the
+  response), structurally eliminating the nil-deref + a DB round-trip; [5] HIGH `handleUpdateTenant` — KEPT the
+  re-fetch (updated_at stamped inside the store, not returned in row) but GUARDED it (mirrors handleUpdateProbe);
+  [19] MEDIUM — SPLIT transient-error(→500) from missing-row(→404) in the three existence checks. Full suite 24/24;
+  [19] deterministically mutation-proven via a pre-canceled-ctx internal test; self-review (no auth/contract surface).
+  Prod `v0.4.0-66-gfede961`.
+- ⏳ **18 remain (2 HIGH, 12 MEDIUM, 4 LOW)** → S65+. Suggested order: **prober untrusted-input** (the 2 remaining
+  HIGH — [3] MPD unbounded read → `io.LimitReader`, [4] attacker-controlled printf format → GB alloc; possibly +
+  RTMP CSID map cap MEDIUM) → alert-evaluator → anomaly → license → prober-core → api. **⚠ [20] audit-log admin gate:
+  re-verify vs D-105 "reads-open" ruling first (likely DEFER).** Fixes continue HIGH-first, one scope per PR. Plan:
+  `sessions/SESSION-65.md`.
 
 ### 2.30  Fresh subsystem adversarial audit (16 findings)  [★ COMPLETE — 14 shipped (ALL 6 HIGH); 2 DEFERRED ([11],[12])]  ✅ DONE S48→S61 (D-110…D-123, 2026-07-16, PR #93…#117)
 

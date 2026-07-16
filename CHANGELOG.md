@@ -34,6 +34,19 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **Report-schedule and tenant update/read endpoints no longer misreport a
+  transient database error, or crash on a concurrent delete (D-126).** Three
+  robustness fixes from the S62 subsystem audit, all in the admin/reports handlers:
+  (1) after a successful schedule/tenant update the handler re-read the row and
+  dereferenced the result without checking it — a concurrent delete (or a transient
+  store error) between the write and the re-read could nil-dereference and return a
+  bare 500 for an operation that actually succeeded; the schedule path now renders
+  the row already in hand (no re-read) and the tenant path guards the re-read.
+  (2) A store error while loading a schedule or tenant was reported to clients as a
+  definitive `404 Not Found` instead of `500`, so an SDK or UI cache could
+  permanently mark an existing resource as deleted; genuine errors now return 500 and
+  only a truly missing row returns 404. (Found by the S62 subsystem audit, findings
+  [5]/[6]/[19].)
 - **The beacon ingest endpoint returns the right error when a client upload is cut
   off (D-120).** A dropped connection partway through a large-but-in-limit upload
   was misreported as `413 Request Entity Too Large` instead of `400` (read error),
