@@ -1,3 +1,16 @@
+> ## ✅ SESSION-63 CLOSED (2026-07-16, D-125) — PR #120 merged `5172150`, prod `v0.4.0-64-g5172150` (smoke green)
+> **Shipped:** alert-channels security cluster — [1] STARTTLS fail-closed (email refuses plaintext fallback on TLS
+> downgrade), [2] Telegram bot-token redaction in error paths, [10] email Subject-header CRLF sanitization, [11]
+> Telegram dashboard_url href attribute escaping. New `channels_security_test.go` (4 tests, fake-SMTP helper).
+> **Honesty adjustments vs the ledger:** [1] scope stated precisely (residual real exposure = localhost/loopback relay
+> or a server falsely advertising TLS; Go's `PlainAuth` already refuses remote non-TLS); **[11] downgraded HIGH→LOW**
+> after tracing `dashboard_url` is only ever the operator's own `baseURL+"/alerts"` (test-fire path), never
+> attacker-controlled — escaped anyway as defense-in-depth. STARTTLS kept fail-closed against the reviewer's
+> availability concern (opportunistic opt-out would re-introduce the vuln; operators wanting plaintext already set
+> `STARTTLS=false`). **Operator note:** email STARTTLS is now mandatory-when-enabled — see `operator-expected.md`
+> D-125 block. **Ledger:** [1]/[2]/[10]/[11] ✅ DONE; **21 S62 findings remain** (4 HIGH, 13 MEDIUM, 4 LOW).
+> **Next (SESSION-64):** reports_wave2 re-fetch nil-deref cluster — see `sessions/SESSION-64.md`.
+
 # SESSION-63 — planned at S62 close (D-124)
 
 > Written by SESSION-62 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS

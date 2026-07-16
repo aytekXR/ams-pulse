@@ -527,7 +527,7 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.31  Second fresh subsystem audit — un-swept subsystems (25 findings)  [0 shipped — 6 HIGH, 15 MEDIUM, 4 LOW]  ⏳ IN PROGRESS S62→ (D-124, 2026-07-16)
+### 2.31  Second fresh subsystem audit — un-swept subsystems (25 findings)  [4 shipped — 21 remain (4 HIGH, 13 MEDIUM, 4 LOW)]  ⏳ IN PROGRESS S62→S63 (D-124…D-125, 2026-07-16, PR #119…#120)
 
 With the §2.30 (S48) audit COMPLETE, SESSION-62 followed the standing re-scan mandate and ran a **fresh adversarial
 audit of the subsystems S44/S48 never swept** — `alert/evaluator`+`alert/channels`, `license`, `prober`, `anomaly`,
@@ -540,9 +540,17 @@ and the `api` handler families not covered by S44. Same workflow (7 finders + re
 - **Re-verify caveats:** [24] audit-log admin gate may DUPLICATE the S43/D-105 "reads-open" product ruling
   (re-verify → likely DEFER/escalate); [1]/STARTTLS partially mitigated by Go's `smtp.PlainAuth` non-TLS guard (fix
   still correct, narrower scenario). Each finding is an AGENT finding — re-verify + take the verified CORE.
-- **Plan:** fixes begin S63, HIGH-first, coherent clusters, one scope per PR (re-verify → mutation-prove → 24/24 →
-  review → PR → CI → merge → prod roll), exactly as the S49→S61 arc worked §2.30. Suggested order: alert-channels
-  security → reports_wave2 re-fetch → prober untrusted-input → the rest. Plan: `sessions/SESSION-63.md`.
+- ✅ **S63 (D-125, PR #120)** — shipped the **alert-channels security cluster** (findings [1]/[2]/[10]/[11]).
+  [1] email STARTTLS now fails closed (was `_ = err` → silent plaintext fallback of body + SMTP AUTH creds);
+  [2] Telegram bot token redacted from returned errors (`client.Do`'s `*url.Error` embedded the token-bearing URL);
+  [10] SMTP Subject CR/LF-sanitized (publisher `stream_id` → title → header injection); [11] DOWNGRADED to LOW +
+  fixed (dashboard_url href-escaped — but it's operator-derived, no live exploit). Full suite 24/24; mutation-proven
+  ×4 (fake SMTP server for STARTTLS); 2-lens review → 2 major (STARTTLS config semantics — kept fail-closed, resolved
+  via docs; behavior change: `STARTTLS=true` now mandatory) + 2 refuted. Prod `v0.4.0-64-g5172150`.
+- ⏳ **21 remain (4 HIGH, 13 MEDIUM, 4 LOW)** → S64+. Suggested order: **reports_wave2 re-fetch** (two nil-deref
+  panics + transient-DB-error-as-404, one file/pattern) → **prober untrusted-input** (MPD LimitReader + printf-format
+  + RTMP CSID map) → alert-evaluator → anomaly → license → prober-core → api. **⚠ [24] audit-log gate: re-verify vs
+  D-105 first (likely DEFER).** Fixes continue HIGH-first, one scope per PR. Plan: `sessions/SESSION-64.md`.
 
 ### 2.30  Fresh subsystem adversarial audit (16 findings)  [★ COMPLETE — 14 shipped (ALL 6 HIGH); 2 DEFERRED ([11],[12])]  ✅ DONE S48→S61 (D-110…D-123, 2026-07-16, PR #93…#117)
 
