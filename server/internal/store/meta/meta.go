@@ -27,6 +27,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -39,6 +40,13 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // pure-Go Postgres driver; registers "pgx" driver name
 	_ "modernc.org/sqlite"             // pure-Go SQLite driver
 )
+
+// ErrNotFound is returned by delete operations when no row matched the given id.
+// The delete itself is idempotent (the API contract for DELETE /admin/users and
+// /admin/tokens deliberately returns 204 for a missing id), so callers treat this
+// as a non-error signal — its purpose is to let a handler suppress a phantom
+// audit-log entry for a deletion that removed nothing (S38 missing-id class, D-109).
+var ErrNotFound = errors.New("meta: record not found")
 
 // parseKeysetCursor splits a "<int64>:<id>" keyset cursor string used for
 // stable pagination over SQLite tables. Returns (0, "") on empty or malformed
@@ -527,8 +535,14 @@ func (s *Store) UpdateUser(ctx context.Context, id, username, role string) error
 
 // DeleteUser deletes a user by ID.
 func (s *Store) DeleteUser(ctx context.Context, id string) error {
-	_, err := s.execContext(ctx, `DELETE FROM users WHERE id=?`, id)
-	return err
+	res, err := s.execContext(ctx, `DELETE FROM users WHERE id=?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // ─── API Tokens ───────────────────────────────────────────────────────────────
@@ -674,8 +688,14 @@ func (s *Store) TouchToken(ctx context.Context, id string) {
 
 // DeleteToken removes a token by ID (revoke).
 func (s *Store) DeleteToken(ctx context.Context, id string) error {
-	_, err := s.execContext(ctx, `DELETE FROM api_tokens WHERE id=?`, id)
-	return err
+	res, err := s.execContext(ctx, `DELETE FROM api_tokens WHERE id=?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // CountTokens returns the number of tokens.

@@ -45,6 +45,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
@@ -2009,6 +2010,13 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "INVALID_PARAM", "kind and name required")
 		return
 	}
+	// Positive allowlist (D-098): only the two kinds the auth layer honors are
+	// storable. An unrecognized kind (e.g. "superadmin") authenticates nowhere yet
+	// would persist as a valid-looking token — reject it, don't store a dead row.
+	if kind != "api" && kind != "ingest" {
+		writeError(w, http.StatusUnprocessableEntity, "INVALID_PARAM", `kind must be one of: "api", "ingest"`)
+		return
+	}
 	rawToken := "plt_" + newToken()
 	tokenHash, hashAlg := s.store.HashToken(rawToken)
 	var scopes []string
@@ -2019,11 +2027,16 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	tok := meta.APIToken{Kind: kind, Name: name, TokenHash: tokenHash, HashAlg: hashAlg, Scopes: scopes, CreatedAt: time.Now().UnixMilli()}
+	// Pre-assign the id so the create can be audited BEFORE the re-fetch below —
+	// otherwise a nil re-fetch would leave the committed token unrecorded (S40 class).
+	tok := meta.APIToken{ID: uuid.NewString(), Kind: kind, Name: name, TokenHash: tokenHash, HashAlg: hashAlg, Scopes: scopes, CreatedAt: time.Now().UnixMilli()}
 	if err := s.store.CreateToken(r.Context(), tok); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	// Audit the committed create here — before the re-fetch — so a re-fetch that
+	// nils cannot leave the mutation unrecorded. Never log the raw token or hash.
+	s.audit(r, "token.create", "token", tok.ID, map[string]any{"name": tok.Name, "kind": tok.Kind, "scopes": tok.Scopes})
 	created, err := s.store.LookupToken(r.Context(), rawToken)
 	if err != nil || created == nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "token created but not found")
@@ -2033,18 +2046,22 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	if m, ok := resp.(map[string]any); ok {
 		m["token"] = rawToken
 	}
-	// Record who minted the token — never the raw token or its hash.
-	s.audit(r, "token.create", "token", created.ID, map[string]any{"name": created.Name, "kind": created.Kind, "scopes": created.Scopes})
 	writeJSON(w, http.StatusCreated, resp)
 }
 
 func (s *Server) handleRevokeToken(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "tokenId")
-	if err := s.store.DeleteToken(r.Context(), id); err != nil {
+	err := s.store.DeleteToken(r.Context(), id)
+	if err != nil && !errors.Is(err, meta.ErrNotFound) {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
-	s.audit(r, "token.revoke", "token", id, nil)
+	// Idempotent per the OpenAPI contract (204 even for a missing id), but only
+	// audit a revoke that actually removed a token — never a phantom token.revoke
+	// for a bogus id (that would corrupt the compliance trail; S38 missing-id class).
+	if err == nil {
+		s.audit(r, "token.revoke", "token", id, nil)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -2096,8 +2113,16 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "INVALID_PARAM", "role must be 'admin' or 'viewer'")
 		return
 	}
+	// bcrypt hashes at most 72 bytes; reject an over-long password with a clear
+	// error rather than letting hashPassword fail closed to an unusable empty hash.
+	if len(password) > 72 {
+		writeError(w, http.StatusUnprocessableEntity, "INVALID_PARAM", "password must be at most 72 bytes")
+		return
+	}
 	now := time.Now().UnixMilli()
-	u := meta.User{Username: username, PwHash: hashPassword(password), Role: role, CreatedAt: now, UpdatedAt: now}
+	// Pre-assign the id so the create can be audited BEFORE the re-fetch below —
+	// otherwise a nil re-fetch would leave the committed user unrecorded (S40 class).
+	u := meta.User{ID: uuid.NewString(), Username: username, PwHash: hashPassword(password), Role: role, CreatedAt: now, UpdatedAt: now}
 	if err := s.store.CreateUser(r.Context(), u); err != nil {
 		// A duplicate username is a client error, not a 500 — the unique
 		// constraint on users.username is the only expected failure here.
@@ -2108,12 +2133,14 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	// Audit the committed create here — before the re-fetch — so a re-fetch that
+	// nils cannot leave the mutation unrecorded.
+	s.audit(r, "user.create", "user", u.ID, map[string]any{"username": u.Username, "role": u.Role})
 	created, _ := s.store.GetUserByUsername(r.Context(), username)
 	if created == nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "user created but not found")
 		return
 	}
-	s.audit(r, "user.create", "user", created.ID, map[string]any{"username": created.Username, "role": created.Role})
 	writeJSON(w, http.StatusCreated, userToAPI(*created))
 }
 
@@ -2175,11 +2202,17 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "userId")
-	if err := s.store.DeleteUser(r.Context(), id); err != nil {
+	err := s.store.DeleteUser(r.Context(), id)
+	if err != nil && !errors.Is(err, meta.ErrNotFound) {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
-	s.audit(r, "user.delete", "user", id, nil)
+	// Idempotent per the OpenAPI contract (204 even for a missing id), but only
+	// audit a delete that actually removed a user — never a phantom user.delete
+	// for a bogus id (that would corrupt the compliance trail; S38 missing-id class).
+	if err == nil {
+		s.audit(r, "user.delete", "user", id, nil)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -2629,9 +2662,12 @@ func hashPassword(pw string) string {
 	}
 	h, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
 	if err != nil {
-		// Fallback to SHA-256 on error (should not happen in practice).
-		sum := sha256.Sum256([]byte(pw))
-		return "sha256:" + hex.EncodeToString(sum[:])
+		// bcrypt errors only when pw exceeds 72 bytes (handleCreateUser rejects
+		// that with 422 first) or on a broken crypto setup. NEVER fall back to a
+		// fast hash (SHA-256) for a password — that silently downgrades it to a
+		// crackable digest (D-109 / CWE-916). Fail closed with an unusable empty
+		// hash instead; checkPassword still verifies legacy sha256: rows on login.
+		return ""
 	}
 	return string(h)
 }
