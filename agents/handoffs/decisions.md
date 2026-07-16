@@ -7270,3 +7270,72 @@ cluster (re-verify each against the code first — this is an agent-produced lis
 **Docs at close:** D-110 CLOSED (this block); CHANGELOG `[Unreleased]` Security; ROADMAP-V2 §2.30 added;
 RESUME-PROMPT ▶ START HERE → SESSION-49; `operator-expected.md` refreshed (no new item); `sessions/SESSION-48.md`
 CLOSED; `sessions/SESSION-49.md` + `S48-AUDIT-FINDINGS.md` (finding marked ✅) carry the remaining 15.
+
+---
+
+## D-111 — S49 (2026-07-16): CLOSED — cross-app StreamID collision cluster shipped (findings [1]+[2], PR #95)
+
+**Context.** SESSION-49 worked the first cluster of the S48-audit backlog. The CI-promotion date gate (§2.7) is
+still shut (today 07-16 < 07-23), so the highest-leverage move was the top HIGH cluster: **two coupled defects with
+one root cause — AMS stream identity is `(app, streamId)`, but two collector subsystems keyed on the bare
+`streamId`, so two applications hosting the same bare stream id on one node collided.** Both findings were
+**re-verified against the code before building** (the standing S38/S43/S46/S47 discipline), and the aggregator one
+turned out subtler than the ledger's one-line summary — see below.
+
+**Finding [1] — `collector/dedup.go`: `dedupKey` omitted `App`.** The Deduplicator keyed on
+`{eventType, nodeID, streamID, window}`. Within one dedup window (default `2×PollInterval`), a second app's
+`publish_start`/`end` for the same bare `streamId` collided with the first and `IsDuplicate` dropped it — so that
+app's lifecycle never reached ClickHouse (stream visibility + billing wrong). **Fix:** add `app` to the struct and
+populate `app: e.App` in the key. **Product-viability confirmed:** the Deduplicator is live on the REST-poll hot
+path (`restpoller.go:412/423`); `domain.ServerEvent` carries `App`.
+
+**Finding [2] — `collector/aggregator/aggregator.go`: `snapRemoveStream` unconditional delete.** `snapshot.Streams`
+is keyed by **bare** `StreamID` (deliberate, documented at `aggregator.go:578` — the alert layer looks streams up
+by bare `stream_id` groupKey at `evaluator.go:797`), while `a.streams` (source of truth) uses the compound
+`nodeID/app/streamID` key. On a bare-ID collision `snapAddStream` does last-write-wins; `snapRemoveStream` then did
+an unconditional `delete(snapshot.Streams, StreamID)`, so when one app's stream ended it **evicted the OTHER app's
+still-active stream** from the per-stream map (ActiveStreams stayed correct → counter/map divergence). **Fix:** a
+pointer-equality guard — `if a.snapshot.Streams[s.StreamID] == s { delete(...) }` — so only the owning stream
+removes its entry; the counters remain unconditional.
+
+**★ Verify-before-build overturns / nuance (recorded for the ledger).**
+1. The existing `TestAggregator_CrossAppStreamID_NoCollision` **passed trivially** — it sent a `publish_end` for an
+   app that never had a `publish_start`, so `a.streams` never held both keys and `snapRemoveStream` never fired. The
+   real bug needs **both** apps active; the new `TestAggregator_CrossAppStreamID_BothActive_EndOne` exercises that.
+2. The guard is the **proportionate** fix, not a total one. It fixes the eviction-of-the-visible-stream corruption
+   (Case A). The residual last-write shadowing — when the *visible* (last-written) stream ends, the shadowed one
+   stays out of the map until its next stats event — is the **documented** last-write-wins behavior, does not
+   regress the counters, and **self-heals within one poll interval**. A full fix (rekey `snapshot.Streams` to the
+   compound key) would break the bare-`stream_id` groupKey lookup in `alert/evaluator.go` and the per-stream API
+   response keys — out of scope, deliberately not taken.
+3. **Cross-source dedup is NOT affected.** The independent review raised "adding App breaks webhook↔restpoller
+   dedup" — refuted: the `Deduplicator` is **restpoller-private** (`webhook/webhook.go` writes directly to its sink
+   with zero dedup involvement; `IsDuplicate` is called only at `restpoller.go:412/423`). Adding `App` cannot
+   regress any cross-source dedup because there is none through this component.
+
+**Verification.** gofmt/vet clean; **full Go suite 24/24**. Three new/extended tests: `dedup_test.go`
+(`CrossAppSameStreamID_NotDuplicate` + `SameApp_IsDuplicate` positive control), the aggregator two-active-streams
+test, and a Phase-4 assertion added to `TestRestPoller_MultiApp_NoFalseEnd` (which was *silently dropping app-B's
+`publish_start`* before this fix). **Mutation-proven, 2 rounds on a throwaway copy:** (a) removing `app` from
+`dedupKey` turns both the dedup unit test and the restpoller integration test RED; (b) reverting the guard to an
+unconditional delete turns the aggregator test RED while the unmutated control stays GREEN. **Independent 3-lens
+adversarial review** (correctness / concurrency / consistency; 7 agents, refute-by-default): **4 candidate
+findings, all 4 refuted** with code-grounded traces.
+
+**Prod: rolled forward** (server *source* changed) — STAMPED build, rollback tag `pre-d111`, backup rc=0. New prod
+stamp: **`v0.4.0-39-gc08ad6a`** (was `v0.4.0-37-g5e822e7`). Smoke: `/healthz` all-ok (`ams_env_configured:true`);
+`pulse version` = `v0.4.0-39-gc08ad6a`; signed webhook → 200; limits 512M/0.5cpu; logs clean; **live functional:**
+`GET /api/v1/live/streams` → **200** `{items,meta}` and `/live/overview` → 200 (the aggregator snapshot the guard
+maintains serializes cleanly on the new binary).
+
+**Operator action required: NONE.** Carried items unchanged (AMS trial-expiry doc discrepancy 07-12 vs 07-27; GHCR
+anon → 401 — both operator-only).
+
+**★ Remaining S48-audit backlog: 13 findings (3 HIGH, 7 MEDIUM, 3 LOW)** in `S48-AUDIT-FINDINGS.md`. Findings [1]
+and [2] marked ✅ DONE. Next HIGH candidates for SESSION-50: **[3]** `amsclient` streamID not URL-path-escaped;
+**[4]** scheduled-report period off-by-one (bundle **[15]** local-vs-UTC `nextCronTime` — same file); **[5]**
+cluster edge-stream status ignored. Re-verify each against the code first (agent-produced list).
+
+**Docs at close:** D-111 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (findings
+[1]+[2] ✅); RESUME-PROMPT ▶ START HERE → SESSION-50; `operator-expected.md` refreshed (no new item);
+`sessions/SESSION-49.md` CLOSED; `sessions/SESSION-50.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 13.

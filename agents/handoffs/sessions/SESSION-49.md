@@ -1,5 +1,14 @@
 # SESSION-49 — planned at S48 close (D-110)
 
+> **✅ CLOSED 2026-07-16 (D-111, PR #95).** Took cluster 1 — the cross-app StreamID collision (S48-audit findings
+> [1]+[2], one root cause: AMS identity is `(app, streamId)` but two collector paths keyed on the bare `streamId`).
+> Shipped: `dedup.go` `dedupKey` gained `app`; `aggregator.go` `snapRemoveStream` guards its bare-`StreamID` map
+> delete with a pointer-equality check. **Re-verify-before-build mattered** — the existing cross-app aggregator test
+> passed trivially, and the guard is the proportionate fix (residual last-write shadowing is documented/self-healing;
+> a full rekey would break the alert groupKey lookup). Full Go suite 24/24; mutation-proven ×2; 3-lens review
+> (4 findings, all refuted); prod `v0.4.0-39-gc08ad6a`. **13 S48-audit findings remain** → SESSION-50. Evidence:
+> `decisions.md` D-111. (CI-promotion gate still shut — 07-16 < 07-23.)
+
 > Written by SESSION-48 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > Read `RESUME-PROMPT.md` + `agents/handoffs/S48-AUDIT-FINDINGS.md` before dispatching.
