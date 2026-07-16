@@ -11,7 +11,49 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-59.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-60.md`)
+
+**Session 2026-07-16 result: D-121 — S59 DEFERRED S48-audit finding [11] (no fix shipped — dead code parked by D-087).**
+
+**★ S59 opened the HARDER TAIL and took finding [11]** (`query/query.go:1092` `AnomalyBaselineForMetric` viewer_count
+case queries `avg(viewers)`/`event_time`). Re-verification CONFIRMED the columns are wrong (`viewer_count`/`ts` per
+`0001_init.sql:48,58`) — BUT the function is **DEAD CODE** (`grep -r '\.AnomalyBaselineForMetric' server/` hits only
+`wave3_anomaly_query_test.go`; the live `anomaly.Detector` uses meta-store Welford baselines, not this ClickHouse
+path) and this exact latent bug was **already deliberately deferred by D-087** ("fix only when this function is
+actually wired to live code"; the F9 ClickHouse-baseline path is GATED on real traffic). **Ruling: DEFER, do not
+fix** — fixing dead code against an explicit deferral is churn with zero prod impact, and a piecemeal column fix
+would be incomplete (needs the default-branch metric-allowlist redesign D-087 describes, done TOGETHER when wired).
+Shipped an inline deferral pin at `query.go:1092` naming the wrong columns + the wire-it-first gate. **No prod roll**
+(comment-only, byte-identical binary; prod stays `v0.4.0-57-g36c16ed`). Full evidence: `decisions.md` D-121.
+
+**★ SESSION-60 = the remaining backlog: 2 ACTIONABLE findings** (both MEDIUM; [11] now ⏸️ DEFERRED) in
+`S48-AUDIT-FINDINGS.md`. Both need MORE than a code tweak (verify each against the code first; one scope per PR;
+**run `gofmt -l` before pushing**):
+- **⚠ [12] MEDIUM** `contracts/db/clickhouse/0001_init.sql:358` — `peak_concurrency` missing from the
+  `SummingMergeTree((viewer_minutes, egress_bytes, recording_bytes))` column list → after a background merge it is
+  NOT summed (kept from one row) → underreported. **Needs a NEW forward-only migration `0005`** (`ALTER TABLE
+  {db}.rollup_usage_1d MODIFY ENGINE = SummingMergeTree((viewer_minutes, peak_concurrency, egress_bytes,
+  recording_bytes))`, ClickHouse ≥ 22.6); **do NOT edit 0001.** **FIVE wiring places** (grep where `0004` is
+  registered: embedded FS list, migrations dir, golden/DDL test, docs) + integration-test the mutation (insert N,
+  OPTIMIZE FINAL, assert `sum(peak_concurrency)=N`). Confirm the running prod schema BEFORE writing the ALTER; the
+  migrate one-shot runs on `up -d` (back up first). **Next pick.**
+- **⚠ [8] MEDIUM** `collector/webhook/webhook.go:160` webhook replay — no freshness check; any captured signed
+  webhook can be replayed. Fix needs a new `X-Ams-Timestamp` header + a ±window check folded into the HMAC — a
+  **CONTRACT change with AMS/the signing proxy**. **Verify product-viability FIRST** (does AMS/the deployed proxy
+  actually send a timestamp header?); if not, this is **operator/contract-gated** — record it in
+  `operator-expected.md` + the session log rather than shipping a half-measure. May not be a pure code fix.
+
+**Suggested order: [12] first** (mechanical fix, heavy plumbing — a clean autonomous win), then **[8]** (product/
+contract gate — may hand off to operator). **Each is an AGENT finding — re-verify against the code before building**
+(take the verified core — S59 DEFERRED [11] as a dead-code dup of D-087). **§2.7 CI promotions unlock ≥ 2026-07-23 —
+CHECK THE DATE at open.**
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
+ledger 07-27) — operator-only. GHCR anon → 401 — operator-only. No new operator action from S59.
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-59.md`)
 
 **Session 2026-07-16 result: D-120 — S58 DONE (PR #113). Shipped S48-audit finding [14] — beacon 413 detection by error type.**
 

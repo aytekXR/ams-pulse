@@ -1,5 +1,19 @@
 # SESSION-59 — planned at S58 close (D-120)
 
+> **⏸️ CLOSED 2026-07-16 (D-121). DEFERRED S48-audit finding [11] — no fix shipped.** Took [11]
+> (`query/query.go:1092` `AnomalyBaselineForMetric` viewer_count case → `avg(viewers)`/`event_time`).
+> Re-verification CONFIRMED the columns are wrong (`viewer_count`/`ts` per `0001_init.sql:48,58`) BUT the function is
+> **DEAD CODE** (`grep -r '\.AnomalyBaselineForMetric' server/` → only `wave3_anomaly_query_test.go`; the live
+> `anomaly.Detector` uses meta-store Welford baselines, not this ClickHouse path) and this exact latent bug was
+> **already deliberately deferred by D-087** ("fix only when this function is actually wired to live code"; F9
+> ClickHouse-baseline path GATED on real traffic). **Ruling: DEFER, do not fix** — churn with zero prod impact, and a
+> piecemeal column fix would be incomplete (needs the default-branch metric-allowlist redesign D-087 describes, done
+> TOGETHER when wired) + dodges the VACUOUS-test trap the finding warned of. Shipped an inline deferral pin at
+> `query.go:1092` naming the wrong columns + the wire-it-first gate. **No prod roll** (comment-only, byte-identical
+> binary; prod stays `v0.4.0-57-g36c16ed`). **2 findings remain (both MEDIUM, actionable): [12] SummingMergeTree
+> peak_concurrency (migration 0005), [8] webhook replay (product/contract-gated)** → SESSION-60. Evidence:
+> `decisions.md` D-121. (CI-promotion gate still shut — 07-16 < 07-23.)
+
 > Written by SESSION-58 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE for the full ranked candidate list** + `S48-AUDIT-FINDINGS.md`.

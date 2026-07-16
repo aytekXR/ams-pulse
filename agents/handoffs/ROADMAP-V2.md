@@ -527,7 +527,7 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.30  Fresh subsystem adversarial audit (16 findings)  [13 shipped — ALL 6 HIGH done; 3 MEDIUM backlog]  ⏳ IN PROGRESS S48→S58 (D-110…D-120, 2026-07-16, PR #93…#113)
+### 2.30  Fresh subsystem adversarial audit (16 findings)  [13 shipped — ALL 6 HIGH done; 1 DEFERRED; 2 MEDIUM actionable]  ⏳ IN PROGRESS S48→S59 (D-110…D-121, 2026-07-16, PR #93…#114)
 
 With the S44 13-bug backlog closed (§2.29) and the §2.7 CI-promotion gate not yet open (07-16 < 07-23), **S48
 followed the standing re-scan mandate and ran a fresh adversarial audit of the subsystems the S44 audit never
@@ -594,11 +594,19 @@ swept** (collector, amsclient, reports, cluster, clickhouse): 7 finders + refute
   the audit — KEPT the post-read exact-boundary check (audit wrongly called it unreachable; `MaxBytesReader` doesn't
   error on a body of exactly `maxBodyBytes`). Mutation-proven (revert to the heuristic → new test reddens `got 413
   want 400`, `OverSize_413` green); self-review (mechanical); prod `v0.4.0-57-g36c16ed`.
-- ⏳ **3 findings remain (ALL MEDIUM — the harder tail)** → S59+: [11] anomaly baseline wrong columns (needs a
-  SQL-text assertion seam or real-CH test — the fake conn is vacuous); ⚠ [12] SummingMergeTree `peak_concurrency`
-  (needs a migration, FIVE places, next = 0005); ⚠ [8] webhook replay (needs product-viability verification — new
-  `X-Ams-Timestamp` header + signing-proxy convention, may be operator/contract-gated). All clean/mechanical
-  findings are done. Full list + fixes: `S48-AUDIT-FINDINGS.md`; plan: `sessions/SESSION-59.md`.
+- ⏸️ **S59 (D-121) — DEFERRED [11] anomaly baseline wrong columns (no fix shipped).** `AnomalyBaselineForMetric`'s
+  viewer_count case queries `avg(viewers)`/`event_time`; re-verification CONFIRMED the columns are wrong
+  (`viewer_count`/`ts` per `0001_init.sql:48,58`) BUT the function is **DEAD CODE** (`grep` → only
+  `wave3_anomaly_query_test.go`; the live `anomaly.Detector` uses meta-store Welford baselines, not this ClickHouse
+  path) and this exact latent bug was **already deliberately deferred by D-087** ("fix only when actually wired to
+  live code"; F9 ClickHouse-baseline path GATED on real traffic). Ruling: DEFER — fixing dead code against an
+  explicit deferral is churn with zero prod impact, and a piecemeal column fix would be incomplete (needs the
+  default-branch metric-allowlist redesign D-087 describes, done TOGETHER when wired). Shipped an inline deferral pin
+  at `query.go:1092`. **No prod roll** (comment-only; prod stays `v0.4.0-57-g36c16ed`).
+- ⏳ **2 findings remain (both MEDIUM, actionable)** → S60+: ⚠ [12] SummingMergeTree `peak_concurrency` (needs a
+  NEW forward-only migration `0005` + `ALTER TABLE … MODIFY ENGINE`, FIVE wiring places; do NOT edit 0001); ⚠ [8]
+  webhook replay (needs product-viability verification — new `X-Ams-Timestamp` header + signing-proxy convention, may
+  be operator/contract-gated). Full list + fixes: `S48-AUDIT-FINDINGS.md`; plan: `sessions/SESSION-60.md`.
 
 ### 2.29  Security hardening + 13-bug adversarial audit  [S shipped; M–L backlog]  ✅ SECURITY CLUSTER DONE S44 (D-106, 2026-07-15, PR #85)
 

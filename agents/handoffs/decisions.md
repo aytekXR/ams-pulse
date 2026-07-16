@@ -7736,3 +7736,44 @@ may be operator/contract-gated).
 **Docs at close:** D-120 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (finding [14]
 ✅, 13 shipped); RESUME-PROMPT ▶ START HERE → SESSION-59; `operator-expected.md` refreshed (no new item);
 `sessions/SESSION-58.md` CLOSED; `sessions/SESSION-59.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 3.
+
+## D-121 — S59 (2026-07-16): DEFERRED — audit finding [11] is a dead-code latent bug already parked by D-087 (no fix shipped)
+
+**Context.** SESSION-59 opened on the "harder tail" (3 MEDIUM remain). Took finding [11] — `query/query.go:1092`
+`AnomalyBaselineForMetric` viewer_count case queries `avg(viewers)` / `event_time`.
+
+**Re-verification (the reason NOT to ship a code fix).** The audit framed [11] as high-value ("baseline-driven
+alerting would treat every window as zero"). Re-verifying against the code overturns that premise:
+- **The columns ARE wrong** — `server_events` has `viewer_count` (not `viewers`) and `ts` (not `event_time`) per
+  `0001_init.sql:48,58`. Against real ClickHouse the query errors "Unknown identifier", is caught, and returns a
+  silent `(0,0,0,nil)` baseline. So the mechanism is real.
+- **But the function is DEAD CODE** — `grep -r '\.AnomalyBaselineForMetric'` across `server/` hits ONLY
+  `wave3_anomaly_query_test.go`. No endpoint or the live `anomaly.Detector` reaches it; the Detector uses meta-store
+  Welford baselines, not this ClickHouse path.
+- **Already known + deliberately deferred by D-087** — D-087's close note lists "Latent bug (scout catch, A2 to
+  assess): query.go:1081" (this function), and its inline pin says "fix only when this function is actually wired to
+  live code." The whole F9 ClickHouse-baseline path is GATED on real traffic (D-087 sparsity ruling: prod had 2
+  beacon rows, zero-variance + non-independence traps).
+
+**Ruling: DEFER, do not fix.** Fixing dead code against an explicit deferral decision is churn with zero production
+impact, and a piecemeal column fix would be incomplete (the correct fix also needs the default-branch
+metric-allowlist redesign D-087 describes, done together WHEN the function is wired). This honors "respect
+documented design even when an audit disagrees" and "take the verified CORE, not the audit's framing." It also
+avoids the VACUOUS-test trap the finding itself warned about (the fake conn ignores SQL text — a real fix would need
+a SQL-text seam or real-CH test, only worth building alongside the wiring).
+
+**What shipped (documentation only, NO behavior change).** Added an explicit inline deferral pin at `query.go:1092`
+(matching D-087's own approach) naming the wrong columns, the correct fix, and the wire-it-first gate. **No query
+change → NO prod roll** (comment-only, byte-identical binary; prod stays `v0.4.0-57-g36c16ed`). gofmt/vet clean;
+`go build ./...` + `go vet ./...` + query package tests pass.
+
+**Operator action required: NONE.** Carried items unchanged (AMS trial-expiry 07-12 vs 07-27; GHCR anon → 401).
+
+**★ Remaining S48-audit backlog: 2 ACTIONABLE (both MEDIUM) + 1 DEFERRED ([11]).** Shipped 13; [11] parked
+(D-121/D-087). Actionable: **[12]** SummingMergeTree `peak_concurrency` (needs a new migration 0005, FIVE places),
+**[8]** webhook replay (needs product-viability verification — may be operator/contract-gated).
+
+**Docs at close:** D-121 DEFERRED (this block); ROADMAP-V2 §2.30 updated ([11] ⏸️ DEFERRED); RESUME-PROMPT ▶ START
+HERE → SESSION-60; `operator-expected.md` refreshed (no new item); `sessions/SESSION-59.md` CLOSED;
+`sessions/SESSION-60.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 2 actionable. (No CHANGELOG entry — no
+user-facing change.)
