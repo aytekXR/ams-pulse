@@ -15,9 +15,16 @@ import (
 )
 
 // dedupKey is the composite key used for deduplication.
+//
+// app is part of the key because AMS stream identity is (app, streamId): two
+// applications on the same node may each host a stream with the same bare
+// streamId (e.g. LiveApp/test123 and PetarTest2/test123). Without app in the
+// key, the second app's publish_start/end within the same window collides with
+// the first and is silently dropped, so its lifecycle never reaches ClickHouse.
 type dedupKey struct {
 	eventType string
 	nodeID    string
+	app       string
 	streamID  string
 	window    int64 // coarse time bucket (ts / windowMs)
 }
@@ -62,6 +69,7 @@ func (d *Deduplicator) IsDuplicate(e domain.ServerEvent) bool {
 	key := dedupKey{
 		eventType: e.Type,
 		nodeID:    e.NodeID,
+		app:       e.App,
 		streamID:  e.StreamID,
 		window:    e.TS / d.windowMs,
 	}

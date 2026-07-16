@@ -378,6 +378,61 @@ func TestAggregator_CrossAppStreamID_NoCollision(t *testing.T) {
 	}
 }
 
+// TestAggregator_CrossAppStreamID_BothActive_EndOne is the S49 regression test
+// (D-111) for S48 finding [2]: when TWO apps both have an active stream with the
+// same bare StreamID and ONE ends, the surviving stream must stay in
+// snapshot.Streams.
+//
+// snapshot.Streams is keyed by bare StreamID (not the compound nodeID/app/streamID
+// key of a.streams), so it holds only the last-written pointer (PetarTest2 here).
+// Before D-111, snapRemoveStream did an unconditional delete(snapshot.Streams,
+// StreamID), so ending LiveApp/test123 evicted PetarTest2/test123 — leaving
+// ActiveStreams=1 but an EMPTY per-stream map. The pointer-equality guard skips
+// the delete unless the map entry is this exact stream.
+//
+// This differs from TestAggregator_CrossAppStreamID_NoCollision above, where the
+// ending app never had a publish_start (so a.streams never held both keys and
+// snapRemoveStream never fired). Here both apps are genuinely active.
+func TestAggregator_CrossAppStreamID_BothActive_EndOne(t *testing.T) {
+	agg := New(3*time.Minute, nil, nil)
+
+	// LiveApp/test123 goes live (published FIRST — so it is the SHADOWED entry;
+	// the map's bare "test123" slot will be overwritten by PetarTest2 below).
+	agg.OnServerEvent(domain.ServerEvent{
+		Version: 1, Type: domain.EventStreamPublishStart, TS: time.Now().UnixMilli(),
+		Source: domain.SourceRestPoll, NodeID: "node-1", App: "LiveApp", StreamID: "test123",
+		Data: map[string]any{"publish_type": "rtmp"},
+	})
+	// PetarTest2/test123 goes live SECOND on the same node → last-write-wins, so
+	// snapshot.Streams["test123"] now points at PetarTest2's stream.
+	agg.OnServerEvent(domain.ServerEvent{
+		Version: 1, Type: domain.EventStreamPublishStart, TS: time.Now().UnixMilli(),
+		Source: domain.SourceRestPoll, NodeID: "node-1", App: "PetarTest2", StreamID: "test123",
+		Data: map[string]any{"publish_type": "rtmp"},
+	})
+	if got := agg.CurrentSnapshot().ActiveStreams; got != 2 {
+		t.Fatalf("ActiveStreams = %d after both apps publish_start; want 2", got)
+	}
+
+	// LiveApp/test123 ends. It is NOT the pointer in snapshot.Streams (PetarTest2
+	// is), so the guard must skip the delete and leave PetarTest2 intact.
+	agg.OnServerEvent(domain.ServerEvent{
+		Version: 1, Type: domain.EventStreamPublishEnd, TS: time.Now().UnixMilli(),
+		Source: domain.SourceRestPoll, NodeID: "node-1", App: "LiveApp", StreamID: "test123",
+		Data: map[string]any{"reason": "stopped"},
+	})
+
+	snap := agg.CurrentSnapshot()
+	if snap.ActiveStreams != 1 {
+		t.Fatalf("ActiveStreams = %d after LiveApp publish_end; want 1 (PetarTest2/test123 still live)", snap.ActiveStreams)
+	}
+	s, ok := snap.Streams["test123"]
+	if !ok || !s.Active || s.App != "PetarTest2" {
+		t.Fatalf("PetarTest2/test123 evicted from snapshot.Streams after LiveApp ended: ok=%v stream=%+v "+
+			"(unconditional delete(snapshot.Streams, StreamID) removed the surviving app's entry)", ok, s)
+	}
+}
+
 // TestAggregator_SetIngestTargets verifies that the dashboard's per-stream health
 // honors the configured PULSE_INGEST_TARGET_BITRATE_KBPS (D-031). The aggregator
 // previously hardcoded ingest.DefaultTargetBitrateKbps (2000), so a 623 kbps RTSP

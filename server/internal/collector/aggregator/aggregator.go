@@ -559,7 +559,13 @@ func (a *Aggregator) snapRemoveStream(s *domain.LiveStream) {
 	a.snapshot.ActiveStreams--
 	a.snapshot.TotalViewers -= s.ViewerCount
 	a.snapshot.IngestBitrate -= s.IngestBitrate
-	delete(a.snapshot.Streams, s.StreamID)
+	// Pointer-equality guard: snapshot.Streams is keyed by bare StreamID, so when
+	// two apps share a StreamID the map holds only the last-written pointer
+	// (last-write-wins, see snapAddStream). A bare delete here would evict the
+	// OTHER app's still-active stream. Only remove the entry if it is this stream.
+	if a.snapshot.Streams[s.StreamID] == s {
+		delete(a.snapshot.Streams, s.StreamID)
+	}
 	a.snapshot.AppViewers[s.App] -= s.ViewerCount
 	if a.snapshot.AppViewers[s.App] <= 0 {
 		delete(a.snapshot.AppViewers, s.App)
