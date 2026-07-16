@@ -12,6 +12,14 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **Player-beacon (QoE) events now save atomically, with accurate ingest metrics
+  (D-118).** The ClickHouse writer opened a separate insert for every beacon item
+  in a flush, so a transient failure partway through committed the earlier items
+  while the writer reported the whole flush as failed — the "inserted" count
+  under-reported reality and the rest of the batch was dropped without a retry.
+  Each flush is now a single atomic insert (matching the server-event and
+  viewer-session writers): on failure nothing is written, so the metrics always
+  match what was stored. (Found by the S48 subsystem audit, finding [13].)
 - **Usage reports now disclose the egress method they actually used (D-117).**
   The report-level "Egress method" line on billing statements (CSV/PDF) and the
   `egress_method` API field were hardcoded to `bitrate_x_watch_time` even when the

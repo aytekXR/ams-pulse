@@ -7618,3 +7618,43 @@ Next: [13] clickhouse per-item PrepareBatch, [16] dup node_stats, [14] beacon 41
 **Docs at close:** D-117 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (finding [10]
 ✅, 10 shipped); RESUME-PROMPT ▶ START HERE → SESSION-56; `operator-expected.md` refreshed (no new item);
 `sessions/SESSION-55.md` CLOSED; `sessions/SESSION-56.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 6.
+
+## D-118 — S56 (2026-07-16): CLOSED — beacon insert is atomic (one batch, not per-item) (finding [13], PR #109)
+
+**Context.** SESSION-56 continued the MEDIUM/LOW batch (CI-promotion gate still shut, 07-16 < 07-23). Took finding
+[13] in `store/clickhouse/clickhouse.go` `insertBeaconEvents`.
+
+**Finding [13] — per-item PrepareBatch → partial commit + misleading metrics.** `insertBeaconEvents` opened a fresh
+`PrepareBatch` and `Send` for EVERY `BeaconItem` inside the `[]BeaconEvent`×`[]BeaconItem` double loop, so each item
+committed to ClickHouse independently. A mid-batch `Send` failure at item M partial-committed items 0..M-1 while
+returning an error for the whole flush. **Verified** against the flusher: `runBeaconEventFlusher.flush()` treats any
+error as a full-batch failure — it skips `s.inserted.Add(len(batch))` and clears the batch without re-queue — so on
+a partial failure the metrics under-count what ClickHouse actually stored and the remaining items are silently lost.
+The sibling `insertServerEvents`/`insertViewerSessions` already do one `PrepareBatch`+`Send` for the whole slice.
+
+**Fix.** Hoist `PrepareBatch` above the double loop and `Send` once after all `Append`s, mirroring the siblings. The
+flush is now atomic — on error nothing commits, so the flusher's all-or-nothing accounting matches reality.
+
+**Verification.** gofmt/vet clean; **full Go suite 24/24**. Added a default-off send-failure hook to the test mock
+(`sendFailOnCall`/`sendErr`) + three tests in `drain_test.go`: `TestInsertBeaconEvents_SingleBatchPerFlush` (exactly
+one `Send` per flush), `_NeverPartiallyCommits` (a mid-batch `Send` failure leaves 0 or all rows, never a subset),
+`_AtomicFailureCommitsNothing` (a failed `Send` commits 0). **Mutation-proven** by splicing the EXACT original
+per-item function back into a throwaway copy (awk splice): the two distinguisher tests redden (`got 3 sends, want 1`;
+`got 1 partial row, want 0 or 3`); the positive control stays green. **Review:** careful self-review — a mechanical
+fix that mirrors two existing sibling inserters, mutation-proven against the exact original (S53/S54 precedent).
+
+**Prod: rolled forward** (server *source* changed) — STAMPED build, rollback image tag `pre-d118`
+(→ `v0.4.0-51-ge5577f7`), backup rc=0. New prod stamp: **`v0.4.0-53-g500aabb`** (was `v0.4.0-51-ge5577f7`). Smoke:
+`/healthz` all-ok (`ams_env_configured:true`); `pulse version` = `v0.4.0-53-g500aabb`; signed webhook → 200; limits
+512M/0.5cpu; logs clean.
+
+**Operator action required: NONE.** Carried items unchanged (AMS trial-expiry doc discrepancy 07-12 vs 07-27;
+GHCR anon → 401).
+
+**★ Remaining S48-audit backlog: 5 findings (3 MEDIUM, 2 LOW)** in `S48-AUDIT-FINDINGS.md`. Finding [13] ✅ DONE.
+Next: [16] dup node_stats, [14] beacon 413; [11] anomaly baseline columns (needs a SQL-text/real-CH seam); [12]
+SummingMergeTree migration (FIVE places) + [8] webhook replay (product-viability) last.
+
+**Docs at close:** D-118 CLOSED (this block); CHANGELOG `[Unreleased]` Fixed; ROADMAP-V2 §2.30 updated (finding [13]
+✅, 11 shipped); RESUME-PROMPT ▶ START HERE → SESSION-57; `operator-expected.md` refreshed (no new item);
+`sessions/SESSION-56.md` CLOSED; `sessions/SESSION-57.md` + `S48-AUDIT-FINDINGS.md` carry the remaining 5.

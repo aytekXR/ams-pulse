@@ -11,7 +11,43 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-56.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-57.md`)
+
+**Session 2026-07-16 result: D-118 — S56 DONE (PR #109). Shipped S48-audit finding [13] — beacon insert atomicity.**
+
+**★ S56** (MEDIUM/LOW batch; CI-promotion gate still shut, 07-16 < 07-23). `store/clickhouse/clickhouse.go`
+`insertBeaconEvents` opened a fresh `PrepareBatch`+`Send` for EVERY `BeaconItem` inside the double loop, so a
+mid-batch `Send` failure partial-committed items 0..M-1 while the flusher (`runBeaconEventFlusher`) counted the whole
+flush as failed — under-reporting `inserted` and silently dropping the rest. Fix: one `PrepareBatch` + one `Send`
+per flush (mirror `insertServerEvents`/`insertViewerSessions`) → atomic; on error nothing commits, matching the
+flusher's all-or-nothing accounting. Mutation-proven (awk-spliced the exact original per-item func back → 2
+distinguisher tests redden); self-review (mechanical). **Prod `v0.4.0-53-g500aabb`.** Full evidence: `decisions.md` D-118.
+
+**★ SESSION-57 = continue the MEDIUM/LOW batch: 5 findings remain** (0 HIGH, 3 MEDIUM, 2 LOW) in
+`S48-AUDIT-FINDINGS.md`. Suggested order (verify each against the code first; one scope per PR; **run `gofmt -l`
+before pushing**):
+- **[16] LOW** `cluster/discovery.go:145` — two DTOs resolving to the same key (both empty NodeID+IP → "") emit
+  duplicate node_stats. Fix: dedup guard at the top of the poll loop (`seen` map already exists). **Clean next pick.**
+- **[14] LOW** `collector/beacon/beacon.go:352` — 413 detection uses `len(body) >= maxBodyBytes-1` instead of
+  `errors.As(err, &http.MaxBytesError)`; a 65535-byte body that then ECONNRESETs wrongly returns 413.
+- **[11] MEDIUM** `query/query.go:1084` — `AnomalyBaselineForMetric` viewer_count case uses `avg(viewers)`/
+  `event_time` but the columns are `viewer_count`/`ts` → silent zero baseline. ⚠ Needs a **SQL-text assertion seam
+  or real-CH test** — the fake conn returns fixed values regardless of SQL, so a naive unit test is VACUOUS.
+- **⚠ [12] MEDIUM** `contracts/db/clickhouse/0001_init.sql:358` — `peak_concurrency` missing from the
+  SummingMergeTree column list. **Needs a migration (FIVE places, next = 0005) + `ALTER TABLE … MODIFY ENGINE`.**
+  Heaviest; do late.
+- **⚠ [8] MEDIUM** `collector/webhook/webhook.go:160` webhook replay — **verify product-viability**: needs a new
+  `X-Ams-Timestamp` header + AMS/signing-proxy convention; may be operator/contract-gated, not a pure code fix.
+
+**Each is an AGENT finding — re-verify against the code before building** (take the verified core — narrower OR
+broader). **§2.7 CI promotions unlock ≥ 2026-07-23 — CHECK THE DATE at open.**
+
+**⚠ CARRIED operator item (unchanged):** the **AMS trial expiry doc discrepancy** (`self-hosted-ams.md` 07-12 vs
+ledger 07-27) — operator-only. GHCR anon → 401 — operator-only. No new operator action from S56.
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-56.md`)
 
 **Session 2026-07-16 result: D-117 — S55 DONE (PR #107). Shipped S48-audit finding [10] — report-level egress-method disclosure.**
 
