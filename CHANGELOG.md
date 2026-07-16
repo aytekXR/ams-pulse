@@ -12,6 +12,14 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **The REST poller no longer leaks memory for idle streams that come and go
+  (D-116).** The poller tracked the last-seen status of every stream but only
+  cleaned up entries for streams that had been actively broadcasting; an
+  idle/created stream that appeared and later disappeared from Ant Media left a
+  permanent entry, so the tracking map grew unbounded over long uptimes. All
+  disappeared streams are now cleaned up (a "stream ended" event is still emitted
+  only for ones that were broadcasting). (Found by the S48 subsystem audit,
+  finding [9].)
 - **A publisher whose ingest stats arrive without a timestamp is no longer
   falsely dropped (D-115).** An ingest health event with a zero timestamp was
   recorded as last-seen in 1970, so the next staleness sweep immediately evicted
