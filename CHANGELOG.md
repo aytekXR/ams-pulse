@@ -12,6 +12,12 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **A publisher whose ingest stats arrive without a timestamp is no longer
+  falsely dropped (D-115).** An ingest health event with a zero timestamp was
+  recorded as last-seen in 1970, so the next staleness sweep immediately evicted
+  the publisher with a spurious "source gone" warning and hid its real health. The
+  guard now checks the timestamp field directly. (Found by the S48 subsystem
+  audit, finding [7].)
 - **Origin viewer counts recover after an edge node goes down (D-114).** In an
   origin+edge cluster, Pulse skips the origin's viewer count for a stream while an
   edge is serving it (the origin's number already includes edge viewers). But a

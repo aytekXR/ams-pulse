@@ -1,5 +1,12 @@
 # SESSION-53 — planned at S52 close (D-114)
 
+> **✅ CLOSED 2026-07-16 (D-115, PR #103).** Took the cleanest MEDIUM — finding [7]: `collector/ingest/health.go`
+> `onIngestStats` guarded a missing timestamp with `if now.IsZero()`, but `time.UnixMilli(0)` is 1970 (not the Go
+> zero time), so a `TS==0` event stamped `LastSeen=1970` → `SweepStale` falsely evicted the publisher. Fix:
+> `if ev.TS <= 0`. Full Go suite 24/24; mutation-proven (revert → 1970 stamp visible in the sweep log → RED);
+> self-reviewed (mechanical); prod `v0.4.0-47-gd32b165`. **8 MEDIUM/LOW findings remain** → SESSION-54. Evidence:
+> `decisions.md` D-115. (CI-promotion gate still shut — 07-16 < 07-23.)
+
 > Written by SESSION-52 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > Read `RESUME-PROMPT.md` + `agents/handoffs/S48-AUDIT-FINDINGS.md` before dispatching.

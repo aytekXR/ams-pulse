@@ -1,4 +1,17 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-114 — SESSION-52)
+# Operator TODO — the items only YOU can do (updated 2026-07-16, D-115 — SESSION-53)
+
+> **S53 (D-115) needs NO operator action.** This session fixed a subsystem-audit finding: an **ingest-health event
+> that arrived without a timestamp was recorded as if last seen in 1970**, so the next staleness sweep immediately
+> dropped that publisher with a false "source gone" warning and hid its real health. The timestamp check is now
+> correct. Fixed and live (`v0.4.0-47-gd32b165`). **All six high-severity audit findings plus two lower-severity
+> ones are now shipped; 8 lower-severity findings remain**, queued for upcoming sessions
+> (`agents/handoffs/S48-AUDIT-FINDINGS.md`); none needs you.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
+> 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none
+> blocks the autonomous work.
+
+## (previous header — D-114, SESSION-52)
 
 > **S52 (D-114) needs NO operator action.** This session fixed the **last of the six high-severity** subsystem-audit
 > findings: in an origin+edge cluster, a **crashed edge node kept origin viewer counts stuck at 0**. Pulse skips the
@@ -6,8 +19,7 @@
 > downed edge was still treated as "serving" because its last-known stream count was never cleared — so origin
 > viewer totals never recovered even after the edge was gone and the origin was the only node left. Downed edges are
 > now excluded from that check. Fixed and live (`v0.4.0-45-g0ab487f`). **★ With this, all six high-severity audit
-> findings are shipped; 9 lower-severity findings remain**, queued for upcoming sessions
-> (`agents/handoffs/S48-AUDIT-FINDINGS.md`); none needs you.
+> findings are shipped.**
 >
 > **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs
 > 07-27; see ⚠ below). GHCR is still private (**401**). The S43 soft rulings and item 10 still wait on you; none
