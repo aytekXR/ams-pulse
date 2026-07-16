@@ -7890,3 +7890,50 @@ today ≥ 2026-07-23).
 **Docs at close:** D-123 SHIPPED (this block); CHANGELOG Added; S48-AUDIT-FINDINGS.md [8] ✅ DONE; ROADMAP-V2 §2.30
 (14 shipped, 2 deferred — audit COMPLETE); RESUME-PROMPT ▶ START HERE → SESSION-62; `operator-expected.md` refreshed
 (opt-in, no action); `sessions/SESSION-61.md` CLOSED; `sessions/SESSION-62.md` written.
+
+## D-124 — S62 (2026-07-16): fresh adversarial audit of the un-swept subsystems → 25 confirmed findings (ledger created)
+
+**Context.** With the S48 audit COMPLETE (D-110…D-123), SESSION-62 followed the standing re-scan mandate and ran a
+**fresh adversarial audit of the subsystems S44/S48 never swept** — `alert/evaluator`+`alert/channels`, `license`,
+`prober`, `anomaly`, and the `api` handler families not covered by S44. Verify-at-open clean: prod
+`v0.4.0-61-g28812db`, date 2026-07-16 (< 07-23, CI-promo gate shut).
+
+**Method.** Same pattern as S44/S48: a `Workflow` with **7 finders** (one per subsystem/lens) hunting CONFIRMED,
+mutation-checkable defects (concrete scenario + mutation each) → **refute-by-default verifiers** (one per finding,
+default REFUTED unless a concrete failure is traceable) → collect CONFIRMED. **33 agents, 1.27M tokens.**
+
+**Result: 26 raw → 25 CONFIRMED (6 HIGH, 15 MEDIUM, 4 LOW), 1 refuted.** All recorded in
+`agents/handoffs/S62-AUDIT-FINDINGS.md` (full mechanism/scenario/mutation/fix per finding). Highlights:
+- **HIGH:** STARTTLS failure silently discarded → SMTP creds risk (`channels.go`); Telegram bot token leaked into
+  error logs (`telegram.go`); unbounded MPD manifest read, no `io.LimitReader` (`probe_dash.go`); attacker-controlled
+  printf format specifier → gigabyte alloc (`probe_dash.go`); two nil-deref panics in the reports_wave2 update
+  re-fetch paths (`reports_wave2.go`).
+- **MEDIUM/LOW:** alert-evaluator D-088 presence guards + stream_offline compare bypass + license_expiry stuck-firing;
+  SMTP CRLF subject injection + Telegram HTML injection; license tier/error handling; RTMP CSID map growth, HLS
+  zero-EXTINF + protocol-relative URI, WebRTC-ICE timer leak; anomaly hysteresis/scopeJSON escaping; api SSRF probe
+  URL, transient-DB-error-as-404, and **[24] viewer-token audit-log read**.
+
+**★ Re-verify caveats before building (the binding lesson):** these are AGENT findings — re-verify each against the
+code and take the verified CORE. Two flagged already: **[24] audit-log admin gate may DUPLICATE the S43/D-105
+"reads-open" product ruling** (reads are deliberately open to any authenticated token — tightening it is a product
+choice, not a bug; re-verify vs D-105, likely DEFER or escalate as a ruling). **[1]/STARTTLS**: the verifier noted Go
+stdlib's `smtp.PlainAuth.Start()` already refuses a non-TLS non-localhost server, partially mitigating the
+remote-host cred-theft path — the fix (don't silently discard the STARTTLS error) is still correct but the scenario
+is narrower than stated.
+
+**No code shipped this session** — SESSION-62's deliverable is the audit + the durable ledger (mirrors how S48
+created `S48-AUDIT-FINDINGS.md` as its artifact). Fixes begin SESSION-63, HIGH-first, in coherent clusters, one scope
+per PR, each re-verified + mutation-proven + reviewed exactly as the S49→S61 arc. No prod roll (docs-only).
+
+**Operator action required: NONE** (the audit is internal; findings are being worked autonomously). The [24]
+audit-read model, if it survives re-verification, becomes a product ruling for the operator (already logged as an
+S43 soft ruling). Carried items unchanged (AMS trial-expiry 07-12 vs 07-27; GHCR 401).
+
+**Suggested SESSION-63 order (coherent clusters, HIGH-first):** (1) **alert-channels security** — STARTTLS + token
+leak (+ CRLF/HTML injection); (2) **reports_wave2 re-fetch** — the two nil-deref panics + the 404-on-transient-error
+(one file, one pattern); (3) **prober untrusted-input** — MPD LimitReader + printf format + RTMP CSID map. Then the
+alert-evaluator, anomaly, license, prober-core, and api clusters.
+
+**Docs at close:** D-124 (this block); `S62-AUDIT-FINDINGS.md` created (25 findings); ROADMAP-V2 §2.31 (new audit
+tracker); RESUME-PROMPT ▶ START HERE → SESSION-63; `operator-expected.md` refreshed (no action); `sessions/SESSION-62.md`
+CLOSED; `sessions/SESSION-63.md` written. (No CHANGELOG entry — no code change.)

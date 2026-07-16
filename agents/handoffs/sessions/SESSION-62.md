@@ -1,5 +1,17 @@
 # SESSION-62 — planned at S61 close (D-123)
 
+> **✅ CLOSED 2026-07-16 (D-124). Ran a fresh adversarial audit of the un-swept subsystems → 25 confirmed findings.**
+> Chose option 1 (fresh audit) — the §2.30 S48 audit was COMPLETE and the §2.7 CI-promo gate is shut (07-16 < 07-23).
+> Audited `alert/evaluator`+`alert/channels`, `license`, `prober`, `anomaly`, and the `api` handler families not
+> covered by S44. Same workflow as S44/S48 (7 finders + refute-by-default verifiers, **33 agents, 1.27M tokens**) →
+> **26 raw → 25 CONFIRMED (6 HIGH, 15 MEDIUM, 4 LOW), 1 refuted.** All in `agents/handoffs/S62-AUDIT-FINDINGS.md`
+> (full mechanism/scenario/mutation/fix per finding). **6 HIGH:** STARTTLS silent-discard (SMTP cred risk), Telegram
+> token in logs, unbounded MPD read, printf-format injection, two reports_wave2 nil-deref panics. **Re-verify caveats
+> flagged:** [24] audit-log gate may DUPLICATE the S43/D-105 "reads-open" ruling (→ likely DEFER); [1]/STARTTLS
+> partially mitigated by Go's `smtp.PlainAuth` guard. **No code shipped** — the deliverable is the audit + durable
+> ledger (mirrors S48). Fixes begin S63, HIGH-first, one scope per PR. **No prod roll** (docs-only). Evidence:
+> `decisions.md` D-124, ROADMAP-V2 §2.31.
+
 > Written by SESSION-61 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE** for the full ranked candidate list.
