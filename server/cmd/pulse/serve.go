@@ -165,12 +165,20 @@ func (m *metaIngestTokenStore) LookupIngestToken(ctx context.Context, rawToken s
 }
 
 // server holds all running services for the pulse binary.
+// apiLifecycle is the start/stop surface of the HTTP API server that the process
+// lifecycle depends on. Satisfied by *api.Server; a seam so server.Stop's graceful
+// shutdown (S73/D-136 [2]) is testable with a fake.
+type apiLifecycle interface {
+	Start(ctx context.Context) error
+	Stop()
+}
+
 type server struct {
 	store     *clickhouse.Store
 	meta      *meta.Store
 	agg       *aggregator.Aggregator
 	col       *collector.Collector
-	apiServer *api.Server
+	apiServer apiLifecycle
 	alertEval *alert.Evaluator
 	lic       *license.Manager
 	logger    *slog.Logger
@@ -705,13 +713,23 @@ func (s *server) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop shuts down all services gracefully.
+// Stop shuts down all services gracefully. Nil-safe on every dependency so it is
+// safe to call on a partially-constructed server.
 func (s *server) Stop() {
+	// Drain the HTTP API server FIRST so in-flight requests finish against still-open
+	// dependencies (meta/store), and its WS push-loop + rate-limiter eviction goroutines
+	// are stopped. Previously never called, so SIGTERM abruptly killed in-flight requests
+	// and leaked those goroutines (S73/D-136 [2]).
+	if s.apiServer != nil {
+		s.apiServer.Stop()
+	}
 	// Wave 2 (BE-02, WO-204): Stop report scheduler.
 	if s.reportScheduler != nil {
 		s.reportScheduler.Stop()
 	}
-	s.alertEval.Stop()
+	if s.alertEval != nil {
+		s.alertEval.Stop()
+	}
 	// Wave 2 (BE-02): Gracefully stop dedicated beacon ingest listener.
 	if s.beaconServer != nil {
 		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -723,8 +741,12 @@ func (s *server) Stop() {
 	if s.meta != nil {
 		s.meta.Close()
 	}
-	s.store.Close()
-	s.logger.Info("pulse: stopped")
+	if s.store != nil {
+		s.store.Close()
+	}
+	if s.logger != nil {
+		s.logger.Info("pulse: stopped")
+	}
 }
 
 // ─── Alert evaluator QoE wiring ───────────────────────────────────────────────
