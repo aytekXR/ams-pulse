@@ -527,20 +527,23 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.37  F6 multi-tenancy — PHASE 1: server-side tenant resolution on the live endpoints  [✅ DONE — operator-directed "start F6"; BUG-009 tenant portion CLOSED]  ✅ S86 (D-148, 2026-07-17, PR #168 + #169, prod v0.4.0-112-g75031e7)
+### 2.37  F6 multi-tenancy — operator-directed "start F6"  [⚙ PHASE 1 ✅ + PHASE 2 ✅; PHASE 3 = [20] next]
 
-Operator named "start F6" mid-loop. Verify-first found F6 is NOT greenfield: the tenant registry (`tenants` table +
-`stream_pattern`/`meta_tag` rules + CRUD + `/admin/tenants`) and a `TenantMatcher` already existed but were used only by
-billing reports; the live pipeline carried no tenant, so `?tenant=` on `/live/overview` + `/live/streams` was silently
-ignored (BUG-009). Phase 1 wired server-side resolution into the live path:
-- New shared **`internal/tenant`** package: the canonical `Matcher` (reports now aliases it) + a `CachedResolver`
-  (registry-backed, ~10 s TTL, keeps last-good on a meta hiccup so an error never widens a tenant view).
-- **`query.Service.SetTenantResolver`**: `LiveOverview`/`LiveStreams` resolve each stream's tenant by `stream_pattern`
-  glob, **filter by `?tenant=`**, and populate `LiveStream.tenant`. **Fail-closed** (no match → empty `[]`, never a leak);
-  single-tenant deployments unaffected. Contract `LiveStream.tenant` + `schema.d.ts` regen. Mutation-proven; full suite +
-  web green; prod-rolled + 5-check smoke + live-verified.
-- **Phased plan:** Phase 1 ✅ (this). **Phase 2 = [5]** tenant-scoped QoE alert rules (thread the tenant into the alert
-  evaluator; reuse `internal/tenant`). **Phase 3 = [20]** audit-log read model. See SESSION-87 (Phase 2).
+**Phase 1 ✅ (D-148, S86, PR #168+#169, prod v0.4.0-112-g75031e7)** — server-side tenant resolution on the live endpoints;
+`?tenant=` filter + `LiveStream.tenant`; **BUG-009 tenant portion CLOSED**. New shared `internal/tenant` (Matcher +
+CachedResolver, fail-safe); `query.Service.SetTenantResolver`; fail-closed; single-tenant unaffected. Verify-first found
+F6 was NOT greenfield — the tenant registry (`tenants` table + `stream_pattern`/`meta_tag` + CRUD + `/admin/tenants`)
+already existed but was billing-only.
+
+**Phase 2 ✅ (D-149, S87, PR #171, prod v0.4.0-114-ge295795)** — tenant-scoped QoE alert rules; **★ S73 finding [5]
+CLOSED (the last one → S73 audit 8/8 shipped).** `domain.AlertScope.tenant` (stored in ScopeJSON → **no migration**;
+backward-compatible); `QoEReader.QoEForStream` gains a `tenant` param passed to `QoeParams.Tenant`; the evaluator threads
+`scope.Tenant`. Reachable via `POST {"scope":{"tenant":"acme"},...}` (no handler change — scope passes opaquely).
+Mutation-proven; scoping applies to the tenant-blendable QoE-read metrics (rebuffer_ratio/error_rate); ingest_bitrate_floor
+is publisher-side and unaffected.
+
+**Phase 3 = [20] audit-log read model** (the last F6 item; an S62 defer-by-ruling product call). After Phase 3, F6 core is
+complete; remaining multi-tenant polish is demand-driven. See SESSION-88.
 
 ### 2.36  OpenAPI contract drift — document GET /reports/export  [✅ DONE — contract/test/types only, no prod deploy]  ✅ S85 (D-147, 2026-07-17, PR #162, main e3abc3b)
 
