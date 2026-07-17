@@ -1,5 +1,18 @@
 # SESSION-80 — planned at S79 close (D-141) — first POST-S73-audit arc
 
+> ## ✅ CLOSED (2026-07-17, D-142) — cross-cutting security-posture pass SHIPPED
+> Ran the CROSS-CUTTING (§2.33, first non-subsystem) supply-chain + deploy-hardening lead. **(A) Deps:** Go govulncheck
+> 0 reachable (1 module-only x/crypto/openpgp, no fix, not imported); web `npm audit` 3 findings all dev-toolchain-only
+> (undici via jsdom, js-yaml via openapi-typescript/redocly — not shipped) → pinned patched in-major via `overrides`
+> (undici@7.28.0, js-yaml@^4.3.0) → audit clean. **(B) Container hardening** (`deploy/docker-compose.hardened.yml` pulse):
+> `read_only`+tmpfs`/tmp`, `cap_drop:[ALL]`, `no-new-privileges`, + `PULSE_REPORTS_DIR` on the volume (fixed a latent
+> ephemeral-root artifact-loss bug). **Adversarial review:** 5 findings, 4 refuted, 1 confirmed LOW (pre-existing
+> report-artifact retention gap → S81 lead). **Prod-verified:** recreate (no rebuild), `docker inspect` confirms all
+> controls live, 5-check smoke green + SPA 200 + 0 EROFS/permission errors + 0 restarts. PR #152 squash-merged; prod
+> stays v0.4.0-93-g8858b5f. **No operator action required.** See `decisions.md` D-142, ROADMAP §2.33, and
+> `sessions/SESSION-81.md` (the report-artifact-retention prune). Everything below is the original pre-session plan.
+
+
 > Written by SESSION-79 close (2026-07-17). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE.** The S73 audit (§2.32) is COMPLETE (7 shipped + [5] deferred).

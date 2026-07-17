@@ -11,7 +11,34 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-80.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-81.md`)
+
+**Session 2026-07-17 result: D-142 — S80 shipped a CROSS-CUTTING security-posture pass (ROADMAP §2.33, the first non-subsystem audit): dependencies clean (Go govulncheck 0 reachable; web `npm audit` → 0 via `overrides`) + the internet-facing pulse container hardened (read-only rootfs, cap_drop:[ALL], no-new-privileges) with report artifacts moved onto the persistent volume. Prod-verified live.**
+
+**★ S80** ran the cross-cutting supply-chain + deploy-hardening lead. Go `govulncheck`: **0 reachable** (1 module-only
+`x/crypto/openpgp`, no fix, not imported). Web `npm audit`: 3 **dev-toolchain-only** vulns (undici via jsdom; js-yaml via
+openapi-typescript/redocly — not in the shipped bundle) → pinned patched in-major via `overrides` (undici@7.28.0,
+js-yaml@^4.3.0) → **audit clean.** Container: `deploy/docker-compose.hardened.yml` pulse now runs `read_only`+tmpfs
+`/tmp` + `cap_drop:[ALL]` + `no-new-privileges` on the already-non-root image; `PULSE_REPORTS_DIR=/var/lib/pulse/reports`
+fixes a latent bug (artifacts were written to the ephemeral container root, lost on redeploy). Adversarial review: 5
+findings, 4 refuted, 1 confirmed LOW. Prod-verified via container recreate (no rebuild): `docker inspect` confirms all
+controls live; 5-check smoke green + SPA 200 + 0 EROFS/permission errors + 0 restarts. PR #152; prod stays
+`v0.4.0-93-g8858b5f`. **No operator action.** Evidence: `decisions.md` D-142.
+
+**★ SESSION-81 = the S80 review's 1 confirmed LOW follow-up: report-artifact retention prune.** The reports scheduler
+never prunes and `PULSE_RETENTION_DAYS` governs only ClickHouse TTL; now that artifacts persist on the shared pulse-data
+volume, add a scoped `PULSE_REPORT_ARTIFACT_RETENTION_DAYS` prune (STRICTLY bounded to the artifacts dir + report
+filename pattern — must NEVER touch `pulse_meta.db`/`pulse_secret.key`). Deletion logic → mutation-prove the guard +
+adversarial-review; server rebuild on deploy. **Alternatives:** §2.7 CI-promotions if the date ≥ **2026-07-23** (check
+it — may outrank the prune), §2.15 light-theme, or an operator checkpoint. See `sessions/SESSION-81.md`.
+
+**⚠ OPERATOR DECISIONS PENDING (both non-blocking product calls):** **[20] audit-read model** AND **[5] per-tenant QoE
+alerting** (D-141). Also: AMS trial-expiry doc discrepancy (07-12 vs 07-27); GHCR anon → 401. **No NEW operator item from
+S80** — the reports-retention follow-up is autonomous.
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-80.md`)
 
 **Session 2026-07-17 result: D-141 — S79 adjudicated the last S73 finding [5] as DEFER-BY-RULING (needs a tenant-scoped-alerting FEATURE; multi-tenant-only). ★★ THE S73 SUBSYSTEM AUDIT IS COMPLETE — 8/8 dispositioned (7 shipped + [5] deferred). Three subsystem audits now done.**
 

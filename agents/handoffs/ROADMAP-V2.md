@@ -527,6 +527,22 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.33  Cross-cutting security-posture pass — supply-chain + container hardening  [✅ CORE DONE — deps clean + pulse container hardened; 1 LOW follow-up open]  ✅ S80 (D-142, 2026-07-17, PR #152, prod v0.4.0-93-g8858b5f)
+
+The FIRST non-subsystem audit (the three prior audits §2.29/§2.30/§2.31/§2.32 were by-package). Covers what subsystem
+sweeps structurally can't: dependency/supply-chain + deploy hardening.
+- **Deps:** Go `govulncheck` **0 reachable** (1 module-only `x/crypto/openpgp`, no fix, not imported → informational).
+  Web `npm audit` 3 findings, all **dev-toolchain-only** (undici via jsdom; js-yaml via openapi-typescript/redocly — not
+  in the shipped bundle) → pinned patched in-major via `overrides` (undici@7.28.0, js-yaml@^4.3.0) → **audit clean.**
+- **Container hardening** (`deploy/docker-compose.hardened.yml` `pulse`): `read_only` + tmpfs `/tmp`, `cap_drop:[ALL]`,
+  `no-new-privileges` on the already-non-root image; + `PULSE_REPORTS_DIR=/var/lib/pulse/reports` (was writing to the
+  ephemeral container root — lost on redeploy). Prod-verified (recreate, 0 EROFS/permission errors, 5-check smoke green).
+- **Adversarial review:** 5 findings, 4 refuted, **1 confirmed LOW** → the follow-up below.
+- **⏳ FOLLOW-UP (S81 lead):** report-artifact retention — the reports scheduler never prunes; `PULSE_RETENTION_DAYS`
+  governs only ClickHouse TTL. LOW (tiny monthly files, decades to fill), but now that artifacts persist on the shared
+  pulse-data volume the accumulation path is live → add a scoped `PULSE_REPORT_ARTIFACT_RETENTION_DAYS` prune (strictly
+  bounded to the artifacts dir + report filename pattern; never touch pulse_meta.db / pulse_secret.key).
+
 ### 2.32  Third fresh subsystem audit — remaining un-swept subsystems (8 findings)  [✅ COMPLETE — 8/8 dispositioned: 7 shipped (D-136…D-140) + 1 defer-by-ruling ([5] QoE cross-tenant, multi-tenant-only — a tenant-scoped-alerting FEATURE, escalated as a product call); ALL 3 HIGH + 4/5 MEDIUM shipped; every fix verified-CORE + mutation-proven + adversarially reviewed]  ✅ DONE S73→S79 (D-135…D-141, 2026-07-17, PR #140…#150, prod v0.4.0-93-g8858b5f)
 
 ### 2.31  Second fresh subsystem audit — un-swept subsystems (25 findings)  [✅ COMPLETE — 25/25 dispositioned: 24 shipped + 1 defer-by-ruling ([20] audit-read, non-code product call); ALL 6 HIGH + 15 MEDIUM + 3/4 LOW shipped; every fix verified-CORE + mutation-proven + adversarially reviewed]  ✅ DONE S62→S72 (D-124…D-134, 2026-07-16→17, PR #119…#138, prod v0.4.0-82-g8355127)
