@@ -11,7 +11,36 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-85.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-86.md`)
+
+**Session 2026-07-17 result: D-147 — S85 was the low-frequency-wait phase, but a verify-before-idling adversarial sweep (3 scouts + judge) caught a real non-gated defect and fixed it: `GET /reports/export` was implemented + web-consumed but ABSENT from the OpenAPI contract (a CLAUDE.md §3 "Contracts before code" violation). Documented it + regenerated `schema.d.ts` + extended param-conformance. Contract/test/types only — no prod roll (prod stays `v0.4.0-98-g641b4e2`). PR #162 (main e3abc3b), 15/15 CI.**
+
+**★ S85** did NOT manufacture an arc. The two-minute gate confirmed §2.7 is still date-locked (07-17 < 07-23) and the
+operator hasn't answered the S82 checkpoint → Lead C (wait). Per the stewardship clause, before idling it verified the
+"backlog exhausted" claim adversarially rather than trusting the tracker (S84 was burned by a stale tracker) — the
+ROADMAP backlog IS fully gated/done (§2.16/§2.17 confirmed complete *in code*), but the sweep found a genuine OpenAPI
+contract drift and closed it as a one-off stewardship fix. Two follow-ups were deliberately DEFERRED as too
+judgment-heavy / cosmetic for an autonomous arc: the CHANGELOG `[0.4.0]` gap and the unread VERSION-file staleness.
+Evidence: `decisions.md` D-147; ROADMAP §2.36.
+
+**★ SESSION-86 = STILL THE LOW-FREQUENCY WAIT** (S85's fix was a caught defect, not a new work-stream). At open, run the
+SAME two-minute gate: (1) `date +%Y-%m-%d` — if **≥ 2026-07-23** → **§2.7 CI-promotions** (the primary autonomous move,
+finally unlocked; flip the soft `web-e2e`/`csp-e2e`/`e2e`/`docker-build` jobs per §2.7's spec — surface the
+branch-protection FULL-LIST PUT to the operator, I cannot set repo-admin). (2) Check `operator-expected.md` — if the
+operator answered/named a priority → do their pick. (3) Else → a quick health check (git/CI/PRs/date/operator) + at most
+ONE more adversarial "is anything genuinely broken" sweep like S85's; if it finds a real non-gated defect, fix it
+(stewardship); otherwise **wait at low frequency — do NOT manufacture an arc.** See `sessions/SESSION-86.md`.
+
+**⚠ OPERATOR DECISIONS PENDING (consolidated in `operator-expected.md`):** F6 multi-tenancy (unblocks
+[5]/[20]/BUG-009-tenant), §2.6 unsigned-webhook, §2.1 branch protection, §2.18 GHCR/licence, §2.19 UI direction, §2.12
+mobile SDKs — each with a recommendation. None blocking; primary single-tenant model unaffected. **NEW low-priority
+stewardship candidates for a future arc (not operator-gated; S85 deferred as judgment-heavy/cosmetic):** the CHANGELOG
+`[0.4.0]` section (needs faithful curation of the 0.3.0→0.4.0 change set); the VERSION-file `0.1.0` staleness (cosmetic
+— nothing reads it; the build uses `git describe`).
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-85.md`)
 
 **Session 2026-07-17 result: D-146 — S84 completed the documentation-gaps deliverable (docs-only, no prod deploy). A verify-before-writing pass found `docs/known-limitations.md` had already closed 15/18 gaps; authored the last 3 residual footnotes (DG-12/13/14) in AMS-INTEGRATION.md + reconciled the tracker. ALL 18 gaps now closed. PR #160.**
 
