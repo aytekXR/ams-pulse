@@ -9128,3 +9128,32 @@ signed webhook 200, limits 512M/0.5cpu, 0 errors, version stamped) + alerts/rule
 Phase 1 ✅ (D-148, BUG-009) · Phase 2 ✅ (this, [5]) · **Phase 3 = [20]** audit-log read model (the last F6 item; also an
 S62 defer-by-ruling product call). No operator action for Phase 2. Docs: D-149 (this block); ROADMAP §2.37 (Phase 2 ✅);
 S73-AUDIT-FINDINGS [5] FIXED; RESUME → SESSION-88 (F6 Phase 3); operator-expected F6 status; SESSION-87 CLOSED; SESSION-88 written.
+
+## D-150 — S88 (2026-07-18): ADJUDICATION (no code) — F6 Phase 3 ([20] audit-read) is an OPERATOR PRODUCT CALL, not a buildable slice. ★ F6 buildable code COMPLETE (Phases 1+2).
+
+**Verify-first adjudication of [20]** (per SESSION-88: decide against the code, do NOT guess a product ruling). Conclusion:
+**[20] has no autonomous code slice — it is an operator product decision, and it is not even a multi-tenancy code item.**
+Two independent reasons, both traced to the code:
+
+1. **The S62 [20] finding is an ACCESS-MODEL product call, already adjudicated (D-130).** `GET /admin/audit-log`
+   (`audit.go:92`) is readable by any authenticated token because `requireWriteScope` exempts all GETs (server.go:696) —
+   the DELIBERATE S43/D-105 "reads are open; only writes need admin scope" model, uniform with `GET /admin/users` +
+   `/admin/tokens`. D-105 already named admin-gating this exact read as its lead candidate and **overturned it at
+   verify-at-open**; gating only the audit read is an inconsistent special-case, and gating the whole admin-read surface
+   breaks the viewer-role AuditLogPage (S41). Changing this is a product decision (keep reads open vs gate the admin-read
+   surface), NOT a change I make unilaterally. Standing operator call (operator-expected.md).
+2. **There is no tenant-scoping angle either.** `AuditEntry` (meta/audit.go) and the `audit_log` table
+   (`0004_audit_log.sql`) carry **NO tenant column** — audit rows are GLOBAL admin config-change records (who created
+   which alert rule / source / user / token) with no natural tenant ownership. So the SESSION-88 "option B" (an optional
+   `?tenant=` filter mirroring Phase 1/2) is infeasible/nonsensical: there is no tenant to filter by. Adding one would be a
+   large change (tenant column + population semantics for global admin actions) with unclear meaning — not a bounded slice.
+
+**★ F6 buildable code is COMPLETE:** the three convergent items the operator's "start F6" targeted are dispositioned —
+BUG-009 tenant filter ✅ (D-148), [5] tenant-scoped QoE alerts ✅ (D-149), [20] audit-read = operator product call (D-130,
+this block; no code). Deeper multi-tenant work (tenant-scoped AUTH so a token only sees its tenant's data — `APIToken`
+has no tenant field, S73 [1]; a tenant-management web UI, §2.19 territory) is a LARGER operator-scoped expansion, not one
+of the three named items — demand-driven, do NOT start autonomously.
+
+**No code, no prod roll.** Loop returns to the low-frequency wait: remaining ROADMAP is gated (§2.7 unlocks 2026-07-23;
+the checkpoint items incl. the [20] audit-read model are operator-gated). Docs: D-150 (this block); ROADMAP §2.37 (Phase 3
+adjudicated); RESUME → SESSION-89; operator-expected [20]/F6-complete status; SESSION-88 CLOSED; SESSION-89 written.

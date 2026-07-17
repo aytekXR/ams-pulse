@@ -11,31 +11,39 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-88.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-89.md`)
 
-**Session 2026-07-18 result: D-149 — F6 multi-tenancy PHASE 2 shipped: tenant-scoped QoE alert rules. `domain.AlertScope` gained a `tenant` field (stored in ScopeJSON → NO migration; backward-compatible); the alert evaluator threads `scope.Tenant` → `QoEForStream` → `QoeParams.Tenant`, so a rule scoped `{"tenant":"acme"}` reads only acme's rebuffer/error rows instead of blending tenants. ★ S73 finding [5] CLOSED — the S73 audit is now 8/8 SHIPPED. No API handler change (scope passes opaquely). Prod-rolled `v0.4.0-114-ge295795`; 5-check smoke green. PR #171.**
+**Session 2026-07-18 result: D-150 — S88 ADJUDICATED F6 Phase 3 ([20] audit-read): it is an OPERATOR PRODUCT CALL with no autonomous code slice (verified against the code — did NOT guess). ★ F6 buildable code is COMPLETE (Phases 1+2: BUG-009 + [5]). No code, no prod roll; prod stays `v0.4.0-114-ge295795`.**
 
-**★ S87 verify-first (again) shrank the change:** the S73 [5] note warned "wider change"; re-scoping found the scope is
-JSON in `AlertRuleRow.ScopeJSON` → no migration, and the correct minimal fix is the read-level tenant pass (not a
-stream-level pattern resolver, which is a different tenant notion). Tenant scoping covers the tenant-blendable QoE-read
-metrics (rebuffer_ratio/error_rate — the exact [5]); ingest_bitrate_floor is publisher-side (no blend) and unaffected.
-Mutation-proven. Evidence: `decisions.md` D-149; ROADMAP §2.37; S73-AUDIT-FINDINGS [5] FIXED.
+**★ S88 verify-first ruled [20] unbuildable for two independent code-traced reasons:** (1) the S62 [20] finding is the
+deliberate S43/D-105 "reads-open" ACCESS model (`requireWriteScope` exempts all GETs, server.go:696) — a product call
+(keep open vs gate the admin-read surface), already escalated (D-130); reversing it unilaterally is wrong. (2) There is NO
+tenant-scoping angle — the `audit_log` table / `AuditEntry` carry no tenant column (global admin config records), so an
+optional `?tenant=` filter is nonsensical. So [20] is surfaced to the operator (operator-expected.md, sharpened to a clean
+(a) keep-open / (b) gate-admin-reads choice), NOT built. Evidence: `decisions.md` D-150; ROADMAP §2.37.
 
-**★ SESSION-88 = F6 PHASE 3 — [20] audit-log read model** (the LAST F6 item; also an S62 defer-by-ruling product call).
-Today `GET /admin/audit-log` is readable by any authenticated token (the deliberate S43 "reads-open" model), and it is
-not tenant-scoped. **At open:** re-read the [20] finding (S62-AUDIT-FINDINGS + D-130 / the S43 reads-open ruling) + the
-audit-log read handler + `meta` audit-log query, and DECIDE the model against the code — [20] may be a **product ruling**
-(keep reads open vs gate the admin-read surface) rather than a pure code change, and it intersects the operator's pending
-[20]/§2.1 decisions. If it resolves to a bounded code increment (e.g. an optional tenant filter on the audit read,
-mirroring Phase 1/2), implement it contracts-first + mutation-prove + adversarial-review (data-isolation) + prod-roll. If
-it resolves to an operator product call, write it up crisply in `operator-expected.md` and **do NOT guess** — then either
-take another F6 polish slice or, if F6 is effectively complete, re-survey ROADMAP §2 for the next move. See
-`sessions/SESSION-88.md`. **(Lead B still applies — if the operator names a different priority, do their pick.)**
+**★ SESSION-89 = the LOW-FREQUENCY WAIT (F6 code is done; the safe autonomous backlog is drained again).** The three
+"start F6" items are dispositioned (BUG-009 ✅, [5] ✅, [20] = operator call). What remains is gated: **§2.7 CI-promotions
+unlock 2026-07-23** (today 07-18); the checkpoint decisions (incl. the [20] audit-read model, §2.6, §2.1, §2.18, §2.19,
+§2.12) are operator-gated; the deeper F6 expansion (tenant-scoped AUTH, tenant-management UI) is large + operator-scoped —
+do NOT start autonomously. **At open, run the two-minute gate:** (1) `date +%Y-%m-%d` — if **≥ 2026-07-23** → do §2.7
+CI-promotions (flip the soft web-e2e/csp-e2e/e2e/docker-build jobs to required; surface the branch-protection half to the
+operator). (2) Check `operator-expected.md` — if the operator answered [20]/named a priority → do their pick (Lead B). (3)
+Else → a quick health check (git/CI/PRs/date/operator) + at most one bounded adversarial "is anything genuinely broken?"
+sweep (fix a real defect = stewardship; else **wait at low frequency — do NOT manufacture an arc**). See
+`sessions/SESSION-89.md`.
 
-**⚠ OPERATOR DECISIONS STILL PENDING (in `operator-expected.md`):** the other checkpoint items (§2.6, §2.1, §2.18, §2.19,
-§2.12), the §2.7 date-gate (**unlocks 2026-07-23** — today 07-18), the AMS trial-licence expiry confirmation, and the 3
-E2E-validation follow-ups (G-21 cluster pagination, credential rotation, G-22 webhook mapping). **F6 [20] (Phase 3) may
-itself be a product call — see SESSION-88.**
+**⚠ OPERATOR DECISIONS PENDING (in `operator-expected.md`):** **[20] audit-read model** (now the sharpest — a clean
+(a)/(b) choice), §2.6, §2.1, §2.18, §2.19, §2.12; the §2.7 date-gate (2026-07-23); the AMS trial-licence expiry
+confirmation; the 3 E2E-validation follow-ups (G-21 cluster pagination, credential rotation, G-22 webhook mapping). None
+blocks continued autonomous stewardship; all substantive next moves are gated.
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-88.md`)
+
+**S88 result: D-149 → D-150.** S87 shipped F6 Phase 2 (tenant-scoped QoE alerts, S73 [5] closed, prod v0.4.0-114). S88 then
+**adjudicated F6 Phase 3 ([20] audit-read) as an OPERATOR PRODUCT CALL with no autonomous code slice** — the reads-open
+access model is a deliberate product decision (D-130), and the audit log has no tenant column so a tenant filter is
+infeasible. **F6 buildable code COMPLETE (Phases 1+2).** No code, no prod roll. Evidence: `decisions.md` D-149/D-150.
 
 ---
 

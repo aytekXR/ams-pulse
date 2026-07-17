@@ -1,6 +1,6 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-18, D-149 — SESSION-87; F6 Phase 1+2 shipped)
+# Operator TODO — the items only YOU can do (updated 2026-07-18, D-150 — SESSION-88; F6 code complete, [20] is your call)
 
-> # ▶ F6 MULTI-TENANCY — PHASES 1 & 2 SHIPPED (2026-07-18, D-148/D-149) — no action needed; Phase 3 may be YOUR call
+> # ▶ F6 MULTI-TENANCY — CODE COMPLETE (2026-07-18, D-148/D-149/D-150) — Phases 1 & 2 shipped; Phase 3 ([20]) is YOUR product call
 >
 > You said "start F6" and the loop has shipped two phases autonomously (single-tenant deployments — the default — are
 > unaffected by all of it):
@@ -12,12 +12,19 @@
 >   reusing the same stream name). Existing rules are unchanged (no tenant = all). **This is the design default I chose for
 >   "how a rule targets a tenant" — a `tenant` on the rule's scope; tell me if you'd prefer a different UX.**
 >
-> **★ Phase 3 = [20] the audit-log read model — this one may need YOUR decision, not just code.** `GET /admin/audit-log`
-> is currently readable by any authenticated token (the deliberate S43 "reads-open" model) and is not tenant-scoped.
-> Whether to (a) keep reads open, (b) gate the whole admin-read surface behind the `admin` scope (removes the audit page
-> from viewer-role users), or (c) add an optional tenant filter — is a product call that overlaps your long-pending [20]
-> decision. SESSION-88 will re-read it against the code and either implement a clean bounded slice or write the decision
-> up here for you. **If you want to steer it (or pause F6), say so.**
+ **★ Phase 3 = [20] the audit-log read model — ADJUDICATED (D-150): it's YOUR product call, and I verified there's no
+> clean code slice to build.** `GET /admin/audit-log` is readable by any authenticated token — the deliberate S43
+> "reads-open" model (uniform with `/admin/users` + `/admin/tokens`). I did NOT change it, because it's a product
+> decision: **(a) keep reads open** (status quo — recommended unless you issue low-trust viewer tokens), or **(b) gate the
+> whole admin-read surface behind the `admin` scope** (accepting that viewer-role users lose the Audit Log page + other
+> admin-read pages). Gating *only* the audit read would be an inconsistent special-case. **A tenant filter is not an
+> option** — the audit log has no tenant column (audit entries are global admin config changes, not per-tenant data).
+> **Tell me (a) or (b) and I'll implement it; otherwise it stays open.**
+>
+> **★ With this, F6's buildable code is DONE** (BUG-009 ✅, per-tenant QoE alerts ✅, [20] = your call above). The only
+> larger F6 expansion left is **tenant-scoped auth** (making a token see only its own tenant's data — a real feature, not
+> yet built) and a **tenant-management web UI** — both demand-driven; say the word if you want either. The loop now returns
+> to the low-frequency wait for your input / the 2026-07-23 §2.7 gate.
 >
 > ---
 >
