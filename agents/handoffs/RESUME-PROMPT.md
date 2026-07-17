@@ -11,7 +11,32 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-77.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-78.md`)
+
+**Session 2026-07-17 result: D-139 — S77 shipped [8] web SettingsPage silent error handlers. S73 tracker = 6/8 shipped; 2 MEDIUM remain ([5] QoE tenant, [7] WS-token log exposure).**
+
+**★ S77** wrapped the web SettingsPage delete/create handlers in try/catch + error toast (PR #147, prod
+`v0.4.0-91-g7e272f6`) — failed source/token actions now surface an error instead of silently doing nothing. First
+web-only fix (validated the web/vitest loop: new RTL test mutation-proven; typecheck+eslint+651 tests+build clean;
+Go 25/25). Repo-wide sweep confirmed no other silent-discard handler. **No operator action.** Evidence: `decisions.md` D-139.
+
+**★ SESSION-78 = [7] MEDIUM (security, operator-flagged): admin token in the Live-dashboard WS URL → Caddy access logs.**
+Fix WITHOUT touching the do-not-commit Caddyfile — choose the CORE at open: (a) short-lived single-use `POST
+/auth/ws-ticket` (recommended, fully closes it) or (b) token as a WS **subprotocol** header (least change). server+web
+(+ OpenAPI/schema.d.ts for the ticket). **Adversarial-review mandatory (auth surface).** Closing it retires the
+operator log-exposure heads-up. See `sessions/SESSION-78.md`.
+
+**★ Last S73 finding after [7]:** **[5]** `QoEForStream` cross-tenant QoE — WIDER (thread Tenant through the live
+pipeline: AlertScope/AlertRuleRow/LiveStream have no Tenant field; multi-tenant-only impact). After [5], §2.32 is
+COMPLETE → flip to ✅ and re-survey ROADMAP §2 (the §2.7 CI gate unlocks ≥ 2026-07-23).
+
+**⚠ CARRIED operator items (unchanged):** the **[20] audit-read product call** (operator-expected.md — keep reads open
+or gate the whole admin-read surface); AMS trial-expiry doc discrepancy (07-12 vs 07-27); GHCR anon → 401; the S63
+email-STARTTLS behavior note (informational).
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-77.md`)
 
 **Session 2026-07-17 result: D-138 — S76 shipped [4] `PruneAlertHistory` single-statement DELETE (fixes the Postgres over-delete race). S73 tracker = 5/8 shipped; 3 MEDIUM remain ([5]/[7]/[8]).**
 
