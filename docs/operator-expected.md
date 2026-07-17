@@ -1,17 +1,23 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-17, D-148 — SESSION-86; F6 started)
+# Operator TODO — the items only YOU can do (updated 2026-07-18, D-149 — SESSION-87; F6 Phase 1+2 shipped)
 
-> # ▶ F6 MULTI-TENANCY STARTED (2026-07-17, D-148) — you said "start F6"; Phase 1 is SHIPPED, no action needed
+> # ▶ F6 MULTI-TENANCY — PHASES 1 & 2 SHIPPED (2026-07-18, D-148/D-149) — no action needed; Phase 3 may be YOUR call
 >
-> Phase 1 (the foundation) is live in prod (`v0.4.0-112-g75031e7`, PR #168+#169): the live dashboard now resolves each
-> stream's owning tenant server-side (from the tenant registry's stream-name pattern) and actually honors the `?tenant=`
-> filter on `/live/overview` + `/live/streams` — closing a long-standing known-violation (BUG-009). **Single-tenant
-> deployments (the default) are unaffected**; this only activates when you configure tenants at `/admin/tenants` with a
-> `stream_pattern` (e.g. `acme-*`). **Nothing for you to do.**
+> You said "start F6" and the loop has shipped two phases autonomously (single-tenant deployments — the default — are
+> unaffected by all of it):
+> - **Phase 1 ✅ (D-148, prod `v0.4.0-112`):** the live dashboard resolves each stream's owning tenant server-side and
+>   honors the `?tenant=` filter on `/live/overview` + `/live/streams` (closed BUG-009). Activates only when you configure
+>   tenants at `/admin/tenants` with a `stream_pattern` (e.g. `acme-*`).
+> - **Phase 2 ✅ (D-149, prod `v0.4.0-114`):** QoE alert rules can be scoped to one tenant. Add `"scope":{"tenant":"acme"}`
+>   to an alert rule and its `rebuffer_ratio`/`error_rate` checks read only that tenant's data (previously blended tenants
+>   reusing the same stream name). Existing rules are unchanged (no tenant = all). **This is the design default I chose for
+>   "how a rule targets a tenant" — a `tenant` on the rule's scope; tell me if you'd prefer a different UX.**
 >
-> **The loop is now continuing F6 autonomously (no input needed):** Phase 2 = per-tenant QoE alert rules ([5]); Phase 3 =
-> the audit-log read model ([20]). If at any point you want to redirect (pause F6, pick a different item, or change the
-> per-tenant-alert UX), just say so. **One design note you may want to weigh in on when Phase 2 lands:** how an alert rule
-> should target a tenant (a `tenant` field on the rule) — I'll implement a sensible default and you can adjust.
+> **★ Phase 3 = [20] the audit-log read model — this one may need YOUR decision, not just code.** `GET /admin/audit-log`
+> is currently readable by any authenticated token (the deliberate S43 "reads-open" model) and is not tenant-scoped.
+> Whether to (a) keep reads open, (b) gate the whole admin-read surface behind the `admin` scope (removes the audit page
+> from viewer-role users), or (c) add an optional tenant filter — is a product call that overlaps your long-pending [20]
+> decision. SESSION-88 will re-read it against the code and either implement a clean bounded slice or write the decision
+> up here for you. **If you want to steer it (or pause F6), say so.**
 >
 > ---
 >

@@ -1,5 +1,12 @@
 # SESSION-87 — planned at S86 close (D-148) — F6 PHASE 2: tenant-scoped QoE alert rules ([5])
 
+> **✅ CLOSED 2026-07-18 (D-149).** Shipped F6 Phase 2: `domain.AlertScope.tenant` (in ScopeJSON → NO migration;
+> backward-compatible) + `QoEReader.QoEForStream` `tenant` param threaded from `scope.Tenant` by the evaluator. A rule
+> scoped `{"tenant":"acme"}` reads only acme's QoE rows; no API handler change (scope passes opaquely). **★ S73 finding
+> [5] CLOSED → S73 audit 8/8 shipped.** Mutation-proven; full suite + web green; prod-rolled `v0.4.0-114-ge295795` (5-check
+> smoke green). PR #171. Verify-first shrank the change (no migration; read-level fix). → **SESSION-88 = F6 Phase 3 ([20]
+> audit-read — possibly a product call).** See RESUME ▶ START HERE.
+
 > Written by SESSION-86 close (2026-07-17). Repo `/home/aytek/repo/ams-pulse` on VPS `161.97.172.146`
 > (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE.** Prod at **v0.4.0-112-g75031e7** (F6 Phase 1 live).

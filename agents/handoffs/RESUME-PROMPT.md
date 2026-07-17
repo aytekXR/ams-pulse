@@ -11,9 +11,35 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-87.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-88.md`)
 
-**Session 2026-07-17 result: D-148 — the operator named "start F6" and S86 shipped F6 multi-tenancy PHASE 1: server-side tenant resolution wired into the live endpoints. `GET /live/overview` + `/live/streams` now actually filter by `?tenant=` (server-resolved via the tenant registry's `stream_pattern` glob) and expose `LiveStream.tenant`. ★ BUG-009 tenant portion CLOSED. Prod-rolled `v0.4.0-112-g75031e7`; 5-check smoke + live-verified. PR #168 + #169.**
+**Session 2026-07-18 result: D-149 — F6 multi-tenancy PHASE 2 shipped: tenant-scoped QoE alert rules. `domain.AlertScope` gained a `tenant` field (stored in ScopeJSON → NO migration; backward-compatible); the alert evaluator threads `scope.Tenant` → `QoEForStream` → `QoeParams.Tenant`, so a rule scoped `{"tenant":"acme"}` reads only acme's rebuffer/error rows instead of blending tenants. ★ S73 finding [5] CLOSED — the S73 audit is now 8/8 SHIPPED. No API handler change (scope passes opaquely). Prod-rolled `v0.4.0-114-ge295795`; 5-check smoke green. PR #171.**
+
+**★ S87 verify-first (again) shrank the change:** the S73 [5] note warned "wider change"; re-scoping found the scope is
+JSON in `AlertRuleRow.ScopeJSON` → no migration, and the correct minimal fix is the read-level tenant pass (not a
+stream-level pattern resolver, which is a different tenant notion). Tenant scoping covers the tenant-blendable QoE-read
+metrics (rebuffer_ratio/error_rate — the exact [5]); ingest_bitrate_floor is publisher-side (no blend) and unaffected.
+Mutation-proven. Evidence: `decisions.md` D-149; ROADMAP §2.37; S73-AUDIT-FINDINGS [5] FIXED.
+
+**★ SESSION-88 = F6 PHASE 3 — [20] audit-log read model** (the LAST F6 item; also an S62 defer-by-ruling product call).
+Today `GET /admin/audit-log` is readable by any authenticated token (the deliberate S43 "reads-open" model), and it is
+not tenant-scoped. **At open:** re-read the [20] finding (S62-AUDIT-FINDINGS + D-130 / the S43 reads-open ruling) + the
+audit-log read handler + `meta` audit-log query, and DECIDE the model against the code — [20] may be a **product ruling**
+(keep reads open vs gate the admin-read surface) rather than a pure code change, and it intersects the operator's pending
+[20]/§2.1 decisions. If it resolves to a bounded code increment (e.g. an optional tenant filter on the audit read,
+mirroring Phase 1/2), implement it contracts-first + mutation-prove + adversarial-review (data-isolation) + prod-roll. If
+it resolves to an operator product call, write it up crisply in `operator-expected.md` and **do NOT guess** — then either
+take another F6 polish slice or, if F6 is effectively complete, re-survey ROADMAP §2 for the next move. See
+`sessions/SESSION-88.md`. **(Lead B still applies — if the operator names a different priority, do their pick.)**
+
+**⚠ OPERATOR DECISIONS STILL PENDING (in `operator-expected.md`):** the other checkpoint items (§2.6, §2.1, §2.18, §2.19,
+§2.12), the §2.7 date-gate (**unlocks 2026-07-23** — today 07-18), the AMS trial-licence expiry confirmation, and the 3
+E2E-validation follow-ups (G-21 cluster pagination, credential rotation, G-22 webhook mapping). **F6 [20] (Phase 3) may
+itself be a product call — see SESSION-88.**
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-87.md`)
 
 **★ S86 verify-first found F6 is NOT greenfield** — the tenant registry (`tenants` table + `stream_pattern`/`meta_tag`
 rules + CRUD + `/admin/tenants`) and a `TenantMatcher` already existed but were used only by billing. Phase 1 relocated

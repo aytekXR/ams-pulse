@@ -9094,3 +9094,37 @@ field; `?tenant=acme` → `{"items":[]}` fail-closed). Rollback tags `pulse-prod
 = [5]** (thread the resolved tenant into the alert evaluator for tenant-scoped QoE alert rules; the `internal/tenant`
 resolver is reusable there). **Phase 3 = [20]** (audit-log read model). No operator action for Phase 1. Docs: D-148 (this
 block); ROADMAP §2.37; RESUME → SESSION-87; operator-expected F6 status; SESSION-86 CLOSED; SESSION-87 written (F6 Phase 2).
+
+## D-149 — S87 (2026-07-18): SHIPPED — F6 multi-tenancy PHASE 2: tenant-scoped QoE alert rules; ★ S73 finding [5] CLOSED (the last one). Prod v0.4.0-114-ge295795.
+
+**Continuing the operator-directed "start F6" (D-148).** Phase 2 closes the last S73 finding **[5]** (deferred by D-141 as
+a product call): the alert evaluator called `QoEForStream(streamID, app, lookback)` with NO tenant, so a `rebuffer_ratio`/
+`error_rate` rule for a stream two tenants happen to reuse (same app+stream) blended both tenants' numbers.
+
+**★ Key finding (verify-first, again saved a wrong assumption):** the S73 [5] note warned "the finder's fix sketch is
+WRONG… AlertScope/AlertRuleRow/LiveStream have no tenant… then the QoEReader signature — a wider change." Re-scoping at
+build found it is actually SMALL: **`AlertRuleRow.ScopeJSON` stores the scope as JSON**, so adding `Tenant` to
+`domain.AlertScope` needs **NO DB migration** (old rules unmarshal to `tenant=""` = all tenants). And the correct minimal
+[5] fix is the **read-level** tenant pass to `QoEForStream` (not a stream-level pattern resolver — that would be a
+different, inconsistent tenant notion).
+
+**★ SHIPPED (PR #171, prod-rolled):**
+- `domain.AlertScope`: `+Tenant` (json:"tenant,omitempty"; stored in ScopeJSON → no migration; backward-compatible).
+- `QoEReader.QoEForStream`: `+tenant` param; `query.Service` passes it to `QoeParams.Tenant` (whose `WHERE tenant=?` SQL
+  is already tested — S73 [1]/D-137). `FakeQoEReader` gained a `LastTenant` capture for tests.
+- Evaluator `evalQoEMetric` threads `scope.Tenant` → `QoEForStream`. An unscoped rule is unchanged.
+- Contract: `AlertScope.tenant` documented; `schema.d.ts` regen. **No API handler change** — `alertRuleFromAPI` already
+  marshals `body["scope"]` opaquely into ScopeJSON, so `POST {"scope":{"tenant":"acme"},...}` round-trips.
+- **Scope note:** tenant scoping covers the tenant-blendable QoE-read metrics (`rebuffer_ratio`, `error_rate`) — the exact
+  [5] finding. `ingest_bitrate_floor` is publisher-side (one value per stream, no per-tenant blend) → unaffected.
+
+**Validation:** full 25-pkg Go suite + web green; tenant threading **mutation-proven** (dropping `scope.Tenant` → reader
+called with "" → test fails). New unit tests: tenant-scoped rule → reader gets `acme`; unscoped rule → reader gets "".
+**Prod-rolled** (server source, no migration): stamped rebuild → `v0.4.0-114-ge295795`; 5-check smoke green (healthz 200,
+signed webhook 200, limits 512M/0.5cpu, 0 errors, version stamped) + alerts/rules 200. Rollback tag
+`pulse-prod-pulse:pre-d149`.
+
+**★ S73 finding [5] → FIXED — the S73 audit is now 8/8 SHIPPED (was 7 shipped + 1 defer-by-ruling).** **F6 phase map:**
+Phase 1 ✅ (D-148, BUG-009) · Phase 2 ✅ (this, [5]) · **Phase 3 = [20]** audit-log read model (the last F6 item; also an
+S62 defer-by-ruling product call). No operator action for Phase 2. Docs: D-149 (this block); ROADMAP §2.37 (Phase 2 ✅);
+S73-AUDIT-FINDINGS [5] FIXED; RESUME → SESSION-88 (F6 Phase 3); operator-expected F6 status; SESSION-87 CLOSED; SESSION-88 written.
