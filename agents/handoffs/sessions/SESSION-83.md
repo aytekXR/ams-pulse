@@ -1,5 +1,14 @@
 # SESSION-83 — planned at S82 close (D-144) — §2.7 date-gate, else a bounded polish arc
 
+> ## ✅ CLOSED (2026-07-17, D-145) — took Option B (bounded web test-coverage arc)
+> Checked at open: today **07-17 < 07-23** so §2.7 stayed locked, and the operator had **not** answered the S82
+> checkpoint → the plan's **Option B** (a concrete bounded arc over idling). Shipped a **test-only** coverage pass on the
+> two lowest-covered web files (PR #158): `SettingsPage.tsx` **55.5→95.4% lines** (30.5→94.4% funcs) and
+> `OnboardingWizard.tsx` **73.0→93.7% lines** (57.1→90.5% funcs) — +23 tests → **676** total, global lines ~76%. No
+> app source changed → **no prod deploy** (`v0.4.0-98-g641b4e2`). typecheck/lint/build clean. No new operator item; the
+> six S82 checkpoint decisions are unchanged. See `decisions.md` D-145, ROADMAP §2.34, and `sessions/SESSION-84.md`.
+> Everything below is the original pre-session plan.
+
 > Written by SESSION-82 close (2026-07-17). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE.** Prod at **v0.4.0-98-g641b4e2** (hardened: read-only rootfs, cap_drop,

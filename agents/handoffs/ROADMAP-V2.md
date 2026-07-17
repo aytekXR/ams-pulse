@@ -527,6 +527,16 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.34  Web test-coverage polish — lowest-covered UI files  [✅ DONE — test-only, no prod deploy]  ✅ S83 (D-145, 2026-07-17, PR #158)
+
+A bounded, unobjectionable arc taken because §2.7 is date-locked (≥07-23) and the S82 checkpoint is unanswered — the
+plan's Option B (a concrete safe move over idling). Raised the two lowest-covered web files with **pure test additions**
+(no behavior change): `SettingsPage.tsx` **55.5→95.4% lines** (30.5→94.4% funcs) and `OnboardingWizard.tsx`
+**73.0→93.7% lines** (57.1→90.5% funcs). New tests cover ingest-token creation + `IngestSnippet` clipboard copy,
+populated list rows, delete/revoke success+cancel, the S3 export form, the license card + activation (success+failure),
+and the full `handleTest` verify flow + `handleSourceSave` failures. Full suite **676 passed** (+23); global lines
+coverage ~76%. No server/web source changed → prod stays `v0.4.0-98-g641b4e2`.
+
 ### 2.33  Cross-cutting security-posture pass — supply-chain + container hardening  [✅ COMPLETE — deps clean + pulse container hardened + report-artifact retention prune shipped]  ✅ S80→S81 (D-142→D-143, 2026-07-17, PR #152 + #155, prod v0.4.0-98-g641b4e2)
 
 The FIRST non-subsystem audit (the three prior audits §2.29/§2.30/§2.31/§2.32 were by-package). Covers what subsystem

@@ -8934,3 +8934,40 @@ loop stays in a quiet/waiting phase). **This is a legitimate steward hand-back p
 correctness/UI surface well-swept, prod hardened + stable at v0.4.0-98-g641b4e2) — NOT a blocker requiring the loop to
 stop, but a recognition that the highest-leverage next step is the operator's. Docs: D-144 (this block); ROADMAP §2.15
 corrected + §2.7 noted; BUG-009 re-verified; RESUME → SESSION-83; SESSION-82 CLOSED; SESSION-83 written.
+
+---
+
+## D-145 — S83: web test-coverage polish arc (SettingsPage + OnboardingWizard) — 2026-07-17
+
+**Context.** SESSION-83 opened with §2.7 CI-promotions still date-locked (unlocks ≥2026-07-23; today 07-17) and the S82
+operator checkpoint unanswered. Per the SESSION-83 plan (Option B), took a **bounded, unobjectionable polish arc** — a
+web test-coverage pass on the two lowest-covered UI files — over idling. NOT a new work-stream (explicitly not F6 / not
+§2.19, which are operator-scoped).
+
+**What shipped (PR #158, test-only).** Two new test files under `web/src/features/settings/__tests__/`:
+- `SettingsPage.interactions.test.tsx` — ingest-token creation + `IngestSnippet` clipboard copy; populated
+  source/API-token/ingest-token list rows; `deleteSource`/`deleteToken` success **and** confirm-declined paths; the S3
+  export form (field edits + submit toast); the license card (paid tier, expiry, `-1 → ∞` limits) + activation form
+  (success toast + failure toast).
+- `OnboardingWizard.verify.test.tsx` — the entire `handleTest` verify flow (reachable ±latency/version, unreachable
+  ±error, ApiError vs generic throw, in-flight spinner) + both `handleSourceSave` failure branches + the optional
+  source fields.
+
+**Coverage delta (v8, per-file).** `SettingsPage.tsx` 55.5→**95.4%** lines / 30.5→**94.4%** funcs;
+`OnboardingWizard.tsx` 73.0→**93.7%** lines / 57.1→**90.5%** funcs. Full suite **653→676 passed** (+23); global lines
+coverage ~72→**76%**; no threshold regression. `typecheck`, `lint`, `build` all clean.
+
+**No prod deploy.** No server/web *source* changed (test files only) → prod stays **v0.4.0-98-g641b4e2**. Per the
+pipeline, a test-only change does not roll prod. No adversarial workflow — a test-only change is low-risk; the tests are
+mutation-meaningful (they assert real args/messages, not tautologies) and were validated against the live components.
+
+**Operator.** No new operator item. The six S82 checkpoint decisions (F6 multi-tenancy, §2.6 unsigned-webhook, §2.1
+branch protection, §2.18 GHCR/licence, §2.19 UI direction, §2.12 mobile SDKs) remain open and unchanged — each with a
+recommendation in `operator-expected.md`; none block continued autonomous work.
+
+**Loop state.** This is the 2nd consecutive quiet arc (S82 checkpoint, S83 coverage). The autonomous backlog is
+genuinely thin; the next headline autonomous move (§2.7 CI-promotions) is gated to 2026-07-23. SESSION-84 should
+CHECK THE DATE + operator-expected first, then either do §2.7 (if ≥07-23), take the operator's pick (if they responded),
+or take at most one more small arc (a `documentation-gaps.md` pass) before scaling the loop to a low-frequency wait for
+the gate (loop guidance: after ~3 no-op ticks, reduce frequency). Docs: D-145 (this block); ROADMAP §2.34 added;
+RESUME → SESSION-84; operator-expected S83 status prepended; SESSION-83 CLOSED; SESSION-84 written.
