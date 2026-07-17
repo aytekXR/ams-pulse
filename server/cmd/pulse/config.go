@@ -134,6 +134,14 @@ type EnvConfig struct {
 	// Corresponds to PULSE_REPORTS_DIR (default: ./pulse-reports).
 	ReportsDir string
 
+	// ReportArtifactRetentionDays prunes generated report artifacts older than
+	// this many days on each scheduler tick. Corresponds to
+	// PULSE_REPORT_ARTIFACT_RETENTION_DAYS (default: 90). 0 or negative disables
+	// pruning (keep forever). Only files matching the scheduler's
+	// pulse-usage-*.{csv,pdf} artifact pattern inside ReportsDir are ever removed
+	// (never the SQLite metastore, which post-D-142 shares the parent volume).
+	ReportArtifactRetentionDays int
+
 	// S3Endpoint is the S3-compatible endpoint URL (e.g. https://s3.amazonaws.com).
 	// Corresponds to PULSE_S3_ENDPOINT. Empty = S3 export disabled.
 	S3Endpoint string
@@ -349,6 +357,7 @@ func loadEnvConfig() (EnvConfig, error) {
 
 	// Wave 2 (WO-204): reports + S3 export config.
 	cfg.ReportsDir = envOrDefault("PULSE_REPORTS_DIR", "pulse-reports")
+	cfg.ReportArtifactRetentionDays = envInt("PULSE_REPORT_ARTIFACT_RETENTION_DAYS", 90)
 	cfg.S3Endpoint = os.Getenv("PULSE_S3_ENDPOINT")
 	cfg.S3Bucket = os.Getenv("PULSE_S3_BUCKET")
 	cfg.S3Prefix = envOrDefault("PULSE_S3_PREFIX", "reports/")
@@ -431,7 +440,12 @@ func envOrDefault(key, dflt string) string {
 }
 
 func envInt(key string, dflt int) int {
-	if v := os.Getenv(key); v != "" {
+	// TrimSpace so a k8s `--from-file` trailing newline or a Docker `--env-file`
+	// trailing space doesn't make strconv.Atoi fail and silently fall back to the
+	// default (mirrors envBool below; caught by the D-143 review for
+	// PULSE_REPORT_ARTIFACT_RETENTION_DAYS=0, where the fallback flips "disabled"
+	// into active 90-day pruning).
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 		n, err := strconv.Atoi(v)
 		if err == nil {
 			return n

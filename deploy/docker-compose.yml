@@ -60,6 +60,15 @@ services:
       # Use postgres for HA deployments:
       # PULSE_META_DSN: "postgres://pulse:password@postgres:5432/pulse_meta"
 
+      # ── Reports ──────────────────────────────────────────────────────────────
+      # Persist generated report artifacts on the pulse-data volume (D-142/D-143).
+      # The code default is the RELATIVE "pulse-reports", which resolves to the
+      # ephemeral container root (WORKDIR "/") and is wiped on every redeploy; the
+      # volume path also lets PULSE_REPORT_ARTIFACT_RETENTION_DAYS pruning (default
+      # 90; 0 disables) actually bound growth across restarts.
+      PULSE_REPORTS_DIR: "/var/lib/pulse/reports"
+      # PULSE_REPORT_ARTIFACT_RETENTION_DAYS: "90"
+
       # ── License ──────────────────────────────────────────────────────────────
       # PULSE_LICENSE_KEY: ""            # empty = Free tier (1 node, 7-day retention)
       # PULSE_LICENSE_FILE: /etc/pulse/license.sig   # air-gapped Enterprise

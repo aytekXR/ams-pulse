@@ -540,10 +540,11 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	reports.ValidateLogoPath(cfg.ReportLogoPath, logger)
 
 	reportScheduler := reports.NewScheduler(reports.SchedulerConfig{
-		ArtifactsDir: cfg.ReportsDir,
-		TickInterval: 60 * time.Second,
-		S3:           s3Cfg,
-		LogoPath:     cfg.ReportLogoPath,
+		ArtifactsDir:  cfg.ReportsDir,
+		RetentionDays: cfg.ReportArtifactRetentionDays,
+		TickInterval:  60 * time.Second,
+		S3:            s3Cfg,
+		LogoPath:      cfg.ReportLogoPath,
 	}, accountant, metaStore, logger)
 	// Wire alert history for schedule failure notifications.
 	reportScheduler.SetAlertStore(metaStore)
