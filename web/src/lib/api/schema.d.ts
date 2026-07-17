@@ -1038,6 +1038,8 @@ export interface components {
             stream_id: string;
             app: string;
             node_id?: string;
+            /** @description Server-side-resolved owning tenant (F6), from the tenant registry's stream-name pattern. Absent when the stream matches no tenant ("unassigned"). Filter the list with the `tenant` query parameter. */
+            tenant?: string;
             viewers: number;
             /** @enum {string} */
             publisher_state: "publishing" | "idle" | "offline";

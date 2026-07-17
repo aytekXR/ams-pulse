@@ -3,7 +3,13 @@
 **Severity:** medium (OpenAPI contract violation — silent; multi-tenant data isolation
 expectation not met by these endpoints)
 **Component:** query (`server/internal/query/query.go`)
-**Status:** PARTIALLY FIXED (S22/D-084) — `cursor` param for `GET /live/streams` fixed; `tenant` param for both endpoints remains known-violation (F6 multi-tenancy backlog).
+**Status:** ✅ FIXED (S86/D-148, F6 Phase 1) — the `tenant` param on `GET /live/overview` + `GET /live/streams`
+now filters server-side. `query.Service` gained an optional `TenantResolver`; the live handlers resolve each live
+stream's owning tenant from the tenant registry (`stream_pattern` glob, via `internal/tenant`) and (a) filter by the
+`?tenant=` param, (b) populate `LiveStream.tenant` in the response. Fail-closed (an explicit `?tenant=X` with no match
+→ empty, never a cross-tenant leak); single-tenant deployments (no tenant rows) are unaffected. The `cursor` portion was
+already fixed (S22/D-084). *(Earlier status: PARTIALLY FIXED S22/D-084 — cursor fixed; tenant was a known-violation
+deferred to the F6 backlog.)*
 
 > **S82/D-144 re-verification (2026-07-17):** the **cursor** portion is CONFIRMED FIXED in the current code —
 > `query.LiveStreams` (query.go:199-234) sorts by StreamID for a stable offset cursor, decodes `cursor` via
