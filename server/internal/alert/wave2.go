@@ -11,7 +11,9 @@ package alert
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -206,7 +208,10 @@ func NewCertCheckerWithTLSConfig(cfg *tls.Config, dialTimeout time.Duration) *Ce
 }
 
 // DaysUntilExpiry returns the number of days until the TLS certificate at
-// host:port expires. Returns -1 on error or if certificate is already expired.
+// host:port expires. Returns -1 with a nil error if the certificate is already
+// expired — including the common case where TLS verification itself rejects the
+// handshake specifically because the (otherwise-trusted) leaf has expired — so a
+// cert_expiry lt 0 rule can fire. Any other failure returns (-1, non-nil error).
 func (c *CertChecker) DaysUntilExpiry(ctx context.Context, host string) (float64, error) {
 	// Parse host:port; default port 443.
 	h, port, err := net.SplitHostPort(host)
@@ -231,6 +236,15 @@ func (c *CertChecker) DaysUntilExpiry(ctx context.Context, host string) (float64
 	}
 	conn, err := dialer.DialContext(dialCtx, "tcp", addr)
 	if err != nil {
+		// A verification failure whose specific reason is Expired is a measurable
+		// "already expired" state, not a check failure: return -1 with a nil error so a
+		// cert_expiry lt 0 rule fires (this is the common production path — a trusted-CA
+		// leaf that has expired fails the handshake before we can read NotAfter). Any
+		// other dial/verification failure stays a real error (D-134/S72 [22]).
+		var invalid x509.CertificateInvalidError
+		if errors.As(err, &invalid) && invalid.Reason == x509.Expired {
+			return -1, nil
+		}
 		return -1, fmt.Errorf("cert check: dial %s: %w", addr, err)
 	}
 	defer conn.Close()
@@ -249,7 +263,10 @@ func (c *CertChecker) DaysUntilExpiry(ctx context.Context, host string) (float64
 	leaf := certs[0]
 	now := time.Now()
 	if now.After(leaf.NotAfter) {
-		return 0, nil // already expired
+		// Already expired: return the -1 sentinel promised by the docstring above.
+		// Returning 0 made a `cert_expiry lt 0` rule never fire (0 < 0 is false), so an
+		// operator watching for an expired cert got no alert (D-134/S72 [22]).
+		return -1, nil
 	}
 	daysLeft := leaf.NotAfter.Sub(now).Hours() / 24
 	return daysLeft, nil
