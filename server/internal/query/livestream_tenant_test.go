@@ -4,7 +4,9 @@
 package query_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -81,13 +83,20 @@ func TestLiveStreams_TenantFilterAndPopulation(t *testing.T) {
 		}
 	}
 
-	// ?tenant=nomatch → empty (no cross-tenant leakage to a bogus tenant).
+	// ?tenant=nomatch → empty (no cross-tenant leakage to a bogus tenant), and the
+	// slice must be non-nil so it serializes as [] not null (OpenAPI type: array).
 	none, err := svc.LiveStreams(context.Background(), "", "", "nomatch", 50, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(none.Items) != 0 {
 		t.Fatalf("tenant=nomatch: got %d items, want 0", len(none.Items))
+	}
+	if none.Items == nil {
+		t.Fatal("tenant=nomatch: Items is nil (serializes as null); want non-nil [] per contract")
+	}
+	if b, _ := json.Marshal(none); !bytes.Contains(b, []byte(`"items":[]`)) {
+		t.Fatalf("empty result must serialize items as []: %s", b)
 	}
 }
 
