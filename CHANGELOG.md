@@ -67,6 +67,12 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **Multi-tenant isolation for ingest-health metrics (D-137).** The `GET /qoe/ingest` publisher
+  ingest-health query was missing the tenant filter its sibling analytics queries all apply, so in a
+  multi-tenant deployment where two tenants used the same app + stream name, the bitrate/fps/packet-loss
+  figures were **blended across tenants**. The query is now tenant-scoped like its siblings (and the
+  `tenant` query parameter is documented). Single-tenant deployments are unaffected. (Found by the S73
+  subsystem audit, finding [1].)
 - **Graceful shutdown, boolean env-vars, and diagnostic redaction (D-136).** Three fixes from the S73
   subsystem audit: (1) on `SIGTERM` the HTTP server is now **gracefully drained** (in-flight requests
   finish, WebSocket and rate-limiter background goroutines stop) instead of being killed abruptly —

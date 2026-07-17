@@ -8619,3 +8619,44 @@ smoke checks green. CI: all 15 checks + CodeQL green on first run.
 ROADMAP §2.32 (3/8 shipped; 5 remain — [1] HIGH + [4]/[5]/[7]/[8] MEDIUM); RESUME-PROMPT ▶ START HERE → SESSION-75;
 `operator-expected.md` ([3] now fixed — anonymize-ip workaround retired; [7] WS-token still pending); `sessions/SESSION-74.md`
 CLOSED; `sessions/SESSION-75.md` written (lead: [1] query cross-tenant — the last S73 HIGH). **No operator action required.**
+
+## D-137 — S75 (2026-07-17): SHIPPED — S73 [1] IngestTimeseries cross-tenant leak (the last S73 HIGH)
+
+**Open facts.** `origin/main` = `6aeb919` (S74 docs, PR #142); HEAD == origin/main; `git status` shows only the
+do-not-commit `deploy/config/Caddyfile.prod` dirty. Branch `s75-d137`. Date 2026-07-17 (§2.7 gate still locked until
+2026-07-23). Single-finding session (the last S73 HIGH, self-contained).
+
+**[1] HIGH — `query.IngestTimeseries` cross-tenant ingest-metrics leak.** `IngestTimeseries` was the ONLY analytics
+query with no `AND tenant = ?` filter — its four siblings (`AudienceAnalytics`/`GeoBreakdown`/`DeviceBreakdown`/
+`QoeSummary`) all apply one — so in a multi-tenant deployment where distinct tenants share an (app, stream_id),
+`GET /qoe/ingest` returned bitrate/fps/packet-loss averages blended across tenants (same class as S48/D-110). **Fix
+(mirrors the siblings exactly):** `Tenant` field on `IngestTimeseriesParams` + `if p.Tenant != "" { where += " AND
+tenant = ?"; args = append(args, p.Tenant) }` (verified IngestTimeseries makes a SINGLE ClickHouse query — drop events
+are derived from the timeseries in Go — so one WHERE covers it); `handleIngestHealth` reads `q.Get("tenant")` →
+`filterTenant` → params; the OpenAPI `/qoe/ingest` endpoint now lists the reusable `tenant` param (the one analytics
+endpoint that lacked it), `web/src/lib/api/schema.d.ts` regenerated (2-line diff), redocly lint clean. Empty tenant = no
+filter → single-tenant/default deployments unaffected, consistent with the siblings. (Verified CORE = match the
+siblings; full auth-bound tenant enforcement is a separate broader concern the siblings also don't do, out of scope.)
+
+**Verification.** New `s75_d137_test.go` (query pkg, mirrors `TestAudienceAnalytics_TenantFilter`): the tenant value
+reaches the query args (+ composes with app/stream/node). Full suite **25/25**; gofmt + vet clean; redocly lint clean.
+Adding the OpenAPI param tripped the param-conformance gate (every documented param needs a registry entry) — added an
+entry. **Mutation-proven:** drop the WHERE block → the query-layer test reddens.
+
+**Adversarial review (2 lenses — tenant-completeness / contract-regression; 3 agents). 1 CONFIRMED (MEDIUM), 0 refuted
+— fixed pre-merge:** my first registry entry was `paramExempt`, but `/qoe/ingest` already has a `captureIngestQsvc`
+probe harness (used by 3 sibling params), so the handler→params routing (`Tenant: filterTenant`) was UNTESTED — a
+regression there would pass CI (the query-layer unit test calls `IngestTimeseries` directly, bypassing the handler).
+**Fixed:** upgraded the registry entry to a capture PROBE that fires `GET /qoe/ingest?tenant=X` and asserts
+`cap.captured[0].Tenant == X` — mutation-proven (break the routing → RED). The completeness lens swept query.go and
+found NO other reachable query leaking tenant.
+
+**Shipped (PR #143, squash `e266738`, merged to `origin/main`).** Prod rolled forward to **`v0.4.0-87-ge266738`**; all 5
+smoke checks green. CI: all 15 checks + CodeQL green (incl. the web openapi-typescript drift check — schema.d.ts was
+committed with the spec change).
+
+**★ ALL 3 S73 HIGH findings are now shipped.** Docs at close: D-137 SHIPPED (this block); CHANGELOG [Unreleased] Fixed;
+`S73-AUDIT-FINDINGS.md` [1] ✅ DONE; ROADMAP §2.32 (4/8 shipped; 4 MEDIUM remain — [4]/[5]/[7]/[8]); RESUME-PROMPT ▶
+START HERE → SESSION-76; `operator-expected.md` (cross-tenant leak fixed, multi-tenant only; [7] WS-token still pending);
+`sessions/SESSION-75.md` CLOSED; `sessions/SESSION-76.md` written (lead: [4] alert-history prune race). **No operator
+action required.**
