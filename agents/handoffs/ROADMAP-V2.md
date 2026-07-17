@@ -527,6 +527,15 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.35  Documentation-gaps deliverable — completion + tracker reconcile  [✅ DONE — docs-only, no prod deploy]  ✅ S84 (D-146, 2026-07-17, PR #160)
+
+A verify-before-writing completeness pass on `docs/assessment/documentation-gaps.md` (the SESSION-84 Option-C bounded
+arc). Found `docs/known-limitations.md` had already closed **15 of 18** gaps (the tracker's status notes were stale);
+authored the last 3 residual S17-drift footnotes in `AMS-INTEGRATION.md` (DG-12 applications/info 405; DG-14 versionType
+"Enterprise Edition"; DG-13 app-inventory-reset troubleshooting — with a corrected remediation, the gap's suggested
+`grep 'resolveApps'` marker doesn't exist) and reconciled the tracker (gap → LIM-*/doc closure map). **All 18
+documentation gaps are now closed; the S18 Phase-6 deliverable is complete.** No prod deploy.
+
 ### 2.34  Web test-coverage polish — lowest-covered UI files  [✅ DONE — test-only, no prod deploy]  ✅ S83 (D-145, 2026-07-17, PR #158)
 
 A bounded, unobjectionable arc taken because §2.7 is date-locked (≥07-23) and the S82 checkpoint is unanswered — the
