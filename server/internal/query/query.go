@@ -180,7 +180,10 @@ func (s *Service) LiveStreams(ctx context.Context, app, nodeID, tenant string, l
 		return &LiveStreamListResult{Items: []LiveStreamItem{}, Meta: PaginatedMeta{}}, nil
 	}
 
-	var items []LiveStreamItem
+	// Non-nil so a filtered-to-empty result (e.g. a fail-closed ?tenant=X match,
+	// or ?app=nomatch) serializes as [] not null — LiveStreamList.items is
+	// declared type: array in the OpenAPI contract.
+	items := []LiveStreamItem{}
 	for sid, stream := range snap.Streams {
 		if app != "" && stream.App != app {
 			continue
