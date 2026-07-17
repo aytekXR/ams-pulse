@@ -1,5 +1,11 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-17, D-137/D-138 — SESSION-75/76)
+# Operator TODO — the items only YOU can do (updated 2026-07-17, D-137/D-138/D-139 — SESSION-75/76/77)
 
+> **S77 (D-139) needs NO operator action** — the Settings page now shows an error toast when removing a source or
+> creating/revoking a token fails (it used to silently do nothing). Live in prod (`v0.4.0-91-g7e272f6`). The one S73
+> item still worth your awareness remains the **admin-token-in-WebSocket-URL log exposure ([7])** — it is the NEXT thing
+> I'm fixing (a short-lived WS ticket / header-based auth); until it lands, treat Caddy/docker logs as containing a live
+> admin credential.
+>
 > **S76 (D-138) needs NO operator action** — an internal fix to how per-rule alert history is trimmed (it could
 > over-trim under heavy concurrent alerting on a Postgres backend; now a single atomic statement). Live in prod
 > (`v0.4.0-89-g300251d`). Nothing to configure. The remaining S73 item worth your awareness is still the **admin-token-

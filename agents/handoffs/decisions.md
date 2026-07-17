@@ -8700,3 +8700,41 @@ smoke checks green. CI: all 15 checks + CodeQL green (incl. the PG integration t
 new action; [7] WS-token still the pending item); `sessions/SESSION-76.md` CLOSED; `sessions/SESSION-77.md` written
 (lead: [8] web SettingsPage silent error handlers — a quick web-only win that also exercises the web/vitest CI loop
 before the bigger [7] WS-ticket + [5] QoE-tenant changes). **No operator action required.**
+
+## D-139 — S77 (2026-07-17): SHIPPED — S73 [8] web SettingsPage silent error handlers (first web-only fix)
+
+**Open facts.** `origin/main` = `35c6ebd` (S76 docs, PR #146); HEAD == origin/main; `git status` shows only the
+do-not-commit `deploy/config/Caddyfile.prod` dirty. Branch `s77-d139`. Date 2026-07-17 (§2.7 gate still locked until
+2026-07-23). First WEB-only fix of this arc — validated the web/vitest CI loop before the bigger remaining [7]/[5].
+
+**[8] MEDIUM — web SettingsPage handlers silently discard API errors.** `deleteSource` / `deleteToken` /
+`createApiToken` / `createIngestToken` `await`ed their admin-API call with NO try/catch and were invoked as
+`() => void handler()`, so a failed request (403/500/network) was silently swallowed — no error toast, the list neither
+refreshed nor updated, and a user seeing nothing could retry, firing repeated DELETEs and masking the failure. **Fix:**
+wrapped each in `try/catch { toast(err instanceof ApiError ? err.message : "<fallback>", "error") }`, mirroring the
+already-correct `saveLicense` in the same file. **Completeness swept:** a repo-wide grep of `await adminApi.` /
+`await api.` confirmed these four were the ONLY silent-discard handlers — ReportsPage (4 awaits/6 catches) and
+OnboardingWizard (both awaits in try/catch) already guard theirs. No adjacent findings.
+
+**Verification.** New `web/src/features/settings/SettingsPage.test.tsx` (vitest + React Testing Library): mocks
+`adminApi` (via `vi.hoisted` to satisfy the vi.mock hoist), rejects `deleteSource` with an `ApiError`, renders inside
+`ToastProvider`, stubs `confirm`, clicks Remove, and asserts the error message surfaces as a toast. **Mutation-proven:**
+reverting `deleteSource` to no-try/catch → the toast never fires → the test times out RED. `tsc --noEmit` clean (caught
++ fixed an `ApiError` body missing the required `code` field); `eslint` clean; full web suite **651/651** (coverage
+threshold met); `npm run build` OK; Go suite **25/25** (no cross-impact). Self-review sufficed (mechanical mirror of the
+established pattern + completeness swept) — no adversarial workflow.
+
+**Web-fix gotchas recorded for the next web session:** `vi.mock` factory can't reference a top-level `const` (hoisting)
+— use `vi.hoisted`. `ApiError(status, body)` body requires `{ code, message }`. Running vitest with a single-file path
+still fails the GLOBAL coverage threshold — run the full `npm test` to check coverage. The pulse binary EMBEDS
+`web/dist`, so a web change DOES require a prod roll-forward (verified: SPA root serves 200 after deploy).
+
+**Shipped (PR #147, squash `7e272f6`, merged to `origin/main`).** Prod rolled forward to **`v0.4.0-91-g7e272f6`** (SPA
+rebuilt); all 5 smoke checks green + `GET /` (SPA root) 200. CI: all 15 checks + CodeQL green (incl. web / web-e2e /
+csp-e2e Playwright).
+
+**Docs at close:** D-139 SHIPPED (this block); CHANGELOG [Unreleased] Fixed; `S73-AUDIT-FINDINGS.md` [8] ✅ DONE; ROADMAP
+§2.32 (6/8 shipped; 2 MEDIUM remain — [5]/[7]); RESUME-PROMPT ▶ START HERE → SESSION-78; `operator-expected.md` (no new
+action; [7] WS-token still pending); `sessions/SESSION-77.md` CLOSED; `sessions/SESSION-78.md` written (lead: [7]
+WS-token log exposure — the security/operator-flagged one; design options: single-use ticket vs WS subprotocol).
+**No operator action required.**

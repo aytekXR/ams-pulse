@@ -1,5 +1,14 @@
 # SESSION-77 — planned at S76 close (D-138)
 
+> ## ✅ CLOSED (2026-07-17, D-139) — SHIPPED [8]
+> The web SettingsPage silent-error-handler fix shipped (PR #147, prod `v0.4.0-91-g7e272f6`): deleteSource/deleteToken/
+> createApiToken/createIngestToken now `try/catch` + error `toast` instead of swallowing API failures (mirrors
+> `saveLicense`). First web-only fix of the arc — validated the web/vitest CI loop (new RTL test, mutation-proven;
+> typecheck+eslint clean; 651/651; build OK; Go 25/25). Repo-wide sweep confirmed no other silent-discard handler.
+> **No operator action.** See `decisions.md` D-139 and `sessions/SESSION-78.md` (lead: [7] WS-token log exposure — the
+> security/operator-flagged one). Everything below is the original pre-session plan.
+
+
 > Written by SESSION-76 close (2026-07-17). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE + `agents/handoffs/S73-AUDIT-FINDINGS.md`** (8-finding ledger; 5 shipped, ALL HIGH done).

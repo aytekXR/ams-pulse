@@ -67,6 +67,11 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **Settings page now reports failed actions (D-139).** Removing a source, revoking/creating an API or
+  ingest token in the web Settings page previously showed no feedback at all when the request failed
+  (e.g. server error) — the action silently did nothing and a user could unknowingly retry it. These
+  handlers now surface an error toast on failure, matching the rest of the page. (Found by the S73
+  subsystem audit, finding [8].)
 - **Alert-history pruning race on Postgres (D-138).** The per-rule alert-history cap was enforced with a
   non-transactional count-then-delete, so under concurrent alert firing on a Postgres backend two prunes
   could together delete below the cap and permanently drop history rows. Pruning is now a single
