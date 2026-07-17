@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +23,12 @@ type SchedulerConfig struct {
 	// ArtifactsDir is the base directory where generated reports are written.
 	// Default: ./pulse-reports
 	ArtifactsDir string
+
+	// RetentionDays prunes artifacts older than this many days on each tick.
+	// 0 or negative disables pruning (keep forever). Default 0 here; the server
+	// wires PULSE_REPORT_ARTIFACT_RETENTION_DAYS (default 90). Only files matching
+	// the pulse-usage-*.{csv,pdf} artifact pattern are ever removed.
+	RetentionDays int
 
 	// TickInterval is how often to check for due schedules.
 	// Default: 60 s.
@@ -131,6 +138,12 @@ func (s *Scheduler) RunOnce(ctx context.Context) {
 
 // runDue checks for due schedules and runs them.
 func (s *Scheduler) runDue(ctx context.Context) {
+	// Prune runs every tick regardless of whether listing/running due schedules
+	// succeeds. It is a pure filesystem op with no dependency on the meta store, so
+	// gating it behind a ListDueReportSchedules error would let a persistent DB or
+	// volume error (e.g. a full volume causing SQLite I/O errors) defeat retention
+	// exactly when artifacts are piling up. (D-143 review finding.)
+	defer func() { s.pruneArtifacts(time.Now()) }()
 	if s.meta == nil {
 		return
 	}
@@ -147,6 +160,60 @@ func (s *Scheduler) runDue(ctx context.Context) {
 				"error", err)
 			s.writeFailureAlert(ctx, sched.ID, err)
 		}
+	}
+}
+
+// isReportArtifact reports whether name is a scheduler-generated report file
+// (the pulse-usage-<from>-to-<to>.{csv,pdf} pattern emitted by GenerateStatement).
+// The prune is filename-gated to this shape so it can NEVER remove a non-artifact
+// file — in particular the SQLite metastore (pulse_meta.db + its -wal/-shm sidecars)
+// and the secret-key file, which post-D-142 share the parent pulse-data volume when
+// ArtifactsDir is /var/lib/pulse/reports.
+func isReportArtifact(name string) bool {
+	return strings.HasPrefix(name, "pulse-usage-") &&
+		(strings.HasSuffix(name, ".csv") || strings.HasSuffix(name, ".pdf"))
+}
+
+// pruneArtifacts removes report artifacts older than the retention window. It is a
+// no-op when RetentionDays <= 0. Strictly bounded: it lists ONLY the top level of
+// ArtifactsDir (os.ReadDir does not recurse) and removes ONLY entries that are
+// REGULAR files (Type().IsRegular() excludes directories AND symlinks/devices, so a
+// pattern-named symlink is never unlinked) matching isReportArtifact and older than
+// the cutoff by their own mtime — so non-artifact files sharing the directory are
+// never touched.
+func (s *Scheduler) pruneArtifacts(now time.Time) {
+	if s.cfg.RetentionDays <= 0 {
+		return
+	}
+	entries, err := os.ReadDir(s.cfg.ArtifactsDir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			s.logger.Warn("reports: prune list failed", "dir", s.cfg.ArtifactsDir, "error", err)
+		}
+		return
+	}
+	cutoff := now.Add(-time.Duration(s.cfg.RetentionDays) * 24 * time.Hour)
+	pruned := 0
+	for _, e := range entries {
+		if !e.Type().IsRegular() || !isReportArtifact(e.Name()) {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			path := filepath.Join(s.cfg.ArtifactsDir, e.Name())
+			if err := os.Remove(path); err != nil {
+				s.logger.Warn("reports: prune remove failed", "file", path, "error", err)
+				continue
+			}
+			pruned++
+		}
+	}
+	if pruned > 0 {
+		s.logger.Info("reports: pruned old artifacts",
+			"count", pruned, "retention_days", s.cfg.RetentionDays, "dir", s.cfg.ArtifactsDir)
 	}
 }
 
