@@ -11,7 +11,30 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-84.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-85.md`)
+
+**Session 2026-07-17 result: D-146 — S84 completed the documentation-gaps deliverable (docs-only, no prod deploy). A verify-before-writing pass found `docs/known-limitations.md` had already closed 15/18 gaps; authored the last 3 residual footnotes (DG-12/13/14) in AMS-INTEGRATION.md + reconciled the tracker. ALL 18 gaps now closed. PR #160.**
+
+**★ S84** took the SESSION-84 Option-C bounded arc. The discipline mattered: trusting the stale tracker would have
+duplicated content that `known-limitations.md` already carries. Corrected DG-13's remediation (the suggested
+`grep 'resolveApps'` marker doesn't exist — `resolveApps()` logs nothing; use `PULSE_AMS_APPLICATIONS` + the real
+`restpoller: app poll error` warning). No new operator item. Evidence: `decisions.md` D-146; ROADMAP §2.35.
+
+**★ SESSION-85 = SCALE THE LOOP BACK — the bounded autonomous backlog is now exhausted (3rd consecutive quiet arc).**
+S82 (checkpoint) → S83 (web coverage) → S84 (doc-gaps) have drained the safe, bounded, operator-unscoped work. What
+remains is **gated**: §2.7 CI-promotions (date-locked ≥ 2026-07-23), the 6 operator-checkpoint decisions (unanswered,
+non-blocking), and large operator-scoped work-streams (F6, §2.19, §2.12 — do NOT start autonomously). **At open:**
+(1) `date +%Y-%m-%d` — if **≥ 2026-07-23** → do **§2.7 CI-promotions** (the primary autonomous move; see SESSION-85.md).
+(2) Check `operator-expected.md` — if the operator answered → do their pick. (3) Else → per loop guidance, do a quick
+CI/threads/date check and **wait at low frequency**; do NOT manufacture another arc. See `sessions/SESSION-85.md`.
+
+**⚠ OPERATOR DECISIONS PENDING (consolidated in `operator-expected.md`):** F6 multi-tenancy (unblocks
+[5]/[20]/BUG-009-tenant), §2.6 unsigned-webhook, §2.1 branch protection, §2.18 GHCR/licence, §2.19 UI direction, §2.12
+mobile SDKs — each with a recommendation. None blocking; primary single-tenant model unaffected.
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-84.md`)
 
 **Session 2026-07-17 result: D-145 — S83 shipped a bounded, test-only web test-coverage arc (no prod deploy): `SettingsPage.tsx` 55→95% lines, `OnboardingWizard.tsx` 73→94% lines; +23 tests → 676 total; global lines ~76%. Taken because §2.7 is date-locked (≥07-23) and the S82 checkpoint is unanswered. PR #158.**
 

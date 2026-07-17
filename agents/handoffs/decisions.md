@@ -8971,3 +8971,39 @@ CHECK THE DATE + operator-expected first, then either do §2.7 (if ≥07-23), ta
 or take at most one more small arc (a `documentation-gaps.md` pass) before scaling the loop to a low-frequency wait for
 the gate (loop guidance: after ~3 no-op ticks, reduce frequency). Docs: D-145 (this block); ROADMAP §2.34 added;
 RESUME → SESSION-84; operator-expected S83 status prepended; SESSION-83 CLOSED; SESSION-84 written.
+
+---
+
+## D-146 — S84: documentation-gaps workstream completed (last 3 residuals + tracker reconcile) — 2026-07-17
+
+**Context.** SESSION-84 opened with §2.7 still date-locked (≥2026-07-23; today 07-17) and the S82 operator checkpoint
+unanswered → the SESSION-84 plan's **Option C** bounded arc: a `docs/assessment/documentation-gaps.md` completeness
+pass. The plan mandated verifying each gap is still open before writing.
+
+**Key finding (verify-before-writing paid off).** The tracker's status notes were stale. `docs/known-limitations.md`
+(a comprehensive 535-line limitations doc created *after* the S18 gap table) had already closed **15 of 18** gaps.
+Authoring from the stale notes would have **duplicated existing content**. Reconciliation (gap → closure):
+DG-01→LIM-02, DG-02→LIM-09, DG-03→LIM-04, DG-04→§4.5+LIM-03, DG-05→§3.7+LIM-01, DG-06→LIM-07, DG-07→beacon-sdk.md,
+DG-08→LIM-14, DG-09→LIM-15, DG-10→LIM-16, DG-11→§1.1, DG-15→kafka-integration.md, DG-16→LIM-13, DG-17→LIM-05,
+DG-18→LIM-08/17+§1.1.
+
+**What shipped (PR #160, docs-only).** The 3 genuine residual S17-drift footnotes, authored in `AMS-INTEGRATION.md`:
+- **DG-12** §1.1 — `GET /rest/v2/applications/info` → HTTP 405; use per-app `GET /{app}/rest/v2/vods/count`.
+- **DG-14** §1.1 — `versionType` is the two-word `"Enterprise Edition"`, not `"Enterprise"`.
+- **DG-13** §10 Troubleshooting — app-inventory reset after AMS container recreation. **Corrected the gap's stale
+  remediation:** its suggested `grep 'resolveApps'` marker does NOT exist (`resolveApps()` returns the list without
+  logging it, `restpoller.go:492`); accurate guidance pins `PULSE_AMS_APPLICATIONS` and greps the real
+  `restpoller: app poll error` warning (`restpoller.go:238`).
+- `documentation-gaps.md` — S84 reconciliation status block. **All 18 gaps now closed; the S18 Phase-6 deliverable is
+  complete.**
+
+**No prod deploy** (docs-only; prod stays `v0.4.0-98-g641b4e2`). No adversarial workflow (docs, low-risk); every claim
+verified against primary sources (code markers grep'd, existing docs read). No new operator item.
+
+**Loop state — 3rd consecutive quiet-phase arc (S82 checkpoint → S83 coverage → S84 doc-gaps).** The bounded autonomous
+backlog is now genuinely exhausted: §2.7 is date-gated to 07-23; the 6 operator-checkpoint decisions are unanswered and
+non-blocking; assessment bugs are all fixed except BUG-009-tenant (needs operator-gated F6); the two lowest-covered web
+files (S83) and all documentation gaps (S84) are done. Per loop guidance ("after ~3 no-op ticks, reduce to a
+low-frequency wait"), **SESSION-85 scales the loop back to a genuine low-frequency wait** for the 07-23 §2.7 gate or
+operator input — a quick date/operator/CI check, then wait, rather than manufacturing an arc. Docs: D-146 (this block);
+ROADMAP §2.35 added; RESUME → SESSION-85; operator-expected S84 status; SESSION-84 CLOSED; SESSION-85 written.

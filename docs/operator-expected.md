@@ -1,5 +1,21 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-17, D-145 — SESSION-83)
+# Operator TODO — the items only YOU can do (updated 2026-07-17, D-146 — SESSION-84)
 
+> # ▶ S84 STATUS (2026-07-17, D-146) — NO operator action required; autonomous backlog now exhausted
+>
+> Another bounded, docs-only arc shipped (PR #160): the **documentation-gaps deliverable is complete** — all 18 operator
+> documentation gaps are now closed (15 were already covered by `docs/known-limitations.md`; the last 3 minor AMS
+> endpoint/troubleshooting footnotes were authored this session). No behavior change, no prod deploy
+> (`v0.4.0-98-g641b4e2`).
+>
+> **This is the 3rd consecutive quiet-phase arc (checkpoint → web test-coverage → doc-gaps), and the safe bounded
+> autonomous backlog is now genuinely drained.** From here the loop **scales back to a low-frequency wait** — it will
+> keep checking but stop taking on new arcs until either (a) **2026-07-23**, when the §2.7 CI-promotions move unlocks, or
+> (b) **you pick one of the decisions below.** The six checkpoint items are unchanged and remain the highest-leverage
+> next moves; **whenever you want the loop to resume substantive work, just name one** (e.g. "start F6", "do the GHCR
+> release", or "keep polishing X").
+>
+> ---
+>
 > # ▶ S83 STATUS (2026-07-17, D-145) — NO operator action required
 >
 > Since the S82 checkpoint below, one bounded, unobjectionable arc shipped: a **web test-coverage pass** (PR #158) that

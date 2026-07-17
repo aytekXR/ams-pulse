@@ -1,5 +1,15 @@
 # SESSION-84 — planned at S83 close (D-145) — the §2.7 date-gate approaches; else quiet
 
+> ## ✅ CLOSED (2026-07-17, D-146) — took Option C (documentation-gaps completion)
+> Checked at open: **07-17 < 07-23** (§2.7 still locked) and the operator had **not** answered the S82 checkpoint →
+> the plan's **Option C** bounded doc arc. A verify-before-writing pass found `docs/known-limitations.md` had already
+> closed **15/18** gaps (the tracker was stale — trusting it would have duplicated content). Authored the last 3 residual
+> footnotes (DG-12/13/14) in `AMS-INTEGRATION.md` + reconciled the tracker (PR #160). **All 18 documentation gaps now
+> closed.** Corrected DG-13's stale `grep 'resolveApps'` remediation (that marker doesn't exist). Docs-only → **no prod
+> deploy** (`v0.4.0-98-g641b4e2`). No new operator item. **This was the 3rd consecutive quiet arc → SESSION-85 scales the
+> loop back to a low-frequency wait.** See `decisions.md` D-146, ROADMAP §2.35, `sessions/SESSION-85.md`. Original
+> pre-session plan below.
+
 > Written by SESSION-83 close (2026-07-17). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE.** Prod at **v0.4.0-98-g641b4e2** (hardened: read-only rootfs, cap_drop,
