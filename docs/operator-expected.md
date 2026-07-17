@@ -1,4 +1,21 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-17, D-136 — SESSION-74)
+# Operator TODO — the items only YOU can do (updated 2026-07-17, D-137 — SESSION-75)
+
+> **S75 (D-137) needs NO operator action.** Shipped the last of the three higher-severity S73-audit findings (prod
+> `v0.4.0-87-ge266738`): the publisher ingest-health view (`/qoe/ingest`) is now correctly scoped per tenant — it had
+> been blending bitrate/fps/packet-loss numbers across tenants that happened to reuse the same app + stream name. **This
+> only affected multi-tenant setups; single-tenant deployments were never impacted.** The remaining S73 items are all
+> internal fixes I'll continue shipping — the one still worth your awareness is the **admin-token-in-WebSocket-URL log
+> exposure ([7]), still queued** (see the D-136 note below): until it ships, treat your Caddy/docker logs as containing
+> a live admin credential.
+>
+> **The ONE decision still waiting on you is the [20] audit-log read access model** (from S68 — see the D-130 block
+> below): keep admin *reads* open to any authenticated token (status quo, recommended), or gate the whole admin-read
+> surface behind the `admin` scope (which would remove the audit page from viewer-role users). No rush; non-blocking.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs 07-27;
+> see ⚠ below). GHCR is still private (**401**). The S63 email-STARTTLS behavior note below still applies.
+
+## (previous header — D-136, SESSION-74)
 
 > **S74 (D-136) needs NO operator action.** Shipped the first batch of S73-audit fixes (prod `v0.4.0-85-g28b8dfc`).
 > Updating the two heads-ups from the previous note:

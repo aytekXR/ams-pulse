@@ -1,5 +1,15 @@
 # SESSION-75 — planned at S74 close (D-136)
 
+> ## ✅ CLOSED (2026-07-17, D-137) — SHIPPED [1] — ★ ALL 3 S73 HIGH DONE
+> The last S73 HIGH shipped (PR #143, prod `v0.4.0-87-ge266738`): `query.IngestTimeseries` is now tenant-scoped like its
+> siblings (`Tenant` param + `AND tenant=?`; handler passes `q.Get("tenant")`; OpenAPI documents the param, schema.d.ts
+> regenerated), closing the cross-tenant ingest-metrics leak (multi-tenant only; single-tenant unaffected). Two-layer
+> tests (query args + handler-routing capture probe); mutation-proven; suite 25/25. 2-lens review found 1 MEDIUM (the
+> handler→params boundary was untested — my registry entry was exempt when a capture probe was available), fixed
+> pre-merge. **All 3 S73 HIGH findings are now shipped.** **No operator action.** See `decisions.md` D-137 and
+> `sessions/SESSION-76.md` (lead: [4] alert-history prune race). Everything below is the original pre-session plan.
+
+
 > Written by SESSION-74 close (2026-07-17). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE + `agents/handoffs/S73-AUDIT-FINDINGS.md`** (the 8-finding ledger; 3 shipped).

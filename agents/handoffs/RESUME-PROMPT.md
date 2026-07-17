@@ -11,7 +11,29 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-75.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-76.md`)
+
+**Session 2026-07-17 result: D-137 — S75 shipped the last S73 HIGH ([1] `query.IngestTimeseries` cross-tenant leak). ★ ALL 3 S73 HIGH findings now done; S73 tracker = 4/8 shipped, 4 MEDIUM remain.**
+
+**★ S75** tenant-scoped `IngestTimeseries` (PR #143, prod `v0.4.0-87-ge266738`) — it was the one analytics query missing
+the `AND tenant=?` filter its siblings all apply, so multi-tenant `GET /qoe/ingest` blended ingest metrics across
+tenants (same class as S48/D-110). Fix mirrors the siblings (`Tenant` param + WHERE guard + handler `q.Get("tenant")` +
+OpenAPI param + schema.d.ts regen). Single-tenant unaffected. Two-layer tests (query args + a handler-routing capture
+probe — the review caught that the query-layer test alone missed the handler→params boundary). Mutation-proven; suite
+25/25. **No operator action.** Evidence: `decisions.md` D-137.
+
+**★ SESSION-76 = [4] MEDIUM: `PruneAlertHistory` COUNT+DELETE race** (store/meta; Postgres over-deletes alert history
+under concurrency) → a single self-contained `DELETE ... WHERE id NOT IN (SELECT ... ORDER BY ts DESC LIMIT keep)`. Self-
+contained backend fix. See `sessions/SESSION-76.md`. Then the remaining MEDIUMs: [5] QoE tenant (WIDER — thread tenant
+through the live pipeline), [7] WS-ticket auth (server+web), [8] web SettingsPage silent error handlers (web-only).
+
+**⚠ CARRIED operator items (unchanged):** the **[20] audit-read product call** (operator-expected.md — keep reads open
+or gate the whole admin-read surface); AMS trial-expiry doc discrepancy (07-12 vs 07-27); GHCR anon → 401; the S63
+email-STARTTLS behavior note (informational).
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-75.md`)
 
 **Session 2026-07-17 result: D-136 — S74 shipped the S73 config-startup cluster ([2] SIGTERM HTTP-drain, [3] PULSE_ANONYMIZE_IP boolean idiom, [6] AMS-URL redaction). 2 of 3 S73 HIGHs done; S73 tracker = 3/8 shipped, 5 remain.**
 
