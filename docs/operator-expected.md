@@ -1,5 +1,26 @@
 # Operator TODO — the items only YOU can do (updated 2026-07-17, D-147 — SESSION-85; operator status-check response)
 
+> # ▶ E2E-VALIDATION FOLLOW-UPS (2026-07-17) — 3 items surfaced by the Full-E2E-Validation work (PR #166)
+>
+> The end-to-end + AMS-integration test extension (`docs/testing/full-e2e-validation-run.md`) shipped 4 verified Go
+> tests + 9 VPS-packaged live scenarios. Three items from it need YOU (details in that doc §6):
+>
+> 1. **Verify the AMS cluster REST path (G-21)** — the validation plan claims AMS 3.0.3 requires the *paginated*
+>    `GET /rest/v2/cluster/nodes/{offset}/{size}`, and that Pulse's unpaginated `/rest/v2/cluster/nodes` would 404 on a
+>    real cluster (silently degrading fleet discovery to standalone). This is an **AMS-source claim I could not verify**
+>    (no live multi-node cluster here). **I did NOT change `amsclient`.** Please confirm against a live 2-node AMS 3.0.3
+>    cluster (or the tagged source). If pagination is required → it becomes a scoped P0 `amsclient` + mock-ams fix.
+> 2. **Rotate credentials** — the AMS console password and the Pulse admin token that were passed through chat to author
+>    the validation plan should be rotated as a precaution.
+> 3. **Webhook-mapping product call (G-22, optional)** — AMS 3.0.3 emits ~14 hook actions; Pulse maps 3. The error
+>    actions + periodic `liveStreamStatus` are candidate event-driven ingest signals. Build vs keep REST polling is your
+>    call (REST polling already meets the latency budget). Non-blocking.
+>
+> To RUN the packaged live scenarios on the VPS: `bash qa/realams/run-full-e2e.sh` (settings-mutating webhook scenarios
+> are opt-in via `ALLOW_SETTINGS_MUTATION=1` and self-restoring). None of the above blocks autonomous progress.
+>
+> ---
+>
 > # ▶ OPERATOR STATUS RESPONSE (2026-07-17) — you asked "what's expected of me?" Here's the whole menu.
 >
 > **Nothing is BLOCKING autonomous progress** — the loop is healthy and will keep going on its own. But you are the only
