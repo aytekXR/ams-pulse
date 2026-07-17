@@ -55,6 +55,12 @@ import type { components } from "@/lib/api/schema.d.ts";
 
 const TOKEN_KEY = "pulse_token";
 
+// Marker subprotocol the browser offers first on the Live WebSocket handshake, alongside
+// the bearer token, so the token travels in the Sec-WebSocket-Protocol header rather than
+// the URL (keeping it out of reverse-proxy access logs). Must match the server's
+// wsBearerSubprotocol (server.go) — S73/D-140 [7].
+const WS_BEARER_SUBPROTOCOL = "pulse.v1";
+
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -567,13 +573,18 @@ export class LiveSocket {
   connect(): void {
     if (this.destroyed) return;
     const token = getToken();
-    const url = `/live/ws${token ? `?token=${encodeURIComponent(token)}` : ""}`;
 
     // Use wss:// if page is served over HTTPS
     const wsUrl = (window.location.protocol === "https:" ? "wss://" : "ws://") +
-      window.location.host + url;
+      window.location.host + "/live/ws";
 
-    this.ws = new WebSocket(wsUrl);
+    // Pass the bearer token via the Sec-WebSocket-Protocol handshake header (not the URL
+    // query) so it doesn't land in reverse-proxy access logs. The server negotiates the
+    // WS_BEARER_SUBPROTOCOL marker and reads the token from the second offered value.
+    // OIDC sessions authenticate via the pulse_session cookie and need no subprotocol.
+    this.ws = token
+      ? new WebSocket(wsUrl, [WS_BEARER_SUBPROTOCOL, token])
+      : new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
       this.retryDelay = this.baseDelay; // reset backoff to configured base on success
