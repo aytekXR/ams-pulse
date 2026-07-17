@@ -1,4 +1,25 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-16, D-133 — SESSION-71)
+# Operator TODO — the items only YOU can do (updated 2026-07-17, D-134 — SESSION-72)
+
+> **S72 (D-134) needs NO operator action — and it COMPLETES the entire second subsystem audit** (25 findings: 24 fixed
+> + 1 product decision left to you, [20] below). This session fixed the last two: (1) an alert rule watching for an
+> **already-expired** TLS certificate now actually fires — previously an expired cert failed the TLS handshake and the
+> check silently skipped it; verification stays on, so a self-signed / internal-CA endpoint's expiry still isn't
+> monitored (a documented limitation, not a silent trust downgrade — tell me if you want an opt-in for that); (2) a
+> WebRTC synthetic probe no longer leaks a short-lived timer when it times out mid-measurement. Live in prod
+> (`v0.4.0-82-g8355127`, rolled forward; smoke green: healthz 200, signed webhook 200, limits 512M/0.5cpu, clean logs).
+>
+> **★ Both subsystem audits are now done.** Next up (my plan) is a THIRD audit of the still-un-reviewed internals
+> (data-collection pipeline, storage, reporting) — autonomous, no action needed from you. The user-facing UI polish
+> (§2.15 / §2.19) is design work I'd rather do WITH your direction — say the word if you'd prefer I prioritize that.
+>
+> **The ONE decision still waiting on you is the [20] audit-log read access model** (from S68 — see the D-130 block
+> below): keep admin *reads* open to any authenticated token (status quo, recommended), or gate the whole admin-read
+> surface behind the `admin` scope (which would remove the audit page from viewer-role users). No rush; non-blocking.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs 07-27;
+> see ⚠ below). GHCR is still private (**401**). The S63 email-STARTTLS behavior note below still applies.
+
+## (previous header — D-133, SESSION-71)
 
 > **S71 (D-133) needs NO operator action.** This session hardened the license manager: (1) if a configured licence key
 > is rejected (bad signature, unreadable/garbled offline file), the server now **logs a warning** and runs on Free tier

@@ -8470,3 +8470,56 @@ checks + CodeQL green on the first run (no flake).
 remain — 0 HIGH, 0 MEDIUM, 2 LOW: [22]+[25]**; ★ all HIGH+MEDIUM done); RESUME-PROMPT ▶ START HERE → SESSION-72;
 `operator-expected.md` (no new action; [20] product call carried); `sessions/SESSION-71.md` CLOSED;
 `sessions/SESSION-72.md` written. Prod rolled forward + smoke green. **No operator action required.**
+
+## D-134 — S72 (2026-07-17): SHIPPED — final S62 LOW pair ([22] cert-expiry detection, [25] WebRTC hold-timer leak) — ★ S62 AUDIT COMPLETE
+
+**Open facts.** `origin/main` = `40abd97` (S71 docs, PR #137); HEAD == origin/main; `git status` shows only the
+do-not-commit `deploy/config/Caddyfile.prod` dirty. Branch `s72-d134`. Date 2026-07-17 (§2.7 gate still locked until
+2026-07-23). Backlog at open: 2 remain (both LOW: [22], [25]). Scope: the last two findings, closing the entire S62
+audit (unrelated subsystems — alert cert-checker + prober WebRTC — done as one close-out PR).
+
+**[22] LOW — `cert_expiry lt 0` never fired for an already-expired cert.** The audit's literal fix (change the
+`now.After(NotAfter)` branch from `return 0` to `return -1`) was correct-looking but **the adversarial review proved it
+was DEAD CODE in production**: the production `CertChecker` (nil TLS config) verifies the chain, so an expired cert
+fails the TLS handshake, `DaysUntilExpiry` returned `(-1, error)`, and `evalCertExpiry` logged a Warn + returned nil —
+the expiry branch was never reached and no alert fired. **Two design paths considered:** (A) disable verification so the
+monitor reads any presented leaf (fixes it including self-signed/internal-CA, but introduces `InsecureSkipVerify=true`
+in production → CodeQL `go/disabled-certificate-check` HIGH alert, which failed CI on the first push); (B) keep
+verification ON and detect the expiry-specific failure. **Chose (B)** — rather than disable a security control and
+dismiss a CodeQL alert autonomously: `DaysUntilExpiry` now uses `errors.As` to catch an `x509.CertificateInvalidError`
+whose `Reason == x509.Expired` (the common trusted-CA-expired case) and returns `(-1, nil)` so `cert_expiry lt 0` fires.
+The `now.After` branch still returns -1 (docstring-consistent, reached by callers that pass skip-verify). **Known
+limitation (documented in the code + ledger):** a self-signed / internal-CA endpoint fails verification for THAT reason,
+so its expiry is not monitored — out of scope for this LOW; a future explicit per-rule skip-verify opt-in could add it
+without weakening the default. Verification stays enabled; no `InsecureSkipVerify` in production.
+
+**[25] LOW — WebRTC stats-hold leaks a `time.After` timer on ctx cancellation.** `continueWebRTCICE` waited out the RTP
+stats hold with `select { <-ctx.Done(); <-time.After(hold) }`; on early cancellation the `time.After` timer was
+abandoned and lingered in the runtime heap for the full hold. **Fix:** `time.NewTimer(hold)` + `defer holdTimer.Stop()`,
+select on `holdTimer.C`. The block returns on both arms so the defer runs exactly once. Behavior-preserving.
+
+**Verification.** New `s72_d134_test.go`: the production error path (a trusted-CA-expired leaf — self-signed cert added
+to the client RootCAs so the chain is trusted and expiry is the only failure — asserts `(-1, nil)`) and the skip-verify
+branch (test-only `InsecureSkipVerify`, CodeQL flags production only — confirmed via the failed check's annotation —
+asserts -1). [25] is guarded by the existing `TestProbeWebRTC_CtxExpiredDuringHold` (verified a broken ctx arm reddens
+it; the timer-Stop itself is a bounded self-cleaning leak with no separately-observable behavior). Full suite **25/25**;
+gofmt + vet clean. **Mutation-proven — 3 mutants killed:** [22] x509.Expired detection (wrong-Reason match), [22] -1
+sentinel (→0), [25] control-flow guard (ctx arm break caught by the existing test).
+
+**Adversarial review — TWO passes (this finding earned it).** Pass 1 (2 lenses) CONFIRMED 1 MAJOR: the first-attempt
+[22] fix was dead code in production (the InsecureSkipVerify-based version). Revised to approach (B) + re-ran a fresh
+2-lens review (skipverify-safety / cert-correctness) → **0 findings**. CI then failed CodeQL on the interim
+InsecureSkipVerify; the final approach (B) removed it and CodeQL passed.
+
+**Shipped (PR #138, squash `8355127`, merged to `origin/main`).** Prod rolled forward to **`v0.4.0-82-g8355127`**; all 5
+smoke checks green (version stamp, healthz 200, signed webhook 200, limits 512M/0.5cpu, 0 error lines). CI: all 15
+checks + CodeQL green on the amended commit.
+
+**★ S62 AUDIT COMPLETE.** 25/25 findings dispositioned: **24 shipped** (D-125…D-134) + **1 deferred-by-ruling** ([20]
+audit-log read model, an operator product call). All HIGH + MEDIUM + 3/4 LOW shipped. See `S62-AUDIT-FINDINGS.md` header.
+
+**Docs at close:** D-134 SHIPPED (this block); CHANGELOG [Unreleased] Fixed; `S62-AUDIT-FINDINGS.md` [22]/[25] ✅ DONE +
+AUDIT COMPLETE banner; ROADMAP-V2 §2.31 flipped ⏳→✅ COMPLETE; RESUME-PROMPT ▶ START HERE → SESSION-73 (first post-audit
+roadmap pick); `operator-expected.md` (no new action; [20] carried); `sessions/SESSION-72.md` CLOSED;
+`sessions/SESSION-73.md` written. Prod rolled forward + smoke green. **No operator action required** (the S62 audit is
+done; [20] remains the sole non-blocking product decision awaiting the operator).
