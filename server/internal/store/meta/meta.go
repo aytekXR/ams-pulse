@@ -1043,38 +1043,35 @@ func (s *Store) PruneAlertHistory(ctx context.Context, ruleID string, keep int) 
 	if keep <= 0 {
 		return nil
 	}
-	var total int
-	if err := s.queryRowContext(ctx,
-		"SELECT COUNT(*) FROM alert_history WHERE rule_id = ?", ruleID).Scan(&total); err != nil {
-		return err
-	}
-	excess := total - keep
-	if excess <= 0 {
-		return nil
-	}
-
+	// Single self-contained statement: delete every row for the rule EXCEPT the newest
+	// `keep` (by ts, tiebroken by insertion order). This replaces a COUNT-then-DELETE pair
+	// whose Go-computed `excess` went stale under concurrency — on Postgres (MaxOpenConns>1)
+	// two workers each computing an independent `excess` and then deleting could together
+	// prune below the cap, permanently losing history rows (S73/D-138 [4]). Collapsing count
+	// and delete into one statement removes the intermediate snapshot gap entirely. The outer
+	// `rule_id = ?` is essential: without it NOT IN would delete OTHER rules' rows that aren't
+	// in this rule's top-`keep` set.
 	var deleteSQL string
 	if s.backend == "postgres" {
 		// Postgres has no rowid pseudo-column. Use id (UUID) as tiebreak.
-		// Keep-newest semantics preserved: lowest ts rows are pruned first.
 		deleteSQL = `DELETE FROM alert_history
-		             WHERE id IN (
+		             WHERE rule_id = ? AND id NOT IN (
 		                 SELECT id FROM alert_history
 		                 WHERE rule_id = ?
-		                 ORDER BY ts ASC, id ASC
+		                 ORDER BY ts DESC, id DESC
 		                 LIMIT ?
 		             )`
 	} else {
 		// SQLite: rowid reflects exact insertion order — deterministic tiebreak.
 		deleteSQL = `DELETE FROM alert_history
-		             WHERE rowid IN (
+		             WHERE rule_id = ? AND rowid NOT IN (
 		                 SELECT rowid FROM alert_history
 		                 WHERE rule_id = ?
-		                 ORDER BY ts ASC, rowid ASC
+		                 ORDER BY ts DESC, rowid DESC
 		                 LIMIT ?
 		             )`
 	}
-	_, err := s.execContext(ctx, deleteSQL, ruleID, excess)
+	_, err := s.execContext(ctx, deleteSQL, ruleID, ruleID, keep)
 	return err
 }
 
