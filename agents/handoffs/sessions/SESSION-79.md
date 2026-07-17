@@ -1,5 +1,16 @@
 # SESSION-79 — planned at S78 close (D-140) — the LAST S73 finding ([5]); closes the third audit
 
+> ## ✅ CLOSED (2026-07-17, D-141) — [5] DEFERRED-BY-RULING → ★ S73 AUDIT COMPLETE
+> Adjudicated [5] (QoE cross-tenant) as DEFER-BY-RULING after tracing the data model: tenant is CLIENT-DECLARED per
+> beacon (`b.Meta["tenant"]`), the aggregator/`LiveStream` path has NO tenant, and `AlertScope`/`AlertRuleRow` carry no
+> tenant — so the alert evaluator has no tenant to pass and the server can't resolve one. A real fix is a FEATURE
+> (tenant-scoped alert rules), a product call, for a multi-tenant-only edge that never affects the primary single-tenant
+> model. Escalated to the operator (operator-expected.md). No code change. **This completes the S73 audit: 7 shipped +
+> [5] deferred = 8/8 dispositioned.** See `decisions.md` D-141 and `sessions/SESSION-80.md` for the next arc (first
+> post-S73 — a cross-cutting dependency/deploy security-posture pass, or the §2.7 gate if the date has unlocked).
+> Everything below is the original pre-session plan.
+
+
 > Written by SESSION-78 close (2026-07-17). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE + `agents/handoffs/S73-AUDIT-FINDINGS.md`** (8-finding ledger; 7 shipped, ALL HIGH done).

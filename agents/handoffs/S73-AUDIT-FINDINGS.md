@@ -1,5 +1,12 @@
 # S73 subsystem audit — confirmed findings ledger (D-135, 2026-07-17)
 
+> ## ✅ AUDIT COMPLETE (2026-07-17, S73→S79, D-135…D-141)
+> All 8 findings dispositioned: **7 shipped** (D-136…D-140, PRs #141…#149) + **1 deferred-by-ruling** ([5] QoE
+> cross-tenant — a multi-tenant-only edge whose real fix is a tenant-scoped-alerting FEATURE, escalated to the operator
+> as a product call). ALL 3 HIGH + 4 of 5 MEDIUM shipped. Every fix was re-verified against the code (verified CORE — the
+> literal audit scope was overturned/deepened repeatedly: [4]'s COUNT+DELETE, [1]'s handler-routing probe, [7]'s
+> subprotocol choice, [5]'s data-model block), mutation-proven, and adversarially reviewed. Prod at **v0.4.0-93-g8858b5f**.
+
 > Produced by the SESSION-73 adversarial audit workflow (5 finder lenses over the still-UN-swept
 > subsystems + refute-by-default verifiers, 17 agents). **8 CONFIRMED (3 HIGH, 5 MEDIUM, 0 LOW), 4 refuted.**
 > Scope (deduplicated against S48 §2.30 — collector/amsclient/reports/cluster/clickhouse — and S62 §2.31 —
@@ -49,7 +56,8 @@
 - **verifier:** CONFIRMED medium. Permanent alert-history loss, Postgres-only, bounded per race but accumulates.
 
 ## [5] MEDIUM — QoEForStream omits tenant → alert evaluator reads cross-tenant QoE
-- **loc:** `server/internal/query/query.go:898` (QoEForStream) → `QoeSummary` :794; caller `internal/alert/wave2.go:93`  ·  **lens:** query-plane  ·  status: ⏳ TODO
+- **loc:** `server/internal/query/query.go:898` (QoEForStream) → `QoeSummary` :794; caller `internal/alert/wave2.go:93`  ·  **lens:** query-plane  ·  status: ⏸️ DEFERRED (D-141, S79, product call — see below)
+- **DEFERRED (D-141):** Not a bug-fix-in-isolation — the QoE alert path has NO tenant to pass and the server CANNOT resolve one. Traced at open: (1) tenant is CLIENT-DECLARED per beacon (`beacon.go:564` reads `b.Meta["tenant"]`) → flows to viewer sessions → `rollup_qoe_1h`; (2) the aggregator/`domain.LiveStream` path never touches tenant; (3) `domain.AlertScope` AND `meta.AlertRuleRow` have NO tenant field (alert rules are globally scoped, not per-tenant). So a QoE alert rule for an (app, stream_id) shared by two tenants blends both tenants' rebuffer/error ratios — a real tenant-isolation gap, but multi-tenant-only (Business+ tier; the primary single-tenant model uses one/empty tenant and is UNAFFECTED). A real fix is a **feature — tenant-scoped alert rules** (add Tenant to AlertScope + rule ownership/CRUD + evaluator threading + QoEReader param + web rule form), which is a PRODUCT decision (do you want per-tenant QoE alerting, and how do operators set the tenant on a rule?), not scoped by this MEDIUM. Adding just a `Tenant` param to QoEForStream would be dead plumbing (no caller value). **Escalated to the operator** (operator-expected.md) as an adjudicated product call, mirroring [20]. If the operator wants it, the fix path above is the plan.
 - **mechanism:** `QoEForStream(streamID, app)` builds `QoeParams` with `Tenant` empty; `QoeSummary` only adds `AND tenant = ?` when Tenant != "", so `rollup_qoe_1h` (multi-tenant, ORDER BY includes tenant) aggregates across every tenant sharing that (app, stream_id). The alert evaluator (wave2.go:93) uses the blended ratio to decide QoE alerts.
 - **scenario:** Tenants A+B share app=`live`, stream=`broadcast`. B's stream rebuffers badly (0.8); A's rule threshold 0.05 fires a false alert on A from the blend — or symmetrically the blend suppresses a real alert.
 - **fix sketch:** ⚠ WIDER than the finder claimed (see header warning): `AlertScope`/`AlertRuleRow`/`LiveStream` have no Tenant field. Thread Tenant from the aggregator into `AlertScope`/`LiveStream`, then add a `tenant` param to `QoEForStream` + `QoEReader` interface, then the `AND tenant=?`. Re-scope at build; may split into a "tenant-in-live-pipeline" prerequisite. Test: 2-tenant QoE fixture, evaluator only sees its own tenant.

@@ -1,5 +1,21 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-17, D-140 — SESSION-78)
+# Operator TODO — the items only YOU can do (updated 2026-07-17, D-141 — SESSION-79)
 
+> **★ S79 (D-141) completes the third internal audit — 8 findings, 7 fixed + 1 escalated to you (no blocking action).**
+> The last item ([5]) turned out to need a product decision, not a bug fix:
+> - **NEW product question — do you want per-tenant QoE alerting?** In a **multi-tenant** deployment (Business+ tier),
+>   if two tenants happen to use the same app name AND the same stream name, a QoE alert rule for that stream blends both
+>   tenants' rebuffer/error numbers. Fixing this properly means **tenant-scoped alert rules** (a rule would target one
+>   tenant), which is a feature with a UX dimension (how you'd pick the tenant when creating a rule). **If your
+>   deployment is single-tenant (the default), this never happens — nothing to do.** Tell me if you want per-tenant
+>   alert rules and I'll build it; otherwise it stays documented as a known multi-tenant limitation.
+> - This is the SECOND non-blocking product call awaiting you, alongside **[20] the audit-log read model** (below). Both
+>   are "your preference" decisions, not urgent.
+>
+> With this, the three internal subsystem audits (S44/S48/S62/S73) are done; the codebase is well-hardened. The next
+> autonomous work is a cross-cutting security-posture pass (dependency/CVE + deploy hardening). Most of what's left on
+> the roadmap is genuinely YOUR call — see the gated items throughout this file (branch protection, GHCR-public, the
+> licence ceremony, the unsigned-webhook mode, and the UI direction).
+>
 > **S78 (D-140) needs NO operator action — and it RETIRES the earlier WebSocket-token heads-up.** The admin token no
 > longer travels in the Live-dashboard WebSocket URL (so it no longer appears in Caddy/docker access logs); it's now sent
 > in the WebSocket handshake header instead. Live in prod (`v0.4.0-93-g8858b5f`). **One optional precaution:** if an

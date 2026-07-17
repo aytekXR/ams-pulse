@@ -11,7 +11,29 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-79.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-80.md`)
+
+**Session 2026-07-17 result: D-141 — S79 adjudicated the last S73 finding [5] as DEFER-BY-RULING (needs a tenant-scoped-alerting FEATURE; multi-tenant-only). ★★ THE S73 SUBSYSTEM AUDIT IS COMPLETE — 8/8 dispositioned (7 shipped + [5] deferred). Three subsystem audits now done.**
+
+**★ S79** ruled [5] (QoE cross-tenant blend) DEFERRED: traced that tenant is client-declared per beacon, the
+aggregator/`LiveStream` and `AlertScope`/`AlertRuleRow` carry no tenant, so the alert evaluator has no tenant to pass —
+a real fix is a product feature (tenant-scoped alert rules), escalated to the operator; multi-tenant-only, primary model
+unaffected. No code change. Evidence: `decisions.md` D-141; ledger AUDIT COMPLETE banner.
+
+**★ SESSION-80 = the first POST-S73 arc.** The subsystem surface is well-swept (3 audits). Re-read ROADMAP §2 /
+assessment §5 and pick the next move. **Suggested lead: a CROSS-CUTTING security-posture pass** the subsystem audits
+couldn't cover — Go `govulncheck` + web `npm audit` dependency/CVE triage + a Dockerfile/deploy hardening review.
+**Alternatives:** §2.7 CI-promotions if the date has unlocked (**≥ 2026-07-23** — check it), §2.15 light-theme from
+brandkit tokens, or — if no autonomous move is high-leverage — a crisp OPERATOR CHECKPOINT of the gated items. See
+`sessions/SESSION-80.md`.
+
+**⚠ OPERATOR DECISIONS PENDING (both non-blocking product calls):** **[20] audit-read model** (keep reads open vs gate
+the admin-read surface) AND **[5] per-tenant QoE alerting** (D-141 — want tenant-scoped alert rules?). Also: AMS
+trial-expiry doc discrepancy (07-12 vs 07-27); GHCR anon → 401; the S63 email-STARTTLS note (informational).
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-79.md`)
 
 **Session 2026-07-17 result: D-140 — S78 shipped [7] Live-WS auth via the Sec-WebSocket-Protocol header (token out of the URL/logs). S73 tracker = 7/8 shipped; ALL HIGH + all but ONE MEDIUM done — only [5] remains, and it closes the audit.**
 
