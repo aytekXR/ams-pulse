@@ -8574,3 +8574,48 @@ RESUME-PROMPT ▶ START HERE → SESSION-74; `operator-expected.md` (audit-opene
 CLOSED; `sessions/SESSION-74.md` written. **No operator action required** — all 8 are code fixes I will build; [3]
 ANONYMIZE_IP and [7] WS-token are operator-*relevant* (privacy / the operator-managed Caddyfile) but fixable in code
 without operator action.
+
+## D-136 — S74 (2026-07-17): SHIPPED — S73 config-startup cluster ([2] SIGTERM HTTP-drain, [3] bool-env idiom, [6] AMS-URL redaction)
+
+**Open facts.** `origin/main` = `3323aca` (S73 audit-open, PR #140); HEAD == origin/main; `git status` shows only the
+do-not-commit `deploy/config/Caddyfile.prod` dirty. Branch `s74-d136`. Date 2026-07-17 (§2.7 gate still locked until
+2026-07-23). First S73-audit fix cluster: the three `server/cmd/pulse/` findings (2 HIGH + 1 MEDIUM), coherent one-package PR.
+
+**[2] HIGH — HTTP server not drained on SIGTERM.** `server.Stop()` never called `apiServer.Stop()` (grep: zero callers),
+so on SIGTERM the HTTP server was killed abruptly (in-flight requests lost at the 60 s write timeout) and its WS
+push-loop + two rate-limiter eviction goroutines leaked. **Fix:** `Stop()` now drains the API server FIRST (before
+stopping background loops and closing meta/store — so in-flight requests finish against still-live dependencies), and
+every dependency in `Stop()` is nil-guarded (safe on a partial struct). The `apiServer` field became a 2-method
+`apiLifecycle{Start,Stop}` interface (satisfied by `*api.Server`) — a testability seam; verified `s.apiServer` is only
+used for `.Start()`/`.Stop()`, so the interface change is safe.
+
+**[3] HIGH — `PULSE_ANONYMIZE_IP=1` silently ignored.** The live `loadEnvConfig` did an exact `== "true"` compare, so
+the Docker/.env `1` idiom (and `True`/`TRUE`) left the control false with no signal — a GDPR/KVKK IP-anonymization
+toggle silently inactive. **Fix:** shared `envBool(key)` accepting `1` / case-insensitive `true`; used at both sites
+(AnonymizeIP + WebhookRequireTimestamp). **Review follow-on:** added `strings.TrimSpace` — a k8s secret created via
+`--from-file` injects a trailing newline and `--env-file` preserves trailing spaces, which would otherwise re-introduce
+the silent-false bug; matches the TrimSpace already applied to list-valued env vars.
+
+**[6] MEDIUM — AMS-URL creds leaked in `pulse diag`.** `runDiag` and `checkAMS` printed the raw `cfg.AMSBaseURL`
+(possible `http://user:pass@host`) to stdout, while `runServe` already redacts (B10). **Fix:** shared `redactURL()`
+(url.Parse + `.Redacted()`) at both sites; refactored runServe to use it too (DRY, behavior-preserving). **Review
+follow-on:** extracted the diag config summary into `printDiagSummary(io.Writer, cfg)` so BOTH AMS-URL print sites have
+call-site tests (the `checkAMS` test alone missed the `runDiag` printf — a real uncovered leak path).
+
+**Verification.** New `s74_d136_test.go` (package main): apiServer-drain (fake `apiLifecycle`), `envBool` table (incl.
+whitespace-padded truthy), `redactURL` table, `checkAMS` + `printDiagSummary` credential-redaction via stdout/io.Writer.
+Full suite **25/25**; gofmt + vet clean. **Mutation-proven — 5 mutants killed:** apiServer.Stop wiring; envBool `1`/case;
+envBool TrimSpace; checkAMS redaction; printDiagSummary redaction.
+
+**Adversarial review (2 lenses — shutdown-ordering / config-redaction; 4 agents). 2 CONFIRMED, 0 refuted — both fixed
+pre-merge:** (1) MEDIUM envBool whitespace (the TrimSpace follow-on above); (2) LOW uncovered `runDiag` AMS-URL print
+site (the `printDiagSummary` extraction + test above). The shutdown-ordering lens confirmed draining HTTP first is
+correct (no use-after-close: meta/store close after the drain) and the interface-seam change is safe.
+
+**Shipped (PR #141, squash `28b8dfc`, merged to `origin/main`).** Prod rolled forward to **`v0.4.0-85-g28b8dfc`**; all 5
+smoke checks green. CI: all 15 checks + CodeQL green on first run.
+
+**Docs at close:** D-136 SHIPPED (this block); CHANGELOG [Unreleased] Fixed; `S73-AUDIT-FINDINGS.md` [2]/[3]/[6] ✅ DONE;
+ROADMAP §2.32 (3/8 shipped; 5 remain — [1] HIGH + [4]/[5]/[7]/[8] MEDIUM); RESUME-PROMPT ▶ START HERE → SESSION-75;
+`operator-expected.md` ([3] now fixed — anonymize-ip workaround retired; [7] WS-token still pending); `sessions/SESSION-74.md`
+CLOSED; `sessions/SESSION-75.md` written (lead: [1] query cross-tenant — the last S73 HIGH). **No operator action required.**

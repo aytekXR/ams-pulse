@@ -1,4 +1,26 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-17, D-135 — SESSION-73)
+# Operator TODO — the items only YOU can do (updated 2026-07-17, D-136 — SESSION-74)
+
+> **S74 (D-136) needs NO operator action.** Shipped the first batch of S73-audit fixes (prod `v0.4.0-85-g28b8dfc`).
+> Updating the two heads-ups from the previous note:
+> - **`PULSE_ANONYMIZE_IP=1` now works** (as do `True`/`TRUE`, and values with a stray trailing space/newline). Once
+>   you're on `v0.4.0-85` or later, the `1` idiom you'd naturally use in a Docker `.env` correctly enables IP
+>   anonymization — the earlier "use lowercase `true`" workaround is no longer needed. (Also fixed: `pulse` now drains
+>   in-flight HTTP requests gracefully on shutdown, and `pulse diag` no longer prints AMS-URL passwords.)
+> - **The admin-token-in-WebSocket-URL log exposure ([7]) is NOT fixed yet** — still queued (moving to a short-lived
+>   ticket). Until then, treat your Caddy/docker logs as containing a live admin credential; rotating the admin token
+>   after that fix ships remains a reasonable precaution.
+>
+> The remaining S73 findings (a multi-tenant-only cross-tenant metrics leak, an alert-history pruning race on Postgres,
+> and some silent web error handling) are internal — no action needed. See `agents/handoffs/S73-AUDIT-FINDINGS.md`.
+>
+> **The ONE decision still waiting on you is the [20] audit-log read access model** (from S68 — see the D-130 block
+> below): keep admin *reads* open to any authenticated token (status quo, recommended), or gate the whole admin-read
+> surface behind the `admin` scope (which would remove the audit page from viewer-role users). No rush; non-blocking.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs 07-27;
+> see ⚠ below). GHCR is still private (**401**). The S63 email-STARTTLS behavior note below still applies.
+
+## (previous header — D-135, SESSION-73)
 
 > **S73 (D-135) needs NO operator action — but two live heads-ups worth knowing NOW (fixes are already queued).** I ran
 > a third internal audit (of the data-store, query, config, startup, and web-UI code the two prior audits never

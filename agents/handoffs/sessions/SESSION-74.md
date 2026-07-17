@@ -1,5 +1,14 @@
 # SESSION-74 — planned at S73 close (D-135) — first S73-audit fix cluster
 
+> ## ✅ CLOSED (2026-07-17, D-136) — SHIPPED [2] + [3] + [6]
+> The `cmd/pulse` config-startup cluster shipped (PR #141, prod `v0.4.0-85-g28b8dfc`): [2] `server.Stop()` now drains the
+> HTTP server on SIGTERM (via an `apiLifecycle` seam; nil-safe throughout); [3] shared `envBool` honors the `1`/`True`
+> idioms + TrimSpace; [6] shared `redactURL` masks AMS-URL creds in `pulse diag`. 5/5 mutants killed; suite 25/25; 2-lens
+> review found 2 issues (envBool whitespace, an uncovered diag call site), both fixed pre-merge. **2 of the 3 S73 HIGHs
+> done.** **No operator action.** See `decisions.md` D-136 and `sessions/SESSION-75.md` (lead: [1] query cross-tenant —
+> the last S73 HIGH). Everything below is the original pre-session plan (historical).
+
+
 > Written by SESSION-73 close (2026-07-17). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE + `agents/handoffs/S73-AUDIT-FINDINGS.md`** (the 8-finding ledger).

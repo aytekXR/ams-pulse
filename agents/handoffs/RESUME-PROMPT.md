@@ -11,7 +11,31 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-74.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-75.md`)
+
+**Session 2026-07-17 result: D-136 — S74 shipped the S73 config-startup cluster ([2] SIGTERM HTTP-drain, [3] PULSE_ANONYMIZE_IP boolean idiom, [6] AMS-URL redaction). 2 of 3 S73 HIGHs done; S73 tracker = 3/8 shipped, 5 remain.**
+
+**★ S74** fixed three `cmd/pulse` findings (PR #141, prod `v0.4.0-85-g28b8dfc`):
+- **[2]** `server.Stop()` now drains the HTTP API server on SIGTERM (via an `apiLifecycle` seam) instead of killing
+  in-flight requests + leaking WS/rate-limiter goroutines; `Stop()` is nil-safe throughout.
+- **[3]** shared `envBool` accepts the Docker `1` / `True` idioms and TrimSpaces (k8s secret trailing newline) — so
+  `PULSE_ANONYMIZE_IP=1` no longer silently leaves the privacy control off.
+- **[6]** shared `redactURL` masks AMS-URL credentials in `pulse diag` / `checkAMS`.
+5/5 mutants killed; suite 25/25; 2-lens review found 2 issues (envBool whitespace, uncovered diag call site), both fixed
+pre-merge. **No operator action.** Evidence: `decisions.md` D-136.
+
+**★ SESSION-75 = the last S73 HIGH: [1] `query.IngestTimeseries` cross-tenant leak** (self-contained — add a `Tenant`
+param + `AND tenant=?` + handler `q.Get("tenant")`; same class as S48/D-110). See `sessions/SESSION-75.md`. Then the
+remaining MEDIUMs: [4] alert-history prune race, [5] QoE tenant (wider — thread tenant through the live pipeline),
+[7] WS-ticket auth, [8] web error handlers.
+
+**⚠ CARRIED operator items (unchanged):** the **[20] audit-read product call** (operator-expected.md — keep reads open
+or gate the whole admin-read surface); AMS trial-expiry doc discrepancy (07-12 vs 07-27); GHCR anon → 401; the S63
+email-STARTTLS behavior note (informational).
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-74.md`)
 
 **Session 2026-07-17 result: D-135 — S73 OPENED a THIRD fresh subsystem audit of the still-un-swept internals → 8 confirmed findings (3 HIGH, 5 MEDIUM). Ledger `agents/handoffs/S73-AUDIT-FINDINGS.md`; tracker ROADMAP §2.32.**
 
