@@ -564,6 +564,56 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /reports/export:
+    get:
+      operationId: exportUsageReport
+      tags: [reports]
+      summary: Download the usage report as a CSV file attachment
+      description: |
+        Business-tier gated CSV export of the same usage data returned by
+        `GET /reports/usage` (identical `ComputeUsage` backing), streamed as a
+        file download (`Content-Disposition: attachment; filename=usage-report-YYYY-MM-DD.csv`).
+        `format=csv` is the only value supported today; `format=pdf` returns 501
+        (Phase 3 white-label PDF — see `docs/known-limitations.md`). Registered
+        under the download-auth middleware, so browser-initiated downloads may
+        authenticate with the `token` query parameter (the same mechanism as the
+        WebSocket upgrade) or the `pulse_session` cookie, in addition to the
+        `Authorization` header.
+      security:
+        - bearerAuth: []
+        - wsTokenQuery: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/from"
+        - $ref: "#/components/parameters/to"
+        - $ref: "#/components/parameters/app"
+        - $ref: "#/components/parameters/stream"
+        - $ref: "#/components/parameters/tenant"
+        - name: format
+          in: query
+          description: Export format. Only `csv` is supported today; `pdf` returns 501.
+          schema:
+            type: string
+            enum: [csv, pdf]
+            default: csv
+      responses:
+        "200":
+          description: CSV export of the usage report (Content-Disposition attachment).
+          content:
+            text/csv:
+              schema:
+                type: string
+                description: Usage report as CSV (filename usage-report-YYYY-MM-DD.csv).
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "501":
+          description: Requested export format is not implemented (only `csv` today).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /reports/schedules:
     get:
       operationId: listReportSchedules

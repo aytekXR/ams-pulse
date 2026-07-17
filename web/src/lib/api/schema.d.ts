@@ -334,6 +334,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reports/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the usage report as a CSV file attachment
+         * @description Business-tier gated CSV export of the same usage data returned by
+         *     `GET /reports/usage` (identical `ComputeUsage` backing), streamed as a
+         *     file download (`Content-Disposition: attachment; filename=usage-report-YYYY-MM-DD.csv`).
+         *     `format=csv` is the only value supported today; `format=pdf` returns 501
+         *     (Phase 3 white-label PDF — see `docs/known-limitations.md`). Registered
+         *     under the download-auth middleware, so browser-initiated downloads may
+         *     authenticate with the `token` query parameter (the same mechanism as the
+         *     WebSocket upgrade) or the `pulse_session` cookie, in addition to the
+         *     `Authorization` header.
+         */
+        get: operations["exportUsageReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reports/schedules": {
         parameters: {
             query?: never;
@@ -2529,6 +2557,51 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    exportUsageReport: {
+        parameters: {
+            query?: {
+                /** @description Start of time range — Unix epoch ms or RFC 3339 string */
+                from?: components["parameters"]["from"];
+                /** @description End of time range — Unix epoch ms or RFC 3339 string */
+                to?: components["parameters"]["to"];
+                /** @description Filter by AMS application name */
+                app?: components["parameters"]["app"];
+                /** @description Filter by stream ID */
+                stream?: components["parameters"]["stream"];
+                /** @description Filter by tenant identifier (F6 multi-tenancy) */
+                tenant?: components["parameters"]["tenant"];
+                /** @description Export format. Only `csv` is supported today; `pdf` returns 501. */
+                format?: "csv" | "pdf";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description CSV export of the usage report (Content-Disposition attachment). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            /** @description Requested export format is not implemented (only `csv` today). */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listReportSchedules: {
