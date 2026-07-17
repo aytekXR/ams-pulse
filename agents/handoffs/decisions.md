@@ -8523,3 +8523,54 @@ AUDIT COMPLETE banner; ROADMAP-V2 §2.31 flipped ⏳→✅ COMPLETE; RESUME-PROM
 roadmap pick); `operator-expected.md` (no new action; [20] carried); `sessions/SESSION-72.md` CLOSED;
 `sessions/SESSION-73.md` written. Prod rolled forward + smoke green. **No operator action required** (the S62 audit is
 done; [20] remains the sole non-blocking product decision awaiting the operator).
+
+## D-135 — S73 (2026-07-17): OPENED — third fresh subsystem audit (un-swept: store/meta, query, config, cmd, web) → 8 findings
+
+**Open facts.** `origin/main` = `2576903` (S72 docs, PR #139); HEAD == origin/main; `git status` shows only the
+do-not-commit `deploy/config/Caddyfile.prod` dirty. Branch `s73-audit`. Date 2026-07-17 (§2.7 gate still locked until
+2026-07-23). The S62 audit (§2.31) is COMPLETE, so this session opened a NEW arc: the highest-leverage autonomous move.
+
+**Why a third audit.** Surveyed ROADMAP §2 at open — the remaining items are gated (§2.7 date-locked; §2.1 branch
+protection, §2.6 unsigned-webhook, §2.18 item 6 / GHCR / licence ceremony all operator-gated) or operator-directed UI
+work (§2.15 phase 2, §2.19). The two prior audits (§2.30 S48: collector/amsclient/reports/cluster/clickhouse; §2.31
+S62: alert/license/prober/anomaly/api) found 41 findings. A third audit of the genuinely UN-swept subsystems is the
+highest-leverage autonomous move — and it deduplicated cleanly (confirmed `store/meta` was NOT in the S48 "clickhouse"
+scope, `query`/`config`/`cmd/pulse` in neither, and `web/` never audited).
+
+**Method.** Audit workflow: 5 finder lenses (meta-store-sql, meta-store-crypto, query-plane, config-startup,
+web-frontend) at high effort over the un-swept code → refute-by-default verifiers (17 agents, ~700k tokens, 238 tool
+calls). **8 CONFIRMED (3 HIGH, 5 MEDIUM), 4 REFUTED.** Findings recorded in `agents/handoffs/S73-AUDIT-FINDINGS.md`.
+
+**The 8 confirmed (verified CORE — re-verify each at build):**
+- **[1] HIGH** `query.IngestTimeseries` has no `AND tenant=?` (the one sibling query missing it) → cross-tenant
+  ingest-metrics leak. Same class as S48/D-110 `AudienceAnalytics`.
+- **[2] HIGH** `server.Stop()` never calls `apiServer.Stop()` → on SIGTERM the HTTP server isn't drained (in-flight
+  requests killed) and the WS + 2 rate-limiter goroutines leak. k8s rolling-update impact.
+- **[3] HIGH** `PULSE_ANONYMIZE_IP=1` (Docker boolean idiom) silently leaves viewer IPs un-anonymized — the live
+  config path does an exact `== "true"` compare; the broad guard lives only in a dead `internal/config` path. Same at
+  `:248` (WebhookRequireTimestamp). A GDPR/KVKK control silently inactive.
+- **[4] MEDIUM** `PruneAlertHistory` non-transactional COUNT+DELETE race → over-deletes alert history on Postgres.
+- **[5] MEDIUM** `query.QoEForStream` omits tenant → the alert evaluator reads cross-tenant QoE. **⚠ the finder's fix
+  sketch is WRONG** (no Tenant field in AlertScope/AlertRuleRow/LiveStream — real fix threads tenant through the live
+  pipeline first). Downgraded high→medium (multi-tenant only).
+- **[6] MEDIUM** `pulse diag` / `checkAMS` print the raw AMS URL (userinfo creds) without the `.Redacted()` that
+  `runServe` already applies.
+- **[7] MEDIUM** the admin bearer token is passed in the WS upgrade URL `?token=` → Caddy's default JSON access log
+  records it (the Go logger only logs the path). Fix via a short-lived WS ticket (avoids touching the do-not-commit
+  Caddyfile).
+- **[8] MEDIUM** `deleteSource`/`deleteToken` (+ `createApiToken`/`createIngestToken`) in `web` SettingsPage silently
+  discard API errors (no try/catch; `() => void handler()` swallows the rejection) → silent failures.
+
+**4 refuted (recorded for provenance):** applySchemaUpgrades rows.Err (unreachable/style), license_key plaintext (dead
+`UpsertLicense`), hasExplicitKey HMAC (192-bit tokens make it moot), localStorage token (hypothetical, no XSS sink).
+
+**Planned clusters (S74+):** [2]+[3]+[6] config-startup (cmd/pulse — 2 HIGH + 1 MEDIUM, coherent, self-contained →
+SESSION-74 lead); [1](+[5]) query tenant-isolation; [4] meta-store standalone; [7]+[8] web. Each runs the S62 loop
+(re-verify CORE → fix → mutation-prove → suite → adversarial review → PR → CI → merge → roll prod if server/web →
+5-check smoke → close docs).
+
+**Docs at open:** this D-135 block; `S73-AUDIT-FINDINGS.md` ledger; ROADMAP §2.32 tracker (⏳ IN PROGRESS, 0/8);
+RESUME-PROMPT ▶ START HERE → SESSION-74; `operator-expected.md` (audit-opened note, no new action); `sessions/SESSION-73.md`
+CLOSED; `sessions/SESSION-74.md` written. **No operator action required** — all 8 are code fixes I will build; [3]
+ANONYMIZE_IP and [7] WS-token are operator-*relevant* (privacy / the operator-managed Caddyfile) but fixable in code
+without operator action.

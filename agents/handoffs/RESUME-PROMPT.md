@@ -11,7 +11,30 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-73.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-74.md`)
+
+**Session 2026-07-17 result: D-135 — S73 OPENED a THIRD fresh subsystem audit of the still-un-swept internals → 8 confirmed findings (3 HIGH, 5 MEDIUM). Ledger `agents/handoffs/S73-AUDIT-FINDINGS.md`; tracker ROADMAP §2.32.**
+
+**★ S73** deduplicated against the two prior audits (S48 swept collector/amsclient/reports/cluster/clickhouse; S62 swept
+alert/license/prober/anomaly/api) and audited the genuinely un-swept `store/meta`, `query`, `config`, `cmd/pulse`, and
+the never-audited `web/` frontend. 5 high-effort finder lenses + refute-by-default verifiers → **8 CONFIRMED, 4 refuted**:
+- **[1] HIGH** `query.IngestTimeseries` missing `AND tenant=?` → cross-tenant ingest-metrics leak (same class as S48).
+- **[2] HIGH** `server.Stop()` never calls `apiServer.Stop()` → HTTP not drained on SIGTERM; WS + 2 goroutines leak.
+- **[3] HIGH** `PULSE_ANONYMIZE_IP=1` (Docker boolean) silently leaves viewer IPs un-anonymized (exact `== "true"`).
+- **[4–8] MEDIUM:** PruneAlertHistory Postgres race; QoEForStream cross-tenant QoE (⚠ finder's fix is wrong — wider);
+  `pulse diag` prints unredacted AMS creds; admin token in WS URL → proxy logs; web SettingsPage silent error handlers.
+
+**★ SESSION-74 = the first fix cluster: the `cmd/pulse` config-startup trio [2] + [3] + [6]** (2 HIGH + 1 MEDIUM,
+self-contained one-package PR). See `sessions/SESSION-74.md` for the full plan + the S62 fix-loop pipeline. Then work the
+remaining clusters ([1] query tenant-isolation; [4] meta-store race; [5] QoE tenant — wider; [7] WS-ticket; [8] web).
+
+**⚠ CARRIED operator items (unchanged):** the **[20] audit-read product call** (operator-expected.md — keep reads open
+or gate the whole admin-read surface); AMS trial-expiry doc discrepancy (07-12 vs 07-27); GHCR anon → 401; the S63
+email-STARTTLS behavior note (informational).
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-73.md`)
 
 **Session 2026-07-17 result: D-134 — S72 shipped the final S62 LOW pair ([22] cert-expiry detection, [25] WebRTC hold-timer leak). ★★ THE ENTIRE S62 SUBSYSTEM AUDIT IS COMPLETE — 25/25 dispositioned (24 shipped + [20] deferred).**
 

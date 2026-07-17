@@ -1,4 +1,29 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-17, D-134 — SESSION-72)
+# Operator TODO — the items only YOU can do (updated 2026-07-17, D-135 — SESSION-73)
+
+> **S73 (D-135) needs NO operator action — but two live heads-ups worth knowing NOW (fixes are already queued).** I ran
+> a third internal audit (of the data-store, query, config, startup, and web-UI code the two prior audits never
+> covered) and found 8 real issues (3 higher-severity). All 8 are code fixes I'll ship over the next sessions — nothing
+> for you to do. Two have implications for your CURRENT running setup, so flagging early:
+> - **If you set `PULSE_ANONYMIZE_IP=1`** (the Docker/shell `1` idiom) expecting IP anonymization for GDPR/KVKK — it is
+>   **NOT taking effect** today: the code only recognizes the exact string `true`. Until the fix ships, use
+>   `PULSE_ANONYMIZE_IP=true` (lowercase) if you rely on this. (I'm making it accept `1`/`True`/`TRUE` too.)
+> - **The admin bearer token currently appears in Caddy's access logs** (it's passed in the Live-dashboard WebSocket
+>   URL, and Caddy logs full URLs). If your Caddy/docker logs are shipped anywhere, treat them as containing a live
+>   admin credential until the fix ships (I'm moving WS auth to a short-lived single-use ticket). Rotating the admin
+>   token after the fix is a reasonable precaution.
+>
+> Everything else from the audit (a cross-tenant metrics leak that only affects multi-tenant setups, a SIGTERM
+> shutdown-drain gap, an alert-history pruning race on Postgres, unredacted AMS creds in `pulse diag` output, and some
+> silent web error handling) is internal — no action needed. See `agents/handoffs/S73-AUDIT-FINDINGS.md`.
+>
+> **The ONE decision still waiting on you is the [20] audit-log read access model** (from S68 — see the D-130 block
+> below): keep admin *reads* open to any authenticated token (status quo, recommended), or gate the whole admin-read
+> surface behind the `admin` scope (which would remove the audit page from viewer-role users). No rush; non-blocking.
+>
+> **The ONE time-sensitive item is still: confirm the true AMS trial-licence expiry** (docs disagree — 07-12 vs 07-27;
+> see ⚠ below). GHCR is still private (**401**). The S63 email-STARTTLS behavior note below still applies.
+
+## (previous header — D-134, SESSION-72)
 
 > **S72 (D-134) needs NO operator action — and it COMPLETES the entire second subsystem audit** (25 findings: 24 fixed
 > + 1 product decision left to you, [20] below). This session fixed the last two: (1) an alert rule watching for an
