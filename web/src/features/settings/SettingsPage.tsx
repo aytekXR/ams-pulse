@@ -131,9 +131,13 @@ export function SettingsPage() {
 
   const deleteSource = async (id: string) => {
     if (!confirm("Remove this source?")) return;
-    await adminApi.deleteSource(id);
-    toast("Source removed", "info");
-    void loadAll();
+    try {
+      await adminApi.deleteSource(id);
+      toast("Source removed", "info");
+      void loadAll();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : "Failed to remove source", "error");
+    }
   };
 
   const createApiToken = async () => {
@@ -147,30 +151,42 @@ export function SettingsPage() {
         "OK — admin: can change settings and create tokens.\n" +
         "Cancel — read-only: can view data only.",
     );
-    const result = await adminApi.createToken({
-      kind: "api",
-      name,
-      scopes: [admin ? "admin" : "read"],
-    });
-    setNewApiToken(result);
-    toast("API token created — copy it now, it won't be shown again", "success");
-    void loadAll();
+    try {
+      const result = await adminApi.createToken({
+        kind: "api",
+        name,
+        scopes: [admin ? "admin" : "read"],
+      });
+      setNewApiToken(result);
+      toast("API token created — copy it now, it won't be shown again", "success");
+      void loadAll();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : "Failed to create token", "error");
+    }
   };
 
   const createIngestToken = async () => {
     const name = prompt("Ingest token name (e.g. player-prod):");
     if (!name) return;
-    const result = await adminApi.createToken({ kind: "ingest", name, scopes: ["ingest"] });
-    setNewIngestToken(result);
-    toast("Ingest token created — copy it now, it won't be shown again", "success");
-    void loadAll();
+    try {
+      const result = await adminApi.createToken({ kind: "ingest", name, scopes: ["ingest"] });
+      setNewIngestToken(result);
+      toast("Ingest token created — copy it now, it won't be shown again", "success");
+      void loadAll();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : "Failed to create ingest token", "error");
+    }
   };
 
   const deleteToken = async (id: string) => {
     if (!confirm("Revoke this token?")) return;
-    await adminApi.deleteToken(id);
-    toast("Token revoked", "info");
-    void loadAll();
+    try {
+      await adminApi.deleteToken(id);
+      toast("Token revoked", "info");
+      void loadAll();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : "Failed to revoke token", "error");
+    }
   };
 
   const saveLicense = async (e: React.FormEvent) => {
