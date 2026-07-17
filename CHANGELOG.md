@@ -67,6 +67,15 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **Graceful shutdown, boolean env-vars, and diagnostic redaction (D-136).** Three fixes from the S73
+  subsystem audit: (1) on `SIGTERM` the HTTP server is now **gracefully drained** (in-flight requests
+  finish, WebSocket and rate-limiter background goroutines stop) instead of being killed abruptly —
+  important for zero-downtime rolling deploys; (2) boolean environment toggles like `PULSE_ANONYMIZE_IP`
+  and `PULSE_WEBHOOK_REQUIRE_TIMESTAMP` now accept the common `1` / `True` forms (and tolerate surrounding
+  whitespace such as a Kubernetes-secret trailing newline), so an IP-anonymization/privacy control set via
+  the Docker `1` idiom is no longer silently ignored; (3) `pulse diag` no longer prints AMS-URL credentials
+  in the clear (the URL is credential-redacted, matching the running server's logs). (Found by the S73
+  subsystem audit, findings [2], [3], and [6].)
 - **TLS cert-expiry alerts + WebRTC probe timer (D-134).** Two fixes from the S62 subsystem audit
   (which this closes): (1) an alert rule watching for an **already-expired** TLS certificate
   (`cert_expiry lt 0`) never fired — an expired cert fails the TLS handshake, and the checker treated

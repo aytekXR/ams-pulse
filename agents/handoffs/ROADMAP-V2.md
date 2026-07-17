@@ -527,7 +527,7 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.32  Third fresh subsystem audit — remaining un-swept subsystems (8 findings)  [⏳ IN PROGRESS — 0/8 shipped; 3 HIGH ([1] IngestTimeseries cross-tenant leak, [2] SIGTERM no HTTP drain, [3] PULSE_ANONYMIZE_IP=1 silently off) + 5 MEDIUM; scope = store/meta + query + config + cmd/pulse + web (the areas S48/S62 never swept)]  ⏳ OPENED S73 (D-135, 2026-07-17). Ledger: `agents/handoffs/S73-AUDIT-FINDINGS.md`. Work the clusters S74+.
+### 2.32  Third fresh subsystem audit — remaining un-swept subsystems (8 findings)  [⏳ IN PROGRESS — 3/8 shipped (D-136 S74: [2] SIGTERM HTTP-drain, [3] PULSE_ANONYMIZE_IP boolean, [6] AMS-URL redaction); 5 remain — [1] HIGH query cross-tenant + [4]/[5]/[7]/[8] MEDIUM; scope = store/meta + query + config + cmd/pulse + web]  ⏳ OPENED S73 (D-135, 2026-07-17). Ledger: `agents/handoffs/S73-AUDIT-FINDINGS.md`. Work the clusters S75+.
 
 ### 2.31  Second fresh subsystem audit — un-swept subsystems (25 findings)  [✅ COMPLETE — 25/25 dispositioned: 24 shipped + 1 defer-by-ruling ([20] audit-read, non-code product call); ALL 6 HIGH + 15 MEDIUM + 3/4 LOW shipped; every fix verified-CORE + mutation-proven + adversarially reviewed]  ✅ DONE S62→S72 (D-124…D-134, 2026-07-16→17, PR #119…#138, prod v0.4.0-82-g8355127)
 

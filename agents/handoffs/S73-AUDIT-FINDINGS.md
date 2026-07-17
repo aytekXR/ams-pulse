@@ -24,14 +24,16 @@
 - **verifier:** CONFIRMED high. `APIToken` (meta.go:551) carries no tenant-scoping field, so auth middleware provides no implicit isolation; the leak is real for any deployment where distinct tenants share an (app, stream_id).
 
 ## [2] HIGH — server.Stop() never calls apiServer.Stop() — HTTP not drained on SIGTERM, goroutines leak
-- **loc:** `server/cmd/pulse/serve.go:709` (server.Stop)  ·  **lens:** config-startup  ·  status: ⏳ TODO
+- **loc:** `server/cmd/pulse/serve.go:709` (server.Stop)  ·  **lens:** config-startup  ·  status: ✅ DONE (D-136, S74, PR #141, prod v0.4.0-85-g28b8dfc)
+- **DONE (D-136):** `Stop()` now drains the API server FIRST (`s.apiServer.Stop()`, before background loops + meta/store close, so in-flight requests finish against live deps), and every dependency in `Stop()` is nil-guarded. The `apiServer` field became a 2-method `apiLifecycle{Start,Stop}` interface (satisfied by `*api.Server`) — a seam so a fake pins the drain. Mutation-proven.
 - **mechanism:** `api.Server.Stop()` (api/server.go:390) calls `httpSrv.Shutdown` (10 s timeout) and stops the WS push-loop + two rate-limiter eviction goroutines started in `Start()`. `server.Stop()` calls reportScheduler/alertEval/beaconServer/meta/store Stop/Close — but **never `s.apiServer.Stop()`** (repo-wide grep: zero callers). The HTTP goroutine (api/server.go:379-383) is not context-aware; it only stops on Shutdown/Close.
 - **scenario:** Pod gets SIGTERM during a k8s rolling update → `signal.NotifyContext` cancels ctx → `server.Stop()` runs → HTTP `Shutdown` never invoked → in-flight requests (write timeout 60 s) killed abruptly; WS push-loop + 2 eviction goroutines leak until process teardown.
 - **fix sketch:** Add `s.apiServer.Stop()` inside `server.Stop()` (serve.go ~726, before `s.store.Close()`). `api.Server.Stop()` already has the correct 10 s timeout. Test: a Start→Stop lifecycle asserting Shutdown is called (or the goroutines exit).
 - **verifier:** CONFIRMED high. Traced end-to-end (main.go:148 → serve.go:709 → api/server.go:390); concrete k8s rolling-update impact.
 
 ## [3] HIGH — PULSE_ANONYMIZE_IP=1 (Docker boolean idiom) silently leaves viewer IPs un-anonymized
-- **loc:** `server/cmd/pulse/config.go:302` (AnonymizeIP) + `:248` (WebhookRequireTimestamp)  ·  **lens:** config-startup  ·  status: ⏳ TODO
+- **loc:** `server/cmd/pulse/config.go:302` (AnonymizeIP) + `:248` (WebhookRequireTimestamp)  ·  **lens:** config-startup  ·  status: ✅ DONE (D-136, S74, PR #141, prod v0.4.0-85-g28b8dfc)
+- **DONE (D-136):** Shared `envBool(key)` accepts `1` / case-insensitive `true` AND `strings.TrimSpace`s first (review follow-on: a k8s secret `--from-file` injects a trailing newline; `--env-file` preserves trailing spaces — both would otherwise read a truthy value as false); used at both sites. Mutation-proven (`1`/case + TrimSpace).
 - **mechanism:** Production `loadEnvConfig()` (main.go:110) does `cfg.AnonymizeIP = os.Getenv("PULSE_ANONYMIZE_IP") == "true"` — exact case-sensitive match. `PULSE_ANONYMIZE_IP=1` (or `True`/`TRUE`) leaves it false silently. The broader guard (`v=="1" || strings.EqualFold(v,"true")`) exists only in `internal/config/config.go:338`, which is **dead code** (config.Load never called in production — HOOK(BE-02), grep-confirmed). Same narrow compare at :248 for WebhookRequireTimestamp.
 - **scenario:** Operator sets `PULSE_ANONYMIZE_IP=1` in a Docker `.env` for GDPR/KVKK compliance. `== "true"` is false → AnonymizeIP false → all beacon viewer IPs stored + geo-resolved in the clear. No error/warning; the privacy control is silently off.
 - **fix sketch:** A shared `envBool(name) bool` helper (`v=="1" || strings.EqualFold(v,"true")`) applied at :302 and :248 (and any sibling boolean env). Mutation-test: `PULSE_ANONYMIZE_IP=1` → AnonymizeIP true. Consider deleting the dead `internal/config` path or reconciling it.
@@ -52,7 +54,8 @@
 - **verifier:** CONFIRMED, downgraded high→medium (only multi-tenant deployments with shared app/stream; primary model is single-tenant). Finder's fix sketch materially wrong.
 
 ## [6] MEDIUM — `pulse diag` / `checkAMS` print the raw AMS URL without credential redaction
-- **loc:** `server/cmd/pulse/main.go:253` (runDiag) + `server/cmd/pulse/migrate.go:131` (checkAMS)  ·  **lens:** config-startup  ·  status: ⏳ TODO
+- **loc:** `server/cmd/pulse/main.go:253` (runDiag) + `server/cmd/pulse/migrate.go:131` (checkAMS)  ·  **lens:** config-startup  ·  status: ✅ DONE (D-136, S74, PR #141, prod v0.4.0-85-g28b8dfc)
+- **DONE (D-136):** Shared `redactURL()` (url.Parse + `.Redacted()`) used at both sites (+ de-dups the existing runServe redaction). The diag summary was extracted to `printDiagSummary(io.Writer, cfg)` so BOTH AMS-URL print sites are call-site-tested (review follow-on — `checkAMS` alone missed the runDiag:250 printf). Mutation-proven at both sites.
 - **mechanism:** `runServe()` (main.go:119-122) deliberately parses `cfg.AMSBaseURL` and calls `.Redacted()` before logging (B10 comment). `runDiag()` (:253) and `checkAMS()` (migrate.go:131) print `cfg.AMSBaseURL` / `baseURL` raw via `fmt.Printf`.
 - **scenario:** Operator embeds creds in `PULSE_AMS_URL` (`http://admin:s3cr3t@ams.internal:5080`). `pulse diag` prints `AMS URL: http://admin:s3cr3t@ams.internal:5080` to stdout → captured by log aggregation → AMS password leaked.
 - **fix sketch:** Apply the `url.Parse(...).Redacted()` pattern (already in runServe) at both sites. Test: a URL with userinfo → the printed string contains `xxxxx` / no password.
