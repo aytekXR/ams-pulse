@@ -100,6 +100,21 @@ func maskDSN(dsn string) string {
 	return u.Redacted()
 }
 
+// redactURL returns rawURL with any userinfo password replaced by "xxxxx" (via
+// url.URL.Redacted), for safe printing/logging. On empty input or a parse error the
+// input is returned unchanged. Used wherever the AMS base URL — which may embed
+// credentials (http://user:pass@host) — is surfaced (S73/D-136 [6]).
+func redactURL(rawURL string) string {
+	if rawURL == "" {
+		return rawURL
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	return u.Redacted()
+}
+
 // checkClickHouse prints a connectivity status line.
 func checkClickHouse(dsn string) {
 	opts, err := clickhouse.ParseDSN(dsn)
@@ -128,5 +143,5 @@ func checkAMS(baseURL string) {
 		fmt.Println("AMS: not configured")
 		return
 	}
-	fmt.Printf("AMS URL: %s (connectivity check skipped in diag mode)\n", baseURL)
+	fmt.Printf("AMS URL: %s (connectivity check skipped in diag mode)\n", redactURL(baseURL))
 }

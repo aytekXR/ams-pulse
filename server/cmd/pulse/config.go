@@ -245,7 +245,7 @@ func loadEnvConfig() (EnvConfig, error) {
 		return cfg, err
 	}
 	cfg.WebhookSharedSecret = webhookSecret
-	cfg.WebhookRequireTimestamp = os.Getenv("PULSE_WEBHOOK_REQUIRE_TIMESTAMP") == "true"
+	cfg.WebhookRequireTimestamp = envBool("PULSE_WEBHOOK_REQUIRE_TIMESTAMP")
 	if v := os.Getenv("PULSE_WEBHOOK_TIMESTAMP_SKEW"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
@@ -299,7 +299,7 @@ func loadEnvConfig() (EnvConfig, error) {
 	// Wave 2: Geo enrichment.
 	cfg.GeoMMDBPath = os.Getenv("PULSE_GEO_MMDB_PATH")
 	cfg.ReportLogoPath = os.Getenv("PULSE_REPORT_LOGO_PATH")
-	cfg.AnonymizeIP = os.Getenv("PULSE_ANONYMIZE_IP") == "true"
+	cfg.AnonymizeIP = envBool("PULSE_ANONYMIZE_IP")
 
 	// Wave 2: Session stitcher.
 	if v := os.Getenv("PULSE_SESSION_IDLE_TIMEOUT"); v != "" {
@@ -438,4 +438,17 @@ func envInt(key string, dflt int) int {
 		}
 	}
 	return dflt
+}
+
+// envBool reports whether an env var is set to a truthy value. Accepts "1" and
+// case-insensitive "true" (the "1" Docker/.env idiom + "True"/"TRUE"), so a
+// security/privacy toggle like PULSE_ANONYMIZE_IP is not silently ignored when an
+// operator uses the common "1" convention (S73/D-136 [3]). Surrounding whitespace is
+// trimmed first — a Kubernetes secret created via --from-file injects a trailing
+// newline, and Docker --env-file preserves trailing spaces, which would otherwise make
+// a truthy value read as false (matches the TrimSpace applied to list-valued env vars
+// elsewhere in loadEnvConfig). Anything else is false.
+func envBool(key string) bool {
+	v := strings.TrimSpace(os.Getenv(key))
+	return v == "1" || strings.EqualFold(v, "true")
 }

@@ -22,6 +22,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/url"
 	"os"
@@ -116,10 +117,7 @@ func runServe(args []string) error {
 	defer cancel()
 
 	// B10: redact userinfo from the AMS URL before logging.
-	amsURLLog := cfg.AMSBaseURL
-	if parsed, err := url.Parse(cfg.AMSBaseURL); err == nil {
-		amsURLLog = parsed.Redacted()
-	}
+	amsURLLog := redactURL(cfg.AMSBaseURL)
 	logger.Info("pulse: starting",
 		"version", Version,
 		"listen", cfg.ListenAddr,
@@ -232,6 +230,19 @@ func runMigrate(args []string) error {
 
 // ─── Diag ─────────────────────────────────────────────────────────────────────
 
+// printDiagSummary writes the pulse-diag config summary to w. The AMS URL and
+// ClickHouse DSN are credential-redacted before printing (S73/D-136 [6]); extracted
+// from runDiag so the redaction of this call site is unit-testable.
+func printDiagSummary(w io.Writer, cfg EnvConfig) {
+	fmt.Fprintf(w, "Version:        %s (%s)\n", Version, GitCommit)
+	fmt.Fprintf(w, "ListenAddr:     %s\n", cfg.ListenAddr)
+	fmt.Fprintf(w, "AMS URL:        %s\n", redactURL(cfg.AMSBaseURL))
+	fmt.Fprintf(w, "AMS NodeID:     %s\n", cfg.AMSNodeID)
+	fmt.Fprintf(w, "ClickHouse DSN: %s\n", maskDSN(cfg.ClickHouseDSN))
+	fmt.Fprintf(w, "Migrations dir: %s\n", cfg.MigrationsDir)
+	fmt.Fprintf(w, "Log level:      %s\n", cfg.LogLevel)
+}
+
 func runDiag(args []string) error {
 	// Parse --reconcile flag.
 	doReconcile := false
@@ -248,13 +259,7 @@ func runDiag(args []string) error {
 	}
 
 	fmt.Println("=== Pulse Diagnostic ===")
-	fmt.Printf("Version:        %s (%s)\n", Version, GitCommit)
-	fmt.Printf("ListenAddr:     %s\n", cfg.ListenAddr)
-	fmt.Printf("AMS URL:        %s\n", cfg.AMSBaseURL)
-	fmt.Printf("AMS NodeID:     %s\n", cfg.AMSNodeID)
-	fmt.Printf("ClickHouse DSN: %s\n", maskDSN(cfg.ClickHouseDSN))
-	fmt.Printf("Migrations dir: %s\n", cfg.MigrationsDir)
-	fmt.Printf("Log level:      %s\n", cfg.LogLevel)
+	printDiagSummary(os.Stdout, cfg)
 
 	// Connectivity checks.
 	fmt.Println("\n=== Connectivity ===")
