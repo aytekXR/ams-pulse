@@ -2191,6 +2191,8 @@ export interface operations {
                 stream?: components["parameters"]["stream"];
                 /** @description Filter by cluster node ID */
                 node?: components["parameters"]["node"];
+                /** @description Filter by tenant identifier (F6 multi-tenancy) */
+                tenant?: components["parameters"]["tenant"];
                 /** @description Rollup bucket size */
                 interval?: components["parameters"]["interval"];
             };

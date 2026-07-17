@@ -675,6 +675,42 @@ func TestParamConformance(t *testing.T) {
 			},
 		},
 
+		"GET /qoe/ingest ?tenant": {
+			// Capture probe (like ?from/?to/?interval) — asserts the handler routes ?tenant
+			// into IngestTimeseriesParams.Tenant, so a regression at the handler->params
+			// boundary (which the query-layer unit test cannot see) reddens (S73/D-137 [1]).
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				const tenant = "acme-probe-tenant"
+				cap := &captureIngestQsvc{}
+				ts, tok, cleanup := setupIngestCaptureServer(t, cap)
+				defer cleanup()
+
+				vals := url.Values{}
+				vals.Set("tenant", tenant)
+				req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/qoe/ingest?"+vals.Encode(), nil)
+				req.Header.Set("Authorization", authHeader(tok))
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					t.Fatalf("GET qoe/ingest?tenant=...: %v", err)
+				}
+				io.Copy(io.Discard, resp.Body)
+				resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					t.Fatalf("want 200, got %d", resp.StatusCode)
+				}
+				if len(cap.captured) == 0 {
+					t.Fatal("qoe/ingest ?tenant: IngestTimeseries not called (iqsvc not wired?)")
+				}
+				if cap.captured[0].Tenant != tenant {
+					t.Errorf("IngestTimeseriesParams.Tenant = %q, want %q (handler must route ?tenant to the query for cross-tenant isolation)",
+						cap.captured[0].Tenant, tenant)
+				} else {
+					t.Logf("PASS: Tenant=%q reached the query params", cap.captured[0].Tenant)
+				}
+			},
+		},
 		"GET /qoe/ingest ?interval": {
 			// BUG-005 live probe — GREEN after parseBucketInterval fix in server.go.
 			// hour → BucketSeconds=3600; fix committed before this file (same session).

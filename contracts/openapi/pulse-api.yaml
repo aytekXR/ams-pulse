@@ -308,6 +308,7 @@ paths:
         - $ref: "#/components/parameters/app"
         - $ref: "#/components/parameters/stream"
         - $ref: "#/components/parameters/node"
+        - $ref: "#/components/parameters/tenant"
         - $ref: "#/components/parameters/interval"
       responses:
         "200":

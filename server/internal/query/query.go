@@ -936,8 +936,12 @@ type IngestTimeseriesParams struct {
 	StreamID string
 	App      string
 	NodeID   string
-	From     time.Time
-	To       time.Time
+	// Tenant scopes the query to one tenant; empty = no tenant filter. Without it
+	// the query blended ingest metrics across every tenant sharing an (app, stream_id)
+	// — the same cross-tenant leak the sibling analytics queries guard against (S73/D-137 [1]).
+	Tenant string
+	From   time.Time
+	To     time.Time
 	// BucketSeconds controls the time bucket width (default 60s).
 	BucketSeconds int
 }
@@ -985,6 +989,10 @@ func (s *Service) IngestTimeseries(ctx context.Context, p IngestTimeseriesParams
 	if p.NodeID != "" {
 		where += " AND node_id = ?"
 		args = append(args, p.NodeID)
+	}
+	if p.Tenant != "" {
+		where += " AND tenant = ?"
+		args = append(args, p.Tenant)
 	}
 	if !p.From.IsZero() {
 		where += " AND ts >= ?"
