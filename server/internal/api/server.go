@@ -1350,6 +1350,7 @@ func (s *Server) handleIngestHealth(w http.ResponseWriter, r *http.Request) {
 	filterApp := q.Get("app")
 	filterStream := q.Get("stream")
 	filterNode := q.Get("node")
+	filterTenant := q.Get("tenant")
 	bucketSecs := parseBucketInterval(q.Get("interval"))
 
 	ctx := r.Context()
@@ -1379,6 +1380,7 @@ func (s *Server) handleIngestHealth(w http.ResponseWriter, r *http.Request) {
 					StreamID:      sid,
 					App:           st.App,
 					NodeID:        st.NodeID,
+					Tenant:        filterTenant,
 					From:          from,
 					To:            to,
 					BucketSeconds: bucketSecs,
