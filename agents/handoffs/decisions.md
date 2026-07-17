@@ -8738,3 +8738,50 @@ csp-e2e Playwright).
 action; [7] WS-token still pending); `sessions/SESSION-77.md` CLOSED; `sessions/SESSION-78.md` written (lead: [7]
 WS-token log exposure — the security/operator-flagged one; design options: single-use ticket vs WS subprotocol).
 **No operator action required.**
+
+## D-140 — S78 (2026-07-17): SHIPPED — S73 [7] Live-WS auth via Sec-WebSocket-Protocol header (token out of the URL)
+
+**Open facts.** `origin/main` = `357cd98` (S77 docs, PR #148); HEAD == origin/main; `git status` shows only the
+do-not-commit `deploy/config/Caddyfile.prod` dirty. Branch `s78-d140`. Date 2026-07-17 (§2.7 gate still locked until
+2026-07-23). Single-finding session; the security-relevant, operator-flagged [7].
+
+**[7] MEDIUM (security) — admin bearer token in the WS upgrade URL → reverse-proxy access logs.** `LiveSocket.connect`
+built `/live/ws?token=<bearer>`; browsers can't set an Authorization header on a WS handshake, so `?token=` was the
+fallback — but Caddy's default json access log records the full request URI, so every Live-dashboard WS connection wrote
+the long-lived admin token to the access/docker logs / any SIEM, replayable against `/admin/*` and `/alerts/*`. **Design
+choice:** weighed (a) a short-lived single-use `POST /auth/ws-ticket` vs (b) the token as a `Sec-WebSocket-Protocol`
+subprotocol header vs (c) first-frame auth. **Chose (b) — the verified CORE:** it closes the exact exposure (URL → header,
+which Caddy's URL log doesn't record) with a minimal, STATELESS change — no new endpoint, no ticket store / HA caveat, no
+reconnect-fetch complexity. (a) is more robust (ephemeral) but stateful and heavier; noted as a possible future
+hardening. **Fix:** the browser offers `["pulse.v1", token]`; `downloadAuthMiddleware` reads the token from the header
+via `wsSubprotocolToken` (skipping the `pulse.v1` marker) ahead of the retained `?token=` fallback; `handleLiveWS`
+negotiates the marker via `websocket.Accept` `Subprotocols` (the token is never selected/echoed). The web
+`LiveSocket.connect` drops `?token=` (reconnect delegates to `connect()`, so it's covered). OIDC cookie path unchanged.
+`?token=` is retained on the SHARED middleware as a documented legacy fallback (it also serves file-download routes that
+genuinely require `?token=` — a WS-specific removal would need to split the middleware and is out of scope); the WEB no
+longer creates the exposure. No OpenAPI change (WS handshake header, not a REST param).
+
+**Verification.** New server test (`s78_d140_ws_subprotocol_test.go`): header-token auth passes (not-401), bad token 401,
+marker-only 401. New web test (`client.livesocket.test.tsx`): token ABSENT from the URL, present as the subprotocol; and
+no subprotocol when there's no bearer token. **Both mutation-proven:** drop the server subprotocol source → subprotocol
+auth 401; revert the web to `?token=` URL → the not-in-URL assertion reddens. Full web suite **653/653** (a pre-existing
+ARIA-wiring test flaked once under full-suite load — passed in isolation ×2 and on the full-suite re-run; unrelated to
+this change); web build OK; typecheck + eslint clean; Go suite **25/25**. **Prod WS smoke:** valid token in the
+`Sec-WebSocket-Protocol` header → **426** (auth passed, upgrade fails only because curl isn't a WS client); bad token →
+**401** (auth rejected) — confirms header-based auth live.
+
+**Adversarial review (2 lenses — auth-correctness / residual-exposure; 4 agents). 0 CONFIRMED, 2 refuted — clean.** Both
+refutations correct: (1) "residual `?token=` still accepted" — intentional documented fallback for downloads; the fix's
+scope is the WEB URL exposure, which it closes; not a defect. (2) "web test doesn't exercise reconnect" — speculative
+(reconnect delegates to the fixed `connect()`, so the property holds); no failing trace against actual code. The
+auth-correctness lens found nothing (parsing, precedence, negotiation, origin enforcement all verified).
+
+**Shipped (PR #149, squash `8858b5f`, merged to `origin/main`).** Prod rolled forward to **`v0.4.0-93-g8858b5f`** (server
++ web); all 5 smoke checks green + the WS-auth smoke above. CI: all 15 checks + CodeQL green (incl. web-e2e / csp-e2e
+Playwright, which exercise the Live dashboard WS).
+
+**Docs at close:** D-140 SHIPPED (this block); CHANGELOG [Unreleased] Fixed; `S73-AUDIT-FINDINGS.md` [7] ✅ DONE; ROADMAP
+§2.32 (7/8 shipped; 1 MEDIUM remains — [5]); RESUME-PROMPT ▶ START HERE → SESSION-79; `operator-expected.md` — **the
+WS-token log-exposure heads-up is RETIRED** (fixed); token rotation noted as an optional precaution;
+`sessions/SESSION-78.md` CLOSED; `sessions/SESSION-79.md` written (lead: [5] QoE cross-tenant — the LAST S73 finding;
+after it, §2.32 is COMPLETE). **No operator action required.**

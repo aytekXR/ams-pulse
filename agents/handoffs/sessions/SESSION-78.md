@@ -1,5 +1,16 @@
 # SESSION-78 — planned at S77 close (D-139)
 
+> ## ✅ CLOSED (2026-07-17, D-140) — SHIPPED [7]
+> The Live-dashboard WebSocket now authenticates via the `Sec-WebSocket-Protocol` handshake header instead of a `?token=`
+> URL param (PR #149, prod `v0.4.0-93-g8858b5f`) — the admin bearer token no longer lands in reverse-proxy access logs.
+> Chose the stateless subprotocol approach (b) over a ticket store; `?token=` kept as a documented legacy fallback (shared
+> middleware serves downloads); OIDC cookie path unchanged. Server + web tests, both mutation-proven; prod WS smoke: valid
+> subprotocol token → 426 (auth passed), bad → 401. 2-lens auth-surface review clean (0 findings). **The operator
+> WS-token log-exposure heads-up is now retired.** **No operator action.** See `decisions.md` D-140 and
+> `sessions/SESSION-79.md` (lead: [5] QoE cross-tenant — the LAST S73 finding; closing it completes §2.32). Everything
+> below is the original pre-session plan.
+
+
 > Written by SESSION-77 close (2026-07-17). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE + `agents/handoffs/S73-AUDIT-FINDINGS.md`** (8-finding ledger; 6 shipped, ALL HIGH done).
