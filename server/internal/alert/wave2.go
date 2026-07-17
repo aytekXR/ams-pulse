@@ -32,8 +32,11 @@ import (
 //
 // conn == nil → (0, 0, nil) fall-through: caller must treat (0, 0, nil) as
 // "no data" and evaluate normally; 0.0 is a legitimate rebuffer_ratio/error_rate.
+// tenant scopes the QoE read to one tenant (F6 Phase 2); "" = all tenants. This
+// closes S73 finding [5]: without it, a QoE rule for a stream that two tenants
+// reuse (same app+stream) blends both tenants' rebuffer/error numbers.
 type QoEReader interface {
-	QoEForStream(ctx context.Context, streamID, app string, lookback time.Duration) (rebufferRatio, errorRate float64, err error)
+	QoEForStream(ctx context.Context, streamID, app, tenant string, lookback time.Duration) (rebufferRatio, errorRate float64, err error)
 }
 
 // FakeQoEReader returns fixed values for testing.
@@ -42,10 +45,15 @@ type FakeQoEReader struct {
 	RebufferRatio float64
 	ErrorRate     float64
 	Err           error
+	// LastTenant records the tenant the evaluator last passed, so tests can
+	// prove the rule's tenant scope is threaded through to the reader.
+	LastTenant string
 }
 
-// QoEForStream returns the pre-configured values for tests.
-func (f *FakeQoEReader) QoEForStream(_ context.Context, _, _ string, _ time.Duration) (float64, float64, error) {
+// QoEForStream returns the pre-configured values for tests and records the
+// tenant it was called with.
+func (f *FakeQoEReader) QoEForStream(_ context.Context, _, _, tenant string, _ time.Duration) (float64, float64, error) {
+	f.LastTenant = tenant
 	return f.RebufferRatio, f.ErrorRate, f.Err
 }
 
@@ -90,7 +98,7 @@ func (e *Evaluator) evalQoEMetric(ctx context.Context, snap *domain.LiveSnapshot
 				}
 				continue
 			}
-			rebuf, errRate, err := reader.QoEForStream(ctx, sid, s.App, 1*time.Hour)
+			rebuf, errRate, err := reader.QoEForStream(ctx, sid, s.App, scope.Tenant, 1*time.Hour)
 			if err != nil {
 				if !warnedErr {
 					e.logger.Warn("alert: qoe_reader error — stream skipped for this tick", "error", err)

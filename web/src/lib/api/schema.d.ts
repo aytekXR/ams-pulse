@@ -1309,6 +1309,8 @@ export interface components {
             node_id?: string | null;
             app?: string | null;
             stream_id?: string | null;
+            /** @description Scope the rule to one tenant (F6). Omit/empty = all tenants (backward compatible). For QoE metrics (rebuffer_ratio, error_rate) the per-stream reads are scoped to this tenant so a stream reused by multiple tenants no longer blends their numbers. */
+            tenant?: string | null;
         };
         MaintenanceWindow: {
             /** @description Cron expression for window start (UTC) */

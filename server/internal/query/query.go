@@ -934,9 +934,11 @@ func (s *Service) QoeSummary(ctx context.Context, p QoeParams) (*QoeSummaryResul
 
 // QoEForStream returns the rebuffer ratio and error rate for a single stream
 // over the given lookback window by delegating to QoeSummary.
-// Falls back to (0, 0, nil) when ClickHouse is not configured (conn == nil) —
-// the caller (alert evaluator) treats this as "no data" and skips the stream.
-func (s *Service) QoEForStream(ctx context.Context, streamID, app string, lookback time.Duration) (rebufferRatio, errorRate float64, err error) {
+// tenant scopes the read to one tenant (F6 Phase 2, closes S73 [5]); "" = all
+// tenants. Falls back to (0, 0, nil) when ClickHouse is not configured
+// (conn == nil) — the caller (alert evaluator) treats this as "no data" and
+// skips the stream.
+func (s *Service) QoEForStream(ctx context.Context, streamID, app, tenant string, lookback time.Duration) (rebufferRatio, errorRate float64, err error) {
 	if s.conn == nil {
 		// Documented fall-through: no CH → no QoE data; return zero values, no error.
 		return 0, 0, nil
@@ -945,6 +947,7 @@ func (s *Service) QoEForStream(ctx context.Context, streamID, app string, lookba
 		From:   time.Now().UTC().Add(-lookback),
 		Stream: streamID,
 		App:    app,
+		Tenant: tenant,
 	})
 	if err != nil {
 		return 0, 0, err

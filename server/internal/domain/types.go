@@ -240,6 +240,10 @@ type AlertScope struct {
 	NodeID   string `json:"node_id,omitempty"`
 	App      string `json:"app,omitempty"`
 	StreamID string `json:"stream_id,omitempty"`
+	// Tenant scopes a rule to one tenant (F6 Phase 2). Empty = all tenants
+	// (backward-compatible: existing rules have no tenant in ScopeJSON). Stored
+	// inside AlertRuleRow.ScopeJSON, so no DB migration is required.
+	Tenant string `json:"tenant,omitempty"`
 }
 
 // Notification is an alert delivery payload.

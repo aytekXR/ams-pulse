@@ -567,7 +567,7 @@ func TestQuery_QoEForStream_RebufferRatio(t *testing.T) {
 	qsvc := query.New(fakeLive, conn, nil)
 
 	// lookback of 2h covers toStartOfHour(baseTime) regardless of current minute.
-	rebuf, errRate, err := qsvc.QoEForStream(ctx, "int-stream", "live", 2*time.Hour)
+	rebuf, errRate, err := qsvc.QoEForStream(ctx, "int-stream", "live", "", 2*time.Hour)
 	if err != nil {
 		t.Fatalf("QoEForStream: %v", err)
 	}
@@ -576,7 +576,7 @@ func TestQuery_QoEForStream_RebufferRatio(t *testing.T) {
 	for deadline := time.Now().Add(15 * time.Second); rebuf == 0 && time.Now().Before(deadline); {
 		_ = conn.Exec(ctx, fmt.Sprintf("OPTIMIZE TABLE %s.rollup_qoe_1h FINAL", dbName))
 		time.Sleep(300 * time.Millisecond)
-		rebuf, errRate, err = qsvc.QoEForStream(ctx, "int-stream", "live", 2*time.Hour)
+		rebuf, errRate, err = qsvc.QoEForStream(ctx, "int-stream", "live", "", 2*time.Hour)
 		if err != nil {
 			t.Fatalf("QoEForStream (poll): %v", err)
 		}
