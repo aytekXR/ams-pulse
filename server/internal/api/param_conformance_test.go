@@ -894,6 +894,73 @@ func TestParamConformance(t *testing.T) {
 			exemptReason: "Same nil-CH reason; scout confirms reads=yes.",
 		},
 
+		// ── GET /reports/export ──────────────────────────────────────────────────
+		// Same ComputeUsage backing + nil-CH test server as /reports/usage, so the
+		// data-filter params (from/to/app/stream/tenant) share its exempt disposition;
+		// only ?format is CH-free observable (csv -> 200 text/csv; pdf -> 501).
+		"GET /reports/export ?from": {
+			disp:         paramExempt,
+			exemptReason: "Same nil-CH reason as /reports/usage ?from; shared ComputeUsage backing (export.go reuses UsageParams).",
+		},
+		"GET /reports/export ?to": {
+			disp:         paramExempt,
+			exemptReason: "Same nil-CH reason as /reports/usage.",
+		},
+		"GET /reports/export ?app": {
+			disp:         paramExempt,
+			exemptReason: "Same nil-CH reason as /reports/usage.",
+		},
+		"GET /reports/export ?stream": {
+			disp:         paramExempt,
+			exemptReason: "Same nil-CH reason as /reports/usage.",
+		},
+		"GET /reports/export ?tenant": {
+			disp:         paramExempt,
+			exemptReason: "Same nil-CH reason as /reports/usage; tenant threaded to UsageParams.Tenant identically.",
+		},
+		"GET /reports/export ?format": {
+			disp: paramProbe,
+			probeFunc: func(t *testing.T) {
+				t.Helper()
+				// Business-tier bizTs (CheckReports passes): format=csv -> 200 text/csv;
+				// format=pdf -> 501. nil ClickHouse yields an empty report, but the format
+				// branch runs before data serialization, so status + Content-Type are
+				// observable regardless of data.
+				for _, tc := range []struct {
+					format   string
+					wantCode int
+					wantCT   string
+				}{
+					{"csv", http.StatusOK, "text/csv"},
+					{"pdf", http.StatusNotImplemented, ""},
+				} {
+					u := bizTs.URL + "/api/v1/reports/export?format=" + tc.format
+					req, _ := http.NewRequest(http.MethodGet, u, nil)
+					req.Header.Set("Authorization", authHeader(bizTok))
+					resp, err := http.DefaultClient.Do(req)
+					if err != nil {
+						t.Fatalf("GET ?format=%s: %v", tc.format, err)
+					}
+					io.Copy(io.Discard, resp.Body)
+					resp.Body.Close()
+					if resp.StatusCode != tc.wantCode {
+						t.Errorf("?format=%s: want %d, got %d", tc.format, tc.wantCode, resp.StatusCode)
+						continue
+					}
+					if tc.wantCT != "" {
+						ct := resp.Header.Get("Content-Type")
+						if !strings.Contains(ct, tc.wantCT) {
+							t.Errorf("?format=%s: Content-Type=%q, want contains %q", tc.format, ct, tc.wantCT)
+						} else {
+							t.Logf("PASS ?format=%s: %d, Content-Type=%q", tc.format, resp.StatusCode, ct)
+						}
+					} else {
+						t.Logf("PASS ?format=%s: %d", tc.format, resp.StatusCode)
+					}
+				}
+			},
+		},
+
 		// ── GET /reports/schedules ───────────────────────────────────────────────
 		"GET /reports/schedules ?limit": {
 			disp: paramProbe,
@@ -1542,7 +1609,8 @@ func TestParamConformance(t *testing.T) {
 	//     must go loud instead of vacuously passing. Lower this constant only
 	//     for an intentional spec shrink.
 	// S40/D-102: +2 for GET /admin/audit-log ?limit/?cursor → 88.
-	const minSpecParams = 88
+	// S85/D-147: +6 for GET /reports/export ?from/?to/?app/?stream/?tenant/?format → 94.
+	const minSpecParams = 94
 	if len(specParams) < minSpecParams {
 		t.Errorf("param-conformance: enumerated only %d spec query params, "+
 			"expected >= %d — spec load may be incomplete", len(specParams), minSpecParams)
@@ -1591,8 +1659,9 @@ func TestParamConformance(t *testing.T) {
 	//  + 2 BUG-007 cursor probes (alerts/history ?cursor, probes/results ?cursor) added by F3 (S22/D-084)
 	//  + 2 BUG-008 Group B (anomalies ?from/?to) promoted from known-violation S24/D-086
 	//  + 2 S40/D-102 audit-log (admin/audit-log ?limit/?cursor)
-	//  = 39 total probes. Floor = 39 - 2 = 37.
-	const minProbes = 37
+	//  + 1 S85/D-147 reports/export ?format (csv->200 / pdf->501 differential)
+	//  = 40 total probes. Floor = 40 - 2 = 38.
+	const minProbes = 38
 	if probesRan < minProbes {
 		t.Errorf("param-conformance: only %d probe(s) ran (need >= %d); "+
 			"check that probe entries are not all skipping", probesRan, minProbes)
