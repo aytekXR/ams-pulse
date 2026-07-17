@@ -8785,3 +8785,46 @@ Playwright, which exercise the Live dashboard WS).
 WS-token log-exposure heads-up is RETIRED** (fixed); token rotation noted as an optional precaution;
 `sessions/SESSION-78.md` CLOSED; `sessions/SESSION-79.md` written (lead: [5] QoE cross-tenant — the LAST S73 finding;
 after it, §2.32 is COMPLETE). **No operator action required.**
+
+## D-141 — S79 (2026-07-17): DEFER-BY-RULING — S73 [5] QoE cross-tenant (needs a tenant-scoped-alerting FEATURE) — ★ S73 AUDIT COMPLETE
+
+**Open facts.** `origin/main` = `d8ecbd6` (S78 docs, PR #150); HEAD == origin/main; `git status` shows only the
+do-not-commit `deploy/config/Caddyfile.prod` dirty. Branch `s79-d141`. Date 2026-07-17 (§2.7 gate still locked until
+2026-07-23). The LAST S73 finding; adjudicated (no code change).
+
+**[5] MEDIUM — `QoEForStream` omits tenant → the alert evaluator blends cross-tenant QoE.** `QoEForStream(streamID,
+app)` (query.go:898) builds `QoeParams` with an empty `Tenant`, so `QoeSummary` (:794) skips its `AND tenant = ?` and
+`rollup_qoe_1h` aggregates rebuffer/error ratios across every tenant sharing an (app, stream_id); the alert evaluator
+(wave2.go:93) uses the blended ratio.
+
+**Why DEFER-BY-RULING (not a fix-in-isolation).** Traced the data model at open — the fix is BLOCKED, and a real fix is
+a product feature:
+- **Tenant is CLIENT-DECLARED, not server-resolved.** The beacon collector reads `b.Meta["tenant"]` (beacon.go:559-564)
+  — the player self-reports its tenant — which flows to `ViewerSession.Tenant` (stitcher.go:224) and `rollup_qoe_1h`.
+- **The server/live path has NO tenant.** The aggregator / `domain.LiveStream` never touch tenant (grep: none); there is
+  no server-side stream→tenant resolution. The `tenants` table's `stream_pattern`/`meta_tag` is used for report scoping,
+  not live-stream tagging.
+- **Alerts are GLOBALLY scoped, not per-tenant.** `domain.AlertScope` = {NodeID, App, StreamID} and `meta.AlertRuleRow`
+  (alert_rules columns) carry NO tenant. So a QoE alert rule is inherently per-(app, stream); the "blend" is the expected
+  aggregate for a non-tenant-scoped rule. To make QoE alerts tenant-isolated requires **tenant-scoped alert rules** — add
+  Tenant to AlertScope + rule ownership/CRUD + evaluator threading + QoEReader param + the web rule-creation form. That
+  is a FEATURE with a product/UX dimension (do you want per-tenant QoE alerting? how do operators set a rule's tenant?),
+  well beyond this MEDIUM. Adding only a `Tenant` param to `QoEForStream` would be dead plumbing (the caller has no
+  tenant value — the same dead-code trap the D-134 review caught).
+- **Impact is narrow + multi-tenant-only.** Triggers only in a Business+ multi-tenant deployment where distinct tenants
+  share the SAME app AND stream name AND run a QoE alert rule for it. The **primary self-hosted single-AMS single-tenant
+  model is completely UNAFFECTED** (one/empty tenant → no blend). The audit verifier itself downgraded high→medium for
+  this reason.
+
+**Ruling.** Disposition [5] as **DEFERRED — escalated to the operator as a product call** (mirroring the [20] audit-read
+ruling): "Do you want per-tenant QoE alerting (tenant-scoped alert rules)? If so, it's a bounded feature (the fix path
+above); if your deployment is single-tenant, [5] never occurs." Recorded in `operator-expected.md`. No code change → no
+prod roll-forward.
+
+**★ S73 AUDIT COMPLETE.** 8/8 dispositioned: **7 shipped** (D-136…D-140) + **1 deferred-by-ruling** ([5]). ALL 3 HIGH +
+4/5 MEDIUM shipped. Third subsystem audit done (after S44/§2.29, S48/§2.30, S62/§2.31). See `S73-AUDIT-FINDINGS.md`
+header. **Docs at close:** D-141 (this block); `S73-AUDIT-FINDINGS.md` [5] ⏸️ DEFERRED + AUDIT COMPLETE banner; ROADMAP
+§2.32 flipped ⏳→✅ COMPLETE; RESUME-PROMPT ▶ START HERE → SESSION-80 (first post-S73 arc — re-survey ROADMAP §2);
+`operator-expected.md` (the [5] product question added; [20] carried); `sessions/SESSION-79.md` CLOSED;
+`sessions/SESSION-80.md` written. **Operator decisions pending (non-blocking): [20] audit-read model; [5] per-tenant QoE
+alerting.** No blocking operator action.
