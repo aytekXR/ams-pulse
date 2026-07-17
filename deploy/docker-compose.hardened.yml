@@ -60,6 +60,26 @@ services:
   pulse:
     # Remove ALL host port publishing — pulse is only reachable via Caddy.
     ports: !override []
+    # ── Container hardening (S80/D-142) ──────────────────────────────────────────
+    # Defense-in-depth on the internet-facing app container (it parses untrusted
+    # beacon + webhook input). The binary is a static (CGO_ENABLED=0) NON-root
+    # process (USER pulse in the Dockerfile) that binds only high ports (8090-8092,
+    # no NET_BIND_SERVICE needed) and writes exclusively to the pulse-data volume
+    # (SQLite meta store + secret key + report artifacts, see PULSE_REPORTS_DIR
+    # below), so it needs no Linux capabilities and no writable root filesystem.
+    #   - read_only: root fs is immutable; the /var/lib/pulse volume stays writable.
+    #   - tmpfs /tmp: absorbs any transient temp write (e.g. modernc SQLite scratch).
+    #   - cap_drop ALL: no capabilities are required.
+    #   - no-new-privileges: block setuid/setgid privilege escalation.
+    # Verified via an isolated `docker run --read-only --cap-drop ALL` boot of the
+    # release image (zero EROFS errors) + the prod roll-forward 5-check smoke.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     deploy:
       resources:
         limits:
@@ -82,6 +102,11 @@ services:
       PULSE_WEBHOOK_ADDR: ":8092"
       PULSE_WEBHOOK_SECRET: "${PULSE_WEBHOOK_SECRET:-}"
       PULSE_META_DSN: "/var/lib/pulse/pulse_meta.db"
+      # Report artifacts on the persistent volume (S80/D-142). The code default is
+      # the RELATIVE "pulse-reports", which under WORKDIR "/" writes to the ephemeral
+      # container root — artifacts are lost on every redeploy AND it breaks read_only.
+      # Pointing it at the pulse-data volume persists artifacts and keeps root fs RO.
+      PULSE_REPORTS_DIR: "/var/lib/pulse/reports"
       PULSE_LOG_LEVEL: "info"
       PULSE_RETENTION_DAYS: "90"
       PULSE_ROLLUP_TTL_DAYS: "395"
