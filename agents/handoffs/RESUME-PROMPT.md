@@ -11,7 +11,32 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-76.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-77.md`)
+
+**Session 2026-07-17 result: D-138 — S76 shipped [4] `PruneAlertHistory` single-statement DELETE (fixes the Postgres over-delete race). S73 tracker = 5/8 shipped; 3 MEDIUM remain ([5]/[7]/[8]).**
+
+**★ S76** replaced `PruneAlertHistory`'s racy COUNT-then-DELETE with one self-contained statement (PR #145, prod
+`v0.4.0-89-g300251d`) — concurrent Postgres prunes can no longer delete below the per-rule cap. Regression guard = the
+existing prune suite (mutation-proven); PG branch in CI; 2-lens review clean. **No operator action.** Evidence:
+`decisions.md` D-138.
+
+**★ SESSION-77 = [8] MEDIUM: web SettingsPage silent error handlers** (`deleteSource`/`deleteToken` + `createApiToken`/
+`createIngestToken` `await` with no try/catch → API errors silently swallowed). Fix: try/catch + `toast(..., 'error')`
+(mirror `saveLicense`). **Web-only** — a quick win that also validates the web/vitest CI loop before the bigger remaining
+two. See `sessions/SESSION-77.md` for the web toolchain notes.
+
+**★ Remaining after [8]:** **[7]** (security, operator-flagged) admin token in the Live WS URL → proxy logs — options at
+open: short-lived `/auth/ws-ticket`, or the token as a WS **subprotocol** (`Sec-WebSocket-Protocol` header, not the
+URL), or first-frame auth (server+web). **[5]** `QoEForStream` cross-tenant QoE — WIDER (thread Tenant through the live
+pipeline; multi-tenant-only impact).
+
+**⚠ CARRIED operator items (unchanged):** the **[20] audit-read product call** (operator-expected.md — keep reads open
+or gate the whole admin-read surface); AMS trial-expiry doc discrepancy (07-12 vs 07-27); GHCR anon → 401; the S63
+email-STARTTLS behavior note (informational).
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-76.md`)
 
 **Session 2026-07-17 result: D-137 — S75 shipped the last S73 HIGH ([1] `query.IngestTimeseries` cross-tenant leak). ★ ALL 3 S73 HIGH findings now done; S73 tracker = 4/8 shipped, 4 MEDIUM remain.**
 

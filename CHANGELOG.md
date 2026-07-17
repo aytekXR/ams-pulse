@@ -67,6 +67,11 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **Alert-history pruning race on Postgres (D-138).** The per-rule alert-history cap was enforced with a
+  non-transactional count-then-delete, so under concurrent alert firing on a Postgres backend two prunes
+  could together delete below the cap and permanently drop history rows. Pruning is now a single
+  self-contained statement (keep the newest N per rule), eliminating the race. SQLite was unaffected.
+  (Found by the S73 subsystem audit, finding [4].)
 - **Multi-tenant isolation for ingest-health metrics (D-137).** The `GET /qoe/ingest` publisher
   ingest-health query was missing the tenant filter its sibling analytics queries all apply, so in a
   multi-tenant deployment where two tenants used the same app + stream name, the bitrate/fps/packet-loss

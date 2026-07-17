@@ -1,5 +1,14 @@
 # SESSION-76 — planned at S75 close (D-137)
 
+> ## ✅ CLOSED (2026-07-17, D-138) — SHIPPED [4]
+> `PruneAlertHistory` now uses a single self-contained `DELETE ... WHERE rule_id=? AND id NOT IN (SELECT id ... ORDER BY
+> ts DESC LIMIT keep)` (rowid on SQLite) instead of the racy COUNT-then-DELETE — concurrent Postgres prunes can no longer
+> over-delete alert history (PR #145, prod `v0.4.0-89-g300251d`). Regression guard = the existing prune suite
+> (mutation-proven: ORDER BY flip + dropped rule_id both redden it); PG branch validated in CI; 2-lens review clean (0
+> findings). **No operator action.** See `decisions.md` D-138 and `sessions/SESSION-77.md` (lead: [8] web SettingsPage
+> silent error handlers). Everything below is the original pre-session plan.
+
+
 > Written by SESSION-75 close (2026-07-17). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE + `agents/handoffs/S73-AUDIT-FINDINGS.md`** (8-finding ledger; 4 shipped, ALL HIGH done).

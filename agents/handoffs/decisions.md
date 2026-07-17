@@ -8660,3 +8660,43 @@ committed with the spec change).
 START HERE → SESSION-76; `operator-expected.md` (cross-tenant leak fixed, multi-tenant only; [7] WS-token still pending);
 `sessions/SESSION-75.md` CLOSED; `sessions/SESSION-76.md` written (lead: [4] alert-history prune race). **No operator
 action required.**
+
+## D-138 — S76 (2026-07-17): SHIPPED — S73 [4] PruneAlertHistory single-statement DELETE (Postgres over-delete race)
+
+**Open facts.** `origin/main` = `b0d3606` (S75 docs, PR #144); HEAD == origin/main; `git status` shows only the
+do-not-commit `deploy/config/Caddyfile.prod` dirty. Branch `s76-d138`. Date 2026-07-17 (§2.7 gate still locked until
+2026-07-23). Single-finding session (standalone store/meta fix).
+
+**[4] MEDIUM — `PruneAlertHistory` COUNT+DELETE race over-deletes on Postgres.** The per-rule alert-history cap was
+enforced by `SELECT COUNT(*)` → `excess := total - keep` (Go) → a separate `DELETE ... LIMIT excess`, called
+unsynchronised after every `CreateAlertHistory` INSERT. On Postgres (MaxOpenConns=10) the Go-computed `excess` went
+stale in the gap between the two statements; two concurrent prunes each computing an independent `excess` and then
+deleting could together prune below the `keep` cap — permanent history loss. SQLite (MaxOpenConns=1) serialises and was
+unaffected. **Fix:** collapse to one self-contained statement per backend — `DELETE FROM alert_history WHERE rule_id = ?
+AND id NOT IN (SELECT id FROM alert_history WHERE rule_id = ? ORDER BY ts DESC, id DESC LIMIT ?)` (rowid on SQLite for
+the insertion-order tiebreak). No intermediate snapshot gap; each DELETE is self-correcting (removes only rows not in
+the current top-`keep`). The outer `rule_id` predicate is essential so `NOT IN` cannot touch other rules' rows.
+`keep <= 0` stays a no-op. Verified `IngestTimeseries`-style single-query correctness: the OLD delete-oldest and the NEW
+keep-newest are row-equivalent for exactly-keep / fewer-than-keep / equal-ts cases.
+
+**Verification.** No new test written — the existing `alert_history_prune_test.go` suite (keep-newest, **multi-rule
+isolation** via ruleX+ruleY "other rule untouched", equal-ts deterministic tiebreak, keep<=0/few no-ops, auto-prune) is
+the regression guard, and I **mutation-proved** it catches regressions in the new SQL: flipping `ORDER BY ts DESC` →
+`ASC` (keeps oldest) reddens PruneKeepsNewest + PruneEqualTsDeterministic; dropping the outer `rule_id` filter (deletes
+other rules) reddens PruneKeepsNewest + others. Full suite **25/25**; gofmt + vet clean. The Postgres `id NOT IN` branch
+runs in CI (PG integration test skips locally without postgres:16).
+
+**Adversarial review (2 lenses — SQL correctness across backends / race + regression; 3 agents). 0 CONFIRMED, 1 refuted
+— clean.** The refuted finding (PG integration test uses only one rule) was correctly dismissed: a test-coverage
+observation, not a defect — the SQLite test already proves multi-rule isolation for the structurally identical NOT-IN
+pattern, and the SQL-correctness lens confirmed no backend-specific NOT-IN / NULL / LIMIT-in-subquery pitfall (id is PK
+/ rowid non-null; LIMIT-in-subquery valid on both; the 3 `?` rebind is positional-correct).
+
+**Shipped (PR #145, squash `300251d`, merged to `origin/main`).** Prod rolled forward to **`v0.4.0-89-g300251d`**; all 5
+smoke checks green. CI: all 15 checks + CodeQL green (incl. the PG integration test on the new branch).
+
+**Docs at close:** D-138 SHIPPED (this block); CHANGELOG [Unreleased] Fixed; `S73-AUDIT-FINDINGS.md` [4] ✅ DONE; ROADMAP
+§2.32 (5/8 shipped; 3 MEDIUM remain — [5]/[7]/[8]); RESUME-PROMPT ▶ START HERE → SESSION-77; `operator-expected.md` (no
+new action; [7] WS-token still the pending item); `sessions/SESSION-76.md` CLOSED; `sessions/SESSION-77.md` written
+(lead: [8] web SettingsPage silent error handlers — a quick web-only win that also exercises the web/vitest CI loop
+before the bigger [7] WS-ticket + [5] QoE-tenant changes). **No operator action required.**

@@ -1,5 +1,11 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-17, D-137 — SESSION-75)
+# Operator TODO — the items only YOU can do (updated 2026-07-17, D-137/D-138 — SESSION-75/76)
 
+> **S76 (D-138) needs NO operator action** — an internal fix to how per-rule alert history is trimmed (it could
+> over-trim under heavy concurrent alerting on a Postgres backend; now a single atomic statement). Live in prod
+> (`v0.4.0-89-g300251d`). Nothing to configure. The remaining S73 item worth your awareness is still the **admin-token-
+> in-WebSocket-URL log exposure ([7]), queued** — until it ships, treat your Caddy/docker logs as containing a live
+> admin credential.
+>
 > **S75 (D-137) needs NO operator action.** Shipped the last of the three higher-severity S73-audit findings (prod
 > `v0.4.0-87-ge266738`): the publisher ingest-health view (`/qoe/ingest`) is now correctly scoped per tenant — it had
 > been blending bitrate/fps/packet-loss numbers across tenants that happened to reuse the same app + stream name. **This
