@@ -10,6 +10,19 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ## [Unreleased]
 
+### Added
+
+- **Report-artifact retention pruning (D-143).** Scheduled report files (CSV/PDF) are now
+  auto-pruned once they age past `PULSE_REPORT_ARTIFACT_RETENTION_DAYS` (default 90; set 0 or
+  negative to keep forever). Previously artifacts accumulated indefinitely on the pulse-data
+  volume with no cleanup. The prune is strictly bounded — it removes only regular files
+  matching the generated `pulse-usage-*.{csv,pdf}` pattern inside the reports directory (never
+  the SQLite metastore or secret-key file that share the volume), runs on every scheduler tick
+  independent of schedule-listing outcome, and skips symlinks. Report artifacts are now also
+  persisted on the volume in the **base** compose (not just the hardened overlay), so
+  non-hardened deployments retain artifacts across restarts. (Closes the one confirmed
+  follow-up from the D-142 security-posture review.)
+
 ### Security
 
 - **Production container hardening + supply-chain sweep (D-142).** A cross-cutting

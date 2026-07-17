@@ -8869,3 +8869,33 @@ SecurityOpt=[no-new-privileges:true] Tmpfs=/tmp PULSE_REPORTS_DIR=/var/lib/pulse
 (version v0.4.0-93-g8858b5f, healthz 200, signed webhook 200, limits 512M/0.5cpu, 0 error lines) + SPA root 200 + **0
 read-only/EROFS/permission errors** across full post-recreate logs + 0 restarts. Rollback point `pulse-prod-pulse:pre-d142`
 tagged; backup taken pre-deploy (rc 0). PR #152 (squash-merged). **No operator action required.**
+
+## D-143 — S81 (2026-07-17): SHIPPED — report-artifact retention pruning (the S80 review's 1 confirmed follow-up)
+
+Closes the single LOW finding the S80/D-142 adversarial review confirmed: report artifacts, now persisted on the
+pulse-data volume (D-142), accumulated with **no prune**, sharing the volume with the SQLite metastore.
+
+**Feature.** New `PULSE_REPORT_ARTIFACT_RETENTION_DAYS` (config.go, default 90; `<=0` disables) → `SchedulerConfig.
+RetentionDays` (serve.go). `Scheduler.pruneArtifacts(now)` runs each tick (`reports/scheduler.go`): lists ONLY the top
+level of `ArtifactsDir` (`os.ReadDir`, no recursion), removes ONLY **regular files** (`e.Type().IsRegular()` excludes
+dirs AND symlinks) matching `isReportArtifact` (`pulse-usage-*.{csv,pdf}`) and older than the cutoff by mtime — so the
+metastore (`pulse_meta.db` + `-wal`/`-shm`) and `pulse_secret.key` sharing the dir can NEVER be removed, even if
+`ArtifactsDir` were mis-set to the volume root. Also set `PULSE_REPORTS_DIR=/var/lib/pulse/reports` in the **base**
+compose (not just the hardened overlay) so non-hardened deployments get persistence + meaningful pruning.
+
+**Adversarial review** (workflow: 2 finder lenses → refute-by-default, 6 agents): **4 findings, 0 refuted, all fixed
+pre-commit:** (HIGH) prune was gated behind the `ListDueReportSchedules` early-return → decoupled via a `defer` so it
+runs every tick even on a DB/volume error (else a full-volume I/O error defeats retention exactly when needed); (MEDIUM)
+guard was `e.IsDir()`, which does NOT exclude a pattern-named symlink → switched to `Type().IsRegular()`; (MEDIUM)
+`envInt` lacked `TrimSpace` (the k8s `--from-file` newline / Docker `--env-file` space hazard `envBool` already guards →
+`...DAYS=0` fell back to 90 = active deletion) → added `TrimSpace` (fixes envInt for all callers); (LOW) base compose
+`PULSE_REPORTS_DIR` (above).
+
+**Verified.** Full 25-pkg suite green; gofmt clean; **8 targeted mutations killed** (disabled-guard, age `Before`,
+`IsRegular`/symlink, prefix literal, `.pdf` suffix, cutoff sign, `defer` decouple, `envInt` TrimSpace); `compose config
+-q` clean (prod overlay set + base-only). **Prod-verified** (stamped rebuild — server change): built + stamped
+`v0.4.0-98-g641b4e2` (commit 641b4e2, asserted non-dev), `up -d pulse`, 5-check smoke all green + hardening STILL applied
+(read_only/cap_drop/no-new-privileges persisted through the rebuild) + reports scheduler started at
+`/var/lib/pulse/reports` + 0 read-only/permission/prune errors + SPA 200 + 0 restarts. Rollback `pulse-prod-pulse:pre-d143`
+tagged; backup rc 0. PR #155 (squash-merged). Prod now `v0.4.0-98-g641b4e2`. **★ ROADMAP §2.33 is now fully complete**
+(the follow-up closed). **No operator action required.**

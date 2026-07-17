@@ -11,7 +11,32 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-81.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-82.md`)
+
+**Session 2026-07-17 result: D-143 — S81 shipped report-artifact retention pruning (`PULSE_REPORT_ARTIFACT_RETENTION_DAYS`, default 90), closing the S80 review's one confirmed follow-up. ★ ROADMAP §2.33 (cross-cutting security-posture pass) is now COMPLETE. Prod-verified stamped rebuild `v0.4.0-98-g641b4e2`.**
+
+**★ S81** added `Scheduler.pruneArtifacts()` — strictly bounded to regular `pulse-usage-*.{csv,pdf}` files in the reports
+dir (never the metastore/secret-key sharing the volume), runs each tick independent of schedule-listing, skips symlinks.
+Base compose now persists artifacts too. **Its own adversarial review found 4 issues (HIGH prune-gated-behind-a-DB-error
+→ decoupled via defer; MEDIUM symlink guard; MEDIUM envInt whitespace; LOW base-compose persistence), ALL fixed
+pre-commit.** 8 mutations killed; full suite green; prod-verified (5-check smoke + hardening persisted through the
+rebuild + 0 read-only/prune errors). PR #155. **No operator action.** Evidence: `decisions.md` D-143.
+
+**★ SESSION-82 = first arc after §2.33.** The autonomous backlog is THINNING (4 internal passes done; 40+ findings).
+**Pick ONE at open (priority order):** (1) **§2.7 CI-promotions** IF the date has unlocked (**≥ 2026-07-23** — check it;
+today 07-17); (2) **§2.15 light-theme** IF `brandkit/tokens.json` already defines light values + `ThemeContext` carries
+theme state (autonomous — tokens are the source of truth, do NOT invent colors); (3) **OPERATOR CHECKPOINT** if neither
+is cleanly autonomous (surface the gated items with recommendations). Smaller autonomous fallbacks: web test-coverage,
+runbook/docs completeness, `/metrics` observability. **Prefer a concrete autonomous move first.** See
+`sessions/SESSION-82.md`.
+
+**⚠ OPERATOR DECISIONS PENDING (both non-blocking product calls):** **[20] audit-read model** AND **[5] per-tenant QoE
+alerting** (D-141). Also: AMS trial-expiry doc discrepancy (07-12 vs 07-27); GHCR anon → 401. **No NEW operator item from
+S81.**
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-81.md`)
 
 **Session 2026-07-17 result: D-142 — S80 shipped a CROSS-CUTTING security-posture pass (ROADMAP §2.33, the first non-subsystem audit): dependencies clean (Go govulncheck 0 reachable; web `npm audit` → 0 via `overrides`) + the internet-facing pulse container hardened (read-only rootfs, cap_drop:[ALL], no-new-privileges) with report artifacts moved onto the persistent volume. Prod-verified live.**
 
