@@ -2349,6 +2349,13 @@ components:
           type: [string, 'null']
         stream_id:
           type: [string, 'null']
+        tenant:
+          type: [string, 'null']
+          description: >
+            Scope the rule to one tenant (F6). Omit/empty = all tenants
+            (backward compatible). For QoE metrics (rebuffer_ratio, error_rate)
+            the per-stream reads are scoped to this tenant so a stream reused by
+            multiple tenants no longer blends their numbers.
 
     MaintenanceWindow:
       type: object
