@@ -9055,3 +9055,42 @@ and re-stales — left alone. Both noted in operator-expected + SESSION-86.
 **No operator action.** The loop remains in the low-frequency wait for the 07-23 §2.7 gate / operator input — this arc
 was a one-off verified-defect fix (stewardship), not a manufactured arc. Docs: D-147 (this block); ROADMAP §2.36 added;
 RESUME → SESSION-86; operator-expected S85 status; SESSION-85 CLOSED; SESSION-86 written.
+
+## D-148 — S86 (2026-07-17): SHIPPED — F6 multi-tenancy PHASE 1 (operator-directed "start F6"): server-side tenant resolution on the live endpoints; BUG-009 tenant portion CLOSED. Prod v0.4.0-112-g75031e7.
+
+**Operator named a priority mid-loop: "start F6"** (the biggest lever — one feature unblocking BUG-009's tenant filter,
+[5] per-tenant QoE alerts, and [20] audit-read). Per Lead B, verified status+viability against the code first, then took
+a bounded, verified Phase-1 vertical slice.
+
+**★ Key finding (verify-first):** F6 was NOT greenfield. The tenant registry already existed — a `tenants` table +
+`TenantRow` (id/name/**stream_pattern**/**meta_tag_key**/meta_tag_value) + full CRUD + admin `/admin/tenants` endpoints —
+and a working `reports.TenantMatcher` (meta-tag > stream-glob resolution), but it was used ONLY by billing reports. The
+LIVE pipeline carried no tenant: `query.LiveOverview`/`LiveStreams` accepted `?tenant=` and silently ignored it (BUG-009
+known-violation). So Phase 1 = wire server-side tenant resolution into the live path, not build a tenant model.
+
+**★ SHIPPED (PR #168 + #169, prod-rolled):**
+- **`internal/tenant`** (new shared pkg): relocated the canonical stream→tenant `Matcher` here so reports + query + future
+  alerts share ONE resolver (`reports.TenantMatcher` is now a thin type-alias → zero `accounting.go` churn) + a
+  `CachedResolver` (registry-backed, ~10 s TTL; on a meta-store load error it keeps the last-good matcher rather than
+  dropping to "unassigned" — a transient error must never WIDEN a tenant-scoped view).
+- **`query.Service`**: optional `TenantResolver` (`SetTenantResolver`, mirroring the existing `SetClusterDiscovery`
+  pattern). `LiveOverview` + `LiveStreams` resolve each live stream's tenant by `stream_pattern` glob (live streams come
+  from the REST poller, no beacon meta → glob only), **filter by `?tenant=`**, and populate `LiveStream.tenant`.
+  **Fail-closed:** an explicit `?tenant=X` with no match → empty (never a cross-tenant leak); single-tenant deployments
+  (no tenant rows) are unaffected (no `?tenant=` → all streams as before).
+- **Contract:** `LiveStream.tenant` added; `schema.d.ts` regenerated.
+- **`serve.go`** wires the `CachedResolver` from `metaStore.ListTenants`.
+- **Follow-up fix (PR #169, prod-verified):** `LiveStreams` empty result now serializes `items` as `[]` not `null`
+  (`type: array` contract) — surfaced by the live prod smoke, where fail-closed `?tenant=acme` returned `"items": null`.
+
+**Validation:** full 25-pkg Go suite + web (typecheck/lint/build) green; the tenant-filter guard is **mutation-proven**
+(flipping `!=`→`==` leaks a cross-tenant stream → test fails). New tests: matcher precedence/glob, cached-resolver
+(cache/TTL/stale-on-error/pre-load-empty), live filter+populate+fail-closed, `items:[]` serialization. **Prod-rolled**
+(server source changed): stamped rebuild → `v0.4.0-112-g75031e7`; 5-check smoke green (healthz 200, signed webhook 200,
+limits 512M/0.5cpu, 0 error lines, version stamped) + F6-live-verified (single-tenant prod: `LiveStream` has no `tenant`
+field; `?tenant=acme` → `{"items":[]}` fail-closed). Rollback tags `pulse-prod-pulse:pre-d148` / `:pre-d148-fix`.
+
+**★ BUG-009 tenant portion → FIXED.** **F6 is a phased feature:** Phase 1 (this) = live resolution + BUG-009. **Phase 2
+= [5]** (thread the resolved tenant into the alert evaluator for tenant-scoped QoE alert rules; the `internal/tenant`
+resolver is reusable there). **Phase 3 = [20]** (audit-log read model). No operator action for Phase 1. Docs: D-148 (this
+block); ROADMAP §2.37; RESUME → SESSION-87; operator-expected F6 status; SESSION-86 CLOSED; SESSION-87 written (F6 Phase 2).

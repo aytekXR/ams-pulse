@@ -11,7 +11,36 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-86.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-87.md`)
+
+**Session 2026-07-17 result: D-148 — the operator named "start F6" and S86 shipped F6 multi-tenancy PHASE 1: server-side tenant resolution wired into the live endpoints. `GET /live/overview` + `/live/streams` now actually filter by `?tenant=` (server-resolved via the tenant registry's `stream_pattern` glob) and expose `LiveStream.tenant`. ★ BUG-009 tenant portion CLOSED. Prod-rolled `v0.4.0-112-g75031e7`; 5-check smoke + live-verified. PR #168 + #169.**
+
+**★ S86 verify-first found F6 is NOT greenfield** — the tenant registry (`tenants` table + `stream_pattern`/`meta_tag`
+rules + CRUD + `/admin/tenants`) and a `TenantMatcher` already existed but were used only by billing. Phase 1 relocated
+the matcher to a shared `internal/tenant` package (+ a `CachedResolver` that keeps last-good rules on a meta hiccup —
+never widens a tenant view), added an optional `query.TenantResolver`, and wired the live filter. **Fail-closed** (no
+match → `[]`, never a cross-tenant leak); single-tenant prod unaffected. Mutation-proven; full suite + web green. A
+follow-up (#169) fixed empty-result `items:null`→`[]` (surfaced by the live prod smoke). Evidence: `decisions.md` D-148;
+ROADMAP §2.37.
+
+**★ SESSION-87 = F6 PHASE 2 — [5] tenant-scoped QoE alert rules** (the next slice of the operator's "start F6"). Today the
+alert evaluator has no tenant, so a QoE alert rule for a stream that two tenants happen to reuse (same app + stream name)
+blends both tenants' rebuffer/error numbers ([5], S73 defer-by-ruling). **Phase 2 threads the resolved tenant through the
+alert path:** add an optional tenant scope to `AlertRule`/`AlertScope` (contract-first — a new nullable `tenant` on the
+rule), resolve the live stream's tenant (reuse the `internal/tenant` resolver from Phase 1), and have the evaluator match
+a tenant-scoped rule only against that tenant's streams. **At open:** re-read D-141 (the [5] ruling) + S73-AUDIT-FINDINGS
+[5] + the alert evaluator (`internal/alert`) + `AlertRule`/`AlertScope` shapes; design the tenant-on-rule contract; then
+implement + mutation-prove + adversarial-review (data-isolation) + prod-roll. This is a real FEATURE with a UX dimension
+(how a rule targets a tenant) — scope it as a bounded increment like Phase 1. See `sessions/SESSION-87.md`. **(If mid-way
+the operator names a different priority, Lead B still applies — do their pick.)**
+
+**⚠ OPERATOR DECISIONS STILL PENDING (in `operator-expected.md`):** the other checkpoint items (§2.6, §2.1, §2.18, §2.19,
+§2.12), the §2.7 date-gate (07-23), the AMS trial-licence expiry confirmation, and the 3 E2E-validation follow-ups (G-21
+cluster pagination, credential rotation, G-22 webhook mapping). F6 [20] audit-read is Phase 3. None blocks Phase 2.
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-86.md`)
 
 **Session 2026-07-17 result: D-147 — S85 was the low-frequency-wait phase, but a verify-before-idling adversarial sweep (3 scouts + judge) caught a real non-gated defect and fixed it: `GET /reports/export` was implemented + web-consumed but ABSENT from the OpenAPI contract (a CLAUDE.md §3 "Contracts before code" violation). Documented it + regenerated `schema.d.ts` + extended param-conformance. Contract/test/types only — no prod roll (prod stays `v0.4.0-98-g641b4e2`). PR #162 (main e3abc3b), 15/15 CI.**
 

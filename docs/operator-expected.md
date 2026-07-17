@@ -1,5 +1,20 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-17, D-147 — SESSION-85; operator status-check response)
+# Operator TODO — the items only YOU can do (updated 2026-07-17, D-148 — SESSION-86; F6 started)
 
+> # ▶ F6 MULTI-TENANCY STARTED (2026-07-17, D-148) — you said "start F6"; Phase 1 is SHIPPED, no action needed
+>
+> Phase 1 (the foundation) is live in prod (`v0.4.0-112-g75031e7`, PR #168+#169): the live dashboard now resolves each
+> stream's owning tenant server-side (from the tenant registry's stream-name pattern) and actually honors the `?tenant=`
+> filter on `/live/overview` + `/live/streams` — closing a long-standing known-violation (BUG-009). **Single-tenant
+> deployments (the default) are unaffected**; this only activates when you configure tenants at `/admin/tenants` with a
+> `stream_pattern` (e.g. `acme-*`). **Nothing for you to do.**
+>
+> **The loop is now continuing F6 autonomously (no input needed):** Phase 2 = per-tenant QoE alert rules ([5]); Phase 3 =
+> the audit-log read model ([20]). If at any point you want to redirect (pause F6, pick a different item, or change the
+> per-tenant-alert UX), just say so. **One design note you may want to weigh in on when Phase 2 lands:** how an alert rule
+> should target a tenant (a `tenant` field on the rule) — I'll implement a sensible default and you can adjust.
+>
+> ---
+>
 > # ▶ E2E-VALIDATION FOLLOW-UPS (2026-07-17) — 3 items surfaced by the Full-E2E-Validation work (PR #166)
 >
 > The end-to-end + AMS-integration test extension (`docs/testing/full-e2e-validation-run.md`) shipped 4 verified Go
