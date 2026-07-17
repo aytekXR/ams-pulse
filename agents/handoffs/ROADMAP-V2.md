@@ -542,8 +542,13 @@ backward-compatible); `QoEReader.QoEForStream` gains a `tenant` param passed to 
 Mutation-proven; scoping applies to the tenant-blendable QoE-read metrics (rebuffer_ratio/error_rate); ingest_bitrate_floor
 is publisher-side and unaffected.
 
-**Phase 3 = [20] audit-log read model** (the last F6 item; an S62 defer-by-ruling product call). After Phase 3, F6 core is
-complete; remaining multi-tenant polish is demand-driven. See SESSION-88.
+**Phase 3 = [20] audit-log read model — ADJUDICATED to OPERATOR (D-150, S88; no code).** Verify-first concluded [20] has
+no autonomous slice: (1) the S62 finding is the deliberate S43/D-105 "reads-open" ACCESS model — an operator product call
+(keep reads open vs gate the admin-read surface), already escalated (D-130); (2) there is no tenant-scoping angle — the
+`audit_log` table / `AuditEntry` carry NO tenant column (global admin config records), so an optional tenant filter is
+infeasible. **★ F6 buildable code is COMPLETE** (BUG-009 ✅ D-148, [5] ✅ D-149, [20] = operator call). Deeper multi-tenant
+work (tenant-scoped auth — `APIToken` has no tenant field, S73 [1]; a tenant-management web UI, §2.19 territory) is a
+larger operator-scoped expansion, demand-driven — not started autonomously.
 
 ### 2.36  OpenAPI contract drift — document GET /reports/export  [✅ DONE — contract/test/types only, no prod deploy]  ✅ S85 (D-147, 2026-07-17, PR #162, main e3abc3b)
 

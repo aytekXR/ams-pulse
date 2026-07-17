@@ -1,5 +1,14 @@
 # SESSION-88 — planned at S87 close (D-149) — F6 PHASE 3: [20] audit-log read model (the LAST F6 item; may be a product call)
 
+> **✅ CLOSED 2026-07-18 (D-150).** Adjudicated [20] against the code (verify-first, no guessing): it is an **OPERATOR
+> PRODUCT CALL with no autonomous code slice.** Two code-traced reasons — (1) the S62 finding is the deliberate S43/D-105
+> "reads-open" ACCESS model (`requireWriteScope` exempts all GETs), a product decision already escalated (D-130), not to be
+> reversed unilaterally; (2) the `audit_log` table / `AuditEntry` carry NO tenant column (global admin config records), so
+> the "option B" tenant filter is infeasible. Surfaced to the operator (operator-expected.md sharpened to a clean (a)
+> keep-open / (b) gate-admin-reads choice). **★ F6 buildable code COMPLETE (Phases 1+2: BUG-009 ✅, [5] ✅).** No code, no
+> prod roll (prod stays v0.4.0-114-ge295795). → **SESSION-89 = low-frequency wait** (F6 done; remaining work gated/operator).
+> See RESUME ▶ START HERE.
+
 > Written by SESSION-87 close (2026-07-18). Repo `/home/aytek/repo/ams-pulse` on VPS `161.97.172.146`
 > (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE.** Prod at **v0.4.0-114-ge295795** (F6 Phase 1+2 live).
