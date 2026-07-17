@@ -1,5 +1,17 @@
 # SESSION-72 — planned at S71 close (D-133)
 
+> ## ✅ CLOSED (2026-07-17, D-134) — SHIPPED [22] + [25] — ★ S62 AUDIT COMPLETE
+> The final two S62 LOW findings shipped (PR #138, prod `v0.4.0-82-g8355127`): [22] `cert_expiry lt 0` now fires for an
+> expired cert — the adversarial review caught that the audit's literal 1-line fix was DEAD CODE in production (an
+> expired cert fails the verifying handshake, so the expiry branch was never reached), so the real fix detects the
+> `x509.Expired` verification error and returns -1 (keeping TLS verification ON — no `InsecureSkipVerify` in production,
+> which had tripped CodeQL); [25] the WebRTC stats-hold uses `time.NewTimer`+`defer Stop` instead of a leaked
+> `time.After`. 3/3 mutants killed; suite 25/25; two adversarial-review passes (pass 1 found the [22] dead-code gap;
+> re-review clean). **This completes the entire 25-finding S62 audit** (24 shipped + [20] deferred). **No operator
+> action.** See `decisions.md` D-134 and `sessions/SESSION-73.md` for the next arc (a third fresh subsystem audit of the
+> un-swept collector/store/query/config subsystems). Everything below is the original pre-session plan (historical).
+
+
 > Written by SESSION-71 close (2026-07-16). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE + `agents/handoffs/S62-AUDIT-FINDINGS.md`** (the 25-finding ledger).

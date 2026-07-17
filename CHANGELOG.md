@@ -67,6 +67,14 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **TLS cert-expiry alerts + WebRTC probe timer (D-134).** Two fixes from the S62 subsystem audit
+  (which this closes): (1) an alert rule watching for an **already-expired** TLS certificate
+  (`cert_expiry lt 0`) never fired — an expired cert fails the TLS handshake, and the checker treated
+  that as a generic error and skipped it; the checker now recognizes an expiry-specific verification
+  failure and reports it so the rule fires (certificate verification remains enabled — a self-signed or
+  internal-CA endpoint is a documented limitation, not silently trusted); (2) a WebRTC synthetic probe
+  leaked a runtime timer for up to the stats-hold duration when its context was cancelled mid-hold — the
+  timer is now stopped promptly. (Found by the S62 subsystem audit, findings [22] and [25].)
 - **License manager — error visibility, tier validation, diagnostics (D-133).** Three fixes from
   the S62 subsystem audit: (1) when a configured license key is **rejected** (bad signature, malformed,
   unreadable offline file), the server now logs a warning and degrades to Free tier — previously the

@@ -1,5 +1,13 @@
 # S62 subsystem audit — confirmed findings ledger (D-124, 2026-07-16)
 
+> ## ✅ AUDIT COMPLETE (2026-07-16 → 2026-07-17, S62→S72, D-124…D-134)
+> All 25 findings dispositioned: **24 shipped** (D-125…D-134, PRs #119…#138) + **1 deferred-by-ruling**
+> ([20] audit-log read model — an adjudicated product call carried to the operator, see D-130). All 6 HIGH,
+> all 15 MEDIUM, and 3 of 4 LOW shipped; [20] is the sole open item and is non-code. Every fix was
+> re-verified against the code (verified CORE, not literal scope — S66/S67/S68/S70/S72 each overturned or
+> deepened the audit's suggestion), mutation-proven, and adversarially reviewed. Prod at **v0.4.0-82-g8355127**.
+> Next work is post-audit roadmap (ROADMAP-V2 §2) — see `sessions/SESSION-73.md`.
+
 > Produced by the SESSION-62 adversarial audit workflow (7 finders + refute-by-default verifiers,
 
 > 33 agents). **25 CONFIRMED (6 HIGH, 15 MEDIUM, 4 LOW), 1 refuted.** These are agent findings —
@@ -409,7 +417,17 @@ MUTATION TEST: Add url.Parse + scheme whitelist + RFC-1918/link-local denylist i
 SEVERITY: Medium is correct. Exploitation requires an admin-scoped token (highest privilege tier in the app), and the observable side-channel is narrow (TTFB + status code, no response body). However, the AWS instance metadata endpoint is a standard SSRF escalation target that can expose IAM role credentials even to an app-level admin who lacks cloud IAM access, so the risk is not trivial.
 
 ## [22] LOW — CertChecker.DaysUntilExpiry returns 0 for already-expired cert but docstring promises -1 — cert_expiry lt 0 rule never fires
-- **loc:** `server/internal/alert/wave2.go:251`  ·  **lens:** alert-evaluator  ·  status: ⏳ TODO
+- **loc:** `server/internal/alert/wave2.go:251`  ·  **lens:** alert-evaluator  ·  status: ✅ DONE (D-134, S72, PR #138, prod v0.4.0-82-g8355127)
+- **DONE (D-134):** Took the verified CORE, which adversarial review showed was DEEPER than the ledger's
+  1-line suggestion: returning -1 from the `now.After` branch was **dead code in production** — with the
+  default (verifying) TLS config an expired cert fails the handshake, so `DaysUntilExpiry` returned
+  `(-1, error)` and `evalCertExpiry` skipped it, never reaching that branch. Real fix (keeps verification
+  ON — no `InsecureSkipVerify` in production, avoiding a CodeQL `go/disabled-certificate-check` alert):
+  detect the verification failure whose reason is `x509.Expired` (the common trusted-CA-expired case) and
+  return `(-1, nil)` so `cert_expiry lt 0` fires; the `now.After` branch also returns -1 (docstring-consistent)
+  for callers that supply skip-verify. Mutation-proven (x509.Expired detection + the -1 sentinel). Known
+  limitation (documented): a self-signed/internal-CA cert fails verification for THAT reason, so its expiry
+  is still not monitored — out of scope for this LOW, left to a future explicit skip-verify opt-in.
 - **mechanism:** The docstring for CertChecker.DaysUntilExpiry states 'Returns -1 on error or if certificate is already expired'. The implementation at line 251–252 returns (0, nil) when now.After(leaf.NotAfter). An operator who wants to detect an already-expired certificate (days remaining == 0) would configure operator=lt, threshold=0. compare(0, "lt", 0) = false, so the rule never fires for an expired cert. The same operator using lte instead of lt gets compare(0, "lte", 0) = true and receives the alert correctly. The standard recommended rule of lt 14 is unaffected (compare(0, "lt", 14) = true).
 - **scenario:** TLS cert expired yesterday. Rule: {metric:cert_expiry, operator:lt, threshold:0}. DaysUntilExpiry returns (0, nil). compare(0, "lt", 0) = false → rule does not fire. Operator believes they will be alerted when the cert expires but receives no notification. The same operator using lte 0 would have been alerted.
 - **mutation/test:** Change 'return 0, nil' to 'return -1, nil' for the already-expired branch and update the docstring to match. A test using FakeCertChecker{DaysLeft: -1} — or the real CertChecker against a mock TLS server presenting an expired cert — with a rule {operator:lt, threshold:0} that asserts a firing notification would redden if the -1 is reverted to 0.
@@ -461,7 +479,12 @@ A test using export_test.go to inject a GenerateKey failure, calling New() with 
 This is inside a block at line 194 that checks `err2 != nil` (the error from `ed25519.GenerateKey`). The outer condition at line 191 fires when `err != nil` OR `len(pubKeyBytes) != ed25519.PublicKeySize`. In the length-mismatch sub-path, `hex.DecodeString` succeeded so `err == nil`. When `GenerateKey` then fails (`err2 != nil`), the return at line 195 wraps `err` (which is `nil`), not `err2` (the actual cause). The caller sees "license: init public key: <nil>" with no indication of what actually went wrong. The fix is a one-character change: wrap `err2` instead of `err`. A test asserting `errors.Is(returnedErr, injectedErr2)` would fail with the unfixed code because the wrapped value is `nil`, not `err2`.
 
 ## [25] LOW — continueWebRTCICE: time.After(hold) timer not stopped on context cancellation during stats hold, leaks runtime timer
-- **loc:** `server/internal/prober/probe_webrtc_ice.go:270`  ·  **lens:** prober-core  ·  status: ⏳ TODO
+- **loc:** `server/internal/prober/probe_webrtc_ice.go:270`  ·  **lens:** prober-core  ·  status: ✅ DONE (D-134, S72, PR #138, prod v0.4.0-82-g8355127)
+- **DONE (D-134):** Replaced the abandoned `time.After(hold)` in the stats-hold select with
+  `time.NewTimer(hold)` + `defer holdTimer.Stop()`, so an early ctx cancellation releases the timer from
+  the runtime heap immediately instead of leaking it for the full hold. The block returns on both select
+  arms, so the defer runs exactly once. Behavior-preserving — guarded by the existing
+  `TestProbeWebRTC_CtxExpiredDuringHold` (verified a broken ctx arm reddens it).
 - **mechanism:** At line 266–274, after ICE connects, the function waits for the stats-collection hold:
 `select { case <-ctx.Done(): return result; case <-time.After(hold): }`. If `ctx.Done()` fires first (e.g., probe timeout fires while waiting for RTP accumulation), the channel returned by `time.After(hold)` is abandoned. Go's runtime cannot garbage-collect the backing `time.Timer` until it fires — 2 seconds later. The timer holds a reference in the runtime's timer heap and its goroutine-equivalent slot for its full duration. `time.After` is explicitly documented as leaking when abandoned without Stop. The fix exists in the standard library: `time.NewTimer` + `defer t.Stop()`.
 - **scenario:** A WebRTC probe has TimeoutS=3. ICE connects at t=1s. The stats hold starts at t=1s with hold=2s (rtpStatsHold). The probe context expires at t=3s (1s into the hold). `ctx.Done()` fires in the select at line 266, `continueWebRTCICE` returns. The timer created by `time.After(2s)` at line 270 was created at t=1s and fires at t=3s — exactly when the context already expired. In this scenario the leak is self-cleaning in ~1s. But if the context expires at t=1.01s (just after ICE connects), `time.After(2s)` has ~1.99s left before it self-cleans. With `cfg.Workers=4` probes all reaching ICE-connected simultaneously and all timing out during the hold, 4 timers are leaked simultaneously. Under high probe rates or frequent runner restarts, this accumulates.

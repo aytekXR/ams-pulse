@@ -11,7 +11,38 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-72.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-73.md`)
+
+**Session 2026-07-17 result: D-134 — S72 shipped the final S62 LOW pair ([22] cert-expiry detection, [25] WebRTC hold-timer leak). ★★ THE ENTIRE S62 SUBSYSTEM AUDIT IS COMPLETE — 25/25 dispositioned (24 shipped + [20] deferred).**
+
+**★ S72** fixed the last two audit findings (PR #138, prod `v0.4.0-82-g8355127`):
+- **[22]** a `cert_expiry lt 0` rule now fires for an already-expired cert. The adversarial review caught that the
+  audit's literal 1-line fix was DEAD CODE in production (an expired cert fails the verifying TLS handshake, so the
+  expiry branch was never reached). The real fix detects the `x509.Expired` verification error and returns the `-1`
+  sentinel — keeping TLS verification ON (an interim `InsecureSkipVerify` version tripped CodeQL; the final approach
+  avoids it). Self-signed/internal-CA expiry monitoring is a documented limitation left to a future opt-in.
+- **[25]** the WebRTC stats-hold uses `time.NewTimer`+`defer Stop` instead of a leaked `time.After` timer.
+3/3 mutants killed; suite 25/25; two review passes (pass 1 found the [22] dead-code gap; re-review clean). **No operator
+action.** Evidence: `decisions.md` D-134.
+
+**★ SESSION-73 = the FIRST post-audit session.** The S62 backlog (§2.31) is empty. Re-read ROADMAP-V2 §2 / assessment §5
+and pick the next move. **Suggested lead (autonomous, high-leverage, proven pattern): a THIRD fresh subsystem
+adversarial audit** of the still-un-swept subsystems — the collector pipeline (kafka/beacon/webhook/restpoller/ingest/
+sessions/aggregator), storage (clickhouse+meta), query/reports, config/cluster/amsclient, and (stretch) the web
+frontend. Produce `S73-AUDIT-FINDINGS.md` + a ROADMAP §2.32 tracker, then work the findings in clusters like S62. See
+`sessions/SESSION-73.md` for the full scope + audit-open pipeline.
+
+**Alternatives / gated:** §2.7 CI promotions (date-gated ≥ 2026-07-23), §2.15 brand phase 2 + §2.19 UI refactor
+(OPERATOR-DIRECTED design work), §2.12 Mobile SDKs [L], and the operator-gated items (§2.1 branch protection, §2.6
+unsigned-webhook, §2.18 item 6 / GHCR / licence ceremony).
+
+**⚠ CARRIED operator items (unchanged):** the **[20] audit-read product call** (operator-expected.md — keep reads open
+or gate the whole admin-read surface); AMS trial-expiry doc discrepancy (07-12 vs 07-27); GHCR anon → 401; the S63
+email-STARTTLS behavior note (informational).
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-72.md`)
 
 **Session 2026-07-16 result: D-133 — S71 shipped the license cluster ([12] log activation failures, [23] tier validation, [24] pubkey err2). ★ ALL S62 HIGH+MEDIUM now done — only 2 LOW remain ([22], [25]).**
 
