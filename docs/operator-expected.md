@@ -1,5 +1,15 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-17, D-142 — SESSION-80)
+# Operator TODO — the items only YOU can do (updated 2026-07-17, D-143 — SESSION-81)
 
+> **S81 (D-143) needs NO operator action.** Generated report files (the scheduled CSV/PDF exports) are now automatically
+> cleaned up after 90 days, so they can't pile up forever on the data volume. You can change the window with
+> `PULSE_REPORT_ARTIFACT_RETENTION_DAYS` (set 0 to keep them forever) — but the default is sensible and nothing needs
+> configuring. Live in prod (`v0.4.0-98-g641b4e2`), verified. This closes the last loose end from the S80 security pass.
+> The two product decisions below ([20] audit-read model, [5] per-tenant QoE alerting) still await your preference —
+> neither is urgent or blocking. **Heads-up:** with four internal audit/hardening passes now done and the security surface
+> well-covered, the remaining high-value work is increasingly YOUR call (branch protection, the GHCR/licence ceremony, the
+> unsigned-webhook mode, and the UI direction for light-theme/density). A consolidated checkpoint may land in a coming
+> session so you can pick the next wave.
+>
 > **S80 (D-142) needs NO operator action.** A cross-cutting security-posture pass, now live in prod
 > (`v0.4.0-93-g8858b5f`). Two parts, both self-contained: **(1) dependencies** — the Go server has **zero reachable**
 > known vulnerabilities, and the web app's `npm audit` is now **clean** (the three flagged packages were build/test-only

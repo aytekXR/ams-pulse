@@ -1,5 +1,17 @@
 # SESSION-81 — planned at S80 close (D-142) — the S80 review's one confirmed follow-up
 
+> ## ✅ CLOSED (2026-07-17, D-143) — report-artifact retention prune SHIPPED → ★ §2.33 COMPLETE
+> Shipped `PULSE_REPORT_ARTIFACT_RETENTION_DAYS` (default 90; `<=0` disables) + `Scheduler.pruneArtifacts()` — strictly
+> bounded to regular `pulse-usage-*.{csv,pdf}` files in the reports dir (never the metastore/secret-key), runs each tick
+> independent of schedule-listing. Also persisted artifacts on the volume in the BASE compose. **Its own adversarial
+> review found 4 issues (HIGH: prune gated behind a schedule-listing error → decoupled via defer; MEDIUM: symlink guard
+> via Type().IsRegular(); MEDIUM: envInt TrimSpace; LOW: base-compose persistence), ALL fixed pre-commit.** 8 mutations
+> killed; full suite green. **Prod-verified** stamped rebuild `v0.4.0-98-g641b4e2` — 5-check smoke green, hardening
+> persisted through the rebuild, reports scheduler at /var/lib/pulse/reports, 0 read-only/prune errors. PR #155
+> squash-merged. **This completes ROADMAP §2.33.** **No operator action.** See `decisions.md` D-143 and
+> `sessions/SESSION-82.md` for the next arc. Everything below is the original pre-session plan.
+
+
 > Written by SESSION-80 close (2026-07-17). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE.** Prod at **v0.4.0-93-g8858b5f**; the pulse container now runs
