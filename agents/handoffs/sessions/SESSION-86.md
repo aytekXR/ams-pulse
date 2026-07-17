@@ -1,5 +1,13 @@
 # SESSION-86 — planned at S85 close (D-147) — STILL THE LOW-FREQUENCY WAIT
 
+> **✅ CLOSED 2026-07-17 (D-148).** The wait ended mid-session: the operator named **"start F6"** (Lead B). Verify-first
+> found F6's tenant registry already existed (used only by billing); Phase 1 wired server-side tenant resolution into the
+> live endpoints (`?tenant=` filter + `LiveStream.tenant`), closing BUG-009's tenant portion. New shared `internal/tenant`
+> package (Matcher + CachedResolver); mutation-proven; full suite + web green; prod-rolled `v0.4.0-112-g75031e7` (5-check
+> smoke + live-verified); follow-up #169 fixed empty `items:null`→`[]`. Also this session (before F6): the E2E
+> test-extension (#166/#167) + operator status menu (#164) + test-design doc (#165) + D-147 close (#162/#163). → **SESSION-87
+> = F6 Phase 2 ([5] tenant-scoped alerts).** See RESUME ▶ START HERE.
+
 > Written by SESSION-85 close (2026-07-17). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE.** Prod at **v0.4.0-98-g641b4e2** (hardened; report-artifact retention).
