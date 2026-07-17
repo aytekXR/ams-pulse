@@ -1,5 +1,16 @@
 # SESSION-82 — planned at S81 close (D-143) — first arc after §2.33 complete
 
+> ## ✅ CLOSED (2026-07-17, D-144) — OPERATOR CHECKPOINT (autonomous backlog exhausted)
+> Verified each remaining candidate against the code: option 2 (§2.15 light-theme) was ALREADY DONE (D-077, commit
+> 08922ff — light theme + density + motion; fixed the stale ROADMAP line); option 1 (§2.7) is date-locked to 07-23; the
+> assessment bug backlog is all fixed except BUG-009's `tenant` part. So option 3 (operator checkpoint) was the live one.
+> **Key synthesis: BUG-009 (tenant), S73 [5] (QoE cross-tenant), S62 [20] (audit-read) all converge on F6 multi-tenancy
+> (no server-side tenant→stream assignment) — one operator decision dispositions all three.** Delivered a consolidated
+> checkpoint in `operator-expected.md` with a recommendation per gated item. No code change → no prod deploy. Docs PR
+> only. See `decisions.md` D-144 and `sessions/SESSION-83.md` (§2.7 at 07-23, else a bounded polish arc). Everything below
+> is the original pre-session plan.
+
+
 > Written by SESSION-81 close (2026-07-17). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE.** Prod at **v0.4.0-98-g641b4e2**. The pulse container runs read-only-rootfs +

@@ -313,7 +313,7 @@ sustained multi-viewer traffic AND a sub-hour windowing design exists.
 
 ---
 
-### 2.15  Brand adoption — `brandkit/` → product UI  [M–L]  (OPERATOR-DIRECTED, D-071) — ✅ PHASE 1 DONE S12 (D-072, 2026-07-10; light theme/density/motion = phase 2 backlog; ships to prod with the next rollout — v0.3.0 proposed)
+### 2.15  Brand adoption — `brandkit/` → product UI  [M–L]  (OPERATOR-DIRECTED, D-071) — ✅ PHASE 1 DONE S12 (D-072) · ✅ PHASE 2 DONE (light theme + density modes + motion tokens, D-077, commit 08922ff) — verified S82/D-144: `theme.ts` + `ThemeContext` (localStorage + prefers-color-scheme + data-theme stamping), a Sun/Moon toggle in `Layout.tsx`, `[data-theme="light"]` token overrides in global.css with WCAG-adjusted colors, and theme/density tests. §2.15 is COMPLETE; §2.19 (full UI/UX refactor via uipro) is the only remaining UI item and stays operator-directed.
 
 **Why:** The operator landed `brandkit/` at the repo root (2026-07-10, D-071) — a complete
 brand & design package: machine-readable `design-system/tokens.json` (dark+light token
