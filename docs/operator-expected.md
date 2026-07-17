@@ -1,5 +1,36 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-17, D-147 — SESSION-85)
+# Operator TODO — the items only YOU can do (updated 2026-07-17, D-147 — SESSION-85; operator status-check response)
 
+> # ▶ OPERATOR STATUS RESPONSE (2026-07-17) — you asked "what's expected of me?" Here's the whole menu.
+>
+> **Nothing is BLOCKING autonomous progress** — the loop is healthy and will keep going on its own. But you are the only
+> one who can unblock the *next wave* of substantive work. If you want the loop to resume big-ticket work before it
+> naturally unlocks, **pick one line below and say it** (e.g. "start F6", "do the GHCR release", "keep polishing X"):
+>
+> | # | Decision (only you can make) | My recommendation | Unblocks |
+> |---|------------------------------|-------------------|----------|
+> | 1 | **F6 multi-tenancy** — build server-side tenant→stream ownership | Defer unless a multi-tenant customer is imminent | [5] per-tenant QoE, [20] audit-read model, BUG-009 tenant filter |
+> | 2 | **§2.6 unsigned-webhook mode** — allow the AMS webhook without HMAC signing | Keep signing required (safer; REST poll already meets the latency budget) | a convenience ingest mode |
+> | 3 | **§2.1 branch protection** — set required-status-checks + PR review on `main` (GitHub repo-admin; I cannot) | Enable it; pair with §2.7 below | CI merge-gating enforcement |
+> | 4 | **§2.18 GHCR-public + licence ceremony** — flip the released image to public GHCR, sign the vendor licence | Do it at the first public release tag | marketplace / anonymous pulls (today 401) |
+> | 5 | **§2.19 full UI/UX refactor** — a larger design pass beyond the base brand adoption | Not needed for GA; revisit post-launch | optional design polish |
+> | 6 | **§2.12 mobile SDKs** (iOS Swift / Android Kotlin) | Demand-driven; defer until a customer needs it | native player SDKs |
+>
+> **The ONE autonomous move already scheduled (no input needed):** §2.7 CI-job promotions unlock **2026-07-23** — the loop
+> will flip the soft CI jobs (`web-e2e`/`csp-e2e`/`e2e`/`docker-build`) to required then, and surface the
+> branch-protection half (decision 3 above) to you.
+>
+> **The ONE time-sensitive confirmation still open (carried many sessions):** the **AMS trial-licence expiry** — two docs
+> disagree (`deploy/runbooks/self-hosted-ams.md` says 2026-07-12, this ledger says 2026-07-27). An autonomous session
+> cannot resolve it (AMS admin creds are yours; AMS enforces the licence only on restart, so live ingest doesn't prove
+> which date is right). **Please check the real expiry in the AMS admin console** and tell me — if it has already lapsed,
+> the next `antmedia` restart = total ingest death.
+>
+> **Two NEW non-gated housekeeping items I can do WITHOUT you** (noted so you're aware; I'll pick them up in a future
+> low-priority arc unless you say otherwise): the CHANGELOG has no `[0.4.0]` section, and the `VERSION` file still reads
+> `0.1.0` (cosmetic — the build uses git tags).
+>
+> ---
+>
 > # ▶ S85 STATUS (2026-07-17, D-147) — NO operator action required
 >
 > The loop is in the low-frequency-wait phase (the safe bounded backlog is exhausted). This session did NOT manufacture
