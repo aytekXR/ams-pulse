@@ -1,5 +1,44 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-17, D-143 — SESSION-81)
+# Operator TODO — the items only YOU can do (updated 2026-07-17, D-144 — SESSION-82)
 
+> # ★ CONSOLIDATED CHECKPOINT (S82, 2026-07-17) — the autonomous work has caught up to you
+>
+> Four internal passes are done (three subsystem security audits + one cross-cutting supply-chain/container-hardening
+> pass), 40+ findings shipped, the web UI's brand adoption (including light theme) is complete, and prod is hardened and
+> stable at **v0.4.0-98-g641b4e2**. I verified every remaining roadmap candidate against the actual code: the concrete
+> autonomous backlog is now exhausted, and **the next high-value moves are decisions only you can make.** Nothing here is
+> on fire — this is a hand-back so you can pick the next wave. Each item has my recommendation.
+>
+> **1. Multi-tenancy (F6) — ONE decision that unblocks THREE findings.** The biggest lever. Three separate items —
+>    [5] QoE metrics blending across tenants, [20] the audit-log read model, and BUG-009 (the `tenant` filter on the
+>    live endpoints) — all trace to the same gap: Pulse has no server-side notion of "which tenant owns this stream"
+>    (tenants are self-declared by the player beacon; the live pipeline and alert rules carry no tenant). **If your
+>    deployments are single-tenant (the default self-hosted model), none of these affect you — recommend documenting them
+>    as known multi-tenant-only limitations and moving on.** If you sell to multi-tenant operators (Business+ tier F6),
+>    this is a real feature to build (tenant→stream assignment threaded through the snapshot + alert rules). *My rec:
+>    defer unless a multi-tenant customer is imminent.*
+>
+> **2. Unsigned-webhook mode (§2.6)** — a product decision on whether to allow the AMS webhook without HMAC signing
+>    (convenience vs. security). *My rec: keep signing required; it's the safer default and already works.*
+>
+> **3. Branch protection (§2.1)** — enable required-status-checks + PR review on `main` in GitHub settings (I can't set
+>    repo admin settings). The CI jobs are all green and stable, so this is low-risk to turn on. *My rec: enable it;
+>    optionally pair with promoting the soft CI jobs to required — see §2.7 below.*
+>
+> **4. GHCR-public + licence ceremony (§2.18)** — publishing the released image to a public GHCR and the vendor licence
+>    signing. Anonymous GHCR pulls currently 401. *My rec: do this when you cut the first public release tag.*
+>
+> **5. UI/UX full refactor (§2.19)** — an optional larger design pass (the base brand adoption is already done). Needs
+>    your direction on scope/priority. *My rec: not needed for GA; revisit post-launch.*
+>
+> **6. Mobile SDKs (§2.12)** — large, per-platform. *My rec: demand-driven; defer until a customer needs it.*
+>
+> **What I'll do autonomously next (no input needed):** **§2.7 CI-job promotions unlock on 2026-07-23** (flip the
+> soft web-e2e/csp-e2e/e2e/docker-build jobs to required). SESSION-83 will do this once the date passes; until then the
+> autonomous loop stays in a quiet/low-frequency phase. If you'd like me to pick up any item above (e.g. start F6, or a
+> web test-coverage / docs-completeness polish pass), just say so.
+>
+> ---
+>
 > **S81 (D-143) needs NO operator action.** Generated report files (the scheduled CSV/PDF exports) are now automatically
 > cleaned up after 90 days, so they can't pile up forever on the data volume. You can change the window with
 > `PULSE_REPORT_ARTIFACT_RETENTION_DAYS` (set 0 to keep them forever) — but the default is sensible and nothing needs

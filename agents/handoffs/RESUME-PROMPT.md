@@ -11,7 +11,33 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-82.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-83.md`)
+
+**Session 2026-07-17 result: D-144 — S82 was an OPERATOR CHECKPOINT. Verified against the code that the autonomous backlog is exhausted (light-theme/density/motion already DONE per D-077; assessment bugs all fixed except BUG-009's tenant part; §2.7 date-locked to 07-23). Delivered a consolidated operator checkpoint and synthesized that [5]+[20]+BUG-009-tenant all converge on F6 multi-tenancy. No code change.**
+
+**★ S82** ruled out each remaining autonomous candidate with code evidence: §2.15 phase 2 (light theme + density + motion)
+is already shipped (D-077, commit 08922ff — fixed the stale ROADMAP line); the assessment bug backlog is all FIXED except
+BUG-009's `tenant` filter; §2.7 CI-promotions is date-locked. **Key synthesis: BUG-009 (`tenant`), S73 [5] (QoE
+cross-tenant), S62 [20] (audit-read) all need the SAME missing capability — server-side tenant→stream assignment (F6
+multi-tenancy) — so ONE operator decision dispositions all three.** Consolidated checkpoint written to
+`operator-expected.md`. Evidence: `decisions.md` D-144.
+
+**★ SESSION-83 = §2.7 CI-promotions IF the date has unlocked (≥ 2026-07-23 — CHECK IT at open).** If today ≥ 07-23: flip
+the soft CI jobs (web-e2e/csp-e2e/e2e/docker-build per §2.7's spec) from advisory to required (a bounded, autonomous,
+high-signal move). If today is STILL < 07-23 AND the operator has not responded to the checkpoint: the autonomous backlog
+is genuinely quiet — either (a) do a bounded autonomous polish arc the operator can't object to (web test-coverage on the
+low spots — SettingsPage ~50%, OnboardingWizard ~69%; or a `docs/assessment/documentation-gaps.md` completeness pass), or
+(b) scale the loop back to a low-frequency wait for the 07-23 gate / operator input. **Prefer (a) a concrete bounded arc
+over idling** — but do NOT start a large new work-stream the operator hasn't scoped (e.g. F6, §2.19) autonomously. See
+`sessions/SESSION-83.md`.
+
+**⚠ OPERATOR DECISIONS PENDING (consolidated in `operator-expected.md` S82 checkpoint):** F6 multi-tenancy (unblocks
+[5]/[20]/BUG-009-tenant), §2.6 unsigned-webhook, §2.1 branch protection, §2.18 GHCR/licence, §2.19 UI direction, §2.12
+mobile SDKs — each with a recommendation. None blocking; primary single-tenant model unaffected.
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-82.md`)
 
 **Session 2026-07-17 result: D-143 — S81 shipped report-artifact retention pruning (`PULSE_REPORT_ARTIFACT_RETENTION_DAYS`, default 90), closing the S80 review's one confirmed follow-up. ★ ROADMAP §2.33 (cross-cutting security-posture pass) is now COMPLETE. Prod-verified stamped rebuild `v0.4.0-98-g641b4e2`.**
 

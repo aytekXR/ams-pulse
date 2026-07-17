@@ -8899,3 +8899,38 @@ guard was `e.IsDir()`, which does NOT exclude a pattern-named symlink → switch
 `/var/lib/pulse/reports` + 0 read-only/permission/prune errors + SPA 200 + 0 restarts. Rollback `pulse-prod-pulse:pre-d143`
 tagged; backup rc 0. PR #155 (squash-merged). Prod now `v0.4.0-98-g641b4e2`. **★ ROADMAP §2.33 is now fully complete**
 (the follow-up closed). **No operator action required.**
+
+## D-144 — S82 (2026-07-17): OPERATOR CHECKPOINT — autonomous backlog exhausted; next wave needs operator decisions
+
+First arc after §2.33. Per the standing directive ("choose the next-highest-leverage move; verify candidate status
+against the code before committing; prefer a concrete autonomous move; checkpoint only if genuinely blocked"), S82
+re-surveyed ROADMAP §2 + `docs/assessment/` and **verified each remaining candidate against the code.** The finding: the
+concrete autonomous backlog is exhausted, and the next high-value wave is operator-gated. No code change (docs +
+verification only) → no prod roll-forward.
+
+**Verified-at-open (candidates ruled out with evidence):**
+- **§2.15 light-theme/density/motion — ALREADY DONE** (D-077, commit 08922ff), NOT the "phase 2 backlog" the stale
+  ROADMAP line claimed. Confirmed: `theme.ts` (localStorage + prefers-color-scheme + data-theme stamping), `ThemeContext`,
+  a Sun/Moon toggle in `Layout.tsx`, `[data-theme="light"]` WCAG-adjusted token overrides, theme/density tests; only 2
+  hardcoded hex colors across all components (colors go through tokens). Fixed the stale ROADMAP §2.15 line.
+- **§2.7 CI-promotions — DATE-LOCKED** until **2026-07-23** (today 07-17). The strongest bounded autonomous move once it
+  unlocks; not yet available.
+- **Assessment bug backlog — all FIXED except BUG-009's tenant part.** Re-verified BUG-009: the **cursor** pagination is
+  CONFIRMED FIXED (query.go:199-234 offset cursor); the doc's `_ = cursor` evidence was stale. The **tenant** filter is
+  the only gap.
+
+**★ Key synthesis — three findings converge on ONE capability (F6 multi-tenancy).** BUG-009 (`/live/*` `tenant` filter
+dropped), S73 [5] (`QoEForStream` cross-tenant blend), and S62 [20] (audit-read model) ALL trace to the same missing
+capability: the live pipeline has **no server-side tenant→stream assignment** (tenant is client-declared per beacon;
+`domain.LiveStream`/`AlertScope`/`AlertRuleRow` carry no tenant). One operator decision — build F6 multi-tenancy, or
+accept these as documented single-tenant-model limitations — dispositions all three. The primary self-hosted
+single-tenant model is unaffected by any of them.
+
+**Checkpoint delivered** (`operator-expected.md`, consolidated section): the GA-adjacent operator decisions — (1) F6
+multi-tenancy (unblocks [5]/[20]/BUG-009-tenant), (2) §2.6 unsigned-webhook mode, (3) §2.1 branch protection, (4)
+§2.18 GHCR-public + licence ceremony, (5) §2.19 full UI/UX direction, (6) §2.12 mobile SDKs — each with a recommendation.
+**Next autonomous move recorded: §2.7 CI-promotions at 07-23** (SESSION-83 will do it if the date has passed; else the
+loop stays in a quiet/waiting phase). **This is a legitimate steward hand-back point** (4 internal passes done, security/
+correctness/UI surface well-swept, prod hardened + stable at v0.4.0-98-g641b4e2) — NOT a blocker requiring the loop to
+stop, but a recognition that the highest-leverage next step is the operator's. Docs: D-144 (this block); ROADMAP §2.15
+corrected + §2.7 noted; BUG-009 re-verified; RESUME → SESSION-83; SESSION-82 CLOSED; SESSION-83 written.

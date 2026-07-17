@@ -5,6 +5,16 @@ expectation not met by these endpoints)
 **Component:** query (`server/internal/query/query.go`)
 **Status:** PARTIALLY FIXED (S22/D-084) — `cursor` param for `GET /live/streams` fixed; `tenant` param for both endpoints remains known-violation (F6 multi-tenancy backlog).
 
+> **S82/D-144 re-verification (2026-07-17):** the **cursor** portion is CONFIRMED FIXED in the current code —
+> `query.LiveStreams` (query.go:199-234) sorts by StreamID for a stable offset cursor, decodes `cursor` via
+> `strconv.Atoi` with a clamp for stale/fabricated values, and emits `next_cursor`; paging now advances. The
+> "Actual (code evidence)" section below (the `_ = cursor` stub) is STALE and describes the pre-D-084 state.
+> The **tenant** portion is the ONLY remaining gap and is now escalated as an operator product call: it requires
+> server-side tenant→stream assignment in the live snapshot (F6 multi-tenancy), which does not exist. **This is the
+> SAME root cause as S73 finding [5] (QoE cross-tenant blend) and S62 finding [20] (audit-read model) — all three are
+> unblocked by one decision: build F6 multi-tenancy, or accept them as documented single-tenant-model limitations.**
+> See `operator-expected.md` (S82 checkpoint) and `decisions.md` D-144.
+
 ## What is different from BUG-006/BUG-007/BUG-008
 
 Those bugs live in the **handler** layer (params never read or never passed on).
