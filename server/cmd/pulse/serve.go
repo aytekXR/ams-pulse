@@ -32,6 +32,7 @@ import (
 	"github.com/pulse-analytics/pulse/server/internal/reports"
 	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse"
 	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/pulse-analytics/pulse/server/internal/tenant"
 	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
 )
 
@@ -434,6 +435,17 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	// VD-39: wire cluster discovery so FleetNodes() returns real role (origin/edge)
 	// instead of hardcoded "standalone".
 	qsvc.SetClusterDiscovery(clusterDiscovery)
+
+	// F6: server-side tenant resolution for the live endpoints. Resolves each live
+	// stream's owning tenant from the tenant registry (stream_pattern glob) so the
+	// ?tenant= filter on /live/overview + /live/streams works and LiveStream.tenant
+	// is populated. Cached ~10 s to keep the hot dashboard path off the meta store.
+	qsvc.SetTenantResolver(tenant.NewCachedResolver(
+		func(ctx context.Context) ([]meta.TenantRow, error) {
+			return metaStore.ListTenants(ctx, 0, "")
+		},
+		10*time.Second,
+	))
 
 	// HOOK(BE-02): Wire API server.
 	webDir := os.Getenv("PULSE_WEB_DIR")

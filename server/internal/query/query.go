@@ -36,6 +36,15 @@ type Service struct {
 	lic                *license.Manager
 	probeResultQuerier ProbeResultQuerier // optional; wired via SetProbeResultQuerier
 	clusterDiscovery   NodeRoleDiscoverer // optional; wired via SetClusterDiscovery (VD-39)
+	tenantResolver     TenantResolver     // optional; wired via SetTenantResolver (F6)
+}
+
+// TenantResolver resolves a live stream's owning tenant server-side from the
+// tenant registry (F6). Live-dashboard streams come from the AMS REST poller and
+// carry no beacon meta, so resolution is by stream_pattern glob only. An empty
+// return means "unassigned". Implementations must be safe for concurrent use.
+type TenantResolver interface {
+	ResolveTenant(streamID string) string
 }
 
 // New creates a Service.
@@ -47,6 +56,21 @@ func New(live domain.LiveProvider, conn clickhouse.Conn, lic *license.Manager) *
 // Call after New, before any FleetNodes() calls.
 func (s *Service) SetClusterDiscovery(d NodeRoleDiscoverer) {
 	s.clusterDiscovery = d
+}
+
+// SetTenantResolver wires server-side tenant resolution for the live endpoints (F6).
+// When unset, the ?tenant= filter is a no-op and LiveStreamItem.Tenant stays empty.
+func (s *Service) SetTenantResolver(r TenantResolver) {
+	s.tenantResolver = r
+}
+
+// resolveTenant returns the resolved tenant for a stream, or "" if no resolver
+// is wired.
+func (s *Service) resolveTenant(streamID string) string {
+	if s.tenantResolver == nil {
+		return ""
+	}
+	return s.tenantResolver.ResolveTenant(streamID)
 }
 
 // ─── Live queries (from in-memory aggregates) ─────────────────────────────────
@@ -68,11 +92,14 @@ func (s *Service) LiveOverview(ctx context.Context, app, nodeID, tenant string) 
 
 	// Aggregate app-level data.
 	appMap := map[string]*AppOverview{}
-	for _, stream := range snap.Streams {
+	for sid, stream := range snap.Streams {
 		if app != "" && stream.App != app {
 			continue
 		}
 		if nodeID != "" && stream.NodeID != nodeID {
+			continue
+		}
+		if tenant != "" && s.resolveTenant(sid) != tenant {
 			continue
 		}
 		ao := appMap[stream.App]
@@ -95,11 +122,14 @@ func (s *Service) LiveOverview(ctx context.Context, app, nodeID, tenant string) 
 	var mix ProtocolMix
 	totalViewers := 0
 	totalPublishers := 0
-	for _, stream := range snap.Streams {
+	for sid, stream := range snap.Streams {
 		if app != "" && stream.App != app {
 			continue
 		}
 		if nodeID != "" && stream.NodeID != nodeID {
+			continue
+		}
+		if tenant != "" && s.resolveTenant(sid) != tenant {
 			continue
 		}
 		totalViewers += stream.ViewerCount
@@ -158,6 +188,10 @@ func (s *Service) LiveStreams(ctx context.Context, app, nodeID, tenant string, l
 		if nodeID != "" && stream.NodeID != nodeID {
 			continue
 		}
+		resolvedTenant := s.resolveTenant(sid)
+		if tenant != "" && resolvedTenant != tenant {
+			continue
+		}
 
 		pubState := "idle"
 		if stream.Active {
@@ -178,6 +212,7 @@ func (s *Service) LiveStreams(ctx context.Context, app, nodeID, tenant string, l
 			StreamID:       sid,
 			App:            stream.App,
 			NodeID:         stream.NodeID,
+			Tenant:         resolvedTenant,
 			Viewers:        stream.ViewerCount,
 			PublisherState: pubState,
 			HealthScore:    healthScore,
@@ -422,9 +457,12 @@ type NodeHealth struct {
 
 // LiveStreamItem is one stream in GET /live/streams.
 type LiveStreamItem struct {
-	StreamID       string      `json:"stream_id"`
-	App            string      `json:"app"`
-	NodeID         string      `json:"node_id,omitempty"`
+	StreamID string `json:"stream_id"`
+	App      string `json:"app"`
+	NodeID   string `json:"node_id,omitempty"`
+	// Tenant is the server-side-resolved owning tenant (F6), from the tenant
+	// registry (stream_pattern glob). Empty = unassigned or no resolver wired.
+	Tenant         string      `json:"tenant,omitempty"`
 	Viewers        int         `json:"viewers"`
 	PublisherState string      `json:"publisher_state"`
 	HealthScore    float64     `json:"health_score"`
