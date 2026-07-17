@@ -1,5 +1,12 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-17, D-137/D-138/D-139 — SESSION-75/76/77)
+# Operator TODO — the items only YOU can do (updated 2026-07-17, D-140 — SESSION-78)
 
+> **S78 (D-140) needs NO operator action — and it RETIRES the earlier WebSocket-token heads-up.** The admin token no
+> longer travels in the Live-dashboard WebSocket URL (so it no longer appears in Caddy/docker access logs); it's now sent
+> in the WebSocket handshake header instead. Live in prod (`v0.4.0-93-g8858b5f`). **One optional precaution:** if an
+> operator/admin token was used with the Live dashboard before this fix, it may exist in old log archives — rotating it
+> (Settings → Tokens) once is a reasonable clean-up, but there's nothing you must do. With this shipped, the S73 audit is
+> down to its last item ([5], a multi-tenant-only metrics-blending edge that doesn't affect single-tenant setups).
+>
 > **S77 (D-139) needs NO operator action** — the Settings page now shows an error toast when removing a source or
 > creating/revoking a token fails (it used to silently do nothing). Live in prod (`v0.4.0-91-g7e272f6`). The one S73
 > item still worth your awareness remains the **admin-token-in-WebSocket-URL log exposure ([7])** — it is the NEXT thing

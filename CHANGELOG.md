@@ -67,6 +67,13 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **Live dashboard no longer puts the API token in the WebSocket URL (D-140).** The Live view's WebSocket
+  connection passed the bearer token as a `?token=` URL parameter, which reverse proxies record in their
+  access logs — exposing a long-lived, replayable admin credential to anyone who can read the logs. The
+  token now travels in the WebSocket handshake header (`Sec-WebSocket-Protocol`) instead, so it stays out
+  of URL-based access logs. OIDC cookie sessions are unaffected. (Found by the S73 subsystem audit,
+  finding [7]; if you have an operator token that was previously used with the Live dashboard, rotating it
+  is a reasonable precaution.)
 - **Settings page now reports failed actions (D-139).** Removing a source, revoking/creating an API or
   ingest token in the web Settings page previously showed no feedback at all when the request failed
   (e.g. server error) — the action silently did nothing and a user could unknowingly retry it. These

@@ -11,7 +11,32 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-78.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-79.md`)
+
+**Session 2026-07-17 result: D-140 — S78 shipped [7] Live-WS auth via the Sec-WebSocket-Protocol header (token out of the URL/logs). S73 tracker = 7/8 shipped; ALL HIGH + all but ONE MEDIUM done — only [5] remains, and it closes the audit.**
+
+**★ S78** moved the Live-dashboard WS bearer token from the `?token=` URL param into the `Sec-WebSocket-Protocol`
+handshake header (PR #149, prod `v0.4.0-93-g8858b5f`), so it no longer lands in reverse-proxy access logs. Stateless
+subprotocol approach (no ticket store); `?token=` kept as a documented legacy fallback; OIDC cookie unchanged. Server +
+web tests mutation-proven; prod WS smoke confirmed (valid subprotocol token → 426 auth-passed, bad → 401); 2-lens
+auth-surface review clean. **Retires the operator WS-token log-exposure heads-up.** **No operator action.** Evidence:
+`decisions.md` D-140.
+
+**★ SESSION-79 = [5] MEDIUM: `QoEForStream` cross-tenant QoE — the LAST S73 finding.** ⚠ WIDER than filed —
+`AlertScope`/`AlertRuleRow`/`LiveStream` have NO Tenant field, so the alert evaluator has no tenant to pass. **Re-verify
+AND adjudicate scope at open:** trace whether the live pipeline carries tenant per stream; then choose (a) FULL thread
+(domain→aggregator→alert), (b) narrower, or (c) DEFER-BY-RULING (multi-tenant-only edge; primary single-tenant model
+unaffected). Adversarial-review mandatory. **Closing/dispositioning [5] completes §2.32** → flip to ✅ COMPLETE and
+re-survey ROADMAP §2 for the next arc (the §2.7 CI gate unlocks ≥ 2026-07-23; much else is operator-gated). See
+`sessions/SESSION-79.md`.
+
+**⚠ CARRIED operator items (unchanged):** the **[20] audit-read product call** (operator-expected.md — keep reads open
+or gate the whole admin-read surface); AMS trial-expiry doc discrepancy (07-12 vs 07-27); GHCR anon → 401; the S63
+email-STARTTLS behavior note (informational).
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-78.md`)
 
 **Session 2026-07-17 result: D-139 — S77 shipped [8] web SettingsPage silent error handlers. S73 tracker = 6/8 shipped; 2 MEDIUM remain ([5] QoE tenant, [7] WS-token log exposure).**
 
