@@ -43,6 +43,13 @@ is a **0..1 fraction** (×100 → pct); `currentFPS` is **absent** from the REST
 broadcast object on AMS 3.0.3 (health scoring redistributes the FPS weight);
 `terminated_unexpectedly` is a real broadcast status (crash) → emit publish_end.
 
+**Endpoint & field drift (AMS 3.0.3 build 20260504_1443+):**
+- `GET /rest/v2/applications/info` (the aggregate per-app `liveStreamCount`/`vodCount`/`storage` endpoint) returns
+  **HTTP 405 Method Not Allowed** on this build. Pulse does not depend on it; for VoD ground truth use the per-app
+  `GET /{app}/rest/v2/vods/count` instead (DG-12; BUG-002; `scenario-matrix.md` S17 Corrections #4).
+- `versionType` in the version / fleet-node payload is the two-word string **`"Enterprise Edition"`**, not
+  `"Enterprise"`. Any integration doing an exact-string check on the edition must match the full value (DG-14; TC-FL-02).
+
 > **`packetLostRatio` semantics per ingest protocol (DG-18, S29/D-091):**
 >
 > `packetLostRatio` and `packetsLost` in BroadcastDTO are populated by different
@@ -976,3 +983,26 @@ basic-auth credential, so polling can still work independently.
   ```bash
   sg docker -c "docker exec pulse wget -qO- ${PULSE_AMS_URL}/rest/v2/version"
   ```
+
+### Streams missing after the AMS container was recreated (app-inventory reset)
+
+Symptom: after the `antmedia` (AMS) container is recreated or reinstalled, Pulse
+stops seeing streams from some apps that previously worked.
+
+Cause: AMS's application list can change across a container recreation (S17
+observed a drop from 16 apps to 4). When `PULSE_AMS_APPLICATIONS` is empty, Pulse
+auto-discovers apps every poll cycle via `ListApplications` and silently follows
+whatever AMS currently reports — a shrunken inventory means fewer polled apps, with
+no error raised (DG-13; `scenario-matrix.md` S17 Corrections #3; D-079).
+
+Fixes:
+- **Pin the app list** so polling no longer depends on live discovery: set
+  `PULSE_AMS_APPLICATIONS` to the known-good comma-separated app names.
+- **Audit which apps AMS currently exposes** (the array-of-strings envelope Pulse
+  discovers from):
+  ```bash
+  sg docker -c "docker exec pulse wget -qO- ${PULSE_AMS_URL}/rest/v2/applications"
+  ```
+- **Per-app poll failures** surface as `restpoller: app poll error` warnings —
+  `docker logs pulse | grep 'app poll error'`. (There is no dedicated "resolved
+  apps" log line; `resolveApps` returns the list without logging it.)

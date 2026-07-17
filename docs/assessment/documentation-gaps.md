@@ -56,6 +56,38 @@ document. S19 should fix all five in a single `docs/AMS-INTEGRATION.md` editing 
 
 ## Prioritized Authoring Plan for S19
 
+> **S84 status (D-146, 2026-07-17): ✅ WORKSTREAM COMPLETE — all 18 gaps closed.**
+> A verify-before-writing pass found that `docs/known-limitations.md` (a comprehensive limitations doc created *after*
+> this gap table) had already closed most gaps the notes below still implied were open. Full reconciliation (gap →
+> closure location):
+> - DG-01 → **LIM-02** (HLS count is a segment-request-window proxy, not a session count; LIM-02 cites DG-01)
+> - DG-02 → **LIM-09** (RTMP-pull viewer count shows 0)
+> - DG-03 → **LIM-04** (FPS always 0 on AMS 3.x REST)
+> - DG-04 → AMS-INTEGRATION §4.5 + **LIM-03** (webhook non-functional + VoD ≤60 s latency)
+> - DG-05 → AMS-INTEGRATION §3.7 + **LIM-01** (fleet resource metrics blank on standalone)
+> - DG-06 → **LIM-07** (egress GB is a bitrate×watch-time estimate)
+> - DG-07 → `docs/beacon-sdk.md`
+> - DG-08 → **LIM-14** (each app needs `remoteAllowedCIDR` opened for Pulse)
+> - DG-09 → **LIM-15** (AMS locks a login account after 2 failed attempts / 5 min)
+> - DG-10 → **LIM-16** (HLS flat path form `/{app}/streams/{id}.m3u8`)
+> - DG-11 → AMS-INTEGRATION §1.1 (implicit RTMP broadcast deleted on stop)
+> - DG-15 → `docs/kafka-integration.md`
+> - DG-16 → **LIM-13** (`speed_read_kbps` stores the AMS real-time ratio, not a bitrate)
+> - DG-17 → **LIM-05** (GeoLite2 procurement + Docker mount)
+> - DG-18 → **LIM-08** / **LIM-17** + AMS-INTEGRATION §1.1
+>
+> **Residual authored THIS session (S84/D-146) in `docs/AMS-INTEGRATION.md`** — the last three minor S17-drift footnotes:
+> - **DG-12** — §1.1 endpoint-drift note: `GET /rest/v2/applications/info` → HTTP 405; use per-app `GET /{app}/rest/v2/vods/count`.
+> - **DG-14** — §1.1 field-drift note: `versionType` is the two-word `"Enterprise Edition"`, not `"Enterprise"`.
+> - **DG-13** — §10 Troubleshooting entry (app-inventory reset). **Corrected remediation:** the gap's suggested
+>   `grep 'resolveApps'` marker does NOT exist — `resolveApps()` returns the app list without logging it. The accurate
+>   guidance is to pin `PULSE_AMS_APPLICATIONS` and grep the real `restpoller: app poll error` warning (verified against
+>   `server/internal/collector/restpoller/restpoller.go:238,492`).
+>
+> **Net:** the S18 Phase-6 documentation-gap deliverable is fully closed. No open documentation gaps remain.
+>
+> ---
+>
 > **S31 status (D-093, 2026-07-14): DG-18 CLOSED** — Live SRT validation
 > TC-I-05-SRT PASS (2/2 assertions, 2026-07-14T02:29:45Z; evidence:
 > `qa/realams/evidence/TC-I-05-SRT-20260714T022945Z/`): `status=broadcasting`,
