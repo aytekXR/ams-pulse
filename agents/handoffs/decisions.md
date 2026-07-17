@@ -9007,3 +9007,51 @@ files (S83) and all documentation gaps (S84) are done. Per loop guidance ("after
 low-frequency wait"), **SESSION-85 scales the loop back to a genuine low-frequency wait** for the 07-23 §2.7 gate or
 operator input — a quick date/operator/CI check, then wait, rather than manufacturing an arc. Docs: D-146 (this block);
 ROADMAP §2.35 added; RESUME → SESSION-85; operator-expected S84 status; SESSION-84 CLOSED; SESSION-85 written.
+
+## D-147 — S85 (2026-07-17): SHIPPED — OpenAPI contract drift closed: document GET /reports/export (contract/test/types only, no prod roll)
+
+**Loop state at open:** SESSION-85's two-minute gate — date **2026-07-17** (§2.7 CI-promotion gate still date-locked
+≥07-23) + operator has NOT answered the S82 checkpoint → both gated leads (A/B) unavailable, falling to Lead C
+(low-frequency wait). **Health check green:** git clean (only the do-not-commit `Caddyfile.prod`), CI on main
+all-success, every open PR a deliberately operator-held Dependabot bump (#153/#69/#70/etc.).
+
+**★ Before idling, VERIFIED the "backlog exhausted" claim adversarially** (standing directive: verify candidate status
+against code, not the tracker — the repo has been burned by stale trackers, e.g. S84's doc-gaps tracker was 15/18 stale).
+Ran a 3-scout + judge workflow (roadmap / stewardship / drift). Result: the ROADMAP backlog IS fully gated/done — §2.16
+(AMS early-warning) + §2.17 (anomaly/fleet honesty tail) confirmed COMPLETE in code; §2.1 done (enforce_admins flipped
+D-076); §2.6/§2.12/§2.18-6/§2.19 operator-gated; §2.7 date-gated — BUT the sweep surfaced **3 genuine non-gated
+defects**: (1) OpenAPI drift on `GET /reports/export`; (2) CHANGELOG missing a `[0.4.0]` section; (3) VERSION file stale
+at `0.1.0`. The judge ruled EXECUTE. This is exactly the SESSION-85 stewardship clause ("a genuine regression/broken
+thing → fix that; it's stewardship, not invention") + the standing directive ("choose the next-highest-leverage move
+when one exists").
+
+**★ SHIPPED — contract drift (the anchor defect):** `GET /api/v1/reports/export` — the Business-tier CSV usage-report
+download endpoint (`export.go`, registered under `downloadAuthMiddleware` at `server.go:518`, consumed by the web
+`reportsApi.downloadExport` client) — was **absent from `contracts/openapi/pulse-api.yaml`** and the generated
+`schema.d.ts`, violating the binding CLAUDE.md §3 rule *"Contracts before code."* Verified genuine drift, NOT a
+download-endpoint convention: the sibling CSV export `/analytics/audience?format=csv` IS documented, and
+`downloadAuthMiddleware` governs auth (server.go:788) not OpenAPI inclusion.
+- **Contract:** added the `/reports/export` GET path block (`from/to/app/stream/tenant` `$ref` params + inline `format`
+  enum `[csv,pdf]`; responses `200 text/csv`, `401`, `403`, `500`, `501`; download-auth security
+  `bearerAuth`/`wsTokenQuery`/`cookieAuth`, mirroring `/live/ws`).
+- **Generated types:** regenerated `web/src/lib/api/schema.d.ts` (additive, +73 lines; new `exportUsageReport` operation).
+- **Conformance:** registered the 6 new query params in `param_conformance_test.go` — `from/to/app/stream/tenant` exempt
+  (identical nil-CH `ComputeUsage` backing as `/reports/usage`), `format` a real differential probe (`csv`→200
+  `text/csv`; `pdf`→501 on a Business-tier server). Bumped non-vacuity floors `minSpecParams 88→94`, `minProbes 37→38`.
+
+**Validation:** Go **25/25 packages** (api ran fresh ~25s), `gofmt` clean, `go build ./...` ok — `openapi_conformance`
+(`doc.Validate` on the modified spec) + `param_conformance` (new probe + floors) + `export_test` all green. Web
+`typecheck`/`lint`/`build` green. **No adversarial review** (contract/test/types only, zero runtime surface). PR #162,
+squash-merged to `main` **e3abc3b**, 15/15 checks. **No prod roll** — no server/web SOURCE behavior change (the web
+client already called the endpoint via a raw string; the OpenAPI/test artifacts aren't shipped to the runtime); prod
+stays `v0.4.0-98-g641b4e2`.
+
+**Deferred (NOT taken this arc — flagged for operator/future):** (2) CHANGELOG `[0.4.0]` gap — the v0.4.0 tag
+(2026-07-13, D-089) has no CHANGELOG section, but a faithful reconstruction means curating ~11 sessions of 0.3.0→0.4.0
+changes (judgment-heavy; misattribution risk) — deliberately NOT done autonomously. (3) VERSION file `0.1.0` — the
+Makefile/Dockerfiles derive the version from `git describe --tags`, so nothing reads the file; updating it is cosmetic
+and re-stales — left alone. Both noted in operator-expected + SESSION-86.
+
+**No operator action.** The loop remains in the low-frequency wait for the 07-23 §2.7 gate / operator input — this arc
+was a one-off verified-defect fix (stewardship), not a manufactured arc. Docs: D-147 (this block); ROADMAP §2.36 added;
+RESUME → SESSION-86; operator-expected S85 status; SESSION-85 CLOSED; SESSION-86 written.

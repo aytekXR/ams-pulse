@@ -1,5 +1,29 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-17, D-146 — SESSION-84)
+# Operator TODO — the items only YOU can do (updated 2026-07-17, D-147 — SESSION-85)
 
+> # ▶ S85 STATUS (2026-07-17, D-147) — NO operator action required
+>
+> The loop is in the low-frequency-wait phase (the safe bounded backlog is exhausted). This session did NOT manufacture
+> an arc — but before idling it ran an adversarial verification sweep to *confirm* nothing autonomous remained, and that
+> sweep caught **one genuine bug**, which it fixed: the `GET /reports/export` CSV-download endpoint was fully built and
+> used by the web UI but was **missing from the API's OpenAPI contract** (an internal-consistency defect — the contract
+> is meant to be the source of truth for every endpoint). It's now documented, the generated web types are regenerated,
+> and the conformance tests are extended. **Contract/test/types only — no behavior change, no prod deploy** (prod stays
+> `v0.4.0-98-g641b4e2`). PR #162.
+>
+> **The six checkpoint decisions below are unchanged and remain the highest-leverage next moves — all yours.** None
+> blocks continued autonomous work. **The next scheduled autonomous move is still §2.7 CI-job promotions, which unlock
+> 2026-07-23**; until then the loop stays in a low-frequency wait, taking only a caught-defect fix like this one if a
+> verification sweep surfaces something genuinely broken. **If you want me to start any item below (F6, GHCR/licence, or
+> a specific polish target), just say which** — that scopes it as your priority and I'll take it next.
+>
+> **Two NEW low-priority housekeeping items (NOT operator-gated — I can do these autonomously in a future arc; noting so
+> you're aware, not asking you to act):** (a) the CHANGELOG has no `[0.4.0]` section even though v0.4.0 was tagged — I
+> deferred it because writing it faithfully means curating ~11 sessions of 0.3.0→0.4.0 changes and I didn't want to risk
+> misattributing them autonomously; (b) the `VERSION` file still reads `0.1.0` (cosmetic — the build derives the real
+> version from git tags, so nothing actually reads that file). Neither affects you or the running product.
+>
+> ---
+>
 > # ▶ S84 STATUS (2026-07-17, D-146) — NO operator action required; autonomous backlog now exhausted
 >
 > Another bounded, docs-only arc shipped (PR #160): the **documentation-gaps deliverable is complete** — all 18 operator

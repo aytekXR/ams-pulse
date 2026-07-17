@@ -1,5 +1,12 @@
 # SESSION-85 — planned at S84 close (D-146) — SCALE BACK: the bounded backlog is exhausted
 
+> **✅ CLOSED 2026-07-17 (D-147).** Ran the two-minute gate → Lead C (07-17 < 07-23; operator unanswered). Did NOT idle
+> blindly: an adversarial verify-before-wait sweep (3 scouts + judge) confirmed the ROADMAP backlog is fully gated/done
+> but caught one genuine non-gated defect — `GET /reports/export` missing from the OpenAPI contract (CLAUDE.md §3
+> violation). Fixed it as a one-off stewardship arc (contract + `schema.d.ts` regen + param-conformance; Go 25/25 + web
+> green; PR #162, main e3abc3b; **no prod roll**). Deferred CHANGELOG `[0.4.0]` + VERSION-file staleness as
+> judgment-heavy/cosmetic. No operator action. → **SESSION-86** (still the low-frequency wait). See RESUME ▶ START HERE.
+
 > Written by SESSION-84 close (2026-07-17). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE.** Prod at **v0.4.0-98-g641b4e2** (hardened; report-artifact retention).

@@ -527,6 +527,23 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.36  OpenAPI contract drift — document GET /reports/export  [✅ DONE — contract/test/types only, no prod deploy]  ✅ S85 (D-147, 2026-07-17, PR #162, main e3abc3b)
+
+Surfaced by an adversarial verification sweep at S85 open (3 scouts + judge) run to *confirm* the "backlog exhausted"
+claim before idling — it confirmed the ROADMAP backlog is fully gated/done but found a real non-gated defect. `GET
+/api/v1/reports/export` (the Business-tier CSV usage-report download — `export.go`, registered under
+`downloadAuthMiddleware`, consumed by the web `reportsApi.downloadExport` client) was **absent from
+`contracts/openapi/pulse-api.yaml`** and the generated `schema.d.ts`, violating CLAUDE.md §3 *"Contracts before code."*
+Confirmed genuine drift not convention — the sibling `/analytics/audience?format=csv` IS documented.
+- Added the `/reports/export` path block (`from/to/app/stream/tenant` `$ref` params + inline `format` enum `[csv,pdf]`;
+  200 `text/csv`, 401, 403, 500, 501; download-auth security schemes).
+- Regenerated `schema.d.ts` (additive; `exportUsageReport` op) + registered the 6 params in `param_conformance_test.go`
+  (data-filter params exempt like `/reports/usage`; `format` a real csv→200 / pdf→501 probe); floors `minSpecParams
+  88→94`, `minProbes 37→38`.
+- Go 25/25 + gofmt clean; web typecheck/lint/build green. **No prod roll** (no runtime behavior change) — prod stays
+  `v0.4.0-98-g641b4e2`. **Deferred (flagged, not taken):** CHANGELOG `[0.4.0]` gap (judgment-heavy reconstruction) and
+  the cosmetic/unread VERSION-file `0.1.0` staleness.
+
 ### 2.35  Documentation-gaps deliverable — completion + tracker reconcile  [✅ DONE — docs-only, no prod deploy]  ✅ S84 (D-146, 2026-07-17, PR #160)
 
 A verify-before-writing completeness pass on `docs/assessment/documentation-gaps.md` (the SESSION-84 Option-C bounded
