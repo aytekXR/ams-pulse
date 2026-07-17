@@ -1,5 +1,20 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-17, D-144 — SESSION-82)
+# Operator TODO — the items only YOU can do (updated 2026-07-17, D-145 — SESSION-83)
 
+> # ▶ S83 STATUS (2026-07-17, D-145) — NO operator action required
+>
+> Since the S82 checkpoint below, one bounded, unobjectionable arc shipped: a **web test-coverage pass** (PR #158) that
+> raised the two lowest-covered UI files — `SettingsPage.tsx` (55→95% lines) and `OnboardingWizard.tsx` (73→94% lines) —
+> with **test-only additions** (no behavior change, no prod deploy; prod stays at **v0.4.0-98-g641b4e2**). This closes a
+> real gap: the ingest-token/license/verify flows now have regression cover.
+>
+> **The six checkpoint decisions below are unchanged and remain the highest-leverage next moves — all yours.** None block
+> continued autonomous work. **The next autonomous move is already scheduled: §2.7 CI-job promotions unlock 2026-07-23**
+> (flip the soft web-e2e/csp-e2e/e2e/docker-build jobs to required); until then the loop stays in a low-frequency wait,
+> taking only small safe arcs like this one. **If you want me to start any item below (F6, GHCR/licence, or a specific
+> polish target), just say which** — that scopes it as your priority and I'll take it next.
+>
+> ---
+>
 > # ★ CONSOLIDATED CHECKPOINT (S82, 2026-07-17) — the autonomous work has caught up to you
 >
 > Four internal passes are done (three subsystem security audits + one cross-cutting supply-chain/container-hardening

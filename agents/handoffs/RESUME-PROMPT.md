@@ -11,7 +11,31 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-83.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-84.md`)
+
+**Session 2026-07-17 result: D-145 — S83 shipped a bounded, test-only web test-coverage arc (no prod deploy): `SettingsPage.tsx` 55→95% lines, `OnboardingWizard.tsx` 73→94% lines; +23 tests → 676 total; global lines ~76%. Taken because §2.7 is date-locked (≥07-23) and the S82 checkpoint is unanswered. PR #158.**
+
+**★ S83** raised the two lowest-covered UI files with pure test additions (ingest-token creation + `IngestSnippet` copy,
+populated list rows, delete/revoke success+cancel, the S3 form, the license card + activation success/failure, and the
+full `OnboardingWizard` verify flow + save failures). No server/web SOURCE changed → prod stays `v0.4.0-98-g641b4e2`.
+Evidence: `decisions.md` D-145; ROADMAP §2.34.
+
+**★ SESSION-84 = CHECK THE DATE + `operator-expected.md` FIRST (a two-minute gate).** (1) `date +%Y-%m-%d`: if **today ≥
+2026-07-23** → **§2.7 CI-promotions** (flip the soft web-e2e/csp-e2e/e2e/docker-build jobs to required per §2.7's spec;
+surface any branch-protection half I can't set to the operator — §2.1). (2) If the operator ANSWERED the checkpoint →
+**do their pick** (now the highest-leverage, operator-scoped move). (3) Else (still <07-23, no answer) → this is the
+**2nd→3rd consecutive quiet arc**: take at MOST one more small bounded arc (a `docs/assessment/documentation-gaps.md`
+completeness pass — verify each gap is still open first), then **scale the loop to a low-frequency wait** for the 07-23
+gate (loop guidance: after ~3 no-op ticks, reduce frequency). Do NOT start a large operator-unscoped work-stream
+(F6, §2.19). See `sessions/SESSION-84.md`.
+
+**⚠ OPERATOR DECISIONS PENDING (consolidated in `operator-expected.md` — S83 status + S82 checkpoint):** F6 multi-tenancy
+(unblocks [5]/[20]/BUG-009-tenant), §2.6 unsigned-webhook, §2.1 branch protection, §2.18 GHCR/licence, §2.19 UI
+direction, §2.12 mobile SDKs — each with a recommendation. None blocking; primary single-tenant model unaffected.
+
+---
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-83.md`)
 
 **Session 2026-07-17 result: D-144 — S82 was an OPERATOR CHECKPOINT. Verified against the code that the autonomous backlog is exhausted (light-theme/density/motion already DONE per D-077; assessment bugs all fixed except BUG-009's tenant part; §2.7 date-locked to 07-23). Delivered a consolidated operator checkpoint and synthesized that [5]+[20]+BUG-009-tenant all converge on F6 multi-tenancy. No code change.**
 
