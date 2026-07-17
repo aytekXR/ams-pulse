@@ -1,5 +1,15 @@
 # SESSION-73 — planned at S72 close (D-134) — ★ first POST-S62-AUDIT session
 
+> ## ✅ CLOSED (2026-07-17, D-135) — OPENED the third subsystem audit → 8 findings
+> Ran the third fresh adversarial audit over the still-un-swept subsystems (`store/meta`, `query`, `config`,
+> `cmd/pulse`, `web/` — deduplicated against S48 + S62). 5 finder lenses (high effort) + refute-by-default verifiers,
+> 17 agents → **8 CONFIRMED (3 HIGH, 5 MEDIUM), 4 refuted.** HIGHs: [1] `IngestTimeseries` cross-tenant leak (same
+> class as S48/D-110), [2] `server.Stop()` doesn't drain the HTTP server on SIGTERM, [3] `PULSE_ANONYMIZE_IP=1`
+> silently leaves IPs un-anonymized. Ledger `agents/handoffs/S73-AUDIT-FINDINGS.md`; tracker ROADMAP §2.32; decision
+> D-135. **No operator action.** Next: work the clusters — SESSION-74 leads with the `cmd/pulse` config-startup cluster
+> [2]+[3]+[6]. Everything below is the original pre-session plan (historical).
+
+
 > Written by SESSION-72 close (2026-07-17). Repo `/home/aytek/repo/ams-pulse` on VPS
 > `161.97.172.146` (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
 > **Read `RESUME-PROMPT.md` ▶ START HERE first.** The S62 audit (§2.31) is COMPLETE — the 25-finding
