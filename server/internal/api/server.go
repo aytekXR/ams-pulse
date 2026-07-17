@@ -750,6 +750,12 @@ func (s *Server) downloadAuthMiddleware(next http.Handler) http.Handler {
 			}
 		}
 		if token == "" {
+			// WebSocket clients cannot set an Authorization header, so the browser sends the
+			// bearer token as a Sec-WebSocket-Protocol subprotocol — a handshake HEADER, not the
+			// URL query — so it stays out of proxy access logs (S73/D-140 [7]).
+			token = wsSubprotocolToken(r)
+		}
+		if token == "" {
 			token = r.URL.Query().Get("token")
 		}
 		if token == "" {
@@ -785,6 +791,27 @@ func extractBearerToken(r *http.Request) string {
 	auth := r.Header.Get("Authorization")
 	if strings.HasPrefix(auth, "Bearer ") {
 		return strings.TrimPrefix(auth, "Bearer ")
+	}
+	return ""
+}
+
+// wsBearerSubprotocol is the marker the browser sends as the FIRST Sec-WebSocket-Protocol
+// value alongside the bearer token, so the token travels in the WebSocket handshake header
+// rather than the URL (browsers cannot set an Authorization header on a WS upgrade, and a
+// ?token= query lands in proxy access logs — S73/D-140 [7]). The server negotiates/echoes
+// this marker; the token is the other offered subprotocol.
+const wsBearerSubprotocol = "pulse.v1"
+
+// wsSubprotocolToken extracts the bearer token a WebSocket client passed via the
+// Sec-WebSocket-Protocol header (format: "pulse.v1, <token>"). Returns the first offered
+// subprotocol that is not the wsBearerSubprotocol marker, or "" if none.
+func wsSubprotocolToken(r *http.Request) string {
+	for _, hdr := range r.Header.Values("Sec-WebSocket-Protocol") {
+		for _, v := range strings.Split(hdr, ",") {
+			if v = strings.TrimSpace(v); v != "" && v != wsBearerSubprotocol {
+				return v
+			}
+		}
 	}
 	return ""
 }
@@ -1110,6 +1137,10 @@ func (s *Server) handleLiveWS(w http.ResponseWriter, r *http.Request) {
 	// Production deployments should set PULSE_ALLOWED_WS_ORIGINS.
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		OriginPatterns: s.wsAllowedOrigins(r),
+		// Negotiate the bearer-subprotocol marker when the client offers it, so a
+		// browser passing the token via Sec-WebSocket-Protocol gets a valid handshake
+		// (the token itself is never selected/echoed — S73/D-140 [7]).
+		Subprotocols: []string{wsBearerSubprotocol},
 	})
 	if err != nil {
 		s.logger.Warn("api: ws accept failed", "error", err)
