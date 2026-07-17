@@ -12,6 +12,25 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Security
 
+- **Production container hardening + supply-chain sweep (D-142).** A cross-cutting
+  security-posture pass (the first non-subsystem audit). **(1) Container hardening** —
+  the internet-facing `pulse` service (which parses untrusted beacon + webhook input)
+  now runs with a **read-only root filesystem** (`read_only: true` + a `/tmp` tmpfs),
+  **all Linux capabilities dropped** (`cap_drop: [ALL]` — the static `CGO_ENABLED=0`
+  binary binds only high ports 8090-8092 and needs none), and **`no-new-privileges`**
+  to block setuid escalation, layered on the already-non-root `USER pulse` image. A
+  latent bug surfaced by the hardening is also fixed: report artifacts were written to
+  the **ephemeral container root** (the relative `pulse-reports` default under WORKDIR
+  `/`), so scheduled-report output was lost on every redeploy; `PULSE_REPORTS_DIR` now
+  points at the persistent `/var/lib/pulse` volume. **(2) Dependency vulnerabilities** —
+  `govulncheck` reports **0 reachable** Go vulnerabilities (one module-only
+  `x/crypto/openpgp` advisory has no fix and is not imported). Three `npm audit` findings
+  (a HIGH `undici`, two moderate `js-yaml`) were all **dev-toolchain-only** (test env /
+  OpenAPI codegen — never in the shipped browser bundle) and are now pinned to patched
+  in-major versions via `overrides` (`undici@7.28.0`, `js-yaml@^4.3.0`) → **`npm audit`
+  clean**. Verified in production (read-only recreate, 0 EROFS/permission errors) and by
+  an adversarial review (4 of 5 findings refuted; the 1 confirmed is a pre-existing,
+  LOW report-artifact retention gap tracked as a follow-up).
 - **Synthetic-probe URL SSRF guard (D-130).** Operator-stored probe URLs are fetched by the
   prober from inside the server's trust boundary. Previously a URL was accepted with no scheme
   or host validation, so an admin-scoped token could point a probe at the cloud instance-metadata

@@ -8828,3 +8828,44 @@ header. **Docs at close:** D-141 (this block); `S73-AUDIT-FINDINGS.md` [5] ⏸�
 `operator-expected.md` (the [5] product question added; [20] carried); `sessions/SESSION-79.md` CLOSED;
 `sessions/SESSION-80.md` written. **Operator decisions pending (non-blocking): [20] audit-read model; [5] per-tenant QoE
 alerting.** No blocking operator action.
+
+## D-142 — S80 (2026-07-17): SHIPPED — cross-cutting security-posture pass (dependency + container hardening)
+
+First post-S73 arc: a CROSS-CUTTING (not by-subsystem) supply-chain + deploy-hardening pass. Branch `s80-d142`.
+
+**(A) Dependency vulnerabilities.**
+- **Go** — `govulncheck ./...` (golang:1.25 container): **0 reachable** vulns; 1 module-only advisory GO-2026-5932
+  (`golang.org/x/crypto/openpgp` deprecated/unmaintained) — **no fix version exists** and our code does NOT import openpgp
+  (module-only finding), so no action possible/needed → documented informational.
+- **Web** — `npm audit` reported 3 (1 HIGH undici, 2 moderate js-yaml). Triaged: **all dev-toolchain only** — undici via
+  `jsdom` (vitest test env), the vulnerable js-yaml via `openapi-typescript`→`@redocly/openapi-core` (codegen); eslint's
+  js-yaml was already patched at 4.2.0. **None in the shipped browser bundle.** `npm audit fix` blocked by a pre-existing
+  eslint@9 vs `@eslint/js@^10` peer conflict (CI installs with `--legacy-peer-deps`). Fixed via `overrides`:
+  `undici@7.28.0` (patched, in-major for jsdom) + `js-yaml@^4.3.0` (patched, in-major for redocly/eslint). Result:
+  `npm audit` → **0**; toolchain fully green (gen:api 0 drift, typecheck/lint/build/test pass, coverage 72.4%).
+
+**(B) Container hardening** — `deploy/docker-compose.hardened.yml` `pulse` service (the internet-facing app that parses
+untrusted beacon+webhook input). The Dockerfile already runs non-root (`USER pulse`, static CGO_ENABLED=0) — added the
+missing compose-level controls: `read_only: true` + `tmpfs: [/tmp]`, `cap_drop: [ALL]`, `security_opt:
+[no-new-privileges:true]`. Also fixed a latent bug the hardening surfaced: `PULSE_REPORTS_DIR` was unset → the code
+default (relative `pulse-reports`) wrote report artifacts to the **ephemeral container root** (`/pulse-reports`) — lost on
+every redeploy AND incompatible with read_only. Set `PULSE_REPORTS_DIR=/var/lib/pulse/reports` (persistent volume).
+Write-path audit: only 2 prod write sites (secret-key file + report artifacts), both now → the `/var/lib/pulse` volume
+(unaffected by read_only).
+
+**Adversarial review** (workflow: 3 finder lenses → refute-by-default verify, 8 agents): 5 raw findings, **4 refuted, 1
+confirmed LOW.** The 4 refuted were all safety-checks confirming the controls are sound (volume ownership fine; no missed
+root-fs write; key-file write targets the volume; the "relative ArtifactsDir → /pulse-reports" high was refuted precisely
+because `PULSE_REPORTS_DIR` already overrides it). The 1 confirmed is a **pre-existing** report-artifact retention gap
+(the reports scheduler never prunes; `PULSE_RETENTION_DAYS` governs only ClickHouse TTL, not files) — verifier
+downgraded medium→LOW ("tiny monthly CSV/PDF files, exhaustion is decades away, not a crash-loop risk"). NOT introduced
+by this change; deferred to a focused follow-up (**SESSION-81 lead:** a scoped `PULSE_REPORT_ARTIFACT_RETENTION_DAYS`
+prune). Note the trade-off: before this change artifacts were wiped each redeploy (never accumulated but were lost); now
+they persist (durability fixed) and the LOW accumulation path becomes live — hence the follow-up.
+
+**Prod-verified** (container recreate, no rebuild — image unchanged, dev-only dep bumps don't touch the shipped bundle):
+`up -d pulse` applied the profile; `docker inspect` confirms `ReadonlyRootfs=true CapDrop=[ALL]
+SecurityOpt=[no-new-privileges:true] Tmpfs=/tmp PULSE_REPORTS_DIR=/var/lib/pulse/reports`. 5-check smoke all green
+(version v0.4.0-93-g8858b5f, healthz 200, signed webhook 200, limits 512M/0.5cpu, 0 error lines) + SPA root 200 + **0
+read-only/EROFS/permission errors** across full post-recreate logs + 0 restarts. Rollback point `pulse-prod-pulse:pre-d142`
+tagged; backup taken pre-deploy (rc 0). PR #152 (squash-merged). **No operator action required.**

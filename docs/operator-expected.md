@@ -1,5 +1,16 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-17, D-141 — SESSION-79)
+# Operator TODO — the items only YOU can do (updated 2026-07-17, D-142 — SESSION-80)
 
+> **S80 (D-142) needs NO operator action.** A cross-cutting security-posture pass, now live in prod
+> (`v0.4.0-93-g8858b5f`). Two parts, both self-contained: **(1) dependencies** — the Go server has **zero reachable**
+> known vulnerabilities, and the web app's `npm audit` is now **clean** (the three flagged packages were build/test-only
+> tooling, never shipped to browsers, and were bumped to patched versions). **(2) container hardening** — the Pulse
+> container now runs with a **read-only root filesystem, all Linux capabilities dropped, and no-privilege-escalation**,
+> so a hypothetical code-execution bug has far less to work with; generated report files also now persist correctly
+> across redeploys (they were previously being lost). Verified live (0 errors, healthy). **Nothing for you to configure.**
+> The one leftover is an internal LOW housekeeping item (old report files aren't auto-pruned yet) that I'll handle next —
+> not your concern. **The two product decisions below ([20] audit-read model, [5] per-tenant QoE alerting) still await
+> your preference** whenever you get to them — neither is urgent or blocking.
+>
 > **★ S79 (D-141) completes the third internal audit — 8 findings, 7 fixed + 1 escalated to you (no blocking action).**
 > The last item ([5]) turned out to need a product decision, not a bug fix:
 > - **NEW product question — do you want per-tenant QoE alerting?** In a **multi-tenant** deployment (Business+ tier),
