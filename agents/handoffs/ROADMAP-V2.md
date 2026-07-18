@@ -262,12 +262,25 @@ AMS, [M] — and **phase 2 (S13) = pion media path** (ICE/DTLS/SRTP, rtt/jitter/
 
 ---
 
-### 2.12  Mobile SDKs  [L per platform]
+### 2.12  Mobile SDKs  [L per platform]  [⚙ iOS Phase 1 ✅ DONE (D-153, S90); iOS Phase 2 = Apple-tooling-blocked; Android = toolchain-blocked]
+
+**★ Operator directive (D-152, 2026-07-18):** "add it to the implementation plan and next session." Mobile SDKs are now
+sanctioned work. **Feasibility split verified against this host's toolchains:**
+- **iOS (Swift) Phase 1 ✅ SHIPPED (D-153, S90).** `sdk/beacon-swift` (`PulseBeacon`) — a SwiftPM package mirroring the
+  frozen beacon wire contract (`contracts/events/beacon-event.schema.json`, D-004) + the beacon-js session/transport
+  model: Codable types, v4-UUID sessions + sampling, a thread-safe batching/retry `Transport` (POST `/ingest/beacon` with
+  `X-Pulse-Ingest-Token`), and a typed `PulseBeacon` façade. `swift build` (debug+release) + **22 XCTest cases green on
+  Linux**; zero third-party deps; ~600 LOC. iOS-only UIKit background-flush behind `#if canImport(UIKit)`. CI: `sdk-swift`
+  job (`container: swift:6.1`). **iOS Phase 2 (blocked):** background `URLSession` config + an AVPlayer/SwiftUI sample need
+  Xcode/an Apple CI runner — not on this Linux host.
+- **Android (Kotlin) — TOOLCHAIN-BLOCKED.** No JDK / Gradle / Kotlin on this host, so it cannot be built or verified under
+  the build-it-to-prove-it discipline. **Surfaced to the operator (operator-expected.md):** needs a JVM+Android build
+  environment (or a CI job) before it can be developed. Authoring without verification is out.
 
 **Why:** `sdk/beacon-js` covers browser clients. Native mobile apps have no supported SDK.
 Mobile QoE data (viewer sessions on iOS/Android apps using AMS streams) cannot currently
 reach Pulse.
-**Source:** ROADMAP.md §2 post-GA backlog.
+**Source:** ROADMAP.md §2 post-GA backlog; operator directive D-152.
 **Scope:** At minimum, a Swift package (iOS) and a Kotlin library (Android), each
 implementing the same beacon REST contract as `sdk/beacon-js`. Size gate analogous to the
 JS SDK 15 KB gate (define per platform at scoping). Share the contract spec; do not diverge

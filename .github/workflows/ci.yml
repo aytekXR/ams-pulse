@@ -219,6 +219,22 @@ jobs:
       - name: Test (HARD)
         run: cd sdk/beacon-js && npm test
 
+  # ── 4b. iOS beacon SDK (Swift) ────────────────────────────────────────────────
+  # Cross-platform core builds + tests on Linux (Foundation + Dispatch only); the
+  # iOS-only lifecycle hook is behind `#if canImport(UIKit)`. Runs in the official
+  # Swift container since ubuntu-latest has no Swift toolchain preinstalled.
+  sdk-swift:
+    runs-on: ubuntu-latest
+    container: swift:6.1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build iOS beacon SDK (cross-platform core)
+        run: cd sdk/beacon-swift && swift build
+
+      - name: Test (HARD)
+        run: cd sdk/beacon-swift && swift test
+
   # ── 5. Docker build ──────────────────────────────────────────────────────────
   # Prove the all-in-one Dockerfile builds end-to-end (build context = repo root).
   # Version stamping: build-args inject VERSION/COMMIT/BUILD_DATE via ldflags so

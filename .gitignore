@@ -73,3 +73,8 @@ docs/marketplace/screenshots/
 # redistribution blocker) + bundle carries CDN-font/Gemini-caller content.
 # Bootstrap: agents/handoffs/wave-uipro/WAVE-PLAN.md §1.1b.
 .claude/skills/
+
+# Swift / SwiftPM (sdk/beacon-swift)
+.build/
+.swiftpm/
+sdk/beacon-swift/.build/

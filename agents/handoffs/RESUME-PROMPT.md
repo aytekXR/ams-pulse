@@ -11,7 +11,7 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-90.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-91.md`)
 
 **Session 2026-07-18 result: D-151 — S89 was the LOW-FREQUENCY WAIT, but a verify-before-idling adversarial sweep (5 scouts + refute-by-default verify, 13 agents) caught 5 genuine non-gated defects and fixed them as a one-off stewardship arc: (1 HIGH) `handleTestSource` emitted the failure reason under `message` while the `AmsSourceStatus` contract + web use `error` → every failed source test showed a generic fallback; (MED) the web analytics client sent `?stream_id=` where the server/contract use `stream` → stream filter silently dropped; (MED×2) logtail (deleted D-062) still shown as shipped/configurable in ARCHITECTURE/AMS-INTEGRATION/README; (MED) `make mock-ams` built from the repo root (no go.mod) → unconditional failure. Both source fixes mutation-proven; full Go+web suites green; adversarial diff-review clean. Prod-rolled `v0.4.0-118` → `v0.4.0-119`, 5-check smoke green. PR #176.**
 
@@ -23,21 +23,36 @@ and closed them as a bounded one-off. The re-verify discipline earned its keep (
 `fanout`/`dedup` row — those are *files*, not deleted packages — and left it). Evidence: `decisions.md` D-151; ROADMAP
 §2.38.
 
-**★ SESSION-90 = STILL THE LOW-FREQUENCY WAIT** (S89's fixes were caught defects, not a new work-stream). At open, run the
-SAME two-minute gate: (1) `date +%Y-%m-%d` — if **≥ 2026-07-23** → **§2.7 CI-promotions** (the primary autonomous move,
-finally unlocked; in `.github/workflows/ci.yml` the only advisory job is `web-e2e` (`continue-on-error: true`; `csp.spec.ts`
-runs inside it — there is no separate `csp-e2e` job) — drop the flag, run `actionlint`; surface the branch-protection
-FULL-LIST PUT to the operator — repo-admin I cannot set, §2.1). (2) Check `operator-expected.md` — if the operator answered
-[20]/named a priority → do their pick (Lead B). (3) Else → a quick health check (git/CI/PRs/date/operator) + at most ONE
-bounded adversarial "is anything genuinely broken?" sweep like S89's; fix a real non-gated defect (stewardship), else
-**wait at low frequency — do NOT manufacture an arc.** See `sessions/SESSION-90.md`.
+**★ 2026-07-18 UPDATE — D-152: THE OPERATOR RESOLVED THE DECISION MENU. The low-frequency wait is OVER.** The operator
+dispositioned the whole checkpoint (in-conversation): §2.6 keep-signing (won't-build unsigned) · §2.18 GHCR-public deferred
+· §2.19 UI refactor deferred · deeper-F6 deferred (delegated to me) · **§2.1 branch protection = ENABLE (operator runs the
+`gh api …/branches/main/protection` PUT I provided — required-status-checks-only; repo-admin I can't set)** · **§2.12
+mobile SDKs GREEN-LIT: "add it to the implementation plan and next session."** [20] audit-read was NOT addressed → stays
+status-quo (reads open). Evidence: `decisions.md` D-152; ROADMAP §2.12; operator-expected.md.
 
-**⚠ OPERATOR DECISIONS PENDING (in `operator-expected.md`):** **[20] audit-read model** (a clean (a)/(b) choice), §2.6,
-§2.1, §2.18, §2.19, §2.12; the §2.7 date-gate (2026-07-23); the AMS trial-licence expiry confirmation; the 3
-E2E-validation follow-ups (G-21 cluster pagination, credential rotation, G-22 webhook mapping). **NEW low-priority
-stewardship follow-up (my call; non-blocking):** the OpenAPI `SourceWrite`/`Source` `type` enums still list the dead
-`log_tail` source type — removing it is a contract-*narrowing* change (backward-compat), deferred from S89's bug-fix
-sweep. None blocks continued autonomous stewardship; all substantive next moves are gated.
+**★ 2026-07-18 result — D-153: S90 SHIPPED the §2.12 iOS Swift beacon SDK Phase 1** (`sdk/beacon-swift`, `PulseBeacon`).
+A SwiftPM package mirroring the frozen beacon wire contract (`beacon-event.schema.json`, D-004) + the beacon-js
+session/transport model: Codable `Types`, v4-UUID `Session` + sampling, a thread-safe batching/retry `Transport` (POST
+`/ingest/beacon` with `X-Pulse-Ingest-Token`), a typed `PulseBeacon` façade; iOS-only UIKit background-flush behind
+`#if canImport(UIKit)`. `swift build` (debug+release) + **22 XCTest cases green on Linux**; zero deps; ~600 LOC; new
+`sdk-swift` CI job (`container: swift:6.1`). Linux fix: `URLSession`/`URLRequest` are in `FoundationNetworking`. **NO
+server/web change → NO prod roll** (prod stays `v0.4.0-119`). Evidence: `decisions.md` D-153; ROADMAP §2.12. PR #177.
+
+**★ SESSION-91 = BACK TO THE LOW-FREQUENCY WAIT** (iOS Phase 1 is the sanctioned work, now done; what remains is gated or
+tooling-blocked). At open, run the SAME two-minute gate: (1) `date +%Y-%m-%d` — if **≥ 2026-07-23** → **§2.7
+CI-promotions** (drop `web-e2e`'s `continue-on-error` in `.github/workflows/ci.yml`, `actionlint`; hand the operator the
+updated branch-protection PUT that adds e2e/csp-e2e/web-e2e/docker-build). (2) Check `operator-expected.md` — if the
+operator answered [20] / provided an **Android build environment** / asked for iOS Phase 2 / named a priority → do their
+pick (Lead B). (3) Else → quick health check + at most ONE bounded adversarial "is anything genuinely broken?" sweep like
+S89's; fix a real non-gated defect (stewardship — a candidate is the deferred `log_tail` enum cleanup, a contract-narrowing
+change), else **wait at low frequency — do NOT manufacture an arc.** **Do NOT start** iOS Phase 2 (needs Xcode/Apple CI)
+or the Android SDK (needs JDK/Gradle/Kotlin) — both are tooling-blocked. See `sessions/SESSION-91.md`.
+
+**⚠ OPERATOR ITEMS STILL OPEN (in `operator-expected.md`, short list):** **§2.1** — run the branch-protection PUT; **§2.12
+Android** — provide a JVM+Gradle+Kotlin build environment (or CI job) to unblock it; **[20] audit-read** — still open
+(status-quo reads-open until you choose); the AMS trial-licence expiry confirmation; rotate the chat-exposed creds; the
+§2.7 date-gate (2026-07-23, auto). **NEW low-priority stewardship follow-up (my call; non-blocking):** the OpenAPI
+`SourceWrite`/`Source` `type` enums still list the dead `log_tail` source type — a contract-*narrowing* change, deferred.
 
 ## (superseded) ▶ START HERE (executed `sessions/SESSION-89.md` — D-151, see above)
 

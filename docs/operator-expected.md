@@ -1,5 +1,26 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-18, SESSION-89 close — D-151 stewardship fixes shipped; F6 code complete)
+# Operator TODO — the items only YOU can do (updated 2026-07-18, D-152 — decision menu resolved; §2.12 iOS SDK green-lit)
 
+> # ▶ D-152 (2026-07-18) — YOU RESOLVED THE DECISION MENU. Remaining items you own are short.
+>
+> Thanks — recorded all of it (`decisions.md` D-152). Net: the loop is off the low-frequency wait and starting the **iOS
+> Swift beacon SDK** (§2.12). What's still on your plate:
+>
+> | Item | Status | What YOU still need to do (if anything) |
+> |------|--------|------------------------------------------|
+> | **§2.1 branch protection** | You said enable | **Run the `gh api … /branches/main/protection` PUT I gave you** (required repo-admin — I can't). Verify with `gh api …/protection --jq '.required_status_checks.contexts'`. |
+> | **§2.12 Android (Kotlin) SDK** | Green-lit but **toolchain-blocked** | This host has **no JDK / Gradle / Kotlin**, so I can't build or verify an Android SDK. Give me a build environment (install a JDK+Gradle here, or add an Android CI job) and I'll do it. iOS is proceeding now (Swift 6.1.2 is present). |
+> | **★ [20] audit-log read model** | **Still open** (you didn't cover it) | (a) keep reads open (status quo — what it stays as until you say otherwise) or (b) gate the whole admin-read surface behind `admin` scope. One word and I'll close it. |
+> | **AMS trial-licence expiry** | Time-sensitive, unchanged | Confirm the real expiry in the AMS console (docs disagree 07-12 vs 07-27; a lapsed licence = ingest death on the next `antmedia` restart). |
+> | **Rotate chat-exposed creds** | Carried | Rotate the AMS console password + Pulse admin token passed through chat. |
+>
+> **Resolved (no action needed):** §2.6 keep signing required (won't-build unsigned mode) · §2.18 GHCR-public deferred to
+> first release · §2.19 UI refactor deferred (you'll review) · deeper-F6 deferred (demand-driven, you delegated the call).
+>
+> **§2.7 CI-job promotions** still auto-unlock **2026-07-23** — the loop will flip the soft jobs and hand you an updated
+> branch-protection PUT that adds the e2e/csp-e2e/web-e2e/docker-build set.
+>
+> ---
+>
 > # ▶ S89 STATUS (2026-07-18, D-151) — NO operator action required
 >
 > The loop is in the low-frequency-wait phase (F6 code complete; the safe autonomous backlog is drained). This session did
