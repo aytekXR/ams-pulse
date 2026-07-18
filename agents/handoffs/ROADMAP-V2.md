@@ -262,7 +262,7 @@ AMS, [M] — and **phase 2 (S13) = pion media path** (ICE/DTLS/SRTP, rtt/jitter/
 
 ---
 
-### 2.12  Mobile SDKs  [L per platform]  [⚙ iOS Phase 1 ✅ DONE (D-153, S90); iOS Phase 2 = Apple-tooling-blocked; Android = toolchain-blocked]
+### 2.12  Mobile SDKs  [L per platform]  [⚙ iOS Phase 1 ✅ DONE (D-153, S90); iOS Phase 2 = Apple-tooling-blocked; Android = STANDING GO, auto-start on toolchain detection (operator directive 2026-07-18)]
 
 **★ Operator directive (D-152, 2026-07-18):** "add it to the implementation plan and next session." Mobile SDKs are now
 sanctioned work. **Feasibility split verified against this host's toolchains:**
@@ -273,9 +273,39 @@ sanctioned work. **Feasibility split verified against this host's toolchains:**
   Linux**; zero third-party deps; ~600 LOC. iOS-only UIKit background-flush behind `#if canImport(UIKit)`. CI: `sdk-swift`
   job (`container: swift:6.1`). **iOS Phase 2 (blocked):** background `URLSession` config + an AVPlayer/SwiftUI sample need
   Xcode/an Apple CI runner — not on this Linux host.
-- **Android (Kotlin) — TOOLCHAIN-BLOCKED.** No JDK / Gradle / Kotlin on this host, so it cannot be built or verified under
-  the build-it-to-prove-it discipline. **Surfaced to the operator (operator-expected.md):** needs a JVM+Android build
-  environment (or a CI job) before it can be developed. Authoring without verification is out.
+- **Android (Kotlin) — ★ STANDING GO (operator directive, 2026-07-18): "start the android sdk once I set up the build env
+  later."** Currently toolchain-blocked (no JDK/Gradle/Kotlin on this host → can't build/verify under the
+  build-it-to-prove-it discipline, so it is NOT authored yet). **AUTO-START TRIGGER:** every session-open / loop tick runs
+  `command -v gradle && command -v java` (or `kotlinc`); **the FIRST tick where the toolchain is present → immediately
+  start `sdk/beacon-kotlin` as a Lead-B arc (no further operator prompt needed — this is the standing GO).** Until then it
+  stays a one-line "toolchain still absent" wait.
+
+  **Turnkey plan (`sdk/beacon-kotlin`, a Gradle Kotlin JVM library — mirror `sdk/beacon-swift` + `sdk/beacon-js`, same
+  frozen `beacon-event.schema.json`):**
+  - **Structure:** `settings.gradle.kts` (`rootProject.name = "beacon-kotlin"`), `build.gradle.kts` (`kotlin("jvm")`;
+    **zero third-party runtime deps** — like the other two SDKs; JUnit 5 as the only test dep), package `dev.pulse.beacon`.
+  - **Types.kt:** data classes `BeaconBatch`/`BeaconEventItem`/`PlayerInfo` + `PlayerKind`/`BeaconEventType` enums whose
+    wire strings match the schema (`ams-webrtc`, `startup_complete`, …). A sealed `JsonValue` (String/Int/Double/Bool) for
+    the open per-type `data`.
+  - **Json.kt:** a tiny hand-rolled JSON writer (the payload is small + fixed) to keep zero-dep — do NOT pull in
+    kotlinx.serialization/Gson/Moshi/org.json. Emit snake_case keys (`session_id`, `stream_id`, `sdk_version`) + the
+    schema `data` keys exactly; escape strings. (A JSON *reader* is unnecessary — the SDK is encode-only, like the Swift one.)
+  - **Session.kt:** `UUID.randomUUID().toString()` (lowercase v4) + once-per-session sampling (`ThreadLocalRandom`).
+  - **Transport.kt:** batch (≤10 s / 25 events / on demand) → `POST <ingestUrl>/ingest/beacon` with
+    `X-Pulse-Ingest-Token`; bounded (100) retry queue + exponential backoff (1 s→60 s). Serialize all state on a
+    single-thread `ScheduledExecutorService` (the JVM analog of the Swift serial `DispatchQueue` + timer). A `BeaconSender`
+    interface (default `HttpURLConnectionSender`, JDK built-in — zero-dep) makes HTTP injectable for tests.
+  - **PulseBeacon.kt:** the façade — `Config`, typed helpers (`startupComplete`, `heartbeat`, `rebufferEnd`, `error`,
+    `bitrateChange`, `resolutionChange`, `sessionStart/End`), generic `event()`, `flush()`, `dispose(reason)`. Android
+    lifecycle (background flush via `ProcessLifecycleOwner`/`Activity` callbacks) is the Android-only Phase-2 layer, kept
+    out of the pure-JVM core so `./gradlew test` runs without an Android SDK.
+  - **Tests:** JUnit5 mirroring the Swift suite — wire-parity vs the schema (parse the emitted JSON, assert snake_case keys
+    + per-type `data`), session/sampling, transport batching/flush/retry (a `MockSender`), façade payloads, unsampled=no-op.
+  - **CI:** add an `sdk-kotlin` job to `.github/workflows/ci.yml` — `actions/setup-java` (Temurin 21) + `./gradlew build`
+    (which runs tests). Add the Gradle wrapper (`gradlew`, `gradle/wrapper/*`) so CI needs no preinstalled Gradle.
+  - **Discipline:** contracts-first (re-read the frozen schema + both existing SDKs); zero-dep; NO server change → NO prod
+    roll; mutation-check the JSON writer + transport if practical. On completion: flip this to ✅ DONE, add an
+    `sdk/beacon-kotlin/README.md`, close via the normal session pipeline.
 
 **Why:** `sdk/beacon-js` covers browser clients. Native mobile apps have no supported SDK.
 Mobile QoE data (viewer sessions on iOS/Android apps using AMS streams) cannot currently

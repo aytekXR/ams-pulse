@@ -9269,3 +9269,20 @@ since `ubuntu-latest` has no Swift toolchain. `.gitignore` now excludes `.build/
 `URLSession` + an AVPlayer/SwiftUI integration sample need Xcode/an Apple CI runner — not on this host. **Android Kotlin
 SDK remains toolchain-blocked** (operator-expected.md). Docs: D-153 (this block); ROADMAP §2.12 (iOS Phase 1 DONE);
 RESUME → SESSION-91; SESSION-90 CLOSED; SESSION-91 written.
+
+## D-154 — OPERATOR STANDING DIRECTIVE (2026-07-18): auto-start the Android Kotlin SDK the moment the JVM/Gradle toolchain appears. No code; a trigger + turnkey plan encoded.
+
+Operator (in-conversation): **"start the android sdk once I set up the build env later."** Recorded as a **standing GO** —
+the loop must self-detect the build environment and begin the Android SDK without a further prompt:
+- **Trigger (encoded in the gate):** every SESSION open / loop tick runs `command -v gradle && command -v java` (or
+  `kotlinc`). The FIRST tick where the toolchain is present → immediately START `sdk/beacon-kotlin` as a Lead-B arc. Until
+  then it is a one-line "toolchain absent, waiting" (verified absent this session: no java/javac/kotlin/kotlinc/gradle).
+- **Turnkey plan (durable):** written into ROADMAP §2.12 — a Gradle Kotlin JVM library mirroring `sdk/beacon-swift` +
+  `sdk/beacon-js` against the frozen `beacon-event.schema.json`: zero-dependency `Types`/enums + a hand-rolled JSON writer
+  (no kotlinx.serialization/Gson/org.json), `UUID` v4 session + sampling, a `ScheduledExecutorService`-serialized
+  batching/retry `Transport` (POST `/ingest/beacon` with `X-Pulse-Ingest-Token`; injectable `HttpURLConnection` sender),
+  a typed `PulseBeacon` façade; JUnit5 parity tests; a Gradle wrapper + an `sdk-kotlin` CI job (`setup-java` Temurin 21 →
+  `./gradlew build`). Android-lifecycle background flush is the Android-only Phase-2 layer, kept out of the pure-JVM core.
+- **Constraints:** contracts-first; zero-dep; NO server change → NO prod roll; do NOT author unverified Kotlin before the
+  toolchain exists (build-it-to-prove-it). **Operator action to unblock:** install a JDK (Temurin 21) + Gradle on this host
+  (or add an Android CI runner). Recorded in operator-expected.md, RESUME (gate step 1b), SESSION-91 (gate 1b + Lead B).

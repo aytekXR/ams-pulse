@@ -14,9 +14,12 @@ remaining work is gated or tooling-blocked, **wait at low frequency** — don't 
 
 ## THE FIRST THING TO DO AT OPEN: the two-minute gate
 1. **CHECK THE DATE.** `date +%Y-%m-%d`. The §2.7 CI-promotion gate unlocks **≥ 2026-07-23** (at S90 close it was 07-18).
-2. **CHECK `operator-expected.md`** — did the operator: answer **[20]** (audit-read model); provide an **Android build
-   environment** (JDK+Gradle+Kotlin, or an Android CI job) to unblock §2.12 Android; ask for **iOS Phase 2**; confirm the
-   **AMS licence expiry**; or name a new priority? If yes → that is the highest-leverage move: DO IT (Lead B).
+1b. **★ CHECK THE ANDROID TOOLCHAIN (standing operator GO, 2026-07-18 — "start the android sdk once I set up the build env
+   later").** Run `command -v gradle && command -v java` (or `kotlinc`). **If PRESENT → this is the highest-priority move:
+   immediately START `sdk/beacon-kotlin` (Lead B, Android), no further operator prompt** — the operator pre-authorized it;
+   follow the turnkey plan in ROADMAP §2.12. If absent → note "Android toolchain absent, waiting" and continue the gate.
+2. **CHECK `operator-expected.md`** — did the operator: answer **[20]** (audit-read model); ask for **iOS Phase 2**;
+   confirm the **AMS licence expiry**; or name a new priority? If yes → that is the highest-leverage move: DO IT (Lead B).
 
 ## Lead — pick by state (priority order)
 **A) IF today ≥ 2026-07-23 → §2.7 CI-promotions.** In `.github/workflows/ci.yml` drop `web-e2e`'s `continue-on-error:
@@ -27,8 +30,12 @@ CI-config change does NOT roll prod.
 **B) IF the operator answered / provided tooling / named a priority → do their pick.**
 - **[20]:** (a) keep-open = document + close; (b) gate-admin-reads = `canWrite` check at `handleListAuditLog` (audit.go:92)
   + decide consistency across users/tokens/audit + contracts/tests/mutation/adversarial-review + prod-roll.
-- **§2.12 Android** (if a JVM+Gradle+Kotlin env appears): build `sdk/beacon-kotlin` mirroring `sdk/beacon-swift` +
-  `sdk/beacon-js` (same frozen schema); Gradle build + JUnit; add a CI job.
+- **§2.12 Android (STANDING GO — start the moment the toolchain is present, per gate step 1b; no operator prompt needed):**
+  build `sdk/beacon-kotlin` per the turnkey plan in ROADMAP §2.12 — a Gradle Kotlin JVM lib mirroring `sdk/beacon-swift` +
+  `sdk/beacon-js` (same frozen schema): zero-dep types + hand-rolled JSON writer, UUID session + sampling, a
+  `ScheduledExecutorService`-serialized batching/retry `Transport` (POST `/ingest/beacon` with `X-Pulse-Ingest-Token`,
+  `HttpURLConnection` sender injectable for tests), a `PulseBeacon` façade; JUnit5 parity tests; add the Gradle wrapper +
+  an `sdk-kotlin` CI job (`actions/setup-java` Temurin 21 → `./gradlew build`). NO server change → NO prod roll.
 - **§2.12 iOS Phase 2** (if an Apple/Xcode runner appears): background `URLSession` config + an AVPlayer/SwiftUI sample.
 
 **C) ELSE (still < 07-23, no operator input) → VERIFY, then WAIT at low frequency. Do NOT manufacture an arc.**
