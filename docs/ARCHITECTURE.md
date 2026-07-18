@@ -18,7 +18,6 @@ crash reporting) must be opt-in and documented.
 ```
                 ┌──────────────────────────── pulse binary ───────────────────────────────────────┐
 AMS REST ──────►│ collector/restpoller ─┐                                                         │
-AMS log ───────►│ collector/logtail ────┤                                                         │
 AMS Kafka ─────►│ collector/kafka ──────┼─► normalize ─► store/clickhouse (events)                │
 AMS webhooks ──►│ collector/webhook ────┤        │                                                │
 Player beacons ►│ collector/beacon ─────┤        ├─► sessions.Stitcher ─► viewer_sessions (CH)   │
@@ -98,7 +97,7 @@ Last updated: Wave 2 implementation complete (2026-06-14).
 | Component | Package | Status |
 |---|---|---|
 | REST poller | `internal/collector/restpoller` | **Shipped** — 5 s default poll, ≤10 s stream visibility |
-| Log tail | `internal/collector/logtail` | **Shipped** — rotation-safe, partial-line-safe |
+| Log tail | _(removed)_ | **Deleted** — removed in D-062 (honest-features pass); the AMS-log ingest path is not active |
 | Webhook receiver | `internal/collector/webhook` | **Shipped** — HMAC-SHA256 validation |
 | Fanout + dedup | `internal/collector/fanout`, `dedup` | **Shipped** |
 | Live aggregator | `internal/collector/aggregator` | **Shipped** — in-memory, deep-copy snapshots; wave-2 health fields added |

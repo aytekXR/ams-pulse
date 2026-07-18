@@ -1,5 +1,29 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-18, SESSION-89 wait — status-check response; F6 code complete)
+# Operator TODO — the items only YOU can do (updated 2026-07-18, SESSION-89 close — D-151 stewardship fixes shipped; F6 code complete)
 
+> # ▶ S89 STATUS (2026-07-18, D-151) — NO operator action required
+>
+> The loop is in the low-frequency-wait phase (F6 code complete; the safe autonomous backlog is drained). This session did
+> NOT manufacture an arc — but before idling it ran one adversarial "is anything genuinely broken?" sweep to *confirm*
+> nothing autonomous remained, and that sweep caught **5 genuine, non-gated defects**, which it fixed as a one-off
+> stewardship arc:
+> - **Add-source "Test connection" now shows the real error** (no REST URL / invalid scheme / the network error) instead
+>   of a generic "Source unreachable" — the server was returning the detail under the wrong JSON key.
+> - **A latent analytics bug fixed** — the audience / geo / devices / CSV-export calls sent the stream filter under the
+>   wrong query-parameter name, so it was silently ignored (no page passes it today, so no visible change).
+> - **Three doc fixes + one build fix** — removed leftover references to the `logtail` collector (deleted in D-062) from
+>   ARCHITECTURE / AMS-INTEGRATION / README, and repaired the `make mock-ams` developer target (it failed unconditionally).
+>
+> Both code fixes are mutation-proven, the full Go + web suites are green, and it is **live in prod (v0.4.0-119)**, 5-check
+> smoke verified. **Nothing for you to do.** The decision menu below is unchanged and remains the set of highest-leverage
+> next moves — all yours; none blocks continued autonomous work. **The next scheduled autonomous move is §2.7 CI-job
+> promotions, which unlock 2026-07-23.**
+>
+> **One discovered follow-up (non-urgent, non-blocking, my call to do later):** the API's source `type` enum still lists a
+> dead `log_tail` type (leftover from the D-062 collector deletion); removing it is a contract-narrowing change I've
+> deferred rather than bundle into a bug-fix sweep.
+>
+> ---
+>
 > # ▶ OPERATOR STATUS RESPONSE (2026-07-18) — you asked "what's expected of me?" Nothing is blocking; here's the menu.
 >
 > **Nothing blocks autonomous progress.** Your "start F6" is fully delivered (Phases 1 & 2 shipped to prod

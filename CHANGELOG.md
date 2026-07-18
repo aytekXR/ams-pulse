@@ -23,6 +23,30 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
   non-hardened deployments retain artifacts across restarts. (Closes the one confirmed
   follow-up from the D-142 security-posture review.)
 
+### Fixed
+
+- **Source connectivity-test error detail (D-151).** The Settings → "Add source" connectivity
+  test (`POST /admin/sources/{id}/test`) now shows the real failure reason (no REST URL, an
+  invalid URL scheme, or the network error) instead of a generic "Source unreachable". The
+  server returned the detail under a `message` key, but the `AmsSourceStatus` API contract and
+  the web UI both use `error`, so the detail was always discarded. On a successful test `error`
+  is now correctly `null`, per the contract.
+- **Analytics stream filter (D-151).** The audience / geo / devices analytics calls and the
+  audience CSV export now send the per-stream filter under the `stream` query parameter the
+  server and OpenAPI spec expect (they previously sent `stream_id`, which the server ignored —
+  silently returning data for all streams). No UI currently passes a stream filter to these, so
+  this is a latent-bug fix with no change to today's behaviour.
+- **`make mock-ams` (D-151).** The developer target built the mock-AMS binary from the repo
+  root, which has no `go.mod`, so it failed unconditionally; it now builds inside `qa/mock-ams`
+  (its own module), matching the CI job.
+
+### Documentation
+
+- **Logtail references removed (D-151).** The `logtail` collector was deleted in D-062, but a
+  few docs still listed it as shipped/configurable: `docs/ARCHITECTURE.md` (component diagram +
+  status table), `docs/AMS-INTEGRATION.md` (the `PULSE_LOG_TAIL_PATH` env-var row), and
+  `README.md`'s architecture diagram are now corrected.
+
 ### Security
 
 - **Production container hardening + supply-chain sweep (D-142).** A cross-cutting

@@ -527,6 +527,29 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.38  Contract-drift + doc/build stewardship sweep — S89 low-frequency-wait caught-defect arc  [✅ DONE — 2 source fixes (prod-rolled v0.4.0-119) + 3 doc/build fixes]  ✅ S89 (D-151, 2026-07-18, PR #176)
+
+The S89 two-minute gate found the primary autonomous move still gated (§2.7 date-locked ≥ 2026-07-23; operator hasn't
+answered [20] or named a priority), so per the stewardship clause the session ran ONE bounded adversarial "is anything
+genuinely broken?" sweep (5 scout lenses + refute-by-default verify, 13 agents) before idling — the same discipline that
+caught the S85 contract drift. It surfaced **5 CONFIRMED non-gated defects** (3 candidates refuted), each re-verified
+against the code:
+- **[HIGH]** `handleTestSource` emitted the failure reason under an undocumented `message` key while `AmsSourceStatus`
+  (contract) + the web `OnboardingWizard` use `error` → every failed source connectivity test showed the generic
+  "Source unreachable" fallback. Renamed the failure branches `message`→`error`; success branch now `error: nil` per the
+  contract (a diff-review catch). Mutation-proven (`s89_drift_test.go`).
+- **[MED]** `analyticsApi` (web) sent `?stream_id=` where the server/contract use `stream` → the stream filter was
+  silently dropped (all-stream data). Fixed the 4 query keys (client-only). Mutation-proven (`analytics-params.test.ts`).
+- **[MED×2]** logtail (deleted D-062) still shown as shipped/configurable in `ARCHITECTURE.md` (diagram+table),
+  `AMS-INTEGRATION.md` (`PULSE_LOG_TAIL_PATH` row), and `README.md` (diagram) — corrected.
+- **[MED]** `make mock-ams` ran `go build ./qa/mock-ams/` from the repo root (no go.mod) → unconditional failure; fixed to
+  `cd qa/mock-ams && go build .`.
+
+Full Go (26 pkg) + web (676+) suites green; both source fixes mutation-proven; adversarial diff-review clean. Prod-rolled
+(server+web source changed) v0.4.0-118 → **v0.4.0-119**. **No operator action.** Discovered follow-up (pre-existing, not
+bundled): the OpenAPI `SourceWrite`/`Source` `type` enums still list the dead `log_tail` type (removal is a contract
+narrowing — deferred).
+
 ### 2.37  F6 multi-tenancy — operator-directed "start F6"  [⚙ PHASE 1 ✅ + PHASE 2 ✅; PHASE 3 = [20] next]
 
 **Phase 1 ✅ (D-148, S86, PR #168+#169, prod v0.4.0-112-g75031e7)** — server-side tenant resolution on the live endpoints;

@@ -698,7 +698,6 @@ Complete table of `PULSE_*` variables relevant to AMS integration, read from
 | `PULSE_REPORTS_DIR` | Local directory for generated report artifacts | `pulse-reports` | No |
 | `PULSE_LICENSE_KEY` | License key string | _(empty = free tier)_ | No |
 | `PULSE_LICENSE_FILE` | Path to license file | _(empty)_ | No |
-| `PULSE_LOG_TAIL_PATH` | Path to AMS analytics log file (logtail source, not yet wired in serve.go) | _(empty)_ | No |
 
 ---
 

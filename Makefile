@@ -129,7 +129,7 @@ helm-golden-update: ## Update golden template files (run after chart changes)
 
 mock-ams: ## Build and start mock-ams for local development (no Docker required)
 	@echo "Building mock-ams..."
-	CGO_ENABLED=0 go build -o /tmp/mock-ams ./qa/mock-ams/
+	cd qa/mock-ams && CGO_ENABLED=0 go build -o /tmp/mock-ams .
 	@echo "Starting mock-ams on :9090 (use Ctrl-C to stop)..."
 	/tmp/mock-ams -addr :9090 -scenario 1
 

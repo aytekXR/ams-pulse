@@ -197,28 +197,28 @@ export const analyticsApi = {
       to: String(params.to),
     });
     if (params.interval) q.set("interval", params.interval);
-    if (params.stream_id) q.set("stream_id", params.stream_id);
+    if (params.stream_id) q.set("stream", params.stream_id);
     if (params.app) q.set("app", params.app);
     return apiFetch<GetAudienceResponse>(`/analytics/audience?${q}`);
   },
 
   getGeo: (params: { from: number; to: number; stream_id?: string; app?: string }) => {
     const q = new URLSearchParams({ from: String(params.from), to: String(params.to) });
-    if (params.stream_id) q.set("stream_id", params.stream_id);
+    if (params.stream_id) q.set("stream", params.stream_id);
     if (params.app) q.set("app", params.app);
     return apiFetch<components["schemas"]["GeoResponse"]>(`/analytics/geo?${q}`);
   },
 
   getDevices: (params: { from: number; to: number; stream_id?: string; app?: string }) => {
     const q = new URLSearchParams({ from: String(params.from), to: String(params.to) });
-    if (params.stream_id) q.set("stream_id", params.stream_id);
+    if (params.stream_id) q.set("stream", params.stream_id);
     if (params.app) q.set("app", params.app);
     return apiFetch<components["schemas"]["DeviceResponse"]>(`/analytics/devices?${q}`);
   },
 
   exportCsv: (params: { from: number; to: number; stream_id?: string; app?: string }) => {
     const q = new URLSearchParams({ from: String(params.from), to: String(params.to), format: "csv" });
-    if (params.stream_id) q.set("stream_id", params.stream_id);
+    if (params.stream_id) q.set("stream", params.stream_id);
     if (params.app) q.set("app", params.app);
     return downloadFile(`/analytics/audience?${q}`, "audience.csv");
   },

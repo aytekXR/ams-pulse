@@ -11,7 +11,35 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-89.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-90.md`)
+
+**Session 2026-07-18 result: D-151 — S89 was the LOW-FREQUENCY WAIT, but a verify-before-idling adversarial sweep (5 scouts + refute-by-default verify, 13 agents) caught 5 genuine non-gated defects and fixed them as a one-off stewardship arc: (1 HIGH) `handleTestSource` emitted the failure reason under `message` while the `AmsSourceStatus` contract + web use `error` → every failed source test showed a generic fallback; (MED) the web analytics client sent `?stream_id=` where the server/contract use `stream` → stream filter silently dropped; (MED×2) logtail (deleted D-062) still shown as shipped/configurable in ARCHITECTURE/AMS-INTEGRATION/README; (MED) `make mock-ams` built from the repo root (no go.mod) → unconditional failure. Both source fixes mutation-proven; full Go+web suites green; adversarial diff-review clean. Prod-rolled `v0.4.0-118` → `v0.4.0-119`, 5-check smoke green. PR #176.**
+
+**★ S89 did NOT manufacture an arc.** The two-minute gate confirmed §2.7 is still date-locked (07-18 < 07-23) and the
+operator hasn't answered [20]/named a priority (commit #175 was a status-check response) → Lead C (wait). Per the
+stewardship clause, before idling it verified the "backlog exhausted" claim adversarially (like S85) — the ROADMAP backlog
+IS fully gated/done, but the sweep found 5 real, non-gated defects (contract drift + doc drift + a broken build target)
+and closed them as a bounded one-off. The re-verify discipline earned its keep (I nearly mis-"fixed" the ARCHITECTURE.md
+`fanout`/`dedup` row — those are *files*, not deleted packages — and left it). Evidence: `decisions.md` D-151; ROADMAP
+§2.38.
+
+**★ SESSION-90 = STILL THE LOW-FREQUENCY WAIT** (S89's fixes were caught defects, not a new work-stream). At open, run the
+SAME two-minute gate: (1) `date +%Y-%m-%d` — if **≥ 2026-07-23** → **§2.7 CI-promotions** (the primary autonomous move,
+finally unlocked; in `.github/workflows/ci.yml` the only advisory job is `web-e2e` (`continue-on-error: true`; `csp.spec.ts`
+runs inside it — there is no separate `csp-e2e` job) — drop the flag, run `actionlint`; surface the branch-protection
+FULL-LIST PUT to the operator — repo-admin I cannot set, §2.1). (2) Check `operator-expected.md` — if the operator answered
+[20]/named a priority → do their pick (Lead B). (3) Else → a quick health check (git/CI/PRs/date/operator) + at most ONE
+bounded adversarial "is anything genuinely broken?" sweep like S89's; fix a real non-gated defect (stewardship), else
+**wait at low frequency — do NOT manufacture an arc.** See `sessions/SESSION-90.md`.
+
+**⚠ OPERATOR DECISIONS PENDING (in `operator-expected.md`):** **[20] audit-read model** (a clean (a)/(b) choice), §2.6,
+§2.1, §2.18, §2.19, §2.12; the §2.7 date-gate (2026-07-23); the AMS trial-licence expiry confirmation; the 3
+E2E-validation follow-ups (G-21 cluster pagination, credential rotation, G-22 webhook mapping). **NEW low-priority
+stewardship follow-up (my call; non-blocking):** the OpenAPI `SourceWrite`/`Source` `type` enums still list the dead
+`log_tail` source type — removing it is a contract-*narrowing* change (backward-compat), deferred from S89's bug-fix
+sweep. None blocks continued autonomous stewardship; all substantive next moves are gated.
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-89.md` — D-151, see above)
 
 **Session 2026-07-18 result: D-150 — S88 ADJUDICATED F6 Phase 3 ([20] audit-read): it is an OPERATOR PRODUCT CALL with no autonomous code slice (verified against the code — did NOT guess). ★ F6 buildable code is COMPLETE (Phases 1+2: BUG-009 + [5]). No code, no prod roll; prod stays `v0.4.0-114-ge295795`.**
 
@@ -32,11 +60,6 @@ operator). (2) Check `operator-expected.md` — if the operator answered [20]/na
 Else → a quick health check (git/CI/PRs/date/operator) + at most one bounded adversarial "is anything genuinely broken?"
 sweep (fix a real defect = stewardship; else **wait at low frequency — do NOT manufacture an arc**). See
 `sessions/SESSION-89.md`.
-
-**⚠ OPERATOR DECISIONS PENDING (in `operator-expected.md`):** **[20] audit-read model** (now the sharpest — a clean
-(a)/(b) choice), §2.6, §2.1, §2.18, §2.19, §2.12; the §2.7 date-gate (2026-07-23); the AMS trial-licence expiry
-confirmation; the 3 E2E-validation follow-ups (G-21 cluster pagination, credential rotation, G-22 webhook mapping). None
-blocks continued autonomous stewardship; all substantive next moves are gated.
 
 ## (superseded) ▶ START HERE (executed `sessions/SESSION-88.md`)
 
