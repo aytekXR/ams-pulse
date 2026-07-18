@@ -1,5 +1,32 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-18, D-150 — SESSION-88; F6 code complete, [20] is your call)
+# Operator TODO — the items only YOU can do (updated 2026-07-18, SESSION-89 wait — status-check response; F6 code complete)
 
+> # ▶ OPERATOR STATUS RESPONSE (2026-07-18) — you asked "what's expected of me?" Nothing is blocking; here's the menu.
+>
+> **Nothing blocks autonomous progress.** Your "start F6" is fully delivered (Phases 1 & 2 shipped to prod
+> `v0.4.0-114-ge295795`; Phase 3 = your product call below). The loop is now in a low-frequency wait — the safe,
+> operator-unscoped autonomous backlog is drained, so the next substantive moves need either a date (**§2.7 auto-unlocks
+> 2026-07-23**) or one of your decisions. Pick any line and I'll take it next:
+>
+> | # | Decision (only you can make) | My recommendation |
+> |---|------------------------------|-------------------|
+> | ★ | **[20] audit-log read model** (F6 Phase 3) — `GET /admin/audit-log` is readable by any authenticated token (the deliberate reads-open model). **(a)** keep reads open, or **(b)** gate the whole admin-read surface behind `admin` scope (viewer-role users lose the Audit Log + other admin-read pages). A tenant filter is NOT possible (audit rows have no tenant). | (a) keep open — unless you issue low-trust viewer tokens |
+> | 1 | **§2.6 unsigned-webhook mode** (build vs won't-fix) | Keep HMAC signing required |
+> | 2 | **§2.1 branch protection** — set required-status-checks + PR review on `main` (GitHub repo-admin; I can't) | Enable it; pairs with §2.7 |
+> | 3 | **§2.18 GHCR-public + licence ceremony** — flip released image public, sign vendor licence | Do it at the first public release tag |
+> | 4 | **§2.19 full UI/UX refactor** | Not needed for GA; post-launch |
+> | 5 | **§2.12 mobile SDKs** (iOS/Android) | Demand-driven; defer |
+> | 6 | **Deeper F6:** tenant-scoped AUTH (a token sees only its tenant's data) + a tenant-management web UI | Demand-driven; say the word |
+>
+> **Autonomous (no input):** **§2.7 CI-job promotions** unlock **2026-07-23** — the loop will flip the soft CI jobs to
+> required then and surface the branch-protection half (decision 2) to you.
+>
+> **Time-sensitive (carried, still open):** confirm the true **AMS trial-licence expiry** in the AMS admin console (docs
+> disagree: 07-12 vs 07-27; an autonomous session can't resolve it — AMS enforces the licence only on restart). Also the
+> 3 E2E-validation follow-ups: **G-21** cluster-pagination verify (needs a live 2-node cluster), rotate the chat-exposed
+> **credentials**, **G-22** webhook-mapping product call.
+>
+> ---
+>
 > # ▶ F6 MULTI-TENANCY — CODE COMPLETE (2026-07-18, D-148/D-149/D-150) — Phases 1 & 2 shipped; Phase 3 ([20]) is YOUR product call
 >
 > You said "start F6" and the loop has shipped two phases autonomously (single-tenant deployments — the default — are
