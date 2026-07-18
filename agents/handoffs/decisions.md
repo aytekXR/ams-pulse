@@ -9201,3 +9201,36 @@ references — harmless, left as historical artifacts.
 **No new operator dependency.** Remaining work stays gated (§2.7 unlocks 2026-07-23; the [20] audit-read model + the other
 checkpoint items operator-gated). Docs: D-151 (this block); ROADMAP §2.38; RESUME → SESSION-90; operator-expected (S89
 status); CHANGELOG [Unreleased] Fixed; SESSION-89 CLOSED; SESSION-90 written.
+
+## D-152 — OPERATOR DECISION BATCH (2026-07-18): dispositioned the checkpoint menu. §2.12 mobile SDKs GREEN-LIT (iOS Phase 1 = next session; Android toolchain-blocked). Branch protection to be enabled by operator. §2.6/§2.18/§2.19/deeper-F6 deferred.
+
+The operator answered the `operator-expected.md` decision menu (in-conversation, 2026-07-18). Dispositions recorded here as
+the source of truth:
+
+1. **§2.1 branch protection — ENABLE (operator runs it).** Operator asked for the command; provided a `gh api -X PUT
+   .../branches/main/protection` with **required_status_checks only** (strict + `server,web,sdk,contracts,compose,helm,
+   docker-build,Analyze (go),Analyze (javascript-typescript)`), `enforce_admins:false`, no required reviews — so CI gates
+   without blocking the autonomous loop's self-merge. The long e2e/csp-e2e/web-e2e set is deliberately left out until the
+   §2.7 promotion (2026-07-23), which will hand the operator an updated PUT. **I cannot set repo-admin; the operator runs
+   the command.**
+2. **§2.6 unsigned-webhook mode — WON'T-BUILD (keep HMAC signing required).** Operator: "keep signing required." The
+   convenience unsigned mode is closed; the signed webhook + REST poller remain the supported ingest paths. No code.
+3. **§2.18 GHCR-public + licence ceremony — DEFERRED.** Operator: "no need yet." Left for the first public release tag.
+4. **§2.19 full UI/UX refactor — DEFERRED.** Operator: "looks good, I'll take a look." No refactor now; operator will
+   review the current UI at their leisure.
+5. **§2.12 mobile SDKs — GREEN-LIT** ("add it to the implementation plan and next session"). **Feasibility verified against
+   this host:** Swift 6.1.2 IS installed → the **iOS Swift SDK is buildable/testable here** (SwiftPM cross-platform core on
+   Linux) and becomes **SESSION-90's work** (`sdk/beacon-swift`, mirroring the frozen `beacon-event.schema.json` + the
+   beacon-js session/transport model). **The Android Kotlin SDK is TOOLCHAIN-BLOCKED** — no JDK/Gradle/Kotlin here, so it
+   cannot be built/verified; surfaced to the operator as a build-environment dependency. See ROADMAP §2.12.
+6. **Deeper F6 (tenant-scoped AUTH + tenant-management UI) — DEFERRED (operator delegated: "decide for me and continue").**
+   Decision: defer — it is a large multi-tenant expansion with no imminent multi-tenant-customer signal; `APIToken` has no
+   tenant field (S73 [1]) and a tenant-management UI is §2.19 territory. Revisit on a demand signal.
+
+**★ [20] audit-log read model — NOT addressed by the operator; stays STATUS-QUO (reads open).** The operator dispositioned
+1–6 but did not decide [20]. Status-quo = reads open (the deliberate S43/D-105 model) = no code = the recommended default,
+so it remains as-is until the operator says otherwise. Still logged in operator-expected.md as the one open decision.
+
+**Net effect:** the low-frequency wait is over — **§2.12 iOS is now sanctioned autonomous work.** SESSION-90 is repointed
+from "wait" to the iOS Swift beacon SDK Phase 1. Docs: D-152 (this block); ROADMAP §2.12; operator-expected.md (decisions
+resolved + Android toolchain ask + [20] still open); RESUME → SESSION-90 (iOS SDK); SESSION-90.md rewritten.

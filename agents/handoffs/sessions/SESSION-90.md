@@ -1,85 +1,71 @@
-# SESSION-90 — planned at S89 close (D-151) — LOW-FREQUENCY WAIT (F6 code complete; remaining work is gated)
+# SESSION-90 — iOS Swift beacon SDK, Phase 1 (§2.12, operator-directed D-152)
 
-> Written by SESSION-89 close (2026-07-18). Repo `/home/aytek/repo/ams-pulse` on VPS `161.97.172.146`
-> (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
-> **Read `RESUME-PROMPT.md` ▶ START HERE.** Prod at **v0.4.0-119** (S89 stewardship fixes live: test-source `error` key +
-> analytics `stream` param).
-> **This is the low-frequency-wait phase.** The operator's "start F6" is fully dispositioned (BUG-009 ✅ D-148, [5] ✅
-> D-149, [20] = operator product call D-150). The safe, bounded, operator-unscoped autonomous backlog is drained. Do NOT
-> manufacture an arc — verify, then wait.
+> Written by the D-152 decision batch (2026-07-18). Repo `/home/aytek/repo/ams-pulse` on VPS `161.97.172.146`
+> (**this host IS prod**; no SSH). **Read `RESUME-PROMPT.md` ▶ START HERE.** Prod at **v0.4.0-119** (unchanged — an SDK is a
+> client library; SESSION-90 does NOT touch the server and does NOT roll prod).
+> **The low-frequency wait is over:** the operator green-lit §2.12 mobile SDKs ("add it to the implementation plan and next
+> session"). Swift 6.1.2 is on this host → the **iOS SDK is buildable/testable here**; the Android Kotlin SDK is
+> **toolchain-blocked** (no JDK/Gradle/Kotlin) and is surfaced to the operator, NOT started.
 
-## ⚡ STANDING DIRECTIVE (operator, 2026-07-12) — still in force
-Re-read ROADMAP-V2 §2 / `docs/assessment/` §5 and choose the next-highest-leverage move WHEN ONE EXISTS. When the only
-remaining work is gated (date/operator) or a large operator-unscoped work-stream, the correct move is to **wait at low
-frequency**, not invent work. **Ultracode is on** (apply to the *quality* of real work, not to justify manufacturing
-arcs). **Workflow gotcha:** no backticks in workflow prompt prose. `gofmt -l` before every push.
+## ⚡ STANDING DIRECTIVE — carried
+Ultracode is on (apply to the *quality* of the SDK). **Workflow gotcha:** no backticks in workflow prompt prose.
+`gofmt -l` before any Go push (N/A this session unless server touched — it should not be). Contracts before code
+(CLAUDE.md §3): the beacon wire shape is **frozen** — `contracts/events/beacon-event.schema.json` (D-004). Mirror it
+exactly; do NOT diverge from the JS beacon schema.
 
-## THE FIRST THING TO DO AT OPEN: the two-minute gate
-1. **CHECK THE DATE.** `date +%Y-%m-%d`. The §2.7 CI-promotion gate unlocks **≥ 2026-07-23** (at S89 close it was 07-18 —
-   **5 days out; may well have unlocked by the time this runs**).
-2. **CHECK `operator-expected.md`** — has the operator answered **[20] the audit-read model** ((a) keep reads open vs (b)
-   gate the admin-read surface) or any other checkpoint item, or named a new priority? If yes → that is now the
-   highest-leverage move: DO IT (Lead B).
+## Goal — `sdk/beacon-swift` Phase 1 (cross-platform core, buildable on Linux)
+A SwiftPM library that lets a native iOS app report player-side QoE telemetry to Pulse, mirroring `sdk/beacon-js`:
+- **Wire contract:** POST batched events to `<ingestUrl>/ingest/beacon` with header `X-Pulse-Ingest-Token: <token>`; body
+  shape = `beacon-event.schema.json` (session_id, stream_id, events[], etc.). Re-read `sdk/beacon-js/src/{types,session,
+  transport,index}.ts` + the schema before coding — the Swift types must match field-for-field.
+- **Core modules (mirror beacon-js):** `Types` (Codable structs matching the schema), `Session` (session lifecycle +
+  event buffer + flush policy), `Transport` (URLSession POST + batching + retry/beacon-on-background), `PulseBeacon`
+  (public façade / config). Keep the public API shape analogous to beacon-js's `index.ts`.
+- **Cross-platform discipline:** the core uses only `Foundation` (URLSession) so `swift build` + `swift test` run on
+  **Linux** here. Any iOS-only lifecycle hook (UIKit `didEnterBackground` → final flush, `URLSession` background config)
+  goes behind `#if canImport(UIKit)` and is documented as "verified on Xcode/CI only" — do NOT let it break the Linux
+  build/tests.
+- **Tests:** XCTest under `Tests/PulseBeaconTests/` — session buffering, batch/flush, transport request shape (assert the
+  URL, the `X-Pulse-Ingest-Token` header, and the JSON body matches the schema), Codable round-trip vs the frozen schema.
+  Aim for parity with the beacon-js test coverage of the same behaviors.
+- **Size gate:** define a per-platform analog to the JS 15 KB gate at scoping (source-size / no-heavy-deps rule; Swewift
+  has no bundler — track LOC + zero third-party deps as the discipline). Document the chosen gate in the SDK README.
+  Swift builds a static library, so the "size gate" is a source-discipline analog, not a shipped-bundle byte count.
 
-## Lead — pick by state (priority order)
-**A) IF today ≥ 2026-07-23 → §2.7 CI-promotions (THE primary autonomous move; finally unlocked).**
-Read §2.7's spec (ROADMAP-V2 §2.7). In `.github/workflows/ci.yml` the ONLY advisory job is `web-e2e`
-(`continue-on-error: true`; `csp.spec.ts` runs inside it — there is no separate `csp-e2e` job in the file). Drop the flag,
-run `actionlint`. **CAVEAT:** the enforcing half — the GitHub branch-protection required-status-checks FULL-LIST PUT —
-needs repo-admin I cannot set (§2.1); do the workflow-side edit I CAN make and surface the exact PUT payload to the
-operator. Don't claim §2.7 done if the enforcing half needs the operator. (A CI-config change does NOT roll prod.)
+## Environment (this session)
+- **Swift:** `swift --version` → 6.1.2 (Linux). Build: `swift build` ; test: `swift test` — both from `sdk/beacon-swift/`.
+  No Xcode/xcodebuild here (iOS simulator tests are NOT possible — that's the documented Linux limitation).
+- **Reference:** `sdk/beacon-js/src/*.ts` (the model to mirror); `contracts/events/beacon-event.schema.json` (frozen wire
+  shape); the server ingest handler `server/internal/collector/ingest` + `POST /ingest/beacon` (64 KB body cap, VD-S4;
+  `X-Pulse-Ingest-Token` bearer). Do NOT change the server.
 
-**B) IF the operator answered / named a priority → do their pick.** For **[20]**: (a) keep-open = document + close (no
-code); (b) gate-admin-reads = add the `canWrite` check at the top of `handleListAuditLog` (audit.go:92) AND decide whether
-to gate the whole admin-read surface (users/tokens/audit) consistently — contracts/tests/mutation/adversarial-review +
-prod-roll. Verify status + viability against the code first.
+## Pipeline
+1. Verify-at-open: git clean (only `Caddyfile.prod`); `swift --version` present. Record **D-153 IN PROGRESS**. Branch
+   `s90-d153-ios-sdk` (D-152 docs already merged separately).
+2. Contracts first: read the frozen schema + beacon-js; write the Swift `Types` to match, then Session/Transport/façade.
+3. Validate: `swift build` (release + debug) + `swift test` green on Linux; Codable round-trip test pins schema parity;
+   the size/no-deps gate holds. (Optional: a `swift build -c release` size check.)
+4. Adversarial review: transport correctness (batching, retry, background flush), schema parity, no PII beyond the JS SDK,
+   token never logged. (SDK handles a token + viewer telemetry — treat as a light security surface.)
+5. PR → CI. **⚠ CI GAP:** the current `sdk` CI job builds beacon-js (npm) only — there is no Swift job. Add a minimal
+   `sdk-swift` CI job (`swift build && swift test`) in `.github/workflows/ci.yml` in THIS PR so the SDK is gated, OR flag
+   it as a follow-up if the CI runner lacks Swift (check `swift` availability on `ubuntu-latest` — it is NOT preinstalled;
+   use `swift-actions/setup-swift` or the official swift container). Decide at open; do not claim CI coverage that isn't
+   wired.
+6. Squash-merge --delete-branch → verify origin/main. **NO prod roll** (client library; server untouched).
+7. Close docs: D-153, ROADMAP §2.12 (iOS Phase 1 done; Android still blocked), RESUME → SESSION-91, operator-expected,
+   SESSION-90 CLOSED, SESSION-91 written. Re-arm the `/loop`.
 
-**C) ELSE (still < 07-23, no operator answer) → VERIFY, then WAIT at low frequency. Do NOT manufacture an arc.**
-- Quick health check: `git status` clean (only `Caddyfile.prod`); no open non-Dependabot PR needs attention; CI on `main`
-  green; date/operator unchanged. (Dependabot PRs #69/#70/#153/etc. are operator-held — do NOT merge autonomously,
-  esp. the eslint 9→10 major which conflicts with the pinned `@eslint/js`.)
-- **Optional (at most ONE):** a bounded adversarial "is anything genuinely broken?" sweep (roadmap-status / stewardship /
-  contract-drift — like S85's and S89's). Its job: surface a **real, non-gated defect** → fix it (stewardship, one-off), or
-  confirm nothing is broken → **wait.** Keep the bar HIGH: web-coverage nudges / doc-completeness on already-complete docs
-  = busywork → dismiss. **NOTE:** S89 already ran this sweep and drained the drift it found — a fresh sweep should expect
-  to find little; if it comes up empty, that CONFIRMS the wait (do not force a finding).
-- **One known low-priority stewardship candidate** (S89-discovered, not operator-gated): the OpenAPI `SourceWrite`/`Source`
-  `type` enums still list the dead `log_tail` source type (`contracts/openapi/pulse-api.yaml:3051,3088`). Removing it is a
-  contract-*narrowing* change (backward-compat: a stored `log_tail` source would fail conformance) — treat as contract-first
-  (change the yaml + regen `schema.d.ts` + confirm the source-create handler's behavior for the removed type + a
-  conformance/param test). Small but real; take it as a bounded arc ONLY if A/B are unavailable and you want a concrete
-  stewardship move over idling. Otherwise leave it noted.
-- Do NOT start the deeper F6 expansion (tenant-scoped AUTH — `APIToken` has no tenant field; a tenant-management web UI —
-  §2.19 territory) autonomously; both are large + operator-scoped + demand-driven.
-- If neither A/B nor a genuine defect → **re-arm the loop at the max interval (3600s) / low frequency and stop in one
-  line.** No manufactured work.
+## Scope discipline
+- Phase 1 = the buildable cross-platform CORE + tests + a clear README. Full iOS-lifecycle integration (background
+  URLSession, UIKit hooks) is Phase 2 and needs Xcode/CI to verify — scope it but don't fake-verify it on Linux.
+- **Do NOT start the Android Kotlin SDK** — toolchain-blocked (operator-expected.md). If the operator provisions a
+  JDK+Gradle+Kotlin environment, that becomes a later session.
+- Do NOT touch the server / prod. If a schema ambiguity appears, the JS SDK + the frozen schema are the source of truth.
 
-## Pipeline (only if you take A or B or a caught-defect fix under C)
-1. Verify-at-open (git clean; date+operator). Record **D-152 IN PROGRESS**. Branch `s90-d152`.
-2. Execute (contracts before code). 3. Validate: Go full 26-pkg suite via docker (+ mutation-prove SOURCE changes); web
-   full `npm test`/build/typecheck/lint. 4. Adversarial review for security-relevant / contract-surface changes. 5. PR → CI →
-   squash-merge --delete-branch → verify origin/main. 6. Roll prod ONLY if server/web SOURCE changed (CI-config/docs/
-   test-only does NOT). 7. Close docs: D-152, ROADMAP, RESUME → SESSION-91, operator-expected, SESSION-90 CLOSED,
-   SESSION-91 written. Re-arm the `/loop`.
-
-## Environment gotchas (carried — unchanged)
-- **Go only in docker:** `docker run --rm -v /home/aytek/repo/ams-pulse:/repo -v pulse-gocache:/go/pkg/mod -v
-  pulse-gocache-build:/root/.cache/go-build -w /repo/server -e GOFLAGS=-buildvcs=false golang:1.25 go test ./...`.
-  `gofmt`/`go` NOT on host PATH. Mutation copy `/tmp/*.orig`; restore via `cp` (NEVER `git checkout`, D-096).
-  Node at `/home/aytek/.local/bin/node`. Reusable: `internal/tenant` (Matcher + CachedResolver).
-- **Web:** from `web/`, `npm test` (676+); `npm run gen:api` regenerates `src/lib/api/schema.d.ts`. A new SERVER query param
-  needs a `param_conformance_test.go` registry entry + floor bumps (`minSpecParams`, `minProbes` — D-147 pattern); a
-  client-only key change (like S89's `stream`) does NOT.
-- **Prod deploy LOCAL** (this host IS prod): 5-overlay compose `DC="-p pulse-prod -f deploy/docker-compose.yml -f
-  deploy/docker-compose.hardened.yml -f deploy/docker-compose.prod-tls.yml -f deploy/docker-compose.real-ams.yml -f
-  deploy/docker-compose.backup.yml --env-file deploy/.env"`. **D-058 stamped build:** `docker compose $DC build
-  --build-arg VERSION=$(git describe --tags --always) --build-arg COMMIT=$(git rev-parse --short HEAD) --build-arg
-  BUILD_DATE=$(date -u ...) pulse` THEN `docker compose $DC up -d pulse` (never mix `--build` into `up -d`). Prod
-  **v0.4.0-119**; rollback tags `pulse-prod-pulse:pre-d148[-fix]` / `:pre-d149` / `:pre-d151`. Read-only rootfs — new writes
-  → `/var/lib/pulse` or `/tmp`. 5-check smoke: version stamp, healthz 200, signed webhook 200 (HMAC from
-  PULSE_WEBHOOK_SECRET), limits 512M/0.5cpu, 0 error lines. Admin token (side-effect-free GET only, never commit):
-  gitignored `oguz-testing.md`; API base `https://beyondkaira.com` with `--resolve beyondkaira.com:443:161.97.172.146`.
-- **Never** restart/fix AMS; never `docker compose down -v` on prod; never `git reset/checkout/stash/restore <path>`
-  (D-096; `git restore --staged` OK). **Do-not-commit:** `deploy/config/Caddyfile.prod` stays modified/unstaged (verify
-  `git diff --cached --name-only | grep -q Caddyfile` is empty before every commit). Commit trailer `Co-Authored-By:
-  Claude Opus 4.8 (1M context) <noreply@anthropic.com>`; PR-body trailer `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+## Carried operator items (unchanged — none block this session)
+§2.1 branch protection (operator runs the `gh api` PUT); **[20] audit-read model still open** (status-quo reads-open);
+AMS trial-licence expiry confirmation; rotate chat-exposed creds; §2.7 CI-promotions auto-unlock 2026-07-23. Prod
+**v0.4.0-119**; rollback tags `pulse-prod-pulse:pre-d151` etc.; do-not-commit `deploy/config/Caddyfile.prod`. Commit
+trailer `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`; PR-body trailer `🤖 Generated with
+[Claude Code](https://claude.com/claude-code)`.
