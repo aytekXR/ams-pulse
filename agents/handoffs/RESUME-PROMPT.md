@@ -41,11 +41,15 @@ server/web change → NO prod roll** (prod stays `v0.4.0-119`). Evidence: `decis
 **★ SESSION-91 = BACK TO THE LOW-FREQUENCY WAIT** (iOS Phase 1 is the sanctioned work, now done; what remains is gated or
 tooling-blocked). At open, run the SAME two-minute gate: (1) `date +%Y-%m-%d` — if **≥ 2026-07-23** → **§2.7
 CI-promotions** (drop `web-e2e`'s `continue-on-error` in `.github/workflows/ci.yml`, `actionlint`; hand the operator the
-updated branch-protection PUT that adds e2e/csp-e2e/web-e2e/docker-build). (2) Check `operator-expected.md` — if the
-operator answered [20] / provided an **Android build environment** / asked for iOS Phase 2 / named a priority → do their
-pick (Lead B). (3) Else → quick health check + at most ONE bounded adversarial "is anything genuinely broken?" sweep like
-S89's; fix a real non-gated defect (stewardship — a candidate is the deferred `log_tail` enum cleanup, a contract-narrowing
-change), else **wait at low frequency — do NOT manufacture an arc.** **Do NOT start** iOS Phase 2 (needs Xcode/Apple CI)
+updated branch-protection PUT that adds e2e/csp-e2e/web-e2e/docker-build). **(1b) ★ ANDROID AUTO-START (standing operator
+GO, 2026-07-18 — "start the android sdk once I set up the build env later"):** run `command -v gradle && command -v java`
+(or `kotlinc`) — **if the JVM/Gradle toolchain is now PRESENT → immediately START `sdk/beacon-kotlin` as a Lead-B arc, no
+further operator prompt needed**, per the turnkey plan in ROADMAP §2.12 (Gradle Kotlin lib mirroring `sdk/beacon-swift` +
+the frozen schema; zero-dep; JUnit; new `sdk-kotlin` CI job; NO server change / NO prod roll). If still absent → one-line
+"toolchain absent, waiting". (2) Check `operator-expected.md` — if the operator answered [20] / asked for iOS Phase 2 /
+named a priority → do their pick (Lead B). (3) Else → quick health check + at most ONE bounded adversarial "is anything
+genuinely broken?" sweep like S89's; fix a real non-gated defect (stewardship — a candidate is the deferred `log_tail`
+enum cleanup, a contract-narrowing change), else **wait at low frequency — do NOT manufacture an arc.** **Do NOT start** iOS Phase 2 (needs Xcode/Apple CI)
 or the Android SDK (needs JDK/Gradle/Kotlin) — both are tooling-blocked. See `sessions/SESSION-91.md`.
 
 **⚠ OPERATOR ITEMS STILL OPEN (in `operator-expected.md`, short list):** **§2.1** — run the branch-protection PUT; **§2.12
