@@ -1,4 +1,11 @@
-# SESSION-90 — iOS Swift beacon SDK, Phase 1 (§2.12, operator-directed D-152)
+# SESSION-90 — ✅ CLOSED (D-153, 2026-07-18) — iOS Swift beacon SDK, Phase 1 (§2.12, operator-directed D-152)
+
+> **CLOSED result (D-153):** Shipped `sdk/beacon-swift` (`PulseBeacon`) — the iOS-native counterpart of beacon-js, posting
+> the identical frozen wire payload. Codable types, v4-UUID sessions + sampling, a thread-safe batching/retry `Transport`
+> (POST `/ingest/beacon` with `X-Pulse-Ingest-Token`), a typed façade; iOS-only UIKit hook behind `#if canImport(UIKit)`.
+> `swift build` (debug+release) + **22 XCTest cases green on Linux**; zero deps; ~600 LOC; new `sdk-swift` CI job. NO
+> server change, NO prod roll (prod stays v0.4.0-119). PR #177. iOS Phase 2 (Xcode) + Android (JDK/Gradle) remain
+> tooling-blocked. **Next: `SESSION-91.md` (back to the low-frequency wait).**
 
 > Written by the D-152 decision batch (2026-07-18). Repo `/home/aytek/repo/ams-pulse` on VPS `161.97.172.146`
 > (**this host IS prod**; no SSH). **Read `RESUME-PROMPT.md` ▶ START HERE.** Prod at **v0.4.0-119** (unchanged — an SDK is a
