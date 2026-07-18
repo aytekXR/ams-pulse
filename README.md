@@ -118,7 +118,7 @@ Cluster fleet discovery ──────────────────�
                                                     ▼
                                    ┌─────────────────────────────────┐
                                    │  Pulse Collector + Ingest       │
-                                   │  ├ restpoller / logtail / kafka  │  single Go binary
+                                   │  ├ restpoller / kafka            │  single Go binary
                                    │  ├ beacon ingest (:8091)         │
                                    │  ├ session stitcher (F3/F4)      │
                                    │  ├ ingest health tracker (F4)    │

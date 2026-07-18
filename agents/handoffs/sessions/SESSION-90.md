@@ -1,17 +1,11 @@
-# SESSION-89 — ✅ CLOSED (D-151, 2026-07-18) — LOW-FREQUENCY WAIT (F6 code complete; remaining work is gated)
+# SESSION-90 — planned at S89 close (D-151) — LOW-FREQUENCY WAIT (F6 code complete; remaining work is gated)
 
-> **CLOSED result (D-151):** Lead C (wait). The two-minute gate confirmed §2.7 date-locked (07-18 < 07-23) + operator
-> silent → wait. Per the stewardship clause, a verify-before-idling adversarial sweep (5 scouts + verify, 13 agents) caught
-> **5 genuine non-gated defects**, fixed as a one-off arc: handleTestSource `message`→`error` (HIGH, contract), analytics
-> client `stream_id`→`stream` (MED), 3× logtail doc drift (D-062 leftovers), `make mock-ams` root-build failure. Both
-> source fixes mutation-proven; full Go+web suites green; adversarial diff-review clean. Prod-rolled `v0.4.0-118` →
-> `v0.4.0-119`, smoke green. PR #176. No operator action. **Next: `SESSION-90.md` (still the low-frequency wait).**
-
-> Written by SESSION-88 close (2026-07-18). Repo `/home/aytek/repo/ams-pulse` on VPS `161.97.172.146`
+> Written by SESSION-89 close (2026-07-18). Repo `/home/aytek/repo/ams-pulse` on VPS `161.97.172.146`
 > (**this host IS prod** — the `pulse-prod` compose stack runs locally; no SSH).
-> **Read `RESUME-PROMPT.md` ▶ START HERE.** Prod at **v0.4.0-114-ge295795** (F6 Phase 1+2 live).
-> **This is the low-frequency-wait phase.** The operator's "start F6" is dispositioned: BUG-009 ✅ (D-148), [5] ✅ (D-149),
-> [20] = operator product call (D-150). The safe, bounded, operator-unscoped autonomous backlog is drained again. Do NOT
+> **Read `RESUME-PROMPT.md` ▶ START HERE.** Prod at **v0.4.0-119** (S89 stewardship fixes live: test-source `error` key +
+> analytics `stream` param).
+> **This is the low-frequency-wait phase.** The operator's "start F6" is fully dispositioned (BUG-009 ✅ D-148, [5] ✅
+> D-149, [20] = operator product call D-150). The safe, bounded, operator-unscoped autonomous backlog is drained. Do NOT
 > manufacture an arc — verify, then wait.
 
 ## ⚡ STANDING DIRECTIVE (operator, 2026-07-12) — still in force
@@ -21,7 +15,8 @@ frequency**, not invent work. **Ultracode is on** (apply to the *quality* of rea
 arcs). **Workflow gotcha:** no backticks in workflow prompt prose. `gofmt -l` before every push.
 
 ## THE FIRST THING TO DO AT OPEN: the two-minute gate
-1. **CHECK THE DATE.** `date +%Y-%m-%d`. The §2.7 CI-promotion gate unlocks **≥ 2026-07-23** (at S88 close it was 07-18).
+1. **CHECK THE DATE.** `date +%Y-%m-%d`. The §2.7 CI-promotion gate unlocks **≥ 2026-07-23** (at S89 close it was 07-18 —
+   **5 days out; may well have unlocked by the time this runs**).
 2. **CHECK `operator-expected.md`** — has the operator answered **[20] the audit-read model** ((a) keep reads open vs (b)
    gate the admin-read surface) or any other checkpoint item, or named a new priority? If yes → that is now the
    highest-leverage move: DO IT (Lead B).
@@ -44,36 +39,44 @@ prod-roll. Verify status + viability against the code first.
   green; date/operator unchanged. (Dependabot PRs #69/#70/#153/etc. are operator-held — do NOT merge autonomously,
   esp. the eslint 9→10 major which conflicts with the pinned `@eslint/js`.)
 - **Optional (at most ONE):** a bounded adversarial "is anything genuinely broken?" sweep (roadmap-status / stewardship /
-  contract-drift — like S85's). Its job: surface a **real, non-gated defect** (broken link, contract drift, build
-  breakage, a bug) → fix it (stewardship, one-off), or confirm nothing is broken → **wait.** Keep the bar high:
-  web-coverage nudges / doc-completeness on already-complete docs = busywork → dismiss.
+  contract-drift — like S85's and S89's). Its job: surface a **real, non-gated defect** → fix it (stewardship, one-off), or
+  confirm nothing is broken → **wait.** Keep the bar HIGH: web-coverage nudges / doc-completeness on already-complete docs
+  = busywork → dismiss. **NOTE:** S89 already ran this sweep and drained the drift it found — a fresh sweep should expect
+  to find little; if it comes up empty, that CONFIRMS the wait (do not force a finding).
+- **One known low-priority stewardship candidate** (S89-discovered, not operator-gated): the OpenAPI `SourceWrite`/`Source`
+  `type` enums still list the dead `log_tail` source type (`contracts/openapi/pulse-api.yaml:3051,3088`). Removing it is a
+  contract-*narrowing* change (backward-compat: a stored `log_tail` source would fail conformance) — treat as contract-first
+  (change the yaml + regen `schema.d.ts` + confirm the source-create handler's behavior for the removed type + a
+  conformance/param test). Small but real; take it as a bounded arc ONLY if A/B are unavailable and you want a concrete
+  stewardship move over idling. Otherwise leave it noted.
 - Do NOT start the deeper F6 expansion (tenant-scoped AUTH — `APIToken` has no tenant field; a tenant-management web UI —
   §2.19 territory) autonomously; both are large + operator-scoped + demand-driven.
 - If neither A/B nor a genuine defect → **re-arm the loop at the max interval (3600s) / low frequency and stop in one
   line.** No manufactured work.
 
 ## Pipeline (only if you take A or B or a caught-defect fix under C)
-1. Verify-at-open (git clean; date+operator). Record **D-151 IN PROGRESS**. Branch `s89-d151`.
-2. Execute (contracts before code). 3. Validate: Go full 25-pkg suite via docker (+ mutation-prove SOURCE changes); web
-   full `npm test`/build/typecheck/lint. 4. Adversarial review for security-relevant changes. 5. PR → CI →
+1. Verify-at-open (git clean; date+operator). Record **D-152 IN PROGRESS**. Branch `s90-d152`.
+2. Execute (contracts before code). 3. Validate: Go full 26-pkg suite via docker (+ mutation-prove SOURCE changes); web
+   full `npm test`/build/typecheck/lint. 4. Adversarial review for security-relevant / contract-surface changes. 5. PR → CI →
    squash-merge --delete-branch → verify origin/main. 6. Roll prod ONLY if server/web SOURCE changed (CI-config/docs/
-   test-only does NOT). 7. Close docs: D-151, ROADMAP, RESUME → SESSION-90, operator-expected, SESSION-89 CLOSED,
-   SESSION-90 written. Re-arm the `/loop`.
+   test-only does NOT). 7. Close docs: D-152, ROADMAP, RESUME → SESSION-91, operator-expected, SESSION-90 CLOSED,
+   SESSION-91 written. Re-arm the `/loop`.
 
 ## Environment gotchas (carried — unchanged)
 - **Go only in docker:** `docker run --rm -v /home/aytek/repo/ams-pulse:/repo -v pulse-gocache:/go/pkg/mod -v
   pulse-gocache-build:/root/.cache/go-build -w /repo/server -e GOFLAGS=-buildvcs=false golang:1.25 go test ./...`.
-  `gofmt`/`go` NOT on host PATH. Mutation copy `/tmp/pulsemut`; restore via `cp` (NEVER `git checkout`, D-096).
+  `gofmt`/`go` NOT on host PATH. Mutation copy `/tmp/*.orig`; restore via `cp` (NEVER `git checkout`, D-096).
   Node at `/home/aytek/.local/bin/node`. Reusable: `internal/tenant` (Matcher + CachedResolver).
-- **Web:** from `web/`, `npm test`; `npm run gen:api` regenerates `src/lib/api/schema.d.ts`. A new query param needs a
-  `param_conformance_test.go` registry entry + floor bumps (`minSpecParams`, `minProbes` — D-147 pattern).
+- **Web:** from `web/`, `npm test` (676+); `npm run gen:api` regenerates `src/lib/api/schema.d.ts`. A new SERVER query param
+  needs a `param_conformance_test.go` registry entry + floor bumps (`minSpecParams`, `minProbes` — D-147 pattern); a
+  client-only key change (like S89's `stream`) does NOT.
 - **Prod deploy LOCAL** (this host IS prod): 5-overlay compose `DC="-p pulse-prod -f deploy/docker-compose.yml -f
   deploy/docker-compose.hardened.yml -f deploy/docker-compose.prod-tls.yml -f deploy/docker-compose.real-ams.yml -f
   deploy/docker-compose.backup.yml --env-file deploy/.env"`. **D-058 stamped build:** `docker compose $DC build
   --build-arg VERSION=$(git describe --tags --always) --build-arg COMMIT=$(git rev-parse --short HEAD) --build-arg
   BUILD_DATE=$(date -u ...) pulse` THEN `docker compose $DC up -d pulse` (never mix `--build` into `up -d`). Prod
-  **v0.4.0-114-ge295795**; rollback tags `pulse-prod-pulse:pre-d148[-fix]` / `:pre-d149`. Read-only rootfs — new writes →
-  `/var/lib/pulse` or `/tmp`. 5-check smoke: version stamp, healthz 200, signed webhook 200 (HMAC from
+  **v0.4.0-119**; rollback tags `pulse-prod-pulse:pre-d148[-fix]` / `:pre-d149` / `:pre-d151`. Read-only rootfs — new writes
+  → `/var/lib/pulse` or `/tmp`. 5-check smoke: version stamp, healthz 200, signed webhook 200 (HMAC from
   PULSE_WEBHOOK_SECRET), limits 512M/0.5cpu, 0 error lines. Admin token (side-effect-free GET only, never commit):
   gitignored `oguz-testing.md`; API base `https://beyondkaira.com` with `--resolve beyondkaira.com:443:161.97.172.146`.
 - **Never** restart/fix AMS; never `docker compose down -v` on prod; never `git reset/checkout/stash/restore <path>`

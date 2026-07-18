@@ -9157,3 +9157,47 @@ of the three named items — demand-driven, do NOT start autonomously.
 **No code, no prod roll.** Loop returns to the low-frequency wait: remaining ROADMAP is gated (§2.7 unlocks 2026-07-23;
 the checkpoint items incl. the [20] audit-read model are operator-gated). Docs: D-150 (this block); ROADMAP §2.37 (Phase 3
 adjudicated); RESUME → SESSION-89; operator-expected [20]/F6-complete status; SESSION-88 CLOSED; SESSION-89 written.
+
+## D-151 — S89 (2026-07-18): SHIPPED — contract-drift + doc/build stewardship sweep (Lead-C caught-defect arc): test-source `error` key, analytics `stream` param, logtail doc drift, mock-ams Makefile. Prod v0.4.0-119.
+
+**S89 was the low-frequency wait** (SESSION-89 Lead C): the two-minute gate found the primary autonomous move still gated
+(§2.7 date-locked to 2026-07-23; today 07-18) and the operator had NOT answered [20] or named a priority (commit #175 was a
+status-check response, no decision). Per the stewardship clause, before idling the session ran ONE bounded adversarial "is
+anything genuinely broken?" sweep (5 scout lenses + refute-by-default verify, 13 agents) — like S85's. It surfaced **5
+CONFIRMED non-gated defects** (3 candidates refuted), EACH re-verified against the code before building (the standing
+"agent findings are re-verified" discipline earned its keep — it caught me almost mis-"fixing" a non-defect: the
+ARCHITECTURE.md `fanout`/`dedup` row references *files* in the collector package, not deleted sub-packages — left
+untouched):
+
+1. **[HIGH] test-source error detail always lost** — `handleTestSource` (server.go) emitted the failure reason under an
+   undocumented `"message"` key, but the OpenAPI `AmsSourceStatus` schema defines `error` and the web `OnboardingWizard`
+   reads `status.error`, so every failed connectivity test showed the generic "Source unreachable" fallback instead of the
+   real reason (no rest_url / bad scheme / network error). Renamed all failure branches `message`→`error`; the success
+   branch now emits `error: nil` per the contract's "null on success" (the adversarial diff-review caught that a blind
+   rename left `error` non-null on success — fixed). New `s89_drift_test.go` mutation-proven; the redirect test now guards
+   `error==null` on a reachable result.
+2. **[MED] analytics stream filter silently dropped** — `analyticsApi` (web `client.ts`) sent `?stream_id=` on
+   getAudience/getGeo/getDevices/exportCsv, but the server handlers read `q.Get("stream")` and the contract param is
+   `stream` (the sibling `qoeApi` was already correct), so a stream filter was ignored and all-stream data returned. Fixed
+   the 4 query keys (client-only; no contract/server change). New `analytics-params.test.ts` mutation-proven. Latent today
+   (AnalyticsPage passes only {from,to}), strictly an improvement.
+3. **[MED×2] logtail doc drift (D-062 leftovers)** — `docs/ARCHITECTURE.md` (component diagram + Wave-2 table) and
+   `docs/AMS-INTEGRATION.md` (`PULSE_LOG_TAIL_PATH` env row) still presented the logtail collector as shipped/configurable
+   though it was deleted in D-062; also corrected the same stale token in `README.md`'s diagram.
+4. **[MED] broken `make mock-ams`** — the target ran `go build ./qa/mock-ams/` from the repo root (which has no
+   `go.mod`) → an unconditional build failure; changed to `cd qa/mock-ams && go build .` (mirrors the CI matrix). Verified
+   the build now succeeds.
+
+**Validation:** full Go suite (26 pkg) + web suite (676+ tests) green; both source fixes mutation-proven; gofmt clean;
+1-agent adversarial diff-review (risks A–F) clean except the success-branch `error`-null fidelity fix, which was applied.
+**Prod-rolled** (server + web SOURCE changed): v0.4.0-118 → **v0.4.0-119**, 5-check smoke green. PR #176.
+
+**Discovered follow-ups (pre-existing, NOT fixed — noted for a future arc / operator):** (a) the OpenAPI `SourceWrite`/
+`Source` `type` enums still list `log_tail` (`contracts/openapi/pulse-api.yaml:3051,3088`) — a dead source type since
+D-062; removing it is a contract-*narrowing* change (backward-compat), so it is deferred, not bundled into this bug-fix
+sweep. (b) internal agent docs (`agents/README.md`, `agents/handoffs/wave-2/WO-206-report.md`) carry historical logtail
+references — harmless, left as historical artifacts.
+
+**No new operator dependency.** Remaining work stays gated (§2.7 unlocks 2026-07-23; the [20] audit-read model + the other
+checkpoint items operator-gated). Docs: D-151 (this block); ROADMAP §2.38; RESUME → SESSION-90; operator-expected (S89
+status); CHANGELOG [Unreleased] Fixed; SESSION-89 CLOSED; SESSION-90 written.

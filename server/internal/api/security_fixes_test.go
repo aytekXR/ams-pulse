@@ -402,10 +402,11 @@ func TestSource_TestEndpoint_BlocksRedirect(t *testing.T) {
 	if !reachable {
 		t.Errorf("expected reachable=true (302 is still an HTTP response), got result=%v", result)
 	}
-	// The response message should mention the source server, NOT the redirect target.
-	msg, _ := result["message"].(string)
-	if strings.Contains(msg, "redirect-target") {
-		t.Errorf("redirect was followed; message references redirect target: %q", msg)
+	// The test reached the source (302 is still a response) with the redirect NOT
+	// followed; per the AmsSourceStatus contract, `error` is null on a reachable
+	// (success) result — never a leaked detail referencing the redirect target.
+	if result["error"] != nil {
+		t.Errorf("expected error=null on a reachable test, got error=%v (result=%v)", result["error"], result)
 	}
 }
 

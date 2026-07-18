@@ -1885,7 +1885,7 @@ func (s *Server) handleTestSource(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"reachable":  false,
 			"status":     "unknown",
-			"message":    "no rest_url configured for this source",
+			"error":      "no rest_url configured for this source",
 			"latency_ms": nil,
 		})
 		return
@@ -1900,7 +1900,7 @@ func (s *Server) handleTestSource(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"reachable":  false,
 			"status":     "error",
-			"message":    "rest_url must use http or https scheme",
+			"error":      "rest_url must use http or https scheme",
 			"latency_ms": nil,
 		})
 		return
@@ -1916,7 +1916,7 @@ func (s *Server) handleTestSource(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"reachable":  false,
 			"status":     "error",
-			"message":    fmt.Sprintf("build request: %v", err),
+			"error":      fmt.Sprintf("build request: %v", err),
 			"latency_ms": nil,
 		})
 		return
@@ -1955,24 +1955,25 @@ func (s *Server) handleTestSource(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"reachable":  false,
 			"status":     "error",
-			"message":    err.Error(),
+			"error":      err.Error(),
 			"latency_ms": latencyMS,
 		})
 		return
 	}
 	defer resp.Body.Close()
 
-	// reachable = true when HTTP response received (any status code, including 4xx/5xx).
+	// reachable = true when an HTTP response was received (any status code, including 4xx/5xx).
 	reachable := true
 	status := "ok"
-	msg := fmt.Sprintf("HTTP %d from %s", resp.StatusCode, testURL)
 	if resp.StatusCode >= 400 {
 		status = "error"
 	}
+	// Per the AmsSourceStatus contract, `error` is null on success (reachable=true);
+	// the coarse ok/error signal is carried by `status`.
 	writeJSON(w, http.StatusOK, map[string]any{
 		"reachable":  reachable,
 		"status":     status,
-		"message":    msg,
+		"error":      nil,
 		"latency_ms": latencyMS,
 	})
 }
