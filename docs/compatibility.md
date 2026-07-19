@@ -141,6 +141,66 @@ most important divergence in the version matrix. Operators on AMS 3.x should exp
 
 ---
 
+## Capacity and load validation
+
+Functional validation (the 50 real-AMS scenarios) runs on the shared VPS, whose AMS accepts only
+**~5–7 concurrent RTMP publishers** before rejecting further connections with *"current system
+resources not enough"* (LIM-12). That ceiling is an AMS/OS resource limit on that box, **not** a Pulse
+limit, and is why four scenarios SKIP rather than PASS in the 46/50 result. It means the shared VPS
+cannot answer *"do Pulse's stats hold up under load?"* — the marketplace claim Ant Media asked us to earn.
+
+The **opt-in load lane** (`qa/realams/load/`, orchestrated as phase 45 of `run-full-e2e.sh`) closes
+that gap. It runs against a **dedicated throw-away AMS** (pay-as-you-go hourly licence) plus a scratch
+Pulse, and asserts that Pulse's numbers stay correct while the media plane is loaded — every assertion
+a delta on streams we own, never an absolute global count. Budgets **L-1…L-9** and the four scenarios
+(`TC-S-10..13`) are specified in `docs/testing/full-e2e-validation-run.md` §Rev2.
+
+| Aspect | Status |
+|---|---|
+| Functional (≤5–7 concurrent publishers) | **LIVE-VALIDATED** on the shared VPS (46/50 PASS) |
+| Under-load fidelity (N publishers / M viewers) | **PACKAGED, NOT YET RUN** — needs a dedicated instance (`harness/load-env.sh`) |
+| Published capacity number (validated N/M) | **TBD** — fill in from the first `LOAD-REPORT.md` |
+
+Once the lane runs, record the headline capacity here ("validated at N publishers / M viewers on
+instance size X; budgets L-1…L-9 met") and attach `LOAD-REPORT.md` to the marketplace submission.
+
+---
+
+## Panel-revamp (G-27) compatibility — PENDING ANKUSH CONFIRMATION
+
+Ant Media is revamping its web panel. The panel is a **frontend/UX** layer over the same AMS backend
+whose REST v2 API Pulse polls; a UI overhaul does **not** by itself change backend paths or response
+shapes. The risk is that the revamp is accompanied by a REST re-versioning or an auth-flow change. The
+staging panel is confidential (manual, read-only review only) and no API changelog has been received, so
+**the revamp's actual scope is unassessed** — this section pins the exposure so it can be confirmed at
+the developer meeting and re-checked against the shipping AMS build (via `qa/tools/ams-drift-watch.sh`).
+
+**Console-scoped paths (share the panel's management backend — revamp-sensitive, unverified):**
+
+| Endpoint | Used for | Mitigation |
+|---|---|---|
+| `POST /rest/v2/users/authenticate` (cookie/JSESSIONID) | login when `PULSE_AMS_LOGIN_EMAIL` set | **`PULSE_AMS_AUTH_TOKEN`** bearer mode fully bypasses it |
+| `GET /rest/v2/applications` | app auto-discovery | **`PULSE_AMS_APPLICATIONS`** manual list bypasses it |
+| `GET /rest/v2/version` | Fleet version string + source connectivity test | best-effort; nil-tolerant on 404 |
+| `GET /rest/v2/system-status` | standalone node card | degrades Fleet card only; no stream-monitoring loss |
+| `GET /rest/v2/cluster/nodes` | fleet CPU/mem/disk (cluster) | 404 → standalone; cluster mode not live-validated (LIM-10) |
+| `GET /rest/v2/cluster/nodes/{nodeId}` | (implemented, **not wired** in prod) | zero live risk today |
+
+**App-REST-scoped paths (per-app data plane `/{app}/rest/v2/…` — low revamp risk, carry Pulse's core value):**
+`GET /{app}/rest/v2/broadcasts/list/{offset}/{size}`, `…/broadcasts/{id}/webrtc-client-stats/0/100`,
+`GET /{app}/rest/v2/vods/list/{offset}/{size}`. These live in a separate namespace consumed by
+publishers/players, historically stable across UI releases.
+
+**Net:** the endpoints that drive stream monitoring are architecturally insulated from panel UI work,
+and the two console dependencies most at risk (auth, app discovery) already have deployed bypasses.
+Confirm at the meeting: (1) do `/rest/v2/*` paths + envelopes survive the revamp or is a v2→v3 jump
+planned; (2) does the new panel introduce a new auth mechanism replacing the cookie flow; (3) in AMS
+3.0.3 cluster mode, is `GET /rest/v2/cluster/nodes` a flat array or the paginated `…/{offset}/{size}`
+form (the **unverified** G-21 claim — do not change `amsclient` until confirmed). See
+`docs/operator-expected.md` (top banner) for the full business + dev assessment.
+
+---
+
 ## Testing this matrix
 
 Mock-profile tests run as part of the standard CI suite:

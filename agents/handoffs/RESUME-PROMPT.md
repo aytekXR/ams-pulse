@@ -11,7 +11,49 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-94.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-95.md`)
+
+**Session 2026-07-19 result: D-158 — S94 was NOT the planned low-frequency wait: the operator injected a two-part request
+mid-session — (1) assess whether Ant Media's confidential web-panel revamp threatens the marketplace opportunity, and (2)
+add load-testing ("verify how your stats hold up under load"). Both delivered, DOCS + QA-TOOLING ONLY (no server/web source,
+NO prod roll — prod stays v0.4.0-124-g8eb3b57). (1) Panel-revamp assessment: recommendation PROCEED with the listing — a
+real but NON-existential concern (Pulse consumes AMS REST v2, not the panel UI; the data-plane endpoints that carry core
+value are insulated; the two at-risk console deps (auth, app-discovery) already have deployed bypasses PULSE_AMS_AUTH_TOKEN /
+PULSE_AMS_APPLICATIONS). Pinned as G-27 in docs/compatibility.md + a 3-question developer-meeting agenda in
+operator-expected.md; honesty caveat recorded (staging panel confidential/SPA → architecture-based, not click-through; an
+earlier plan draft's overstatements corrected — G-21 UNVERIFIED, do NOT touch amsclient until a live cluster confirms). (2)
+Load lane (qa/realams/load/): an OPT-IN lane (phase 45 of run-full-e2e.sh) that drives a DEDICATED throw-away AMS + scratch
+Pulse and asserts Pulse's numbers stay correct under load (budgets L-1…L-9; 4 scenarios TC-S-10..13: publisher ramp / viewer
+scale / soak / churn). Structurally CANNOT touch the shared VPS/prod (sources only harness/load-env.sh, never env.sh;
+placeholder→SKIP-77, forbidden-host→hard-abort-1; scenarios live one dir deeper so make validate-all / phase-41 can't sweep
+them). Native generators default, official Ant Media Scripts opt-in. This session FINALIZED prior-run work that had been left
+uncommitted: a 4-lens adversarial verification workflow (isolation-safety / harness-API / doc-accuracy / shellcheck)
+returned 0 blockers + 4 confirmed nits, all fixed pre-commit (over-broad official-path pkill → match the unique RUN token;
+TC-S-12 cleanup guard; L-2/L-7 budget-doc precision). bash -n + shellcheck clean. PR #183. Evidence: decisions.md D-158;
+ROADMAP-V2 §2.41; operator-expected.md.**
+
+**★ SESSION-95 = BACK TO THE LOW-FREQUENCY WAIT.** The operator's two-part ask (panel assessment + load lane) is delivered;
+the concrete non-gated backlog is drained again. What remains is GATED: §2.7 CI-promotions (date ≥ 2026-07-23), the Android
+Kotlin SDK (JVM/Gradle toolchain), iOS Phase 2 (Apple CI), and operator decisions ([20], branch protection, licence, creds,
++ the NEW operator load-lane run on a dedicated PAYG AMS + the panel developer meeting). At open, run the SAME two-minute
+gate: **(1)** `date +%Y-%m-%d` — if **≥ 2026-07-23** → **§2.7 CI-promotions** (drop `web-e2e` `continue-on-error` in
+`.github/workflows/ci.yml`, `actionlint`; hand the operator the branch-protection FULL-LIST PUT adding
+e2e/csp-e2e/web-e2e/docker-build/sdk-swift). **(1b)** `command -v gradle && command -v java` (or `kotlinc`) — if PRESENT →
+START `sdk/beacon-kotlin` (standing GO D-154, ROADMAP §2.12), no prompt. **(2)** check `operator-expected.md` — operator
+answered [20] / asked for iOS Phase 2 / ran the load lane and gave a capacity number / reported panel-meeting G-27 answers /
+named a priority → do their pick (Lead B). **(3)** Else → quick health check + wait at low frequency. Do NOT manufacture an
+arc; do NOT re-run a fresh "is anything broken?" sweep (S89/S91/S92 swept 3× + D-157 drained it). Re-arm at low frequency and
+stop in one line. See `sessions/SESSION-95.md`.
+
+**⚠ OPERATOR ITEMS OPEN (operator-expected.md):** **★ NEW — run the load lane** on a DEDICATED PAYG AMS
+(`cp qa/realams/harness/load-env.sh.example qa/realams/harness/load-env.sh`, fill hosts, `bash qa/realams/run-load-suite.sh`)
+→ feeds the marketplace capacity number + also resolves the expired trial for further testing; **★ NEW — panel-revamp
+developer meeting** (3 technical Qs + revenue-share / API-stability asks, operator-expected.md §3); **§2.1** branch-protection
+PUT; **§2.12 Android** JVM+Gradle+Kotlin env (standing GO auto-starts on detection); **[20]** audit-read (status-quo); AMS
+trial-licence expiry; rotate chat-exposed creds; §2.7 date-gate (2026-07-23, auto). **Optional (non-blocking):** unmute the
+"Stream offline (default)" rule to page on offline (D-157).
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-94.md` — D-158, see above)
 
 **Session 2026-07-19 result: D-157 — S93 SHIPPED the wildcard `stream_offline` fix (operator-authorized: "use your judgment
 and build the stream_offline fix"). The default `critical` "Stream offline (default)" rule — and any wildcard

@@ -9,6 +9,10 @@
 > against the real harness API) and `bash -n`-checked, not run here.
 > **Authored:** 2026-07-17 · **Prod:** `v0.4.0-98-g641b4e2` · **AMS:** 3.0.3 EE.
 > **Companion:** `docs/testing/e2e-ams-test-design.md` (the base test-design doc).
+> **Rev 2 (2026-07-19):** added the opt-in **load lane** (§7) per Ant Media's "verify how your stats hold
+> up under load" pointer, and the **panel-revamp / marketplace** assessment (§8). Same #1 rule applies:
+> the operator plan's load scripts were **verified and rewritten against the real harness API** before
+> anything was committed — see §7.3 for the corrections.
 
 ---
 
@@ -150,5 +154,106 @@ EXIT trap.
 
 ---
 
-*Implements the operator's "Full End-to-End Validation Run" plan, verified against the code. Companion:
-`docs/testing/e2e-ams-test-design.md`.*
+## 7. Rev 2 — the load lane (`qa/realams/load/`)
+
+**Goal (Ant Media's framing):** prove not just that a real AMS carries the media load, but that **Pulse's
+numbers stay correct and its budgets hold while it does** — convergence, oracle parity, API latency, alert
+latency, and ghost-free teardown. Every assertion is a **delta on `val-load-` streams we own**; none is an
+absolute global count, so none can false-green. The mock tier already proves cheap Pulse-side scale (CI
+WO-4: `bulk_publish 500` → `total_publishers ≥ 502`); this lane is the next fidelity tier — real wire, real
+media — against a **dedicated instance**.
+
+### 7.1 What shipped
+
+| Artifact | Purpose |
+|---|---|
+| `qa/realams/harness/load-env.sh.example` | committed template; operator copies to `load-env.sh` (gitignored) |
+| `qa/realams/harness/load-gen.sh` | generator abstraction: **native** (default) vs **official** Ant Media Scripts |
+| `qa/realams/load/scenarios/TC-S-10..13` | publisher ramp · viewer scale · soak · churn |
+| `qa/realams/run-load-suite.sh` | lane runner → `LOAD-REPORT.md` |
+| `run-full-e2e.sh` **phase 45** | opt-in; SKIPs 77 when `load-env.sh` absent |
+| `docs/compatibility.md` "Capacity and load validation" | where the measured capacity number lands |
+
+### 7.2 Two design decisions that differ from the operator plan
+
+1. **Native generators are the default; the official Ant Media tools are an opt-in.** The plan wrapped
+   `ant-media/Scripts` (`rtmp_publisher.sh`, `hls_players.sh`) + the Java WebRTC Load Test Tool as the
+   *primary* path. Those tools are real (verified: `rtmp_publisher.sh` takes `file server N` → `server_1..N`;
+   the WebRTC tool is `run.sh -m publisher|player -f -s -n -i -u`), but the repo already has
+   dependency-free equivalents — `start_bulk_publishers`, `ramp_hls_viewers`, `start_webrtc_viewer` — that
+   need no downloads, no `sample.mp4`, and whose HLS sim uses **real-player segment-once** semantics (no
+   refetch inflation). So `LOAD_GENERATOR=native` is the default; `=official` wraps the Ant Media tools when
+   the marketplace submission should speak their toolkit's vocabulary or when WebRTC viewer scale exceeds the
+   native Playwright cap (8 browsers).
+2. **The load scenarios live in `load/scenarios/`, NOT `scenarios/` — a safety fix.** The plan put
+   `TC-S-1x` in `qa/realams/scenarios/`, where `make validate-all` (`scenarios/TC-*.sh`) **and** phase 41
+   (`scenarios/TC-*-1[0-9]-*.sh`) would both sweep them up and fire load generators **at the shared VPS** —
+   exactly what the safety rail forbids. Isolating them one directory deeper keeps every shared-VPS path
+   blind to them. Belt-and-suspenders: `load-env.sh` sets the harness vars itself and is **never** sourced
+   alongside `env.sh` (which is the only file that knows the shared VPS), and it hard-aborts (exit 1) if a
+   forbidden host (`beyondkaira.com` / `antmedia.io` / the staging host) is detected. All three guards were
+   exercised: placeholder → 77, forbidden host → 1, valid dedicated host → 0.
+
+### 7.3 Corrections vs the operator plan's scripts (same class as §5)
+
+The plan's §9 scripts had the §5 harness-API errors **plus** load-specific ones. Rewritten against reality:
+
+| Plan's version | Real API / fix |
+|---|---|
+| `${LOAD_PULSE_URL}/api/v1/live/overview` | `${PULSE_URL}/live/overview` (URL already includes `/api/v1`) |
+| `.streams[]` in the live list | `(.items // [])[]` |
+| alert rule body `{"op":"lt","stream_id":…}` | `AlertRuleWrite` requires `operator` (not `op`), plus `window_s` + `severity`; scoping is `scope.{app,stream_id}` — the plan's body would 400 |
+| alert history match on `.rule_name` | history has **`rule_id`** (there is no `rule_name`); match `rule_id == <created id>` |
+| load scenarios in `scenarios/` | `load/scenarios/` (see §7.2 #2) |
+| download official tools as the only generator | native default; official behind `LOAD_GENERATOR=official` |
+
+### 7.4 Budgets L-1…L-9 (asserted unless noted)
+
+L-1 convergence (`total_publishers` +N ≤120 s) · L-2 oracle parity (AMS `active-live-stream-count` **and**
+Pulse `total_publishers` both reach base+N — asserted as independent lower bounds per side, not a strict
+AMS-delta == Pulse-delta equality) · L-3 `/live/overview` p95 <300 ms (assert N≤50, record above) · L-4 poll
+stability (count == base+N in ≥95% of soak samples) · L-5 alert-under-load (guaranteed-fire rule reaches
+`firing` ≤30 s; asserted only when the rule is accepted) · L-6 WebRTC viewer parity ±10% (HLS **recorded**,
+not asserted — the ~9× inflation is a known AMS semantic, see TC-V-10) · L-7 pipeline drop counters = 0
+(**reserved — NOT collected by TC-S-10..13**; needs a `/metrics` scrape a future scenario adds) · L-8
+scratch-Pulse RSS slope (record; flag >10%/h) · L-9 ghost-free teardown (counts back to baseline ≤60 s).
+
+### 7.5 Run it
+
+```bash
+cp qa/realams/harness/load-env.sh.example qa/realams/harness/load-env.sh   # then fill in the dedicated hosts
+bash qa/realams/run-load-suite.sh                                          # → LOAD-REPORT.md under $EVIDENCE_ROOT
+```
+
+Scenarios are `bash -n`-clean; like the rest of the live lane they are **packaged for a dedicated
+instance**, not run in this egress-blocked sandbox.
+
+---
+
+## 8. Rev 2 — panel revamp & marketplace readiness
+
+Ant Media (Ankush) gave us confidential read-only access to a **web-panel revamp** and framed the
+marketplace listing as: ship a fully-ready, documented plugin, then meet their developer. The full
+**business + development assessment** — does the revamp threaten our opportunity, and what it means on the
+dev end — is written up for the operator in **`docs/operator-expected.md`** (top banner), with the technical
+integration-surface detail pinned in **`docs/compatibility.md` → "Panel-revamp (G-27) compatibility"**.
+
+**One-line verdict (medium confidence):** the revamp is a real but **non-existential** concern — the
+endpoints that carry Pulse's core value (`/{app}/rest/v2/broadcasts/list`, `webrtc-client-stats`,
+`vods/list`) are in a data-plane namespace a UI overhaul does not touch, and the two console dependencies
+most at risk (auth, app discovery) already have deployed bypasses (`PULSE_AMS_AUTH_TOKEN`,
+`PULSE_AMS_APPLICATIONS`). The right response is targeted due diligence at the developer meeting + a pinned
+G-27 note, **not** an architecture change.
+
+> **Honesty note (do not repeat the plan's overstatements):** an earlier draft of the operator plan called
+> the G-21 cluster-pagination issue a "confirmed P0 wire bug", cited 7 "M-1..M-7" marketplace gates, and
+> called the compatibility matrix "standalone-only". Verified against the repo: G-21 is **UNVERIFIED** (repo
+> says do **not** change `amsclient` until a live 2-node cluster confirms it); the real readiness structure
+> is the **17-row** checklist in `docs/assessment/final-assessment.md` §3; the matrix covers four AMS
+> versions (3.0.3 live, three mock). The two load-relevant claims that **are** confirmed: ~9× HLS inflation
+> (TC-V-06) and the ~5–7 concurrent-RTMP ceiling on the shared VPS (LIM-12).
+
+---
+
+*Implements the operator's "Full End-to-End Validation Run" plan (Rev 2), verified against the code.
+Companion: `docs/testing/e2e-ams-test-design.md`. Operator-facing summary: `docs/operator-expected.md`.*

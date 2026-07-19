@@ -62,6 +62,11 @@ web/test-results/
 # Real-AMS validation evidence (timestamped JSON/screenshot packages — never commit)
 qa/realams/evidence/
 
+# Load-lane operator config (points at a dedicated instance; has a scratch token). Template is committed.
+qa/realams/harness/load-env.sh
+# Fetched official Ant Media load-testing tools (reproducible via load-gen.sh)
+qa/realams/load/tools/
+
 # licensegen local build artifact (CI uses `go run .`)
 qa/licensegen/licensegen
 
