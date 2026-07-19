@@ -96,6 +96,21 @@ type ruleState struct {
 	pendingSince  time.Time
 }
 
+// offlineTracker holds the cross-tick state a WILDCARD stream_offline rule needs
+// (D-157). A wildcard "any stream went offline" alert is an EDGE event: the
+// aggregator removes an ended stream from the snapshot (aggregator.onPublishEnd),
+// so "offline" cannot be read from a single snapshot — it must be inferred by
+// diffing the scope-matching present-stream set across ticks. One tracker per
+// wildcard stream_offline rule (keyed by rule ID).
+type offlineTracker struct {
+	// prevPresent is the set of scope-matching stream IDs present last tick.
+	prevPresent map[string]bool
+	// offlineAt maps a stream ID that went present→gone to the time it went
+	// offline. The rule emits value 1.0 for it until the hold window elapses,
+	// then one resolving 0.0, then it is dropped.
+	offlineAt map[string]time.Time
+}
+
 // ─── Evaluator ────────────────────────────────────────────────────────────────
 
 // Config holds evaluator configuration.
@@ -130,6 +145,11 @@ type Evaluator struct {
 
 	mu     sync.Mutex
 	states map[string]*ruleState // key = ruleID+":"+groupKey
+
+	// offlineTrackers holds per-wildcard-stream_offline-rule edge-detection state
+	// (D-157). Keyed by rule ID. Guarded by mu. Pruned in evaluate() once a rule is
+	// no longer an actively-evaluated wildcard stream_offline rule.
+	offlineTrackers map[string]*offlineTracker
 
 	// Wave 2: TLS cert expiry checker (nil = cert_expiry rules skipped).
 	certChecker CertExpiryChecker
@@ -192,13 +212,14 @@ func New(cfg Config, live domain.LiveProvider, store *meta.Store, registry *chan
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	return &Evaluator{
-		cfg:      cfg,
-		store:    store,
-		live:     live,
-		registry: registry,
-		clock:    clock,
-		logger:   logger,
-		states:   make(map[string]*ruleState),
+		cfg:             cfg,
+		store:           store,
+		live:            live,
+		registry:        registry,
+		clock:           clock,
+		logger:          logger,
+		states:          make(map[string]*ruleState),
+		offlineTrackers: make(map[string]*offlineTracker),
 	}
 }
 
@@ -300,6 +321,7 @@ func (e *Evaluator) evaluate(ctx context.Context) {
 
 	now := e.clock.Now()
 
+	keepOffline := make(map[string]bool)
 	for _, rule := range rules {
 		// enabled=false: rule is completely suspended — not evaluated at all.
 		// This is distinct from muted=true (evaluated, but notifications suppressed).
@@ -311,8 +333,42 @@ func (e *Evaluator) evaluate(ctx context.Context) {
 			continue
 		}
 
+		// D-157: keep an offline tracker only while its rule is CONTINUOUSLY an active
+		// wildcard stream_offline rule. A rule that is disabled, in a maintenance
+		// window, or whose metric/scope changed away from wildcard stream_offline is
+		// skipped here (not added to keepOffline), so its tracker is pruned below and
+		// rebuilt fresh on resumption. Otherwise a stale prevPresent would fabricate
+		// present→gone edges — spurious offline fires — when the rule resumes.
+		if rule.Metric == "stream_offline" && isWildcardOfflineScope(rule.ScopeJSON) {
+			keepOffline[rule.ID] = true
+		}
+
 		e.evaluateRule(ctx, rule, snap, now)
 	}
+
+	e.pruneOfflineTrackers(keepOffline)
+}
+
+// pruneOfflineTrackers removes offline trackers for any rule NOT in keep — i.e. a
+// rule that is deleted, disabled, suppressed, or no longer a wildcard stream_offline
+// rule. Its edge-detection state is discarded and rebuilt fresh on resumption.
+func (e *Evaluator) pruneOfflineTrackers(keep map[string]bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for ruleID := range e.offlineTrackers {
+		if !keep[ruleID] {
+			delete(e.offlineTrackers, ruleID)
+		}
+	}
+}
+
+// isWildcardOfflineScope reports whether a rule's scope has no stream_id — the
+// wildcard form that uses cross-tick edge detection. A malformed scope parses to
+// the zero value (empty StreamID) → wildcard, matching evaluateRule's tolerant parse.
+func isWildcardOfflineScope(scopeJSON string) bool {
+	var scope domain.AlertScope
+	_ = json.Unmarshal([]byte(scopeJSON), &scope)
+	return scope.StreamID == ""
 }
 
 // syncRegistryFromStore updates the channel registry from the meta store.
@@ -375,7 +431,7 @@ func (e *Evaluator) evaluateRule(ctx context.Context, rule meta.AlertRuleRow, sn
 	} else {
 		switch rule.Metric {
 		case "stream_offline":
-			evals = e.evalStreamOffline(snap, scope, rule)
+			evals = e.evalStreamOffline(snap, scope, rule, now)
 		case "viewer_drop_pct":
 			evals = e.evalViewerDrop(snap, scope, rule)
 		case "node_cpu":
@@ -408,7 +464,15 @@ func (e *Evaluator) evaluateRule(ctx context.Context, rule meta.AlertRuleRow, sn
 	// When group_by is set, collapse per-stream evals into one per group key.
 	// e.g. group_by="app" → one notification per app, not per stream.
 	if rule.GroupBy.Valid && rule.GroupBy.String != "" {
-		evals = applyGroupBy(evals, rule.GroupBy.String, snap)
+		// D-157: wildcard stream_offline is per-stream edge detection. Its offline
+		// results are for streams ABSENT from snap.Streams, which applyGroupBy cannot
+		// resolve to an app (group key falls back to stream_id) — and when such a
+		// stream RECOVERS, applyGroupBy would re-key it to its app, orphaning the
+		// stream-id-keyed firing state so it never resolves (permanent stuck-fire).
+		// So group_by does not collapse wildcard offline; it stays one alert per stream.
+		if rule.Metric != "stream_offline" || scope.StreamID != "" {
+			evals = applyGroupBy(evals, rule.GroupBy.String, snap)
+		}
 	}
 
 	for _, ev := range evals {
@@ -715,18 +779,54 @@ type evalResult struct {
 // via compare (D-129). The default rule is { operator: "eq", threshold: 1 }, so it
 // fires exactly when offline. Previously this hardcoded value=0 and ok=!active, which
 // (a) reported a misleading value=0 on a firing alert and (b) ignored the rule's
-// operator/threshold entirely. Offline detection is unchanged: scoped = absent from
-// the snapshot, wildcard = present-but-inactive.
-func (e *Evaluator) evalStreamOffline(snap *domain.LiveSnapshot, scope domain.AlertScope, rule meta.AlertRuleRow) []evalResult {
-	var results []evalResult
+// operator/threshold entirely. Offline detection: scoped = absent from the snapshot
+// (sticky); wildcard = a present→gone edge across ticks (D-157 — an inactive stream
+// is no longer present in the snapshot, so the old "present-but-inactive" wildcard
+// test could never match in production).
+func (e *Evaluator) evalStreamOffline(snap *domain.LiveSnapshot, scope domain.AlertScope, rule meta.AlertRuleRow, now time.Time) []evalResult {
+	// Scoped: a specific stream is offline iff absent from the snapshot. Sticky —
+	// fires (value 1.0) every tick while absent and resolves when it returns.
 	if scope.StreamID != "" {
 		val := 0.0
 		if _, present := snap.Streams[scope.StreamID]; !present {
 			val = 1.0 // offline: the scoped stream is absent from the snapshot
 		}
-		results = append(results, evalResult{groupKey: scope.StreamID, value: val, ok: compare(val, rule.Operator, rule.Threshold)})
-		return results
+		return []evalResult{{groupKey: scope.StreamID, value: val, ok: compare(val, rule.Operator, rule.Threshold)}}
 	}
+
+	// Wildcard (D-157): an inactive stream is removed from snap.Streams entirely
+	// (aggregator.onPublishEnd calls snapRemoveStream while Active==true, then
+	// deletes it), so offline cannot be read from a single snapshot. Detect the
+	// present→gone EDGE by diffing the scope-matching present set across ticks: a
+	// stream present last tick and gone now has just ended. It emits value 1.0 for
+	// a bounded hold window — long enough to satisfy the rule's WindowS and fire —
+	// then one resolving 0.0 (the state machine has no stale-sweep, so a fired
+	// alert would otherwise stick firing forever). A returning stream also resolves.
+	//
+	// By-design (differs from the scoped path, which is a sticky level condition):
+	// wildcard offline is an EDGE — it pages ONCE per offline event and auto-clears
+	// after the hold window. A stream that ends and never returns yields a single
+	// alert, not a perpetually-firing one.
+	//
+	// Known limitation: snap.Streams is keyed by BARE stream_id (last-write-wins when
+	// two active streams share an id across apps/nodes — see aggregator.snapAddStream).
+	// A partially-scoped wildcard rule (scope.App/NodeID set, StreamID empty) therefore
+	// inherits that aliasing: a stream shadowed in the snapshot can read as gone. The
+	// full-wildcard form (empty scope — the default rule) and the scoped form are
+	// unaffected. A precise fix needs compound-keyed snapshots (out of scope here).
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.offlineTrackers == nil {
+		e.offlineTrackers = make(map[string]*offlineTracker)
+	}
+	tr := e.offlineTrackers[rule.ID]
+	if tr == nil {
+		tr = &offlineTracker{prevPresent: map[string]bool{}, offlineAt: map[string]time.Time{}}
+		e.offlineTrackers[rule.ID] = tr
+	}
+
+	// Scope-matching currently-present streams.
+	present := make(map[string]bool, len(snap.Streams))
 	for sid, s := range snap.Streams {
 		if scope.App != "" && s.App != scope.App {
 			continue
@@ -734,13 +834,57 @@ func (e *Evaluator) evalStreamOffline(snap *domain.LiveSnapshot, scope domain.Al
 		if scope.NodeID != "" && s.NodeID != scope.NodeID {
 			continue
 		}
-		val := 0.0
-		if !s.Active {
-			val = 1.0 // offline: present in the snapshot but not active
-		}
-		results = append(results, evalResult{groupKey: sid, value: val, ok: compare(val, rule.Operator, rule.Threshold)})
+		present[sid] = true
 	}
+
+	// New offline edges: present last tick, gone now (and not already tracked).
+	for sid := range tr.prevPresent {
+		if !present[sid] {
+			if _, tracked := tr.offlineAt[sid]; !tracked {
+				tr.offlineAt[sid] = now
+			}
+		}
+	}
+
+	hold := streamOfflineHold(rule.WindowS, e.cfg.TickInterval)
+
+	results := make([]evalResult, 0, len(present)+len(tr.offlineAt))
+	// Present streams are online (value 0.0). A returning stream also clears any
+	// pending offline tracking, so its firing alert resolves.
+	for sid := range present {
+		delete(tr.offlineAt, sid)
+		results = append(results, evalResult{groupKey: sid, value: 0.0, ok: compare(0.0, rule.Operator, rule.Threshold)})
+	}
+	// Recently-offline streams: value 1.0 within the hold window (fires), then one
+	// resolving 0.0 and stop tracking.
+	for sid, offAt := range tr.offlineAt {
+		if now.Sub(offAt) < hold {
+			results = append(results, evalResult{groupKey: sid, value: 1.0, ok: compare(1.0, rule.Operator, rule.Threshold)})
+		} else {
+			results = append(results, evalResult{groupKey: sid, value: 0.0, ok: compare(0.0, rule.Operator, rule.Threshold)})
+			delete(tr.offlineAt, sid)
+		}
+	}
+
+	tr.prevPresent = present
 	return results
+}
+
+// streamOfflineHold is how long a wildcard-detected offline stream keeps emitting
+// value 1.0 before it auto-resolves (D-157). It must exceed the rule's WindowS so
+// the alert can satisfy its hold-to-fire requirement and actually fire; the extra
+// grace keeps it visibly firing briefly, then it emits a resolving 0.0. Floored at
+// two ticks so a WindowS=0 (fire-immediately) rule still fires then resolves.
+func streamOfflineHold(windowS int, tick time.Duration) time.Duration {
+	if tick <= 0 {
+		tick = 5 * time.Second
+	}
+	w := time.Duration(windowS) * time.Second
+	grace := w
+	if grace < 2*tick {
+		grace = 2 * tick
+	}
+	return w + grace
 }
 
 func (e *Evaluator) evalViewerDrop(snap *domain.LiveSnapshot, scope domain.AlertScope, rule meta.AlertRuleRow) []evalResult {
