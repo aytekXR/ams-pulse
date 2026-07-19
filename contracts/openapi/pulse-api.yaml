@@ -3048,7 +3048,9 @@ components:
           type: string
         type:
           type: string
-          enum: [rest_poll, log_tail, kafka, webhook]
+          # log_tail removed (D-155): the logtail collector was deleted in D-062;
+          # the only configurable AMS source types are rest_poll, kafka, webhook.
+          enum: [rest_poll, kafka, webhook]
         rest_url:
           type: string
           format: uri
@@ -3085,7 +3087,9 @@ components:
           type: string
         type:
           type: string
-          enum: [rest_poll, log_tail, kafka, webhook]
+          # log_tail removed (D-155): the logtail collector was deleted in D-062;
+          # the only configurable AMS source types are rest_poll, kafka, webhook.
+          enum: [rest_poll, kafka, webhook]
         rest_url:
           type: string
           format: uri

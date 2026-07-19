@@ -21,6 +21,27 @@
 >
 > ---
 >
+# ▶ S91 STATUS (2026-07-19, D-155) — NO operator action required
+
+> The loop remains in the low-frequency-wait phase. This session did NOT manufacture an arc — the two-minute gate
+> confirmed the primary moves are still gated (§2.7 CI-promotions auto-unlock **2026-07-23**; the Android SDK is
+> tooling-blocked awaiting your JDK+Gradle env; you haven't answered [20] or named a priority). Rather than idle, it took
+> the one small, pre-identified, non-gated cleanup it had flagged for itself last session:
+> - **Removed a dead source type from the API contract.** The API used to advertise a `log_tail` AMS source type, left over
+>   from a log-file collector that was deleted months ago (D-062). No one could actually create that source type, so the
+>   listing was misleading. The contract, the generated web types, the drift-guard test, and the database schema comments
+>   now list only the three real source types (REST poll, Kafka, webhook).
+>
+> **Contract/types/test/documentation only — no behavior change, no prod deploy** (prod stays **v0.4.0-119**). Verified by
+> the full Go + web test suites (green) and a 3-lens adversarial review (no blocking issues). PR #179. **Nothing for you to
+> do.** This closes the `log_tail` follow-up noted in the S89 status below.
+>
+> The operator items in the table at the top of this file are unchanged and remain the highest-leverage next moves — all
+> yours; none blocks continued autonomous work. **The next scheduled autonomous move is §2.7 CI-job promotions on
+> 2026-07-23**, or sooner if you install the Android build env (auto-starts the Kotlin SDK) or answer [20].
+>
+> ---
+>
 > # ▶ S89 STATUS (2026-07-18, D-151) — NO operator action required
 >
 > The loop is in the low-frequency-wait phase (F6 code complete; the safe autonomous backlog is drained). This session did

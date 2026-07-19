@@ -11,7 +11,47 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-91.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-92.md`)
+
+**Session 2026-07-19 result: D-155 — S91 was the LOW-FREQUENCY WAIT. The two-minute gate confirmed all three branches
+still closed (date 2026-07-19 < 07-23 → §2.7 gated; `gradle`/`java`/`kotlinc` all ABSENT → §2.12 Android tooling-blocked,
+standing GO D-154 not yet triggerable; operator-expected top block still D-152 → no new answer to [20], no iOS Phase 2 ask,
+no new priority) → Lead C. Rather than idle, took the ONE sanctioned non-gated stewardship candidate SESSION-91 named: the
+`log_tail` source-type enum cleanup (the contract-narrowing follow-up S89/D-151 had deferred). The logtail collector was
+deleted in D-062 but the OpenAPI `Source`/`SourceWrite` `type` enums still advertised `log_tail`. Verify-first confirmed
+`amsSourceFromAPI` doesn't validate `type` against the enum (documentation-only) so narrowing is zero-behavior-change.
+Narrowed both enums to `[rest_poll, kafka, webhook]`, regenerated `schema.d.ts` (`.d.ts` types-only), added a
+mutation-proven spec-driven drift guard (`s91_source_type_enum_test.go`), and dropped `log_tail` from the 4
+`*0001_init.sql` `source_type` column comments. 3-lens adversarial review all non-blocking (2 NITs folded in). Go 26-pkg +
+web 680 + typecheck/lint/build green; gofmt clean. NO prod roll (no runtime source change) → prod stays `v0.4.0-119`.
+PR #179. Evidence: `decisions.md` D-155; ROADMAP §2.39.**
+
+**★ S91 did NOT manufacture an arc.** The `log_tail` enum removal was a real, pre-identified, non-gated contract-accuracy
+defect (flagged by S89, sanctioned by SESSION-91 Lead C). With it closed, the concrete non-gated stewardship backlog is
+now thinner still — the remaining `log_tail`-family items (the `ams-server-event.schema.json` event-origin enum, the
+vestigial `log_path` field + its UI/doc labels, `brandkit/uploads/` archive snapshots) were adversarially confirmed
+NON-blocking and are lower-value / riskier-narrowing than the API enum; do NOT chase them autonomously without a clear
+signal.
+
+**★ SESSION-92 = STILL THE LOW-FREQUENCY WAIT** (same posture as S89/S91; the sanctioned stewardship candidate is now
+spent). At open, run the SAME two-minute gate: **(1)** `date +%Y-%m-%d` — if **≥ 2026-07-23** → **§2.7 CI-promotions**
+(drop `web-e2e`'s `continue-on-error` in `.github/workflows/ci.yml`, `actionlint`; hand the operator the updated
+branch-protection FULL-LIST PUT that adds e2e/csp-e2e/web-e2e/docker-build/sdk-swift). **(1b) ANDROID AUTO-START (standing
+operator GO D-154):** `command -v gradle && command -v java` (or `kotlinc`) — if the JVM/Gradle toolchain is now PRESENT →
+immediately START `sdk/beacon-kotlin` (Lead B, per ROADMAP §2.12), no further prompt. If absent → one-line "toolchain
+absent, waiting". **(2)** check `operator-expected.md` — if the operator answered [20] / asked for iOS Phase 2 / named a
+priority → do their pick (Lead B). **(3)** Else → quick health check + at most ONE bounded adversarial "is anything
+genuinely broken?" sweep (S89 + S91 have both swept and drained the drift, so expect little; keep the bar HIGH). If it
+comes up empty, that CONFIRMS the wait → **re-arm the loop at low frequency / max interval and stop in one line. Do NOT
+manufacture an arc.** **Do NOT start** iOS Phase 2 (Xcode/Apple CI) or Android (JDK/Gradle/Kotlin) — both tooling-blocked.
+See `sessions/SESSION-92.md`.
+
+**⚠ OPERATOR ITEMS STILL OPEN (in `operator-expected.md`, short list — unchanged from S90):** **§2.1** — run the
+branch-protection PUT; **§2.12 Android** — provide a JVM+Gradle+Kotlin build environment (or CI job) to unblock the
+standing GO; **[20] audit-read** — still open (status-quo reads-open until you choose); the AMS trial-licence expiry
+confirmation; rotate the chat-exposed creds; the §2.7 date-gate (2026-07-23, auto).
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-91.md` — D-155, see above)
 
 **Session 2026-07-18 result: D-151 — S89 was the LOW-FREQUENCY WAIT, but a verify-before-idling adversarial sweep (5 scouts + refute-by-default verify, 13 agents) caught 5 genuine non-gated defects and fixed them as a one-off stewardship arc: (1 HIGH) `handleTestSource` emitted the failure reason under `message` while the `AmsSourceStatus` contract + web use `error` → every failed source test showed a generic fallback; (MED) the web analytics client sent `?stream_id=` where the server/contract use `stream` → stream filter silently dropped; (MED×2) logtail (deleted D-062) still shown as shipped/configurable in ARCHITECTURE/AMS-INTEGRATION/README; (MED) `make mock-ams` built from the repo root (no go.mod) → unconditional failure. Both source fixes mutation-proven; full Go+web suites green; adversarial diff-review clean. Prod-rolled `v0.4.0-118` → `v0.4.0-119`, 5-check smoke green. PR #176.**
 

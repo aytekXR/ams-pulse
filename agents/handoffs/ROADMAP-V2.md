@@ -570,6 +570,24 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.39  Source-type enum contract-narrowing — remove dead `log_tail`  [✅ DONE — contract/types/test/doc only, NO prod deploy]  ✅ S91 (D-155, 2026-07-19, PR #179)
+
+S91's two-minute gate found the low-frequency wait still in force (date 2026-07-19 < 2026-07-23 → §2.7 gated; gradle/java/
+kotlinc absent → §2.12 Android tooling-blocked; operator-expected top block still D-152 → no new input). → **Lead C.**
+Rather than idle, took the ONE sanctioned non-gated stewardship candidate: the `log_tail` enum cleanup S89/D-151 had
+deferred.
+
+The logtail collector was deleted in **D-062** but the OpenAPI `Source`/`SourceWrite` `type` enums still advertised a
+`log_tail` source type. **Verify-first:** `amsSourceFromAPI` doesn't validate `type` against the enum (accepts any string)
+→ the enum is documentation-only → narrowing is zero-behavior-change; no client/seed/fixture ever writes `log_tail`;
+`host_agent` is an event-origin tag (not a config type) so it stays out. **Change:** both enums →
+`[rest_poll, kafka, webhook]`; regen `schema.d.ts` (`.d.ts` types-only, no bundle change); a spec-driven **mutation-proven**
+drift guard (`s91_source_type_enum_test.go`) pins the exact 3-value set; and the 4 `*0001_init.sql` `source_type` column
+comments (the only doc of allowed values) drop `log_tail`. 3-lens adversarial review: all non-blocking (2 NITs folded in).
+Go 26-pkg + web 680 + typecheck/lint/build green; gofmt clean. **NO prod roll** (no runtime source change) — prod stays
+**v0.4.0-119**. **No operator action.** Noted non-blocking follow-ups: the `ams-server-event.schema.json` event-origin
+enum (separate data contract), the vestigial `log_path` field + labels, stale `brandkit/uploads/` archives.
+
 ### 2.38  Contract-drift + doc/build stewardship sweep — S89 low-frequency-wait caught-defect arc  [✅ DONE — 2 source fixes (prod-rolled v0.4.0-119) + 3 doc/build fixes]  ✅ S89 (D-151, 2026-07-18, PR #176)
 
 The S89 two-minute gate found the primary autonomous move still gated (§2.7 date-locked ≥ 2026-07-23; operator hasn't
@@ -591,7 +609,7 @@ against the code:
 Full Go (26 pkg) + web (676+) suites green; both source fixes mutation-proven; adversarial diff-review clean. Prod-rolled
 (server+web source changed) v0.4.0-118 → **v0.4.0-119**. **No operator action.** Discovered follow-up (pre-existing, not
 bundled): the OpenAPI `SourceWrite`/`Source` `type` enums still list the dead `log_tail` type (removal is a contract
-narrowing — deferred).
+narrowing — deferred). **→ CLOSED in §2.39 (S91, D-155, PR #179).**
 
 ### 2.37  F6 multi-tenancy — operator-directed "start F6"  [⚙ PHASE 1 ✅ + PHASE 2 ✅; PHASE 3 = [20] next]
 
