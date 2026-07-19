@@ -9286,3 +9286,44 @@ the loop must self-detect the build environment and begin the Android SDK withou
 - **Constraints:** contracts-first; zero-dep; NO server change → NO prod roll; do NOT author unverified Kotlin before the
   toolchain exists (build-it-to-prove-it). **Operator action to unblock:** install a JDK (Temurin 21) + Gradle on this host
   (or add an Android CI runner). Recorded in operator-expected.md, RESUME (gate step 1b), SESSION-91 (gate 1b + Lead B).
+
+## D-155 — S91 (2026-07-19): SHIPPED — contract-narrowing stewardship (Lead-C caught-defect arc): drop dead `log_tail` from the OpenAPI source-type enum. PR #179. NO prod roll (types/contract/test/doc only).
+
+**Gate (two-minute):** date 2026-07-19 < 2026-07-23 → §2.7 CI-promotions still date-locked; `command -v gradle/java/kotlinc`
+all ABSENT → §2.12 Android still tooling-blocked (standing GO D-154 not yet triggerable); operator-expected.md top block
+still D-152 (no new answer to [20], no iOS Phase 2 ask, no new priority). → **Lead C** (verify, then wait). Health check
+clean: CI on main all green (ci/e2e/codeql/ams-version-matrix), only Dependabot PRs open (operator-held), git clean except
+the do-not-commit `Caddyfile.prod`.
+
+**The move:** took the ONE sanctioned non-gated stewardship candidate SESSION-91 Lead-C named — the deferred `log_tail`
+enum cleanup (flagged by S89/D-151 as a contract-narrowing follow-up). The logtail collector was deleted in D-062
+(package, `SourceLogTail`, serve.go wiring all gone), but the OpenAPI `Source`/`SourceWrite` `type` enums still advertised
+`log_tail`.
+
+**Verify-first (traced, not assumed):**
+- `amsSourceFromAPI` (server.go:2570) does NOT validate `type` against the enum — accepts any non-empty string → the enum
+  is a **documentation contract only** → narrowing it is zero server behavior change, no source-create break.
+- No seed/migration/fixture/client writes or sends `type: log_tail`; `OnboardingWizard` hardcodes `type: "rest_poll"` with
+  no type selector. The only conformance risk (a stored `log_tail` in a `Source` response) is impossible to create now.
+- `domain.SourceHostAgent = "host_agent"` is a `ServerEvent.source` event-origin tag, NOT an `/admin/sources` config type —
+  correctly excluded from the API enum (it never was in it).
+
+**Change (7 files):** ① `contracts/openapi/pulse-api.yaml` — both enums `[rest_poll, log_tail, kafka, webhook]` →
+`[rest_poll, kafka, webhook]`. ② `web/src/lib/api/schema.d.ts` — regenerated (openapi-typescript 7.13.0), clean 2-line
+diff, `.d.ts` types-only (no runtime/bundle change). ③ `server/internal/api/s91_source_type_enum_test.go` (new) —
+spec-driven drift guard: loads the real spec, asserts both enums == exactly `{rest_poll, kafka, webhook}`, no `log_tail`;
+4 t.Fatalf non-vacuity guards; **mutation-proven** (re-added `log_tail` → FAIL on both the specific-value + exact-set
+checks; restored via `cp`, D-096). ④–⑦ four `*0001_init.sql` (`contracts/db/meta` + embedded `store/meta/sql`, sqlite +
+postgres) — `source_type` column comment (the only doc of allowed values; plain TEXT, no CHECK) no longer lists
+`log_tail`. Comment-only; idempotent `IF NOT EXISTS` DDL, no schema change, no checksum-mismatch risk (meta DDL is not
+content-checksummed; CH runner keys on filename via `sha256(name)`, D-verified in runner.go:202).
+
+**Adversarial review** (3 lenses, refute-by-default, 141k tok): **all non-blocking.** Surfaced 2 useful NITs, both
+folded in pre-merge: (a) the 4 DDL comments (originally not in my follow-up list — now fixed above), (b) sharpened the
+test's host_agent-exclusion rationale. Residual `log_tail` refs confirmed NON-blocking + noted as follow-ups: the
+`ams-server-event.schema.json` event-origin enum (separate data contract; backward-compat for stored events), the
+vestigial `log_path` field + its `OnboardingWizard`/`AMS-INTEGRATION.md:356` labels, stale `brandkit/uploads/` archives.
+
+**Validation:** Go 26-pkg suite green (twice — pre + post the DDL/test-comment edits); web 680 tests + typecheck + lint +
+build green; gofmt clean. **NO prod roll** (no runtime source change — like S85/D-146): prod stays **v0.4.0-119**.
+**No operator action.** Evidence: ROADMAP §2.39; PR #179. Closes the S89-noted `log_tail` enum follow-up.
