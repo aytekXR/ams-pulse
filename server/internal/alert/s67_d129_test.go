@@ -221,30 +221,25 @@ func TestEvalStreamOffline_ScopedOnline_NoFire_S67(t *testing.T) {
 	}
 }
 
-// TestEvalStreamOffline_WildcardInactive_FiresValueOne_S67: wildcard rule, a present
-// stream with Active=false is offline → fires with value 1.0.
-func TestEvalStreamOffline_WildcardInactive_FiresValueOne_S67(t *testing.T) {
-	notifs := s67RunTick(t,
-		s67ThresholdRule("s67-offline-wild", "stream_offline", "eq", 1),
-		s67StreamSnap(&domain.LiveStream{StreamID: "s1", Active: false}))
-	if len(notifs) != 1 {
-		t.Fatalf("wildcard stream_offline for an inactive stream must fire once; got %d", len(notifs))
-	}
-	if v, _ := notifs[0]["value"].(float64); v != 1 {
-		t.Errorf("firing stream_offline value: got %v, want 1.0", notifs[0]["value"])
-	}
-}
+// D-157: the former TestEvalStreamOffline_WildcardInactive_FiresValueOne_S67 was
+// removed — it injected an Active:false stream directly into the snapshot, a state
+// the aggregator never produces (onPublishEnd removes an ended stream from the
+// snapshot BEFORE marking it inactive), so it validated an unreachable code path
+// and masked the wildcard-never-fires defect. Wildcard stream_offline is now an
+// across-ticks present→gone edge; it is covered against the REAL aggregator flow in
+// s93_stream_offline_test.go.
 
 // TestEvalStreamOffline_CompareRespected_S67 is the discriminating test for the compare()
 // path. Pre-D-129 the operator/threshold were ignored (ok hardcoded to !active), so an
 // offline stream fired regardless of the rule. Under a rule whose predicate is NOT met by
 // the offline value (`eq 0`), the offline stream must NOT fire once compare() is honored.
+// Uses the SCOPED path (absent stream → value 1.0) — a reachable state (D-157).
 func TestEvalStreamOffline_CompareRespected_S67(t *testing.T) {
-	notifs := s67RunTick(t,
-		s67ThresholdRule("s67-offline-cmp", "stream_offline", "eq", 0),
-		s67StreamSnap(&domain.LiveStream{StreamID: "s1", Active: false}))
+	rule := s67ThresholdRule("s67-offline-cmp", "stream_offline", "eq", 0)
+	rule.ScopeJSON = `{"stream_id":"s1"}`
+	notifs := s67RunTick(t, rule, s67StreamSnap()) // s1 absent → value 1.0 (offline)
 	if len(notifs) != 0 {
-		t.Errorf("offline stream under `eq 0` must not fire once compare() is honored; "+
+		t.Errorf("offline stream (value 1.0) under `eq 0` must not fire once compare() is honored; "+
 			"got %d (operator/threshold ignored)", len(notifs))
 	}
 }
