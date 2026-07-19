@@ -9327,3 +9327,48 @@ vestigial `log_path` field + its `OnboardingWizard`/`AMS-INTEGRATION.md:356` lab
 **Validation:** Go 26-pkg suite green (twice — pre + post the DDL/test-comment edits); web 680 tests + typecheck + lint +
 build green; gofmt clean. **NO prod roll** (no runtime source change — like S85/D-146): prod stays **v0.4.0-119**.
 **No operator action.** Evidence: ROADMAP §2.39; PR #179. Closes the S89-noted `log_tail` enum follow-up.
+
+## D-156 — S92 (2026-07-19): FINDING (confirmed HIGH, escalated — NO code fix). The default `critical` wildcard "Stream offline" alert can NEVER fire. Needs a firing-semantics product call + a flapping-risky core-feature change. ROADMAP §2.40 (OPEN).
+
+**Gate:** unchanged from S91 (same day) — date 2026-07-19 < 07-23 (§2.7 gated); gradle/java/kotlinc absent (§2.12 Android
+blocked); operator silent → Lead C. The S91 sanctioned candidate (log_tail enum) was spent, so S92 took the single
+sanctioned "is anything genuinely broken?" sweep (3 scouts, refute-by-default verify, ~178k tok). Two lenses (contract↔server
+drift, web↔server consistency) came back **CLEAN** — confirming S89/S91 drained that class. The fresh-behavioral lens
+surfaced ONE confirmed HIGH defect; I then independently re-verified it end-to-end against the code (verify-first — did NOT
+trust the agent).
+
+**The defect (CONFIRMED):** wildcard `stream_offline` alert rules — INCLUDING the default seeded `critical`
+"Stream offline (default)" rule (`wave2.go:494`, `ScopeJSON:"{}"`, `eq 1`) shipped to every install — **never fire.**
+- `evalStreamOffline` wildcard path (`evaluator.go:730-742`) iterates `snap.Streams` and fires only when `!s.Active`.
+- But the aggregator NEVER leaves an inactive stream in `snap.Streams`: `onPublishEnd` (`aggregator.go:306-315`) calls
+  `snapRemoveStream(s)` **while `Active==true`** (deleting it from `snap.Streams`), THEN sets `Active=false` + `delete(a.streams)`.
+  `EvictStale` (`aggregator.go:242`) sets `Active=false` then emits a synthetic publish_end → same removal.
+  `rebuildSnapshot`/`snapAddStream` both `if !s.Active { continue/return }`. So `snap.Streams` is an
+  **exclusively-active set at all times** → the wildcard `!s.Active` check is unreachable → `val` is permanently 0 →
+  `eq 1` never true → no wildcard offline alert ever fires. (The SCOPED path — `scope.StreamID != ""` → absent-from-snapshot
+  → `val=1` — WORKS correctly; only wildcard is dead.)
+- **Masking test:** `TestEvalStreamOffline_WildcardInactive_FiresValueOne_S67` (`s67_d129_test.go:226-236`) injects
+  `&domain.LiveStream{Active:false}` DIRECTLY into the snapshot map — a state the aggregator never produces — so it passes
+  green while the production path is dead. This is why the defect survived S67/D-129 (whose real fix was the scoped
+  operator/threshold-honoring change, verified genuine).
+- **Regression origin:** the `evaluator.go:718-719` comment ("wildcard = present-but-inactive") documents a design that
+  the S10/D-068 incremental-snapshot refactor (eager `snapRemoveStream` on publish-end) silently made unreachable.
+
+**Why NOT force-fixed this session (escalated instead — cf. D-130/D-141/D-150):** a wildcard "any stream went offline"
+alert is an EDGE event (present→gone), not a level condition, so the fix needs a **firing-semantics decision** the operator
+should own: one-shot page per offline event (my rec), sticky-until-recovered, or a fixed window. AND the alert framework has
+**no stale-state sweep** (`evaluator.go:790-795`, D-129): a naive one-shot emission would leave a **critical** alert
+stuck-firing forever (no `val=0` tick to resolve it) — strictly WORSE than today's silent-but-muted state. Getting it wrong
+risks flapping/false critical pages on a headline feature. The default rule is **muted** (operators must unmute), so
+exposure is latent, not urgent. This squarely fits the escalate-design pattern; a rushed autonomous patch is not warranted.
+
+**Recommended turnkey fix (for the fix arc / operator nod):** windowed offline-edge detection, evaluator-local, NO
+`LiveSnapshot` contract/WS change. The evaluator tracks per-wildcard-rule the scope-matching stream IDs present last tick;
+this tick, streams that were present and are now gone enter a short "recently offline" set with a grace window; while in the
+window the rule emits `val=1` (fires, sticky within the window), then emits `val=0` once to RESOLVE before ageing out (avoids
+the stuck-firing hazard). Replace the masking s67 wildcard test with one that drives the REAL aggregator flow
+(publish-start → publish-end → eval). Mutation-prove the fire AND the resolve; adversarial-review the alert state machine.
+
+**No code change this session. NO prod roll** (prod stays v0.4.0-119). **Operator product call surfaced**
+(operator-expected.md): wildcard-offline firing semantics. Evidence: ROADMAP §2.40; verified against
+`evaluator.go`/`aggregator.go`/`wave2.go`/`s67_d129_test.go`.

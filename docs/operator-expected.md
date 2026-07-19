@@ -21,7 +21,35 @@
 >
 > ---
 >
-# ▶ S91 STATUS (2026-07-19, D-155) — NO operator action required
+# ▶ ★ S92 FINDING (2026-07-19, D-156) — a HIGH bug found + escalated; ONE product decision requested (non-urgent)
+
+> A verification sweep this session caught a real, higher-severity bug in the **alerting** engine and I want your call on
+> how the fix should behave before I build it (it changes how a **critical** alert fires, so I won't guess).
+>
+> **The bug:** the built-in **"Stream offline" alert never actually fires** when it's set to watch *all* streams (which is
+> how the default rule ships). I traced it end to end and confirmed it: the live-state engine drops a stream from its
+> snapshot the instant it ends, but the alert check looks for a stream that is "still listed but marked inactive" — a state
+> that never occurs — so the check is always false. **A "Stream offline" rule scoped to a *specific* stream works fine; only
+> the "any stream" (wildcard) form is dead — including the default rule.** Good news: **the default rule ships MUTED**, so
+> nobody is being silently misled today unless they've turned it on and rely on it. A stale test was hiding the bug (it
+> fabricated the impossible state), which is why it slipped past an earlier fix.
+>
+> **Why I'm asking instead of just fixing it:** "any stream went offline" is a one-time *event*, not an ongoing condition,
+> and the alert engine has no auto-clear for events — so a careless fix would leave a **critical** alert stuck "firing"
+> forever (worse than the current silence). How should it behave?
+> - **(a) One page per offline event, auto-clearing after a short grace window** — *my recommendation* (matches how you'd
+>   want to be paged: "stream X dropped", once).
+> - **(b) Stays "firing" until that stream comes back** — more like the per-stream rule, but can pile up if streams end and
+>   never restart.
+> - **(c) Just document wildcard-offline as unsupported** and steer operators to per-stream offline rules.
+>
+> **Say (a), (b), or (c)** — or **"use your judgment"** and I'll build (a) with a proper auto-clear + real tests +
+> adversarial review. Either way there is **no code change and no deploy this session** (prod stays **v0.4.0-119**); this is
+> filed as a tracked HIGH item (ROADMAP §2.40) and is the top candidate for the next work session. Not urgent, not blocking.
+>
+> ---
+>
+> # ▶ S91 STATUS (2026-07-19, D-155) — NO operator action required
 
 > The loop remains in the low-frequency-wait phase. This session did NOT manufacture an arc — the two-minute gate
 > confirmed the primary moves are still gated (§2.7 CI-promotions auto-unlock **2026-07-23**; the Android SDK is
