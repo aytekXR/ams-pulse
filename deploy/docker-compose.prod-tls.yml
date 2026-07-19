@@ -33,6 +33,21 @@ services:
     environment:
       PULSE_DOMAIN: "${PULSE_DOMAIN:?set PULSE_DOMAIN to your real domain, e.g. beyondkaira.com}"
       AMS_UPSTREAM: "${AMS_UPSTREAM:-161.97.172.146:5080}"
+      # bcrypt hash for the matbu.{$PULSE_DOMAIN} basic_auth credential (Evrak, Stage 1 Phase A).
+      # Kept OUT of git: Caddyfile.prod carries the {$EVRAK_BASICAUTH_HASH} placeholder and this
+      # supplies the value from the gitignored deploy/.env.
+      #
+      # ⚠ IN deploy/.env, EVERY `$` OF THE HASH MUST BE WRITTEN `$$`.
+      # Compose interpolates .env values, so a raw `$2a$14$sZtr...` has `$sZtr...` read as an
+      # (unset) variable and silently arrives as `$$2a$$14.jpND...` — a DIFFERENT hash. Caddy then
+      # loads cleanly and 401s every correct password forever. Measured 2026-07-20; `$$`-escaping
+      # is the only form that round-trips intact.
+      #
+      # ⚠ If this variable is missing, Caddy does NOT merely fail closed — `caddy validate` exits 1
+      # with "username and password cannot be empty or missing" and the container REFUSES TO START,
+      # taking pulse, ams and yanki down with matbu. `:?` below turns that into a clear compose-time
+      # error instead of a dead TLS terminator.
+      EVRAK_BASICAUTH_HASH: "${EVRAK_BASICAUTH_HASH:?set EVRAK_BASICAUTH_HASH in deploy/.env, with every dollar sign doubled}"
     volumes: !override
       - ./config/Caddyfile.prod:/etc/caddy/Caddyfile:ro
       - caddy_data:/data       # persists the issued Let's Encrypt certs across restarts
