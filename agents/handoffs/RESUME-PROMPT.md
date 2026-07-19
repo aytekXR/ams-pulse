@@ -11,7 +11,38 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-93.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-94.md`)
+
+**Session 2026-07-19 result: D-157 — S93 SHIPPED the wildcard `stream_offline` fix (operator-authorized: "use your judgment
+and build the stream_offline fix"). The default `critical` "Stream offline (default)" rule — and any wildcard
+`stream_offline` rule — now actually fires. Built design (a) (one page per offline event, auto-clear): wildcard offline is a
+present→gone EDGE detected across ticks (per-rule `offlineTracker`, guarded by `e.mu`), emitting `value 1.0` for a hold =
+`WindowS + max(WindowS, 2·tick)` then one resolving `0.0` (no stale-sweep → explicit 0 prevents stuck-firing). The 3-lens
+adversarial review caught + fixed 2 edges (MEDIUM stale-tracker spurious-fire on disable/re-enable; HIGH `group_by=app`
+recovery orphan stuck-fire), both mutation-proven; 2 more documented as inherited/by-design. Replaced the masking s67 test;
+new `s93_stream_offline_test.go` drives the REAL aggregator + fake-live state machine (fire/resolve/recovery/no-false-fire/
+disable-re-enable/group_by); fire AND resolve edges mutation-proven; Go 26-pkg green; 16/16 CI. Prod-rolled `v0.4.0-119` →
+**v0.4.0-124-g8eb3b57** (rollback tag `pre-d157`; 5-check smoke green). The default rule ships MUTED — operator unmutes to
+page. Evidence: `decisions.md` D-157; ROADMAP §2.40 → DONE; operator-expected.md.**
+
+**★ SESSION-94 = BACK TO THE LOW-FREQUENCY WAIT.** The operator-requested arc (stream_offline) is done; the S89/S91/S92
+sweeps (3×) + D-157 have drained the concrete non-gated backlog. What remains is GATED: §2.7 CI-promotions (date ≥
+2026-07-23), the Android SDK (JVM/Gradle toolchain), iOS Phase 2 (Apple CI), and operator decisions ([20], branch
+protection, licence, creds). At open, run the SAME two-minute gate: **(1)** `date +%Y-%m-%d` — if **≥ 2026-07-23** → **§2.7
+CI-promotions** (drop `web-e2e` `continue-on-error` in `.github/workflows/ci.yml`, `actionlint`; hand the operator the
+branch-protection FULL-LIST PUT adding e2e/csp-e2e/web-e2e/docker-build/sdk-swift). **(1b)** `command -v gradle && command
+-v java` (or `kotlinc`) — if PRESENT → START `sdk/beacon-kotlin` (standing GO D-154, ROADMAP §2.12), no prompt. **(2)** check
+`operator-expected.md` — operator answered [20] / asked for iOS Phase 2 / named a priority → do their pick (Lead B). **(3)**
+Else → quick health check + **wait at low frequency. Do NOT manufacture an arc** — S89/S91/S92 swept 3× and the
+contract-drift class is drained; do NOT run another fresh sweep. Re-arm at low frequency and stop in one line. See
+`sessions/SESSION-94.md`.
+
+**⚠ OPERATOR ITEMS OPEN (operator-expected.md):** **§2.1** branch-protection PUT; **§2.12 Android** JVM+Gradle+Kotlin env
+(standing GO auto-starts on detection); **[20]** audit-read (status-quo); AMS trial-licence expiry; rotate chat-exposed
+creds; §2.7 date-gate (2026-07-23, auto). **Optional (non-blocking):** unmute the "Stream offline (default)" rule to page on
+offline (D-157).
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-93.md` — D-157, see above)
 
 **Session 2026-07-19 result: D-156 — S92 ran the sanctioned low-frequency-wait verification sweep (3 scouts, refute-by-default
 verify). Two lenses (contract↔server drift, web↔server consistency) came back CLEAN — confirming S89/S91 drained that class.

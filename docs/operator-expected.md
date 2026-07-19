@@ -21,7 +21,21 @@
 >
 > ---
 >
-# ▶ ★ S92 FINDING (2026-07-19, D-156) — a HIGH bug found + escalated; ONE product decision requested (non-urgent)
+# ▶ ★ S93 (2026-07-19, D-157) — the "Stream offline" alert bug is FIXED and live. ONE small action for you (optional).
+
+> You said **"use your judgment and build the stream_offline fix"** — done, shipped, and live in prod
+> (**v0.4.0-124**). The built-in **"Stream offline" alert now actually fires** when any stream goes offline: it pages once
+> per offline event and auto-clears after a short grace window. I hardened it against two edge cases a review caught
+> (a spurious alert when a rule is toggled off/on; a stuck alert when grouping by app), both now fixed and regression-tested,
+> and verified the fix end-to-end against the real live-state engine. Full test suite green; 5-check prod smoke green.
+>
+> **★ The one thing you may want to do:** the default "Stream offline" rule ships **muted** (so it never paged before, and
+> still won't until you turn it on). **Unmute it in Settings → Alerts** if you want to be paged when a stream drops. That's
+> the only action, and it's optional. Nothing else is required.
+>
+> ---
+>
+> # ▶ (resolved) ★ S92 FINDING (2026-07-19, D-156) — HIGH bug found + escalated → FIXED in D-157 above
 
 > A verification sweep this session caught a real, higher-severity bug in the **alerting** engine and I want your call on
 > how the fix should behave before I build it (it changes how a **critical** alert fires, so I won't guess).
