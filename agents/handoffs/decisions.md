@@ -9372,3 +9372,39 @@ the stuck-firing hazard). Replace the masking s67 wildcard test with one that dr
 **No code change this session. NO prod roll** (prod stays v0.4.0-119). **Operator product call surfaced**
 (operator-expected.md): wildcard-offline firing semantics. Evidence: ROADMAP §2.40; verified against
 `evaluator.go`/`aggregator.go`/`wave2.go`/`s67_d129_test.go`.
+
+## D-157 — S93 (2026-07-19): SHIPPED — wildcard `stream_offline` alerts now fire (edge detection). Fixes the D-156 HIGH defect. Operator-authorized ("use your judgment and build it"). PR #181, prod **v0.4.0-124-g8eb3b57**.
+
+**Authorization:** the operator answered the D-156 product call with "use your judgment and build the stream_offline
+fix" → built **design (a)** (one page per offline event, auto-clear after a grace window) under my judgment.
+
+**The fix (`server/internal/alert/evaluator.go`):** wildcard `stream_offline` is now a present→gone EDGE detected across
+ticks (the aggregator removes an ended stream from the snapshot before marking it inactive, so the old "present-but-inactive"
+check was unreachable — D-156). A per-rule `offlineTracker{prevPresent, offlineAt}` (guarded by `e.mu`) diffs the
+scope-matching present set each tick; a stream present last tick and gone now emits `value 1.0` for a bounded hold =
+`WindowS + max(WindowS, 2·tick)` (long enough to satisfy the framework's WindowS-hold-to-fire), then **one resolving `0.0`**
+(the state machine has no stale-sweep → an explicit 0 prevents stuck-firing forever), then it is dropped. A returning stream
+also resolves. The SCOPED path is unchanged; muted rules (the default) stay silent until unmuted.
+
+**★ Adversarial review (3 lenses, refute-by-default, 218k tok) caught 2 real edges — both FIXED + mutation-proven:**
+- **MEDIUM (blocking):** a disabled / maintenance-suppressed / metric-changed rule retained a stale `prevPresent` tracker →
+  a spurious offline fire on resume (the prune keep-set was populated before the `!Enabled` guard). Fix: the keep-set is now
+  ONLY the rules actually evaluated this tick as wildcard `stream_offline`, so the tracker is pruned and rebuilt fresh on
+  resumption (`isWildcardOfflineScope` + `keepOffline`).
+- **HIGH (blocking):** `group_by=app` on a wildcard offline rule orphaned the stream-id-keyed firing state when a stream
+  recovered within the hold window (`applyGroupBy` re-keys a returning stream to its app) → permanent stuck-fire on a
+  CRITICAL alert. Fix: wildcard offline no longer collapses via `group_by` (stays one alert per stream).
+- **Documented (not fixed — inherited/by-design):** partial-scope wildcard under `snap.Streams` bare-stream-id
+  last-write-wins aliasing (needs compound-keyed snapshots — out of scope; default full-wildcard + scoped rules unaffected);
+  the edge-event one-shot semantics vs the scoped sticky-level (intentional design (a)).
+
+**Tests:** replaced the masking `TestEvalStreamOffline_WildcardInactive_FiresValueOne_S67` (converted `CompareRespected` to
+the reachable scoped path); new `s93_stream_offline_test.go` drives the **REAL aggregator** (publish_start→publish_end) +
+the fake-live state machine — fire, resolve, recovery, no-false-fire-on-first-tick, disable/re-enable, group_by. **Both the
+FIRE and RESOLVE edges AND both review fixes are mutation-proven** (`cp` restore, D-096). Full Go 26-pkg suite green; gofmt
+clean; 16/16 CI.
+
+**Deploy:** alert eval is server SOURCE → **prod-rolled** `v0.4.0-119` → **v0.4.0-124-g8eb3b57** (rollback tag `pre-d157`;
+5-check smoke green: version, healthz 200, signed webhook 200 / unsigned 401 fail-closed, limits 512M/0.5cpu, 0 errors).
+**Operator note:** the default "Stream offline (default)" rule ships MUTED — unmute it (Settings) to receive offline pages
+now that it works. Evidence: ROADMAP §2.40 → DONE; PR #181.

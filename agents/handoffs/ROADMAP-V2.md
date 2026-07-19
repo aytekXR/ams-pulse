@@ -570,7 +570,18 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
-### 2.40  Wildcard `stream_offline` alert never fires — HIGH defect (default critical rule)  [⚠ OPEN — confirmed HIGH; escalated for a firing-semantics call; NO code fix yet]  S92 (D-156, 2026-07-19)
+### 2.40  Wildcard `stream_offline` alert never fires — HIGH defect (default critical rule)  [✅ DONE — edge-detection fix shipped, prod v0.4.0-124; found S92/D-156, built S93/D-157 on operator "use your judgment"]  ✅ S93 (D-157, 2026-07-19, PR #181)
+
+**Resolution (D-157, S93):** operator answered the firing-semantics call with "use your judgment" → built **design (a)**
+(one page per offline event, auto-clear). Wildcard `stream_offline` is now a present→gone EDGE detected across ticks
+(per-rule `offlineTracker`); emits `value 1.0` for a hold = `WindowS + max(WindowS, 2·tick)` then one resolving `0.0`
+(prevents stuck-firing). 3-lens adversarial review caught + fixed 2 edges (MEDIUM stale-tracker spurious-fire on
+disable/re-enable; HIGH `group_by=app` recovery orphan stuck-fire), both mutation-proven; documented 2 inherited/by-design
+(partial-scope aliasing; edge one-shot vs scoped sticky). Real-aggregator-flow tests; fire+resolve edges mutation-proven;
+Go 26-pkg green; prod-rolled **v0.4.0-124-g8eb3b57**, 5-check smoke green. Default rule ships MUTED (operator unmutes to
+page). Evidence: `decisions.md` D-157.
+
+
 
 S92's sanctioned "is anything broken?" sweep (2 lenses CLEAN, confirming S89/S91 drained the contract-drift class) caught
 ONE confirmed HIGH defect, independently re-verified end-to-end: **wildcard `stream_offline` alert rules — including the
