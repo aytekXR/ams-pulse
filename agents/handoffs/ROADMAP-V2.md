@@ -570,6 +570,28 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.40  Wildcard `stream_offline` alert never fires — HIGH defect (default critical rule)  [⚠ OPEN — confirmed HIGH; escalated for a firing-semantics call; NO code fix yet]  S92 (D-156, 2026-07-19)
+
+S92's sanctioned "is anything broken?" sweep (2 lenses CLEAN, confirming S89/S91 drained the contract-drift class) caught
+ONE confirmed HIGH defect, independently re-verified end-to-end: **wildcard `stream_offline` alert rules — including the
+default seeded `critical` "Stream offline (default)" rule (`wave2.go:494`, `ScopeJSON:"{}"`, `eq 1`) shipped to every
+install — never fire.** The evaluator's wildcard path (`evaluator.go:730-742`) fires only on a `snap.Streams` entry with
+`!s.Active`, but the aggregator removes a stream from `snap.Streams` (`snapRemoveStream`, `Active==true`) BEFORE marking it
+inactive and deleting it (`onPublishEnd` aggregator.go:306-315; `EvictStale` aggregator.go:242) — so `snap.Streams` is
+always an exclusively-active set and the `!s.Active` check is unreachable (`val` permanently 0). The SCOPED path
+(absent-from-snapshot → fire) works; only wildcard is dead. A S67 test (`s67_d129_test.go:226`) masks it by injecting an
+`Active:false` stream directly into the snapshot — a state the aggregator never produces. Root cause: the S10/D-068
+incremental-snapshot refactor silently invalidated the `evaluator.go:718` "wildcard = present-but-inactive" assumption.
+
+**Escalated, not force-fixed** (cf. §2.30 [20]/D-130, §2.32 [5]/D-141, §2.37 Phase-3/D-150): the correct fix needs a
+firing-semantics product decision (one-shot page vs sticky vs windowed) AND — because the alert framework has no stale-sweep
+(evaluator.go:790-795) — care to avoid leaving a **critical** alert stuck-firing forever (worse than today). Default rule is
+MUTED, so exposure is latent. **Recommended turnkey fix:** evaluator-local windowed offline-edge detection (track
+scope-matching present-stream IDs across ticks; a present→gone stream fires `val=1` for a grace window then `val=0` once to
+resolve), NO `LiveSnapshot` contract change; replace the masking s67 wildcard test with a real-aggregator-flow test;
+mutation-prove fire+resolve; adversarial-review the state machine. Surfaced to the operator (operator-expected.md) for the
+semantics call. Evidence: `decisions.md` D-156.
+
 ### 2.39  Source-type enum contract-narrowing — remove dead `log_tail`  [✅ DONE — contract/types/test/doc only, NO prod deploy]  ✅ S91 (D-155, 2026-07-19, PR #179)
 
 S91's two-minute gate found the low-frequency wait still in force (date 2026-07-19 < 2026-07-23 → §2.7 gated; gradle/java/

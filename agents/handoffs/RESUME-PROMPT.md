@@ -11,7 +11,49 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-92.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-93.md`)
+
+**Session 2026-07-19 result: D-156 — S92 ran the sanctioned low-frequency-wait verification sweep (3 scouts, refute-by-default
+verify). Two lenses (contract↔server drift, web↔server consistency) came back CLEAN — confirming S89/S91 drained that class.
+The fresh-behavioral lens caught ONE confirmed HIGH defect, which I independently re-verified end-to-end (verify-first, did
+NOT trust the agent): the default `critical` "Stream offline (default)" alert — and any WILDCARD `stream_offline` rule —
+NEVER FIRES. The evaluator's wildcard path looks for a `snap.Streams` entry with `!Active`, but the aggregator removes a
+stream from the snapshot (`snapRemoveStream`, while `Active==true`) BEFORE marking it inactive (`onPublishEnd`
+aggregator.go:306-315) — so that state is unreachable; `val` is permanently 0. SCOPED offline rules work; only wildcard is
+dead. A S67 test masks it by injecting an impossible `Active:false` snapshot entry. Root cause: the S10/D-068
+incremental-snapshot refactor invalidated the `evaluator.go:718` "wildcard = present-but-inactive" assumption. I ESCALATED
+it (did NOT force-fix) — the correct fix needs a firing-semantics PRODUCT CALL + care to avoid stuck-firing a critical alert
+(the framework has no stale-sweep). Default rule is MUTED → latent, not urgent. NO code change, NO prod roll (prod stays
+`v0.4.0-119`). Evidence: `decisions.md` D-156; ROADMAP §2.40; operator-expected.md (product question + my rec).**
+
+**★ SESSION-93 = the `stream_offline` HIGH fix is the TOP candidate — but it is DESIGN-GATED on a firing-semantics call.**
+At open, run the two-minute gate FIRST (date/Android/operator, below). Then: **IF the operator answered the S92 product
+question (operator-expected.md — one-shot+auto-clear (a) / sticky (b) / document-as-unsupported (c) / "use your judgment")
+→ BUILD the fix (Lead B, a real HIGH-value arc):** evaluator-local **windowed offline-edge detection** (track scope-matching
+present-stream IDs across ticks; a present→gone stream fires `val=1` for a grace window then emits `val=0` ONCE to RESOLVE
+before ageing out — this avoids the stuck-firing hazard), NO `LiveSnapshot` contract/WS change; REPLACE the masking
+`TestEvalStreamOffline_WildcardInactive_FiresValueOne_S67` with a real-aggregator-flow test (publish-start → publish-end →
+eval); mutation-prove BOTH the fire and the resolve; **adversarial-review the alert state machine** (flapping/false-page
+risk on a critical alert); server rebuild + prod roll (alert eval is server SOURCE). If the operator has NOT answered and
+you judge design (a) the clear default (it is — matches how you page on an offline event) → you MAY proceed with (a) under
+your own judgment, but keep the adversarial review mandatory. **This is genuine, high-value, non-gated autonomous work — do
+it if the semantics are settled.**
+
+**★ If you do NOT take the stream_offline fix** (operator explicitly wants to decide semantics first, or you judge it too
+risky to self-authorize) → the low-frequency wait continues: run the same gate; §2.7 unlocks ≥ 2026-07-23; Android on the
+standing GO when the toolchain appears; do NOT manufacture a fresh sweep (S89/S91/S92 have swept three times — the
+contract-drift class is drained and S92 already spent this cycle's sanctioned sweep). Re-arm at low frequency.
+
+**Two-minute gate (run at open):** (1) `date +%Y-%m-%d` — if **≥ 2026-07-23** → also do **§2.7 CI-promotions** (drop
+`web-e2e` `continue-on-error`; hand the operator the branch-protection FULL-LIST PUT + `sdk-swift`). (1b) `command -v gradle
+&& command -v java` (or `kotlinc`) — if PRESENT → **START `sdk/beacon-kotlin`** (standing GO D-154, ROADMAP §2.12). (2)
+check `operator-expected.md` — the S92 semantics answer, [20], iOS Phase 2, or a new priority → do their pick.
+
+**⚠ OPERATOR ITEMS OPEN (operator-expected.md):** **★ NEW — S92 `stream_offline` firing-semantics call** (product; my rec:
+(a) one-shot + auto-clear); **§2.1** branch-protection PUT; **§2.12 Android** JVM+Gradle+Kotlin env; **[20]** audit-read
+(status-quo); AMS trial-licence expiry; rotate chat-exposed creds; §2.7 date-gate (2026-07-23, auto).
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-92.md` — D-156, see above)
 
 **Session 2026-07-19 result: D-155 — S91 was the LOW-FREQUENCY WAIT. The two-minute gate confirmed all three branches
 still closed (date 2026-07-19 < 07-23 → §2.7 gated; `gradle`/`java`/`kotlinc` all ABSENT → §2.12 Android tooling-blocked,
