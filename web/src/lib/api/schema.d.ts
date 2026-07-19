@@ -1667,7 +1667,7 @@ export interface components {
             id: string;
             name: string;
             /** @enum {string} */
-            type: "rest_poll" | "log_tail" | "kafka" | "webhook";
+            type: "rest_poll" | "kafka" | "webhook";
             /**
              * Format: uri
              * @description AMS REST base URL
@@ -1691,7 +1691,7 @@ export interface components {
         SourceWrite: {
             name: string;
             /** @enum {string} */
-            type: "rest_poll" | "log_tail" | "kafka" | "webhook";
+            type: "rest_poll" | "kafka" | "webhook";
             /** Format: uri */
             rest_url?: string;
             rest_user?: string | null;

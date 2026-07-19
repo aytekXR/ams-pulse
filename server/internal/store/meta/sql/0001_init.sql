@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS ingest_tokens (
 CREATE TABLE IF NOT EXISTS ams_sources (
     id              TEXT    NOT NULL PRIMARY KEY,
     name            TEXT    NOT NULL,
-    source_type     TEXT    NOT NULL,  -- 'rest_poll' | 'log_tail' | 'kafka' | 'webhook'
+    source_type     TEXT    NOT NULL,  -- 'rest_poll' | 'kafka' | 'webhook' (log_tail removed D-155; collector deleted D-062)
     rest_url        TEXT,              -- AMS REST base URL
     rest_user       TEXT,              -- AMS REST username
     credential_enc  TEXT,              -- AES-256-GCM encrypted credential (write-only output)
