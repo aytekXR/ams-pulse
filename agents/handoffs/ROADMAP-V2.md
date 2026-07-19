@@ -570,6 +570,36 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.41  Opt-in load-testing lane + Ant Media panel-revamp (G-27) assessment — operator-requested mid-session  [✅ DONE — docs + QA-tooling only, NO prod roll; load lane NOT yet run (needs the operator's dedicated instance)]  ✅ S94 (D-158, 2026-07-19, PR #183)
+
+SESSION-94 was planned as a low-frequency wait; the operator injected a two-part in-conversation request that superseded it:
+(1) assess whether Ant Media's confidential web-panel revamp threatens the marketplace opportunity, and (2) add load-testing
+("verify how your stats hold up under load"). Both delivered, **docs + QA-tooling only** → **NO prod roll** (prod stays
+**v0.4.0-124-g8eb3b57**). This entry also records finalizing prior-run work left uncommitted (scripts+docs authored, no
+commit/close).
+
+**(1) Panel-revamp (G-27):** verdict **PROCEED with the listing** — a real but NON-existential concern. Pulse consumes AMS
+REST v2, not the panel UI; the data-plane endpoints carrying core value are insulated and the two at-risk console deps
+(auth, app-discovery) already have deployed bypasses (`PULSE_AMS_AUTH_TOKEN`, `PULSE_AMS_APPLICATIONS`). Pinned the 9-endpoint
+integration surface as **G-27** in `docs/compatibility.md` + a 3-question developer-meeting agenda + panel-walkthrough
+checklist in `operator-expected.md`. Honesty caveat: staging panel confidential/SPA → architecture-based, not click-through;
+corrected an earlier plan draft's overstatements (G-21 is UNVERIFIED — do NOT touch `amsclient` until a live cluster
+confirms; real readiness = the 17-row `final-assessment.md` §3 checklist).
+
+**(2) Load lane (`qa/realams/load/`):** 4 scenarios `TC-S-10..13` (publisher ramp / viewer scale / soak / churn) + runner
+`run-load-suite.sh` + generator abstraction `load-gen.sh` (native default / official Ant Media Scripts opt-in) + committed
+template `load-env.sh.example` (→ gitignored `load-env.sh`) + **phase 45** of `run-full-e2e.sh` (SKIPs 77 unconfigured).
+Asserts Pulse's numbers stay correct under load — every assertion a **delta on `val-load-` streams we own** (budgets
+L-1…L-9, `full-e2e-validation-run.md` §7). **★ Structural shared-VPS isolation:** sources only `harness/load-env.sh` (never
+`env.sh`); placeholder → SKIP-77; forbidden-host (`beyondkaira.com`/`antmedia.io`/staging) → hard-abort-1; scenarios one dir
+deeper so `make validate-all`/phase-41 can't sweep them at the shared VPS.
+
+**Verify:** 4-lens adversarial workflow (isolation / harness-API / doc-accuracy / shellcheck) → **0 blockers, 4 confirmed
+nits all fixed pre-commit** (over-broad official `pkill` → unique RUN token; TC-S-12 cleanup guard; L-2/L-7 budget-doc
+precision). All 7 scripts `bash -n` + `shellcheck -S warning` clean; harness primitives all exist. **No operator action to
+unblock the loop.** NEW non-blocking operator items: run the lane on a dedicated PAYG AMS (→ capacity number; clears the
+expired trial) + the panel developer meeting. Evidence: `decisions.md` D-158.
+
 ### 2.40  Wildcard `stream_offline` alert never fires — HIGH defect (default critical rule)  [✅ DONE — edge-detection fix shipped, prod v0.4.0-124; found S92/D-156, built S93/D-157 on operator "use your judgment"]  ✅ S93 (D-157, 2026-07-19, PR #181)
 
 **Resolution (D-157, S93):** operator answered the firing-semantics call with "use your judgment" → built **design (a)**

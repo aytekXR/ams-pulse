@@ -107,6 +107,10 @@ phase 41-realams-new bash -c '
   done
   [ "$fails" -eq 0 ] || exit 1'
 
+# ── 45 load lane (OPT-IN — DEDICATED instance only; never the shared VPS) ─────
+# run-load-suite.sh reads ONLY harness/load-env.sh; absent/placeholder → SKIP(77).
+phase 45-load bash "${SCRIPT_DIR}/run-load-suite.sh"
+
 # ── 50 budgets ────────────────────────────────────────────────────────────────
 phase 50-budgets bash "${REPO_ROOT}/qa/budgets/run-budget-tests.sh"
 

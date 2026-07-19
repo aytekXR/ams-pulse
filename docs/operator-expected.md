@@ -1,3 +1,116 @@
+# Operator TODO — the items only YOU can do (updated 2026-07-19, SESSION-94 — AMS panel revamp reviewed; load-testing lane shipped)
+
+> # ▶ ★ S94 (2026-07-19) — Ant Media's panel revamp: does it threaten us? (short answer: **NO, not on its own**) + how we now load-test the stats
+>
+> You asked two things: (1) Ant Media (Ankush) gave us **private, confidential** read-only access to a **web-panel
+> revamp** and asked whether we still want to list on their Marketplace — *does the new design threaten our business
+> opportunity, and what do I think on the dev end?*; (2) add **load-testing** for "how do the stats hold up under load."
+> Both are done. **Nothing prod-facing changed** — docs + QA scripts only, no deploy.
+>
+> ## ⚡ TL;DR
+>
+> - **The revamp is a real but NON-existential concern. Recommendation: keep going — PROCEED toward the listing.**
+>   Pulse consumes Ant Media's **REST API**, not its **panel UI**. A panel is a frontend over the same backend; a UI
+>   overhaul does not, by itself, change the API paths or response shapes we poll. The endpoints that carry our core
+>   value (per-app broadcast/QoE/VoD data) sit in a **data-plane namespace a UI rework doesn't touch**, and the two
+>   console dependencies most at risk (login, app-discovery) **already have deployed bypasses**.
+> - **The bigger risk is competitive, not technical:** if the revamp quietly ships *native* stream analytics/alerting,
+>   our Free-tier install funnel loses its argument. That is **unconfirmed** ("many new features" + a UI revamp is all
+>   we were told) and historically unlikely — Ant Media delegates adjacencies to partners (captions→Raskenlund,
+>   encoding→Visionular, OTT→Mobiotics, ads→Scotty). Our viewer-side beacon moat is also hard to replicate server-side.
+> - **What's actually yours:** the marketplace **go/no-go stays a go**, but listing is still gated by the same
+>   operator-contact items it was before the revamp (below) — the revamp doesn't add a blocker, it adds **three
+>   questions to the developer meeting**.
+> - **Honesty caveat:** I could **not** open the staging panel — it's confidential, behind a login, and a single-page
+>   app (nothing a fetch can read). This assessment is built from our **integration architecture**, not a click-through.
+>   A manual 15-minute walkthrough of the panel's network tab is a **human step** (checklist below).
+>
+> ## 1. Does it threaten the business opportunity?
+>
+> The opportunity is unchanged: list Pulse (self-hosted analytics/QoE/alerting) on the AMS Marketplace to reach a
+> 2,000+ paying-company base + a Free-tier install funnel, first-mover in the analytics category, with co-marketing.
+> The revamp touches that in two ways:
+>
+> | Threat vector | Likelihood | Why it is not existential |
+> |---|---|---|
+> | **Revamp adds native analytics/alerting** (competitive) | Medium / high-impact (PRD's #1 risk) | Unannounced; Ant Media's pattern is partner-led adjacencies; our viewer-beacon QoE needs a client SDK a server team rarely builds |
+> | **Console REST re-versioned (v2→v3) with the new panel** | Low–medium | We poll `/rest/v2/*`; a UI rebuild ≠ an API rebuild. `ams-drift-watch.sh` (nightly) trips on any new AMS tag before we claim support |
+> | **New auth flow replaces cookie login** | Low–medium | `PULSE_AMS_AUTH_TOKEN` bearer mode already bypasses the login endpoint entirely (deployed in prod) |
+> | **App-discovery path/envelope changes** | Low–medium | `PULSE_AMS_APPLICATIONS` manual list bypasses discovery |
+>
+> **Net:** no endpoint change has been observed, no analytics feature has been announced, and our architecture already
+> insulates the data path. This is a *watch-and-confirm*, not a *stop-and-rebuild*.
+>
+> ## 2. What it means on the development end
+>
+> We depend on **9 AMS endpoints in two tiers** (full detail now pinned in `docs/compatibility.md` → "Panel-revamp
+> (G-27) compatibility"):
+>
+> - **Console-scoped (share the panel's management backend → revamp-sensitive):** `POST …/users/authenticate`,
+>   `GET …/applications`, `…/version`, `…/system-status`, `…/cluster/nodes`. The first two have bypasses; the rest
+>   degrade *display* (Fleet page), not *stream monitoring*.
+> - **App-REST-scoped (`/{app}/rest/v2/…` data plane → low revamp risk, our core value):** `broadcasts/list`,
+>   `webrtc-client-stats`, `vods/list`. Consumed by publishers/players; historically stable across UI releases.
+>
+> **Dev actions (no code change needed now):** (a) make **`PULSE_AMS_AUTH_TOKEN` the recommended default** in the
+> install guide (decouples us from whatever login the new panel ships); (b) **do NOT** change `amsclient` cluster
+> pagination on the unverified G-21 claim — confirm against a live 2-node 3.0.3 cluster first; (c) when the AMS build
+> carrying the new panel is public, run `qa/tools/ams-drift-watch.sh`, bump the pin, and re-run the 46-scenario harness
+> before updating the compatibility matrix.
+>
+> ## 3. The one decision you own + the developer-meeting agenda
+>
+> **Decision: proceed with the listing?** → recommended **YES**. The revamp is not a reason to pause. Listing is still
+> gated by the **same operator-contact items** (unchanged, carried below), plus the meeting.
+>
+> **Bring to Ankush's developer meeting — 3 technical questions + business asks:**
+> 1. Will `/rest/v2/*` management paths + response envelopes **survive the revamp**, or is a **v2→v3** jump planned?
+> 2. Does the new panel introduce a **new auth mechanism** (OAuth2/OIDC/AMS-JWT) replacing the cookie flow? Timeline?
+> 3. In 3.0.3 **cluster** mode, is `GET /rest/v2/cluster/nodes` a **flat array** or the paginated `…/{offset}/{size}`
+>    form? (Settles the unverified **G-21** claim.)
+> 4. Business: request an **API-stability / deprecation-notice** commitment in the vendor agreement; ask about
+>    **revenue-share** terms (our 20–30% is an unverified target) and any **exclusivity / min-AMS-version** constraints;
+>    revisit **first-party-partner / soft non-compete** so a native dashboard doesn't land right after we list.
+>
+> **Panel walkthrough (you, ~15 min, read-only):** open the staging panel's **network tab**; confirm it still calls the
+> same `/rest/v2/applications`, `/rest/v2/version`, `/rest/v2/system-status`, `/rest/v2/cluster/*` contracts (paths +
+> shapes) we consume, or whether it's a new API generation; note the **login** request shape; screenshot anything that
+> looks like built-in **analytics/alerting/viewer-count** (that's the competitive signal). Feed findings into G-27.
+>
+> ## 4. Load-testing (your 2nd ask) — built + packaged
+>
+> Added an **opt-in load lane** that answers Ant Media's "verify how your stats hold up under load" in their own terms:
+> it drives a **dedicated throw-away AMS** (pay-as-you-go hourly) + a scratch Pulse and asserts **Pulse's numbers stay
+> correct under load** — convergence, AMS↔Pulse parity, API p95, alert latency, ghost-free teardown (budgets L-1…L-9).
+> Four scenarios (`TC-S-10..13`: publisher ramp / viewer scale / soak / churn), a runner (`run-load-suite.sh`), and
+> **phase 45** of `run-full-e2e.sh`. Built on our **own** harness primitives by default (zero downloads); Ant Media's
+> official tools (`rtmp_publisher.sh`, WebRTC Load Test Tool) are a `LOAD_GENERATOR=official` opt-in.
+> **⚠ It structurally cannot touch the shared VPS** (separate config, never sources the prod env; hard-aborts on a
+> forbidden host — verified). Design + budgets: `docs/testing/full-e2e-validation-run.md` §7.
+>
+> **Your part:** it needs a **dedicated instance** — run it on a PAYG AMS (also resolves the expired trial for further
+> testing). `cp qa/realams/harness/load-env.sh.example qa/realams/harness/load-env.sh`, fill in the hosts, then
+> `bash qa/realams/run-load-suite.sh`. The measured capacity number then goes into `docs/compatibility.md` and the
+> marketplace submission.
+>
+> ## ⚠ Confidentiality
+>
+> Ankush said the staging panel is for our reference only — **do not share yet**. Its URL and admin credentials are
+> **deliberately NOT reproduced** here or anywhere in the repo, and no scripted/automated access was made against it
+> (manual, read-only review only).
+>
+> ## Still yours (carried, unchanged by the revamp)
+>
+> The listing was already gated on human items, and still is: **Ant Media marketplace contact / listing submission**,
+> **revenue-share terms**, **support channel + public licensing terms**, **co-marketing**, **GHCR image → public**
+> (today a private-registry `Install` = auth error), and the product tidy-ups the listing draft flags (**Pro MaxNodes**
+> PRD-vs-code discrepancy, **PDF export** still `501`). None of these moved because of the revamp — the revamp only adds
+> the meeting agenda above. See `docs/assessment/final-assessment.md` §3 (the real 17-row readiness checklist).
+>
+> ---
+>
+## (previous header — D-152, 2026-07-18)
+
 # Operator TODO — the items only YOU can do (updated 2026-07-18, D-152 — decision menu resolved; §2.12 iOS SDK green-lit)
 
 > # ▶ D-152 (2026-07-18) — YOU RESOLVED THE DECISION MENU. Remaining items you own are short.

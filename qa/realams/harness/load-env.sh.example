@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# qa/realams/harness/load-env.sh.example
+#
+# TEMPLATE for the OPT-IN load-testing lane (docs/testing/full-e2e-validation-run.md §Rev2).
+# Copy to qa/realams/harness/load-env.sh (gitignored) and fill in the real hosts:
+#
+#   cp qa/realams/harness/load-env.sh.example qa/realams/harness/load-env.sh
+#   $EDITOR qa/realams/harness/load-env.sh          # replace every REPLACE-ME value
+#
+# ─────────────────────────────────────────────────────────────────────────────
+#  ⚠  DEDICATED INSTANCE ONLY.  This file points the load generators at a
+#     THROW-AWAY Ant Media Server + a SCRATCH Pulse. It MUST NEVER point at the
+#     shared validation VPS (ams.beyondkaira.com) or prod (beyondkaira.com):
+#     load generators there would knock over the live prod poller and a shared
+#     admin account. A hard guard at the bottom aborts (exit 1) if it detects a
+#     forbidden host — do not remove it.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# WHY THIS FILE EXPORTS THE SAME VAR NAMES AS env.sh (AMS_URL/PULSE_URL/…):
+#   The load scenarios reuse the proven native harness primitives
+#   (publisher.sh start_bulk_publishers, viewer-sim.sh ramp_hls_viewers /
+#   start_webrtc_viewer). Those read AMS_URL/PULSE_URL/PULSE_TOKEN. By exporting
+#   them here — pointed at the DEDICATED instance — the primitives target the
+#   load instance and, crucially, env.sh (which knows the shared VPS) is NEVER
+#   sourced. Isolation is structural, not just by convention.
+#
+# SOURCE this file — do not execute it.
+#
+set -euo pipefail
+
+# ── Locate repo root (this file lives at qa/realams/harness/) ─────────────────
+_LOAD_HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${_LOAD_HARNESS_DIR}/../../.." && pwd)"
+
+# ══ 1. DEDICATED Ant Media Server under test ═════════════════════════════════
+# Spin up a throw-away instance on the pay-as-you-go hourly licence
+# (https://antmedia.io/ant-media-server-hourly-subscription-pay-as-you-go/),
+# run the lane, then tear it down. Also cleanly sidesteps the expired trial on
+# the shared VPS.
+LOAD_AMS_HOST="REPLACE-ME-load-ams-host"          # e.g. 203.0.113.10  (NOT beyondkaira.com)
+LOAD_AMS_HTTP_PORT="${LOAD_AMS_HTTP_PORT:-5080}"  # 5443 if SSL is enabled
+AMS_URL="http://${LOAD_AMS_HOST}:${LOAD_AMS_HTTP_PORT}"
+# HLS base can differ from the REST base when SSL/edge is in front:
+LOAD_HLS_BASE="${LOAD_HLS_BASE:-${AMS_URL}}"
+
+# ══ 2. SCRATCH Pulse polling the DEDICATED AMS ═══════════════════════════════
+# A compose stack (deploy/, base doc §7.1) licensed via
+#   qa/licensegen -tier business
+# so tier gates (probes, reports, alerts) are ON. NEVER the prod meta store.
+LOAD_PULSE_HOST="REPLACE-ME-load-pulse-host"      # e.g. 203.0.113.10 or 127.0.0.1
+LOAD_PULSE_HTTP_PORT="${LOAD_PULSE_HTTP_PORT:-8090}"
+# NOTE: PULSE_URL already includes /api/v1 — scenarios call ${PULSE_URL}/live/…
+PULSE_URL="http://${LOAD_PULSE_HOST}:${LOAD_PULSE_HTTP_PORT}/api/v1"
+PULSE_HEALTH_URL="http://${LOAD_PULSE_HOST}:${LOAD_PULSE_HTTP_PORT}/healthz"
+PULSE_WS="ws://${LOAD_PULSE_HOST}:${LOAD_PULSE_HTTP_PORT}/api/v1/live/ws"
+# Scratch API token minted on the scratch Pulse — NEVER the prod token.
+PULSE_TOKEN="REPLACE-ME-plt-scratch-token"
+
+# ══ 3. Evidence + app ════════════════════════════════════════════════════════
+# Kept OUTSIDE the repo tree by default (load runs produce large captures).
+EVIDENCE_ROOT="${LOAD_EVIDENCE_ROOT:-${HOME}/pulse-load-evidence}"
+mkdir -p "${EVIDENCE_ROOT}"
+AMS_COOKIE_FILE="${EVIDENCE_ROOT}/.ams-cookie"    # optional; curl -b tolerates absence
+AMS_APP="${AMS_APP:-LiveApp}"
+LOAD_APP="${LOAD_APP:-${AMS_APP}}"
+
+# ══ 4. Load-shape knobs (size to the instance) ═══════════════════════════════
+LOAD_N="${LOAD_N:-25}"                  # publisher count for the ramp/soak/parity
+LOAD_VIEWERS="${LOAD_VIEWERS:-50}"      # viewer count for the viewer-scale lane
+LOAD_SOAK_MIN="${LOAD_SOAK_MIN:-30}"    # soak duration (minutes)
+LOAD_CHURN_CYCLES="${LOAD_CHURN_CYCLES:-6}"
+LOAD_CHURN_WAVE="${LOAD_CHURN_WAVE:-10}"   # publishers per churn wave (TC-S-13)
+LOAD_PUB_KBPS="${LOAD_PUB_KBPS:-800}"   # per-publisher bitrate
+# Optional: scratch-Pulse container name for L-8 RSS sampling (docker stats).
+# Empty → resource slope recorded as "na". e.g. deploy-pulse-1 or pulse.
+LOAD_PULSE_CONTAINER="${LOAD_PULSE_CONTAINER:-}"
+
+# ══ 5. Generator selection ═══════════════════════════════════════════════════
+# native   (default) — repo harness primitives; zero external downloads, no
+#                      sample.mp4, synthetic testsrc2/sine source.
+# official           — wrap Ant Media's official Scripts (rtmp_publisher.sh /
+#                      hls_players.sh) + WebRTC Load Test Tool, so the resulting
+#                      report speaks Ant Media's own toolkit vocabulary for the
+#                      marketplace submission. Requires LOAD_MEDIA (+ optionally
+#                      WEBRTC_TEST_DIR) below and network access to GitHub.
+LOAD_GENERATOR="${LOAD_GENERATOR:-native}"
+LOAD_MEDIA="${LOAD_MEDIA:-${HOME}/sample.mp4}"     # official generators only
+WEBRTC_TEST_DIR="${WEBRTC_TEST_DIR:-}"             # unzipped WebRTC Load Test Tool dir (optional)
+
+# ── Export everything the harness + scenarios consume ─────────────────────────
+export REPO_ROOT
+export LOAD_AMS_HOST LOAD_AMS_HTTP_PORT AMS_URL LOAD_HLS_BASE
+export LOAD_PULSE_HOST LOAD_PULSE_HTTP_PORT PULSE_URL PULSE_HEALTH_URL PULSE_WS PULSE_TOKEN
+export EVIDENCE_ROOT AMS_COOKIE_FILE AMS_APP LOAD_APP
+export LOAD_N LOAD_VIEWERS LOAD_SOAK_MIN LOAD_CHURN_CYCLES LOAD_CHURN_WAVE LOAD_PUB_KBPS LOAD_PULSE_CONTAINER
+export LOAD_GENERATOR LOAD_MEDIA WEBRTC_TEST_DIR
+
+# ── Guard A: placeholders must be replaced ───────────────────────────────────
+if printf '%s\n' "${LOAD_AMS_HOST}${LOAD_PULSE_HOST}${PULSE_TOKEN}" | grep -q 'REPLACE-ME'; then
+  echo "[load-env] NOT CONFIGURED: replace every REPLACE-ME value in qa/realams/harness/load-env.sh" >&2
+  echo "[load-env]   (copied from load-env.sh.example — this is a template, not runnable as-is)" >&2
+  exit 77
+fi
+
+# ── Guard B: HARD safety abort — never the shared VPS / prod / Ant Media hosts ─
+_load_forbidden='beyondkaira\.com|antmedia\.io|petarostojic\.com'
+if printf '%s\n' "${AMS_URL} ${PULSE_URL} ${LOAD_HLS_BASE}" | grep -qiE "${_load_forbidden}"; then
+  echo "[load-env] SAFETY ABORT: a host matches a FORBIDDEN pattern (${_load_forbidden})." >&2
+  echo "[load-env]   The load lane must target a DEDICATED throw-away instance only —" >&2
+  echo "[load-env]   never the shared validation VPS, prod, or Ant Media's own hosts." >&2
+  exit 1
+fi
+
+echo "[load-env] DEDICATED load lane  AMS=${AMS_URL}  PULSE=${PULSE_URL}" >&2
+echo "[load-env] N=${LOAD_N} pub  VIEWERS=${LOAD_VIEWERS}  soak=${LOAD_SOAK_MIN}m  generator=${LOAD_GENERATOR}" >&2
+echo "[load-env] EVIDENCE_ROOT=${EVIDENCE_ROOT}" >&2

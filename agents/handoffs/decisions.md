@@ -9408,3 +9408,50 @@ clean; 16/16 CI.
 5-check smoke green: version, healthz 200, signed webhook 200 / unsigned 401 fail-closed, limits 512M/0.5cpu, 0 errors).
 **Operator note:** the default "Stream offline (default)" rule ships MUTED — unmute it (Settings) to receive offline pages
 now that it works. Evidence: ROADMAP §2.40 → DONE; PR #181.
+
+## D-158 — S94 (2026-07-19): SHIPPED (docs + QA-tooling only, NO prod roll) — (1) opt-in load-testing lane + (2) Ant Media panel-revamp (G-27) business/dev assessment. Operator-requested mid-session (superseded the planned low-frequency wait). PR #183.
+
+**Context:** SESSION-94 was planned (S93 close) as a low-frequency wait. The operator instead injected a two-part request
+in-conversation: (1) "does Ant Media's [confidential] web-panel revamp threaten our marketplace opportunity, and what does it
+mean on the dev end?"; (2) "add load-testing — verify how the stats hold up under load." Both delivered. **NO server/web
+SOURCE change → NO prod roll** (prod stays **v0.4.0-124-g8eb3b57**). This D-entry also records the FINALIZATION of prior-run
+work that had been left uncommitted (load scripts + docs authored, but no commit / D-entry / session close).
+
+**(1) Panel-revamp assessment (G-27).** Verdict: **PROCEED with the listing** — the revamp is a real but NON-existential
+concern. Pulse consumes AMS **REST v2**, not the panel UI; a UI overhaul does not by itself change backend paths/envelopes.
+The endpoints carrying Pulse's core value (`/{app}/rest/v2/broadcasts/list`, `webrtc-client-stats`, `vods/list`) are a
+data-plane namespace a UI rework doesn't touch; the two at-risk console deps (login, app-discovery) already have deployed
+bypasses (`PULSE_AMS_AUTH_TOKEN`, `PULSE_AMS_APPLICATIONS`). The bigger risk is competitive (a native analytics feature) —
+unconfirmed + historically unlikely (Ant Media delegates adjacencies to partners). Pinned the integration surface as **G-27**
+in `docs/compatibility.md` (9 endpoints, two tiers) + a 3-question developer-meeting agenda + panel-walkthrough checklist in
+`operator-expected.md`. **Honesty caveat recorded:** the staging panel is confidential/login-gated (SPA) → NOT
+click-through-inspected; the assessment is architecture-based; an earlier plan draft's overstatements (G-21 "confirmed P0", 7
+"M-x gates", "standalone-only matrix") were corrected against the repo (G-21 UNVERIFIED — do NOT change `amsclient` until a
+live cluster confirms; real readiness = the 17-row `final-assessment.md` §3 checklist).
+
+**(2) Opt-in load lane (`qa/realams/load/`).** Answers Ant Media's "verify how your stats hold up under load" in their terms:
+drives a **DEDICATED throw-away AMS** (PAYG hourly) + a scratch Pulse and asserts **Pulse's numbers stay correct under
+load** — every assertion a **delta on `val-load-` streams we own** (cannot false-green). 4 scenarios `TC-S-10..13` (publisher
+ramp / viewer scale / soak / churn), a runner (`run-load-suite.sh`), a generator abstraction (`load-gen.sh`: native default /
+official Ant Media Scripts opt-in), a committed template (`load-env.sh.example` → gitignored `load-env.sh`), and **phase 45**
+of `run-full-e2e.sh` (SKIPs 77 when unconfigured). Budgets **L-1…L-9** in `docs/testing/full-e2e-validation-run.md` §7.
+- **★ Structural shared-VPS isolation (safety-critical):** the lane sources **only** `harness/load-env.sh`, **never**
+  `env.sh` (the only file that knows the shared VPS) → the harness primitives target the dedicated instance. Guard A: any
+  `REPLACE-ME` placeholder → exit 77 (SKIP). Guard B: a forbidden host (`beyondkaira.com` / `antmedia.io` / staging) → hard
+  exit 1. Scenarios live in `load/scenarios/` (one dir deeper) so `make validate-all` / phase-41's `scenarios/TC-*.sh` sweep
+  can't fire load generators at the shared VPS. **NOT yet RUN** (needs the operator's dedicated instance).
+
+**Verification (this finalization).** Reviewed every new file; confirmed all harness primitives exist
+(`start_bulk_publishers`/`stop_publisher`/`start_publisher`/`ramp_hls_viewers`/`start_hls_viewer`/`start_webrtc_viewer`/
+`stop_*`/`scenario_verdict`/`assert_*`); `bash -n` + `shellcheck -S warning` clean on all 7 scripts. Ran a **4-lens
+adversarial verification workflow** (isolation-safety / harness-API-correctness / doc-accuracy / shellcheck-robustness; 4
+agents, 0 errors): **0 blockers, 4 confirmed nits — all fixed pre-commit:** (MED) official-path `pkill -f` used the
+dotted-IP URL as an unescaped ERE → now matches the unique metachar-free `RUN` token; (LOW) `TC-S-12` cleanup
+`load_stop_publishers` lacked a `|| true` guard (could skip the alert-rule DELETE under `set -e`) → guarded like `TC-S-13`;
+(MED doc) L-7 "pipeline drop counters" was listed `(record)` but no scenario collects it → marked reserved/not-collected;
+(LOW doc) L-2 "AMS delta == Pulse delta" overstated the two independent lower-bound asserts → reworded.
+
+**No operator action to unblock the loop.** NEW operator items surfaced (non-blocking): run the load lane on a dedicated PAYG
+AMS (→ marketplace capacity number; also clears the expired trial), and the panel-revamp developer meeting. **Do-not-commit
+`deploy/config/Caddyfile.prod` excluded** (verified unstaged). Evidence: ROADMAP-V2 §2.41; operator-expected.md (top banner);
+PR #183.
