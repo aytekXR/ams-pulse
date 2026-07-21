@@ -1,0 +1,47 @@
+# Pulse — nginx-on-host edge overlay (ADDITIVE; part of the Caddy -> nginx migration).
+#
+# WHAT THIS DOES, AND WHY IT IS A SEPARATE FILE
+# ---------------------------------------------
+# The new edge is nginx running ON THE HOST (not a container). A host process
+# cannot reach a Docker network alias, so it cannot use the old `reverse_proxy
+# pulse:8090` path the containerised Caddy used. This overlay publishes Pulse's
+# three listeners on the LOOPBACK interface so host-nginx can proxy to them:
+#
+#     nginx (host) ──▶ 127.0.0.1:8090  UI + API   (upstream pulse_app)
+#                  ──▶ 127.0.0.1:8091  beacon      (upstream pulse_beacon)
+#                  ──▶ 127.0.0.1:8092  webhook     (upstream pulse_webhook)
+#
+# Bound to 127.0.0.1 ONLY — never 0.0.0.0 — so these ports are unreachable from
+# the internet; only nginx, on the same host, can connect. This is the whole
+# security point of the migration.
+#
+# ADDITIVE: this file is applied AFTER docker-compose.hardened.yml, which sets
+# `pulse: ports: !override []` (strips all host publishing for the Caddy world).
+# `!override` here REPLACES that empty list with the loopback binds — it does not
+# edit the hardened file. Drop this overlay and you are back to the Caddy stack,
+# untouched.
+#
+# BRING UP (host, replaces the Caddy prod-tls overlay with this one) — Caddy is
+# NOT started here; nginx owns :443. See deploy/MIGRATION.md for the full runbook.
+#
+#   sg docker -c 'docker compose -p pulse-prod \
+#     -f deploy/docker-compose.yml \
+#     -f deploy/docker-compose.hardened.yml \
+#     -f deploy/docker-compose.nginx-edge.yml \
+#     --env-file deploy/.env up -d --build'
+#
+# NOTE: do NOT combine this with docker-compose.prod-tls.yml — that overlay runs
+# the containerised Caddy and binds 0.0.0.0:443, which collides with host-nginx.
+# The two edges are mutually exclusive; this file is the nginx replacement.
+
+name: pulse
+
+services:
+  pulse:
+    # Replace the hardened overlay's empty ports list with loopback-only publishes.
+    # !override (not a bare list) is required: Compose otherwise concatenates, and
+    # the hardened file already emptied the list with its own !override.
+    ports: !override
+      - "127.0.0.1:8090:8090"   # UI + API + /healthz + WebSocket
+      - "127.0.0.1:8091:8091"   # beacon ingest  (nginx /beacon/* , prefix stripped)
+      - "127.0.0.1:8092:8092"   # AMS webhooks    (nginx /webhook/*)
