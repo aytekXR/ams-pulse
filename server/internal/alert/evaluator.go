@@ -292,6 +292,14 @@ func (e *Evaluator) TickOnce(ctx context.Context) {
 	e.evaluate(ctx)
 }
 
+// StateCount returns the number of live ruleState entries. Test-only observability for
+// the D-160 e.states eviction — a production run never inspects this.
+func (e *Evaluator) StateCount() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return len(e.states)
+}
+
 // ─── Evaluation loop ──────────────────────────────────────────────────────────
 
 func (e *Evaluator) loop(ctx context.Context) {
@@ -365,6 +373,43 @@ func (e *Evaluator) evaluate(ctx context.Context) {
 	}
 
 	e.pruneOfflineTrackers(keepOffline, suspendOffline)
+	e.pruneStaleStates(now)
+}
+
+// pruneStaleStates evicts ruleState entries whose (rule, group) produced NO evalResult
+// this tick (their stream/node has vanished, or the rule was removed) AND which are
+// behaviorally INERT — i.e. deleting them is indistinguishable from keeping them,
+// because the next evalResult for that key would recreate a fresh "pending" entry that
+// behaves identically (D-160). Without this, e.states grew one permanent entry per
+// unique (rule, stream_id) ever seen — an unbounded leak on high-stream-churn systems.
+//
+// An entry is inert iff it is NOT actively firing and NOT mid-pending toward a fire,
+// AND its cooldown has expired (evicting a "resolved" entry whose cooldown is still
+// active would let a quick re-appearance bypass the remaining cooldown — so those are
+// kept until the cooldown lapses). A "firing" entry is never evicted here: dropping it
+// would silently discard an unresolved alert (that firing-orphan case is a separate,
+// pre-existing concern, deliberately out of scope).
+func (e *Evaluator) pruneStaleStates(now time.Time) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for key, st := range e.states {
+		if st.lastCheck.Equal(now) {
+			continue // evaluated this tick — actively tracked
+		}
+		// Inert = NO accumulated re-fire window progress AND settled (resolved or
+		// idle-pending). A "resolved" entry can carry a NON-zero pendingSince when its
+		// condition has re-met and is accumulating toward a re-fire that a still-active
+		// cooldown is currently suppressing; evicting that would discard the progress and
+		// delay or miss the re-fire on the stream's return (a behavior a fresh entry does
+		// NOT reproduce). So require pendingSince zero to evict. (Residual: a resolved
+		// entry that re-met then vanished mid-window is retained — a narrow bounded case,
+		// vs. the general one-entry-per-unique-stream-id leak this closes.)
+		inert := st.pendingSince.IsZero() && (st.state == "resolved" || st.state == "pending")
+		cooldownExpired := st.cooldownUntil.IsZero() || !now.Before(st.cooldownUntil)
+		if inert && cooldownExpired {
+			delete(e.states, key)
+		}
+	}
 }
 
 // pruneOfflineTrackers reconciles the offline-tracker map after a tick (D-157/D-159).
@@ -532,6 +577,11 @@ func (e *Evaluator) processEvaluation(ctx context.Context, rule meta.AlertRuleRo
 		st = &ruleState{ruleID: rule.ID, groupKey: groupKey, state: "pending"}
 		e.states[key] = st
 	}
+	// D-160: stamp the tick this (rule, group) was last evaluated. pruneStaleStates
+	// uses it to evict entries whose stream/node has vanished (no evalResult this tick)
+	// once they are behaviorally inert — bounding e.states, which otherwise grows one
+	// permanent entry per unique (rule, stream_id) ever seen.
+	st.lastCheck = now
 	e.mu.Unlock()
 
 	switch st.state {
