@@ -182,3 +182,102 @@ bedirhandemirel.{$PULSE_DOMAIN} {
         level INFO
     }
 }
+
+matbu.{$PULSE_DOMAIN} {
+    # No 'tls internal' -> Caddy auto-provisions a public Let's Encrypt cert.
+    # NOTE (SPEC 11, Phase A): this puts matbu.beyondkaira.com in the public
+    # certificate-transparency logs. Accepted for the dummy pilot; it is one more
+    # reason real documents wait for Phase B.
+
+    # ── PHASE A: basic_auth in front of the ENTIRE site (SPEC Section 11) ─────
+    # One shared credential, so not even the app's own login page is exposed to
+    # the internet. The app's session login still applies BEHIND this layer.
+    #
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # !!  THE HASH BELOW IS A PLACEHOLDER. IT IS NOT A CREDENTIAL.          !!
+    # !!  REPLACE IT BEFORE YOU VALIDATE OR RELOAD, OR THE SITE IS BROKEN.  !!
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    #
+    # Generate the bcrypt hash with the SHARED Caddy container (it is the same
+    # binary that will parse it). Omit --plaintext so Caddy PROMPTS: that keeps
+    # the password out of your shell history.
+    #
+    #   sudo docker exec -it pulse-prod-caddy-1 caddy hash-password
+    #     Enter password:   <the shared pilot password>
+    #     Confirm password: <again>
+    #   -> prints  $2a$14$........................................................
+    #
+    # Paste that output as the second token below. The PLAINTEXT password never
+    # enters this repo, a log, a commit, or a session summary — only the hash does
+    # (and the hash only ever lives in the shared Caddyfile, not here).
+    #
+    # ── Directive name: `basic_auth` is correct here ─────────────────────────
+    # The directive was RENAMED in Caddy 2.8 (`basicauth` -> `basic_auth`; the old
+    # spelling still parses but is deprecated). The shared image is pinned by
+    # digest, but ams-pulse/deploy/docker-compose.hardened.yml records what that
+    # digest IS — `# caddy:2-alpine`, "Digest pinned 2026-07-08". Caddy 2.8 shipped
+    # in May 2024, so a 2-alpine tag pulled in July 2026 is comfortably >= 2.8.
+    # Hence `basic_auth`. If `sudo docker exec pulse-prod-caddy-1 caddy version`
+    # ever contradicts that, the ONLY change needed is renaming this directive to
+    # `basicauth` — the body is identical in both forms: <username> <bcrypt-hash>.
+    basic_auth {
+        evrak {$EVRAK_BASICAUTH_HASH}
+    }
+    # Caddy runs basic_auth BEFORE the handle blocks, so every route below —
+    # including the 404 for /healthz — sits behind this credential.
+    #
+    # ── `caddy validate` will NOT catch a bad hash. Prove it with curl. ───────
+    # basic_auth only checks that the username and password fields are non-empty at
+    # provision time; the bcrypt hash itself is not parsed until an actual request
+    # arrives. So the PLACEHOLDER above passes `caddy validate` AND passes
+    # `caddy reload` — giving a green light on a site that 401s every credential,
+    # forever. Validate proves syntax, not correctness.
+    #
+    # After the reload, prove the credential end-to-end (both curls, in order):
+    #   curl -sS -o /dev/null -w '%{http_code}\n' https://matbu.beyondkaira.com
+    #       -> 401   (no credential: correct, the basic_auth layer is live)
+    #   curl -sS -o /dev/null -w '%{http_code}\n' -u evrak https://matbu.beyondkaira.com
+    #       -> 200/302  (with the real password: you are through to the app)
+    # A 401 on the SECOND curl, with the CORRECT password, means the hash above was
+    # never replaced. That is the failure this comment exists to prevent.
+
+    # ── /healthz is NOT publicly routed ───────────────────────────────────────
+    # SPEC Section 7: /healthz exists for the Docker healthcheck and local probes
+    # only. It is reachable from the host at 127.0.0.1:8150/healthz and from
+    # inside the docker network at evrak-app:8000/healthz — but the public vhost
+    # must never expose it. This handle block comes FIRST and is terminal, so the
+    # path never reaches the reverse_proxy below.
+    @healthz path /healthz /healthz/*
+    handle @healthz {
+        respond "Not Found" 404
+    }
+
+    # ── Everything else -> the app container, by docker network alias ─────────
+    handle {
+        reverse_proxy evrak-app:8000 {
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
+            header_up Host {host}
+        }
+    }
+
+    # ── Security headers ─────────────────────────────────────────────────────
+    # `-Server` strips Caddy's Server: fingerprint from proxied responses.
+    # NOTE: no Content-Security-Policy here ON PURPOSE. SPEC Section 14 / M8 puts
+    # security headers (incl. a self-only CSP) in the APP, and two owners emitting
+    # CSP means two conflicting policies. One owner: the app. Revisit at M8.
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
+    }
+
+    log {
+        output stdout
+        format json
+        level INFO
+    }
+}
