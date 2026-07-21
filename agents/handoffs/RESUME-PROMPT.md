@@ -11,7 +11,43 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-95.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-96.md`)
+
+**Session 2026-07-21 result: D-159 — S95 stayed the low-frequency wait at the gate (date 07-21 < 07-23 → §2.7 gated;
+gradle/java/kotlinc absent → §2.12 Android blocked; operator-expected top block still D-158 → no new input) BUT did not
+idle: it ran an independent adversarial re-verification of the highest-stakes un-independently-swept code — the D-157
+wildcard `stream_offline` critical-alert state machine + the D-158 load lane, both shipped AFTER the S89/S91/S92 sweeps.
+That surfaced 7 CONFIRMED defects (each independently re-verified against the real code, verify-first). SHIPPED fixes for 6;
+deferred 1. Server (prod-rolled v0.4.0-124 → **v0.4.0-129-g30717fc**, rollback tag `pre-d159`, 5-check smoke green): #1
+missed-fire + #3/#4 stuck-fire (tracker prune on disable/maintenance discarded in-flight offline state → fresh empty tracker
+can't re-detect an already-gone stream; fixed via keep/suspend/discard classification that PRESERVES offlineAt across a brief
+suspend) + #2 retro-hold-expiry (fixed via absolute holdUntil frozen at detection). QA shell (no roll): #6 forbidden-host
+guard now includes the prod VPS raw IP; #7 publisher/viewer/failures bootstrap scripts hard-abort instead of silently
+sourcing prod env.sh. Mutation-proven (2 orthogonal mutations) + 3-lens adversarial review (0 confirmed regressions). PR #185.
+Deferred: #5 `e.states` unbounded growth (pre-existing, all-metrics, cooldown-sensitive → ROADMAP §2.43, its own arc).
+Evidence: decisions.md D-159; ROADMAP-V2 §2.42/§2.43; operator-expected.md.**
+
+**★ SESSION-96 = BACK TO THE LOW-FREQUENCY WAIT.** S95's arc (the D-157/D-158 delta re-verification) is done; the un-swept
+delta is now swept. What remains is GATED: §2.7 CI-promotions (date ≥ 2026-07-23 — **likely UNLOCKED by the time S96 runs**),
+the Android Kotlin SDK (JVM/Gradle toolchain), iOS Phase 2 (Apple CI), and operator decisions/actions. At open, run the SAME
+two-minute gate: **(1)** `date +%Y-%m-%d` — if **≥ 2026-07-23** → **§2.7 CI-promotions** (drop `web-e2e`'s
+`continue-on-error: true` in `.github/workflows/ci.yml`; `actionlint`; hand the operator the branch-protection FULL-LIST PUT
+adding `e2e`/`csp-e2e`/`web-e2e`/`docker-build`/`sdk-swift`). CI-config change does NOT roll prod. **(1b)** `command -v gradle
+&& command -v java` (or `kotlinc`) — if PRESENT → START `sdk/beacon-kotlin` (standing GO D-154, ROADMAP §2.12), no prompt.
+**(2)** check `operator-expected.md` — operator answered [20] / asked for iOS Phase 2 / ran the load lane + gave a capacity
+number / reported panel-meeting G-27 answers / named a priority → do their pick (Lead B). **(3)** Else → quick health check +
+wait at low frequency. **Do NOT run another fresh "is anything broken?" sweep** — S95 just swept the last un-swept delta
+(D-157/D-158) and drained it; S89/S91/S92 swept the rest 3×. A candidate non-gated arc IF you want real work: **ROADMAP §2.43**
+(the `e.states` unbounded-growth fix — a genuine, pre-identified, non-gated internal defect; needs care re cooldown
+semantics). See `sessions/SESSION-96.md`.
+
+**⚠ OPERATOR ITEMS OPEN (operator-expected.md, unchanged from S94):** run the load lane on a DEDICATED PAYG AMS (now with
+stronger prod-isolation guards, D-159); the panel-revamp developer meeting (G-27); §2.1 branch-protection PUT; §2.12 Android
+JVM+Gradle+Kotlin env (standing GO auto-starts on detection); [20] audit-read; AMS trial-licence expiry; rotate chat-exposed
+creds; §2.7 date-gate (2026-07-23, auto). **Optional (non-blocking):** unmute the "Stream offline (default)" rule to page on
+offline (now correct across disable/maintenance edges, D-159).
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-95.md` — D-159, see above)
 
 **Session 2026-07-19 result: D-158 — S94 was NOT the planned low-frequency wait: the operator injected a two-part request
 mid-session — (1) assess whether Ant Media's confidential web-panel revamp threatens the marketplace opportunity, and (2)

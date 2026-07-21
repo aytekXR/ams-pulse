@@ -570,6 +570,28 @@ generating license keys ready?"* — answered by **executing** the docs, not rea
 clone-and-build never touches GHCR and **works**. Only the quickstart is dead.
 **The vendor key ceremony is DONE** (S16/D-077); it had been wrongly carried as open.
 
+### 2.42  Wildcard stream_offline suspend/resume correctness + load-lane isolation guards — S95 adversarial re-verification of the D-157/D-158 delta  [✅ DONE — 6 of 7 confirmed defects fixed; server prod-rolled, QA no-roll]  ✅ S95 (D-159, 2026-07-21, PR #185, prod v0.4.0-129-g30717fc)
+
+The S95 two-minute gate found the low-frequency wait still in force (date 2026-07-21 < 07-23 → §2.7 gated; gradle/java/
+kotlinc absent → §2.12 Android tooling-blocked; operator-expected top block still D-158 → no new input). → **Lead C.**
+Instead of idling, ran an independent adversarial verification of the D-157 (stream_offline edge detection) + D-158 (load
+lane) delta — never swept by S89/S91/S92 (which predate them). **7 confirmed defects; 6 fixed (D-159), #5 deferred to §2.43.**
+- Server (prod-critical wildcard offline state machine): **#1 missed-fire + #3/#4 stuck-fire** (tracker prune on
+  disable/maintenance discarded in-flight offline state → the fresh empty tracker could not re-detect an already-gone
+  stream) — fixed via a keep/suspend/discard classification that PRESERVES offlineAt across a brief suspend; **#2
+  retro-hold-expiry** (per-tick hold recompute) — fixed via an absolute holdUntil frozen at detection.
+- QA shell (load-lane isolation, no roll): **#6** forbidden-host guard now includes the prod VPS raw IP; **#7**
+  publisher/viewer/failures bootstrap scripts hard-abort instead of silently sourcing prod env.sh.
+Mutation-proven (2 orthogonal mutations) + 3-lens adversarial review (0 confirmed regressions). Prod-rolled the server change.
+
+### 2.43  Alert `e.states` unbounded growth — evict terminal firing-state entries  [OPEN — internal follow-up, LOW urgency; found S95/D-159 #5]
+
+`Evaluator.states` (map keyed `ruleID+":"+groupKey`) is never pruned — every unique `(rule, stream_id)` that ever produces an
+evalResult leaves a permanent `ruleState`. **Pre-existing (not D-157); affects ALL metrics.** A correct fix must preserve
+`cooldownUntil` (evicting a "resolved" entry too early would drop flapping-suppression) — likely a bounded sweep of terminal
+entries whose cooldown has expired, or a per-(rule,stream) TTL. Slow growth (~100 B/entry over unique-stream-id churn); not
+urgent. Its own focused arc — do NOT bundle a broad state-machine change into a critical-alert PR.
+
 ### 2.41  Opt-in load-testing lane + Ant Media panel-revamp (G-27) assessment — operator-requested mid-session  [✅ DONE — docs + QA-tooling only, NO prod roll; load lane NOT yet run (needs the operator's dedicated instance)]  ✅ S94 (D-158, 2026-07-19, PR #183)
 
 SESSION-94 was planned as a low-frequency wait; the operator injected a two-part in-conversation request that superseded it:

@@ -1,3 +1,5 @@
+# SESSION-95 — ✅ CLOSED (D-159, 2026-07-21) — the low-frequency-wait gate held, but an independent re-verification of the un-swept D-157/D-158 delta caught 7 defects; 6 fixed (prod v0.4.0-129-g30717fc), 1 deferred (§2.43). See RESUME-PROMPT.md ▶ START HERE + decisions.md D-159. Next: SESSION-96.md.
+
 # SESSION-95 — planned at S94 close (D-158) — LOW-FREQUENCY WAIT (load lane + panel-revamp assessment shipped; remaining work gated/tooling-blocked)
 
 > Written by SESSION-94 close (2026-07-19). Repo `/home/aytek/repo/ams-pulse` on VPS `161.97.172.146` (**this host IS

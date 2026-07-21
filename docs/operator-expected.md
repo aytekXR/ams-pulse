@@ -1,5 +1,39 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-19, SESSION-94 — AMS panel revamp reviewed; load-testing lane shipped)
+# Operator TODO — the items only YOU can do (updated 2026-07-21, SESSION-95 — critical-alert + load-lane defects found & fixed; NO new operator action)
 
+> # ▶ S95 STATUS (2026-07-21, D-159) — NO operator action required. Two fixes shipped; one safety win before you run the load lane.
+>
+> The loop stayed in the low-frequency wait (date 07-21 < the 07-23 §2.7 gate; the Android build env you'll set up is still
+> absent; no new priority from you). Rather than idle, it re-verified the **newest, highest-stakes code that had never had an
+> independent review** — the "Stream offline" critical-alert fix (D-157) and the load-testing lane (D-158), both of which
+> shipped *after* the last three verification sweeps. That review found **7 real defects**; **6 are now fixed and live**, one
+> is a slow pre-existing memory-growth item I've queued for its own session. Nothing here needs you.
+>
+> **What got fixed (live in prod v0.4.0-129):**
+> - **The "Stream offline" alert now behaves correctly around a rule toggle / maintenance window.** If a stream goes offline
+>   and you briefly disable the rule (or it's inside a maintenance window) before it pages, then re-enable it while the stream
+>   is still down, it now correctly pages — and an already-firing one correctly auto-clears. Before, that offline event was
+>   silently dropped or the alert could stick "firing". (The default rule still ships **muted** — this only matters once you
+>   unmute it, which remains the one optional action from S93.)
+> - **A `window_s` change mid-outage no longer swallows the page.** Shrinking a "Stream offline" rule's window while a stream
+>   is already down used to lose the alert; fixed.
+> - **★ Load-lane safety hardened BEFORE you run it.** The opt-in load lane now refuses the prod VPS by its **raw IP**
+>   (161.97.172.146), not just its hostname, and its publisher/viewer helper scripts now hard-abort instead of silently
+>   pointing at prod if you forget to load the dedicated config first. So when you run the lane on your dedicated PAYG AMS,
+>   the "can't touch prod" guarantee is stronger. (Run it exactly as before: `cp qa/realams/harness/load-env.sh.example
+>   qa/realams/harness/load-env.sh`, fill the hosts, `bash qa/realams/run-load-suite.sh`.)
+>
+> **One internal item I deferred (my call, not yours):** the alert engine's in-memory firing-state map isn't pruned, so over
+> a long uptime with many distinct stream IDs it slowly grows (~100 bytes per unique stream that ever alerts). It's
+> pre-existing, not urgent, and fixing it safely (without breaking alert cooldowns) deserves its own session — tracked as
+> ROADMAP §2.43.
+>
+> **Your open items are unchanged from S94 below** (run the load lane on a dedicated AMS; the panel-revamp developer meeting;
+> branch protection; Android build env; [20]; AMS trial expiry; rotate chat-exposed creds). None blocks the loop. The next
+> scheduled autonomous move is the **§2.7 CI-promotions on 2026-07-23**, or sooner if you install the Android build env or
+> name a priority.
+>
+> ---
+>
 > # ▶ ★ S94 (2026-07-19) — Ant Media's panel revamp: does it threaten us? (short answer: **NO, not on its own**) + how we now load-test the stats
 >
 > You asked two things: (1) Ant Media (Ankush) gave us **private, confidential** read-only access to a **web-panel
