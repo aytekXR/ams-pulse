@@ -103,7 +103,10 @@ if printf '%s\n' "${LOAD_AMS_HOST}${LOAD_PULSE_HOST}${PULSE_TOKEN}" | grep -q 'R
 fi
 
 # ── Guard B: HARD safety abort — never the shared VPS / prod / Ant Media hosts ─
-_load_forbidden='beyondkaira\.com|antmedia\.io|petarostojic\.com'
+# Includes the prod VPS by RAW IP (161.97.172.146), not just its hostname: the
+# operator knows that IP and could paste it as a host, which would otherwise slip
+# past a domain-only pattern and point the load lane straight at prod (D-159).
+_load_forbidden='beyondkaira\.com|antmedia\.io|petarostojic\.com|161\.97\.172\.146'
 if printf '%s\n' "${AMS_URL} ${PULSE_URL} ${LOAD_HLS_BASE}" | grep -qiE "${_load_forbidden}"; then
   echo "[load-env] SAFETY ABORT: a host matches a FORBIDDEN pattern (${_load_forbidden})." >&2
   echo "[load-env]   The load lane must target a DEDICATED throw-away instance only —" >&2

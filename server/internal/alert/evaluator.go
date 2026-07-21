@@ -109,6 +109,13 @@ type offlineTracker struct {
 	// offline. The rule emits value 1.0 for it until the hold window elapses,
 	// then one resolving 0.0, then it is dropped.
 	offlineAt map[string]time.Time
+	// holdUntil is the ABSOLUTE hold deadline for each offline stream, frozen at
+	// detection time (D-159). The value 1.0 is emitted while now < holdUntil, then
+	// one resolving 0.0. Freezing it at detection (rather than recomputing
+	// streamOfflineHold(rule.WindowS, …) every tick) makes the hold immune to a
+	// mid-event WindowS edit — a decreased WindowS would otherwise retroactively
+	// expire an in-flight offline event and silently swallow its page.
+	holdUntil map[string]time.Time
 }
 
 // ─── Evaluator ────────────────────────────────────────────────────────────────
@@ -321,42 +328,72 @@ func (e *Evaluator) evaluate(ctx context.Context) {
 
 	now := e.clock.Now()
 
-	keepOffline := make(map[string]bool)
+	keepOffline := make(map[string]bool)    // active wildcard offline → full cross-tick state kept
+	suspendOffline := make(map[string]bool) // existing-but-suspended wildcard offline → offlineAt preserved
 	for _, rule := range rules {
+		// A wildcard stream_offline rule carries cross-tick edge-detection state that
+		// must be handled specially when the rule is temporarily suspended (D-159 —
+		// see pruneOfflineTrackers). Detect the shape BEFORE the suspend guards so a
+		// disabled / maintenance-window rule is still recognised as offline-shaped.
+		isWildcardOffline := rule.Metric == "stream_offline" && isWildcardOfflineScope(rule.ScopeJSON)
+
 		// enabled=false: rule is completely suspended — not evaluated at all.
 		// This is distinct from muted=true (evaluated, but notifications suppressed).
 		if !rule.Enabled {
+			if isWildcardOffline {
+				suspendOffline[rule.ID] = true
+			}
 			continue
 		}
 		// Maintenance window suppression.
 		if e.inMaintenanceWindow(rule, now) {
+			if isWildcardOffline {
+				suspendOffline[rule.ID] = true
+			}
 			continue
 		}
 
-		// D-157: keep an offline tracker only while its rule is CONTINUOUSLY an active
-		// wildcard stream_offline rule. A rule that is disabled, in a maintenance
-		// window, or whose metric/scope changed away from wildcard stream_offline is
-		// skipped here (not added to keepOffline), so its tracker is pruned below and
-		// rebuilt fresh on resumption. Otherwise a stale prevPresent would fabricate
-		// present→gone edges — spurious offline fires — when the rule resumes.
-		if rule.Metric == "stream_offline" && isWildcardOfflineScope(rule.ScopeJSON) {
+		// D-157/D-159: keep an offline tracker at FULL fidelity only while its rule is
+		// CONTINUOUSLY an active wildcard stream_offline rule. A rule whose metric/scope
+		// changed away from wildcard stream_offline (neither keep nor suspend) has its
+		// tracker discarded below.
+		if isWildcardOffline {
 			keepOffline[rule.ID] = true
 		}
 
 		e.evaluateRule(ctx, rule, snap, now)
 	}
 
-	e.pruneOfflineTrackers(keepOffline)
+	e.pruneOfflineTrackers(keepOffline, suspendOffline)
 }
 
-// pruneOfflineTrackers removes offline trackers for any rule NOT in keep — i.e. a
-// rule that is deleted, disabled, suppressed, or no longer a wildcard stream_offline
-// rule. Its edge-detection state is discarded and rebuilt fresh on resumption.
-func (e *Evaluator) pruneOfflineTrackers(keep map[string]bool) {
+// pruneOfflineTrackers reconciles the offline-tracker map after a tick (D-157/D-159).
+// Three cases per existing tracker:
+//   - keep:    the rule is an actively-evaluated wildcard offline rule. evalStreamOffline
+//     already maintained its state this tick; nothing to do.
+//   - suspend: the rule still EXISTS and is still wildcard-offline-shaped but is
+//     currently suspended (disabled or inside a maintenance window). Reset
+//     prevPresent so a stale present set cannot fabricate a present→gone edge
+//     on resume (the original D-157 spurious-fire concern), but PRESERVE
+//     offlineAt/holdUntil so an offline event already IN FLIGHT when the rule
+//     was suspended can still satisfy WindowS and fire — or auto-resolve at its
+//     hold — once the rule resumes. Without this, a brief disable / maintenance
+//     window between the offline edge and WindowS silently swallowed the page
+//     (missed-fire), and a disable AFTER firing left the alert stuck "firing"
+//     forever because the fresh empty tracker produced no result to resolve it.
+//   - discard: the rule is gone, or is no longer wildcard-offline (metric/scope changed).
+//     Drop the whole tracker; a stale offlineAt must not resurrect as a
+//     spurious fire if the rule later becomes wildcard-offline again.
+func (e *Evaluator) pruneOfflineTrackers(keep, suspend map[string]bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	for ruleID := range e.offlineTrackers {
-		if !keep[ruleID] {
+	for ruleID, tr := range e.offlineTrackers {
+		switch {
+		case keep[ruleID]:
+			// active — full state already maintained by evalStreamOffline.
+		case suspend[ruleID]:
+			tr.prevPresent = map[string]bool{}
+		default:
 			delete(e.offlineTrackers, ruleID)
 		}
 	}
@@ -821,7 +858,11 @@ func (e *Evaluator) evalStreamOffline(snap *domain.LiveSnapshot, scope domain.Al
 	}
 	tr := e.offlineTrackers[rule.ID]
 	if tr == nil {
-		tr = &offlineTracker{prevPresent: map[string]bool{}, offlineAt: map[string]time.Time{}}
+		tr = &offlineTracker{
+			prevPresent: map[string]bool{},
+			offlineAt:   map[string]time.Time{},
+			holdUntil:   map[string]time.Time{},
+		}
 		e.offlineTrackers[rule.ID] = tr
 	}
 
@@ -837,32 +878,36 @@ func (e *Evaluator) evalStreamOffline(snap *domain.LiveSnapshot, scope domain.Al
 		present[sid] = true
 	}
 
-	// New offline edges: present last tick, gone now (and not already tracked).
+	// New offline edges: present last tick, gone now (and not already tracked). The
+	// hold deadline is frozen HERE, at detection, from the WindowS in effect now — so
+	// a later WindowS edit cannot retroactively expire an in-flight offline event
+	// (D-159).
 	for sid := range tr.prevPresent {
 		if !present[sid] {
 			if _, tracked := tr.offlineAt[sid]; !tracked {
 				tr.offlineAt[sid] = now
+				tr.holdUntil[sid] = now.Add(streamOfflineHold(rule.WindowS, e.cfg.TickInterval))
 			}
 		}
 	}
-
-	hold := streamOfflineHold(rule.WindowS, e.cfg.TickInterval)
 
 	results := make([]evalResult, 0, len(present)+len(tr.offlineAt))
 	// Present streams are online (value 0.0). A returning stream also clears any
 	// pending offline tracking, so its firing alert resolves.
 	for sid := range present {
 		delete(tr.offlineAt, sid)
+		delete(tr.holdUntil, sid)
 		results = append(results, evalResult{groupKey: sid, value: 0.0, ok: compare(0.0, rule.Operator, rule.Threshold)})
 	}
-	// Recently-offline streams: value 1.0 within the hold window (fires), then one
-	// resolving 0.0 and stop tracking.
-	for sid, offAt := range tr.offlineAt {
-		if now.Sub(offAt) < hold {
+	// Recently-offline streams: value 1.0 until the absolute hold deadline (fires),
+	// then one resolving 0.0 and stop tracking.
+	for sid := range tr.offlineAt {
+		if now.Before(tr.holdUntil[sid]) {
 			results = append(results, evalResult{groupKey: sid, value: 1.0, ok: compare(1.0, rule.Operator, rule.Threshold)})
 		} else {
 			results = append(results, evalResult{groupKey: sid, value: 0.0, ok: compare(0.0, rule.Operator, rule.Threshold)})
 			delete(tr.offlineAt, sid)
+			delete(tr.holdUntil, sid)
 		}
 	}
 

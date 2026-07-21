@@ -30,8 +30,14 @@ set -euo pipefail
 
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
 _VS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./env.sh
-[[ -n "${AMS_URL:-}" ]] || source "${_VS_DIR}/env.sh"
+# D-159: require the caller to have sourced the correct env FIRST (see publisher.sh).
+# Silently sourcing env.sh here was a prod-safety footgun for the load lane.
+if [[ -z "${AMS_URL:-}" ]]; then
+  echo "[viewer-sim] ERROR: AMS_URL is unset — source an env file FIRST:" >&2
+  echo "[viewer-sim]   real-AMS validation:  source qa/realams/harness/env.sh" >&2
+  echo "[viewer-sim]   dedicated load lane:  source qa/realams/harness/load-env.sh" >&2
+  return 1 2>/dev/null || exit 1
+fi
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 _VIEWER_PID_DIR="/tmp/claude-1000"
