@@ -25,6 +25,26 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **Wildcard "Stream offline" alert survives a brief disable / maintenance window (D-159).**
+  A wildcard `stream_offline` critical alert whose watched stream goes offline and then has its
+  rule briefly disabled (or enters a maintenance window) before the alert window elapses — then
+  is re-enabled while the stream stays offline — now still pages, and an already-firing such
+  alert now still auto-resolves at its hold. Previously the rule's edge-detection tracker was
+  discarded on suspend, and the freshly-rebuilt tracker could not re-detect a stream that was
+  already gone, so the offline event was silently dropped (or the alert stuck "firing" forever).
+  The tracker now preserves in-flight offline state across a suspend while still preventing
+  spurious edges on resume. Only affects wildcard offline rules under a disable/maintenance
+  transition; the default rule ships muted.
+- **Wildcard "Stream offline" hold is immune to a mid-event window change (D-159).** Shrinking a
+  wildcard `stream_offline` rule's `window_s` while a stream is already offline no longer
+  retroactively expires the in-flight offline event (which previously swallowed its page). The
+  hold deadline is now frozen when the stream is first detected offline.
+- **Load-testing lane isolation hardening (D-159).** The opt-in load lane's forbidden-host guard
+  now also rejects the production VPS by raw IP (not just by hostname), and the
+  `publisher.sh` / `viewer-sim.sh` / `failures.sh` harness bootstrap scripts now abort with a
+  clear error when `AMS_URL` is unset instead of silently falling back to the shared/prod env —
+  closing a footgun where a load test sourced without its dedicated env could target prod. QA
+  tooling only; no runtime change.
 - **Source connectivity-test error detail (D-151).** The Settings → "Add source" connectivity
   test (`POST /admin/sources/{id}/test`) now shows the real failure reason (no REST URL, an
   invalid URL scheme, or the network error) instead of a generic "Source unreachable". The
