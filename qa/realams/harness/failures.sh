@@ -43,8 +43,14 @@ set -euo pipefail
 
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
 _FAIL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./env.sh
-[[ -n "${AMS_URL:-}" ]] || source "${_FAIL_DIR}/env.sh"
+# D-159: require the caller to have sourced the correct env FIRST (see publisher.sh) —
+# never silently fall back to env.sh (the shared/prod AMS).
+if [[ -z "${AMS_URL:-}" ]]; then
+  echo "[failures] ERROR: AMS_URL is unset — source an env file FIRST:" >&2
+  echo "[failures]   real-AMS validation:  source qa/realams/harness/env.sh" >&2
+  echo "[failures]   dedicated load lane:  source qa/realams/harness/load-env.sh" >&2
+  return 1 2>/dev/null || exit 1
+fi
 # shellcheck source=./publisher.sh
 [[ -n "${_PUBLISHER_SH_LOADED:-}" ]] || source "${_FAIL_DIR}/publisher.sh"
 

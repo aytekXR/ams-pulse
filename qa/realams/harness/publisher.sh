@@ -29,8 +29,17 @@ set -euo pipefail
 
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
 _PUB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./env.sh
-[[ -n "${AMS_URL:-}" ]] || source "${_PUB_DIR}/env.sh"
+# D-159: require the caller to have sourced the correct env FIRST. Silently sourcing
+# env.sh here was a prod-safety footgun — a load test sourced without load-env.sh
+# would fall back to env.sh (the shared/prod AMS). Both legitimate flows already
+# export AMS_URL before this point (realams via auth.sh→env.sh; load lane via
+# load-env.sh's guarded config), so this only closes the misuse path.
+if [[ -z "${AMS_URL:-}" ]]; then
+  echo "[publisher] ERROR: AMS_URL is unset — source an env file FIRST:" >&2
+  echo "[publisher]   real-AMS validation:  source qa/realams/harness/env.sh" >&2
+  echo "[publisher]   dedicated load lane:  source qa/realams/harness/load-env.sh" >&2
+  return 1 2>/dev/null || exit 1
+fi
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 _FFMPEG_IMAGE="jrottenberg/ffmpeg:4.1-alpine"
