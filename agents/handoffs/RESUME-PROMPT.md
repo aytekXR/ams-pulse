@@ -11,7 +11,40 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-96.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-97.md`)
+
+**Session 2026-07-21 result: D-160 — S96 took the ONE sanctioned non-gated arc SESSION-96 named (the `e.states`
+unbounded-growth fix deferred from D-159 #5, ROADMAP §2.43). `Evaluator.states` had no delete site → one permanent entry
+per unique `(rule, stream_id)`. `pruneStaleStates` now evicts entries not touched this tick that are behaviorally INERT
+(settled, `pendingSince`-zero) and whose cooldown has lapsed — provably behavior-preserving. **The adversarial review caught +
+fixed a real bug in the first cut** (a `resolved` entry with accumulated re-fire `pendingSince` must NOT be evicted — Option A:
+predicate now requires `pendingSince.IsZero()`), mutation-proven. Full Go 26-pkg + `-race` green. Prod-rolled v0.4.0-129 →
+**v0.4.0-131-g6b5bd38** (rollback tag `pre-d160`, 5-check smoke green). Surfaced ONE new escalation (`[FO-1]`, ROADMAP §2.44):
+a non-`stream_offline` alert sticks firing if its source vanishes entirely — needs a firing-semantics PRODUCT CALL (D-156
+class), NOT force-fixed. PR #187. Evidence: decisions.md D-160; ROADMAP-V2 §2.43/§2.44; operator-expected.md.**
+
+**★ SESSION-97 = THE LOW-FREQUENCY WAIT — the concrete non-gated backlog is now DRAINED AGAIN.** S95 swept the un-swept
+D-157/D-158 delta; S96 closed §2.43. What remains is GATED: §2.7 CI-promotions (date ≥ 2026-07-23 — **check it; likely
+UNLOCKED by the time S97 runs**), the Android Kotlin SDK (JVM/Gradle), iOS Phase 2 (Apple CI), operator decisions/actions, and
+`[FO-1]` (needs an operator firing-semantics call). At open, run the SAME two-minute gate: **(1)** `date +%Y-%m-%d` — if **≥
+2026-07-23** → **§2.7 CI-promotions** (drop `web-e2e`'s `continue-on-error: true` in `.github/workflows/ci.yml`; `actionlint`;
+hand the operator the branch-protection FULL-LIST PUT adding `e2e`/`csp-e2e`/`web-e2e`/`docker-build`/`sdk-swift`). CI-config
+does NOT roll prod. **(1b)** `command -v gradle && command -v java` (or `kotlinc`) — if PRESENT → START `sdk/beacon-kotlin`
+(standing GO D-154, ROADMAP §2.12). **(2)** check `operator-expected.md` — operator answered [20] / `[FO-1]` / asked for iOS
+Phase 2 / ran the load lane + gave a capacity number / reported panel-meeting G-27 answers / named a priority → do their pick
+(Lead B; `[FO-1]` = build the chosen firing-orphan resolution). **(3)** Else → quick health check + **wait at low frequency.
+Do NOT manufacture an arc** — S89/S91/S92 swept 3×, S95 swept the last un-swept delta, S96 drained §2.43; the non-gated
+backlog is genuinely empty and the only remaining internal item (`[FO-1]`) is a product call. Re-arm at low frequency and stop
+in one line. See `sessions/SESSION-97.md`.
+
+**⚠ OPERATOR ITEMS OPEN (operator-expected.md):** **★ NEW `[FO-1]`** firing-orphan product call (auto-resolve-after-grace /
+stay-firing / leave-as-is — non-urgent); run the load lane on a DEDICATED PAYG AMS (stronger prod-isolation guards, D-159);
+the panel-revamp developer meeting (G-27); §2.1 branch-protection PUT; §2.12 Android JVM+Gradle+Kotlin env (standing GO
+auto-starts on detection); [20] audit-read; AMS trial-licence expiry; rotate chat-exposed creds; §2.7 date-gate (2026-07-23,
+auto). **Optional (non-blocking):** unmute the "Stream offline (default)" rule (now correct across disable/maintenance edges,
+D-159).
+
+## (superseded) ▶ START HERE (executed `sessions/SESSION-96.md` — D-160, see above)
 
 **Session 2026-07-21 result: D-159 — S95 stayed the low-frequency wait at the gate (date 07-21 < 07-23 → §2.7 gated;
 gradle/java/kotlinc absent → §2.12 Android blocked; operator-expected top block still D-158 → no new input) BUT did not

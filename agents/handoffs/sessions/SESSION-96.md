@@ -1,3 +1,5 @@
+# SESSION-96 — ✅ CLOSED (D-160, 2026-07-21) — took the sanctioned §2.43 arc: bounded `e.states` growth (inert-entry eviction), prod v0.4.0-131-g6b5bd38. Review caught + fixed a real bug in the first cut. Surfaced `[FO-1]` (firing-orphan, escalated). See RESUME-PROMPT.md ▶ START HERE + decisions.md D-160. Next: SESSION-97.md.
+
 # SESSION-96 — planned at S95 close (D-159) — LOW-FREQUENCY WAIT (the D-157/D-158 delta is now swept; remaining work gated/tooling-blocked)
 
 > Written by SESSION-95 close (2026-07-21). Repo `/home/aytek/repo/ams-pulse` on VPS `161.97.172.146` (**this host IS
