@@ -584,13 +584,22 @@ lane) delta — never swept by S89/S91/S92 (which predate them). **7 confirmed d
   publisher/viewer/failures bootstrap scripts hard-abort instead of silently sourcing prod env.sh.
 Mutation-proven (2 orthogonal mutations) + 3-lens adversarial review (0 confirmed regressions). Prod-rolled the server change.
 
-### 2.43  Alert `e.states` unbounded growth — evict terminal firing-state entries  [OPEN — internal follow-up, LOW urgency; found S95/D-159 #5]
+### 2.43  Alert `e.states` unbounded growth — evict terminal firing-state entries  [✅ DONE — provably behavior-preserving inert-entry eviction; prod-rolled]  ✅ S96 (D-160, 2026-07-21, PR #187, prod v0.4.0-131-g6b5bd38)
 
-`Evaluator.states` (map keyed `ruleID+":"+groupKey`) is never pruned — every unique `(rule, stream_id)` that ever produces an
-evalResult leaves a permanent `ruleState`. **Pre-existing (not D-157); affects ALL metrics.** A correct fix must preserve
-`cooldownUntil` (evicting a "resolved" entry too early would drop flapping-suppression) — likely a bounded sweep of terminal
-entries whose cooldown has expired, or a per-(rule,stream) TTL. Slow growth (~100 B/entry over unique-stream-id churn); not
-urgent. Its own focused arc — do NOT bundle a broad state-machine change into a critical-alert PR.
+Found S95/D-159 #5; fixed S96. `Evaluator.states` (keyed `ruleID+":"+groupKey`) had no delete site → one permanent entry per
+unique `(rule, stream_id)`. `pruneStaleStates` now evicts entries not touched this tick that are behaviorally INERT (settled,
+`pendingSince`-zero) and whose cooldown has lapsed — provably identical to keeping them. **The adversarial review caught + fixed
+a real bug in the first cut** (a `resolved` entry with accumulated re-fire `pendingSince` must NOT be evicted — Option A tightens
+the predicate to require `pendingSince.IsZero()`). Mutation-proven (3 tests); 26-pkg + `-race` green. Firing entries are never
+evicted → the firing-orphan for a vanished non-offline source is escalated as §2.44 / `[FO-1]`.
+
+### 2.44  Firing-orphan: a non-offline alert sticks firing when its source vanishes  [OPEN — escalated to operator as [FO-1], product/semantics call; found S96/D-160]
+
+For a non-`stream_offline` metric (node_cpu, viewer_drop, qoe…), a `firing` alert whose stream/node disappears ENTIRELY from the
+snapshot is never re-evaluated → stuck firing (no stale-firing sweep). D-160 does not evict firing entries by design (that would
+drop the alert without resolving it). A correct fix needs a firing-semantics decision (abandoned vs. still-firing) like D-156 —
+delicate on a live alert, and a blanket stale-firing sweep would wrongly resolve `stream_offline` (absence IS its alert).
+Surfaced to the operator; NOT auto-built.
 
 ### 2.41  Opt-in load-testing lane + Ant Media panel-revamp (G-27) assessment — operator-requested mid-session  [✅ DONE — docs + QA-tooling only, NO prod roll; load lane NOT yet run (needs the operator's dedicated instance)]  ✅ S94 (D-158, 2026-07-19, PR #183)
 

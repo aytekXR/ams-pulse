@@ -25,6 +25,12 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **Alert engine no longer leaks in-memory state (D-160).** The alert evaluator's per-rule,
+  per-stream firing-state map was never pruned, so on a long-running server with high stream
+  churn it grew without bound (one small entry per unique stream that ever matched a rule).
+  Settled entries whose stream has gone and whose cooldown has lapsed are now evicted each tick;
+  fire/resolve/cooldown behaviour is unchanged (an entry still accumulating toward a re-fire, or
+  still firing, is never evicted). Internal robustness; no configuration or API change.
 - **Wildcard "Stream offline" alert survives a brief disable / maintenance window (D-159).**
   A wildcard `stream_offline` critical alert whose watched stream goes offline and then has its
   rule briefly disabled (or enters a maintenance window) before the alert window elapses — then

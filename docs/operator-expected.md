@@ -1,5 +1,33 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-21, SESSION-95 — critical-alert + load-lane defects found & fixed; NO new operator action)
+# Operator TODO — the items only YOU can do (updated 2026-07-21, SESSION-96 — alert-engine memory-leak fixed; one new product question; NO blocking operator action)
 
+> # ▶ S96 STATUS (2026-07-21, D-160) — NO operator action required to continue. One internal fix shipped; one NEW product question for you (non-urgent).
+>
+> Still the low-frequency wait (date < the 07-23 §2.7 gate; Android build env still absent; no new priority from you). S96 took
+> the one genuine non-gated internal item queued last session and shipped it, then surfaced one new product question.
+>
+> **What got fixed (live in prod v0.4.0-131):**
+> - **The alert engine no longer slowly leaks memory.** Its internal per-rule/per-stream state map was never cleaned up, so on
+>   a long-running server that sees many distinct stream IDs it grew unbounded (~100 bytes per unique stream that ever matched
+>   a rule). Settled entries are now cleaned up once their stream is gone and any alert cooldown has passed. Alert
+>   fire/resolve/cooldown behaviour is unchanged — an adversarial review caught (and I fixed, pre-ship) an edge where the first
+>   version could have dropped an in-progress re-alert; the shipped version provably preserves behaviour.
+>
+> **★ ONE NEW product question (non-urgent, non-blocking) — `[FO-1]` firing-orphan:** for a **non-"stream offline"** alert
+> (e.g. a node CPU/RAM/disk alert, or a QoE alert), if the alert is currently **firing** and its stream/node then disappears
+> **entirely** from monitoring, the alert can stay stuck "firing" (there's no rule for "the thing I was watching vanished →
+> resolve"). Unlike "Stream offline" — where *gone* is literally the alert — for these metrics *gone* is ambiguous: should a
+> firing alert whose subject vanished auto-resolve after a grace period, or stay firing until you acknowledge it? I did **not**
+> guess (it changes how a live alert behaves). **Tell me your preference** — auto-resolve-after-grace (my lean) / stay-firing /
+> leave-as-is — and I'll build it; otherwise it stays documented (ROADMAP §2.44). This only affects node/QoE alerts on
+> infrastructure that comes and goes, and only once it's already firing — rare.
+>
+> **Your open items are unchanged** (run the load lane on a dedicated AMS — now with stronger prod-isolation guards from D-159;
+> the panel-revamp developer meeting; branch protection; Android build env; [20]; AMS trial expiry; rotate chat-exposed creds).
+> None blocks the loop. The next scheduled autonomous move is the **§2.7 CI-promotions on 2026-07-23**, or sooner if you install
+> the Android build env or name a priority.
+>
+> ---
+>
 > # ▶ S95 STATUS (2026-07-21, D-159) — NO operator action required. Two fixes shipped; one safety win before you run the load lane.
 >
 > The loop stayed in the low-frequency wait (date 07-21 < the 07-23 §2.7 gate; the Android build env you'll set up is still
