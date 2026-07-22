@@ -28,7 +28,7 @@ Pulse; the REST polling path does not contribute to that endpoint.
 
 The SDK is **MIT-licensed** (`sdk/beacon-js/LICENSE`), has **zero runtime
 dependencies**, and is marked `"sideEffects": false` for full tree-shaking.
-Bundle size is **~3.5 KB gzipped** — well inside the < 15 KB hard gate enforced
+Bundle size is **3.52 KB gzipped** — well inside the < 15 KB hard gate enforced
 in CI by `npm run size` (uses `@size-limit/preset-small-lib`).
 
 ---
@@ -40,7 +40,7 @@ in CI by `npm run size` (uses `@size-limit/preset-small-lib`).
 > **⚠️ Pro+ license required (F3 gate):**
 > The beacon ingest endpoint (`POST /ingest/beacon`) requires a Pro or higher
 > Pulse license. `CheckBeaconIngest()` in `server/internal/license/license.go`
-> (lines 336–342) rejects requests from Free-tier deployments with HTTP 403
+> (lines 405–413) rejects requests from Free-tier deployments with HTTP 403
 > and body `{"code":"LICENSE_REQUIRED","message":"..."}`. Configure
 > `PULSE_LICENSE_KEY` or `PULSE_LICENSE_FILE` before testing beacon delivery.
 > A deployment with neither env var set runs in Free tier.
@@ -59,8 +59,11 @@ curl -s -X POST https://pulse.example.com/api/v1/admin/tokens \
 ```
 
 The raw token value (`TokenCreated.token`) is returned **only on creation** — store
-it immediately. It has no expiry unless you delete it via the admin API. Pass it
-as the `token` field in `PulseConfig`.
+it immediately. It has no expiry unless you delete it via the admin API. Tokens are
+identifiable by their `plt_` prefix. Pass it as the `token` field in `PulseConfig`.
+
+Alternatively, create and copy an ingest token from **Settings › Ingest Tokens** in the
+Pulse web UI — the tab provides a one-click copy of a pre-filled SDK snippet.
 
 ### 2.3 Ingest URL
 
@@ -93,7 +96,16 @@ yarn add @pulse/beacon
 ```
 
 The package ships ESM (`dist/index.js`), CJS (`dist/index.cjs`), and full `.d.ts`
-declarations. Import whichever your bundler selects automatically.
+declarations. Import whichever your bundler selects automatically. For
+tree-shaking-friendly imports, `init` is also exported as a named re-export of
+`Pulse.init`:
+
+```ts
+import { init } from '@pulse/beacon';
+// equivalent to Pulse.init(...)
+
+import type { PulseConfig, SessionHandle, BeaconEventType, PlayerKind } from '@pulse/beacon';
+```
 
 ### 3.2 No-bundler IIFE build
 
@@ -204,11 +216,14 @@ const session = Pulse.init(
   'video.js',
 );
 
-// video.js wraps a native <video> element — pass it directly.
-const videoEl = player.el().querySelector('video');
-if (videoEl instanceof HTMLVideoElement) {
-  session.attachVideoElement(videoEl);
-}
+// Wait for the player to be ready before attaching.
+player.ready(() => {
+  // video.js wraps a native <video> element — pass it directly.
+  const videoEl = player.el().querySelector('video');
+  if (videoEl instanceof HTMLVideoElement) {
+    session.attachVideoElement(videoEl);
+  }
+});
 
 player.on('dispose', () => session.dispose());
 ```
@@ -274,6 +289,19 @@ every batch. Defaults to `'other'` if omitted.
 | `event(type: BeaconEventType, data?)` | Emit a custom event with optional data payload. |
 | `dispose()` | Flush the pending event queue via `navigator.sendBeacon`, emit `session_end`, remove all listeners. Safe to call multiple times. |
 
+Custom event examples:
+
+```ts
+// DRM failure not surfaced by the player adapter:
+session.event('error', { code: 'DRM_FAIL', message: 'License server unreachable', fatal: true });
+// Force a heartbeat checkpoint with a known watch duration:
+session.event('heartbeat', { watch_ms: 30000 });
+```
+
+Allowed `BeaconEventType` values: `session_start`, `startup_complete`, `heartbeat`,
+`rebuffer_start`, `rebuffer_end`, `error`, `bitrate_change`, `resolution_change`,
+`session_end`. Full data shape per type: `contracts/events/beacon-event.schema.json`.
+
 ---
 
 ## 7. What is collected
@@ -289,6 +317,10 @@ every batch. Defaults to `'other'` if omitted.
 | `player.kind` | `PlayerKind` value passed to `Pulse.init()`. |
 | `player.sdk_version` | SDK version string (`0.1.0`). |
 
+Each `Pulse.init()` call creates a distinct `session_id`, mapping to one playback
+attempt. Call `Pulse.init()` again for each new playback attempt — page refresh,
+new stream selection, or player re-creation.
+
 ### 7.2 Events and metrics
 
 | Event type | When fired | Key data fields |
@@ -302,6 +334,10 @@ every batch. Defaults to `'other'` if omitted.
 | `bitrate_change` | >10% bandwidth change (WebRTC); `LEVEL_SWITCHED` (hls.js) | `from_kbps`, `to_kbps`, `hls_level` |
 | `resolution_change` | `frameWidth`/`frameHeight` change (WebRTC) | `from`, `to` |
 | `session_end` | `session.dispose()` | `reason` — `watch_ms` is schema-defined but not auto-emitted on `session_end`; cumulative watch time arrives via `heartbeat` events |
+
+> **CMCD field alignment:** Key metric names follow Common Media Client Data (CMCD)
+> conventions — `bitrate_kbps` maps to CMCD `br`, `buffer_ms` maps to CMCD `bl`
+> (buffer length ahead), and `startup_ms` maps to delivery-latency at first frame.
 
 ### 7.3 Not collected
 

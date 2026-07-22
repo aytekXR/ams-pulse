@@ -1,11 +1,11 @@
 # Pulse — Known Limitations
 
-**Product:** Pulse v0.3.0 (D-093, S31)  
+**Product:** Pulse v0.4.0 (last refreshed D-161, S97, 2026-07-22)  
 **Source:** `docs/assessment/documentation-gaps.md` (DG-01 through DG-18),
 `docs/assessment/final-assessment.md` §1 and Appendix B,
 `docs/assessment/capability-map.md`
 
-This document lists every known operator-facing limitation of Pulse v0.3.0 in
+This document lists every known operator-facing limitation of Pulse v0.4.0 in
 priority order. Each entry states what the limitation means for you, and what
 workaround or roadmap path exists.
 
@@ -191,7 +191,7 @@ ingest.
 rather than receiving a push), `rtmpViewerCount` inline in BroadcastDTO is 0.
 The `broadcast-statistics` endpoint (now dead code, removed in S26/D-088 BUG-001
 FIXED) returned `-1` as an "untracked" sentinel for pull viewers — Pulse was
-never calling it. The inline inline RTMP count is the actual value for push
+never calling it. The inline RTMP count is the actual value for push
 streams and is correct there (AV-02, AV-16; DG-02).
 
 **Workaround:** RTMP pull viewer tracking is a roadmap P2 item that would require
@@ -509,26 +509,73 @@ for this release.
 
 ---
 
-### LIM-24: PDF export is not implemented (Phase 3 feature)
+### LIM-24: Interactive PDF export is not implemented (scheduled PDF reports ARE)
 
-**What it means for you:** The Reports page offers only CSV export
-(`GET /api/v1/reports/export?format=csv`). The "Export PDF" button
-has been removed. Requesting `format=pdf` returns `501 NOT_IMPLEMENTED`.
+**What it means for you:** The Reports page's on-demand export offers only CSV
+(`GET /api/v1/reports/export?format=csv`); requesting `format=pdf` there returns
+`501 NOT_IMPLEMENTED`, and the "Export PDF" button has been removed. **Scheduled
+reports are a separate, implemented path:** a report schedule with `format: pdf`
+generates a real PDF statement each run (Business+ tier), with the logo set by
+`PULSE_REPORT_LOGO_PATH`; the custom white-label header (your company name and
+address on the statement) additionally requires an Enterprise license with the
+`white_label` claim. (Verified D-161: `server/internal/api/export.go:40-44`;
+`server/internal/reports/scheduler.go:255-277`; `statement.go:194,265`.)
 
-**Root cause:** White-label PDF generation is a PRD Phase 3 deliverable
-(`docs/prd-report.md` §7 Phase 3: "white-label PDF, air-gapped licensing").
-It requires a server-side rendering dependency (HTML→PDF) and per-operator
-branding assets that are not yet in scope. Shipping a button that 404s
-is worse than not shipping the button.
+**Root cause:** The interactive export endpoint predates the scheduled-statement
+renderer and was shipped CSV-first; wiring the on-demand path to the PDF renderer
+is pending. Shipping a button that errors is worse than not shipping the button.
 
-**Workaround:** Use CSV export and open in a spreadsheet to generate a PDF
-from there, or use your browser's Print → Save as PDF on the reports page.
-(The CSV is formula-injection-safe as of D-106 — publisher-controlled cells that
-begin with `= + - @` are neutralized, so opening the export in a spreadsheet
-cannot execute an injected formula.)
+**Workaround:** For a one-off PDF, create a schedule with `format: pdf` for the
+period you need (then delete it), use CSV export in a spreadsheet, or use your
+browser's Print → Save as PDF. (The CSV is formula-injection-safe as of D-106 —
+publisher-controlled cells that begin with `= + - @` are neutralized, so opening
+the export in a spreadsheet cannot execute an injected formula.)
 
-**Roadmap:** Phase 3 (PRD §7). No ETA. File a feature request if this is
-blocking your use case.
+**Roadmap:** Wire `GET /reports/export?format=pdf` to the existing statement
+renderer. No ETA. File a feature request if this is blocking your use case.
+
+---
+
+### LIM-25: User management has no web UI yet (API only)
+
+**What it means for you:** Settings → Users shows "User management — coming in a
+future update." Creating, updating, and deleting Pulse users works today only via
+the API: `GET/POST /api/v1/admin/users`, `PUT/DELETE /api/v1/admin/users/{userId}`
+(admin-scoped token required; every change is recorded in the audit log). SSO/OIDC
+user provisioning (Enterprise) is unaffected — first-login provisioning works end
+to end.
+
+**Root cause:** The users API shipped with full test coverage (D-100); the
+management UI tab was deferred behind higher-priority dashboard work.
+
+**Workaround:** Use the API directly (see `docs/api-guide.md`), or manage access
+via API tokens (Settings → API Tokens, which has a full UI) instead of named users.
+
+**Roadmap:** UI tab planned; no ETA.
+
+---
+
+### LIM-26: A firing alert can outlive a source that disappears entirely (non-"Stream offline" rules)
+
+**What it means for you:** If a node/QoE/threshold alert (anything except
+"Stream offline") is currently **firing** and the stream or node it watches then
+vanishes completely from monitoring (deleted, renamed, decommissioned), the alert
+stays "firing" — there is no rule that says "the thing I was watching is gone,
+so resolve." "Stream offline" rules are unaffected (absence *is* their signal,
+and they auto-resolve correctly, D-157/D-159). This only occurs when a source
+disappears *while* its alert is firing — rare outside high-churn labs.
+
+**Root cause:** Resolving on disappearance is ambiguous for value-threshold
+metrics (gone ≠ recovered). The correct behavior — auto-resolve after a grace
+window vs. stay firing until acknowledged — is an open product decision
+(`agents/handoffs/ROADMAP-V2.md` §2.44, `[FO-1]`), deliberately not guessed.
+
+**Workaround:** Delete or disable the rule to clear the stuck alert (re-enabling
+a rule is safe — its evaluation state is rebuilt from live data on the next
+tick), or let the source return and recover normally.
+
+**Roadmap:** Pending the §2.44 product ruling; the fix ships once the semantics
+are chosen.
 
 ---
 
@@ -541,6 +588,7 @@ blocking your use case.
 | D-093 (S31, 2026-07-14) | LIM-17 roadmap → Validation status: TC-I-05-SRT PASS (F3, first live SRT run, 2/2 assertions); added LIM-23: SRT streams attributed as RTMP in protocol breakdown (AMS-side publishType="RTMP" fact, F5, live-observed S31); updated product version header; count 22 → 23 |
 | D-094 (S32, 2026-07-14) | Added LIM-24: PDF export not implemented (Phase 3); removed Export PDF button from Reports page; implemented GET /api/v1/reports/export?format=csv; count 23 → 24 |
 | D-106 (S44, 2026-07-15) | Security hardening (not a new limitation): CSV export/statements now neutralize formula-injection cells (LIM-24 workaround note updated); email/SMTP channel creds encrypted at rest; OIDC state cookie Secure on HTTPS. No count change |
+| D-161 (S97, 2026-07-22) | Marketplace-docs fact sweep: header → v0.4.0; LIM-24 corrected (scheduled PDF reports ARE implemented, Business+; only interactive export is CSV-only); added LIM-25 (user management API-only, no UI tab yet) and LIM-26 (firing alert can outlive a vanished source, pending §2.44 `[FO-1]` ruling); count 24 → 26 |
 
 ---
 

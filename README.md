@@ -17,6 +17,8 @@ For a guided 15-minute install wizard, see [deploy/quickstart/](deploy/quickstar
 
 **Released image:** `ghcr.io/aytekxr/ams-pulse` — cosign-signed, multi-arch (amd64/arm64),
 SBOM + provenance, published by a CI-gated tag pipeline.
+**The registry is private** — authenticate before pulling:
+`docker login ghcr.io` with a GitHub personal access token (read:packages scope).
 Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.4.0**).
 
 **Docker Compose (supported production path):**
@@ -78,8 +80,8 @@ PULSE_SECRET_KEY=$(openssl rand -hex 32) \
 
 ## Feature status
 
-Last updated: **v0.2.0 GA (2026-07-09, D-065/D-066)** — all 10 PRD features shipped; prod
-live behind Caddy TLS against a real AMS 3.0.3. Product one-pager: [docs/product.md](docs/product.md).
+Last updated: **2026-07-22 (D-161)** — all 10 PRD features shipped; prod live at **v0.4.0**
+behind TLS against a real AMS 3.0.3 Enterprise. Product one-pager: [docs/product.md](docs/product.md).
 
 | Feature | PRD ref | Status | Notes |
 |---|---|---|---|
@@ -90,12 +92,12 @@ live behind Caddy TLS against a real AMS 3.0.3. Product one-pager: [docs/product
 | QoE summary (`/qoe/summary`) | F3 | **Shipped** | Queries `rollup_qoe_1h`; `startup_p50_ms` non-zero (250 ms measured); `bitrate_kbps_p50` field |
 | Ingest health monitoring | F4 | **Shipped** | Health score formula; `health_score` 0–100 scale; ingest timeseries + drop_events in API; 250 µs detection (budget 15 s) |
 | Core alerting | F5 | **Shipped** | Email (Free+), Slack/Telegram (Pro+), PagerDuty/Webhook (Business+); `muted=true` suppresses notifications; `group_by` collapses storm alerts; `node_down` fires on node absence; maintenance windows with range cron syntax |
-| Usage / billing reports | F6 | **Shipped** | Business+ tier required; CSV + PDF; tenant mapping; S3 export; ±1% reconciliation; 5-field cron schedules work; `peak_concurrency` sourced from true windowed max (`rollup_concurrency_1d`) |
+| Usage / billing reports | F6 | **Shipped** | Business+ tier required; interactive export CSV-only; scheduled reports CSV **or** PDF per schedule (white-label header Enterprise); tenant mapping; S3 export; ±1% reconciliation; 5-field cron schedules work; `peak_concurrency` sourced from true windowed max (`rollup_concurrency_1d`) |
 | Cluster fleet view | F7 | **Shipped** | Auto-discovery ≤ 30 s (budget 2 min); real origin/edge roles; node version field populated |
 | Data API + Prometheus | F8 | **Shipped** | 5 bounded metrics; scrape token uses constant-time compare; Grafana starter panels |
 | Helm install path | §7.10 | **Shipped** (authored) | Lint and template verified; cluster deploy deferred D-002 |
 | Licensing + tier enforcement | — | **Shipped** | 4-tier: Free/Pro/Business/Enterprise (PRD §7.11); ed25519 verification; 403 on gated features; token kind enforcement |
-| API (REST + WebSocket) | — | **Shipped** | 32 paths, 46 ops, OpenAPI-conformant; WS origin enforcement; idempotent DELETE documented |
+| API (REST + WebSocket) | — | **Shipped** | 42 paths, 59 ops, OpenAPI-conformant; WS origin enforcement; idempotent DELETE documented |
 | Onboarding wizard | §7.12 | **Shipped** | 4-step first-run flow |
 | Anomaly detection | F9 | **Shipped** (Wave 3-MVP + Wave-3-Plus, Enterprise) | Welford baselines; σ=4.0; 0.259 false alarms/node-week (target <1); minSamples=30 warmup; hysteresis cooldown; epsilon floor — constant-baseline deviations now flagged |
 | Synthetic probes | F10 | **Shipped** (Wave 3-MVP + Wave-3-Plus, Pro+) | HLS full — media and master playlists; `ttfb_ms` + `segment_ttfb_ms` stored separately; bitrate >0 for master playlists; dash full MPD+segment (D-073); webrtc signaling+ICE+RTP stats rtt/jitter/loss (D-072/D-074/D-075); rtmp TCP handshake (D-073); 60 s config refresh; 4-worker pool; 90-day result TTL |
@@ -172,6 +174,15 @@ Cluster fleet discovery ──────────────────�
 
 | Document | Description |
 |---|---|
+| [docs/overview.md](docs/overview.md) | **Start here** — evaluator-facing overview: what Pulse is, architecture + deployment + data-flow diagrams, tiers |
+| [docs/user-guide.md](docs/user-guide.md) | Per-screen walkthrough of the web UI (all pages, onboarding, tier gates) |
+| [docs/admin-guide.md](docs/admin-guide.md) | Administrator reference: complete config-variable table, tokens, users, retention, ports, proxies |
+| [docs/api-guide.md](docs/api-guide.md) | API quickstart (auth, WS, ingest, rate limits) + rendered OpenAPI reference (`docs/api/index.html`) |
+| [docs/faq.md](docs/faq.md) | Operator FAQ (install, licensing, privacy, features, operations) |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | Symptom → cause → fix index |
+| [docs/support.md](docs/support.md) | Support policy (channels, SLA targets, bug-report guide) — pending operator finalization |
+| [docs/licensing-public.md](docs/licensing-public.md) | Licensing explained: PolyForm NC + MIT SDK + commercial tiers + trial (draft) |
+| [docs/marketplace/submission-package.md](docs/marketplace/submission-package.md) | Ant Media Marketplace submission pack index (listing, screenshots, process, meeting brief) |
 | [docs/product.md](docs/product.md) | Product one-pager: what Pulse is, distilled PRD, brand-kit design prompt |
 | [docs/prd-report.md](docs/prd-report.md) | Full PRD (§7) + AMS marketplace/market analysis (§§1–6) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Component diagram, boundaries, performance budgets, Wave-2 implementation status, ingest health score formula |
@@ -182,7 +193,7 @@ Cluster fleet discovery ──────────────────�
 | [docs/runbooks/install.md](docs/runbooks/install.md) | Install guide: Docker Compose + QA-verified local binary + Helm (Kubernetes) |
 | [docs/runbooks/alerting.md](docs/runbooks/alerting.md) | Alert rule semantics, channel setup (Email/Slack/Telegram/PD/Webhook), maintenance windows, HMAC verification |
 | [docs/runbooks/reports.md](docs/runbooks/reports.md) | Usage reports: tenant mapping, egress estimation, schedule setup, S3 export, reconciliation |
-| [docs/guides/beacon-sdk.md](docs/guides/beacon-sdk.md) | Beacon SDK integration: AMS WebRTC, hls.js, video.js, native video; sampling; privacy |
+| [docs/beacon-sdk.md](docs/beacon-sdk.md) | Beacon SDK integration: AMS WebRTC, hls.js, video.js, native video; sampling; privacy |
 | [docs/guides/prometheus.md](docs/guides/prometheus.md) | Prometheus scrape config, metric reference, Grafana starter panels |
 | [docs/guides/anomaly-detection.md](docs/guides/anomaly-detection.md) | F9 anomaly detection: Welford statistical model, sensitivity calibration, false-alarm math, tuning min_sigma, API usage (Enterprise) |
 | [docs/runbooks/probes.md](docs/runbooks/probes.md) | F10 synthetic probes: creating probes, HLS/protocol coverage, result interpretation, synthetic vs organic labeling (Pro+) |
@@ -192,7 +203,7 @@ Cluster fleet discovery ──────────────────�
 | [sdk/beacon-js/README.md](sdk/beacon-js/README.md) | Beacon SDK API reference and player integration guide |
 | [deploy/helm/pulse/README.md](deploy/helm/pulse/README.md) | Helm chart values table, secrets setup, HA deployment, resource sizing |
 | [contracts/README.md](contracts/README.md) | Contract surface, codegen commands, CI validation |
-| [contracts/openapi/pulse-api.yaml](contracts/openapi/pulse-api.yaml) | Full OpenAPI 3.1 spec (32 paths, 46 operations, 66 schemas) |
+| [contracts/openapi/pulse-api.yaml](contracts/openapi/pulse-api.yaml) | Full OpenAPI 3.1 spec (42 paths, 59 operations, 73 schemas) |
 | [agents/README.md](agents/README.md) | Multi-agent build workflow |
 | [deploy/runbooks/upgrade-rollback.md](deploy/runbooks/upgrade-rollback.md) | Upgrade + rollback: 5-overlay compose command, stamped-build pattern, rollback tags, ClickHouse DDL stance |
 | [deploy/runbooks/monitoring.md](deploy/runbooks/monitoring.md) | Monitoring: backup daemon health, alert_history cap, CH disk, Prometheus metrics, WARN log taxonomy |
@@ -239,7 +250,7 @@ sqlite3 :memory: < contracts/db/meta/0001_init.sql        # meta DDL
 ## Roadmap (from PRD §7.14)
 
 - **Wave 1 / MVP (complete):** Collector, live ops dashboard (F1), historical analytics (F2), core alerting (F5), Docker Compose installer, licensing.
-- **Wave 2 (complete):** QoE beacon SDK (F3, 3.44 KB gzip), ingest health (F4, 250 µs detection), usage/billing reports (F6, ±1% reconciliation), cluster fleet view (F7, ≤30 s discovery), full data API + Prometheus (F8), Telegram/PD/webhook channels, Helm chart.
+- **Wave 2 (complete):** QoE beacon SDK (F3, now 3.52 KB gzip), ingest health (F4, 250 µs detection), usage/billing reports (F6, ±1% reconciliation), cluster fleet view (F7, ≤30 s discovery), full data API + Prometheus (F8), Telegram/PD/webhook channels, Helm chart.
 - **Wave 3-MVP (complete):** Anomaly detection (F9, Enterprise — Welford baselines, 0.259 false alarms/node-week), synthetic probes (F10, Pro+ — HLS full coverage; webrtc/rtmp/dash grew real probes in D-072…D-075).
 - **V3a/V3b fix-loop (complete, 2026-06-15):** Beacon round-trip end-to-end (SDK header, main-port sink, Pro+ gate, geo enrichment); geo/device analytics; QoE rollup queries; ingest health non-zero; alerting muted/group_by/node_down; 4-tier license model (Business tier); report tier gates; 5-field cron; security hardening (CT compare, WS origin, token kind). See `docs/ARCHITECTURE.md` for full defect list.
 - **Wave-3-Plus (complete, 2026-06-15):** True windowed peak concurrency in billing (`rollup_concurrency_1d`, maxState/maxMerge; VD-38); alert detect→notify wall-clock test passes at 201 ms (VD-31); 13-month dimensional GROUP BY query at 145 ms (VD-18/C9b); HLS probe segment TTFB (`segment_ttfb_ms`) and master-playlist variant-following for real bitrate; anomaly epsilon floor — constant-baseline deviations now flagged; Kafka lag + parse_errors in `/healthz`.

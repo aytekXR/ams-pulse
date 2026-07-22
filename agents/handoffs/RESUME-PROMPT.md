@@ -11,7 +11,42 @@
 
 ---
 
-## ▶ START HERE (next session — SESSION-97 = ★ MARKETPLACE DOCUMENTATION PACK; operator directive 2026-07-22 re-scopes the wait-gate)
+## ▶ START HERE (next session — execute `sessions/SESSION-98.md`: §2.7 CI-promotions, NOW UNLOCKED)
+
+**Session 2026-07-22/23 result: D-161 — S97 executed the operator's marketplace directive and SHIPPED THE COMPLETE
+DOCUMENTATION PACK** (docs + listing assets ONLY — no server/web source change, NO prod roll; prod stays
+**v0.4.0-131-g6b5bd38**). 12 new docs (overview w/ diagrams, user guide, admin guide w/ all 69 config vars, API guide +
+rendered OpenAPI HTML, FAQ, troubleshooting, public licensing, support skeleton, release notes, submission-process,
+developer-meeting brief, **submission-package.md = the index**); staleness sweep fact-checked against code via a
+39-item verified ledger (`agents/handoffs/validation/S97-fact-ledger.md`) — real API counts 42/59/73, LIM-24 corrected
+(scheduled PDF IS implemented), +LIM-25/LIM-26, CHANGELOG **[0.4.0] reconstructed** (D-076…D-089), `.env.example` S3
+var names fixed (were never read by the server), SDK size 3.52 KB everywhere; **all 6 listing screenshots + 9
+user-guide shots now capture automatically from the live app** (`qa/marketplace/capture-live-screenshots.mjs`);
+**G-27 pre-answered from the PUBLIC panel repo** (`Management-panel-reborn` @ c4a0235: 100% `/rest/v2`, auth unchanged,
+paginated cluster/nodes evidence for G-21; ships analytics CHARTS but no alerting/QoE/reports/probes/anomalies →
+listing re-positioned on differentiators); **publicly stated first-year marketplace revenue = 100%/no-commission**
+(post-year-1 = meeting ask; the PRD's 20–30% is dead). A 16-agent adversarial verify fixed ~70 defects in the generated
+docs pre-merge (incl. hallucinated alert channels + an over-limit listing description). PR #—see D-161. **The
+marketplace submission is now gated ONLY on the operator** (sequence in operator-expected.md ★S97 block; index:
+`docs/marketplace/submission-package.md`).
+
+**★ SESSION-98 = §2.7 CI-PROMOTIONS (date-gate ≥ 2026-07-23 — UNLOCKED).** Drop `web-e2e`'s `continue-on-error: true`
+in `.github/workflows/ci.yml`, `actionlint`, hand the operator the branch-protection FULL-LIST PUT (adds
+`e2e`/`csp-e2e`/`web-e2e`/`docker-build`/`sdk-swift`). CI-config only; no prod roll. Branch `s98-d162-ci-promotions`.
+At open run the standard gate (date / Android toolchain / operator-expected top block — a delivered capacity number,
+G-27 meeting answers, D-081 approval, or an `[FO-1]`/[20] ruling outranks Lead A). **After §2.7 the non-gated backlog
+is EMPTY → SESSION-99 = the marketplace-wait** (everything left is operator-external, tooling-blocked, or a product
+call — do NOT manufacture arcs). See `sessions/SESSION-98.md`. **Process gotcha recorded (D-161): Workflow subagents
+cannot read the session scratchpad — share context via repo paths.**
+
+**⚠ OPERATOR ITEMS OPEN (operator-expected.md ★S97 — the submission sequence):** (1) D-081 review of the docs pack →
+(2) support channel/SLA + pricing + MaxNodes(Pro 10 vs Business 5) + trial decisions → (3) load lane on a PAYG AMS
+(capacity number) → (4) record the demo video (script ready) → (5) GHCR → public → (6) reply to Ankush, request the
+developer meeting (`docs/marketplace/developer-meeting-brief.md`). **Carried:** `[FO-1]` ruling (=LIM-26); [20];
+§2.1 branch-protection PUT (S98 hands you the updated list); Android JVM/Gradle env (standing GO); AMS trial/PAYG;
+rotate chat-exposed creds.
+
+## (superseded — EXECUTED as D-161, see above) ▶ was: START HERE (SESSION-97 = ★ MARKETPLACE DOCUMENTATION PACK; operator directive 2026-07-22 re-scopes the wait-gate)
 
 **Operator directive (2026-07-22, delivered out-of-band in a planning session):** prepare the Ant Media Marketplace
 documentation pack — generate EVERY document required for Marketplace submission in ONE session, with minimal further

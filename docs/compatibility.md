@@ -1,7 +1,7 @@
 # Pulse — AMS Version Compatibility Matrix
 
 **Product:** Pulse: Self-Hosted Analytics, QoE Monitoring and Alerting for Ant Media Server  
-**Last updated:** S27 / D-089 (2026-07-13)
+**Last updated:** D-089 (2026-07-13); G-27 section added D-161 (2026-07-22)
 
 ---
 
@@ -27,7 +27,7 @@ runs Go in-process mock profiles — not live containers.
 ### AMS 3.0.3 Enterprise Edition (build 20260504\_1443)
 
 **Validation program:** Sessions S17–S18, 2026-07-11
-(`qa/realams/` harness against `161.97.172.146:5080`)
+(`qa/realams/` harness against a private AMS VPS)
 
 | Scenario class | Result |
 |----------------|--------|
@@ -166,14 +166,16 @@ instance size X; budgets L-1…L-9 met") and attach `LOAD-REPORT.md` to the mark
 
 ---
 
-## Panel-revamp (G-27) compatibility — PENDING ANKUSH CONFIRMATION
+## Panel-revamp (G-27) compatibility — public-repo evidence REASSURING; final confirmation at the developer meeting
 
 Ant Media is revamping its web panel. The panel is a **frontend/UX** layer over the same AMS backend
 whose REST v2 API Pulse polls; a UI overhaul does **not** by itself change backend paths or response
 shapes. The risk is that the revamp is accompanied by a REST re-versioning or an auth-flow change. The
-staging panel is confidential (manual, read-only review only) and no API changelog has been received, so
-**the revamp's actual scope is unassessed** — this section pins the exposure so it can be confirmed at
-the developer meeting and re-checked against the shipping AMS build (via `qa/tools/ams-drift-watch.sh`).
+staging panel is confidential (manual, read-only review only) and no API changelog has been received —
+but the revamp now has a **public GitHub repo** (`ant-media/Management-panel-reborn`), and a code-level
+review of it (2026-07-22, see "Public-repo evidence" below) largely pre-answers the exposure questions.
+This section pins the exposure so it can be finally confirmed at the developer meeting and re-checked
+against the shipping AMS build (via `qa/tools/ams-drift-watch.sh`).
 
 **Console-scoped paths (share the panel's management backend — revamp-sensitive, unverified):**
 
@@ -198,6 +200,32 @@ planned; (2) does the new panel introduce a new auth mechanism replacing the coo
 3.0.3 cluster mode, is `GET /rest/v2/cluster/nodes` a flat array or the paginated `…/{offset}/{size}`
 form (the **unverified** G-21 claim — do not change `amsclient` until confirmed). See
 `docs/operator-expected.md` (top banner) for the full business + dev assessment.
+
+### Public-repo evidence (2026-07-22, `ant-media/Management-panel-reborn` @ `c4a0235`)
+
+Code-level review of the panel rewrite's public repo (public information only; the confidential
+staging instance was not accessed; the public repo may lag their private/shipping state):
+
+- **Q1 largely answered — `/rest/v2` survives.** The panel's single API chokepoint is
+  `MGMT_PREFIX = '/rest/v2'` (`src/lib/api/client.ts`); per-app calls use `/{app}/rest/v2/…`. A sweep
+  of all 232 source files finds **zero** `/rest/v3`, `/api/v3`, or new-generation paths.
+- **Q2 largely answered — auth flow unchanged.** Login is still `POST /rest/v2/users/authenticate`
+  (client-side MD5 password + HttpOnly session cookie, `credentials: 'include'`); **no OIDC/OAuth/JWT
+  libraries** exist in its `package.json`. Both Pulse auth modes (cookie login and the
+  `PULSE_AMS_AUTH_TOKEN` bearer bypass) remain valid against this design.
+- **G-21 evidence strengthened (still not settled).** The new panel calls the **paginated**
+  `GET /rest/v2/cluster/nodes/{offset}/{size}` form (`src/lib/api/endpoints/cluster.ts`) — consistent
+  with the G-21 claim that the paginated form is the canonical cluster API. This does not prove the
+  unpaginated form 404s; `amsclient` stays unchanged until a live cluster (or the meeting) confirms.
+- **New additive endpoints appear** (`/system-resources/history`, `/applications/{name}/metrics-history`,
+  `/broadcasts/{id}/metrics-history`) backed by an unreleased AMS branch per the repo's status doc —
+  additive API evolution, not a breaking rework; potential future ingest sources for Pulse.
+- **Competitive scope now partially confirmed:** the new panel ships real analytics *visualizations*
+  (per-stream bitrate/viewer/speed history, per-app viewer sparklines, system-resource/GPU trends,
+  WebRTC client stats) — but **no alerting, no thresholds/notification channels, no player-side QoE,
+  no historical rollups/reports, no probes, no anomaly detection**. Pulse's differentiation shifts
+  from "AMS has no analytics" to "AMS's new panel charts live server metrics; Pulse adds alerting,
+  viewer QoE, long-horizon analytics, billing reports, probes, and anomaly detection."
 
 ---
 

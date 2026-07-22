@@ -1,5 +1,50 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-21, SESSION-96 — alert-engine memory-leak fixed; one new product question; NO blocking operator action)
+# Operator TODO — the items only YOU can do (updated 2026-07-22, SESSION-97 — ★ the MARKETPLACE DOCS PACK is DONE; the submission now waits on YOUR decisions)
 
+> # ▶ ★ S97 STATUS (2026-07-22, D-161) — Your directive executed: the complete Ant Media Marketplace documentation pack is generated. Nothing blocks the loop; **the marketplace submission is now gated on you.**
+>
+> You said "prepare everything for the marketplace and continue autonomously." Done this session (docs + listing assets
+> only — **no server/web code changed, no prod roll**; prod stays v0.4.0-131):
+>
+> - **12 new documents**: evaluator overview (with architecture diagrams), user guide (per-screen), administrator guide
+>   (all 69 config vars, code-verified), API guide + rendered HTML API reference, FAQ, troubleshooting,
+>   public licensing page, support-policy skeleton, marketplace release notes, submission-process doc,
+>   developer-meeting brief, submission-package index (`docs/marketplace/submission-package.md` — **start there**).
+> - **Staleness swept, fact-checked against code**: SECURITY.md (said v0.1.x), VERSION file (said 0.1.0), README API
+>   counts (real: 42 paths/59 ops), SDK size (real: 3.52 KB), LIM-24 corrected (**scheduled PDF reports DO work**,
+>   Business+ — only the interactive export button is CSV-only), two new honest limitations (LIM-25 user-management
+>   UI pending; LIM-26 the `[FO-1]` firing-orphan), and the missing **CHANGELOG `[0.4.0]` section reconstructed**
+>   (D-076…D-089, every bullet attributed).
+> - **All 6 listing screenshots now capture automatically from the REAL app** (`node
+>   qa/marketplace/capture-live-screenshots.mjs`, 1920×1080, verified populated) — the 3 that were "operator-manual"
+>   (Alerting, Reports, Probes) included. Plus 9 user-guide shots. A 3-min demo-video script/storyboard is written;
+>   **recording is yours**.
+> - **★ Intelligence you should read (PUBLIC info, safe to cite):** the panel revamp has a public repo
+>   (`ant-media/Management-panel-reborn`). Code review pre-answers the G-27 meeting questions: it is built 100% on
+>   `/rest/v2` (zero v3 paths) with the **unchanged cookie auth** — our integration survives. It also shows the new
+>   panel **ships real analytics charts** (per-stream bitrate/viewer history, system trends) but **no alerting, no
+>   QoE, no reports/probes/anomalies** — the competitive risk is now partially real, and our listing copy has been
+>   re-positioned around what the panel does NOT do. Also: Ant Media **publicly states first-year marketplace revenue
+>   is 100% yours, no commission** (post-year-1 undisclosed → get it in writing at the meeting). Details:
+>   `docs/compatibility.md` §G-27 + `docs/marketplace/developer-meeting-brief.md`.
+>
+> **★ YOUR SUBMISSION SEQUENCE (in order — everything is prepared for each step):**
+> 1. **Review the pack** (D-081 gate): `docs/marketplace/submission-package.md` lists every artifact + its state.
+> 2. **Decide**: support channel + SLA (`docs/support.md` boxes) · pricing + the Pro(10)/Business(5) MaxNodes
+>    inversion (`docs/marketplace/listing-draft.md` flags it) · trial mechanics (14-day Pro proposed).
+> 3. **Run the load lane** on a dedicated PAYG AMS (15 min setup; yields the capacity number for the listing).
+> 4. **Record the demo video** (`docs/marketplace/demo-video-script.md`) — or tell the loop to attempt a Playwright
+>    rough cut.
+> 5. **Flip GHCR public** at the release reviewers should pull.
+> 6. **Reply to Ankush**: docs ready → request the developer meeting. Bring
+>    `docs/marketplace/developer-meeting-brief.md` (agenda, pre-answered technical questions, business asks).
+>
+> **Carried items (unchanged):** `[FO-1]` firing-orphan ruling ([a] auto-resolve-after-grace / [b] stay-firing /
+> [c] leave-as-is — now also documented as LIM-26); [20] audit-read model; §2.1 branch-protection PUT; Android
+> JVM+Gradle env (standing GO); AMS trial-licence expiry / PAYG; rotate chat-exposed creds. **§2.7 CI-promotions
+> auto-unlock 2026-07-23 — the loop takes that next session.**
+>
+> ---
+>
 > # ▶ S96 STATUS (2026-07-21, D-160) — NO operator action required to continue. One internal fix shipped; one NEW product question for you (non-urgent).
 >
 > Still the low-frequency wait (date < the 07-23 §2.7 gate; Android build env still absent; no new priority from you). S96 took
