@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Beyond Kaira</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: grid; place-items: center; padding: 6vmin;
+    background: #0b0d10; color: #e7ebf0;
+    -webkit-font-smoothing: antialiased;
+  }
+  @media (prefers-color-scheme: light) {
+    body { background: #f7f8fa; color: #1a1f26; }
+    .sub { color: #55606e; }
+    .dot { background: #1a1f26; }
+    a.cta { border-color: rgba(0,0,0,.18); color: #1a1f26; }
+    a.cta:hover { background: rgba(0,0,0,.05); }
+  }
+  main { max-width: 34rem; text-align: center; }
+  .mark {
+    display: inline-flex; align-items: center; gap: .55rem;
+    font-weight: 650; letter-spacing: .01em; font-size: 1.05rem;
+  }
+  .dot { width: .5rem; height: .5rem; border-radius: 50%; background: #e7ebf0; display: inline-block; }
+  h1 { font-size: clamp(1.9rem, 6vw, 3rem); line-height: 1.08; margin: 1.6rem 0 0; font-weight: 680; letter-spacing: -0.02em; }
+  .sub { margin: 1rem 0 0; font-size: 1.05rem; line-height: 1.6; color: #9aa6b2; }
+  .actions { margin-top: 2.2rem; display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; }
+  a.cta {
+    text-decoration: none; padding: .7rem 1.15rem; border-radius: .6rem;
+    border: 1px solid rgba(255,255,255,.16); color: #e7ebf0; font-weight: 550; font-size: .95rem;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  a.cta:hover { background: rgba(255,255,255,.06); }
+  footer { margin-top: 3rem; font-size: .8rem; opacity: .55; }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+  <main>
+    <div class="mark"><span class="dot"></span> Beyond&nbsp;Kaira</div>
+    <h1>Something is on the way.</h1>
+    <p class="sub">We are building here. In the meantime, our products live on their own subdomains.</p>
+    <div class="actions">
+      <a class="cta" href="https://pulse.beyondkaira.com">Open Pulse&nbsp;→</a>
+      <a class="cta" href="mailto:hello@beyondkaira.com">Get in touch</a>
+    </div>
+    <footer>© <span id="y">2026</span> Beyond Kaira · <a href="https://pulse.beyondkaira.com">pulse.beyondkaira.com</a></footer>
+  </main>
+</body>
+</html>
