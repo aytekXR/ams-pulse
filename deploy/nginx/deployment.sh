@@ -6,10 +6,13 @@
 # SCOPE. This is EDGE-migration tooling, not a rewrite of how Pulse runs. Pulse
 # stays a docker-compose stack (Go server + ClickHouse + Kafka). This script
 # does exactly: build -> up (with the loopback-publish overlay) -> health-gate
-# the app on its PRIVATE loopback port. It does NOT touch nginx, :443, or Caddy
-# — the edge cutover is owner-run and windowed (see deploy/MIGRATION.md). Run it
-# to prove the app answers on 127.0.0.1 BEFORE you flip the edge, and on every
-# app redeploy after.
+# the app on its PRIVATE loopback port. It does NOT touch nginx, :443, or the live
+# shared Caddy: docker-compose.nginx-edge.yml `!reset`s the caddy service out of
+# the merged config, so `up -d` can never recreate/stop pulse-prod-caddy-1 (it is
+# left as an untouched orphan). Only the `pulse` app container is reconciled (a
+# brief app recreate onto loopback). The edge cutover itself is owner-run and
+# windowed (see deploy/MIGRATION.md). Run it to prove the app answers on 127.0.0.1
+# BEFORE you flip the edge, and on every app redeploy after.
 #
 # SELF-CONTAINED. No bin/repo, no repo_cli, no external health-check.sh. The
 # health gate below is its own bounded curl loop asserting a REAL signal (the

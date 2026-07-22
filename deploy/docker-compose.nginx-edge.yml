@@ -45,3 +45,14 @@ services:
       - "127.0.0.1:8090:8090"   # UI + API + /healthz + WebSocket
       - "127.0.0.1:8091:8091"   # beacon ingest  (nginx /beacon/* , prefix stripped)
       - "127.0.0.1:8092:8092"   # AMS webhooks    (nginx /webhook/*)
+
+  # Drop the hardened overlay's local-verify Caddy from the MERGED config so a
+  # host-nginx bring-up (deployment.sh, or the command above) can NEVER recreate
+  # or stop the LIVE shared TLS terminator pulse-prod-caddy-1 (project pulse-prod).
+  # WITHOUT this, `docker compose -p pulse-prod ... up -d` reconciled that running
+  # container to hardened.yml's loopback/internal-CA `caddy` definition and tore
+  # down public :443 for EVERY site — during a step documented as non-destructive.
+  # `!reset null` removes the service entirely; the running live Caddy is left as
+  # an untouched orphan (compose warns, does not remove — no --remove-orphans here)
+  # until the windowed, owner-run cutover in deploy/MIGRATION.md stops it on purpose.
+  caddy: !reset null
