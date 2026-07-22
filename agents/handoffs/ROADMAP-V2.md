@@ -34,6 +34,56 @@
 | Known hot path | O(N²) `rebuildSnapshot` at poll boundaries; mitigated to 1.0 vCPU (D-065 WO-C); real fix is post-GA backlog |
 | Open operator items | O7 (GHCR public), U3 (Pro+ license key — optional QoE unlock) |
 
+## Future roadmap — consolidated OPEN / gated items (as of 2026-07-22, S96 close)
+
+> **Why this section exists:** as of S96 (D-160) the **concrete non-gated autonomous backlog is
+> drained** — S89/S91/S92 swept the codebase 3×, S95 swept the last un-swept D-157/D-158 delta
+> (7 defects, 6 fixed), and S96 closed §2.43. Everything still open needs **a date, a tooling
+> install, or an operator decision/action** — none is cleanly autonomous. This is the forward
+> plan, grouped by what unblocks each. The autonomous loop keeps checking the two-minute gate
+> each session and picks any item up the moment its blocker clears. Detail lives in the numbered
+> §2 entries; operator-facing asks live in `docs/operator-expected.md`. Prod is stable at
+> **v0.4.0-131-g6b5bd38** — nothing here is required to keep the system healthy.
+
+### A. Date-gated — auto-unlocks, NO human needed
+- **§2.7 CI job promotions** — unlocks **≥ 2026-07-23**. Drop `web-e2e`'s `continue-on-error`
+  in `.github/workflows/ci.yml`, run `actionlint`, and hand the operator the branch-protection
+  FULL-LIST PUT (adds `e2e`/`csp-e2e`/`web-e2e`/`docker-build`/`sdk-swift`). The loop takes the
+  CI-config half automatically on the first session at/after that date. (CI-config change; no
+  prod roll.)
+
+### B. Tooling-blocked — operator provisions the environment
+- **§2.12 Android Kotlin SDK** — needs a JVM+Gradle toolchain (Temurin 21 + Gradle) on the host.
+  **Standing GO (D-154):** the loop auto-starts `sdk/beacon-kotlin` on the first tick
+  `command -v gradle && command -v java` succeeds — no further prompt.
+- **§2.12 iOS Phase 2** — needs an Apple/Xcode CI runner (Phase 1 shipped, D-153).
+
+### C. Operator decision / product call
+- **§2.44 `[FO-1]` firing-orphan** (found S96/D-160) — a non-`stream_offline` alert sticks
+  firing if its source vanishes entirely. Needs a firing-semantics ruling (auto-resolve-after-
+  grace / stay-firing / leave-as-is; D-156 class — a blanket sweep would wrongly resolve
+  `stream_offline`). Build the chosen resolution once the operator answers.
+- **§2.6 unsigned-webhook ingest mode** — build vs won't-fix (rec: keep HMAC signing required).
+- **[20] audit-log read model** — keep reads open (status quo) vs gate the admin-read surface.
+- **§2.1 branch-protection revisit** — operator repo-admin PUT (self-approval deadlock today; see
+  §2.1 detail for the two unblock paths).
+
+### D. Operator direction / demand-driven
+- **§2.16 AMS operational early-warning** — operator-approved but demand-driven; needs a trigger.
+- **§2.19 full UI/UX refactor** (uipro) — operator-directed; not needed for GA.
+- **Deeper F6 multi-tenancy** — tenant-scoped AUTH + a tenant-management UI (F6 buildable code is
+  complete; this expansion is demand-driven).
+
+### E. Operator external action (unblocks the marketplace track)
+- **Run the load lane** on a DEDICATED PAYG AMS (stronger prod-isolation guards since D-159) →
+  yields the marketplace capacity number for `docs/compatibility.md`; also clears the expired trial.
+- **Panel-revamp developer meeting (G-27)** — 3 technical Qs + revenue-share / API-stability asks
+  (may unlock a scoped `amsclient` fix IF a live cluster confirms G-21).
+- **GHCR image → public**, **AMS trial-licence expiry** confirmation, **rotate chat-exposed creds**,
+  and the marketplace **listing submission / support + public licensing / co-marketing**.
+
+---
+
 ## 2. Backlog
 
 All post-GA items. Roughly ascending delivery complexity. Each item notes its source and size.
