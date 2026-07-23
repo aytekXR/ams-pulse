@@ -6,8 +6,12 @@
 > **DRAFT — INTERNAL. External use gated on operator review of
 > `docs/assessment/final-assessment.md` (D-081).**
 >
-> SS1, SS2, and SS4 are now automated via `qa/marketplace/render-screenshots.mjs`.
-> SS3, SS5, and SS6 remain operator-manual (no standalone screens in brandkit dc.html).
+> **All six listing shots are now AUTOMATED from the LIVE APP** (D-161, S97):
+> `node qa/marketplace/capture-live-screenshots.mjs` renders the real React UI
+> (route-mocked data, 1920×1080, dark theme) — this is the preferred source, since
+> it shows the actual product. `render-screenshots.mjs` (brandkit design mocks)
+> remains as a fallback for SS1/SS2/SS4 only; never publish a mock render where it
+> diverges from the live app.
 
 ---
 
@@ -22,16 +26,28 @@
 
 | # | File | Status | Method |
 |---|------|--------|--------|
-| SS1 | `ss1-dashboard.png` | **AUTOMATED** | `node qa/marketplace/render-screenshots.mjs` |
-| SS2 | `ss2-stream-detail.png` | **AUTOMATED** | `node qa/marketplace/render-screenshots.mjs` |
-| SS3 | `ss3-alerting.png` | **OPERATOR-MANUAL** | No standalone Alerting screen in brandkit dc.html; options: extend dc.html with a new screen section, or take live-app captures once the alerting React route carries real data |
-| SS4 | `ss4-analytics.png` | **AUTOMATED** | `node qa/marketplace/render-screenshots.mjs` |
-| SS5 | `ss5-billing.png` | **OPERATOR-MANUAL** | No standalone Billing/Usage screen in brandkit dc.html; same options as SS3 |
-| SS6 | `ss6-probes.png` | **OPERATOR-MANUAL** | No standalone Probes screen in brandkit dc.html; same options as SS3 |
+| SS1 | `ss1-dashboard.png` | **AUTOMATED (live app)** | `capture-live-screenshots.mjs`; brandkit fallback available |
+| SS2 | `ss2-ingest-health.png` | **AUTOMATED (live app)** | `capture-live-screenshots.mjs`; brandkit fallback: `ss2-stream-detail.png` |
+| SS3 | `ss3-alerting.png` | **AUTOMATED (live app)** | `capture-live-screenshots.mjs` (was operator-manual) |
+| SS4 | `ss4-analytics.png` | **AUTOMATED (live app)** | `capture-live-screenshots.mjs`; brandkit fallback available |
+| SS5 | `ss5-reports.png` | **AUTOMATED (live app)** | `capture-live-screenshots.mjs` (was operator-manual; Business-tier data mocked) |
+| SS6 | `ss6-probes.png` | **AUTOMATED (live app)** | `capture-live-screenshots.mjs` (was operator-manual) |
 
-**Script:** `qa/marketplace/render-screenshots.mjs`  
-**Rerun command:** `node qa/marketplace/render-screenshots.mjs` (from repo root)  
-**Output directory:** `docs/marketplace/screenshots/` (gitignored — PNGs are reproducible artifacts, not committed)
+**Primary script:** `qa/marketplace/capture-live-screenshots.mjs` — real React UI at
+1920×1080 (dark theme), populated via the same route-mock data shapes the e2e suite
+uses; verified populated on 2026-07-22 (viewer counts, charts, badges all non-empty).
+Also produces the user-guide set (below).
+**Fallback script:** `qa/marketplace/render-screenshots.mjs` (brandkit hi-fi mocks, SS1/SS2/SS4 only).
+**Rerun command:** `node qa/marketplace/capture-live-screenshots.mjs` (from repo root)  
+**Output directory:** `docs/marketplace/screenshots/` (gitignored — PNGs are reproducible
+artifacts; whether to commit a curated set for the user guide is an operator packaging
+decision, see `docs/user-guide.md` note)
+
+**User-guide set (same script, same run):** `ug-qoe.png`, `ug-fleet.png`, `ug-anomalies.png`,
+`ug-audit-log.png`, `ug-settings-sources.png`, `ug-settings-license.png`, `ug-login.png`,
+`ug-onboarding-step2.png`, plus `ss1-light.png` (⚠ currently byte-identical to the dark
+shot — the light-theme toggle did not visibly apply in the capture context; re-verify
+before using a light-theme shot anywhere).
 
 ---
 
@@ -77,11 +93,12 @@ Tokens, Error and Empty States, Mobile — each a `data-screen-label` div with a
 - Launches Chromium headless, aborts all non-`file://` requests (zero CDN reliance)
 - Element-screenshots each matched screen at 1440×900 viewport
 
-**Operator-manual capture** (SS3/SS5/SS6):
-- These screens do not exist as standalone layouts in the dc.html
-- Options: (a) extend `brandkit/ui/Pulse App - Screens.dc.html` with new screen
-  sections (designer decision), or (b) take live-app screenshots once the
-  corresponding React routes (alerting, billing, probes) carry real data
+**Historical note (SS3/SS5/SS6 — now automated):**
+These screens did not exist as standalone layouts in the dc.html and were originally
+operator-manual. As of S97 / D-161 they are produced by `capture-live-screenshots.mjs`
+alongside SS1/SS2/SS4. The designer option of extending `brandkit/ui/Pulse App -
+Screens.dc.html` with new `data-screen-label` sections remains open if a hi-fi
+brandkit variant is later desired, but the live-app capture is the authoritative source.
 
 ---
 
@@ -93,8 +110,8 @@ importance and demand evidence.
 
 ### Screenshot 1 — Live Operations Dashboard
 
-**Status:** AUTOMATED — `node qa/marketplace/render-screenshots.mjs`  
-**Output:** `docs/marketplace/screenshots/ss1-dashboard.png` (1282×802px)
+**Status:** AUTOMATED (live app) — `node qa/marketplace/capture-live-screenshots.mjs`  
+**Output:** `docs/marketplace/screenshots/ss1-dashboard.png` (1920×1080; brandkit fallback 1282×802)
 
 **Caption:** "Real-time stream overview — viewer counts, active publishers, and node
 health at a glance. New streams appear within 4 seconds of publish on AMS 3.0.3."
@@ -108,7 +125,7 @@ non-zero bitrate and viewer count.
 - Stream cards with `hlsViewerCount`, `webRTCViewerCount`, health score badge
 - Fleet node card (OS, version, status=up)
 - Timestamp or "last updated" indicator
-- Dark and light theme both supported — capture in the default theme (light)
+- Dark and light theme both supported — automation captures in dark theme; `ss1-light.png` provides a light-theme variant (see ⚠ caveat in User-guide set section above)
 
 **Evidence basis:** F1 PARTIALLY → live dashboard validated TC-WH-02, TC-V-03,
 TC-FL-01/02 (S17/S18).
@@ -117,8 +134,8 @@ TC-FL-01/02 (S17/S18).
 
 ### Screenshot 2 — Ingest Health and Bitrate Timeline
 
-**Status:** AUTOMATED — `node qa/marketplace/render-screenshots.mjs`  
-**Output:** `docs/marketplace/screenshots/ss2-stream-detail.png` (1282×802px)
+**Status:** AUTOMATED (live app) — `node qa/marketplace/capture-live-screenshots.mjs`  
+**Output:** `docs/marketplace/screenshots/ss2-ingest-health.png` (1920×1080; brandkit fallback: `ss2-stream-detail.png`)
 
 **Caption:** "Per-publisher ingest health: bitrate, health score, packet loss, and
 drop events. Ingest degradation visible within 15 seconds."
@@ -140,13 +157,13 @@ Ideally showing a non-trivial bitrate (~2 Mbps) and health score above 80.
 
 ### Screenshot 3 — Alerting — Active Rules and Incident History
 
-**Status:** OPERATOR-MANUAL — no standalone Alerting screen in `brandkit/ui/Pulse App - Screens.dc.html`.
+**Status:** AUTOMATED (live app) — `node qa/marketplace/capture-live-screenshots.mjs` → `ss3-alerting.png` (1920×1080).
 Options:
 - Extend the dc.html with a new `data-screen-label="Alerting"` screen section (designer decision)
 - Take a live-app screenshot once the alerting React route carries real data
 
 **Caption:** "Alerting on any metric — stream offline, bitrate floor, viewer drop.
-Delivers to Slack, email, Telegram, or PagerDuty in under 201 ms."
+Delivers to Slack, email, Telegram, PagerDuty, or webhook in under 201 ms."
 
 **Screen to capture:** The alert rules list with at least one active rule (e.g.,
 "stream offline" or "ingest bitrate floor"), plus the incident history panel showing
@@ -164,8 +181,8 @@ if visible.
 
 ### Screenshot 4 — Audience Analytics and QoE Rollups
 
-**Status:** AUTOMATED — `node qa/marketplace/render-screenshots.mjs`  
-**Output:** `docs/marketplace/screenshots/ss4-analytics.png` (1282×802px)
+**Status:** AUTOMATED (live app) — `node qa/marketplace/capture-live-screenshots.mjs`  
+**Output:** `docs/marketplace/screenshots/ss4-analytics.png` (1920×1080; brandkit fallback 1282×802)
 
 **Caption:** "Historical audience analytics with viewer QoE: startup time, rebuffer
 ratio, watch time, and geo breakdown. 13-month rollup queries return in under 150 ms."
@@ -187,7 +204,7 @@ structure is visible). Date range selector visible.
 
 ### Screenshot 5 — Usage and Billing Reports
 
-**Status:** OPERATOR-MANUAL — no standalone Billing/Usage screen in `brandkit/ui/Pulse App - Screens.dc.html`.
+**Status:** AUTOMATED (live app) — `node qa/marketplace/capture-live-screenshots.mjs` → `ss5-reports.png` (1920×1080, Business-tier data).
 Options:
 - Extend the dc.html with a new `data-screen-label="Billing"` screen section (designer decision)
 - Take a live-app screenshot once the billing React route carries real data
@@ -213,7 +230,7 @@ S23/D-085 (0.02% reconciliation live-validated).
 
 ### Screenshot 6 — Synthetic Viewer Probes (optional / bonus)
 
-**Status:** OPERATOR-MANUAL — no standalone Probes screen in `brandkit/ui/Pulse App - Screens.dc.html`.
+**Status:** AUTOMATED (live app) — `node qa/marketplace/capture-live-screenshots.mjs` → `ss6-probes.png` (1920×1080).
 Options:
 - Extend the dc.html with a new `data-screen-label="Probes"` screen section (designer decision)
 - Take a live-app screenshot once the probes React route carries real data
@@ -238,12 +255,12 @@ claim.
 
 ## PNG export checklist
 
-- [x] SS1 Dashboard — AUTOMATED (`node qa/marketplace/render-screenshots.mjs`)
-- [x] SS2 Stream Detail — AUTOMATED (`node qa/marketplace/render-screenshots.mjs`)
-- [ ] SS3 Alerting — OPERATOR-MANUAL (no dc.html screen; extend dc.html or use live-app capture)
-- [x] SS4 Analytics — AUTOMATED (`node qa/marketplace/render-screenshots.mjs`)
-- [ ] SS5 Billing/Usage — OPERATOR-MANUAL (no dc.html screen; extend dc.html or use live-app capture)
-- [ ] SS6 Probes (optional) — OPERATOR-MANUAL (no dc.html screen; extend dc.html or use live-app capture)
+- [x] SS1 Dashboard — AUTOMATED (`node qa/marketplace/capture-live-screenshots.mjs`)
+- [x] SS2 Ingest Health — AUTOMATED (`node qa/marketplace/capture-live-screenshots.mjs`)
+- [x] SS3 Alerting — AUTOMATED (`node qa/marketplace/capture-live-screenshots.mjs`)
+- [x] SS4 Analytics — AUTOMATED (`node qa/marketplace/capture-live-screenshots.mjs`)
+- [x] SS5 Usage Reports — AUTOMATED (`node qa/marketplace/capture-live-screenshots.mjs`)
+- [x] SS6 Probes (optional) — AUTOMATED (`node qa/marketplace/capture-live-screenshots.mjs`)
 
 ---
 

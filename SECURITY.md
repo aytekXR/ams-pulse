@@ -12,8 +12,8 @@ GitHub issue for security vulnerabilities.
 
 | Version | Supported |
 |---|---|
-| v0.1.x | Yes |
-| < v0.1.0 | No |
+| v0.4.x | Yes |
+| < v0.4.0 | No — upgrade to the latest v0.4.x release |
 
 ## Security Design Overview
 
@@ -27,14 +27,14 @@ Every AMS webhook request is authenticated with HMAC-SHA256:
 - The `X-Ams-Signature` header must equal `sha256=` + hex(HMAC-SHA256(secret, body)).
 - Comparison uses `hmac.Equal` (constant-time).
 - An empty secret always returns `false` from `validateHMAC`; the handler returns
-  `401` (fail-closed — not `404`). (Verified: `server/internal/collector/webhook/webhook.go:260-268`.)
+  `401` (fail-closed — not `404`). (Verified: `server/internal/collector/webhook/webhook.go:318-326`.)
 - The legacy route (`/webhook/ams`) uses `PULSE_WEBHOOK_SECRET` globally.
 - The per-source route (`/webhook/ams/{name}`) uses the named source's secret when present
   with no SharedSecret fallback — cross-source isolation. Unknown names fall back to
-  SharedSecret or return `401`. (Verified: `webhook.go:126-163`.)
+  SharedSecret or return `401`. (Verified: `webhook.go:152-166`.)
 - `PULSE_WEBHOOK_SECRET` must be set when `PULSE_WEBHOOK_ADDR` is configured; the
   webhook listener is skipped (fail-closed) at startup if the secret is absent.
-  (Verified: `server/cmd/pulse/serve.go:278-283`.)
+  (Verified: `server/cmd/pulse/serve.go:384`.)
 
 ### API token storage
 
@@ -62,13 +62,13 @@ Supported variables: `PULSE_SECRET_KEY`, `PULSE_WEBHOOK_SECRET`, `PULSE_AMS_LOGI
 (Verified: `server/internal/config/secrets.go:27` `GetSecret` implementation.)
 
 **Exception:** `PULSE_LICENSE_KEY` is read via `os.Getenv` directly and does NOT support
-the `_FILE` convention. (Verified: `server/cmd/pulse/serve.go:236`.)
+the `_FILE` convention. (Verified: `server/cmd/pulse/serve.go:316`.)
 
 ### Startup key validation (fail-closed)
 
 For non-`:memory:` meta store DSNs, `PULSE_SECRET_KEY` must be set and at least 16 bytes.
 An empty key or a key shorter than 16 bytes causes the server to refuse to start with an
-actionable error message. (Verified: `server/cmd/pulse/serve.go:256-260`.)
+actionable error message. (Verified: `server/cmd/pulse/serve.go:335-339`.)
 
 ### Content Security Policy
 
@@ -102,10 +102,10 @@ Gated features return `403 LICENSE_REQUIRED` when the active license tier is ins
 
 | Feature | Minimum tier | Handler location |
 |---|---|---|
-| `/metrics` (Prometheus) | Business | `server/internal/api/server.go:688-690`; `license.go:351-357` |
-| Usage/billing reports | Business | `license.go:328-333` |
-| Multi-tenant billing | Business | `license.go:317-322` |
-| QoE beacon ingest | Pro | `license.go:339-344` |
+| `/metrics` (Prometheus) | Business | `server/internal/api/server.go:1003-1004`; `license.go:419-425` |
+| Usage/billing reports | Business | `license.go:394-400` |
+| Multi-tenant billing | Business | `license.go:383-389` |
+| QoE beacon ingest | Pro | `license.go:405-413` |
 
 The default tier when no license key is configured is **Free** (not a startup failure).
 A license init error is logged as WARN and falls back to Free tier.
@@ -115,7 +115,7 @@ A license init error is logged as WARN and falls back to Free tier.
 ClickHouse ports 9000 (native) and 8123 (HTTP) are declared with `expose:` in the base
 `docker-compose.yml`, not `ports:`. This means they are cluster-internal only and never
 bound to the host network. External access to ClickHouse is not possible without explicitly
-publishing a port. (Verified: `deploy/docker-compose.yml:100-102`.)
+publishing a port. (Verified: `deploy/docker-compose.yml:114-116`.)
 
 The meta store (SQLite) is a file on the `pulse-data` Docker volume and is not network-accessible.
 
@@ -128,6 +128,7 @@ API routes: per-user rate limiting via middleware.
 
 ## License
 
-A `LICENSE` file has not yet been added to this repository. The operator has not selected
-a license (operator item O5, deferred). This does not affect the security posture described
-above.
+The server, web UI, and deployment tooling are licensed under
+[PolyForm Noncommercial 1.0.0](LICENSE); the beacon SDK (`sdk/beacon-js/`) is MIT.
+See `docs/licensing.md` for the product license-key model. Licensing does not affect
+the security posture described above.

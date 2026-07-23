@@ -11,7 +11,400 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-97.md`)
+## ▶ START HERE (next session — execute `sessions/SESSION-98.md`: §2.7 CI-promotions, NOW UNLOCKED)
+
+**Session 2026-07-22/23 result: D-161 — S97 executed the operator's marketplace directive and SHIPPED THE COMPLETE
+DOCUMENTATION PACK** (docs + listing assets ONLY — no server/web source change, NO prod roll; prod stays
+**v0.4.0-131-g6b5bd38**). 12 new docs (overview w/ diagrams, user guide, admin guide w/ all 69 config vars, API guide +
+rendered OpenAPI HTML, FAQ, troubleshooting, public licensing, support skeleton, release notes, submission-process,
+developer-meeting brief, **submission-package.md = the index**); staleness sweep fact-checked against code via a
+39-item verified ledger (`agents/handoffs/validation/S97-fact-ledger.md`) — real API counts 42/59/73, LIM-24 corrected
+(scheduled PDF IS implemented), +LIM-25/LIM-26, CHANGELOG **[0.4.0] reconstructed** (D-076…D-089), `.env.example` S3
+var names fixed (were never read by the server), SDK size 3.52 KB everywhere; **all 6 listing screenshots + 9
+user-guide shots now capture automatically from the live app** (`qa/marketplace/capture-live-screenshots.mjs`);
+**G-27 pre-answered from the PUBLIC panel repo** (`Management-panel-reborn` @ c4a0235: 100% `/rest/v2`, auth unchanged,
+paginated cluster/nodes evidence for G-21; ships analytics CHARTS but no alerting/QoE/reports/probes/anomalies →
+listing re-positioned on differentiators); **publicly stated first-year marketplace revenue = 100%/no-commission**
+(post-year-1 = meeting ask; the PRD's 20–30% is dead). A 16-agent adversarial verify fixed ~70 defects in the generated
+docs pre-merge (incl. hallucinated alert channels + an over-limit listing description). PR #—see D-161. **The
+marketplace submission is now gated ONLY on the operator** (sequence in operator-expected.md ★S97 block; index:
+`docs/marketplace/submission-package.md`).
+
+**★ SESSION-98 = §2.7 CI-PROMOTIONS (date-gate ≥ 2026-07-23 — UNLOCKED).** Drop `web-e2e`'s `continue-on-error: true`
+in `.github/workflows/ci.yml`, `actionlint`, hand the operator the branch-protection FULL-LIST PUT (adds
+`e2e`/`csp-e2e`/`web-e2e`/`docker-build`/`sdk-swift`). CI-config only; no prod roll. Branch `s98-d162-ci-promotions`.
+At open run the standard gate (date / Android toolchain / operator-expected top block — a delivered capacity number,
+G-27 meeting answers, D-081 approval, or an `[FO-1]`/[20] ruling outranks Lead A). **After §2.7 the non-gated backlog
+is EMPTY → SESSION-99 = the marketplace-wait** (everything left is operator-external, tooling-blocked, or a product
+call — do NOT manufacture arcs). See `sessions/SESSION-98.md`. **Process gotcha recorded (D-161): Workflow subagents
+cannot read the session scratchpad — share context via repo paths.**
+
+**⚠ OPERATOR ITEMS OPEN (operator-expected.md ★S97 — the submission sequence):** (1) D-081 review of the docs pack →
+(2) support channel/SLA + pricing + MaxNodes(Pro 10 vs Business 5) + trial decisions → (3) load lane on a PAYG AMS
+(capacity number) → (4) record the demo video (script ready) → (5) GHCR → public → (6) reply to Ankush, request the
+developer meeting (`docs/marketplace/developer-meeting-brief.md`). **Carried:** `[FO-1]` ruling (=LIM-26); [20];
+§2.1 branch-protection PUT (S98 hands you the updated list); Android JVM/Gradle env (standing GO); AMS trial/PAYG;
+rotate chat-exposed creds.
+
+## (superseded — EXECUTED as D-161, see above) ▶ was: START HERE (SESSION-97 = ★ MARKETPLACE DOCUMENTATION PACK; operator directive 2026-07-22 re-scopes the wait-gate)
+
+**Operator directive (2026-07-22, delivered out-of-band in a planning session):** prepare the Ant Media Marketplace
+documentation pack — generate EVERY document required for Marketplace submission in ONE session, with minimal further
+human input. The planning session (this re-scope) audited the whole repo (5 parallel audits: server, deploy/CI/release,
+web+brandkit, full docs inventory, Ant Media docs research), analyzed the Ankush Banyal email thread, and wrote this work
+order. **It generated NO documentation itself** (directive). `sessions/SESSION-97.md` (the wait-gate plan) is SUPERSEDED
+by this block — do not execute it; its standing checks are carried in §0 below. **Log this arc as D-161 at open**
+(operator-directed, Lead B — "operator named a priority").
+
+### 0. Ground rules + carried gate (read first)
+
+- **This is a DOCS + LISTING-ASSETS arc.** No server/web source changes, NO prod roll. Allowed file surface: `docs/**`,
+  `README.md`, `SECURITY.md`, `CHANGELOG.md`, `VERSION`, `deploy/helm/README.md` (stale-pointer fix),
+  `docs/marketplace/**`, `qa/marketplace/**` (screenshot tooling only), `agents/handoffs/**`, `web/e2e/**` ONLY if you add
+  a screenshot-capture spec (no changes to existing specs' assertions). If a doc task seems to require a code change
+  (e.g. tier limits), STOP — it's an operator flag, not a fix (record in §6).
+- **Carried two-minute gate:** (1) `date +%Y-%m-%d` — if ≥ 2026-07-23, §2.7 CI-promotions is UNLOCKED; take it as an
+  ISOLATED first PR (drop `web-e2e` `continue-on-error` in `.github/workflows/ci.yml`, `actionlint`, hand the operator
+  the branch-protection FULL-LIST PUT) — ~30 min, no prod roll — then return here. If it risks eating the session,
+  defer it to S98 and say so. (1b) `command -v gradle && command -v java` — if present, do NOT context-switch to the
+  Kotlin SDK this session (docs arc is the operator's named priority); note it for S98. (2) skim `docs/operator-expected.md`
+  top block for new operator answers ([FO-1], [20], load-lane capacity number, G-27 meeting answers) — a delivered
+  **capacity number** or **G-27 answers** change what you write in `docs/compatibility.md` / the submission pack, so
+  ingest them before generating.
+- **VERIFY-THEN-WRITE (binding).** Every feature/number claim in every generated doc must be re-verified against
+  code/contracts THIS session (docs have drifted before — D-097 found docs describing endpoints that didn't exist).
+  Known traps already found by the audit, verify each before repeating any claim:
+  - Interactive Reports "Export PDF" was REMOVED at D-097 (LIM-24) — CSV only via `GET /reports/export`; but SCHEDULED
+    reports still emit CSV **and PDF** artifacts (`pulse-usage-*.{csv,pdf}`, D-143 prune) and Enterprise white-label PDF
+    exists (`PULSE_REPORT_LOGO_PATH`, `white_label` claim). README's F6 row says "CSV + PDF" — disambiguate precisely.
+  - Tier limits in `server/internal/license/license.go`: Free MaxNodes=1, **Pro=10, Business=5** (inversion!),
+    Enterprise=unlimited; PRD §7.11 says Pro "1–2 nodes". Code governs today; the listing CANNOT ship this
+    contradiction — write docs from code truth and put the reconcile decision in §6 operator flags.
+  - Settings → Users tab in the web UI is a STUB ("coming in a future update") while `/admin/users` API is complete —
+    user docs must say "user management via API (+ UI pending)", not screenshot a fake.
+  - `VERSION` file reads `0.1.0` (build stamps come from git tags; prod is v0.4.0-131). Bump to `0.4.0` as part of
+    Phase 1 (cosmetic, nothing reads it — verified D-152-era).
+  - SECURITY.md "Supported Versions" table still says v0.1.x, and its tail claims "a LICENSE file has not yet been
+    added" (LICENSE exists since D-066).
+  - CHANGELOG trap (learned D-089-era): `[Unreleased]` is POST-0.4.0 content — do NOT relabel it `[0.4.0]`. The
+    `[0.4.0]` section must be RECONSTRUCTED (Phase 2) from `decisions.md` + `git log v0.3.0..v0.4.0`.
+  - Beacon SDK size: README says 3.44 KB gzip, final-assessment measured 3.52 KB — re-measure (`cd sdk/beacon-js &&
+    npm run size`) and use the fresh number everywhere.
+  - OpenAPI counts (32 paths / 46 ops / 66 schemas) — recount from `contracts/openapi/pulse-api.yaml` before citing.
+- **CONFIDENTIALITY (hard rules):** the Ant Media staging-panel URL and credentials are deliberately NOT in this repo
+  (they live only with the operator / gitignored `oguz-testing.md`) — never write them into any doc, commit, or PR.
+  Same for chat-exposed creds. `oguz-testing.md` is gitignored (verified) — never reference its contents externally.
+  The G-27 assessment's honesty caveat stands: panel claims are architecture-based, not click-through-verified.
+- **EXTERNAL-USE GATE (D-081):** everything you generate stays DRAFT-INTERNAL until the operator reviews
+  `docs/assessment/final-assessment.md` and approves external use. Mark every new external-facing doc with the same
+  header used by `docs/marketplace/listing-draft.md`. Generating ≠ publishing; nothing is sent to Ant Media this session.
+- **Repo conventions:** branch `s97-d161-marketplace-docs`; contracts-before-code N/A (docs arc); PR → CI →
+  squash-merge; close docs (decisions.md D-161, ROADMAP-V2 §2.18 refresh, RESUME → SESSION-98, operator-expected.md,
+  SESSION-98 written). Ultracode is on — use a Workflow for the fan-out generation + a multi-lens adversarial
+  doc-accuracy verify pass (lenses: claim-vs-code accuracy, link integrity, staleness, audience fit, confidentiality).
+  Workflow gotcha: NO backticks in workflow prompt prose. `gofmt` only via docker; Go tests only via docker (you should
+  not need either). This host IS prod — never restart AMS, never `docker compose down -v`, never `git checkout <path>`
+  (D-096); `deploy/config/Caddyfile.prod` stays modified/unstaged (verify before every commit).
+
+### 1. Fact base (from the 2026-07-22 audit — trust but re-verify the ★ items)
+
+**Product identity:** Pulse — self-hosted analytics, QoE monitoring and alerting for Ant Media Server. NOT an AMS
+in-process (JAR) plugin: a standalone Go binary + React SPA (served by the same binary on :8090) + ClickHouse, deployed
+NEXT TO AMS; integration is read-only AMS REST v2 polling (9 endpoints, two tiers — see `docs/compatibility.md` G-27
+section) + optional HMAC webhook (:8092) + optional Kafka (`ams-server-events`) + player-side beacon SDKs (JS shipped,
+MIT, ~3.5 KB gzip; Swift Phase 1; Kotlin pending toolchain). No AMS-side plugin/agent required. Zero phone-home
+(audit-verified: no telemetry SDKs; outbound = AMS/S3/alert channels, all operator-configured). Privacy: viewer IPs
+SHA-256-hashed, never stored raw; optional `PULSE_ANONYMIZE_IP`; GeoIP only via operator-supplied MMDB (none bundled).
+**Versions:** prod v0.4.0-131-g6b5bd38; tags v0.1.0…v0.4.0 exist; image `ghcr.io/aytekxr/ams-pulse` (cosign-signed,
+multi-arch, SBOM+provenance) — GHCR still PRIVATE (anonymous pull 401; flip = operator, §2.18/O7). AMS compatibility:
+live-validated against AMS 3.0.3 Enterprise (46/50 scenarios PASS); 2.10.0/2.14.x/3.0.2 mock-profile only (honest
+disclosure in `docs/compatibility.md`); nightly `ams-version-matrix.yml` + `qa/tools/ams-drift-watch.sh`.
+**Tiers (license.go, ed25519 keys):** Free / Pro $99 / Business $299 / Enterprise $799+ (prices PROPOSED, operator must
+confirm) — gates: beacon+probes+data-API = Pro+; Prometheus+reports+multi-tenant = Business+; anomalies+SSO+white-label
+= Enterprise. Activation: `PULSE_LICENSE_KEY` env / file (air-gapped) / `PUT /admin/license` hot-reload; invalid or
+expired key degrades to Free (never crashes).
+**Auth:** first-run bootstrap admin token printed to stderr (`plt_…`); bearer tokens (api|ingest kinds, admin vs
+read-only scopes); OIDC SSO (Enterprise); audit log on every admin write.
+**Install paths:** (1) quickstart `deploy/quickstart/install.sh` (one command, ~15 min, currently blocked for anonymous
+users by private GHCR — fails honestly); (2) 5-overlay Docker Compose = supported production path
+(`docs/runbooks/productionize.md`); (3) Helm chart (lint/template-verified only — cluster deploy NOT validated, keep
+"experimental"); (4) local binary (QA-verified). Upgrade/rollback = `deploy/runbooks/upgrade-rollback.md` (stamped-build
+pattern, `pre-dNNN` tags); backup = 24 h sidecar (CH zip + SQLite copy, 7 kept).
+**Web UI (all 11 routes implemented):** Live `/`, Analytics, QoE, Ingest, Alerts, Reports (Business+), Fleet, Anomalies
+(Ent), Probes (Pro+), Audit Log, Settings (6 tabs) + 4-step onboarding wizard + AuthGate token login + dark/light theme
++ 3 density modes. Playwright 1.61 + Chromium INSTALLED (`~/.cache/ms-playwright`); `web/e2e/*` route-mock every API so
+populated screens render with NO backend; `qa/mock-ams` has a control API (`/control/bulk_publish` etc.) for live-data
+screens via `deploy/docker-compose.override.yml`.
+**Ant Media landscape (researched 2026-07-22; antmedia.io/docs.antmedia.io direct fetches 403'd — findings come from
+GitHub, official-page search snippets and blog posts; re-verify anything critical):** latest stable AMS = **3.0.3
+(2026-05-05)** — exactly the version Pulse is live-validated against (3.0.2 May-04, 3.0.1/3.0.0 April 2026; 2.17.0
+Jan-2026 introduced WebRTC Web SDK v2). The panel revamp has a PUBLIC repo: `ant-media/Management-panel-reborn`
+(React 19 + Vite + TS + Tailwind + shadcn/ui; early, ~15 commits; README: talks to the AMS REST API, ships alongside the
+legacy Angular console sharing one login/origin) — public-repo inspection is allowed and can pre-answer G-27 questions;
+the confidential staging INSTANCE stays off-limits. AMS marketplace (`antmedia.io/marketplace/[slug]/`) hosts: JAR
+plugins (Enterprise, `/usr/local/antmedia/plugins` — Filter/LL-HLS/Media-Push/SCTE35…), **WAR applications uploaded via
+the AMS dashboard (Bitmovin Analytics = the closest analytics precedent)**, third-party integrations running as
+separate processes (GST-Ant Fusion/GStreamer), custom-dev services (Raskenlund), and it advertises openness to hardware
++ non-AMS streaming apps. A "become a marketplace vendor" form exists on the marketplace page (+ a separate
+`antmedia.io/partnership-form/`; Global Partner Program with co-marketing/webinars/newsletter 40k+ subscribers).
+**Publicly stated vendor terms: 100% revenue to the vendor for the FIRST YEAR, no commission; post-year-1 terms
+undisclosed** — this supersedes the PRD's unverified 20–30% figure; get post-year-1 terms in writing at the meeting.
+AMS's own "Monitoring Solutions" docs cover New Relic (via `/var/log/antmedia/ant-media-server-analytics.log`, JSON,
+since v2.10) and Loki+Prometheus+Grafana (k8s) — generic infra monitoring, which is the positioning contrast for the
+listing copy (Pulse = AMS-native, self-hosted, player-side QoE + alerting). Official load-testing tooling: WebRTC Load
+Test Tool (Enterprise download; gitlab.com/Ant-Media/webrtc-test; `-m publisher|player -n <count>`), `hls_players.sh`,
+JMeter HLS sampler, plus the built-in `webrtc-test-tool.html` quality probe — our load lane already supports these via
+`LOAD_GENERATOR=official`. AMS SDK catalog = WebRTC publish/play SDKs (JS/Android/iOS/Flutter/React-Native/Unity) —
+the beacon SDK is a companion QoE collector, not a competitor. PAYG licensing (the sanctioned post-trial test path):
+hourly self-hosted subscription, **$0.09/instance/hr per third-party pricing aggregators (100 free hrs/mo claimed;
+third-party-sourced — confirm on the official page)**; annual $69/mo and 14-day trial also exist.
+**Docs corpus:** ~45 real docs exist and most are CURRENT (the audit's full per-doc verdict list is in §2/§3 tables
+below — do NOT rewrite what's marked KEEP). ★ Existing marketplace seeds: `docs/marketplace/listing-draft.md` (title
+43ch, tagline, 202-char short description, 6 feature bullets, tier tables, trial-key para OPERATOR-DECISION-PENDING,
+demand evidence AMS#3122+#7926) and `docs/marketplace/screenshot-list.md` (6-shot plan; SS1/SS2/SS4 automated via
+`qa/marketplace/render-screenshots.mjs` from brandkit mocks; SS3/SS5/SS6 missing). 17-row readiness checklist:
+`docs/assessment/final-assessment.md` §3 (10 PASS / 2 PARTIAL / 5 NEEDS-OPERATOR-CONTACT; row 4 is STALE — all 18 DGs
+closed since S84). Load lane `qa/realams/load/` (TC-S-10..13, budgets L-1..L-9) is BUILT but NOT RUN — the capacity
+number is TBD pending the operator's dedicated PAYG AMS run.
+
+### 2. THE ARC — generation plan (exact order; each phase depends on the previous)
+
+Run as: Phase 0 fact-sweep → Phases 1–5 generation (parallelize within a phase via Workflow; never across phases) →
+Phase 6 adversarial verify → close-out. Per-doc spec: **[source files to extract from] → [target] → [audience] →
+[done-when]**. Reuse-not-rewrite: where a canonical doc exists, the marketplace pack LINKS or thinly wraps it.
+
+**PHASE 0 — fact-check ledger (no files committed).** Re-verify every ★/trap item in §0+§1 against code; write the
+ledger to the scratchpad; it is the citation base for every claim below. Also: recount OpenAPI ops; re-measure SDK
+size; `git describe --tags` for current version string; confirm GHCR visibility (`docker manifest inspect` anonymously
+or `gh api`); latest AMS release number (check antmedia.io/github ant-media/Ant-Media-Server releases) for the
+compatibility statement.
+
+**PHASE 1 — repair stale foundations (small edits to EXISTING files; commit "docs: pre-marketplace staleness sweep").**
+1. `SECURITY.md` — supported-versions table → v0.4.x (0.4 supported; <0.4 not), delete the "no LICENSE file" tail para.
+2. `VERSION` → `0.4.0` (+ one-line note in commit msg: cosmetic, build stamps come from git tags).
+3. `deploy/helm/README.md` — replace "Not started" stub with 3 lines pointing at `deploy/helm/pulse/README.md` +
+   "experimental: lint/template-verified, cluster-install not yet validated".
+4. `README.md` — fix "Last updated: v0.2.0 GA" label; correct F6 row per Phase-0 PDF findings; verify quick-start
+   snippet against current compose files; (Phase-5 will append new docs to the doc index — leave a TODO marker now).
+5. `docs/ARCHITECTURE.md` — refresh the "Last updated" header line only (content verified current).
+6. Beacon-SDK guide duplication: `docs/beacon-sdk.md` (452-line operator guide, DG-07) is CANONICAL; diff
+   `docs/guides/beacon-sdk.md` (342 lines) for unique content, merge any into the canonical file, and reduce
+   `docs/guides/beacon-sdk.md` to a pointer stub; update README index + all cross-links (`grep -rn "guides/beacon-sdk"`).
+7. `docs/known-limitations.md` — add: web Users-tab stub (API-only user management today); `[FO-1]` firing-orphan
+   behavior (ROADMAP §2.44, operator ruling pending); re-check LIM-24 wording vs Phase-0 findings.
+
+**PHASE 2 — versioning + release history (depends on Phase 0).**
+8. `CHANGELOG.md` — reconstruct the missing `[0.4.0] — 2026-07-1x` section: curate from `agents/handoffs/decisions.md`
+   D-089…(the D at the v0.4.0 tag) + `git log v0.3.0..v0.4.0 --oneline`; keep `[Unreleased]` (post-0.4.0) intact above
+   it. This is deliberate curation, not relabeling — misattribution is worse than absence, so every line cites its
+   D-number/PR.
+9. `docs/marketplace/release-notes.md` — NEW: marketplace-facing "What's new in Pulse 0.4" one-pager distilled from the
+   reconstructed section (audience: AMS operators evaluating the listing; done-when: no claim without a CHANGELOG line
+   behind it).
+
+**PHASE 3 — the user/admin/deploy doc set (mostly NEW files; each cites Phase-0 ledger).**
+10. `docs/overview.md` — NEW evaluator-facing architecture overview: what Pulse is, how it attaches to AMS (read-only,
+    upgrade-tolerant), the two-store design, tier model — with **Mermaid diagrams** (see §3 diagram list). Sources:
+    README system-overview ASCII, `docs/ARCHITECTURE.md` §1–3, `docs/product.md`. Audience: marketplace evaluator/new
+    operator. Done-when: renders on GitHub, no wave/agent jargon.
+11. `docs/faq.md` — NEW: ~15–20 Q/A distilled from `docs/known-limitations.md` (24 LIMs), `docs/AMS-INTEGRATION.md`
+    troubleshooting + DG series, install gotchas (CIDR 403! AMS license via `-l` arg! GHCR login while private),
+    licensing/tiers, "does my data leave my infra" (no), "do you modify AMS" (no). Answers LINK to canonical docs.
+12. `docs/troubleshooting.md` — NEW symptom→cause→fix index (thin, links-heavy; no duplication of AMS-INTEGRATION):
+    sources `docs/AMS-INTEGRATION.md` troubleshooting sections, `docs/runbooks/install.md`, `deploy/runbooks/monitoring.md`
+    (WARN taxonomy), `/healthz` component semantics from server code, quickstart failure modes (`install.sh` error paths).
+13. `docs/admin-guide.md` — NEW consolidated administrator reference: complete config surface (the audit produced the
+    full `PULSE_*` table from `server/cmd/pulse/config.go` + `server/internal/config/config.go` — regenerate it from
+    code, ~60 vars, mark required/optional/default/`_FILE`-support), token management, user management (API-only note),
+    license activation (link `docs/guides/license-activation.md`), retention/TTL table, backup/restore pointers, ports
+    (8090/8091/8092), reverse-proxy notes (Caddy default, nginx-edge alternative). Audience: operator/admin. Done-when:
+    every env var in code appears exactly once with its real default.
+14. `docs/compatibility.md` — REFRESH: verify AMS-latest statement vs Phase-0 finding; capacity row stays "TBD — load
+    lane pending operator run" with the exact run command; fold in any operator-delivered capacity number or G-27
+    meeting answers if present in `operator-expected.md`.
+15. API reference — generate static HTML: `npx @redocly/cli build-docs contracts/openapi/pulse-api.yaml -o docs/api/index.html`
+    (self-contained; commit it) + NEW `docs/api-guide.md`: auth quickstart (bootstrap token → create scoped tokens),
+    rate limits, WS protocol summary, ingest endpoint, Prometheus endpoint — links to the HTML + `docs/guides/prometheus.md`.
+16. `docs/licensing-public.md` — NEW human-readable "Pulse licensing explained": PolyForm NC for the repo (what
+    noncommercial self-hosters may do), commercial tiers via license keys (what each tier includes — from license.go
+    truth), beacon SDK MIT carve-out, trial paragraph (mark OPERATOR-DECISION-PENDING: proposed 14-day Pro trial from
+    listing-draft §7). Sources: `LICENSE`, `docs/licensing.md`, license.go. THIS is checklist row 8's missing artifact.
+17. `docs/support.md` — NEW support policy SKELETON: channels table (GitHub Issues / email / response-time targets) with
+    ⚠ OPERATOR-DECISION boxes for the actual channel + SLA (checklist row 7). Include: supported versions (n, n-1),
+    security contact (from SECURITY.md), what to include in a bug report (`pulse diag` redacted output!).
+18. Upgrade doc: do NOT fork `deploy/runbooks/upgrade-rollback.md`; add a short "Upgrading" section to
+    `docs/runbooks/install.md` that links it + states the compatibility stance (forward-only migrations, no
+    breaking-config changes within 0.x promised so far — verify phrasing against the runbook).
+
+**PHASE 4 — listing pack + visual assets (depends on Phases 0–3).**
+19. Screenshots — SOURCE POLICY: prefer LIVE-APP captures (brand adoption is complete since S82; mock renders may
+    diverge from the real product — never present divergent mocks as product shots). Build NEW
+    `qa/marketplace/capture-live-screenshots.mjs` (Playwright; reuse `web/e2e/*` route-mock fixtures so every page
+    renders populated with NO backend): dark theme, 1920×1080, per-page network-idle waits; capture the 6 listing shots
+    (SS1 Live, SS2 Ingest detail, SS3 Alerts, SS4 Analytics, SS5 Reports/Billing, SS6 Probes) + one per remaining route
+    for the user guide. Fallback for SS1/SS2/SS4 only: existing `render-screenshots.mjs` (brandkit). Output stays
+    gitignored (`docs/marketplace/screenshots/`); update `docs/marketplace/screenshot-list.md` statuses + captions.
+    Visually diff live vs brandkit renders; note divergences in the screenshot list (honesty note for the operator).
+20. `docs/user-guide.md` — NEW per-screen walkthrough (11 routes + onboarding wizard + login + theme/density), one
+    section per route with its screenshot, what each metric means (health score 0–100 formula pointer, QoE p50/p95,
+    anomaly sigma), tier-gate notes. Sources: the audited route inventory, feature runbooks/guides (link, don't inline).
+21. `docs/marketplace/listing-draft.md` — FINALIZE all in-repo-resolvable fields: re-verify the 6 feature bullets
+    against shipped truth (add SSO/audit-log/white-label mentions where tier-appropriate), refresh tier tables from
+    license.go (with the MaxNodes contradiction FLAGGED not hidden), keep prices PROPOSED, keep NEEDS-OPERATOR-CONTACT
+    rows explicit, sync screenshot refs to Phase-4 outputs. Keep DRAFT-INTERNAL header.
+22. `docs/marketplace/demo-video-script.md` — NEW: 2–3 min storyboard mirroring the demo Ankush already saw (Email 1:
+    "the live dashboard looked good"): scripted walkthrough (install one-liner → onboarding wizard → live dashboard
+    with mock-ams seeded streams → alert firing → QoE/analytics → probes), narration lines, per-scene screen + duration.
+    Recording = OPERATOR (or optional: Playwright `recordVideo` against the seeded compose stack for a rough cut —
+    mark experimental).
+23. Listing media kit note (inside screenshot-list.md): logo candidates `brandkit/logo/pulse-logo-primary-{light,dark}.svg`
+    + `png/pulse-mark-256.png`, OG banner `brandkit/assets/png/og-1200x630.png` — final specs unknown until Ant Media
+    confirms (ASSUMPTION-tagged).
+
+**PHASE 5 — submission process + meeting pack (integrates everything; content base = §4/§5 of this block).**
+24. `docs/marketplace/submission-process.md` — NEW: the full §4 content below, expanded, with every ASSUMPTION tagged.
+25. `docs/marketplace/developer-meeting-brief.md` — NEW: the §5 agenda below + one-page product brief (from
+    `docs/overview.md`) + the ask-list; formatted so the operator can print/share it at the meeting.
+25b. OPTIONAL (time-box 30 min): scan the PUBLIC `ant-media/Management-panel-reborn` repo (clone or gh api; public
+    info only — the confidential staging instance stays untouched) for which REST paths + auth flow the new panel
+    calls; pre-answer G-27 Qs (i)/(ii) in the meeting brief with "public-repo evidence suggests…" phrasing + commit
+    refs. If the repo is too early-stage to tell (~15 commits at research time), say so and keep the questions open.
+26. `docs/marketplace/submission-package.md` — NEW master INDEX: table mapping every submission artifact → repo path →
+    status (READY / DRAFT-pending-operator / TBD-external) — this is the "hand Ant Media a docs link" page and the
+    session's headline deliverable.
+27. `README.md` doc index + `docs/runbooks/README.md` — append all new docs; `docs/operator-expected.md` — replace the
+    top block with the §6 operator list; `ROADMAP-V2.md` §2.18 — append S97 status line; decisions.md D-161; RESUME →
+    SESSION-98 (restore the standing wait-gate + remaining external items); write `sessions/SESSION-98.md`.
+
+**PHASE 6 — adversarial verify (MANDATORY before the PR).** Workflow fan-out, one verifier per generated/edited doc ×
+4 lenses: (a) claim-vs-code (every number/feature/env-var re-checked against source), (b) link integrity (every
+relative link resolves; every referenced screenshot exists or is marked pending), (c) confidentiality (no panel
+URL/creds, no chat-exposed secrets, no `oguz-testing.md` content, no unreleased-AMS confidential details), (d)
+audience/staleness (no agent/wave jargon in external docs; DRAFT-INTERNAL headers present where required). Fix all
+confirmed findings; re-run failed lenses. Then PR with the full doc tree, CI green, squash-merge.
+
+### 3. Screenshot + diagram inventory (targets for Phase 3/4)
+
+**Screenshots (6 listing + ~12 user-guide):** listing SS1–SS6 as above; user-guide: onboarding steps 1–4 (four shots),
+AuthGate login, Fleet, Anomalies, Audit Log, Settings→License (activation form), Settings→API Tokens, trial banner,
+TierGate card (upgrade prompt), light-theme variant of SS1. All via the Phase-4 Playwright script; populated via
+route-mock fixtures; mock-ams compose path only if a real-backend shot is needed.
+**Mermaid diagrams (in docs/overview.md unless noted):** (1) system architecture (AMS sources → collector → CH/meta →
+API/alerts/reports → UI/SDK/Prometheus — port-labeled); (2) deployment topology (5-overlay compose: Caddy/nginx edge,
+pulse, CH, backup sidecar, mock-ams-vs-real switch); (3) data flow with retention (raw 90 d → rollups 13 mo); (4) alert
+pipeline (evaluator → channels, maintenance windows/mute) in docs/runbooks/alerting.md IF it lacks one; (5) beacon SDK
+flow (player → :8091 ingest token → EventSink) in docs/beacon-sdk.md IF it lacks one. Keep each ≤ ~25 nodes; GitHub-
+renderable; no brand colors needed.
+
+### 4. MARKETPLACE SUBMISSION PROCESS — what we know vs. assume (content base for `submission-process.md`)
+
+**KNOWN (email thread, Ankush Banyal, + in-repo G-27/D-158 record):**
+- Sequence agreed with Ant Media: **(1)** product fully ready + **(2) "relevant documentation" ready → (3) Ant Media
+  arranges a meeting with their developer → (4) marketplace listing process continues from there.** The qualification
+  steps themselves are still being defined by their dev team ("consulting with our development team on the
+  qualification steps") — expect them at/around the meeting; no published submission checklist exists on our side.
+- A live demo was already given (2026-07); Ankush: "the live dashboard looked good" — expect a deeper technical demo at
+  the developer meeting.
+- Ant Media pointed us at their load-testing docs — read as: capacity/scale validation is part of qualification. Our
+  answer is the load lane (`qa/realams/load/`, budgets L-1..L-9, Ant Media's official tools available via
+  `LOAD_GENERATOR=official`) + the measured capacity number → `docs/compatibility.md` + the listing.
+- Our AMS trial expired; the sanctioned continued-testing path is the AMS **pay-as-you-go hourly subscription** (also
+  the dedicated instance the load lane requires).
+- Ant Media is revamping its web panel ("many new features"); we assessed (G-27, D-158): PROCEED — data-plane REST v2
+  endpoints insulated, auth/app-discovery bypasses deployed; competitive risk (native analytics) unconfirmed. The
+  staging panel is confidential (reference-only; creds NOT in repo; no automated access).
+- Contact point: Ankush Banyal (Ant Media sales/partnerships) — the thread where we announce "documentation ready" and
+  request the developer meeting.
+- Trigger for step 3 is OURS: when this session's pack is operator-approved, the operator replies to Ankush with the
+  docs link + requests the meeting. (A "become a marketplace vendor" web form also exists on antmedia.io/marketplace/ —
+  probably bypassed since we already have direct contact; note it as the formal fallback channel.)
+- Marketplace structure (researched, see §1 Ant-Media-landscape block for sources/caveats): listings live at
+  `antmedia.io/marketplace/[slug]/`; existing listing TYPES = JAR plugin / WAR application / external-process
+  integration / service; **Bitmovin Analytics (WAR app) is the closest analytics precedent; GST-Ant Fusion is the
+  external-process precedent**; listing pages carry title, vendor, description, install instructions, docs links,
+  pricing, screenshots/video; Ant Media promotes via blog/case-study/newsletter(40k+)/webinars/Ecosystem Slack.
+- **First-year vendor terms publicly stated: 100% revenue, no commission** (post-year-1 undisclosed → meeting ask).
+
+**ASSUMPTIONS — each must be tagged `⚠ ASSUMPTION — verify at the developer meeting` wherever used. Ant Media publishes
+NO submission checklist, artifact spec, review SLA, security-review process, or qualification thresholds (explicitly
+searched 2026-07-22, not found — that absence is exactly why their dev team is "defining qualification steps"):**
+- A1. Listing type: Pulse lists as a standalone **integration/solution** (own deploy, like GST-Ant Fusion) rather than
+  a WAR/JAR inside AMS. Risk to probe at the meeting: the closest analytics precedent (Bitmovin) IS a WAR — ask
+  explicitly whether an external self-hosted service is listable as-is, or whether they want any thin AMS-side artifact.
+- A2. Artifact format: title ≤60 chars / short description ≤250 chars / 5–6 feature bullets / ~6 screenshots — our own
+  PRD-era analysis of existing listings, NOT a published Ant Media spec.
+- A3. Screenshot/logo/video specs — unpublished; we prepare 1920×1080 PNGs, SVG + 256px logos, 1200×630 OG banner,
+  2–3 min video script as reasonable defaults.
+- A4. Revenue share: first-year 100%/no-commission is publicly stated; **post-year-1 terms are NOT** — treat any
+  long-term percentage (incl. the PRD's old 20–30%) as unknown; get it in writing.
+- A5. Review flow: expect functional install review + doc review + security/scale questions by their developer; no
+  published SLA/timeline; security review may be self-certified — ask (our posture: SECURITY.md, zero phone-home,
+  cosign/SBOM, IP hashing).
+- A6. Trial expectation: listings typically offer trials; our proposed mechanic (14-day Pro key) is
+  OPERATOR-DECISION-PENDING; the official trial-key mint is operator-gated (vault privkey).
+- A7. AMS-version-support requirement (N-1/N-2?) — unknown; our honest matrix (3.0.3 = current latest stable,
+  live-validated; older versions mock-only) is the opening position.
+- A8. Docs hosting: assume linking to our GitHub docs is acceptable; if they require uploads/PDFs, the markdown pack
+  converts cleanly later.
+- A9. Load-test qualification thresholds: none published. Our plan: run the load lane (optionally with their official
+  tools via `LOAD_GENERATOR=official`) and present budgets L-1..L-9 + the capacity number + "Pulse adds only read-only
+  REST polling load to AMS" — ask what evidence format they want.
+- A10. Category/tag for Pulse (analytics/monitoring?) and whether the marketplace integrates with the new
+  React panel era — unknown; confirm at the meeting.
+
+**PREREQUISITES (state → owner) — the submission-blocking list:**
+- GHCR image public (reviewer must be able to pull anonymously; today 401) → operator (§2.18/O7, at first public release).
+- Support channel + SLA named (checklist row 7) → operator decision, docs skeleton ready after Phase 3.
+- Public licensing/trial terms (row 8) → Phase 3 drafts + operator approval; official trial-key MINT is operator-gated
+  (vault privkey ceremony, S16).
+- Capacity number (load lane on dedicated PAYG AMS) → operator runs `bash qa/realams/run-load-suite.sh` (15-min setup:
+  `cp qa/realams/harness/load-env.sh.example …`, fill hosts); result → compatibility.md + listing.
+- Pricing + tier-limit sign-off (incl. the Pro=10/Business=5 MaxNodes reconcile) → operator.
+- Panel 15-min network-tab walkthrough (G-27 checklist in operator-expected.md §3) → operator, feeds the meeting.
+- Final-assessment review (D-081 external gate) → operator; unlocks removing DRAFT-INTERNAL headers.
+- AMS licence for the demo instance (PAYG) + rotate chat-exposed creds → operator (carried).
+- 17-row checklist refresh (rows 4→PASS since S84, row 12 pending GHCR) → this session (Phase 5).
+
+**VALIDATION EVIDENCE to attach to the submission:** 46/50 live scenarios vs AMS 3.0.3 (final-assessment §1); CI suite
+(Go race+coverage-gated, web, e2e stack, csp-e2e, docker-build, helm golden, sdk gates); load-lane budgets L-1..L-9 +
+capacity number (pending); cosign/SBOM/provenance supply-chain story; SECURITY.md + zero-phone-home + IP-hashing
+privacy posture. **POST-SUBMISSION:** track their qualification-steps doc; iterate listing per review feedback;
+co-marketing blog (row 11) at launch; keep `ams-drift-watch.sh` + version-matrix green on new AMS releases; update
+compatibility matrix per release; support-channel monitoring per docs/support.md SLA.
+
+### 5. Developer-meeting brief (content base for `developer-meeting-brief.md`)
+
+Agenda (60 min): 1) 10-min product demo (mirror the demo-video script; live dashboard + alert fire + QoE). 2) G-27
+technical questions: (i) do `/rest/v2/*` management paths + envelopes survive the panel revamp, or is v2→v3 planned?
+(ii) does the new panel introduce a new auth mechanism (OAuth2/OIDC/JWT) replacing cookie login — timeline? (iii) in
+3.0.3 cluster mode, is `GET /rest/v2/cluster/nodes` flat or paginated `…/{offset}/{size}` (settles G-21 — amsclient
+stays untouched until confirmed). 3) Final-assessment §6 technical asks: webhook HMAC signing plans (Q1),
+hlsViewerCount ~9× semantics (Q2), WHEP viewer counts (Q3), analytics-log FPS field (Q4). 4) Qualification/process
+(Q5 + assumptions A1–A10): **listing artifact type — external service OK, or WAR/JAR wanted? (Bitmovin-WAR vs
+GST-Ant-Fusion-external precedents)**; exact submission steps + checklist; artifact formats + screenshot/logo/video
+specs; review flow + timeline; security review (audited or self-certified?); load-test evidence format + thresholds;
+AMS-version-support requirement; trial mechanics; docs hosting; listing category + new-panel marketplace integration.
+5) Business (operator-led): revenue terms — first-year 100%/no-commission is publicly stated, get it + **post-year-1
+terms in writing**; API-stability/deprecation-notice commitment in the vendor agreement (ties to G-27);
+exclusivity/min-AMS-version constraints; first-party-partner / soft non-compete (native-analytics concern —
+Management-panel-reborn "many new features"); co-marketing blog + newsletter + Ecosystem Slack (their stated promo
+channels). 6) Close: agree next review step + who receives the submission package link. Attach: submission-package.md
+index + overview.md + compatibility.md + capacity number (if available). Pre-work that sharpens question 2: the Phase-5
+public-repo scan of `ant-media/Management-panel-reborn` (see task 25b).
+
+### 6. OPERATOR ITEMS after this session (replaces the wait-gate list; carry into operator-expected.md at close)
+
+**New (this arc):** review + approve the doc pack (D-081 gate) — then reply to Ankush: docs ready, request the
+developer meeting; decide support channel + SLA (docs/support.md boxes); confirm pricing + resolve the Pro/Business
+MaxNodes inversion (product call — code change is a separate future arc); decide trial mechanics (14-day Pro proposed)
++ schedule the vault trial-key mint; record the demo video (script provided) or approve the Playwright rough-cut;
+flip GHCR public at the release you want reviewers to pull. **Carried:** run the load lane on a dedicated PAYG AMS
+(capacity number); 15-min panel network-tab walkthrough; `[FO-1]` firing-semantics ruling; [20]; §2.1 branch-protection
+PUT; Android JVM/Gradle env (standing GO D-154); AMS licence/PAYG (hourly self-hosted subscription — the path Ankush
+gave for post-trial testing; ≈$0.09/instance/hr per third-party aggregators, confirm on the official page); rotate
+chat-exposed creds; §2.7 date-gate (auto, ≥ 2026-07-23 — taken this session if the date allowed, else S98).
+
+## (superseded) ▶ START HERE (was: `sessions/SESSION-97.md` wait-gate — RE-SCOPED to the marketplace-docs arc by operator directive 2026-07-22, see above; never executed)
 
 **Session 2026-07-21 result: D-160 — S96 took the ONE sanctioned non-gated arc SESSION-96 named (the `e.states`
 unbounded-growth fix deferred from D-159 #5, ROADMAP §2.43). `Evaluator.states` had no delete site → one permanent entry

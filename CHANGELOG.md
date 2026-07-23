@@ -419,6 +419,169 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ---
 
+## [0.4.0] - 2026-07-13
+
+Operator-approved release ("rollout quick → marketplace ASAP", D-089) carrying
+the changes recorded as D-076 … D-089 in the decision log (including two
+post-v0.3.0 hotfixes, D-076/D-076b). Delivers ten API-correctness fixes
+surfaced by the Pulse × AMS real-validation program, a persistent anomaly
+flag-event store, the AMS API early-warning ladder, VoD recording billing, and
+marketplace-readiness infrastructure (one-command install, trial-license
+lifecycle, compatibility and known-limitations docs). Also ships a light-theme,
+density-mode, and reduced-motion web UI refresh.
+
+### Added
+
+- **AMS API early-warning ladder — `ams_api_latency_ms` anomaly metric (D-087).**
+  The REST poller now measures its round-trip to each AMS node and surfaces
+  `ams_api_latency_ms` as a Welford-baselined anomaly metric. The value is
+  correctly absent (never zero) when a poll fails, so it does not false-arm on
+  nodes that do not report it. Alert rules can reference it alongside
+  `cpu_pct`/`mem_pct`/`disk_pct`/`viewer_count`/`ingest_bitrate_kbps`. Together
+  with the API error-streak gate in `node_degraded`, this gives three rungs of
+  early warning before a `node_down` event.
+- **`node_down` alerts now fire — BUG-011 fixed (D-087).** The goroutine that
+  evicts stale nodes and fires `node_down` rules was implemented but never
+  started (`wireNodeEviction` was absent from `serve.go`). No deployment has
+  ever fired a `node_down` alert. The goroutine is now wired with a 3 × PollInterval
+  eviction threshold; a node that fails the poller for that window is evicted and
+  triggers any matching `node_down` rule.
+- **Persistent anomaly flag-event history (D-086).** `GET /anomalies` now accepts
+  `from`/`to` and `cursor`/`limit` and returns from a ClickHouse-backed
+  `anomaly_flag_events` store, so anomaly spikes are retained across restarts and
+  queryable over any window. Previously the endpoint computed flags point-in-time
+  and returned nothing meaningful for any time range. CH migration 0010 applies
+  automatically on upgrade.
+- **VoD recording billing — BUG-002 fixed (D-085).** `recording_gb` is now
+  populated by polling the AMS VoD REST API on every 12th collector tick, with an
+  immediate backfill on startup. Previously it was always 0: the only fill path was
+  the `vodReady` webhook, which AMS 3.x sends unsigned and Pulse silently rejected.
+  A `vod_poll_state` meta table (migration 0003) deduplicates on `(app, vod_id)`
+  so a restart does not double-bill an existing VoD; CH migration 0009
+  (`mv_recording_1d`) wires the events into `rollup_usage_1d`. Live-validated:
+  `recording_gb = 0.003126` at 0.02% reconciliation vs AMS.
+- **One-command quickstart install (D-089).** New `deploy/quickstart/` with a
+  minimal compose file, six-variable `.env.example`, and `install.sh` (healthz-gated,
+  no-TTY safe). Migrations are now baked into the Docker image at
+  `/usr/share/pulse/migrations` (via `PULSE_MIGRATIONS_DIR`), so `pulse-migrate`
+  finds them without a bind mount. `docs/runbooks/install.md` documents the Path A0
+  install flow. Requires image ≥ 0.4.0 (prior images lack baked migrations).
+- **Trial-license lifecycle + web banner (D-089).** The license manager now checks
+  expiry on every reader call (Tier/Valid/all Check* methods): a trial that crosses
+  `expires_at` mid-run degrades gracefully to free-tier entitlements and logs a
+  single warning, with no restart required. Boot with an already-expired key
+  produces the same honest `{tier:free, valid:false, expires_at retained}` state
+  instead of silently discarding the error. A dismissable warning banner appears in
+  the web UI when ≤14 days remain; a non-dismissable error banner appears when the
+  trial has expired. The `LicenseInfo` API shape is unchanged.
+- **ProbesPage — WebRTC metric columns (D-077).** The probe results table now shows
+  `ice_state` (badge: connected/failed/timeout), `rtt_ms`, `jitter_ms`, and
+  `loss_pct`. Absent values display as a dash, not zero; `loss_pct = 0.0%` is
+  correctly distinguished from absent.
+- **Light theme, density modes, and reduced-motion support (D-077).** The web UI
+  applies the brandkit light theme when the OS or user selects light mode
+  (`[data-theme=light]`, all 15 `tokens.json` color.light values). Two density
+  modes — compact and wall — are persisted to localStorage and toggled via a
+  sidebar control. `prefers-reduced-motion` collapses motion tokens throughout.
+- **New documentation (D-081, D-089):** `docs/beacon-sdk.md` — complete SDK
+  integration guide (12 sections, every API name cross-checked against source).
+  `docs/compatibility.md` — AMS version and browser compatibility matrix.
+  `docs/known-limitations.md` — 18 documented limitations.
+
+### Fixed
+
+- **`/qoe/ingest` ignores `from`/`to`/`app`/`stream`/`node` filter params —
+  BUG-004 (D-082).** The ingest-health endpoint declared these parameters in the
+  OpenAPI spec but discarded them server-side, returning the all-time, all-streams
+  dataset on every call. The web client sends `from=now-15min&to=now` on every
+  Ingest-page load, so every prod deployment was serving era-mixed all-time
+  buckets. Parameters are now honored.
+- **`/qoe/ingest` ignores `interval` bucket-size param — BUG-005 (D-083).** The
+  bucket granularity was silently fixed at 60 s regardless of the declared
+  `interval` parameter. The parameter now maps to the bucket query
+  (hour → 3 600 s, day → 86 400 s, absent → 60 s kept as the fine-grain default
+  for the F4 15 s visibility target).
+- **Probe scheduler emits duplicate result rows every 60 s — BUG-003 (D-082).**
+  The 60 s config-refresh loop cancelled and immediately respawned every probe on
+  every tick even when the configuration was unchanged; the respawned goroutine
+  fired at zero jitter, producing a second result row 0–1 ms after the first.
+  The scheduler now tracks configuration per probe and only respawns when it
+  changes. Phase was also being silently reset on every refresh, so probe timing
+  was never truly periodic; this is fixed as a side-effect of the same mechanism
+  change.
+- **List endpoints ignore `limit` + `cursor` pagination — BUG-006/007/010
+  (D-084).** Eight list endpoints declared `limit`/`cursor` in the OpenAPI spec
+  but applied neither, always returning the full set. Keyset cursors and `limit`
+  are now threaded through: `/alerts/rules`, `/alerts/history`, `/admin/users`,
+  `/admin/tokens`, `/admin/sources`, `/probes`, `/probes/{id}/results`, and
+  `/analytics/audience`. `GET /live/streams` now has a stability sort so cursor
+  pages are deterministic (non-deterministic map iteration previously caused
+  duplicate and dropped items across pages — BUG-009 partial, D-084).
+  `GET /analytics/audience?format=csv` is now declared in the OpenAPI spec
+  (BUG-010) to match the pre-existing implementation.
+- **Two server panics under pagination (D-084).** A stale or malformed cursor on
+  `GET /api/v1/live/streams` could produce a slice-OOB panic. `?limit=-1` on
+  `GET /alerts/history` bypassed the zero guard and returned HTTP 500 via the
+  chi Recoverer. Both are now clamped.
+- **`node_degraded` status inconsistent across fleet page and live overview
+  (D-088).** Three independent copies of the degraded predicate
+  (`CPUPCT > 90 || MemPCT > 90 || ConsecAPIErrors ≥ 3`) had drifted: the fleet
+  page omitted the `MemPCT` arm; the live overview omitted `ConsecAPIErrors`. All
+  three now call a shared `LiveNodeStats.Degraded()` method.
+- **Standalone nodes form poisoned zero-mean anomaly baselines (D-088).** AMS 3.x
+  standalone nodes do not report cpu/mem/disk via REST; the absent field was
+  recorded as `0`, building a `mean=0, stddev=0` baseline that guarantees an
+  instant false alarm on the first real reading. Presence flags now gate baseline
+  accumulation for these three metrics. A startup sweep purges any existing
+  poisoned rows (logged as `anomaly: purged zero-mean baselines on startup
+  count=N`); live-proved: prod purged 3 rows (cpu/mem n=8 813, disk n=3 578) on
+  the D-089 rollout boot.
+- **Web assets returned as `text/html` (D-076b).** `favicon.svg`, `icons/*`,
+  `logo/*`, and `site.webmanifest` were caught by the SPA catch-all handler and
+  served with `Content-Type: text/html`, breaking the browser tab icon and web
+  manifest. The static-file handler now checks for these paths before falling
+  through to the SPA; directory traversal is guarded.
+- **AuthGate silently authenticates on a non-JSON `/auth/me` 200 (D-077).** A
+  stale SPA fallback or misconfigured reverse proxy that returns `200 + index.html`
+  for `/auth/me` was treated as a successful authentication (`.ok` was true),
+  leaving the user on a broken dashboard with 401-ing API calls. The gate now
+  requires `Content-Type: application/json` and validates the response shape before
+  granting access.
+- **Prod compose overlay never passed license env vars (D-076).** The `real-ams`
+  compose overlay listed `PULSE_LICENSE_KEY` and `PULSE_LICENSE_PUBKEY` in a
+  comment block only; `docker compose --env-file` interpolates but does not inject
+  commented-out variables. Every prod deployment from that overlay ran in silent
+  Free tier even with a key present in `deploy/.env`. The overlay now passes both
+  variables explicitly.
+
+### Documentation
+
+- **AMS-INTEGRATION.md expanded (D-081).** Two sections added: (1) webhook
+  downstream impact and the D-V2-1 unsigned-webhook workaround path; (2) implicit
+  broadcast deletion — AMS 3.x removes RTMP broadcasts from the REST API on stop
+  rather than marking them `finished`/`terminated_unexpectedly`, which affects
+  stream-end webhook delivery and the `recording_gb` fill path.
+- **Real-AMS validation harness (D-079/D-080).** `qa/realams/` adds reusable
+  parity-helper scripts, 26 P0 and 24 P1 scenario scripts against a live AMS
+  instance, and `make validate-realams-p0` / `make validate-realams-p1` targets.
+  P0 final result vs production AMS 3.0.3 Enterprise: 24 PASS / 2 SKIP / 0 FAIL;
+  stream publish→Pulse-visible in 4 s, stop→removed in 7 s (PRD ≤10 s budget).
+
+### Database
+
+- **Migration 0003** (`vod_poll_state` SQLite + Postgres meta table): tracks seen
+  VoD IDs on `(app, vod_id)` for restart-safe recording deduplication. Applies
+  automatically via `pulse-migrate` on upgrade; idempotent.
+- **Migration 0009** (`mv_recording_1d` ClickHouse materialized view): wires
+  recording-event bytes into `rollup_usage_1d` so `recording_gb` appears in usage
+  reports and reconciliation. Applies automatically; idempotent.
+- **Migration 0010** (`anomaly_flag_events` ClickHouse MergeTree table,
+  `ORDER BY (detected_at, metric, scope)`, TTL = `{retention_days}` days): backs
+  the persistent anomaly flag history and `GET /anomalies?from=…&to=…` queries.
+  Applies automatically; idempotent.
+
+---
+
 ## [0.3.0] - 2026-07-11
 
 Operator-approved release ("ship v0.3.0", D-076) carrying SESSION-10 through
@@ -665,7 +828,7 @@ First production release. Rolled to `pulse-prod` (beyondkaira.com) 2026-07-08.
   carry `startup_ms=0`), correcting the diluted-toward-0 prod metric;
   migration `0004_qoe_startup_quantile_fix.sql` (D-042).
 - AMS upstream in `Caddyfile.prod` now read from `{$AMS_UPSTREAM}` env var instead
-  of hard-coded IP; compose default `${AMS_UPSTREAM:-161.97.172.146:5080}` (D-062).
+  of hard-coded IP; compose default `${AMS_UPSTREAM:-<your-ams-host>:5080}` (D-062).
 
 ### Fixed
 

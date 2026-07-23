@@ -12,7 +12,7 @@ community; the viewer-side moat no server-side DIY stack can replicate.
 
 | Constraint | Limit | Measured |
 |---|---|---|
-| Bundle size (gzip) | < 15 KB | **3.44 KB** |
+| Bundle size (gzip) | < 15 KB | **3.52 KB** |
 | Runtime dependencies | 0 | 0 |
 | Player CPU overhead | < 1% | < 1% (5 s poll cadence) |
 | Flush cadence | ≤ 10 s | 10 s |
@@ -235,7 +235,7 @@ import type {
 - Sampling (0–1 per-session), session UUID v4 generation
 - ESM + CJS + IIFE build, full `.d.ts`
 - Schema round-trip tests (AJV 2020), 56 tests green
-- Bundle: **3.44 KB** gzipped
+- Bundle: **3.52 KB** gzipped
 
 ## License
 

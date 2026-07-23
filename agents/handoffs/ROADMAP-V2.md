@@ -74,7 +74,12 @@
 - **Deeper F6 multi-tenancy** — tenant-scoped AUTH + a tenant-management UI (F6 buildable code is
   complete; this expansion is demand-driven).
 
-### E. Operator external action (unblocks the marketplace track)
+### E. Operator external action (unblocks the marketplace track) — ★ S97 (D-161) SHIPPED THE FULL DOCS PACK
+> S97 (2026-07-22, operator-directed): the complete marketplace documentation pack is generated and fact-verified —
+> submission-package index, listing copy, 15 live-app screenshots (all automated), demo script, submission-process +
+> developer-meeting briefs (A1–A10 assumptions tagged), user/admin/API/FAQ/troubleshooting/licensing/support docs,
+> CHANGELOG [0.4.0] reconstructed, G-27 pre-answered from the public panel repo. Remaining rows below are the
+> operator-external tail; see `docs/marketplace/submission-package.md` §Blocking items.
 - **Run the load lane** on a DEDICATED PAYG AMS (stronger prod-isolation guards since D-159) →
   yields the marketplace capacity number for `docs/compatibility.md`; also clears the expired trial.
 - **Panel-revamp developer meeting (G-27)** — 3 technical Qs + revenue-share / API-stability asks

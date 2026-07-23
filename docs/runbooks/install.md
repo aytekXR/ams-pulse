@@ -1,7 +1,7 @@
 # Pulse — Install Runbook
 
 **PRD ref:** §7.12 (launch asset — 15-minute install target)  
-**QA-verified:** local binary path < 2 min (Wave-1 gate); wave-2 build verified 2026-06-14
+**QA-verified:** local binary path < 2 min; full-stack build verified 2026-06-14
 
 ---
 
@@ -99,7 +99,7 @@ starts automatically after you sign in, when no AMS sources are configured yet.
 
 > **Note:** This is the supported production path — it is what the live production
 > deployment runs. A full clean-install verification of the step-by-step below (fresh
-> machine, released image, real AMS) is scheduled as a SESSION-11 work order (D-069);
+> machine, released image, real AMS) is scheduled (D-069);
 > any step that diverges will be corrected there.
 
 ### Prerequisites
@@ -222,8 +222,8 @@ make up
 >
 > ```sh
 > # Pull the released image. ⚠ Image tags have NO `v` prefix: the git tag
-> # `v0.2.0` publishes the image tag `0.2.0` (also `0.2`, `0`, `latest`).
-> docker pull ghcr.io/aytekxr/ams-pulse:0.2.0
+> # `v0.4.0` publishes the image tag `0.4.0` (also `0.4`, `0`, `latest`).
+> docker pull ghcr.io/aytekxr/ams-pulse:0.4.0
 > ```
 >
 > Create `deploy/docker-compose.image-pin.yml` (do not commit this file).
@@ -237,7 +237,7 @@ make up
 > ```yaml
 > services:
 >   pulse:
->     image: ghcr.io/aytekxr/ams-pulse:0.2.0
+>     image: ghcr.io/aytekxr/ams-pulse:0.4.0
 >     ports:
 >       - "127.0.0.1:8090:8090"   # loopback only; front with a reverse proxy for remote access
 >     environment:
@@ -247,7 +247,7 @@ make up
 >         condition: service_completed_successfully
 >
 >   pulse-migrate:
->     image: ghcr.io/aytekxr/ams-pulse:0.2.0
+>     image: ghcr.io/aytekxr/ams-pulse:0.4.0
 >     entrypoint: ["pulse", "migrate"]   # image ENTRYPOINT is `pulse serve`
 >     restart: "no"
 >     depends_on:
@@ -352,8 +352,7 @@ The wizard starts automatically after login when no AMS sources are configured:
 ## Path B: Local binary (QA-verified)
 
 This path runs Pulse and ClickHouse as local processes without Docker.
-It is the path QA-01 exercised in Wave 1 and all command output below is
-from that verified run.
+All command output below is from a QA-verified run.
 
 ### Prerequisites
 
@@ -390,7 +389,7 @@ Verify it is ready:
 cd server && CGO_ENABLED=0 go build -o /tmp/pulse ./cmd/pulse/
 ```
 
-Verified output (Wave 1 QA gate, 2026-06-12):
+Verified output (QA-verified 2026-06-12):
 ```
 # no output — success
 # binary at /tmp/pulse (~30 MB static binary)
@@ -414,7 +413,7 @@ This runs both:
 - **ClickHouse migrations** — creates the `pulse` database with 9 raw/rollup tables
   and 5 materialized views.
 
-Verified output (Wave 1 fix-loop QA gate, 2026-06-12):
+Verified output (QA-verified 2026-06-12):
 ```
 [INFO] pulse migrate: meta store migrations done
 [WARN] pulse migrate: ClickHouse migrations failed (non-fatal)   ← only if CH unreachable
@@ -456,7 +455,7 @@ Copy the token.
 curl http://localhost:8090/healthz
 ```
 
-Expected response (verified Wave 1 fix-loop QA gate, 2026-06-12):
+Expected response (QA-verified 2026-06-12):
 
 ```json
 {
@@ -483,7 +482,7 @@ Navigate to `http://localhost:8090`. You will see the **Pulse login screen** —
 the admin token printed in step 4 and click **Sign in**. The onboarding wizard
 starts automatically after login (same 4-step flow as Docker path step 6 above).
 
-**QA-measured time (Wave 1 gate):**
+**QA-measured time:**
 
 | Step | Time |
 |------|------|
@@ -544,10 +543,10 @@ See `deploy/config/pulse.example.yaml` for the full annotated file.
 
 ### Environment variables
 
-All wave-1 and wave-2 variables are listed below. Omit any wave-2 variable to get the
-noted default; the binary runs correctly without it.
+All variables are listed below. Omit any variable marked as having a default to get that
+default; the binary runs correctly without it.
 
-**Wave-1 variables (collector + API core):**
+**Core variables (collector + API):**
 
 | Variable | Default | Description |
 |---|---|---|
@@ -573,7 +572,7 @@ noted default; the binary runs correctly without it.
 | `PULSE_MIGRATIONS_DIR` | auto from source tree | Override path to ClickHouse migration SQL files |
 | `PULSE_META_DDL_PATH` | embedded in binary | Optional override: path to a custom meta DDL SQL file |
 
-**Wave-2 variables (beacon ingest listener, geo, Kafka, metrics, reports, S3):**
+**Extended variables (beacon ingest listener, geo, Kafka, metrics, reports, S3):**
 
 | Variable | Default | Description |
 |---|---|---|
@@ -657,7 +656,7 @@ license:
 # Print resolved config (secrets redacted), CH connectivity, meta store status:
 /tmp/pulse diag
 
-# Check billing reconciliation (Wave 2) — requires live ClickHouse:
+# Check billing reconciliation — requires live ClickHouse:
 /tmp/pulse diag --reconcile
 # Output: drift%, tolerance verdict (exits non-zero if > 1%)
 ```
@@ -668,18 +667,6 @@ license:
 
 ---
 
-## Upgrading
-
-1. Stop Pulse (`docker compose stop pulse` or kill the process).
-2. Replace the binary or update the Docker image tag.
-3. Run `pulse migrate` to apply any new ClickHouse DDL.
-4. Start Pulse. Meta migrations run automatically on startup.
-
-The meta store schema is backwards-compatible within a major version.
-ClickHouse DDL migrations are append-only (no destructive changes).
-
----
-
 ## Path C: Helm (Kubernetes)
 
 > **EXPERIMENTAL — do not use in production yet.**
@@ -687,7 +674,7 @@ ClickHouse DDL migrations are append-only (no destructive changes).
 > and lint pass locally (`helm lint`, `helm template` golden-file tests).
 > Validate on a clean cluster before production use.
 >
-> **S6 parity batch — shipped in this session (chart now has):**
+> **Features included in the current chart:**
 > - ClickHouse auth via `clickhouse.auth.existingSecret` — wire `CLICKHOUSE_USER` /
 >   `CLICKHOUSE_PASSWORD` / `PULSE_CLICKHOUSE_DSN` through a K8s Secret (parity with
 >   `docker-compose.hardened.yml`). Empty `existingSecret` = unauthenticated default
@@ -706,7 +693,7 @@ ClickHouse DDL migrations are append-only (no destructive changes).
 >
 > **Remaining gap (chart still EXPERIMENTAL):**
 > - `helm install` / `helm upgrade` not run against a real cluster (D-002).
->   QA-01 must validate on a clean cluster before removing the EXPERIMENTAL marker.
+>   A real-cluster install must be validated before removing the EXPERIMENTAL marker.
 > - S3 push in the backup CronJob requires a custom sidecar image (aws-cli not in the
 >   ClickHouse base image); documented in `backup.extraEnv` and README.
 >
@@ -821,6 +808,17 @@ WARN and falls back to no-op geo enrichment — existing collection continues no
 helm upgrade pulse ./deploy/helm/pulse -f my-values.yaml
 kubectl exec deploy/pulse -- pulse migrate  # apply new DDL if any
 ```
+
+---
+
+## Upgrading
+
+Upgrades follow the stamped-build two-step procedure in [`deploy/runbooks/upgrade-rollback.md`](../../deploy/runbooks/upgrade-rollback.md): build the new image with explicit version stamps via `docker compose build --build-arg VERSION=... --build-arg COMMIT=... --build-arg BUILD_DATE=...`, then run `docker compose up -d` without `--build` so Compose reuses the pre-built image (passing `--build` to `up` does not forward `--build-arg` values and produces an unstamped `dev/unknown` binary). Before every upgrade, tag the current running image as a rollback point (e.g. `docker tag pulse-prod-pulse:latest pulse-prod-pulse:pre-dNNN`) and take a manual backup using the backup sidecar — the backup exit code must be 0 before proceeding; see [`deploy/runbooks/backup-restore.md`](../../deploy/runbooks/backup-restore.md) for restore steps if the upgrade fails. Schema migrations are forward-only: the DDL files in `contracts/` are immutable once merged, schema changes are additive only, and there is no down-migration path — if a bad migration is deployed, roll back the binary and restore from the pre-upgrade backup rather than attempting manual DDL reversal. Never run `docker compose down -v` in production: the `pulse-data` volume holds the SQLite meta store containing all API tokens, alert rules, and system settings, and destroying it requires full manual reconfiguration. To roll back, retag the known-good image as `latest` and run `docker compose up -d` without `--build` — the full procedure, canonical 5-overlay compose command, and post-swap smoke checklist are in the [rollback procedure](../../deploy/runbooks/upgrade-rollback.md#rollback-procedure) section of the upgrade runbook.
+
+**See also:**
+- [Upgrade & rollback runbook](../../deploy/runbooks/upgrade-rollback.md) — stamped-build steps, smoke checklist, and NEVER rules
+- [Backup & restore runbook](../../deploy/runbooks/backup-restore.md) — pre-upgrade manual backup and restore instructions
+- [Rollback procedure](../../deploy/runbooks/upgrade-rollback.md#rollback-procedure) — retag the known-good image and `up -d`
 
 ---
 
