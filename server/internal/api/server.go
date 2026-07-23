@@ -197,6 +197,12 @@ type Server struct {
 	// Wave 2: ingest tracker for QoE endpoints (optional).
 	ingestTracker IngestTracker
 
+	// D-164: upstream poll-freshness source for /healthz (optional).
+	// nil keeps the pre-D-164 liveness-only collector semantics, so every
+	// constructor and test that does not wire a collector still compiles and
+	// reports "ok".
+	collectorHealth domain.CollectorHealth
+
 	// BUG-004: ingest querier used exclusively by handleIngestHealth.
 	// Defaults to qsvc; tests may override via SetIngestQuerier to inject a
 	// capture double without replacing the concrete *query.Service everywhere.
@@ -311,6 +317,13 @@ func (s *Server) SetEventSink(sink domain.EventSink) {
 // Call after New, before Start.
 func (s *Server) SetIngestTracker(tracker IngestTracker) {
 	s.ingestTracker = tracker
+}
+
+// SetCollectorHealth wires the upstream poll-freshness source used by /healthz
+// (D-164). Call after New, before Start. Leaving it unset keeps the collector
+// component on liveness-only semantics.
+func (s *Server) SetCollectorHealth(h domain.CollectorHealth) {
+	s.collectorHealth = h
 }
 
 // SetIngestQuerier overrides the IngestQuerier used by handleIngestHealth.
@@ -944,12 +957,40 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 		components["meta_store"] = map[string]any{"status": "ok", "latency_ms": nil, "message": nil}
 	}
 
-	// Collector: check live provider has a snapshot (liveness proxy).
+	// Collector: the live provider must have a snapshot AND that snapshot must
+	// still be fed by a reachable AMS.
+	//
+	// D-164: existence alone is not health. The aggregator keeps its last
+	// snapshot forever, so a collector whose every poll fails stayed "ok"
+	// indefinitely — a 7 h 46 m production collection outage was reported
+	// healthy end to end, and the deploy health-gate passed on it. When a
+	// freshness source is wired, age out the component.
 	collectorStatus := "ok"
-	if s.live == nil || s.live.CurrentSnapshot() == nil {
+	var collectorMsg any
+	switch {
+	case s.live == nil || s.live.CurrentSnapshot() == nil:
 		collectorStatus = "degraded"
+		collectorMsg = "no live snapshot yet"
+	case s.collectorHealth != nil:
+		h := s.collectorHealth.PollHealth()
+		// Before the first success, age from StartedAt: a collector that has
+		// NEVER reached AMS must not read as healthy.
+		ref := h.LastSuccess
+		if ref.IsZero() {
+			ref = h.StartedAt
+		}
+		if h.StaleAfter > 0 && !ref.IsZero() {
+			if age := time.Since(ref); age > h.StaleAfter {
+				collectorStatus = "degraded"
+				msg := fmt.Sprintf("no successful AMS poll for %s", age.Truncate(time.Second))
+				if h.LastError != "" {
+					msg += ": " + h.LastError
+				}
+				collectorMsg = msg
+			}
+		}
 	}
-	components["collector"] = map[string]any{"status": collectorStatus, "latency_ms": nil, "message": nil}
+	components["collector"] = map[string]any{"status": collectorStatus, "latency_ms": nil, "message": collectorMsg}
 
 	// Kafka: report lag and parse_errors when a stats provider is wired (VD-27).
 	hasDegradedNonCritical := collectorStatus == "degraded"

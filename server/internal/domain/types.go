@@ -399,6 +399,42 @@ type LiveProvider interface {
 	Subscribe() (<-chan *LiveSnapshot, func())
 }
 
+// PollHealthSnapshot reports the freshness of a collector's upstream poll loop.
+//
+// D-164: the /healthz collector component used to be a pure liveness proxy
+// ("a snapshot object exists"), which stays "ok" forever once the aggregator has
+// built its first snapshot — even when every subsequent AMS poll fails. That is
+// how a 7 h 46 m production collection outage went unreported (the AMS URL had
+// been reverted to an unreachable host by a deploy that dropped a compose
+// overlay). Freshness, not mere existence, is the health signal.
+type PollHealthSnapshot struct {
+	// StartedAt is when the poll loop began. Used as the age reference before
+	// the first successful poll, so a collector that has NEVER reached AMS is
+	// reported degraded rather than healthy.
+	StartedAt time.Time
+
+	// LastSuccess is the time of the most recent successful poll.
+	// Zero means no poll has succeeded since StartedAt.
+	LastSuccess time.Time
+
+	// LastError is the most recent poll error, empty when the last poll
+	// succeeded. Surfaced in the /healthz message to name the cause.
+	LastError string
+
+	// StaleAfter is the age beyond which the collector counts as degraded.
+	// Zero disables the freshness check (the caller keeps liveness-only
+	// semantics).
+	StaleAfter time.Duration
+}
+
+// CollectorHealth exposes upstream poll freshness to the /healthz handler.
+// Implemented by internal/collector/restpoller.Poller.
+type CollectorHealth interface {
+	// PollHealth returns a consistent snapshot of poll-loop freshness.
+	// Safe for concurrent use with the running poll loop.
+	PollHealth() PollHealthSnapshot
+}
+
 // EventSink accepts normalized events from collectors for fanout to
 // ClickHouse writer and live aggregator.
 // Implemented by internal/collector/fanout.Fanout.

@@ -26,10 +26,11 @@
 # ORDER
 #   1. preflight  tools + files present, env file present, compose config valid
 #   2. last-good  record whether the project is already running (rollback needs it)
-#   3. build      docker compose build
+#   3. build      docker compose build, WITH the version stamps (D-058)
 #   4. apply      docker compose up -d   (brings up the loopback-published stack)
 #   5. health     bounded curl loop vs the PRIVATE loopback /healthz, real signal
-#                 A failure at 4 or 5 rolls back (see rollback()).
+#   6. collector  after the staleness window, assert Pulse is actually COLLECTING
+#                 A failure at 4, 5 or 6 rolls back (see rollback()).
 #
 # CONFIG (env; never printed):
 #   PULSE_PROJECT      compose project name          default: pulse-prod
@@ -37,9 +38,11 @@
 #   HEALTH_URL         private health probe          default: http://127.0.0.1:8090/healthz
 #   HEALTH_EXPECT      substring the body must have  default: "components"
 #   HEALTH_TIMEOUT     seconds before hard-fail      default: 90
+#   COLLECTOR_GRACE    seconds to wait before the    default: 35
+#                      freshness assert; 0 skips it
 #   DOCKER_SG          "1" wraps compose in `sg docker -c` (host w/o docker group)
 #
-# EXIT: 0 built+up+healthy · 1 failed (rolled back) · 64 not configured · 2 usage
+# EXIT: 0 built+up+healthy+collecting · 1 failed (rolled back) · 64 not configured · 2 usage
 # =============================================================================
 set -euo pipefail
 
@@ -70,11 +73,23 @@ HEALTH_EXPECT="${HEALTH_EXPECT:-components}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-90}"
 DOCKER_SG="${DOCKER_SG:-0}"
 
-# Single consolidated prod file (formerly base + hardened + nginx-edge — the
-# three were merged into docker-compose.prod.yml; `docker compose config` proved
-# the rendered configs identical at consolidation time).
+# THE CANONICAL OVERLAY SET — keep in sync with deploy/runbooks/upgrade-rollback.md
+# ("Canonical compose command"). Copy it as-is; NEVER omit an overlay.
+#
+# D-164 (2026-07-23): this list held ONLY docker-compose.prod.yml. Running the
+# script therefore recreated the prod app from the base file alone, which
+# silently
+#   - reverted PULSE_AMS_URL to the built-in mock-ams default (an unreachable
+#     host in a real deployment) => the collector went blind for 7 h 46 m, and
+#   - dropped PULSE_LICENSE_KEY, which ONLY real-ams.yml maps => the server
+#     degraded to the Free tier, disabling reports, probes, anomalies and the
+#     data API.
+# Both failures are silent by design (the server never crashes on a bad licence
+# or an unreachable AMS), so the overlay set is load-bearing, not cosmetic.
 COMPOSE_FILES=(
-  -f "$ROOT/deploy/docker-compose.prod.yml"
+  -f "$ROOT/deploy/docker-compose.prod.yml"      # app + ClickHouse, hardening, loopback publish
+  -f "$ROOT/deploy/docker-compose.real-ams.yml"  # real AMS wiring + PULSE_LICENSE_KEY mapping
+  -f "$ROOT/deploy/docker-compose.backup.yml"    # 24 h backup sidecar
 )
 
 # compose <args...> — one wrapper so the `sg docker` path is a faithful rehearsal
@@ -89,8 +104,10 @@ compose() {
     cmd="$cmd --env-file $PULSE_ENV_FILE $*"
     sg docker -c "$cmd"
   else
+    # "$@" (not $*): the build step passes --build-arg VERSION=... values that
+    # must survive as single words. SC2048.
     docker compose -p "$PULSE_PROJECT" "${COMPOSE_FILES[@]}" \
-      --env-file "$PULSE_ENV_FILE" $*
+      --env-file "$PULSE_ENV_FILE" "$@"
   fi
 }
 
@@ -124,7 +141,8 @@ info "compose config valid · project=$PULSE_PROJECT · health=$HEALTH_URL"
 
 if [ "$CHECK_ONLY" -eq 1 ]; then
   say "--check: configuration valid, changing nothing."
-  info "would run: build -> up -d -> health-gate $HEALTH_URL (expect \"$HEALTH_EXPECT\")"
+  info "would run: build (stamped) -> up -d -> health-gate $HEALTH_URL (expect \"$HEALTH_EXPECT\")"
+  info "            -> collector-freshness assert after ${COLLECTOR_GRACE:-35}s"
   exit 0
 fi
 
@@ -157,7 +175,18 @@ rollback() {
 # 3. build
 # ---------------------------------------------------------------------------
 say "3/5 build"
-if ! compose build; then
+# Version stamps must be passed HERE, to `compose build`. `compose up --build`
+# does not forward --build-arg, which is why the image that shipped at D-164
+# reported `pulse dev (commit unknown)` and prod could not name the code it was
+# running. (D-058 lesson b; deploy/runbooks/upgrade-rollback.md Step 3.)
+STAMP_VERSION="$(git -C "$ROOT" describe --tags --always 2>/dev/null || echo dev)"
+STAMP_COMMIT="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+STAMP_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+info "stamping $STAMP_VERSION (commit $STAMP_COMMIT)"
+if ! compose build \
+  --build-arg "VERSION=$STAMP_VERSION" \
+  --build-arg "COMMIT=$STAMP_COMMIT" \
+  --build-arg "BUILD_DATE=$STAMP_DATE"; then
   oops "build failed"
   rollback
   exit 1
@@ -201,5 +230,36 @@ if ! health_ok; then
   exit 1
 fi
 
-say "done — Pulse is up and healthy on its private loopback port."
+# ---------------------------------------------------------------------------
+# 6. collector freshness (D-164)
+# ---------------------------------------------------------------------------
+# WHY THIS STEP EXISTS. Step 5 proves Pulse ANSWERS. It cannot prove Pulse is
+# COLLECTING: /healthz reports the whole document "ok" during a cold-start grace
+# window, and before D-164 the collector component was a pure liveness proxy
+# that stayed "ok" forever even when every AMS poll failed. That is exactly how
+# a deploy with the wrong PULSE_AMS_URL passed its health gate and ran blind for
+# 7 h 46 m. So: wait past the staleness window, THEN require the document to be
+# "ok" — with D-164 that is true only if a real AMS poll has recently succeeded.
+#
+# COLLECTOR_GRACE=0 skips this check — the documented escape hatch for
+# deploying Pulse while AMS is deliberately down (maintenance).
+COLLECTOR_GRACE="${COLLECTOR_GRACE:-35}"   # > the 30 s staleAfter floor
+if [ "$COLLECTOR_GRACE" -gt 0 ]; then
+  say "6/6 collector freshness (waiting ${COLLECTOR_GRACE}s for a real AMS poll)"
+  sleep "$COLLECTOR_GRACE"
+  body="$(curl -fsS -m 5 "$HEALTH_URL" 2>/dev/null || true)"
+  if printf '%s' "$body" | grep -q '"status":"ok"'; then
+    info "collector is fresh: AMS polls are landing."
+  else
+    oops "collector is NOT fresh after ${COLLECTOR_GRACE}s — Pulse answers but is not collecting."
+    oops "  /healthz says: ${body:-<no response>}"
+    oops "  Most likely the AMS wiring is wrong (PULSE_AMS_URL / credentials in"
+    oops "  $PULSE_ENV_FILE), or AMS itself is down. Check: compose logs pulse | grep restpoller"
+    oops "  Deploying anyway (set COLLECTOR_GRACE=0) means shipping a blind monitor."
+    rollback
+    exit 1
+  fi
+fi
+
+say "done — Pulse is up, healthy on its private loopback port, and collecting."
 info "host nginx (the live edge) proxies to it; no nginx action needed for an app redeploy."

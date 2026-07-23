@@ -11,7 +11,45 @@
 
 ---
 
-## ▶ START HERE (next session — CONTINUE the marketplace-wait per `sessions/SESSION-99.md`; ⚠ ENV CHANGED: the edge is now HOST NGINX)
+## ▶ START HERE (next session — execute `sessions/SESSION-100.md` §SESSION-101: PROVE the D-164 fixes, then back to the wait; ⚠ A SECOND SESSION IS WRITING THIS REPO)
+
+**Session 2026-07-23 (S100) result: D-164 — the wait-gate found PRODUCTION SILENTLY BLIND and fixed it.**
+The gate said "nothing new" on every documented axis; the standing **prod health-read** is what caught it.
+The cutover's own deploy script (`deploy/nginx/deployment.sh`, shipped in PR #199 and never loop-reviewed —
+S99 swept #199's *docs*, not its *code*) hardcoded the compose set to `docker-compose.prod.yml` **alone**,
+dropping `real-ams.yml`. One omission → three silent failures: **zero AMS collection for 7 h 46 m**
+(`server_events` flatlined 08:58:20Z → 16:44:28Z), **Enterprise→Free** (that overlay is the only file
+mapping `PULSE_LICENSE_KEY`), and a `pulse dev (commit unknown)` binary (`up --build` never forwards
+build-args — D-058 re-learned). **Nothing paged, because `/healthz` said `collector: "ok"` throughout**: the
+check only asked whether the aggregator held a snapshot object, which it holds forever.
+
+Shipped: prod restored via the canonical 3-file command (pre-d164 tag, stamped build, stamp asserted
+pre-deploy) → **v0.4.0-139-gf9e9c69, tier enterprise, zero poll errors, 1,265,906 rows intact**; the deploy
+script fixed (canonical overlays + stamped builds + **a new step 6 that refuses to finish unless Pulse is
+actually COLLECTING**); and `/healthz` made honest (`domain.CollectorHealth` ages the collector out past 3
+missed intervals, names the cause, stays HTTP 200 so a transient AMS outage cannot trip liveness probes).
+12 new tests; full server suite green under `-race`.
+
+**⚠ TWO THINGS THE NEXT SESSION MUST INTERNALISE.** (1) **Another session is editing this repo concurrently**
+— ~20 files carried uncommitted edits S100 did not make; S100 restored them untouched and committed only its
+own seven paths. `git status` and re-read before every edit; never `git add -A`; two of those edits are wrong
+or risky (operator-expected §4). (2) **The canonical overlay set is load-bearing** — "never omit an overlay"
+in `upgrade-rollback.md` is not style advice; one missing overlay silently blinds prod with no crash and no
+alert.
+
+**SESSION-101 = PROVE IT** (plan in `sessions/SESSION-100.md`): confirm prod is still collecting, then — in an
+**isolated** throwaway project, never prod — prove the new health signal actually fires against an unreachable
+AMS and that `deployment.sh` step 6 actually fails the deploy. D-164 changed a live health path and a deploy
+script; neither has been exercised against the failure it was written for. Then back to the wait.
+
+**Operator queue (operator-expected.md ★S100):** nothing blocking; a **permanent 7 h 46 m data hole on
+2026-07-23** (affects any report/screenshot/demo covering today); **★ a decision on the 18-PR Dependabot
+queue** (oldest 8 days, outside its own 1-week policy, previously "operator-held"); whether the concurrent
+session is intentional; plus the unchanged 6-step submission sequence and carried product calls.
+
+---
+
+## (superseded — see D-164 above) ▶ was: START HERE (next session — CONTINUE the marketplace-wait per `sessions/SESSION-99.md`; ⚠ ENV CHANGED: the edge is now HOST NGINX)
 
 **Session 2026-07-23 (later) result: D-163 — the S99 wait-gate caught the OPERATOR'S OWN Caddy→nginx cutover (PR #199,
 `810b36f`: host nginx owns :80/:443, vhosts `deploy/nginx/`, certbot TLS; ALL Caddy prod artifacts deleted from repo

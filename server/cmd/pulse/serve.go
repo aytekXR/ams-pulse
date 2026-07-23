@@ -373,6 +373,9 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		logger,
 	)
 	sources = append(sources, poller)
+	// D-164: hold the poller so /healthz can age out the collector component
+	// when AMS stops answering (wired after api.New below).
+	collectorHealth := poller
 
 	// A5/B1/B7: Wire webhook source when PULSE_WEBHOOK_ADDR is set.
 	// Placed here (after metaStore) so per-source HMAC secrets can be loaded.
@@ -495,6 +498,9 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	apiServer := api.New(apiCfg, metaStore, agg, qsvc, lic, logger)
 	// Wire ClickHouse connection for /healthz probes (D-W1-002).
 	apiServer.SetClickHouseConn(store.GetConn())
+	// D-164: wire poll freshness so /healthz reports the collector degraded when
+	// AMS has been unreachable, instead of "ok" forever off a stale snapshot.
+	apiServer.SetCollectorHealth(collectorHealth)
 	// VD-10: Wire event sink so main-port /ingest/beacon persists events.
 	// Without this, beacons POSTed to the main API port are authenticated but
 	// silently discarded. The dedicated beacon server (PULSE_INGEST_LISTEN_ADDR)
