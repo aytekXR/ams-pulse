@@ -279,9 +279,7 @@ Define the compose project alias (run from the repo root):
 
 ```bash
 DC="-p pulse-prod \
-  -f deploy/docker-compose.yml \
-  -f deploy/docker-compose.hardened.yml \
-  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.real-ams.yml \
   -f deploy/docker-compose.backup.yml \
   --env-file deploy/.env"
@@ -436,7 +434,7 @@ AMS should POST events to the shared path:
 http://<pulse-host>:8092/webhook/ams
 ```
 
-When fronted by Caddy over HTTPS (see below), the public URL becomes:
+When fronted by the host-nginx edge over HTTPS (see below), the public URL becomes:
 
 ```
 https://your-domain/webhook/ams
@@ -458,27 +456,27 @@ guard were bypassed.
 > `<decimal-unix-seconds>.<raw-body>` (not the bare body). A sender still using the
 > body-only contract above will get **401 invalid signature** — see §4.7.
 
-### 4.4 Caddy route for the webhook path
+### 4.4 nginx route for the webhook path
 
-The `/webhook/*` route is **already present** in `deploy/config/Caddyfile.prod`
-(lines 55–60), proxying to `pulse:8092`. No route addition is required. The
-route is:
+The `/webhook/` route is **already present** in the reference vhost
+`deploy/nginx/pulse.beyondkaira.com.conf`, proxying to the webhook listener on
+`127.0.0.1:8092` with the path preserved (no trailing slash on `proxy_pass`
+means nginx forwards `/webhook/...` unchanged). No route addition is required.
+The route is:
 
-```caddyfile
-# AMS lifecycle webhooks — proxy /webhook/* to pulse:8092.
-handle /webhook/* {
-    reverse_proxy pulse:8092 {
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Real-IP {remote_host}
-    }
+```nginx
+upstream pulse_webhook { server 127.0.0.1:8092; }
+
+location /webhook/ {
+    proxy_pass http://pulse_webhook;
 }
 ```
 
-After any changes to `Caddyfile.prod`, reload (not restart) Caddy to avoid
-disrupting other tenants sharing the container:
+After any change to the vhost files, validate and reload (not restart) the host
+nginx so the edge stays up for the other vhosts:
 
 ```bash
-docker exec pulse-prod-caddy-1 caddy reload --config /etc/caddy/Caddyfile
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
 ### 4.5 Configure a sender to POST webhooks
@@ -558,8 +556,8 @@ handler maps them to domain events via the `action`, `event`, and `type` fields
 
 ### 4.6 Expose the webhook port in Docker Compose (if needed)
 
-If Caddy is not involved and you want AMS to POST directly to the Docker host on
-port 8092, add an override:
+If no edge proxy is involved and you want AMS to POST directly to the Docker host
+on port 8092, add an override:
 
 ```yaml
 # deploy/docker-compose.webhook-port.yml (create if needed)
@@ -569,8 +567,8 @@ services:
       - "8092:8092"
 ```
 
-For production behind Caddy, the Caddy route above is preferred (single exposed
-port, TLS, no direct host port binding).
+For production behind the host-nginx edge, the nginx route above is preferred
+(single exposed port, TLS, no direct host port binding).
 
 ### 4.7 Optional: webhook replay protection (`X-Ams-Timestamp`)
 
@@ -632,8 +630,9 @@ fallback to the plain env var). The following secrets honour this convention:
 (`config.go:375`).
 
 An opt-in overlay `deploy/docker-compose.secrets.yml` wires Docker secrets via
-this mechanism. Apply it instead of `docker-compose.hardened.yml`'s plain env
-injection when file-based secret delivery is preferred. Until then, mitigate by
+this mechanism. Apply it instead of the stack's plain env injection (from
+`deploy/.env` via `docker-compose.prod.yml`) when file-based secret delivery is
+preferred. Until then, mitigate by
 restricting `deploy/.env` permissions (`chmod 600 deploy/.env`) and ensuring the
 `.env` file is in `.gitignore` (it is).
 
@@ -648,8 +647,8 @@ of this key means stored credentials cannot be decrypted.
 
 CORS for `/api/v1/*` routes is allowlist-controlled via `PULSE_CORS_ALLOWED_ORIGINS`
 (comma-separated). The beacon ingest route (`/ingest/beacon`) is always permissive
-(needed for cross-origin browser beacons). CSP is enforced by Caddy headers in
-`Caddyfile.prod`.
+(needed for cross-origin browser beacons). CSP is enforced by the edge proxy —
+the `Content-Security-Policy` header in `deploy/nginx/pulse.beyondkaira.com.conf`.
 
 ---
 
@@ -824,7 +823,7 @@ TASKS — run as an ORCH workflow with Verify + Commit + Handoff flows:
      PULSE_AMS_LOGIN_PASSWORD), PULSE_AMS_NODE_ID, PULSE_AMS_APPLICATIONS
      to deploy/.env.
    - Restart the pulse service:
-       DC="-p pulse-prod -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml -f deploy/docker-compose.prod-tls.yml -f deploy/docker-compose.real-ams.yml -f deploy/docker-compose.backup.yml --env-file deploy/.env"
+       DC="-p pulse-prod -f deploy/docker-compose.prod.yml -f deploy/docker-compose.real-ams.yml -f deploy/docker-compose.backup.yml --env-file deploy/.env"
        sg docker -c "docker compose $DC up -d pulse"
    - Confirm no 401/403 errors in pulse logs within 30 s.
 
@@ -846,10 +845,10 @@ TASKS — run as an ORCH workflow with Verify + Commit + Handoff flows:
 
 4. OPTIONAL WEBHOOK SETUP (if you have PULSE_WEBHOOK_SECRET)
    - Set PULSE_WEBHOOK_ADDR=:8092 and PULSE_WEBHOOK_SECRET in deploy/.env.
-   - The Caddy route for /webhook/* → pulse:8092 is already present in
-     Caddyfile.prod (lines 55–60). No route addition needed. Reload (not
-     restart) Caddy after any Caddyfile change:
-       docker exec pulse-prod-caddy-1 caddy reload --config /etc/caddy/Caddyfile
+   - The nginx route for /webhook/ → 127.0.0.1:8092 is already present in
+     deploy/nginx/pulse.beyondkaira.com.conf. No route addition needed.
+     Validate and reload (not restart) nginx after any vhost change:
+       sudo nginx -t && sudo systemctl reload nginx
    - Configure AMS Management Console to POST to https://<domain>/webhook/ams
      with the shared secret.
    - Verify: trigger a publish-start event in AMS and confirm it appears in
@@ -939,13 +938,14 @@ in `rest_url`.
 
 Symptom: AMS logs show HTTP 404 when POSTing to `https://your-domain/webhook/ams`.
 
-Cause: the Caddy route for `/webhook/*` was not loaded, or Caddy has not been
-reloaded since the route was added.
+Cause: the nginx route for `/webhook/` was not loaded, or nginx has not been
+reloaded since the vhost was changed.
 
-Fix: the `/webhook/*` handle block is already in `Caddyfile.prod` (lines 55–60).
-Reload (not restart) Caddy:
+Fix: the `/webhook/` location block is already in
+`deploy/nginx/pulse.beyondkaira.com.conf`. Validate and reload (not restart)
+nginx:
 ```bash
-docker exec pulse-prod-caddy-1 caddy reload --config /etc/caddy/Caddyfile
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
 ### Webhook returns 401 (invalid signature)

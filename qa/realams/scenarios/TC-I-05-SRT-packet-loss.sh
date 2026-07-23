@@ -31,7 +31,7 @@
 # NETEM / LOSS INJECTION NOTE:
 #   This publisher runs with --network host, sharing the VPS host network.
 #   Applying tc netem to the host eth0 NIC is FORBIDDEN: it shapes ALL traffic
-#   on the VPS including prod Caddy, Pulse polling, and other tenants.
+#   on the VPS including the host-nginx edge, Pulse polling, and other tenants.
 #
 #   Loss injection for SRT requires a BRIDGE-NETWORK publisher instead:
 #     1. Run publisher without --network host (gets 172.17.x.x Docker bridge IP)

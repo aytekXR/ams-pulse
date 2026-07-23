@@ -11,7 +11,23 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-99.md`: ★ THE MARKETPLACE-WAIT; the autonomous backlog is EMPTY)
+## ▶ START HERE (next session — CONTINUE the marketplace-wait per `sessions/SESSION-99.md`; ⚠ ENV CHANGED: the edge is now HOST NGINX)
+
+**Session 2026-07-23 (later) result: D-163 — the S99 wait-gate caught the OPERATOR'S OWN Caddy→nginx cutover (PR #199,
+`810b36f`: host nginx owns :80/:443, vhosts `deploy/nginx/`, certbot TLS; ALL Caddy prod artifacts deleted from repo
+AND VPS; prod compose consolidated into `deploy/docker-compose.prod.yml`, canonical 3-file command in
+`upgrade-rollback.md`; CI-only Caddy kept for csp-e2e) and reconciled the living docs #199 left untouched** (PR #200,
+docs + one comment — NO prod roll): admin-guide §7 (nginx = default edge), overview.md (diagram + 3-file table),
+AMS-INTEGRATION (two dead 5-overlay/`prod-tls` DC commands → canonical set; §4.4 real nginx webhook route +
+`nginx -t && systemctl reload nginx`; CSP pointer), troubleshooting, dependabot-policy smoke, SESSION-99 environment
+gotchas (⚠ the SESSION-97 gotchas are PARTIALLY STALE — no `Caddyfile.prod` exists; never touch host nginx/certbot
+without operator direction). **The wait-state is otherwise unchanged — SESSION-100+ keep executing
+`sessions/SESSION-99.md`'s protocol** (two-minute gate → Lead B if operator input → else re-arm at max interval, one
+line). The queue on the operator is the same 6-step submission sequence + carried decisions (operator-expected.md).
+
+---
+
+## (superseded — the wait CONTINUES under it, env-gotchas section updated in place; see D-163 above) ▶ was: START HERE (`sessions/SESSION-99.md`: ★ THE MARKETPLACE-WAIT; the autonomous backlog is EMPTY)
 
 **Session 2026-07-23 result: D-162 — S98 finished the interrupted S97 close (PR #197 squash-merged → `c761028`), then
 shipped §2.7 COMPLETE on its unlock day** (PR #198; CI-config + one spec fix — NO prod roll; prod stays

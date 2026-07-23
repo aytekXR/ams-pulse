@@ -1,5 +1,22 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-23, SESSION-98 — §2.7 CI-promotions DONE incl. branch protection; the autonomous backlog is now EMPTY — everything left is yours)
+# Operator TODO — the items only YOU can do (updated 2026-07-23, SESSION-99 — your nginx cutover is now reflected in ALL living docs; the wait continues)
 
+> # ▶ S99 STATUS (2026-07-23, D-163) — NO operator action required. Your Caddy→nginx cutover (PR #199) was detected by the hourly gate; the living docs it deliberately left are now reconciled.
+>
+> You merged the edge cutover mid-wait; the loop picked it up on the next tick and swept the delta: the admin guide
+> now teaches host nginx as the default edge (the section citing the two deleted Caddyfiles is gone), the overview
+> diagram + compose table show the consolidated `docker-compose.prod.yml` 3-file set, AMS-INTEGRATION's webhook
+> section shows the REAL nginx route + `nginx -t && systemctl reload nginx` (the old `docker exec …caddy reload`
+> commands would fail against nothing), two stale 5-overlay `DC` commands with the deleted `prod-tls` file were
+> replaced with the canonical 3-file command, and the session-handoff environment gotchas no longer instruct
+> protecting a `Caddyfile.prod` that doesn't exist. Historical records and the CI-only Caddy harness were left
+> alone, matching the convention your PR set. Docs + one script comment only — **no prod roll** (still
+> v0.4.0-131-g6b5bd38). PR #200.
+>
+> **Your queue is UNCHANGED** — the ★S98 block below is still the live list (submission sequence 1–6, carried
+> decisions). Nothing new for you.
+>
+> ---
+>
 > # ▶ S98 STATUS (2026-07-23, D-162) — NO operator action required. §2.7 shipped on its unlock day — AND the branch-protection update you were queued to run turned out to be automatable, so that carried item is RETIRED.
 >
 > The interrupted S97 close was finished first (PR #197 squash-merged; the docs pack is on main). Then the one

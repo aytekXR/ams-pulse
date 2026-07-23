@@ -205,7 +205,7 @@ Cluster fleet discovery ──────────────────�
 | [contracts/README.md](contracts/README.md) | Contract surface, codegen commands, CI validation |
 | [contracts/openapi/pulse-api.yaml](contracts/openapi/pulse-api.yaml) | Full OpenAPI 3.1 spec (42 paths, 59 operations, 73 schemas) |
 | [agents/README.md](agents/README.md) | Multi-agent build workflow |
-| [deploy/runbooks/upgrade-rollback.md](deploy/runbooks/upgrade-rollback.md) | Upgrade + rollback: 5-overlay compose command, stamped-build pattern, rollback tags, ClickHouse DDL stance |
+| [deploy/runbooks/upgrade-rollback.md](deploy/runbooks/upgrade-rollback.md) | Upgrade + rollback: canonical 3-file compose command, stamped-build pattern, rollback tags, ClickHouse DDL stance |
 | [deploy/runbooks/monitoring.md](deploy/runbooks/monitoring.md) | Monitoring: backup daemon health, alert_history cap, CH disk, Prometheus metrics, WARN log taxonomy |
 | [deploy/runbooks/backup-restore.md](deploy/runbooks/backup-restore.md) | Backup sidecar, manual backup, ClickHouse + SQLite restore steps |
 | [SECURITY.md](SECURITY.md) | Security policy: report channel, supported versions, webhook HMAC, token storage, CSP, license gates |

@@ -148,7 +148,7 @@ clickhouse:
            "--query", "SELECT 1"]
 ```
 
-This is already handled by `deploy/docker-compose.hardened.yml`.
+This is already handled by `deploy/docker-compose.prod.yml`.
 
 **2d. Remove CLICKHOUSE_SKIP_USER_SETUP**
 
@@ -454,8 +454,8 @@ For off-host storage (S3, NFS, rsync) see `deploy/runbooks/backup-restore.md §S
 ### Resource limits
 
 Add resource limits to prevent a runaway ClickHouse or pulse container from
-exhausting host memory. In `deploy/docker-compose.hardened.yml` or a local
-override:
+exhausting host memory. Already set in `deploy/docker-compose.prod.yml`; adjust
+there or in a local override:
 
 ```yaml
 services:
