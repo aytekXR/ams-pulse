@@ -30,8 +30,9 @@ prod container refresh:
 
 1. **Staging smoke (pristine-copy stack):** spin up a full compose stack from a
    clean copy of `deploy/` with a unique `-p <name>` project (never the prod `.env`).
-   Use `tls internal` (caddy self-signed). Verify:
-   - `healthz` responds OK via both direct container and caddy proxy
+   The stack has no TLS layer of its own (the edge is host nginx, out of scope for a
+   container-digest smoke). Verify:
+   - `healthz` responds OK on the pulse container's HTTP port
    - The webhook listener returns fail-closed (403/no-HMAC) on an unsigned probe
 2. **Prod refresh:** pull the new digest and recreate **only the updated services by
    naming them explicitly** (`docker compose … up -d --no-deps <svc> …`; `--no-deps`

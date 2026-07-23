@@ -31,9 +31,15 @@ subagents cannot read the session scratchpad — share context via repo paths (D
 - **D-081 approval** → strip DRAFT-INTERNAL headers across docs/marketplace/* + licensing-public.md in one commit.
 - **"attempt the demo rough cut"** → Playwright-driven screen capture per `docs/marketplace/demo-video-script.md`.
 
-## Environment gotchas (carried, unchanged)
-See `sessions/SESSION-97.md` §Environment gotchas (S97/S98 changed no runtime). Prod-deploy 5-overlay `DC` set,
-5-check smoke, do-not-commit `Caddyfile.prod`, mutation-copy restore via `cp`.
+## Environment gotchas (UPDATED 2026-07-23 after the operator's Caddy→nginx cutover, PR #199 / commit 810b36f)
+**The SESSION-97 gotchas are PARTIALLY STALE.** New truth: prod edge = **host nginx** (vhosts in `deploy/nginx/`,
+TLS via certbot, cert at `/etc/letsencrypt/live/beyondkaira.com/`); Caddy containers/config are GONE from repo AND
+VPS (`Caddyfile.prod` no longer exists — that do-not-commit rule is moot); the canonical prod compose command is the
+**3-file set** in `deploy/runbooks/upgrade-rollback.md` (`-p pulse-prod -f deploy/docker-compose.prod.yml
+-f deploy/docker-compose.real-ams.yml -f deploy/docker-compose.backup.yml --env-file deploy/.env`) — NOT the old
+5-overlay set. Never touch the host nginx (:80/:443) or certbot state without operator direction. CI keeps its own
+containerised Caddy (`Caddyfile.ci`, csp-e2e) — deliberately, do not "clean it up". Still true: 5-check smoke,
+mutation-copy restore via `cp`, gofmt/Go tests only via docker, never `docker compose down -v` on prod.
 
 ## Notable state (for whoever reads this cold)
 - Branch protection: 13 required contexts on `main`, strict=true (D-162 — verified). The loop's token holds
@@ -42,3 +48,27 @@ See `sessions/SESSION-97.md` §Environment gotchas (S97/S98 changed no runtime).
   pattern), never re-soften `continue-on-error`.
 - The marketplace submission is fully prepared (D-161 pack, `docs/marketplace/submission-package.md` = index) and
   gated ONLY on the operator's 6-step sequence (operator-expected.md ★S97 block).
+
+---
+
+# EXECUTION LOG (S99, 2026-07-23) — wait-session gate found external change → doc-reconciliation arc (D-163)
+
+Ticks 1–4 (hourly): gate quiet (toolchain absent; main unchanged at `4d8c746`; no operator input) → re-armed, no arc.
+Tick 5: gate found **PR #199 merged by the operator** (`810b36f` — Caddy→host-nginx cutover complete, prod compose
+consolidated). Session goal determined at open: reconcile the living docs #199 deliberately left untouched with the
+new edge/compose reality (the un-swept delta), nothing more.
+
+- Ground truth read FIRST (nginx vhosts incl. the real `/webhook/` + `/beacon/` routing semantics, prod.yml service
+  list, upgrade-rollback.md canonical 3-file command) — every edit grounded in merged config, not memory.
+- Fixed: admin-guide §7 (nginx = default edge; deleted-Caddyfile table gone), overview.md (diagram + 3-file table),
+  AMS-INTEGRATION (§3.2 + appendix DC commands with dead `prod-tls`; §4.4 nginx webhook route; §4.6/§5.2/§5.4;
+  webhook-404 fix), troubleshooting.md WS section, dependabot-policy staging smoke, TC-I-05 comment, and THIS file's
+  Environment gotchas (Caddyfile.prod rule moot; 5-overlay DC dead; hands off host nginx/certbot).
+- Verified: no living script/config references a deleted artifact; marketplace pack + faq/user-guide/api-guide have
+  ZERO caddy/prod-tls/PULSE_DOMAIN refs; historical docs left per #199's own convention.
+- 3-lens adversarial verify (grounding / completeness / cross-refs) → PR #200 → squash-merge.
+
+**Operator-action check: NO operator action is required.** The cutover was the operator's own work; this arc only
+made the docs tell the truth about it. The wait-state queue (submission sequence, toolchain, [FO-1], [20]) is
+unchanged — see operator-expected.md ★S99. → back to the marketplace-wait (SESSION-100 = same protocol as this file's
+plan section; next session continues under it).

@@ -48,11 +48,13 @@ proxy_set_header Upgrade $http_upgrade;
 proxy_set_header Connection "upgrade";
 ```
 
-Caddy handles the upgrade automatically for `reverse_proxy` directives; no
-additional configuration is required there.
+The reference vhost `deploy/nginx/pulse.beyondkaira.com.conf` already carries
+these directives (via the shared `00-beyondkaira-maps.conf` upgrade map). If you
+use Caddy instead, its `reverse_proxy` directive handles the upgrade
+automatically with no additional configuration.
 
-See `docs/AMS-INTEGRATION.md` §3 for the standard Caddy route layout and
-`deploy/nginx/pulse.beyondkaira.com.conf` for a reference Nginx configuration.
+See `deploy/nginx/pulse.beyondkaira.com.conf` for the reference nginx
+configuration and `docs/AMS-INTEGRATION.md` §4.4 for the webhook route.
 
 ---
 

@@ -384,22 +384,18 @@ network-accessible.
 
 ## 7. Reverse proxy
 
-### Caddy (default — recommended)
+### Host nginx (default — recommended)
 
-The base stack ships with Caddy as the TLS-terminating reverse proxy. Two Caddyfiles
-are provided:
+The production stack publishes the app on loopback only (`127.0.0.1:8090` API+UI,
+`:8091` beacon, `:8092` webhook) and expects a host-level nginx to terminate TLS.
+Reference vhosts live in `deploy/nginx/` (site configs plus the shared
+`00-beyondkaira-maps.conf` WebSocket upgrade map); TLS certificates come from
+certbot (Let's Encrypt HTTP-01 webroot). The Pulse vhost sets the CSP and the
+other security headers, proxies `/beacon/` to the beacon listener (stripping the
+prefix) and `/webhook/` to the webhook listener (path preserved), and carries the
+WebSocket upgrade headers for `/live/ws`.
 
-| File | Use case | CSP |
-|---|---|---|
-| `deploy/config/Caddyfile` | Local development + base overlay | `connect-src 'self' wss://{$PULSE_DOMAIN:localhost} https://{$PULSE_DOMAIN:localhost}` |
-| `deploy/config/Caddyfile.prod` | Production with Let's Encrypt TLS | `connect-src 'self' wss://{$PULSE_DOMAIN} wss://pulse.{$PULSE_DOMAIN} https://{$PULSE_DOMAIN} https://pulse.{$PULSE_DOMAIN}` |
-
-Caddy handles WebSocket upgrades automatically. No additional proxy headers are
-required for `/live/ws`.
-
-### nginx edge (alternative)
-
-For deployments that already run nginx on the host:
+To set it up on a fresh host:
 
 1. Load the shared WebSocket upgrade map (once per host):
    ```sh
@@ -414,17 +410,19 @@ For deployments that already run nginx on the host:
    sudo nginx -t && sudo systemctl reload nginx
    ```
 
-3. Use the additive Docker Compose overlay to publish ports on loopback:
+3. Bring up the loopback-published stack with the consolidated prod compose file:
    ```sh
    docker compose \
-     -f deploy/docker-compose.yml \
-     -f deploy/docker-compose.nginx-edge.yml \
+     -f deploy/docker-compose.prod.yml \
      up -d
    ```
+   (Production deployments add `-f deploy/docker-compose.real-ams.yml` and
+   `-f deploy/docker-compose.backup.yml` — see
+   `deploy/runbooks/upgrade-rollback.md` for the canonical command.)
 
 #### WebSocket upgrade requirements
 
-nginx does NOT handle WebSocket upgrades automatically (unlike Caddy). The site config
+nginx does NOT handle WebSocket upgrades automatically. The site config
 must include the `$connection_upgrade` map variable and pass the upgrade headers for
 `/live/ws`:
 
@@ -437,10 +435,20 @@ proxy_set_header Connection $connection_upgrade;
 The `00-beyondkaira-maps.conf` file defines the required `map $http_upgrade $connection_upgrade`
 directive. This must be included in the `http {}` context exactly once.
 
+### Other proxies
+
+Any TLS-terminating reverse proxy works, provided it forwards the WebSocket
+upgrade headers for `/live/ws` and preserves the `/webhook/*` path (the beacon
+route expects its `/beacon/` prefix stripped — see the reference vhost). The CI
+e2e harness still uses a containerised Caddy (`deploy/config/Caddyfile.ci`) to
+exercise the CSP suite; that Caddy is CI-only and not part of any deployment.
+
 ### CSP and CORS notes
 
-- The CSP is enforced by Caddy/nginx, not by Go middleware. Adjust `Caddyfile.prod`
-  if you host Pulse on a subdomain other than `pulse.{$PULSE_DOMAIN}`.
+- The CSP is enforced by the edge proxy (the nginx vhost), not by Go middleware.
+  Adjust the `Content-Security-Policy` header in your copy of
+  `deploy/nginx/pulse.beyondkaira.com.conf` if you host Pulse on a different
+  domain (the `connect-src` entries must match your WebSocket origin).
 - Set `PULSE_CORS_ALLOWED_ORIGINS` when the API is called from a different origin than
   the UI (e.g. Grafana or a custom dashboard).
 - Set `PULSE_ALLOWED_WS_ORIGINS` when the live dashboard WebSocket is opened from a

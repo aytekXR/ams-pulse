@@ -103,24 +103,26 @@ The Pulse binary exposes three ports:
 
 ## Diagram 2 — Deployment Topology
 
-The production stack is composed from five Docker Compose overlays applied in order.
-The mock-AMS service (included in the hardened overlay for QA) is suppressed by the
-real-AMS overlay when pointing at a live server.
+The production stack is a consolidated Docker Compose file plus two overlays. TLS is
+terminated by a host-level nginx (reference vhosts in `deploy/nginx/`, certificates via
+certbot); the compose stack publishes the app on loopback only. The mock-AMS service
+(included in the consolidated file for QA) is suppressed by the real-AMS overlay when
+pointing at a live server.
 
 ```mermaid
 flowchart TB
     subgraph HOST["Customer Host (VM or bare-metal)"]
-        CADDY["Caddy — edge TLS proxy\n:443 HTTPS, :80 redirect"]
-        PULSE["Pulse container\n:8090 API+UI, :8091 beacon, :8092 webhook"]
+        NGINX["Host nginx — edge TLS\n:443 HTTPS, :80 redirect (certbot)"]
+        PULSE["Pulse container\n127.0.0.1 → :8090 API+UI, :8091 beacon, :8092 webhook"]
         CH2["ClickHouse\n:9000 cluster-internal"]
         MIG["pulse-migrate (one-shot DDL)"]
         BK["Backup sidecar (24 h schedule)"]
     end
 
     REALAMS["Real AMS :5080\n(docker-compose.real-ams.yml)"]
-    MOCKAMS["mock-AMS QA server\n(hardened overlay, demo only)"]
+    MOCKAMS["mock-AMS QA server\n(consolidated file, demo only)"]
 
-    CADDY --> PULSE
+    NGINX --> PULSE
     PULSE --> CH2
     MIG --> CH2
     BK --> CH2
@@ -128,19 +130,19 @@ flowchart TB
     MOCKAMS -. "demo / local QA" .-> PULSE
 ```
 
-**Five production overlays (apply in this order):**
+**Production compose set (apply in this order):**
 
-| Overlay file | Concern |
+| Compose file | Concern |
 |---|---|
-| `docker-compose.yml` | Base: Pulse + ClickHouse, default env |
-| `docker-compose.hardened.yml` | Security caps, resource limits, Caddy TLS, pulse-migrate, mock-AMS for QA |
-| `docker-compose.prod-tls.yml` | Production TLS configuration |
+| `docker-compose.prod.yml` | Consolidated prod stack: Pulse + ClickHouse (auth), container hardening, resource limits, webhook listener, loopback-only publishes for host nginx |
 | `docker-compose.real-ams.yml` | Disables mock-AMS; wires Pulse to the operator's AMS endpoint |
 | `docker-compose.backup.yml` | Backup sidecar (24 h ClickHouse + SQLite snapshots, optional S3 push) |
 
 For local development or QA without a real AMS, omit `docker-compose.real-ams.yml`; the
-mock-AMS service from the hardened overlay starts automatically. A Helm chart is also
-provided at `deploy/helm/pulse/` for Kubernetes installs.
+mock-AMS service from the consolidated file starts automatically. The pre-consolidation
+layer files (`docker-compose.yml` + `docker-compose.hardened.yml` +
+`docker-compose.nginx-edge.yml`) remain for layer-by-layer local composition. A Helm
+chart is also provided at `deploy/helm/pulse/` for Kubernetes installs.
 
 ---
 
@@ -252,7 +254,7 @@ See [`docs/licensing.md`](licensing.md) for minting and activation instructions.
 | Document | Contents |
 |---|---|
 | [`docs/runbooks/install.md`](runbooks/install.md) | Step-by-step install: Docker Compose, local binary, Helm (Kubernetes) |
-| [`docs/runbooks/productionize.md`](runbooks/productionize.md) | TLS/Caddy, real-AMS wiring, backups, hardened 5-overlay command |
+| [`docs/runbooks/productionize.md`](runbooks/productionize.md) | TLS via host nginx + certbot, real-AMS wiring, backups, canonical compose command |
 | [`docs/runbooks/alerting.md`](runbooks/alerting.md) | Alert rule semantics, channel setup, maintenance windows, HMAC verification |
 | [`docs/runbooks/reports.md`](runbooks/reports.md) | Tenant mapping, egress estimation, schedule setup, S3 export, reconciliation |
 | [`docs/runbooks/probes.md`](runbooks/probes.md) | Synthetic probe creation, protocol coverage, result interpretation (F10) |
