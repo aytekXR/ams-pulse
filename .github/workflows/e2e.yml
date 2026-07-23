@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Generate ephemeral secret key
         run: echo "PULSE_SECRET_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
@@ -984,7 +984,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Generate ephemeral secret key
         run: echo "PULSE_SECRET_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"

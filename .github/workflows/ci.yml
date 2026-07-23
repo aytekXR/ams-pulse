@@ -13,7 +13,7 @@ jobs:
   contracts:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Validate JSON schemas (ajv draft2020)
         run: |
           npx --yes ajv-cli compile --spec=draft2020 --strict=false \
@@ -60,7 +60,7 @@ jobs:
           --health-retries 12
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v6
         with:
@@ -162,7 +162,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: contracts
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -196,7 +196,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: contracts
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -227,7 +227,7 @@ jobs:
     runs-on: ubuntu-latest
     container: swift:6.1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build iOS beacon SDK (cross-platform core)
         run: cd sdk/beacon-swift && swift build
@@ -243,7 +243,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [server, web, sdk]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Compute version build-args
         id: ver
@@ -289,7 +289,7 @@ jobs:
   helm:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Helm
         uses: azure/setup-helm@v4
@@ -345,7 +345,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: contracts
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -387,7 +387,7 @@ jobs:
   compose:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Validate base compose config
         run: |
