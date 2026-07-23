@@ -1,5 +1,82 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-23, SESSION-99 — your nginx cutover is now reflected in ALL living docs; the wait continues)
+# Operator TODO — the items only YOU can do (updated 2026-07-23, SESSION-100 — ⚠ prod was silently BLIND for 7 h 46 m after the cutover; it is FIXED and collecting again, but please read §1–§4)
 
+> # ▶ ★ S100 STATUS (2026-07-23, D-164) — ⚠ ACTION-RELEVANT (not action-blocking). The wait-gate caught a live production regression left by the cutover deploy. Prod is restored. Four things you should know; one needs a decision.
+>
+> **What was wrong.** Your Caddy→nginx cutover deploy brought the prod app up from
+> `deploy/docker-compose.prod.yml` **alone**, without the other two canonical overlays. That single
+> omission silently did three things — none of which crash, all of which matter:
+>
+> 1. **Pulse stopped collecting from your Ant Media Server for 7 h 46 m.** Without `real-ams.yml`,
+>    `PULSE_AMS_URL` fell back to the built-in `mock-ams` default, which does not exist in your stack.
+>    Every poll failed, every 5 seconds, from **08:58:20 UTC to 16:44:28 UTC**. Evidence: the
+>    `server_events` table ran at a steady ~2,160 rows/hour, then flatlined to zero at exactly 08:58:20
+>    and resumed the moment the fix landed.
+> 2. **Your licence silently dropped from Enterprise to Free.** `PULSE_LICENSE_KEY` is mapped into the
+>    container by `real-ams.yml` and by nothing else — so it was never passed. Free tier disables
+>    reports, probes, anomaly detection and the data API. (This exact trap was hit once before, at the
+>    v0.3.0 rollout; the warning comment in `real-ams.yml` is from that incident.)
+> 3. **The running binary could no longer name its own code** (`pulse dev (commit unknown)`), because
+>    `compose up --build` does not forward the version build-args.
+>
+> **Nothing paged you, and that is the deeper bug.** `/healthz` reported the collector `"ok"` for the
+> entire outage: the check only asked "does the aggregator hold a snapshot object?", and it holds its
+> last snapshot forever. Your deploy script's health gate passed for the same reason. A monitoring
+> product that cannot notice its own blindness is the thing worth fixing, so both were fixed.
+>
+> **What the loop did** (all verified, prod healthy at v0.4.0-139-gf9e9c69, tier `enterprise`, zero poll
+> errors, 1,265,906 rows of history intact; ClickHouse volume, host nginx, certbot and the `antmedia`
+> container were never touched):
+> - Restored prod with the canonical 3-file command, after taking a `pre-d164` rollback tag and
+>   asserting the version stamp on the new image before deploying.
+> - Fixed `deploy/nginx/deployment.sh` — the actual root cause. It had the overlay list hardcoded to one
+>   file. It now uses the canonical set, stamps builds, and **refuses to finish a deploy unless Pulse is
+>   genuinely collecting** (a new post-deploy assertion; this deploy would have failed loudly instead of
+>   going quietly blind). `COLLECTOR_GRACE=0` opts out when you deploy during AMS maintenance.
+> - Fixed `/healthz` so the collector component ages out and names the cause when AMS stops answering.
+>
+> ### §1 — Use the fixed deploy path from now on
+> `bash deploy/nginx/deployment.sh` is now safe and is the recommended path. If you deploy by hand
+> instead, copy the 3-file `DC_ARGS` block from `deploy/runbooks/upgrade-rollback.md` verbatim — the
+> overlays are load-bearing, not decoration.
+>
+> ### §2 — There is a permanent 7 h 46 m hole in today's data
+> Nothing can backfill it (AMS does not retain the history Pulse polls). Any analytics view, report,
+> screenshot or demo recording covering **2026-07-23** will under-count that window. If you were about
+> to capture marketplace screenshots or record the demo video from live data, either wait a day or pick
+> a date range that excludes it.
+>
+> ### §3 — ★ ONE DECISION FOR YOU: the Dependabot queue
+> **18 PRs are open, the oldest opened 2026-07-15 (8 days).** Nearly all are green. The repo's own
+> policy (`docs/dependabot-policy.md`) targets merging digest/patch bumps within **1 week** of green CI
+> and minors within 2 weeks — so the queue is now outside its own policy. Earlier sessions recorded
+> these as *deliberately operator-held*, which is why the loop has not touched them. **Please confirm
+> which it is:** (a) keep holding them (say so and the loop will stop counting it as drift), or
+> (b) authorize the loop to absorb them in a dedicated session per the policy's batch protocol. Two
+> majors in the queue (`typescript` 7, `@types/node` 26) have failing CI and need the co-upgrade
+> cluster treatment either way.
+>
+> ### §4 — ⚠ Another session appears to be editing this repo concurrently
+> While S100 ran, uncommitted edits appeared in the working tree that this session did not make —
+> `CLAUDE.md`, `Makefile`, `web/package.json`, `web/vite.config.ts`, `docs/AMS-INTEGRATION.md` and
+> ~10 more. **The loop left every one of them in place, uncommitted and unmerged** (S100's commit names
+> only its own seven files). Some look genuinely useful (the `CLAUDE.md` "skeleton only" line is long
+> overdue for correction, and `branch-protection.sh` now matches the live 13 contexts). **Two need a
+> second look before they land:**
+> - `web/package.json` **downgrades `@eslint/js` from ^10.0.1 to ^9.39.4** and rewrites an em-dash as a
+>   `u...` escape; `web/package-lock.json` moves with it.
+> - `docs/product.md` changes the F2 (historical analytics) tier from **Free+ to Pro+** — this is
+>   **factually wrong**: analytics is gated by retention days, and Pro gets 90 days. The row's own
+>   "13-month rollups" claim is **Business+** (396 days, `license.go:134`). Neither Free+ nor Pro+ is a
+>   clean answer; the row needs rewording, not a tier swap.
+>
+> Also worth knowing: `docs/AMS-INTEGRATION.md` is down 213 lines in that uncommitted set. If a second
+> autonomous session is intentional, fine — but two sessions writing the same handoff files will
+> collide. If it is not intentional, it is worth stopping.
+>
+> **Your queue is otherwise UNCHANGED** — the ★S98/S97 submission sequence below is still the live list.
+>
+> ---
+>
 > # ▶ S99 STATUS (2026-07-23, D-163) — NO operator action required. Your Caddy→nginx cutover (PR #199) was detected by the hourly gate; the living docs it deliberately left are now reconciled.
 >
 > You merged the edge cutover mid-wait; the loop picked it up on the next tick and swept the delta: the admin guide
