@@ -87,6 +87,51 @@ type Poller struct {
 	// failures. Resets to 0 on any successful call. Single-goroutine invariant:
 	// poll() runs only from Run's loop, same as vodTick. D-087.
 	consecAPIErrors int
+
+	// Poll-loop freshness for /healthz (D-164). Written by Run's goroutine,
+	// read concurrently by the API handler, so it has its own lock — never take
+	// this and mu together, so no lock-order rule is needed.
+	healthMu    sync.RWMutex
+	startedAt   time.Time
+	lastSuccess time.Time
+	lastErr     string
+}
+
+// staleAfter is the poll age beyond which /healthz reports the collector
+// degraded: three missed intervals, floored at 30 s so the default 5 s cadence
+// does not flap the health signal on a single slow response.
+func (p *Poller) staleAfter() time.Duration {
+	if d := 3 * p.cfg.PollInterval; d > minStaleAfter {
+		return d
+	}
+	return minStaleAfter
+}
+
+// minStaleAfter is the floor for staleAfter.
+const minStaleAfter = 30 * time.Second
+
+// PollHealth implements domain.CollectorHealth.
+func (p *Poller) PollHealth() domain.PollHealthSnapshot {
+	p.healthMu.RLock()
+	defer p.healthMu.RUnlock()
+	return domain.PollHealthSnapshot{
+		StartedAt:   p.startedAt,
+		LastSuccess: p.lastSuccess,
+		LastError:   p.lastErr,
+		StaleAfter:  p.staleAfter(),
+	}
+}
+
+// recordPoll updates the freshness state after one poll attempt.
+func (p *Poller) recordPoll(err error) {
+	p.healthMu.Lock()
+	defer p.healthMu.Unlock()
+	if err != nil {
+		p.lastErr = err.Error()
+		return
+	}
+	p.lastSuccess = time.Now()
+	p.lastErr = ""
 }
 
 // New creates a new Poller.
@@ -131,6 +176,11 @@ func (p *Poller) Name() string {
 // is cancelled or a fatal error occurs.
 func (p *Poller) Run(ctx context.Context) error {
 	p.logger.Info("restpoller: starting", "node_id", p.cfg.NodeID, "interval", p.cfg.PollInterval)
+	// D-164: StartedAt is the age reference until the first poll succeeds, so a
+	// collector that never reaches AMS reports degraded instead of healthy.
+	p.healthMu.Lock()
+	p.startedAt = time.Now()
+	p.healthMu.Unlock()
 	if p.vodState == nil {
 		p.logger.Info("restpoller: VoD polling disabled (VodState not configured)")
 	}
@@ -139,7 +189,9 @@ func (p *Poller) Run(ctx context.Context) error {
 
 	// Initial poll immediately so the first broadcast is visible within one
 	// interval, not two.
-	if err := p.poll(ctx); err != nil {
+	err := p.poll(ctx)
+	p.recordPoll(err)
+	if err != nil {
 		p.logger.Warn("restpoller: initial poll error", "error", err)
 	}
 
@@ -148,9 +200,13 @@ func (p *Poller) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			if err := p.poll(ctx); err != nil {
+			err := p.poll(ctx)
+			p.recordPoll(err)
+			if err != nil {
 				p.logger.Warn("restpoller: poll error", "error", err)
 				// Non-fatal: keep running, supervisor handles persistent failures.
+				// The failure is now also visible on /healthz once the last
+				// success ages past staleAfter (D-164).
 			}
 		}
 	}
