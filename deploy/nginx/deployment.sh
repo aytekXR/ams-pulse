@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
 # =============================================================================
 # deployment.sh — thin, self-contained ON-HOST deploy for the Pulse compose
-# stack behind the new host-nginx edge.
+# stack behind the host-nginx edge.
 #
-# SCOPE. This is EDGE-migration tooling, not a rewrite of how Pulse runs. Pulse
+# SCOPE. This is app-deploy tooling, not a rewrite of how Pulse runs. Pulse
 # stays a docker-compose stack (Go server + ClickHouse + Kafka). This script
-# does exactly: build -> up (with the loopback-publish overlay) -> health-gate
-# the app on its PRIVATE loopback port. It does NOT touch nginx, :443, or the live
-# shared Caddy: docker-compose.nginx-edge.yml `!reset`s the caddy service out of
-# the merged config, so `up -d` can never recreate/stop pulse-prod-caddy-1 (it is
-# left as an untouched orphan). Only the `pulse` app container is reconciled (a
-# brief app recreate onto loopback). The edge cutover itself is owner-run and
-# windowed (see deploy/MIGRATION.md). Run it to prove the app answers on 127.0.0.1
-# BEFORE you flip the edge, and on every app redeploy after.
+# does exactly: build -> up (deploy/docker-compose.prod.yml, loopback-published)
+# -> health-gate the app on its PRIVATE loopback port. It does NOT touch nginx
+# or :443 — host nginx owns the edge (vhosts in deploy/nginx/, TLS via certbot,
+# cert at /etc/letsencrypt/live/beyondkaira.com/) and is reloaded separately by
+# the owner. Only the app containers are reconciled (a brief app recreate onto
+# loopback). Run it on every app redeploy to prove the app answers on 127.0.0.1.
 #
 # SELF-CONTAINED. No bin/repo, no repo_cli, no external health-check.sh. The
 # health gate below is its own bounded curl loop asserting a REAL signal (the
@@ -29,7 +27,7 @@
 #   1. preflight  tools + files present, env file present, compose config valid
 #   2. last-good  record whether the project is already running (rollback needs it)
 #   3. build      docker compose build
-#   4. apply      docker compose up -d   (brings up loopback-published stack)
+#   4. apply      docker compose up -d   (brings up the loopback-published stack)
 #   5. health     bounded curl loop vs the PRIVATE loopback /healthz, real signal
 #                 A failure at 4 or 5 rolls back (see rollback()).
 #
@@ -72,10 +70,11 @@ HEALTH_EXPECT="${HEALTH_EXPECT:-components}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-90}"
 DOCKER_SG="${DOCKER_SG:-0}"
 
+# Single consolidated prod file (formerly base + hardened + nginx-edge — the
+# three were merged into docker-compose.prod.yml; `docker compose config` proved
+# the rendered configs identical at consolidation time).
 COMPOSE_FILES=(
-  -f "$ROOT/deploy/docker-compose.yml"
-  -f "$ROOT/deploy/docker-compose.hardened.yml"
-  -f "$ROOT/deploy/docker-compose.nginx-edge.yml"
+  -f "$ROOT/deploy/docker-compose.prod.yml"
 )
 
 # compose <args...> — one wrapper so the `sg docker` path is a faithful rehearsal
@@ -115,10 +114,10 @@ if [ ! -f "$PULSE_ENV_FILE" ]; then
   oops "  copy deploy/.env.example -> deploy/.env and fill real values (gitignored)."
   exit 64
 fi
-# `compose config` validates the merged overlay (catches a bad override/env ref)
+# `compose config` validates the rendered config (catches a bad override/env ref)
 # without starting anything — safe in --check too.
 if ! compose config >/dev/null; then
-  oops "docker compose config failed — the merged overlay is invalid or env is missing keys."
+  oops "docker compose config failed — the compose file is invalid or env is missing keys."
   exit 64
 fi
 info "compose config valid · project=$PULSE_PROJECT · health=$HEALTH_URL"
@@ -140,9 +139,9 @@ info "project was $([ "$WAS_RUNNING" -eq 1 ] && echo 'already running' || echo '
 # rollback — used by the `if !` guards below. Honest about a compose topology:
 # if we started the stack fresh and it failed to come healthy, take it back down
 # so no half-broken loopback stack is left listening; if it was already running,
-# leave it as the owner had it and report. Either way the live :443 edge is
-# UNTOUCHED (Caddy still owns :443 until the manual cutover), so a failure here
-# never takes the public site down.
+# leave it as the owner had it and report. Either way the :443 edge (host nginx)
+# is UNTOUCHED — this script never reloads nginx — though a dead app upstream
+# means nginx serves 502s until the app is healthy again.
 rollback() {
   oops "rolling back — the live edge (:443) was not touched by this script."
   if [ "$WAS_RUNNING" -eq 0 ]; then
@@ -203,4 +202,4 @@ if ! health_ok; then
 fi
 
 say "done — Pulse is up and healthy on its private loopback port."
-info "next: run the owner nginx edge cutover in deploy/MIGRATION.md (§ cutover)."
+info "host nginx (the live edge) proxies to it; no nginx action needed for an app redeploy."
