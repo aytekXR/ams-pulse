@@ -39,6 +39,12 @@
 > instead, copy the 3-file `DC_ARGS` block from `deploy/runbooks/upgrade-rollback.md` verbatim — the
 > overlays are load-bearing, not decoration.
 >
+> **Precisely what is live right now:** the restore was a *configuration* fix, so prod is collecting
+> correctly today. The two *code* fixes (the deploy script and the honest `/healthz`) are committed on
+> the S100 branch and reach prod on the **next roll after that PR merges** — the running image
+> (`v0.4.0-139-gf9e9c69`) predates them. Nothing is degraded in the meantime; it just means prod's own
+> `/healthz` cannot yet detect this class of failure.
+>
 > ### §2 — There is a permanent 7 h 46 m hole in today's data
 > Nothing can backfill it (AMS does not retain the history Pulse polls). Any analytics view, report,
 > screenshot or demo recording covering **2026-07-23** will under-count that window. If you were about

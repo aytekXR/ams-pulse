@@ -40,6 +40,13 @@ Enterprise→Free downgrade, and an unstamped `pulse dev (commit unknown)` binar
    Stays HTTP 200 when degraded so a transient AMS outage cannot trip liveness probes into a
    restart loop. 12 new tests; full server suite green under `-race`.
 
+> **⚠ PRECISION — what is and is not live.** The prod restore (item 1) was a **configuration** fix and
+> is fully live. Items 2 and 3 are **code**, committed on the branch and NOT yet in prod: the running
+> image is `v0.4.0-139-gf9e9c69`, built from `main` before those commits. So prod today is collecting
+> correctly but still carries the old liveness-only `/healthz`. The collector-freshness signal reaches
+> prod on the **next roll after this PR merges** — which is why SESSION-101 verifies it in an isolated
+> stack rather than by reading prod's `/healthz`.
+
 ## ⚠ Environment truths for whoever reads this cold
 
 - **A SECOND SESSION IS WRITING THIS REPO.** ~20 files gained uncommitted edits during S100 that this
