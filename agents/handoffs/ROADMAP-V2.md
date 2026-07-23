@@ -50,6 +50,15 @@
   INCLUDING the branch-protection contexts update, which turned out to be executable
   autonomously — the gh token holds repo-admin. See §2.7.)*
 
+### A′. Non-gated and AUTONOMOUS — reopened 2026-07-23 by the S100 incident
+> The "backlog is drained" claim above was true of *features*. It was not true of the system's
+> ability to notice its own failures, which is what D-164 exposed. These need no operator input.
+- **§2.45 Nothing ALERTS when Pulse goes blind** — D-164 made `/healthz` honest; nothing pages.
+  The cheapest first step (a `pulse_collector_last_success_timestamp` gauge on `/metrics`) is
+  fully autonomous; the built-in alert rule needs a semantics decision first.
+- **SESSION-101 verification of D-164** — the new health signal and the new deploy gate have not
+  yet been exercised against the failure they were written for. Autonomous, isolated-stack only.
+
 ### B. Tooling-blocked — operator provisions the environment
 - **§2.12 Android Kotlin SDK** — needs a JVM+Gradle toolchain (Temurin 21 + Gradle) on the host.
   **Standing GO (D-154):** the loop auto-starts `sdk/beacon-kotlin` on the first tick
@@ -663,6 +672,26 @@ snapshot is never re-evaluated → stuck firing (no stale-firing sweep). D-160 d
 drop the alert without resolving it). A correct fix needs a firing-semantics decision (abandoned vs. still-firing) like D-156 —
 delicate on a live alert, and a blanket stale-firing sweep would wrongly resolve `stream_offline` (absence IS its alert).
 Surfaced to the operator; NOT auto-built.
+
+### 2.45  Nothing ALERTS when Pulse itself goes blind  [OPEN — found S100/D-164; the incident's unfinished half]
+
+D-164 made `/healthz` honest: the collector component now ages out and names the cause when AMS stops answering. That closes
+the *reporting* gap. It does not close the *notification* gap — **nothing pages when Pulse stops collecting.** The alert engine
+evaluates streams, nodes and QoE metrics *derived from* the collector; when the collector is blind there are no metrics to
+evaluate, so the alerting path is silent by construction. That is exactly how a 7 h 46 m production outage passed unnoticed:
+every layer was individually "working", and no layer's job was to notice the absence of input.
+
+**Why it is not a trivial add:** a self-monitoring alert must not itself depend on the pipeline it watches, and it must not
+false-positive on a deliberate AMS maintenance window (which the existing maintenance-window feature covers for *stream*
+alerts, not for *collector* health). It also interacts with `[FO-1]` semantics (§2.44): "the thing I was watching vanished" is
+the same question in a different costume — an operator ruling on one should inform the other.
+
+**Sketch (needs a decision before building):** a built-in, non-deletable "Pulse collector offline" rule evaluated from
+`domain.CollectorHealth` on its own timer rather than from the snapshot, defaulting to enabled-and-unmuted (unlike the seeded
+stream rules, which ship muted) — because the failure it catches is invisible by definition. Open questions: does it respect
+maintenance windows; which channels at which tier (a Free-tier user still deserves to know their monitor is dead); does
+`/metrics` expose a `pulse_collector_last_success_timestamp` gauge so Prometheus users can alert on it themselves (cheapest
+partial win, and probably the right first step).
 
 ### 2.41  Opt-in load-testing lane + Ant Media panel-revamp (G-27) assessment — operator-requested mid-session  [✅ DONE — docs + QA-tooling only, NO prod roll; load lane NOT yet run (needs the operator's dedicated instance)]  ✅ S94 (D-158, 2026-07-19, PR #183)
 
