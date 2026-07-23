@@ -1034,7 +1034,7 @@ jobs:
         run: cd web && npm ci --legacy-peer-deps
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-csp-${{ hashFiles('web/package-lock.json') }}
