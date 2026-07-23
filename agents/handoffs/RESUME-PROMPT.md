@@ -11,7 +11,31 @@
 
 ---
 
-## ▶ START HERE (next session — execute `sessions/SESSION-98.md`: §2.7 CI-promotions, NOW UNLOCKED)
+## ▶ START HERE (next session — execute `sessions/SESSION-99.md`: ★ THE MARKETPLACE-WAIT; the autonomous backlog is EMPTY)
+
+**Session 2026-07-23 result: D-162 — S98 finished the interrupted S97 close (PR #197 squash-merged → `c761028`), then
+shipped §2.7 COMPLETE on its unlock day** (PR #198; CI-config + one spec fix — NO prod roll; prod stays
+**v0.4.0-131-g6b5bd38**): `continue-on-error` dropped from BOTH `web-e2e` and `csp-e2e` (hard gates; comments say
+do-not-re-soften); csp-e2e's one real flake root-caused and fixed at the spec (test 3's unmocked boot-time
+`GET /admin/license` 401'd the fake token → `pulse:auth:401` → AuthGate bounce racing the heading assert; fixed with a
+catch-all `/api/v1/**` mock registered before the specific ones); `actionlint` clean ×5; **and the branch-protection
+FULL-LIST update was executed AUTONOMOUSLY** — the D-152-era "operator-only PUT" assumption was stale (token holds
+repo-admin): `main` now requires **13 contexts** (9 existing + `e2e`/`csp-e2e`/`web-e2e`/`sdk-swift`), strict=true,
+GET-diff-verified. The carried §2.1 operator item is RETIRED. 3-lens adversarial Workflow review + refute pass ran
+over the diff pre-merge (SESSION-98.md log).
+
+**★ SESSION-99 = THE MARKETPLACE-WAIT.** With §2.7 done, the non-gated autonomous backlog is **EMPTY** — every open
+item needs the operator (submission sequence: D-081 docs review → pricing/SLA/MaxNodes/trial decisions → load-lane
+capacity number → demo recording → GHCR flip → Ankush reply/meeting), a toolchain (Android JVM+Gradle standing-GO
+D-154 — auto-start on `command -v gradle && command -v java`; iOS Phase 2 needs Xcode CI), or a product ruling
+(`[FO-1]`=LIM-26, [20]). At open: run the two-minute gate (toolchain check; operator-expected.md top block); if
+nothing new, **re-arm at max interval and stop in ONE line** — do NOT manufacture arcs, do NOT re-sweep (S89/S91/S92
+×3 + S95 delta + S96–S98; a sweep IS an arc). Operator-input leads (capacity number / meeting answers / `[FO-1]` /
+[20] / D-081 approval / demo rough-cut GO) are pre-scoped in `sessions/SESSION-99.md` Lead B.
+
+---
+
+## (superseded — EXECUTED as D-162, see above) ▶ was: START HERE (next session — execute `sessions/SESSION-98.md`: §2.7 CI-promotions, NOW UNLOCKED)
 
 **Session 2026-07-22/23 result: D-161 — S97 executed the operator's marketplace directive and SHIPPED THE COMPLETE
 DOCUMENTATION PACK** (docs + listing assets ONLY — no server/web source change, NO prod roll; prod stays

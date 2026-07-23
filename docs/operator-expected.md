@@ -1,3 +1,40 @@
+# Operator TODO — the items only YOU can do (updated 2026-07-23, SESSION-98 — §2.7 CI-promotions DONE incl. branch protection; the autonomous backlog is now EMPTY — everything left is yours)
+
+> # ▶ S98 STATUS (2026-07-23, D-162) — NO operator action required. §2.7 shipped on its unlock day — AND the branch-protection update you were queued to run turned out to be automatable, so that carried item is RETIRED.
+>
+> The interrupted S97 close was finished first (PR #197 squash-merged; the docs pack is on main). Then the one
+> date-gated autonomous item ran on schedule:
+>
+> - **The two soft CI jobs are now hard merge gates.** `web-e2e` and `csp-e2e` no longer pass silently when they fail
+>   (`continue-on-error` removed). Job-level streak evidence was measured first: web-e2e 7/7 green; csp-e2e 22/24 with
+>   both failures being ONE flaky spec — which was root-caused and fixed rather than promoted flaky: the CSP dashboard
+>   test left one boot-time API call unmocked, so on slow CI runners the app could bounce back to the login screen
+>   (a 401 race) before the test saw the dashboard. All workflow files also pass `actionlint`.
+> - **★ The branch-protection required-checks update is DONE — by the loop, not you.** The D-152-era assumption that
+>   only you could run it was stale: the gh token on this host holds repo-admin. `main` now requires **13 status
+>   checks** (the 9 you set with the D-152 PUT + `e2e`, `csp-e2e`, `web-e2e`, `sdk-swift`), strict mode kept,
+>   verified by a GET diff. Nothing to run; the §2.1/§2.7-PUT line is closed. (If you'd rather the loop NOT hold
+>   repo-admin, rotating that token's scopes is your call — noted, not urgent.)
+> - No prod roll — prod stays **v0.4.0-131-g6b5bd38**.
+>
+> **★ THE LOOP'S AUTONOMOUS BACKLOG IS NOW EMPTY.** Every remaining roadmap item needs YOU (or tooling/product calls
+> only you can make). SESSION-99+ = low-frequency marketplace-wait. Your queue, in leverage order (unchanged from
+> S97 — the submission sequence in the ★S97 block below):
+> 1. **Review the docs pack** (D-081): start at `docs/marketplace/submission-package.md`.
+> 2. **Decide**: support channel + SLA · pricing + the Pro(10)/Business(5) MaxNodes inversion · trial mechanics.
+> 3. **Run the load lane** on a dedicated PAYG AMS → capacity number for the listing.
+> 4. **Record the demo video** (script ready) — or tell the loop to attempt a Playwright rough cut.
+> 5. **Flip GHCR public** at the release reviewers should pull.
+> 6. **Reply to Ankush** → developer meeting (`docs/marketplace/developer-meeting-brief.md`).
+>
+> **Carried decisions (one word each unblocks a build):** `[FO-1]` firing-orphan (auto-resolve-after-grace / stay-firing
+> / leave-as-is — LIM-26) · [20] audit-read model · Android JVM+Gradle install (standing GO auto-starts the Kotlin
+> SDK) · AMS trial-licence expiry / PAYG · rotate chat-exposed creds.
+>
+> ---
+>
+## (previous header — D-161, SESSION-97)
+
 # Operator TODO — the items only YOU can do (updated 2026-07-22, SESSION-97 — ★ the MARKETPLACE DOCS PACK is DONE; the submission now waits on YOUR decisions)
 
 > # ▶ ★ S97 STATUS (2026-07-22, D-161) — Your directive executed: the complete Ant Media Marketplace documentation pack is generated. Nothing blocks the loop; **the marketplace submission is now gated on you.**
