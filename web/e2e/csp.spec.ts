@@ -201,6 +201,22 @@ test.describe("CSP — Caddy-fronted", () => {
       TOKEN_KEY
     );
 
+    // Catch-all API mock — MUST be registered before the specific routes below
+    // (Playwright matches routes in reverse registration order, so the specific
+    // mocks still win). Any boot-time call this spec does not mock explicitly
+    // (today: LicenseProvider's GET /admin/license) would otherwise reach the
+    // real backend, 401 on the fake token, and fire pulse:auth:401 — which
+    // clears the token and swaps the dashboard for the login gate. Whether the
+    // heading assert below won that race depended on runner speed (the D-162
+    // csp-e2e flake). A benign 200 {} keeps boot deterministic.
+    await page.route("/api/v1/**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "{}",
+      })
+    );
+
     // OnboardingGuard probes /healthz before deciding whether a source-less
     // deployment needs the wizard. Report an env-configured instance so it stays
     // on the dashboard deterministically, independent of the backend's env.

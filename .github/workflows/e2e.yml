@@ -978,8 +978,9 @@ jobs:
 
   csp-e2e:
     runs-on: ubuntu-latest
-    # Bake period — promote to required after 2 weeks green (same policy as web-e2e).
-    continue-on-error: true
+    # HARD GATE since D-162 (§2.7): promoted alongside web-e2e after its one flaky
+    # spec (the dashboard 401-bounce race, csp.spec.ts test 3) was fixed at the
+    # spec. Do not re-soften; fix flakes at the spec.
 
     steps:
       - name: Checkout
