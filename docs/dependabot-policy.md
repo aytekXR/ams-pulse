@@ -38,7 +38,8 @@ prod container refresh:
    naming them explicitly** (`docker compose … up -d --no-deps <svc> …`; `--no-deps`
    keeps compose from also restarting their dependencies) — never the `pulse` app
    container unless `pulse.Dockerfile` itself changed (D-067 batch-2 pattern:
-   clickhouse/backup/caddy recreated; pulse untouched at v0.2.0).
+   clickhouse/backup recreated — plus the caddy service that existed at v0.2.0,
+   since removed; pulse untouched).
 3. **Teardown:** `docker compose -p <name> down -v` to destroy the staging stack.
 
 ### 2b. Minor bumps (dependabot-grouped)

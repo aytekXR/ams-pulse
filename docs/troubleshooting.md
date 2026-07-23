@@ -45,8 +45,12 @@ The required directives are:
 ```nginx
 proxy_http_version 1.1;
 proxy_set_header Upgrade $http_upgrade;
-proxy_set_header Connection "upgrade";
+proxy_set_header Connection $connection_upgrade;
 ```
+
+(`$connection_upgrade` comes from the shared `map` in
+`deploy/nginx/00-beyondkaira-maps.conf`; a hardcoded `Connection "upgrade"` also
+works but pins the header even for non-WebSocket requests through that location.)
 
 The reference vhost `deploy/nginx/pulse.beyondkaira.com.conf` already carries
 these directives (via the shared `00-beyondkaira-maps.conf` upgrade map). If you

@@ -413,11 +413,15 @@ To set it up on a fresh host:
 3. Bring up the loopback-published stack with the consolidated prod compose file:
    ```sh
    docker compose \
+     -p pulse-prod \
      -f deploy/docker-compose.prod.yml \
+     --env-file deploy/.env \
      up -d
    ```
-   (Production deployments add `-f deploy/docker-compose.real-ams.yml` and
-   `-f deploy/docker-compose.backup.yml` — see
+   (`--env-file` is required — without it `PULSE_SECRET_KEY` resolves empty and the
+   stack fails closed at startup. `-p pulse-prod` keeps container names aligned with
+   the runbooks. Production deployments add `-f deploy/docker-compose.real-ams.yml`
+   and `-f deploy/docker-compose.backup.yml` — see
    `deploy/runbooks/upgrade-rollback.md` for the canonical command.)
 
 #### WebSocket upgrade requirements

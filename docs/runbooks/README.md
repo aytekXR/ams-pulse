@@ -6,7 +6,7 @@ Operational guides written as features land (owner: INFRA-01 with DOC-01):
 - [`alerting.md`](alerting.md) — alert rule semantics, channels, maintenance windows
 - [`probes.md`](probes.md) — synthetic probes (Pro+)
 - [`reports.md`](reports.md) — usage/billing reports (Business+)
-- [`productionize.md`](productionize.md) — the 5-overlay production wiring
+- [`productionize.md`](productionize.md) — the production wiring (host-nginx edge + consolidated compose)
 
 Operator-facing reference docs (in `docs/`): [`../overview.md`](../overview.md) ·
 [`../user-guide.md`](../user-guide.md) · [`../admin-guide.md`](../admin-guide.md) ·
@@ -17,12 +17,6 @@ Operator-facing reference docs (in `docs/`): [`../overview.md`](../overview.md) 
 
 Operational runbooks for the production stack (in `deploy/runbooks/`):
 
-- [`deploy/runbooks/upgrade-rollback.md`](../../deploy/runbooks/upgrade-rollback.md) — upgrade + rollback procedure: 5-overlay compose command, stamped-build pattern, rollback tags, ClickHouse DDL stance
-- [`deploy/runbooks/monitoring.md`](../../deploy/runbooks/monitoring.md) — what to watch: backup daemon health, alert_history cap, CH disk, Prometheus metrics, WARN log taxonomy
-- [`deploy/runbooks/backup-restore.md`](../../deploy/runbooks/backup-restore.md) — backup sidecar architecture, manual backup, ClickHouse + SQLite restore steps
-
-Operational runbooks for the production stack (in `deploy/runbooks/`):
-
-- [`deploy/runbooks/upgrade-rollback.md`](../../deploy/runbooks/upgrade-rollback.md) — upgrade + rollback procedure: 5-overlay compose command, stamped-build pattern, rollback tags, ClickHouse DDL stance
+- [`deploy/runbooks/upgrade-rollback.md`](../../deploy/runbooks/upgrade-rollback.md) — upgrade + rollback procedure: canonical 3-file compose command, stamped-build pattern, rollback tags, ClickHouse DDL stance
 - [`deploy/runbooks/monitoring.md`](../../deploy/runbooks/monitoring.md) — what to watch: backup daemon health, alert_history cap, CH disk, Prometheus metrics, WARN log taxonomy
 - [`deploy/runbooks/backup-restore.md`](../../deploy/runbooks/backup-restore.md) — backup sidecar architecture, manual backup, ClickHouse + SQLite restore steps
