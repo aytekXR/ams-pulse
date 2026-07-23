@@ -49,9 +49,7 @@ Add `deploy/docker-compose.backup.yml` to your compose command:
 
 ```sh
 docker compose -p pulse-prod \
-  -f deploy/docker-compose.yml \
-  -f deploy/docker-compose.hardened.yml \
-  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.real-ams.yml \
   -f deploy/docker-compose.backup.yml \
   --env-file deploy/.env \

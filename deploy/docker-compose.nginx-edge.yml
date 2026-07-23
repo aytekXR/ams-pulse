@@ -1,10 +1,9 @@
-# Pulse — nginx-on-host edge overlay (ADDITIVE; part of the Caddy -> nginx migration).
+# Pulse — nginx-on-host edge overlay (ADDITIVE).
 #
 # WHAT THIS DOES, AND WHY IT IS A SEPARATE FILE
 # ---------------------------------------------
-# The new edge is nginx running ON THE HOST (not a container). A host process
-# cannot reach a Docker network alias, so it cannot use the old `reverse_proxy
-# pulse:8090` path the containerised Caddy used. This overlay publishes Pulse's
+# The edge is nginx running ON THE HOST (not a container). A host process
+# cannot reach a Docker network alias, so this overlay publishes Pulse's
 # three listeners on the LOOPBACK interface so host-nginx can proxy to them:
 #
 #     nginx (host) ──▶ 127.0.0.1:8090  UI + API   (upstream pulse_app)
@@ -16,23 +15,19 @@
 # security point of the migration.
 #
 # ADDITIVE: this file is applied AFTER docker-compose.hardened.yml, which sets
-# `pulse: ports: !override []` (strips all host publishing for the Caddy world).
-# `!override` here REPLACES that empty list with the loopback binds — it does not
-# edit the hardened file. Drop this overlay and you are back to the Caddy stack,
-# untouched.
+# `pulse: ports: !override []` (strips all host publishing). `!override` here
+# REPLACES that empty list with the loopback binds — it does not edit the
+# hardened file.
 #
-# BRING UP (host, replaces the Caddy prod-tls overlay with this one) — Caddy is
-# NOT started here; nginx owns :443. See deploy/MIGRATION.md for the full runbook.
+# NOTE: the CONSOLIDATED deploy/docker-compose.prod.yml is the canonical prod
+# entrypoint — it is the merge of base + hardened + this overlay in one file.
+# This overlay remains for anyone composing the stack layer by layer:
 #
 #   sg docker -c 'docker compose -p pulse-prod \
 #     -f deploy/docker-compose.yml \
 #     -f deploy/docker-compose.hardened.yml \
 #     -f deploy/docker-compose.nginx-edge.yml \
 #     --env-file deploy/.env up -d --build'
-#
-# NOTE: do NOT combine this with docker-compose.prod-tls.yml — that overlay runs
-# the containerised Caddy and binds 0.0.0.0:443, which collides with host-nginx.
-# The two edges are mutually exclusive; this file is the nginx replacement.
 
 name: pulse
 

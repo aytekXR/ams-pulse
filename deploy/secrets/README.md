@@ -36,9 +36,7 @@ Add `docker-compose.secrets.yml` AFTER the hardened overlay:
 
 ```bash
 docker compose -p pulse-prod \
-  -f deploy/docker-compose.yml \
-  -f deploy/docker-compose.hardened.yml \
-  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.secrets.yml \
   up -d
 ```
@@ -55,9 +53,7 @@ openssl rand -hex 32 > deploy/secrets/pulse_secret_key.txt
 
 # 2. Restart the pulse container to pick it up
 docker compose -p pulse-prod \
-  -f deploy/docker-compose.yml \
-  -f deploy/docker-compose.hardened.yml \
-  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.secrets.yml \
   up -d pulse
 ```

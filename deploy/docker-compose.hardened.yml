@@ -12,53 +12,24 @@
 # infra.  A separate real-ams override (not authored here) swaps mock-ams for
 # a real AMS endpoint.
 #
-# TLS:
-#   - Local verify:  Caddy obtains a certificate from its INTERNAL CA
-#     (no outbound ACME traffic, no domain required).  Import the root cert from
-#     the caddy_data volume if your browser shows an untrusted-CA warning:
-#       docker cp pulse-hardened-caddy-1:/data/caddy/pki/authorities/local/root.crt /tmp/
-#   - Production:  replace '{$PULSE_DOMAIN:localhost}' in config/Caddyfile with
-#     your public domain and switch 'tls internal' to 'tls {email}' (see comment
-#     in Caddyfile).  Caddy will obtain a Let's Encrypt certificate automatically.
+# TLS: terminated OUTSIDE this stack by nginx on the host (vhosts in
+# deploy/nginx/, cert at /etc/letsencrypt/live/beyondkaira.com/). This overlay
+# publishes NO ports at all; layer deploy/docker-compose.nginx-edge.yml on top
+# to publish the app's listeners on 127.0.0.1 for host-nginx — or just use the
+# consolidated deploy/docker-compose.prod.yml, which is base + hardened +
+# nginx-edge in one file.
 #
 # Required env vars (put in deploy/.env — see deploy/.env.example):
 #   PULSE_SECRET_KEY, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD
-# Optional:
-#   PULSE_DOMAIN (default: localhost)
 
 name: pulse-hardened
 
 services:
 
-  # ── Caddy TLS terminator ─────────────────────────────────────────────────────
-  caddy:
-    # caddy:2-alpine
-    # Digest pinned 2026-07-08; to refresh: docker pull caddy:2-alpine && docker image inspect caddy:2-alpine --format '{{index .RepoDigests 0}}'
-    image: caddy@sha256:af5fdcd76f2db5e4e974ee92f96ee8c0fc3edb55bd4ba5032547cbf3f65e486d
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8080:80"    # HTTP → Caddy handles redirect to HTTPS
-      - "127.0.0.1:8443:443"   # HTTPS — loopback only; avoids clashing with demo :80/:443
-    environment:
-      PULSE_DOMAIN: "${PULSE_DOMAIN:-localhost}"
-    volumes:
-      - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      pulse:
-        condition: service_healthy
-    networks:
-      - default
-    deploy:
-      resources:
-        limits:
-          memory: 256m
-          cpus: "0.5"
-
   # ── Pulse application ────────────────────────────────────────────────────────
   pulse:
-    # Remove ALL host port publishing — pulse is only reachable via Caddy.
+    # Remove ALL host port publishing — the nginx-edge overlay (or the
+    # consolidated prod file) re-publishes the listeners on 127.0.0.1 only.
     ports: !override []
     # ── Container hardening (S80/D-142) ──────────────────────────────────────────
     # Defense-in-depth on the internet-facing app container (it parses untrusted
@@ -147,7 +118,7 @@ services:
     volumes:
       - ../:/src:ro
       - go-build-cache:/root/.cache/go-build
-    # Internal only — no host port; Caddy and pulse reach it via the default network.
+    # Internal only — no host port; pulse reaches it via the default network.
     restart: unless-stopped
 
   # ── Schema migration one-shot ────────────────────────────────────────────────
@@ -173,6 +144,4 @@ services:
     restart: "no"
 
 volumes:
-  caddy_data:
-  caddy_config:
   go-build-cache:

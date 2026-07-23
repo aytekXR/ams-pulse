@@ -6,16 +6,17 @@
 
 ---
 
-## Canonical 5-overlay compose command
+## Canonical compose command
 
 All production operations use this exact overlay set. Copy it as-is; never omit an overlay.
+TLS is terminated by **host nginx** (vhosts in `deploy/nginx/`, cert at
+`/etc/letsencrypt/live/beyondkaira.com/`, renewed by certbot) — the compose stack publishes
+the app on `127.0.0.1` only.
 
 ```sh
 # Run from the repo root. sg docker is required — docker group is stale in non-login shells.
 DC_ARGS="-p pulse-prod \
-  -f deploy/docker-compose.yml \
-  -f deploy/docker-compose.hardened.yml \
-  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.real-ams.yml \
   -f deploy/docker-compose.backup.yml \
   --env-file deploy/.env"
@@ -25,9 +26,9 @@ sg docker -c "docker compose ${DC_ARGS} config -q" && echo CONFIG_OK
 ```
 
 Overlay purpose:
-- `docker-compose.yml` — base: pulse + ClickHouse (expose-only ports, no host bindings)
-- `docker-compose.hardened.yml` — Caddy TLS proxy, CH auth, resource limits, webhook listener
-- `docker-compose.prod-tls.yml` — public `0.0.0.0:80/443`, `Caddyfile.prod`, `PULSE_DOMAIN` required
+- `docker-compose.prod.yml` — consolidated prod stack (formerly base + hardened + nginx-edge):
+  pulse + ClickHouse (auth), container hardening, resource limits, webhook listener,
+  loopback-only `127.0.0.1:8090/8091/8092` publishes for host nginx
 - `docker-compose.real-ams.yml` — disables mock-ams, wires `PULSE_AMS_*` from env
 - `docker-compose.backup.yml` — backup sidecar (24 h cycles, 7-artifact retention, CH zip + SQLite)
 
