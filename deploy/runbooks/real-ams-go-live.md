@@ -3,11 +3,11 @@
 > **HISTORICAL — this runbook describes the D-031/D-062 go-live (2026-06-21) that
 > swapped `beyondkaira.com` from MOCK-AMS + seeded demo data to the live
 > `test.antmedia.io`. That swap is complete (SESSION-05, D-062). For current
-> production operations, use the 5-overlay commands in
+> production operations, use the compose commands in
 > `docs/runbooks/productionize.md`. Sections 0–7 below are kept for provenance.**
 >
 > **Note on cross-references:** this file has sections 0–7 only. References to
-> "§8" (post-swap smoke) should be read as §4; "§14" (5-overlay DC command) should
+> "§8" (post-swap smoke) should be read as §4; "§14" (the DC command) should
 > be read as section 3 below or the Quick Reference in `docs/runbooks/productionize.md`.
 
 **Target:** swap `beyondkaira.com` from MOCK-AMS + seeded demo data to the live
@@ -78,9 +78,9 @@ No further code changes are required for the swap.
 ```bash
 cd /home/aytek/repo/ams-pulse
 # Real-AMS compose set:
-export DC="-p pulse-prod -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml -f deploy/docker-compose.prod-tls.yml -f deploy/docker-compose.real-ams.yml -f deploy/docker-compose.backup.yml --env-file deploy/.env"
+export DC="-p pulse-prod -f deploy/docker-compose.prod.yml -f deploy/docker-compose.real-ams.yml -f deploy/docker-compose.backup.yml --env-file deploy/.env"
 # Mock-ams (rollback) compose set — omits real-ams overlay but keeps backup sidecar:
-export DC_MOCK="-p pulse-prod -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml -f deploy/docker-compose.prod-tls.yml -f deploy/docker-compose.backup.yml --env-file deploy/.env"
+export DC_MOCK="-p pulse-prod -f deploy/docker-compose.prod.yml -f deploy/docker-compose.backup.yml --env-file deploy/.env"
 ```
 
 ### 3-A. Pre-flight (all must pass)
@@ -140,8 +140,8 @@ sg docker -c "docker compose $DC build \
 sg docker -c "docker compose $DC up -d pulse"
 ```
 
-Profiles out mock-ams, wires the `PULSE_AMS_*` env. ClickHouse, Caddy and the
-`pulse-prod_pulse-data` volume (token, alert rules) are untouched.
+Profiles out mock-ams, wires the `PULSE_AMS_*` env. ClickHouse, the host-nginx edge
+and the `pulse-prod_pulse-data` volume (token, alert rules) are untouched.
 
 ---
 
@@ -212,6 +212,6 @@ sidecar regenerates live demo numbers but historical charts restart from t=0.
 3. **Surface AMS version** (`3.0.3 Enterprise`) on the source/fleet view.
 4. **Merge `ams-integration` → `main`** + remove the vestigial `AMS_LOGIN_EMAIL`/
    `AMS_LOGIN_PASSWORD` lines from `deploy/.env` (not read by any compose service).
-5. **B7** (per-source webhook secret, contract CR) + **B3** (Docker secrets) — also
-   add a Caddy `/webhook/*` route if low-latency webhook ingest is wanted (polling
-   works without it).
+5. **B7** (per-source webhook secret, contract CR) + **B3** (Docker secrets) — the
+   edge `/webhook/*` route now exists in `deploy/nginx/pulse.beyondkaira.com.conf`
+   if low-latency webhook ingest is wanted (polling works without it).
