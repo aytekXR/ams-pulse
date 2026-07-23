@@ -338,12 +338,12 @@ jobs:
 
   # ── 8. Web e2e (Playwright) ──────────────────────────────────────────────────
   # Chromium-only, API route-mocked via page.route — no backend needed.
-  # continue-on-error: true while stabilising; promote to required after 2 weeks green.
+  # HARD GATE since D-162 (§2.7): promoted after a sustained job-level green streak
+  # (7/7 recent main runs at promotion). Do not re-soften; fix flakes at the spec.
   # D-042 reminder: a wait that never resolves is a deterministic bug — never bump timeouts.
   web-e2e:
     runs-on: ubuntu-latest
     needs: contracts
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 

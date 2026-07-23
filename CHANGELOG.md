@@ -10,6 +10,14 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ## [Unreleased]
 
+### Changed
+
+- **CI: `web-e2e` and `csp-e2e` are hard merge gates (D-162).** Both Playwright jobs ran as
+  advisory (`continue-on-error: true`) through their bake period; they are now required, and
+  `main`'s branch protection requires all 13 CI contexts. The one genuinely flaky CSP spec
+  (dashboard test racing a `pulse:auth:401` bounce caused by an unmocked boot-time license
+  fetch) was fixed at the spec with a catch-all API mock rather than promoted flaky.
+
 ### Added
 
 - **Report-artifact retention pruning (D-143).** Scheduled report files (CSV/PDF) are now
