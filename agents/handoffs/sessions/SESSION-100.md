@@ -64,9 +64,13 @@ Enterprise→Free downgrade, and an unstamped `pulse dev (commit unknown)` binar
 - Still true: host nginx owns :80/:443 (never touch it or certbot without operator direction); CI
   keeps its own Caddy deliberately; `gofmt`/Go tests only via docker (`-buildvcs=false` is needed —
   the container trips Go's VCS stamping on this mount); never `docker compose down -v` on prod.
-- **Workflow subagents ignored an explicit READ-ONLY instruction** in this session's verification run
-  (or their writes were indistinguishable from the concurrent session's). Either way: when a workflow
-  is only meant to *investigate*, verify the tree afterwards with `git status` before committing.
+- **Attribution, corrected:** S100 first suspected its own read-only verification subagents of making
+  those edits. They did not. The concurrent session identified itself — it is a **review/staleness
+  session**, and it recorded S100 as *the* intruder in its own notes ("theirs superseded mine on
+  `deployment.sh`" — it was independently converging on the same deploy-script fix). Two sessions were
+  fixing the same file from opposite ends. The lesson is not "distrust subagents", it is **check
+  `git status` before attributing any edit, and commit by explicit path so a collision cannot silently
+  absorb someone else's work.**
 
 ## Open on the operator (see `docs/operator-expected.md` ★S100)
 
