@@ -10,15 +10,15 @@ is independent once secrets and TLS are in place.
 
 ## 1. TLS and a real domain
 
-Pulse ships a Caddy reverse proxy in the hardened override
-(`deploy/docker-compose.hardened.yml`). Caddy auto-provisions TLS via Let's
-Encrypt when a real domain is pointed at the server.
+In production, TLS is terminated by **nginx on the host** — not by anything in
+the compose stack. The stack (`deploy/docker-compose.prod.yml`) publishes the
+app on the loopback interface only (`127.0.0.1:8090/8091/8092`); host nginx
+proxies the public `:80/:443` to those ports. Reference vhosts live in
+`deploy/nginx/` (one `server` file per subdomain); the reference deployment's
+cert lives at `/etc/letsencrypt/live/beyondkaira.com/` and is renewed by
+certbot's systemd timer.
 
-> **Turnkey path (recommended).** Add the pre-staged production overlay
-> `deploy/docker-compose.prod-tls.yml` (with `deploy/config/Caddyfile.prod`) — it
-> binds Caddy on `0.0.0.0:80/443` and uses real Let's Encrypt (no `tls internal`),
-> so you do NOT hand-edit the hardened files. The canonical **5-overlay** compose
-> ordering is: base + hardened + prod-tls + real-ams + backup (D-054); see step 1e
+> The canonical compose ordering is: **prod + real-ams + backup**; see step 1e
 > and the Quick Reference for the full command. **Omitting
 > `-f deploy/docker-compose.backup.yml` on `up -d` silently removes the backup
 > sidecar** (real-ams overlay: §4; backup overlay: §5).
@@ -36,16 +36,22 @@ pulse.example.com  A  <server-public-ip>
 
 Propagation takes seconds to a few minutes.
 
-**1b. Set PULSE_DOMAIN in deploy/.env**
+**1b. Install nginx, a vhost, and a certificate**
 
 ```sh
-# deploy/.env
-PULSE_DOMAIN=pulse.example.com
+apt-get install -y nginx certbot python3-certbot-nginx
+# Adapt the reference vhosts (FQDNs are hard-set per file — edit to your domain):
+cp deploy/nginx/00-beyondkaira-maps.conf /etc/nginx/conf.d/   # shared WebSocket map, once per host
+cp deploy/nginx/pulse.beyondkaira.com.conf /etc/nginx/sites-available/pulse.example.com.conf
+ln -s /etc/nginx/sites-available/pulse.example.com.conf /etc/nginx/sites-enabled/
+# Obtain a certificate (HTTP-01 webroot; certbot's systemd timer auto-renews):
+certbot certonly --webroot -w /var/www/html -d pulse.example.com
+nginx -t && systemctl reload nginx
 ```
 
-Caddy reads `PULSE_DOMAIN` and requests a Let's Encrypt certificate automatically
-on first startup. Ports 80 and 443 must be reachable from the internet (Let's
-Encrypt HTTP-01 challenge).
+nginx does **not** read a domain from env — the FQDNs and cert paths are set in
+each `.conf`. Ports 80 and 443 must be reachable from the internet for the
+HTTP-01 challenge.
 
 **1c. Open ports 80 and 443**
 
@@ -63,18 +69,15 @@ check your cloud provider's external firewall as well.
 **1d. Remove plain-HTTP host exposure**
 
 The demo override (`docker-compose.override.yml`) publishes pulse on `:80`.
-In production, Caddy is the public entry point and pulse should only be
-reachable cluster-internally. The hardened override removes the `:80` binding
-and restricts pulse to `expose` only (no host ports).
+In production, host nginx is the public entry point and pulse binds
+`127.0.0.1` only — `deploy/docker-compose.prod.yml` publishes no public port.
 
-**1e. Start the hardened stack**
+**1e. Start the production stack**
 
 ```sh
 cd /path/to/pulse
 docker compose -p pulse-prod \
-  -f deploy/docker-compose.yml \
-  -f deploy/docker-compose.hardened.yml \
-  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.real-ams.yml \
   -f deploy/docker-compose.backup.yml \
   --env-file deploy/.env \
@@ -159,9 +162,7 @@ Run migrations against the authenticated instance:
 
 ```sh
 docker compose -p pulse-prod \
-  -f deploy/docker-compose.yml \
-  -f deploy/docker-compose.hardened.yml \
-  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.real-ams.yml \
   -f deploy/docker-compose.backup.yml \
   --env-file deploy/.env \
@@ -172,9 +173,7 @@ Then start the full stack:
 
 ```sh
 docker compose -p pulse-prod \
-  -f deploy/docker-compose.yml \
-  -f deploy/docker-compose.hardened.yml \
-  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.real-ams.yml \
   -f deploy/docker-compose.backup.yml \
   --env-file deploy/.env \
@@ -244,9 +243,7 @@ When an AMS REST token is rotated:
 
 ```sh
 docker compose -p pulse-prod \
-  -f deploy/docker-compose.yml \
-  -f deploy/docker-compose.hardened.yml \
-  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.real-ams.yml \
   -f deploy/docker-compose.backup.yml \
   --env-file deploy/.env \
@@ -280,8 +277,6 @@ CLICKHOUSE_USER=pulse
 CLICKHOUSE_PASSWORD=replace-with-strong-password
 PULSE_CLICKHOUSE_DSN=clickhouse://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@clickhouse:9000/pulse
 
-PULSE_DOMAIN=pulse.example.com
-
 PULSE_AMS_URL=http://your-ams-host:5080
 PULSE_AMS_AUTH_TOKEN=replace-with-ams-rest-token
 PULSE_AMS_NODE_ID=standalone
@@ -306,22 +301,17 @@ PULSE_AMS_URL=http://your-ams-host:5080    # AMS REST base URL (no trailing slas
 PULSE_AMS_AUTH_TOKEN=<ams-rest-token>      # AMS admin or dedicated read token
 PULSE_AMS_NODE_ID=node-01                  # Label for this node in Pulse events
 PULSE_AMS_APPLICATIONS=live,vod            # Comma-separated; empty = all apps
-
-# AMS_UPSTREAM: host:port that Caddyfile.prod reverse-proxies for the AMS web
-# console (ams.<PULSE_DOMAIN>). Injected into the caddy container via the
-# environment: block in docker-compose.prod-tls.yml.
-# Default (from docker-compose.prod-tls.yml): 161.97.172.146:5080.
-# Override in deploy/.env only if your AMS host differs:
-# AMS_UPSTREAM=your-ams-host:5080
 ```
+
+To expose the AMS web console publicly, host nginx proxies `ams.<your-domain>`
+to the AMS host (see `deploy/nginx/ams.beyondkaira.com.conf` — upstream
+`127.0.0.1:5080` for an AMS on the same host; edit the `.conf` if yours differs).
 
 **4b. Start with the real-ams override**
 
 ```sh
 docker compose -p pulse-prod \
-  -f deploy/docker-compose.yml \
-  -f deploy/docker-compose.hardened.yml \
-  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.real-ams.yml \
   -f deploy/docker-compose.backup.yml \
   --env-file deploy/.env \
@@ -377,9 +367,7 @@ Add `-f deploy/docker-compose.backup.yml` to your compose command:
 
 ```sh
 docker compose -p pulse-prod \
-  -f deploy/docker-compose.yml \
-  -f deploy/docker-compose.hardened.yml \
-  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.real-ams.yml \
   -f deploy/docker-compose.backup.yml \
   --env-file deploy/.env \
@@ -522,7 +510,7 @@ scrape_configs:
     authorization:
       credentials: <PULSE_METRICS_TOKEN value>
     tls_config:
-      insecure_skip_verify: false  # Caddy provisions a valid cert
+      insecure_skip_verify: false  # host nginx serves a valid certbot cert
 ```
 
 **Key metrics to alert on** (the 7 metrics registered by `/metrics` — see `deploy/runbooks/monitoring.md` for full details):
@@ -545,9 +533,7 @@ scrape_configs:
 # From the repo root, after filling in deploy/.env:
 
 docker compose -p pulse-prod \
-  -f deploy/docker-compose.yml \
-  -f deploy/docker-compose.hardened.yml \
-  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.real-ams.yml \
   -f deploy/docker-compose.backup.yml \
   --env-file deploy/.env \
@@ -560,12 +546,14 @@ docker compose -p pulse-prod logs -f pulse
 curl -m 10 https://pulse.example.com/healthz
 ```
 
-The five-file compose ordering is canonical (all files under `deploy/`):
-1. `docker-compose.yml` — base (services, volumes, healthchecks; no host ports)
-2. `docker-compose.hardened.yml` — TLS via Caddy, CH auth, no plain-HTTP exposure
-3. `docker-compose.prod-tls.yml` — binds Caddy on 0.0.0.0:80/443, real Let's Encrypt
-4. `docker-compose.real-ams.yml` — disables mock-ams, wires real AMS credentials
-5. `docker-compose.backup.yml` — backup sidecar (24 h cycle, 7-copy retention)
+The three-file compose ordering is canonical (all files under `deploy/`):
+1. `docker-compose.prod.yml` — consolidated prod stack (pulse + ClickHouse with auth,
+   container hardening, resource limits, loopback-only `127.0.0.1` publishes for host nginx)
+2. `docker-compose.real-ams.yml` — disables mock-ams, wires real AMS credentials
+3. `docker-compose.backup.yml` — backup sidecar (24 h cycle, 7-copy retention)
+
+TLS is terminated by host nginx (vhosts in `deploy/nginx/`, certbot-managed cert) —
+nothing in the compose stack binds a public port.
 
 **Omitting `-f deploy/docker-compose.backup.yml` on `up -d` silently removes the
 backup sidecar.**
@@ -577,9 +565,7 @@ loses the `VERSION`/`COMMIT`/`BUILD_DATE` stamps.
 ```sh
 # 1. Build the pulse image with explicit version stamps:
 docker compose -p pulse-prod \
-  -f deploy/docker-compose.yml \
-  -f deploy/docker-compose.hardened.yml \
-  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.real-ams.yml \
   -f deploy/docker-compose.backup.yml \
   --env-file deploy/.env \
@@ -591,9 +577,7 @@ docker compose -p pulse-prod \
 
 # 2. Start WITHOUT --build — uses the pre-built stamped image:
 docker compose -p pulse-prod \
-  -f deploy/docker-compose.yml \
-  -f deploy/docker-compose.hardened.yml \
-  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.real-ams.yml \
   -f deploy/docker-compose.backup.yml \
   --env-file deploy/.env \
@@ -601,9 +585,7 @@ docker compose -p pulse-prod \
 
 # 3. Run migrations after image update:
 docker compose -p pulse-prod \
-  -f deploy/docker-compose.yml \
-  -f deploy/docker-compose.hardened.yml \
-  -f deploy/docker-compose.prod-tls.yml \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.real-ams.yml \
   -f deploy/docker-compose.backup.yml \
   --env-file deploy/.env \

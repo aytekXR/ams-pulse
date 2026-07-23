@@ -28,27 +28,27 @@ cp deploy/.env.example deploy/.env
 #   PULSE_SECRET_KEY — generate with: openssl rand -hex 32
 #   PULSE_AMS_URL    — uncomment and set to your AMS REST base URL, e.g. http://10.0.1.10:5080
 #   PULSE_AMS_LOGIN_EMAIL / PULSE_AMS_LOGIN_PASSWORD — AMS admin credentials
-docker compose -p pulse-hardened \
-  -f deploy/docker-compose.yml \
-  -f deploy/docker-compose.hardened.yml \
+docker compose -p pulse-prod \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.real-ams.yml \
   --env-file deploy/.env \
   up -d --build
 ```
 
-> **PULSE_AMS_URL is required.** `docker-compose.hardened.yml` defaults to the built-in
+> **PULSE_AMS_URL is required.** `docker-compose.prod.yml` defaults to the built-in
 > mock-AMS for local QA; adding `docker-compose.real-ams.yml` (as shown above) routes
 > Pulse to your configured AMS URL instead. If PULSE_AMS_URL is unset, compose will
 > print `PULSE_AMS_URL must be set` and exit — see `deploy/.env.example` for the line
 > to uncomment.
 >
-> After the stack starts the UI is at **https://localhost:8443** (Caddy TLS, local CA —
-> your browser will show a certificate warning on first visit; import the root cert with
-> `docker cp pulse-hardened-caddy-1:/data/caddy/pki/authorities/local/root.crt /tmp/`
-> then add it to your trust store).  HTTP at http://localhost:8080 redirects to HTTPS.
+> After the stack starts the UI is at **http://127.0.0.1:8090** (loopback only). The
+> stack terminates no TLS itself — put a reverse proxy on the host in front of the
+> loopback ports for public exposure. The reference production edge is host nginx
+> (vhosts in `deploy/nginx/`, TLS via certbot HTTP-01 webroot, cert at
+> `/etc/letsencrypt/live/beyondkaira.com/`).
 
-> Full walkthrough (incl. TLS/Caddy exposure, real-AMS wiring, backups — production runs
-> 5 compose overlays): [docs/runbooks/install.md](docs/runbooks/install.md) and
+> Full walkthrough (incl. TLS/edge exposure, real-AMS wiring, backups):
+> [docs/runbooks/install.md](docs/runbooks/install.md) and
 > [docs/runbooks/productionize.md](docs/runbooks/productionize.md).
 
 **Local binary (QA-verified):**
@@ -79,7 +79,7 @@ PULSE_SECRET_KEY=$(openssl rand -hex 32) \
 ## Feature status
 
 Last updated: **v0.2.0 GA (2026-07-09, D-065/D-066)** — all 10 PRD features shipped; prod
-live behind Caddy TLS against a real AMS 3.0.3. Product one-pager: [docs/product.md](docs/product.md).
+live behind host-nginx TLS against a real AMS 3.0.3. Product one-pager: [docs/product.md](docs/product.md).
 
 | Feature | PRD ref | Status | Notes |
 |---|---|---|---|

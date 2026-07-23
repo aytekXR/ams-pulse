@@ -10,7 +10,7 @@ be exercised on an AMS you fully control.
 
 ## 0. Prereqs (this VPS, already true)
 - Docker present; user in `docker` group → prefix `sg docker -c "…"`.
-- AMS ports free: 5080/5443/1935/5000 (Caddy owns 80/443; `brier-db` owns 5432).
+- AMS ports free: 5080/5443/1935/5000 (host nginx owns 80/443; `brier-db` owns 5432).
 - Public IP `161.97.172.146` directly on `eth0` → WebRTC ICE advertises it (no PUBLIC_IP env needed).
 
 ## 1. Run AMS (Docker, host network)
@@ -71,8 +71,7 @@ creds, `PULSE_AMS_NODE_ID=beyondkaira-ams`, `PULSE_AMS_APPLICATIONS=` (empty = a
 `PULSE_INGEST_TARGET_BITRATE_KBPS=2000`. Always **staging-verify on an isolated `-p` project first** (base +
 hardened + real-ams; curl via `docker exec`), then redeploy prod:
 ```bash
-DC="-p pulse-prod -f deploy/docker-compose.yml -f deploy/docker-compose.hardened.yml \
- -f deploy/docker-compose.prod-tls.yml -f deploy/docker-compose.real-ams.yml --env-file deploy/.env"
+DC="-p pulse-prod -f deploy/docker-compose.prod.yml -f deploy/docker-compose.real-ams.yml --env-file deploy/.env"
 sg docker -c "docker compose $DC config -q" && sg docker -c "docker compose $DC up -d"   # never -v
 ```
 Smoke: `/healthz` 200; `/api/v1/live/overview` (`Authorization: Bearer <admin-token>`) `total_publishers≥1`;

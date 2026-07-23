@@ -72,29 +72,22 @@ actionable error message. (Verified: `server/cmd/pulse/serve.go:256-260`.)
 
 ### Content Security Policy
 
-CSP is enforced by Caddy (not Go middleware). Two Caddyfiles are in use; they carry
-**different** policies:
-
-**Development / base overlay** (`deploy/config/Caddyfile:71`):
-
-```
-Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' wss://{$PULSE_DOMAIN:localhost} https://{$PULSE_DOMAIN:localhost}; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
-```
-
-**Production overlay** (`deploy/config/Caddyfile.prod:78`, mounted at
-`deploy/docker-compose.prod-tls.yml:37`):
+CSP is enforced at the edge (not Go middleware). In production the edge is **nginx on
+the host** — vhosts in `deploy/nginx/`, TLS via certbot HTTP-01 webroot, cert at
+`/etc/letsencrypt/live/beyondkaira.com/`. The production policy is set in
+`deploy/nginx/pulse.beyondkaira.com.conf`:
 
 ```
-Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' wss://{$PULSE_DOMAIN} wss://pulse.{$PULSE_DOMAIN} https://{$PULSE_DOMAIN} https://pulse.{$PULSE_DOMAIN}; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' wss://pulse.beyondkaira.com https://pulse.beyondkaira.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" always;
 ```
 
-The production policy adds `wss://pulse.{$PULSE_DOMAIN}` and `https://pulse.{$PULSE_DOMAIN}`
-(the pulse subdomain) and removes the `:localhost` fallbacks present in the base Caddyfile.
+(`always` makes nginx attach the header on error responses too.)
 
-The `csp-e2e` CI job (`deploy/config/Caddyfile.ci:69`) validates that Caddy serves the
-CI-specific policy (`connect-src 'self' ws://localhost:18080`) against a live Caddy stack.
-It does not assert parity with the base or production Caddyfiles.
-(Verified: `grep -n 'Content-Security-Policy' deploy/config/Caddyfile{,.prod,.ci}`, D-061.)
+The `csp-e2e` CI job still uses a containerised Caddy as a CI-only test edge
+(`deploy/config/Caddyfile.ci:69`, `deploy/docker-compose.csp-e2e.yml`): it validates that
+the edge-served CI policy (`connect-src 'self' ws://localhost:18080`) holds against a live
+stack. It does not assert parity with the production nginx policy. (The retired production
+Caddyfiles were removed with the Caddy → nginx edge migration; see `deploy/MIGRATION.md`.)
 
 ### License gates — fail-closed (403)
 

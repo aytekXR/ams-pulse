@@ -1,5 +1,17 @@
 # Pulse — Caddy → nginx edge migration runbook
 
+> **STATUS: DONE (2026-07).** The cutover below has been executed: host nginx
+> owns `:80/:443` for every site on the VPS, the shared Caddy container (and its
+> images/volumes) has been deleted, and the repo's Caddy artifacts
+> (`deploy/config/Caddyfile{,.prod}`, `deploy/docker-compose.prod-tls.yml`, the
+> `caddy` service in the hardened overlay) have been removed. The prod compose
+> stack is consolidated in **`deploy/docker-compose.prod.yml`** (used by
+> `deploy/nginx/deployment.sh`). TLS: cert at
+> `/etc/letsencrypt/live/beyondkaira.com/`, renewed by certbot; vhosts in
+> `deploy/nginx/`. The Caddy-era steps and rollback below are kept as a record
+> of how the migration was done — the rollback path no longer exists (the Caddy
+> container and config are gone).
+
 Move the Pulse edge from the **shared containerised Caddy** to **nginx on the
 host**, with one `server` file per subdomain, the **wildcard** TLS cert, and the
 app reachable only over a **private loopback** bind. **Edge-only:** Pulse stays a
@@ -46,7 +58,8 @@ Only their *host publishing* changes, via the additive overlay below.
 | `deploy/nginx/ams.beyondkaira.com.conf` | `ams.` → `127.0.0.1:5080` (AMS `--network host`) |
 | `deploy/nginx/www.beyondkaira.com.conf` | `www.` → 301 apex |
 | `deploy/nginx/00-beyondkaira-maps.conf` | shared `$connection_upgrade` map (WebSocket), installed once into `conf.d/` |
-| `deploy/docker-compose.nginx-edge.yml` | additive overlay: publishes 8090/8091/8092 on `127.0.0.1` so host-nginx can reach them |
+| `deploy/docker-compose.prod.yml` | consolidated prod stack (base + hardened + nginx-edge in one file) — what `deployment.sh` runs |
+| `deploy/docker-compose.nginx-edge.yml` | additive overlay: publishes 8090/8091/8092 on `127.0.0.1` so host-nginx can reach them (folded into `prod.yml`; kept for layer-by-layer composition) |
 | `deploy/nginx/deployment.sh` | self-contained build→up→loopback-health for the compose stack |
 
 Routing was transcribed from the Caddyfile.prod `{$PULSE_DOMAIN}, pulse.{$PULSE_DOMAIN}`
@@ -73,30 +86,21 @@ trailing slash on `location /beacon/` + `proxy_pass .../` (Caddy `handle_path`);
 
 ## 1. 🤖 Bring the Pulse stack up with the loopback overlay (no edge change yet)
 
-This publishes the app on `127.0.0.1` next to the still-live Caddy. It does not
-touch `:443`. The hardened overlay also defines a local-verify `caddy` service
-that binds only `127.0.0.1:8080/8443` (harmless, loopback) — skip it with
-`--scale caddy=0` so there is no redundant TLS terminator.
+This publishes the app on `127.0.0.1`. It does not touch `:443`.
 
 ```bash
 cd ~/repo/ams-pulse
 # from the deploy script (recommended — it health-gates the private port):
-DOCKER_SG=1 ./deploy/nginx/deployment.sh --check      # validates the merged config, changes nothing
+DOCKER_SG=1 ./deploy/nginx/deployment.sh --check      # validates the config, changes nothing
 DOCKER_SG=1 ./deploy/nginx/deployment.sh              # build -> up -> assert /healthz on 127.0.0.1:8090
 
-# or by hand:
+# or by hand (single consolidated prod file):
 sg docker -c 'docker compose -p pulse-prod \
-  -f deploy/docker-compose.yml \
-  -f deploy/docker-compose.hardened.yml \
-  -f deploy/docker-compose.nginx-edge.yml \
-  --env-file deploy/.env up -d --build --scale caddy=0'
+  -f deploy/docker-compose.prod.yml \
+  --env-file deploy/.env up -d --build'
 
 curl -fsS http://127.0.0.1:8090/healthz | grep -q '"components"' && echo "app OK on loopback"
 ```
-
-> Do **not** also pass `docker-compose.prod-tls.yml` here — that overlay runs the
-> containerised Caddy on `0.0.0.0:443` and would collide with host nginx. The
-> nginx-edge overlay is the replacement for prod-tls, not an addition to it.
 
 ## 2. 👤 Install the shared WebSocket map (once per host)
 
@@ -158,9 +162,11 @@ sudo docker start pulse-prod-caddy-1   # Caddy retakes :443 with its unchanged c
 curl -fsS https://pulse.beyondkaira.com/healthz    # confirm the old edge is back
 ```
 
-Nothing in this migration deleted the Caddyfile or the prod-tls overlay, so
-Caddy comes back exactly as it was. The loopback overlay from step 1 can stay
-up (it only publishes private ports) or be dropped with `compose down`.
+At migration time nothing had deleted the Caddyfile or the prod-tls overlay, so
+Caddy came back exactly as it was. (**No longer true post-cleanup:** the Caddy
+container, its volumes and the repo's Caddy config have since been deleted —
+this rollback is historical record only.) The loopback overlay from step 1 can
+stay up (it only publishes private ports) or be dropped with `compose down`.
 
 ## 5. 👤 Persist (after a stable soak)
 
@@ -182,11 +188,12 @@ This edge migration adds **no** new secrets. The overlay reuses the existing
 | `PULSE_SECRET_KEY` | AES-GCM token encryption | `openssl rand -hex 32`; required in prod |
 | `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` | ClickHouse auth | alphanumeric + `_` |
 | `PULSE_WEBHOOK_SECRET` | HMAC for AMS webhooks | required for the `:8092` listener to bind (fail-closed) |
-| `PULSE_DOMAIN` | used by the Caddy overlays | **not** read by nginx or this overlay; nginx has the FQDNs hard-set in each `.conf` |
 
-`deploy/.env` stays gitignored — never commit real values. `EVRAK_BASICAUTH_HASH`
-and the AMS/S3/metrics keys are only needed by other overlays (prod-tls / real-ams)
-and are out of scope for the nginx edge.
+nginx does **not** read a domain from env — the FQDNs are hard-set in each
+`deploy/nginx/*.conf` (`PULSE_DOMAIN` was Caddy-only and has been removed).
+`deploy/.env` stays gitignored — never commit real values. The AMS/S3/metrics
+keys are only needed by other overlays (real-ams) and are out of scope for the
+nginx edge.
 
 ## Deployment script config (`deploy/nginx/deployment.sh`)
 
