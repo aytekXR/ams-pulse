@@ -109,6 +109,11 @@ and neither has yet been proven against the failure it was written for.
   dead AMS and confirm it fails and rolls back rather than reporting success. This is the assertion
   that would have prevented D-164 — it must be proven, not assumed.
 - Then tear the verify stack down (`down -v` is safe ONLY for that throwaway project name).
+- **Fix ROADMAP §2.46 — the backup sidecar startup race** (found at S100 close, fully autonomous). The
+  daemon runs its first cycle with no readiness wait, so both of 2026-07-23's host reboots cost a
+  ClickHouse backup (`Connection refused (clickhouse:9000)` → 24 h sleep). S100 ran a manual cycle to
+  restore a current recovery point, but the race is untouched. Add a bounded readiness wait + retry;
+  consider skipping retention pruning on a failed cycle so a broken path cannot erode an intact set.
 
 ## Lead B — operator-input driven (only if provided at open)
 - **Dependabot ruling (b) = absorb** → run the policy's batch protocol (`docs/dependabot-policy.md`

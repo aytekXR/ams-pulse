@@ -79,6 +79,21 @@
 > autonomous session is intentional, fine — but two sessions writing the same handoff files will
 > collide. If it is not intentional, it is worth stopping.
 >
+> ### §5 — Your ClickHouse backups had been failing since this morning (fixed for now, root cause queued)
+> Found while closing S100. The backup sidecar starts its first cycle the instant it launches, without
+> waiting for ClickHouse — so on **both** of today's host reboots it lost the race, failed the
+> ClickHouse backup with `Connection refused`, and then slept 24 h. The SQLite half kept succeeding,
+> which is why it looked like a partial error rather than a failure. **Your newest ClickHouse recovery
+> point was 02:03 UTC — from before the cutover and before the outage.**
+>
+> The loop ran a manual cycle to close the gap: `ch/pulse-20260723-172330.zip` now exists and captures
+> the restored state, and your 7-artifact retention set is intact. **The race itself is not yet fixed**
+> (ROADMAP §2.46, queued for the next session) — so until it is, **if you reboot the host, run one
+> backup by hand** afterwards:
+> `docker compose -p pulse-prod -f deploy/docker-compose.prod.yml -f deploy/docker-compose.real-ams.yml -f deploy/docker-compose.backup.yml --env-file deploy/.env exec backup /scripts/pulse-backup.sh once`
+> This is pre-existing, by the way — not something your cutover caused. Today's two reboots just made
+> it visible.
+>
 > **Your queue is otherwise UNCHANGED** — the ★S98/S97 submission sequence below is still the live list.
 >
 > ---

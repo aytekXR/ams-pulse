@@ -58,6 +58,8 @@
   fully autonomous; the built-in alert rule needs a semantics decision first.
 - **SESSION-101 verification of D-164** — the new health signal and the new deploy gate have not
   yet been exercised against the failure they were written for. Autonomous, isolated-stack only.
+- **§2.46 Backup sidecar startup race** — a reboot costs a full day of ClickHouse backups. Fully
+  autonomous (a readiness wait + retry in the backup script).
 
 ### B. Tooling-blocked — operator provisions the environment
 - **§2.12 Android Kotlin SDK** — needs a JVM+Gradle toolchain (Temurin 21 + Gradle) on the host.
@@ -672,6 +674,20 @@ snapshot is never re-evaluated → stuck firing (no stale-firing sweep). D-160 d
 drop the alert without resolving it). A correct fix needs a firing-semantics decision (abandoned vs. still-firing) like D-156 —
 delicate on a live alert, and a blanket stale-firing sweep would wrongly resolve `stream_offline` (absence IS its alert).
 Surfaced to the operator; NOT auto-built.
+
+### 2.46  Backup sidecar loses the startup race after a host reboot  [OPEN — found S100/D-164 close; latent, pre-existing]
+
+The backup daemon runs its first cycle the instant the container starts, with no readiness wait and no retry. On a host reboot
+it starts alongside ClickHouse, loses the race, logs `Code: 210 ... Connection refused (clickhouse:9000)`, marks the cycle
+"COMPLETED WITH ERRORS" — and then **sleeps 24 h**. The SQLite/meta half succeeds (separate code path), which is what makes the
+failure easy to miss. Two reboots on 2026-07-23 cost two consecutive ClickHouse backups; the newest CH recovery point was
+15 h old and pre-outage until S100 ran a manual cycle. `depends_on` does not help here: Docker restart policies bring
+containers back after a reboot without replaying compose's dependency ordering.
+
+**Fix:** a bounded readiness wait before the first CH backup (poll `clickhouse:9000` until healthy, cap ~120 s), plus a short
+retry on `NETWORK_ERROR` rather than falling straight through to the 24 h sleep. Consider also: exit non-zero on a failed CH
+backup so the container's own health/restart signal reflects it, and skip retention pruning on a failed cycle so a broken
+backup path cannot erode an intact recovery set.
 
 ### 2.45  Nothing ALERTS when Pulse itself goes blind  [OPEN — found S100/D-164; the incident's unfinished half]
 
