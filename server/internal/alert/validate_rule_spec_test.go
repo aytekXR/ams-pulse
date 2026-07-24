@@ -170,13 +170,19 @@ func TestValidateRuleSpec_UnknownSeverity(t *testing.T) {
 	}
 }
 
-func TestValidateRuleSpec_WindowZero(t *testing.T) {
-	err := alert.ValidateRuleSpec("node_cpu", "gt", 0, "warning", 90)
-	if err == nil {
-		t.Fatal("expected error for window_s=0, got nil")
+func TestValidateRuleSpec_WindowZeroIsValid(t *testing.T) {
+	// window_s:0 is "near-instant" — a legitimate value the evaluator honors and
+	// the e2e A1 rule relies on. Only a negative window is rejected.
+	if err := alert.ValidateRuleSpec("node_cpu", "gt", 0, "warning", 90); err != nil {
+		t.Errorf("window_s=0 must be valid, got %v", err)
 	}
-	if !errors.Is(err, alert.ErrInvalidRuleSpec) {
-		t.Errorf("expected ErrInvalidRuleSpec, got %T: %v", err, err)
+}
+
+func TestValidateRuleSpec_EmptySeverityIsValid(t *testing.T) {
+	// An omitted severity stores as empty and has always been accepted; only a
+	// non-empty WRONG severity is rejected (see TestValidateRuleSpec_UnknownSeverity).
+	if err := alert.ValidateRuleSpec("node_cpu", "gt", 60, "", 90); err != nil {
+		t.Errorf("empty severity must be valid, got %v", err)
 	}
 }
 
@@ -253,7 +259,7 @@ func TestErrInvalidRuleSpec_IsWrappable(t *testing.T) {
 		{"bad metric", "bogus", "gt", 60, "warning", 1},
 		{"bad operator", "node_cpu", "xx", 60, "warning", 1},
 		{"bad severity", "node_cpu", "gt", 60, "extreme", 1},
-		{"zero window", "node_cpu", "gt", 0, "warning", 1},
+		{"negative window", "node_cpu", "gt", -5, "warning", 1},
 		{"over window", "node_cpu", "gt", 99999999, "warning", 1},
 		{"NaN thresh", "node_cpu", "gt", 60, "warning", math.NaN()},
 	}

@@ -96,8 +96,14 @@ var ErrInvalidRuleSpec = errors.New("invalid alert rule spec")
 // Validation rules:
 //   - metric must be in KnownMetricNames (see also: SupportedAnomalyMetrics for anomaly rules)
 //   - operator must be in KnownOperators
-//   - severity must be in KnownSeverities
-//   - windowSeconds: 1 ≤ windowSeconds ≤ maxWindowS (604800 s / 7 days)
+//   - severity, when non-empty, must be in KnownSeverities. An EMPTY severity is
+//     accepted: the create handler treats an omitted severity as "unspecified"
+//     and has always stored it as such (the seeded rules set one explicitly, but
+//     the API never required it). We reject a WRONG severity, not a missing one.
+//   - windowSeconds: 0 ≤ windowSeconds ≤ maxWindowS. Zero is a legitimate value —
+//     the evaluator treats window_s:0 as "near-instant" (evaluate the latest
+//     sample with no lookback), which the e2e A1 rule relies on. Only a NEGATIVE
+//     window is nonsense (the review's -3600 payload).
 //   - threshold must be finite: NaN and ±Inf are rejected because compare() with
 //     a non-finite threshold silently always returns false or true, producing
 //     permanently-stuck alerts that are indistinguishable from real firing ones
@@ -108,11 +114,11 @@ func ValidateRuleSpec(metric, operator string, windowSeconds int64, severity str
 	if !knownOperatorSet[operator] {
 		return fmt.Errorf("%w: unknown operator %q (valid: eq, gt, gte, lt, lte)", ErrInvalidRuleSpec, operator)
 	}
-	if !knownSeveritySet[severity] {
+	if severity != "" && !knownSeveritySet[severity] {
 		return fmt.Errorf("%w: unknown severity %q (valid: critical, warning, info)", ErrInvalidRuleSpec, severity)
 	}
-	if windowSeconds < 1 {
-		return fmt.Errorf("%w: window_s must be >= 1, got %d", ErrInvalidRuleSpec, windowSeconds)
+	if windowSeconds < 0 {
+		return fmt.Errorf("%w: window_s must be >= 0, got %d", ErrInvalidRuleSpec, windowSeconds)
 	}
 	if windowSeconds > maxWindowS {
 		return fmt.Errorf("%w: window_s must be <= %d (7 days), got %d", ErrInvalidRuleSpec, maxWindowS, windowSeconds)

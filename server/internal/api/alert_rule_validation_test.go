@@ -116,11 +116,26 @@ func TestAlertRuleCreate_InvalidSpec_Returns422(t *testing.T) {
 			wantInMsg:  "window_s",
 		},
 		{
-			name:       "window_s_zero",
+			// window_s:0 is "near-instant" — a legitimate value (the seeded e2e A1
+			// rule uses it). Only a negative window is rejected.
+			name:       "window_s_zero_is_valid",
 			bodyMut:    func(b map[string]any) map[string]any { return mutateBody(b, "window_s", 0.0) },
-			wantStatus: http.StatusUnprocessableEntity,
-			wantCode:   "INVALID_RULE",
-			wantInMsg:  "window_s",
+			wantStatus: http.StatusCreated,
+			wantCode:   "",
+			wantInMsg:  "",
+		},
+		{
+			// An omitted severity is accepted (stored empty) — pre-existing handler
+			// behavior the e2e A1 rule relies on. Only a WRONG severity is rejected.
+			name: "severity_omitted_is_valid",
+			bodyMut: func(b map[string]any) map[string]any {
+				m := mutateBody(b, "severity", nil)
+				delete(m, "severity")
+				return m
+			},
+			wantStatus: http.StatusCreated,
+			wantCode:   "",
+			wantInMsg:  "",
 		},
 		{
 			name:       "severity_apocalypse",
@@ -229,7 +244,7 @@ func TestAlertRuleUpdate_InvalidSpec_Returns422(t *testing.T) {
 		{"unknown_metric", "metric", "packets_from_mars", http.StatusUnprocessableEntity, "INVALID_RULE", "metric"},
 		{"operator_banana", "operator", "banana", http.StatusUnprocessableEntity, "INVALID_RULE", "operator"},
 		{"window_s_negative", "window_s", -3600.0, http.StatusUnprocessableEntity, "INVALID_RULE", "window_s"},
-		{"window_s_zero", "window_s", 0.0, http.StatusUnprocessableEntity, "INVALID_RULE", "window_s"},
+		{"window_s_zero_is_valid", "window_s", 0.0, http.StatusOK, "", ""},
 		{"severity_apocalypse", "severity", "apocalypse", http.StatusUnprocessableEntity, "INVALID_RULE", "severity"},
 		{"window_s_over_cap", "window_s", 604801.0, http.StatusUnprocessableEntity, "INVALID_RULE", "window_s"},
 		// Valid update — confirms the guard does not block a well-formed body.
