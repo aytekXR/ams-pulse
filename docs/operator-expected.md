@@ -1,5 +1,28 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-23, SESSION-100 — ⚠ prod was silently BLIND for 7 h 46 m after the cutover; it is FIXED and collecting again, but please read §1–§4)
+# Operator TODO — the items only YOU can do (updated 2026-07-24, SESSION-101 — the pre-listing review is folded in and fixed; ONE new blocking-for-listing item: flip GHCR public after the 0.4.1 image pushes)
 
+> # ▶ ★ S101 STATUS (2026-07-24, D-166) — the independent pre-listing review is DONE and its blockers are FIXED in code (PR #204). To LIST on the marketplace you now need exactly one thing from me: flip the GHCR package to public, once the v0.4.1 image exists. No prod roll happened.
+>
+> **What this session did.** Acted on the third-party pre-listing review (the one that returned "DO NOT LIST TODAY") and closed the carried D-164 verification. The three listing blockers are resolved in code:
+> - **Pricing/node inversion fixed.** Business was capped at **5 nodes — fewer than Pro's 10**. It is now 50 (ladder: Free 1 / Pro 10 / Business 50 / Enterprise unlimited), guarded by a test so it can't silently invert again. **Your call remains the actual prices** — they are all still marked "(PROPOSED)". Nothing about the dollar figures changed.
+> - **Paid-license silent-downgrade fixed.** On the README/compose install path a real vendor-signed license used to fail verification and drop to Free **with no error**, because the embedded default verification key was a dev key and the real key shipped commented-out. The official key is now the built-in default and ships active on every documented path. (Your prod was never affected — it sets the key explicitly.)
+> - **Release integrity — v0.4.1 is prepared, and here is the one thing only you can do.** The version bump, Helm/quickstart/README pins and CHANGELOG are done; the `v0.4.1` git tag cuts automatically when PR #204 merges, and CI builds + pushes the image to GHCR. **But the GHCR package `ghcr.io/aytekxr/ams-pulse` is still PRIVATE, and there is no API to change that** — I verified this directly (the GitHub packages visibility endpoint returns 404). So an evaluator's `docker pull` still fails until you flip it.
+>
+> ### §1 — ★ THE ONE BLOCKING ACTION: flip the GHCR package to public (after 0.4.1 pushes)
+> Order matters: **let PR #204 merge → the `v0.4.1` tag fires `release.yml` → confirm the image `ghcr.io/aytekxr/ams-pulse:0.4.1` exists** (Actions tab, "release" workflow green), **then** flip visibility:
+> GitHub → your profile → **Packages** → `ams-pulse` → **Package settings** → **Change visibility** → **Public**.
+> The moment it is public, tell the loop (or it will pick it up on the next gate): it can then run the anonymous clean-room install → live-dashboard re-verify itself — that is the last mile of the review's blocker 1, and it does not need you.
+>
+> ### §2 — What is FIXED and needs nothing from you (context, not action)
+> Beyond the blockers: the source-connectivity test and webhook/Slack alert channels no longer allow SSRF to cloud-metadata addresses; scopeless API tokens no longer silently become admin; alert rules with nonsense fields are now rejected instead of stored-and-never-firing; a wildcard "any node down" rule actually fires; alerts hold steady instead of flapping when ClickHouse hiccups; the SDK's end-of-session beacons no longer silently 401; the onboarding wizard no longer double-creates a source; and the backup sidecar no longer loses a full day of ClickHouse backups after a reboot. The alerting docs that the previous review-session claimed to have fixed but hadn't are now genuinely correct.
+>
+> ### §3 — ★ Verification finding worth your attention: the D-164 deploy-gate was itself broken
+> S100 added a post-deploy check that was supposed to refuse a deploy unless Pulse is actually collecting. This session ran it for the first time against a dead AMS — **and it passed the deploy anyway.** It was matching `"status":"ok"` anywhere in the health document, which the database/metastore components satisfy even while the collector is blind. It is now fixed to check the collector specifically, and re-proven (a deploy against a dead AMS correctly fails and rolls back). The `/healthz` half of D-164 was sound; only the deploy script's gate was wrong. This is exactly the kind of "the safety net had a hole" issue the loop is meant to catch before you hit it in production.
+>
+> ### §4 — Your other queue is UNCHANGED
+> The ★S100 items below are still live: the permanent **2026-07-23 08:58–16:44 UTC data hole** (any report/screenshot/demo covering that day under-counts), the **18-PR Dependabot** decision (hold vs authorize absorption), and the 6-step submission sequence (docs-pack review, support/SLA + pricing sign-off, load lane → capacity number, demo video, GHCR flip [now §1 above], Ankush reply). Operational, not public-repo: rotate the chat-exposed and VPS-group-readable secrets in `deploy/.env` and `oguz-testing.md`.
+>
+> ---
+>
 > # ▶ ★ S100 STATUS (2026-07-23, D-164) — ⚠ ACTION-RELEVANT (not action-blocking). The wait-gate caught a live production regression left by the cutover deploy. Prod is restored. Four things you should know; one needs a decision.
 >
 > **What was wrong.** Your Caddy→nginx cutover deploy brought the prod app up from

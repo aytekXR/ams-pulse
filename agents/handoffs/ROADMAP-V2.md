@@ -56,10 +56,12 @@
 - **§2.45 Nothing ALERTS when Pulse goes blind** — D-164 made `/healthz` honest; nothing pages.
   The cheapest first step (a `pulse_collector_last_success_timestamp` gauge on `/metrics`) is
   fully autonomous; the built-in alert rule needs a semantics decision first.
-- **SESSION-101 verification of D-164** — the new health signal and the new deploy gate have not
-  yet been exercised against the failure they were written for. Autonomous, isolated-stack only.
-- **§2.46 Backup sidecar startup race** — a reboot costs a full day of ClickHouse backups. Fully
-  autonomous (a readiness wait + retry in the backup script).
+- **SESSION-101 verification of D-164** — ✅ DONE (D-166). Proven live in an isolated stack; the
+  `/healthz` signal was sound but **`deployment.sh` step 6 was broken** (grepped the whole body,
+  passed while the collector was degraded) — fixed and re-proven.
+- **§2.46 Backup sidecar startup race** — ✅ DONE (D-166). Bounded ClickHouse readiness wait +
+  network-class retry with backoff; retention pruning skipped on a failed cycle; honest FAILED
+  status. Both script copies, shellcheck clean.
 
 ### B. Tooling-blocked — operator provisions the environment
 - **§2.12 Android Kotlin SDK** — needs a JVM+Gradle toolchain (Temurin 21 + Gradle) on the host.
@@ -675,7 +677,7 @@ drop the alert without resolving it). A correct fix needs a firing-semantics dec
 delicate on a live alert, and a blanket stale-firing sweep would wrongly resolve `stream_offline` (absence IS its alert).
 Surfaced to the operator; NOT auto-built.
 
-### 2.46  Backup sidecar loses the startup race after a host reboot  [OPEN — found S100/D-164 close; latent, pre-existing]
+### 2.46  Backup sidecar loses the startup race after a host reboot  [✅ DONE — D-166/S101, PR #204]
 
 The backup daemon runs its first cycle the instant the container starts, with no readiness wait and no retry. On a host reboot
 it starts alongside ClickHouse, loses the race, logs `Code: 210 ... Connection refused (clickhouse:9000)`, marks the cycle
