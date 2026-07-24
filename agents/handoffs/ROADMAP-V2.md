@@ -677,6 +677,17 @@ drop the alert without resolving it). A correct fix needs a firing-semantics dec
 delicate on a live alert, and a blanket stale-firing sweep would wrongly resolve `stream_offline` (absence IS its alert).
 Surfaced to the operator; NOT auto-built.
 
+### 2.47  Manual real-AMS scenario TC-H-06 creates a cpu_pct THRESHOLD rule — now correctly rejected  [OPEN — found D-166/S101; manual-suite only, NOT a CI gate]
+
+D-166 added create-time alert-rule validation. `cpu_pct`/`mem_pct`/`disk_pct` are **anomaly-only** metrics (the threshold
+evaluator's CPU metric is `node_cpu`), so `alert.ValidateRuleSpec` now 422s a `cpu_pct` *threshold* rule — correctly: such a
+rule was always an unknown-metric rule that silently never fires (exactly the review's item 5). But
+`qa/realams/scenarios/TC-H-06-cpu-alert-standalone.sh:62` creates one and captures its `RULE_ID`, so the scenario now fails at
+rule creation. It is a **manual** real-AMS validation scenario (the 46/50 suite), not part of the CI e2e gate, so it does not
+block anything. **Fix on its next operator run:** either point it at `node_cpu` (the real threshold CPU metric — still yields
+no firing rows on a standalone AMS, preserving the scenario's intent) or make it `rule_type:anomaly`. Its firing-row assertion
+(greps `cpu_pct`/`mem_pct`/`disk_pct`) would move accordingly. Left for the next real-AMS pass rather than edited blind here.
+
 ### 2.46  Backup sidecar loses the startup race after a host reboot  [✅ DONE — D-166/S101, PR #204]
 
 The backup daemon runs its first cycle the instant the container starts, with no readiness wait and no retry. On a host reboot
