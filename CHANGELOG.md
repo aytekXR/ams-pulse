@@ -33,6 +33,33 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **Live dashboard WebSocket now actually connects (D-165).** The web client dialed
+  `/live/ws`, but the server registers the socket only at `/api/v1/live/ws`; the SPA
+  fallback answered the bare path with HTTP 200, the upgrade never happened, and the
+  dashboard silently ran on the 5 s polling fallback in every environment since the
+  feature shipped. The client now dials the API-prefixed path (and the Vite dev proxy
+  forwards WebSocket upgrades on `/api`). The "Live" indicator can now genuinely engage.
+- **Settings → Ingest Tokens snippet is now correct (D-165).** The copy-paste SDK snippet
+  shown after creating an ingest token used a wrong package name (`@pulse/beacon-js` — the
+  package is `@pulse/beacon`, named export), a config key the SDK does not accept
+  (`endpoint:` — the real key is `ingestUrl`, and the SDK appends `/ingest/beacon` itself,
+  so the old value would also have doubled the path), omitted the required `streamId`, and
+  embedded `window.location.origin` as code that would evaluate on the *player's* page.
+  The snippet now bakes in the concrete Pulse origin and all required fields. The same
+  wrong snippet in `docs/user-guide.md` is fixed to match.
+- **Fresh `npm ci` works again on Node 20 LTS (D-165).** `web/package.json` pinned
+  `@eslint/js@^10` against `eslint@^9` — a major-version peer mismatch that stock
+  npm 10.8 rejects outright (CI's Node 22 npm tolerated it; the Docker build masked it
+  with `--legacy-peer-deps`). `@eslint/js` now matches the eslint major (`^9.39.4`);
+  a clean `npm ci` + lint + full test run passes with no override flags.
+- **`make test` / `make lint` no longer mask web and SDK failures (D-165).** Skeleton-era
+  `|| (echo "…not yet populated"; exit 0)` guards on `test-web`, `test-sdk`, `lint-web`
+  and `lint-sdk` swallowed real failures (the web suite alone is 680 tests); the guards
+  are removed so local `make test` fails when the suites fail, matching CI.
+- **`branch-protection.sh` restores the real gate set (D-165).** The restore script still
+  listed the 7 pre-D-162 contexts; re-running it would have silently dropped the
+  `e2e`/`csp-e2e`/`web-e2e`/`sdk-swift` and CodeQL requirements. It now applies the full
+  13-context list currently enforced on `main`.
 - **Alert engine no longer leaks in-memory state (D-160).** The alert evaluator's per-rule,
   per-stream firing-state map was never pruned, so on a long-running server with high stream
   churn it grew without bound (one small entry per unique stream that ever matched a rule).
@@ -76,6 +103,29 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Documentation
 
+- **Release-readiness accuracy sweep (D-165).** An independent full-repo review verified
+  the documentation against code and fixed every confirmed drift: the alerting runbook's
+  default-rule table was wrong on all four rows (docs said `stream_offline eq 0` — which
+  matches the *online* state and would fire while a stream is healthy; actual seeded rule
+  is `eq 1`; likewise `viewer_drop lt 0.5` not `lt 20`, `node_cpu gt 90`/120 s not
+  `gt 80`/60 s, ingest floor absolute 500 kbps not "50 % of target") and its copy-paste
+  example created the inverted rule — both corrected, a worked `POST /alerts/rules`
+  example added, and `viewer_drop_pct`'s real semantics (absolute viewer count, not a
+  drop percentage) documented honestly. Also fixed: the bootstrap-token log line shown in
+  the user guide and API guide did not match what the server prints (users grepping the
+  documented string would never find their only admin credential); four stale admin-guide
+  notes claiming the corrected S3 variable names were wrong; three stale claims that the
+  main-port beacon rate limit was an open backlog item (it shipped as A2); the user
+  guide's CSV export URL (`/analytics/export` does not exist; real:
+  `/analytics/audience?format=csv`); all 14 user-guide screenshot paths (`../marketplace/…`
+  resolved outside the repo); `WRONG_TOKEN_KIND` documented as 401 (it is 403); a
+  prominent notice that YAML config is not operative in v0.4.x; removal of a 213-line
+  internal AI-session prompt from `docs/AMS-INTEGRATION.md`; post-nginx-cutover compose
+  references in `docker-compose.real-ams.yml`, the monitoring/productionize/
+  upgrade-rollback runbooks and compose-file comments; the quickstart token grep now
+  anchors on the FIRST-RUN line; `pulse.Dockerfile` EXPOSEs the webhook port 8092; the
+  listing draft's obsolete 20–30 % revenue-share figure and stale conformance claim; and
+  `CLAUDE.md`'s "skeleton only" state description.
 - **Logtail references removed (D-151).** The `logtail` collector was deleted in D-062, but a
   few docs still listed it as shipped/configurable: `docs/ARCHITECTURE.md` (component diagram +
   status table), `docs/AMS-INTEGRATION.md` (the `PULSE_LOG_TAIL_PATH` env-var row), and

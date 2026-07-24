@@ -24,11 +24,12 @@
 ### Bootstrap admin token (first run)
 
 On the very first `pulse serve` invocation, when no tokens exist in the
-meta store, Pulse auto-generates a random admin token (`plt_<16 hex bytes>`),
-stores its SHA-256 hash, and prints it **once** to stderr:
+meta store, Pulse auto-generates a random admin token (`plt_<48 hex chars>`),
+stores its hash, and prints it **once** to stderr:
 
 ```
-[pulse] bootstrap token (one-time): plt_3a9f7c2e1b0d4852...
+pulse: FIRST RUN — generated admin token: plt_<48 hex chars>
+       Save this token; it will not be shown again.
 ```
 
 Copy it immediately — the raw value is never stored and cannot be retrieved

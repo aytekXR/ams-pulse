@@ -84,9 +84,10 @@ subsection (2026-07-22). Confirm remaining unknowns at the developer meeting. --
 4. **Synthetic probes + full observability API** — active connectivity probes over HLS,
    WebRTC, RTMP, and DASH verify stream reachability from Pulse's own vantage (Pro+);
    13-month (396-day) retention window enables long-horizon trend and rollup analysis;
-   Prometheus `/metrics` endpoint in standard exposition format; 42-path OpenAPI 3.1 spec
-   (51/52 operations response-body conformant — **historical v0.3-era CI measurement;
-   pending re-run against the current 59-operation spec**); scrape token uses constant-time compare.
+   Prometheus `/metrics` endpoint in standard exposition format; spec-first OpenAPI 3.1
+   API (42 paths / 59 operations) with response-body conformance enforced in CI by a
+   probe registry (2 known parameter deviations tracked openly as BUG-009);
+   scrape token uses constant-time compare.
    No additional Grafana pipeline needed.
    **Demand signal:** ant-media/Ant-Media-Server#3122 (closed 2023 without implementation —
    Prometheus exporter was a long-standing unmet community request; Pulse ships this natively).
@@ -106,8 +107,10 @@ subsection (2026-07-22). Confirm remaining unknowns at the developer meeting. --
 
 > **PROPOSED** — prices from `docs/prd-report.md` §7.11. Not yet published or confirmed
 > with the Ant Media marketplace team (checklist row 8 NEEDS-OPERATOR-CONTACT).
-> **Revenue-share** (20–30%) is UNVERIFIED — appears only in the PRD as a target figure
-> and has not been negotiated with Ant Media (checklist row 9, final-assessment.md §6 Q5).
+> **Revenue-share:** Ant Media's publicly stated first-year vendor terms are **100% to the
+> vendor, no commission** (S97/D-161 research; see `submission-process.md` §1). Post-year-1
+> terms are a developer-meeting question. The PRD's older 20–30% figure is obsolete —
+> do not use it in discussions.
 
 The entitlements below are drawn from `server/internal/license/license.go:90–150`
 (the authoritative runtime implementation). Where the PRD §7.11 and license.go diverge,
@@ -232,7 +235,7 @@ mechanism not yet decided), contact: [support channel — NEEDS-OPERATOR].
 |-----|--------|-----------------|
 | Support channel / SLA | NEEDS-OPERATOR-CONTACT | Define and publish a support URL (email, GitHub Issues, or hosted forum). Checklist row 7 in `docs/assessment/final-assessment.md` §3. |
 | Public licensing terms | NEEDS-OPERATOR-CONTACT | Publish human-readable licensing terms (PolyForm NC for self-hosted; commercial license for vendor use). Checklist row 8. |
-| Revenue-share terms | UNVERIFIED | Negotiate with Ant Media marketplace team. PRD target: 20–30%. Checklist row 9. |
+| Revenue-share terms | PARTIALLY KNOWN | First-year terms publicly stated: 100% to vendor, no commission (`submission-process.md` §1). Confirm post-year-1 terms at the developer meeting. Checklist row 9. |
 | Listing submission | NEEDS-OPERATOR-CONTACT | Initiate contact with Ant Media developer-relations or marketplace team. Checklist row 10. |
 | AMS version support requirement | NEEDS-OPERATOR-CONTACT | Ask Ant Media what minimum AMS version a marketplace product must support. Q5 in `docs/assessment/final-assessment.md` §6. |
 

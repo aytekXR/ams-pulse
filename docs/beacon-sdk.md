@@ -419,14 +419,13 @@ Response codes:
 | `403 LICENSE_REQUIRED` | Pulse license tier is Free; Pro+ required |
 | `413 Request Entity Too Large` | Batch body exceeds 64 KB |
 | `422 Unprocessable Entity` | All events in the batch failed schema validation |
-| `429 Too Many Requests` | Rate limit exceeded (dedicated ingest listener only) |
+| `429 Too Many Requests` | Rate limit exceeded |
 
-> **⚠️ Rate limiter on dedicated ingest listener (`PULSE_INGEST_LISTEN_ADDR`):**
-> The dedicated listener enforces 100 req/s per token, burst 200
-> (`serve.go:326`). The main-port `/ingest/beacon` handler does not apply this
-> rate limiter (backlog item A2, `AMS-INTEGRATION.md` §7). For production
-> deployments with high viewer counts, configure `PULSE_INGEST_LISTEN_ADDR` to
-> get rate-limit protection.
+> **Rate limiting:** both ingest paths enforce 100 req/s per token with a burst
+> of 200 — the dedicated listener (`serve.go:326`) and the main-port
+> `/ingest/beacon` handler (`server.go:2318`, shipped as A2). Use
+> `PULSE_INGEST_LISTEN_ADDR` when you want beacon traffic on a separate port
+> for DMZ routing, not for rate-limit coverage.
 
 ---
 
@@ -458,13 +457,6 @@ Beacon ingest requires a Pro or higher Pulse license. Free-tier deployments
 `{"code":"LICENSE_REQUIRED","message":"..."}` on every beacon POST. The SDK
 backs off and continues retrying; no playback impact, but no data is stored.
 
-### Main-port rate-limiting gap (A2 backlog)
-
-`POST /ingest/beacon` on the main port (`:8090`) does not apply per-token rate
-limiting (`AMS-INTEGRATION.md` §7, backlog item A2). For production deployments,
-use `PULSE_INGEST_LISTEN_ADDR` to activate the dedicated listener, which
-enforces 100 req/s per token with a burst of 200.
-
 ### Sampled-out sessions are silent by design
 
 When `sampleRate` is set below `1`, a fraction of `Pulse.init()` calls return
@@ -481,7 +473,7 @@ logged. If `qoe/summary` shows fewer sessions than expected, verify the
 |---|---|---|
 | HTTP 401 on beacon POST | Token missing, wrong kind, or expired | Mint a new token with `kind=ingest` via `POST /api/v1/admin/tokens`; confirm the `X-Pulse-Ingest-Token` header is set (not `Authorization: Bearer`) |
 | HTTP 403 `LICENSE_REQUIRED` | Free tier deployment | Set `PULSE_LICENSE_KEY` or `PULSE_LICENSE_FILE` to a Pro+ license |
-| HTTP 429 rate limit | High viewer count on dedicated ingest port | Raise burst or check whether `PULSE_INGEST_LISTEN_ADDR` is configured; main-port handler has no rate limit (see backlog A2) |
+| HTTP 429 rate limit | High viewer count exceeding 100 req/s per token (both ports enforce the same limit) | Spread traffic across per-player ingest tokens, or lower the SDK `sampleRate` |
 | No data in `qoe/summary` after play | Rollup window not elapsed | Wait 120 s after the first batch; verify `202` responses in server logs |
 | CSP blocks beacon POST | Script or fetch blocked by Content-Security-Policy | Self-host `dist/index.global.js` and add the Pulse origin to `connect-src` in your CSP header; do not load the SDK from any CDN |
 | `startup_ms` absent from summary | `startup_complete` event never fired | Confirm the correct attach method was called; for WebRTC confirm `webRTCAdaptor` was passed after the adaptor was fully initialised |

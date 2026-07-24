@@ -37,7 +37,7 @@ noted explicitly.
 Pulse protects every page behind an authentication gate. The gate is a
 full-page centered card that renders before the sidebar loads.
 
-![Sign-in screen](../marketplace/screenshots/ug-login.png "Sign-in form
+![Sign-in screen](marketplace/screenshots/ug-login.png "Sign-in form
 with an API Token field and a Sign in button")
 
 ### Token sign-in
@@ -48,7 +48,8 @@ session. On a fresh install the first token is printed to the server's
 standard error at first run — look for a line like:
 
 ```
-pulse: initial admin token: plt_XXXXXXXXXXXX
+pulse: FIRST RUN — generated admin token: plt_<48 hex chars>
+       Save this token; it will not be shown again.
 ```
 
 Additional tokens can be created and copied from **Settings → API Tokens**
@@ -82,7 +83,7 @@ browser: after the wizard is completed or skipped, a flag is written to
 `localStorage` and the redirect never fires again. You can always reach the
 wizard by navigating directly to `/onboarding`.
 
-![Onboarding wizard step indicator](../marketplace/screenshots/ug-onboarding-step2.png
+![Onboarding wizard step indicator](marketplace/screenshots/ug-onboarding-step2.png
 "Four-step progress indicator: Welcome, Add source, Verify, Done")
 
 The wizard has four steps shown in a numbered progress indicator at the top of
@@ -106,7 +107,7 @@ health check at `/healthz` reports `ams_env_configured: true`).
 
 **URL:** `/` (sidebar: **Live**)
 
-![Live dashboard](../marketplace/screenshots/ss1-dashboard.png "Stat cards,
+![Live dashboard](marketplace/screenshots/ss1-dashboard.png "Stat cards,
 protocol donut chart, by-application table, and active streams table")
 
 The live dashboard is the default landing page after sign-in. It shows the
@@ -168,7 +169,7 @@ of WebSocket state.
 Historical audience data backed by ClickHouse. The date range defaults to the
 last 7 days; the picker lets you choose any custom range.
 
-![Analytics page](../marketplace/screenshots/ss4-analytics.png "Audience
+![Analytics page](marketplace/screenshots/ss4-analytics.png "Audience
 timeseries chart and summary stat cards")
 
 ### Tabs
@@ -188,7 +189,7 @@ Changing the range refetches all three tab datasets simultaneously.
 
 The **Export CSV** button in the top-right triggers a browser download of the
 current audience data for the selected date range via
-`GET /api/v1/analytics/export`.
+`GET /api/v1/analytics/audience?format=csv`.
 
 ---
 
@@ -202,7 +203,7 @@ Viewer Quality of Experience data collected by the
 [beacon SDK](beacon-sdk.md). Install the beacon in your player to start
 populating this screen.
 
-![QoE page](../marketplace/screenshots/ug-qoe.png "QoE summary cards and
+![QoE page](marketplace/screenshots/ug-qoe.png "QoE summary cards and
 bitrate timeline chart")
 
 ### Summary cards
@@ -241,7 +242,7 @@ least one player with the beacon is active.
 Per-publisher ingest quality for the last 15 minutes. Refreshes automatically
 every 15 seconds; a manual **Refresh** button is also provided.
 
-![Ingest health page](../marketplace/screenshots/ss2-ingest-health.png "Publisher
+![Ingest health page](marketplace/screenshots/ss2-ingest-health.png "Publisher
 list with health score badges and a detail panel")
 
 ### Publisher list
@@ -282,7 +283,7 @@ Click **Collapse** or **Close** to dismiss the panel.
 
 Rule-based alerting with three tabs: **Rules**, **Channels**, and **History**.
 
-![Alerts page](../marketplace/screenshots/ss3-alerting.png "Alert rules list
+![Alerts page](marketplace/screenshots/ss3-alerting.png "Alert rules list
 with severity badges and edit controls")
 
 ### Rules tab
@@ -343,7 +344,8 @@ deleted channel stop notifying.
 
 Append-only log of every fired alert: rule ID, severity, state (`firing` or
 `resolved`), timestamp, and the metric value that triggered the event. The
-last 100 entries are shown.
+last 100 entries are shown (display cap; the server stores up to 1,000
+history rows per rule before pruning oldest-first).
 
 ---
 
@@ -356,7 +358,7 @@ last 100 entries are shown.
 On Free or Pro plans the page shows an upsell gate:
 _"Usage Reports requires Business tier"_.
 
-![Reports page](../marketplace/screenshots/ss5-reports.png "Usage table with
+![Reports page](marketplace/screenshots/ss5-reports.png "Usage table with
 viewer-minutes and egress columns")
 
 ### Usage tab
@@ -409,7 +411,7 @@ At least one matcher is required. Unmatched streams appear as `—` in reports.
 Cluster node inventory. Auto-discovers nodes within 2 minutes of first
 contact; refreshes automatically every 30 seconds.
 
-![Fleet page](../marketplace/screenshots/ug-fleet.png "Node cards with CPU
+![Fleet page](marketplace/screenshots/ug-fleet.png "Node cards with CPU
 and memory load bars")
 
 ### Summary header
@@ -451,7 +453,7 @@ detector computes a rolling mean and standard deviation for each metric;
 when an observation deviates by more than N standard deviations (sigma), a
 flag is raised.
 
-![Anomalies page](../marketplace/screenshots/ug-anomalies.png "Anomaly flags
+![Anomalies page](marketplace/screenshots/ug-anomalies.png "Anomaly flags
 table with sigma values and severity badges")
 
 ### Columns
@@ -498,7 +500,7 @@ infrastructure and record Time to First Byte (TTFB), measured bitrate, and
 success/failure. All probe results are clearly labeled **Synthetic** — they are
 never silently mixed into organic QoE charts.
 
-![Probes page](../marketplace/screenshots/ss6-probes.png "Probes list with
+![Probes page](marketplace/screenshots/ss6-probes.png "Probes list with
 last result and Results panel")
 
 ### Probe list
@@ -552,7 +554,7 @@ Read-only, append-only log of every mutating API call made to admin and
 configuration endpoints. No tier gate — all authenticated admin users can view
 the log.
 
-![Audit log](../marketplace/screenshots/ug-audit-log.png "Audit log table
+![Audit log](marketplace/screenshots/ug-audit-log.png "Audit log table
 with Time, Actor, Action, Object, Object ID, Source IP columns")
 
 ### Columns
@@ -614,11 +616,12 @@ enter a name. The created token and a ready-to-paste SDK snippet are shown
 once:
 
 ```js
-import Pulse from '@pulse/beacon-js';
+import { Pulse } from '@pulse/beacon';
 
-Pulse.init({
-  token: 'plt_…',
-  endpoint: window.location.origin + '/ingest/beacon',
+const session = Pulse.init({
+  ingestUrl: 'https://your-pulse-host', // the SDK appends /ingest/beacon itself
+  token: 'plt_…',                       // the ingest token created above
+  streamId: 'your-stream-id',           // must match the AMS stream id being played
 });
 ```
 

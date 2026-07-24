@@ -17,7 +17,7 @@ db/wal/shm triplet) in the `pulse-prod_pulse-backups` Docker volume.
 ```sh
 # View last few cycle results:
 sg docker -c "docker compose -p pulse-prod \
-  -f deploy/docker-compose.yml \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.backup.yml \
   logs backup | grep 'Backup cycle' | tail -5"
 ```
@@ -32,7 +32,7 @@ ClickHouse unreachable) then run a manual one-shot:
 
 ```sh
 sg docker -c "docker compose -p pulse-prod \
-  -f deploy/docker-compose.yml \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.backup.yml \
   exec backup /scripts/pulse-backup.sh once"
 ```
@@ -148,8 +148,8 @@ Memory limit (total) exceeded 1.80 GiB
 ```
 
 This occurred on `server_events` inserts. It did NOT recur in the post-swap window.
-The hardened overlay sets a 2 GiB / 1.0 CPU limit on the `clickhouse` service
-(`deploy/docker-compose.hardened.yml:93-97`), leaving ~200 MiB headroom above the
+The prod compose sets a 2 GiB / 1.0 CPU limit on the `clickhouse` service
+(`deploy/docker-compose.prod.yml`), leaving ~200 MiB headroom above the
 observed threshold — narrow, especially under burst ingestion.
 
 **To check if it has recurred:**

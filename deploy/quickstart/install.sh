@@ -253,7 +253,7 @@ trap - EXIT
 # ── Extract bootstrap admin token ─────────────────────────────────────────────
 printf '\nLooking for bootstrap admin token...\n'
 TOKEN="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" logs pulse 2>/dev/null \
-  | grep -oE 'plt_[a-f0-9]+' | head -1 || true)"
+  | grep 'FIRST RUN' | grep -oE 'plt_[a-f0-9]+' | head -1 || true)"
 
 if [[ -n "$TOKEN" ]]; then
   printf '\n'

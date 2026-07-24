@@ -44,7 +44,7 @@ COPY --from=web /src/web/dist /usr/share/pulse/web
 COPY --from=server /src/contracts/db/clickhouse /usr/share/pulse/migrations
 ENV PULSE_MIGRATIONS_DIR=/usr/share/pulse/migrations
 USER pulse
-EXPOSE 8090 8091
+EXPOSE 8090 8091 8092
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost:8090/healthz || exit 1
 ENTRYPOINT ["pulse", "serve"]

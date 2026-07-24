@@ -54,11 +54,11 @@ test: test-server test-web test-sdk ## Run all tests
 test-server: ## Run server tests
 	cd server && go test ./...
 
-test-web: web/node_modules/.package-lock.json ## Run web tests (skip if no test files)
-	cd web && npm test || (echo "NOTE(FE-01): web test suite not yet populated — zero test files"; exit 0)
+test-web: web/node_modules/.package-lock.json ## Run web tests
+	cd web && npm test
 
-test-sdk: sdk/beacon-js/node_modules/.package-lock.json ## Run SDK tests (skip if no test files)
-	cd sdk/beacon-js && npm test || (echo "NOTE(SDK-01): sdk test suite not yet populated — zero test files"; exit 0)
+test-sdk: sdk/beacon-js/node_modules/.package-lock.json ## Run SDK tests
+	cd sdk/beacon-js && npm test
 
 # ---------------------------------------------------------------------------
 # Lint
@@ -70,10 +70,10 @@ lint-server: ## Go vet the server
 	cd server && go vet ./...
 
 lint-web: web/node_modules/.package-lock.json ## ESLint the web dashboard
-	cd web && npm run lint || (echo "GAP(FE-01): eslint.config.js missing — ESLint v9 requires it; tracked in WO-001 gaps"; exit 0)
+	cd web && npm run lint
 
 lint-sdk: sdk/beacon-js/node_modules/.package-lock.json ## ESLint the beacon SDK
-	cd sdk/beacon-js && npm run lint || (echo "GAP(SDK-01): eslint.config.js missing — ESLint v9 requires it; tracked in WO-001 gaps"; exit 0)
+	cd sdk/beacon-js && npm run lint
 
 # ---------------------------------------------------------------------------
 # Contract validation

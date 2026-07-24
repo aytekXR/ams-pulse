@@ -1,12 +1,16 @@
 # Pulse — real-AMS override.
 #
-# Layers on top of the base compose file and optional overrides:
+# Layers on top of the consolidated prod compose file (docker-compose.hardened.yml
+# was merged into docker-compose.prod.yml at the 2026-07-23 nginx cutover, PR #199):
 #
-#   docker compose \
-#     -f deploy/docker-compose.yml \
-#     -f deploy/docker-compose.hardened.yml \
+#   docker compose -p pulse-prod \
+#     -f deploy/docker-compose.prod.yml \
 #     -f deploy/docker-compose.real-ams.yml \
+#     --env-file deploy/.env \
 #     up -d
+#
+# Production canonical form adds -f deploy/docker-compose.backup.yml (see
+# deploy/runbooks/upgrade-rollback.md).
 #
 # This override:
 #   1. Disables mock-ams (assigns an unused profile so it never starts).
@@ -34,8 +38,7 @@
 #   PULSE_AMS_URL=http://ams:5080 PULSE_AMS_LOGIN_EMAIL=a@b.c \
 #   PULSE_AMS_LOGIN_PASSWORD=x PULSE_AMS_NODE_ID=node-01 \
 #   docker compose \
-#     -f deploy/docker-compose.yml \
-#     -f deploy/docker-compose.hardened.yml \
+#     -f deploy/docker-compose.prod.yml \
 #     -f deploy/docker-compose.real-ams.yml \
 #     config -q
 

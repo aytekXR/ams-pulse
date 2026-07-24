@@ -8,10 +8,11 @@
 #   - The `ci` workflow has run at least once on a PR so GitHub knows the check
 #     names (contexts) below.
 #
-# Required status checks = the ci.yml job names. The e2e workflow (e2e.yml) is
-# intentionally NOT required: it spins a full Docker Compose stack and runs only
-# on pull_request + workflow_dispatch — too slow/heavy for a mandatory gate until
-# GitHub-hosted-runner timing is validated (D-020 limitation).
+# Required status checks = the full 13-context list applied at D-162 (S98,
+# 2026-07-23): the ci.yml job names, CodeQL analyses, and the e2e workflow jobs
+# (e2e / csp-e2e / web-e2e were promoted to hard gates; sdk-swift added D-153).
+# Keep this list in sync with what `gh api .../protection/required_status_checks`
+# reports — this script is the restore path if protection is ever reset.
 #
 # Fallback local verification (no GitHub needed): make build && make test
 set -euo pipefail
@@ -27,7 +28,7 @@ gh api -X PUT "repos/${REPO}/branches/${BRANCH}/protection" \
 {
   "required_status_checks": {
     "strict": true,
-    "contexts": ["contracts", "server", "web", "sdk", "docker-build", "helm", "compose"]
+    "contexts": ["contracts", "server", "web", "sdk", "docker-build", "helm", "compose", "Analyze (go)", "Analyze (javascript-typescript)", "e2e", "csp-e2e", "web-e2e", "sdk-swift"]
   },
   "enforce_admins": false,
   "required_pull_request_reviews": {

@@ -32,9 +32,15 @@ fixed-name variables each have a dedicated row, plus one dynamic-name row for `P
 
 ## 1. Environment variables
 
-Pulse reads all configuration from `PULSE_*` environment variables. A YAML file
-(`pulse.yaml` in the process working directory, or `--config=<path>`) can supply
-base values; environment variables always override YAML when both are present.
+Pulse reads all configuration from `PULSE_*` environment variables.
+
+> **YAML config is not operative in v0.4.x.** A `pulse.yaml` / `--config` parser
+> exists in `server/internal/config` but is not wired into the binary entry point
+> (`HOOK(BE-02)` in `server/cmd/pulse/main.go`) — the shipped binary silently
+> ignores any YAML file. Variables marked below as read only by the YAML loader
+> (e.g. `PULSE_BASE_URL`, `PULSE_BEACON_SAMPLE_RATE`, `PULSE_CLICKHOUSE_ADDR`,
+> `PULSE_LICENSE_OFFLINE_FILE`) currently have **no effect** in production.
+> Configure everything via environment variables.
 
 ### _FILE convention
 
@@ -183,13 +189,13 @@ refuses to start if any is missing.
 | `PULSE_REPORT_ARTIFACT_RETENTION_DAYS` | `90` | No | No | Prune report artifacts older than this many days on each scheduler tick; `0` = keep forever (never prune); only `pulse-usage-*.{csv,pdf}` files inside `PULSE_REPORTS_DIR` are ever removed |
 | `PULSE_REPORT_LOGO_PATH` | (empty = default) | No | No | Filesystem path to a PNG or JPEG logo embedded in generated PDF reports; empty = embedded default Pulse waveform |
 | `PULSE_S3_ENDPOINT` | (empty = disabled) | No | No | S3-compatible endpoint URL (e.g. `https://s3.amazonaws.com`); empty = S3 report export disabled |
-| `PULSE_S3_BUCKET` | (empty) | Cond. | No | Target S3 bucket; required when `PULSE_S3_ENDPOINT` is set. **Note:** `deploy/.env.example` incorrectly shows `PULSE_S3_EXPORT_BUCKET` — the correct variable name is `PULSE_S3_BUCKET`. |
+| `PULSE_S3_BUCKET` | (empty) | Cond. | No | Target S3 bucket; required when `PULSE_S3_ENDPOINT` is set. |
 | `PULSE_S3_PREFIX` | `reports/` | No | No | Object key prefix applied to every uploaded report |
-| `PULSE_S3_REGION` | `us-east-1` | No | No | AWS/S3-compatible region. **Note:** `deploy/.env.example` incorrectly shows `PULSE_S3_EXPORT_REGION` — the correct variable name is `PULSE_S3_REGION`. |
+| `PULSE_S3_REGION` | `us-east-1` | No | No | AWS/S3-compatible region. |
 | `PULSE_S3_ACCESS_KEY_ENV` | `PULSE_S3_ACCESS_KEY_ID` | No | No | Name of the environment variable that holds the S3 access key ID; indirection allows delivery via a secret manager. Change this only if your secret manager uses a different variable name. If the named variable is also unset at upload time, the uploader falls back to the standard `AWS_ACCESS_KEY_ID` environment variable (`server/internal/reports/s3.go:98`). |
 | `PULSE_S3_SECRET_KEY_ENV` | `PULSE_S3_SECRET_ACCESS_KEY` | No | No | Name of the environment variable that holds the S3 secret access key; same indirection pattern as `PULSE_S3_ACCESS_KEY_ENV`. Falls back to `AWS_SECRET_ACCESS_KEY` when the named variable is unset. |
-| `PULSE_S3_ACCESS_KEY_ID` | (empty) | Cond. | No | S3 access key ID read at upload time; required when S3 export is enabled. **Note:** `deploy/.env.example` incorrectly shows `PULSE_S3_EXPORT_KEY_ID` — the correct variable name is `PULSE_S3_ACCESS_KEY_ID` (verified in `server/cmd/pulse/config.go:365`). |
-| `PULSE_S3_SECRET_ACCESS_KEY` | (empty) | Cond. | No | S3 secret access key read at upload time; required when S3 export is enabled. **Note:** `deploy/.env.example` incorrectly shows `PULSE_S3_EXPORT_SECRET_KEY` — the correct variable name is `PULSE_S3_SECRET_ACCESS_KEY`. |
+| `PULSE_S3_ACCESS_KEY_ID` | (empty) | Cond. | No | S3 access key ID read at upload time; required when S3 export is enabled (verified in `server/cmd/pulse/config.go:365`). |
+| `PULSE_S3_SECRET_ACCESS_KEY` | (empty) | Cond. | No | S3 secret access key read at upload time; required when S3 export is enabled. |
 
 ---
 
@@ -227,8 +233,8 @@ Pulse issues two distinct token kinds; they are not interchangeable:
 | `api` | `POST /api/v1/admin/tokens` or first-run bootstrap | `/api/v1/*` routes | `plt_` |
 | `ingest` | `POST /api/v1/admin/tokens` | `/ingest/beacon` only | `plt_` |
 
-An `ingest` token presented on an `/api/v1/*` route returns 401 with the message
-`"this route requires an API token (kind=api)"`.
+An `ingest` token presented on an `/api/v1/*` route returns **403** with error
+code `WRONG_TOKEN_KIND` (`"this route requires an API token (kind=api)"`).
 
 ### Scopes
 
@@ -261,7 +267,7 @@ UI or `POST /api/v1/admin/tokens`.
 curl -s -X POST https://<pulse-host>/api/v1/admin/tokens \
   -H "Authorization: Bearer <admin-token>" \
   -H "Content-Type: application/json" \
-  -d '{"kind":"api","name":"grafana-readonly","scopes":["viewer"]}'
+  -d '{"kind":"api","name":"grafana-readonly","scopes":["read"]}'
 
 # Create an ingest token for the beacon SDK
 curl -s -X POST https://<pulse-host>/api/v1/admin/tokens \
