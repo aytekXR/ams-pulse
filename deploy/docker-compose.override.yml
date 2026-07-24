@@ -38,14 +38,17 @@ services:
     restart: "no"
 
   pulse:
-    # MVP exposure (user request): publish the UI+API on host port 80 so the
-    # dashboard is reachable in a browser at http://161.97.172.146.
-    # Docker port publishing bypasses ufw (INPUT=DROP) at the DNAT/FORWARD layer,
-    # so no firewall change is needed — consistent with "leave the firewall as-is".
-    # NOTE: plain HTTP with the admin API public — acceptable for an MVP demo only;
-    # front with TLS + a domain and re-restrict before any production use.
+    # WARNING: This override publishes the full API and admin interface on host port
+    # 80 without TLS. The admin API (create/delete tokens, alert rules, license) is
+    # exposed to any host that can reach port 80. Docker's DNAT rules bypass host
+    # firewall INPUT chains, so any port published here is internet-reachable even
+    # with a restrictive iptables/ufw policy. This configuration is NOT suitable for
+    # production. Use it only for isolated local development or a firewalled demo
+    # environment. For any public or shared deployment: remove port 80 here,
+    # publish only on 127.0.0.1, and front Pulse with TLS-terminating nginx or
+    # another reverse proxy (see deploy/docker-compose.prod.yml and deploy/nginx/).
     ports:
-      - "80:8090"                # public UI+API → http://161.97.172.146
+      - "80:8090"                # UNSAFE: public UI+API on plain HTTP — demo/dev only
       - "127.0.0.1:8090:8090"    # local debug access
       - "8091:8091"              # beacon ingest (internet-facing)
     environment:

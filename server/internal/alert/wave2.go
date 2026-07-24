@@ -64,13 +64,16 @@ func (f *FakeQoEReader) QoEForStream(_ context.Context, _, _, tenant string, _ t
 //   - error_rate: from rollup_qoe_1h via QoEReader (D-062: proxy removed, G6)
 //   - ingest_bitrate_floor: from live snapshot IngestBitrate (real poller data)
 //
-// For rebuffer_ratio and error_rate: qoeReader == nil OR a reader error causes
-// the affected stream to be skipped for this tick. At most one WARN log is
-// emitted per tick per condition. A value of 0.0 from the reader is a
-// legitimate reading (evaluated normally; will not exceed gt thresholds > 0).
+// Reader errors (Fix C): when the QoE reader returns an error, the affected
+// stream emits a hold=true result so processEvaluation preserves the current
+// alert state without firing, resolving, or flapping. The WARN log is
+// rate-limited to once per transition (entering/leaving error mode) instead of
+// once per 15 s tick. A nil reader always skips (logs once per tick — config
+// issue, not a transient error). A value of 0.0 from the reader is legitimate.
 func (e *Evaluator) evalQoEMetric(ctx context.Context, snap *domain.LiveSnapshot, scope domain.AlertScope, rule meta.AlertRuleRow) []evalResult {
 	var results []evalResult
-	var warnedNil, warnedErr bool
+	var warnedNil bool
+	hadReaderErr := false
 
 	for sid, s := range snap.Streams {
 		if scope.App != "" && s.App != scope.App {
@@ -100,10 +103,11 @@ func (e *Evaluator) evalQoEMetric(ctx context.Context, snap *domain.LiveSnapshot
 			}
 			rebuf, errRate, err := reader.QoEForStream(ctx, sid, s.App, scope.Tenant, 1*time.Hour)
 			if err != nil {
-				if !warnedErr {
-					e.logger.Warn("alert: qoe_reader error — stream skipped for this tick", "error", err)
-					warnedErr = true
-				}
+				// Fix C: hold state — emit a hold result so the state machine keeps the
+				// current firing/pending state without transitions. Do not resolve or
+				// re-fire: the underlying condition has not changed, we just cannot read it.
+				hadReaderErr = true
+				results = append(results, evalResult{groupKey: sid, hold: true})
 				continue
 			}
 			if rule.Metric == "rebuffer_ratio" {
@@ -123,6 +127,19 @@ func (e *Evaluator) evalQoEMetric(ctx context.Context, snap *domain.LiveSnapshot
 			ok:       compare(val, rule.Operator, rule.Threshold),
 		})
 	}
+
+	// Fix C: rate-limited WARN — log once on entry into error mode, once on recovery.
+	e.mu.Lock()
+	prevErrMode := e.qoeErrMode
+	e.qoeErrMode = hadReaderErr
+	e.mu.Unlock()
+	switch {
+	case hadReaderErr && !prevErrMode:
+		e.logger.Warn("alert: qoe_reader error — holding alert states until reader recovers")
+	case !hadReaderErr && prevErrMode:
+		e.logger.Warn("alert: qoe_reader recovered — normal QoE evaluation resumed")
+	}
+
 	return results
 }
 
@@ -135,18 +152,19 @@ func (e *Evaluator) evalQoEMetric(ctx context.Context, snap *domain.LiveSnapshot
 // How absence detection works:
 //   - EvictStaleNodes() removes nodes from Nodes map when LastSeenAt is stale.
 //   - Once evicted, a node no longer appears in snap.Nodes.
-//   - evalNodeUpDown synthesises a "down" eval for nodes that WERE known
-//     (tracked in knownNodeIDs) but are no longer present.
+//   - Scoped rules (scope.NodeID set): fire immediately when the named node is absent.
+//   - Wildcard rules (scope.NodeID ""): use cross-tick tracking via nodeDownTracker
+//     (Fix B) — diff prevPresent vs current to detect new absences, and continue
+//     firing for nodes that remain absent across ticks.
 //
-// For the scope-specific case (scope.NodeID set), if the named node is absent
-// from snap.Nodes, we fire node_down immediately.
-func (e *Evaluator) evalNodeUpDown(snap *domain.LiveSnapshot, scope domain.AlertScope, rule meta.AlertRuleRow) []evalResult {
+// now is the current evaluation tick time, used to record when a node first went down.
+func (e *Evaluator) evalNodeUpDown(snap *domain.LiveSnapshot, scope domain.AlertScope, rule meta.AlertRuleRow, now time.Time) []evalResult {
 	var results []evalResult
 
 	switch rule.Metric {
 	case "node_down":
 		if scope.NodeID != "" {
-			// Scope-specific: fire if the named node is absent.
+			// Scoped: fire if the named node is absent from the snapshot.
 			if _, present := snap.Nodes[scope.NodeID]; !present {
 				results = append(results, evalResult{
 					groupKey: scope.NodeID,
@@ -154,19 +172,17 @@ func (e *Evaluator) evalNodeUpDown(snap *domain.LiveSnapshot, scope domain.Alert
 					ok:       true, // condition met (node is down)
 				})
 			} else {
-				// Node is present — it's up.
+				// Node is present — it's up; resolves any firing alert.
 				results = append(results, evalResult{
 					groupKey: scope.NodeID,
 					value:    0.0,
 					ok:       false,
 				})
 			}
+		} else {
+			// Wildcard: cross-tick node-presence tracking (Fix B — previously inert).
+			results = e.evalWildcardNodeDown(snap, rule, now)
 		}
-		// For wildcard scope (scope.NodeID == ""), the alert fires only when
-		// specific nodes have been evicted. Since evicted nodes are removed
-		// from snap.Nodes, we cannot enumerate them here without external state.
-		// The recommended practice is to set scope.NodeID to monitor specific nodes.
-		// Fall through: no results for wildcard node_down without prior knowledge.
 
 	case "node_degraded":
 		for nid, n := range snap.Nodes {
@@ -186,6 +202,75 @@ func (e *Evaluator) evalNodeUpDown(snap *domain.LiveSnapshot, scope domain.Alert
 		}
 	}
 
+	return results
+}
+
+// evalWildcardNodeDown implements wildcard node_down evaluation (Fix B).
+//
+// A node absent from snap.Nodes has been evicted by EvictStaleNodes() because no
+// stats arrived within 3×PollInterval — the same eviction that the scoped case
+// detects. Wildcard rules cannot enumerate absent nodes from a single snapshot;
+// instead, the nodeDownTracker diffs the present set across ticks:
+//
+//   - New absence (was in prevPresent, gone now): recorded in downSince; emits 1.0.
+//   - Persistent absence (in downSince, still gone): continues emitting 1.0 each tick.
+//   - Return (appears in snap.Nodes): removed from downSince; emits 0.0 (resolves alert).
+//   - Present node: emits 0.0 unconditionally.
+//
+// Holds e.mu for the duration to guard shared nodeDownTrackers map access.
+func (e *Evaluator) evalWildcardNodeDown(snap *domain.LiveSnapshot, rule meta.AlertRuleRow, now time.Time) []evalResult {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.nodeDownTrackers == nil {
+		e.nodeDownTrackers = make(map[string]*nodeDownTracker)
+	}
+	tr := e.nodeDownTrackers[rule.ID]
+	if tr == nil {
+		tr = &nodeDownTracker{
+			prevPresent: map[string]bool{},
+			downSince:   map[string]time.Time{},
+		}
+		e.nodeDownTrackers[rule.ID] = tr
+	}
+
+	// Current node set from snapshot.
+	present := make(map[string]bool, len(snap.Nodes))
+	for nid := range snap.Nodes {
+		present[nid] = true
+	}
+
+	// Detect new down edges: nodes present last tick that are now absent.
+	for nid := range tr.prevPresent {
+		if !present[nid] {
+			if _, tracked := tr.downSince[nid]; !tracked {
+				tr.downSince[nid] = now
+			}
+		}
+	}
+
+	results := make([]evalResult, 0, len(present)+len(tr.downSince))
+
+	// Present nodes: up. Remove from downSince if they returned (resolves alert).
+	for nid := range present {
+		delete(tr.downSince, nid)
+		results = append(results, evalResult{
+			groupKey: nid,
+			value:    0.0,
+			ok:       compare(0.0, rule.Operator, rule.Threshold),
+		})
+	}
+
+	// Tracked-down nodes: continuously fire until they return to the snapshot.
+	for nid := range tr.downSince {
+		results = append(results, evalResult{
+			groupKey: nid,
+			value:    1.0,
+			ok:       compare(1.0, rule.Operator, rule.Threshold),
+		})
+	}
+
+	tr.prevPresent = present
 	return results
 }
 
@@ -507,10 +592,14 @@ var DefaultRulePack = []meta.AlertRuleRow{
 		ChannelIDs:         "[]",
 	},
 	{
-		Name:               "Viewer drop > 50% (default)",
-		Metric:             "viewer_drop_pct",
+		// Fix D: metric renamed from viewer_drop_pct to viewer_count_floor (honest name).
+		// The metric compares an absolute viewer count, not a percentage — threshold 0.5
+		// with integer counts is equivalent to threshold 1 (fires when count == 0).
+		// Existing stored rules using viewer_drop_pct continue to evaluate via the alias.
+		Name:               "Viewer floor breach (default)",
+		Metric:             "viewer_count_floor",
 		Operator:           "lt",
-		Threshold:          0.5,
+		Threshold:          1, // fire when viewer count < 1 (0 viewers on any stream)
 		WindowS:            60,
 		ScopeJSON:          "{}",
 		Severity:           "warning",

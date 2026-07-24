@@ -91,11 +91,23 @@ export function OnboardingWizard({ onComplete }: Props) {
       setError("Name and REST URL are required");
       return;
     }
+    // Belt-and-suspenders guard against concurrent in-flight submits:
+    // the disabled button prevents most races, but an explicit check is
+    // needed because disabled alone cannot protect against rapid double-clicks
+    // before React flushes the re-render.
+    if (saving) return;
     setSaving(true);
     setError(null);
     try {
-      const src = await adminApi.createSource(sourceData);
-      setCreatedSourceId(src.id);
+      if (createdSourceId) {
+        // Source was already persisted on a prior submit (user went Back from
+        // the verify step and re-submitted).  Update the existing record
+        // instead of creating a duplicate.
+        await adminApi.updateSource(createdSourceId, sourceData);
+      } else {
+        const src = await adminApi.createSource(sourceData);
+        setCreatedSourceId(src.id);
+      }
       setStep("verify");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save source");

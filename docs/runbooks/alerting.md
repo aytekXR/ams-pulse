@@ -67,7 +67,8 @@ A disabled rule's `muted` state is not surfaced — it has no effect until the r
 | Metric name | Evaluated against | Notes |
 |---|---|---|
 | `stream_offline` | Live aggregator | Emits value `1.0` while a scoped stream is absent (offline) and on the offline edge for wildcard rules. Use `operator: eq`, `threshold: 1` — a threshold of 0 would match the ONLINE state and fire while the stream is healthy. |
-| `viewer_drop_pct` | Live aggregator | **Despite the name, this evaluates the absolute viewer count per stream** (not a drop percentage) — identical semantics to `viewer_count`. The default rule `lt 0.5` therefore fires when a stream has zero viewers. |
+| `viewer_count_floor` | Live aggregator | **Canonical name for the per-stream viewer count floor.** Evaluates the absolute viewer count (integer); compare against a whole-number threshold. Use `operator: lt, threshold: 1` to fire when a stream has zero viewers. |
+| `viewer_drop_pct` | Live aggregator | **Deprecated alias for `viewer_count_floor`** — accepted by the API and evaluator for backward compatibility but not preferred for new rules. Evaluates the same absolute viewer count, not a drop percentage. |
 | `viewer_count` | Live aggregator | Absolute viewer count per stream |
 | `ingest_bitrate_kbps` | Live aggregator | Ingested bitrate for active streams |
 | `fps` | Live aggregator | Current frames-per-second |
@@ -76,7 +77,7 @@ A disabled rule's `muted` state is not surfaced — it has no effect until the r
 | `node_disk` | Live aggregator | Disk % per node |
 | `rebuffer_ratio` | ClickHouse `rollup_qoe_1h` | QoE rebuffer ratio from beacon-fed hourly rollup (D-062). Requires beacon ingest data (Pro+ license, U3). Rule is skipped with a WARN log when the QoE reader is not configured or ClickHouse returns an error. A value of 0.0 means no buffering events in the window (evaluated normally against the threshold). |
 | `error_rate` | ClickHouse `rollup_qoe_1h` | QoE error rate from beacon-fed hourly rollup (D-062). Same beacon/license/skip semantics as `rebuffer_ratio`. |
-| `ingest_bitrate_floor` | Ingest health tracker | Fires when ingest health score indicates bitrate < 50% of target (`S_bitrate < 0.5`) |
+| `ingest_bitrate_floor` | Live aggregator (raw kbps) | Fires when the raw ingest bitrate of a stream falls below the rule's `threshold` kbps. The default rule uses `operator: lt, threshold: 500` — fires when ingest kbps drops below 500. The value is the live `IngestBitrate` field directly (not a ratio or health score). |
 | `node_down` | Fleet discovery | Fires when a cluster node is absent from the live snapshot (not seen within `3 × PollInterval`). Use a scope `node_id` to target a specific node, or leave scope empty to monitor all nodes. |
 | `node_degraded` | Fleet discovery | Fires when a cluster node transitions to `status=degraded` |
 | `cert_expiry` | TLS dial to host | Fires when TLS certificate days_left < threshold (e.g. `threshold: 30`) |
@@ -100,7 +101,7 @@ notification per distinct stream/node that meets the condition (subject to
 {
   "metric": "stream_offline",
   "operator": "eq",
-  "threshold": 0,
+  "threshold": 1,
   "window_s": 30,
   "scope": { "stream_id": "live/main-stage" }
 }
@@ -126,7 +127,7 @@ alerts and you want one actionable alert, not a storm.
   "name": "App stream offline (grouped)",
   "metric": "stream_offline",
   "operator": "eq",
-  "threshold": 0,
+  "threshold": 1,
   "window_s": 30,
   "group_by": "app",
   "channel_ids": ["ch-slack-01"]
@@ -224,8 +225,8 @@ threshold, scope, and a dashboard deep-link (if `PULSE_BASE_URL` is set).
 **Slack message format:**
 
 ```
-:red_circle: *FIRING: stream live/main-stage / stream_offline eq 0* [CRITICAL]
-Metric: `stream_offline` | Value: `0` | Threshold: `0`
+:red_circle: *FIRING: stream live/main-stage / stream_offline eq 1* [CRITICAL]
+Metric: `stream_offline` | Value: `1` | Threshold: `1`
 Scope: `stream_id=live/main-stage`
 <https://pulse.example.com/alerts|Open Dashboard>
 ```
@@ -478,9 +479,9 @@ from day one, but send no notifications until you configure channels and unmute 
 | Rule | Metric | Condition | Severity | Cooldown |
 |---|---|---|---|---|
 | Stream offline (default) | `stream_offline` | eq 1, window 30s | critical | 300s |
-| Viewer drop > 50% (default) | `viewer_drop_pct` | lt 0.5, window 60s — evaluates the absolute viewer count, so this fires at zero viewers (see [Supported metrics](#supported-metrics)) | warning | 600s |
+| Viewer floor breach (default) | `viewer_count_floor` | lt 1, window 60s — fires when viewer count < 1 (zero viewers); the deprecated `viewer_drop_pct` alias continues to work for existing rules | warning | 600s |
 | Node CPU > 90% (default) | `node_cpu` | gt 90, window 120s | warning | 300s |
-| Ingest bitrate floor breach (default) | `ingest_bitrate_floor` | lt 500 kbps (absolute), window 30s | warning | 300s |
+| Ingest bitrate floor breach (default) | `ingest_bitrate_floor` | lt 500, window 30s — fires when ingest kbps drops below 500 | warning | 300s |
 
 To activate notifications: assign a channel to the rule and set `muted: false`.
 
@@ -494,9 +495,7 @@ curl -X POST http://localhost:8090/api/v1/alerts/rules \
   -d @rule.json
 ```
 
-> **Metric names are not validated at create time.** A rule whose `metric` is not
-> in the [Supported metrics](#supported-metrics) table is accepted (201) but never
-> matches anything — it silently never fires. Double-check the metric spelling.
+> **Threshold-rule specs are validated at create/update time.** `POST` and `PUT /api/v1/alerts/rules` run `alert.ValidateRuleSpec` before persisting. An unknown `metric`, invalid `operator` or `severity`, out-of-range `window_s` (1–604800), or non-finite `threshold` returns HTTP 422 with `{"code":"INVALID_RULE","message":"..."}` naming the failing field. The deprecated alias `viewer_drop_pct` is accepted. Anomaly rules (`rule_type: "anomaly"`) use a separate validation path and are not subject to this gate.
 
 **Stream offline (critical):**
 ```json

@@ -129,10 +129,13 @@ var proTierEntitlements = Entitlements{
 	Channels:      []string{"email", "slack", "telegram"},
 }
 
-// Business tier (§7.11): up to 5 nodes, 13-month retention, PagerDuty+webhook,
+// Business tier: up to 50 nodes, 13-month retention, PagerDuty+webhook,
 // usage/billing reports, multi-tenant billing, API+Prometheus. $299/month.
+// Persona-consistent ladder: Free 1 / Pro 10 / Business 50 / Enterprise unlimited.
+// PRD §7.11 listed a 5-node ceiling that is superseded by the current pricing
+// sign-off; final pricing remains an operator item.
 var businessTierEntitlements = Entitlements{
-	MaxNodes:      5,
+	MaxNodes:      50,
 	MaxStreams:    -1,
 	RetentionDays: 396, // 13 months ≈ 396 days
 	DataAPI:       true,
@@ -174,10 +177,14 @@ type Manager struct {
 }
 
 // devPublicKeyHex is the embedded dev/test public key (ed25519).
-// Replace with the real vendor public key for production builds.
-// This key was generated for Pulse development only and does NOT authorize
-// production use.
+// Retained for self-signing workflows and test environments that generate their
+// own key pair. NOT used as the runtime default in production builds.
 const devPublicKeyHex = "3dab4e90e91c3d58f37cf4a4bc7c71254c78348d11b52e57fec31a8a8b4d89b3"
+
+// officialPublicKeyHex is the embedded production ed25519 public key used to
+// verify Pulse license signatures when PULSE_LICENSE_PUBKEY is not set in the
+// environment. Set PULSE_LICENSE_PUBKEY to override for self-signed/CI keys.
+const officialPublicKeyHex = "6403d7b49951d0220c7219e491b6525971edf10f0e64616b17023eab002ab4ba"
 
 // New creates a Manager and loads the license from the provided key or file.
 // If both are empty, Free tier is assumed.
@@ -190,7 +197,11 @@ func New(licenseKey, offlineFile string) (*Manager, error) {
 	// Load public key.
 	pubKeyHex := os.Getenv("PULSE_LICENSE_PUBKEY")
 	if pubKeyHex == "" {
-		pubKeyHex = devPublicKeyHex
+		pubKeyHex = officialPublicKeyHex
+		if licenseKey != "" {
+			licenseLog.Load().Info("license: PULSE_LICENSE_PUBKEY unset — verifying with embedded official pubkey",
+				"pubkey", officialPublicKeyHex)
+		}
 	}
 	pubKeyBytes, err := hex.DecodeString(pubKeyHex)
 	if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {

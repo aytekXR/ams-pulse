@@ -1,7 +1,7 @@
 /**
  * Transport tests:
  * - Events buffered and flushed ≤10 s (fake timers)
- * - Flush-on-visibilitychange / pagehide via sendBeacon
+ * - Flush-on-visibilitychange / pagehide via fetch keepalive (D-165: sendBeacon cannot carry auth header)
  * - Unreachable-collector: bounded retry queue, backoff, player callbacks unaffected
  * - MAX_BATCH_SIZE (25 events) triggers an immediate flush
  * - No network calls when sampled out (tested via Pulse.init sampleRate=0)
@@ -120,8 +120,8 @@ describe('Transport — flush cadence', () => {
   });
 });
 
-describe('Transport — sendBeacon on page lifecycle events', () => {
-  it('uses sendBeacon on visibilitychange to hidden', async () => {
+describe('Transport — fetch keepalive on page lifecycle events', () => {
+  it('uses fetch keepalive on visibilitychange to hidden', async () => {
     const t = new Transport(makeConfig());
     t.push({ type: 'session_end', ts: Date.now(), data: { watch_ms: 5000 } });
 
@@ -134,17 +134,18 @@ describe('Transport — sendBeacon on page lifecycle events', () => {
 
     await flushMicrotasks();
 
-    expect(sendBeaconMock).toHaveBeenCalledTimes(1);
-    const [url, blob] = sendBeaconMock.mock.calls[0] as [string, Blob];
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://pulse.example.com/ingest/beacon');
-    expect(blob).toBeInstanceOf(Blob);
+    expect(opts.keepalive).toBe(true);
+    expect(sendBeaconMock).not.toHaveBeenCalled();
 
     t.dispose();
     // Restore
     Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
   });
 
-  it('uses sendBeacon on pagehide', async () => {
+  it('uses fetch keepalive on pagehide', async () => {
     const t = new Transport(makeConfig());
     t.push({ type: 'session_end', ts: Date.now(), data: { watch_ms: 5000 } });
 
@@ -152,7 +153,11 @@ describe('Transport — sendBeacon on page lifecycle events', () => {
 
     await flushMicrotasks();
 
-    expect(sendBeaconMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(opts.keepalive).toBe(true);
+    expect(sendBeaconMock).not.toHaveBeenCalled();
+
     t.dispose();
   });
 });
@@ -240,15 +245,18 @@ describe('Transport — header name (VD-09)', () => {
 });
 
 describe('Transport — dispose', () => {
-  it('flushes remaining events on dispose via sendBeacon', async () => {
+  it('flushes remaining events on dispose via fetch keepalive', async () => {
     const t = new Transport(makeConfig());
     t.push({ type: 'session_end', ts: Date.now(), data: { watch_ms: 60000, reason: 'user_exit' } });
 
     t.dispose();
     await flushMicrotasks();
 
-    // dispose() uses sendBeacon (prefer=true path)
-    expect(sendBeaconMock).toHaveBeenCalledTimes(1);
+    // dispose() uses fetch keepalive (isUnload=true path) — sendBeacon cannot carry the auth header
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(opts.keepalive).toBe(true);
+    expect(sendBeaconMock).not.toHaveBeenCalled();
   });
 
   it('ignores push() after dispose()', async () => {
@@ -260,5 +268,70 @@ describe('Transport — dispose', () => {
     await flushMicrotasks();
     // No fetch call since transport is disposed and had no events
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('Transport unload flush fallback (D-165)', () => {
+  it('falls back to sendBeacon when fetch throws on unload', async () => {
+    fetchMock.mockRejectedValueOnce(new Error('keepalive body quota exceeded'));
+
+    const t = new Transport(makeConfig());
+    t.push({ type: 'session_end', ts: Date.now(), data: { watch_ms: 5000 } });
+
+    Object.defineProperty(document, 'visibilityState', {
+      value: 'hidden',
+      configurable: true,
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    // fetch was attempted first with keepalive
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(opts.keepalive).toBe(true);
+    // sendBeacon used as last-resort fallback after fetch threw
+    expect(sendBeaconMock).toHaveBeenCalledTimes(1);
+
+    t.dispose();
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+  });
+
+  it('falls back when fetch unavailable', async () => {
+    // Simulate environment without fetch (e.g. old WebView)
+    vi.stubGlobal('fetch', undefined);
+
+    const t = new Transport(makeConfig());
+    t.push({ type: 'session_end', ts: Date.now(), data: { watch_ms: 5000 } });
+
+    window.dispatchEvent(new Event('pagehide'));
+
+    await flushMicrotasks();
+
+    // sendBeacon is used as fallback when fetch is unavailable on unload
+    expect(sendBeaconMock).toHaveBeenCalledTimes(1);
+
+    t.dispose();
+    vi.unstubAllGlobals();
+  });
+
+  it('sends auth header in unload keepalive fetch', async () => {
+    const t = new Transport(makeConfig({ token: 'plt_unload_token' }));
+    t.push({ type: 'session_end', ts: Date.now(), data: { watch_ms: 5000 } });
+
+    window.dispatchEvent(new Event('pagehide'));
+
+    await flushMicrotasks();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://pulse.example.com/ingest/beacon');
+    expect(opts.keepalive).toBe(true);
+    const headers = opts.headers as Record<string, string>;
+    expect(headers['X-Pulse-Ingest-Token']).toBe('plt_unload_token');
+    expect(sendBeaconMock).not.toHaveBeenCalled();
+
+    t.dispose();
   });
 });

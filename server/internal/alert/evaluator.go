@@ -118,6 +118,21 @@ type offlineTracker struct {
 	holdUntil map[string]time.Time
 }
 
+// nodeDownTracker holds cross-tick state for a WILDCARD node_down rule (Fix B).
+// A wildcard "any node is down" alert must detect absence cross-tick: a node
+// evicted by EvictStaleNodes() disappears from snap.Nodes, so "down" cannot be
+// read from a single snapshot. One tracker per wildcard node_down rule (keyed by
+// rule ID). Guarded by Evaluator.mu.
+type nodeDownTracker struct {
+	// prevPresent is the set of node IDs present in the previous tick.
+	prevPresent map[string]bool
+	// downSince maps a node ID that disappeared from snap.Nodes to the tick it
+	// was first detected absent. The node keeps emitting value 1.0 until it
+	// returns to snap.Nodes (level condition, no hold window needed); on return it
+	// is removed and emits 0.0 to resolve the firing alert.
+	downSince map[string]time.Time
+}
+
 // ─── Evaluator ────────────────────────────────────────────────────────────────
 
 // Config holds evaluator configuration.
@@ -158,6 +173,10 @@ type Evaluator struct {
 	// no longer an actively-evaluated wildcard stream_offline rule.
 	offlineTrackers map[string]*offlineTracker
 
+	// nodeDownTrackers holds per-wildcard-node_down-rule node-presence state (Fix B).
+	// Keyed by rule ID. Guarded by mu. Pruned by pruneNodeDownTrackers each tick.
+	nodeDownTrackers map[string]*nodeDownTracker
+
 	// Wave 2: TLS cert expiry checker (nil = cert_expiry rules skipped).
 	certChecker CertExpiryChecker
 
@@ -168,8 +187,16 @@ type Evaluator struct {
 	// nil = these rules are skipped with a WARN log (one per tick).
 	qoeReader QoEReader
 
+	// qoeErrMode is true when the QoE reader had errors during the previous tick
+	// (Fix C). Rate-limits WARN logs to once per transition. Guarded by mu.
+	qoeErrMode bool
+
 	// S11 WO-B: baseline reader for anomaly rules (nil = skipped with WARN).
 	anomalyReader AnomalyBaselineReader
+
+	// anomalyErrMode mirrors qoeErrMode for the anomaly baseline reader (Fix C).
+	// Guarded by mu.
+	anomalyErrMode bool
 
 	// Notification sink for tests.
 	notifySink func([]byte)
@@ -219,14 +246,15 @@ func New(cfg Config, live domain.LiveProvider, store *meta.Store, registry *chan
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	return &Evaluator{
-		cfg:             cfg,
-		store:           store,
-		live:            live,
-		registry:        registry,
-		clock:           clock,
-		logger:          logger,
-		states:          make(map[string]*ruleState),
-		offlineTrackers: make(map[string]*offlineTracker),
+		cfg:              cfg,
+		store:            store,
+		live:             live,
+		registry:         registry,
+		clock:            clock,
+		logger:           logger,
+		states:           make(map[string]*ruleState),
+		offlineTrackers:  make(map[string]*offlineTracker),
+		nodeDownTrackers: make(map[string]*nodeDownTracker),
 	}
 }
 
@@ -338,12 +366,15 @@ func (e *Evaluator) evaluate(ctx context.Context) {
 
 	keepOffline := make(map[string]bool)    // active wildcard offline → full cross-tick state kept
 	suspendOffline := make(map[string]bool) // existing-but-suspended wildcard offline → offlineAt preserved
+	keepNodeDown := make(map[string]bool)   // active wildcard node_down → tracker kept (Fix B)
 	for _, rule := range rules {
 		// A wildcard stream_offline rule carries cross-tick edge-detection state that
 		// must be handled specially when the rule is temporarily suspended (D-159 —
 		// see pruneOfflineTrackers). Detect the shape BEFORE the suspend guards so a
 		// disabled / maintenance-window rule is still recognised as offline-shaped.
 		isWildcardOffline := rule.Metric == "stream_offline" && isWildcardOfflineScope(rule.ScopeJSON)
+		// Fix B: wildcard node_down needs cross-tick node-presence tracking.
+		isWildcardNodeDown := rule.Metric == "node_down" && isWildcardNodeDownScope(rule.ScopeJSON)
 
 		// enabled=false: rule is completely suspended — not evaluated at all.
 		// This is distinct from muted=true (evaluated, but notifications suppressed).
@@ -368,11 +399,16 @@ func (e *Evaluator) evaluate(ctx context.Context) {
 		if isWildcardOffline {
 			keepOffline[rule.ID] = true
 		}
+		// Fix B: keep the node-down tracker for active wildcard node_down rules.
+		if isWildcardNodeDown {
+			keepNodeDown[rule.ID] = true
+		}
 
 		e.evaluateRule(ctx, rule, snap, now)
 	}
 
 	e.pruneOfflineTrackers(keepOffline, suspendOffline)
+	e.pruneNodeDownTrackers(keepNodeDown) // Fix B
 	e.pruneStaleStates(now)
 }
 
@@ -453,6 +489,30 @@ func isWildcardOfflineScope(scopeJSON string) bool {
 	return scope.StreamID == ""
 }
 
+// isWildcardNodeDownScope reports whether a rule's scope has no node_id — the
+// wildcard form that uses cross-tick node-presence tracking (Fix B).
+func isWildcardNodeDownScope(scopeJSON string) bool {
+	var scope domain.AlertScope
+	_ = json.Unmarshal([]byte(scopeJSON), &scope)
+	return scope.NodeID == ""
+}
+
+// pruneNodeDownTrackers removes per-wildcard-node_down trackers for rules that
+// are no longer actively-evaluated wildcard node_down rules (rule deleted,
+// disabled, metric/scope changed, or inside a maintenance window). A pruned
+// tracker is discarded entirely; if the rule becomes a wildcard node_down rule
+// again it starts fresh — safe because node eviction is a level condition and
+// absence is re-detected on the first active tick (Fix B).
+func (e *Evaluator) pruneNodeDownTrackers(keep map[string]bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for ruleID := range e.nodeDownTrackers {
+		if !keep[ruleID] {
+			delete(e.nodeDownTrackers, ruleID)
+		}
+	}
+}
+
 // syncRegistryFromStore updates the channel registry from the meta store.
 // Called at the start of every evaluation tick (sync-on-tick pattern).
 //
@@ -514,7 +574,9 @@ func (e *Evaluator) evaluateRule(ctx context.Context, rule meta.AlertRuleRow, sn
 		switch rule.Metric {
 		case "stream_offline":
 			evals = e.evalStreamOffline(snap, scope, rule, now)
-		case "viewer_drop_pct":
+		// viewer_count_floor is the canonical name (Fix D); viewer_drop_pct is the
+		// deprecated alias — both route to evalViewerDrop. KnownMetricNames lists both.
+		case "viewer_drop_pct", "viewer_count_floor":
 			evals = e.evalViewerDrop(snap, scope, rule)
 		case "node_cpu":
 			evals = e.evalNodeMetric(snap, scope, rule, "cpu_pct")
@@ -526,7 +588,8 @@ func (e *Evaluator) evaluateRule(ctx context.Context, rule meta.AlertRuleRow, sn
 		case "rebuffer_ratio", "error_rate", "ingest_bitrate_floor":
 			evals = e.evalQoEMetric(ctx, snap, scope, rule)
 		case "node_down", "node_degraded":
-			evals = e.evalNodeUpDown(snap, scope, rule)
+			// now is threaded through for wildcard node_down cross-tick tracking (Fix B).
+			evals = e.evalNodeUpDown(snap, scope, rule, now)
 		case "cert_expiry":
 			// Cert expiry uses a real TLS checker in production; nil checker = skip.
 			if e.certChecker != nil {
@@ -538,6 +601,9 @@ func (e *Evaluator) evaluateRule(ctx context.Context, rule meta.AlertRuleRow, sn
 				evals = e.evalLicenseExpiry(rule, scope, e.licenseChecker)
 			}
 		default:
+			// evalGenericMetric handles viewer_count, ingest_bitrate_kbps, fps.
+			// Unknown metric names silently produce no results. KnownMetricNames in
+			// validate.go lists every metric accepted here; keep both in sync.
 			evals = e.evalGenericMetric(snap, scope, rule)
 		}
 	}
@@ -583,6 +649,14 @@ func (e *Evaluator) processEvaluation(ctx context.Context, rule meta.AlertRuleRo
 	// permanent entry per unique (rule, stream_id) ever seen.
 	st.lastCheck = now
 	e.mu.Unlock()
+
+	// Fix C: evaluation hold — reader/evaluation error this tick.
+	// Preserve the current firing/pending/resolved state without any transition:
+	// no fire, no resolve, no state flap. lastCheck was stamped above so
+	// pruneStaleStates does not evict this entry while reads are failing.
+	if ev.hold {
+		return
+	}
 
 	switch st.state {
 	case "pending", "resolved":
@@ -856,6 +930,10 @@ type evalResult struct {
 	groupKey string
 	value    float64
 	ok       bool
+	// hold signals a reader/evaluation error for this tick (Fix C).
+	// processEvaluation updates lastCheck but skips all state transitions, so
+	// firing/pending/resolved state is preserved until the reader recovers.
+	hold bool
 	// S11 WO-B: anomaly eval context. Non-nil only for anomaly rule results.
 	// Passed through processEvaluation → fire() → buildNotification.
 	anomalyInfo *anomalyEvalInfo

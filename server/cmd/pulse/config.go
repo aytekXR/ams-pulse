@@ -181,6 +181,13 @@ type EnvConfig struct {
 	// Overridden by PULSE_ANOMALY_TICK_S for CI (set to 5 in deploy/docker-compose.ci.yml).
 	AnomalyTickS int
 
+	// PulseBaseURL is the external base URL for alert deep-links (e.g. alert notification
+	// "view in Pulse" links). Corresponds to PULSE_BASE_URL.
+	// Must be an absolute http or https URL when set; trailing slash is stripped at load time.
+	// When unset, the binary falls back to "http://" + ListenAddr, which breaks behind any
+	// reverse proxy or ingress — operators MUST set this env var in those deployments.
+	PulseBaseURL string
+
 	// ─── S11 WO-C: SSO/OIDC phase 1 ─────────────────────────────────────────────
 
 	// OIDCIssuer is the OIDC provider issuer URL. Empty = OIDC disabled.
@@ -427,6 +434,16 @@ func loadEnvConfig() (EnvConfig, error) {
 		if cfg.OIDCRedirectURL == "" {
 			return cfg, fmt.Errorf("PULSE_OIDC_REDIRECT_URL required when PULSE_OIDC_ISSUER is set")
 		}
+	}
+
+	// PULSE_BASE_URL: external base URL for alert deep-links.
+	// Validated to be an absolute http/https URL; trailing slash stripped so
+	// callers can safely append paths without double-slash.
+	if v := os.Getenv("PULSE_BASE_URL"); v != "" {
+		if !strings.HasPrefix(v, "http://") && !strings.HasPrefix(v, "https://") {
+			return cfg, fmt.Errorf("PULSE_BASE_URL: must be an absolute http or https URL, got %q", v)
+		}
+		cfg.PulseBaseURL = strings.TrimRight(v, "/")
 	}
 
 	return cfg, nil

@@ -88,18 +88,13 @@ noted).
 |------|-------|-----------|-------------|-----------|----------------|----------|-------------|
 | **Free** | $0/month | 1 | Unlimited | 7 days | Email only | No | No |
 | **Pro** | $99/month (PROPOSED) | 10 | Unlimited | 90 days | Email, Slack, Telegram | Yes | No |
-| **Business** | $299/month (PROPOSED) | 5 | Unlimited | 396 days (13 months) | Email, Slack, Telegram, PagerDuty, Webhook | Yes | No |
+| **Business** | $299/month (PROPOSED) | 50 | Unlimited | 396 days (13 months) | Email, Slack, Telegram, PagerDuty, Webhook | Yes | No |
 | **Enterprise** | from $799/month (PROPOSED) | Unlimited | Unlimited | Unlimited | All channels | Yes | Yes |
 
 **Notes on the table:**
 
 - **Max Streams** is unlimited at every tier; there is no per-tier stream cap.
-- **Max Nodes (Pro):** The PRD §7.11 states "1 to 2 nodes" but
-  `license.go:124` enforces `MaxNodes = 10`. The code is the operative value;
-  operators should reconcile this before publishing public pricing.
-- **Business (5 nodes):** `license.go:135` sets `MaxNodes = 5` for Business.
-  This is lower than Pro (10); operators may wish to review this ordering
-  before publication.
+- **Max Nodes (Pro):** The PRD §7.11 states "1 to 2 nodes" but the code enforces `MaxNodes = 10`. The code is the operative value. The deliberate tier ladder is Free 1 / Pro 10 / Business 50 / Enterprise unlimited — Pro is positioned for multi-node edge networks; Business adds multi-tenant billing and reporting.
 - **Retention** for Enterprise is absent/null in the claims (`retention_days`
   absent or null maps to unlimited at runtime via `buildEntitlements`; the
   value `0` in the claims JSON is also treated as unlimited, but `null` is the

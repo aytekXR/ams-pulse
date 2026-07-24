@@ -1,7 +1,9 @@
 /**
  * Event transport: batches events (flush every ≤10 s or 25 events, or on
- * visibilitychange/pagehide), prefers navigator.sendBeacon with fetch keepalive
- * fallback, keeps a bounded in-memory retry queue (+ localStorage spill),
+ * visibilitychange/pagehide), prefers fetch with keepalive:true (carries the
+ * auth token, outlives the page); sendBeacon retained only as last-resort
+ * fallback on unload when fetch is unavailable or throws (e.g. 64 KB quota).
+ * Keeps a bounded in-memory retry queue (+ localStorage spill),
  * exponential backoff with cap, silently drops on persistent failure.
  *
  * Payload shape: contracts/events/beacon-event.schema.json (frozen D-004).
@@ -106,13 +108,14 @@ export class Transport {
   }
 
   /** Flush the in-flight buffer.
-   * @param useSendBeacon - when true, prefer sendBeacon (page unload paths).
+   * @param isUnload - when true this is a page-unload flush; fetch keepalive is
+   *   the primary path; sendBeacon is only a last-resort fallback.
    */
-  private _flush(useSendBeacon: boolean): void {
+  private _flush(isUnload: boolean): void {
     if (this.buffer.length === 0) return;
     const events = this.buffer.splice(0);
     const batch = this._buildBatch(events);
-    this._send(batch, useSendBeacon);
+    this._send(batch, isUnload);
   }
 
   private _buildBatch(events: BeaconEventItem[]): BeaconBatch {
@@ -130,7 +133,7 @@ export class Transport {
     };
   }
 
-  private _send(batch: BeaconBatch, preferBeacon: boolean): void {
+  private _send(batch: BeaconBatch, isUnload: boolean): void {
     const url = `${this.cfg.ingestUrl}/ingest/beacon`;
     const body = JSON.stringify(batch);
     const headers = {
@@ -138,14 +141,10 @@ export class Transport {
       'X-Pulse-Ingest-Token': this.cfg.token,
     };
 
+    // fetch with keepalive is the PRIMARY path for ALL sends, including page-unload.
+    // sendBeacon cannot set custom headers, so beacons sent via sendBeacon silently
+    // 401. The server does NOT accept a token query parameter as an alternative.
     try {
-      if (preferBeacon && typeof navigator !== 'undefined' && navigator.sendBeacon) {
-        const blob = new Blob([body], { type: 'application/json' });
-        const sent = navigator.sendBeacon(url, blob);
-        if (sent) return;
-        // sendBeacon returned false (queue full) — fall through to fetch
-      }
-      // fetch with keepalive for background delivery
       if (typeof fetch !== 'undefined') {
         fetch(url, {
           method: 'POST',
@@ -160,10 +159,23 @@ export class Transport {
             this.backoffMs = BACKOFF_BASE_MS;
           }
         }).catch(() => {
-          this._enqueueRetry(batch);
+          // fetch threw (e.g. keepalive 64 KB body-quota exceeded on unload) —
+          // fall back to sendBeacon as last resort; it cannot carry the auth header
+          // so the server may reject it, but it is better than silently dropping.
+          if (isUnload && typeof navigator !== 'undefined' && navigator.sendBeacon) {
+            const blob = new Blob([body], { type: 'application/json' });
+            navigator.sendBeacon(url, blob);
+          } else {
+            this._enqueueRetry(batch);
+          }
         });
+      } else if (isUnload && typeof navigator !== 'undefined' && navigator.sendBeacon) {
+        // No fetch API available — sendBeacon is the only option on unload.
+        // It cannot carry the auth header but it is better than losing the event.
+        const blob = new Blob([body], { type: 'application/json' });
+        navigator.sendBeacon(url, blob);
       } else {
-        // No fetch API — spill to localStorage
+        // No fetch, not on unload — spill to localStorage for cross-page recovery.
         this._spillToLocalStorage(batch);
       }
     } catch {

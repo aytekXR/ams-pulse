@@ -18,3 +18,21 @@ func SetNow(f func() time.Time) { now = f }
 func SetGenerateKey(f func(io.Reader) (ed25519.PublicKey, ed25519.PrivateKey, error)) {
 	generateKey = f
 }
+
+// TierDefaultMaxNodes returns the default MaxNodes entitlement for the given
+// tier as defined by the tier entitlement vars in license.go. -1 means unlimited.
+// Exported for tier_ladder_test.go which cannot access unexported package vars.
+func TierDefaultMaxNodes(t Tier) int {
+	switch t {
+	case TierFree:
+		return freeTierEntitlements.MaxNodes
+	case TierPro:
+		return proTierEntitlements.MaxNodes
+	case TierBusiness:
+		return businessTierEntitlements.MaxNodes
+	case TierEnterprise:
+		return enterpriseTierEntitlements.MaxNodes
+	default:
+		return 0
+	}
+}

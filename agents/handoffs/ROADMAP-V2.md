@@ -56,10 +56,12 @@
 - **§2.45 Nothing ALERTS when Pulse goes blind** — D-164 made `/healthz` honest; nothing pages.
   The cheapest first step (a `pulse_collector_last_success_timestamp` gauge on `/metrics`) is
   fully autonomous; the built-in alert rule needs a semantics decision first.
-- **SESSION-101 verification of D-164** — the new health signal and the new deploy gate have not
-  yet been exercised against the failure they were written for. Autonomous, isolated-stack only.
-- **§2.46 Backup sidecar startup race** — a reboot costs a full day of ClickHouse backups. Fully
-  autonomous (a readiness wait + retry in the backup script).
+- **SESSION-101 verification of D-164** — ✅ DONE (D-166). Proven live in an isolated stack; the
+  `/healthz` signal was sound but **`deployment.sh` step 6 was broken** (grepped the whole body,
+  passed while the collector was degraded) — fixed and re-proven.
+- **§2.46 Backup sidecar startup race** — ✅ DONE (D-166). Bounded ClickHouse readiness wait +
+  network-class retry with backoff; retention pruning skipped on a failed cycle; honest FAILED
+  status. Both script copies, shellcheck clean.
 
 ### B. Tooling-blocked — operator provisions the environment
 - **§2.12 Android Kotlin SDK** — needs a JVM+Gradle toolchain (Temurin 21 + Gradle) on the host.
@@ -675,7 +677,18 @@ drop the alert without resolving it). A correct fix needs a firing-semantics dec
 delicate on a live alert, and a blanket stale-firing sweep would wrongly resolve `stream_offline` (absence IS its alert).
 Surfaced to the operator; NOT auto-built.
 
-### 2.46  Backup sidecar loses the startup race after a host reboot  [OPEN — found S100/D-164 close; latent, pre-existing]
+### 2.47  Manual real-AMS scenario TC-H-06 creates a cpu_pct THRESHOLD rule — now correctly rejected  [OPEN — found D-166/S101; manual-suite only, NOT a CI gate]
+
+D-166 added create-time alert-rule validation. `cpu_pct`/`mem_pct`/`disk_pct` are **anomaly-only** metrics (the threshold
+evaluator's CPU metric is `node_cpu`), so `alert.ValidateRuleSpec` now 422s a `cpu_pct` *threshold* rule — correctly: such a
+rule was always an unknown-metric rule that silently never fires (exactly the review's item 5). But
+`qa/realams/scenarios/TC-H-06-cpu-alert-standalone.sh:62` creates one and captures its `RULE_ID`, so the scenario now fails at
+rule creation. It is a **manual** real-AMS validation scenario (the 46/50 suite), not part of the CI e2e gate, so it does not
+block anything. **Fix on its next operator run:** either point it at `node_cpu` (the real threshold CPU metric — still yields
+no firing rows on a standalone AMS, preserving the scenario's intent) or make it `rule_type:anomaly`. Its firing-row assertion
+(greps `cpu_pct`/`mem_pct`/`disk_pct`) would move accordingly. Left for the next real-AMS pass rather than edited blind here.
+
+### 2.46  Backup sidecar loses the startup race after a host reboot  [✅ DONE — D-166/S101, PR #204]
 
 The backup daemon runs its first cycle the instant the container starts, with no readiness wait and no retry. On a host reboot
 it starts alongside ClickHouse, loses the race, logs `Code: 210 ... Connection refused (clickhouse:9000)`, marks the cycle

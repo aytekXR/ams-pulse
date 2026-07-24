@@ -257,7 +257,7 @@ spec:
               echo "ClickHouse ready."
       containers:
         - name: pulse
-          image: "ghcr.io/aytekxr/ams-pulse:0.1.0"
+          image: "ghcr.io/aytekxr/ams-pulse:0.4.1"
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false

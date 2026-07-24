@@ -25,7 +25,7 @@ set -euo pipefail
 REPO_RAW="https://raw.githubusercontent.com/aytekXR/ams-pulse/main"
 REPO_WEB="https://github.com/aytekXR/ams-pulse"
 HEALTHZ_DEADLINE=90   # seconds
-export PULSE_IMAGE="${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.0}"
+export PULSE_IMAGE="${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.1}"
 
 # ── Locate working directory ──────────────────────────────────────────────────
 # When executed via `curl ... | bash`, BASH_SOURCE[0] is empty or set to "bash".

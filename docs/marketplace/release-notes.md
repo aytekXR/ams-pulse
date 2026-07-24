@@ -44,7 +44,7 @@ config refresh (BUG-003, D-082); eight list endpoints ignored `limit`/`cursor` p
 nodes no longer build poisoned zero-mean anomaly baselines (D-088). The production compose
 overlay now correctly passes license env vars (D-076).
 
-## Since 0.4.0 — currently shipping in v0.4.0 patch builds
+## New in 0.4.1 (since 0.4.0)
 
 - **Security hardening pass** — SSRF guard on synthetic-probe URLs closes cloud-metadata
   escalation (D-130); opt-in webhook replay protection via `PULSE_WEBHOOK_REQUIRE_TIMESTAMP`

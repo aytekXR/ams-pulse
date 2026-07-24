@@ -38,7 +38,7 @@ Pulse reads all configuration from `PULSE_*` environment variables.
 > exists in `server/internal/config` but is not wired into the binary entry point
 > (`HOOK(BE-02)` in `server/cmd/pulse/main.go`) — the shipped binary silently
 > ignores any YAML file. Variables marked below as read only by the YAML loader
-> (e.g. `PULSE_BASE_URL`, `PULSE_BEACON_SAMPLE_RATE`, `PULSE_CLICKHOUSE_ADDR`,
+> (e.g. `PULSE_BEACON_SAMPLE_RATE`, `PULSE_CLICKHOUSE_ADDR`,
 > `PULSE_LICENSE_OFFLINE_FILE`) currently have **no effect** in production.
 > Configure everything via environment variables.
 
@@ -69,7 +69,7 @@ Variables with `_FILE` support (from `server/internal/config/secrets.go:GetSecre
 | `PULSE_LOG_LEVEL` | `info` | No | No | Log verbosity: `debug`, `info`, `warn`, `error` |
 | `PULSE_MIGRATIONS_DIR` | (empty) | No | No | Path to ClickHouse migration SQL files; embedded migrations are used when unset |
 | `PULSE_WEB_DIR` | `/usr/share/pulse/web` | No | No | Filesystem path to the built React UI; the Docker image places the UI here automatically |
-| `PULSE_BASE_URL` | (empty) | No | No | Full public URL used in alert deep-link payloads (e.g. `https://pulse.example.com`); takes effect only via the YAML config loader in the current build |
+| `PULSE_BASE_URL` | (empty) | No | No | Full public URL used in alert deep-link payloads (e.g. `https://pulse.example.com`). Must be an absolute `http` or `https` URL; trailing slash is stripped. When unset, deep-link URLs fall back to `http://` + `PULSE_LISTEN_ADDR` — this breaks behind any reverse proxy. **Set this in all proxied deployments.** |
 
 ---
 
@@ -158,7 +158,7 @@ Variables with `_FILE` support (from `server/internal/config/secrets.go:GetSecre
 | `PULSE_LICENSE_KEY` | (empty = Free) | No | **No** | License key string; empty = Free tier (1 node, 7-day retention). **No `_FILE` convention**; the variable is read via `os.Getenv` directly. |
 | `PULSE_LICENSE_FILE` | (empty) | No | No | Path to a file containing the license key (for air-gapped/offline installs); read via `os.ReadFile` at startup |
 | `PULSE_LICENSE_OFFLINE_FILE` | (empty) | No | No | Legacy config-path variable for offline license verification; present in the YAML config loader (`internal/config`) but has no effect in the production `pulse serve` command path. Use `PULSE_LICENSE_FILE` instead. |
-| `PULSE_LICENSE_PUBKEY` | (embedded Pulse CA) | No | No | Hex-encoded ed25519 public key that overrides the embedded Pulse CA for verifying license signatures; leave unset to use the default embedded key |
+| `PULSE_LICENSE_PUBKEY` | (embedded vendor key) | No | No | Hex-encoded ed25519 public key used to verify license signatures. Leave unset to use the default embedded vendor public key. Set only when overriding the key — for example, in CI/staging with a separate signing key. |
 
 ---
 

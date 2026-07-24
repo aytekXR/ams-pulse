@@ -12,8 +12,9 @@ You need:
 - Your `PULSE_LICENSE_KEY` string (delivered by the vendor).
 - The Pulse deployment URL and an admin bearer token
   (created via **Settings → API Tokens** or `POST /api/v1/admin/tokens`).
-- The deployment must be running with `PULSE_LICENSE_PUBKEY` set to the
-  vendor's public key — without it the server only accepts dev/CI keys.
+- The vendor's public key is the embedded default since v0.4.1, so no
+  `PULSE_LICENSE_PUBKEY` configuration is needed unless you self-sign
+  (set the env var only to override the embedded key).
 
 ## Three activation routes
 

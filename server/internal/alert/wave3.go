@@ -192,22 +192,40 @@ func (e *Evaluator) evalAnomalyMetric(ctx context.Context, snap *domain.LiveSnap
 		lookupMetric = alias
 	}
 
+	var results []evalResult
+	var hadReaderErr bool
 	switch rule.Metric {
 	case "viewer_count", "ingest_bitrate_kbps":
-		return e.evalAnomalyStreams(ctx, snap, scope, rule, lookupMetric, effectiveSigma, effectiveMinSamples, rule.WindowS, reader)
+		results, hadReaderErr = e.evalAnomalyStreams(ctx, snap, scope, rule, lookupMetric, effectiveSigma, effectiveMinSamples, rule.WindowS, reader)
 	case "cpu_pct", "mem_pct", "disk_pct", "ams_api_latency_ms":
-		return e.evalAnomalyNodes(ctx, snap, scope, rule, lookupMetric, effectiveSigma, effectiveMinSamples, rule.WindowS, reader)
+		results, hadReaderErr = e.evalAnomalyNodes(ctx, snap, scope, rule, lookupMetric, effectiveSigma, effectiveMinSamples, rule.WindowS, reader)
 	default:
 		e.logger.Warn("alert: anomaly rule metric not supported", "metric", rule.Metric)
 		return nil
 	}
+
+	// Fix C: rate-limited WARN — log once on entry into error mode, once on recovery.
+	e.mu.Lock()
+	prevErrMode := e.anomalyErrMode
+	e.anomalyErrMode = hadReaderErr
+	e.mu.Unlock()
+	switch {
+	case hadReaderErr && !prevErrMode:
+		e.logger.Warn("alert: anomaly_reader error — holding alert states until reader recovers")
+	case !hadReaderErr && prevErrMode:
+		e.logger.Warn("alert: anomaly_reader recovered — normal anomaly evaluation resumed")
+	}
+
+	return results
 }
 
 // evalAnomalyStreams handles stream-level anomaly metrics (viewer_count → "viewers").
+// Fix C: returns (results, hadReaderErr) — hadReaderErr is true when any GetAnomalyBaseline
+// call failed. Affected streams emit hold=true results instead of being silently skipped.
 func (e *Evaluator) evalAnomalyStreams(ctx context.Context, snap *domain.LiveSnapshot, scope domain.AlertScope, rule meta.AlertRuleRow,
-	lookupMetric string, effectiveSigma float64, effectiveMinSamples, windowS int, reader AnomalyBaselineReader) []evalResult {
+	lookupMetric string, effectiveSigma float64, effectiveMinSamples, windowS int, reader AnomalyBaselineReader) ([]evalResult, bool) {
 	var results []evalResult
-	var warnedErr bool
+	hadReaderErr := false
 
 	for sid, s := range snap.Streams {
 		if scope.App != "" && s.App != scope.App {
@@ -231,14 +249,13 @@ func (e *Evaluator) evalAnomalyStreams(ctx context.Context, snap *domain.LiveSna
 
 		baseline, err := reader.GetAnomalyBaseline(ctx, lookupMetric, scopeStr, windowS)
 		if err != nil {
-			if !warnedErr {
-				e.logger.Warn("alert: anomaly_reader error — stream skipped", "stream_id", sid, "error", err)
-				warnedErr = true
-			}
+			// Fix C: hold state — preserve current firing/pending status until reader recovers.
+			hadReaderErr = true
+			results = append(results, evalResult{groupKey: sid, hold: true})
 			continue
 		}
 		if baseline == nil {
-			continue // no baseline yet → skip
+			continue // no baseline yet → skip (not a reader error)
 		}
 		if baseline.SampleCount < effectiveMinSamples {
 			continue // baseline not warmed up yet
@@ -258,14 +275,15 @@ func (e *Evaluator) evalAnomalyStreams(ctx context.Context, snap *domain.LiveSna
 			},
 		})
 	}
-	return results
+	return results, hadReaderErr
 }
 
-// evalAnomalyNodes handles node-level anomaly metrics (cpu_pct, mem_pct).
+// evalAnomalyNodes handles node-level anomaly metrics (cpu_pct, mem_pct, disk_pct, ams_api_latency_ms).
+// Fix C: returns (results, hadReaderErr) — see evalAnomalyStreams for rationale.
 func (e *Evaluator) evalAnomalyNodes(ctx context.Context, snap *domain.LiveSnapshot, scope domain.AlertScope, rule meta.AlertRuleRow,
-	lookupMetric string, effectiveSigma float64, effectiveMinSamples, windowS int, reader AnomalyBaselineReader) []evalResult {
+	lookupMetric string, effectiveSigma float64, effectiveMinSamples, windowS int, reader AnomalyBaselineReader) ([]evalResult, bool) {
 	var results []evalResult
-	var warnedErr bool
+	hadReaderErr := false
 
 	for nodeID, n := range snap.Nodes {
 		if scope.NodeID != "" && nodeID != scope.NodeID {
@@ -306,10 +324,9 @@ func (e *Evaluator) evalAnomalyNodes(ctx context.Context, snap *domain.LiveSnaps
 
 		baseline, err := reader.GetAnomalyBaseline(ctx, lookupMetric, scopeStr, windowS)
 		if err != nil {
-			if !warnedErr {
-				e.logger.Warn("alert: anomaly_reader error — node skipped", "node_id", nodeID, "error", err)
-				warnedErr = true
-			}
+			// Fix C: hold state — preserve current firing/pending status until reader recovers.
+			hadReaderErr = true
+			results = append(results, evalResult{groupKey: nodeID, hold: true})
 			continue
 		}
 		if baseline == nil {
@@ -333,5 +350,5 @@ func (e *Evaluator) evalAnomalyNodes(ctx context.Context, snap *domain.LiveSnaps
 			},
 		})
 	}
-	return results
+	return results, hadReaderErr
 }

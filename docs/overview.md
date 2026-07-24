@@ -216,14 +216,10 @@ and no phone-home; all tiers run fully self-hosted.
 |---|---|---|---|---|
 | **Free** | 1 | 7 days | F1 live dashboard, F2 historical analytics, F4 ingest health, F7 fleet view | Email only |
 | **Pro** | 10 | 90 days | Free + F3 QoE beacon SDK, F8 data API (REST + WebSocket), F10 synthetic probes | + Slack, Telegram |
-| **Business** | 5 | 396 days | Pro + F8 Prometheus `/metrics`, F6 usage/billing reports (CSV/PDF, S3, multi-tenant) | + PagerDuty, Webhook |
+| **Business** | 50 | 396 days | Pro + F8 Prometheus `/metrics`, F6 usage/billing reports (CSV/PDF, S3, multi-tenant) | + PagerDuty, Webhook |
 | **Enterprise** | Unlimited | Unlimited | Business + F9 anomaly detection (Welford baselines), SSO (OIDC), white-label PDF reports | All five channels |
 
-Max streams is unlimited on every tier. Note that Pro allows up to 10 monitored AMS nodes
-while Business allows up to 5 — this intentional pricing distinction reflects product
-positioning: Pro targets medium-scale streaming networks needing full API access; Business
-targets high-retention reporting and multi-tenant billing use cases. Unlimited nodes require
-Enterprise.
+Max streams is unlimited on every tier. The node limit ladder is Free 1 / Pro 10 / Business 50 / Enterprise unlimited — Business targets high-retention reporting and multi-tenant billing use cases where up to 50 nodes suffice; Pro targets medium-scale streaming networks needing full API and QoE access. Unlimited nodes require Enterprise.
 
 License verification is fully offline: the binary verifies the ed25519 signature against
 the vendor public key embedded at build time (or supplied via `PULSE_LICENSE_PUBKEY`).
