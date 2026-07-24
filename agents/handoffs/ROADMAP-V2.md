@@ -702,12 +702,20 @@ retry on `NETWORK_ERROR` rather than falling straight through to the 24 h sleep.
 backup so the container's own health/restart signal reflects it, and skip retention pruning on a failed cycle so a broken
 backup path cannot erode an intact recovery set.
 
-### 2.45  Nothing ALERTS when Pulse itself goes blind  [OPEN — found S100/D-164; the incident's unfinished half]
+### 2.45  Nothing ALERTS when Pulse itself goes blind  [PARTIAL — the Prometheus-gauge half is ✅ DONE (D-167/S102); the built-in self-alert rule stays OPEN, decision-gated]
 
-D-164 made `/healthz` honest: the collector component now ages out and names the cause when AMS stops answering. That closes
-the *reporting* gap. It does not close the *notification* gap — **nothing pages when Pulse stops collecting.** The alert engine
-evaluates streams, nodes and QoE metrics *derived from* the collector; when the collector is blind there are no metrics to
-evaluate, so the alerting path is silent by construction. That is exactly how a 7 h 46 m production outage passed unnoticed:
+**✅ Done (D-167/S102):** `/metrics` now exposes `pulse_collector_last_success_timestamp` and `pulse_collector_up` (mirroring
+the `/healthz` collector decision; emitted only when a collector-health source is wired). A Prometheus user can now close the
+gap themselves — `pulse_collector_up == 0` or `time() - pulse_collector_last_success_timestamp > N` — without Pulse paging
+itself. This was flagged in the §2.45 sketch as "the cheapest partial win, and probably the right first step." Docs:
+`docs/guides/prometheus.md` (metric reference + the self-blindness alert-rule example). 4 tests in
+`server/internal/api/collector_metrics_test.go`.
+
+**Still OPEN (needs a decision before building):** the *built-in* self-alert — a Pulse-native "collector offline" rule that
+pages through Pulse's own channels for operators who do not run Prometheus. D-164 made `/healthz` honest (closing the *reporting*
+gap); the gauge closes the *external-notification* gap; this remaining piece is the *internal-notification* gap. The alert
+engine evaluates streams, nodes and QoE metrics *derived from* the collector; when the collector is blind there are no metrics
+to evaluate, so the alerting path is silent by construction. That is exactly how a 7 h 46 m production outage passed unnoticed:
 every layer was individually "working", and no layer's job was to notice the absence of input.
 
 **Why it is not a trivial add:** a self-monitoring alert must not itself depend on the pipeline it watches, and it must not
