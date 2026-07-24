@@ -75,9 +75,8 @@ curl -X POST http://localhost:8090/api/v1/admin/tenants \
   -d '{"tenant_id":"tenant-b","tag_key":"tenant","tag_value":"b","priority":20}'
 ```
 
-> **Note:** `/api/v1/admin/tenants` routes are implemented but not yet in the
-> OpenAPI spec (contracts frozen per D-004). A contract change request (CR-WO204-01)
-> has been filed for Wave 3.
+> **Note:** examples use `http://localhost:8090` — substitute your production
+> `https://` URL when running against a proxied deployment.
 
 ---
 

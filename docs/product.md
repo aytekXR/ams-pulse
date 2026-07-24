@@ -30,12 +30,12 @@ to an Ant Media Server (AMS) deployment and answers, out of the box:
 agencies operating AMS for clients — anyone who must answer "is the stream OK?" for paying
 customers without shipping viewer data to a third party.
 
-**The 10 features (all shipped, v0.2.0 GA):**
+**The 10 features (all shipped; current release v0.4.0):**
 
 | # | Feature | One-liner | Tier |
 |---|---|---|---|
 | F1 | Live ops dashboard | streams, viewers, nodes, ≤10 s visibility, WS push | Free+ |
-| F2 | Historical analytics | geo/device breakdowns, 13-month rollups | Free+ |
+| F2 | Historical analytics | geo/device breakdowns; rollup history capped by tier retention (Pro 90 d, Business+ 13 mo) | Pro+ |
 | F3 | Player QoE beacon SDK | 3.52 KB JS SDK (MIT): startup time, rebuffer, bitrate, errors | Pro+ |
 | F4 | Ingest health | 0–100 health score per stream, degradation detection | Free+ |
 | F5 | Alerting | email/Slack/Telegram/PagerDuty/webhook, mute, grouping, maintenance windows | Free+ (channels tiered) |

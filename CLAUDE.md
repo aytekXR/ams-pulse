@@ -5,8 +5,12 @@ PRD: `docs/prd-report.md` §7 (the rest of that file is market analysis — cont
 
 ## Current state
 
-**Skeleton only.** Structure, contracts, ADRs and the agent workflow are in place;
-business logic is not. Build sessions execute the wave plan in `agents/manifest.yaml`.
+**Shipped product, pre-marketplace.** All 10 PRD features are implemented and live-validated
+against a real AMS 3.0.3 Enterprise (46/50 scenarios); latest release v0.4.0; production runs
+behind host nginx on this VPS. The wave plan in `agents/manifest.yaml` is complete — current
+work follows `agents/handoffs/ROADMAP-V2.md` and the session protocol in
+`agents/handoffs/RESUME-PROMPT.md` (start there, not at the wave plan). Remaining open items
+are mostly operator-gated marketplace-submission steps (`docs/operator-expected.md`).
 
 ## How to work in this repo
 

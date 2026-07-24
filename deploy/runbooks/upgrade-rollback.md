@@ -104,7 +104,7 @@ sg docker -c "docker compose ${DC_ARGS} up -d"
 ```
 
 Compose will recreate only containers whose image or config changed. The `pulse-migrate`
-one-shot runs automatically before `pulse` starts (see `depends_on` chain in hardened overlay).
+one-shot runs automatically before `pulse` starts (see `depends_on` chain in `docker-compose.prod.yml`).
 
 ### Step 6 — Post-swap smoke checklist
 

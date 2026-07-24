@@ -32,7 +32,7 @@ services:
   # Note: ClickHouse 24.8 restricts the built-in 'default' user to localhost
   # connections. For cross-container access (backup sidecar → clickhouse) a named
   # user must be created. Set CLICKHOUSE_USER + CLICKHOUSE_PASSWORD — the image
-  # creates the user at first boot. The hardened overlay provides these for
+  # creates the user at first boot. docker-compose.prod.yml provides these for
   # production; for isolated tests pass them as env vars (see runbook).
   clickhouse:
     environment:

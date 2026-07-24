@@ -387,7 +387,7 @@ requires this disk to be configured — it does NOT work without the overlay.
 
 ```sh
 docker compose -p pulse-prod \
-  -f deploy/docker-compose.yml \
+  -f deploy/docker-compose.prod.yml \
   -f deploy/docker-compose.backup.yml \
   exec backup /scripts/pulse-backup.sh once
 ```

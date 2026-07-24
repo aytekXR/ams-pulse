@@ -66,8 +66,8 @@ A disabled rule's `muted` state is not surfaced — it has no effect until the r
 
 | Metric name | Evaluated against | Notes |
 |---|---|---|
-| `stream_offline` | Live aggregator | Fires when a stream_id is no longer active. No threshold needed (`operator: eq`, `threshold: 0`). |
-| `viewer_drop_pct` | Live aggregator | Current viewer count per stream vs threshold |
+| `stream_offline` | Live aggregator | Emits value `1.0` while a scoped stream is absent (offline) and on the offline edge for wildcard rules. Use `operator: eq`, `threshold: 1` — a threshold of 0 would match the ONLINE state and fire while the stream is healthy. |
+| `viewer_drop_pct` | Live aggregator | **Despite the name, this evaluates the absolute viewer count per stream** (not a drop percentage) — identical semantics to `viewer_count`. The default rule `lt 0.5` therefore fires when a stream has zero viewers. |
 | `viewer_count` | Live aggregator | Absolute viewer count per stream |
 | `ingest_bitrate_kbps` | Live aggregator | Ingested bitrate for active streams |
 | `fps` | Live aggregator | Current frames-per-second |
@@ -475,16 +475,28 @@ Pulse automatically seeds 4 default rules on first run (Wave 2). All default rul
 are seeded with `enabled: true` and `muted: true` — they evaluate and record history
 from day one, but send no notifications until you configure channels and unmute them.
 
-| Rule | Metric | Condition | Severity |
-|---|---|---|---|
-| Stream offline | `stream_offline` | eq 0, window 30s | critical |
-| Viewer drop | `viewer_drop_pct` | lt 20, window 60s | warning |
-| Node CPU high | `node_cpu` | gt 80, window 60s | warning |
-| Ingest bitrate floor | `ingest_bitrate_floor` | bitrate < 50% target, window 30s | critical |
+| Rule | Metric | Condition | Severity | Cooldown |
+|---|---|---|---|---|
+| Stream offline (default) | `stream_offline` | eq 1, window 30s | critical | 300s |
+| Viewer drop > 50% (default) | `viewer_drop_pct` | lt 0.5, window 60s — evaluates the absolute viewer count, so this fires at zero viewers (see [Supported metrics](#supported-metrics)) | warning | 600s |
+| Node CPU > 90% (default) | `node_cpu` | gt 90, window 120s | warning | 300s |
+| Ingest bitrate floor breach (default) | `ingest_bitrate_floor` | lt 500 kbps (absolute), window 30s | warning | 300s |
 
 To activate notifications: assign a channel to the rule and set `muted: false`.
 
-Manually create additional rules as needed:
+Manually create additional rules as needed with
+`POST /api/v1/alerts/rules`:
+
+```sh
+curl -X POST http://localhost:8090/api/v1/alerts/rules \
+  -H "Authorization: Bearer plt_<token>" \
+  -H "Content-Type: application/json" \
+  -d @rule.json
+```
+
+> **Metric names are not validated at create time.** A rule whose `metric` is not
+> in the [Supported metrics](#supported-metrics) table is accepted (201) but never
+> matches anything — it silently never fires. Double-check the metric spelling.
 
 **Stream offline (critical):**
 ```json
@@ -492,7 +504,7 @@ Manually create additional rules as needed:
   "name": "Stream offline",
   "metric": "stream_offline",
   "operator": "eq",
-  "threshold": 0,
+  "threshold": 1,
   "window_s": 30,
   "cooldown_s": 300,
   "severity": "critical",
