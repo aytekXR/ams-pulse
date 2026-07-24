@@ -10,6 +10,18 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ## [Unreleased]
 
+### Added
+
+- **Collector-freshness scrape metrics (D-167, ROADMAP §2.45).** `GET /metrics` now exposes
+  `pulse_collector_last_success_timestamp` (Unix time of Pulse's most recent successful AMS
+  poll; `0` if none since boot) and `pulse_collector_up` (`1` when that poll is within the
+  staleness window, mirroring the `/healthz` collector decision). This lets a Prometheus user
+  alert on Pulse's *own* blindness — `pulse_collector_up == 0` — which its internal alert
+  engine cannot, because that engine evaluates metrics derived from the collector and falls
+  silent when the collector does (the cause of the D-164 outage going unpaged). Emitted only
+  when a collector-health source is wired (absent on a pure-beacon deployment). The built-in
+  self-alert rule remains a separate, decision-gated item. Docs: `docs/guides/prometheus.md`.
+
 ## [0.4.1] - 2026-07-24
 
 ### Security

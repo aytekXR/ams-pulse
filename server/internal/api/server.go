@@ -1116,6 +1116,37 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		}
 		fmt.Fprintf(w, "# HELP pulse_alerts_firing Total firing alert count\n# TYPE pulse_alerts_firing gauge\npulse_alerts_firing %d\n", firingCount)
 	}
+
+	// ── Collector freshness (ROADMAP §2.45) ───────────────────────────────
+	// The D-164 outage passed unnoticed because nothing pages when the collector
+	// goes blind: the alert engine evaluates metrics DERIVED from the collector,
+	// so when it stops there is nothing to evaluate. Exposing the poll freshness
+	// as a scrape metric lets a Prometheus user close that gap themselves —
+	//   alert: time() - pulse_collector_last_success_timestamp > 180
+	// — without Pulse having to page itself (the built-in self-alert is a separate,
+	// decision-gated item). Emitted only when a collector-health source is wired
+	// (nil in tests / a pure-beacon deployment), mirroring /healthz.
+	if s.collectorHealth != nil {
+		h := s.collectorHealth.PollHealth()
+		var lastSuccessUnix int64 // 0 = no successful poll since boot
+		if !h.LastSuccess.IsZero() {
+			lastSuccessUnix = h.LastSuccess.Unix()
+		}
+		// up mirrors the /healthz collector decision exactly: fresh unless the age
+		// (from LastSuccess, or StartedAt before the first success) exceeds
+		// StaleAfter. A zero StaleAfter or an unstarted loop cannot be judged stale,
+		// so it reads up (matches /healthz leaving status "ok" in those cases).
+		up := 1
+		ref := h.LastSuccess
+		if ref.IsZero() {
+			ref = h.StartedAt
+		}
+		if h.StaleAfter > 0 && !ref.IsZero() && time.Since(ref) > h.StaleAfter {
+			up = 0
+		}
+		fmt.Fprintf(w, "# HELP pulse_collector_last_success_timestamp Unix time of the most recent successful AMS poll (0 = none since boot)\n# TYPE pulse_collector_last_success_timestamp gauge\npulse_collector_last_success_timestamp %d\n", lastSuccessUnix)
+		fmt.Fprintf(w, "# HELP pulse_collector_up 1 when the collector's last successful poll is within its staleness window, else 0\n# TYPE pulse_collector_up gauge\npulse_collector_up %d\n", up)
+	}
 }
 
 // ─── Live ──────────────────────────────────────────────────────────────────────

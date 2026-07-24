@@ -109,6 +109,8 @@ sample lines appear.
 | `pulse_node_cpu_pct` | gauge | `node` | CPU utilization percent for each AMS node |
 | `pulse_node_mem_pct` | gauge | `node` | Memory utilization percent for each AMS node |
 | `pulse_alerts_firing` | gauge | — | Count of `alert_history` rows in the `firing` state — see the caveat below |
+| `pulse_collector_last_success_timestamp` | gauge | — | Unix time of Pulse's most recent successful AMS poll; `0` if none since boot |
+| `pulse_collector_up` | gauge | — | `1` when the last successful poll is within the staleness window, else `0` |
 
 > **`pulse_alerts_firing` does not mean "rules firing right now."** It counts rows
 > in the alert history whose state is `firing`, over all time and capped at the
@@ -116,6 +118,25 @@ sample lines appear.
 > a rule that has since resolved still contributes its historical firings. Treat it
 > as a cumulative event count, not a live gauge of current incidents — alerting on
 > `pulse_alerts_firing > 0` will page you for something that resolved last month.
+
+> **★ Alert on Pulse's own blindness — `pulse_collector_up` / `pulse_collector_last_success_timestamp`.**
+> Pulse's own alert rules evaluate metrics *derived from* the collector, so if the
+> collector stops reaching your AMS there is nothing left to evaluate and no rule
+> fires — a monitor that cannot notice its own blindness (this is exactly how a
+> 7 h 46 m collection outage once went unpaged). These two gauges let **your**
+> Prometheus catch it independently. The `_last_success_timestamp` gauge keeps
+> reporting the last (old) success while blind, so `time() - …` is the outage age;
+> `pulse_collector_up` is the ready-made boolean, matching `/healthz`'s collector
+> component (fresh unless the last poll is older than the staleness window; both are
+> absent on a pure-beacon deployment with no AMS collector). A minimal rule:
+>
+> ```yaml
+> - alert: PulseCollectorBlind
+>   expr: pulse_collector_up == 0
+>   for: 2m
+>   annotations:
+>     summary: "Pulse has not polled AMS successfully in over its staleness window"
+> ```
 
 **Sample output** (Business tier, idle instance with no AMS nodes connected):
 
@@ -139,6 +160,12 @@ pulse_ingest_bitrate_kbps 0
 # HELP pulse_alerts_firing Total firing alert count
 # TYPE pulse_alerts_firing gauge
 pulse_alerts_firing 0
+# HELP pulse_collector_last_success_timestamp Unix time of the most recent successful AMS poll (0 = none since boot)
+# TYPE pulse_collector_last_success_timestamp gauge
+pulse_collector_last_success_timestamp 1784908800
+# HELP pulse_collector_up 1 when the collector's last successful poll is within its staleness window, else 0
+# TYPE pulse_collector_up gauge
+pulse_collector_up 1
 ```
 
 With one AMS node connected the two per-node metrics gain sample lines:
@@ -286,6 +313,12 @@ pulse_ingest_bitrate_kbps / 1000
 ```promql
 pulse_node_cpu_pct
 ```
+
+**Seconds since Pulse last polled AMS (its own blindness):**
+```promql
+time() - pulse_collector_last_success_timestamp
+```
+(High and climbing = Pulse is not collecting. Use `pulse_collector_up == 0` for a ready-made boolean.)
 
 **Alert for streams going down:**
 ```yaml
