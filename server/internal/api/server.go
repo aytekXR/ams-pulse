@@ -52,11 +52,13 @@ import (
 
 	"github.com/pulse-analytics/pulse/server/internal/alert"
 	"github.com/pulse-analytics/pulse/server/internal/alert/channels"
+	"github.com/pulse-analytics/pulse/server/internal/collector/beacon"
 	"github.com/pulse-analytics/pulse/server/internal/collector/ingest"
 	"github.com/pulse-analytics/pulse/server/internal/domain"
 	"github.com/pulse-analytics/pulse/server/internal/license"
 	"github.com/pulse-analytics/pulse/server/internal/query"
 	"github.com/pulse-analytics/pulse/server/internal/reports"
+	"github.com/pulse-analytics/pulse/server/internal/ssrfguard"
 	"github.com/pulse-analytics/pulse/server/internal/store/meta"
 )
 
@@ -291,6 +293,13 @@ func New(cfg Config, store *meta.Store, live domain.LiveProvider, qsvc *query.Se
 	// S11 WO-C: initialise OIDC handler if a pre-built provider was injected.
 	if cfg.OIDCConfig != nil && cfg.OIDCConfig.Provider != nil {
 		s.oidc = newOIDCHandler(cfg.OIDCConfig, store, logger)
+	}
+	// S101 (REVIEW-EXT-2026-07-24): /metrics is served unauthenticated when no
+	// token is configured. That is deliberate (prod publishes loopback-only and
+	// Prometheus scrapes unauthenticated by default), but it must not be silent.
+	if cfg.MetricsToken == "" {
+		logger.Warn("PULSE_METRICS_TOKEN is not set — /metrics is served without authentication; " +
+			"set PULSE_METRICS_TOKEN to require a bearer token on scrapes")
 	}
 
 	s.buildRouter()
@@ -734,6 +743,9 @@ func (s *Server) requireWriteScope(next http.Handler) http.Handler {
 // carry none, and the store cannot distinguish "no scope recorded" from "no scope
 // required". Rejecting them would lock an operator out of their own instance.
 // Any explicit scope other than "admin" ("read", "viewer", …) is read-only.
+// Since S101, handleCreateToken defaults omitted scopes on NEW api tokens to
+// ["read"], so the scopeless-admin case below is reachable only for tokens that
+// predate that change.
 func canWrite(scopes []string) bool {
 	if len(scopes) == 0 {
 		return true
@@ -1535,6 +1547,15 @@ func (s *Server) handleCreateAlertRule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "INVALID_RULE", err.Error())
 		return
 	}
+	// Validate threshold-rule spec (metric, operator, severity, window_s, threshold).
+	// Skipped for anomaly rules — those carry anomaly-only metric names not in
+	// KnownMetricNames, and their separate constraints are checked by ValidateAnomalyRule.
+	if row.RuleType != "anomaly" {
+		if valErr := alert.ValidateRuleSpec(row.Metric, row.Operator, int64(row.WindowS), row.Severity, row.Threshold); valErr != nil {
+			writeError(w, http.StatusUnprocessableEntity, "INVALID_RULE", valErr.Error())
+			return
+		}
+	}
 	// S11 WO-B: validate anomaly-specific constraints (metric support, window_s=3600).
 	if valErr := alert.ValidateAnomalyRule(row); valErr != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_ANOMALY_RULE", valErr.Error())
@@ -1565,6 +1586,13 @@ func (s *Server) handleUpdateAlertRule(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "INVALID_RULE", err.Error())
 		return
+	}
+	// Validate threshold-rule spec — same guard as in handleCreateAlertRule.
+	if row.RuleType != "anomaly" {
+		if valErr := alert.ValidateRuleSpec(row.Metric, row.Operator, int64(row.WindowS), row.Severity, row.Threshold); valErr != nil {
+			writeError(w, http.StatusUnprocessableEntity, "INVALID_RULE", valErr.Error())
+			return
+		}
 	}
 	// S11 WO-B: validate anomaly-specific constraints.
 	if valErr := alert.ValidateAnomalyRule(row); valErr != nil {
@@ -1936,12 +1964,25 @@ func (s *Server) handleTestSource(w http.ResponseWriter, r *http.Request) {
 	// This is a defence-in-depth check; amsSourceFromAPI already validates on
 	// write, but a row could have been created before this guard was added.
 	testBase := src.RestURL.String
-	if parsedBase, perr := url.Parse(testBase); perr != nil ||
-		(parsedBase.Scheme != "http" && parsedBase.Scheme != "https") {
+	parsedBase, perr := url.Parse(testBase)
+	if perr != nil || (parsedBase.Scheme != "http" && parsedBase.Scheme != "https") {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"reachable":  false,
 			"status":     "error",
 			"error":      "rest_url must use http or https scheme",
+			"latency_ms": nil,
+		})
+		return
+	}
+	// S101 (REVIEW-EXT-2026-07-24 item 4): IP-literal boundary check. The
+	// authoritative, rebinding-safe enforcement is the DialControl hook on the
+	// transport below; rejecting the obvious literal here just gives a named
+	// error instead of a generic dial refusal.
+	if ip := net.ParseIP(parsedBase.Hostname()); ip != nil && ssrfguard.IsDenied(ip) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"reachable":  false,
+			"status":     "error",
+			"error":      "rest_url host is a restricted address (link-local/metadata ranges are refused)",
 			"latency_ms": nil,
 		})
 		return
@@ -1978,13 +2019,25 @@ func (s *Server) handleTestSource(w http.ResponseWriter, r *http.Request) {
 		req.SetBasicAuth(src.RestUser.String, password)
 	}
 
-	// B4/A6: use a dedicated client that refuses to follow redirects.
-	// Redirects to internal metadata endpoints (e.g. 169.254.169.254) are a
-	// common SSRF vector; stopping at the first response prevents redirect chains.
-	// Private/loopback IPs are intentionally allowed — real AMS nodes are often
-	// on internal networks.
+	// B4/A6 + S101: dedicated client with the ssrfguard policy enforced at dial
+	// time — private/RFC-1918/loopback ALLOWED (real AMS nodes live on internal
+	// networks), link-local/IMDS/NAT64-embedded/unspecified DENIED. The Control
+	// hook sees the *resolved* peer, so a hostname that resolves (or rebinds) to
+	// 169.254.169.254 is refused even though only the literal is checked above.
+	// Redirects are additionally not followed at all (defence in depth; the
+	// guard would re-run on any redirect dial anyway).
+	testTransport := http.DefaultTransport.(*http.Transport).Clone()
+	testTransport.DialContext = (&net.Dialer{
+		Timeout:   5 * time.Second,
+		KeepAlive: 30 * time.Second,
+		Control:   ssrfguard.DialControl,
+	}).DialContext
+	// No proxy: with an egress proxy the transport dials the proxy (which passes
+	// DialControl) and the proxy fetches the real target, bypassing the guard.
+	testTransport.Proxy = nil
 	testClient := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout:   5 * time.Second,
+		Transport: testTransport,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -2101,6 +2154,15 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 				scopes = append(scopes, ss)
 			}
 		}
+	}
+	// S101 (REVIEW-EXT-2026-07-24 item 6): an api-kind token created without
+	// scopes used to persist scopeless — and canWrite treats no-scopes as full
+	// admin (legacy compat). Default new api tokens to least privilege instead;
+	// admin now requires an explicit scopes:["admin"]. Legacy tokens already in
+	// the store keep their historical semantics. Ingest tokens never consult
+	// scopes, so they are left as-is.
+	if kind == "api" && len(scopes) == 0 {
+		scopes = []string{"read"}
 	}
 	// Pre-assign the id so the create can be audited BEFORE the re-fetch below —
 	// otherwise a nil re-fetch would leave the committed token unrecorded (S40 class).
@@ -2342,6 +2404,22 @@ func (s *Server) handleIngestBeacon(w http.ResponseWriter, r *http.Request) {
 	if int64(len(rawBody)) >= beaconMaxBodyBytes {
 		writeError(w, http.StatusRequestEntityTooLarge, "REQUEST_TOO_LARGE",
 			fmt.Sprintf("body exceeds %d KB limit", beaconMaxBodyBytes/1024))
+		return
+	}
+
+	// S101 (REVIEW-EXT-2026-07-24, main-port validation skip): enforce the SAME
+	// schema rules as the dedicated beacon port before accepting anything. The
+	// beacon package owns the rules; this route previously accepted any
+	// decodable batch, so the two ports disagreed on what a valid event is.
+	if jsonErr, schemaErrs := beacon.ValidateRawBatch(rawBody); jsonErr != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_JSON", "invalid request body")
+		return
+	} else if len(schemaErrs) > 0 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+			"code":    "SCHEMA_ERROR",
+			"message": "beacon event batch failed schema validation",
+			"errors":  schemaErrs,
+		})
 		return
 	}
 

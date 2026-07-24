@@ -73,4 +73,4 @@ services:
       # compose files, so WITHOUT this mapping the container never sees the key
       # and silently runs Free tier (found live at the v0.3.0 rollout).
       PULSE_LICENSE_KEY: "${PULSE_LICENSE_KEY:-}"
-      PULSE_LICENSE_PUBKEY: "${PULSE_LICENSE_PUBKEY:-}"
+      PULSE_LICENSE_PUBKEY: "${PULSE_LICENSE_PUBKEY:-6403d7b49951d0220c7219e491b6525971edf10f0e64616b17023eab002ab4ba}"

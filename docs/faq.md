@@ -178,7 +178,7 @@ To renew, activate a new key via any of three routes:
 
 | Limit / feature | Free | Pro | Business | Enterprise |
 |---|---|---|---|---|
-| AMS source nodes | 1 | **10** | **5** | Unlimited |
+| AMS source nodes | 1 | **10** | **50** | Unlimited |
 | Data retention | 7 days | 90 days | 13 months | Unlimited |
 | Beacon QoE ingest (F3) | No | Yes | Yes | Yes |
 | Data API + Prometheus `/metrics` (F8) | No | API only | Yes | Yes |
@@ -188,7 +188,7 @@ To renew, activate a new key via any of three routes:
 | White-label PDF | No | No | No | Yes |
 | Notification channels | Email | Email, Slack, Telegram | + PagerDuty, Webhook | All |
 
-**Note on node limits:** Pro allows more monitored nodes (10) than Business (5). This is intentional pricing: Pro is optimised for a single operator running many AMS edge nodes, while Business adds multi-tenant billing, Prometheus, and scheduled reports for fewer high-value nodes. Check which features matter most for your deployment before choosing.
+**Note on node limits:** The tier ladder is Free 1 / Pro 10 / Business 50 / Enterprise unlimited. Business allows up to 50 monitored nodes and adds multi-tenant billing, Prometheus, and scheduled reports. Pro is optimised for operators running up to 10 AMS edge nodes who need full API and QoE access. Unlimited nodes require Enterprise.
 
 > `docs/runbooks/install.md` §Free tier limits; `docs/product.md` §1 (feature table).
 
@@ -200,8 +200,9 @@ To renew, activate a new key via any of three routes:
 
 No. Pulse is entirely self-hosted. There is no SaaS component and no
 phone-home. License verification is offline — keys are validated locally
-via an ed25519 signature check against the `PULSE_LICENSE_PUBKEY` you
-deploy; no activation server is contacted.
+via an ed25519 signature check against the vendor public key embedded in
+the binary (or the key you supply via `PULSE_LICENSE_PUBKEY`); no
+activation server is contacted.
 
 Viewer IPs from the beacon SDK are **SHA-256 hashed** before storage in
 ClickHouse — no raw IP is written to the database (verified:

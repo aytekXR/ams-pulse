@@ -4,7 +4,7 @@
 pulse:
   image:
     repository: ghcr.io/aytekxr/ams-pulse
-    tag: "0.1.0"
+    tag: "0.4.1"
   secretRef:
     name: pulse-secrets
   ams:

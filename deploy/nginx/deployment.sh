@@ -92,6 +92,18 @@ COMPOSE_FILES=(
   -f "$ROOT/deploy/docker-compose.backup.yml"    # 24 h backup sidecar
 )
 
+# PULSE_EXTRA_COMPOSE (optional): ONE extra overlay appended AFTER the canonical
+# set. Append-only by design — this seam cannot omit a canonical overlay, only
+# add on top (e.g. a port remap so an isolated verification stack can run beside
+# prod, which is how the D-164 step-6 assertion itself is exercised — S101).
+if [ -n "${PULSE_EXTRA_COMPOSE:-}" ]; then
+  if [ ! -f "$PULSE_EXTRA_COMPOSE" ]; then
+    oops "PULSE_EXTRA_COMPOSE set but not a file: $PULSE_EXTRA_COMPOSE"
+    exit 64
+  fi
+  COMPOSE_FILES+=(-f "$PULSE_EXTRA_COMPOSE")
+fi
+
 # compose <args...> — one wrapper so the `sg docker` path is a faithful rehearsal
 # of the plain path. Everything that touches Docker goes through here.
 compose() {
@@ -248,10 +260,20 @@ if [ "$COLLECTOR_GRACE" -gt 0 ]; then
   say "6/6 collector freshness (waiting ${COLLECTOR_GRACE}s for a real AMS poll)"
   sleep "$COLLECTOR_GRACE"
   body="$(curl -fsS -m 5 "$HEALTH_URL" 2>/dev/null || true)"
-  if printf '%s' "$body" | grep -q '"status":"ok"'; then
+  # Assert the COLLECTOR COMPONENT is "ok" — not merely that the string
+  # "status":"ok" appears anywhere in the document. The clickhouse/meta_store
+  # component objects carry their own "status":"ok", so a whole-body grep passes
+  # even while the collector is degraded (found live by the S101 step-6
+  # verification: a deploy against a dead AMS sailed through the original
+  # check). Extracting the collector object first is fail-closed: if the shape
+  # ever changes and the extraction comes up empty, the gate FAILS rather than
+  # passes blind.
+  collector_obj="$(printf '%s' "$body" | grep -o '"collector":{[^}]*}' || true)"
+  if printf '%s' "$collector_obj" | grep -q '"status":"ok"'; then
     info "collector is fresh: AMS polls are landing."
   else
     oops "collector is NOT fresh after ${COLLECTOR_GRACE}s — Pulse answers but is not collecting."
+    oops "  collector component: ${collector_obj:-<not found in /healthz body>}"
     oops "  /healthz says: ${body:-<no response>}"
     oops "  Most likely the AMS wiring is wrong (PULSE_AMS_URL / credentials in"
     oops "  $PULSE_ENV_FILE), or AMS itself is down. Check: compose logs pulse | grep restpoller"

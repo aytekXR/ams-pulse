@@ -17,11 +17,13 @@ import { OnboardingWizard } from "../OnboardingWizard";
 
 const mockCreateSource = vi.fn();
 const mockTestSource = vi.fn();
+const mockUpdateSource = vi.fn();
 
 vi.mock("@/api/client", () => ({
   adminApi: {
     createSource: (...args: unknown[]) => mockCreateSource(...args),
     testSource: (...args: unknown[]) => mockTestSource(...args),
+    updateSource: (...args: unknown[]) => mockUpdateSource(...args),
   },
   ApiError: class ApiError extends Error {
     status: number;
@@ -175,5 +177,66 @@ describe("OnboardingWizard — state-preserving back navigation (Wave 4)", () =>
     await waitFor(() => {
       expect(screen.getByDisplayValue("My AMS")).toBeInTheDocument();
     });
+  });
+});
+
+// ── (i) D-165: Back-then-resubmit is idempotent ──────────────────────────────
+//
+// Regression: before the fix, navigating Back from the verify step and
+// re-submitting the source form called createSource a second time, producing
+// a duplicate source in the database.  The fix switches to updateSource when
+// createdSourceId is already set.
+
+describe("OnboardingWizard — Back-then-resubmit idempotency (D-165)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreateSource.mockResolvedValue({ id: "src-abc" });
+    mockUpdateSource.mockResolvedValue({ id: "src-abc" });
+  });
+
+  /** Navigate welcome → source (filled) → verify via the first submit. */
+  async function submitAndReachVerify() {
+    render(<OnboardingWizard onComplete={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /get started/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText(/production cluster/i)).toBeInTheDocument());
+    fireEvent.change(screen.getByPlaceholderText(/production cluster/i), { target: { value: "Prod" } });
+    fireEvent.change(screen.getByPlaceholderText(/your-ams-server/i), { target: { value: "http://ams:5080" } });
+    fireEvent.click(screen.getByRole("button", { name: /add source/i }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: /verify connection/i })).toBeInTheDocument());
+  }
+
+  it("going Back from verify and re-submitting calls createSource exactly once", async () => {
+    await submitAndReachVerify();
+
+    // Verify the first submit used createSource.
+    expect(mockCreateSource).toHaveBeenCalledOnce();
+
+    // Go Back to the source step.
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: /add ams source/i })).toBeInTheDocument());
+
+    // Re-submit — must NOT call createSource a second time.
+    fireEvent.click(screen.getByRole("button", { name: /add source/i }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: /verify connection/i })).toBeInTheDocument());
+
+    // Still exactly one create; the second submit used updateSource.
+    expect(mockCreateSource).toHaveBeenCalledOnce();
+    expect(mockUpdateSource).toHaveBeenCalledOnce();
+    expect(mockUpdateSource).toHaveBeenCalledWith("src-abc", expect.objectContaining({ name: "Prod" }));
+  });
+
+  it("update failure on re-submit stays on source step and shows error", async () => {
+    await submitAndReachVerify();
+
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: /add ams source/i })).toBeInTheDocument());
+
+    mockUpdateSource.mockRejectedValueOnce(new Error("update failed"));
+    fireEvent.click(screen.getByRole("button", { name: /add source/i }));
+
+    await waitFor(() => expect(screen.getByText(/failed to save source/i)).toBeInTheDocument());
+    expect(screen.getByRole("heading", { name: /add ams source/i })).toBeInTheDocument();
+    // createSource still called only once; no second create attempt.
+    expect(mockCreateSource).toHaveBeenCalledOnce();
   });
 });

@@ -23,6 +23,15 @@
 #   or an IAM instance role. aws-cli is NOT shipped in the ClickHouse image; the S3
 #   push section below documents the approach for a custom sidecar image that adds it.
 #
+# Daemon readiness / retry knobs:
+#   CH_READY_WAIT          Seconds to wait for ClickHouse to be ready at daemon
+#                          start before giving up (default: 120). Daemon only —
+#                          once mode does not call wait_for_clickhouse().
+#   CH_BACKUP_ATTEMPTS     Max backup attempts per cycle for network-class failures
+#                          (default: 3). Non-network failures break immediately.
+#   CH_BACKUP_RETRY_DELAY  Seconds to sleep between network-class retry attempts
+#                          (default: 20).
+#
 # SQLite consistency approach (IMPORTANT — READ BEFORE CHANGING):
 #   The ClickHouse image does NOT ship sqlite3 (confirmed on 24.8 / sha256:1ffa82e).
 #   The pulse meta store is opened with _pragma=journal_mode(WAL), confirmed in
@@ -52,10 +61,41 @@ BACKUP_DIR="${BACKUP_DIR:-/backups}"
 META_SRC="${PULSE_META_DB:-/var/lib/pulse/pulse_meta.db}"
 KEEP_COUNT=7
 MODE="${1:-daemon}"
+CH_READY_WAIT="${CH_READY_WAIT:-120}"
+CH_BACKUP_ATTEMPTS="${CH_BACKUP_ATTEMPTS:-3}"
+CH_BACKUP_RETRY_DELAY="${CH_BACKUP_RETRY_DELAY:-20}"
 
 log() { printf '[pulse-backup] %s %s\n' "$(date -u +%T)" "$*"; }
 err() { printf '[pulse-backup] ERROR: %s\n' "$*" >&2; }
 die() { err "$*"; exit 1; }
+
+# ── ClickHouse readiness wait (daemon only) ────────────────────────────────────
+# Polls clickhouse-client SELECT 1 every 5 s up to CH_READY_WAIT seconds.
+# NOT called in once mode.
+wait_for_clickhouse() {
+    local deadline
+    deadline=$(( $(date +%s) + CH_READY_WAIT ))
+    local args=(--host "$CLICKHOUSE_HOST" --user "$CLICKHOUSE_USER")
+    [ -n "$CLICKHOUSE_PASSWORD" ] && args+=(--password "$CLICKHOUSE_PASSWORD")
+
+    log "Waiting for ClickHouse to be ready (timeout=${CH_READY_WAIT}s)…"
+    while true; do
+        if clickhouse-client "${args[@]}" --query "SELECT 1" >/dev/null 2>&1; then
+            log "ClickHouse is ready."
+            return 0
+        fi
+        local now
+        now=$(date +%s)
+        if [ "$now" -ge "$deadline" ]; then
+            err "ClickHouse not ready after ${CH_READY_WAIT}s — giving up"
+            return 1
+        fi
+        local remaining
+        remaining=$(( deadline - now ))
+        log "CH not ready yet (${remaining}s remaining) — retrying in 5s"
+        sleep 5
+    done
+}
 
 # ── ClickHouse backup ──────────────────────────────────────────────────────────
 backup_clickhouse() {
@@ -72,15 +112,30 @@ backup_clickhouse() {
     local args=(--host "$CLICKHOUSE_HOST" --user "$CLICKHOUSE_USER")
     [ -n "$CLICKHOUSE_PASSWORD" ] && args+=(--password "$CLICKHOUSE_PASSWORD")
 
-    log "CH: BACKUP DATABASE ${CLICKHOUSE_DATABASE} TO Disk('backups','${dest}')"
-    if clickhouse-client "${args[@]}" \
-            --query "BACKUP DATABASE ${CLICKHOUSE_DATABASE} TO Disk('backups', '${dest}')"; then
-        log "CH backup OK: /backups/${dest}"
-        return 0
-    else
-        err "CH backup FAILED (dest=${dest})"
-        return 1
-    fi
+    local attempt=0
+    while true; do
+        attempt=$(( attempt + 1 ))
+        log "CH: BACKUP DATABASE ${CLICKHOUSE_DATABASE} TO Disk('backups','${dest}') (attempt ${attempt}/${CH_BACKUP_ATTEMPTS})"
+        if clickhouse-client "${args[@]}" \
+                --query "BACKUP DATABASE ${CLICKHOUSE_DATABASE} TO Disk('backups', '${dest}')"; then
+            log "CH backup OK: /backups/${dest}"
+            return 0
+        fi
+        err "CH backup FAILED (dest=${dest}, attempt ${attempt}/${CH_BACKUP_ATTEMPTS})"
+        # Probe to classify: network-class vs non-network failure.
+        if clickhouse-client "${args[@]}" --query "SELECT 1" >/dev/null 2>&1; then
+            # Server is reachable — non-network failure; retrying will not help.
+            err "CH is reachable but backup failed — non-network error, not retrying"
+            return 1
+        fi
+        # Network-class failure — may be transient.
+        if [ "$attempt" -ge "$CH_BACKUP_ATTEMPTS" ]; then
+            err "CH backup failed ${attempt} time(s) with network-class errors — giving up"
+            return 1
+        fi
+        log "CH unreachable (network-class failure) — retrying in ${CH_BACKUP_RETRY_DELAY}s"
+        sleep "$CH_BACKUP_RETRY_DELAY"
+    done
 }
 
 # ── SQLite meta store backup ──────────────────────────────────────────────────
@@ -137,7 +192,7 @@ prune_old() {
 
     local old_files
     # shellcheck disable=SC2012  # ls -t is correct here; no newlines in backup filenames
-    old_files="$(ls -1t "${dir}"/${pattern} 2>/dev/null \
+    old_files="$(ls -1t "${dir}"/"${pattern}" 2>/dev/null \
         | tail -n "+$((KEEP_COUNT + 1))" \
         || true)"
 
@@ -170,13 +225,16 @@ push_s3() {
     fi
 
     log "S3: uploading to s3://${bucket}/${prefix} (region=${region})"
-    aws s3 sync "${BACKUP_DIR}/" "s3://${bucket}/${prefix}" \
+    if aws s3 sync "${BACKUP_DIR}/" "s3://${bucket}/${prefix}" \
         --region "$region" \
         --exclude "*" \
         --include "ch/pulse-${ts}.*" \
-        --include "meta/pulse_meta-${ts}.*" \
-        && log "S3 upload OK" \
-        || { err "S3 upload FAILED"; return 1; }
+        --include "meta/pulse_meta-${ts}.*"; then
+        log "S3 upload OK"
+    else
+        err "S3 upload FAILED"
+        return 1
+    fi
 }
 
 # ── Main backup cycle ─────────────────────────────────────────────────────────
@@ -189,16 +247,17 @@ do_backup() {
     backup_sqlite     "$ts" || failed=1
     push_s3           "$ts" || failed=1
 
-    # Retention — keep newest KEEP_COUNT of each artifact type.
-    prune_old "${BACKUP_DIR}/ch"   "pulse-*.zip"
-    prune_old "${BACKUP_DIR}/meta" "pulse_meta-*.db"
-    prune_old "${BACKUP_DIR}/meta" "pulse_meta-*.db-wal"
-    prune_old "${BACKUP_DIR}/meta" "pulse_meta-*.db-shm"
-
     if [ "$failed" -eq 0 ]; then
+        # Retention — keep newest KEEP_COUNT of each artifact type.
+        # Only prune when ALL steps succeeded so a broken backup path cannot
+        # erode the intact retention set.
+        prune_old "${BACKUP_DIR}/ch"   "pulse-*.zip"
+        prune_old "${BACKUP_DIR}/meta" "pulse_meta-*.db"
+        prune_old "${BACKUP_DIR}/meta" "pulse_meta-*.db-wal"
+        prune_old "${BACKUP_DIR}/meta" "pulse_meta-*.db-shm"
         log "Backup cycle complete (ts=${ts})"
     else
-        err "Backup cycle COMPLETED WITH ERRORS (ts=${ts}) — check logs above"
+        err "Backup cycle FAILED (ts=${ts}) — check logs above"
     fi
     return "$failed"
 }
@@ -210,8 +269,9 @@ case "$MODE" in
         ;;
     daemon)
         log "Daemon starting — first backup now, then every 24 h (keep=${KEEP_COUNT})"
+        wait_for_clickhouse
         while true; do
-            do_backup || log "Cycle had errors — will retry in 24 h"
+            do_backup || log "Cycle FAILED - sleeping 24 h"
             log "Sleeping 24 h"
             sleep 86400
         done

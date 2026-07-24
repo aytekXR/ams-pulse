@@ -11,7 +11,7 @@ pulse:
     # Tags produced: {{version}}, {{major}}.{{minor}}, {{major}}, 'latest' (non-prerelease only).
     # Images are cosign-signed (keyless/Sigstore OIDC) at the manifest digest.
     repository: ghcr.io/aytekxr/ams-pulse
-    tag: "0.1.0"
+    tag: "0.4.1"
     pullPolicy: IfNotPresent
     # Digest pinning (recommended for production): set to the manifest digest to get
     # an immutable pull regardless of tag movement.
@@ -19,10 +19,10 @@ pulse:
     # readability; Kubernetes uses the digest for the actual pull).
     #
     # To obtain the digest after a release:
-    #   docker pull ghcr.io/aytekxr/ams-pulse:0.1.0
-    #   docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/aytekxr/ams-pulse:0.1.0
+    #   docker pull ghcr.io/aytekxr/ams-pulse:0.4.1
+    #   docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/aytekxr/ams-pulse:0.4.1
     # Or from the cosign SBOM attestation:
-    #   cosign verify ghcr.io/aytekxr/ams-pulse:0.1.0 | jq -r '.[0].critical.image.docker-manifest-digest'
+    #   cosign verify ghcr.io/aytekxr/ams-pulse:0.4.1 | jq -r '.[0].critical.image.docker-manifest-digest'
     digest: ""   # e.g. sha256:abc123...
 
   replicaCount: 1

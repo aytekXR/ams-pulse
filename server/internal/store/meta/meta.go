@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -148,6 +149,9 @@ func New(ctx context.Context, backend, dsn, secretKey string) (*Store, error) {
 		cipherKey:      cipherKey,
 		hmacKey:        deriveHMACKey(cipherKey),
 		hasExplicitKey: secretKey != "",
+	}
+	if secretKey == "" {
+		slog.Warn("meta store: PULSE_SECRET_KEY is unset — token hashes use plain SHA-256 (set PULSE_SECRET_KEY for HMAC protection in production)")
 	}
 	return s, nil
 }

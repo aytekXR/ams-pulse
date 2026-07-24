@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pulse-analytics/pulse/server/internal/ssrfguard"
 )
 
 // Channel delivers notifications to one configured destination.
@@ -251,11 +253,18 @@ type SlackChannel struct {
 }
 
 // NewSlackChannel creates a new Slack channel.
+// The HTTP client is guarded by ssrfguard.DialControl (Fix E): a webhook URL
+// that resolves to a link-local or IMDS address is refused at dial time.
 func NewSlackChannel(cfg SlackConfig) *SlackChannel {
 	return &SlackChannel{
 		cfg: cfg,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				DialContext: (&net.Dialer{
+					Control: ssrfguard.DialControl,
+				}).DialContext,
+			},
 		},
 	}
 }

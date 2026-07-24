@@ -24,7 +24,7 @@ committed artifact in this repo, no sudo. This whole doc is additive: it adds
 files and does **not** modify a live Caddy snippet, compose file, or unit. The
 live site keeps working on Caddy until step 6, and step 6 is reversible.
 
-- **Host:** `161.97.172.146` = `beyondkaira.com`, user `aytek`, Docker + systemd.
+- **Host:** `YOUR-SERVER-IP` = `beyondkaira.com`, user `YOUR-USER`, Docker + systemd.
 - **Subdomains this repo owns** (from `deploy/config/Caddyfile.prod`):
   `beyondkaira.com` (apex) + `pulse.beyondkaira.com` → the Pulse app;
   `ams.beyondkaira.com` → the Ant Media panel; `www.beyondkaira.com` → 301 apex.
@@ -71,12 +71,12 @@ trailing slash on `location /beacon/` + `proxy_pass .../` (Caddy `handle_path`);
 
 ## 0. 👤 Prerequisites (once per host — likely already done for other sites)
 
-- DNS `A` records → `161.97.172.146`, propagated, for each name you are cutting
+- DNS `A` records → `YOUR-SERVER-IP`, propagated, for each name you are cutting
   over: `beyondkaira.com`, `www`, `pulse`, `ams`. A wildcard `*.beyondkaira.com`
   A record covers the subdomains.
   ```bash
   for n in beyondkaira.com www.beyondkaira.com pulse.beyondkaira.com ams.beyondkaira.com; do
-    printf '%s -> ' "$n"; dig @8.8.8.8 +short "$n"; done   # each must print 161.97.172.146
+    printf '%s -> ' "$n"; dig @8.8.8.8 +short "$n"; done   # each must print YOUR-SERVER-IP
   ```
 - nginx installed and enabled: `sudo apt-get install -y nginx && sudo systemctl enable --now nginx`.
 - **Wildcard cert present** at `/etc/letsencrypt/live/beyondkaira.com/{fullchain,privkey}.pem`,

@@ -752,8 +752,8 @@ func TestParamConformance(t *testing.T) {
 				t.Helper()
 				for i := 1; i <= 2; i++ {
 					postConformanceItem(t, bizTs.URL, "/api/v1/alerts/rules", bizTok, map[string]any{
-						"name": fmt.Sprintf("rule-lim-%d", i), "metric": "bitrate",
-						"operator": "lt", "threshold": 100.0,
+						"name": fmt.Sprintf("rule-lim-%d", i), "metric": "viewer_count",
+						"operator": "lt", "threshold": 100.0, "window_s": 60, "severity": "warning",
 					})
 				}
 				items, nc := getListPage(t, bizTs.URL, "/api/v1/alerts/rules?limit=1", bizTok)
@@ -775,8 +775,8 @@ func TestParamConformance(t *testing.T) {
 				t.Helper()
 				for i := 1; i <= 2; i++ {
 					postConformanceItem(t, bizTs.URL, "/api/v1/alerts/rules", bizTok, map[string]any{
-						"name": fmt.Sprintf("rule-cur-%d", i), "metric": "bitrate",
-						"operator": "lt", "threshold": 100.0,
+						"name": fmt.Sprintf("rule-cur-%d", i), "metric": "viewer_count",
+						"operator": "lt", "threshold": 100.0, "window_s": 60, "severity": "warning",
 					})
 				}
 				_, nc := getListPage(t, bizTs.URL, "/api/v1/alerts/rules?limit=1", bizTok)

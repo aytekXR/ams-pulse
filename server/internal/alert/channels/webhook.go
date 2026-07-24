@@ -8,8 +8,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
+
+	"github.com/pulse-analytics/pulse/server/internal/ssrfguard"
 )
 
 // WebhookConfig is the configuration for a generic webhook notification channel.
@@ -40,11 +43,19 @@ type WebhookChannel struct {
 }
 
 // NewWebhookChannel creates a new generic webhook channel.
+// The HTTP client is guarded by ssrfguard.DialControl (Fix E) so that a
+// webhook URL targeting link-local or IMDS addresses (e.g. 169.254.169.254)
+// is refused at dial time, DNS-rebinding-safely, on every request hop.
 func NewWebhookChannel(cfg WebhookConfig) *WebhookChannel {
 	return &WebhookChannel{
 		cfg: cfg,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				DialContext: (&net.Dialer{
+					Control: ssrfguard.DialControl,
+				}).DialContext,
+			},
 		},
 	}
 }

@@ -10,8 +10,84 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-24
+
+### Security
+
+- **Source-test SSRF guard (D-166, REVIEW-EXT-2026-07-24 item 4).** `POST
+  /admin/sources/{id}/test` now installs `ssrfguard.DialControl` on its transport (plus an
+  IP-literal boundary check), refusing link-local/IMDS/NAT64-embedded targets at dial time
+  while keeping private/loopback AMS hosts allowed. Previously the endpoint would dial
+  `169.254.169.254` — a blind SSRF timing/error oracle. Alert-channel senders (webhook,
+  Slack) gained the same dial-time guard.
+- **Scopeless API tokens no longer mint silent admins (item 6).** `POST /admin/tokens` with
+  `kind:"api"` and no `scopes` now defaults the token to `["read"]`; admin requires an
+  explicit `scopes:["admin"]`. Legacy scopeless tokens keep their historical semantics
+  (documented at `canWrite`).
+- **Main-port `/ingest/beacon` validates batches (LOWER item).** The main-port route now
+  enforces the identical `beacon-event.schema.json` rules as the dedicated beacon port via a
+  shared exported validator (422 `SCHEMA_ERROR`); it previously accepted any decodable JSON.
+- **Alert-rule specs are validated at the API boundary (item 5).** Create/update now 422 on
+  unknown metrics, unknown operators/severities, non-positive or >7-day windows — the exact
+  hostile payloads the external review landed with HTTP 201 (`operator:"banana"`,
+  `window_s:-3600`, `severity:"apocalypse"`) are all rejected, with a canonical
+  `alert.ValidateRuleSpec` + exported known-name lists as the single source of truth.
+- **Loud warnings for silent-weak configurations.** Boot now WARNs when `/metrics` is served
+  without `PULSE_METRICS_TOKEN` and when the meta store falls back to unsalted SHA-256 token
+  hashing because `PULSE_SECRET_KEY` is unset.
+
+### Fixed
+
+- **License-tier node ladder inversion (REVIEW-EXT blocker 2).** Business `MaxNodes` was 5 —
+  below Pro's 10. Now 50 (persona-consistent ladder Free 1 / Pro 10 / Business 50 /
+  Enterprise unlimited; PRD §7.11's old table superseded, pricing sign-off still an operator
+  item), with a regression test pinning ladder monotonicity.
+- **Silent Free-tier downgrade on the README compose path (blocker 3).** The embedded default
+  license pubkey was the dev key, so vendor-signed licenses failed verification unless
+  `PULSE_LICENSE_PUBKEY` was set explicitly. The official vendor key is now the embedded
+  default and ships uncommented in `.env.example` and as the `real-ams.yml` default — all
+  documented install paths verify vendor keys out of the box.
+- **Wildcard `node_down` rules actually fire (item 5).** A rule targeting ANY node was
+  permanently inert (BUG-011 residual); a cross-tick node-eviction tracker now detects
+  disappearing nodes.
+- **Alerts hold state on reader errors (item 5).** A ClickHouse/reader failure during
+  evaluation no longer locks alerts open or flaps them; the tick holds state, WARNs
+  (rate-limited), and recovers cleanly.
+- **`viewer_drop_pct` renamed to `viewer_count_floor`.** The metric always compared an
+  absolute viewer count; the honest name is now canonical (old name accepted as a deprecated
+  alias, no stored-rule migration), and the seeded default rule uses `threshold:1` instead of
+  firing at 0 viewers.
+- **SDK: unload beacons no longer lose auth (D-165 follow-up).** `fetch(keepalive:true)` is
+  now the primary flush path (carries `X-Pulse-Ingest-Token`); `navigator.sendBeacon` — which
+  cannot set headers and thus silently 401'd `session_end` events — is a last-resort fallback
+  only.
+- **Onboarding wizard no longer duplicates the source on Back → re-submit (D-165 follow-up).**
+  Re-submitting after Back updates the already-created source instead of creating a second.
+- **Backup sidecar startup race (ROADMAP §2.46).** The daemon now waits (bounded, 120 s) for
+  ClickHouse before its first cycle, retries network-class backup failures with backoff
+  instead of sleeping 24 h, never prunes retention on a failed cycle, and reports a failed
+  cycle as FAILED. A host reboot no longer costs a day of ClickHouse backups.
+- **`PULSE_BASE_URL` is wired (item 7).** Alert deep-links honor the documented env var
+  (absolute http/https, trailing slash stripped) instead of hardcoding the listen address.
+- **`deployment.sh`: `PULSE_EXTRA_COMPOSE` seam (S101).** One optional overlay can be
+  appended AFTER the canonical set (append-only — cannot omit an overlay); used to run the
+  isolated D-164 verification stack that proved step 6 live.
+
+### Documentation
+
+- Alerting runbook: `ingest_bitrate_floor` described as raw kbps (was a wrong 0.5-ratio
+  claim); the three inverted `stream_offline threshold:0` examples fixed (they fired while
+  the stream was HEALTHY); `viewer_count_floor` documented with the deprecated alias.
+  `licensing-public.md` Business row 50 nodes, inversion notes removed. `admin-guide.md`
+  `PULSE_BASE_URL` and embedded-vendor-key rows now match code. `deploy/MIGRATION.md`
+  scrubbed of the real VPS IP/SSH user. `docker-compose.override.yml` admin-on-:80 comment
+  rewritten as an explicit security warning. `license-activation.md` no longer claims the
+  default pubkey only accepts dev/CI keys.
+
 ### Changed
 
+- **Helm chart default image tag `0.1.0` → `0.4.1`** (goldens regenerated byte-identical to
+  real renders); quickstart/README pins move to `0.4.1`.
 - **CI: `web-e2e` and `csp-e2e` are hard merge gates (D-162).** Both Playwright jobs ran as
   advisory (`continue-on-error: true`) through their bake period; they are now required, and
   `main`'s branch protection requires all 13 CI contexts. The one genuinely flaky CSP spec

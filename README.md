@@ -19,7 +19,7 @@ For a guided 15-minute install wizard, see [deploy/quickstart/](deploy/quickstar
 SBOM + provenance, published by a CI-gated tag pipeline.
 **The registry is private** — authenticate before pulling:
 `docker login ghcr.io` with a GitHub personal access token (read:packages scope).
-Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.4.0**).
+Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.4.1**).
 
 **Docker Compose (supported production path):**
 
@@ -80,7 +80,7 @@ PULSE_SECRET_KEY=$(openssl rand -hex 32) \
 
 ## Feature status
 
-Last updated: **2026-07-22 (D-161)** — all 10 PRD features shipped; prod live at **v0.4.0**
+Last updated: **2026-07-22 (D-161)** — all 10 PRD features shipped; prod live at **v0.4.1**
 behind host-nginx TLS against a real AMS 3.0.3 Enterprise. Product one-pager: [docs/product.md](docs/product.md).
 
 | Feature | PRD ref | Status | Notes |

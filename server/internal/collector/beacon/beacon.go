@@ -450,6 +450,20 @@ var validEventTypes = map[string]bool{
 	"session_end":       true,
 }
 
+// ValidateRawBatch unmarshals raw JSON with the same parse target and rules as
+// this dedicated beacon port. jsonErr non-nil means the body is not decodable;
+// otherwise errs carries the schema violations (empty = valid). Exported so the
+// main-port /ingest/beacon route in internal/api enforces identical rules —
+// before S101 (REVIEW-EXT-2026-07-24 item: main-port validation skip) that
+// route accepted any decodable batch.
+func ValidateRawBatch(raw []byte) (jsonErr error, errs []string) {
+	var b beaconBatch
+	if err := json.Unmarshal(raw, &b); err != nil {
+		return err, nil
+	}
+	return nil, validateBeaconBatch(&b)
+}
+
 // validateBeaconBatch validates the batch against beacon-event.schema.json rules.
 func validateBeaconBatch(b *beaconBatch) []string {
 	var errs []string

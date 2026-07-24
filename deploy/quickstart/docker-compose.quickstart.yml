@@ -20,7 +20,7 @@ name: pulse-quickstart
 services:
 
   pulse-migrate:
-    image: ${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.0}
+    image: ${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.1}
     entrypoint: ["pulse", "migrate"]
     restart: "no"
     environment:
@@ -38,7 +38,7 @@ services:
         condition: service_healthy
 
   pulse:
-    image: ${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.0}
+    image: ${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.1}
     ports:
       - "8090:8090"
     environment:

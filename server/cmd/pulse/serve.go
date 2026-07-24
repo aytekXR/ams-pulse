@@ -430,7 +430,7 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	// HOOK(BE-02): Wire alert evaluator.
 	alertEval := alert.New(alert.Config{
 		TickInterval: 5 * time.Second,
-		BaseURL:      "http://" + cfg.ListenAddr,
+		BaseURL:      resolveAlertBaseURL(cfg.PulseBaseURL, cfg.ListenAddr),
 	}, agg, metaStore, chanRegistry, nil, logger)
 
 	// HOOK(BE-02): Wire query service.
@@ -866,6 +866,28 @@ func nodeEvictionThreshold(pollInterval time.Duration) time.Duration {
 		pollInterval = restpoller.DefaultPollInterval
 	}
 	return 3 * pollInterval
+}
+
+// ─── Alert base URL resolution ────────────────────────────────────────────────
+
+// resolveAlertBaseURL returns the external base URL for alert deep-links.
+//
+// When PULSE_BASE_URL is configured (already validated by loadEnvConfig to be an
+// absolute http/https URL with trailing slash stripped), that value is returned
+// as-is so deep-links work behind any reverse proxy or ingress.
+//
+// When PULSE_BASE_URL is unset, the prior fallback of "http://" + listenAddr is
+// used unchanged; this is correct for direct-access installs and CI, but breaks
+// any deployment behind nginx/Caddy/an ingress — operators MUST set PULSE_BASE_URL
+// in those configurations.
+//
+// D-165 wiring pin: serve_wiring_test.go calls this function directly; deleting
+// it causes the test file to fail to compile (analogous to beaconListenerConfig).
+func resolveAlertBaseURL(pulseBaseURL, listenAddr string) string {
+	if pulseBaseURL != "" {
+		return pulseBaseURL
+	}
+	return "http://" + listenAddr
 }
 
 // ─── Beacon listener wiring ───────────────────────────────────────────────────
