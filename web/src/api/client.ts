@@ -574,9 +574,12 @@ export class LiveSocket {
     if (this.destroyed) return;
     const token = getToken();
 
-    // Use wss:// if page is served over HTTPS
+    // Use wss:// if page is served over HTTPS. The route lives under the API
+    // prefix (server registers /api/v1/live/ws only — a bare /live/ws returns
+    // the SPA fallback, so the socket never upgraded and the UI silently
+    // stayed on polling).
     const wsUrl = (window.location.protocol === "https:" ? "wss://" : "ws://") +
-      window.location.host + "/live/ws";
+      window.location.host + "/api/v1/live/ws";
 
     // Pass the bearer token via the Sec-WebSocket-Protocol handshake header (not the URL
     // query) so it doesn't land in reverse-proxy access logs. The server negotiates the

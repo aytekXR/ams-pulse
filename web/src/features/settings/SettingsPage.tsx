@@ -33,11 +33,15 @@ type Tab = "sources" | "tokens" | "ingest" | "integrations" | "license" | "users
 
 function IngestSnippet({ token }: { token: string }) {
   const { toast } = useToast();
-  const snippet = `import Pulse from '@pulse/beacon-js';
+  // Bake the concrete Pulse origin into the snippet — the snippet runs on the
+  // player's page, where window.location.origin would be the WRONG host. The
+  // SDK appends /ingest/beacon to ingestUrl itself; streamId is required.
+  const snippet = `import { Pulse } from '@pulse/beacon';
 
-Pulse.init({
+const session = Pulse.init({
+  ingestUrl: '${window.location.origin}',
   token: '${token}',
-  endpoint: window.location.origin + '/ingest/beacon',
+  streamId: 'your-stream-id', // must match the AMS stream id being played
 });`;
 
   const copy = () => {
