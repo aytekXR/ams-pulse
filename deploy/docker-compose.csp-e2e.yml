@@ -17,7 +17,7 @@ services:
   caddy:
     # caddy:2-alpine — same pinned digest as deploy/docker-compose.hardened.yml (2026-07-08).
     # To refresh: docker pull caddy:2-alpine && docker image inspect caddy:2-alpine --format '{{index .RepoDigests 0}}'
-    image: caddy@sha256:af5fdcd76f2db5e4e974ee92f96ee8c0fc3edb55bd4ba5032547cbf3f65e486d
+    image: caddy@sha256:844f60b64e4724a5aa8245e019dace0d3f199f7433ce6c57676cb30a920dbad9
     ports:
       - "127.0.0.1:18080:80"   # HTTP caddy — loopback only; Playwright baseURL
     volumes:
