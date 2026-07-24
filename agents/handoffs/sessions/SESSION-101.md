@@ -91,11 +91,24 @@ throughout (720 rows/h, tier enterprise).
    the 6-step submission sequence (docs-pack review, support/SLA, load lane, demo video, Ankush
    reply); rotate the chat-exposed + VPS-group-readable `deploy/.env` / `oguz-testing.md` secrets.
 
+## What landed this session (updated at close)
+
+PR #204 **merged** to `main` (`e45ea8b`); the `v0.4.1` tag is **pushed** and `release.yml`
+**built + pushed `ghcr.io/aytekxr/ams-pulse:0.4.1`** (multi-arch, cosign-signed) to the still-private
+package. Two CI-caught corrections happened before merge: the `e2e` hard gate flagged that the new
+alert-rule validator over-rejected `window_s:0` + omitted severity (both legitimate) — corrected to
+reject only negative/over-cap windows and non-empty unknown severities (decisions.md D-166 addendum),
+and a manual-suite follow-up was filed (ROADMAP §2.47, cpu_pct threshold rule). Handoff docs were
+updated to the post-tag state on branch `s101-post-tag-handoff`.
+
 ## Next session
 
-Land #204 (done this session if CI is green and merge is unblocked), cut the `v0.4.1` tag, watch
-`release.yml`, then **hold for the operator's GHCR flip**. When the package is public, run the
-anonymous clean-room install → live-dashboard re-verify (blocker 1's last mile) autonomously and
-record it. Otherwise the autonomous backlog is again down to review fast-follows only — keep
-reading prod health at every gate (that read, not the checklist, is what has caught the last two
-live regressions).
+**The only thing between here and a listable artifact is the operator's GHCR public flip** — the
+`0.4.1` image now exists, so the "wait for the image" precondition is met (operator-expected ★S101 §1;
+no API for the flip). When the operator reports the package public, run the **anonymous clean-room
+install** (isolated compose project, `docker pull ghcr.io/aytekxr/ams-pulse:0.4.1` with no auth →
+quickstart → `/healthz` collector `ok` → live dashboard) and record it as the D-166 close-out — that
+is blocker 1's last mile and is fully autonomous. Until then, back to the low-frequency gate; **keep
+reading prod health at every gate** (a ClickHouse `server_events` count + the `collector` component of
+`/healthz`) — that read, not the checklist, has caught the last two live regressions. Prod stays
+v0.4.0-139 (D-166 is released, NOT rolled to prod).
