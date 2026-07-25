@@ -25,14 +25,20 @@
  * dependency this script cannot self-satisfy (tracked in operator-expected).
  */
 
-import pkg from "/home/aytek/repo/ams-pulse/web/node_modules/@playwright/test/index.js";
-const { chromium } = pkg;
 import { spawn, execSync } from "child_process";
 import { existsSync, mkdirSync, renameSync, readdirSync } from "fs";
-import { join } from "path";
+import { join, dirname, resolve } from "path";
+import { fileURLToPath, pathToFileURL } from "url";
 import net from "net";
 
-const REPO_ROOT = "/home/aytek/repo/ams-pulse";
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+
+// Playwright is resolved relative to this script (web/node_modules), never an
+// absolute machine path — the script must run from any clone location.
+const pwMod = await import(pathToFileURL(
+  join(REPO_ROOT, "web/node_modules/@playwright/test/index.js"),
+).href);
+const { chromium } = pwMod.default ?? pwMod;
 const WEB_DIR = join(REPO_ROOT, "web");
 const DIST_DIR = join(WEB_DIR, "dist");
 const OUT_DIR = join(REPO_ROOT, "docs/marketplace/demo");
@@ -154,6 +160,10 @@ const REPORTS_SCHEDULES = { items: [], meta: { total: 0, next_cursor: null } };
 // ── Page mocks ─────────────────────────────────────────────────────────────
 async function installMocks(page) {
   await page.addInitScript(([k, v]) => localStorage.setItem(k, v), ["pulse_token", "plt_demo"]);
+  // S105: pin the brand-default dark theme explicitly — Playwright's default
+  // emulated prefers-color-scheme is light, and with no stored choice the app
+  // falls through to matchMedia (the first rough cut silently rendered light).
+  await page.addInitScript(([k, v]) => localStorage.setItem(k, v), ["pulse_theme", "dark"]);
   const R = (pat, body) => page.route(pat, (r) => r.fulfill(json(body)));
   await R("**/auth/me", AUTH_ME);
   await R("**/auth/oidc/status", OIDC_OFF);
@@ -199,7 +209,7 @@ async function main() {
   }
   const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"] });
   try {
-    const ctx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, recordVideo: { dir: OUT_DIR, size: VIEWPORT } });
+    const ctx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, colorScheme: "dark", recordVideo: { dir: OUT_DIR, size: VIEWPORT } });
     const page = await ctx.newPage();
     await installMocks(page);
 

@@ -8,8 +8,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/internal/query"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/query"
 )
 
 // TestLiveStreams_Cursor verifies that the cursor parameter advances pagination

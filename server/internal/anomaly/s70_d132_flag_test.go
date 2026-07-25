@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/anomaly"
+	"github.com/aytekXR/ams-pulse/server/internal/anomaly"
 )
 
 // TestFlagStore_ComputeFlagsDoesNotSuppressTickPersistence reproduces the [16]

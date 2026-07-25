@@ -6,10 +6,10 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.1.0
+    helm.sh/chart: pulse-0.2.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.4.1"
     app.kubernetes.io/managed-by: Helm
 ---
 # Source: pulse/templates/configmap-clickhouse.yaml
@@ -23,10 +23,10 @@ metadata:
   name: pulse-clickhouse-config
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.1.0
+    helm.sh/chart: pulse-0.2.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.4.1"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: clickhouse
 data:
@@ -102,10 +102,10 @@ metadata:
   name: pulse-data
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.1.0
+    helm.sh/chart: pulse-0.2.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.4.1"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: pulse
 spec:
@@ -123,10 +123,10 @@ metadata:
   name: pulse-clickhouse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.1.0
+    helm.sh/chart: pulse-0.2.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.4.1"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: clickhouse
 spec:
@@ -154,10 +154,10 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.1.0
+    helm.sh/chart: pulse-0.2.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.4.1"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: pulse
 spec:
@@ -184,10 +184,10 @@ metadata:
   name: pulse-ingest
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.1.0
+    helm.sh/chart: pulse-0.2.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.4.1"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: pulse-ingest
   annotations:
@@ -213,10 +213,10 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.1.0
+    helm.sh/chart: pulse-0.2.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.4.1"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: pulse
 spec:
@@ -339,10 +339,10 @@ metadata:
   name: pulse-clickhouse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.1.0
+    helm.sh/chart: pulse-0.2.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.4.1"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: clickhouse
 spec:
@@ -364,7 +364,7 @@ spec:
         fsGroup: 101
       containers:
         - name: clickhouse
-          image: "clickhouse/clickhouse-server:24.8"
+          image: "clickhouse/clickhouse-server:24.8@sha256:1d1f6508eba2dccce2cee9913907c5f7766327debc57a6b1991f2c9e3176c163"
           imagePullPolicy: IfNotPresent
           ports:
             - name: native

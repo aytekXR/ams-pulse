@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 // f32ptr returns a pointer to a float32 literal — test helper for pointer fields.

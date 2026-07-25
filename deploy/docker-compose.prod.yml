@@ -1,3 +1,9 @@
+# NOTE: VPS OPERATOR PATH — NOT FOR EVALUATORS.
+# This file is the VPS canonical path and deliberately builds a stamped source image
+# via deploy/nginx/deployment.sh (see deploy/runbooks/upgrade-rollback.md).
+# Evaluators should use the quickstart (deploy/quickstart/) or the base compose:
+#   docker compose -f deploy/docker-compose.yml up -d  (signed GHCR image)
+#
 # Pulse — CONSOLIDATED production compose file.
 #
 # Hand-authored merge of the former three-file prod stack:

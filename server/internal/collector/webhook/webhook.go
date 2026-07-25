@@ -14,10 +14,12 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 // Config holds webhook handler configuration.
@@ -221,7 +223,15 @@ func (h *Handler) handleWebhookWithSecret(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	events, err := h.parseWebhook(body)
+	// HMAC verification runs over the raw body (above) — content-type detection
+	// happens only after the signature is already validated.
+	ct := r.Header.Get("Content-Type")
+	var events []domain.ServerEvent
+	if strings.Contains(ct, "application/x-www-form-urlencoded") {
+		events, err = h.parseFormWebhook(body)
+	} else {
+		events, err = h.parseWebhook(body)
+	}
 	if err != nil {
 		h.logger.Warn("webhook: parse error", "error", err)
 		// Return 200 anyway — AMS may retry if we return non-2xx.
@@ -256,6 +266,33 @@ func (h *Handler) parseWebhook(body []byte) ([]domain.ServerEvent, error) {
 	return h.translateWebhook(raw), nil
 }
 
+// parseFormWebhook parses an application/x-www-form-urlencoded AMS webhook
+// body into domain events. The HMAC signature is verified over the raw bytes
+// before this function is called — the signing contract is unchanged.
+// Each form value is encoded as a JSON string so translateWebhook's helpers
+// work identically regardless of content type; the string-tolerant jsonInt /
+// jsonInt64 helpers normalise numeric string values from the form.
+// Keep the 200-on-parse-failure contract: the caller's error handler returns
+// HTTP 200 to suppress AMS webhook retry storms.
+func (h *Handler) parseFormWebhook(body []byte) ([]domain.ServerEvent, error) {
+	vals, err := url.ParseQuery(string(body))
+	if err != nil {
+		return nil, fmt.Errorf("form-urlencoded parse error: %w", err)
+	}
+	raw := make(map[string]json.RawMessage, len(vals))
+	for k, vs := range vals {
+		if len(vs) == 0 {
+			continue
+		}
+		b, merr := json.Marshal(vs[0]) // encode as JSON string: "value"
+		if merr != nil {
+			continue
+		}
+		raw[k] = json.RawMessage(b)
+	}
+	return h.translateWebhook(raw), nil
+}
+
 // translateWebhook maps one AMS webhook payload to domain events.
 func (h *Handler) translateWebhook(raw map[string]json.RawMessage) []domain.ServerEvent {
 	action := jsonString(raw["action"])
@@ -267,6 +304,10 @@ func (h *Handler) translateWebhook(raw map[string]json.RawMessage) []domain.Serv
 	}
 
 	streamID := jsonString(raw["streamId"])
+	if streamID == "" {
+		// Official AMS webhook field is "id"; "streamId" kept first for existing proxy deployments.
+		streamID = jsonString(raw["id"])
+	}
 	app := jsonString(raw["app"])
 	if app == "" {
 		app = jsonString(raw["appName"])
@@ -301,8 +342,10 @@ func (h *Handler) translateWebhook(raw map[string]json.RawMessage) []domain.Serv
 	case "vodReady", "recording_ready":
 		ev.Type = domain.EventRecordingReady
 		ev.Data = map[string]any{
-			"path":       jsonString(raw["vodName"]),
-			"size_bytes": jsonInt64(raw["vodSize"]),
+			"path":        jsonString(raw["vodName"]),
+			"size_bytes":  jsonInt64(raw["vodSize"]),
+			"vod_id":      jsonString(raw["vodId"]),
+			"duration_ms": jsonInt64(raw["duration"]),
 		}
 
 	default:
@@ -343,8 +386,18 @@ func jsonInt(raw json.RawMessage) int {
 		return 0
 	}
 	var n int
-	_ = json.Unmarshal(raw, &n)
-	return n
+	if err := json.Unmarshal(raw, &n); err == nil {
+		return n
+	}
+	// Tolerate JSON strings carrying a numeric value — form-urlencoded fields
+	// arrive as strings and are encoded as JSON strings by parseFormWebhook.
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		if v, err := strconv.Atoi(s); err == nil {
+			return v
+		}
+	}
+	return 0
 }
 
 func jsonInt64(raw json.RawMessage) int64 {
@@ -352,8 +405,18 @@ func jsonInt64(raw json.RawMessage) int64 {
 		return 0
 	}
 	var n int64
-	_ = json.Unmarshal(raw, &n)
-	return n
+	if err := json.Unmarshal(raw, &n); err == nil {
+		return n
+	}
+	// Tolerate JSON strings carrying a numeric value — form-urlencoded fields
+	// arrive as strings and are encoded as JSON strings by parseFormWebhook.
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		if v, err := strconv.ParseInt(s, 10, 64); err == nil {
+			return v
+		}
+	}
+	return 0
 }
 
 func normalizePublishType(t string) string {

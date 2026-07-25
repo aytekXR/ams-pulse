@@ -1,0 +1,34 @@
+{
+  "instanceId": "ams-node-1",
+  "cpuUsage": {
+    "processCPUTime": 123456789,
+    "systemCPULoad": 42,
+    "processCPULoad": 15,
+    "systemLoadAverageLastMinute": 1.8
+  },
+  "jvmMemoryUsage": {
+    "maxMemory": 4294967296,
+    "totalMemory": 2147483648,
+    "freeMemory": 536870912,
+    "inUseMemory": 1610612736
+  },
+  "systemMemoryInfo": {
+    "virtualMemory": 8589934592,
+    "totalMemory": 8589934592,
+    "freeMemory": 1073741824,
+    "inUseMemory": 7516192768,
+    "totalSwapSpace": 2147483648,
+    "freeSwapSpace": 1073741824,
+    "inUseSwapSpace": 1073741824,
+    "availableMemory": 2147483648
+  },
+  "fileSystemInfo": {
+    "usableSpace": 107374182400,
+    "totalSpace": 214748364800,
+    "freeSpace": 107374182400,
+    "inUseSpace": 107374182400
+  },
+  "time": "2024-01-15T10:30:00Z",
+  "hostAddress": "192.168.1.100",
+  "ipAddress": "192.168.1.100"
+}

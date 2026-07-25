@@ -14,8 +14,8 @@ package restpoller
 import (
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/pkg/amsclient"
 )
 
 func TestDetectEnded_EvictsDisappearedNonBroadcasting(t *testing.T) {

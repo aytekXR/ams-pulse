@@ -20,7 +20,7 @@ package tenant
 import (
 	"strings"
 
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // Matcher holds loaded tenant rules and resolves stream→tenant.

@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // Loader loads the current tenant rows from the registry (typically

@@ -8,6 +8,7 @@
 # Usage:
 #   docker compose -p pulse-e2e \
 #     -f deploy/docker-compose.yml \
+#     -f deploy/docker-compose.build.yml \
 #     -f deploy/docker-compose.ci.yml \
 #     up -d --build
 
@@ -28,6 +29,9 @@ services:
     restart: unless-stopped
 
   pulse-migrate:
+    # Explicit local tag: without it the compose merge would tag this source
+    # build with the base file's ghcr.io image name (S105 tag-masquerade guard).
+    image: ams-pulse:local-build
     build:
       context: ..
       dockerfile: deploy/docker/pulse.Dockerfile

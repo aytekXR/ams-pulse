@@ -9,7 +9,7 @@ import (
 	"database/sql"
 	"strings"
 
-	"github.com/pulse-analytics/pulse/server/internal/anomaly"
+	"github.com/aytekXR/ams-pulse/server/internal/anomaly"
 )
 
 // ListAnomalyBaselines returns all rows from the anomaly_baselines table.

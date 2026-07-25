@@ -13,7 +13,7 @@ package reports_test
 import (
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/reports"
+	"github.com/aytekXR/ams-pulse/server/internal/reports"
 )
 
 // TestVD37_EgressMethodConstants guards VD-37:

@@ -20,6 +20,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
@@ -214,6 +215,19 @@ func New(cfg Config) *Client {
 	}
 
 	hc := &http.Client{Timeout: timeout}
+	// net/http strips Authorization on cross-host redirects, but "ProxyAuthorization"
+	// (no hyphen — the AMS management-API header, not RFC Proxy-Authorization) is not
+	// in its sensitive-header list, so it would be forwarded to a foreign host. Strip
+	// it ourselves whenever a redirect leaves the original host.
+	hc.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("amsclient: stopped after 10 redirects")
+		}
+		if len(via) > 0 && req.URL.Host != via[0].URL.Host {
+			req.Header.Del("ProxyAuthorization")
+		}
+		return nil
+	}
 	if cfg.LoginEmail != "" {
 		// Use simpleCookieJar instead of the standard cookiejar: the standard
 		// net/http/cookiejar (RFC 6265 §5.1.3) does not store cookies for bare
@@ -336,7 +350,13 @@ func (c *Client) doGet(ctx context.Context, path string) (*http.Response, error)
 		return nil, fmt.Errorf("amsclient: build request: %w", err)
 	}
 	if c.authHeader != "" {
+		// app-scope REST (/{app}/rest/v2/...) reads Authorization Bearer
+		// (jwtControlEnabled); management/web-panel REST (/rest/v2/applications,
+		// /rest/v2/cluster/..., /rest/v2/system-status, /rest/v2/version) reads
+		// ProxyAuthorization (server.jwtServerControlEnabled). Sending both is
+		// harmless — each side ignores the header it doesn't use.
 		req.Header.Set("Authorization", c.authHeader)
+		req.Header.Set("ProxyAuthorization", strings.TrimPrefix(c.authHeader, "Bearer "))
 	}
 	req.Header.Set("Accept", "application/json")
 

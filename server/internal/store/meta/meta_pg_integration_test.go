@@ -28,9 +28,9 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 
-	"github.com/pulse-analytics/pulse/server/internal/anomaly"
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/anomaly"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 const pgSecretKey = "integration-test-secret-key-32b!"

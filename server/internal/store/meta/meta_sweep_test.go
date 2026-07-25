@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/anomaly"
+	"github.com/aytekXR/ams-pulse/server/internal/anomaly"
 )
 
 // seedBaseline is a helper to insert an anomaly_baselines row for sweep tests.

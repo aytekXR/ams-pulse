@@ -13,7 +13,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 // ─── ProbeRow ─────────────────────────────────────────────────────────────────

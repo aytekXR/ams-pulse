@@ -1,4 +1,4 @@
-# @pulse/beacon
+# ams-pulse-beacon
 
 Player-side QoE telemetry for [Pulse](../../README.md) — self-hosted analytics and
 alerting for Ant Media Server. Reports startup time, rebuffering, errors, bitrate/
@@ -20,16 +20,31 @@ community; the viewer-side moat no server-side DIY stack can replicate.
 
 ## Installation
 
+### Option A — tarball from GitHub Release (works today)
+
+Download `ams-pulse-beacon-0.4.1.tgz` from the
+[v0.4.1 GitHub Release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.1) and install it
+locally:
+
 ```bash
-npm install @pulse/beacon
-# or
-yarn add @pulse/beacon
+npm install ./ams-pulse-beacon-0.4.1.tgz
 ```
+
+### Option B — npm registry (coming)
+
+```bash
+npm install ams-pulse-beacon
+# or
+yarn add ams-pulse-beacon
+```
+
+Publishing to the npm registry is automated in the release workflow and pending
+credentials; until the package page is live, use Option A.
 
 ## One-line init
 
 ```ts
-import { Pulse } from '@pulse/beacon';
+import { Pulse } from 'ams-pulse-beacon';
 
 const session = Pulse.init(
   {
@@ -52,7 +67,7 @@ is unreachable, it silently becomes a no-op — **telemetry will never break pla
 ### AMS WebRTC (getStats-based)
 
 ```ts
-import { PulseBeaconConfig } from '@pulse/beacon';
+import { PulseBeaconConfig } from 'ams-pulse-beacon';
 
 // After webRTCAdaptor is created (AMS JS SDK):
 session.attachWebRTC(webRTCAdaptor);
@@ -221,10 +236,16 @@ import type {
   SessionHandle,
   BeaconEventType,
   PlayerKind,
-} from '@pulse/beacon';
+} from 'ams-pulse-beacon';
 ```
 
 ## Changelog
+
+### 0.4.1 (S105 — 2026-07-25)
+- Renamed npm package to `ams-pulse-beacon` (unscoped; verified unclaimed on registry.npmjs.org)
+- Version bumped to align with Pulse v0.4.1 release
+- Added `repository`, `homepage`, `bugs`, and `files` fields to package.json
+- Release workflow now builds and uploads `ams-pulse-beacon-0.4.1.tgz` to GitHub Release
 
 ### 0.1.0 (Wave 2 — 2026-06-14)
 - Initial production implementation

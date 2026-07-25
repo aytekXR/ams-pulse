@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/config"
+	"github.com/aytekXR/ams-pulse/server/internal/config"
 )
 
 // EnvConfig holds configuration loaded from environment variables.
@@ -84,6 +84,11 @@ type EnvConfig struct {
 	// KafkaBrokers is a comma-separated list of Kafka broker addresses.
 	// Empty = Kafka source disabled.
 	KafkaBrokers []string
+
+	// KafkaTopics is the list of Kafka topics to consume.
+	// Parsed from PULSE_KAFKA_TOPICS (comma-separated, entries trimmed).
+	// Empty = use the Kafka source default ("ams-instance-stats", "ams-webrtc-stats").
+	KafkaTopics []string
 
 	// KafkaGroupID is the consumer group ID for the Kafka source.
 	KafkaGroupID string
@@ -306,6 +311,14 @@ func loadEnvConfig() (EnvConfig, error) {
 			broker = strings.TrimSpace(broker)
 			if broker != "" {
 				cfg.KafkaBrokers = append(cfg.KafkaBrokers, broker)
+			}
+		}
+	}
+	if v := os.Getenv("PULSE_KAFKA_TOPICS"); v != "" {
+		for _, topic := range strings.Split(v, ",") {
+			topic = strings.TrimSpace(topic)
+			if topic != "" {
+				cfg.KafkaTopics = append(cfg.KafkaTopics, topic)
 			}
 		}
 	}

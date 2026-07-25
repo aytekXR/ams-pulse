@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // warnCapture is a minimal slog.Handler that records Warn-level messages.

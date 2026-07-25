@@ -209,71 +209,26 @@ make up
 >   up -d
 > ```
 
-> **Note — base compose builds from source:** The base `docker-compose.yml` has no
-> `image:` key for the Pulse service; it builds the binary from the local source tree
-> on every `compose up`. To use a pre-built released image instead, pull it first and
-> create a small image-pin override file:
+> **Note — base compose defaults to the signed GHCR image:** `docker-compose.yml`
+> now defaults to `ghcr.io/aytekxr/ams-pulse:0.4.1` (cosign-signed, SBOM-attached;
+> `ghcr.io/aytekxr/ams-pulse` is **public** — no `docker login` needed). Image tags
+> have no `v` prefix: the git tag `v0.4.1` publishes the image tag `0.4.1`
+> (also `0.4`, `0`, `latest`). The image tag is overridable via the `PULSE_IMAGE`
+> environment variable if you need to pin a different release.
 >
-> > **GHCR visibility:** `ghcr.io/aytekxr/ams-pulse` is **public** — no `docker login` needed.
+> To **build from source** instead (development, local patches, unreleased commits),
+> add the build overlay and `--build`:
 >
-> ```sh
-> # Pull the released image. ⚠ Image tags have NO `v` prefix: the git tag
-> # `v0.4.0` publishes the image tag `0.4.0` (also `0.4`, `0`, `latest`).
-> docker pull ghcr.io/aytekxr/ams-pulse:0.4.1
-> ```
->
-> Create `deploy/docker-compose.image-pin.yml` (do not commit this file).
-> This full example is the one that passed the clean-install release test
-> (D-072, ~3 min to verified-healthy): when running with explicit `-f` flags
-> the override's conveniences are absent, so the pin file must also publish
-> the API port, define the one-shot `pulse-migrate` service completely (the
-> image `ENTRYPOINT` is `pulse serve` and the migration SQL is not baked into
-> the runtime image), pass `PULSE_SECRET_KEY`, and keep ClickHouse's
-> permissive default user:
-> ```yaml
-> services:
->   pulse:
->     image: ghcr.io/aytekxr/ams-pulse:0.4.1
->     ports:
->       - "127.0.0.1:8090:8090"   # loopback only; front with a reverse proxy for remote access
->     environment:
->       PULSE_SECRET_KEY: "${PULSE_SECRET_KEY}"
->     depends_on:
->       pulse-migrate:
->         condition: service_completed_successfully
->
->   pulse-migrate:
->     image: ghcr.io/aytekxr/ams-pulse:0.4.1
->     entrypoint: ["pulse", "migrate"]   # image ENTRYPOINT is `pulse serve`
->     restart: "no"
->     depends_on:
->       clickhouse:
->         condition: service_healthy
->     environment:
->       PULSE_CLICKHOUSE_DSN: "clickhouse://clickhouse:9000/pulse"
->       PULSE_CLICKHOUSE_DATABASE: "pulse"
->       PULSE_MIGRATIONS_DIR: "/contracts/db/clickhouse"   # SQL not in the runtime image
->       PULSE_META_DSN: "/var/lib/pulse/pulse_meta.db"
->       PULSE_SECRET_KEY: "${PULSE_SECRET_KEY}"            # migrate validates it too
->     volumes:
->       - pulse-data:/var/lib/pulse
->       - ../contracts:/contracts:ro
->
->   clickhouse:
->     environment:
->       # ClickHouse ≥24.8 disables the default user for network access unless
->       # credentials are set; the dev override sets this — explicit -f paths must too.
->       CLICKHOUSE_SKIP_USER_SETUP: "1"
-> ```
->
-> Then start the stack **without** `--build`:
 > ```sh
 > docker compose \
 >   -f deploy/docker-compose.yml \
+>   -f deploy/docker-compose.build.yml \
 >   -f deploy/docker-compose.real-ams.yml \
->   -f deploy/docker-compose.image-pin.yml \
->   up -d
+>   up -d --build
 > ```
+>
+> The build overlay (`deploy/docker-compose.build.yml`) sets the local image tag to
+> `ams-pulse:local-build` so it cannot be confused with the signed GHCR release image.
 
 **Schema migrations:** When using the default `make up` / `cd deploy && docker compose
 up -d` path, the stack includes a one-shot **`pulse-migrate`** container (from
@@ -290,11 +245,11 @@ The entry point depends on which compose path you ran:
 | Path | URL |
 |---|---|
 | **Plain path** (`make up` / `cd deploy && docker compose up -d`) | `http://your-server` (port 80, published on all interfaces by the dev override) or `http://localhost:8090` (loopback-only debug binding) |
-| **Production path** (README Quick Start — `docker-compose.prod.yml` + real-ams overlay) | **`http://127.0.0.1:8090`** (loopback only). The stack terminates no TLS itself; put a host reverse proxy in front for public exposure — the reference edge is host nginx with a certbot cert (see `productionize.md`). |
+| **Signed-image path** (README Quick Start — `docker compose -f deploy/docker-compose.yml up -d`) | Port 8090 is `expose:`d only inside Docker — add a `ports:` binding or reverse proxy. The stack terminates no TLS itself (see `productionize.md`). |
 
 > With explicit `-f` flags (no override) the base compose only `expose`s 8090 inside the
-> Docker network — nothing is reachable from the host unless you added a `ports:` binding
-> (the image-pin example above binds `127.0.0.1:8090`) or fronted the stack with a
+> Docker network — nothing is reachable from the host unless you add a `ports:` binding
+> (e.g. `- "127.0.0.1:8090:8090"` in a local override) or front the stack with a
 > reverse proxy (see `productionize.md`).
 
 On first run, the bootstrap token is printed to the Pulse container logs:

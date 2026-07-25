@@ -1,11 +1,11 @@
 # Pulse — Known Limitations
 
-**Product:** Pulse v0.4.0 (last refreshed D-161, S97, 2026-07-22)  
+**Product:** Pulse v0.4.1 (last refreshed S105, 2026-07-25)  
 **Source:** `docs/assessment/documentation-gaps.md` (DG-01 through DG-18),
 `docs/assessment/final-assessment.md` §1 and Appendix B,
 `docs/assessment/capability-map.md`
 
-This document lists every known operator-facing limitation of Pulse v0.4.0 in
+This document lists every known operator-facing limitation of Pulse v0.4.1 in
 priority order. Each entry states what the limitation means for you, and what
 workaround or roadmap path exists.
 
@@ -22,9 +22,10 @@ set CPU or memory alert rules for a standalone AMS deployment.
 **Root cause:** AMS 3.x `GET /rest/v2/system-status` for standalone nodes returns
 only `{osName, osArch, javaVersion, processorCount}` — no CPU, memory, or disk
 fields (AV-06; `docs/assessment/capability-map.md` §5). These metrics are
-available via Kafka (topic `ams-server-events` — name is code-derived,
-`server/internal/collector/kafka/kafka.go:35,58,100`; not wire-validated against
-a live AMS broker, AV-15 BLOCKED — see LIM-19).
+available via Kafka (official AMS topics `ams-instance-stats` / `ams-webrtc-stats`,
+verified from AMS `StatsCollector.java`; the Pulse consumer is now aligned to these
+official topics and message shapes, fixture-tested; live validation against a real
+AMS broker still pending, AV-15 BLOCKED — see LIM-19).
 
 **Workaround:** Set `PULSE_KAFKA_BROKERS=<your-kafka>` to activate the Kafka
 consumer (`server/internal/collector/kafka/`). **Read LIM-19 first** — the
@@ -93,14 +94,17 @@ stream, regardless of actual frame rate. The health score formula redistributes
 FPS weight so a healthy 2 Mbps stream still scores above 80 (confirmed TC-I-06).
 
 **Root cause:** `currentFPS` is absent from the AMS 3.0.3 BroadcastDTO REST
-response (AV-04; `server/pkg/amsclient/client.go:97` comment). FPS data is
-expected on the `ams-server-events` Kafka topic (name code-derived,
-`server/internal/collector/kafka/kafka.go:35,58,100`; not wire-validated,
-AV-15 BLOCKED — see LIM-19); the Kafka FPS field name is also unconfirmed
-(Q4 in `docs/assessment/final-assessment.md` §6; DG-03).
+response (AV-04; `server/pkg/amsclient/client.go:97` comment). The official
+`ams-webrtc-stats` Kafka topic carries **per-viewer WebRTC client records**
+(verified from AMS `StatsCollector.java`), not per-stream encoder stats — Pulse
+subscribes to it but currently **skips** those messages because the shape has no
+clean domain mapping (`docs/kafka-integration.md` §4.5), so **Kafka does NOT
+restore FPS today**. FPS via Kafka only works through a custom bridge topic
+emitting flat `fps`/`bitrate` fields (kafka-integration §4.6). Live validation
+of the official feed is still pending (AV-15 BLOCKED — see LIM-19).
 
 **Workaround:** Use the health score as the primary ingest-health signal rather
-than raw FPS. Enable Kafka (`PULSE_KAFKA_BROKERS`) if your deployment has a broker.
+than raw FPS.
 
 **Roadmap:** Awaiting AMS team confirmation of the Kafka FPS field name (Q4).
 
@@ -242,32 +246,33 @@ RTT/jitter/loss values as unvalidated. Report suspicious readings.
 
 ---
 
-### LIM-19: Kafka consumer never live-validated against a real AMS broker (AV-15 BLOCKED)
+### LIM-19: Kafka consumer not yet live-validated against a real AMS broker (AV-15 BLOCKED)
 
 **What it means for you:** Setting `PULSE_KAFKA_BROKERS` activates the Kafka
 consumer path — the only route to Fleet CPU/memory/disk gauges on standalone AMS
-(LIM-01) and to FPS data (LIM-04). The consumer is code-complete and covered by
-8 contract tests against an in-process fake broker. However, it has **never** been
-connected to a real AMS Kafka producer. The topic name (`ams-server-events`,
-code-derived — `server/internal/collector/kafka/kafka.go` lines 35, 58, 100), field
-names, and message shapes are unconfirmed against any AMS version. Gauges may stay
-permanently empty if the topic or field names do not match what your AMS version
-publishes.
+(LIM-01) and to FPS data (LIM-04). The consumer is code-complete, aligned to the
+official AMS topic names (`ams-instance-stats`, `ams-webrtc-stats`, verified from
+AMS `StatsCollector.java`) and official nested message shapes, and covered by
+contract tests against an in-process fake broker plus broker-integration tests.
+However, it has **never** been connected to a real AMS Kafka producer. Topic names
+and message shapes are source-derived and unconfirmed as live AMS wire values.
+Gauges may stay empty if AMS on your version publishes to different topics or with
+different field names.
 
-**Root cause:** AV-15 BLOCKED — no Kafka broker was deployed in any Pulse
-validation environment as of S27/D-089. The `kafka.go` package comment (lines 10–11)
-states this explicitly. Neither topic name (`ams-server-events`) nor any field name
-has been verified against a live AMS broker.
+**Root cause:** AV-15 BLOCKED — no Kafka broker has been connected to a live AMS
+Kafka producer in any Pulse validation environment. The consumer-side topic/shape
+mismatch that existed in earlier releases is **FIXED** (the consumer is now aligned
+to official AMS topics and shapes, fixture-tested); what remains open is live
+validation of those shapes against a real AMS broker.
 
-**Workaround:** Before enabling the Kafka path in production, confirm the actual
-topic name and field names against your AMS version and `docs.antmedia.io`.
-Diagnostic steps: `docs/kafka-integration.md` §6.3. If `GET /healthz` shows
-`lag = 0` more than 30 seconds after connecting a broker, AMS is likely not
-publishing to `ams-server-events`, or the topic name differs — a silent failure
-with no parse errors in `/healthz` output.
+**Workaround:** Before enabling the Kafka path in production, confirm the topic
+names against your AMS version and `docs.antmedia.io`. Diagnostic steps:
+`docs/kafka-integration.md` §6.3. If `GET /healthz` shows `lag = 0` more than
+30 seconds after connecting a broker, AMS is likely not publishing to the expected
+topics — a silent failure with no parse errors in `/healthz` output.
 
 **Roadmap:** AV-15 validation requires a live Kafka broker connected to a real AMS
-instance. Until resolved, treat the Kafka ingest path as provisionally implemented
+instance. Until resolved, treat the Kafka ingest path as **experimental/preview**
 (`docs/assessment/final-assessment.md` §5 P1 "Standalone CPU/mem/disk via Kafka").
 
 ---
@@ -589,6 +594,7 @@ are chosen.
 | D-094 (S32, 2026-07-14) | Added LIM-24: PDF export not implemented (Phase 3); removed Export PDF button from Reports page; implemented GET /api/v1/reports/export?format=csv; count 23 → 24 |
 | D-106 (S44, 2026-07-15) | Security hardening (not a new limitation): CSV export/statements now neutralize formula-injection cells (LIM-24 workaround note updated); email/SMTP channel creds encrypted at rest; OIDC state cookie Secure on HTTPS. No count change |
 | D-161 (S97, 2026-07-22) | Marketplace-docs fact sweep: header → v0.4.0; LIM-24 corrected (scheduled PDF reports ARE implemented, Business+; only interactive export is CSV-only); added LIM-25 (user management API-only, no UI tab yet) and LIM-26 (firing alert can outlive a vanished source, pending §2.44 `[FO-1]` ruling); count 24 → 26 |
+| S105 (2026-07-25) | Kafka consumer aligned to official AMS topics (`ams-instance-stats`/`ams-webrtc-stats`, source-derived from AMS `StatsCollector.java`, fixture-tested + broker-integration-tested); LIM-01/LIM-04 topic refs updated; LIM-19 title and body updated to reflect fixed consumer alignment (what remains open is live AMS-producer validation, AV-15); header → v0.4.1 |
 
 ---
 

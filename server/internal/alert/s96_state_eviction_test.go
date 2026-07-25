@@ -15,8 +15,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // TestStates_ResolvedEntryEvictedAfterCooldown_S96 is the mutation target: after a

@@ -1,8 +1,3 @@
-<!--
-  DRAFT — INTERNAL. External use gated on operator review of
-  docs/assessment/final-assessment.md (D-081).
--->
-
 # Marketplace demo video — storyboard & script
 
 **Target:** 2:30–3:00 min, 1920×1080, dark theme. Mirrors and deepens the live demo
@@ -10,6 +5,10 @@ already shown to Ant Media ("the live dashboard looked good"). Recording is an
 **operator step** (screen recording over the seeded demo stack); an experimental
 Playwright `recordVideo` rough cut is possible from the capture script's mock setup but
 a human take with narration is expected to look better.
+
+**Status:** Rough-cut rendered (D-170) — `docs/marketplace/demo/pulse-demo-roughcut.webm`,
+attached to [GitHub release v0.4.1](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.1).
+Operator records the final version with voiceover using this script.
 
 **Setup before recording:** demo stack with populated screens — either the compose
 override + mock-AMS (`docker compose -f deploy/docker-compose.yml -f

@@ -9,7 +9,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // openMetaTestStore creates an in-memory test store with both 0001 and 0002 migrations applied.

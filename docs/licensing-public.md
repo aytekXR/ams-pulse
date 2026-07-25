@@ -1,13 +1,3 @@
-<!--
-  DRAFT — INTERNAL. External use gated on operator review of
-  docs/assessment/final-assessment.md (D-081).
--->
-
-> **DRAFT — INTERNAL. External use gated on operator review of
-> `docs/assessment/final-assessment.md` (D-081).**
-
----
-
 # Pulse — Licensing Explained
 
 **Last updated:** 2026-07-25
@@ -29,8 +19,9 @@ Pulse is made up of two independently licensed components.
 ### 1.1 Server, web UI, and deploy tooling — PolyForm Noncommercial 1.0.0
 
 The main Pulse codebase (everything in `server/`, `web/`, and `deploy/`) is
-released under the **PolyForm Noncommercial 1.0.0** license. The full text is
-in the root `LICENSE` file and at
+released under the **PolyForm Noncommercial 1.0.0** license,
+**Copyright (c) 2026 Aytek Erdoğan (beyondkaira.com)**. The full text is in
+the root `LICENSE` file and at
 <https://polyformproject.org/licenses/noncommercial/1.0.0>.
 
 **What noncommercial users may do freely:**
@@ -162,11 +153,16 @@ Perpetual licenses (no `expires_at`) do not expire.
 
 ## 3. Trial access
 
-A **14-day Pro trial key** is available to any new deployment, self-serve, with no credit card required. The trial key provides full Pro-tier entitlements (10 nodes, 90-day retention, Slack and Telegram alerts, QoE beacon integration) for the trial period.
+**14-day Pro trial — no credit card.** Request a trial key from the Ant Media
+Marketplace listing or by emailing
+[support@beyondkaira.com](mailto:support@beyondkaira.com); the key arrives by
+email (typically within 1 business day) and activates in Settings → License.
+The trial key provides full Pro-tier entitlements (10 nodes, 90-day retention,
+Slack and Telegram alerts, QoE beacon integration) for the trial period. On
+expiry the deployment gracefully reverts to Free — no data loss (see §2.4).
 
-To request a trial key, contact [support@beyondkaira.com](mailto:support@beyondkaira.com) or the marketplace support channel.
-
-After the 14-day trial period the deployment reverts to Free tier automatically (see §2.4). A trial that converts to a paid subscription during the Founding Operators launch window qualifies for campaign pricing (see §4).
+A trial that converts to a paid subscription during the Founding Operators
+launch window qualifies for campaign pricing (see §4).
 
 ---
 

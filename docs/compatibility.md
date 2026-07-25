@@ -44,7 +44,7 @@ RTMP capacity ~5–7 streams) and are not AMS version regressions. See
 | Behavior | Impact on Pulse | Source |
 |----------|-----------------|--------|
 | `currentFPS` absent from REST BroadcastDTO | `fps = 0` for all REST-polled streams; health score redistributes FPS weight | AV-04; `server/pkg/amsclient/client.go:97` comment; DG-03 |
-| CPU / mem / disk absent from `GET /rest/v2/system-status` for standalone AMS | Fleet resource gauges empty; available only via Kafka (`ams-instance-stats`) or cluster mode | AV-06; DG-05 |
+| CPU / mem / disk absent from `GET /rest/v2/system-status` for standalone AMS | Fleet resource gauges empty; available only via Kafka (`ams-instance-stats` — official AMS topic, verified from AMS `StatsCollector.java`, fixture-tested; `ams-webrtc-stats` is subscribed but currently skipped — **live broker validation pending, AV-15**) or cluster mode | AV-06; DG-05 |
 | AMS 3.0.3 cannot HMAC-sign lifecycle webhooks | Webhook listener returns 401 for all unsigned deliveries; REST polling covers stream lifecycle within ≤10 s budget | AV-08; decisions.md O3; DG-04 |
 | `GET /rest/v2/applications/info` returns HTTP 405 | Not used by Pulse; VoD ground truth uses per-app `GET /{app}/rest/v2/vods/list` | S17 corrections; `docs/assessment/scenario-matrix.md` |
 | Per-app RTMP broadcast deleted on stop (implicit broadcasts return 404, not `finished`) | Pulse treats 404-after-broadcasting as stream end (correct); operators polling for `finished` via AMS directly will miss the event | DG-11; TC-F-02 |
@@ -134,7 +134,7 @@ most important divergence in the version matrix. Operators on AMS 3.x should exp
 | Bitrate (kbps) | Via `speed` field | Via `bitrate` field | Via `bitrate` field | **LIVE-VALIDATED** |
 | FPS | Via `currentFPS` (mock) | Via `currentFPS` (mock) | Via `currentFPS` (mock) | **0 (field absent in REST)** |
 | WebRTC viewer count | Via `webRTCViewerCount` (mock) | Via `webRTCViewerCount` (mock) | Via `webRTCViewerCount` (mock) | **LIVE-VALIDATED** |
-| Fleet resource metrics (CPU/mem) | Unknown | Unknown | Unknown | **Via Kafka only** (REST absent for standalone) |
+| Fleet resource metrics (CPU/mem) | Unknown | Unknown | Unknown | **Via Kafka only** (REST absent for standalone); consumer aligned to the official `ams-instance-stats` topic/shape, fixture-tested (`ams-webrtc-stats` subscribed but skipped); **live validation pending (AV-15)** |
 | Webhook signing | Unknown | Unknown | Unknown | **UNSIGNED — webhook path disabled** |
 | VoD recording (REST poll) | Unknown | Unknown | Unknown | **LIVE-VALIDATED** (BUG-002 FIXED S23/D-085) |
 | Anomaly detection | Mock-compatible | Mock-compatible | Mock-compatible | **LIVE-VALIDATED** (0.259 false alarms/node-week) |

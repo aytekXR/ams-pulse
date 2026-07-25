@@ -19,7 +19,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // openStoreWithKey creates an in-memory store with an explicit secret key.

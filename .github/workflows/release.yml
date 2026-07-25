@@ -30,11 +30,16 @@ on:
         required: false
         default: "0.0.0-dry"
         type: string
+      publish_tag:
+        description: "Existing tag to checkout and publish to npm (e.g. v0.4.1); requires NPM_TOKEN secret"
+        required: false
+        default: ""
+        type: string
 
 permissions:
-  contents: read
+  contents: write  # create/upload GitHub Releases
   packages: write
-  id-token: write  # cosign keyless: OIDC token for Sigstore
+  id-token: write  # cosign keyless + npm provenance: OIDC token for Sigstore
   actions: read    # CI-gate: gh api query for workflow runs
 
 jobs:
@@ -44,19 +49,79 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      # ── Checkout specific tag (dispatch npm-publish path) ──────────────────────────
+      # When a caller supplies publish_tag on workflow_dispatch, re-checkout that ref
+      # so the workspace matches the release being published.
+      - name: Checkout publish tag (dispatch npm-publish path)
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_tag != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.publish_tag }}
+
       # ── CI gate ────────────────────────────────────────────────────────────────────
-      # Block the release unless this exact commit SHA has at least one successful
+      # Block the release unless the WORKSPACE commit has at least one successful
       # 'ci' workflow run. Runs on BOTH tag push and workflow_dispatch.
+      # NOTE: git rev-parse HEAD, NOT ${GITHUB_SHA} — on the publish_tag dispatch
+      # path the previous step re-checked-out the tag, while GITHUB_SHA still
+      # points at the dispatch branch HEAD; gating on GITHUB_SHA would certify
+      # the wrong commit (S105 adversarial-review finding).
       # Mutation proof: if no ci run exists for the SHA → total_count=0 → exit 1.
       - name: CI gate — require successful ci run for this SHA
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          GATE_SHA=$(git rev-parse HEAD)
           COUNT=$(gh api \
-            "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}&status=success&per_page=1" \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GATE_SHA}&status=success&per_page=1" \
             -q '.total_count')
-          [ "$COUNT" -ge 1 ] || { echo "FAIL: no successful ci run for ${GITHUB_SHA}"; exit 1; }
-          echo "CI gate: PASS (${COUNT} successful ci run(s) for ${GITHUB_SHA})"
+          [ "$COUNT" -ge 1 ] || { echo "FAIL: no successful ci run for ${GATE_SHA}"; exit 1; }
+          echo "CI gate: PASS (${COUNT} successful ci run(s) for ${GATE_SHA})"
+
+      # ── Version consistency guard (tag push only) ──────────────────────────────────
+      # Asserts VERSION file, Chart.yaml appVersion, and doc header stamps all match
+      # the pushed tag.  A mismatch here means a pre-release checklist step was skipped.
+      - name: Version consistency guard
+        if: github.ref_type == 'tag'
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+
+          # 1. VERSION file
+          FILE_VERSION="$(cat VERSION)"
+          if [ "$FILE_VERSION" != "$TAG_VERSION" ]; then
+            echo "FAIL: VERSION file ($FILE_VERSION) != tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+          # 2. Helm Chart appVersion
+          CHART_VERSION="$(grep '^appVersion:' deploy/helm/pulse/Chart.yaml \
+            | sed 's/appVersion:[[:space:]]*//; s/\"//g')"
+          if [ "$CHART_VERSION" != "$TAG_VERSION" ]; then
+            echo "FAIL: Chart.yaml appVersion ($CHART_VERSION) != tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+          # 3. Doc header stamps — grep only the first 40 lines of each file to
+          #    avoid false positives from changelog entries further down the doc.
+          #    An EMPTY stamp is a failure too: otherwise restructuring a doc
+          #    header would silently degrade this guard to a no-op for that file.
+          TAG_STAMP="v${TAG_VERSION}"
+          for doc in docs/product.md docs/faq.md docs/known-limitations.md; do
+            DOC_STAMP="$(head -40 "$doc" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
+            if [ -z "$DOC_STAMP" ] || [ "$DOC_STAMP" != "$TAG_STAMP" ]; then
+              echo "FAIL: $doc carries '${DOC_STAMP:-<no version stamp in first 40 lines>}', expected $TAG_STAMP — update the doc header before tagging"
+              exit 1
+            fi
+          done
+
+          # 4. SDK package version — the npm-publish step below ships whatever
+          #    sdk/beacon-js/package.json says; it must match the tag.
+          PKG_VERSION="$(node -p "require('./sdk/beacon-js/package.json').version")"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "FAIL: sdk/beacon-js/package.json ($PKG_VERSION) != tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+          echo "Version guard: PASS (VERSION=$FILE_VERSION Chart=$CHART_VERSION sdk=$PKG_VERSION tag=$GITHUB_REF_NAME)"
 
       # GHCR login is unconditional — dry-run still needs credentials for the
       # local Trivy-scan build step (pulling base layers from GHCR if cached).
@@ -176,7 +241,7 @@ jobs:
       #   cosign verify \
       #     --certificate-identity-regexp 'github.com/aytekXR/ams-pulse' \
       #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-      #     ghcr.io/aytekxr/ams-pulse:vX.Y.Z
+      #     ghcr.io/aytekxr/ams-pulse:X.Y.Z    # image tags have NO v prefix (see header)
       - name: Install cosign
         if: github.ref_type == 'tag'
         uses: sigstore/cosign-installer@v4.1.2
@@ -186,6 +251,63 @@ jobs:
         run: |
           cosign sign --yes \
             "ghcr.io/aytekxr/ams-pulse@${{ steps.push.outputs.digest }}"
+
+      # ── SDK tarball + GitHub Release (tag push only) ───────────────────────────────
+      # Builds the beacon-js SDK, packs it, creates the GitHub Release (if it doesn't
+      # exist), and uploads the tarball as a release asset.
+      - name: Build SDK tarball and upload to GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd sdk/beacon-js
+          npm ci
+          npm run build
+          TARBALL=$(npm pack 2>/dev/null)
+          echo "Packed: $TARBALL"
+          cd ../..
+
+          # Create the GitHub Release if it doesn't already exist.
+          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release create "${GITHUB_REF_NAME}" \
+              --verify-tag \
+              --title "${GITHUB_REF_NAME}" \
+              --generate-notes
+          fi
+
+          # Upload the SDK tarball, overwriting any existing asset with the same name.
+          gh release upload "${GITHUB_REF_NAME}" \
+            "sdk/beacon-js/${TARBALL}" \
+            --clobber
+          echo "Uploaded sdk/beacon-js/${TARBALL} to release ${GITHUB_REF_NAME}"
+
+      # ── npm publish (gated on NPM_TOKEN; never blocks the release) ────────────────
+      # Step 1: probe whether the secret is present and write a step output.
+      # Step 2: publish only when the output is 'true'.
+      # Missing token logs a notice and falls through — it does NOT fail the job.
+      - name: Check npm publish credentials
+        id: npm-creds
+        if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.publish_tag != '')
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::NPM_TOKEN secret not set — skipping npm publish; set NPM_TOKEN to enable"
+          fi
+
+      - name: Publish to npm registry
+        if: steps.npm-creds.outputs.available == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          # Configure npm to use the registry auth token.
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+          cd sdk/beacon-js
+          npm publish --provenance --access public
+          echo "Published ams-pulse-beacon to npm registry"
 
       - name: Notify Slack on success
         if: success()

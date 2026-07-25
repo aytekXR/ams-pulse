@@ -25,8 +25,8 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
-	"github.com/pulse-analytics/pulse/server/internal/anomaly"
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/anomaly"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 // Config holds ClickHouse store configuration.

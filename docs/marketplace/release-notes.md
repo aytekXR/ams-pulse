@@ -1,8 +1,3 @@
-<!--
-  DRAFT — INTERNAL. External use gated on operator review of
-  docs/assessment/final-assessment.md (D-081).
--->
-
 # What's New in Pulse 0.4
 
 Pulse 0.4 is the first marketplace-ready release: it ships a one-command Docker Compose
@@ -66,5 +61,9 @@ overlay now correctly passes license env vars (D-076).
   hardened overlay. (D-143)
 
 ---
+
+The [GitHub release page for v0.4.1](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.1)
+is live (previously this was a tag only); the demo rough-cut video (`pulse-demo-roughcut.webm`,
+D-170) is attached to that release.
 
 Full change history: [`CHANGELOG.md`](../../CHANGELOG.md)

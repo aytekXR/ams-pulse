@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/ssrfguard"
+	"github.com/aytekXR/ams-pulse/server/internal/ssrfguard"
 )
 
 // Channel delivers notifications to one configured destination.

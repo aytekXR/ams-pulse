@@ -1,5 +1,5 @@
 /**
- * @pulse/beacon — Player-side QoE telemetry for Pulse (Ant Media Server analytics).
+ * ams-pulse-beacon — Player-side QoE telemetry for Pulse (Ant Media Server analytics).
  *
  * One-line init: Pulse.init({ ingestUrl, token, streamId }) returns a session handle
  * with attachWebRTC(), attachHls(), attachVideoElement(), event(), dispose().

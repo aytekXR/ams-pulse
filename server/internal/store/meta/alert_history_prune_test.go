@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // makeRule creates a minimal alert rule and returns its assigned ID.

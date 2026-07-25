@@ -18,7 +18,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/reports"
+	"github.com/aytekXR/ams-pulse/server/internal/reports"
 )
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

@@ -31,7 +31,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
+	"github.com/aytekXR/ams-pulse/server/pkg/amsclient"
 )
 
 // ─── AMS wire-format profiles ────────────────────────────────────────────────

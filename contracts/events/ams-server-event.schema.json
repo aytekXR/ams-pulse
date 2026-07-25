@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://pulse.dev/schemas/ams-server-event.json",
+  "$id": "https://pulse.beyondkaira.com/schemas/ams-server-event.json",
   "title": "ServerEvent",
   "description": "Normalized internal event produced by the collector from any AMS source (REST poll, analytics-log tail, Kafka feed, webhook). Downstream storage and query layers depend ONLY on this shape, never on raw AMS formats — this is the portability boundary (PRD §7.11 expansion play). Finalized by INT-01 for wave-1 freeze.",
   "type": "object",

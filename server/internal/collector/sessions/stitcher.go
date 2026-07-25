@@ -16,10 +16,11 @@ package sessions
 
 import (
 	"log/slog"
+	"math"
 	"sync"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 const (
@@ -167,7 +168,18 @@ func (s *Stitcher) handleLeave(ev domain.ServerEvent) {
 	}
 	state.sess.EndedAt = now
 	state.sess.UpdatedAt = now
-	state.sess.WatchTimeS = uint32(watchTimeS)
+	// Bounded conversion: watch_time_s arrives as untrusted event data; clamp to
+	// the uint32 domain instead of wrapping on negative/oversized values. The
+	// integer-typed bounds checks before the uint32() are deliberate — CodeQL's
+	// integer-conversion query recognizes only integer-domain guards.
+	wt := int64(math.Max(0, math.Min(math.MaxUint32, watchTimeS)))
+	if wt < 0 {
+		wt = 0
+	}
+	if wt > math.MaxUint32 {
+		wt = math.MaxUint32
+	}
+	state.sess.WatchTimeS = uint32(wt)
 	if state.sess.WatchTimeS == 0 {
 		// Derive from timestamps if AMS didn't send it.
 		elapsed := now.Sub(state.sess.StartedAt)

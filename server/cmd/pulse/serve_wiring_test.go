@@ -33,14 +33,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/alert"
-	"github.com/pulse-analytics/pulse/server/internal/alert/channels"
-	anomaly "github.com/pulse-analytics/pulse/server/internal/anomaly"
-	"github.com/pulse-analytics/pulse/server/internal/collector/aggregator"
-	beaconingest "github.com/pulse-analytics/pulse/server/internal/collector/beacon"
-	"github.com/pulse-analytics/pulse/server/internal/collector/restpoller"
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/alert"
+	"github.com/aytekXR/ams-pulse/server/internal/alert/channels"
+	anomaly "github.com/aytekXR/ams-pulse/server/internal/anomaly"
+	"github.com/aytekXR/ams-pulse/server/internal/collector/aggregator"
+	beaconingest "github.com/aytekXR/ams-pulse/server/internal/collector/beacon"
+	"github.com/aytekXR/ams-pulse/server/internal/collector/restpoller"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // ─── Beacon listener config helpers ──────────────────────────────────────────

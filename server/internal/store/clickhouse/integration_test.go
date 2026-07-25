@@ -22,11 +22,11 @@ import (
 	"time"
 
 	clickhousego "github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/store/clickhouse"
+	"github.com/aytekXR/ams-pulse/server/internal/store/clickhouse/migrations"
+	"github.com/aytekXR/ams-pulse/server/internal/testutil"
 	"github.com/google/uuid"
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse"
-	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse/migrations"
-	"github.com/pulse-analytics/pulse/server/internal/testutil"
 )
 
 // TestIntegration_BatchInsert starts a ClickHouse server, runs migrations,

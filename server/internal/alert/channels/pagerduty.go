@@ -78,7 +78,7 @@ func (p *PagerDutyChannel) Send(ctx context.Context, payload []byte) error {
 		"payload": map[string]any{
 			"summary":        summary,
 			"severity":       pdSeverity,
-			"source":         "pulse-analytics",
+			"source":         "ams-pulse",
 			"component":      buildPDComponent(n),
 			"custom_details": buildPDDetails(n),
 		},

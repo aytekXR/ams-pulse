@@ -1,6 +1,6 @@
 # Pulse — Operator FAQ
 
-**Product:** Pulse v0.4.0 · **Last updated:** 2026-07-25 (D-169)
+**Product:** Pulse v0.4.1 · **Last updated:** 2026-07-25 (D-172)
 
 Short answers to the questions operators ask most often.
 Each answer links to the canonical doc for deeper reading.
@@ -23,14 +23,17 @@ survives AMS upgrades without any coordination.
 
 ### Q2. Which AMS versions are supported?
 
+Validated live on **AMS 3.0.3 Enterprise**; best-effort compatibility with
+**AMS 2.10+** via version-tolerance tests (mock profiles).
+
 | AMS Version | Support level |
 |---|---|
-| **3.0.3 Enterprise Edition (build 20260504\_1443)** | **Live-validated — primary target** (46/50 scenario scripts PASS, S17–S18) |
-| 3.0.2, 2.14.x, 2.10.0 | Mock-profile only — compatible in CI, not tested against a live server |
+| **3.0.3 Enterprise Edition (build 20260504\_1443)** | **Live-validated — primary target** (46/50 scenario scripts PASS) |
+| 2.10.x – 3.0.2 | Best-effort — version-tolerance tests (mock profiles); no live-wire guarantee |
 
-Deploy AMS 3.x. Real Docker images for older versions are unavailable on
-Docker Hub (all tags return 404 as of 2026-07-13), so those older rows are
-CI-only and carry no live-wire guarantee.
+Deploy AMS 3.x for production. Real Docker images for older versions are
+unavailable on Docker Hub (all tags return 404 as of 2026-07-13), so older
+versions are CI-only.
 
 > Full matrix and per-version field notes: `docs/compatibility.md`.
 
@@ -218,13 +221,14 @@ out before auto-reverting to standard pricing.
 
 ### Q21. Is there a free trial?
 
-Yes. Pulse offers a **14-day Pro trial** — self-serve, no credit card required, one
-per deployment. On expiry the deployment gracefully reverts to Free: all collected
-data is retained, paid features lock to Free entitlements, and nothing crashes. A
-trial that converts during the Founding Operators launch window qualifies for the
-campaign price (see Q20).
+Yes. **14-day Pro trial — no credit card.** Request a trial key from the Ant
+Media Marketplace listing or by emailing **support@beyondkaira.com**; the key
+arrives by email (typically within 1 business day) and activates in
+Settings → License. On expiry the deployment gracefully reverts to Free — no
+data loss. A trial that converts during the Founding Operators launch window
+qualifies for the campaign price (see Q20).
 
-> `docs/licensing.md` §2 (trial activation).
+> `docs/licensing-public.md` §3 (trial access).
 
 ---
 

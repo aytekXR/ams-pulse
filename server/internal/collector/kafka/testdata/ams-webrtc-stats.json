@@ -1,0 +1,11 @@
+{
+  "streamId": "stream-abc",
+  "webrtcClientId": "client-xyz",
+  "audioFrameSendPeriod": 20,
+  "videoFrameSendPeriod": 33,
+  "measured_bitrate": 1500000,
+  "send_bitrate": 1200000,
+  "time": "2024-01-15T10:30:00Z",
+  "hostAddress": "192.168.1.100",
+  "ipAddress": "10.0.0.5"
+}

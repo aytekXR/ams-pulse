@@ -1,5 +1,5 @@
 /**
- * Shared types for @pulse/beacon SDK.
+ * Shared types for ams-pulse-beacon SDK.
  * Aligned with contracts/events/beacon-event.schema.json (frozen, D-004).
  */
 

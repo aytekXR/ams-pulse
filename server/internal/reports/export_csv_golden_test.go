@@ -13,7 +13,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/reports"
+	"github.com/aytekXR/ams-pulse/server/internal/reports"
 )
 
 func TestWriteUsageCSV_DetailRowGoldenValues(t *testing.T) {

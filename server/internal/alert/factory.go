@@ -16,8 +16,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/pulse-analytics/pulse/server/internal/alert/channels"
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/alert/channels"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // BuildChannelFromRow is the shared channel factory. See file-level doc for usage.

@@ -70,8 +70,10 @@ qa/realams/load/tools/
 # licensegen local build artifact (CI uses `go run .`)
 qa/licensegen/licensegen
 
-# Marketplace screenshot PNGs — binary blobs; script is the reproducible artifact
-docs/marketplace/screenshots/
+# Marketplace screenshots are COMMITTED (S105/D-172): docs/user-guide.md embeds
+# them, so they must render on GitHub and survive a fresh clone. Regenerate with
+# qa/marketplace/capture-live-screenshots.mjs (portable; theme pinned).
+# The demo video stays out of git — it is attached to the GitHub release instead.
 
 # uipro-installed skill content (S30/D-092): local-only, NEVER commit —
 # the core ui-ux-pro-max skill has no license grant (public-repo

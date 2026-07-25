@@ -1,5 +1,5 @@
 /**
- * Session UUID generation for @pulse/beacon.
+ * Session UUID generation for ams-pulse-beacon.
  * Uses crypto.randomUUID() (available in all modern browsers and Node 14.17+).
  * Falls back to a Math.random-based v4 UUID if unavailable.
  */

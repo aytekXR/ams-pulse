@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://pulse.dev/schemas/alert-notification.json",
+  "$id": "https://pulse.beyondkaira.com/schemas/alert-notification.json",
   "title": "AlertNotification",
   "description": "Payload delivered by the alert evaluator to every notification channel adapter (and verbatim to generic-webhook channels). Finalized by INT-01 for wave-1 freeze.",
   "type": "object",

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/reports"
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/reports"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // ─── Seeded-month test ────────────────────────────────────────────────────────

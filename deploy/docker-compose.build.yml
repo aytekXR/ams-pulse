@@ -1,0 +1,29 @@
+# Pulse — build-from-source overlay.
+#
+# Adds a build: block to the pulse service so the local repository is compiled
+# instead of pulling the cosign-signed GHCR image.  Use this overlay when you
+# need to test an unreleased or locally modified binary:
+#
+#   docker compose \
+#     -f deploy/docker-compose.yml \
+#     -f deploy/docker-compose.build.yml \
+#     up -d --build
+#
+# The overlay sets image: ams-pulse:local-build so the locally built image is
+# tagged distinctly from ghcr.io/aytekxr/ams-pulse:* and cannot be confused
+# with the cosign-signed published release.
+
+services:
+  pulse:
+    image: ams-pulse:local-build
+    build:
+      context: ..
+      dockerfile: deploy/docker/pulse.Dockerfile
+
+  # The migrate one-shot must come from the SAME source build — otherwise the
+  # 0.4.1 image would apply an older baked schema than the source binary expects.
+  pulse-migrate:
+    image: ams-pulse:local-build
+    build:
+      context: ..
+      dockerfile: deploy/docker/pulse.Dockerfile

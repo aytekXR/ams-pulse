@@ -30,6 +30,11 @@ Set the same address in the marketplace listing. A ticketing alias (Freshdesk/Ze
 it later without changing the published address.
 _Set for launch (operator-delegated, D-169) — subject to operator override._
 
+**Trial key requests:** email **support@beyondkaira.com** with your deployment
+details to request a 14-day Pro trial key (no credit card required). The key
+typically arrives within 1 business day and activates via Settings → License.
+See `docs/licensing-public.md` §3 for the full trial policy.
+
 Business hours: **Monday–Friday 09:00–18:00 UTC**, excluding public holidays.
 State this explicitly in the Enterprise SLA addendum.
 _Set for launch (operator-delegated, D-169) — subject to operator override._
@@ -83,9 +88,8 @@ Attach the following to every bug report (GitHub Issue or email). Omitting items
 5. **AMS version** — visible in the AMS web panel under **About**, or via the AMS REST API
    `/LiveApp/rest/v2/version`.
 
-> **OPERATOR-DECISION** Decide whether to provide a bug-report issue template
-> (`.github/ISSUE_TEMPLATE/bug_report.yml`) that pre-fills these fields — recommended
-> for marketplace self-service.
+A bug-report issue template is available at `.github/ISSUE_TEMPLATE/bug_report.yml`
+and pre-fills these fields for GitHub Issues submissions.
 
 ---
 
@@ -107,4 +111,4 @@ is subject to the commercial agreement.
 ---
 
 *Support policy set for launch (operator-delegated, D-169). Remaining open `OPERATOR-DECISION`
-items (bug-report issue template §4, public roadmap §5) are non-blocking for marketplace submission.*
+item (public roadmap §5) is non-blocking for marketplace submission.*

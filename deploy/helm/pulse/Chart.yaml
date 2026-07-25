@@ -6,9 +6,9 @@ description: >
   with an optional Postgres meta store for HA deployments.
 type: application
 # Chart version (semver, independent of the pulse binary version).
-version: 0.1.0
+version: 0.2.0
 # App version matches the pulse binary release tag.
-appVersion: "0.1.0"
+appVersion: "0.4.1"
 
 keywords:
   - antmedia
@@ -17,13 +17,13 @@ keywords:
   - qoe
   - clickhouse
 
-home: https://github.com/pulse-analytics/pulse
+home: https://github.com/aytekXR/ams-pulse
 sources:
-  - https://github.com/pulse-analytics/pulse
+  - https://github.com/aytekXR/ams-pulse
 
 maintainers:
-  - name: INFRA-01
-    email: infra@pulse-analytics.io
+  - name: Pulse (beyondkaira.com)
+    email: support@beyondkaira.com
 
 # Sub-chart design decision (INFRA-01, WO-206):
 #   ClickHouse is bundled as a StatefulSet template rather than a Bitnami

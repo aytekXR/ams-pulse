@@ -616,7 +616,7 @@ enter a name. The created token and a ready-to-paste SDK snippet are shown
 once:
 
 ```js
-import { Pulse } from '@pulse/beacon';
+import { Pulse } from 'ams-pulse-beacon';
 
 const session = Pulse.init({
   ingestUrl: 'https://your-pulse-host', // the SDK appends /ingest/beacon itself

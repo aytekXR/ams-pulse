@@ -44,7 +44,7 @@ import (
 	nhws "nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 // rtpStatsHold is the duration the probe waits after ICE connects to accumulate

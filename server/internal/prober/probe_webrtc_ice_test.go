@@ -23,8 +23,8 @@ import (
 	nhws "nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/internal/prober"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/prober"
 )
 
 // ─── ICE signaling message shape (mirrors prober.wsSignalingMsg but local) ──

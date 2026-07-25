@@ -1,8 +1,3 @@
-<!--
-  DRAFT — INTERNAL. External use gated on operator review of
-  docs/assessment/final-assessment.md (D-081).
--->
-
 # Ant Media Marketplace — Submission Package Index
 
 **Product:** Pulse — Analytics & QoE Monitoring for Ant Media Server
@@ -18,9 +13,9 @@ or the D-081 external-use review) · **TBD-EXT** (needs an external step).
 | Artifact | Location | Status |
 |---|---|---|
 | Listing copy (title, tagline, description, bullets, tiers, pricing) | [`listing-draft.md`](listing-draft.md) | READY-OP (pricing + Founding Operators campaign set D-169; ladder settled D-166; only submit-gated) |
-| Screenshots — 6 listing shots, 1920×1080 live-app | [`screenshot-list.md`](screenshot-list.md) + `screenshots/` (regenerate: `node qa/marketplace/capture-live-screenshots.mjs`) | READY (regenerable; commit/upload choice at submission) |
+| Screenshots — 6 listing shots, 1920×1080 live-app | [`screenshot-list.md`](screenshot-list.md) + `screenshots/` (regenerate: `node qa/marketplace/capture-live-screenshots.mjs`) | READY (committed to `docs/marketplace/screenshots/`, S105/D-172; portable capture script; regenerable at any time) |
 | Logo / media kit | `brandkit/logo/` (SVG + PNG variants), OG banner `brandkit/assets/png/og-1200x630.png` | READY (final specs = meeting A3) |
-| Demo video | [`demo-video-script.md`](demo-video-script.md) | TBD-EXT (operator records) |
+| Demo video | [`demo-video-script.md`](demo-video-script.md) + rough-cut `docs/marketplace/demo/pulse-demo-roughcut.webm` | DRAFT-OP (rough-cut rendered D-170, attached to [GitHub release v0.4.1](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.1); operator records final with voiceover — TBD-EXT for voiceover only) |
 | Release notes ("what's new in 0.4") | [`release-notes.md`](release-notes.md) | READY (D-081 cleared D-169) |
 
 ## Documentation set (linkable as the product docs)
@@ -74,7 +69,7 @@ operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
   + `listing-draft.md`. Operator may override any figure.
 - ~~**Support channel + SLA**~~ **DECIDED (D-169):** `support@beyondkaira.com`; Pro 2-day / Business
   1-day / Enterprise 4-business-hour targets; hours Mon–Fri 09:00–18:00 UTC. Written into `support.md`.
-- ~~**Trial mechanics**~~ **DECIDED (D-169):** 14-day self-serve Pro trial, graceful revert to Free.
+- ~~**Trial mechanics**~~ **DECIDED (D-169):** 14-day Pro trial (no credit card; key delivered by email via support@beyondkaira.com or marketplace listing), graceful revert to Free.
 - ~~**D-081 review**~~ **CLEARED (D-169):** `final-assessment.md` reviewed on the operator's behalf;
   internal assessment docs stay internal (not part of the external listing).
 - ~~**Provision `support@beyondkaira.com`**~~ **DONE (2026-07-25, operator, D-171):** the mailbox
@@ -85,8 +80,9 @@ operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
 2. **Set up billing** for the tiers / campaign / trial in the marketplace's billing system.
 3. **Capacity number** — run the load lane on a dedicated PAYG AMS → replaces the PROVISIONAL claim
    now in `docs/compatibility.md`.
-4. **Demo video** — a rendered rough-cut exists (`docs/marketplace/demo/pulse-demo-roughcut.webm`,
-   D-170); operator re-records the final with voiceover.
+4. **Demo video** — rough-cut rendered (D-170, `docs/marketplace/demo/pulse-demo-roughcut.webm`)
+   and attached to [GitHub release v0.4.1](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.1);
+   operator re-records the final with voiceover.
 5. **Reply to Ankush Banyal** — draft ready (`ankush-reply-draft.md`, D-170); operator fills the
    [brackets] and sends.
 6. Optional: **roll prod to v0.4.1** (prod is healthy on v0.4.0-139); **rotate** the exposed secrets.

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://pulse.dev/schemas/beacon-event.json",
+  "$id": "https://pulse.beyondkaira.com/schemas/beacon-event.json",
   "title": "BeaconEvent",
   "description": "QoE event batch posted by the player beacon SDK to POST /ingest/beacon. Field naming is CMCD-aligned where applicable (PRD F3). Finalized by INT-01 for wave-1 freeze.",
   "type": "object",

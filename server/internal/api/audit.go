@@ -27,7 +27,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // actorFrom extracts the audit actor from the request context. Every mutating

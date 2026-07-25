@@ -3,7 +3,7 @@ package tenant
 import (
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 func rows() []meta.TenantRow {

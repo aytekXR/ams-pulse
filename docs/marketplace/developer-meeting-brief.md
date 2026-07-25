@@ -1,8 +1,8 @@
 <!--
-  DRAFT — INTERNAL. External use gated on operator review of
-  docs/assessment/final-assessment.md (D-081). This brief is for the OPERATOR
-  to use in the Ant Media developer meeting; the "share" column marks what can
-  be handed over vs. what is internal negotiation posture.
+  INTERNAL — operator brief. This brief is for the OPERATOR to use in the
+  Ant Media developer meeting; the "share" column marks what can be handed
+  over vs. what is internal negotiation posture. (The former D-081 external-use
+  gate was cleared by D-169.)
 -->
 
 # Ant Media developer meeting — brief & agenda
@@ -15,7 +15,7 @@ the business terms conversation.
 **Attach / share:** [`submission-package.md`](submission-package.md) (artifact index),
 [`../overview.md`](../overview.md), [`../compatibility.md`](../compatibility.md), the
 capacity number if the load lane has run. Everything else in this repo stays internal
-until the D-081 review clears it.
+unless marked shareable in the table below (the D-081 gate was cleared by D-169).
 
 ---
 

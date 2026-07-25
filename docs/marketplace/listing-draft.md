@@ -1,24 +1,12 @@
-<!--
-  DRAFT — INTERNAL. External use gated on operator submitting the listing to
-  the Ant Media Marketplace.
--->
-
-> **DRAFT — INTERNAL. External use gated on operator submitting the listing to
-> the Ant Media Marketplace.**
->
-> This document has not been reviewed by the Ant Media marketplace team.
-> Rows marked NEEDS-OPERATOR are blocked on operator action before the
-> listing can be submitted. **Pricing is set for launch (operator-delegated,
-> D-169) — subject to operator override.** Revenue-share rows are
-> UNVERIFIED (PRD target only; not yet negotiated).
+> Internal working copy; final text is pasted into the marketplace form by the operator at submission.
 
 ---
 
 # Ant Media Marketplace — Listing Draft
 
 **Product:** Pulse: Analytics & QoE Monitoring for AMS  
-**Prepared:** S27 / D-089 (2026-07-13); last revised S103 / D-169 (2026-07-25)  
-**Contact for submission:** NEEDS-OPERATOR (see §7 below)
+**Prepared:** S27 / D-089 (2026-07-13); last revised S105 / D-172 (2026-07-25)  
+**Contact for submission:** support@beyondkaira.com
 
 ---
 
@@ -44,18 +32,8 @@ Character count: 43 (limit 60 — within budget).
 
 Character count: 240 (limit 250 — within budget).
 
-<!-- INTERNAL POSITIONING NOTE — omit from all public copy.
-AMS Management-panel-reborn (G-27, public-repo evidence 2026-07-22, commit c4a0235,
-src/lib/api/client.ts MGMT_PREFIX='/rest/v2') ships live server-side analytics charts:
-per-stream bitrate/viewer/speed history, per-app viewer sparklines, system-resource
-and GPU trends, WebRTC client stats. It does NOT include: alerting or notification
-channels, player-side QoE beacon, long-horizon retention / rollups, scheduled billing
-reports, synthetic probes, or anomaly detection. Pulse's competitive positioning has
-shifted from "AMS has no analytics at all" to "the new AMS panel charts live server
-metrics; Pulse adds alerting (5 channels), viewer-side QoE beacon (3.52 KB), 13-month
-historical rollups, scheduled PDF/CSV billing reports, synthetic probes (4 protocols),
-and anomaly detection." Source: docs/compatibility.md §G-27 Public-repo evidence
-subsection (2026-07-22). Confirm remaining unknowns at the developer meeting. -->
+**Compatibility:** Validated live on AMS 3.0.3 Enterprise (current release); best-effort
+compatibility with AMS 2.10+ via version-tolerance tests (mock profiles).
 
 ---
 
@@ -148,7 +126,11 @@ Campaign price is locked at signup. At the 12-month renewal the subscription aut
 
 ### 14-day Pro trial
 
-Self-serve, no credit card required, one per deployment. On expiry the deployment gracefully reverts to Free — no data loss; paid features lock. A trial that converts within the Founding Operators window qualifies for the campaign price. (Decision: D-169 §2.)
+**14-day Pro trial — no credit card.** Request a trial key from the Ant Media Marketplace
+listing or by emailing **support@beyondkaira.com**; the key arrives by email (typically within
+1 business day) and activates in Settings → License. On expiry the deployment gracefully
+reverts to Free — no data loss. A trial that converts within the Founding Operators launch
+window qualifies for the campaign price. (Decision: D-169 §2.)
 
 ---
 
@@ -197,9 +179,10 @@ Self-serve, no credit card required, one per deployment. On expiry the deploymen
 
 Screenshots are produced by `qa/marketplace/capture-live-screenshots.mjs` against a
 route-mocked live-app build (Vite preview + Playwright; self-contained, starts and stops
-its own server). Output goes to `docs/marketplace/screenshots/` (gitignored).
-**The PNGs are not committed to the repository** — run the capture script to produce them
-before submission.
+its own server; no hardcoded machine paths). The committed set at
+`docs/marketplace/screenshots/` (S105/D-172) holds the six listing PNGs
+(`ss1-dashboard` … `ss6-probes`), one light-theme variant (`ss1-light`), and nine
+user-guide shots (`ug-*`); regenerate at any time with the capture script.
 
 | File | Subject | Capture method |
 |------|---------|----------------|
@@ -226,10 +209,11 @@ detect the missing dist and build it. The script uses Playwright Chromium; run
 
 ## 8. Trial-key onboarding paragraph
 
-> A **14-day Pro trial** is available — self-serve, no credit card required, one per deployment.
-> On expiry the deployment gracefully reverts to Free (no data loss; paid features lock).
-> A trial that converts within the Founding Operators launch window qualifies for the
-> campaign price. (Decision: D-169 §2.)
+> **14-day Pro trial — no credit card.** Request a trial key from the Ant Media Marketplace
+> listing or by emailing **support@beyondkaira.com**; the key arrives by email (typically within
+> 1 business day) and activates in Settings → License. On expiry the deployment gracefully
+> reverts to Free — no data loss. A trial that converts within the Founding Operators launch
+> window qualifies for the campaign price. (Decision: D-169 §2.)
 
 ---
 
@@ -242,20 +226,21 @@ Pulse installs in under 15 minutes. After installing via Docker Compose:
 4. To activate your Pro or Business license: paste your license key in
    **Settings → License** and click Activate. Features unlock immediately — no restart required.
 
-To start your 14-day Pro trial, use the self-serve trial option in the marketplace listing.
-For support, contact [support channel — NEEDS-OPERATOR].
+To start your 14-day Pro trial, email **support@beyondkaira.com** or request a trial key
+from the marketplace listing; the key arrives by email within 1 business day.
+For support, contact support@beyondkaira.com.
 
 ---
 
-## 9. Support and licensing rows (NEEDS-OPERATOR-CONTACT)
+## 9. Support and licensing rows
 
-| Row | Status | Action required |
-|-----|--------|-----------------|
-| Support channel / SLA | NEEDS-OPERATOR-CONTACT | Define and publish a support URL (email, GitHub Issues, or hosted forum). Checklist row 7 in `docs/assessment/final-assessment.md` §3. |
-| Public licensing terms | NEEDS-OPERATOR-CONTACT | Publish human-readable licensing terms (PolyForm NC for self-hosted; commercial license for vendor use). Checklist row 8. |
-| Revenue-share terms | PARTIALLY KNOWN | First-year terms publicly stated: 100% to vendor, no commission (`submission-process.md` §1). Confirm post-year-1 terms at the developer meeting. Checklist row 9. |
-| Listing submission | NEEDS-OPERATOR-CONTACT | Initiate contact with Ant Media developer-relations or marketplace team. Checklist row 10. |
-| AMS version support requirement | NEEDS-OPERATOR-CONTACT | Ask Ant Media what minimum AMS version a marketplace product must support. Q5 in `docs/assessment/final-assessment.md` §6. |
+| Row | Status | Notes |
+|-----|--------|-------|
+| Support channel / SLA | RESOLVED (D-169/D-171) | `support@beyondkaira.com`; Pro 2-day / Business 1-day / Enterprise 4-business-hour targets; Mon–Fri 09:00–18:00 UTC; mailbox live. Published in `docs/support.md`. |
+| Public licensing terms | RESOLVED (D-169) | Pricing, tiers, Founding Operators campaign, and 14-day trial published in `docs/licensing-public.md`. Checklist row 8 closed. |
+| Revenue-share terms | PARTIALLY KNOWN | First-year terms publicly stated: 100% to vendor, no commission (`submission-process.md` §1). Post-year-1 terms: confirm at the developer meeting. Checklist row 9. |
+| Listing submission | NEEDS-OPERATOR | Operator initiates contact with Ant Media developer-relations / marketplace team. Checklist row 10. |
+| AMS version support requirement | NEEDS-OPERATOR | Ask Ant Media what minimum AMS version a marketplace product must support. Q5 in `docs/assessment/final-assessment.md` §6. |
 
 ---
 
@@ -278,7 +263,7 @@ GitHub issue tracker; they do not require operator clearance to cite:
 
 ---
 
-*Produced at S27/D-089; revised S103/D-169 (2026-07-25). Evidence sources:
+*Produced at S27/D-089; revised S103/D-169; last revised S105/D-172 (2026-07-25). Evidence sources:
 `docs/assessment/final-assessment.md` §3, `docs/prd-report.md` §7.11,
 `server/internal/license/license.go:90–150` (entitlements), `contracts/openapi/pulse-api.yaml`
 (42 paths / 59 operations / 73 schemas), `docs/compatibility.md` §G-27 (new-panel competitive scope),

@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // readMetaDDL reads the meta DDL from the contracts directory.

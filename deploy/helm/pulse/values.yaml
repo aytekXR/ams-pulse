@@ -252,10 +252,11 @@ clickhouse:
     existingSecret: ""   # REQUIRED for production; empty = unauthenticated (dev/test only)
 
   image:
-    # clickhouse/clickhouse-server:24.8
-    # Pin to digest in production.
+    # clickhouse/clickhouse-server:24.8 — digest-pinned (S105), same digest the
+    # compose stack pins (deploy/docker-compose.yml, pinned 2026-06-11). The
+    # tag@digest form is valid image-ref syntax; the digest wins on pull.
     repository: clickhouse/clickhouse-server
-    tag: "24.8"
+    tag: "24.8@sha256:1d1f6508eba2dccce2cee9913907c5f7766327debc57a6b1991f2c9e3176c163"
     pullPolicy: IfNotPresent
 
   # wait-for-clickhouse init container image (only rendered when clickhouse.enabled=true).

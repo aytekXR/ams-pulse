@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/alert"
+	"github.com/aytekXR/ams-pulse/server/internal/alert"
 )
 
 func TestEvalAnomalyMetric_FiresAtExactSigmaBoundary(t *testing.T) {
