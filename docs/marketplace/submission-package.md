@@ -17,7 +17,7 @@ or the D-081 external-use review) · **TBD-EXT** (needs an external step).
 
 | Artifact | Location | Status |
 |---|---|---|
-| Listing copy (title, tagline, description, bullets, tiers, pricing) | [`listing-draft.md`](listing-draft.md) | DRAFT-OP (prices PROPOSED; MaxNodes reconcile; D-081) |
+| Listing copy (title, tagline, description, bullets, tiers, pricing) | [`listing-draft.md`](listing-draft.md) | DRAFT-OP (prices still PROPOSED — need sign-off; MaxNodes ladder now settled D-166; D-081) |
 | Screenshots — 6 listing shots, 1920×1080 live-app | [`screenshot-list.md`](screenshot-list.md) + `screenshots/` (regenerate: `node qa/marketplace/capture-live-screenshots.mjs`) | READY (regenerable; commit/upload choice at submission) |
 | Logo / media kit | `brandkit/logo/` (SVG + PNG variants), OG banner `brandkit/assets/png/og-1200x630.png` | READY (final specs = meeting A3) |
 | Demo video | [`demo-video-script.md`](demo-video-script.md) | TBD-EXT (operator records) |
@@ -28,7 +28,7 @@ or the D-081 external-use review) · **TBD-EXT** (needs an external step).
 | Doc | Location | Status |
 |---|---|---|
 | Product overview + architecture (diagrams) | [`../overview.md`](../overview.md) | READY |
-| Install guide (quickstart / Compose / binary / Helm) | [`../runbooks/install.md`](../runbooks/install.md) | READY (GHCR public flip pending for anonymous quickstart) |
+| Install guide (quickstart / Compose / binary / Helm) | [`../runbooks/install.md`](../runbooks/install.md) | READY (GHCR public + anonymous quickstart verified end-to-end, D-168) |
 | User guide (per-screen) | [`../user-guide.md`](../user-guide.md) | READY |
 | Administrator guide (full config reference) | [`../admin-guide.md`](../admin-guide.md) | READY |
 | API guide + rendered OpenAPI reference | [`../api-guide.md`](../api-guide.md) + [`../api/index.html`](../api/index.html) | READY |
@@ -62,13 +62,22 @@ operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
 
 ## Blocking items before external submission
 
+**✅ DONE (2026-07-25):**
+- ~~**GHCR public** — reviewers must `docker pull` anonymously.~~ **DONE (D-168):** package is
+  public; the anonymous clean-room install (`docker pull …:0.4.1` → quickstart → live dashboard,
+  collector `ok`, events flowing) was verified end-to-end with zero credentials.
+- ~~**MaxNodes reconcile** (Pro 10 vs Business 5 inversion)~~ **DONE (D-166):** Business is now 50;
+  ladder is monotonic (Free 1 / Pro 10 / Business 50 / Enterprise ∞) with a regression test. The
+  *prices* still need sign-off (item 2 below) but the node ladder is settled.
+
+**Still needed — all operator-owned (no engineering left):**
 1. **D-081 review** — operator reviews `docs/assessment/final-assessment.md`; clears the
    DRAFT-INTERNAL headers.
-2. **GHCR public** — reviewers must `docker pull` anonymously.
-3. **Pricing + tier sign-off** — incl. the Pro(10)/Business(5) MaxNodes reconcile.
-4. **Support channel + SLA** — fill `docs/support.md` decision boxes.
-5. **Trial mechanics** — confirm the 14-day Pro proposal + vault key-mint ceremony.
-6. **Capacity number** — run the load lane; fill `docs/compatibility.md`.
-7. **Demo video** — record per the script.
-8. Then: reply to Ankush Banyal — documentation ready, request the developer meeting
+2. **Pricing sign-off** — the tier/node ladder is fixed in code; the dollar figures are still
+   "(PROPOSED)". Confirm them.
+3. **Support channel + SLA** — fill `docs/support.md` decision boxes.
+4. **Trial mechanics** — confirm the 14-day Pro proposal + vault key-mint ceremony.
+5. **Capacity number** — run the load lane on a dedicated PAYG AMS; fill `docs/compatibility.md`.
+6. **Demo video** — record per the script (or authorize a Playwright rough cut).
+7. Then: reply to Ankush Banyal — documentation ready, request the developer meeting
    ([`developer-meeting-brief.md`](developer-meeting-brief.md)).
