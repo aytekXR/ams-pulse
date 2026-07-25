@@ -29,12 +29,29 @@ package aggregator
 
 import (
 	"log/slog"
+	"math"
 	"sync"
 	"time"
 
 	"github.com/aytekXR/ams-pulse/server/internal/collector/ingest"
 	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
+
+// clampToInt converts an untrusted float64 (event-data payloads are attacker-
+// influenced JSON) to int with explicit bounds instead of relying on the
+// platform-dependent width of int: values are clamped to the int32 domain,
+// which comfortably covers every counter this package stores (viewer counts,
+// processor counts, consecutive-error counters).
+func clampToInt(f float64) int {
+	switch {
+	case f > math.MaxInt32:
+		return math.MaxInt32
+	case f < math.MinInt32:
+		return math.MinInt32
+	default:
+		return int(f)
+	}
+}
 
 // EdgeStreamChecker is satisfied by *cluster.Discovery (and test doubles).
 // The aggregator uses it to avoid double-counting viewer counts in
@@ -350,7 +367,7 @@ func (a *Aggregator) onStreamStats(ev domain.ServerEvent) {
 		if vc, ok := ev.Data["viewer_count"].(int); ok {
 			s.ViewerCount = vc
 		} else if vcf, ok := ev.Data["viewer_count"].(float64); ok {
-			s.ViewerCount = int(vcf)
+			s.ViewerCount = clampToInt(vcf)
 		}
 	}
 	if bps, ok := ev.Data["bitrate_kbps"].(float64); ok {
@@ -388,7 +405,7 @@ func (a *Aggregator) onNodeStats(ev domain.ServerEvent) {
 			return
 		}
 		if errs, ok := ev.Data["consec_api_errors"].(float64); ok {
-			existing.ConsecAPIErrors = int(errs)
+			existing.ConsecAPIErrors = clampToInt(errs)
 		}
 		// Snapshot already references the same pointer — update is visible immediately.
 		a.snapshot.UpdatedAt = time.Now()
@@ -436,7 +453,7 @@ func (a *Aggregator) onNodeStats(ev domain.ServerEvent) {
 	}
 	// processor_count is stored as int in Data but JSON round-trips as float64.
 	if v, ok := ev.Data["processor_count"].(float64); ok && v > 0 {
-		ns.ProcessorCount = int(v)
+		ns.ProcessorCount = clampToInt(v)
 	} else if v, ok := ev.Data["processor_count"].(int); ok && v > 0 {
 		ns.ProcessorCount = v
 	}
@@ -445,7 +462,7 @@ func (a *Aggregator) onNodeStats(ev domain.ServerEvent) {
 		ns.APILatencyMS = v
 	}
 	if v, ok := ev.Data["consec_api_errors"].(float64); ok {
-		ns.ConsecAPIErrors = int(v)
+		ns.ConsecAPIErrors = clampToInt(v)
 	}
 	a.nodes[ev.NodeID] = ns
 	// O(1): update snapshot node map in-place (no rebuild needed).

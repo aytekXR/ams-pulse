@@ -16,6 +16,7 @@ package sessions
 
 import (
 	"log/slog"
+	"math"
 	"sync"
 	"time"
 
@@ -167,7 +168,16 @@ func (s *Stitcher) handleLeave(ev domain.ServerEvent) {
 	}
 	state.sess.EndedAt = now
 	state.sess.UpdatedAt = now
-	state.sess.WatchTimeS = uint32(watchTimeS)
+	// Bounded conversion: watch_time_s arrives as untrusted event data; clamp to
+	// the uint32 domain instead of wrapping on negative/oversized values.
+	switch {
+	case watchTimeS < 0:
+		state.sess.WatchTimeS = 0
+	case watchTimeS > math.MaxUint32:
+		state.sess.WatchTimeS = math.MaxUint32
+	default:
+		state.sess.WatchTimeS = uint32(watchTimeS)
+	}
 	if state.sess.WatchTimeS == 0 {
 		// Derive from timestamps if AMS didn't send it.
 		elapsed := now.Sub(state.sess.StartedAt)
