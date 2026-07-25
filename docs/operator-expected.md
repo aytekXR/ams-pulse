@@ -11,15 +11,25 @@
 > - **Demo:** the loop will attempt a Playwright rough-cut walkthrough next session; you record the final.
 > - **D-081:** the assessment was reviewed and the gate cleared for submission (internal assessment docs stay internal).
 >
+> **✅ Two of these the loop just did for you (S103):** the **Ankush reply is DRAFTED** →
+> `docs/marketplace/ankush-reply-draft.md` (fill the [brackets] and send from your account), and a
+> **demo rough-cut video is RENDERED** → `docs/marketplace/demo/pulse-demo-roughcut.webm` (~3.8 MB,
+> a silent walkthrough of the six flagship screens; regenerate with `node
+> qa/marketplace/capture-demo-video.mjs` in a browser-deps env — the script header has the one-line
+> Docker command the loop used).
+>
 > ### ▶ What is LEFT — only things the loop cannot do for you:
 > 1. **Submit the listing** to the Ant Media Marketplace (your account).
 > 2. **Set up billing** for the campaign/trial/standard prices in the marketplace's billing system (your Stripe/marketplace account).
 > 3. **Provision `support@beyondkaira.com`** as a monitored mailbox (or a ticketing alias) before GA.
 > 4. **Run the load lane** on a dedicated PAYG AMS → gives the real capacity number to replace the provisional one.
-> 5. **Record the demo video FINAL** (the loop provides a rough cut to work from).
-> 6. **Send the reply to Ankush** (your identity) — the loop will DRAFT it next session for you to send.
+> 5. **Record the demo video FINAL** — a rendered rough cut (above) is ready to re-record with your voiceover/branding.
+> 6. **Send the reply to Ankush** — the draft (above) is ready; send it from your account.
 > 7. **Roll prod to v0.4.1** if/when you want (optional — prod is healthy on v0.4.0-139; a stamped `deployment.sh` deploy, your go-ahead).
 > 8. **Rotate** the chat-exposed / VPS-group-readable secrets in `deploy/.env` / `oguz-testing.md`.
+> 9. *(minor, if you want the video regenerable ON the VPS)* install the Chromium OS libraries there
+>    (`sudo npx playwright install-deps chromium`) — they are root-gated and absent, so the loop rendered
+>    the rough cut in a Docker container instead. Not required; the CI runners and the Docker path both work.
 >
 > Everything below (★S102/★S101) is superseded context. Prod is healthy and UNCHANGED (v0.4.0-139, collector `ok`).
 >

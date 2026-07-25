@@ -9703,3 +9703,13 @@ Reviewed `docs/assessment/final-assessment.md` on the operator's behalf: it is a
 7. **Rotate** the chat-exposed / VPS-group-readable secrets.
 
 Everything else that was "operator-owned" is now decided. No code changed; no prod roll (prod stays v0.4.0-139).
+
+## D-170 — (2026-07-25, SESSION-103 execution): shipped the two autonomous first-draft assets D-169 planned — the Ankush reply draft and a rendered demo rough-cut. Docs/tooling only; NO code, NO prod roll.
+
+**Ankush reply — DRAFTED.** `docs/marketplace/ankush-reply-draft.md`: a ready-to-send message requesting the Ant Media developer meeting (docs ready, v0.4.1 public + install-verified), derived from `developer-meeting-brief.md`. Bracketed blanks for the operator; **the operator sends it** (outbound, their identity) — the loop does not send on their behalf.
+
+**Demo rough-cut — GENERATOR shipped + video RENDERED.** `qa/marketplace/capture-demo-video.mjs`: a self-contained Playwright walkthrough of the six flagship screens (dashboard → ingest → alerts → QoE → analytics → reports) driven against `vite preview` with fully route-mocked API data (fixtures mirror `capture-live-screenshots.mjs`) — no backend, no AMS, never prod, deterministic epoch (no `Date.now()`). Records a silent `.webm` to `docs/marketplace/demo/` (gitignored, regenerable — same convention as the screenshots). Rendered this session → `pulse-demo-roughcut.webm` (~3.8 MB); the operator re-records the final with voiceover.
+
+**Finding — Chromium OS libraries are absent + root-gated on the VPS.** Playwright's browser binaries download with `npm install`, but the system libs (`libatk`, `libcups`, `libasound`, `libcairo`, `libpango`, …) need `sudo npx playwright install-deps` and are NOT installed here, so Chromium won't launch natively on this host (verified via `ldd` + a launch attempt). Worked around by rendering inside `mcr.microsoft.com/playwright:v1.61.1-jammy` (mounted at the identical host path, `--network host`, `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`). Implication: any local Playwright/browser tooling (this generator, and the existing screenshot capture) needs the same container path or the operator installing the deps — the CI runners already have them. Recorded as an optional operator item (operator-expected ★S103 #9). This is the same class of gap as the absent Android JVM/Gradle toolchain — a host dependency the loop cannot self-install.
+
+**Net:** SESSION-103's autonomous work is complete; the autonomous backlog is empty. All that remains is operator-outbound / their infra (submit, billing, mailbox, load lane, demo final, send Ankush, optional prod roll, secret rotation) plus decision-gated eng (§2.45 built-in rule, §2.44, Dependabot). Prod unchanged (v0.4.0-139, collector ok).
