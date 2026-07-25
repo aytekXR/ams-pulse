@@ -24,8 +24,8 @@ import (
 	"time"
 
 	clickhousego "github.com/ClickHouse/clickhouse-go/v2"
-	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse/migrations"
-	"github.com/pulse-analytics/pulse/server/internal/testutil"
+	"github.com/aytekXR/ams-pulse/server/internal/store/clickhouse/migrations"
+	"github.com/aytekXR/ams-pulse/server/internal/testutil"
 )
 
 // TestIntegration_ProbeResultsTTL verifies that the migration set applies a

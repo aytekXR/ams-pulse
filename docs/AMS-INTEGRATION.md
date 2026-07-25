@@ -231,16 +231,24 @@ Before connecting Pulse to a real AMS node:
      the JSESSIONID cookie automatically, with re-login on 401/403. This is the
      primary auth path for AMS 3.x Enterprise deployments.
 
+   **Auth-mode mapping:**
+
+   | Pulse auth mode | Env vars | AMS-side setting | Notes |
+   |---|---|---|---|
+   | Cookie-session (default, live-validated) | `PULSE_AMS_LOGIN_EMAIL` + `PULSE_AMS_LOGIN_PASSWORD` | AMS default panel auth (`jwtServerControlEnabled=false`) | Primary path for AMS 3.x Enterprise; Pulse manages JSESSIONID automatically |
+   | Static Bearer token | `PULSE_AMS_AUTH_TOKEN` | App-scope: per-app `jwtControlEnabled`; management-scope: server-level `server.jwtServerControlEnabled` | Pulse sends both `Authorization: Bearer <token>` **and** `ProxyAuthorization: <token>` on every request — a single token value covers both scopes |
+
 3. **Network path** — Pulse's `pulse` container must be able to open a TCP
    connection to `PULSE_AMS_URL`. Verify with:
    ```
    sg docker -c "docker exec pulse curl -s http://<ams-host>:5080/rest/v2/version"
    ```
 
-4. **AMS version** — v2.8 and above are supported. The amsclient tolerates field
-   variance across v2.10, v2.14, and v3.0 (W2c, D-025). Earlier versions have
-   not been tested; the primary risk is an unknown `/rest/v2/applications`
-   envelope shape.
+4. **AMS version** — Validated live on AMS 3.0.3 Enterprise (current release);
+   best-effort compatibility with AMS 2.10+ via version-tolerance tests (mock profiles).
+   The amsclient tolerates field variance across v2.10, v2.14, and v3.0 (W2c, D-025).
+   Versions earlier than 2.10 are not tested and not supported; the primary risk is
+   an unknown `/rest/v2/applications` envelope shape.
 
 5. **TLS recommendation** — use `https://` for the AMS URL in production so that
    the bearer token travels encrypted. See section 5 (Security).
@@ -399,13 +407,42 @@ allow up to 10 s after startup.
 
 ### 3.7 Standalone resource metrics and Kafka (DG-05)
 
+> **⚠️ EXPERIMENTAL / PREVIEW — pending AV-15 live validation.**
+> The Kafka consumer is aligned to official AMS topic names and message shapes
+> (source-derived from AMS `StatsCollector.java`, fixture-tested), but has **not**
+> been connected to a live AMS Kafka producer. Treat the Kafka ingest path as
+> preview until AV-15 is resolved.
+
 Standalone resource metrics (CPU, memory, disk) for the fleet node card require
 a Kafka feed from AMS — the REST `/rest/v2/system-status` endpoint on AMS 3.x
 returns only `{osName, osArch, javaVersion, processorCount}` and does not carry
-real-time load data. Operators who need per-node resource utilisation in Pulse
-must enable the Kafka source; see `docs/kafka-integration.md` for the
-configuration guide (authored in parallel — path is authoritative, file content
-is in progress).
+real-time load data.
+
+**AMS-side setup (`conf/red5.properties`):**
+
+```properties
+# AMS conf/red5.properties — enable the Kafka producer:
+server.kafka_brokers=kafka1:9092,kafka2:9092
+```
+
+AMS publishes to two official topics:
+
+| Topic | Content | Pulse handling |
+|---|---|---|
+| `ams-instance-stats` | Node-level CPU, memory, disk utilisation | Parsed → Fleet resource gauges |
+| `ams-webrtc-stats` | Per-viewer WebRTC client records | Subscribed but currently **skipped** — the per-viewer shape has no clean domain mapping yet (`docs/kafka-integration.md` §4.5) |
+
+**Pulse-side setup (`deploy/.env`):**
+
+```env
+PULSE_KAFKA_BROKERS=kafka1:9092,kafka2:9092
+# Optional: override topic list (comma-separated; default = ams-instance-stats,ams-webrtc-stats):
+PULSE_KAFKA_TOPICS=ams-instance-stats,ams-webrtc-stats
+```
+
+`PULSE_KAFKA_TOPICS` overrides the topic list when your AMS deployment uses
+non-standard topic names. Leave unset to use the official defaults above.
+See `docs/kafka-integration.md` for the complete configuration reference.
 
 ---
 
@@ -672,6 +709,7 @@ Complete table of `PULSE_*` variables relevant to AMS integration, read from
 | `PULSE_WEBHOOK_TIMESTAMP_SKEW` | ± acceptance window for `X-Ams-Timestamp` when the above is `true` (Go duration) | `5m` | No |
 | `PULSE_KAFKA_BROKERS` | Comma-separated Kafka broker addresses; empty = disabled | _(empty)_ | No |
 | `PULSE_KAFKA_GROUP_ID` | Kafka consumer group ID | `pulse-collector` | No |
+| `PULSE_KAFKA_TOPICS` | Comma-separated Kafka topic list | `ams-instance-stats,ams-webrtc-stats` | No |
 | `PULSE_LISTEN_ADDR` | Main API listen address | `:8090` | No |
 | `PULSE_INGEST_LISTEN_ADDR` | Dedicated beacon ingest listener; empty = use main port | _(empty)_ | No |
 | `PULSE_CLICKHOUSE_DSN` | ClickHouse native protocol DSN | `clickhouse://localhost:9000/pulse` | Yes |
@@ -752,17 +790,45 @@ curl -s -X PUT https://your-domain/api/v1/admin/sources/${SOURCE_ID} \
   -d '{"webhook_secret": "your-strong-per-source-secret"}'
 ```
 
-**Concrete operator example — configure AMS to POST to the per-source URL:**
+**Concrete operator example — signing-proxy pattern (required on AMS 3.0.3):**
 
-In AMS Management Console > Settings > Webhooks for the source named `production-eu`:
-- **Webhook URL:** `https://beyondkaira.com/webhook/ams/production-eu`
-- **Webhook secret:** the value you set in `webhook_secret` above
-- **Header name:** `X-Ams-Signature`
+> **⚠️ AMS 3.0.3 does not expose HMAC-secret or signature-header fields in its
+> Management Console** (confirmed D-066; §4.5). Do not point AMS's `listenerHookURL`
+> directly at Pulse's webhook listener — every request will return **401** because
+> AMS sends unsigned payloads.
 
-Pulse will validate the HMAC using the per-source secret stored for `production-eu`.
-A different AMS instance (e.g. `production-us`) must use its own per-source URL
-(`/webhook/ams/production-us`) and its own secret; its requests on
-`/webhook/ams/production-eu` will be rejected.
+The supported delivery pattern uses a small **signing proxy** between AMS and Pulse:
+
+```
+AMS  →  (listenerHookURL)  →  signing proxy  →  Pulse /webhook/ams/{source_name}
+```
+
+1. **Configure AMS** — in AMS Management Console > Settings > Webhooks, set
+   `listenerHookURL` to point at your signing proxy, for example:
+   ```
+   https://your-proxy.example.com/sign/production-eu
+   ```
+   AMS retries delivery on non-200 responses (`webhookRetryCount` /
+   `webhookRetryDelay`). Pulse's listener responds **200** even on parse failures,
+   so AMS will not loop-retry on malformed payloads.
+
+2. **Signing proxy** — your proxy receives the raw AMS POST (JSON or
+   `application/x-www-form-urlencoded` — both accepted by Pulse's parser), computes:
+   ```
+   X-Ams-Signature: sha256=<hex(HMAC-SHA256(raw-body, per-source-secret))>
+   ```
+   and forwards to `https://your-domain/webhook/ams/production-eu`. The body can
+   be forwarded verbatim; Pulse's parser accepts the official AMS field names (`id`
+   as stream-id fallback when `streamId` is absent; `vodReady` events carry `vodId`
+   + `duration`).
+
+3. **Per-source secret** — configure it on the Pulse side only (already shown above
+   via `PUT /api/v1/admin/sources/{id}`). Pulse validates the `X-Ams-Signature`
+   using this stored secret.
+
+**Source isolation:** a different AMS instance (e.g. `production-us`) must use its
+own per-source URL (`/webhook/ams/production-us`) and its own secret. Requests on
+`/webhook/ams/production-eu` from a different source will be rejected (401).
 
 ### B3 — Secrets via Docker secrets rather than env vars (partially shipped)
 

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // TestAMSSource_WebhookSecretEnc_RoundTrip verifies that webhook_secret_enc is

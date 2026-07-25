@@ -5,12 +5,13 @@ package webhook
 // Complements webhook_test.go without duplicating its cases.
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 // ─── Name ────────────────────────────────────────────────────────────────────
@@ -312,6 +313,9 @@ func TestJsonInt(t *testing.T) {
 		{"malformed string", json.RawMessage(`"not a number"`), 0},
 		{"zero", json.RawMessage(`0`), 0},
 		{"negative", json.RawMessage(`-5`), -5},
+		// form-urlencoded values arrive as JSON strings — must tolerate numeric strings.
+		{"numeric string tolerant", json.RawMessage(`"123"`), 123},
+		{"numeric string negative", json.RawMessage(`"-7"`), -7},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -335,6 +339,8 @@ func TestJsonInt64(t *testing.T) {
 		{"large number", json.RawMessage(`9999999999`), 9999999999},
 		{"malformed string", json.RawMessage(`"not a number"`), 0},
 		{"zero", json.RawMessage(`0`), 0},
+		// form-urlencoded values arrive as JSON strings — must tolerate numeric strings.
+		{"numeric string tolerant", json.RawMessage(`"9999999998"`), 9999999998},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -491,5 +497,125 @@ func TestHandleWebhookArrayBodySinkContents(t *testing.T) {
 	}
 	if sink.Len() != 2 {
 		t.Errorf("expected 2 events from array body, got %d", sink.Len())
+	}
+}
+
+// ─── Official AMS payload shapes (S105 / WO-A2) ─────────────────────────────
+
+// TestWebhookIDFallback verifies that the official AMS "id" field is accepted
+// as the stream identifier when "streamId" is absent. AMS payloads carry:
+// id, action, streamName, category, metadata, timestamp, app.
+func TestWebhookIDFallback(t *testing.T) {
+	h, _ := newTestHandler(t, testSecret)
+	payload := `{"action":"liveStreamStarted","id":"stream-from-ams","streamName":"mystream","category":"liveStream","timestamp":1700000000,"app":"live"}`
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(payload), &raw); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	evs := h.translateWebhook(raw)
+	if len(evs) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(evs))
+	}
+	if evs[0].StreamID != "stream-from-ams" {
+		t.Errorf("StreamID = %q, want %q", evs[0].StreamID, "stream-from-ams")
+	}
+	if evs[0].Type != domain.EventStreamPublishStart {
+		t.Errorf("Type = %q, want %q", evs[0].Type, domain.EventStreamPublishStart)
+	}
+}
+
+// TestWebhookStreamID_LegacyStreamId is the regression guard for the id-fallback
+// change: an existing payload using "streamId" must still work.
+func TestWebhookStreamID_LegacyStreamId(t *testing.T) {
+	h, _ := newTestHandler(t, testSecret)
+	var raw map[string]json.RawMessage
+	json.Unmarshal([]byte(`{"action":"liveStreamStarted","streamId":"legacy-stream","app":"live"}`), &raw) //nolint:errcheck
+	evs := h.translateWebhook(raw)
+	if len(evs) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(evs))
+	}
+	if evs[0].StreamID != "legacy-stream" {
+		t.Errorf("StreamID = %q, want %q", evs[0].StreamID, "legacy-stream")
+	}
+}
+
+// TestWebhookVodReadyCompleteness verifies that vodReady events carry vod_id
+// and duration_ms (AMS sends duration in ms) in addition to path and size_bytes.
+func TestWebhookVodReadyCompleteness(t *testing.T) {
+	h, _ := newTestHandler(t, testSecret)
+	payload := `{"action":"vodReady","id":"s1","app":"live","vodName":"/recordings/s1.mp4","vodId":"vod-abc-123","duration":90000}`
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(payload), &raw); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	evs := h.translateWebhook(raw)
+	if len(evs) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(evs))
+	}
+	if evs[0].Type != domain.EventRecordingReady {
+		t.Errorf("Type = %q, want %q", evs[0].Type, domain.EventRecordingReady)
+	}
+	vodID, _ := evs[0].Data["vod_id"].(string)
+	if vodID != "vod-abc-123" {
+		t.Errorf("vod_id = %q, want %q", vodID, "vod-abc-123")
+	}
+	durMS, _ := evs[0].Data["duration_ms"].(int64)
+	if durMS != 90000 {
+		t.Errorf("duration_ms = %d, want 90000", durMS)
+	}
+	path, _ := evs[0].Data["path"].(string)
+	if path != "/recordings/s1.mp4" {
+		t.Errorf("path = %q, want %q", path, "/recordings/s1.mp4")
+	}
+}
+
+// TestWebhookFormURLEncoded_Accepted verifies that a correctly HMAC-signed
+// application/x-www-form-urlencoded body is accepted (200) and yields a
+// correct event. HMAC is computed over the raw form bytes, unchanged.
+func TestWebhookFormURLEncoded_Accepted(t *testing.T) {
+	h, sink := newTestHandler(t, testSecret)
+	// AMS sends: id, action, streamName, category, timestamp, app.
+	body := []byte("action=liveStreamStarted&id=form-stream&app=live&timestamp=1700000000")
+	sig := hmacSign(body, testSecret)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/ams", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-Ams-Signature", sig)
+	rr := httptest.NewRecorder()
+	h.HTTPHandler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if sink.Len() != 1 {
+		t.Fatalf("expected 1 event, got %d", sink.Len())
+	}
+	ev := sink.events[0]
+	if ev.StreamID != "form-stream" {
+		t.Errorf("StreamID = %q, want %q", ev.StreamID, "form-stream")
+	}
+	if ev.Type != domain.EventStreamPublishStart {
+		t.Errorf("Type = %q, want %q", ev.Type, domain.EventStreamPublishStart)
+	}
+}
+
+// TestWebhookFormURLEncoded_WrongHMAC_401 verifies that an incorrect HMAC on a
+// form-urlencoded body is rejected (fail-closed unchanged).
+func TestWebhookFormURLEncoded_WrongHMAC_401(t *testing.T) {
+	h, sink := newTestHandler(t, testSecret)
+	body := []byte("action=liveStreamStarted&id=form-stream&app=live")
+	badSig := hmacSign(body, "wrong-secret")
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/ams", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-Ams-Signature", badSig)
+	rr := httptest.NewRecorder()
+	h.HTTPHandler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rr.Code)
+	}
+	if sink.Len() != 0 {
+		t.Errorf("expected 0 events, got %d", sink.Len())
 	}
 }

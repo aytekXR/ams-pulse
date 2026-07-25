@@ -10,6 +10,68 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Kafka collector now consumes the real AMS Kafka feed (D-172, REVIEW-MP-2026-07-25
+  Issue 1).** The consumer subscribed to `ams-server-events` — a topic AMS never publishes —
+  and parsed flat `cpuUsage`/`memoryUsage`/`diskUsage` fields the official messages don't
+  carry. Default topics are now `ams-instance-stats,ams-webrtc-stats` (verified against AMS
+  `StatsCollector.java`), overridable via the new `PULSE_KAFKA_TOPICS` env var; the
+  normalizer routes by topic and parses the official nested shapes (`instanceId`, nested
+  `cpuUsage`/`systemMemoryInfo`/`fileSystemInfo`), pinned as source-derived testdata
+  fixtures. `ams-webrtc-stats` messages are consumed and skipped (no clean domain mapping
+  yet). Unknown/custom topics keep the legacy field-sniffing for bridge feeds. The feature
+  stays EXPERIMENTAL/PREVIEW until live validation against a real AMS producer (AV-15).
+- **Webhook listener accepts the official AMS payload (Issue 2).** The stream id now falls
+  back to the official `id` field (`streamId` still honored first for existing proxies);
+  `vodReady` events now capture `vod_id` and `duration_ms`; `application/x-www-form-urlencoded`
+  bodies (an AMS-configurable content type) are parsed instead of 200-and-dropped, with
+  numeric-string tolerance. HMAC-over-raw-body verification and the deliberate 200-on-parse-
+  failure (AMS retry-storm avoidance) are unchanged.
+- **Static-token auth works for management-scope AMS endpoints (Issue 3).** `amsclient` now
+  sends `ProxyAuthorization: <jwt>` alongside `Authorization: Bearer <jwt>` on every GET, so
+  `PULSE_AMS_AUTH_TOKEN` mode reaches `server.jwtServerControlEnabled`-protected endpoints
+  (`/rest/v2/applications`, `cluster/nodes`, `system-status`, `version`) — previously fleet
+  and cluster data silently failed in token-only mode. App-scope behavior unchanged.
+- **Marketplace screenshot/demo captures render the brand-default dark theme (Issue 4 root
+  cause).** Playwright's default emulated `prefers-color-scheme` is light, so with no stored
+  choice the whole "dark" screenshot set and the D-170 demo rough-cut silently rendered
+  light (also the real cause of the ss1-light byte-duplicate). Both capture scripts now pin
+  the theme explicitly, assert it applied, resolve Playwright relative to the repo (no
+  machine-specific paths), and the screenshot set is committed to the repo so
+  `docs/user-guide.md` renders on GitHub.
+
+### Changed
+
+- **Evaluator compose path defaults to the signed GHCR image (Issue 10).**
+  `deploy/docker-compose.yml` now pulls `ghcr.io/aytekxr/ams-pulse:0.4.1` (cosign-signed,
+  Trivy-gated, SBOM-attached) instead of building from source; source builds move behind the
+  new `deploy/docker-compose.build.yml` overlay (tagged `ams-pulse:local-build` so a local
+  build can never masquerade as the signed tag). CI e2e keeps building from source via the
+  overlay. The VPS prod path (`docker-compose.prod.yml` + `deployment.sh` stamped builds) is
+  deliberately unchanged. Adversarial review then caught that this documented path had never
+  actually worked standalone: the `pulse-migrate` one-shot lived only in the auto-loaded
+  override (so `-f deploy/docker-compose.yml` booted an unmigrated ClickHouse), and the base
+  file never mapped `PULSE_SECRET_KEY`/AMS credentials from `deploy/.env` into the container
+  — both fixed in the base file (migrate service + `depends_on: service_completed_successfully`
+  + env substitution), and `make up` now builds BOTH services from source via the overlay
+  (no GHCR-binary/source-schema version splits).
+- **Go module paths renamed to the real repo (Issue 6).**
+  `github.com/pulse-analytics/pulse/*` → `github.com/aytekXR/ams-pulse/*` across all three
+  modules (server, qa/mock-ams, qa/licensegen); Helm chart home/sources/maintainer, OpenAPI
+  license/contact, and event-schema `$id`s (`pulse.beyondkaira.com`) now carry the real
+  vendor identity. PagerDuty alert events now report `source: ams-pulse`.
+- **Beacon JS SDK renamed `@pulse/beacon` → `ams-pulse-beacon` (Issue 7).** The old name was
+  never published (npm 404) and the scope isn't ownable. v0.4.1 tarball attached to the
+  GitHub release for offline install; `release.yml` now creates the GitHub Release, attaches
+  the SDK tarball, and publishes to npm automatically once an `NPM_TOKEN` secret exists.
+  The Swift SDK README's unresolvable SPM-URL snippet is replaced with working local-path
+  integration instructions.
+- **`release.yml` gained a version-consistency guard (Issue 5).** A tag push now fails fast
+  if the VERSION file, Helm `appVersion`, or the product/faq/known-limitations doc headers
+  disagree with the tag — the drift class the marketplace review flagged cannot recur
+  silently.
+
 ### Added
 
 - **Collector-freshness scrape metrics (D-167, ROADMAP §2.45).** `GET /metrics` now exposes

@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/reports"
+	"github.com/aytekXR/ams-pulse/server/internal/reports"
 )
 
 func TestNextCronTime_HonorsDayOfMonth(t *testing.T) {

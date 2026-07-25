@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aytekXR/ams-pulse/server/internal/anomaly"
+	"github.com/aytekXR/ams-pulse/server/internal/store/clickhouse"
 	"github.com/google/uuid"
-	"github.com/pulse-analytics/pulse/server/internal/anomaly"
-	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse"
 )
 
 // newFlagEvent builds an AnomalyFlagEvent with all fields populated.

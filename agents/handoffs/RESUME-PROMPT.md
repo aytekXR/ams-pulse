@@ -11,7 +11,36 @@
 
 ---
 
-## ▶ START HERE (next session — S104/D-171 done: the operator PROVISIONED `support@beyondkaira.com` (★S103 item 3 CLOSED, docs de-staled). Backlog still EMPTY; 8 operator-outbound items remain. Low-frequency gate + prod-health read.)
+## ▶ START HERE (next session — S105/D-172 done: the operator's THIRD-PARTY MARKETPLACE REVIEW was executed end-to-end; all 12 issues fixed or honestly de-scoped. Check the S105 PR merged + CI green, then back to the low-frequency gate.)
+
+> **✅ Where we are (2026-07-25 late evening, D-172):** the operator supplied a second independent
+> review (REVIEW-MP-2026-07-25, 12 issues) + "make the app ready for the marketplace." SESSION-105
+> executed it: Kafka collector aligned to the real AMS topics/shapes (+ real-broker integration
+> test; still EXPERIMENTAL pending AV-15), webhook accepts the official payload, amsclient sends
+> ProxyAuthorization, go.mod renamed to github.com/aytekXR/ams-pulse, **v0.4.1 GitHub Release
+> created** (webm + SDK tarball attached), screenshots re-captured DARK (root cause: Playwright
+> defaults to light color-scheme — the old set + demo were silently light) and COMMITTED, SDK
+> renamed `ams-pulse-beacon` (tarball install works today; npm publish auto-fires once the
+> operator adds NPM_TOKEN), versions swept to 0.4.1 + release.yml consistency guard, identities/
+> LICENSE/trial-story/compose-default/banner-hygiene all fixed. Full records: `decisions.md`
+> D-172 · `sessions/SESSION-105.md` (incl. adversarial-review addendum) · work orders in
+> `agents/handoffs/wave-s105/`.
+>
+> **⚠ Environment gotchas discovered:** this host has NO native Go toolchain — run all Go gates
+> via `docker run … -v ~/go/pkg:/go/pkg golang:1.25` (subagent claims of native `go test` runs
+> were impossible; re-verify gates yourself). Playwright captures MUST pin the theme explicitly.
+>
+> **Next session job:** confirm the S105 PR merged with green CI (if still open, shepherd it);
+> then resume the low-frequency gate — read prod health every cycle (component-scoped collector
+> + ClickHouse count). Prod stays v0.4.0-139 unless the operator authorises a stamped roll.
+> Operator queue (operator-expected.md ★S105): submit listing · billing · load lane (+ AV-15
+> Kafka live validation on the same PAYG AMS) · demo final re-record (rough cut now DARK, on the
+> release) · send Ankush reply · NPM_TOKEN secret · confirm licensor legal name · optional prod
+> roll · rotate secrets · optional Chromium deps.
+
+---
+
+## (superseded by S105/D-172 above) ▶ was: START HERE (next session — S104/D-171 done: the operator PROVISIONED `support@beyondkaira.com` (★S103 item 3 CLOSED, docs de-staled). Backlog still EMPTY; 8 operator-outbound items remain. Low-frequency gate + prod-health read.)
 
 > **✅ Where we are (2026-07-25 evening, D-171):** the operator confirmed **`support@beyondkaira.com` is created** — the only pre-GA support-infra task. Recorded (decisions.md D-171, `sessions/SESSION-104.md`); de-staled `support.md`, `submission-package.md`, `operator-expected.md` (★S104 header), ROADMAP §1E. **No SLA/policy value changed** (D-169 stands). NO code, NO prod roll.
 >

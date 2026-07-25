@@ -14,14 +14,21 @@ package kafka
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 	kafkago "github.com/segmentio/kafka-go"
 )
+
+// errSkipMessage is returned by normalizeKafkaMessage when a message is
+// intentionally skipped (not a parse error) — the topic is recognised but its
+// shape does not map to any domain event type.
+var errSkipMessage = errors.New("skip")
 
 // Config for the Kafka source.
 type Config struct {
@@ -32,7 +39,7 @@ type Config struct {
 	GroupID string
 
 	// Topics is the list of Kafka topics to consume.
-	// AMS native producer typically publishes to "ams-server-events".
+	// AMS native producer publishes to "ams-instance-stats" and "ams-webrtc-stats".
 	Topics []string
 
 	// NodeID identifies this node in emitted events.
@@ -55,7 +62,7 @@ func DefaultConfig(brokers []string, nodeID string) Config {
 	return Config{
 		Brokers:     brokers,
 		GroupID:     "pulse-collector",
-		Topics:      []string{"ams-server-events"},
+		Topics:      []string{"ams-instance-stats", "ams-webrtc-stats"},
 		NodeID:      nodeID,
 		StartOffset: kafkago.LastOffset,
 		MaxWait:     1 * time.Second,
@@ -83,6 +90,11 @@ type Source struct {
 	// parseErrors counts malformed messages since start.
 	// Accessed via ParseErrors() from the healthz goroutine; updated by processMessage() — race-safe.
 	parseErrors atomic.Int64
+
+	// webrtcSkipOnce ensures the "ams-webrtc-stats skipped" debug log fires at most
+	// once per broker session — Run() resets it, so the log re-fires after each
+	// supervisor reconnect rather than being suppressed for the Source's lifetime.
+	webrtcSkipOnce sync.Once
 }
 
 // New creates a Kafka Source.
@@ -97,7 +109,7 @@ func New(cfg Config, sink domain.EventSink, logger *slog.Logger) *Source {
 		cfg.MaxBytes = 10 << 20
 	}
 	if len(cfg.Topics) == 0 {
-		cfg.Topics = []string{"ams-server-events"}
+		cfg.Topics = []string{"ams-instance-stats", "ams-webrtc-stats"}
 	}
 	if cfg.GroupID == "" {
 		cfg.GroupID = "pulse-collector"
@@ -126,6 +138,10 @@ func (s *Source) Run(ctx context.Context) error {
 	if len(s.cfg.Brokers) == 0 {
 		return fmt.Errorf("kafka: no brokers configured")
 	}
+
+	// New broker session: re-arm the once-per-session skip log. Safe: processMessage
+	// only runs from this goroutine, and the supervisor calls Run serially.
+	s.webrtcSkipOnce = sync.Once{}
 
 	r := kafkago.NewReader(kafkago.ReaderConfig{
 		Brokers:     s.cfg.Brokers,
@@ -172,6 +188,7 @@ func (s *Source) Run(ctx context.Context) error {
 
 // processMessage decodes and normalizes a single Kafka message.
 // Malformed messages increment parseErrors and are skipped.
+// Intentionally skipped messages (errSkipMessage) do not increment the counter.
 func (s *Source) processMessage(msg kafkago.Message) {
 	if len(msg.Value) == 0 {
 		return
@@ -191,8 +208,19 @@ func (s *Source) processMessage(msg kafkago.Message) {
 		return
 	}
 
-	ev, err := normalizeKafkaMessage(raw, s.cfg.NodeID)
+	ev, err := normalizeKafkaMessage(raw, s.cfg.NodeID, msg.Topic)
 	if err != nil {
+		if errors.Is(err, errSkipMessage) {
+			// Known topic with no domain mapping — log once then stay silent.
+			s.webrtcSkipOnce.Do(func() {
+				s.logger.Debug("kafka: ams-webrtc-stats messages skipped"+
+					" (per-viewer client shape does not map to a domain event type;"+
+					" no metrics fabricated)",
+					"topic", msg.Topic,
+				)
+			})
+			return
+		}
 		s.parseErrors.Add(1)
 		s.logger.Debug("kafka: normalize failed, skipping",
 			"topic", msg.Topic,
@@ -206,29 +234,25 @@ func (s *Source) processMessage(msg kafkago.Message) {
 
 // normalizeKafkaMessage converts a raw AMS Kafka message to a domain.ServerEvent.
 //
-// AMS publishes stats events on Kafka with a shape similar to REST v2 but as
-// a flat JSON object. The message typically includes a "streamId", "app",
-// event type fields (bitrate, fps, viewer counts, CPU usage, etc.).
+// Messages are routed by topic name:
 //
-// We map to domain.ServerEvent types using the presence of key fields:
-//   - "streamId" + "cpuUsage" → node_stats
-//   - "streamId" + "bitrate" + "fps" → ingest_stats (stream-level)
-//   - "streamId" + "hlsViewerCount" → stream_stats
-//   - else → stream_stats (best-effort)
-func normalizeKafkaMessage(raw map[string]any, nodeID string) (domain.ServerEvent, error) {
+//   - "ams-instance-stats" → EventNodeStats using the official AMS nested shape
+//     (StatsCollector.java: cpuUsage.systemCPULoad, systemMemoryInfo, fileSystemInfo).
+//
+//   - "ams-webrtc-stats" → skipped (errSkipMessage); the per-viewer client shape
+//     (webrtcClientId, measured_bitrate, send_bitrate, audioFrameSendPeriod …) does
+//     not map cleanly to EventIngestStats or EventStreamStats.
+//
+//   - any other topic → legacy field-sniffing (back-compat for operators feeding a
+//     custom bridge topic that emits flat cpuUsage / bitrate+fps / viewer-count fields).
+func normalizeKafkaMessage(raw map[string]any, nodeID, topic string) (domain.ServerEvent, error) {
 	now := time.Now().UnixMilli()
 
-	// Extract common fields.
+	// Extract common fields present in most message shapes.
 	streamID, _ := raw["streamId"].(string)
 	app, _ := raw["app"].(string)
 	if app == "" {
 		app = "live"
-	}
-	nid := nodeID
-	if nid == "" {
-		if n, ok := raw["nodeId"].(string); ok && n != "" {
-			nid = n
-		}
 	}
 
 	// Timestamp: AMS may include "timestamp" as epoch ms.
@@ -237,62 +261,158 @@ func normalizeKafkaMessage(raw map[string]any, nodeID string) (domain.ServerEven
 		ts = int64(tsRaw)
 	}
 
-	// Route by field presence.
-	var evType string
-	var data map[string]any
+	switch topic {
 
-	switch {
-	case hasKey(raw, "cpuUsage"):
-		// Node stats message.
-		evType = domain.EventNodeStats
-		data = map[string]any{
-			"cpu_pct":  floatField(raw, "cpuUsage"),
-			"mem_pct":  floatField(raw, "memoryUsage"),
-			"disk_pct": floatField(raw, "diskUsage"),
+	case "ams-instance-stats":
+		// Official AMS instance stats (StatsCollector.java sendInstanceStats).
+		//
+		// Node identity: configured NodeID wins (operator-controlled); fallback to
+		// instanceId from the message, then nodeId (back-compat with bridge topics).
+		nid := nodeID
+		if nid == "" {
+			if id, ok := raw["instanceId"].(string); ok && id != "" {
+				nid = id
+			} else if id, ok := raw["nodeId"].(string); ok && id != "" {
+				nid = id
+			}
 		}
 
-	case hasKey(raw, "fps") && hasKey(raw, "bitrate"):
-		// Ingest/stream stats (per-stream level from AMS Kafka producer).
-		evType = domain.EventIngestStats
-		data = map[string]any{
-			"bitrate_kbps":        floatField(raw, "bitrate"),
-			"fps":                 floatField(raw, "fps"),
-			"keyframe_interval_s": floatField(raw, "keyFrameInterval"),
-			"packet_loss_pct":     floatField(raw, "packetLost"),
-			"jitter_ms":           floatField(raw, "jitter"),
-		}
+		// cpu_pct: cpuUsage.systemCPULoad is ALREADY an integer percent (0-100).
+		// AMS SystemUtils.getSystemCpuLoad() does the [0,1]→percent conversion itself
+		// ((int)(osBean.getSystemCpuLoad() * 100.0)) before StatsCollector serializes
+		// it — do NOT multiply again (caught by S105 adversarial review: the *100
+		// would have reported 4200% CPU against a real AMS).
+		// We use systemCPULoad (whole-system view) rather than processCPULoad (JVM-only)
+		// because node_stats is intended to represent node-level health, not JVM health.
+		cpuObj := nestedMapField(raw, "cpuUsage")
+		cpuPct := floatField(cpuObj, "systemCPULoad")
+
+		// mem_pct: systemMemoryInfo.inUseMemory / totalMemory (guard div-by-zero).
+		memObj := nestedMapField(raw, "systemMemoryInfo")
+		memPct := pctSafe(floatField(memObj, "inUseMemory"), floatField(memObj, "totalMemory"))
+
+		// disk_pct: fileSystemInfo.inUseSpace / totalSpace (guard div-by-zero).
+		fsObj := nestedMapField(raw, "fileSystemInfo")
+		diskPct := pctSafe(floatField(fsObj, "inUseSpace"), floatField(fsObj, "totalSpace"))
+
+		return domain.ServerEvent{
+			Version: 1,
+			Type:    domain.EventNodeStats,
+			TS:      ts,
+			Source:  domain.SourceKafka,
+			NodeID:  nid,
+			App:     app,
+			Data: map[string]any{
+				"cpu_pct":  cpuPct,
+				"mem_pct":  memPct,
+				"disk_pct": diskPct,
+			},
+		}, nil
+
+	case "ams-webrtc-stats":
+		// Per-viewer WebRTC client stats (StatsCollector.java sendWebRTCClientStats2Kafka).
+		// Fields: webrtcClientId, measured_bitrate, send_bitrate, audioFrameSendPeriod,
+		// videoFrameSendPeriod, ipAddress, hostAddress, time.
+		// This shape does not map cleanly to EventIngestStats (ingest-side per-stream
+		// metrics) or EventStreamStats (viewer counts) — skip to avoid fabricating metrics.
+		return domain.ServerEvent{}, errSkipMessage
 
 	default:
-		// Stream stats (viewer counts).
-		// FIX 4 (VD-??): dashViewerCount was omitted from the sum, causing Kafka
-		// and REST paths to disagree. Add it to match NormalizeBroadcast behaviour.
-		evType = domain.EventStreamStats
-		total := int(floatField(raw, "hlsViewerCount")) +
-			int(floatField(raw, "webRTCViewerCount")) +
-			int(floatField(raw, "rtmpViewerCount")) +
-			int(floatField(raw, "dashViewerCount"))
-		data = map[string]any{
-			"viewer_count": total,
-			"viewer_count_by_protocol": map[string]any{
-				"webrtc": int(floatField(raw, "webRTCViewerCount")),
-				"hls":    int(floatField(raw, "hlsViewerCount")),
-				"rtmp":   int(floatField(raw, "rtmpViewerCount")),
-				"dash":   int(floatField(raw, "dashViewerCount")),
-			},
-			"bitrate_kbps": floatField(raw, "bitrate"),
+		// Legacy field-sniffing: back-compat for operators feeding a custom bridge topic
+		// that emits flat fields. Routing by field presence, unchanged from the original
+		// implementation.
+		//
+		// Node identity: configured NodeID wins; fallback to nodeId in message.
+		nid := nodeID
+		if nid == "" {
+			if n, ok := raw["nodeId"].(string); ok && n != "" {
+				nid = n
+			}
 		}
-	}
 
-	return domain.ServerEvent{
-		Version:  1,
-		Type:     evType,
-		TS:       ts,
-		Source:   domain.SourceKafka,
-		NodeID:   nid,
-		App:      app,
-		StreamID: streamID,
-		Data:     data,
-	}, nil
+		var evType string
+		var data map[string]any
+
+		switch {
+		case hasKey(raw, "cpuUsage"):
+			// Node stats message (flat format from custom bridge topics).
+			evType = domain.EventNodeStats
+			data = map[string]any{
+				"cpu_pct":  floatField(raw, "cpuUsage"),
+				"mem_pct":  floatField(raw, "memoryUsage"),
+				"disk_pct": floatField(raw, "diskUsage"),
+			}
+
+		case hasKey(raw, "fps") && hasKey(raw, "bitrate"):
+			// Ingest/stream stats (per-stream level from AMS Kafka producer).
+			evType = domain.EventIngestStats
+			data = map[string]any{
+				"bitrate_kbps":        floatField(raw, "bitrate"),
+				"fps":                 floatField(raw, "fps"),
+				"keyframe_interval_s": floatField(raw, "keyFrameInterval"),
+				"packet_loss_pct":     floatField(raw, "packetLost"),
+				"jitter_ms":           floatField(raw, "jitter"),
+			}
+
+		default:
+			// Stream stats (viewer counts).
+			// FIX 4 (VD-??): dashViewerCount was omitted from the sum, causing Kafka
+			// and REST paths to disagree. Add it to match NormalizeBroadcast behaviour.
+			evType = domain.EventStreamStats
+			total := int(floatField(raw, "hlsViewerCount")) +
+				int(floatField(raw, "webRTCViewerCount")) +
+				int(floatField(raw, "rtmpViewerCount")) +
+				int(floatField(raw, "dashViewerCount"))
+			data = map[string]any{
+				"viewer_count": total,
+				"viewer_count_by_protocol": map[string]any{
+					"webrtc": int(floatField(raw, "webRTCViewerCount")),
+					"hls":    int(floatField(raw, "hlsViewerCount")),
+					"rtmp":   int(floatField(raw, "rtmpViewerCount")),
+					"dash":   int(floatField(raw, "dashViewerCount")),
+				},
+				"bitrate_kbps": floatField(raw, "bitrate"),
+			}
+		}
+
+		return domain.ServerEvent{
+			Version:  1,
+			Type:     evType,
+			TS:       ts,
+			Source:   domain.SourceKafka,
+			NodeID:   nid,
+			App:      app,
+			StreamID: streamID,
+			Data:     data,
+		}, nil
+	}
+}
+
+// nestedMapField extracts a nested map from m[key].
+// Returns nil if the key is absent or the value is not map[string]any.
+func nestedMapField(m map[string]any, key string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	v, ok := m[key]
+	if !ok {
+		return nil
+	}
+	nested, _ := v.(map[string]any)
+	return nested
+}
+
+// pctSafe computes inUse/total*100 with a div-by-zero guard.
+// Returns 0 when total is 0; caps the result at 100.
+func pctSafe(inUse, total float64) float64 {
+	if total == 0 {
+		return 0
+	}
+	v := inUse / total * 100
+	if v > 100 {
+		v = 100
+	}
+	return v
 }
 
 func hasKey(m map[string]any, key string) bool {
@@ -301,6 +421,9 @@ func hasKey(m map[string]any, key string) bool {
 }
 
 func floatField(m map[string]any, key string) float64 {
+	if m == nil {
+		return 0
+	}
 	if v, ok := m[key]; ok {
 		switch x := v.(type) {
 		case float64:

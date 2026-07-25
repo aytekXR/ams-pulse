@@ -94,11 +94,14 @@ validate-realams-p0: ## Run the P0 real-AMS validation suite (requires pulse-rea
 # Docker Compose (requires Docker daemon — see decisions.md D-002)
 # ---------------------------------------------------------------------------
 
-up: ## Start the full stack locally (Docker Compose)
-	cd deploy && docker compose up -d
+# Dev stack builds pulse AND pulse-migrate from the local source (build overlay)
+# so the schema and the binary always match the checkout — without the overlay
+# the base file would pull the released GHCR image (S105: version-split guard).
+up: ## Start the full stack locally (Docker Compose, built from source)
+	cd deploy && docker compose -f docker-compose.yml -f docker-compose.build.yml -f docker-compose.override.yml up -d --build
 
 down: ## Stop the local stack
-	cd deploy && docker compose down
+	cd deploy && docker compose -f docker-compose.yml -f docker-compose.build.yml -f docker-compose.override.yml down
 
 # ---------------------------------------------------------------------------
 # Helm (Wave 2 — INFRA-01)

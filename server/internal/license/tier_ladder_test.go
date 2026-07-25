@@ -8,7 +8,7 @@ package license_test
 import (
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/license"
+	"github.com/aytekXR/ams-pulse/server/internal/license"
 )
 
 // asOrderedNodes maps MaxNodes to a comparable integer: -1 → maxInt so that

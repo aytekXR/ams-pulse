@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/collector/restpoller"
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
+	"github.com/aytekXR/ams-pulse/server/internal/collector/restpoller"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/pkg/amsclient"
 )
 
 // loadFixture reads a JSON file from pkg/amsclient/testdata relative to the repo root.

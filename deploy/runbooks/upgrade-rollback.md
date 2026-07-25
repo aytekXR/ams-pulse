@@ -1,6 +1,6 @@
 # Pulse Upgrade & Rollback Runbook
 
-**Target:** `pulse-prod` stack on `beyondkaira.com` (VPS `161.97.172.146`).
+**Target:** `pulse-prod` stack on `beyondkaira.com` (VPS `<VPS_IP>`).
 **Authored:** 2026-07-09 (D-062 SESSION-06).
 **Scope:** Docker Compose prod stack; Go binary only. Helm path deferred (S6).
 
@@ -111,7 +111,7 @@ one-shot runs automatically before `pulse` starts (see `depends_on` chain in `do
 ```sh
 # Health endpoint (use --resolve because VPS local DNS may be stale):
 curl -sf --max-time 10 \
-  --resolve beyondkaira.com:443:161.97.172.146 \
+  --resolve beyondkaira.com:443:<VPS_IP> \
   https://beyondkaira.com/healthz
 # Expected: {"status":"ok","components":{...}}
 
@@ -122,7 +122,7 @@ sg docker -c "docker compose ${DC_ARGS} exec pulse /usr/local/bin/pulse version"
 BODY='{"action":"liveStreamStarted","streamId":"smoke","app":"LiveApp"}'
 SIG="sha256=$(echo -n "${BODY}" | openssl dgst -sha256 -hmac "${PULSE_WEBHOOK_SECRET}" -hex | sed 's/.* //')"
 curl -sf -X POST \
-  --resolve beyondkaira.com:443:161.97.172.146 \
+  --resolve beyondkaira.com:443:<VPS_IP> \
   https://beyondkaira.com/webhook/ams \
   -H "Content-Type: application/json" \
   -H "X-Ams-Signature: ${SIG}" \
@@ -165,7 +165,7 @@ sg docker -c "docker compose ${DC_ARGS} up -d"
 
 ```sh
 curl -sf --max-time 10 \
-  --resolve beyondkaira.com:443:161.97.172.146 \
+  --resolve beyondkaira.com:443:<VPS_IP> \
   https://beyondkaira.com/healthz
 # Expected: {"status":"ok",...}
 ```

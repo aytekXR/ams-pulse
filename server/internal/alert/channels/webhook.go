@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/ssrfguard"
+	"github.com/aytekXR/ams-pulse/server/internal/ssrfguard"
 )
 
 // WebhookConfig is the configuration for a generic webhook notification channel.

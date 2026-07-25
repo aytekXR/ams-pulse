@@ -12,7 +12,7 @@ package collector
 import (
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
+	"github.com/aytekXR/ams-pulse/server/pkg/amsclient"
 )
 
 func TestNormalizeBroadcast_PublishTypeMapping(t *testing.T) {

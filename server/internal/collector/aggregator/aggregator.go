@@ -32,8 +32,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/collector/ingest"
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/collector/ingest"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 // EdgeStreamChecker is satisfied by *cluster.Discovery (and test doubles).

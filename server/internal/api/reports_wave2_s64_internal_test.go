@@ -33,8 +33,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/pulse-analytics/pulse/server/internal/license"
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/license"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // enterpriseLicenseForTest builds a signed enterprise license and points

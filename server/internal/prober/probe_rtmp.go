@@ -18,8 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/internal/ssrfguard"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/ssrfguard"
 )
 
 // rtmpDefaultPort is used when no port is present in the rtmp:// URL.

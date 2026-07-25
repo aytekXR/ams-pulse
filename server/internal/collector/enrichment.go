@@ -20,8 +20,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 	maxminddb "github.com/oschwald/maxminddb-golang"
-	"github.com/pulse-analytics/pulse/server/internal/domain"
 )
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────

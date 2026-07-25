@@ -36,13 +36,13 @@ import (
 
 	clickhousego "github.com/ClickHouse/clickhouse-go/v2"
 
-	"github.com/pulse-analytics/pulse/server/internal/api"
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/internal/license"
-	"github.com/pulse-analytics/pulse/server/internal/query"
-	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse/migrations"
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
-	"github.com/pulse-analytics/pulse/server/internal/testutil"
+	"github.com/aytekXR/ams-pulse/server/internal/api"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/license"
+	"github.com/aytekXR/ams-pulse/server/internal/query"
+	"github.com/aytekXR/ams-pulse/server/internal/store/clickhouse/migrations"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/testutil"
 )
 
 // startCHForVD19 starts a ClickHouse server for VD-19 tests and returns the TCP port.

@@ -20,10 +20,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/alert"
-	"github.com/pulse-analytics/pulse/server/internal/collector/aggregator"
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/alert"
+	"github.com/aytekXR/ams-pulse/server/internal/collector/aggregator"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // s93Clock returns a fake clock anchored at a fixed instant (tests advance it).

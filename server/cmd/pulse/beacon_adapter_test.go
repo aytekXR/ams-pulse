@@ -24,7 +24,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // adapterDDLPath returns the path to the meta DDL relative to this file.

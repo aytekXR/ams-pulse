@@ -20,10 +20,10 @@ import (
 	"time"
 
 	clickhousego "github.com/ClickHouse/clickhouse-go/v2"
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse"
-	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse/migrations"
-	"github.com/pulse-analytics/pulse/server/internal/testutil"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/store/clickhouse"
+	"github.com/aytekXR/ams-pulse/server/internal/store/clickhouse/migrations"
+	"github.com/aytekXR/ams-pulse/server/internal/testutil"
 )
 
 // fixedEventTS is a fixed epoch-ms constant used in all MV recording assertions.

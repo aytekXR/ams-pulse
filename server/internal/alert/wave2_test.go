@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/alert"
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/alert"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // ─── Test: cron maintenance window parsing and matching ──────────────────────
@@ -250,7 +250,7 @@ func generateTestCert(t *testing.T, daysUntilExpiry int) tls.Certificate {
 
 	tmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
-		Subject:      pkix.Name{CommonName: "test.pulse.dev"},
+		Subject:      pkix.Name{CommonName: "test.pulse.invalid"},
 		NotBefore:    notBefore,
 		NotAfter:     notAfter,
 		KeyUsage:     x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,

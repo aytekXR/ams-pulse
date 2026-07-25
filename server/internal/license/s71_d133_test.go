@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/license"
+	"github.com/aytekXR/ams-pulse/server/internal/license"
 )
 
 func warnsContain(warns []string, sub string) bool {

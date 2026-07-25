@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
+	"github.com/aytekXR/ams-pulse/server/pkg/amsclient"
 )
 
 // mustReadFixture reads a file from testdata/ or fatals the test.

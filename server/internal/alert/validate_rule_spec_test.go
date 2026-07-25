@@ -13,7 +13,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/alert"
+	"github.com/aytekXR/ams-pulse/server/internal/alert"
 )
 
 // ─── KnownMetricNames list invariants ────────────────────────────────────────

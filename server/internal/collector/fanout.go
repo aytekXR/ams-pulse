@@ -10,7 +10,7 @@ import (
 	"log/slog"
 	"sync/atomic"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 // Consumer is any component that wants to receive normalized events.

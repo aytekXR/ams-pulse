@@ -4,7 +4,7 @@ package license_test
 import (
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/license"
+	"github.com/aytekXR/ams-pulse/server/internal/license"
 )
 
 // TestFreeTier_EntitlementMatrix verifies Free tier limits.

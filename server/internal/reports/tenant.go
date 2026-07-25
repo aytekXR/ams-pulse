@@ -8,8 +8,8 @@
 package reports
 
 import (
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
-	"github.com/pulse-analytics/pulse/server/internal/tenant"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/tenant"
 )
 
 // TenantMatcher is the shared tenant.Matcher (relocated to internal/tenant).

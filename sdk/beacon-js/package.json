@@ -1,8 +1,23 @@
 {
-  "name": "@pulse/beacon",
-  "version": "0.1.0",
+  "name": "ams-pulse-beacon",
+  "version": "0.4.1",
   "description": "Pulse QoE beacon for Ant Media Server players — startup time, rebuffering, errors, bitrate. Self-hosted; your viewer data never leaves your infrastructure.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aytekXR/ams-pulse.git",
+    "directory": "sdk/beacon-js"
+  },
+  "homepage": "https://github.com/aytekXR/ams-pulse#readme",
+  "bugs": {
+    "url": "https://github.com/aytekXR/ams-pulse/issues",
+    "email": "support@beyondkaira.com"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

@@ -59,7 +59,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 // DefaultSigma is the default number of standard deviations that triggers a flag.

@@ -11,20 +11,44 @@ let the two diverge.
 
 ## Install (Swift Package Manager)
 
+A dedicated, tagged SPM repository for `PulseBeacon` is planned. Until then, two
+working options are available:
+
+### Option A — local path (recommended)
+
+Clone the `ams-pulse` repository and reference the SDK via a local path in your
+`Package.swift`:
+
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/aytekXR/ams-pulse.git", from: "0.1.0"),
+    .package(path: "../ams-pulse/sdk/beacon-swift"),
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
-        .product(name: "PulseBeacon", package: "ams-pulse"),
+        .product(name: "PulseBeacon", package: "beacon-swift"),
     ]),
 ]
 ```
 
-(Point the URL at wherever you vendor the package; the library lives under
-`sdk/beacon-swift`.)
+Adjust the relative path (`../ams-pulse/sdk/beacon-swift`) to match your checkout
+location.
+
+### Option B — copy the sources
+
+Copy the Swift source files directly into your project:
+
+```
+sdk/beacon-swift/Sources/PulseBeacon/
+  JSONValue.swift
+  Types.swift
+  Session.swift
+  Transport.swift
+  PulseBeacon.swift
+```
+
+No build system integration required — add the five files to your Xcode target or
+`Package.swift` sources list.
 
 ## Usage
 

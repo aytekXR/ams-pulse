@@ -6,7 +6,7 @@ package domain_test
 import (
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 func TestLiveNodeStats_Degraded_CPU(t *testing.T) {

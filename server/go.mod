@@ -1,4 +1,4 @@
-module github.com/pulse-analytics/pulse/server
+module github.com/aytekXR/ams-pulse/server
 
 go 1.25.0
 

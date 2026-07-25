@@ -50,16 +50,16 @@ import (
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 
-	"github.com/pulse-analytics/pulse/server/internal/alert"
-	"github.com/pulse-analytics/pulse/server/internal/alert/channels"
-	"github.com/pulse-analytics/pulse/server/internal/collector/beacon"
-	"github.com/pulse-analytics/pulse/server/internal/collector/ingest"
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/internal/license"
-	"github.com/pulse-analytics/pulse/server/internal/query"
-	"github.com/pulse-analytics/pulse/server/internal/reports"
-	"github.com/pulse-analytics/pulse/server/internal/ssrfguard"
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/alert"
+	"github.com/aytekXR/ams-pulse/server/internal/alert/channels"
+	"github.com/aytekXR/ams-pulse/server/internal/collector/beacon"
+	"github.com/aytekXR/ams-pulse/server/internal/collector/ingest"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/license"
+	"github.com/aytekXR/ams-pulse/server/internal/query"
+	"github.com/aytekXR/ams-pulse/server/internal/reports"
+	"github.com/aytekXR/ams-pulse/server/internal/ssrfguard"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // Config holds API server configuration.

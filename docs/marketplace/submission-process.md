@@ -1,8 +1,3 @@
-<!--
-  DRAFT — INTERNAL. External use gated on operator review of
-  docs/assessment/final-assessment.md (D-081).
--->
-
 # Ant Media Marketplace — Submission Process
 
 **Product:** Pulse — Analytics & QoE Monitoring for AMS
@@ -73,7 +68,7 @@ Each assumption below is tagged where used across the docs pack as
 | A3 | Screenshot/logo/video specs | Unpublished; we prepared 1920×1080 PNGs, SVG + 256px logos, 1200×630 OG banner, a 2–3 min video script as defaults |
 | A4 | Revenue: first-year 100%/no-commission (publicly stated); **post-year-1 unknown** | Get post-year-1 terms in writing |
 | A5 | Review flow: functional install review + doc review + security/scale questions; security review possibly self-certified | No published SLA/timeline; our posture: SECURITY.md, zero phone-home, cosign/SBOM, IP hashing |
-| A6 | A trial offer is expected; our mechanic (14-day Pro key on request) is OPERATOR-DECISION-PENDING | Official trial-key mint is operator-gated (vault privkey ceremony) |
+| A6 | A trial offer is expected; our mechanic is a **14-day Pro key on request** (decided D-169; no automated minting yet — request via support@beyondkaira.com or marketplace listing) | Delivery is manual; key-mint ceremony is operator-gated |
 | A7 | AMS-version-support requirement (N-1/N-2?) unknown | Our position: 3.0.3 (current latest stable) live-validated; older versions mock-profile only — honestly disclosed |
 | A8 | Linking to our GitHub docs is acceptable | If uploads/PDFs required, the markdown pack converts cleanly |
 | A9 | Load-test qualification thresholds: none published | We present budgets L-1…L-9 + the capacity number + "Pulse adds only read-only REST polling load to AMS"; ask what evidence format they want |
@@ -83,14 +78,14 @@ Each assumption below is tagged where used across the docs pack as
 
 | Prerequisite | State | Owner |
 |---|---|---|
-| GHCR image public (reviewers must pull anonymously; today 401) | OPEN | Operator (§2.18/O7 — at the release reviewers should pull) |
-| Support channel + SLA named (checklist row 7) | Skeleton in [`../support.md`](../support.md) | Operator decision |
-| Public licensing/trial terms (row 8) | Draft in [`../licensing-public.md`](../licensing-public.md) | Operator approval + trial-key mint ceremony |
+| GHCR image public (anonymous pull) | **DONE (D-168)** — package public; anonymous clean-room install verified end-to-end | — |
+| Support channel + SLA named (checklist row 7) | **DONE (D-169/D-171)** — `support@beyondkaira.com`; SLA targets in [`../support.md`](../support.md); mailbox live | — |
+| Public licensing/trial terms (row 8) | **DONE (D-169)** — pricing, tiers, Founding Operators campaign, 14-day trial in [`../licensing-public.md`](../licensing-public.md) | — |
+| Pricing + tier sign-off (incl. MaxNodes reconcile) | **DONE (D-169/D-166)** — pricing set; ladder monotonic (Free 1 / Pro 10 / Business 50 / Enterprise ∞); regression test added | — |
+| Final-assessment review (D-081 gate) | **CLEARED (D-169)** — reviewed on operator's behalf; internal assessment docs stay internal | — |
 | Capacity number (load lane on dedicated PAYG AMS) | Lane built, NOT run | Operator (`bash qa/realams/run-load-suite.sh` after `cp qa/realams/harness/load-env.sh.example qa/realams/harness/load-env.sh`) |
-| Pricing + tier sign-off (incl. Pro=10 vs Business=5 MaxNodes reconcile) | Flagged in [`listing-draft.md`](listing-draft.md) | Operator product call |
 | 15-min staging-panel network-tab walkthrough (G-27 residual) | Checklist in `docs/operator-expected.md` §3 | Operator (largely pre-answered by public-repo evidence) |
-| Final-assessment review (D-081 gate — un-gates every DRAFT-INTERNAL header) | OPEN | Operator |
-| Demo video | Script in [`demo-video-script.md`](demo-video-script.md) | Operator records (or approves a capture-based rough cut) |
+| Demo video | Rough-cut rendered (D-170, `docs/marketplace/demo/pulse-demo-roughcut.webm`), attached to [GitHub release v0.4.1](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.1); script: [`demo-video-script.md`](demo-video-script.md) | Operator records final with voiceover |
 | Rotate chat-exposed credentials; AMS PAYG license for the demo instance | OPEN (carried) | Operator |
 
 ## 4. Validation evidence to attach

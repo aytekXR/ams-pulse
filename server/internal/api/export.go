@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/reports"
+	"github.com/aytekXR/ams-pulse/server/internal/reports"
 )
 
 // handleReportExport serves GET /api/v1/reports/export.

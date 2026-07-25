@@ -19,10 +19,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/api"
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/internal/license"
-	"github.com/pulse-analytics/pulse/server/internal/query"
+	"github.com/aytekXR/ams-pulse/server/internal/api"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/license"
+	"github.com/aytekXR/ams-pulse/server/internal/query"
 )
 
 // stubCollectorHealth is a domain.CollectorHealth double returning a fixed snapshot.

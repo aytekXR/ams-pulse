@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/collector"
-	"github.com/pulse-analytics/pulse/server/internal/collector/beacon"
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/collector"
+	"github.com/aytekXR/ams-pulse/server/internal/collector/beacon"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // SchedulerConfig holds configuration for the report scheduler.

@@ -20,10 +20,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/api"
-	"github.com/pulse-analytics/pulse/server/internal/license"
-	"github.com/pulse-analytics/pulse/server/internal/query"
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/api"
+	"github.com/aytekXR/ams-pulse/server/internal/license"
+	"github.com/aytekXR/ams-pulse/server/internal/query"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // ─── helpers ──────────────────────────────────────────────────────────────────

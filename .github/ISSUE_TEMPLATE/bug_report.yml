@@ -1,0 +1,77 @@
+name: Bug Report
+description: File a bug report for Pulse
+labels: ["bug"]
+body:
+  - type: input
+    id: pulse_version
+    attributes:
+      label: Pulse version and tier
+      description: >
+        Run `pulse diag` (redacts credentials automatically) or go to Settings → License.
+        Include the full version string and your tier (Free / Pro / Business / Enterprise).
+      placeholder: "pulse 0.4.x (commit abc1234, built 2026-01-01T00:00:00Z) — Pro"
+    validations:
+      required: true
+
+  - type: input
+    id: ams_version
+    attributes:
+      label: AMS version and edition
+      description: >
+        Visible in the AMS web panel under **About**, or via
+        `/LiveApp/rest/v2/version`. Include edition (Community / Enterprise).
+      placeholder: "AMS 3.0.3 Enterprise"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deploy_method
+    attributes:
+      label: Deploy method
+      options:
+        - quickstart (single curl | bash)
+        - Docker Compose
+        - Helm
+        - source build
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened vs. what was expected
+      description: Describe the actual behaviour and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro_steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: >
+        Paste output of `docker compose logs --tail=200 pulse` (and
+        `--tail=100 clickhouse` if relevant). Credentials are auto-redacted by
+        `pulse diag`; remove any remaining secrets before submitting.
+      render: shell
+    validations:
+      required: false
+
+  - type: input
+    id: environment
+    attributes:
+      label: Host OS / architecture
+      placeholder: "Ubuntu 22.04 LTS, amd64"
+    validations:
+      required: true

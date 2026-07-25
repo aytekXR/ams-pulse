@@ -36,7 +36,7 @@ function IngestSnippet({ token }: { token: string }) {
   // Bake the concrete Pulse origin into the snippet — the snippet runs on the
   // player's page, where window.location.origin would be the WRONG host. The
   // SDK appends /ingest/beacon to ingestUrl itself; streamId is required.
-  const snippet = `import { Pulse } from '@pulse/beacon';
+  const snippet = `import { Pulse } from 'ams-pulse-beacon';
 
 const session = Pulse.init({
   ingestUrl: '${window.location.origin}',

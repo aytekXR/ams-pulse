@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/license"
+	"github.com/aytekXR/ams-pulse/server/internal/license"
 )
 
 // ─── Log-capture helper ───────────────────────────────────────────────────────

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/reports"
+	"github.com/aytekXR/ams-pulse/server/internal/reports"
 )
 
 // TestGeneratePDFsForPoppler generates default.pdf and custom.pdf into

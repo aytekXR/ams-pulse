@@ -13,17 +13,22 @@
  * Self-contained: starts vite preview, captures, then stops it.
  */
 
-import pkg from "/home/aytek/repo/ams-pulse/web/node_modules/@playwright/test/index.js";
-const { chromium } = pkg;
 import { spawn, execSync } from "child_process";
 import { existsSync, mkdirSync } from "fs";
 import { join, dirname, resolve } from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import { createServer } from "net";
 
 // ── Paths ────────────────────────────────────────────────────────────────────
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Playwright is resolved relative to this script (web/node_modules), never an
+// absolute machine path — the script must run from any clone location.
+const pwMod = await import(pathToFileURL(
+  resolve(__dirname, "../../web/node_modules/@playwright/test/index.js"),
+).href);
+const { chromium } = pwMod.default ?? pwMod;
 
 // ── Bootstrap: ensure libatk / libcups etc. are available for the headless ──
 // shell. On Ubuntu 24.04 these may not be installed system-wide. We extract
@@ -421,15 +426,23 @@ async function main() {
     const deviceScaleFactor = 1;
 
     // ── Helper: new page with dark theme (default) ────────────────────────
-    async function newPage(tier = "enterprise", themeOverride = null) {
-      const ctx = await browser.newContext({ viewport, deviceScaleFactor });
+    // S105: the theme MUST be pinned explicitly. Playwright's default emulated
+    // prefers-color-scheme is LIGHT, and with no stored choice the app falls
+    // through to matchMedia — so the whole "dark" set silently rendered light
+    // (that was the real cause of the famous ss1-light byte-dup: BOTH shots
+    // were light). localStorage pins the app's resolveTheme; colorScheme pins
+    // the media query for good measure.
+    async function newPage(tier = "enterprise", themeOverride = "dark") {
+      const ctx = await browser.newContext({
+        viewport,
+        deviceScaleFactor,
+        colorScheme: themeOverride === "light" ? "light" : "dark",
+      });
       const page = await ctx.newPage();
-      if (themeOverride) {
-        await page.addInitScript(
-          ([k, v]) => localStorage.setItem(k, v),
-          ["pulse_theme", themeOverride],
-        );
-      }
+      await page.addInitScript(
+        ([k, v]) => localStorage.setItem(k, v),
+        ["pulse_theme", themeOverride],
+      );
       await stubBoot(page, { tier });
       return { page, ctx };
     }
@@ -603,8 +616,12 @@ async function main() {
     // ug-login.png — AuthGate card (NO token injected, separate context)
     {
       log("Capturing ug-login.png …");
-      const ctx = await browser.newContext({ viewport, deviceScaleFactor });
+      const ctx = await browser.newContext({ viewport, deviceScaleFactor, colorScheme: "dark" });
       const page = await ctx.newPage();
+      await page.addInitScript(
+        ([k, v]) => localStorage.setItem(k, v),
+        ["pulse_theme", "dark"], // pin brand-default dark (see newPage note)
+      );
       // Do NOT inject token — we want the login gate
       await page.route("**/auth/oidc/status", (r) =>
         r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(OIDC_OFF) })
@@ -624,12 +641,16 @@ async function main() {
     //  navigate directly to /onboarding to skip the redirect race)
     {
       log("Capturing ug-onboarding-step2.png …");
-      const ctx = await browser.newContext({ viewport, deviceScaleFactor });
+      const ctx = await browser.newContext({ viewport, deviceScaleFactor, colorScheme: "dark" });
       const page = await ctx.newPage();
       // Inject token so AuthGate passes, but healthz says no AMS configured
       await page.addInitScript(
         ([k, v]) => localStorage.setItem(k, v),
         ["pulse_token", "plt_marketplace_test"],
+      );
+      await page.addInitScript(
+        ([k, v]) => localStorage.setItem(k, v),
+        ["pulse_theme", "dark"], // pin brand-default dark (see newPage note)
       );
       await page.route("**/api/v1/admin/license", (r) => r.fulfill(json(license("enterprise"))));
       await page.route("**/auth/me",         (r) => r.fulfill(json(AUTH_ME)));
@@ -664,6 +685,19 @@ async function main() {
       await page.route("**/api/v1/live/overview", (r) => r.fulfill(json(OVERVIEW_POPULATED)));
       await page.route("**/api/v1/live/streams**",  (r) => r.fulfill(json(STREAMS_POPULATED)));
       await page.goto(`${BASE_URL}/`);
+      // Guard against the silent-dark regression (S105): the byte-identical
+      // ss1-light bug happened because the shot was taken without verifying the
+      // theme actually applied. Fail loudly instead of writing a dark duplicate.
+      await page.waitForFunction(
+        () => document.documentElement.getAttribute("data-theme") === "light",
+        { timeout: 10_000 },
+      ).catch(async () => {
+        const state = await page.evaluate(() => ({
+          attr: document.documentElement.getAttribute("data-theme"),
+          stored: localStorage.getItem("pulse_theme"),
+        }));
+        throw new Error(`ss1-light: light theme did not apply: ${JSON.stringify(state)}`);
+      });
       await shot(page, join(OUT_DIR, "ss1-light.png"), {
         waitFor: 'h1, [data-testid="stat-card"], .recharts-wrapper',
       });
@@ -681,7 +715,14 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error("[capture] FATAL:", err);
-  process.exit(1);
-});
+main()
+  .then(() => {
+    // Explicit exit: the npm->vite child process chain can keep stdio pipes
+    // open after SIGTERM, which leaves the process (and a docker run) hanging
+    // after a successful capture.
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error("[capture] FATAL:", err);
+    process.exit(1);
+  });

@@ -17,10 +17,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/collector"
-	"github.com/pulse-analytics/pulse/server/internal/collector/restpoller"
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
+	"github.com/aytekXR/ams-pulse/server/internal/collector"
+	"github.com/aytekXR/ams-pulse/server/internal/collector/restpoller"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/pkg/amsclient"
 )
 
 // mockEventSink captures events emitted by the poller.

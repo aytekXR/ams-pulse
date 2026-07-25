@@ -20,6 +20,10 @@ services:
     restart: unless-stopped
 
   pulse-migrate:
+    # Dev flow builds from source; the explicit local tag prevents the merged
+    # base image name (ghcr.io/aytekxr/ams-pulse:X.Y.Z) from being applied to a
+    # locally built image (S105 — tag-masquerade guard).
+    image: ams-pulse:local-build
     build:
       context: ..
       dockerfile: deploy/docker/pulse.Dockerfile

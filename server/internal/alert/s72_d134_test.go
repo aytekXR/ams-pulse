@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/alert"
+	"github.com/aytekXR/ams-pulse/server/internal/alert"
 )
 
 func startTLSServerWithCert(t *testing.T, cert tls.Certificate) string {

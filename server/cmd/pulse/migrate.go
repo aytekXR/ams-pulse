@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
-	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse/migrations"
+	"github.com/aytekXR/ams-pulse/server/internal/store/clickhouse/migrations"
 )
 
 // runClickHouseMigrations connects to ClickHouse and runs all pending migrations.

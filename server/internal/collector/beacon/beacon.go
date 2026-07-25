@@ -35,8 +35,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/pulse-analytics/pulse/server/internal/collector"
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/collector"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 const (

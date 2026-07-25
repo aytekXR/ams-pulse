@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 // TestDeduplicator_CrossAppSameStreamID_NotDuplicate proves that two apps sharing

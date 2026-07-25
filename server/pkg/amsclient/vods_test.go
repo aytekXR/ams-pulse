@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
+	"github.com/aytekXR/ams-pulse/server/pkg/amsclient"
 )
 
 // TestListVods_FixtureDecode decodes the live-captured vods_list.json fixture

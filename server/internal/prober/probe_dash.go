@@ -36,7 +36,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 // reNumberFmt matches DASH SegmentTemplate $Number<fmt>$ tokens that carry a

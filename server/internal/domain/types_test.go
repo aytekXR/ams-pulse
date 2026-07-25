@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 // TestServerEvent_Time verifies that the Time() helper correctly converts the

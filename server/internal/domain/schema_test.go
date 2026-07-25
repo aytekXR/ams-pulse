@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 // Test that domain types marshal to JSON that matches the contract fixtures.

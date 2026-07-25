@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 // emptyLiveProvider returns a non-nil snapshot with zero streams/nodes — the case

@@ -1,3 +1,28 @@
+# Operator TODO — the items only YOU can do (updated 2026-07-25 late evening, SESSION-105 — ★ your MARKETPLACE REVIEW is EXECUTED: all 12 issues fixed or honestly de-scoped, D-172. The listing is now materially ready; what remains is outbound/your-infra + 4 small new items.)
+
+> # ▶ ★ S105 STATUS (2026-07-25 late evening, D-172) — you sent the third-party marketplace-readiness review + "make the app ready." DONE this session (verification-first, all gates re-run by the loop itself):
+>
+> - **Both real integration defects are FIXED in code** — Kafka now consumes the actual AMS topics/shapes (validated end-to-end against a real broker; stays EXPERIMENTAL in docs until AV-15 runs against a live AMS producer) and the webhook parser accepts the official AMS payload; token-mode auth now reaches the management-scope endpoints (ProxyAuthorization).
+> - **The v0.4.1 GitHub Release EXISTS now** (it never did — the releases page was stuck at v0.4.0): notes + cosign-verify instructions, with the demo rough-cut (re-rendered in the correct DARK brand theme — the old one and ALL screenshots were silently light; root cause found and pinned) and the SDK tarball `ams-pulse-beacon-0.4.1.tgz` attached. Screenshots are committed to the repo; the capture scripts run from any machine now.
+> - **Identity/consistency sweep:** go.mod → github.com/aytekXR/ams-pulse; Helm/OpenAPI/schema-IDs/LICENSE files carry your real identity; versions swept to 0.4.1 with a release-time drift guard; trial story unified everywhere (14-day Pro, no card, requested via listing/support email — the "self-serve" wording is gone until your billing setup makes it true); evaluator compose path defaults to your signed GHCR image; DRAFT banners/stale rows/internal comments/VPS-IP leak cleaned; bug-report issue template added.
+>
+> ### ▶ Your queue (leverage order):
+> 1. **Submit the listing** (your account) — content is ready: `docs/marketplace/listing-draft.md` + `submission-package.md`.
+> 2. **Set up billing** in the marketplace (Stripe/marketplace account) — until then the trial stays email-request (docs already say so honestly).
+> 3. **Send the Ankush reply** (draft: `docs/marketplace/ankush-reply-draft.md`).
+> 4. **Load lane on a PAYG AMS** (→ real capacity number) — **and on the same instance set `server.kafka_brokers` in red5.properties** so the loop can run AV-15 live Kafka validation and drop the EXPERIMENTAL label.
+> 5. **NEW — add an `NPM_TOKEN` repo secret** (your npm account) if you want `npm install ams-pulse-beacon` to work; the release workflow then publishes automatically on the next tag (or via workflow_dispatch `publish_tag`).
+> 6. **Demo FINAL** — re-record voiceover over the (now dark) rough cut on the release page.
+> 7. **NEW — confirm the licensor legal name** now stamped in LICENSE / licensing docs: "Copyright (c) 2026 Aytek Erdoğan (beyondkaira.com)" (taken from your review's prescribed text — one word if it's right, or give the exact form).
+> 8. **Rotate the chat-exposed / VPS-group-readable secrets** (carried).
+> 9. Optional: prod roll to 0.4.1 (stamped deployment.sh, your go-ahead) · VPS Chromium deps (captures currently run via the Docker path fine).
+>
+> Decision-gated eng unchanged: §2.45 built-in self-alert rule · §2.44 `[FO-1]` · Dependabot queue (17 PRs, oldest 10 days). Prod untouched and healthy (v0.4.0-139, collector `ok`).
+>
+> ---
+>
+## (previous header — D-171, SESSION-104)
+
 # Operator TODO — the items only YOU can do (updated 2026-07-25, SESSION-104 — ✅ you provisioned `support@beyondkaira.com` (item 3 → DONE, D-171). 8 outbound/infra items remain; nothing blocks the loop.)
 
 > # ▶ ★ S104 STATUS (2026-07-25 evening, D-171) — you confirmed **support@beyondkaira.com is created**. Recorded; `support.md`, the submission package and the roadmap are de-staled (the "provision the mailbox" task is CLOSED). Prod health re-read this gate: collector `ok`, v0.4.0-139 unchanged, exactly 720 rows/h over the last 24 h, CH+meta backups fresh today 16:13 UTC. **No other operator input arrived; the autonomous backlog remains EMPTY.** Your remaining queue is the ★S103 list below **minus item 3** — all outbound/your-infra: (1) submit the listing · (2) set up billing · (4) load lane → real capacity number · (5) record the demo final (rough cut is rendered) · (6) send the Ankush reply (draft ready) · (7) optional prod roll to 0.4.1 · (8) rotate exposed secrets · (9, minor) Chromium OS libs on the VPS. Decision-gated eng also unchanged: §2.45 built-in self-alert rule, §2.44 `[FO-1]`, the 17-PR Dependabot queue (oldest now 10 days).
@@ -1513,7 +1538,7 @@ GHCR.**
 | # | Item | Why it needs you |
 |---|---|---|
 | 3 | **G7 — light-theme Badge contrast** | Three variants fail WCAG AA as **text**: success **2.73:1**, warning **4.25:1**, error **4.13:1**. Fixing needs **three new `brandkit/` values**, and `brandkit/` is yours (D-071) — **a session may not invent them**. Dark theme passes. This is the last *known* a11y defect. |
-| 4 | **Kafka fleet consumer — never wire-validated** | The fleet CPU/mem/disk gauges depend on a Kafka topic (`ams-server-events`) and field names that are **code-derived and have never been tested against a real broker** (the code's own comment admits it; LIM-19). If they're wrong, the gauges sit **empty with `parse_errors=0`** — a silent lie, the worst failure shape. Needs a **Kafka-enabled AMS lab**, which a session cannot conjure. |
+| 4 | **Kafka fleet consumer — not yet validated against a live AMS producer** | *(updated S105/D-172)* The consumer now subscribes to the **official** topics (`ams-instance-stats`, plus `ams-webrtc-stats` which is deliberately skipped) with shapes derived from AMS `StatsCollector.java`, fixture-tested AND validated end-to-end against a real Kafka broker. What remains unproven is a **live AMS producer** feeding it (AV-15; LIM-19) — set `server.kafka_brokers` on the load-lane PAYG AMS and the loop finishes this. |
 | 5 | **Trial-key mint** | Needs your **vault private key** (the ceremony itself is DONE — see ② above). Mint a short-expiry key with `cd qa/licensegen && go run . -tier pro -expires 14 -privkey <vault-key-file>` and confirm Pulse accepts it. The tooling works; S35 also **fixed the runbook that told you to verify it against a 404** (see below). |
 | 6 | **Final-assessment review** | Sign-off is yours; it gates the marketplace upload. |
 | 7 | **Ant Media contact** | Partner/marketplace outreach. |

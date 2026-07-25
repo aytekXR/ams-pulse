@@ -23,9 +23,9 @@ import (
 	"time"
 
 	clickhousego "github.com/ClickHouse/clickhouse-go/v2"
-	"github.com/pulse-analytics/pulse/server/internal/reports"
-	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse/migrations"
-	"github.com/pulse-analytics/pulse/server/internal/testutil"
+	"github.com/aytekXR/ams-pulse/server/internal/reports"
+	"github.com/aytekXR/ams-pulse/server/internal/store/clickhouse/migrations"
+	"github.com/aytekXR/ams-pulse/server/internal/testutil"
 )
 
 // TestAccountant_CHIntegration starts a real ClickHouse instance, runs migrations,

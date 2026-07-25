@@ -1,0 +1,7 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Pro+ support (email)
+    url: mailto:support@beyondkaira.com
+    about: >
+      Pro, Business, and Enterprise customers can reach the support team directly
+      at support@beyondkaira.com. See docs/support.md for response-time targets.

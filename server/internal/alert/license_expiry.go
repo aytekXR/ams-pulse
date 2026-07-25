@@ -12,8 +12,8 @@
 package alert
 
 import (
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // perpetualLicenseDays is the sentinel "days until expiry" reported for a perpetual /

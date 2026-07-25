@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/alert/channels"
+	"github.com/aytekXR/ams-pulse/server/internal/alert/channels"
 )
 
 // testPayload returns a minimal alert notification JSON payload for tests.

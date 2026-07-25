@@ -89,7 +89,7 @@ Variables with `_FILE` support (from `server/internal/config/secrets.go:GetSecre
 |---|---|---|---|---|
 | `PULSE_AMS_URL` | `http://localhost:5080` | Yes (prod) | No | AMS REST API base URL |
 | `PULSE_AMS_NODE_ID` | `standalone` | No | No | Node identifier emitted in events; used for labeling in multi-node cluster deployments |
-| `PULSE_AMS_AUTH_TOKEN` | (empty) | No | Yes | AMS REST bearer token; mutually exclusive with `PULSE_AMS_LOGIN_EMAIL`/`PULSE_AMS_LOGIN_PASSWORD` |
+| `PULSE_AMS_AUTH_TOKEN` | (empty) | No | Yes | AMS REST static bearer token; Pulse sends both `Authorization: Bearer <token>` **and** `ProxyAuthorization: <token>` on every request, so a single token value works for both app-scope (`jwtControlEnabled`) and management-scope (`server.jwtServerControlEnabled`) AMS endpoints; mutually exclusive with `PULSE_AMS_LOGIN_EMAIL`/`PULSE_AMS_LOGIN_PASSWORD` |
 | `PULSE_AMS_LOGIN_EMAIL` | (empty) | No | No | AMS console login email for cookie-session auth; used as a fallback when no bearer token is configured |
 | `PULSE_AMS_LOGIN_PASSWORD` | (empty) | No | Yes | AMS console login password for cookie-session auth |
 | `PULSE_AMS_APPLICATIONS` | (empty = all) | No | No | Comma-separated AMS application names to poll (e.g. `live,vod`); empty = poll all applications |
@@ -120,6 +120,7 @@ Variables with `_FILE` support (from `server/internal/config/secrets.go:GetSecre
 |---|---|---|---|---|
 | `PULSE_KAFKA_BROKERS` | (empty = disabled) | No | No | Comma-separated Kafka broker addresses; empty = Kafka source disabled |
 | `PULSE_KAFKA_GROUP_ID` | `pulse-collector` | No | No | Kafka consumer group ID |
+| `PULSE_KAFKA_TOPICS` | `ams-instance-stats,ams-webrtc-stats` | No | No | Comma-separated Kafka topic list; defaults to the two official AMS stats topics; override when your AMS deployment uses non-standard topic names |
 | `PULSE_GEO_MMDB_PATH` | (empty = disabled) | No | No | Path to a MaxMind-format `.mmdb` file for geo enrichment; empty = geo lookup disabled |
 | `PULSE_ANONYMIZE_IP` | `false` | No | No | Strip the last octet of viewer IPs before geo lookup and storage (GDPR/KVKK compliance); set `1` or `true` to enable |
 | `PULSE_BEACON_SAMPLE_RATE` | `1.0` | No | No | Fraction of beacon events accepted at the ingest endpoint (0.0 = drop all, 1.0 = accept all) |

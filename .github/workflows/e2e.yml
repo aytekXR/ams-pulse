@@ -59,6 +59,7 @@ jobs:
           docker compose \
             -p pulse-e2e \
             -f deploy/docker-compose.yml \
+            -f deploy/docker-compose.build.yml \
             -f deploy/docker-compose.ci.yml \
             up -d --build
 
@@ -998,6 +999,7 @@ jobs:
           docker compose \
             -p pulse-csp-e2e \
             -f deploy/docker-compose.yml \
+            -f deploy/docker-compose.build.yml \
             -f deploy/docker-compose.ci.yml \
             -f deploy/docker-compose.csp-e2e.yml \
             up -d --build

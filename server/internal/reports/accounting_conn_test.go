@@ -27,8 +27,8 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/column"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 
-	"github.com/pulse-analytics/pulse/server/internal/reports"
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/reports"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // ─── Mock driver.Rows ─────────────────────────────────────────────────────────

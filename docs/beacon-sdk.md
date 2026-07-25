@@ -11,7 +11,7 @@
 
 ## 1. Introduction
 
-The `@pulse/beacon` SDK is a client-side JavaScript library that collects
+The `ams-pulse-beacon` SDK is a client-side JavaScript library that collects
 viewer-perceived quality metrics — startup time, rebuffering, errors,
 bitrate/resolution switches, and cumulative watch time — from browser player
 pages and reports them to your Pulse collector.
@@ -89,11 +89,26 @@ requests from any player page origin are accepted without allowlisting (see
 
 ### 3.1 npm / bundler
 
+**Option A — tarball from GitHub Release (works today)**
+
+Download `ams-pulse-beacon-0.4.1.tgz` from the
+[v0.4.1 GitHub Release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.1) and install it
+locally:
+
 ```bash
-npm install @pulse/beacon
-# or
-yarn add @pulse/beacon
+npm install ./ams-pulse-beacon-0.4.1.tgz
 ```
+
+**Option B — npm registry (coming)**
+
+```bash
+npm install ams-pulse-beacon
+# or
+yarn add ams-pulse-beacon
+```
+
+Publishing to the npm registry is automated in the release workflow and pending
+credentials; until the package page is live, use Option A.
 
 The package ships ESM (`dist/index.js`), CJS (`dist/index.cjs`), and full `.d.ts`
 declarations. Import whichever your bundler selects automatically. For
@@ -101,10 +116,10 @@ tree-shaking-friendly imports, `init` is also exported as a named re-export of
 `Pulse.init`:
 
 ```ts
-import { init } from '@pulse/beacon';
+import { init } from 'ams-pulse-beacon';
 // equivalent to Pulse.init(...)
 
-import type { PulseConfig, SessionHandle, BeaconEventType, PlayerKind } from '@pulse/beacon';
+import type { PulseConfig, SessionHandle, BeaconEventType, PlayerKind } from 'ams-pulse-beacon';
 ```
 
 ### 3.2 No-bundler IIFE build
@@ -147,7 +162,7 @@ on the `HTMLVideoElement`.
 ### 5.1 AMS WebRTC
 
 ```ts
-import { Pulse } from '@pulse/beacon';
+import { Pulse } from 'ams-pulse-beacon';
 
 // Call after webRTCAdaptor is created (AMS JS SDK).
 const session = Pulse.init(
@@ -174,7 +189,7 @@ session.dispose();
 
 ```ts
 import Hls from 'hls.js';
-import { Pulse } from '@pulse/beacon';
+import { Pulse } from 'ams-pulse-beacon';
 
 const hls = new Hls();
 hls.loadSource('https://stream.example.com/live/auction-main/index.m3u8');
@@ -202,7 +217,7 @@ session.dispose();
 
 ```ts
 import videojs from 'video.js';
-import { Pulse } from '@pulse/beacon';
+import { Pulse } from 'ams-pulse-beacon';
 
 const player = videojs('my-video');
 
@@ -231,7 +246,7 @@ player.on('dispose', () => session.dispose());
 ### 5.4 Safari native HLS / plain `<video>`
 
 ```ts
-import { Pulse } from '@pulse/beacon';
+import { Pulse } from 'ams-pulse-beacon';
 
 const videoEl = document.getElementById('player') as HTMLVideoElement;
 videoEl.src = 'https://stream.example.com/live/auction-main/index.m3u8';
@@ -315,7 +330,7 @@ Allowed `BeaconEventType` values: `session_start`, `startup_complete`, `heartbea
 | `app` | As provided to `Pulse.init()`. |
 | `meta` | `metadata` key-value pairs as provided. |
 | `player.kind` | `PlayerKind` value passed to `Pulse.init()`. |
-| `player.sdk_version` | SDK version string (`0.1.0`). |
+| `player.sdk_version` | SDK version string (`0.4.1`). |
 
 Each `Pulse.init()` call creates a distinct `session_id`, mapping to one playback
 attempt. Call `Pulse.init()` again for each new playback attempt — page refresh,

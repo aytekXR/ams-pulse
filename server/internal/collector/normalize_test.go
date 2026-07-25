@@ -5,8 +5,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/pkg/amsclient"
 )
 
 // TestVD05_ViewerCountAccuracy_NonTautological verifies that NormalizeBroadcast

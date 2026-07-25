@@ -3,13 +3,20 @@ info:
   title: Pulse API
   version: "1.0.0"
   license:
-    name: "Proprietary"
-    url: "https://pulse.dev/license"
+    name: "PolyForm Noncommercial 1.0.0 (server) / MIT (SDKs); commercial keys available"
+    url: "https://github.com/aytekXR/ams-pulse/blob/main/docs/licensing-public.md"
+  contact:
+    email: support@beyondkaira.com
+    url: "https://github.com/aytekXR/ams-pulse"
   description: |
     Pulse Query & Config API. Serves the web dashboard and the customer-facing
     Data API (PRD F8). All `/api/v1` paths require bearer-token authentication
     unless noted. Read endpoints answer from pre-built rollups (ClickHouse) or
     live in-memory aggregates — never from raw event tables directly.
+
+    **API versioning:** The API contract (`info.version`) is versioned
+    independently of the product release tag; `1.0.0` here reflects the
+    stability of the contract surface, not the Pulse binary version.
 
     **Live endpoints** (`/live/overview`, `/live/streams`, `/live/ws`) serve from
     in-memory aggregates maintained by the collector, not from ClickHouse. This

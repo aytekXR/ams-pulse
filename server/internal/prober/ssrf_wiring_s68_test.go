@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
 )
 
 func TestGuardedClient_RefusesMetadata_S68(t *testing.T) {

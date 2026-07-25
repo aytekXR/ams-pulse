@@ -19,9 +19,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/internal/ssrfguard"
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/ssrfguard"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // ─── F9 Anomaly detection ────────────────────────────────────────────────────

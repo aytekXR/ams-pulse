@@ -20,35 +20,44 @@ pull), cosign-signed, multi-arch (amd64/arm64), SBOM + provenance, published by 
 tag pipeline.
 Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.4.1**).
 
-**Docker Compose (supported production path):**
+**Docker Compose (signed image — recommended for evaluators):**
 
 ```sh
 git clone https://github.com/aytekXR/ams-pulse.git && cd ams-pulse
 cp deploy/.env.example deploy/.env
 # edit deploy/.env:
 #   PULSE_SECRET_KEY — generate with: openssl rand -hex 32
-#   PULSE_AMS_URL    — uncomment and set to your AMS REST base URL, e.g. http://10.0.1.10:5080
-#   PULSE_AMS_LOGIN_EMAIL / PULSE_AMS_LOGIN_PASSWORD — AMS admin credentials
-docker compose -p pulse-prod \
-  -f deploy/docker-compose.prod.yml \
-  -f deploy/docker-compose.real-ams.yml \
-  --env-file deploy/.env \
+#   PULSE_AMS_URL    — set to your AMS REST base URL, e.g. http://10.0.1.10:5080
+docker compose -f deploy/docker-compose.yml up -d
+```
+
+This pulls `ghcr.io/aytekxr/ams-pulse:0.4.1` — cosign-signed, SBOM-attached, no
+authentication required (`ghcr.io/aytekxr/ams-pulse` is public).
+To verify the image signature before running:
+
+```sh
+cosign verify \
+  --certificate-identity-regexp 'https://github.com/aytekXR/ams-pulse' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/aytekxr/ams-pulse:0.4.1
+```
+
+**Building from source** (development or local patches):
+
+```sh
+docker compose \
+  -f deploy/docker-compose.yml \
+  -f deploy/docker-compose.build.yml \
   up -d --build
 ```
 
-> **PULSE_AMS_URL is required.** `docker-compose.prod.yml` defaults to the built-in
-> mock-AMS for local QA; adding `docker-compose.real-ams.yml` (as shown above) routes
-> Pulse to your configured AMS URL instead. If PULSE_AMS_URL is unset, compose will
-> print `PULSE_AMS_URL must be set` and exit — see `deploy/.env.example` for the line
-> to uncomment.
->
-> After the stack starts the UI is at **http://127.0.0.1:8090** (loopback only). The
-> stack terminates no TLS itself — put a reverse proxy on the host in front of the
-> loopback ports for public exposure. The reference production edge is host nginx
-> (vhosts in `deploy/nginx/`, TLS via certbot HTTP-01 webroot, cert at
-> `/etc/letsencrypt/live/beyondkaira.com/`).
+> After the stack starts the UI is at **http://localhost:8090** when using
+> `make up` / `cd deploy && docker compose up -d` (the `docker-compose.override.yml`
+> publishes port 80 on all interfaces). With explicit `-f` flags, port 8090 is
+> `expose:`d only inside the Docker network — bind it or front with a reverse proxy.
+> The stack terminates no TLS itself.
 
-> Full walkthrough (incl. TLS/edge exposure, real-AMS wiring, backups):
+> Full walkthrough (incl. AMS wiring, TLS/edge exposure, backups):
 > [docs/runbooks/install.md](docs/runbooks/install.md) and
 > [docs/runbooks/productionize.md](docs/runbooks/productionize.md).
 
@@ -260,6 +269,7 @@ sqlite3 :memory: < contracts/db/meta/0001_init.sql        # meta DDL
 ## License
 
 - **Server, web UI, and deployment tooling:** [PolyForm Noncommercial 1.0.0](LICENSE) —
-  free for noncommercial use, modification, and distribution; commercial use
-  requires a vendor license (see `docs/licensing.md`).
-- **Beacon SDK** (`sdk/beacon-js/`): MIT.
+  Copyright (c) 2026 Aytek Erdoğan (beyondkaira.com).
+  Free for noncommercial use; commercial tiers available — see `docs/licensing-public.md`.
+- **SDKs** (`sdk/beacon-js`, `sdk/beacon-swift`): MIT —
+  Copyright (c) 2026 Aytek Erdoğan (beyondkaira.com).

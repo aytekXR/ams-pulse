@@ -31,10 +31,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/pulse-analytics/pulse/server/internal/config"
-	"github.com/pulse-analytics/pulse/server/internal/reports"
-	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse"
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/config"
+	"github.com/aytekXR/ams-pulse/server/internal/reports"
+	"github.com/aytekXR/ams-pulse/server/internal/store/clickhouse"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
 // Version is set by the build system via -ldflags.

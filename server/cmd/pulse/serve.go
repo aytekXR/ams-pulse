@@ -11,29 +11,29 @@ import (
 
 	oidclib "github.com/coreos/go-oidc/v3/oidc"
 
-	"github.com/pulse-analytics/pulse/server/internal/alert"
-	"github.com/pulse-analytics/pulse/server/internal/alert/channels"
-	"github.com/pulse-analytics/pulse/server/internal/anomaly"
-	"github.com/pulse-analytics/pulse/server/internal/api"
-	"github.com/pulse-analytics/pulse/server/internal/cluster"
-	"github.com/pulse-analytics/pulse/server/internal/collector"
-	"github.com/pulse-analytics/pulse/server/internal/collector/aggregator"
-	beaconingest "github.com/pulse-analytics/pulse/server/internal/collector/beacon"
-	"github.com/pulse-analytics/pulse/server/internal/collector/ingest"
-	kafkasrc "github.com/pulse-analytics/pulse/server/internal/collector/kafka"
-	"github.com/pulse-analytics/pulse/server/internal/collector/restpoller"
-	"github.com/pulse-analytics/pulse/server/internal/collector/sessions"
-	webhooksrc "github.com/pulse-analytics/pulse/server/internal/collector/webhook"
-	"github.com/pulse-analytics/pulse/server/internal/config"
-	"github.com/pulse-analytics/pulse/server/internal/domain"
-	"github.com/pulse-analytics/pulse/server/internal/license"
-	"github.com/pulse-analytics/pulse/server/internal/prober"
-	"github.com/pulse-analytics/pulse/server/internal/query"
-	"github.com/pulse-analytics/pulse/server/internal/reports"
-	"github.com/pulse-analytics/pulse/server/internal/store/clickhouse"
-	"github.com/pulse-analytics/pulse/server/internal/store/meta"
-	"github.com/pulse-analytics/pulse/server/internal/tenant"
-	"github.com/pulse-analytics/pulse/server/pkg/amsclient"
+	"github.com/aytekXR/ams-pulse/server/internal/alert"
+	"github.com/aytekXR/ams-pulse/server/internal/alert/channels"
+	"github.com/aytekXR/ams-pulse/server/internal/anomaly"
+	"github.com/aytekXR/ams-pulse/server/internal/api"
+	"github.com/aytekXR/ams-pulse/server/internal/cluster"
+	"github.com/aytekXR/ams-pulse/server/internal/collector"
+	"github.com/aytekXR/ams-pulse/server/internal/collector/aggregator"
+	beaconingest "github.com/aytekXR/ams-pulse/server/internal/collector/beacon"
+	"github.com/aytekXR/ams-pulse/server/internal/collector/ingest"
+	kafkasrc "github.com/aytekXR/ams-pulse/server/internal/collector/kafka"
+	"github.com/aytekXR/ams-pulse/server/internal/collector/restpoller"
+	"github.com/aytekXR/ams-pulse/server/internal/collector/sessions"
+	webhooksrc "github.com/aytekXR/ams-pulse/server/internal/collector/webhook"
+	"github.com/aytekXR/ams-pulse/server/internal/config"
+	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/license"
+	"github.com/aytekXR/ams-pulse/server/internal/prober"
+	"github.com/aytekXR/ams-pulse/server/internal/query"
+	"github.com/aytekXR/ams-pulse/server/internal/reports"
+	"github.com/aytekXR/ams-pulse/server/internal/store/clickhouse"
+	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
+	"github.com/aytekXR/ams-pulse/server/internal/tenant"
+	"github.com/aytekXR/ams-pulse/server/pkg/amsclient"
 )
 
 // resolveMetaBackend determines the meta store backend name and DSN from
@@ -289,6 +289,7 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		kafkaSource = kafkasrc.New(kafkasrc.Config{
 			Brokers:  cfg.KafkaBrokers,
 			GroupID:  cfg.KafkaGroupID,
+			Topics:   cfg.KafkaTopics, // empty slice → New() default (ams-instance-stats, ams-webrtc-stats)
 			NodeID:   cfg.AMSNodeID,
 			MaxWait:  1 * time.Second,
 			MinBytes: 1,

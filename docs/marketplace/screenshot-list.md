@@ -1,12 +1,4 @@
-<!--
-  DRAFT — INTERNAL. External use gated on operator review of
-  docs/assessment/final-assessment.md (D-081).
--->
-
-> **DRAFT — INTERNAL. External use gated on operator review of
-> `docs/assessment/final-assessment.md` (D-081).**
->
-> **All six listing shots are now AUTOMATED from the LIVE APP** (D-161, S97):
+> **All six listing shots are AUTOMATED from the LIVE APP** (D-161, S97):
 > `node qa/marketplace/capture-live-screenshots.mjs` renders the real React UI
 > (route-mocked data, 1920×1080, dark theme) — this is the preferred source, since
 > it shows the actual product. `render-screenshots.mjs` (brandkit design mocks)
@@ -27,7 +19,7 @@
 | # | File | Status | Method |
 |---|------|--------|--------|
 | SS1 | `ss1-dashboard.png` | **AUTOMATED (live app)** | `capture-live-screenshots.mjs`; brandkit fallback available |
-| SS2 | `ss2-ingest-health.png` | **AUTOMATED (live app)** | `capture-live-screenshots.mjs`; brandkit fallback: `ss2-stream-detail.png` |
+| SS2 | `ss2-ingest-health.png` | **AUTOMATED (live app)** | `capture-live-screenshots.mjs` (the old `ss2-stream-detail.png` brandkit fallback was retired in S105 — the live capture is canonical) |
 | SS3 | `ss3-alerting.png` | **AUTOMATED (live app)** | `capture-live-screenshots.mjs` (was operator-manual) |
 | SS4 | `ss4-analytics.png` | **AUTOMATED (live app)** | `capture-live-screenshots.mjs`; brandkit fallback available |
 | SS5 | `ss5-reports.png` | **AUTOMATED (live app)** | `capture-live-screenshots.mjs` (was operator-manual; Business-tier data mocked) |
@@ -39,15 +31,16 @@ uses; verified populated on 2026-07-22 (viewer counts, charts, badges all non-em
 Also produces the user-guide set (below).
 **Fallback script:** `qa/marketplace/render-screenshots.mjs` (brandkit hi-fi mocks, SS1/SS2/SS4 only).
 **Rerun command:** `node qa/marketplace/capture-live-screenshots.mjs` (from repo root)  
-**Output directory:** `docs/marketplace/screenshots/` (gitignored — PNGs are reproducible
-artifacts; whether to commit a curated set for the user guide is an operator packaging
-decision, see `docs/user-guide.md` note)
+**Output directory:** `docs/marketplace/screenshots/` — six listing PNGs and the user-guide
+set are committed to the repository (S105/D-172); the capture script is portable (no
+hardcoded machine paths). Regenerate at any time with the command above.
 
 **User-guide set (same script, same run):** `ug-qoe.png`, `ug-fleet.png`, `ug-anomalies.png`,
 `ug-audit-log.png`, `ug-settings-sources.png`, `ug-settings-license.png`, `ug-login.png`,
-`ug-onboarding-step2.png`, plus `ss1-light.png` (⚠ currently byte-identical to the dark
-shot — the light-theme toggle did not visibly apply in the capture context; re-verify
-before using a light-theme shot anywhere).
+`ug-onboarding-step2.png`, plus `ss1-light.png` (a genuine light-theme capture as of
+S105/D-172 — the historical byte-identical-to-dark bug is fixed: its real cause was
+Playwright's default light `prefers-color-scheme` making the whole "dark" set render
+light; both themes are now pinned explicitly and the light shot is asserted at capture).
 
 ---
 
@@ -125,7 +118,7 @@ non-zero bitrate and viewer count.
 - Stream cards with `hlsViewerCount`, `webRTCViewerCount`, health score badge
 - Fleet node card (OS, version, status=up)
 - Timestamp or "last updated" indicator
-- Dark and light theme both supported — automation captures in dark theme; `ss1-light.png` provides a light-theme variant (see ⚠ caveat in User-guide set section above)
+- Dark and light theme both supported — automation captures in dark theme (explicitly pinned since S105); `ss1-light.png` provides a genuine light-theme variant
 
 **Evidence basis:** F1 PARTIALLY → live dashboard validated TC-WH-02, TC-V-03,
 TC-FL-01/02 (S17/S18).
@@ -135,7 +128,7 @@ TC-FL-01/02 (S17/S18).
 ### Screenshot 2 — Ingest Health and Bitrate Timeline
 
 **Status:** AUTOMATED (live app) — `node qa/marketplace/capture-live-screenshots.mjs`  
-**Output:** `docs/marketplace/screenshots/ss2-ingest-health.png` (1920×1080; brandkit fallback: `ss2-stream-detail.png`)
+**Output:** `docs/marketplace/screenshots/ss2-ingest-health.png` (1920×1080)
 
 **Caption:** "Per-publisher ingest health: bitrate, health score, packet loss, and
 drop events. Ingest degradation visible within 15 seconds."
