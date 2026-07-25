@@ -30,9 +30,22 @@
 > via `docker run … -v ~/go/pkg:/go/pkg golang:1.25` (subagent claims of native `go test` runs
 > were impossible; re-verify gates yourself). Playwright captures MUST pin the theme explicitly.
 >
-> **Next session job:** confirm the S105 PR merged with green CI (if still open, shepherd it);
-> then resume the low-frequency gate — read prod health every cycle (component-scoped collector
-> + ClickHouse count). Prod stays v0.4.0-139 unless the operator authorises a stamped roll.
+> **Next session job:** confirm **PR #214** merged with green CI (if still open, shepherd it —
+> two fixups landed: helm goldens regenerated for chart 0.2.0/appVersion 0.4.1/CH digest, and
+> the 5 CodeQL integer-conversion alerts hardened with integer-domain clamps); then resume the
+> low-frequency gate — read prod health every cycle (component-scoped collector + ClickHouse
+> count). Prod stays v0.4.0-139 unless the operator authorises a stamped roll.
+>
+> **★ NEXT SESSION'S PRIMARY GOAL — CUT v0.4.2.** The released 0.4.1 image does NOT contain
+> the S105 code fixes (Kafka topics/shapes, webhook official-payload, ProxyAuthorization
+> landed post-tag), while the docs on main describe the fixed behavior — an evaluator-visible
+> doc/image drift that only a new tag resolves. The cut is mechanical and now gate-guarded:
+> bump VERSION + Chart appVersion + sdk/beacon-js package.json to 0.4.2, roll CHANGELOG
+> [Unreleased]→[0.4.2], re-stamp product/faq/known-limitations headers, bump the
+> quickstart/compose/README 0.4.1 pins, tag v0.4.2 → release.yml does the rest (image, GitHub
+> Release, SDK tarball; npm publish too if the operator has added NPM_TOKEN by then). Then
+> update the marketplace docs' pin references and run the anonymous clean-room pull check
+> (D-168 pattern) against 0.4.2.
 > Operator queue (operator-expected.md ★S105): submit listing · billing · load lane (+ AV-15
 > Kafka live validation on the same PAYG AMS) · demo final re-record (rough cut now DARK, on the
 > release) · send Ankush reply · NPM_TOKEN secret · confirm licensor legal name · optional prod
