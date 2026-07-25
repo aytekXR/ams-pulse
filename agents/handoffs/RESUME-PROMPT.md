@@ -11,7 +11,19 @@
 
 ---
 
-## ▶ START HERE (next session — SESSION-103's two autonomous tasks are DONE (Ankush draft + demo-generator script); the autonomous backlog is EMPTY. Everything remaining is operator-outbound. Low-frequency gate + prod-health read.)
+## ▶ START HERE (next session — S104/D-171 done: the operator PROVISIONED `support@beyondkaira.com` (★S103 item 3 CLOSED, docs de-staled). Backlog still EMPTY; 8 operator-outbound items remain. Low-frequency gate + prod-health read.)
+
+> **✅ Where we are (2026-07-25 evening, D-171):** the operator confirmed **`support@beyondkaira.com` is created** — the only pre-GA support-infra task. Recorded (decisions.md D-171, `sessions/SESSION-104.md`); de-staled `support.md`, `submission-package.md`, `operator-expected.md` (★S104 header), ROADMAP §1E. **No SLA/policy value changed** (D-169 stands). NO code, NO prod roll.
+>
+> **S104 gate reads (all green):** prod collector component `ok` · binary v0.4.0-139-gf9e9c69 unchanged · `server_events` 1,302,178 rows, exactly 720 rows/h, last event seconds-old · CH+meta backups fresh 16:13 UTC · `pulse-realams` (:18090) is the documented standing QA lane, EXPECTED, leave it · Dependabot 17 PRs (oldest 10 days) still operator-held · D-170 merge CI: see SESSION-104.md addendum for terminal state.
+>
+> **THE AUTONOMOUS BACKLOG REMAINS EMPTY.** Remaining = 8 operator-outbound/infra items (`operator-expected.md` ★S104): submit listing · billing · load lane (→ real capacity number) · record demo final (rough cut RENDERED, D-170) · send Ankush reply (draft READY, D-170) · optional prod roll to 0.4.1 · rotate secrets · optional VPS Chromium deps. Decision-gated eng: §2.45 built-in self-alert rule, §2.44 `[FO-1]`, Dependabot ruling.
+>
+> **Next session job (unchanged):** low-frequency gate; **read prod health every cycle** (component-scoped `/healthz` collector + a ClickHouse `server_events` count — that read caught the last two live regressions). Execute any arrived operator decision. Do NOT manufacture an arc; do NOT perform outbound/marketplace actions or send anything on the operator's behalf. Prod stays v0.4.0-139 unless the operator authorises a stamped roll. `git status` + commit-by-path before every edit.
+
+---
+
+## (superseded — S104/D-171 above executed the arrived operator input) ▶ was: START HERE (next session — SESSION-103's two autonomous tasks are DONE (Ankush draft + demo-generator script); the autonomous backlog is EMPTY. Everything remaining is operator-outbound. Low-frequency gate + prod-health read.)
 
 > **✅ Where we are (2026-07-25):** v0.4.1 released, GHCR public, anonymous install verified (D-168); go-to-market decisions delegated + made (D-169: pricing Free $0 / Pro $99 / Business $299 / Enterprise from $799, "Founding Operators" near-free-year-1 campaign Pro $9 / Business $29, 14-day trial, support/SLA, provisional capacity, D-081 cleared). **SESSION-103 then did its two autonomous tasks:**
 > - **✅ Ankush reply DRAFTED** → `docs/marketplace/ankush-reply-draft.md` (requests the developer meeting; operator fills the [brackets] and SENDS it — do NOT send on their behalf).

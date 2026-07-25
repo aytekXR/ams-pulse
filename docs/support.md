@@ -2,8 +2,8 @@
 
 > **Support policy set for launch (operator-delegated, D-169).**
 > All SLA, channel, email, hours, and version-support decisions are resolved below.
-> The one remaining operator task is provisioning the **support@beyondkaira.com** mailbox
-> (or a Zendesk/Freshdesk alias) before GA — see §1. Operator may override any value.
+> ✅ The **support@beyondkaira.com** mailbox is **provisioned and live** (operator confirmed
+> 2026-07-25, D-171) — no provisioning task remains. Operator may override any value.
 > Marketplace-readiness checklist row 7.
 
 ---
@@ -13,7 +13,7 @@
 | Channel | Where | Notes |
 |---|---|---|
 | GitHub Issues | [github.com/aytekXR/ams-pulse/issues](https://github.com/aytekXR/ams-pulse/issues) | Source-available (PolyForm NC); public bug tracking |
-| Email | See tier table below | Non-security requests; rotate to a shared alias before GA |
+| Email | support@beyondkaira.com | Non-security requests; provisioned and live (D-171) |
 | Security vulnerabilities | aytek@beyondkaira.com | **Do not open a public issue** — see §3 |
 
 ### Response-time targets by tier
@@ -25,9 +25,10 @@
 | **Business** | GitHub Issues + email | **1 business day** |
 | **Enterprise** | Named contact + shared Slack/Teams channel | **4 business hours** (critical); named contact + onboarding assistance; custom SLA addendum available |
 
-Support email: **support@beyondkaira.com** (or a ticketing alias such as Freshdesk/Zendesk).
-Set the same address in the marketplace listing.
-_Set for launch (operator-delegated, D-169) — subject to operator override. Provisioning the mailbox is an operator task._
+Support email: **support@beyondkaira.com** — provisioned and live (operator, 2026-07-25).
+Set the same address in the marketplace listing. A ticketing alias (Freshdesk/Zendesk) can front
+it later without changing the published address.
+_Set for launch (operator-delegated, D-169) — subject to operator override._
 
 Business hours: **Monday–Friday 09:00–18:00 UTC**, excluding public holidays.
 State this explicitly in the Enterprise SLA addendum.
