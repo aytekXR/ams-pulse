@@ -169,21 +169,20 @@ if [[ $PULL_RC -ne 0 ]]; then
     printf '%s\n' "$PULL_OUT" | grep -iE '401|403|error|unauthorized|denied' | head -3 | sed 's/^/    /' >&2
     printf '\n' >&2
     printf 'This is a REGISTRY ACCESS problem — nothing is wrong with your Docker setup.\n' >&2
-    printf 'The image is currently private on GHCR and requires authentication to pull.\n' >&2
+    printf 'The image is PUBLIC (no login needed), so this usually means the tag does not\n' >&2
+    printf 'exist, a network/proxy is blocking ghcr.io, or GHCR is rate-limiting you.\n' >&2
     printf '\n' >&2
-    printf 'Option 1 — Authenticate with a GitHub Personal Access Token:\n' >&2
-    printf '  1. Create a PAT at https://github.com/settings/tokens/new\n' >&2
-    printf '     (classic, read:packages scope is sufficient)\n' >&2
-    printf '  2. Log in:  docker login ghcr.io -u YOUR_GITHUB_USERNAME\n' >&2
-    printf '     (paste your PAT when prompted for a password)\n' >&2
-    printf '  3. Re-run this installer.\n' >&2
+    printf 'Option 1 — Check the tag and connectivity:\n' >&2
+    printf '  - Confirm the tag exists (image tags have NO v prefix, e.g. 0.4.1 not v0.4.1):\n' >&2
+    printf '      https://github.com/aytekXR/ams-pulse/pkgs/container/ams-pulse\n' >&2
+    printf '  - Retry the pull directly:  docker pull %s\n' "$PULSE_IMAGE" >&2
     printf '\n' >&2
-    printf 'Option 2 — Build from source (no registry credentials needed):\n' >&2
+    printf 'Option 2 — Build from source (no registry needed):\n' >&2
     printf '  git clone %s\n' "$REPO_WEB" >&2
     printf '  cd ams-pulse && make build\n' >&2
     printf '  PULSE_IMAGE=pulse:dev bash deploy/quickstart/install.sh ...\n' >&2
     printf '\n' >&2
-    printf 'Need access or help? Open an issue: %s/issues\n' "$REPO_WEB" >&2
+    printf 'Still stuck? Open an issue: %s/issues\n' "$REPO_WEB" >&2
   else
     printf '\nERROR: Image pull failed:\n' >&2
     printf '%s\n' "$PULL_OUT" >&2

@@ -513,25 +513,22 @@ Error: Docker Compose v2 not found.
 
 ---
 
-### GHCR 401 / image not accessible
+### Image not accessible from the registry
 
 ```
 ERROR: The Pulse container image is not accessible from the registry.
-  Image : ghcr.io/aytekxr/ams-pulse:0.4.0
+  Image : ghcr.io/aytekxr/ams-pulse:0.4.1
 ```
 
-The GHCR package is currently private. Authenticate first:
-
-```bash
-# Create a GitHub PAT with read:packages scope at:
-# https://github.com/settings/tokens/new
-
-docker login ghcr.io -u YOUR_GITHUB_USERNAME
-# Paste your PAT when prompted for a password.
-```
-
-Then re-run `install.sh`. The installer pre-pulls the image before writing any
-credentials to disk, so a 401 at this stage is safe to retry.
+The image is **public** — no `docker login` is needed. A failure at this stage
+means the tag does not exist, a network/proxy is blocking `ghcr.io`, or GHCR is
+rate-limiting you. Check the tag on the
+[package page](https://github.com/aytekXR/ams-pulse/pkgs/container/ams-pulse)
+(tags have **no `v` prefix** — `0.4.1`, not `v0.4.1`) and retry
+`docker pull ghcr.io/aytekxr/ams-pulse:0.4.1`. If your environment cannot reach
+GHCR at all, build from source instead (`make build`, then
+`PULSE_IMAGE=pulse:dev`). The installer pre-pulls before writing any credentials
+to disk, so this stage is always safe to retry.
 
 ---
 

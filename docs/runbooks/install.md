@@ -37,14 +37,12 @@ ClickHouse migration SQL **baked in** — no repo clone is needed. A single scri
 Docker preflight, credential collection, `.env` writing, stack start, healthz polling,
 and bootstrap-token extraction.
 
-> **GHCR visibility (pending):** `ghcr.io/aytekxr/ams-pulse` is pending public visibility.
-> Until the operator flips the package to Public you must authenticate first:
-> `docker login ghcr.io` (GitHub PAT with `read:packages` scope).
-> This note will be removed once the package is public.
+> **GHCR visibility:** `ghcr.io/aytekxr/ams-pulse` is **public** — no `docker login` or
+> credentials are needed to pull.
 
 > **Image tag format:** Pulse image tags have **no `v` prefix**. The git release tag
-> `v0.4.0` is published as image tag `0.4.0` (not `v0.4.0`). Always omit the `v`
-> when specifying an image tag (e.g. `ghcr.io/aytekxr/ams-pulse:0.4.0`).
+> `v0.4.1` is published as image tag `0.4.1` (not `v0.4.1`). Always omit the `v`
+> when specifying an image tag (e.g. `ghcr.io/aytekxr/ams-pulse:0.4.1`).
 
 ### Prerequisites
 
@@ -216,14 +214,12 @@ make up
 > on every `compose up`. To use a pre-built released image instead, pull it first and
 > create a small image-pin override file:
 >
-> > **GHCR visibility (pending):** `ghcr.io/aytekxr/ams-pulse` is pending public visibility.
-> > Until the package is made public you must authenticate first:
-> > `docker login ghcr.io` (GitHub PAT with `read:packages` scope).
+> > **GHCR visibility:** `ghcr.io/aytekxr/ams-pulse` is **public** — no `docker login` needed.
 >
 > ```sh
 > # Pull the released image. ⚠ Image tags have NO `v` prefix: the git tag
 > # `v0.4.0` publishes the image tag `0.4.0` (also `0.4`, `0`, `latest`).
-> docker pull ghcr.io/aytekxr/ams-pulse:0.4.0
+> docker pull ghcr.io/aytekxr/ams-pulse:0.4.1
 > ```
 >
 > Create `deploy/docker-compose.image-pin.yml` (do not commit this file).
@@ -237,7 +233,7 @@ make up
 > ```yaml
 > services:
 >   pulse:
->     image: ghcr.io/aytekxr/ams-pulse:0.4.0
+>     image: ghcr.io/aytekxr/ams-pulse:0.4.1
 >     ports:
 >       - "127.0.0.1:8090:8090"   # loopback only; front with a reverse proxy for remote access
 >     environment:
@@ -247,7 +243,7 @@ make up
 >         condition: service_completed_successfully
 >
 >   pulse-migrate:
->     image: ghcr.io/aytekxr/ams-pulse:0.4.0
+>     image: ghcr.io/aytekxr/ams-pulse:0.4.1
 >     entrypoint: ["pulse", "migrate"]   # image ENTRYPOINT is `pulse serve`
 >     restart: "no"
 >     depends_on:

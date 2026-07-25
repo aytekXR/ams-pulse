@@ -63,3 +63,17 @@ If the operator has answered a decision (§2.45 rule, `[FO-1]`, Dependabot, pric
 Otherwise: low-frequency gate, and **keep reading prod health every gate** — that read has caught the
 last two live regressions. Prod stays v0.4.0-139 (neither D-166 nor D-167 is rolled to prod; both are
 released/merged only).
+
+---
+
+## Close-out addendum (2026-07-25, D-168) — blocker 1 CLOSED
+
+The operator flipped GHCR public mid-session, so the "next session" clean-room verify was run
+immediately rather than deferred. Anonymous evaluator path proven end-to-end (empty
+`DOCKER_CONFIG` = zero credentials, isolated `pulse-cleanroom` project on loopback 38090, mock
+AMS, torn down `-v`, prod untouched): anonymous `docker pull …:0.4.1` (digest `sha256:0f70b99e…`)
+→ baked-in migrations applied → `v0.4.1` → dashboard UI 200 → `/healthz` collector `ok` → 8
+`server_events` collected → Free tier. All six "GHCR private / `docker login`" doc notes
+de-staled; example pins `0.4.0`→`0.4.1`. **No technical blocker remains for listing** — the
+REVIEW-EXT-2026-07-24 "DO NOT LIST TODAY" verdict is fully retired. Full record: `decisions.md`
+D-168; operator go-to-market queue: `operator-expected.md` ★S102. Prod stays v0.4.0-139.

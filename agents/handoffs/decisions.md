@@ -9628,3 +9628,20 @@ Recommended rule (docs/guides/prometheus.md): `pulse_collector_up == 0` for 2m. 
 **Left OPEN in §2.45 (decision-gated, NOT in this arc):** the *built-in* Pulse-native "collector offline" rule for operators who don't run Prometheus — the *internal-notification* gap. It needs a semantics decision first (maintenance-window interaction; which channels at which tier; evaluate off `domain.CollectorHealth` on its own timer, defaulting enabled-and-unmuted since the failure is invisible by definition; interaction with `[FO-1]`). Surfaced to the operator via ROADMAP §2.45.
 
 **State:** prod untouched (still v0.4.0-139; D-167 is a code increment on `main`, not a prod roll). This is a separate small session (S102) opened after the S101/D-166 close because the S101 charter (review + D-164 + release) was complete and its only remaining blocker is operator-gated.
+
+## D-168 — (2026-07-25, SESSION-102 cont.): CLOSED release-integrity blocker 1 — operator flipped GHCR public; loop verified the anonymous evaluator path end-to-end. NO prod roll.
+
+**Trigger.** The operator flipped `ghcr.io/aytekxr/ams-pulse` to **public** (the one action with no API — web-UI only, `PATCH /user/packages/...` → 404). That unblocked the last mile of REVIEW-EXT-2026-07-24 blocker 1 / D-166: prove an outside evaluator's exact path works to a live dashboard.
+
+**Verification (anonymous, isolated, prod untouched).** Ran with an empty `DOCKER_CONFIG` (guaranteed zero credentials) in a throwaway compose project `pulse-cleanroom` on loopback `38090` with a mock AMS standing in for the evaluator's server:
+1. `gh api …/ams-pulse` → `visibility: public`.
+2. Anonymous `docker pull ghcr.io/aytekxr/ams-pulse:0.4.1` → success, digest `sha256:0f70b99eaa38…` (matches the release artifact). This is the exact call that returned `unauthorized`/401 while private — now works.
+3. Quickstart stack up from the pulled image: `pulse-migrate` applied the **baked-in** ClickHouse migrations (through `0010`), proving the image is self-contained (no repo clone).
+4. `pulse version` → `v0.4.1 (commit e45ea8b, built 2026-07-24T17:16:17Z)` — the released image is HEAD-of-`main`, not the stale D-089 build the review flagged.
+5. Dashboard UI: `GET /` → **HTTP 200**, `<title>Pulse — Ant Media Analytics</title>`.
+6. `/healthz` → all components `ok`, **collector `ok`**; **8 `server_events`** collected from the mock AMS (live collection working). Default **Free tier** (correct out-of-box; `/metrics` correctly 403s on Free since Prometheus is Business+ — the D-167 gauges are present in the image, license-gated at runtime).
+7. Torn down `-v`; **prod untouched and healthy** throughout (`v0.4.0-139`, collector `ok`).
+
+**Doc de-staling (same PR).** The moment the package went public, every "GHCR is private / `docker login` first / `read:packages` PAT" note became false. Corrected across `README.md`, `deploy/quickstart/docker-compose.quickstart.yml`, `deploy/quickstart/install.sh` (the pull-failure help now says the image is public and reframes a failure as tag/network/rate-limit, keeping the build-from-source fallback), `docs/faq.md` (Q6), `docs/troubleshooting.md`, and `docs/runbooks/install.md` (two blocks). Evaluator-facing example image pins bumped `0.4.0`→`0.4.1`. The `operator-expected.md` ★S102 top block and `RESUME-PROMPT` START HERE updated to mark blocker 1 CLOSED.
+
+**Net state.** **No technical blocker remains for the marketplace listing.** The full REVIEW-EXT-2026-07-24 verdict ("DO NOT LIST TODAY") is now fully retired: blockers 1-3 fixed and *proven* (release integrity now includes a live anonymous clean-room install), fast-follows 4-7 shipped, lower items + D-165 leftovers shipped, D-167 added. What remains is operator go-to-market only (pricing sign-off, support/SLA, load-lane capacity, demo video, Ankush reply, Dependabot ruling, §2.45 built-in-rule semantics, secret rotation) — none of it engineering, none of it autonomously actionable. Prod stays v0.4.0-139 (D-166/D-167/D-168 are released/merged, not rolled to prod).

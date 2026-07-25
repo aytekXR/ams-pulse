@@ -8,12 +8,9 @@
 # Or use deploy/quickstart/install.sh for a guided setup that handles .env creation,
 # healthz polling and bootstrap-token extraction automatically.
 #
-# Image: ghcr.io/aytekxr/ams-pulse  — ClickHouse migrations are BAKED IN (no repo
-# clone needed). Override PULSE_IMAGE to pin a specific release tag or digest.
-#
-# NOTE: ghcr.io/aytekxr/ams-pulse is pending public visibility. Until the package is
-# public you must authenticate: docker login ghcr.io  (GitHub PAT with read:packages).
-# This note will be removed once the operator flips the visibility toggle.
+# Image: ghcr.io/aytekxr/ams-pulse  — PUBLIC (no authentication needed to pull);
+# ClickHouse migrations are BAKED IN (no repo clone needed). Override PULSE_IMAGE to
+# pin a specific release tag or digest.
 
 name: pulse-quickstart
 
