@@ -96,16 +96,12 @@ healthcheck polling, and bootstrap-token extraction. Append
 
 ### Q6. Why does `docker pull ghcr.io/aytekxr/ams-pulse` fail?
 
-The GHCR image is currently **private**. Until the package is flipped to
-public, authenticate first with a GitHub PAT that has the `read:packages`
-scope:
-
-```sh
-docker login ghcr.io
-```
-
-This requirement will be removed once the package visibility is set to
-public.
+The image is **public** — no authentication is needed. If a pull fails it is
+almost always one of: a tag that does not exist (image tags have **no `v`
+prefix** — use `0.4.1`, not `v0.4.1`), a network/proxy blocking `ghcr.io`, or
+GHCR rate-limiting. Confirm the tag on the
+[package page](https://github.com/aytekXR/ams-pulse/pkgs/container/ams-pulse) and
+retry, or build from source (`make build`) if your environment cannot reach GHCR.
 
 Also note: image tags have **no `v` prefix** — the git tag `v0.4.0`
 publishes as image tag `0.4.0`, not `v0.4.0`.

@@ -1,13 +1,25 @@
 # Operator TODO — the items only YOU can do (updated 2026-07-25, SESSION-102 — v0.4.1 is RELEASED and verified; the autonomous backlog is EMPTY; ONE action unblocks the listing: flip GHCR public)
 
-> # ▶ ★ S102 CURRENT STATUS (2026-07-25) — everything the loop can do without you is DONE. The ONE blocking action is the GHCR public flip (§1 below). Prod is healthy and untouched.
+> # ▶ ★ S102 CURRENT STATUS (2026-07-25) — ✅ YOU FLIPPED GHCR PUBLIC; the loop VERIFIED the evaluator path end-to-end. The release-integrity blocker is CLOSED. No technical blocker remains for listing — what's left is your go-to-market decisions. Prod is healthy and untouched.
 >
-> **State as of 2026-07-25 09:xx UTC (all verified):**
-> - **v0.4.1 is released.** PR #204 (D-166 fix wave) + #205 (handoff) + #206 (D-167 metrics) all merged to `main`; `main` CI is green (`ci`/`e2e`/`codeql`/`ams-version-matrix` all pass on the merge commit). Tag `v0.4.1` built and pushed **`ghcr.io/aytekxr/ams-pulse:0.4.1`** (multi-arch, Trivy-scanned, cosign-signed).
-> - **The GHCR package is still PRIVATE** — I re-checked today; you have not flipped it yet. Until you do, an evaluator's `docker pull` fails and the marketplace quickstart is broken. **This is the single blocking-for-listing item.** No API exists for the flip (verified), so only you can do it. → **§1 below.**
-> - **Prod is healthy and UNCHANGED.** Still `v0.4.0-139-gf9e9c69`, tier enterprise; `server_events` collected an unbroken 720 rows/hour across the last 24 h (no gaps, collector `ok`). Neither D-166 nor D-167 is rolled to prod — both are released/merged only; a prod roll to 0.4.1 is a separate, deliberate `deployment.sh` deploy that needs your go-ahead (prod is fine as-is).
-> - **New this session (D-167, autonomous, no action needed):** `/metrics` now exposes `pulse_collector_last_success_timestamp` + `pulse_collector_up` so your Prometheus can alert on Pulse's *own* collector going blind (`pulse_collector_up == 0`) — the notification gap the D-164 outage exposed. See `docs/guides/prometheus.md`.
-> - **The loop's autonomous engineering backlog is now EMPTY.** Every remaining item needs you (a decision or your environment) or a toolchain that isn't installed here. Your queue is unchanged from ★S101 below, plus the §2.45 built-in-self-alert-rule semantics decision (the Prometheus half is done; the Pulse-native-paging half needs your ruling — see ROADMAP §2.45).
+> **State as of 2026-07-25 (all verified):**
+> - **✅ GHCR is PUBLIC and the clean-room verify PASSED.** You flipped `ghcr.io/aytekxr/ams-pulse` to public; the loop confirmed it and ran the anonymous evaluator path with **zero credentials**: anonymous `docker pull …:0.4.1` (digest `sha256:0f70b99e…`) → quickstart stack in an isolated throwaway project (never prod) → **baked-in migrations applied** (no repo clone) → image reports `v0.4.1` → **dashboard UI 200** (`<title>Pulse — Ant Media Analytics</title>`) → `/healthz` all components `ok`, **collector `ok`** → **8 `server_events` collected** from a stand-in AMS → default **Free tier** (correct out-of-box). Torn down `-v`; prod untouched. **This closes release-integrity blocker 1 — an outside evaluator's exact path works.**
+> - **Docs de-staled:** every "GHCR is private / `docker login` first" note (README, quickstart compose + `install.sh`, faq, troubleshooting, install runbook) is corrected to "public, no auth"; evaluator-facing example pins bumped `0.4.0`→`0.4.1`.
+> - **v0.4.1 is released & on `main` (green):** PRs #204 (D-166 fix wave) + #205 (handoff) + #206 (D-167 metrics) merged; image multi-arch, Trivy-scanned, cosign-signed.
+> - **Prod is healthy and UNCHANGED:** still `v0.4.0-139-gf9e9c69`, tier enterprise; unbroken 720 rows/hour across the last 24 h, collector `ok`. Neither D-166 nor D-167 is rolled to prod (released/merged only); a prod roll to 0.4.1 is a separate deliberate `deployment.sh` deploy that needs your go-ahead (prod is fine as-is).
+> - **The loop's autonomous backlog is EMPTY.** No technical work remains to list. Everything below needs YOU.
+>
+> ### ▶ What's left is all YOURS (go-to-market — no technical blocker):
+> 1. **Pricing sign-off** — the tier/node ladder is fixed in code (Free 1 / Pro 10 / Business 50 / Enterprise ∞); the dollar figures are still marked "(PROPOSED)". Confirm them.
+> 2. **Support channel + SLA** — decide and fill the support-policy skeleton.
+> 3. **Load-lane capacity number** — run the opt-in load lane on a dedicated PAYG AMS to get the listing's capacity claim.
+> 4. **Demo video** — record it (script/storyboard ready), or tell the loop to attempt a Playwright rough cut.
+> 5. **Reply to Ankush** → developer-meeting brief (`docs/marketplace/developer-meeting-brief.md`).
+> 6. **The 17-PR Dependabot queue** — confirm hold, or authorize the loop to absorb it per the batch policy.
+> 7. **§2.45 built-in self-alert rule** — the Prometheus half shipped (D-167); the Pulse-native-paging half needs a semantics ruling (maintenance-window interaction; tier/channels). See ROADMAP §2.45.
+> 8. **Rotate the chat-exposed + VPS-group-readable secrets** in `deploy/.env` / `oguz-testing.md`.
+>
+> **The old ★S101 §1 "flip GHCR" action is DONE — ignore it below.** The rest of ★S101 is unchanged context.
 >
 > ---
 >

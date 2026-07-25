@@ -15,10 +15,9 @@ Customer data never leaves the customer's infrastructure.
 
 For a guided 15-minute install wizard, see [deploy/quickstart/](deploy/quickstart/).
 
-**Released image:** `ghcr.io/aytekxr/ams-pulse` — cosign-signed, multi-arch (amd64/arm64),
-SBOM + provenance, published by a CI-gated tag pipeline.
-**The registry is private** — authenticate before pulling:
-`docker login ghcr.io` with a GitHub personal access token (read:packages scope).
+**Released image:** `ghcr.io/aytekxr/ams-pulse` — **public** (no authentication needed to
+pull), cosign-signed, multi-arch (amd64/arm64), SBOM + provenance, published by a CI-gated
+tag pipeline.
 Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.4.1**).
 
 **Docker Compose (supported production path):**
