@@ -43,14 +43,21 @@ import (
 // which comfortably covers every counter this package stores (viewer counts,
 // processor counts, consecutive-error counters).
 func clampToInt(f float64) int {
-	switch {
-	case f > math.MaxInt32:
-		return math.MaxInt32
-	case f < math.MinInt32:
-		return math.MinInt32
-	default:
-		return int(f)
+	// NaN guards nothing below — map it to 0 explicitly.
+	if math.IsNaN(f) {
+		return 0
 	}
+	// Clamp in the float domain first (handles ±Inf and values beyond int64),
+	// then re-check in the integer domain: CodeQL's integer-conversion query
+	// only recognizes integer-typed bounds checks as sanitizers.
+	i := int64(math.Max(math.MinInt32, math.Min(math.MaxInt32, f)))
+	if i > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	if i < math.MinInt32 {
+		return math.MinInt32
+	}
+	return int(i)
 }
 
 // EdgeStreamChecker is satisfied by *cluster.Discovery (and test doubles).

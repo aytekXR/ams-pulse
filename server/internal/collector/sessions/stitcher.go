@@ -169,15 +169,17 @@ func (s *Stitcher) handleLeave(ev domain.ServerEvent) {
 	state.sess.EndedAt = now
 	state.sess.UpdatedAt = now
 	// Bounded conversion: watch_time_s arrives as untrusted event data; clamp to
-	// the uint32 domain instead of wrapping on negative/oversized values.
-	switch {
-	case watchTimeS < 0:
-		state.sess.WatchTimeS = 0
-	case watchTimeS > math.MaxUint32:
-		state.sess.WatchTimeS = math.MaxUint32
-	default:
-		state.sess.WatchTimeS = uint32(watchTimeS)
+	// the uint32 domain instead of wrapping on negative/oversized values. The
+	// integer-typed bounds checks before the uint32() are deliberate — CodeQL's
+	// integer-conversion query recognizes only integer-domain guards.
+	wt := int64(math.Max(0, math.Min(math.MaxUint32, watchTimeS)))
+	if wt < 0 {
+		wt = 0
 	}
+	if wt > math.MaxUint32 {
+		wt = math.MaxUint32
+	}
+	state.sess.WatchTimeS = uint32(wt)
 	if state.sess.WatchTimeS == 0 {
 		// Derive from timestamps if AMS didn't send it.
 		elapsed := now.Sub(state.sess.StartedAt)
