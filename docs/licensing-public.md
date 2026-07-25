@@ -10,7 +10,7 @@
 
 # Pulse — Licensing Explained
 
-**Last updated:** 2026-07-22
+**Last updated:** 2026-07-25
 
 This page is the human-readable guide to Pulse licensing. It covers the
 open-source licenses that govern the code, the commercial tiers and what each
@@ -87,9 +87,11 @@ noted).
 | Tier | Price | Max Nodes | Max Streams | Retention | Alert Channels | Data API | White-label |
 |------|-------|-----------|-------------|-----------|----------------|----------|-------------|
 | **Free** | $0/month | 1 | Unlimited | 7 days | Email only | No | No |
-| **Pro** | $99/month (PROPOSED) | 10 | Unlimited | 90 days | Email, Slack, Telegram | Yes | No |
-| **Business** | $299/month (PROPOSED) | 50 | Unlimited | 396 days (13 months) | Email, Slack, Telegram, PagerDuty, Webhook | Yes | No |
-| **Enterprise** | from $799/month (PROPOSED) | Unlimited | Unlimited | Unlimited | All channels | Yes | Yes |
+| **Pro** | $99/month | 10 | Unlimited | 90 days | Email, Slack, Telegram | Yes | No |
+| **Business** | $299/month | 50 | Unlimited | 396 days (13 months) | Email, Slack, Telegram, PagerDuty, Webhook | Yes | No |
+| **Enterprise** | from $799/month | Unlimited | Unlimited | Unlimited | All channels | Yes | Yes |
+
+Prices are set for launch (operator-delegated, D-169) — subject to operator override. Annual subscriptions are billed at 10× the monthly price (two months free). See §4 for the Founding Operators launch campaign.
 
 **Notes on the table:**
 
@@ -160,32 +162,39 @@ Perpetual licenses (no `expires_at`) do not expire.
 
 ## 3. Trial access
 
-> **OPERATOR-DECISION-PENDING** — The trial-key programme described in this
-> section is proposed but not yet confirmed. The mechanism (self-serve vs.
-> manual issuance, duration, renewal) is an operator decision pending before
-> this page can be finalised for external publication. The wording below
-> mirrors `docs/marketplace/listing-draft.md` §7.
+A **14-day Pro trial key** is available to any new deployment, self-serve, with no credit card required. The trial key provides full Pro-tier entitlements (10 nodes, 90-day retention, Slack and Telegram alerts, QoE beacon integration) for the trial period.
 
-A **14-day Pro trial key** is the proposed standard onboarding path for new
-users who want to evaluate paid features before purchasing. The trial key
-provides full Pro-tier entitlements (10 nodes, 90-day retention, Slack and
-Telegram alerts, QoE beacon integration) for the trial period.
+To request a trial key, contact [support@beyondkaira.com](mailto:support@beyondkaira.com) or the marketplace support channel.
 
-To request a trial key: [support channel — NEEDS-OPERATOR].
-
-After the 14-day trial period the deployment reverts to Free tier
-automatically (see §2.4). No credit card is required for the trial.
+After the 14-day trial period the deployment reverts to Free tier automatically (see §2.4). A trial that converts to a paid subscription during the Founding Operators launch window qualifies for campaign pricing (see §4).
 
 ---
 
 ## 4. Pricing
 
-The prices shown in §2.1 are **PROPOSED** figures from `docs/prd-report.md`
-§7.11. They have not been confirmed or published through the Ant Media
-marketplace at the time of writing. **Published pricing is pending final
-operator confirmation** and may differ from the figures shown here. Check the
-official listing or contact the vendor for current pricing before making a
-purchasing decision.
+The prices in §2.1 are set for launch (operator-delegated, D-169) — subject to operator override. Annual subscriptions are billed at 10× the monthly price (two months free).
+
+### 4.1 Launch campaign — Founding Operators
+
+To maximise early adoption, a **Founding Operators** campaign applies to any deployment that activates a paid tier during the launch window.
+
+**Eligibility:** the first **6 months** after the marketplace listing goes live, or the first **100** paid activations — whichever comes first.
+
+**Campaign prices for the first 12 months:**
+
+| Tier | First 12 months | Standard price after |
+|------|-----------------|----------------------|
+| Free | $0/month (unchanged) | $0/month |
+| Pro | **$9/month** (~91% off) | $99/month |
+| Business | **$29/month** (~90% off) | $299/month |
+| Enterprise | **90-day free pilot, then 25% off year one** | from $799/month |
+
+**Terms:**
+
+- Campaign price is locked at the time of signup.
+- At the 12-month renewal, the subscription auto-reverts to the standard price with **30 days** advance email notice.
+- Founding Operators keep a permanent **10% loyalty discount** on standard pricing at every renewal thereafter.
+- Free tier remains free — no campaign required.
 
 ---
 

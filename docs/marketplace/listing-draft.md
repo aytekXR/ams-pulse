@@ -1,15 +1,15 @@
 <!--
-  DRAFT — INTERNAL. External use gated on operator review of
-  docs/assessment/final-assessment.md (D-081).
+  DRAFT — INTERNAL. External use gated on operator submitting the listing to
+  the Ant Media Marketplace.
 -->
 
-> **DRAFT — INTERNAL. External use gated on operator review of
-> `docs/assessment/final-assessment.md` (D-081).**
+> **DRAFT — INTERNAL. External use gated on operator submitting the listing to
+> the Ant Media Marketplace.**
 >
 > This document has not been reviewed by the Ant Media marketplace team.
 > Rows marked NEEDS-OPERATOR are blocked on operator action before the
-> listing can be submitted. Pricing rows are PROPOSED (from `docs/prd-report.md`
-> §7.11) and have not been confirmed with Ant Media. Revenue-share rows are
+> listing can be submitted. **Pricing is set for launch (operator-delegated,
+> D-169) — subject to operator override.** Revenue-share rows are
 > UNVERIFIED (PRD target only; not yet negotiated).
 
 ---
@@ -17,7 +17,7 @@
 # Ant Media Marketplace — Listing Draft
 
 **Product:** Pulse: Analytics & QoE Monitoring for AMS  
-**Prepared:** S27 / D-089 (2026-07-13); last revised S96 / D-160 (2026-07-22)  
+**Prepared:** S27 / D-089 (2026-07-13); last revised S103 / D-169 (2026-07-25)  
 **Contact for submission:** NEEDS-OPERATOR (see §7 below)
 
 ---
@@ -105,8 +105,9 @@ subsection (2026-07-22). Confirm remaining unknowns at the developer meeting. --
 
 ## 5. Tier and pricing table
 
-> **PROPOSED** — prices from `docs/prd-report.md` §7.11. Not yet published or confirmed
-> with the Ant Media marketplace team (checklist row 8 NEEDS-OPERATOR-CONTACT).
+> **Pricing set for launch (operator-delegated, D-169) — subject to operator override.**
+> Monthly, or annual at 10× monthly (2 months free). Standard rates apply from year two;
+> see the Founding Operators campaign below for year-one rates.
 > **Revenue-share:** Ant Media's publicly stated first-year vendor terms are **100% to the
 > vendor, no commission** (S97/D-161 research; see `submission-process.md` §1). Post-year-1
 > terms are a developer-meeting question. The PRD's older 20–30% figure is obsolete —
@@ -116,12 +117,12 @@ The entitlements below are drawn from `server/internal/license/license.go:90–1
 (the authoritative runtime implementation). Where the PRD §7.11 and license.go diverge,
 the code governs and the divergence is flagged.
 
-| Tier | Price (PROPOSED) | Max Nodes | Max Streams | Retention | Alert Channels | Data API | White-label | Notes |
+| Tier | Price | Max Nodes | Max Streams | Retention | Alert Channels | Data API | White-label | Notes |
 |------|-----------------|-----------|-------------|-----------|----------------|----------|-------------|-------|
 | **Free** | $0/month | 1 | Unlimited | 7 days | Email only (1 channel) | No | No | `freeTierEntitlements` in `server/internal/license/license.go` (§7.11 reference in comment) |
-| **Pro** | $99/month | 10 | Unlimited | 90 days | Email, Slack, Telegram (3 channels) | Yes | No | `proTierEntitlements` in license.go; **NOTE (PRD divergence):** PRD §7.11 says "1 to 2 nodes" but license.go enforces MaxNodes=10 — code governs; operator should reconcile before publishing. **NOTE (tier-order inversion):** Pro (MaxNodes=10) exceeds Business (MaxNodes=5) — a higher tier carries a lower node limit; this reversal is almost certainly unintentional and must be resolved before publishing |
-| **Business** | $299/month | 5 | Unlimited | 396 days (13 months) | Email, Slack, Telegram, PagerDuty, Webhook (5 channels) | Yes | No | `businessTierEntitlements` in license.go; includes billing reports, multi-tenant, Prometheus, scheduled PDF/CSV |
-| **Enterprise** | from $799/month (PROPOSED) | Unlimited | Unlimited | Unlimited | All 5 channels (email, Slack, Telegram, PagerDuty, webhook) | Yes | Yes | `enterpriseTierEntitlements` in license.go; includes anomaly detection (F9), SSO, white-label PDF |
+| **Pro** | $99/month | 10 | Unlimited | 90 days | Email, Slack, Telegram (3 channels) | Yes | No | `proTierEntitlements` in license.go |
+| **Business** | $299/month | 50 | Unlimited | 396 days (13 months) | Email, Slack, Telegram, PagerDuty, Webhook (5 channels) | Yes | No | `businessTierEntitlements` in license.go; includes billing reports, multi-tenant, Prometheus, scheduled PDF/CSV |
+| **Enterprise** | from $799/month | Unlimited | Unlimited | Unlimited | All 5 channels (email, Slack, Telegram, PagerDuty, webhook) | Yes | Yes | `enterpriseTierEntitlements` in license.go; includes anomaly detection (F9), SSO, white-label PDF |
 
 **Feature gates cross-check** (license.go:90–150 vs README.md feature table):
 
@@ -132,6 +133,22 @@ the code governs and the divergence is flagged.
 | Anomaly detection (F9) | Enterprise | `enterpriseTierEntitlements`; anomaly evaluator checks Enterprise tier flag |
 | White-label PDF reports | Enterprise | `WhiteLabel: true` only in `enterpriseTierEntitlements` (license.go) |
 | PagerDuty / Webhook channels | Business+ | `businessTierEntitlements.Channels` includes "pagerduty" and "webhook" |
+
+### Founding Operators — launch campaign
+
+Available to any paid-tier deployment activated during the **first 6 months** after the marketplace listing goes live, or the first **100 paid activations** — whichever comes first.
+
+| Tier | Founding Operators price (months 1–12) | Standard price (year two+) |
+|------|----------------------------------------|---------------------------|
+| Pro | **$9/month** (~91% off) | $99/month |
+| Business | **$29/month** (~90% off) | $299/month |
+| Enterprise | **90-day free pilot**, then 25% off year one | from $799/month |
+
+Campaign price is locked at signup. At the 12-month renewal the subscription auto-reverts to standard pricing with **30 days' advance email notice**. Founding Operators keep a permanent **10% loyalty discount** on standard pricing at every renewal thereafter. Free stays free forever.
+
+### 14-day Pro trial
+
+Self-serve, no credit card required, one per deployment. On expiry the deployment gracefully reverts to Free — no data loss; paid features lock. A trial that converts within the Founding Operators window qualifies for the campaign price. (Decision: D-169 §2.)
 
 ---
 
@@ -144,7 +161,7 @@ the code governs and the divergence is flagged.
 - Docker Compose single-node install
 - Community support (GitHub Issues)
 
-### Pro ($99/month — PROPOSED)
+### Pro ($99/month)
 - Everything in Free, plus:
 - Player QoE beacon SDK integration (AMS WebRTC, hls.js, video.js adapters)
 - Historical QoE analytics (startup p50, rebuffer ratio, error rate)
@@ -152,9 +169,9 @@ the code governs and the divergence is flagged.
 - Slack and Telegram alert channels
 - On-demand CSV data export
 - 90-day data retention
-- Up to 10 AMS nodes (code: license.go:124; reconcile with PRD "1 to 2 nodes" AND the Pro>Business node-limit inversion)
+- Up to 10 AMS nodes
 
-### Business ($299/month — PROPOSED)
+### Business ($299/month)
 - Everything in Pro, plus:
 - Usage and billing reports (viewer-minutes, egress estimate, VoD recording storage)
 - On-demand CSV export **and scheduled PDF and CSV delivery** (via report schedules API)
@@ -163,9 +180,9 @@ the code governs and the divergence is flagged.
 - PagerDuty and webhook alert channels (all 5 channel types)
 - 396-day (13-month) data retention — enables long-horizon trend analysis and rollups
 - Priority email support
-- Up to 5 AMS nodes (code: license.go:135; see tier-order inversion note in §5)
+- Up to 50 AMS nodes
 
-### Enterprise (from $799/month — PROPOSED)
+### Enterprise (from $799/month)
 - Everything in Business, plus:
 - Anomaly detection (F9: Welford baselines on viewers, bitrate, CPU/mem)
 - White-label PDF reports
@@ -209,9 +226,10 @@ detect the missing dist and build it. The script uses Playwright Chromium; run
 
 ## 8. Trial-key onboarding paragraph
 
-> **ASSUMED — OPERATOR-DECISION-PENDING.** A 14-day Pro trial key is assumed as the
-> standard onboarding path. Whether Pulse ships with a built-in trial or requires
-> a manual trial-key issuance is an operator decision.
+> A **14-day Pro trial** is available — self-serve, no credit card required, one per deployment.
+> On expiry the deployment gracefully reverts to Free (no data loss; paid features lock).
+> A trial that converts within the Founding Operators launch window qualifies for the
+> campaign price. (Decision: D-169 §2.)
 
 ---
 
@@ -224,8 +242,8 @@ Pulse installs in under 15 minutes. After installing via Docker Compose:
 4. To activate your Pro or Business license: paste your license key in
    **Settings → License** and click Activate. Features unlock immediately — no restart required.
 
-To request a 14-day Pro trial key (OPERATOR-DECISION-PENDING: trial key issuance
-mechanism not yet decided), contact: [support channel — NEEDS-OPERATOR].
+To start your 14-day Pro trial, use the self-serve trial option in the marketplace listing.
+For support, contact [support channel — NEEDS-OPERATOR].
 
 ---
 
@@ -260,7 +278,7 @@ GitHub issue tracker; they do not require operator clearance to cite:
 
 ---
 
-*Produced at S27/D-089; revised S96/D-160 (2026-07-22). Evidence sources:
+*Produced at S27/D-089; revised S103/D-169 (2026-07-25). Evidence sources:
 `docs/assessment/final-assessment.md` §3, `docs/prd-report.md` §7.11,
 `server/internal/license/license.go:90–150` (entitlements), `contracts/openapi/pulse-api.yaml`
 (42 paths / 59 operations / 73 schemas), `docs/compatibility.md` §G-27 (new-panel competitive scope),
