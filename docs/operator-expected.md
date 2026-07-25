@@ -1,5 +1,30 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-25, SESSION-102 — v0.4.1 is RELEASED and verified; the autonomous backlog is EMPTY; ONE action unblocks the listing: flip GHCR public)
+# Operator TODO — the items only YOU can do (updated 2026-07-25, SESSION-103 — you delegated the go-to-market decisions; they are MADE (D-169). Only OUTBOUND actions and your infra remain.)
 
+> # ▶ ★ S103 STATUS (2026-07-25, D-169) — you said "decide for me": PRICING (+ launch campaign), SUPPORT/SLA, TRIAL, CAPACITY approach, DEMO approach and the D-081 sign-off are all DECIDED and written into the docs. Every value is yours to override. What remains is only what the loop physically cannot do for you: outbound actions from your account/identity, and things needing your infrastructure.
+>
+> **Decisions made on your behalf (full record: `decisions.md` D-169; customer-facing docs updated):**
+> - **Pricing (fair standard):** Free $0 · Pro **$99/mo** · Business **$299/mo** · Enterprise **from $799/mo** (annual = 2 months free). Node ladder settled (Free 1 / Pro 10 / Business 50 / Enterprise ∞).
+> - **Launch campaign "Founding Operators" (near-free year 1, per your steer):** during the first 6 months (or first 100 paid activations) — **Pro $9/mo** and **Business $29/mo for the first 12 months**, Enterprise 90-day free pilot + 25% off year 1, Free stays free; auto-reverts to standard at renewal with 30-day notice; Founding Operators keep a permanent 10% loyalty discount.
+> - **Trial:** 14-day self-serve Pro trial, no card, graceful revert to Free.
+> - **Support/SLA:** community (Free) · email `support@beyondkaira.com`, 2-business-day response (Pro) · priority, 1-business-day (Business) · named contact + Slack/Teams, 4-business-hour critical + onboarding (Enterprise). Business hours Mon–Fri 09:00–18:00 UTC.
+> - **Capacity:** a PROVISIONAL, honest claim is written (no fabricated number); the real benchmark comes from the load lane on your PAYG AMS.
+> - **Demo:** the loop will attempt a Playwright rough-cut walkthrough next session; you record the final.
+> - **D-081:** the assessment was reviewed and the gate cleared for submission (internal assessment docs stay internal).
+>
+> ### ▶ What is LEFT — only things the loop cannot do for you:
+> 1. **Submit the listing** to the Ant Media Marketplace (your account).
+> 2. **Set up billing** for the campaign/trial/standard prices in the marketplace's billing system (your Stripe/marketplace account).
+> 3. **Provision `support@beyondkaira.com`** as a monitored mailbox (or a ticketing alias) before GA.
+> 4. **Run the load lane** on a dedicated PAYG AMS → gives the real capacity number to replace the provisional one.
+> 5. **Record the demo video FINAL** (the loop provides a rough cut to work from).
+> 6. **Send the reply to Ankush** (your identity) — the loop will DRAFT it next session for you to send.
+> 7. **Roll prod to v0.4.1** if/when you want (optional — prod is healthy on v0.4.0-139; a stamped `deployment.sh` deploy, your go-ahead).
+> 8. **Rotate** the chat-exposed / VPS-group-readable secrets in `deploy/.env` / `oguz-testing.md`.
+>
+> Everything below (★S102/★S101) is superseded context. Prod is healthy and UNCHANGED (v0.4.0-139, collector `ok`).
+>
+> ---
+>
 > # ▶ ★ S102 CURRENT STATUS (2026-07-25) — ✅ YOU FLIPPED GHCR PUBLIC; the loop VERIFIED the evaluator path end-to-end. The release-integrity blocker is CLOSED. No technical blocker remains for listing — what's left is your go-to-market decisions. Prod is healthy and untouched.
 >
 > **State as of 2026-07-25 (all verified):**

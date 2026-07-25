@@ -159,10 +159,15 @@ a delta on streams we own, never an absolute global count. Budgets **L-1…L-9**
 |---|---|
 | Functional (≤5–7 concurrent publishers) | **LIVE-VALIDATED** on the shared VPS (46/50 PASS) |
 | Under-load fidelity (N publishers / M viewers) | **PACKAGED, NOT YET RUN** — needs a dedicated instance (`harness/load-env.sh`) |
-| Published capacity number (validated N/M) | **TBD** — fill in from the first `LOAD-REPORT.md` |
+| Published capacity number | **PROVISIONAL (to be benchmarked)** — see note below |
 
-Once the lane runs, record the headline capacity here ("validated at N publishers / M viewers on
-instance size X; budgets L-1…L-9 met") and attach `LOAD-REPORT.md` to the marketplace submission.
+> **PROVISIONAL — to be replaced by the formal load-test result (operator-delegated, D-169):**
+> A single Pulse instance on the recommended 2 vCPU / 2 GB comfortably handles the polling +
+> beacon-ingest load of a typical small-to-mid AMS deployment (tens of nodes, thousands of
+> concurrent viewer-sessions). A formal high-load benchmark will be published from the launch
+> load test (`qa/realams/run-load-suite.sh` on a dedicated PAYG AMS). Once the load lane has
+> run, record the headline capacity here ("validated at N publishers / M viewers on instance
+> size X; budgets L-1…L-9 met") and attach `LOAD-REPORT.md` to the marketplace submission.
 
 ---
 

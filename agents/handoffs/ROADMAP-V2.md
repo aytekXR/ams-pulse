@@ -85,18 +85,20 @@
 - **Deeper F6 multi-tenancy** — tenant-scoped AUTH + a tenant-management UI (F6 buildable code is
   complete; this expansion is demand-driven).
 
-### E. Operator external action (unblocks the marketplace track) — ★ S97 (D-161) SHIPPED THE FULL DOCS PACK
-> S97 (2026-07-22, operator-directed): the complete marketplace documentation pack is generated and fact-verified —
-> submission-package index, listing copy, 15 live-app screenshots (all automated), demo script, submission-process +
-> developer-meeting briefs (A1–A10 assumptions tagged), user/admin/API/FAQ/troubleshooting/licensing/support docs,
-> CHANGELOG [0.4.0] reconstructed, G-27 pre-answered from the public panel repo. Remaining rows below are the
-> operator-external tail; see `docs/marketplace/submission-package.md` §Blocking items.
-- **Run the load lane** on a DEDICATED PAYG AMS (stronger prod-isolation guards since D-159) →
-  yields the marketplace capacity number for `docs/compatibility.md`; also clears the expired trial.
-- **Panel-revamp developer meeting (G-27)** — 3 technical Qs + revenue-share / API-stability asks
-  (may unlock a scoped `amsclient` fix IF a live cluster confirms G-21).
-- **GHCR image → public**, **AMS trial-licence expiry** confirmation, **rotate chat-exposed creds**,
-  and the marketplace **listing submission / support + public licensing / co-marketing**.
+### E. Operator external action (unblocks the marketplace track) — ★ DOCS PACK SHIPPED (S97/D-161); GHCR PUBLIC + INSTALL VERIFIED (S102/D-168); GO-TO-MARKET DECISIONS MADE (S103/D-169)
+> S97 (2026-07-22): the full marketplace documentation pack is generated and fact-verified. **D-168 (2026-07-25):** GHCR
+> flipped public and the anonymous clean-room install was verified end-to-end — the release-integrity blocker is CLOSED.
+> **D-169 (2026-07-25, operator-delegated):** pricing (+ "Founding Operators" near-free-year-1 campaign), support/SLA,
+> 14-day trial, capacity approach (provisional), demo approach (loop rough-cut) and the D-081 sign-off are all DECIDED and
+> written into the customer-facing docs. **No engineering or decision work remains — only operator-outbound actions.**
+> See `operator-expected.md` ★S103 and `docs/marketplace/submission-package.md` §Blocking items (now all operator-owned).
+- **✅ DONE (loop):** GHCR public + install verified (D-168); pricing/campaign/support/trial/capacity-wording/demo-plan/D-081 (D-169).
+- **Operator-outbound remainder (loop cannot do):** submit the listing · set up billing for the tiers/campaign/trial ·
+  provision the `support@beyondkaira.com` mailbox · run the load lane on a dedicated PAYG AMS (→ replaces the provisional
+  capacity number; also exercises the trial) · record the demo video final (loop provides a rough cut) · send the Ankush /
+  G-27 developer-meeting reply (loop drafts it) · optional prod roll to v0.4.1 · rotate chat-exposed creds.
+- **Panel-revamp developer meeting (G-27)** — 3 technical Qs + revenue-share / API-stability asks (may unlock a scoped
+  `amsclient` fix IF a live cluster confirms G-21); the reply requesting it is drafted for the operator to send.
 
 ---
 

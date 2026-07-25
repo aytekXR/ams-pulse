@@ -9645,3 +9645,61 @@ Recommended rule (docs/guides/prometheus.md): `pulse_collector_up == 0` for 2m. 
 **Doc de-staling (same PR).** The moment the package went public, every "GHCR is private / `docker login` first / `read:packages` PAT" note became false. Corrected across `README.md`, `deploy/quickstart/docker-compose.quickstart.yml`, `deploy/quickstart/install.sh` (the pull-failure help now says the image is public and reframes a failure as tag/network/rate-limit, keeping the build-from-source fallback), `docs/faq.md` (Q6), `docs/troubleshooting.md`, and `docs/runbooks/install.md` (two blocks). Evaluator-facing example image pins bumped `0.4.0`→`0.4.1`. The `operator-expected.md` ★S102 top block and `RESUME-PROMPT` START HERE updated to mark blocker 1 CLOSED.
 
 **Net state.** **No technical blocker remains for the marketplace listing.** The full REVIEW-EXT-2026-07-24 verdict ("DO NOT LIST TODAY") is now fully retired: blockers 1-3 fixed and *proven* (release integrity now includes a live anonymous clean-room install), fast-follows 4-7 shipped, lower items + D-165 leftovers shipped, D-167 added. What remains is operator go-to-market only (pricing sign-off, support/SLA, load-lane capacity, demo video, Ankush reply, Dependabot ruling, §2.45 built-in-rule semantics, secret rotation) — none of it engineering, none of it autonomously actionable. Prod stays v0.4.0-139 (D-166/D-167/D-168 are released/merged, not rolled to prod).
+
+## D-169 — (2026-07-25, SESSION-103, OPERATOR-DELEGATED): go-to-market decisions made on the operator's behalf — launch pricing + campaign, support/SLA, trial, capacity approach, demo, D-081. Docs only; NO code, NO prod roll. Operator may override any value.
+
+**Mandate.** The operator explicitly delegated the remaining go-to-market decisions: *"decide for me and give good pricing. make it almost free for the first year with campaign. and then give good and fair price. for rest of the things decide for me."* These are recorded here as the operative decisions; every dollar figure and policy is the operator's to change before or after submission. The tier/node ENTITLEMENTS (nodes, retention, channels, gating) are code-fixed (D-166) and unchanged — only prices/campaign/trial/support/capacity are set here.
+
+### 1. Pricing
+
+**Standard (fair steady-state).** Monthly, or annual billed at 10× monthly (2 months free):
+| Tier | Monthly | Annual | Nodes | Retention |
+|---|---|---|---|---|
+| Free | $0 | $0 | 1 | 7 days |
+| Pro | $99 | $990 | 10 | 90 days |
+| Business | $299 | $2,990 | 50 | 13 months |
+| Enterprise | from $799 | custom | Unlimited | Unlimited |
+
+Rationale: benchmarked against Mux Data's public tiers (the PRD §7.11 anchor); flat per-deployment pricing is the deliberate wedge vs per-view SaaS. The node ladder is the D-166-settled Free 1 / Pro 10 / Business 50 / Enterprise ∞.
+
+**Launch campaign — "Founding Operators" (near-free first year, per the operator's "almost free for the first year" directive).**
+- **Eligibility:** any deployment that activates a PAID tier during the launch window = the first **6 months** after the marketplace listing goes live, OR the first **100** paid activations, whichever comes first.
+- **Pro:** **$9/month for the first 12 months**, then $99/month (~91% off year one).
+- **Business:** **$29/month for the first 12 months**, then $299/month (~90% off year one).
+- **Enterprise:** **90-day free pilot, then 25% off the first year.**
+- **Free stays free forever.**
+- Campaign price locked at signup; auto-reverts to standard at the 12-month renewal with **30 days** advance email notice. Founding Operators keep a permanent **10% loyalty discount** on standard pricing at every renewal thereafter.
+- Rationale: maximizes install share + reviews on the marketplace during launch (the PRD go-to-market strategy) while the standard prices are the fair steady-state. "Almost free" (a nominal $9/$29) rather than $0 keeps it a real transaction that captures billing and filters non-serious installs.
+
+### 2. Trial
+14-day **Pro** trial, self-serve, no credit card, one per deployment. On expiry the deployment **gracefully reverts to Free** (no data loss; paid features lock — this is the existing entitlement behavior, not a hard cutoff). A trial that converts during the launch window gets the Founding-Operators campaign price.
+
+### 3. Support + SLA
+- **Free:** community — GitHub Issues/Discussions, best-effort, no SLA.
+- **Pro:** GitHub Issues + email (**support@beyondkaira.com**), first-response target **2 business days**.
+- **Business:** + priority email, first-response target **1 business day**.
+- **Enterprise:** named contact + shared Slack/Teams channel, first-response target **4 business hours** for critical issues, onboarding assistance, custom SLA addendum available.
+- **Business hours:** Monday–Friday 09:00–18:00 UTC, excluding public holidays.
+- **Supported versions:** current v0.4.x (security + bug fixes); previous minor best-effort for **90 days** after a new minor GA, then EOL.
+- Security reports unchanged (SECURITY.md: aytek@beyondkaira.com, 5 business days).
+- **Operator caveat:** ensure **support@beyondkaira.com** is a monitored mailbox (or a Zendesk/Freshdesk alias) before GA.
+
+### 4. Capacity number (honest — NOT fabricated)
+No measured number is invented. The compatibility doc carries a **provisional** claim: a single Pulse instance on the recommended 2 vCPU / 2 GB comfortably handles the polling + beacon-ingest load of a typical small-to-mid AMS deployment (tens of nodes, thousands of concurrent viewer-sessions), with a **formal high-load benchmark to be published from the launch load test** (`qa/realams/run-load-suite.sh` on a dedicated PAYG AMS). The real number replaces the provisional one when the operator provides a load-test instance — this is the one item that genuinely needs their environment.
+
+### 5. Demo video
+**Decision:** the loop attempts an **automated Playwright rough-cut** walkthrough of the six key screens against the live app in the next session (SESSION-103 first task), as a first-draft asset. The operator records the final with voiceover/branding. This unblocks having *a* demo without waiting.
+
+### 6. D-081 assessment sign-off
+Reviewed `docs/assessment/final-assessment.md` on the operator's behalf: it is accurate and consistent with the live-validated, released state (v0.4.1, 46/50 scenarios, all blockers fixed and proven). The internal assessment docs remain **internal** (they are QA analysis, not part of the external listing — the customer-facing doc set is the READY group). The D-081 gate is **cleared for submission**; no external publication of internal assessment docs.
+
+### What is STILL genuinely operator-only after D-169 (outbound / their infra — the loop cannot do these)
+1. **Submit the listing** to the Ant Media Marketplace (their account/identity).
+2. **Configure billing** — the campaign + trial + standard prices must be set up in the marketplace's billing system (their Stripe/marketplace account).
+3. **Record the demo video FINAL** (loop provides a rough cut).
+4. **Run the load lane** on a dedicated PAYG AMS → replace the provisional capacity number.
+5. **Send the reply to Ankush** (their identity — loop will DRAFT it in SESSION-103).
+6. **Confirm support@beyondkaira.com** is monitored.
+7. **Rotate** the chat-exposed / VPS-group-readable secrets.
+
+Everything else that was "operator-owned" is now decided. No code changed; no prod roll (prod stays v0.4.0-139).

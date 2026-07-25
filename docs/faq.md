@@ -1,6 +1,6 @@
 # Pulse — Operator FAQ
 
-**Product:** Pulse v0.4.0 · **Last updated:** 2026-07-22 (D-161)
+**Product:** Pulse v0.4.0 · **Last updated:** 2026-07-25 (D-169)
 
 Short answers to the questions operators ask most often.
 Each answer links to the canonical doc for deeper reading.
@@ -187,6 +187,44 @@ To renew, activate a new key via any of three routes:
 **Note on node limits:** The tier ladder is Free 1 / Pro 10 / Business 50 / Enterprise unlimited. Business allows up to 50 monitored nodes and adds multi-tenant billing, Prometheus, and scheduled reports. Pro is optimised for operators running up to 10 AMS edge nodes who need full API and QoE access. Unlimited nodes require Enterprise.
 
 > `docs/runbooks/install.md` §Free tier limits; `docs/product.md` §1 (feature table).
+
+---
+
+### Q20. What do the tiers cost?
+
+Standard pricing — monthly, or annual billed at 10× monthly (2 months free):
+
+| Tier | Monthly | Annual |
+|---|---|---|
+| Free | $0 | $0 |
+| Pro | $99 | $990 |
+| Business | $299 | $2,990 |
+| Enterprise | from $799 | custom |
+
+*Pricing set for launch (operator-delegated, D-169) — subject to operator override.*
+
+**Founding Operators launch campaign:** any deployment that activates a paid tier
+within the first **6 months** of the marketplace listing going live (or the first
+**100 paid activations**, whichever comes first) receives near-free first-year
+pricing: **Pro $9/month** and **Business $29/month** for the first 12 months, then
+standard rates apply. Enterprise: 90-day free pilot, then 25% off year one.
+Founding Operators also keep a permanent **10% loyalty discount** at every renewal
+thereafter. The campaign price locks at signup; a 30-day advance email notice goes
+out before auto-reverting to standard pricing.
+
+> `docs/licensing.md`; `docs/product.md` §1 (tier feature table).
+
+---
+
+### Q21. Is there a free trial?
+
+Yes. Pulse offers a **14-day Pro trial** — self-serve, no credit card required, one
+per deployment. On expiry the deployment gracefully reverts to Free: all collected
+data is retained, paid features lock to Free entitlements, and nothing crashes. A
+trial that converts during the Founding Operators launch window qualifies for the
+campaign price (see Q20).
+
+> `docs/licensing.md` §2 (trial activation).
 
 ---
 

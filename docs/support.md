@@ -1,6 +1,9 @@
 # Support Policy
 
-> **Skeleton — operator must finalize all `OPERATOR-DECISION` items before publishing.**
+> **Support policy set for launch (operator-delegated, D-169).**
+> All SLA, channel, email, hours, and version-support decisions are resolved below.
+> The one remaining operator task is provisioning the **support@beyondkaira.com** mailbox
+> (or a Zendesk/Freshdesk alias) before GA — see §1. Operator may override any value.
 > Marketplace-readiness checklist row 7.
 
 ---
@@ -18,15 +21,17 @@
 | Tier | Support channel | First-response target |
 |---|---|---|
 | **Free** | GitHub Issues only | Community / best-effort; no SLA |
-| **Pro** | GitHub Issues + email | > **OPERATOR-DECISION** Proposed default: **3 business days** |
-| **Business** | GitHub Issues + email | > **OPERATOR-DECISION** Proposed default: **1 business day** |
-| **Enterprise** | Named contact + shared Slack/Teams channel | > **OPERATOR-DECISION** Proposed default: **4 business hours + named CSE** |
+| **Pro** | GitHub Issues + email | **2 business days** |
+| **Business** | GitHub Issues + email | **1 business day** |
+| **Enterprise** | Named contact + shared Slack/Teams channel | **4 business hours** (critical); named contact + onboarding assistance; custom SLA addendum available |
 
-> **OPERATOR-DECISION** Support email address — proposed default: `support@beyondkaira.com` (or a
-> ticketing alias such as Freshdesk/Zendesk). Set the same address in the marketplace listing.
+Support email: **support@beyondkaira.com** (or a ticketing alias such as Freshdesk/Zendesk).
+Set the same address in the marketplace listing.
+_Set for launch (operator-delegated, D-169) — subject to operator override. Provisioning the mailbox is an operator task._
 
-> **OPERATOR-DECISION** Business hours definition — proposed default: Monday–Friday 09:00–18:00 UTC,
-> excluding public holidays (specify which calendar). State this explicitly in the Enterprise SLA addendum.
+Business hours: **Monday–Friday 09:00–18:00 UTC**, excluding public holidays.
+State this explicitly in the Enterprise SLA addendum.
+_Set for launch (operator-delegated, D-169) — subject to operator override._
 
 ---
 
@@ -40,9 +45,9 @@
 This matches the supported-versions table in `SECURITY.md` exactly. "Supported" means security
 patches are backported to the current v0.4.x line.
 
-> **OPERATOR-DECISION** If you intend to offer best-effort support for a previous minor (e.g. v0.3.x)
-> after a new minor is released, extend this table with that row and update `SECURITY.md` to match.
-> Proposed window: 90 days after the new minor GA, then EOL. Confirm this cadence before publishing.
+Previous minor (e.g. v0.3.x): best-effort for **90 days** after a new minor GA, then EOL.
+Extend this table with that row when applicable and update `SECURITY.md` to match.
+_Set for launch (operator-delegated, D-169) — subject to operator override._
 
 ---
 
@@ -100,5 +105,5 @@ is subject to the commercial agreement.
 
 ---
 
-*This document is a skeleton. Replace all `OPERATOR-DECISION` blocks with final decisions before
-publishing to the marketplace or the public docs site.*
+*Support policy set for launch (operator-delegated, D-169). Remaining open `OPERATOR-DECISION`
+items (bug-report issue template §4, public roadmap §5) are non-blocking for marketplace submission.*
