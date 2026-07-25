@@ -83,3 +83,4 @@ docs/marketplace/screenshots/
 .build/
 .swiftpm/
 sdk/beacon-swift/.build/
+docs/marketplace/demo/
