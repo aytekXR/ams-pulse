@@ -1,5 +1,16 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-24, SESSION-101 — the pre-listing review is folded in and fixed; ONE new blocking-for-listing item: flip GHCR public after the 0.4.1 image pushes)
+# Operator TODO — the items only YOU can do (updated 2026-07-25, SESSION-102 — v0.4.1 is RELEASED and verified; the autonomous backlog is EMPTY; ONE action unblocks the listing: flip GHCR public)
 
+> # ▶ ★ S102 CURRENT STATUS (2026-07-25) — everything the loop can do without you is DONE. The ONE blocking action is the GHCR public flip (§1 below). Prod is healthy and untouched.
+>
+> **State as of 2026-07-25 09:xx UTC (all verified):**
+> - **v0.4.1 is released.** PR #204 (D-166 fix wave) + #205 (handoff) + #206 (D-167 metrics) all merged to `main`; `main` CI is green (`ci`/`e2e`/`codeql`/`ams-version-matrix` all pass on the merge commit). Tag `v0.4.1` built and pushed **`ghcr.io/aytekxr/ams-pulse:0.4.1`** (multi-arch, Trivy-scanned, cosign-signed).
+> - **The GHCR package is still PRIVATE** — I re-checked today; you have not flipped it yet. Until you do, an evaluator's `docker pull` fails and the marketplace quickstart is broken. **This is the single blocking-for-listing item.** No API exists for the flip (verified), so only you can do it. → **§1 below.**
+> - **Prod is healthy and UNCHANGED.** Still `v0.4.0-139-gf9e9c69`, tier enterprise; `server_events` collected an unbroken 720 rows/hour across the last 24 h (no gaps, collector `ok`). Neither D-166 nor D-167 is rolled to prod — both are released/merged only; a prod roll to 0.4.1 is a separate, deliberate `deployment.sh` deploy that needs your go-ahead (prod is fine as-is).
+> - **New this session (D-167, autonomous, no action needed):** `/metrics` now exposes `pulse_collector_last_success_timestamp` + `pulse_collector_up` so your Prometheus can alert on Pulse's *own* collector going blind (`pulse_collector_up == 0`) — the notification gap the D-164 outage exposed. See `docs/guides/prometheus.md`.
+> - **The loop's autonomous engineering backlog is now EMPTY.** Every remaining item needs you (a decision or your environment) or a toolchain that isn't installed here. Your queue is unchanged from ★S101 below, plus the §2.45 built-in-self-alert-rule semantics decision (the Prometheus half is done; the Pulse-native-paging half needs your ruling — see ROADMAP §2.45).
+>
+> ---
+>
 > # ▶ ★ S101 STATUS (2026-07-24, D-166) — the independent pre-listing review is DONE and its blockers are FIXED in code (PR #204). To LIST on the marketplace you now need exactly one thing from me: flip the GHCR package to public, once the v0.4.1 image exists. No prod roll happened.
 >
 > **What this session did.** Acted on the third-party pre-listing review (the one that returned "DO NOT LIST TODAY") and closed the carried D-164 verification. The three listing blockers are resolved in code:
