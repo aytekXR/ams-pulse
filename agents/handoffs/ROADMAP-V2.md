@@ -92,11 +92,13 @@
 > 14-day trial, capacity approach (provisional), demo approach (loop rough-cut) and the D-081 sign-off are all DECIDED and
 > written into the customer-facing docs. **No engineering or decision work remains — only operator-outbound actions.**
 > See `operator-expected.md` ★S103 and `docs/marketplace/submission-package.md` §Blocking items (now all operator-owned).
-- **✅ DONE (loop):** GHCR public + install verified (D-168); pricing/campaign/support/trial/capacity-wording/demo-plan/D-081 (D-169).
+- **✅ DONE (loop):** GHCR public + install verified (D-168); pricing/campaign/support/trial/capacity-wording/demo-plan/D-081 (D-169);
+  Ankush reply drafted + demo rough-cut rendered (D-170).
+- **✅ DONE (operator):** `support@beyondkaira.com` mailbox provisioned (2026-07-25, recorded D-171/S104).
 - **Operator-outbound remainder (loop cannot do):** submit the listing · set up billing for the tiers/campaign/trial ·
-  provision the `support@beyondkaira.com` mailbox · run the load lane on a dedicated PAYG AMS (→ replaces the provisional
-  capacity number; also exercises the trial) · record the demo video final (loop provides a rough cut) · send the Ankush /
-  G-27 developer-meeting reply (loop drafts it) · optional prod roll to v0.4.1 · rotate chat-exposed creds.
+  run the load lane on a dedicated PAYG AMS (→ replaces the provisional
+  capacity number; also exercises the trial) · record the demo video final (rough cut rendered, D-170) · send the Ankush /
+  G-27 developer-meeting reply (draft ready, D-170) · optional prod roll to v0.4.1 · rotate chat-exposed creds.
 - **Panel-revamp developer meeting (G-27)** — 3 technical Qs + revenue-share / API-stability asks (may unlock a scoped
   `amsclient` fix IF a live cluster confirms G-21); the reply requesting it is drafted for the operator to send.
 

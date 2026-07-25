@@ -1,3 +1,11 @@
+# Operator TODO — the items only YOU can do (updated 2026-07-25, SESSION-104 — ✅ you provisioned `support@beyondkaira.com` (item 3 → DONE, D-171). 8 outbound/infra items remain; nothing blocks the loop.)
+
+> # ▶ ★ S104 STATUS (2026-07-25 evening, D-171) — you confirmed **support@beyondkaira.com is created**. Recorded; `support.md`, the submission package and the roadmap are de-staled (the "provision the mailbox" task is CLOSED). Prod health re-read this gate: collector `ok`, v0.4.0-139 unchanged, exactly 720 rows/h over the last 24 h, CH+meta backups fresh today 16:13 UTC. **No other operator input arrived; the autonomous backlog remains EMPTY.** Your remaining queue is the ★S103 list below **minus item 3** — all outbound/your-infra: (1) submit the listing · (2) set up billing · (4) load lane → real capacity number · (5) record the demo final (rough cut is rendered) · (6) send the Ankush reply (draft ready) · (7) optional prod roll to 0.4.1 · (8) rotate exposed secrets · (9, minor) Chromium OS libs on the VPS. Decision-gated eng also unchanged: §2.45 built-in self-alert rule, §2.44 `[FO-1]`, the 17-PR Dependabot queue (oldest now 10 days).
+>
+> ---
+>
+## (previous header — D-169/D-170, SESSION-103)
+
 # Operator TODO — the items only YOU can do (updated 2026-07-25, SESSION-103 — you delegated the go-to-market decisions; they are MADE (D-169). Only OUTBOUND actions and your infra remain.)
 
 > # ▶ ★ S103 STATUS (2026-07-25, D-169) — you said "decide for me": PRICING (+ launch campaign), SUPPORT/SLA, TRIAL, CAPACITY approach, DEMO approach and the D-081 sign-off are all DECIDED and written into the docs. Every value is yours to override. What remains is only what the loop physically cannot do for you: outbound actions from your account/identity, and things needing your infrastructure.
@@ -21,7 +29,7 @@
 > ### ▶ What is LEFT — only things the loop cannot do for you:
 > 1. **Submit the listing** to the Ant Media Marketplace (your account).
 > 2. **Set up billing** for the campaign/trial/standard prices in the marketplace's billing system (your Stripe/marketplace account).
-> 3. **Provision `support@beyondkaira.com`** as a monitored mailbox (or a ticketing alias) before GA.
+> 3. ~~**Provision `support@beyondkaira.com`**~~ ✅ **DONE (2026-07-25, you — recorded as D-171/S104):** mailbox created and live.
 > 4. **Run the load lane** on a dedicated PAYG AMS → gives the real capacity number to replace the provisional one.
 > 5. **Record the demo video FINAL** — a rendered rough cut (above) is ready to re-record with your voiceover/branding.
 > 6. **Send the reply to Ankush** — the draft (above) is ready; send it from your account.

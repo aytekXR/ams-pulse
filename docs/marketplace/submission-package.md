@@ -40,7 +40,7 @@ or the D-081 external-use review) · **TBD-EXT** (needs an external step).
 | Upgrade & rollback | [`../../deploy/runbooks/upgrade-rollback.md`](../../deploy/runbooks/upgrade-rollback.md) | READY |
 | Security policy | [`../../SECURITY.md`](../../SECURITY.md) | READY |
 | Licensing explained (public terms + tiers + trial) | [`../licensing-public.md`](../licensing-public.md) | READY (pricing + campaign + 14-day trial set D-169) |
-| Support policy | [`../support.md`](../support.md) | READY (channel + SLA set D-169; only mailbox provisioning pending) |
+| Support policy | [`../support.md`](../support.md) | READY (channel + SLA set D-169; mailbox live, D-171) |
 | Changelog | [`../../CHANGELOG.md`](../../CHANGELOG.md) | READY |
 
 ## Process documents (internal)
@@ -77,13 +77,16 @@ operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
 - ~~**Trial mechanics**~~ **DECIDED (D-169):** 14-day self-serve Pro trial, graceful revert to Free.
 - ~~**D-081 review**~~ **CLEARED (D-169):** `final-assessment.md` reviewed on the operator's behalf;
   internal assessment docs stay internal (not part of the external listing).
+- ~~**Provision `support@beyondkaira.com`**~~ **DONE (2026-07-25, operator, D-171):** the mailbox
+  is created and live; `support.md` + `licensing-public.md` already publish it.
 
 **Still needed — OUTBOUND / operator-infra only (the loop physically cannot do these):**
 1. **Submit the listing** to the Ant Media Marketplace (operator account).
 2. **Set up billing** for the tiers / campaign / trial in the marketplace's billing system.
-3. **Provision `support@beyondkaira.com`** as a monitored mailbox (or ticketing alias) before GA.
-4. **Capacity number** — run the load lane on a dedicated PAYG AMS → replaces the PROVISIONAL claim
+3. **Capacity number** — run the load lane on a dedicated PAYG AMS → replaces the PROVISIONAL claim
    now in `docs/compatibility.md`.
-5. **Demo video** — the loop produces a Playwright rough-cut next session; operator records the final.
-6. **Reply to Ankush Banyal** — the loop drafts it next session (`developer-meeting-brief.md`); operator sends.
-7. Optional: **roll prod to v0.4.1** (prod is healthy on v0.4.0-139); **rotate** the exposed secrets.
+4. **Demo video** — a rendered rough-cut exists (`docs/marketplace/demo/pulse-demo-roughcut.webm`,
+   D-170); operator re-records the final with voiceover.
+5. **Reply to Ankush Banyal** — draft ready (`ankush-reply-draft.md`, D-170); operator fills the
+   [brackets] and sends.
+6. Optional: **roll prod to v0.4.1** (prod is healthy on v0.4.0-139); **rotate** the exposed secrets.
