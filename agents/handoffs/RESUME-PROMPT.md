@@ -11,7 +11,53 @@
 
 ---
 
-## ▶ START HERE (next session — S105/D-172 done: the operator's THIRD-PARTY MARKETPLACE REVIEW was executed end-to-end; all 12 issues fixed or honestly de-scoped. Check the S105 PR merged + CI green, then back to the low-frequency gate.)
+## ▶ START HERE (next session — S106/D-173 done: the SECOND external marketplace review (REVIEW-MP2) was adversarially verified and executed; G-21 SETTLED, cluster discovery rebuilt against the real AMS wire. Confirm the S106 PR merged + CI green, then CUT v0.4.2 — read SESSION-106.md §SESSION-107 for the changed cut sequencing BEFORE tagging.)
+
+> **✅ Where we are (2026-07-26, D-173):** the operator supplied a second independent
+> marketplace review (recorded: `docs/assessment/marketplace-compliance-review-2026-07-25.md`)
+> + "fix them if relevant". SESSION-106 ran verify-first (14 adversarial verifiers + a live
+> probe of the real standalone AMS): 11 issues CONFIRMED, Issue I PARTIAL (its `?token=`
+> claim REFUTED), 1 P3 item REFUTED — then fixed everything confirmed across 9 ownership
+> lanes. Headlines: **G-21 settled with primary evidence** (AMS source at `ams-v3.0.3` has
+> only paginated `cluster/nodes/{offset}/{size}`; live standalone probe: flat→404,
+> paginated→**500** `tomcat.cluster`, `cluster-mode-status`→success:false) and
+> `amsclient` rebuilt accordingly (probe→paginate, real wire DTO — the old one decoded
+> all-zero nodes, dead `NodeInfo` removed, mock-ams now mirrors real AMS + 4 missing
+> endpoints); licensegen Business 5→50 (the real customer-key mint path); quickstart no
+> longer deletes the operator's `.env`/secret key on failure; base-compose ClickHouse auth
+> fixed + CI now boots the exact README command; helm ingest-port/PVC/S3/CH-default-user
+> fixed (5 CI-diffed goldens); OpenAPI per-path servers for the 8 root-mounted paths
+> (+ kin-openapi sticky-servers router bug worked around in conformance tests); clean
+> external `docs/marketplace/listing.md` (PolyForm disclosure, corrected tiers, no internal
+> IDs); release guard 4→10 checks, Trivy-on-pushed-digest, e2e release gate,
+> binaries+SHA256SUMS, chart→GHCR OCI; error webhooks → `stream_ingest_error`; SDK versions
+> build-time injected; VPS IP redacted from the assessment pack. Full record: `decisions.md`
+> D-173 · `sessions/SESSION-106.md` (verdict table + lane detail + deliberate keeps).
+>
+> **Gates (all orchestrator-run in containers):** server 26/26 pkgs + gofmt/vet clean · web
+> tsc + 682/682 · SDK build/test/3.52KB · 5/5 helm goldens byte-match · actionlint ·
+> shellcheck · compose configs. Prod untouched (v0.4.0-139, collector `ok`, 720 rows/h).
+>
+> **⚠ Workflow lesson (add to your priors):** two fixer lanes died AFTER completing edits but
+> BEFORE reporting (session limit / connection drop). `git status` + gate-runs proved their
+> work complete — re-running them blind would have double-applied edits. On any lane failure,
+> assess the tree first, then decide resume-vs-finish-manually.
+>
+> **★ NEXT SESSION'S PRIMARY GOAL — CUT v0.4.2 (unchanged from S105, sequencing CHANGED).**
+> The 10-check guard now asserts the deploy-surface pins AT TAG TIME, so the pin repoints
+> (compose ×2, quickstart compose, install.sh pin + `PULSE_REF`→`v0.4.2`, helm values +
+> README tags) go IN the pre-tag cut commit together with VERSION/Chart-appVersion/SDK
+> bumps, CHANGELOG roll, doc restamps, and regenerated helm goldens. Expect ONE transient
+> red: the new compose-boot job can't pull 0.4.2 until the release publishes — merge anyway,
+> tag the merge commit, re-run the job. Watch the FIRST runs of the new release steps
+> (binaries, chart OCI push — the chart package will start PRIVATE on GHCR, operator-flip
+> only). Then the anonymous clean-room check against 0.4.2. Details: SESSION-106.md.
+> Operator queue (operator-expected.md ★S106): unchanged from ★S105 + review the new
+> `listing.md` before submitting.
+
+---
+
+## (superseded by S106/D-173 above) ▶ was: START HERE (next session — S105/D-172 done: the operator's THIRD-PARTY MARKETPLACE REVIEW was executed end-to-end; all 12 issues fixed or honestly de-scoped. Check the S105 PR merged + CI green, then back to the low-frequency gate.)
 
 > **✅ Where we are (2026-07-25 late evening, D-172):** the operator supplied a second independent
 > review (REVIEW-MP-2026-07-25, 12 issues) + "make the app ready for the marketplace." SESSION-105

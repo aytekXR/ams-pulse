@@ -152,6 +152,64 @@ func TestClaimsContent(t *testing.T) {
 	}
 }
 
+// TestMintPathNodeLadder verifies that for every tier the claims minted by
+// licensegen carry the correct max_nodes value matching the published tier
+// ladder (Free=1, Pro=10, Business=50, Enterprise=absent/unlimited).
+// This is the mint-path regression for D-166: the tier entitlement table was
+// fixed but the minting tool (this binary) must also embed the right value.
+func TestMintPathNodeLadder(t *testing.T) {
+	cases := []struct {
+		tier         string
+		wantMaxNodes *int // nil = field must be absent (enterprise = unlimited)
+	}{
+		{"free", ptr(1)},
+		{"pro", ptr(10)},
+		{"business", ptr(50)},
+		{"enterprise", nil},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.tier, func(t *testing.T) {
+			stdout, stderr, ok := runLicensegen(t, "-tier", tc.tier)
+			if !ok {
+				t.Fatalf("licensegen exited non-zero for tier %q\nstderr: %s", tc.tier, stderr)
+			}
+			env := parseEnvLines(t, stdout)
+
+			parts := strings.SplitN(env["PULSE_LICENSE_KEY"], ".", 2)
+			if len(parts) != 2 {
+				t.Fatalf("invalid key format")
+			}
+			claimsData, err := base64.StdEncoding.DecodeString(parts[0])
+			if err != nil {
+				t.Fatalf("base64-decode claims: %v", err)
+			}
+
+			var c struct {
+				MaxNodes *int `json:"max_nodes"`
+			}
+			if err := json.Unmarshal(claimsData, &c); err != nil {
+				t.Fatalf("unmarshal claims: %v", err)
+			}
+
+			if tc.wantMaxNodes == nil {
+				if c.MaxNodes != nil {
+					t.Errorf("tier %q: expected max_nodes absent (unlimited), got %d", tc.tier, *c.MaxNodes)
+				}
+			} else {
+				if c.MaxNodes == nil {
+					t.Errorf("tier %q: expected max_nodes=%d, got field absent", tc.tier, *tc.wantMaxNodes)
+				} else if *c.MaxNodes != *tc.wantMaxNodes {
+					t.Errorf("tier %q: max_nodes got %d, want %d", tc.tier, *c.MaxNodes, *tc.wantMaxNodes)
+				}
+			}
+		})
+	}
+}
+
+func ptr(n int) *int { return &n }
+
 // TestUnknownTierErrors verifies that an invalid -tier value causes a non-zero
 // exit code.
 func TestUnknownTierErrors(t *testing.T) {

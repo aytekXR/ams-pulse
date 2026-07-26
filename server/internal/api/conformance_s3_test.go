@@ -9,13 +9,9 @@
 // Special cases documented:
 //   - GET /live/ws: WebSocket 101 upgrade — inherently untestable with this
 //     harness (no WS client). Waived per WO-1 directive; the one permitted waiver.
-//   - GET /healthz, GET /metrics, POST /ingest/beacon: these spec paths live
-//     under the /api/v1 server base in the YAML but are served at top-level
-//     paths (/healthz, /metrics, /ingest/beacon). For FindRoute to succeed,
-//     the conformCheck request uses the spec-resolved URL (/api/v1/<path>).
-//     kin-openapi's gorillamux router registers routes as serverURL+path, so
-//     the request URL must be /api/v1/healthz, /api/v1/metrics,
-//     /api/v1/ingest/beacon respectively.
+//   - GET /healthz, GET /metrics, POST /ingest/beacon: root-mounted paths.
+//     The spec declares them with a path-level `servers: [{url: /}]`, so
+//     conformCheck uses the real request URL (no /api/v1 prefix).
 //
 // TDD red evidence:
 //   - TestS3_AlertRules_Post201_Conforms: first written expecting 418 → FAIL
@@ -661,10 +657,8 @@ func TestS3_Probes_Delete204_Conforms(t *testing.T) {
 // TestS3_Beacon_Ingest_Conforms validates POST /ingest/beacon → 202 IngestAccepted.
 // Pro+ license required (CheckBeaconIngest). Uses X-Pulse-Ingest-Token auth.
 //
-// Note on conformCheck path: the spec declares /ingest/beacon under server base
-// /api/v1, so kin-openapi registers the route as /api/v1/ingest/beacon.
-// The conformCheck request URL must therefore be /api/v1/ingest/beacon for
-// FindRoute to succeed, even though the real handler is at /ingest/beacon.
+// Root-mounted path: the spec declares /ingest/beacon with a path-level
+// `servers: [{url: /}]`, so conformCheck uses the real handler path.
 func TestS3_Beacon_Ingest_Conforms(t *testing.T) {
 	ts, _, ingestToken, cleanup := setupProServerWithIngest(t)
 	defer cleanup()
@@ -700,8 +694,7 @@ func TestS3_Beacon_Ingest_Conforms(t *testing.T) {
 		t.Fatalf("expected 202, got %d: %s", resp.StatusCode, bd)
 	}
 
-	// conformCheck path: /api/v1/ingest/beacon (spec server base + path).
-	req2, _ := http.NewRequest(http.MethodPost, "/api/v1/ingest/beacon", bytes.NewReader(b))
+	req2, _ := http.NewRequest(http.MethodPost, "/ingest/beacon", bytes.NewReader(b))
 	req2.Header.Set("Content-Type", "application/json")
 	req2.Header.Set("X-Pulse-Ingest-Token", ingestToken)
 	conformCheck(t, doc, req2, resp)
@@ -712,10 +705,8 @@ func TestS3_Beacon_Ingest_Conforms(t *testing.T) {
 
 // TestS3_Healthz_Conforms validates GET /healthz → 200 HealthStatus.
 //
-// kin-openapi behavior: the spec declares /healthz under server base /api/v1,
-// so gorillamux registers the route as /api/v1/healthz. We get the response
-// from the real handler at /healthz and pass /api/v1/healthz to conformCheck
-// so FindRoute succeeds. The body content is identical regardless of URL path.
+// Root-mounted path: the spec declares /healthz with a path-level
+// `servers: [{url: /}]`, so conformCheck uses the real handler path.
 func TestS3_Healthz_Conforms(t *testing.T) {
 	ts, _, cleanup := setupTestServer(t)
 	defer cleanup()
@@ -733,19 +724,16 @@ func TestS3_Healthz_Conforms(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, bd)
 	}
 
-	// conformCheck with spec-resolved path /api/v1/healthz.
-	// kin-openapi's gorillamux router builds routes as serverURL+path, so
-	// /api/v1 + /healthz = /api/v1/healthz. FindRoute matches this request.
-	req2, _ := http.NewRequest(http.MethodGet, "/api/v1/healthz", nil)
+	req2, _ := http.NewRequest(http.MethodGet, "/healthz", nil)
 	conformCheck(t, doc, req2, resp)
-	t.Logf("PASS: GET /healthz → 200, conforms to spec (conformCheck via /api/v1/healthz)")
+	t.Logf("PASS: GET /healthz → 200, conforms to spec")
 }
 
 // TestS3_Metrics_Conforms validates GET /metrics → 200 text/plain.
 // Requires Business+ tier (CheckPrometheus). The schema is type:string
 // (near-vacuous) but conformCheck is wired for completeness.
 //
-// Note on conformCheck path: same reasoning as /healthz — uses /api/v1/metrics.
+// Root-mounted path: same reasoning as /healthz — uses the real /metrics path.
 func TestS3_Metrics_Conforms(t *testing.T) {
 	ts, _, cleanup := setupBusinessServer(t)
 	defer cleanup()
@@ -763,12 +751,11 @@ func TestS3_Metrics_Conforms(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, bd)
 	}
 
-	// conformCheck with spec-resolved path /api/v1/metrics.
 	// The response schema is type:string (Prometheus text-format) — near-vacuous
 	// but we wire conformCheck anyway per WO requirement.
-	req2, _ := http.NewRequest(http.MethodGet, "/api/v1/metrics", nil)
+	req2, _ := http.NewRequest(http.MethodGet, "/metrics", nil)
 	conformCheck(t, doc, req2, resp)
-	t.Logf("PASS: GET /metrics → 200, conforms to spec (text/plain schema validated via /api/v1/metrics)")
+	t.Logf("PASS: GET /metrics → 200, conforms to spec (text/plain schema validated)")
 }
 
 // ─── Task A: Admin — Sources ─────────────────────────────────────────────────
@@ -1253,7 +1240,7 @@ func TestS3_401_BeaconIngest(t *testing.T) {
 	}
 
 	resp.Body = io.NopCloser(bytes.NewReader(body))
-	req2, _ := http.NewRequest(http.MethodPost, "/api/v1/ingest/beacon", bytes.NewReader(b))
+	req2, _ := http.NewRequest(http.MethodPost, "/ingest/beacon", bytes.NewReader(b))
 	req2.Header.Set("Content-Type", "application/json")
 	conformCheck(t, doc, req2, resp)
 
@@ -1323,7 +1310,7 @@ func TestS3_403_MetricsForbiddenFreeTier(t *testing.T) {
 	}
 
 	resp.Body = io.NopCloser(bytes.NewReader(body))
-	req2, _ := http.NewRequest(http.MethodGet, "/api/v1/metrics", nil)
+	req2, _ := http.NewRequest(http.MethodGet, "/metrics", nil)
 	conformCheck(t, doc, req2, resp)
 
 	var errBody map[string]any

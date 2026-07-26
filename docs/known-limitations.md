@@ -1,8 +1,10 @@
 # Pulse — Known Limitations
 
-**Product:** Pulse v0.4.1 (last refreshed S105, 2026-07-25)  
+**Product:** Pulse v0.4.1 (last refreshed S106, 2026-07-26)  
 **Source:** `docs/assessment/documentation-gaps.md` (DG-01 through DG-18),
-`docs/assessment/final-assessment.md` §1 and Appendix B,
+`docs/assessment/final-assessment.md` §1 and Appendix B (v0.3.0 baseline; see
+`docs/assessment/marketplace-compliance-review-2026-07-25.md` for current
+marketplace readiness),
 `docs/assessment/capability-map.md`
 
 This document lists every known operator-facing limitation of Pulse v0.4.1 in
@@ -206,23 +208,33 @@ polling the per-connection `/{app}/connections` endpoint.
 
 ---
 
-### LIM-10: Cluster mode is not live-validated against a real multi-node AMS
+### LIM-10: Cluster fleet discovery wire shape source-verified; live multi-node validation pending
 
 **What it means for you:** Edge/origin viewer dedup (`IsEdgeStream()`), cluster
 node auto-discovery, and aggregate fleet metrics are implemented and unit-tested.
-None of these were validated against a real multi-node AMS cluster — the validation
-VPS ran single-node AMS only.
+Cluster-specific behavior has not been live-validated against a real multi-node AMS
+cluster — the validation VPS ran single-node AMS only.
 
-**What is proven:** Standalone mode is fully live-validated (46/50 scenarios PASS);
-`IsEdgeStream()` dedup logic is unit-tested; node discovery completes in 24.4 ms
-in CI.
+**Wire shape (G-21 settled, S106):** AMS source at tag `ams-v3.0.3`
+(`ClusterRestServiceV2`, class-level `@Path("/v2/cluster")`) exposes exactly three
+routes: `GET /node-count`, `GET /nodes/{offset}/{size}` (paginated), and
+`DELETE /node/{id}`. There is no flat `GET /nodes` route. Live standalone probe
+confirms: flat `GET /rest/v2/cluster/nodes` → HTTP 404; paginated
+`GET /rest/v2/cluster/nodes/0/50` → HTTP 500 (`NoSuchBeanDefinitionException:
+tomcat.cluster`) on a standalone node; `GET /rest/v2/cluster-mode-status` →
+`{"success":false}` (clean standalone signal). `amsclient.ClusterNodes()` now
+probes `cluster-mode-status` first and only paginates when `success:true`.
 
-**Workaround:** If you run a multi-node AMS cluster, treat cluster-specific behavior
-(edge role labeling, dedup) as provisionally implemented, not live-proven. Report
-any discrepancies as issues.
+**What is proven:** Standalone mode fully live-validated (46/50 PASS); wire shape
+source-verified at ams-v3.0.3 + standalone live-verified; `IsEdgeStream()` dedup
+unit-tested; node discovery in 24.4 ms (CI). Live cluster behaviour (multi-node
+paginated response) remains unvalidated — no multi-node AMS cluster is available.
 
-**Roadmap:** `docs/assessment/final-assessment.md` §1 "Honest limitations";
-N3 PARTIALLY in prd-validation-matrix.md.
+**Workaround:** If you run a multi-node AMS cluster, treat cluster node listing and
+fleet aggregates as provisionally implemented, not live-proven. Report any
+discrepancies as issues.
+
+**Roadmap:** Live cluster validation (N3 PARTIALLY in prd-validation-matrix.md).
 
 ---
 

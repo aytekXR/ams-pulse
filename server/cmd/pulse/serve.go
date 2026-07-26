@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	oidclib "github.com/coreos/go-oidc/v3/oidc"
@@ -338,6 +339,9 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 			return nil, fmt.Errorf("PULSE_SECRET_KEY must be set (min 16 bytes); generate with: openssl rand -hex 32")
 		}
 		return nil, fmt.Errorf("PULSE_SECRET_KEY is too short (%d bytes); minimum is 16 bytes; generate with: openssl rand -hex 32", len(metaSecretKey))
+	}
+	if metaDSN != ":memory:" && strings.Contains(strings.ToLower(metaSecretKey), "changeme") {
+		return nil, fmt.Errorf("PULSE_SECRET_KEY appears to be a placeholder value; generate a real key with: openssl rand -hex 32")
 	}
 	metaStore, err := meta.New(ctx, metaBackend, metaDSN, metaSecretKey)
 	if err != nil {

@@ -27,8 +27,10 @@ Claims fields (`server/internal/license/license.go`, `claims` struct):
 
 Verification: `ed25519.Verify` against, in order:
 1. `PULSE_LICENSE_PUBKEY` (hex, 32 bytes) if set in the environment, else
-2. the **embedded dev public key** (`license.go` `devPublicKeyHex`) — which the
-   code itself marks as *not authorizing production use*.
+2. the **embedded official public key** (`license.go` `officialPublicKeyHex`) —
+   the key that verifies licenses minted by the vendor ceremony.
+   `devPublicKeyHex` is retained in the source for self-signing/test workflows
+   only and is NOT the runtime default.
 
 A key that fails to parse/verify/expire **fails open to Free tier** (the server
 still runs; paid gates return 403 `LICENSE_REQUIRED`).
@@ -69,9 +71,9 @@ the `tier` string + explicit limits — see `buildEntitlements` (license.go).
 
 ### 2.3 Distributing & activating
 
-Every production deployment must carry the vendor public key:
-`PULSE_LICENSE_PUBKEY=<hex>` in `deploy/.env` (compose) or the Helm secret.
-(Alternative for official builds: replace `devPublicKeyHex` at build time.)
+Official builds embed `officialPublicKeyHex` as the default — no env var required
+for licenses minted by the vendor ceremony. Set `PULSE_LICENSE_PUBKEY=<hex>` only
+to override the embedded key (e.g. for a custom self-signed deployment).
 
 The customer then activates by any of:
 1. `PULSE_LICENSE_KEY=<key>` in the environment (picked up at boot),
@@ -84,9 +86,10 @@ The customer then activates by any of:
 
 - Keys are offline-verifiable; no phone-home. Revocation = expiry (`expires_at`)
   — there is no revocation list, so prefer 1-year expiries for subscriptions.
-- The embedded dev pubkey means a **default build without
-  `PULSE_LICENSE_PUBKEY` only accepts keys signed by the dev keypair** — do not
-  distribute the dev private key; treat any key minted against it as CI-only
+- A default build without `PULSE_LICENSE_PUBKEY` verifies against the **embedded
+  official public key** (`officialPublicKeyHex`) — it will only accept licenses
+  minted by the vendor ceremony. `devPublicKeyHex` (used by CI via `PULSE_LICENSE_PUBKEY`
+  override) is not the runtime default; treat any key minted against it as CI-only
   (`e2e.yml` mints ephemeral ones per run).
 - Rotating the vendor keypair invalidates all outstanding keys — plan for
   overlap (accept old+new) only via a code change (post-GA backlog if needed).

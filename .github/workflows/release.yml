@@ -66,7 +66,7 @@ jobs:
       # points at the dispatch branch HEAD; gating on GITHUB_SHA would certify
       # the wrong commit (S105 adversarial-review finding).
       # Mutation proof: if no ci run exists for the SHA → total_count=0 → exit 1.
-      - name: CI gate — require successful ci run for this SHA
+      - name: CI gate — require successful ci and e2e runs for this SHA
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -76,6 +76,11 @@ jobs:
             -q '.total_count')
           [ "$COUNT" -ge 1 ] || { echo "FAIL: no successful ci run for ${GATE_SHA}"; exit 1; }
           echo "CI gate: PASS (${COUNT} successful ci run(s) for ${GATE_SHA})"
+          E2E_COUNT=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/e2e.yml/runs?head_sha=${GATE_SHA}&status=success&per_page=1" \
+            -q '.total_count')
+          [ "$E2E_COUNT" -ge 1 ] || { echo "FAIL: no successful e2e run for ${GATE_SHA}"; exit 1; }
+          echo "E2E gate: PASS (${E2E_COUNT} successful e2e run(s) for ${GATE_SHA})"
 
       # ── Version consistency guard (tag push only) ──────────────────────────────────
       # Asserts VERSION file, Chart.yaml appVersion, and doc header stamps all match
@@ -121,7 +126,56 @@ jobs:
             exit 1
           fi
 
-          echo "Version guard: PASS (VERSION=$FILE_VERSION Chart=$CHART_VERSION sdk=$PKG_VERSION tag=$GITHUB_REF_NAME)"
+          # 5. Deploy-surface image-tag pins — every evaluator/operator install path
+          #    must pin the image being released; stale pins cause evaluators to pull the
+          #    old image while thinking they have the new one.
+          for f in \
+            deploy/docker-compose.yml \
+            deploy/quickstart/docker-compose.quickstart.yml; do
+            if ! grep -q "ams-pulse:${TAG_VERSION}" "$f" 2>/dev/null; then
+              echo "FAIL: $f does not contain image pin ams-pulse:${TAG_VERSION} — update before tagging"
+              exit 1
+            fi
+          done
+
+          # 6. Helm values.yaml image tag
+          HELM_TAG="$(grep '^  tag:' deploy/helm/pulse/values.yaml | head -1 \
+            | sed 's/.*tag:[[:space:]]*//; s/\"//g')"
+          if [ "$HELM_TAG" != "$TAG_VERSION" ]; then
+            echo "FAIL: deploy/helm/pulse/values.yaml image tag ($HELM_TAG) != tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+          # 7. Helm README example tag (doc table default value)
+          if ! grep -q "pulse\.image\.tag.*${TAG_VERSION}" deploy/helm/pulse/README.md 2>/dev/null; then
+            echo "FAIL: deploy/helm/pulse/README.md pulse.image.tag table entry does not show ${TAG_VERSION} — update before tagging"
+            exit 1
+          fi
+
+          # 8. install.sh PULSE_IMAGE default
+          if ! grep -q "ams-pulse:${TAG_VERSION}" deploy/quickstart/install.sh 2>/dev/null; then
+            echo "FAIL: deploy/quickstart/install.sh PULSE_IMAGE default does not contain ${TAG_VERSION} — update before tagging"
+            exit 1
+          fi
+
+          # 9. install.sh PULSE_REF default must be v${TAG_VERSION} at cut time.
+          #    Between releases the deploy lane sets PULSE_REF to 'main'; the cut
+          #    flips it to the release tag so raw.githubusercontent.com downloads
+          #    pin to the tagged tree, not a moving main branch.
+          if ! grep -q "PULSE_REF:-v${TAG_VERSION}" deploy/quickstart/install.sh 2>/dev/null; then
+            echo "FAIL: deploy/quickstart/install.sh PULSE_REF default is not v${TAG_VERSION} — flip it from 'main' before tagging"
+            exit 1
+          fi
+
+          # 10. Swift beacon SDK version constant
+          SWIFT_VER="$(grep 'pulseBeaconSDKVersion' sdk/beacon-swift/Sources/PulseBeacon/Types.swift \
+            | grep -oE '"[^"]+"' | tr -d '"' || true)"
+          if [ "$SWIFT_VER" != "$TAG_VERSION" ]; then
+            echo "FAIL: sdk/beacon-swift/Sources/PulseBeacon/Types.swift pulseBeaconSDKVersion (${SWIFT_VER}) != tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+          echo "Version guard: PASS (VERSION=$FILE_VERSION Chart=$CHART_VERSION sdk=$PKG_VERSION swift_sdk=$SWIFT_VER tag=$GITHUB_REF_NAME)"
 
       # GHCR login is unconditional — dry-run still needs credentials for the
       # local Trivy-scan build step (pulling base layers from GHCR if cached).
@@ -181,13 +235,11 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
             type=raw,value=${{ inputs.version || '0.0.0-dry' }},enable=${{ github.event_name == 'workflow_dispatch' }}
 
-      # ── Trivy scan (BEFORE any push) ───────────────────────────────────────────────
-      # Build amd64 image into the local Docker daemon (load: true, push: false),
-      # then scan it for vulnerabilities. Runs on BOTH tag push and dispatch (dry-run).
-      #
-      # exit-code: "1"    → any FIXABLE HIGH/CRITICAL CVE fails the job; blocks release.
-      # ignore-unfixed: true → CVEs with no upstream fix are reported but do NOT block.
-      - name: Build amd64 image for Trivy scan (local only, no push)
+      # ── Dry-run Trivy scan (workflow_dispatch only, no push path) ─────────────────
+      # Build amd64 image into the local Docker daemon and scan it.  Skipped on tag
+      # push (the pushed multi-arch image is scanned by digest after the push below).
+      - name: Build amd64 image for Trivy scan (dry-run only, no push)
+        if: github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -201,7 +253,8 @@ jobs:
             COMMIT=${{ steps.version.outputs.COMMIT }}
             BUILD_DATE=${{ steps.version.outputs.BUILD_DATE }}
 
-      - name: Trivy vulnerability scan (HIGH + CRITICAL, fixable only)
+      - name: Trivy vulnerability scan — dry-run local image
+        if: github.event_name == 'workflow_dispatch'
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ghcr.io/aytekxr/ams-pulse:trivy-scan
@@ -232,6 +285,35 @@ jobs:
             COMMIT=${{ steps.version.outputs.COMMIT }}
             BUILD_DATE=${{ steps.version.outputs.BUILD_DATE }}
 
+      # ── Trivy scan pushed multi-arch image by digest (tag push only) ─────────────
+      # Scans the EXACT image users will pull: both amd64 and arm64 platform layers
+      # from the pushed manifest digest.  TRIVY_PLATFORM selects the platform-specific
+      # layer from the multi-arch index.
+      # exit-code: "1" blocks release on any FIXABLE HIGH/CRITICAL CVE.
+      - name: Trivy vulnerability scan — pushed amd64 layer by digest
+        if: github.ref_type == 'tag'
+        uses: aquasecurity/trivy-action@v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/amd64
+        with:
+          image-ref: ghcr.io/aytekxr/ams-pulse@${{ steps.push.outputs.digest }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+
+      - name: Trivy vulnerability scan — pushed arm64 layer by digest
+        if: github.ref_type == 'tag'
+        uses: aquasecurity/trivy-action@v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/arm64
+        with:
+          image-ref: ghcr.io/aytekxr/ams-pulse@${{ steps.push.outputs.digest }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+
       # ── cosign keyless signing (tag push only) ─────────────────────────────────────
       # SKIPPED on workflow_dispatch (dry-run): same if condition as push step.
       # Signs the immutable manifest digest (not the mutable tag name) using the
@@ -252,9 +334,38 @@ jobs:
           cosign sign --yes \
             "ghcr.io/aytekxr/ams-pulse@${{ steps.push.outputs.digest }}"
 
-      # ── SDK tarball + GitHub Release (tag push only) ───────────────────────────────
+      # ── Pulse binaries (tag push only) ────────────────────────────────────────────
+      # Builds static linux/amd64 + linux/arm64 pulse binaries (CGO_ENABLED=0; the
+      # sqlite driver is pure-Go modernc.org/sqlite — no C runtime needed) and a
+      # SHA256SUMS file.  All three are attached to the GitHub Release below.
+      - name: Set up Go for binary builds
+        if: github.ref_type == 'tag'
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.25"
+
+      - name: Build pulse binaries and SHA256SUMS
+        if: github.ref_type == 'tag'
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          COMMIT="${{ steps.version.outputs.COMMIT }}"
+          BUILD_DATE="${{ steps.version.outputs.BUILD_DATE }}"
+          LDFLAGS="-X main.Version=${VERSION} -X main.GitCommit=${COMMIT} -X main.BuildDate=${BUILD_DATE}"
+          cd server
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
+            -ldflags "$LDFLAGS" \
+            -o ../pulse-linux-amd64 ./cmd/pulse/
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build \
+            -ldflags "$LDFLAGS" \
+            -o ../pulse-linux-arm64 ./cmd/pulse/
+          cd ..
+          sha256sum pulse-linux-amd64 pulse-linux-arm64 > SHA256SUMS
+          echo "Built binaries and SHA256SUMS:"
+          cat SHA256SUMS
+
+      # ── SDK tarball + Helm chart + GitHub Release (tag push only) ──────────────────
       # Builds the beacon-js SDK, packs it, creates the GitHub Release (if it doesn't
-      # exist), and uploads the tarball as a release asset.
+      # exist), and uploads the SDK tarball, pulse binaries, SHA256SUMS, and Helm chart.
       - name: Build SDK tarball and upload to GitHub Release
         if: github.ref_type == 'tag'
         env:
@@ -280,6 +391,40 @@ jobs:
             "sdk/beacon-js/${TARBALL}" \
             --clobber
           echo "Uploaded sdk/beacon-js/${TARBALL} to release ${GITHUB_REF_NAME}"
+
+          # Upload pulse binaries and SHA256SUMS built above.
+          gh release upload "${GITHUB_REF_NAME}" \
+            pulse-linux-amd64 \
+            pulse-linux-arm64 \
+            SHA256SUMS \
+            --clobber
+          echo "Uploaded pulse-linux-amd64, pulse-linux-arm64, SHA256SUMS to release ${GITHUB_REF_NAME}"
+
+      # ── Helm chart — package, push to OCI registry, attach to release ──────────────
+      - name: Install Helm for chart packaging
+        if: github.ref_type == 'tag'
+        uses: azure/setup-helm@v4
+        with:
+          version: "v3.17.0"
+
+      - name: Package and publish Helm chart
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          helm package deploy/helm/pulse/
+          CHART_TGZ=$(find . -maxdepth 1 -name 'pulse-*.tgz' | head -1)
+          echo "Packed chart: $CHART_TGZ"
+
+          # Push chart to OCI registry (oci://ghcr.io/aytekxr/charts).
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io \
+            --username "${{ github.actor }}" \
+            --password-stdin
+          helm push "$CHART_TGZ" oci://ghcr.io/aytekxr/charts
+
+          # Also attach the chart .tgz to the GitHub Release for offline installs.
+          gh release upload "${GITHUB_REF_NAME}" "$CHART_TGZ" --clobber
+          echo "Helm chart pushed to oci://ghcr.io/aytekxr/charts and attached to ${GITHUB_REF_NAME}"
 
       # ── npm publish (gated on NPM_TOKEN; never blocks the release) ────────────────
       # Step 1: probe whether the secret is present and write a step output.

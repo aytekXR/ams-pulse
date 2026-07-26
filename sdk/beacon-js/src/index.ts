@@ -17,8 +17,10 @@ import { Transport } from './transport.js';
 import { WebRTCAdapter } from './webrtc.js';
 import { MediaElementAdapter, HlsAdapter } from './hls.js';
 
-/** SDK version embedded at build time (updated on release). */
-const SDK_VERSION = '0.1.0';
+/** SDK version injected from package.json at build time via tsup define (tsup.config.ts).
+ *  Vitest also defines this constant (vitest.config.ts) so unit tests receive the same value.
+ *  Declared ambient so esbuild can substitute it; the literal never drifts from package.json. */
+declare const SDK_VERSION: string;
 
 /** Internal no-op session returned when sampling excludes the session or config is invalid. */
 class NoOpSession implements SessionHandle {

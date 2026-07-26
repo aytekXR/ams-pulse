@@ -37,6 +37,13 @@ services:
   pulse:
     image: ${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.1}
     ports:
+      # WARNING: Port 8090 is published on 0.0.0.0 without TLS. Docker's DNAT
+      # rules bypass host firewall INPUT chains, so this port is internet-reachable
+      # even with a restrictive iptables/ufw policy. This configuration is suitable
+      # ONLY for evaluation on a firewalled local machine or a private LAN. For any
+      # public or shared deployment: remove this binding, publish only on 127.0.0.1,
+      # and front Pulse with a TLS-terminating reverse proxy (see
+      # deploy/docker-compose.prod.yml and deploy/nginx/).
       - "8090:8090"
     environment:
       # ── Core ─────────────────────────────────────────────────────────────────

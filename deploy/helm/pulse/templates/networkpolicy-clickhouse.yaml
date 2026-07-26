@@ -1,0 +1,38 @@
+{{- if and .Values.clickhouse.enabled .Values.clickhouse.networkPolicy.enabled }}
+# NetworkPolicy: restrict ClickHouse ingress to pulse (and backup) pods only.
+# Defense-in-depth for the dev/test case where existingSecret is absent, and an
+# additional layer when existingSecret is set (the default user is localhost-only,
+# but the named user still needs a network path from the pulse pod).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "pulse.fullname" . }}-clickhouse
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pulse.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "pulse.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: clickhouse
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "pulse.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: pulse
+        {{- if .Values.backup.enabled }}
+        - podSelector:
+            matchLabels:
+              {{- include "pulse.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: backup
+        {{- end }}
+      ports:
+        - port: 9000
+          protocol: TCP
+        - port: 8123
+          protocol: TCP
+{{- end }}

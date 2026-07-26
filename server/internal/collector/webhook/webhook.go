@@ -348,8 +348,16 @@ func (h *Handler) translateWebhook(raw map[string]json.RawMessage) []domain.Serv
 			"duration_ms": jsonInt64(raw["duration"]),
 		}
 
+	case "endpointFailed", "publishTimeoutError", "encoderNotOpenedError":
+		ev.Type = domain.EventStreamIngestError
+		ev.Data = map[string]any{
+			"action":      action,
+			"stream_name": jsonString(raw["streamName"]),
+			"metadata":    raw,
+		}
+
 	default:
-		h.logger.Debug("webhook: unknown action, skipping", "action", action)
+		h.logger.Info("webhook: unrecognized action", "action", action)
 		return nil
 	}
 

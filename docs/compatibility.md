@@ -201,9 +201,7 @@ publishers/players, historically stable across UI releases.
 **Net:** the endpoints that drive stream monitoring are architecturally insulated from panel UI work,
 and the two console dependencies most at risk (auth, app discovery) already have deployed bypasses.
 Confirm at the meeting: (1) do `/rest/v2/*` paths + envelopes survive the revamp or is a v2→v3 jump
-planned; (2) does the new panel introduce a new auth mechanism replacing the cookie flow; (3) in AMS
-3.0.3 cluster mode, is `GET /rest/v2/cluster/nodes` a flat array or the paginated `…/{offset}/{size}`
-form (the **unverified** G-21 claim — do not change `amsclient` until confirmed). See
+planned; (2) does the new panel introduce a new auth mechanism replacing the cookie flow. See
 `docs/operator-expected.md` (top banner) for the full business + dev assessment.
 
 ### Public-repo evidence (2026-07-22, `ant-media/Management-panel-reborn` @ `c4a0235`)
@@ -218,10 +216,15 @@ staging instance was not accessed; the public repo may lag their private/shippin
   (client-side MD5 password + HttpOnly session cookie, `credentials: 'include'`); **no OIDC/OAuth/JWT
   libraries** exist in its `package.json`. Both Pulse auth modes (cookie login and the
   `PULSE_AMS_AUTH_TOKEN` bearer bypass) remain valid against this design.
-- **G-21 evidence strengthened (still not settled).** The new panel calls the **paginated**
-  `GET /rest/v2/cluster/nodes/{offset}/{size}` form (`src/lib/api/endpoints/cluster.ts`) — consistent
-  with the G-21 claim that the paginated form is the canonical cluster API. This does not prove the
-  unpaginated form 404s; `amsclient` stays unchanged until a live cluster (or the meeting) confirms.
+- **G-21 settled (S106, 2026-07-26).** AMS source at tag `ams-v3.0.3`
+  (`ClusterRestServiceV2`, `@Path("/v2/cluster")`) registers only three methods: `GET /node-count`,
+  `GET /nodes/{offset}/{size}`, and `DELETE /node/{id}` — no flat `GET /nodes` route exists.
+  Live standalone probe confirms: flat `GET /rest/v2/cluster/nodes` → HTTP 404; paginated
+  `GET /rest/v2/cluster/nodes/0/50` → HTTP 500 (`NoSuchBeanDefinitionException: tomcat.cluster`)
+  on a standalone node; `GET /rest/v2/cluster-mode-status` → `{"success":false}` (clean standalone
+  discriminator). `amsclient.ClusterNodes()` now probes `cluster-mode-status` first and paginates
+  only when `success:true`. Live multi-node cluster validation remains pending (see
+  `docs/known-limitations.md` LIM-10).
 - **New additive endpoints appear** (`/system-resources/history`, `/applications/{name}/metrics-history`,
   `/broadcasts/{id}/metrics-history`) backed by an unreleased AMS branch per the repo's status doc —
   additive API evolution, not a breaking rework; potential future ingest sources for Pulse.

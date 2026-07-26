@@ -70,6 +70,7 @@ func TestServerEvent_AllTypes(t *testing.T) {
 		domain.EventRecordingReady,
 		domain.EventViewerJoin,
 		domain.EventViewerLeave,
+		domain.EventStreamIngestError,
 	}
 	for _, et := range types {
 		if et == "" {

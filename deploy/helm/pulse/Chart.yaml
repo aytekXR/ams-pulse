@@ -6,7 +6,7 @@ description: >
   with an optional Postgres meta store for HA deployments.
 type: application
 # Chart version (semver, independent of the pulse binary version).
-version: 0.2.0
+version: 0.3.0
 # App version matches the pulse binary release tag.
 appVersion: "0.4.1"
 

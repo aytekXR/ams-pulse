@@ -141,12 +141,9 @@ func (d *Discovery) poll(ctx context.Context) {
 	seen := make(map[string]struct{}, len(nodes))
 
 	for _, n := range nodes {
-		nodeID := n.NodeID
-		if nodeID == "" {
-			nodeID = n.IP
-		}
+		nodeID := n.PrimaryID()
 		// Deduplicate within this poll cycle. Two DTOs that resolve to the same key
-		// (e.g. both missing NodeID and IP → "") would otherwise each overwrite
+		// (e.g. both missing ID/NodeID and IP → "") would otherwise each overwrite
 		// d.nodes[nodeID] and append a second node_stats event to pending, emitting
 		// duplicate metrics for one logical node (a phantom node in the fleet view).
 		// The seen map already backs the stale-check below; consulting it here before
@@ -160,11 +157,13 @@ func (d *Discovery) poll(ctx context.Context) {
 
 		role := n.Role
 		if role == "" {
-			role = "origin" // default — single-node deployments
+			role = "origin" // default — AMS does not expose role on cluster/nodes endpoint
 		}
 
+		cpuPct := n.CPUPct()
+		memPct := n.MemPct()
 		status := "ok"
-		if n.CPUUsage > 90 || n.MemoryUsage > 90 {
+		if cpuPct > 90 || memPct > 90 {
 			status = "degraded"
 		}
 
@@ -186,8 +185,8 @@ func (d *Discovery) poll(ctx context.Context) {
 		info.Status = status
 		info.Version = n.Version // VD-40: propagate version from DTO
 		info.LastSeen = now
-		info.CPUPct = n.CPUUsage
-		info.MemPct = n.MemoryUsage
+		info.CPUPct = cpuPct
+		info.MemPct = memPct
 		info.DiskPct = n.DiskUsage
 		info.ActiveStreams = n.ActiveStreamCount
 
@@ -200,8 +199,8 @@ func (d *Discovery) poll(ctx context.Context) {
 				Source:  domain.SourceRestPoll,
 				NodeID:  nodeID,
 				Data: map[string]any{
-					"cpu_pct":          n.CPUUsage,
-					"mem_pct":          n.MemoryUsage,
+					"cpu_pct":          cpuPct,
+					"mem_pct":          memPct,
 					"disk_pct":         n.DiskUsage,
 					"net_in_mbps":      n.NetworkInputBps / 1_000_000,
 					"net_out_mbps":     n.NetworkOutputBps / 1_000_000,

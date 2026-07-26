@@ -41,8 +41,10 @@ versions are CI-only.
 
 ### Q3. How much load does Pulse add to AMS?
 
-Pulse issues read-only REST GET requests on a 5 s cycle
-(`PULSE_POLL_INTERVAL`, tunable). At 500 concurrent streams (CI-verified
+Pulse issues read-only REST requests on a 5 s cycle (`PULSE_POLL_INTERVAL`,
+tunable) — GETs for all polling; one POST per session to
+`/rest/v2/users/authenticate` when cookie-session auth is used
+(`PULSE_AMS_LOGIN_EMAIL`). No state-changing calls are ever made to AMS. At 500 concurrent streams (CI-verified
 with mock-ams) Pulse uses 18.6 MiB peak memory on its own host; the load it
 places on an AMS REST endpoint is bounded by the
 number of AMS applications and streams, not by viewer count. The validated

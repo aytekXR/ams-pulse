@@ -30,7 +30,7 @@ CORRECTED behavior; rows below are kept as originally written for provenance.
    `pulse-test` (mp4 muxing temporarily enabled, then restored) so TC-WH-03 /
    TC-A-09 keep a live ground truth.
 
-All scenarios run against real AMS 3.0.3 at `http://161.97.172.146:5080`
+All scenarios run against real AMS 3.0.3 at `http://<VPS_IP>:5080`
 and Pulse v0.3.0 at `https://beyondkaira.com` (prod) or
 `http://127.0.0.1:18090` (pulse-realams isolated stack).
 
@@ -170,10 +170,10 @@ as evidence.** Always curl both endpoints.
 
 | ID | Scenario | Steps | AMS Ground Truth | Pulse Assertion | Auto | Priority |
 |----|----------|-------|-----------------|-----------------|------|---------|
-| TC-P-01 | WebRTC probe — live stream | 1. Start publisher on LiveApp/val-probe<br>2. Create WebRTC probe targeting `ws://161.97.172.146:5080/LiveApp/websocket` with streamId=val-probe<br>3. Wait 120 s | AMS sends `notification(subtrackAdded)` then `takeConfiguration(offer)` (confirmed from real capture D-074) | `GET /api/v1/probes/{id}/results` → `success=true`, `signaling_state=offer_received`, `ice_state=connected`, `connect_time_ms > 0`, `rtt_ms` non-null | Yes | P0 |
+| TC-P-01 | WebRTC probe — live stream | 1. Start publisher on LiveApp/val-probe<br>2. Create WebRTC probe targeting `ws://<VPS_IP>:5080/LiveApp/websocket` with streamId=val-probe<br>3. Wait 120 s | AMS sends `notification(subtrackAdded)` then `takeConfiguration(offer)` (confirmed from real capture D-074) | `GET /api/v1/probes/{id}/results` → `success=true`, `signaling_state=offer_received`, `ice_state=connected`, `connect_time_ms > 0`, `rtt_ms` non-null | Yes | P0 |
 | TC-P-02 | WebRTC probe — no active stream | 1. Create WebRTC probe with a non-existent streamId | AMS sends `play_finished` notification (stream not found) | Probe result: `success=false`, `signaling_state=ws_error` or appropriate error code | Yes | P0 |
-| TC-P-03 | RTMP probe | 1. Create RTMP probe targeting `rtmp://161.97.172.146:1935/LiveApp`<br>2. Wait 90 s | AMS completes C0/C1/S0/S1/S2/C2 handshake | `success=true`, `signaling_state=handshake_complete`, `connect_time_ms > 0` | Yes | P0 |
-| TC-P-04 | HLS probe — live stream | 1. Active publisher on LiveApp/val-hls<br>2. Create HLS probe: `http://161.97.172.146:5080/LiveApp/streams/val-hls/playlist.m3u8`<br>3. Wait 60 s | AMS serves valid M3U8 playlist | `success=true`, `ttfb_ms > 0`, `bitrate_kbps > 0`, `segment_ttfb_ms > 0` | Yes | P0 |
+| TC-P-03 | RTMP probe | 1. Create RTMP probe targeting `rtmp://<VPS_IP>:1935/LiveApp`<br>2. Wait 90 s | AMS completes C0/C1/S0/S1/S2/C2 handshake | `success=true`, `signaling_state=handshake_complete`, `connect_time_ms > 0` | Yes | P0 |
+| TC-P-04 | HLS probe — live stream | 1. Active publisher on LiveApp/val-hls<br>2. Create HLS probe: `http://<VPS_IP>:5080/LiveApp/streams/val-hls/playlist.m3u8`<br>3. Wait 60 s | AMS serves valid M3U8 playlist | `success=true`, `ttfb_ms > 0`, `bitrate_kbps > 0`, `segment_ttfb_ms > 0` | Yes | P0 |
 | TC-P-05 | HLS probe — no stream (404) | Probe non-existent stream playlist | AMS returns HTTP 404 | `success=false`, `error_code=http_4xx` | Yes | P0 |
 | TC-P-06 | DASH probe — AMS without DASH | Create DASH probe on test AMS (DASH muxing disabled) | AMS returns 404 for `.mpd` URL | `success=false`, `error_code=http_4xx`; no crash; documented as expected | Yes | P0 |
 | TC-P-07 | Probe interval and scheduling | 1. Create probe with 60 s interval<br>2. Wait 5 min | N/A | `GET /api/v1/probes/{id}/results` shows 4–5 result rows with consistent timing; no missing intervals | Manual | P1 |

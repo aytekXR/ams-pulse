@@ -10,8 +10,8 @@ import (
 )
 
 // TestLoadEnvConfig_SecretFile exercises the _FILE convention for each
-// secret-bearing var in the cmd layer: PULSE_AMS_LOGIN_PASSWORD,
-// PULSE_WEBHOOK_SECRET, and PULSE_METRICS_TOKEN.
+// secret-bearing var in the cmd layer: PULSE_AMS_LOGIN_EMAIL,
+// PULSE_AMS_LOGIN_PASSWORD, PULSE_WEBHOOK_SECRET, and PULSE_METRICS_TOKEN.
 func TestLoadEnvConfig_SecretFile(t *testing.T) {
 	type secretVarCase struct {
 		varName   string
@@ -24,6 +24,11 @@ func TestLoadEnvConfig_SecretFile(t *testing.T) {
 			varName:   "PULSE_AMS_AUTH_TOKEN",
 			fieldName: "AMSAuthToken",
 			getField:  func(c EnvConfig) string { return c.AMSAuthToken },
+		},
+		{
+			varName:   "PULSE_AMS_LOGIN_EMAIL",
+			fieldName: "AMSLoginEmail",
+			getField:  func(c EnvConfig) string { return c.AMSLoginEmail },
 		},
 		{
 			varName:   "PULSE_AMS_LOGIN_PASSWORD",

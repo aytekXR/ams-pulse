@@ -12,6 +12,80 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **Cluster fleet discovery works against real AMS 3.x clusters (D-173, REVIEW-MP2-2026-07-25
+  Issue A; settles G-21).** `amsclient.ClusterNodes` called a flat `GET /rest/v2/cluster/nodes`
+  that AMS 3.x does not register (source-verified at tag `ams-v3.0.3`: `ClusterRestServiceV2`
+  exposes only `nodes/{offset}/{size}`), so every real cluster silently degraded to
+  "standalone". The client now probes `GET /rest/v2/cluster-mode-status` (cached, re-probed
+  every ~60 calls) and pages through `nodes/{offset}/{size}` when in cluster mode; a live
+  standalone AMS 3.0.3 probe confirmed the paginated path 500s (not 404s) outside cluster
+  mode, so both 404 and 500 map to the standalone fallback. `ClusterNodeDTO` now decodes the
+  real AMS wire fields (`id`, `ip`, `lastUpdateTime`, `memory`, `cpu`, `dbQueryAveargeTimeMs`,
+  `status` — previously only `ip` overlapped, so nodes decoded all-zero) with tolerant aliases
+  for the old keys; the dead `NodeInfo` method is removed. `qa/mock-ams` now serves the real
+  shapes (flat route 404s, paginated 500s when standalone) plus the previously missing
+  `system-status`, `version`, `vods/list`, and `users/authenticate` endpoints. Live multi-node
+  cluster validation remains pending (LIM-10).
+- **Business-tier license keys mint with 50 nodes (Issue F).** `qa/licensegen` still encoded
+  `max_nodes: 5` for Business — below Pro's 10 — so every real Business key carried the
+  inversion D-166 fixed in the entitlement table (entitlements are claim-driven by design). Now
+  50, with a mint-path regression test locking the whole ladder (Free 1 / Pro 10 / Business 50 /
+  Enterprise unlimited).
+- **Quickstart installer no longer destroys operator secrets on failure (Issue G).** The EXIT
+  trap deleted `.env` — including the freshly generated AES-GCM secret key — on any non-zero
+  exit even when containers and volumes kept running with data encrypted under that key, and a
+  re-run minted a new key (permanently orphaning the meta store). Cleanup now only removes an
+  `.env` this run created before the stack started; an existing `PULSE_SECRET_KEY` is reused;
+  "Pulse up but AMS unreachable" (collector `degraded`) is diagnosed as a warning with the AMS
+  URL named instead of failing the install; raw.githubusercontent downloads pin `PULSE_REF`.
+- **README base-Compose path can authenticate to ClickHouse (Issue C).** The base
+  `deploy/docker-compose.yml` clickhouse service set no auth env at all, so the documented
+  `-f deploy/docker-compose.yml up -d` command (which skips the auto-loaded override) failed
+  migration with `code 516: Authentication failed`. `CLICKHOUSE_SKIP_USER_SETUP: "1"` is now
+  set in the base file (ports stay expose-only); a new CI job boots exactly that command
+  against the pinned GHCR image and asserts component-scoped `/healthz`.
+- **Helm chart: beacon ingest port is live, Postgres mode schedulable, S3 export functional
+  (Issue D).** The chart declared/routed containerPort 8091 but never rendered
+  `PULSE_INGEST_LISTEN_ADDR` (nothing listened); `postgres.enabled=true` suppressed the data
+  PVC while the deployment still mounted it (pod stuck `Pending`); the S3 env block rendered
+  variable names the binary does not read and omitted bucket/endpoint/region;
+  `PULSE_REPORTS_DIR` was unset (reports written to the ephemeral container root); ClickHouse
+  StatefulSet emitted a duplicate `volumes:` key with persistence off. All fixed; goldens
+  regenerated plus two new locked variants (`ch-persistence-off`, `existing-secret`), now also
+  diffed in CI.
+- **Helm ClickHouse `existingSecret` mode actually locks down the default user (Issue H).**
+  The `users.xml` emitted a passwordless `default` superuser (`::/0` networks,
+  `access_management=1`) in every configuration — the existingSecret branch changed only
+  comments. With a secret set, `default` is now localhost-only with `access_management=0`
+  (probes run in-pod, unaffected); an opt-in NetworkPolicy template restricts ClickHouse
+  ingress to the pulse/backup pods; chart README/NOTES claims are now truthful.
+- **OpenAPI spec matches the deployed surface (Issue I).** The 8 root-mounted paths
+  (`/healthz`, `/metrics`, `/ingest/beacon`, `/auth/me`, `/auth/oidc/*`) carried the global
+  `/api/v1` server base, so generated clients called `/api/v1/healthz` (404). Each now has a
+  path-level `servers: [{url: /}]`; the WS bearer-token-in-`Sec-WebSocket-Protocol` mechanism
+  (`pulse.v1, <token>`) is documented; the `/metrics` description states the Business+ gate
+  (it claimed "unauthenticated by default"); `POST /admin/sources` honestly documents that it
+  stores config without starting extra pollers. Conformance tests updated (including a
+  workaround for kin-openapi's sticky path-level-servers router bug); `schema.d.ts` and the
+  rendered API reference regenerated — JSDoc-only diff, zero type churn.
+- **Official AMS error webhooks are captured instead of silently dropped (Issue J).**
+  `endpointFailed`, `publishTimeoutError`, and `encoderNotOpenedError` now map to a new
+  `stream_ingest_error` server event (schema enum extended); remaining unknown actions are
+  counted and logged. FAQ/AMS-INTEGRATION wording corrected from "GET-only" to "read-only —
+  the only non-GET is the optional cookie-login POST".
+- **Beacon SDKs report their real version (Issue K).** Both SDKs still embedded `0.1.0` as
+  `player.sdk_version` (poisoning SDK-adoption telemetry). beacon-js now injects the version
+  from `package.json` at build time via tsup `define` (drift impossible; unit test asserts
+  it); beacon-swift bumped to the package version, both now covered by the release version
+  guard.
+- **Placeholder secrets rejected at boot (P3).** A `PULSE_SECRET_KEY` containing `changeme`
+  (the `.env.example` placeholder, which passed the ≥16-byte check) now fails startup with a
+  clear message, in both `serve` and `migrate`.
+- **`PULSE_AMS_LOGIN_EMAIL` supports the `_FILE` secrets convention (P3)** like its password
+  sibling.
+- **WebRTC-stats poll errors are logged (P3)** instead of silently swallowed in the REST
+  poller.
+
 - **Kafka collector now consumes the real AMS Kafka feed (D-172, REVIEW-MP-2026-07-25
   Issue 1).** The consumer subscribed to `ams-server-events` — a topic AMS never publishes —
   and parsed flat `cpuUsage`/`memoryUsage`/`diskUsage` fields the official messages don't
@@ -43,6 +117,35 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Changed
 
+- **Marketplace listing copy externalized (D-173, REVIEW-MP2-2026-07-25 Issue E).** New
+  `docs/marketplace/listing.md` is the clean submission copy: Free tier carries the
+  PolyForm-Noncommercial disclosure, Prometheus `/metrics` and 396-day retention corrected
+  Pro+→Business+, egress marked as an estimate (CDN logs for invoicing), the cluster bullet
+  softened to "live cluster validation pending", air-gapped licensing corrected from
+  "(roadmap)" to supported-today, lab numbers labeled as CI/lab-measured, a long-form
+  description added, category proposed (Analytics & Monitoring, pending A10), and zero
+  internal identifiers/paths/negotiating notes. `listing-draft.md` demoted to the internal
+  working file; `release-notes.md` rewritten in plain prose; `submission-process.md` §4
+  re-labels the nightly matrix honestly as mock wire-format profile tests.
+- **CI/release fidelity (D-173, Issue L).** The "AMS version matrix" workflow is renamed to
+  what it is (mock wire-format profile tests) and its smoke curl now uses the real client
+  path shape; mock-ams learned the four missing endpoints (so the VoD poller and login path
+  are CI-exercised); Trivy scans the pushed multi-arch digest (amd64+arm64) instead of a
+  separate local build; the release now requires a green e2e run, attaches
+  linux/amd64+arm64 `pulse` binaries with SHA256SUMS, and pushes the Helm chart to GHCR OCI;
+  the release version guard extends from 4 to 10 checks (compose/quickstart/helm/README
+  pins, `PULSE_REF`, both SDK version constants); new CI jobs shellcheck the deploy scripts
+  and boot the README compose path; prod/hardened ClickHouse healthchecks no longer expose
+  the password via `docker inspect`; the referenced-but-missing
+  `clickhouse-low-footprint.xml` now exists.
+- **Publication hygiene (D-173, Issue K).** The production VPS IP is redacted from the
+  assessment pack, runbooks, and both review records; `final-assessment.md` restamped and
+  marked superseded (rows 7/8/12 reconciled); customer-facing docs no longer link into
+  internal drafts; `docs/licensing.md` reflects the official-pubkey default;
+  install/productionize runbooks corrected (migrations are baked into the image,
+  `pulse-migrate` is in the base compose, meta DB default `pulse_meta.db`, Go 1.25);
+  `server/internal/config.Load` is explicitly marked as not wired
+  (`pulse.yaml`/`PULSE_LICENSE_OFFLINE_FILE` inert).
 - **Evaluator compose path defaults to the signed GHCR image (Issue 10).**
   `deploy/docker-compose.yml` now pulls `ghcr.io/aytekxr/ams-pulse:0.4.1` (cosign-signed,
   Trivy-gated, SBOM-attached) instead of building from source; source builds move behind the

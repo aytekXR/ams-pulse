@@ -239,7 +239,7 @@ Kafka or cluster mode)
 
 **Assumptions to Validate:**
 - Confirm that Fleet page shows a node card for the standalone AMS
-  (161.97.172.146:5080) with OS/version data populated.
+  (<VPS_IP>:5080) with OS/version data populated.
 - Confirm that CPU/mem/disk fields are absent (blank/null) in the Fleet
   API response, not falsely zero.
 
@@ -446,12 +446,12 @@ WebRTC probe was failing against real AMS because it expected the offer
 first. Fixed and proven via WO-B CI scenario.
 
 **Assumptions to Validate:**
-- Point a WebRTC probe at `ws://161.97.172.146:5080/LiveApp/websocket`
+- Point a WebRTC probe at `ws://<VPS_IP>:5080/LiveApp/websocket`
   with a live `streamId` and confirm `signaling_state=offer_received`,
   `ice_state=connected` in `GET /api/v1/probes/{id}/results`.
-- HLS probe against `http://161.97.172.146:5080/LiveApp/streams/{id}/playlist.m3u8`
+- HLS probe against `http://<VPS_IP>:5080/LiveApp/streams/{id}/playlist.m3u8`
   — confirm `success=true`, `ttfb_ms > 0`, `bitrate_kbps > 0`.
-- RTMP probe against real `rtmp://161.97.172.146:1935/LiveApp` — confirm
+- RTMP probe against real `rtmp://<VPS_IP>:1935/LiveApp` — confirm
   `signaling_state=handshake_complete`.
 - DASH: expect `success=false` with `error_code=http_4xx` (DASH not
   enabled). Document this as a known limitation.
@@ -589,7 +589,7 @@ GeoLite2 DB for non-zero results)
 ## AV Triage — S17 (2026-07-11, live)
 
 All checks executed against: Pulse prod `https://beyondkaira.com/api/v1` (token from
-oguz-testing.md:159) and AMS `http://161.97.172.146:5080`. AMS version confirmed:
+oguz-testing.md:159) and AMS `http://<VPS_IP>:5080`. AMS version confirmed:
 3.0.3 Enterprise Edition build 20260504\_1443. One cookie login performed; cookie
 written to scratchpad only.
 

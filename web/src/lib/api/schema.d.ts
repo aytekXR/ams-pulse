@@ -65,10 +65,16 @@ export interface paths {
          *       client merges into its local state.
          *     - **`heartbeat`** — `{"type":"heartbeat","ts":<epoch_ms>}` sent every 30 s.
          *
-         *     Authentication: bearer token in `Authorization` header, `token` query
-         *     parameter (WebSocket clients may not set headers), or the `pulse_session`
-         *     cookie (OIDC/SSO browser sessions). All three are validated the same way
-         *     as file downloads.
+         *     Authentication (checked in order):
+         *
+         *     1. `Authorization: Bearer <token>` header (non-browser WS clients).
+         *     2. `Sec-WebSocket-Protocol: pulse.v1, <token>` — the preferred browser
+         *        path. The browser sends the token as a second subprotocol value after
+         *        the `pulse.v1` marker; the server negotiates only `pulse.v1` back and
+         *        never echoes the token.
+         *     3. `pulse_session` cookie (OIDC/SSO browser sessions).
+         *     4. `?token=` query parameter — last-resort fallback; tokens in URLs land
+         *        in proxy access logs, so prefer the subprotocol mechanism for browsers.
          *
          *     Message envelope schema:
          *     ```json
@@ -573,14 +579,15 @@ export interface paths {
          * @description Prometheus text exposition format (Content-Type:
          *     `text/plain; version=0.0.4`). Low-cardinality gauges and counters only.
          *
-         *     **Authentication:** Unauthenticated by default; operators may configure
-         *     a separate scrape token via `PULSE_METRICS_TOKEN` environment variable.
-         *     If set, the endpoint requires `Authorization: Bearer <token>` (same
-         *     scheme as the main API). Scrape-token is independent from the main API
-         *     bearer tokens and scoped only to this endpoint. Documented here as a
-         *     design choice: unauthenticated is the right default for Prometheus
-         *     deployments where network-level controls are standard; the optional
-         *     token satisfies stricter environments.
+         *     **License gate:** Requires Business or Enterprise tier. Free and Pro
+         *     tiers receive `403 LICENSE_REQUIRED` regardless of any token (there is
+         *     no unauthenticated fallback path).
+         *
+         *     **Scrape token (optional):** When `PULSE_METRICS_TOKEN` is set, the
+         *     endpoint additionally requires `Authorization: Bearer <token>`
+         *     (constant-time compared). If the env var is unset, any valid Business+
+         *     instance exposes metrics without a token — rely on network-level controls
+         *     (firewall, reverse-proxy ACL) for access restriction in that case.
          */
         get: operations["getMetrics"];
         put?: never;
@@ -728,7 +735,15 @@ export interface paths {
          */
         get: operations["listSources"];
         put?: never;
-        /** Add an AMS data source */
+        /**
+         * Add an AMS data source
+         * @description Persists the source configuration and webhook secret to the meta store,
+         *     and enforces the license node limit. **Does not activate a new REST poll
+         *     cycle** — the REST poller is wired to `PULSE_AMS_BASE_URL` once at
+         *     process startup. To begin polling a newly registered source, restart the
+         *     server. Webhook secrets registered here take effect after a restart for
+         *     the same reason.
+         */
         post: operations["createSource"];
         delete?: never;
         options?: never;

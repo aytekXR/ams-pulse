@@ -57,10 +57,12 @@ func TestRestPoller_MultiApp_NoFalseEnd(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 
-		// Standalone AMS: 404 on cluster/nodes → poller falls back to SystemStats path.
-		// SystemStats also 404s (default case), so the poller logs a warning and continues.
-		case "/rest/v2/cluster/nodes":
-			w.WriteHeader(http.StatusNotFound)
+		// Standalone AMS: cluster-mode-status returns success=false → poller falls
+		// back to SystemStats path. SystemStats also 404s (default case), so the poller
+		// logs a warning and continues.
+		case "/rest/v2/cluster-mode-status":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"success": false}) //nolint:errcheck
 
 		// app-A: "test123" is always broadcasting — never disappears.
 		case "/" + appA + "/rest/v2/broadcasts/list/0/200":

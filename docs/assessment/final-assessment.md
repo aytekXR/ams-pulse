@@ -1,25 +1,28 @@
 <!--
-  ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  DRAFT — OPERATOR REVIEW REQUIRED BEFORE SHARING WITH ANT MEDIA OR      ║
-  ║          ANY EXTERNAL PARTY                                              ║
-  ╚══════════════════════════════════════════════════════════════════════════╝
+  Point-in-time assessment for v0.3.0 (S17–S19, 2026-07-11).
+  Superseded by the two marketplace-readiness reviews at
+  docs/assessment/marketplace-compliance-review-2026-07-25.md
+  and the companion marketplace-readiness-review-2026-07-25.md.
+  Retained for historical traceability only — do not treat as a live checklist.
 -->
 
-> **DRAFT — OPERATOR REVIEW REQUIRED BEFORE SHARING WITH ANT MEDIA OR ANY EXTERNAL PARTY**
+> **POINT-IN-TIME RECORD — v0.3.0 assessment (S17–S19, 2026-07-11)**
 >
-> Sections 3 (Marketplace Readiness) and 6 (Open Questions) contain rows that
-> explicitly require operator contact before the document is usable externally.
-> This draft is produced at S19 close and is an internal working document only.
+> This document is superseded by the 2026-07-25 marketplace-readiness reviews
+> (`docs/assessment/marketplace-compliance-review-2026-07-25.md`). Rows that
+> previously carried NEEDS-OPERATOR-CONTACT status have been reconciled below
+> to reflect current state as of S106 (2026-07-26). Treat this file as a
+> historical record, not a live checklist.
 
 ---
 
-# Pulse v0.3.0 — Final Product Assessment
+# Pulse v0.4.1 — Final Product Assessment (v0.3.0 baseline)
 
 **Product:** Pulse: Self-Hosted Analytics, QoE Monitoring and Alerting for Ant Media Server  
 **Assessed against:** AMS 3.0.3 Enterprise Edition (build 20260504\_1443)  
 **Validation program:** Sessions S17–S19, 2026-07-11  
 **Validation corpus:** 50 automated scenario scripts (P0 + P1), run from
-`qa/realams/` harness against the live AMS deployment at `161.97.172.146:5080`  
+`qa/realams/` harness against the live AMS deployment at `<VPS_IP>:5080`  
 **Authors:** ORCH-00 + QA-01 (S17–S19 session agents)  
 **Source:** `docs/assessment/prd-validation-matrix.md` (Phase 7),
 `docs/assessment/capability-map.md` (Phase 1)  
@@ -238,12 +241,12 @@ TC-REC-01 with 0.02% reconciliation → verdict now FULLY.)
 | 4 | Integration documentation (AMS-side setup) | PARTIAL | `docs/AMS-INTEGRATION.md` exists; `docs/beacon-sdk.md` authored S19/D-081 (452 lines, DG-07 DONE); `docs/AMS-INTEGRATION.md` §4.5 expanded (DG-04 DONE — webhook downstream impact, workarounds, D-V2-1 future path); §1.1 expanded (DG-11 DONE — implicit RTMP broadcast deletion admonition). Remaining open DGs: DG-01 (HLS CDN viewer count), DG-02 (RTMP -1 FAQ), DG-03 (FPS=0 Known Limitation), DG-05 (standalone CPU/mem blank §3.7), DG-06 (egress estimate), DG-08 (per-app CIDR prereq), DG-09 (lockout strategy), DG-10 (HLS flat URL form), DG-12 (applications/info 405), DG-13 (app reset detection), DG-14 (versionType "Enterprise Edition"), DG-15 (Kafka guide), DG-16 (speed_read_kbps), DG-17 (GeoLite2), DG-18 (RTMP packet loss semantics) |
 | 5 | API documentation / OpenAPI spec | PASS | OpenAPI spec exists; 51/52 operations response-body conformant; BUG-004/005/006/007/010 FIXED S20–S22; BUG-008 FIXED S24/D-086 (from/to probed); remaining parameter known-violations: BUG-009 ?tenant ×2 on GET /live (F6 backlog); 2 pinned in conformance registry; conformance registry: 37 probes / 2 known-violations / 47 exempt |
 | 6 | Self-hosted deployment guide | PASS | `deploy/` directory contains Docker Compose stack, `Caddyfile.prod`, and environment variable documentation |
-| 7 | Support channel defined | NEEDS-OPERATOR-CONTACT | No support SLA or support channel (email / forum / GitHub issues) has been publicly defined for Pulse v0.3.0 |
-| 8 | Licensing clearly stated | NEEDS-OPERATOR-CONTACT | Pulse uses a license-key model (PULSE\_LICENSE\_KEY); the public licensing terms (free/pro/enterprise tiers, self-hosted redistribution rights) are not yet published |
+| 7 | Support channel defined | PASS | support@beyondkaira.com provisioned and publicly listed (D-171, S104) |
+| 8 | Licensing clearly stated | PASS | docs/licensing-public.md published (D-089, updated D-172); tier table and PolyForm NC / MIT terms publicly documented |
 | 9 | Marketplace revenue-share terms agreed | NEEDS-OPERATOR-CONTACT | The PRD cites 20–30% revenue share; this figure is **unverified** — it appears only in the PRD as a target and has not been negotiated or confirmed with Ant Media |
 | 10 | Listing category, screenshots, and description copy | NEEDS-OPERATOR-CONTACT | `docs/marketplace/listing-draft.md` authored D-089 S27 (DRAFT-INTERNAL: title, tagline, short description, 6 feature bullets, tier/pricing table, demand evidence, trial-key paragraph); `docs/marketplace/screenshot-list.md` authored D-089 S27 (ordered 6-shot plan; PNG export is pending manual step). Listing submission still requires operator contact with Ant Media marketplace team. |
 | 11 | Co-marketing / blog post process | NEEDS-OPERATOR-CONTACT | Operator must initiate contact with the Ant Media developer-relations or marketplace team |
-| 12 | Semantic versioning and release artifacts | PARTIAL | v0.2.0 and v0.3.0 release tags published (cosign-signed multi-arch Docker images, SBOM + provenance, CI-gated tag pipeline; `ghcr.io/aytekxr/ams-pulse`). Residual gaps: GHCR image registry visibility is private pending operator decision O7; no binary tarball releases (Docker image is the only distribution artifact). Row stays PARTIAL until GHCR is made public. |
+| 12 | Semantic versioning and release artifacts | PASS | v0.4.1 released; GHCR package made public (D-172, S105); cosign-signed multi-arch images, SBOM + provenance, CI-gated tag pipeline. No binary tarball releases (Docker image is the only artifact — acceptable for marketplace). |
 | 13 | Security: token authentication on all API routes | PASS | Bearer token (`plt_…`) required on all Pulse API routes; confirmed in TC-H-01/H-02 (S17) |
 | 14 | No hard-coded secrets in committed code | PASS | `deploy/.env` is gitignored; secrets are not in committed files |
 | 15 | Privacy: viewer IP handling | PASS | Viewer IPs are SHA-256 hashed (`normalize.go:281`); no raw IP stored in ClickHouse |

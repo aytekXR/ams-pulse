@@ -36,7 +36,7 @@ services:
   # production; for isolated tests pass them as env vars (see runbook).
   clickhouse:
     environment:
-      CLICKHOUSE_USER: "${CLICKHOUSE_USER}"
+      CLICKHOUSE_USER: "${CLICKHOUSE_USER:-pulse}"
       CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD}"
     volumes:
       # config.d drop-in: defines local 'backups' disk + allows BACKUP/RESTORE SQL

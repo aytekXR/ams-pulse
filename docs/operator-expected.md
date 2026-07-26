@@ -1,4 +1,33 @@
-# Operator TODO — the items only YOU can do (updated 2026-07-25 late evening, SESSION-105 — ★ your MARKETPLACE REVIEW is EXECUTED: all 12 issues fixed or honestly de-scoped, D-172. The listing is now materially ready; what remains is outbound/your-infra + 4 small new items.)
+# Operator TODO — the items only YOU can do (updated 2026-07-26, SESSION-106 — ★ your SECOND external review is EXECUTED too: every claim adversarially verified (2 refuted with evidence), all confirmed issues fixed, D-173. G-21 is SETTLED — cluster discovery now matches the real AMS wire. v0.4.2 cut is next (the loop does it); your queue is unchanged + 1 new review item.)
+
+> # ▶ ★ S106 STATUS (2026-07-26, D-173) — you sent the second third-party marketplace review ("NOT READY — but close", 12 issues A–L). DONE this session, verification-first: 14 adversarial verifiers + a LIVE probe of your real AMS settled every claim before any fix (11 confirmed; the review's "?token= rejected" claim and one P3 item REFUTED with evidence — those were left alone). All confirmed defects are fixed across server/deploy/helm/contracts/docs/SDK/CI; all gates green; **prod untouched** (v0.4.0-139, collector `ok`, 720 rows/h). Full record: `decisions.md` D-173 · `sessions/SESSION-106.md`.
+>
+> **What this means for you, concretely:**
+> - **The cluster-discovery defect was real and is fixed** — AMS 3.x only serves the paginated cluster endpoint (verified in Ant Media's own source at `ams-v3.0.3` AND by probing your live AMS read-only); before this fix a real cluster would have silently shown as "standalone" in the Fleet view. Live multi-node validation is still pending (honest LIM-10) — worth pairing with the load-lane PAYG AMS.
+> - **A paying-customer bug you'd have hit at first sale is fixed:** Business license keys were still MINTED with 5 nodes (below Pro's 10) even though v0.4.1 fixed the entitlement table — the mint tool was the miss. Now 50, regression-locked end-to-end.
+> - **The quickstart could destroy an operator's secret key on a failed install** (deleting `.env` while volumes kept data encrypted under that key). Fixed: your `.env` is preserved and reused, and "Pulse up but AMS unreachable" is now a diagnosed warning, not a destroyed install.
+> - **★ NEW ITEM FOR YOU (review before submitting): `docs/marketplace/listing.md`** — the clean external listing copy (replaces pasting from listing-draft): PolyForm-noncommercial disclosure on the Free tier, corrected tier labels, egress-estimate caveat, long-form description, proposed category "Analytics & Monitoring". The long description, category, and all price wording are yours to override. `listing-draft.md` is now internal-only.
+> - The published v0.4.1 image still predates the S105+S106 fixes — **the loop cuts v0.4.2 next session** (mechanical, now enforced by a 10-surface release guard). After that release: the new Helm chart OCI package on GHCR will start PRIVATE — flipping it public is web-UI-only, same as the image was (you'll get a ping when it exists).
+>
+> ### ▶ Your queue (unchanged from ★S105, + item 0):
+> 0. **NEW — review `docs/marketplace/listing.md`** (the submission copy; override anything).
+> 1. **Submit the listing** (your account) — now paste from `listing.md`, not the draft.
+> 2. **Set up billing** in the marketplace.
+> 3. **Send the Ankush reply** (draft: `docs/marketplace/ankush-reply-draft.md`).
+> 4. **Load lane on a PAYG AMS** (→ real capacity number; same instance: `server.kafka_brokers` for AV-15, and — new — a 2-node cluster would close the last cluster-validation gap).
+> 5. **Add an `NPM_TOKEN` repo secret** if you want npm installs of the beacon SDK.
+> 6. **Demo FINAL** — re-record voiceover over the dark rough-cut.
+> 7. **Confirm the licensor legal name** ("Aytek Erdoğan (beyondkaira.com)").
+> 8. **Rotate the chat-exposed / VPS-group-readable secrets** (carried).
+> 9. Optional: prod roll to 0.4.2 once cut (stamped deployment.sh, your go-ahead) · VPS Chromium deps · flip the chart OCI package public once it exists.
+>
+> Decision-gated eng unchanged: §2.45 built-in self-alert rule · §2.44 `[FO-1]` · Dependabot queue (17 PRs). Prod untouched and healthy.
+>
+> ---
+>
+## (previous header — D-172, SESSION-105)
+
+# Operator TODO — (superseded) updated 2026-07-25 late evening, SESSION-105 — ★ your MARKETPLACE REVIEW is EXECUTED: all 12 issues fixed or honestly de-scoped, D-172. The listing is now materially ready; what remains is outbound/your-infra + 4 small new items.
 
 > # ▶ ★ S105 STATUS (2026-07-25 → 26, D-172) — you sent the third-party marketplace-readiness review + "make the app ready." DONE this session (verification-first, all gates re-run by the loop itself). Shipped as **PR #214** (three commits: main wave + helm-golden/CodeQL-hardening fixups); your #213 (the review document) was merged in cleanly.
 >

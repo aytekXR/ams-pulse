@@ -21,7 +21,8 @@
         "node_stats",
         "recording_ready",
         "viewer_join",
-        "viewer_leave"
+        "viewer_leave",
+        "stream_ingest_error"
       ]
     },
     "ts": {

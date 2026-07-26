@@ -102,7 +102,11 @@ services:
       # CLICKHOUSE_SKIP_USER_SETUP must NOT be set here — auth must be enforced.
     healthcheck:
       # Override the base healthcheck to pass credentials once auth is enabled.
-      test: ["CMD", "clickhouse-client", "--user", "${CLICKHOUSE_USER}", "--password", "${CLICKHOUSE_PASSWORD}", "--query", "SELECT 1"]
+      # Use CMD-SHELL with $$-prefixed vars so the password expands at runtime
+      # inside the container (from the service's own environment block) rather
+      # than at compose-parse time — prevents the plaintext password appearing
+      # in `docker inspect` Config.Healthcheck.Test (P3-7).
+      test: ["CMD-SHELL", "clickhouse-client --user $$CLICKHOUSE_USER --password $$CLICKHOUSE_PASSWORD --query 'SELECT 1'"]
       interval: 10s
       timeout: 5s
       start_period: 20s

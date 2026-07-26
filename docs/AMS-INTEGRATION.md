@@ -15,7 +15,9 @@ Pulse has three ingest paths for server-side data, and one client-side SDK:
 
 ### 1.1 REST polling (primary — always active)
 
-`server/pkg/amsclient/client.go` implements a typed, read-only REST client.
+`server/pkg/amsclient/client.go` implements a typed, read-only REST client —
+no state-changing calls; the only non-GET is the optional cookie-login
+`POST /rest/v2/users/authenticate` when cookie auth is used (`PULSE_AMS_LOGIN_EMAIL`).
 `server/internal/collector/restpoller` polls AMS on `PULSE_POLL_INTERVAL`
 (default 5 s) and is always wired regardless of other source config
 (`serve.go:353–366`).
@@ -30,8 +32,7 @@ earlier root-level `/rest/v2/broadcasts/...` paths 404'd; real AMS uses per-app 
 | `ListApplications` | `GET /rest/v2/applications` | Discover apps — **array-of-strings** envelope `{"applications":["LiveApp",…]}` |
 | `ListBroadcastsPaged` | `GET /{app}/rest/v2/broadcasts/list/{offset}/{size}` | All broadcasts, 200/page (per-app) |
 | `WebRTCClientStats` | `GET /{app}/rest/v2/broadcasts/{streamId}/webrtc-client-stats/0/100` | Per-peer WebRTC QoE (empty `[]` when no viewers) |
-| `ClusterNodes` | `GET /rest/v2/cluster/nodes` | Node list — **404 on standalone** → mapped to nil (no error) |
-| `NodeInfo` | `GET /rest/v2/cluster/nodes/{nodeId}` | Single-node detail (404-tolerant) |
+| `ClusterNodes` | `GET /rest/v2/cluster-mode-status` → then `GET /rest/v2/cluster/nodes/{offset}/{size}` | Cluster probe: `success:false` → standalone (nil, nil); `success:true` → paginate nodes (AMS 3.x has no flat `/nodes` route; G-21 settled S106) |
 | `SystemStats` | `GET /rest/v2/system-status` | `{osName,osArch,javaVersion,processorCount}` — **no cpu/mem** on AMS 3.x |
 | `ListVodsPaged` | `GET /{app}/rest/v2/vods/list/{offset}/200` | VoD list for recording billing — polled every 12 broadcast ticks (60 s at 5 s default); deduped via `vod_poll_state` seen-set; emits `EventRecordingReady` (BUG-002 fix, S23/D-085) |
 | `GetVersion` | `GET /rest/v2/version` | AMS version string for fleet node card (standalone path only); best-effort — returns nil on AMS < v3 without this endpoint |
@@ -190,7 +191,7 @@ HTTP POST. Lower latency than polling for publish-start visibility (F1 criterion
 
 **Fail-closed** (B2): `serve.go:373–375` logs an error and skips starting the
 listener when `PULSE_WEBHOOK_ADDR` is set but `PULSE_WEBHOOK_SECRET` is empty.
-`validateHMAC` in `webhook.go:260–267` independently returns `false` when the
+`validateHMAC` in `webhook.go:361` independently returns `false` when the
 secret is empty, so even if the listener were somehow started without a secret,
 every request would be rejected.
 
@@ -458,13 +459,13 @@ PULSE_WEBHOOK_SECRET=your-strong-random-secret
 ```
 
 `PULSE_WEBHOOK_ADDR` is the listen address for the webhook HTTP server
-(`config.go:62`). `PULSE_WEBHOOK_SECRET` is the shared HMAC-SHA256 secret
-(`config.go:65`).
+(`config.go:246`). `PULSE_WEBHOOK_SECRET` is the shared HMAC-SHA256 secret
+(`config.go:263`).
 
 ### 4.2 The webhook listener and its path
 
 The webhook handler registers two paths on the webhook listener port
-(legacy: `webhook.go:64`; per-source: `webhook.go:67`). With `PULSE_WEBHOOK_ADDR=:8092`,
+(legacy: `webhook.go:92`; per-source: `webhook.go:95`). With `PULSE_WEBHOOK_ADDR=:8092`,
 AMS should POST events to the shared path:
 
 ```
@@ -479,8 +480,8 @@ https://your-domain/webhook/ams
 
 ### 4.3 HMAC signature validation
 
-Pulse reads the `X-Ams-Signature` request header (`webhook.go:159`) and validates
-it as `sha256=<hex(HMAC-SHA256(body, secret))>` (`webhook.go:260–267`). AMS must
+Pulse reads the `X-Ams-Signature` request header (`webhook.go:187`) and validates
+it as `sha256=<hex(HMAC-SHA256(body, secret))>` (`webhook.go:361`). AMS must
 be configured to send this header with the same secret. If the signature is missing
 or wrong, the handler returns HTTP 401 and logs a warning.
 
@@ -716,7 +717,7 @@ Complete table of `PULSE_*` variables relevant to AMS integration, read from
 | `PULSE_CLICKHOUSE_DATABASE` | ClickHouse database name | `pulse` | No |
 | `PULSE_MIGRATIONS_DIR` | Path to ClickHouse migration SQL files | _(empty)_ | No |
 | `PULSE_META_DSN` | SQLite meta store path | `pulse_meta.db` | No |
-| `PULSE_SECRET_KEY` | AES-GCM key for encrypting stored credentials | _(empty = no encryption)_ | Yes for production |
+| `PULSE_SECRET_KEY` | AES-GCM key for encrypting stored credentials | _(empty or <16 bytes → hard startup failure for non-`:memory:` DSNs)_ | Yes |
 | `PULSE_RETENTION_DAYS` | Raw event TTL in days | `90` | No |
 | `PULSE_ROLLUP_TTL_DAYS` | Rollup table TTL in days | `395` | No |
 | `PULSE_METRICS_TOKEN` | Bearer token required on `GET /metrics`; empty = open; supports `_FILE` convention | _(empty)_ | Recommended |

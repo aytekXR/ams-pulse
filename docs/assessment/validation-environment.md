@@ -6,7 +6,7 @@
 
 This document specifies the reusable test harness for running validation
 scenarios against the real Ant Media Server (AMS 3.0.3 Enterprise,
-`http://161.97.172.146:5080`) and the production Pulse deployment
+`http://<VPS_IP>:5080`) and the production Pulse deployment
 (`https://beyondkaira.com`). The harness is designed for repeatability:
 any scenario can be rerun from scratch in a new session without manual
 state setup.
@@ -17,7 +17,7 @@ state setup.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  VPS: 161.97.172.146                                             │
+│  VPS: <VPS_IP>                                             │
 │                                                                  │
 │  ┌─────────────────────────────────────────────────────────────┐│
 │  │  pulse-prod (5-overlay compose)                             ││
@@ -110,7 +110,7 @@ else
   PULSE_URL="http://127.0.0.1:18090/api/v1"
   PULSE_WS="ws://127.0.0.1:18090/api/v1/live/ws"
 fi
-AMS_URL="http://161.97.172.146:5080"
+AMS_URL="http://<VPS_IP>:5080"
 AMS_COOKIE_FILE="$(dirname "$0")/../evidence/.ams-cookie"
 # Token from oguz-testing.md line 159 / deploy/.env
 PULSE_TOKEN="${PULSE_TOKEN:-$(grep PULSE_ADMIN_TOKEN deploy/.env | cut -d= -f2)}"
@@ -183,7 +183,7 @@ start_publisher() {
     -f lavfi -i "sine=frequency=440" \
     -c:v libx264 -b:v "${BITRATE_KBPS}k" -g 60 \
     -c:a aac -b:a 128k \
-    -f flv "rtmp://161.97.172.146:1935/${APP}/${STREAM_ID}"
+    -f flv "rtmp://<VPS_IP>:1935/${APP}/${STREAM_ID}"
 }
 
 stop_publisher() {
@@ -255,7 +255,7 @@ start_hls_viewer() {
   local APP="${2:-LiveApp}"
   local VIEWER_ID="${3:-viewer-001}"
   (
-    PLAYLIST="http://161.97.172.146:5080/$APP/streams/$STREAM_ID/playlist.m3u8"
+    PLAYLIST="http://<VPS_IP>:5080/$APP/streams/$STREAM_ID/playlist.m3u8"
     while true; do
       SEGMENTS=$(curl -s "$PLAYLIST" | grep "\.ts" | head -3)
       for SEG in $SEGMENTS; do
@@ -284,7 +284,7 @@ For real WebRTC viewer sessions (counts viewable in
 # libs on the host, no sudo — same rule as the CI e2e gate; see §9). Image
 # already pulled: mcr.microsoft.com/playwright:v1.61.1-noble — keep it in
 # lockstep with the pinned @playwright/test version in web/package.json.
-# --network host so the container reaches AMS on 161.97.172.146:5080;
+# --network host so the container reaches AMS on <VPS_IP>:5080;
 # web/ is mounted so `require('playwright')` resolves from node_modules.
 start_webrtc_viewer() {
   local STREAM_ID="${1:-teststream}"
@@ -298,7 +298,7 @@ const { chromium } = require('playwright');
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   // AMS sample player page (adjust path to match actual AMS player URL)
-  await page.goto('http://161.97.172.146:5080/$APP/player.html?id=$STREAM_ID');
+  await page.goto('http://<VPS_IP>:5080/$APP/player.html?id=$STREAM_ID');
   await page.waitForTimeout(120000);  // hold 2 min for stats collection
   await browser.close();
 })();
@@ -369,7 +369,7 @@ inject_invalid_stream_key() {
   docker run --rm linuxserver/ffmpeg \
     -re -f lavfi -i "testsrc2=size=320x180:rate=5" \
     -c:v libx264 -b:v 100k \
-    -f flv "rtmp://161.97.172.146:1935/$APP/$WRONG_KEY" \
+    -f flv "rtmp://<VPS_IP>:1935/$APP/$WRONG_KEY" \
     2>&1 | head -20 &
   sleep 5
   docker kill "$(docker ps -qf ancestor=linuxserver/ffmpeg)" 2>/dev/null || true
@@ -470,7 +470,7 @@ inject_expired_token_publish() {
   docker run --rm linuxserver/ffmpeg \
     -re -f lavfi -i "testsrc2=size=320x180:rate=5" \
     -c:v libx264 -b:v 100k \
-    -f flv "rtmp://161.97.172.146:1935/$APP/$STREAM_ID?token=$TOKEN" \
+    -f flv "rtmp://<VPS_IP>:1935/$APP/$STREAM_ID?token=$TOKEN" \
     2>&1 | head -10 || true
 }
 ```
@@ -638,7 +638,7 @@ echo "=== $SCENARIO: COMPLETE ==="
 To re-run any scenario in a future session:
 
 1. `cd /home/aytek/repo/ams-pulse`
-2. Confirm AMS is up: `curl -s http://161.97.172.146:5080/rest/v2/version | jq .`
+2. Confirm AMS is up: `curl -s http://<VPS_IP>:5080/rest/v2/version | jq .`
 3. Confirm Pulse is up: `curl -s https://beyondkaira.com/api/v1/healthz`
 4. `source qa/realams/harness/env.sh && bash qa/realams/harness/auth.sh`
 5. `bash qa/realams/scenarios/<TC-*>.sh`

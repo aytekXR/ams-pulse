@@ -29,7 +29,8 @@ spec:
           {{- if .Values.clickhouse.auth.existingSecret }}
           # ClickHouse auth: named user created at first boot from these env vars.
           # Parity with docker-compose.hardened.yml which sets CLICKHOUSE_USER + CLICKHOUSE_PASSWORD.
-          # SECURITY: remove the default empty-password user by providing a named user here.
+          # SECURITY: with existingSecret set, users.xml restricts the default user to localhost only
+          # (access_management 0); readiness probes run in-pod so they continue to work.
           env:
             - name: CLICKHOUSE_USER
               valueFrom:
@@ -91,6 +92,11 @@ spec:
         - name: config
           configMap:
             name: {{ include "pulse.fullname" . }}-clickhouse-config
+        {{- if not .Values.clickhouse.persistence.enabled }}
+        # No persistence — data volume is ephemeral (not recommended for production).
+        - name: data
+          emptyDir: {}
+        {{- end }}
         {{- if .Values.backup.enabled }}
         - name: backups
           persistentVolumeClaim:
@@ -108,10 +114,5 @@ spec:
         resources:
           requests:
             storage: {{ .Values.clickhouse.persistence.size }}
-  {{- else }}
-      # No persistence — data is ephemeral (not recommended for production).
-      volumes:
-        - name: data
-          emptyDir: {}
   {{- end }}
 {{- end }}

@@ -320,6 +320,20 @@ jobs:
             > /tmp/golden-external-clickhouse.yaml
           echo "helm template (external-clickhouse): rendered $(wc -l < /tmp/golden-external-clickhouse.yaml) lines"
 
+      - name: helm template — ClickHouse persistence off
+        run: |
+          helm template pulse deploy/helm/pulse/ \
+            -f deploy/helm/tests/values-ch-persistence-off.yaml \
+            > /tmp/golden-ch-persistence-off.yaml
+          echo "helm template (ch-persistence-off): rendered $(wc -l < /tmp/golden-ch-persistence-off.yaml) lines"
+
+      - name: helm template — ClickHouse existing secret
+        run: |
+          helm template pulse deploy/helm/pulse/ \
+            -f deploy/helm/tests/values-existing-secret.yaml \
+            > /tmp/golden-existing-secret.yaml
+          echo "helm template (existing-secret): rendered $(wc -l < /tmp/golden-existing-secret.yaml) lines"
+
       - name: Golden-file diff (catch template regressions)
         run: |
           FAIL=0
@@ -329,6 +343,10 @@ jobs:
             || { echo "FAIL: golden-postgres-s3.yaml drift"; FAIL=1; }
           diff deploy/helm/tests/golden-external-clickhouse.yaml /tmp/golden-external-clickhouse.yaml \
             || { echo "FAIL: golden-external-clickhouse.yaml drift"; FAIL=1; }
+          diff deploy/helm/tests/golden-ch-persistence-off.yaml /tmp/golden-ch-persistence-off.yaml \
+            || { echo "FAIL: golden-ch-persistence-off.yaml drift"; FAIL=1; }
+          diff deploy/helm/tests/golden-existing-secret.yaml /tmp/golden-existing-secret.yaml \
+            || { echo "FAIL: golden-existing-secret.yaml drift"; FAIL=1; }
           [ $FAIL -eq 0 ] && echo "Golden-file diff: PASS (no drift)" || exit 1
 
       - name: D-002 limitation note
@@ -407,10 +425,76 @@ jobs:
             config --quiet
           echo "docker compose (CI override): PASS"
 
+  # ── 9. Shellcheck ────────────────────────────────────────────────────────────
+  # Validates deploy shell scripts for portability and common errors.
+  # install.sh, pulse-backup.sh, and deployment.sh are cheaply coverable.
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get install -y --no-install-recommends shellcheck
+
+      - name: Shellcheck deploy scripts
+        run: |
+          shellcheck \
+            deploy/quickstart/install.sh \
+            deploy/scripts/pulse-backup.sh \
+            deploy/nginx/deployment.sh
+
+  # ── 10. Compose boot smoke ───────────────────────────────────────────────────
+  # Boots the base deploy/docker-compose.yml (the exact README evaluator command)
+  # with the pinned public GHCR image and asserts that:
+  #   • pulse responds HTTP 200 at /healthz
+  #   • clickhouse component status == "ok" (validates CLICKHOUSE_SKIP_USER_SETUP)
+  #   • meta_store component status == "ok" (validates SQLite bootstrap)
+  #   • collector may be "ok" or "degraded" (no AMS in CI — collector without a
+  #     live snapshot degrades gracefully; NEVER whole-body grep for "ok")
+  # Uses docker compose exec to reach the expose:-only port 8090 from inside the
+  # Docker network without publishing it to the host.
+  # Poll with a deadline loop — no fixed sleep.
+  compose-boot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Boot base compose stack (README evaluator path)
+        env:
+          PULSE_SECRET_KEY: ci-boot-smoke-key-0123456789abcdef01234567
+        run: |
+          docker compose -f deploy/docker-compose.yml up -d --wait --wait-timeout 120
+
+      - name: Assert /healthz — HTTP 200 and component-scoped status
+        run: |
+          BODY=$(docker compose -f deploy/docker-compose.yml exec -T pulse \
+            wget -qO- http://localhost:8090/healthz)
+          echo "healthz response: $BODY"
+          echo "$BODY" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          comps = d.get('components', {})
+          ch        = comps.get('clickhouse', {}).get('status', 'missing')
+          meta      = comps.get('meta_store', {}).get('status', 'missing')
+          collector = comps.get('collector', {}).get('status', 'missing')
+          overall   = d.get('status', 'missing')
+          print('overall={} clickhouse={} meta_store={} collector={}'.format(
+              overall, ch, meta, collector))
+          assert ch == 'ok',                      'FAIL: clickhouse status=' + ch
+          assert meta == 'ok',                    'FAIL: meta_store status=' + meta
+          assert collector in ('ok', 'degraded'), 'FAIL: collector status=' + collector
+          assert overall in ('ok', 'degraded'),   'FAIL: overall status=' + overall
+          print('PASS: /healthz component checks')
+          "
+
+      - name: Tear down compose stack
+        if: always()
+        run: docker compose -f deploy/docker-compose.yml down -v
+
   slack-notify:
     name: Slack notification
     runs-on: ubuntu-latest
-    needs: [contracts, server, web, sdk, docker-build, helm, web-e2e, compose]
+    needs: [contracts, server, web, sdk, docker-build, helm, web-e2e, compose, shellcheck, compose-boot]
     if: always()
     steps:
       - name: Notify Slack on success

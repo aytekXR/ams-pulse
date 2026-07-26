@@ -6,7 +6,7 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"
@@ -23,7 +23,7 @@ metadata:
   name: pulse-clickhouse-config
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"
@@ -94,15 +94,15 @@ data:
     </clickhouse>
 ---
 # Source: pulse/templates/pvc.yaml
-# PVC for pulse meta store (SQLite) + license cache.
-# Not needed when postgres.enabled=true (meta store is in Postgres then).
+# PVC for pulse data: license cache, report artifacts, and SQLite meta store.
+# Created whenever persistence.enabled — data volume is needed regardless of meta-store backend.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: pulse-data
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"
@@ -123,7 +123,7 @@ metadata:
   name: pulse-clickhouse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"
@@ -154,7 +154,7 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"
@@ -184,7 +184,7 @@ metadata:
   name: pulse-ingest
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"
@@ -213,7 +213,7 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"
@@ -275,6 +275,10 @@ spec:
             # ── Core server ──────────────────────────────────────────────
             - name: PULSE_LISTEN_ADDR
               value: ":8090"
+            - name: PULSE_INGEST_LISTEN_ADDR
+              value: ":8091"
+            - name: PULSE_REPORTS_DIR
+              value: "/var/lib/pulse/reports"
             # ── ClickHouse ───────────────────────────────────────────────
             - name: PULSE_CLICKHOUSE_DSN
               value: "clickhouse://pulse-clickhouse:9000/pulse"
@@ -299,6 +303,7 @@ spec:
             # ── Observability ────────────────────────────────────────────
             - name: PULSE_LOG_LEVEL
               value: "info"
+            # ── S3 export config (optional) ──────────────────────────────
             # ── Secrets from secretRef ────────────────────────────────────
             # ── Extra env from values.yaml ────────────────────────────────
           livenessProbe:
@@ -339,7 +344,7 @@ metadata:
   name: pulse-clickhouse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"

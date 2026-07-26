@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -85,9 +86,10 @@ func standaloneAMSServer(t *testing.T, sysStatsHandler func(w http.ResponseWrite
 		switch r.URL.Path {
 		case "/rest/v2/applications":
 			json.NewEncoder(w).Encode(map[string]any{"applications": []any{}}) //nolint:errcheck
-		case "/rest/v2/cluster/nodes":
-			// Standalone AMS: 404 → client maps to nil,nil
-			w.WriteHeader(http.StatusNotFound)
+		case "/rest/v2/cluster-mode-status":
+			// Standalone AMS: success=false → client returns (nil, nil) immediately.
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"success": false}) //nolint:errcheck
 		case "/rest/v2/system-status":
 			sysStatsHandler(w, r)
 		case "/rest/v2/version":
@@ -99,14 +101,19 @@ func standaloneAMSServer(t *testing.T, sysStatsHandler func(w http.ResponseWrite
 }
 
 // clusterAMSServer returns a test server that simulates a clustered AMS node.
-// clusterNodesHandler controls what /rest/v2/cluster/nodes returns.
+// clusterNodesHandler controls what the paginated cluster/nodes/{offset}/{size} returns.
 func clusterAMSServer(t *testing.T, clusterNodesHandler func(w http.ResponseWriter, r *http.Request)) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/rest/v2/applications":
+		switch {
+		case r.URL.Path == "/rest/v2/applications":
 			json.NewEncoder(w).Encode(map[string]any{"applications": []any{}}) //nolint:errcheck
-		case "/rest/v2/cluster/nodes":
+		case r.URL.Path == "/rest/v2/cluster-mode-status":
+			// Cluster mode: success=true → client will call the paginated endpoint.
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"success": true}) //nolint:errcheck
+		case strings.HasPrefix(r.URL.Path, "/rest/v2/cluster/nodes/"):
+			// Paginated cluster/nodes/{offset}/{size} — delegate to the injected handler.
 			clusterNodesHandler(w, r)
 		default:
 			w.WriteHeader(http.StatusNotFound)
@@ -296,8 +303,9 @@ func TestAPIStreak_ResetsOnSuccess(t *testing.T) {
 		switch r.URL.Path {
 		case "/rest/v2/applications":
 			json.NewEncoder(w).Encode(map[string]any{"applications": []any{}}) //nolint:errcheck
-		case "/rest/v2/cluster/nodes":
-			w.WriteHeader(http.StatusNotFound)
+		case "/rest/v2/cluster-mode-status":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"success": false}) //nolint:errcheck
 		case "/rest/v2/system-status":
 			if failCount < 2 {
 				failCount++
@@ -382,8 +390,9 @@ func TestAPIStreak_BroadcastFailure_NoStreakIncrement(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
 				"applications": []string{"live"},
 			})
-		case "/rest/v2/cluster/nodes":
-			w.WriteHeader(http.StatusNotFound) // standalone
+		case "/rest/v2/cluster-mode-status":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"success": false}) //nolint:errcheck
 		case "/rest/v2/system-status":
 			// SystemStats succeeds → streak should be 0.
 			w.Header().Set("Content-Type", "application/json")
@@ -516,8 +525,9 @@ func TestAPIStreak_PostRecoveryFailure_StartsAtOne(t *testing.T) {
 		switch r.URL.Path {
 		case "/rest/v2/applications":
 			json.NewEncoder(w).Encode(map[string]any{"applications": []any{}}) //nolint:errcheck
-		case "/rest/v2/cluster/nodes":
-			w.WriteHeader(http.StatusNotFound)
+		case "/rest/v2/cluster-mode-status":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"success": false}) //nolint:errcheck
 		case "/rest/v2/system-status":
 			call++
 			if call <= 2 || call >= 4 {

@@ -1,0 +1,18 @@
+# Test values: ClickHouse persistence disabled (emptyDir data volume).
+# Locks the fix for the duplicate volumes: key that appeared in the else branch
+# when clickhouse.persistence.enabled=false.
+# Used by: helm template golden-file test (manual; not yet wired into CI).
+
+clickhouse:
+  persistence:
+    enabled: false
+
+pulse:
+  image:
+    repository: ghcr.io/aytekxr/ams-pulse
+    tag: "0.4.1"
+  ams:
+    url: "http://ams.example.com:5080"
+    nodeId: "node-01"
+  secretRef:
+    name: pulse-secrets

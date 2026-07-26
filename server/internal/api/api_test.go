@@ -31,6 +31,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
+	"github.com/getkin/kin-openapi/routers"
 	"github.com/getkin/kin-openapi/routers/gorillamux"
 
 	"github.com/aytekXR/ams-pulse/server/internal/api"
@@ -166,10 +167,26 @@ func hashToken(tok string) string {
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 
+// newSpecRouter builds the kin-openapi route finder for the spec.
+// kin-openapi v0.140.0's gorillamux.NewRouter keeps path-level servers sticky:
+// once a path item carries its own servers (the root-mounted /healthz etc.),
+// every later path in matching order silently inherits that base instead of
+// reverting to the top-level /api/v1, so versioned routes stop matching.
+// Giving every path item explicit servers removes the shared state the bug
+// depends on.
+func newSpecRouter(doc *openapi3.T) (routers.Router, error) {
+	for _, item := range doc.Paths.Map() {
+		if len(item.Servers) == 0 {
+			item.Servers = doc.Servers
+		}
+	}
+	return gorillamux.NewRouter(doc)
+}
+
 // conformCheck validates that an http.Response body conforms to the OpenAPI spec.
 func conformCheck(t *testing.T, doc *openapi3.T, req *http.Request, resp *http.Response) {
 	t.Helper()
-	router, err := gorillamux.NewRouter(doc)
+	router, err := newSpecRouter(doc)
 	if err != nil {
 		t.Fatalf("kin-openapi router: %v", err)
 	}

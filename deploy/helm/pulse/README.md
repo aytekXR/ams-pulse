@@ -20,9 +20,12 @@ set `clickhouse.enabled=false` and provide `clickhouse.externalDSN`.
 - **PULSE_SECRET_KEY is required** (`optional: false`): missing this key causes the
   pod to fail scheduling loudly rather than crashing at runtime.
 - **ClickHouse auth**: set `clickhouse.auth.existingSecret` to a Secret containing
-  `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, and `PULSE_CLICKHOUSE_DSN`. Without this,
-  the ClickHouse 'default' user has no password — acceptable only for isolated
-  dev/test clusters protected by NetworkPolicy.
+  `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, and `PULSE_CLICKHOUSE_DSN`. With this set,
+  the `default` user in `users.xml` is restricted to localhost only (`127.0.0.1`/`::1`),
+  disabling network-wide access and `access_management`. Readiness probes run in-pod so
+  they keep working. Without `existingSecret`, the `default` user has no password —
+  acceptable only for isolated dev/test clusters. Enable `clickhouse.networkPolicy.enabled`
+  for additional defense-in-depth (restricts ClickHouse ingress to pulse and backup pods).
 - **Digest pinning**: set `pulse.image.digest` to the manifest digest for immutable
   production pulls (see values.yaml for how to obtain the digest).
 - Pulse runs as UID 1000, non-root, `allowPrivilegeEscalation: false`.
@@ -70,7 +73,7 @@ helm upgrade pulse ./deploy/helm/pulse -f my-values.yaml
 | Key | Default | Description |
 |-----|---------|-------------|
 | `pulse.image.repository` | `ghcr.io/aytekxr/ams-pulse` | Canonical GHCR image (cosign-signed on release) |
-| `pulse.image.tag` | `0.1.0` | Image tag |
+| `pulse.image.tag` | `0.4.1` | Image tag |
 | `pulse.image.digest` | `""` | Manifest digest for immutable pinning (overrides tag when set) |
 | `pulse.replicaCount` | `1` | Pulse replicas (use 1 with SQLite; N with postgres.enabled) |
 | `pulse.resources.requests.cpu` | `250m` | CPU request (2-vCPU tier) |
@@ -78,7 +81,8 @@ helm upgrade pulse ./deploy/helm/pulse -f my-values.yaml
 | `pulse.resources.limits.cpu` | `500m` | CPU limit |
 | `pulse.resources.limits.memory` | `512Mi` | Memory limit |
 | `pulse.listenAddr` | `:8090` | `PULSE_LISTEN_ADDR` — API + UI port |
-| `pulse.ingestListenAddr` | `:8091` | Beacon ingest port (matches `ingestService.port`) |
+| `pulse.ingestListenAddr` | `:8091` | `PULSE_INGEST_LISTEN_ADDR` — beacon ingest port (matches `ingestService.port`; leave empty to disable) |
+| `pulse.reportsDir` | `/var/lib/pulse/reports` | `PULSE_REPORTS_DIR` — report artifact directory (always set to PVC-backed path) |
 | `pulse.ams.url` | `http://localhost:5080` | `PULSE_AMS_URL` — AMS REST base URL |
 | `pulse.ams.nodeId` | `standalone` | `PULSE_AMS_NODE_ID` — node identifier in events |
 | `pulse.ams.applications` | `""` | `PULSE_AMS_APPLICATIONS` — comma-separated app filter (empty = all) |
@@ -104,13 +108,16 @@ helm upgrade pulse ./deploy/helm/pulse -f my-values.yaml
 | `clickhouse.resources.limits.memory` | `1Gi` | ClickHouse memory limit |
 | `clickhouse.persistence.size` | `20Gi` | ClickHouse PVC size |
 | `clickhouse.config.maxMemoryUsage` | `536870912` | 512 MB ClickHouse server memory cap |
+| `clickhouse.networkPolicy.enabled` | `false` | Restrict ClickHouse ingress to pulse and backup pods (defense-in-depth) |
 | `postgres.enabled` | `false` | Provision in-cluster Postgres for HA meta store |
 | `postgres.auth.database` | `pulse_meta` | Postgres database name |
 | `postgres.auth.username` | `pulse` | Postgres username |
 | `postgres.persistence.size` | `5Gi` | Postgres PVC size |
 | `s3Export.enabled` | `false` | Enable S3 export for CSV/PDF reports (Wave 2) |
-| `s3Export.bucket` | `""` | S3 bucket name |
-| `s3Export.region` | `us-east-1` | S3 region |
+| `s3Export.bucket` | `""` | `PULSE_S3_BUCKET` — S3 bucket name |
+| `s3Export.region` | `us-east-1` | `PULSE_S3_REGION` — S3 region |
+| `s3Export.endpoint` | `""` | `PULSE_S3_ENDPOINT` — S3 endpoint URL (empty = AWS S3) |
+| `s3Export.prefix` | `reports/` | `PULSE_S3_PREFIX` — path prefix inside the bucket |
 | `mmdb.enabled` | `false` | Mount MaxMind mmdb for geo enrichment (Wave 2) |
 | `webhookService.enabled` | `false` | Expose the webhook port as a K8s Service (enable with `pulse.webhookAddr`) |
 | `webhookService.type` | `ClusterIP` | Webhook Service type |
@@ -138,8 +145,8 @@ helm upgrade pulse ./deploy/helm/pulse -f my-values.yaml
 | `PULSE_WEBHOOK_SECRET` | no | `PULSE_WEBHOOK_SECRET` | HMAC-SHA256 global webhook validation secret |
 | `PULSE_METRICS_TOKEN` | no | `PULSE_METRICS_TOKEN` | Prometheus scrape token (Wave 2) |
 | `PULSE_POSTGRES_DSN` | when `postgres.enabled` | `PULSE_META_DSN` | Full Postgres DSN |
-| `PULSE_S3_EXPORT_KEY_ID` | no | `PULSE_S3_EXPORT_KEY_ID` | S3 access key ID (Wave 2) |
-| `PULSE_S3_EXPORT_SECRET_KEY` | no | `PULSE_S3_EXPORT_SECRET_KEY` | S3 secret access key (Wave 2) |
+| `PULSE_S3_ACCESS_KEY_ID` | no | `PULSE_S3_ACCESS_KEY_ID` | S3 access key ID (when `s3Export.enabled`) |
+| `PULSE_S3_SECRET_ACCESS_KEY` | no | `PULSE_S3_SECRET_ACCESS_KEY` | S3 secret access key (when `s3Export.enabled`) |
 
 ### ClickHouse auth secret (`clickhouse.auth.existingSecret`)
 

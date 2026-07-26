@@ -185,6 +185,7 @@ func TestEventTypeConstants_NonEmptyAndDistinct(t *testing.T) {
 		{"EventRecordingReady", domain.EventRecordingReady},
 		{"EventViewerJoin", domain.EventViewerJoin},
 		{"EventViewerLeave", domain.EventViewerLeave},
+		{"EventStreamIngestError", domain.EventStreamIngestError},
 	}
 
 	seen := make(map[string]string, len(entries))

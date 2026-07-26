@@ -66,7 +66,7 @@ func tierClaims(tier string) (map[string]any, error) {
 			"white_label":    false,
 		}, nil
 	case "business":
-		maxNodes := 5
+		maxNodes := 50
 		retDays := 396 // 13 months per tier table
 		return map[string]any{
 			"tier":           "business",

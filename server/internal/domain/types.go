@@ -25,6 +25,7 @@ const (
 	EventRecordingReady     = "recording_ready"
 	EventViewerJoin         = "viewer_join"
 	EventViewerLeave        = "viewer_leave"
+	EventStreamIngestError  = "stream_ingest_error"
 )
 
 // Source identifies which AMS data-collection pathway produced an event.

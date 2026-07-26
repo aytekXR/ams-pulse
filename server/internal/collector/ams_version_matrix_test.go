@@ -205,8 +205,21 @@ func newProfileServer(t *testing.T, profile amsProfile) *httptest.Server {
 		_ = json.NewEncoder(w).Encode(profile.broadcasts)
 	})
 
-	// GET /rest/v2/cluster/nodes
+	// GET /rest/v2/cluster-mode-status
+	// Returns success=true when the profile has nodes, success=false otherwise.
+	mux.HandleFunc("/rest/v2/cluster-mode-status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": len(profile.nodes) > 0})
+	})
+
+	// GET /rest/v2/cluster/nodes (flat) — absent on real AMS 3.x; return 404.
 	mux.HandleFunc("/rest/v2/cluster/nodes", func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+
+	// GET /rest/v2/cluster/nodes/{offset}/{size} — paginated (real AMS 3.x shape).
+	// Returns all profile nodes on page 0 (fewer than pageSize=50, so pagination stops).
+	mux.HandleFunc("/rest/v2/cluster/nodes/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
