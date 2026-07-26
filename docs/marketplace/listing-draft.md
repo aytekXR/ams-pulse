@@ -1,271 +1,116 @@
-> Internal working copy; final text is pasted into the marketplace form by the operator at submission.
+> **Internal working file.** Submission copy — the exact text to paste into the marketplace
+> form — lives in [`listing.md`](listing.md). Do not paste from this file. This file holds
+> internal notes, source-code cross-references, decision history, and status tracking only.
 
 ---
 
-# Ant Media Marketplace — Listing Draft
+# Ant Media Marketplace — Listing Working Notes
 
 **Product:** Pulse: Analytics & QoE Monitoring for AMS  
-**Prepared:** S27 / D-089 (2026-07-13); last revised S105 / D-172 (2026-07-25)  
+**Prepared:** 2026-07-13; last revised 2026-07-25  
 **Contact for submission:** support@beyondkaira.com
 
 ---
 
-## 1. Listing title
-
-> **Pulse — Analytics & QoE Monitoring for AMS**
-
-Character count: 43 (limit 60 — within budget).
-
----
-
-## 2. Tagline
-
-> Self-hosted streaming analytics, alerting, and viewer QoE for Ant Media Server operators.
-
----
-
-## 3. Short description (≤250 characters)
-
-> Pulse installs next to AMS and delivers real-time stream dashboards, QoE beacon analytics,
-> fleet health monitoring, alerting (email, Slack, Telegram, PagerDuty, webhook), scheduled
-> PDF/CSV usage reports, and anomaly detection — self-hosted.
-
-Character count: 240 (limit 250 — within budget).
-
-**Compatibility:** Validated live on AMS 3.0.3 Enterprise (current release); best-effort
-compatibility with AMS 2.10+ via version-tolerance tests (mock profiles).
-
----
-
-## 4. Feature bullets (5–6)
-
-1. **Live ops dashboard** — new stream visible ≤4 s; viewer counts per protocol (HLS,
-   WebRTC, RTMP, DASH); fleet node health; auto-discovers all AMS apps and cluster nodes.
-   (Evidence: TC-WH-02 S17 — 4 s publish→Pulse; 46/50 scenario scripts PASS on AMS 3.0.3
-   Enterprise live deployment.)
-
-2. **Player QoE beacon SDK** — 3.52 KB gzip (budget 15 KB); MIT-licensed; adapters for
-   AMS WebRTC, hls.js, and video.js; reports startup time, rebuffering, errors, bitrate
-   switches, and watch time from the viewer's browser. Integration guide:
-   `docs/beacon-sdk.md` (485 lines as of 2026-07-22, authored S19/D-081).
-
-3. **Alerting on any metric — 5 channel types** — stream offline, ingest bitrate floor,
-   viewer count drop, node-degraded rung, node-down freeze detection; 201 ms
-   detection-to-notification wall-clock. Channels by tier: **email** (Free+),
-   **email + Slack + Telegram** (Pro+), **email + Slack + Telegram + PagerDuty + webhook**
-   (Business+, all 5); all 5 channels available on Enterprise.
-   (Evidence: TestEvaluator\_DetectAndNotify\_WallClockBudget CI; TC-H-04/05 S18 live.)
-   **Demand signal:** ant-media/Ant-Media-Server#7926 (open 2026-07-06: AMS freeze under high
-   RTMP load). Pulse's S25 three-rung ladder directly addresses this failure class
-   (`final-assessment.md` §3 demand note).
-
-4. **Synthetic probes + full observability API** — active connectivity probes over HLS,
-   WebRTC, RTMP, and DASH verify stream reachability from Pulse's own vantage (Pro+);
-   13-month (396-day) retention window enables long-horizon trend and rollup analysis;
-   Prometheus `/metrics` endpoint in standard exposition format; spec-first OpenAPI 3.1
-   API (42 paths / 59 operations) with response-body conformance enforced in CI by a
-   probe registry (2 known parameter deviations tracked openly as BUG-009);
-   scrape token uses constant-time compare.
-   No additional Grafana pipeline needed.
-   **Demand signal:** ant-media/Ant-Media-Server#3122 (closed 2023 without implementation —
-   Prometheus exporter was a long-standing unmet community request; Pulse ships this natively).
-
-5. **Usage and billing reports** — viewer-minutes, peak concurrency (true windowed max),
-   VoD recording storage (REST poll, BUG-002 FIXED S23/D-085), egress estimate; on-demand
-   CSV export and **scheduled PDF and CSV delivery** (via `/reports/schedules`);
-   ±1% reconciliation (0.0000% drift at n=10,000 in CI). Business+ tier.
-
-6. **Anomaly detection** — Welford statistical baseline on viewer counts and bitrate;
-   0.259 false alarms/node-week at default σ=4.0 (target <1); epsilon-floor prevents
-   constant-zero baseline false silencing. Enterprise tier.
-
----
-
-## 5. Tier and pricing table
-
-> **Pricing set for launch (operator-delegated, D-169) — subject to operator override.**
-> Monthly, or annual at 10× monthly (2 months free). Standard rates apply from year two;
-> see the Founding Operators campaign below for year-one rates.
-> **Revenue-share:** Ant Media's publicly stated first-year vendor terms are **100% to the
-> vendor, no commission** (S97/D-161 research; see `submission-process.md` §1). Post-year-1
-> terms are a developer-meeting question. The PRD's older 20–30% figure is obsolete —
-> do not use it in discussions.
+## Tier entitlement source of truth
 
 The entitlements below are drawn from `server/internal/license/license.go:90–150`
 (the authoritative runtime implementation). Where the PRD §7.11 and license.go diverge,
-the code governs and the divergence is flagged.
-
-| Tier | Price | Max Nodes | Max Streams | Retention | Alert Channels | Data API | White-label | Notes |
-|------|-----------------|-----------|-------------|-----------|----------------|----------|-------------|-------|
-| **Free** | $0/month | 1 | Unlimited | 7 days | Email only (1 channel) | No | No | `freeTierEntitlements` in `server/internal/license/license.go` (§7.11 reference in comment) |
-| **Pro** | $99/month | 10 | Unlimited | 90 days | Email, Slack, Telegram (3 channels) | Yes | No | `proTierEntitlements` in license.go |
-| **Business** | $299/month | 50 | Unlimited | 396 days (13 months) | Email, Slack, Telegram, PagerDuty, Webhook (5 channels) | Yes | No | `businessTierEntitlements` in license.go; includes billing reports, multi-tenant, Prometheus, scheduled PDF/CSV |
-| **Enterprise** | from $799/month | Unlimited | Unlimited | Unlimited | All 5 channels (email, Slack, Telegram, PagerDuty, webhook) | Yes | Yes | `enterpriseTierEntitlements` in license.go; includes anomaly detection (F9), SSO, white-label PDF |
-
-**Feature gates cross-check** (license.go:90–150 vs README.md feature table):
+the code governs.
 
 | Feature | Minimum tier | Code gate |
 |---------|-------------|-----------|
-| QoE beacon events (ingest) | Pro+ | `CheckBeaconIngest()` in `license.go:405` (Pro/Business/Enterprise); beacon round-trip confirmed TC-A-05/06 |
-| CSV export / usage reports | Business+ | `CheckReports()` in `license.go:394` (Business/Enterprise); gated in both export handler (`handleReportExport`) and report scheduler |
-| Anomaly detection (F9) | Enterprise | `enterpriseTierEntitlements`; anomaly evaluator checks Enterprise tier flag |
-| White-label PDF reports | Enterprise | `WhiteLabel: true` only in `enterpriseTierEntitlements` (license.go) |
-| PagerDuty / Webhook channels | Business+ | `businessTierEntitlements.Channels` includes "pagerduty" and "webhook" |
+| QoE beacon events (ingest) | Pro+ | `CheckBeaconIngest()` in `license.go:405` (Pro/Business/Enterprise) |
+| Prometheus `/metrics` endpoint | Business+ | `businessTierEntitlements` in license.go |
+| 396-day retention | Business+ | `businessTierEntitlements` in license.go |
+| CSV export / usage reports | Business+ | `CheckReports()` in `license.go:394` (Business/Enterprise) |
+| Anomaly detection | Enterprise | `enterpriseTierEntitlements`; anomaly evaluator checks Enterprise tier flag |
+| White-label PDF reports | Enterprise | `WhiteLabel: true` only in `enterpriseTierEntitlements` |
+| PagerDuty / Webhook channels | Business+ | `businessTierEntitlements.Channels` |
+| Air-gapped licensing | Enterprise (recommended) | Supported at all tiers via `PULSE_LICENSE_FILE` (no tier gate); Enterprise is recommended for air-gapped production |
 
-### Founding Operators — launch campaign
-
-Available to any paid-tier deployment activated during the **first 6 months** after the marketplace listing goes live, or the first **100 paid activations** — whichever comes first.
-
-| Tier | Founding Operators price (months 1–12) | Standard price (year two+) |
-|------|----------------------------------------|---------------------------|
-| Pro | **$9/month** (~91% off) | $99/month |
-| Business | **$29/month** (~90% off) | $299/month |
-| Enterprise | **90-day free pilot**, then 25% off year one | from $799/month |
-
-Campaign price is locked at signup. At the 12-month renewal the subscription auto-reverts to standard pricing with **30 days' advance email notice**. Founding Operators keep a permanent **10% loyalty discount** on standard pricing at every renewal thereafter. Free stays free forever.
-
-### 14-day Pro trial
-
-**14-day Pro trial — no credit card.** Request a trial key from the Ant Media Marketplace
-listing or by emailing **support@beyondkaira.com**; the key arrives by email (typically within
-1 business day) and activates in Settings → License. On expiry the deployment gracefully
-reverts to Free — no data loss. A trial that converts within the Founding Operators launch
-window qualifies for the campaign price. (Decision: D-169 §2.)
+**MaxNodes note:** The PRD §7.11 states "1 to 2 nodes" for Pro, but the code enforces
+`MaxNodes = 10`. The code is the operative value. Ladder: Free 1 / Pro 10 / Business 50 /
+Enterprise unlimited.
 
 ---
 
-## 6. What's included per tier
+## Pricing and revenue-share context
 
-### Free
-- Live operations dashboard (stream list, viewer counts, fleet node health)
-- Stream start/stop alerting (email)
-- 7-day data retention
-- Docker Compose single-node install
-- Community support (GitHub Issues)
+Pricing is operator-delegated (2026-07-22 decision, committed in `docs/licensing-public.md`).
+Operator may override any figure. Annual = 10× monthly (2 months free); standard rates from
+year two.
 
-### Pro ($99/month)
-- Everything in Free, plus:
-- Player QoE beacon SDK integration (AMS WebRTC, hls.js, video.js adapters)
-- Historical QoE analytics (startup p50, rebuffer ratio, error rate)
-- Synthetic viewer probes (HLS, WebRTC, RTMP, DASH — `docs/runbooks/probes.md`)
-- Slack and Telegram alert channels
-- On-demand CSV data export
-- 90-day data retention
-- Up to 10 AMS nodes
-
-### Business ($299/month)
-- Everything in Pro, plus:
-- Usage and billing reports (viewer-minutes, egress estimate, VoD recording storage)
-- On-demand CSV export **and scheduled PDF and CSV delivery** (via report schedules API)
-- Multi-tenant billing (stream-name pattern or metadata tag)
-- Prometheus `/metrics` endpoint
-- PagerDuty and webhook alert channels (all 5 channel types)
-- 396-day (13-month) data retention — enables long-horizon trend analysis and rollups
-- Priority email support
-- Up to 50 AMS nodes
-
-### Enterprise (from $799/month)
-- Everything in Business, plus:
-- Anomaly detection (F9: Welford baselines on viewers, bitrate, CPU/mem)
-- White-label PDF reports
-- SSO / OIDC (shipped Wave 3, D-070/D-074)
-- Unlimited nodes and retention
-- Air-gapped licensing (roadmap)
-- SLA and onboarding support
+**Revenue-share:** Ant Media's publicly stated first-year vendor terms are 100% to the vendor,
+no commission (research 2026-07-22; see `submission-process.md` §1). Post-year-1 terms are not
+published — get them in writing at the developer meeting. The PRD's older figure for revenue
+share is superseded by the published terms; do not cite it.
 
 ---
 
-## 7. Marketplace screenshots
+## Demand evidence citations (internal analysis)
 
-Screenshots are produced by `qa/marketplace/capture-live-screenshots.mjs` against a
-route-mocked live-app build (Vite preview + Playwright; self-contained, starts and stops
-its own server; no hardcoded machine paths). The committed set at
-`docs/marketplace/screenshots/` (S105/D-172) holds the six listing PNGs
-(`ss1-dashboard` … `ss6-probes`), one light-theme variant (`ss1-light`), and nine
-user-guide shots (`ug-*`); regenerate at any time with the capture script.
+These are public GitHub issues; they do not require operator clearance to cite in the listing.
 
-| File | Subject | Capture method |
-|------|---------|----------------|
-| `ss1-dashboard.png` | Live ops dashboard — ~8 streams, viewer counts per protocol, fleet node health | Automated (route-mocked live app) |
-| `ss2-ingest-health.png` | Ingest health detail panel open | Automated (route-mocked live app) |
-| `ss3-alerting.png` | Alerting rules tab with 3–4 rules and a History firing badge | **Automated via live-app capture** |
-| `ss4-analytics.png` | Analytics audience tab — line charts and totals | Automated (route-mocked live app) |
-| `ss5-reports.png` | Usage reports tab, Business tier, populated usage table | **Automated via live-app capture** |
-| `ss6-probes.png` | Probes page with 3 active probes, Pro+ tier | **Automated via live-app capture** |
+- **ant-media/Ant-Media-Server#3122** — Prometheus exporter requested 2021, closed 2023
+  without implementation. Community workaround via `json_exporter` with a moved blog and lost
+  dashboard. Pulse's `/metrics` endpoint ships this natively. Source: `docs/assessment/final-assessment.md` §3.
 
-SS3 (alerting), SS5 (usage reports), and SS6 (probes) are now captured through the
-live-app route-mock harness introduced in the capture script; these are not static
-hand-crafted screenshots. To regenerate all six:
-
-```sh
-node qa/marketplace/capture-live-screenshots.mjs
-```
-
-(Requires `web/dist/` to exist — run `cd web && npm run build` first, or let the script
-detect the missing dist and build it. The script uses Playwright Chromium; run
-`npx playwright install chromium` in `web/` if browsers are not yet installed.)
+- **ant-media/Ant-Media-Server#7926** — open 2026-07-06: AMS freezes after ~24 h under high
+  RTMP load; Java alive, OS metrics normal, HLS/API dead. Pulse's three-rung detection ladder —
+  latency-creep anomaly flag (`ams_api_latency_ms`) → `node_degraded` alert (~15 s) →
+  `node_down` on freeze — directly addresses this failure class. Source:
+  `docs/assessment/final-assessment.md` §3.
 
 ---
 
-## 8. Trial-key onboarding paragraph
+## Cluster fleet view — known limitation (listing copy accuracy)
 
-> **14-day Pro trial — no credit card.** Request a trial key from the Ant Media Marketplace
-> listing or by emailing **support@beyondkaira.com**; the key arrives by email (typically within
-> 1 business day) and activates in Settings → License. On expiry the deployment gracefully
-> reverts to Free — no data loss. A trial that converts within the Founding Operators launch
-> window qualifies for the campaign price. (Decision: D-169 §2.)
-
----
-
-Pulse installs in under 15 minutes. After installing via Docker Compose:
-
-1. Copy the admin token printed to stderr on first boot.
-2. Open `http://localhost:8090` and log in.
-3. Streams from your AMS instance appear within 10 seconds of publish (confirmed 4 s
-   in live validation, TC-WH-02).
-4. To activate your Pro or Business license: paste your license key in
-   **Settings → License** and click Activate. Features unlock immediately — no restart required.
-
-To start your 14-day Pro trial, email **support@beyondkaira.com** or request a trial key
-from the marketplace listing; the key arrives by email within 1 business day.
-For support, contact support@beyondkaira.com.
+The listing copy in `listing.md` says "cluster fleet view with wire shape verified against AMS
+3.0.3 source — live multi-node validation pending." This matches docs/known-limitations.md
+LIM-10: cluster mode is unit-tested but not live-validated against a real multi-node AMS
+cluster. The code calls a paginated endpoint shape; the exact AMS 3.x behavior is pending
+confirmation at the developer meeting or on a real cluster. Do not strengthen the cluster claim
+in the listing until live validation is complete.
 
 ---
 
-## 9. Support and licensing rows
+## Air-gapped licensing — listing copy accuracy
+
+Air-gapped licensing is **supported today** via `PULSE_LICENSE_FILE` — license keys are
+self-contained ed25519-signed tokens; no connection to any external server is needed at
+activation or runtime. The Enterprise tier is recommended for air-gapped production deployments
+but the mechanism itself is not gated to Enterprise. The `listing.md` copy reflects this
+correctly. (An earlier draft incorrectly labelled this as "roadmap" — that error is fixed in
+the submission copy.)
+
+---
+
+## Support and licensing rows (status)
 
 | Row | Status | Notes |
 |-----|--------|-------|
-| Support channel / SLA | RESOLVED (D-169/D-171) | `support@beyondkaira.com`; Pro 2-day / Business 1-day / Enterprise 4-business-hour targets; Mon–Fri 09:00–18:00 UTC; mailbox live. Published in `docs/support.md`. |
-| Public licensing terms | RESOLVED (D-169) | Pricing, tiers, Founding Operators campaign, and 14-day trial published in `docs/licensing-public.md`. Checklist row 8 closed. |
-| Revenue-share terms | PARTIALLY KNOWN | First-year terms publicly stated: 100% to vendor, no commission (`submission-process.md` §1). Post-year-1 terms: confirm at the developer meeting. Checklist row 9. |
-| Listing submission | NEEDS-OPERATOR | Operator initiates contact with Ant Media developer-relations / marketplace team. Checklist row 10. |
-| AMS version support requirement | NEEDS-OPERATOR | Ask Ant Media what minimum AMS version a marketplace product must support. Q5 in `docs/assessment/final-assessment.md` §6. |
+| Support channel / SLA | RESOLVED | `support@beyondkaira.com`; Pro 2-day / Business 1-day / Enterprise 4-business-hour; Mon–Fri 09:00–18:00 UTC; mailbox live. Published in `docs/support.md`. |
+| Public licensing terms | RESOLVED | Pricing, tiers, Founding Operators campaign, 14-day trial in `docs/licensing-public.md`. |
+| Revenue-share terms | PARTIALLY KNOWN | First-year terms publicly stated: 100% to vendor, no commission. Post-year-1 terms: confirm at the developer meeting. |
+| Listing submission | NEEDS-OPERATOR | Operator initiates contact with Ant Media developer-relations / marketplace team. |
+| AMS version support requirement | NEEDS-OPERATOR | Ask Ant Media what minimum AMS version a marketplace product must support. |
 
 ---
 
-## 10. Demand evidence citations
+## Screenshots — internal context
 
-These are included in the listing copy (bullet 3 and 4 above) and are on the public
-GitHub issue tracker; they do not require operator clearance to cite:
+Screenshots are produced by `qa/marketplace/capture-live-screenshots.mjs` against a
+route-mocked live-app build (Vite preview + Playwright; self-contained, starts and stops
+its own server; no hardcoded machine paths). The committed set at `docs/marketplace/screenshots/`
+holds six listing PNGs (`ss1-dashboard` … `ss6-probes`), one light-theme variant (`ss1-light`),
+and nine user-guide shots (`ug-*`); regenerate at any time with the capture script.
 
-- **ant-media/Ant-Media-Server#3122** (Prometheus exporter requested 2021, closed 2023
-  without implementation; community workaround via `json_exporter` with a moved blog and
-  lost dashboard). Pulse's `/metrics` endpoint ships this natively.
-  Source: `docs/assessment/final-assessment.md` §3 demand note (added S25/D-087).
-
-- **ant-media/Ant-Media-Server#7926** (open 2026-07-06: AMS freezes after ~24 h under
-  high RTMP load; Java alive, OS metrics normal, HLS/API dead). Pulse's S25 three-rung
-  detection ladder — latency-creep anomaly flag (`ams_api_latency_ms`) → `node_degraded`
-  alert (~15 s) → `node_down` on freeze — directly addresses this failure class (BUG-011
-  FIXED S25/D-087).
-  Source: `docs/assessment/final-assessment.md` §3 demand note (added S25/D-087).
+SS3 (alerting), SS5 (usage reports), and SS6 (probes) are captured through the live-app
+route-mock harness — not static hand-crafted screenshots.
 
 ---
 
-*Produced at S27/D-089; revised S103/D-169; last revised S105/D-172 (2026-07-25). Evidence sources:
-`docs/assessment/final-assessment.md` §3, `docs/prd-report.md` §7.11,
-`server/internal/license/license.go:90–150` (entitlements), `contracts/openapi/pulse-api.yaml`
-(42 paths / 59 operations / 73 schemas), `docs/compatibility.md` §G-27 (new-panel competitive scope),
-`qa/marketplace/capture-live-screenshots.mjs` (screenshot file names),
-`docs/assessment/prd-validation-matrix.md`.*
+*See `listing.md` for the submission copy. See `submission-process.md` for the full process
+record, assumptions (A1–A10), and prerequisites. See `docs/licensing-public.md` for the
+customer-facing licensing terms.*

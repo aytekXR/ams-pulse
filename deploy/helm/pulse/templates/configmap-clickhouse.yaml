@@ -62,10 +62,17 @@ data:
         <default>
           {{- if .Values.clickhouse.auth.existingSecret }}
           <!-- Named user provisioned via CLICKHOUSE_USER + CLICKHOUSE_PASSWORD env vars at first boot. -->
-          <!-- The default user is kept here for internal readiness probes only; access is restricted. -->
+          <!-- The default user is restricted to localhost; readiness probes run in-pod so they work. -->
+          <password></password>
+          <profile>default</profile>
+          <quota>default</quota>
+          <networks>
+            <ip>127.0.0.1</ip>
+            <ip>::1</ip>
+          </networks>
+          <access_management>0</access_management>
           {{- else }}
           <!-- DEVELOPMENT/TEST ONLY: no password. Set clickhouse.auth.existingSecret in production. -->
-          {{- end }}
           <password></password>
           <profile>default</profile>
           <quota>default</quota>
@@ -73,6 +80,7 @@ data:
             <ip>::/0</ip>
           </networks>
           <access_management>1</access_management>
+          {{- end }}
         </default>
       </users>
       <quotas>

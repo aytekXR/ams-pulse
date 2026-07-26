@@ -55,19 +55,18 @@ func TestStandaloneNodeStats_PollEmitsNodeStatsEvent(t *testing.T) {
 	versionBody := loadFixture(t, "version.json")
 
 	mockAMS := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/rest/v2/applications":
 			json.NewEncoder(w).Encode(map[string]any{
 				"applications": []map[string]any{},
 			})
-		case "/rest/v2/cluster/nodes":
-			// Standalone AMS: 404 tells the client there is no cluster.
-			w.WriteHeader(http.StatusNotFound)
+		case "/rest/v2/cluster-mode-status":
+			// Standalone AMS: cluster-mode-status returns success=false.
+			json.NewEncoder(w).Encode(map[string]any{"success": false, "message": "", "dataId": "", "errorId": 0})
 		case "/rest/v2/system-status":
-			w.Header().Set("Content-Type", "application/json")
 			w.Write(systemStatusBody)
 		case "/rest/v2/version":
-			w.Header().Set("Content-Type", "application/json")
 			w.Write(versionBody)
 		default:
 			w.WriteHeader(http.StatusNotFound)

@@ -101,9 +101,9 @@ pulse:
   #   PULSE_AMS_AUTH_TOKEN      (optional) AMS REST bearer token
   #   PULSE_WEBHOOK_SECRET      (optional) HMAC-SHA256 global webhook secret
   #   PULSE_METRICS_TOKEN       (optional) Prometheus scrape token (Wave 2)
-  #   PULSE_POSTGRES_DSN        (required when postgres.enabled=true)
-  #   PULSE_S3_EXPORT_KEY_ID    (optional, when s3Export.enabled=true)
-  #   PULSE_S3_EXPORT_SECRET_KEY (optional, when s3Export.enabled=true)
+  #   PULSE_POSTGRES_DSN          (required when postgres.enabled=true)
+  #   PULSE_S3_ACCESS_KEY_ID      (optional, when s3Export.enabled=true)
+  #   PULSE_S3_SECRET_ACCESS_KEY  (optional, when s3Export.enabled=true)
   secretRef: {}
 
   # Volume mounts for the pulse container (e.g., AMS log, mmdb, custom config).
@@ -296,6 +296,13 @@ clickhouse:
     uncompressedCacheSize: "67108864"    # 64 MB
     markCacheSize: "67108864"            # 64 MB
 
+  # NetworkPolicy — restrict ClickHouse ingress to pulse (and backup) pods only.
+  # Disabled by default; enable in multi-tenant clusters or as defense-in-depth.
+  # When enabled, only pods with app.kubernetes.io/component=pulse (and backup if
+  # backup.enabled) can reach ClickHouse ports 9000 and 8123.
+  networkPolicy:
+    enabled: false
+
   service:
     type: ClusterIP
     nativePort: 9000
@@ -344,7 +351,8 @@ s3Export:
   bucket: ""
   region: "us-east-1"
   endpoint: ""            # empty = AWS S3
-  # keyId and secretKey: set via secretRef (PULSE_S3_EXPORT_KEY_ID, PULSE_S3_EXPORT_SECRET_KEY)
+  prefix: "reports/"     # PULSE_S3_PREFIX — path prefix inside the bucket
+  # credentials: set via secretRef keys PULSE_S3_ACCESS_KEY_ID and PULSE_S3_SECRET_ACCESS_KEY
 
 # ---------------------------------------------------------------------------
 # mmdb geo-enrichment database (optional — Wave 2)

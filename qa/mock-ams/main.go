@@ -6,14 +6,20 @@
 //
 // Usage:
 //
-//	mock-ams [-addr :9090] [-scenario N] [-app live] [-log-dir /tmp/ams-logs]
+//	mock-ams [-addr :9090] [-scenario N] [-app live] [-log-dir /tmp/ams-logs] [-cluster]
 //
 // REST paths emulated (matching amsclient/client.go exactly):
 //
-//	GET /rest/v2/applications               → {"applications":[{"name":"live"}]}
-//	GET /rest/v2/broadcasts/{app}/list      → []BroadcastDTO (paginated)
-//	GET /rest/v2/cluster/nodes              → []ClusterNodeDTO
-//	GET /rest/v2/broadcasts/{app}/{id}/webrtc-client-stats/0/100 → []WebRTCStatsDTO
+//	GET /rest/v2/applications                              → {"applications":[{"name":"live"}]}
+//	GET /{app}/rest/v2/broadcasts/list/{offset}/{size}     → []BroadcastDTO (paginated)
+//	GET /rest/v2/cluster-mode-status                       → {"success":false} or {"success":true}
+//	GET /rest/v2/cluster/nodes                             → 404 (flat route absent on real AMS 3.x)
+//	GET /rest/v2/cluster/nodes/{offset}/{size}             → HTTP 500 (standalone) or paginated []ClusterNodeDTO (cluster)
+//	GET /rest/v2/system-status                             → {"cpuUsage":15.0,"ramUsage":40.0}
+//	GET /rest/v2/version                                   → {"versionName":"3.0.3","versionType":"Enterprise","buildNumber":"mock"}
+//	GET /{app}/rest/v2/vods/list/{offset}/{size}           → [] (empty VoD list)
+//	POST /rest/v2/users/authenticate                       → {"success":true} + Set-Cookie: JSESSIONID=mock
+//	GET /{app}/rest/v2/broadcasts/{id}/webrtc-client-stats/0/100 → []WebRTCStatsDTO
 //
 // WebRTC signaling (WO-B):
 //
@@ -63,12 +69,33 @@ import (
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 type Config struct {
-	Addr      string
-	RtmpAddr  string
-	WebRTCICE bool // -webrtc-ice: enable pion ICE offerer on /{app}/websocket
-	LogDir    string
-	Scenario  int
-	AppName   string
+	Addr        string
+	RtmpAddr    string
+	WebRTCICE   bool // -webrtc-ice: enable pion ICE offerer on /{app}/websocket
+	LogDir      string
+	Scenario    int
+	AppName     string
+	ClusterMode bool // -cluster: simulate a multi-node AMS cluster (default: standalone)
+}
+
+// clusterNodeFixtures returns the mock cluster node list in the REAL AMS 3.x wire
+// shape (ClusterNode.java fields: id, ip, lastUpdateTime, memory, cpu,
+// dbQueryAveargeTimeMs, status). Contains 60 nodes to exercise multi-page pagination
+// (pageSize 50 → 2 requests: page 0 with 50 nodes, page 1 with 10 nodes).
+func clusterNodeFixtures() []map[string]any {
+	nodes := make([]map[string]any, 60)
+	for i := range nodes {
+		nodes[i] = map[string]any{
+			"id":                   fmt.Sprintf("node-%02d", i+1),
+			"ip":                   fmt.Sprintf("10.0.1.%d", i+1),
+			"lastUpdateTime":       int64(1721952000000) + int64(i)*1000,
+			"memory":               "40.0%",
+			"cpu":                  "15.0",
+			"dbQueryAveargeTimeMs": 0,
+			"status":               "Running",
+		}
+	}
+	return nodes
 }
 
 // dashSegmentData is a 50000-byte static payload served by the DASH segment route.
@@ -259,12 +286,13 @@ func (s *Server) routes() {
 
 	// broadcastsHandler handles all /rest/v2/broadcasts/... sub-paths regardless of
 	// whether the URL includes the app prefix (/{app}/rest/v2/broadcasts/...) or not
-	// (/rest/v2/broadcasts/...). Path matching uses strings.Contains so it is
-	// insensitive to offset/size suffixes and app-name placement.
+	// (/rest/v2/broadcasts/...). Path matching is strict: only paths containing
+	// /broadcasts/list/ (with trailing slash) are treated as list requests, preventing
+	// false positives from paths like /broadcasts/livestream-list.
 	broadcastsHandler := func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		// Match .../list or .../list/{offset}/{size}
-		if strings.Contains(path, "/list") {
+		// Match /{app}/rest/v2/broadcasts/list/{offset}/{size} (strict segment match).
+		if strings.Contains(path, "/broadcasts/list/") || strings.HasSuffix(path, "/broadcasts/list") {
 			broadcasts := s.state.List()
 			if broadcasts == nil {
 				broadcasts = []Broadcast{}
@@ -322,25 +350,79 @@ func (s *Server) routes() {
 	// Kept for backward compatibility with older test drivers and direct curl usage.
 	s.mux.HandleFunc("/rest/v2/broadcasts/", broadcastsHandler)
 
-	// GET /rest/v2/cluster/nodes
-	// amsclient.ClusterNodes expects: []ClusterNodeDTO
-	s.mux.HandleFunc("/rest/v2/cluster/nodes", func(w http.ResponseWriter, r *http.Request) {
-		active := s.state.ListActive()
-		writeJSON(w, []map[string]any{
-			{
-				"nodeId":            "standalone",
-				"ip":                "127.0.0.1",
-				"port":              9090,
-				"role":              "origin",
-				"cpuUsage":          15.0,
-				"memoryUsage":       40.0,
-				"diskUsage":         20.0,
-				"networkInputBps":   1024.0,
-				"networkOutputBps":  2048.0,
-				"jvmMemoryUsage":    25.0,
-				"activeStreamCount": len(active),
-			},
+	// GET /rest/v2/cluster-mode-status
+	// Real AMS 3.x endpoint (RestServiceV2.java). Returns {"success":false} for
+	// standalone (default) or {"success":true} for cluster mode (-cluster flag).
+	s.mux.HandleFunc("/rest/v2/cluster-mode-status", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{
+			"success": s.cfg.ClusterMode,
+			"message": "",
+			"dataId":  "",
+			"errorId": 0,
 		})
+	})
+
+	// GET /rest/v2/cluster/nodes  (flat path — absent on real AMS 3.x, returns 404)
+	s.mux.HandleFunc("/rest/v2/cluster/nodes", func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+
+	// GET /rest/v2/cluster/nodes/{offset}/{size}  (paginated — real AMS 3.x shape)
+	// Standalone: HTTP 500 (matching real AMS 3.0.3 — NoSuchBeanDefinitionException).
+	// Cluster mode: pages through clusterNodeFixtures() based on offset/size.
+	s.mux.HandleFunc("/rest/v2/cluster/nodes/", func(w http.ResponseWriter, r *http.Request) {
+		if !s.cfg.ClusterMode {
+			// Standalone AMS 3.0.3 returns 500 on this path (live-probed 2026-07-26).
+			http.Error(w, `{"errorId":500,"message":"No bean named 'tomcat.cluster'"}`, http.StatusInternalServerError)
+			return
+		}
+		// Parse {offset}/{size} from the tail of the path.
+		tail := strings.TrimPrefix(r.URL.Path, "/rest/v2/cluster/nodes/")
+		var offset, size int
+		fmt.Sscanf(tail, "%d/%d", &offset, &size)
+		if size <= 0 {
+			size = 50
+		}
+		all := clusterNodeFixtures()
+		if offset >= len(all) {
+			writeJSON(w, []map[string]any{})
+			return
+		}
+		end := offset + size
+		if end > len(all) {
+			end = len(all)
+		}
+		writeJSON(w, all[offset:end])
+	})
+
+	// GET /rest/v2/system-status  (AMS 3.x endpoint)
+	s.mux.HandleFunc("/rest/v2/system-status", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{
+			"cpuUsage": 15.0,
+			"ramUsage": 40.0,
+		})
+	})
+
+	// GET /rest/v2/version  (AMS 3.x endpoint)
+	s.mux.HandleFunc("/rest/v2/version", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{
+			"versionName": "3.0.3",
+			"versionType": "Enterprise",
+			"buildNumber": "mock",
+		})
+	})
+
+	// POST /rest/v2/users/authenticate
+	// Returns {"success":true} and sets a JSESSIONID session cookie (matching real AMS).
+	s.mux.HandleFunc("/rest/v2/users/authenticate", func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{Name: "JSESSIONID", Value: "mock-session"})
+		writeJSON(w, map[string]any{"success": true, "message": "system/ADMIN"})
+	})
+
+	// GET /{app}/rest/v2/vods/list/{offset}/{size}
+	// Returns an empty VoD list (no VoDs in the mock by default).
+	s.mux.HandleFunc("/"+s.cfg.AppName+"/rest/v2/vods/", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, []map[string]any{})
 	})
 
 	// WebRTC signaling handler.
@@ -867,6 +949,7 @@ func main() {
 	flag.StringVar(&cfg.LogDir, "log-dir", "", "directory to write AMS analytics log (empty = disable)")
 	flag.IntVar(&cfg.Scenario, "scenario", 0, "auto-run scenario (0 = manual control only)")
 	flag.StringVar(&cfg.AppName, "app", "live", "AMS application name")
+	flag.BoolVar(&cfg.ClusterMode, "cluster", false, "simulate a multi-node AMS cluster (default: standalone mode)")
 	flag.Parse()
 
 	state := NewState(cfg.AppName)

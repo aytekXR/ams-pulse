@@ -241,13 +241,18 @@ func loadEnvConfig() (EnvConfig, error) {
 		MigrationsDir:      envOrDefault("PULSE_MIGRATIONS_DIR", ""),
 		AMSBaseURL:         envOrDefault("PULSE_AMS_URL", "http://localhost:5080"),
 		AMSNodeID:          envOrDefault("PULSE_AMS_NODE_ID", "standalone"),
-		// AMSAuthToken resolved below via GetSecret.
-		AMSLoginEmail:     os.Getenv("PULSE_AMS_LOGIN_EMAIL"),
+		// AMSLoginEmail and AMSAuthToken resolved below via GetSecret.
 		WebhookListenAddr: os.Getenv("PULSE_WEBHOOK_ADDR"),
 		LogLevel:          envOrDefault("PULSE_LOG_LEVEL", "info"),
 	}
 
 	// Secret vars: use GetSecret so ${NAME}_FILE is honoured.
+	amsLoginEmail, err := config.GetSecret("PULSE_AMS_LOGIN_EMAIL")
+	if err != nil {
+		return cfg, err
+	}
+	cfg.AMSLoginEmail = amsLoginEmail
+
 	amsAuthToken, err := config.GetSecret("PULSE_AMS_AUTH_TOKEN")
 	if err != nil {
 		return cfg, err

@@ -24,7 +24,7 @@
   "types": "./dist/index.d.ts",
   "sideEffects": false,
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs,iife --dts --minify",
+    "build": "tsup",
     "test": "vitest run",
     "lint": "eslint src",
     "size": "size-limit"

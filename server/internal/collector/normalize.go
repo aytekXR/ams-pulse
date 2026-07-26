@@ -251,17 +251,16 @@ func NormalizeSystemStats(stats map[string]any, nodeID, version string) domain.S
 }
 
 // NormalizeClusterNode converts an AMS ClusterNodeDTO to a domain.ServerEvent of
-// type node_stats.
+// type node_stats. It handles both the real AMS 3.x wire fields (id, cpu, memory,
+// status — A-amssource verified 2026-07-26) and the old invented aliases (nodeId,
+// cpuUsage, memoryUsage, …) used by test mocks and fixtures.
 func NormalizeClusterNode(n amsclient.ClusterNodeDTO) domain.ServerEvent {
-	nodeID := n.NodeID
-	if nodeID == "" {
-		nodeID = n.IP
-	}
+	nodeID := n.PrimaryID()
 	// FIX 1 (VD-40): Version was decoded from the DTO but never written into Data,
 	// so aggregator.onNodeStats always read Data["version"] == "". Write it now.
 	data := map[string]any{
-		"cpu_pct":          n.CPUUsage,
-		"mem_pct":          n.MemoryUsage,
+		"cpu_pct":          n.CPUPct(),
+		"mem_pct":          n.MemPct(),
 		"disk_pct":         n.DiskUsage,
 		"net_in_mbps":      n.NetworkInputBps / 1_000_000,
 		"net_out_mbps":     n.NetworkOutputBps / 1_000_000,

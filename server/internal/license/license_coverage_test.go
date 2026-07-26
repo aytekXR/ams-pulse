@@ -113,7 +113,7 @@ func TestNew_ValidBusinessKey_TierAndEntitlements(t *testing.T) {
 	mgr := newMgr(t, map[string]interface{}{
 		"tier":      "business",
 		"data_api":  true,
-		"max_nodes": 5,
+		"max_nodes": 50,
 	})
 
 	if mgr.Tier() != license.TierBusiness {
@@ -133,8 +133,8 @@ func TestNew_ValidBusinessKey_TierAndEntitlements(t *testing.T) {
 			t.Errorf("business tier: missing channel %q", required)
 		}
 	}
-	if ent.MaxNodes != 5 {
-		t.Errorf("business tier: MaxNodes want 5 got %d", ent.MaxNodes)
+	if ent.MaxNodes != 50 {
+		t.Errorf("business tier: MaxNodes want 50 got %d", ent.MaxNodes)
 	}
 }
 

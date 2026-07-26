@@ -166,6 +166,7 @@ func clearSecretEnv(t *testing.T) {
 	t.Helper()
 	for _, name := range []string{
 		"PULSE_AMS_AUTH_TOKEN", "PULSE_AMS_AUTH_TOKEN_FILE",
+		"PULSE_AMS_LOGIN_EMAIL", "PULSE_AMS_LOGIN_EMAIL_FILE",
 		"PULSE_AMS_LOGIN_PASSWORD", "PULSE_AMS_LOGIN_PASSWORD_FILE",
 		"PULSE_WEBHOOK_SECRET", "PULSE_WEBHOOK_SECRET_FILE",
 		"PULSE_METRICS_TOKEN", "PULSE_METRICS_TOKEN_FILE",
@@ -207,6 +208,24 @@ func TestRunMigrate_ShortSecretKey(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "too short") {
 		t.Errorf("runMigrate short-key error should mention 'too short', got: %v", err)
+	}
+}
+
+// TestRunMigrate_PlaceholderSecretKey verifies that the changeme-style placeholder
+// from deploy/.env.example is rejected at boot, preventing silent use of a
+// predictable key (P3-11).
+func TestRunMigrate_PlaceholderSecretKey(t *testing.T) {
+	clearSecretEnv(t)
+	t.Setenv("PULSE_META_DSN", "pulse_meta_test_placeholder.db")
+	t.Setenv("PULSE_SECRET_KEY", "changeme-generate-with-openssl-rand-hex-32")
+	t.Setenv("PULSE_CLICKHOUSE_DSN", badCHDSN)
+
+	err := runMigrate(nil)
+	if err == nil {
+		t.Fatal("runMigrate: expected error for placeholder PULSE_SECRET_KEY, got nil")
+	}
+	if !strings.Contains(err.Error(), "placeholder") {
+		t.Errorf("runMigrate placeholder-key error should mention 'placeholder', got: %v", err)
 	}
 }
 

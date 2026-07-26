@@ -94,8 +94,10 @@ Each assumption below is tagged where used across the docs pack as
   (`docs/assessment/final-assessment.md` §1); 84.5% weighted product-completeness score.
 - **CI:** Go suite with `-race` + 70.2% coverage floor; web suite + Playwright e2e;
   full-stack compose e2e (license mint → beacon → alert fire); CSP e2e; docker-build
-  version-stamp gate; Helm lint/template golden tests; SDK 15 KB size gate; nightly AMS
-  version-matrix + CodeQL.
+  version-stamp gate; Helm lint/template golden tests; SDK 15 KB size gate; nightly
+  mock wire-format profile tests (in-process mock profiles; real-container matrix pending
+  PAYG AMS availability — real-AMS validation is the 46/50 live scenario record plus the
+  standing real-AMS lane); CodeQL.
 - **Load:** budgets L-1…L-9 + capacity number (pending operator run — see §3).
 - **Supply chain:** cosign-signed multi-arch images, SBOM + provenance, Trivy-gated
   releases, Dependabot policy.

@@ -45,9 +45,9 @@ func TestSetBitRate_PublishedStream(t *testing.T) {
 	}
 
 	// Verify the bitrate is visible in the broadcast list.
-	listResp, err := http.Get(ts.URL + "/rest/v2/broadcasts/live/list")
+	listResp, err := http.Get(ts.URL + "/live/rest/v2/broadcasts/list/0/200")
 	if err != nil {
-		t.Fatalf("GET /rest/v2/broadcasts/live/list: %v", err)
+		t.Fatalf("GET /live/rest/v2/broadcasts/list/0/200: %v", err)
 	}
 	defer listResp.Body.Close()
 
@@ -343,5 +343,294 @@ func TestWSSignaling_HappyPath(t *testing.T) {
 	}
 	if !strings.HasPrefix(reply.SDP, "v=0") {
 		t.Errorf("sdp does not look like SDP: %q", reply.SDP)
+	}
+}
+
+// newClusterTestServer creates a test server in cluster mode.
+func newClusterTestServer(t *testing.T) (*httptest.Server, *State) {
+	t.Helper()
+	cfg := Config{AppName: "live", ClusterMode: true}
+	state := NewState(cfg.AppName)
+	srv := NewServer(cfg, state)
+	return httptest.NewServer(srv), state
+}
+
+// TestClusterModeStatus_Standalone verifies that /rest/v2/cluster-mode-status
+// returns success=false in the default (standalone) configuration.
+func TestClusterModeStatus_Standalone(t *testing.T) {
+	ts, _ := newTestServer(t)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/rest/v2/cluster-mode-status")
+	if err != nil {
+		t.Fatalf("GET /rest/v2/cluster-mode-status: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode cluster-mode-status: %v", err)
+	}
+	if result["success"] != false {
+		t.Errorf("standalone: cluster-mode-status success = %v, want false", result["success"])
+	}
+}
+
+// TestClusterModeStatus_Cluster verifies that /rest/v2/cluster-mode-status
+// returns success=true when ClusterMode is enabled.
+func TestClusterModeStatus_Cluster(t *testing.T) {
+	ts, _ := newClusterTestServer(t)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/rest/v2/cluster-mode-status")
+	if err != nil {
+		t.Fatalf("GET /rest/v2/cluster-mode-status: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode cluster-mode-status: %v", err)
+	}
+	if result["success"] != true {
+		t.Errorf("cluster mode: cluster-mode-status success = %v, want true", result["success"])
+	}
+}
+
+// TestClusterNodes_FlatPath404 verifies that GET /rest/v2/cluster/nodes (flat path,
+// absent on real AMS 3.x) returns 404 in both standalone and cluster mode.
+func TestClusterNodes_FlatPath404(t *testing.T) {
+	for _, name := range []string{"standalone", "cluster"} {
+		t.Run(name, func(t *testing.T) {
+			var ts *httptest.Server
+			if name == "cluster" {
+				ts, _ = newClusterTestServer(t)
+			} else {
+				ts, _ = newTestServer(t)
+			}
+			defer ts.Close()
+
+			resp, err := http.Get(ts.URL + "/rest/v2/cluster/nodes")
+			if err != nil {
+				t.Fatalf("GET /rest/v2/cluster/nodes: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusNotFound {
+				t.Errorf("flat cluster/nodes: want 404, got %d", resp.StatusCode)
+			}
+		})
+	}
+}
+
+// TestClusterNodes_PaginatedPath_Standalone500 verifies that GET
+// /rest/v2/cluster/nodes/0/50 returns HTTP 500 in standalone mode,
+// matching the behavior of real AMS 3.0.3 (live-probed 2026-07-26).
+func TestClusterNodes_PaginatedPath_Standalone500(t *testing.T) {
+	ts, _ := newTestServer(t)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/rest/v2/cluster/nodes/0/50")
+	if err != nil {
+		t.Fatalf("GET /rest/v2/cluster/nodes/0/50: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("standalone paginated cluster/nodes: want 500, got %d", resp.StatusCode)
+	}
+}
+
+// TestClusterNodes_PaginatedPath_ClusterMode verifies that GET
+// /rest/v2/cluster/nodes/{offset}/{size} returns paginated node fixtures
+// in cluster mode, using the real AMS 3.x wire fields.
+func TestClusterNodes_PaginatedPath_ClusterMode(t *testing.T) {
+	ts, _ := newClusterTestServer(t)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/rest/v2/cluster/nodes/0/50")
+	if err != nil {
+		t.Fatalf("GET /rest/v2/cluster/nodes/0/50: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("cluster paginated nodes: want 200, got %d", resp.StatusCode)
+	}
+	var nodes []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&nodes); err != nil {
+		t.Fatalf("decode cluster nodes page 0: %v", err)
+	}
+	// clusterNodeFixtures() returns 60 nodes; page 0 size 50 should return 50.
+	if len(nodes) != 50 {
+		t.Errorf("cluster nodes page 0/50: want 50 nodes, got %d", len(nodes))
+	}
+	// Verify real AMS 3.x wire fields are present on the first node.
+	first := nodes[0]
+	if _, ok := first["id"]; !ok {
+		t.Errorf("cluster node missing 'id' field (real AMS 3.x wire field)")
+	}
+	if _, ok := first["ip"]; !ok {
+		t.Errorf("cluster node missing 'ip' field")
+	}
+	if _, ok := first["status"]; !ok {
+		t.Errorf("cluster node missing 'status' field")
+	}
+}
+
+// TestClusterNodes_MultiPagePagination verifies that the paginated cluster/nodes
+// endpoint correctly returns 60 total nodes across two pages (page 0: 50, page 1: 10)
+// in cluster mode, exercising the pagination boundary.
+func TestClusterNodes_MultiPagePagination(t *testing.T) {
+	ts, _ := newClusterTestServer(t)
+	defer ts.Close()
+
+	// Page 0: expect 50 nodes (full page).
+	resp0, err := http.Get(ts.URL + "/rest/v2/cluster/nodes/0/50")
+	if err != nil {
+		t.Fatalf("GET /rest/v2/cluster/nodes/0/50: %v", err)
+	}
+	defer resp0.Body.Close()
+	var page0 []map[string]any
+	if err := json.NewDecoder(resp0.Body).Decode(&page0); err != nil {
+		t.Fatalf("decode page 0: %v", err)
+	}
+	if len(page0) != 50 {
+		t.Errorf("page 0: want 50 nodes, got %d", len(page0))
+	}
+
+	// Page 1: expect 10 nodes (short page, terminates pagination).
+	resp1, err := http.Get(ts.URL + "/rest/v2/cluster/nodes/50/50")
+	if err != nil {
+		t.Fatalf("GET /rest/v2/cluster/nodes/50/50: %v", err)
+	}
+	defer resp1.Body.Close()
+	var page1 []map[string]any
+	if err := json.NewDecoder(resp1.Body).Decode(&page1); err != nil {
+		t.Fatalf("decode page 1: %v", err)
+	}
+	if len(page1) != 10 {
+		t.Errorf("page 1: want 10 nodes, got %d", len(page1))
+	}
+
+	// Page 2: expect 0 nodes (past the end).
+	resp2, err := http.Get(ts.URL + "/rest/v2/cluster/nodes/60/50")
+	if err != nil {
+		t.Fatalf("GET /rest/v2/cluster/nodes/60/50: %v", err)
+	}
+	defer resp2.Body.Close()
+	var page2 []map[string]any
+	if err := json.NewDecoder(resp2.Body).Decode(&page2); err != nil {
+		t.Fatalf("decode page 2: %v", err)
+	}
+	if len(page2) != 0 {
+		t.Errorf("page 2 (past end): want 0 nodes, got %d", len(page2))
+	}
+}
+
+// TestSystemStatus verifies that GET /rest/v2/system-status returns 200
+// with cpuUsage and ramUsage fields.
+func TestSystemStatus(t *testing.T) {
+	ts, _ := newTestServer(t)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/rest/v2/system-status")
+	if err != nil {
+		t.Fatalf("GET /rest/v2/system-status: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode system-status: %v", err)
+	}
+	if _, ok := result["cpuUsage"]; !ok {
+		t.Errorf("system-status: missing 'cpuUsage' field")
+	}
+	if _, ok := result["ramUsage"]; !ok {
+		t.Errorf("system-status: missing 'ramUsage' field")
+	}
+}
+
+// TestVersion verifies that GET /rest/v2/version returns 200 with
+// versionName, versionType, and buildNumber fields.
+func TestVersion(t *testing.T) {
+	ts, _ := newTestServer(t)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/rest/v2/version")
+	if err != nil {
+		t.Fatalf("GET /rest/v2/version: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode version: %v", err)
+	}
+	if result["versionName"] != "3.0.3" {
+		t.Errorf("versionName = %v, want 3.0.3", result["versionName"])
+	}
+	if result["versionType"] != "Enterprise" {
+		t.Errorf("versionType = %v, want Enterprise", result["versionType"])
+	}
+}
+
+// TestAuthenticate verifies that POST /rest/v2/users/authenticate returns 200,
+// a success response body, and sets a JSESSIONID session cookie.
+func TestAuthenticate(t *testing.T) {
+	ts, _ := newTestServer(t)
+	defer ts.Close()
+
+	payload := `{"email":"admin@example.com","password":"secret"}`
+	resp, err := http.Post(ts.URL+"/rest/v2/users/authenticate", "application/json", strings.NewReader(payload))
+	if err != nil {
+		t.Fatalf("POST /rest/v2/users/authenticate: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode authenticate response: %v", err)
+	}
+	if result["success"] != true {
+		t.Errorf("authenticate success = %v, want true", result["success"])
+	}
+	found := false
+	for _, c := range resp.Cookies() {
+		if c.Name == "JSESSIONID" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("authenticate: JSESSIONID cookie not set in response")
+	}
+}
+
+// TestVodsList verifies that GET /{app}/rest/v2/vods/list/{offset}/{size}
+// returns 200 and a JSON array (empty by default).
+func TestVodsList(t *testing.T) {
+	ts, _ := newTestServer(t)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/live/rest/v2/vods/list/0/200")
+	if err != nil {
+		t.Fatalf("GET /live/rest/v2/vods/list/0/200: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var result []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode vods list: %v", err)
 	}
 }

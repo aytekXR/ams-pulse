@@ -10,7 +10,7 @@
 
 This directory contains the complete validation and product-fit assessment
 program for Pulse v0.3.0 running against the real Ant Media Server (AMS)
-3.0.3 Enterprise deployment at `http://161.97.172.146:5080`.
+3.0.3 Enterprise deployment at `http://<VPS_IP>:5080`.
 
 The goal is not a smoke test — it is a systematic, evidence-backed answer to:
 
@@ -70,7 +70,7 @@ never committed to main unless they are small (<50 KB) reference fixtures.
 2. Read `scenario-matrix.md` for the specific scenario you are executing.
 3. Confirm the real-AMS stack is reachable:
    ```bash
-   curl -s http://161.97.172.146:5080/rest/v2/version | jq .versionName
+   curl -s http://<VPS_IP>:5080/rest/v2/version | jq .versionName
    curl -s https://beyondkaira.com/api/v1/healthz
    ```
 4. Confirm `ams-teststream` publisher status:
@@ -186,7 +186,7 @@ Response: `{...}`
 
 The existing CI E2E suite (`e2e.yml`) runs against `mock-ams` — a
 deterministic Go binary, not the real AMS. The validation program in this
-directory runs against the **production AMS at 161.97.172.146:5080** using
+directory runs against the **production AMS at <VPS_IP>:5080** using
 the isolated `pulse-realams` compose stack (base + real-ams + realams-test
 overlays, Pulse on `127.0.0.1:18090`).
 

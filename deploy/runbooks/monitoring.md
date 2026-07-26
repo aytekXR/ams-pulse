@@ -1,6 +1,6 @@
 # Pulse Monitoring Runbook
 
-**Target:** `pulse-prod` stack on `beyondkaira.com` (VPS `161.97.172.146`).
+**Target:** `pulse-prod` stack on `beyondkaira.com` (VPS `<VPS_IP>`).
 **Authored:** 2026-07-09 (D-062 SESSION-06).
 **Scope:** operational health signals; what to watch and when to act.
 

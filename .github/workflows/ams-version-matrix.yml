@@ -14,7 +14,7 @@
 # server/internal/collector/ams_version_matrix_test.go), so this workflow now runs those
 # (no Docker, no ClickHouse) plus a REST v2 contract smoke against the mock-ams binary.
 # When a pullable/authenticated real-AMS image becomes available, add a container-backed job.
-name: ams-version-matrix
+name: mock-ams wire-format profile tests
 
 on:
   schedule:
@@ -53,8 +53,12 @@ jobs:
             ./internal/collector/... ./pkg/amsclient/... \
             -v -timeout 120s
 
-      - name: REST v2 contract smoke against mock-ams
+      - name: REST v2 contract smoke against mock-ams (strict path shape)
         run: |
+          # mock-ams default app = "live" (-app flag default, qa/mock-ams/main.go:951).
+          # Paths must match amsclient/client.go exactly:
+          #   /{app}/rest/v2/broadcasts/list/{offset}/{size}  (path segments, not query params)
+          #   /rest/v2/cluster/nodes returns 404 on standalone (flat route absent on real AMS 3.x)
           /tmp/mock-ams -addr :5080 -scenario 1 &
           MOCK_PID=$!
           for _ in $(seq 1 15); do
@@ -71,15 +75,22 @@ jobs:
             FAIL=1
           fi
 
-          echo "Testing /rest/v2/broadcasts/live/list..."
-          curl -sf "http://localhost:5080/rest/v2/broadcasts/live/list?offset=0&size=10" > /dev/null 2>&1 \
-            && echo "PASS: /rest/v2/broadcasts/live/list" \
-            || echo "WARN: /rest/v2/broadcasts/live/list"
+          echo "Testing /live/rest/v2/broadcasts/list/0/200 (strict segment shape matching amsclient)..."
+          if curl -sf "http://localhost:5080/live/rest/v2/broadcasts/list/0/200" > /dev/null 2>&1; then
+            echo "PASS: /live/rest/v2/broadcasts/list/0/200"
+          else
+            echo "FAIL: /live/rest/v2/broadcasts/list/0/200"
+            FAIL=1
+          fi
 
-          echo "Testing /rest/v2/cluster/nodes..."
-          curl -sf "http://localhost:5080/rest/v2/cluster/nodes" > /dev/null 2>&1 \
-            && echo "PASS: /rest/v2/cluster/nodes" \
-            || echo "WARN: /rest/v2/cluster/nodes"
+          echo "Testing /rest/v2/cluster/nodes (expect 404 on standalone)..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:5080/rest/v2/cluster/nodes")
+          if [ "$STATUS" = "404" ]; then
+            echo "PASS: /rest/v2/cluster/nodes returned $STATUS (flat route absent on real AMS 3.x)"
+          else
+            echo "FAIL: /rest/v2/cluster/nodes returned $STATUS, expected 404"
+            FAIL=1
+          fi
 
           kill "$MOCK_PID" 2>/dev/null || true
           [ $FAIL -eq 0 ] && echo "REST v2 contract smoke: PASS" || exit 1

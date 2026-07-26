@@ -2,6 +2,7 @@ package amsclient_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -303,17 +304,23 @@ func TestListBroadcasts_Non2xx_ReturnsError(t *testing.T) {
 	}
 }
 
-// ─── ClusterNodes: role, version, usage fields ───────────────────────────────
+// ─── ClusterNodes: paginated path, cluster-mode-status probe ─────────────────
 
+// TestClusterNodes_DecodesRoleVersionUsage verifies that ClusterNodes correctly
+// pages through the real AMS v3 paginated endpoint and decodes the cluster_nodes.json
+// fixture (which uses the old invented fields kept for backward compat).
 func TestClusterNodes_DecodesRoleVersionUsage(t *testing.T) {
 	fixture := mustReadFixture(t, "cluster_nodes.json")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/rest/v2/cluster/nodes" {
-			http.NotFound(w, r)
-			return
-		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(fixture)
+		switch r.URL.Path {
+		case "/rest/v2/cluster-mode-status":
+			fmt.Fprint(w, `{"success":true,"message":"","dataId":"","errorId":0}`)
+		case "/rest/v2/cluster/nodes/0/50":
+			w.Write(fixture)
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	defer srv.Close()
 
@@ -326,6 +333,8 @@ func TestClusterNodes_DecodesRoleVersionUsage(t *testing.T) {
 		t.Fatalf("expected 2 nodes, got %d", len(nodes))
 	}
 
+	// cluster_nodes.json uses the old invented alias fields (nodeId, role, version,
+	// cpuUsage, etc.) which still decode into the tolerant alias fields on ClusterNodeDTO.
 	origin := nodes[0]
 	if origin.Role != "origin" {
 		t.Errorf("nodes[0].Role = %q, want origin", origin.Role)
@@ -361,6 +370,173 @@ func TestClusterNodes_DecodesRoleVersionUsage(t *testing.T) {
 	}
 	if edge.ActiveStreamCount != 45 {
 		t.Errorf("nodes[1].ActiveStreamCount = %d, want 45", edge.ActiveStreamCount)
+	}
+}
+
+// TestClusterNodes_ReaAMSWireShape verifies that ClusterNodes decodes the real AMS 3.x
+// wire fields (id, ip, lastUpdateTime, memory, cpu, dbQueryAveargeTimeMs, status) and
+// that PrimaryID/CPUPct/MemPct return correct values.
+func TestClusterNodes_RealAMSWireShape(t *testing.T) {
+	const realWireFixture = `[{
+		"id": "node-abc123",
+		"ip": "10.0.1.5",
+		"lastUpdateTime": 1721952000000,
+		"memory": "42.0%",
+		"cpu": "18.5",
+		"dbQueryAveargeTimeMs": 3,
+		"status": "Running"
+	}]`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/rest/v2/cluster-mode-status":
+			fmt.Fprint(w, `{"success":true}`)
+		case "/rest/v2/cluster/nodes/0/50":
+			fmt.Fprint(w, realWireFixture)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+	nodes, err := c.ClusterNodes(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(nodes) != 1 {
+		t.Fatalf("expected 1 node, got %d", len(nodes))
+	}
+	n := nodes[0]
+	if n.PrimaryID() != "node-abc123" {
+		t.Errorf("PrimaryID() = %q, want node-abc123", n.PrimaryID())
+	}
+	if n.CPUPct() != 18.5 {
+		t.Errorf("CPUPct() = %v, want 18.5", n.CPUPct())
+	}
+	if n.MemPct() != 42.0 {
+		t.Errorf("MemPct() = %v, want 42.0", n.MemPct())
+	}
+	if n.DbQueryAveargeTimeMs != 3 {
+		t.Errorf("DbQueryAveargeTimeMs = %d, want 3", n.DbQueryAveargeTimeMs)
+	}
+	if n.Status != "Running" {
+		t.Errorf("Status = %q, want Running", n.Status)
+	}
+	if n.LastUpdateTime != 1721952000000 {
+		t.Errorf("LastUpdateTime = %d, want 1721952000000", n.LastUpdateTime)
+	}
+}
+
+// TestClusterNodes_PaginationCrossesPageBoundary verifies that ClusterNodes correctly
+// accumulates results across multiple pages when the first page is exactly full (pageSize=50).
+func TestClusterNodes_PaginationCrossesPageBoundary(t *testing.T) {
+	// Build 60 nodes: page 0 = 50 nodes, page 1 = 10 nodes.
+	buildPage := func(offset, count int) string {
+		nodes := make([]map[string]any, count)
+		for i := range nodes {
+			nodes[i] = map[string]any{
+				"id": fmt.Sprintf("node-%03d", offset+i),
+				"ip": fmt.Sprintf("10.0.0.%d", offset+i+1),
+			}
+		}
+		b, _ := json.Marshal(nodes)
+		return string(b)
+	}
+	page0 := buildPage(0, 50)  // full page — triggers next request
+	page1 := buildPage(50, 10) // short page — stops pagination
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/rest/v2/cluster-mode-status":
+			fmt.Fprint(w, `{"success":true}`)
+		case "/rest/v2/cluster/nodes/0/50":
+			fmt.Fprint(w, page0)
+		case "/rest/v2/cluster/nodes/50/50":
+			fmt.Fprint(w, page1)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+	nodes, err := c.ClusterNodes(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(nodes) != 60 {
+		t.Errorf("expected 60 nodes (50+10 across two pages), got %d", len(nodes))
+	}
+	if nodes[0].ID != "node-000" {
+		t.Errorf("nodes[0].ID = %q, want node-000", nodes[0].ID)
+	}
+	if nodes[59].ID != "node-059" {
+		t.Errorf("nodes[59].ID = %q, want node-059", nodes[59].ID)
+	}
+}
+
+// TestClusterNodes_Standalone500ReturnsNilNoError verifies that HTTP 500 from the
+// paginated cluster/nodes path (real standalone AMS 3.0.3 behavior — returns
+// NoSuchBeanDefinitionException) is mapped to (nil, nil), not an error.
+func TestClusterNodes_Standalone500ReturnsNilNoError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/rest/v2/cluster-mode-status":
+			// Simulate older AMS or probe failure — return error to force paginated path.
+			w.WriteHeader(http.StatusNotFound)
+		case strings.HasPrefix(r.URL.Path, "/rest/v2/cluster/nodes/"):
+			// Real standalone AMS 3.0.3: paginated path returns HTTP 500.
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+	nodes, err := c.ClusterNodes(context.Background())
+	if err != nil {
+		t.Fatalf("standalone AMS (500 on paginated path) must return nil error, got: %v", err)
+	}
+	if nodes != nil {
+		t.Errorf("standalone AMS (500 on paginated path) must return nil slice, got: %v", nodes)
+	}
+}
+
+// TestClusterNodes_ClusterModeStatusFalseReturnsNilNoError verifies that when
+// cluster-mode-status returns success=false (real standalone AMS 3.0.3 behavior),
+// ClusterNodes returns (nil, nil) immediately without calling the paginated path.
+func TestClusterNodes_ClusterModeStatusFalseReturnsNilNoError(t *testing.T) {
+	paginatedCalled := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/rest/v2/cluster-mode-status":
+			// Real standalone AMS 3.0.3 live-probed response.
+			fmt.Fprint(w, `{"success":false,"message":"","dataId":"","errorId":0}`)
+		case strings.HasPrefix(r.URL.Path, "/rest/v2/cluster/nodes/"):
+			paginatedCalled = true
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+	nodes, err := c.ClusterNodes(context.Background())
+	if err != nil {
+		t.Fatalf("standalone AMS (cluster-mode-status=false) must return nil error, got: %v", err)
+	}
+	if nodes != nil {
+		t.Errorf("standalone AMS (cluster-mode-status=false) must return nil slice, got: %v", nodes)
+	}
+	if paginatedCalled {
+		t.Errorf("paginated cluster/nodes path must NOT be called when cluster-mode-status=false")
 	}
 }
 
@@ -760,26 +936,30 @@ func TestPersistent403_DoesNotStormLogins(t *testing.T) {
 	}
 }
 
-// TestClusterNodes_404ReturnsEmptyNoError verifies that a standalone AMS node
-// returning 404 for the cluster/nodes endpoint does not cause an error —
-// ClusterNodes returns (nil, nil).
-func TestClusterNodes_404ReturnsEmptyNoError(t *testing.T) {
+// TestClusterNodes_404OnPaginatedReturnsNilNoError verifies that a 404 from the
+// paginated cluster/nodes path (defensive fallback) is mapped to (nil, nil), not an error.
+// The real AMS 3.0.3 returns 500 on standalone, but older or odd builds may 404.
+func TestClusterNodes_404OnPaginatedReturnsNilNoError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/rest/v2/cluster/nodes" {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/rest/v2/cluster-mode-status":
+			// cluster-mode-status unavailable → fall through to paginated path.
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			// Paginated path and any other path: 404.
 			http.NotFound(w, r)
-			return
 		}
-		http.NotFound(w, r)
 	}))
 	defer srv.Close()
 
 	c := newTestClient(srv)
 	nodes, err := c.ClusterNodes(context.Background())
 	if err != nil {
-		t.Fatalf("ClusterNodes on standalone AMS (404) must return nil error, got: %v", err)
+		t.Fatalf("ClusterNodes on standalone AMS (404 on paginated path) must return nil error, got: %v", err)
 	}
 	if nodes != nil {
-		t.Errorf("ClusterNodes on standalone AMS (404) must return nil slice, got: %v", nodes)
+		t.Errorf("ClusterNodes on standalone AMS (404 on paginated path) must return nil slice, got: %v", nodes)
 	}
 }
 

@@ -183,31 +183,12 @@ make up
 >   up -d
 > ```
 >
-> When using explicit `-f` flags without the override, the one-shot `pulse-migrate`
-> container is not included. Apply schema migrations before the first start.
-> Three gotchas (all verified empirically, D-072 release test):
-> the image `ENTRYPOINT` is `pulse serve`, so `compose run` must override the
-> entrypoint (`run --rm pulse pulse migrate` would execute `pulse serve pulse
-> migrate` and fail); `pulse migrate` validates `PULSE_SECRET_KEY` at startup;
-> and the ClickHouse migration SQL files are **not** baked into the runtime
-> image — mount the repo's `contracts/` directory and point
-> `PULSE_MIGRATIONS_DIR` at it:
->
-> ```sh
-> # from the repo root; PULSE_SECRET_KEY exported in step 3
-> docker compose \
->   -f deploy/docker-compose.yml \
->   -f deploy/docker-compose.real-ams.yml \
->   run --rm --entrypoint pulse \
->   -e PULSE_SECRET_KEY \
->   -e PULSE_MIGRATIONS_DIR=/contracts/db/clickhouse \
->   -v "$(pwd)/contracts:/contracts:ro" \
->   pulse migrate
-> docker compose \
->   -f deploy/docker-compose.yml \
->   -f deploy/docker-compose.real-ams.yml \
->   up -d
-> ```
+> `pulse-migrate` is defined in the base `docker-compose.yml` and runs automatically
+> for all compose paths. Migration SQL is baked into the image at
+> `/usr/share/pulse/migrations` — no repo checkout or volume mount needed.
+> Note: the image `ENTRYPOINT` is `pulse serve`, so manual `compose run`
+> must override the entrypoint; `pulse migrate` also validates `PULSE_SECRET_KEY`
+> at startup so that env var must be set.
 
 > **Note — base compose defaults to the signed GHCR image:** `docker-compose.yml`
 > now defaults to `ghcr.io/aytekxr/ams-pulse:0.4.1` (cosign-signed, SBOM-attached;
@@ -230,10 +211,11 @@ make up
 > The build overlay (`deploy/docker-compose.build.yml`) sets the local image tag to
 > `ams-pulse:local-build` so it cannot be confused with the signed GHCR release image.
 
-**Schema migrations:** When using the default `make up` / `cd deploy && docker compose
-up -d` path, the stack includes a one-shot **`pulse-migrate`** container (from
-`docker-compose.override.yml`) that automatically applies ClickHouse and meta-store
-schema before Pulse starts. No separate migration step is needed for the default path.
+**Schema migrations:** Migration SQL is baked into the image at
+`/usr/share/pulse/migrations` (no repo checkout or volume mount needed). The stack
+includes a one-shot **`pulse-migrate`** container (defined in the base
+`docker-compose.yml`) that automatically applies ClickHouse and meta-store schema
+before Pulse starts. No separate migration step is needed for any compose path.
 
 ClickHouse takes ~10 s to become healthy (the healthcheck retries up to 12 times
 at 10 s intervals). Pulse will wait for it via the `depends_on: clickhouse: condition: service_healthy` in the Compose file.
@@ -269,7 +251,7 @@ docker compose logs pulse | grep "FIRST RUN"
 > CLI command to recover or regenerate it (`pulse` subcommands are `serve`, `migrate`,
 > `version`, `diag`, `help` — there is no `token` or `reset-admin` command). If the
 > token is lost, the only recovery is to **delete the entire meta database** (Docker
-> default: `/var/lib/pulse/pulse_meta.db`; bare-metal default: `pulse.db` beside the
+> default: `/var/lib/pulse/pulse_meta.db`; bare-metal default: `pulse_meta.db` beside the
 > binary) and restart Pulse. Deleting the meta database wipes every configured source,
 > alert rule, API token, and system setting — full reconfiguration is required.
 > See [Troubleshooting](#troubleshooting) for the exact recovery steps.
@@ -299,7 +281,7 @@ All command output below is from a QA-verified run.
 
 ### Prerequisites
 
-- Go 1.22+ (for building from source) or a pre-built `pulse` binary
+- Go 1.25+ (for building from source; matches `server/go.mod`) or a pre-built `pulse` binary
 - ClickHouse single binary (see step 1)
 - An AMS host reachable from this machine
 
@@ -344,7 +326,7 @@ Build time: approximately 15 s on a 2-vCPU machine.
 
 ```sh
 PULSE_CLICKHOUSE_DSN=clickhouse://localhost:9000/pulse \
-PULSE_META_DSN=/tmp/pulse.db \
+PULSE_META_DSN=/tmp/pulse_meta.db \
 /tmp/pulse migrate
 ```
 
@@ -371,7 +353,7 @@ migrations standalone. When ClickHouse is running, both complete cleanly.
 ```sh
 PULSE_AMS_URL=http://YOUR_AMS_HOST:5080 \
 PULSE_AMS_AUTH_TOKEN=your_ams_token_here \
-PULSE_META_DSN=/tmp/pulse.db \
+PULSE_META_DSN=/tmp/pulse_meta.db \
 PULSE_SECRET_KEY=$(openssl rand -hex 32) \
 /tmp/pulse serve
 ```
@@ -501,7 +483,7 @@ default; the binary runs correctly without it.
 | `PULSE_AMS_APPLICATIONS` | all | Comma-separated AMS app names to poll (empty = all) |
 | `PULSE_CLICKHOUSE_DSN` | `clickhouse://localhost:9000/pulse` | ClickHouse native-protocol DSN |
 | `PULSE_CLICKHOUSE_DATABASE` | `pulse` | ClickHouse target database name |
-| `PULSE_META_DSN` | `pulse.db` beside binary | SQLite database file path |
+| `PULSE_META_DSN` | `pulse_meta.db` beside binary | SQLite database file path |
 | `PULSE_SECRET_KEY` | auto-generated file | 32-byte hex key for AES-256-GCM at-rest encryption |
 | `PULSE_LISTEN_ADDR` | `:8090` | HTTP listen address for UI + API |
 | `PULSE_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
@@ -591,7 +573,7 @@ license:
 | Dashboard shows no streams after publish | AMS token wrong or REST URL unreachable | Run `pulse diag` to see config + connectivity; check `PULSE_AMS_AUTH_TOKEN` |
 | `pulse migrate` exits with "connection refused" | ClickHouse not yet ready | Wait for ClickHouse healthcheck to pass; retry |
 | No admin token printed | Not a first run — tokens already exist | Generate a new token via `POST /api/v1/admin/tokens` using an existing admin token |
-| `FIRST RUN` token lost | Token is printed once and never stored in plaintext; `pulse` has no token-recovery subcommand | **All configuration is destroyed in recovery.** Delete the meta database (`/var/lib/pulse/pulse_meta.db` in Docker; `pulse.db` beside the binary for bare-metal), then restart Pulse. A new FIRST RUN token is printed. Every source, alert rule, API token, and setting must be re-entered. See the WARNING block in step 5 above. |
+| `FIRST RUN` token lost | Token is printed once and never stored in plaintext; `pulse` has no token-recovery subcommand | **All configuration is destroyed in recovery.** Delete the meta database (`/var/lib/pulse/pulse_meta.db` in Docker; `pulse_meta.db` beside the binary for bare-metal), then restart Pulse. A new FIRST RUN token is printed. Every source, alert rule, API token, and setting must be re-entered. See the WARNING block in step 5 above. |
 
 ### Diagnostic commands
 

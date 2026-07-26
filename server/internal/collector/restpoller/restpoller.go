@@ -224,10 +224,12 @@ func (p *Poller) poll(ctx context.Context) error {
 	vodDue := p.vodState != nil && p.vodTick%vodPollEveryNTicks == 0
 	p.vodTick++
 
-	// Poll cluster nodes (best-effort). A standalone AMS returns 404, which
-	// ClusterNodes maps to (nil, nil) — no warning. Any OTHER error (500, network,
+	// Poll cluster nodes (best-effort). ClusterNodes first probes cluster-mode-status;
+	// success=false means standalone — returns (nil, nil) without warning. A standalone
+	// AMS 3.0.3 returns HTTP 500 (not 404) on the paginated cluster/nodes path, which
+	// ClusterNodes defensively maps to (nil, nil) as well. Any OTHER error (network,
 	// auth) is surfaced so a clustered deployment's node pipeline doesn't go dark
-	// silently (D-029v / finding #10).
+	// silently (D-029v / finding #10, A-amssource live-probe 2026-07-26).
 	//
 	// Standalone path: when ClusterNodes returns no error AND zero nodes the AMS
 	// node is standalone. Fall back to SystemStats so the fleet node card is
@@ -473,7 +475,14 @@ func (p *Poller) pollApp(ctx context.Context, app string) error {
 
 		// Fetch WebRTC client stats for active streams.
 		if b.Status == "broadcasting" && b.WebRTCViewerCount > 0 {
-			if stats, err := p.client.WebRTCClientStats(ctx, app, b.StreamID); err == nil {
+			stats, wsErr := p.client.WebRTCClientStats(ctx, app, b.StreamID)
+			if wsErr != nil {
+				p.logger.Debug("restpoller: webrtc client stats fetch failed",
+					"app", app,
+					"stream", b.StreamID,
+					"error", wsErr,
+				)
+			} else {
 				for _, s := range stats {
 					ev := collector.NormalizeWebRTCStats(s, app, b.StreamID, p.cfg.NodeID)
 					if !p.dedup.IsDuplicate(ev) {

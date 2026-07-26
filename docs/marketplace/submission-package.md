@@ -1,22 +1,23 @@
 # Ant Media Marketplace — Submission Package Index
 
 **Product:** Pulse — Analytics & QoE Monitoring for Ant Media Server
-**Version:** v0.4.1 (released, GHCR public) · **Prepared:** S97 / D-161; updated S103 / D-169 (2026-07-25)
+**Version:** v0.4.1 (released, GHCR public) · **Prepared:** 2026-07-22; updated 2026-07-25
 
 This is the single page to hand Ant Media when the listing process starts: every
 submission artifact, where it lives, and its state. Statuses: **READY** (accurate,
-reviewable now) · **DRAFT-OP** (content complete; blocked only on an operator decision
-or the D-081 external-use review) · **TBD-EXT** (needs an external step).
+reviewable now) · **DRAFT-OP** (content complete; blocked only on an operator decision) ·
+**TBD-EXT** (needs an external step).
 
 ## Listing artifacts
 
 | Artifact | Location | Status |
 |---|---|---|
-| Listing copy (title, tagline, description, bullets, tiers, pricing) | [`listing-draft.md`](listing-draft.md) | READY-OP (pricing + Founding Operators campaign set D-169; ladder settled D-166; only submit-gated) |
-| Screenshots — 6 listing shots, 1920×1080 live-app | [`screenshot-list.md`](screenshot-list.md) + `screenshots/` (regenerate: `node qa/marketplace/capture-live-screenshots.mjs`) | READY (committed to `docs/marketplace/screenshots/`, S105/D-172; portable capture script; regenerable at any time) |
-| Logo / media kit | `brandkit/logo/` (SVG + PNG variants), OG banner `brandkit/assets/png/og-1200x630.png` | READY (final specs = meeting A3) |
-| Demo video | [`demo-video-script.md`](demo-video-script.md) + rough-cut `docs/marketplace/demo/pulse-demo-roughcut.webm` | DRAFT-OP (rough-cut rendered D-170, attached to [GitHub release v0.4.1](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.1); operator records final with voiceover — TBD-EXT for voiceover only) |
-| Release notes ("what's new in 0.4") | [`release-notes.md`](release-notes.md) | READY (D-081 cleared D-169) |
+| **Listing copy** (title, tagline, long-form description, bullets, tiers, pricing) | [`listing.md`](listing.md) — submission copy; no internal identifiers | READY (submission copy; paste verbatim into the marketplace form) |
+| Listing working notes (internal cross-references, decision history) | [`listing-draft.md`](listing-draft.md) | INTERNAL (do not paste into the marketplace form) |
+| Screenshots — 6 listing shots, 1920×1080 live-app | [`screenshot-list.md`](screenshot-list.md) + `screenshots/` (regenerate: `node qa/marketplace/capture-live-screenshots.mjs`) | READY (committed to `docs/marketplace/screenshots/`; portable capture script; regenerable at any time) |
+| Logo / media kit | `brandkit/logo/` (SVG + PNG variants), OG banner `brandkit/assets/png/og-1200x630.png` | READY (final specs = meeting assumption A3) |
+| Demo video | [`demo-video-script.md`](demo-video-script.md) + rough-cut `docs/marketplace/demo/pulse-demo-roughcut.webm` | DRAFT-OP (rough-cut rendered and attached to [GitHub release v0.4.1](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.1); operator records final with voiceover — TBD-EXT for voiceover only) |
+| Release notes ("what's new in 0.4") | [`release-notes.md`](release-notes.md) | READY |
 
 ## Documentation set (linkable as the product docs)
 

@@ -170,6 +170,11 @@ type yamlConfig struct {
 //  3. Apply PULSE_* env overrides
 //
 // AMS credentials: PULSE_AMS_<NAME>_TOKEN where <NAME> is the uppercase source name.
+//
+// NOT WIRED: `pulse serve` never calls Load — cmd/pulse builds its config from
+// env vars directly (loadEnvConfig), so pulse.yaml and Load-only vars like
+// PULSE_LICENSE_OFFLINE_FILE have no effect at runtime (HOOK(BE-02) pending).
+// The package stays because cmd/pulse imports GetSecret from secrets.go.
 func Load(args []string) (*Config, error) {
 	configFile := ""
 	for _, arg := range args {

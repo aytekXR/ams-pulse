@@ -79,6 +79,12 @@ spec:
             # ── Core server ──────────────────────────────────────────────
             - name: PULSE_LISTEN_ADDR
               value: {{ .Values.pulse.listenAddr | quote }}
+            {{- if .Values.pulse.ingestListenAddr }}
+            - name: PULSE_INGEST_LISTEN_ADDR
+              value: {{ .Values.pulse.ingestListenAddr | quote }}
+            {{- end }}
+            - name: PULSE_REPORTS_DIR
+              value: "/var/lib/pulse/reports"
             # ── ClickHouse ───────────────────────────────────────────────
             {{- if and .Values.clickhouse.enabled .Values.clickhouse.auth.existingSecret }}
             # Authenticated DSN from Secret (key: PULSE_CLICKHOUSE_DSN).
@@ -138,6 +144,17 @@ spec:
             # ── Observability ────────────────────────────────────────────
             - name: PULSE_LOG_LEVEL
               value: {{ .Values.pulse.logLevel | quote }}
+            # ── S3 export config (optional) ──────────────────────────────
+            {{- if .Values.s3Export.enabled }}
+            - name: PULSE_S3_ENDPOINT
+              value: {{ .Values.s3Export.endpoint | quote }}
+            - name: PULSE_S3_BUCKET
+              value: {{ .Values.s3Export.bucket | quote }}
+            - name: PULSE_S3_REGION
+              value: {{ .Values.s3Export.region | quote }}
+            - name: PULSE_S3_PREFIX
+              value: {{ .Values.s3Export.prefix | quote }}
+            {{- end }}
             # ── Secrets from secretRef ────────────────────────────────────
             {{- if .Values.pulse.secretRef.name }}
             - name: PULSE_AMS_AUTH_TOKEN
@@ -174,17 +191,17 @@ spec:
                   optional: false
             {{- end }}
             {{- if .Values.s3Export.enabled }}
-            - name: PULSE_S3_EXPORT_KEY_ID
+            - name: PULSE_S3_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.pulse.secretRef.name }}
-                  key: PULSE_S3_EXPORT_KEY_ID
+                  key: PULSE_S3_ACCESS_KEY_ID
                   optional: true
-            - name: PULSE_S3_EXPORT_SECRET_KEY
+            - name: PULSE_S3_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.pulse.secretRef.name }}
-                  key: PULSE_S3_EXPORT_SECRET_KEY
+                  key: PULSE_S3_SECRET_ACCESS_KEY
                   optional: true
             {{- end }}
             {{- end }}

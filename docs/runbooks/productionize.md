@@ -122,16 +122,12 @@ Generate a password:
 openssl rand -hex 24
 ```
 
-**2b. Update PULSE_CLICKHOUSE_DSN to include credentials**
+**2b. Set CLICKHOUSE_USER and CLICKHOUSE_PASSWORD in deploy/.env**
 
-In `deploy/.env`, set the DSN with userinfo for both `pulse` and `pulse-migrate`:
-
-```sh
-PULSE_CLICKHOUSE_DSN=clickhouse://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@clickhouse:9000/pulse
-```
-
-The hardened override passes these vars to both `pulse` and `pulse-migrate`
-services. The `clickhouse-go` driver parses userinfo from the DSN directly.
+`docker-compose.prod.yml` constructs `PULSE_CLICKHOUSE_DSN` itself from
+`${CLICKHOUSE_USER}` and `${CLICKHOUSE_PASSWORD}`. Do **not** set
+`PULSE_CLICKHOUSE_DSN` in `deploy/.env` when using the prod overlay — the compose
+file overrides it regardless. The `clickhouse-go` driver parses the DSN directly.
 
 **2c. Update the ClickHouse healthcheck**
 
@@ -264,27 +260,19 @@ curl -X POST https://pulse.example.com/api/v1/admin/tokens \
 
 ### deploy/.env.example
 
-A committable template belongs at `deploy/.env.example`. It documents all
-required variables without real values:
+`deploy/.env.example` is the canonical template — copy it to `deploy/.env` and
+fill in real values. The key variables for a hardened production deployment are:
 
-```sh
-# deploy/.env.example — copy to deploy/.env and fill in real values.
-# This file is safe to commit; deploy/.env is gitignored.
+- `PULSE_SECRET_KEY` — generate with `openssl rand -hex 32` (required; hard startup
+  failure if empty or shorter than 16 bytes)
+- `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` — passed directly to
+  `docker-compose.prod.yml`, which constructs the ClickHouse DSN itself.
+  **Do NOT set `PULSE_CLICKHOUSE_DSN` in `deploy/.env` when using
+  `docker-compose.prod.yml`** — the compose file overrides it with the correct
+  service-name DSN regardless.
+- `PULSE_AMS_URL` — your AMS REST base URL (required by `docker-compose.real-ams.yml`)
 
-PULSE_SECRET_KEY=replace-with-openssl-rand-hex-32
-
-CLICKHOUSE_USER=pulse
-CLICKHOUSE_PASSWORD=replace-with-strong-password
-PULSE_CLICKHOUSE_DSN=clickhouse://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@clickhouse:9000/pulse
-
-PULSE_AMS_URL=http://your-ams-host:5080
-PULSE_AMS_AUTH_TOKEN=replace-with-ams-rest-token
-PULSE_AMS_NODE_ID=standalone
-PULSE_AMS_APPLICATIONS=
-
-# Optional: Prometheus scrape token (leave blank to disable /metrics auth)
-PULSE_METRICS_TOKEN=
-```
+See `deploy/.env.example` for all variables and their defaults.
 
 ---
 

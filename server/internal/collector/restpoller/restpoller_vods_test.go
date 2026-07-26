@@ -133,9 +133,9 @@ func newVodHandler(vodsByApp map[string][]amsclient.VodDTO, vodHits *atomic.Int6
 		w.Header().Set("Content-Type", "application/json")
 		path := r.URL.Path
 
-		// AMS cluster/nodes — standalone: return 404 so ClusterNodes yields (nil,nil).
-		if path == "/rest/v2/cluster/nodes" {
-			w.WriteHeader(http.StatusNotFound)
+		// AMS cluster-mode-status — standalone: success=false so ClusterNodes yields (nil,nil).
+		if path == "/rest/v2/cluster-mode-status" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": false})
 			return
 		}
 

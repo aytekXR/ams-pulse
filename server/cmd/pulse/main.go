@@ -180,6 +180,9 @@ func runMigrate(args []string) error {
 		}
 		return fmt.Errorf("PULSE_SECRET_KEY is too short (%d bytes); minimum is 16 bytes; generate with: openssl rand -hex 32", len(metaSecretKey))
 	}
+	if metaDSN != ":memory:" && strings.Contains(strings.ToLower(metaSecretKey), "changeme") {
+		return fmt.Errorf("PULSE_SECRET_KEY appears to be a placeholder value; generate a real key with: openssl rand -hex 32")
+	}
 	logger.Info("pulse migrate: running meta store migrations", "dsn", metaDSN, "backend", metaBackend)
 	metaStore, metaErr := meta.New(ctx, metaBackend, metaDSN, metaSecretKey)
 	if metaErr != nil {

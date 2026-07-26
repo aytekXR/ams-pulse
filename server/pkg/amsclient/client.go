@@ -20,6 +20,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +29,17 @@ import (
 // minLoginInterval is the shortest interval between two forced re-logins.
 // A permanent IP-block 403 must not cause a login storm.
 const minLoginInterval = 3 * time.Second
+
+// clusterProbeInterval is how often ClusterNodes re-probes /rest/v2/cluster-mode-status
+// relative to the total number of ClusterNodes calls. At the default 5 s restpoller cadence,
+// 60 calls ≈ 5 minutes between cluster-mode re-probes.
+const clusterProbeInterval = 60
+
+// clusterModeResult decodes the AMS Result envelope from GET /rest/v2/cluster-mode-status.
+type clusterModeResult struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
 
 // ─── simpleCookieJar ─────────────────────────────────────────────────────────
 // The standard net/http/cookiejar (RFC 6265) does not store cookies for bare
@@ -122,15 +134,28 @@ type WebRTCClientStatsDTO struct {
 	InboundRtpList       []map[string]any `json:"inboundRtpList"`
 }
 
-// ClusterNodeDTO is one entry in the cluster nodes list.
+// ClusterNodeDTO is one entry in the AMS cluster nodes list.
+//
+// Real AMS 3.x wire fields (from ClusterNode.java at tag ams-v3.0.3, curl-verified
+// on a standalone node 2026-07-26; cluster wire shape is source-verified).
+// The tolerant alias fields below (nodeId, cpuUsage, …) are NOT sent by real AMS
+// but are kept so test mock profiles and old fixtures continue to decode correctly.
 type ClusterNodeDTO struct {
-	NodeID string `json:"nodeId"`
-	IP     string `json:"ip"`
-	Port   int    `json:"port"`
-	Role   string `json:"role"` // origin|edge
-	// Version is the AMS server version string (e.g. "2.8.3") returned by
-	// the cluster nodes endpoint. VD-40: populated so FleetPage can render it.
-	Version           string  `json:"version"`
+	// Real AMS 3.x wire fields.
+	ID                   string `json:"id"`
+	IP                   string `json:"ip"`
+	LastUpdateTime       int64  `json:"lastUpdateTime"`       // Unix epoch ms
+	Memory               string `json:"memory"`               // e.g. "40.2%" or "40.2"
+	CPU                  string `json:"cpu"`                  // e.g. "15.3"
+	DbQueryAveargeTimeMs int    `json:"dbQueryAveargeTimeMs"` // AMS's own typo preserved
+	Status               string `json:"status"`               // e.g. "Running"
+
+	// Tolerant aliases for old invented keys (kept for test mock compat; real AMS does
+	// not send these fields — they decode to zero/empty against a real cluster).
+	NodeID            string  `json:"nodeId"`
+	Port              int     `json:"port"`
+	Role              string  `json:"role"`    // AMS has no role field on this endpoint
+	Version           string  `json:"version"` // not in AMS 3.x wire
 	CPUUsage          float64 `json:"cpuUsage"`
 	MemoryUsage       float64 `json:"memoryUsage"`
 	DiskUsage         float64 `json:"diskUsage"`
@@ -138,6 +163,44 @@ type ClusterNodeDTO struct {
 	NetworkOutputBps  float64 `json:"networkOutputBps"`
 	JvmMemoryUsage    float64 `json:"jvmMemoryUsage"`
 	ActiveStreamCount int     `json:"activeStreamCount"`
+}
+
+// PrimaryID returns the node's identity string, preferring the real AMS wire
+// field ID, then the old invented NodeID alias, then the IP address.
+func (n ClusterNodeDTO) PrimaryID() string {
+	if n.ID != "" {
+		return n.ID
+	}
+	if n.NodeID != "" {
+		return n.NodeID
+	}
+	return n.IP
+}
+
+// CPUPct returns the CPU usage as a percentage float64. It prefers the real AMS
+// wire field CPU (string, e.g. "15.3"), falling back to the old invented CPUUsage
+// float64 field used by test mocks.
+func (n ClusterNodeDTO) CPUPct() float64 {
+	if n.CPU != "" {
+		s := strings.TrimSuffix(strings.TrimSpace(n.CPU), "%")
+		if v, err := strconv.ParseFloat(s, 64); err == nil {
+			return v
+		}
+	}
+	return n.CPUUsage
+}
+
+// MemPct returns the memory usage as a percentage float64. It prefers the real AMS
+// wire field Memory (string, e.g. "40.2%"), falling back to the old invented
+// MemoryUsage float64 field.
+func (n ClusterNodeDTO) MemPct() float64 {
+	if n.Memory != "" {
+		s := strings.TrimSuffix(strings.TrimSpace(n.Memory), "%")
+		if v, err := strconv.ParseFloat(s, 64); err == nil {
+			return v
+		}
+	}
+	return n.MemoryUsage
 }
 
 // ApplicationDTO represents one AMS application (object form, older AMS versions).
@@ -175,6 +238,14 @@ type Client struct {
 	loginMu       sync.Mutex
 	lastLogin     time.Time
 	loggedIn      bool
+
+	// clusterMu protects the cluster-mode cache (clusterModeKnown, clusterModeIsCluster,
+	// clusterCallCount). The Client may be used concurrently by multiple goroutines
+	// (restpoller + discovery), so all cache reads/writes are mutex-guarded.
+	clusterMu            sync.Mutex
+	clusterModeKnown     bool // true once cluster-mode-status has been probed successfully
+	clusterModeIsCluster bool // last successful probe result (true = cluster mode)
+	clusterCallCount     int  // total ClusterNodes() calls; drives re-probe cadence
 }
 
 // Config holds Client construction options.
@@ -509,33 +580,88 @@ func (c *Client) WebRTCClientStats(ctx context.Context, app, streamID string) ([
 	return result, nil
 }
 
-// ClusterNodes returns the list of cluster nodes (only meaningful on origin nodes).
-// Returns (nil, nil) when the AMS node is standalone (404 from the endpoint).
-func (c *Client) ClusterNodes(ctx context.Context) ([]ClusterNodeDTO, error) {
-	var result []ClusterNodeDTO
-	if err := c.getJSON(ctx, "/rest/v2/cluster/nodes", &result); err != nil {
-		var hse *httpStatusError
-		if errors.As(err, &hse) && hse.Status == http.StatusNotFound {
-			return nil, nil // standalone AMS — no cluster endpoint
-		}
-		return nil, err
+// ClusterModeStatus probes GET /rest/v2/cluster-mode-status to determine whether
+// the AMS node is running in cluster mode. Returns (true, nil) for cluster mode,
+// (false, nil) for standalone. Any HTTP or JSON error is returned as-is.
+func (c *Client) ClusterModeStatus(ctx context.Context) (bool, error) {
+	var result clusterModeResult
+	if err := c.getJSON(ctx, "/rest/v2/cluster-mode-status", &result); err != nil {
+		return false, err
 	}
-	return result, nil
+	return result.Success, nil
 }
 
-// NodeInfo returns info about one specific node.
-// Returns (&ClusterNodeDTO{}, nil) when the AMS node is standalone (404).
-func (c *Client) NodeInfo(ctx context.Context, nodeID string) (*ClusterNodeDTO, error) {
-	path := fmt.Sprintf("/rest/v2/cluster/nodes/%s", nodeID)
-	var result ClusterNodeDTO
-	if err := c.getJSON(ctx, path, &result); err != nil {
-		var hse *httpStatusError
-		if errors.As(err, &hse) && hse.Status == http.StatusNotFound {
-			return &ClusterNodeDTO{}, nil // standalone AMS — no cluster endpoint
+// ClusterNodes returns all cluster nodes from an AMS cluster.
+//
+// It first probes GET /rest/v2/cluster-mode-status (cached; re-probed every
+// clusterProbeInterval calls). success=false means standalone — returns (nil, nil)
+// immediately without touching the paginated endpoint.
+//
+// When in cluster mode (success=true), it pages through
+// GET /rest/v2/cluster/nodes/{offset}/{size} (pageSize 50) until a short page.
+//
+// Defensive fallback: on a standalone AMS 3.0.3 the paginated path returns HTTP 500
+// (NoSuchBeanDefinitionException: No bean named 'tomcat.cluster'), not 404. Both 404
+// and 500 from the paginated route are mapped to the standalone fallback (nil, nil)
+// and update the cache so subsequent calls skip the cluster-mode-status probe.
+func (c *Client) ClusterNodes(ctx context.Context) ([]ClusterNodeDTO, error) {
+	// Read + update call counter under the lock; read cached mode outside the lock
+	// to avoid holding it during the network call.
+	c.clusterMu.Lock()
+	c.clusterCallCount++
+	callCount := c.clusterCallCount
+	known := c.clusterModeKnown
+	isCluster := c.clusterModeIsCluster
+	c.clusterMu.Unlock()
+
+	needProbe := !known || callCount%clusterProbeInterval == 0
+	if needProbe {
+		clusterStatus, err := c.ClusterModeStatus(ctx)
+		if err == nil {
+			// Successful probe: update the cache.
+			c.clusterMu.Lock()
+			c.clusterModeKnown = true
+			c.clusterModeIsCluster = clusterStatus
+			known = true
+			isCluster = clusterStatus
+			c.clusterMu.Unlock()
 		}
-		return nil, err
+		// On error (e.g. older AMS without the endpoint): leave known/isCluster
+		// unchanged so we fall through to the paginated path.
 	}
-	return &result, nil
+
+	if known && !isCluster {
+		return nil, nil // standalone AMS — skip the paginated call
+	}
+
+	// Cluster mode (or mode unknown): page through the paginated endpoint.
+	const pageSize = 50
+	var all []ClusterNodeDTO
+	offset := 0
+	for {
+		path := fmt.Sprintf("/rest/v2/cluster/nodes/%d/%d", offset, pageSize)
+		var page []ClusterNodeDTO
+		if err := c.getJSON(ctx, path, &page); err != nil {
+			var hse *httpStatusError
+			if errors.As(err, &hse) && (hse.Status == http.StatusNotFound || hse.Status == http.StatusInternalServerError) {
+				// Standalone AMS 3.0.3 returns HTTP 500 (not 404) on the paginated path.
+				// Map both to the standalone fallback and update the cache so subsequent
+				// calls short-circuit to (nil, nil) without hitting this route again.
+				c.clusterMu.Lock()
+				c.clusterModeKnown = true
+				c.clusterModeIsCluster = false
+				c.clusterMu.Unlock()
+				return nil, nil
+			}
+			return all, err
+		}
+		all = append(all, page...)
+		if len(page) < pageSize {
+			break
+		}
+		offset += pageSize
+	}
+	return all, nil
 }
 
 // SystemStats returns aggregate system statistics from the AMS node.

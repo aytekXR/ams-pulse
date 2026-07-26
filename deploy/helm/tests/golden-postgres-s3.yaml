@@ -6,7 +6,7 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"
@@ -23,7 +23,7 @@ metadata:
   name: pulse-clickhouse-config
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"
@@ -93,6 +93,28 @@ data:
       </quotas>
     </clickhouse>
 ---
+# Source: pulse/templates/pvc.yaml
+# PVC for pulse data: license cache, report artifacts, and SQLite meta store.
+# Created whenever persistence.enabled — data volume is needed regardless of meta-store backend.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pulse-data
+  namespace: default
+  labels:
+    helm.sh/chart: pulse-0.3.0
+    app.kubernetes.io/name: pulse
+    app.kubernetes.io/instance: pulse
+    app.kubernetes.io/version: "0.4.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: pulse
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
 # Source: pulse/templates/service-clickhouse.yaml
 # Headless service for ClickHouse StatefulSet (cluster-internal only).
 apiVersion: v1
@@ -101,7 +123,7 @@ metadata:
   name: pulse-clickhouse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"
@@ -132,7 +154,7 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"
@@ -162,7 +184,7 @@ metadata:
   name: pulse-ingest
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"
@@ -193,7 +215,7 @@ metadata:
   name: pulse-postgres
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"
@@ -218,7 +240,7 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"
@@ -280,6 +302,10 @@ spec:
             # ── Core server ──────────────────────────────────────────────
             - name: PULSE_LISTEN_ADDR
               value: ":8090"
+            - name: PULSE_INGEST_LISTEN_ADDR
+              value: ":8091"
+            - name: PULSE_REPORTS_DIR
+              value: "/var/lib/pulse/reports"
             # ── ClickHouse ───────────────────────────────────────────────
             - name: PULSE_CLICKHOUSE_DSN
               value: "clickhouse://pulse-clickhouse:9000/pulse"
@@ -302,6 +328,15 @@ spec:
             # ── Observability ────────────────────────────────────────────
             - name: PULSE_LOG_LEVEL
               value: "debug"
+            # ── S3 export config (optional) ──────────────────────────────
+            - name: PULSE_S3_ENDPOINT
+              value: ""
+            - name: PULSE_S3_BUCKET
+              value: "pulse-reports"
+            - name: PULSE_S3_REGION
+              value: "eu-west-1"
+            - name: PULSE_S3_PREFIX
+              value: "reports/"
             # ── Secrets from secretRef ────────────────────────────────────
             - name: PULSE_AMS_AUTH_TOKEN
               valueFrom:
@@ -334,17 +369,17 @@ spec:
                   name: pulse-secrets
                   key: PULSE_POSTGRES_DSN
                   optional: false
-            - name: PULSE_S3_EXPORT_KEY_ID
+            - name: PULSE_S3_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
                   name: pulse-secrets
-                  key: PULSE_S3_EXPORT_KEY_ID
+                  key: PULSE_S3_ACCESS_KEY_ID
                   optional: true
-            - name: PULSE_S3_EXPORT_SECRET_KEY
+            - name: PULSE_S3_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
                   name: pulse-secrets
-                  key: PULSE_S3_EXPORT_SECRET_KEY
+                  key: PULSE_S3_SECRET_ACCESS_KEY
                   optional: true
             # ── Extra env from values.yaml ────────────────────────────────
           livenessProbe:
@@ -385,7 +420,7 @@ metadata:
   name: pulse-clickhouse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"
@@ -474,7 +509,7 @@ metadata:
   name: pulse-postgres
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"
@@ -557,7 +592,7 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"
@@ -590,7 +625,7 @@ metadata:
   name: pulse-ingest
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.2.0
+    helm.sh/chart: pulse-0.3.0
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.1"

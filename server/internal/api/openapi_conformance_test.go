@@ -33,7 +33,6 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
-	"github.com/getkin/kin-openapi/routers/gorillamux"
 )
 
 // TestConformance_OpenAPIResponseSchema validates that the live API server
@@ -87,9 +86,9 @@ func TestConformance_OpenAPIResponseSchema(t *testing.T) {
 	t.Logf("conformance: spec loaded — %d paths, file=%s", pathCount, specPath)
 
 	// ── 2. Build the kin-openapi route finder ─────────────────────────────────
-	router, err := gorillamux.NewRouter(doc)
+	router, err := newSpecRouter(doc)
 	if err != nil {
-		t.Fatalf("conformance: gorillamux.NewRouter: %v", err)
+		t.Fatalf("conformance: newSpecRouter: %v", err)
 	}
 
 	// ── 3. Start test server (Business-tier license: data_api=true) ───────────

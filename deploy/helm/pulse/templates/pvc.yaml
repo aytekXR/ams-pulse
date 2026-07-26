@@ -1,6 +1,6 @@
-{{- if and .Values.pulse.persistence.enabled (not .Values.postgres.enabled) -}}
-# PVC for pulse meta store (SQLite) + license cache.
-# Not needed when postgres.enabled=true (meta store is in Postgres then).
+{{- if .Values.pulse.persistence.enabled -}}
+# PVC for pulse data: license cache, report artifacts, and SQLite meta store.
+# Created whenever persistence.enabled — data volume is needed regardless of meta-store backend.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

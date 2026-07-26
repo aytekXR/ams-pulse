@@ -453,7 +453,7 @@ Ground truth: S17 VoD on pulse-test (D-079: mp4 muxing enabled → 20 s publish 
 
 This scenario must SKIP (exit 77) rather than FAIL if the Pulse version under test
 predates the fix (i.e. if the feature flag or module is absent).  It SHOULD be run
-against the live AMS at `161.97.172.146:5080` to validate against the real pulse-test
+against the live AMS at `<VPS_IP>:5080` to validate against the real pulse-test
 VoD.
 
 The S17 pulse-test VoD is the natural fixture: it was created during the BUG-002
@@ -497,8 +497,8 @@ response shape (OQ-1 below).
 the AMS 3.0.3 `/{app}/rest/v2/vods/list/{offset}/{size}` response?  Specifically:
 the unique VoD identifier field name, the file size field name (bytes), and the VoD
 creation timestamp field name and epoch unit.  Probe the live AMS at
-`161.97.172.146:5080` against the pulse-test app.  Run:
-`curl -s http://161.97.172.146:5080/pulse-test/rest/v2/vods/list/0/1 | jq .`
+`<VPS_IP>:5080` against the pulse-test app.  Run:
+`curl -s http://<VPS_IP>:5080/pulse-test/rest/v2/vods/list/0/1 | jq .`
 (no auth required for the default AMS open-read policy — ASSUMPTION-TO-VERIFY).
 
 **OQ-2 (architecture preference):** Should `recording_gb` be attributed to the
