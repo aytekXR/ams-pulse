@@ -214,7 +214,7 @@ Cluster topology.
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/fleet/nodes` | Discovered AMS nodes with role (origin/edge/standalone), health, version, and load |
+| GET | `/fleet/nodes` | Discovered AMS nodes with role, health, version, and load. The `role` enum is `origin`/`edge`/`standalone`, but AMS 3.x sends no role on its cluster endpoint, so cluster nodes always report `origin` and `version` is empty (LIM-10) |
 
 ### anomalies — 1 operation
 

@@ -84,11 +84,17 @@ type Config struct {
 // (pageSize 50 → 2 requests: page 0 with 50 nodes, page 1 with 10 nodes).
 func clusterNodeFixtures() []map[string]any {
 	nodes := make([]map[string]any, 60)
+	// lastUpdateTime must be NOW-relative, not a hardcoded date: discovery marks a node
+	// "down" once it is older than StaleTimeout, so the previous fixed 2024 timestamp
+	// put every mock cluster node permanently in the down state — and because
+	// first-sight transitions are not logged, nothing surfaced it (external review
+	// round 4, F-05).
+	nowMS := time.Now().UnixMilli()
 	for i := range nodes {
 		nodes[i] = map[string]any{
 			"id":                   fmt.Sprintf("node-%02d", i+1),
 			"ip":                   fmt.Sprintf("10.0.1.%d", i+1),
-			"lastUpdateTime":       int64(1721952000000) + int64(i)*1000,
+			"lastUpdateTime":       nowMS - int64(i)*1000,
 			"memory":               "40.0%",
 			"cpu":                  "15.0",
 			"dbQueryAveargeTimeMs": 0,

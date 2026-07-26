@@ -17,15 +17,18 @@
 #   bash install.sh --ams-url http://10.0.1.10:5080 --email admin@example.com --password <pw>
 #   bash install.sh --help
 #
-# Supports both in-repo execution and curl|bash piped install:
-#   curl -fsSL https://raw.githubusercontent.com/aytekXR/ams-pulse/main/deploy/quickstart/install.sh | bash
+# Supports both in-repo execution and curl-piped install. Note the `-s --`: with a
+# plain `| bash` the script owns stdin, so the interactive prompts cannot read the
+# terminal and every argument is unreachable. Always pass the flags explicitly:
+#   curl -fsSL https://raw.githubusercontent.com/aytekXR/ams-pulse/main/deploy/quickstart/install.sh \
+#     | bash -s -- --ams-url http://10.0.1.10:5080 --email admin@example.com --password <pw>
 
 set -euo pipefail
 
 # PULSE_REF pins all raw.githubusercontent.com downloads to the release tag
 # matching the pinned image, so a curl|bash install can never pair an old image
 # with a newer compose file from main (the release-time guard enforces the pin).
-PULSE_REF="${PULSE_REF:-v0.4.2}"
+PULSE_REF="${PULSE_REF:-v0.4.3}"
 REPO_RAW="https://raw.githubusercontent.com/aytekXR/ams-pulse/${PULSE_REF}"
 REPO_WEB="https://github.com/aytekXR/ams-pulse"
 HEALTHZ_DEADLINE=90   # seconds
@@ -34,7 +37,7 @@ HEALTHZ_DEADLINE=90   # seconds
 # discovered in the UI a minute later. Must exceed the 30 s collector staleness
 # floor (D-164) for the verdict to be meaningful.
 COLLECTOR_SETTLE_SECONDS="${COLLECTOR_SETTLE_SECONDS:-40}"
-export PULSE_IMAGE="${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.2}"
+export PULSE_IMAGE="${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.3}"
 # Host port for the Pulse UI/API. Override when 8090 is already taken on this
 # machine: PULSE_HOST_PORT=18090 ./install.sh …
 export PULSE_HOST_PORT="${PULSE_HOST_PORT:-8090}"
@@ -296,11 +299,41 @@ elif command -v netstat >/dev/null 2>&1; then
 else
   _PORT_IN_USE=""
 fi
+# A previous quickstart install is not a conflict — it is the re-run path (N5/R11/R12).
+# Compose will recreate that container and re-bind the port itself, so a listener owned
+# by THIS stack must not abort the install. Without this exemption, re-running the
+# installer against a healthy install exits 1 on Pulse's own published port.
+if [[ -n "${_PORT_IN_USE:-}" ]]; then
+  _OWN_CONTAINER=""
+  if docker compose -f "$COMPOSE_FILE" ps -q pulse >/dev/null 2>&1; then
+    _OWN_CONTAINER="$(docker compose -f "$COMPOSE_FILE" ps -q pulse 2>/dev/null | head -1)"
+  fi
+  if [[ -n "$_OWN_CONTAINER" ]]; then
+    printf '\nPort %s is held by an existing Pulse quickstart install — re-using it.\n' "$PULSE_HOST_PORT"
+    printf 'This is a re-run: the stack will be recreated in place.\n'
+    _PORT_IN_USE=""
+  fi
+fi
 if [[ -n "${_PORT_IN_USE:-}" ]]; then
   printf '\nError: host port %s is already in use (%s).\n' "$PULSE_HOST_PORT" "$_PORT_IN_USE" >&2
   printf '       Pulse cannot publish its UI there. Either stop whatever is using it, or\n' >&2
   printf '       pick another port and re-run:\n' >&2
   printf '         PULSE_HOST_PORT=18090 bash install.sh --ams-url %s --email %s --password <pw>\n' "$AMS_URL" "$EMAIL" >&2
+  exit 1
+fi
+
+# ── Preflight: the pinned compose file must be able to honour PULSE_HOST_PORT ──
+# Releases up to and including v0.4.2 hardcode "8090:8090" in the quickstart compose,
+# so PULSE_HOST_PORT is silently ignored on the curl-piped path (which fetches the
+# compose from $PULSE_REF, not from this working tree). Failing loudly here beats
+# health-polling a port nothing is listening on until the 90 s deadline expires.
+if [[ "$PULSE_HOST_PORT" != "8090" ]] && ! grep -q 'PULSE_HOST_PORT' "$COMPOSE_FILE"; then
+  printf '\nError: PULSE_HOST_PORT=%s was requested, but the compose file pinned to %s\n' \
+    "$PULSE_HOST_PORT" "$PULSE_REF" >&2
+  printf '       (%s) hardcodes port 8090 and cannot honour it.\n' "$COMPOSE_FILE" >&2
+  printf '       Use a release whose quickstart compose parameterises the host port, e.g.:\n' >&2
+  printf '         PULSE_REF=main PULSE_HOST_PORT=%s bash install.sh …\n' "$PULSE_HOST_PORT" >&2
+  printf '       or free port 8090 and re-run without PULSE_HOST_PORT.\n' >&2
   exit 1
 fi
 

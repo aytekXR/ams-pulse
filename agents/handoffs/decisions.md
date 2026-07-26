@@ -9858,3 +9858,103 @@ goldens regenerated. Prod untouched.
 
 **Deliberately NOT done:** no prod roll; no new tag (these fixes ride the next release); no
 outbound/marketplace action; R13 left as D-174 decided.
+
+---
+
+## D-176 — §S109: external review round 4 (F-01…F-14) verified & executed; the residual risk was in claims, not code
+
+**Input:** operator supplied the external review's **round 4** (F-01…F-14) against `bea0108`.
+
+**Verify-first result: 14/14 CONFIRMED, 1 embedded sub-claim REFUTED.** This is the first
+round whose tree-state table was exactly right — no stale premise to correct (the prior two
+reviews both carried one). Full disposition table:
+`docs/assessment/marketplace-compliance-review-2026-07-27-round4.md`.
+
+The reviewer's verdict — *"the residual risk is now concentrated almost entirely in claims,
+not code"* — is accurate, and drove the shape of this session: most of the work was making
+documents stop asserting things the code does not do.
+
+**Refuted (recorded, not silently dropped):** the claim that LIM-28's roadmap cites an
+`originAdress` field "that exists nowhere in the tree". It is present in the **real AMS 3.0.3
+response captures** under `server/pkg/amsclient/testdata/` — not yet decoded into the DTO,
+which is presumably what their search matched, but the roadmap claim is grounded in captured
+wire data. LIM-28 now cites the path.
+
+**Headline finding (F-03): the cluster claims were WRONG, not merely unvalidated.** AMS 3.x
+sends no `role` and no `version` on its cluster-nodes endpoint, so discovery defaults every
+node to `origin`, version stays empty, and `IsEdgeStream()` — gated on `role == "edge"` —
+can never activate. LIM-10 framed this as a *confidence* gap ("not live-validated"); it is a
+*statically provable* fact. The claim had propagated into **six** documents, two more than the
+review found — including `demo-video-script.md`, the voiceover the operator is about to
+re-record ("Edge and origin viewers are deduplicated, so the numbers are real"). All corrected.
+
+**Shipped — code:**
+- **F-14:** `CPUPctOK`/`MemPctOK` returned `(0, true)` with no field present at all — a
+  fabricated measured-0% reaching the Fleet card and the anomaly baselines via a *different*
+  input than D-175's R5 fixed. **The existing test pinned the bug as correct**; rewritten,
+  plus a new regression test.
+- **F-03:** `/live/overview` resolved node role through cluster discovery instead of
+  hardcoding `"standalone"`, so it agrees with `/fleet/nodes`.
+- **F-09:** Helm deprecated-alias precedence genuinely fixed — the default moved out of
+  `values.yaml` into the template, because a chart default is never empty and so made the
+  `| default` fallback unreachable. Verified by rendering all four cases; the alias-only case
+  now yields 6 GB instead of silently snapping to 768 MB. Goldens regenerated with **CI's
+  pinned helm 3.17.0** (a newer helm injected spurious blank lines — that would itself have
+  been golden drift).
+- **F-09:** release checkout `fetch-depth: 0` + `fetch-tags: true`; guard #16 now **fails
+  loudly** instead of no-opping, scoped to `templates/` + `values.yaml`.
+- **F-07:** GHCR quarantine cleanup — was worse than reported. The reviewer expected the
+  warning branch; in fact the *list* call fails first under `GITHUB_TOKEN`, so the step exited
+  **0** via "nothing to clean up", reporting success while never deleting anything. Now uses
+  `/users/{owner}/...` + a `GHCR_CLEANUP_TOKEN` PAT + an HTTP-status assertion, and warns
+  loudly when the secret is absent.
+- **F-08:** quickstart port preflight exempts a listener owned by its own stack (re-runs
+  hard-failed on healthy installs, breaking the idempotent path N5/R11/R12 protect); a second
+  preflight fails loudly when the pinned compose cannot honour `PULSE_HOST_PORT`.
+- **F-05:** `qa/mock-ams` cluster fixtures were pinned to a **2024** `lastUpdateTime`, so every
+  mock cluster node sat permanently in the `down` state and nothing surfaced it (first-sight
+  transitions are not logged). Now `now`-relative.
+- **F-14:** poller skips identity-less cluster DTOs; guard #13's substring match anchored
+  (`0.4.20` would have passed a `0.4.2` release).
+
+**Disclosed rather than fixed — and why.** F-04/F-05/F-06 (cluster node alerting can still
+miss during an AMS API outage: eviction race at the same 3× constant, discovery streak reset,
+`/applications` short-circuit, invisible `down` state, unverified `lastUpdateTime` unit,
+mode-flip blind window). Every candidate fix retunes alert timing, and **no live multi-node
+cluster exists to verify against**; guessing risks trading a missed alert for a false one.
+All six mechanisms are now written into LIM-10 as product behaviour, and the CHANGELOG's R1/R6
+entries carry explicit scope corrections. Gated on the operator's 2-node cluster (queue item 7).
+
+**The `lastUpdateTime` unit is now an explicit unverified assumption** in `AMS-INTEGRATION.md`
+§1.1, with the consequence stated: if AMS emits seconds rather than milliseconds, every node
+is silently marked down.
+
+**Recommendation carried to the operator: cut `v0.4.3` from `main` and submit against it.**
+Everything an evaluator hits in the first ten minutes — honest docs, regenerated screenshots,
+the evaluator compose overlay, the parameterised quickstart port — is on `main` and absent
+from the published v0.4.2.
+
+**F-01 remains open and operator-gated.** Verified directly this session *without printing the
+secret*: the live 48-char `CLICKHOUSE_PASSWORD`'s first 32 characters still match git history.
+Rotation stays queue item #1.
+
+**Deliberately NOT done:** no prod roll; no new tag (operator's call); no outbound/marketplace
+action; `install.md`'s `main`-ref downloads kept (the compose carries its own image pin, so
+that path is self-consistent — repointing to the tag would reintroduce the hardcoded-8090 bug
+F-08 is about); guard #11's false-positive risk left alone (no current content triggers it and
+every tightening weakens the check).
+
+**v0.4.3 cut (operator authorised; rotation deferred by explicit operator choice).** The
+operator replied "GO ON skip clickhouse pw" — the release proceeds, F-01 stays open. Noted
+once and proceeded: the public-history exposure exists with or without the tag, so cutting it
+does not make the exposure materially worse, but it remains the pre-submission item.
+
+All 16 release-guard checks were **dry-run locally against the tree before committing**. The
+guard only executes at tag time in CI, so a local run is the only way to avoid discovering a
+missing pin via a failed tag push. Two pre-existing defects surfaced during the bump:
+`sdk/beacon-js/package-lock.json` was stale at **0.4.1** — a full release behind package.json,
+shipped that way in v0.4.2, and covered by no guard — and `submission-package.md`'s beacon
+tarball row pointed at the wrong release page. Both fixed.
+
+Gates: server gofmt/vet/tests clean · SDK 6/6 files 70/70 tests @ 3.52 kB · web tsc clean ·
+helm lint + 5 goldens regenerated at helm 3.17.0 · shellcheck · actionlint · guard 16/16.

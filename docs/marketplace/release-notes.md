@@ -36,21 +36,59 @@ endpoints ignored `limit`/`cursor` pagination; two server panics under paginatio
 Standalone AMS 3.x nodes no longer build poisoned zero-mean anomaly baselines. The production
 compose overlay now correctly passes license env vars.
 
+## New in 0.4.3 (since 0.4.2)
+
+An honesty-and-hardening release. An external technical review checked the 0.4.2 artifact
+against its own documentation and found the remaining risk was mostly in *claims*, not code.
+Everything below is a correction we made rather than a feature we added — we would rather you
+find our limits written down than discover them yourself.
+
+- **Cluster capabilities are now described accurately.** Earlier docs said Pulse showed "real
+  origin/edge roles" with node versions, and that edge/origin viewer deduplication was active.
+  Ant Media Server 3.x does not expose a node role or version on its cluster-nodes endpoint,
+  so **every node displays as `origin` with no version, and viewer dedup does not activate**.
+  The code is in place and would work unchanged if a future AMS exposed roles. This is
+  documented in Known Limitations LIM-10, along with the situations in which cluster node
+  alerting can miss during an AMS API outage.
+- **Two 0.4.2 release-note claims corrected.** AMS error webhooks are recorded to ClickHouse
+  and queryable, but have no dashboard or alert surface yet (LIM-27) — they were previously
+  described as feeding ingest health. And the compose path that "boots out of the box" is the
+  documented evaluator command (base file + `docker-compose.evaluator.yml`); the base file
+  alone deliberately publishes no ports.
+- **Quickstart installer fixes.** Re-running the installer against a healthy install no longer
+  fails on Pulse's own port, and `PULSE_HOST_PORT` is honoured on the piped-install path (0.4.2
+  hardcoded 8090). The installer now fails immediately with an explanation instead of polling a
+  port nothing is listening on.
+- **Helm: the deprecated ClickHouse memory key works again.** If your values file tuned
+  `maxMemoryUsageForAllQueries` and not `maxServerMemoryUsage`, your setting was silently
+  dropped and the server cap fell back to 768 MB. It is now honoured.
+- **Supply chain.** The release pipeline's quarantine cleanup — which removes an image that
+  failed its vulnerability scan — could never execute due to a token/endpoint mismatch, and
+  reported success while doing nothing. Fixed, with the failure now surfaced loudly. A release
+  guard that verifies the Helm chart version was bumped had also been silently skipping.
+- **Documentation accuracy pass.** The install guide's tier table showed Business at 5 nodes
+  instead of 50; schema table counts, the environment-variable reference, and several
+  install-path instructions were corrected. AMS Kafka ingest is now labelled EXPERIMENTAL
+  everywhere it appears, matching what LIM-19 already said.
+
 ## New in 0.4.2 (since 0.4.1)
 
 - **Cluster fleet discovery works against real AMS 3.x clusters.** Node discovery now uses the
   cluster-mode probe plus the paginated cluster-nodes endpoint that Ant Media Server actually
-  serves (verified against the AMS 3.0.3 source), and decodes the real node fields. Previously
-  a clustered AMS silently appeared as a single standalone node. Live multi-node validation is
-  the one remaining step and is disclosed in Known Limitations.
+  serves (verified against the AMS 3.0.3 source), and decodes the real node fields — per-node
+  IDs, CPU and memory. Previously a clustered AMS silently appeared as a single standalone
+  node. Two limits are disclosed in Known Limitations (LIM-10): AMS 3.x sends no node **role**
+  or **version** on that endpoint, so all nodes display as `origin` with no version and
+  edge/origin viewer dedup stays inactive; and live multi-node validation is still pending.
 - **Kafka ingest consumes the official AMS topics** (`ams-instance-stats`,
   `ams-webrtc-stats`) with the official message shapes; the previous topic name was never
   published by AMS. The feature remains marked experimental until validated against a live
   AMS Kafka producer.
 - **Webhook ingest accepts the official AMS payload** — form-urlencoded bodies and the
   official `id` field are parsed; stream-error events (`endpointFailed`,
-  `publishTimeoutError`, `encoderNotOpenedError`) are now captured for ingest health instead
-  of being dropped.
+  `publishTimeoutError`, `encoderNotOpenedError`) are now recorded to ClickHouse instead of
+  being dropped. They are queryable today; a dashboard panel and alert condition for them
+  have not shipped yet (see Known Limitations LIM-27).
 - **Token-mode authentication reaches all management endpoints** — the `ProxyAuthorization`
   header AMS expects for management-scope calls is now sent, so app auto-discovery and fleet
   data work with a static bearer token (no console login needed).
@@ -58,8 +96,10 @@ compose overlay now correctly passes license env vars.
   issued 5-node Business keys; the full tier ladder is now regression-locked.
 - **Installer hardening** — the quickstart preserves your `.env` (and its encryption key) on
   failed installs, reuses an existing key on re-runs, and distinguishes "Pulse up, AMS
-  unreachable" from a failed install; the plain `docker compose -f deploy/docker-compose.yml`
-  path now boots out of the box and is exercised in CI.
+  unreachable" from a failed install; the documented evaluator command (the base compose file
+  plus `deploy/docker-compose.evaluator.yml`, which publishes the UI on localhost) now boots
+  out of the box, and CI boots that exact command and asserts the UI over the published host
+  port. The base file alone deliberately publishes no ports.
 - **Helm chart fixes** — the beacon-ingest port is actually served, Postgres-backed installs
   schedule correctly, S3 report export works from chart values, and the bundled ClickHouse
   locks down its default account when a password secret is configured (plus an opt-in

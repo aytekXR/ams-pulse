@@ -2,6 +2,8 @@
 package collector
 
 import (
+	"encoding/json"
+	"fmt"
 	"math"
 	"testing"
 
@@ -175,10 +177,13 @@ func TestNormalizeClusterNode_NodeIDFallback(t *testing.T) {
 }
 
 // TestNormalizeClusterNode_BoundaryValues ensures values at the 0 and 100
-// boundaries are passed through unchanged. cpu_pct/mem_pct (real wire fields)
-// are always emitted; disk_pct is alias-only and is OMITTED when zero — real
-// AMS 3.x doesn't send it, and a fabricated "Disk 0%" would render as a
-// measurement (REVIEW-MP3 N-cluster c).
+// boundaries are passed through unchanged when they come from the REAL AMS wire
+// fields (cpu/memory), where a zero is a genuine measurement and must be emitted.
+//
+// Alias-only zeros are a different case and are OMITTED — see
+// TestF14_AliasOnlyZero_IsAbsentNotFabricated below. disk_pct has always been
+// alias-only and omitted-when-zero: real AMS 3.x doesn't send it, and a
+// fabricated "Disk 0%" would render as a measurement (REVIEW-MP3 N-cluster c).
 func TestNormalizeClusterNode_BoundaryValues(t *testing.T) {
 	cases := []struct {
 		name string
@@ -192,18 +197,20 @@ func TestNormalizeClusterNode_BoundaryValues(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			dto := amsclient.ClusterNodeDTO{
-				NodeID:      "n",
-				CPUUsage:    tc.cpu,
-				MemoryUsage: tc.mem,
-				DiskUsage:   tc.disk,
+			// Build via JSON so the REAL wire fields (cpu/memory, unexported
+			// flexString) are populated the way a live AMS response would.
+			raw := fmt.Sprintf(`{"id":"n","cpu":%g,"memory":%g,"diskUsage":%g}`,
+				tc.cpu, tc.mem, tc.disk)
+			var dto amsclient.ClusterNodeDTO
+			if err := json.Unmarshal([]byte(raw), &dto); err != nil {
+				t.Fatalf("unmarshal: %v", err)
 			}
 			ev := NormalizeClusterNode(dto)
-			if got := ev.Data["cpu_pct"].(float64); got != tc.cpu {
-				t.Errorf("cpu_pct = %.1f, want %.1f", got, tc.cpu)
+			if got, ok := ev.Data["cpu_pct"].(float64); !ok || got != tc.cpu {
+				t.Errorf("cpu_pct = %v, want %.1f (real wire zero is a measurement)", ev.Data["cpu_pct"], tc.cpu)
 			}
-			if got := ev.Data["mem_pct"].(float64); got != tc.mem {
-				t.Errorf("mem_pct = %.1f, want %.1f", got, tc.mem)
+			if got, ok := ev.Data["mem_pct"].(float64); !ok || got != tc.mem {
+				t.Errorf("mem_pct = %v, want %.1f (real wire zero is a measurement)", ev.Data["mem_pct"], tc.mem)
 			}
 			if tc.disk == 0 {
 				if _, present := ev.Data["disk_pct"]; present {
@@ -213,6 +220,30 @@ func TestNormalizeClusterNode_BoundaryValues(t *testing.T) {
 				t.Errorf("disk_pct = %.1f, want %.1f", got, tc.disk)
 			}
 		})
+	}
+}
+
+// TestF14_AliasOnlyZero_IsAbsentNotFabricated pins external review round 4, F-14:
+// a DTO carrying NEITHER the real wire field nor a non-zero alias has no CPU/memory
+// reading at all. This used to emit cpu_pct=0 / mem_pct=0 as if measured — the same
+// fabricated-zero defect R5 fixed for NaN, reached through a different input.
+func TestF14_AliasOnlyZero_IsAbsentNotFabricated(t *testing.T) {
+	dto := amsclient.ClusterNodeDTO{NodeID: "mock"} // no cpu/memory, no cpuUsage/memoryUsage
+	ev := NormalizeClusterNode(dto)
+	for _, key := range []string{"cpu_pct", "mem_pct"} {
+		if v, present := ev.Data[key]; present {
+			t.Errorf("%s = %v present with no reading on the wire — fabricated measurement (want omitted)", key, v)
+		}
+	}
+
+	// A non-zero alias IS a reading and must still be emitted.
+	aliased := amsclient.ClusterNodeDTO{NodeID: "mock", CPUUsage: 22.5, MemoryUsage: 61.0}
+	evA := NormalizeClusterNode(aliased)
+	if got, ok := evA.Data["cpu_pct"].(float64); !ok || got != 22.5 {
+		t.Errorf("cpu_pct = %v, want 22.5 from the alias", evA.Data["cpu_pct"])
+	}
+	if got, ok := evA.Data["mem_pct"].(float64); !ok || got != 61.0 {
+		t.Errorf("mem_pct = %v, want 61 from the alias", evA.Data["mem_pct"])
 	}
 }
 

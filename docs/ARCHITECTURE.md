@@ -55,7 +55,7 @@ triage report). Key functional changes:
 | Ingest health (F4) | `LiveStream.HealthScore` non-zero — `ComputeHealthScore()` called inline in `onIngestStats()` (VD-20); REST poller emits `EventIngestStats` (VD-22); `/qoe/ingest` returns `health_score` on 0–100 scale; `timeseries` and `drop_events` keys present in response (VD-21, empty when ClickHouse not seeded — D-002 waiver); `IngestTracker` interface `Snapshot()` type fixed + `SetIngestTracker` wired (VD-23, V3a) |
 | Alerting (F5) | `muted=true` suppresses notifications (VD-28); `group_by` collapses N streams to 1 notification per group (VD-29); `node_down` fires on node absence, not CPU proxy (VD-30); cron range syntax `1-5` parsed as set (VD-33); maintenance windows work correctly; 5-field cron accepted (VD-36) |
 | Reports / billing (F6) | All 5 report endpoints gated to Business+ tier (VD-35); 5-field cron schedule presets work (VD-36); `egress_method` label correct when bytes branch taken (VD-37) |
-| Cluster / fleet (F7) | `IsEdgeStream()` implemented — edge/origin viewer dedup active (VD-03); `FleetNodes()` returns real role from cluster discovery (VD-39); node `version` field populated end-to-end (VD-40) |
+| Cluster / fleet (F7) | `IsEdgeStream()` implemented (VD-03) but **inert on AMS 3.x** — it keys on `role == "edge"` and the AMS cluster endpoint sends no role, so discovery defaults every node to `origin`; `FleetNodes()` and `LiveOverview` both resolve role via cluster discovery (VD-39); node `version` plumbed end-to-end (VD-40) but empty on real clusters (not in the AMS 3.x wire). See LIM-10 |
 | Tier model | 4-tier enum `free\|pro\|business\|enterprise` enforced in Go + OpenAPI (VD-01); Business tier gates: reports, PagerDuty/webhook channels, multi-tenant, beacon ingest (Pro+) |
 | Live WS | `/live/ws` broadcasts `LiveOverview` shape (`total_publishers`, `protocol_mix`, `apps`) instead of `LiveSnapshot` (VD-02) |
 | Security | Metrics token uses `subtle.ConstantTimeCompare` (VD-S1); WS uses `OriginPatterns` not `InsecureSkipVerify` (VD-S2); bearer middleware rejects ingest tokens on API routes (VD-S3) |
@@ -157,7 +157,7 @@ Wave-3-Plus re-gate: PASS_WITH_LIMITATIONS (2026-06-15, `qa/wave-3-plus/gate-rep
 |---|---|---|---|---|
 | New stream on dashboard ≤ 10 s after publish | F1 | **1064 ms** | **1.50 s** (B-01) | Unchanged |
 | Viewer counts within ±2% of AMS REST (standalone) | F1 | **0.0%** | **0.0%** (B-02 runtime; VD-05 runtime test added V3b) | Unchanged |
-| Viewer counts within ±2% of AMS REST (cluster) | F1 | Not tested | Not tested | **0% double-count**: `IsEdgeStream()` implemented; edge viewer dedup active (VD-03 V3a) |
+| Viewer counts within ±2% of AMS REST (cluster) | F1 | Not tested | Not tested | **Unproven on real clusters**: `IsEdgeStream()` implemented and unit-tested against role-bearing mocks (VD-03 V3a), but AMS 3.x sends no role, so dedup never activates and origin/edge double-counting is not actually suppressed (LIM-10) |
 | Dashboard < 2 s load at 500 concurrent streams | F1 | Virtualized, ≤20 DOM rows | ≤20 DOM rows (C-W2-02) | **668 ms / 459 ms** (run1/run2; Playwright nav+grid-visible; budget 2 s; VD-04 CLOSED SESSION-04/WO-4) |
 | 13-month rollup queries < 3 s | F2 | DDL only | **126 ms** simple aggregate (C-W2-08) | **144 ms** simple aggregate + **145 ms** dimensional GROUP BY (3 geo × 2 device × 2 protocol, 12 rows; C9b `qa/wave-2/run-gate.sh`; VD-18 CLOSED) |
 | Beacon SDK < 15 KB gzip | F3 | Stub | **3.44 KB** gzip (C-W2-03) | **3.52 KB** (no regression; VD-09/12/13 fixes added code) |

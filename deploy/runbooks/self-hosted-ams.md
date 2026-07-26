@@ -11,7 +11,7 @@ be exercised on an AMS you fully control.
 ## 0. Prereqs (this VPS, already true)
 - Docker present; user in `docker` group → prefix `sg docker -c "…"`.
 - AMS ports free: 5080/5443/1935/5000 (host nginx owns 80/443; `brier-db` owns 5432).
-- Public IP `161.97.172.146` directly on `eth0` → WebRTC ICE advertises it (no PUBLIC_IP env needed).
+- Public IP directly on `eth0` → WebRTC ICE advertises it (no PUBLIC_IP env needed).
 
 ## 1. Run AMS (Docker, host network)
 ```bash
@@ -66,7 +66,7 @@ sg docker -c "docker run -d --name ams-teststream --network host jrottenberg/ffm
 ```
 
 ## 6. Point Pulse at the new AMS
-In `deploy/.env`: `PULSE_AMS_URL=http://161.97.172.146:5080`, `PULSE_AMS_LOGIN_EMAIL/PASSWORD` = AMS admin
+In `deploy/.env`: `PULSE_AMS_URL=http://<ams-host>:5080`, `PULSE_AMS_LOGIN_EMAIL/PASSWORD` = AMS admin
 creds, `PULSE_AMS_NODE_ID=beyondkaira-ams`, `PULSE_AMS_APPLICATIONS=` (empty = auto), `PULSE_AMS_AUTH_TOKEN=`,
 `PULSE_INGEST_TARGET_BITRATE_KBPS=2000`. Always **staging-verify on an isolated `-p` project first** (base +
 hardened + real-ams; curl via `docker exec`), then redeploy prod:

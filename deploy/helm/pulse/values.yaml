@@ -11,7 +11,7 @@ pulse:
     # Tags produced: {{version}}, {{major}}.{{minor}}, {{major}}, 'latest' (non-prerelease only).
     # Images are cosign-signed (keyless/Sigstore OIDC) at the manifest digest.
     repository: ghcr.io/aytekxr/ams-pulse
-    tag: "0.4.2"
+    tag: "0.4.3"
     pullPolicy: IfNotPresent
     # Digest pinning (recommended for production): set to the manifest digest to get
     # an immutable pull regardless of tag movement.
@@ -19,10 +19,10 @@ pulse:
     # readability; Kubernetes uses the digest for the actual pull).
     #
     # To obtain the digest after a release:
-    #   docker pull ghcr.io/aytekxr/ams-pulse:0.4.2
-    #   docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/aytekxr/ams-pulse:0.4.2
+    #   docker pull ghcr.io/aytekxr/ams-pulse:0.4.3
+    #   docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/aytekxr/ams-pulse:0.4.3
     # Or from the cosign SBOM attestation:
-    #   cosign verify ghcr.io/aytekxr/ams-pulse:0.4.2 | jq -r '.[0].critical.image.docker-manifest-digest'
+    #   cosign verify ghcr.io/aytekxr/ams-pulse:0.4.3 | jq -r '.[0].critical.image.docker-manifest-digest'
     digest: ""   # e.g. sha256:abc123...
 
   replicaCount: 1
@@ -288,10 +288,19 @@ clickhouse:
   # These are injected into a ConfigMap mounted into the container.
   config:
     maxMemoryUsage: "536870912"          # 512 MB — per-query cap (default profile)
-    maxServerMemoryUsage: "805306368"    # 768 MB — server-wide cap; must exceed the per-query cap
-    # Deprecated alias for maxServerMemoryUsage, honoured when the new key is
+    # Server-wide memory cap. Must exceed the per-query cap above.
+    # DELIBERATELY UNSET HERE — the default (768 MB) lives in the template, so that the
+    # deprecated alias below can actually take effect. Shipping either key as a chart
+    # default broke the fallback it exists for: `a | default b` only falls back when `a`
+    # is empty, and a chart default is never empty — so an operator values file that
+    # tuned only the old key was silently ignored and the server cap snapped back to
+    # 768 MB on upgrade (external review round 4, F-09).
+    # Uncomment to override:
+    # maxServerMemoryUsage: "805306368"        # 768 MB
+    #
+    # DEPRECATED alias for maxServerMemoryUsage, still honoured when the new key is
     # unset so existing values files keep working. Remove in a future chart major.
-    maxMemoryUsageForAllQueries: "805306368"  # 768 MB
+    # maxMemoryUsageForAllQueries: "805306368"
     maxConcurrentQueries: 16
     maxThreads: 2                        # per-query; rendered into the default profile
     backgroundPoolSize: 2

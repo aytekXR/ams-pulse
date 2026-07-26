@@ -13,12 +13,19 @@ Customer data never leaves the customer's infrastructure.
 
 ## Quick start
 
-For a guided 15-minute install wizard, see [deploy/quickstart/](deploy/quickstart/).
+For a guided 15-minute install, run the quickstart wizard
+([`deploy/quickstart/install.sh`](deploy/quickstart/install.sh)) — it prompts for your AMS
+URL and credentials, writes `.env`, boots the stack and verifies the collector:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/aytekXR/ams-pulse/main/deploy/quickstart/install.sh \
+  | bash -s -- --ams-url http://YOUR-AMS:5080 --email you@example.com
+```
 
 **Released image:** `ghcr.io/aytekxr/ams-pulse` — **public** (no authentication needed to
 pull), cosign-signed, multi-arch (amd64/arm64), SBOM + provenance, published by a CI-gated
 tag pipeline.
-Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.4.2**).
+Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.4.3**).
 
 **Docker Compose (signed image — recommended for evaluators):**
 
@@ -36,7 +43,7 @@ only). Without it the base file is `expose:`-only — correct for the production
 path, where a TLS-terminating reverse proxy sits in front, but it leaves the UI
 unreachable from the host. Set `PULSE_HOST_PORT` if 8090 is already taken.
 
-This pulls `ghcr.io/aytekxr/ams-pulse:0.4.2` — cosign-signed, SBOM-attached, no
+This pulls `ghcr.io/aytekxr/ams-pulse:0.4.3` — cosign-signed, SBOM-attached, no
 authentication required (`ghcr.io/aytekxr/ams-pulse` is public).
 To verify the image signature before running:
 
@@ -44,7 +51,7 @@ To verify the image signature before running:
 cosign verify \
   --certificate-identity-regexp 'https://github.com/aytekXR/ams-pulse' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/aytekxr/ams-pulse:0.4.2
+  ghcr.io/aytekxr/ams-pulse:0.4.3
 ```
 
 **Building from source** (development or local patches):
@@ -53,8 +60,12 @@ cosign verify \
 docker compose \
   -f deploy/docker-compose.yml \
   -f deploy/docker-compose.build.yml \
+  -f deploy/docker-compose.evaluator.yml \
   up -d --build
 ```
+
+> The `evaluator.yml` overlay is what publishes the UI on `127.0.0.1:8090`. Without it this
+> command produces a healthy stack with no reachable UI — see the note below.
 
 > **Port publishing, in one place.** `deploy/docker-compose.yml` only `expose:`s
 > 8090 (container network), and passing explicit `-f` flags also suppresses the
@@ -100,12 +111,14 @@ PULSE_SECRET_KEY=$(openssl rand -hex 32) \
 
 ## Feature status
 
-Last updated: **2026-07-26 (D-173)** — all 10 PRD features shipped; latest release **v0.4.2**
-behind host-nginx TLS against a real AMS 3.0.3 Enterprise. Product one-pager: [docs/product.md](docs/product.md).
+Last updated: **2026-07-27 (D-176)** — all 10 PRD features shipped; latest release **v0.4.3**.
+The maintainer's production instance runs behind host-nginx TLS against a real AMS 3.0.3
+Enterprise (currently on the stamped **v0.4.0-139** build; the roll to 0.4.3 is deliberate,
+not automatic). Product one-pager: [docs/product.md](docs/product.md).
 
 | Feature | PRD ref | Status | Notes |
 |---|---|---|---|
-| Live ops dashboard | F1 | **Shipped** | Streams, viewers, nodes; WS push broadcasts `LiveOverview` shape; ≤10 s stream visibility; edge/origin viewer dedup active |
+| Live ops dashboard | F1 | **Shipped** | Streams, viewers, nodes; WS push broadcasts `LiveOverview` shape; ≤10 s stream visibility. Edge/origin viewer dedup is implemented and unit-tested but **inactive on AMS 3.x** — it keys on a node `role` the AMS cluster endpoint does not expose (LIM-10) |
 | Historical analytics | F2 | **Shipped** | Geo + device breakdown: real rows from `viewer_sessions`; 13-month rollup: 150 ms measured (budget 3 s) |
 | QoE beacon SDK | F3 | **Shipped** | TypeScript, 3.52 KB gzip (budget 15 KB); 65 tests; MIT; `rebuffer_end` from HlsAdapter; bitrate from `hls.levels[]` |
 | QoE beacon round-trip | F3 | **Shipped** | SDK sends `X-Pulse-Ingest-Token`; main-port `/ingest/beacon` persists to EventSink (64 KB cap); Pro+ tier required; beacon events geo/UA enriched |
@@ -113,7 +126,7 @@ behind host-nginx TLS against a real AMS 3.0.3 Enterprise. Product one-pager: [d
 | Ingest health monitoring | F4 | **Shipped** | Health score formula; `health_score` 0–100 scale; ingest timeseries + drop_events in API; 250 µs detection (budget 15 s) |
 | Core alerting | F5 | **Shipped** | Email (Free+), Slack/Telegram (Pro+), PagerDuty/Webhook (Business+); `muted=true` suppresses notifications; `group_by` collapses storm alerts; `node_down` fires on node absence; maintenance windows with range cron syntax |
 | Usage / billing reports | F6 | **Shipped** | Business+ tier required; interactive export CSV-only; scheduled reports CSV **or** PDF per schedule (white-label header Enterprise); tenant mapping; S3 export; ±1% reconciliation; 5-field cron schedules work; `peak_concurrency` sourced from true windowed max (`rollup_concurrency_1d`) |
-| Cluster fleet view | F7 | **Shipped** | Auto-discovery ≤ 30 s (budget 2 min); real origin/edge roles; node version field populated |
+| Cluster fleet view | F7 | **Shipped** | Auto-discovery ≤ 30 s (budget 2 min); real per-node IDs, CPU/memory from the AMS 3.x cluster wire. AMS 3.x exposes **no role or version field** on that endpoint, so every node displays as `origin` with no version (LIM-10) |
 | Data API + Prometheus | F8 | **Shipped** | 5 bounded metrics; scrape token uses constant-time compare; Grafana starter panels |
 | Helm install path | §7.10 | **Shipped** (authored) | Lint and template verified; cluster deploy deferred D-002 |
 | Licensing + tier enforcement | — | **Shipped** | 4-tier: Free/Pro/Business/Enterprise (PRD §7.11); ed25519 verification; 403 on gated features; token kind enforcement |
@@ -126,7 +139,7 @@ behind host-nginx TLS against a real AMS 3.0.3 Enterprise. Product one-pager: [d
 
 - Dashboard render time at 500 streams: virtualization confirmed (≤20 DOM rows), wall-clock not measured — Phase-3 Playwright benchmark (VD-04).
 - Player CPU <1% budget: not measurable in jsdom/vitest; Phase-3 real-browser profiler needed (VD-14).
-- AMS Kafka / log-tail source: no broker available in CI (D-007.5 waiver); REST poller path fully functional and QA-verified. Kafka `lag` + `parse_errors` are surfaced in `/healthz` (Wave-3-Plus). The logtail collector was removed in D-062 (honest-features pass).
+- AMS Kafka source is **EXPERIMENTAL** — never live-validated against a real AMS broker (no broker available in CI; D-007.5 waiver, LIM-19). The REST poller path is the supported, QA-verified source. Kafka `lag` + `parse_errors` are surfaced in `/healthz` (Wave-3-Plus). The logtail collector was removed in D-062 (honest-features pass).
 - Docker Compose path exercised continuously since D-058: CI `docker-build` is a required merge context and staging smokes run on a pristine compose copy each deploy session (the original D-002 waiver is retired).
 
 ---

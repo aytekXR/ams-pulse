@@ -10,7 +10,7 @@ clickhouse:
 pulse:
   image:
     repository: ghcr.io/aytekxr/ams-pulse
-    tag: "0.4.2"
+    tag: "0.4.3"
   ams:
     url: "http://ams.example.com:5080"
     nodeId: "node-01"

@@ -131,7 +131,7 @@ was refuted; one was already dispositioned by operator decision.
 
 ### Found independently in the same pass (not in this review)
 
-A parallel verify-first audit of the published v0.4.2 artifact surfaced four more,
+A parallel verify-first audit of the published v0.4.2 artifact surfaced five more,
 all fixed here:
 
 - **Production ClickHouse password prefix committed to the public repo** —

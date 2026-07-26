@@ -11,7 +11,63 @@
 
 ---
 
-## ▶ START HERE (next session — S108/D-175 done: review round 3 (R1–R15) executed AND a parallel artifact audit found 5 more, incl. a public-history credential and a broken flagship screenshot. PR #220 merged green. **The tree is staged for the operator's NEXT external review.**)
+## ▶ START HERE (next session — S109/D-176 done: external review **round 4** (F-01…F-14) verified & executed. **14/14 confirmed, 1 sub-claim refuted.** The reviewer's own verdict — *"residual risk is almost entirely in claims, not code"* — was right, and the claims are now fixed. **Recommended next action: cut v0.4.3 and submit against it** (operator's call).)
+
+> **✅ Where we are (2026-07-27, D-176):** the operator supplied the external review's round 4.
+> **First round with no stale premise** — its tree-state table was verified exactly correct.
+> Verify-first as always: **all 14 findings CONFIRMED**, one embedded sub-claim **REFUTED**
+> (it said the broadcast `originAdress` field appears nowhere in the tree; it is in the real
+> AMS 3.0.3 capture fixtures, so LIM-28's roadmap is grounded).
+>
+> **Headline (F-03): the cluster claims were WRONG, not merely unvalidated.** AMS 3.x sends no
+> `role` and no `version` on its cluster-nodes endpoint → discovery defaults every node to
+> `origin`, version stays empty, and `IsEdgeStream()` (gated on `role == "edge"`) can **never**
+> activate. LIM-10 framed this as a confidence gap; it is statically provable. The claim had
+> propagated into **six** documents — two more than the review found — including
+> **`demo-video-script.md`, the voiceover the operator is about to re-record** ("Edge and
+> origin viewers are deduplicated, so the numbers are real"). All corrected.
+>
+> **Also fixed:** two false v0.4.2 claims in `release-notes.md` · the `install.md` tier
+> inversion (Business 5→50) + 6 residues incl. genuinely wrong schema counts (meta 14→**16**,
+> CH 9/5→**11/7**) · **the GHCR quarantine cleanup that could never run** (it used
+> `GITHUB_TOKEN` against `/user/packages/...` and exited **0** reporting "nothing to clean up")
+> · the Helm deprecated-alias inversion (both keys as chart defaults made `| default`
+> unreachable — an operator tuning only the old key silently lost their setting) · **guard #16,
+> which had silently no-opped on every release** (shallow checkout, no tags) · `CPUPctOK`
+> fabricating a measured 0% when the field is absent — **and the test that pinned it as
+> correct** · mock-ams pinning cluster nodes to a **2024** timestamp, so every mock cluster run
+> sat permanently in the all-down state · the quickstart re-run hard-fail.
+>
+> **⚠ Deliberately disclosed, NOT fixed — F-04/F-05/F-06 (cluster node alerting).** Six
+> mechanisms can still make `node_degraded` miss during an AMS API outage (eviction race at the
+> same 3× constant, discovery streak reset, `/applications` short-circuit, invisible `down`
+> state, unverified `lastUpdateTime` unit, mode-flip blind window). Every fix retunes alert
+> timing and **there is no live cluster to verify against** — guessing risks trading a missed
+> alert for a false one. All six are now in LIM-10 as product behaviour, and the CHANGELOG's
+> R1/R6 entries carry scope corrections instead of continuing to claim the ladder works.
+>
+> **⚠ Two of my own errors, recorded:** (1) I first counted the ClickHouse schema with a sloppy
+> regex and got 9/5 — the reviewer's 11/7 was right. When a review disputes a count, re-derive
+> it. (2) I regenerated the helm goldens with the wrong helm version, which injected spurious
+> blank lines that would themselves have been CI drift — **use CI's pinned helm 3.17.0**.
+>
+> **Next session (in order):**
+> 1. **Gate reads:** prod health (component-scoped + a ClickHouse count), git/PR drift, and
+>    **whether the operator rotated `CLICKHOUSE_PASSWORD`** — still un-rotated as of this
+>    session (verified silently: live 48-char value's first 32 chars still hit `git log -S`).
+> 2. **If the operator says go: cut v0.4.3.** Guard #16 now actually runs; chart is 0.3.1
+>    (unpublished, published is 0.3.0), which satisfies it.
+> 3. **If a 2-node cluster appears** (operator queue item 7): F-04/F-05/F-06 become fixable
+>    with verification instead of guesswork. Highest-value technical unblock by far.
+> 4. **Expect another review round.** Verify every claim first — and check the reviewer's
+>    tree-state assumptions as carefully as their findings.
+>
+> Full record: `decisions.md` D-176 · `sessions/SESSION-109.md` · disposition table:
+> `docs/assessment/marketplace-compliance-review-2026-07-27-round4.md`.
+
+---
+
+## (previous) ▶ START HERE (S108/D-175 done: review round 3 (R1–R15) executed AND a parallel artifact audit found 5 more, incl. a public-history credential and a broken flagship screenshot. PR #220 merged green.)
 
 > **✅ Where we are (2026-07-26 late, D-175):** the operator supplied a third-party review's
 > Round-3 pass (R1–R15) with "add this to your fixes". Verify-first: **14 CONFIRMED, R13

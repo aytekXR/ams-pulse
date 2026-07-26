@@ -274,9 +274,21 @@ func (p *Poller) poll(ctx context.Context) error {
 			// leave the cluster stop receiving streak events.
 			p.lastClusterNodeIDs = p.lastClusterNodeIDs[:0]
 			for _, n := range nodes {
+				// Skip identity-less DTOs. PrimaryID() falls back id → nodeId → ip and
+				// returns "" when all three are absent; emitting that key produces a
+				// blank phantom node in the fleet view and a "" entry in the streak
+				// fan-out set. cluster.Discovery already dedups on this key; the poller
+				// had no guard at all (round-4 review F-14).
+				if n.PrimaryID() == "" {
+					continue
+				}
 				p.lastClusterNodeIDs = append(p.lastClusterNodeIDs, n.PrimaryID())
 			}
 			for _, n := range nodes {
+				if n.PrimaryID() == "" {
+					p.logger.Warn("restpoller: cluster node has no id/nodeId/ip, skipping")
+					continue
+				}
 				// NormalizeClusterNode keys the event to the node's REAL cluster ID
 				// (PrimaryID). Never override with p.cfg.NodeID here: stamping every
 				// node with the single configured ID collapses an N-node fleet onto
@@ -539,6 +551,10 @@ func (p *Poller) pollApp(ctx context.Context, app string) error {
 
 		events := collector.NormalizeBroadcast(
 			b,
+			// Stream events carry the CONFIGURED node ID, while cluster node_stats
+			// carry AMS's real per-node IDs — the two disagree on a cluster
+			// (REVIEW-MP3-R15, disclosed as LIM-28). Threading the owning node
+			// through per-app polling is deferred until a live cluster exists.
 			p.cfg.NodeID,
 			prev,
 			p.cfg.GeoResolver,
@@ -638,10 +654,12 @@ func (p *Poller) detectEnded(app string, current []amsclient.BroadcastDTO) {
 	for _, key := range ended {
 		streamID := strings.TrimPrefix(key, prefix)
 		ev := domain.ServerEvent{
-			Version:  1,
-			Type:     domain.EventStreamPublishEnd,
-			TS:       time.Now().UnixMilli(),
-			Source:   domain.SourceRestPoll,
+			Version: 1,
+			Type:    domain.EventStreamPublishEnd,
+			TS:      time.Now().UnixMilli(),
+			Source:  domain.SourceRestPoll,
+			// CONFIGURED node ID, not the real cluster node ID — see LIM-28
+			// (REVIEW-MP3-R15). Same deferral as the stream-event site above.
 			NodeID:   p.cfg.NodeID,
 			App:      app,
 			StreamID: streamID,

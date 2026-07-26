@@ -238,7 +238,7 @@ See [`docs/licensing.md`](licensing.md) for minting and activation instructions.
 | F4 | Ingest health | Per-stream 0–100 health score (bitrate, FPS, keyframe interval, loss, jitter); degradation detected in-process in under 250 µs |
 | F5 | Alerting | Email/Slack/Telegram/PagerDuty/webhook channels; mute, group-by, maintenance windows; detect→notify measured at 201 ms |
 | F6 | Usage/billing reports | Per-tenant CSV and PDF statements with S3 export, ±0.0000% reconciliation drift, true windowed peak concurrency |
-| F7 | Cluster fleet view | Auto-discovers origin and edge nodes within 30 s; viewer deduplication across edge/origin roles |
+| F7 | Cluster fleet view | Auto-discovers cluster nodes within 30 s with real per-node IDs and CPU/memory. AMS 3.x exposes no node role, so all nodes display as `origin` and edge/origin viewer dedup stays inactive (LIM-10) |
 | F8 | Data API and Prometheus | Full public REST and WebSocket API (42 paths, 59 operations); `/metrics` scrape endpoint with bounded cardinality |
 | F9 | Anomaly detection | Welford online baselines, σ = 4.0 threshold, 0.259 false alarms/node-week (target < 1); epsilon floor for constant-baseline streams |
 | F10 | Synthetic probes | HLS full (TTFB + segment TTFB + bitrate); DASH MPD + segment; WebRTC ICE + RTP stats; RTMP TCP handshake; 4-worker pool, 60 s config refresh |

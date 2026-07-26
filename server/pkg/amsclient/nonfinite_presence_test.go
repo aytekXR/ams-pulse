@@ -54,13 +54,26 @@ func TestR5_FiniteWireValues_Present(t *testing.T) {
 }
 
 func TestR5_EmptyWireValues_FallBackToAliasAsPresent(t *testing.T) {
-	// Alias-only profiles (no real wire field at all) keep their pre-R5 behavior:
-	// the alias is the reading, including a legitimate zero.
-	n := ClusterNodeDTO{NodeID: "mock", CPUUsage: 0, MemoryUsage: 0}
-	if v, ok := n.CPUPctOK(); !ok || v != 0 {
-		t.Errorf("alias-only cpu = (%v, %v), want (0, true)", v, ok)
+	// Alias-only profiles (no real wire field) read from the alias.
+	n := ClusterNodeDTO{NodeID: "mock", CPUUsage: 22.5, MemoryUsage: 61.0}
+	if v, ok := n.CPUPctOK(); !ok || v != 22.5 {
+		t.Errorf("alias-only cpu = (%v, %v), want (22.5, true)", v, ok)
 	}
-	if v, ok := n.MemPctOK(); !ok || v != 0 {
-		t.Errorf("alias-only mem = (%v, %v), want (0, true)", v, ok)
+	if v, ok := n.MemPctOK(); !ok || v != 61.0 {
+		t.Errorf("alias-only mem = (%v, %v), want (61, true)", v, ok)
+	}
+}
+
+// F-14 (external review round 4): a node carrying NEITHER the real wire field nor the
+// alias has no reading at all. This previously returned (0, true) — a fabricated
+// "measured 0%" reaching the Fleet card and the anomaly baselines through a different
+// input than the NaN/Inf case R5 fixed.
+func TestF14_NoCPUFieldAtAll_IsAbsentNotZero(t *testing.T) {
+	n := ClusterNodeDTO{NodeID: "node-1"} // no cpu, no cpuUsage, no memory, no memoryUsage
+	if v, ok := n.CPUPctOK(); ok {
+		t.Errorf("cpu with no fields = (%v, %v), want (0, false) — absent, not a measured zero", v, ok)
+	}
+	if v, ok := n.MemPctOK(); ok {
+		t.Errorf("mem with no fields = (%v, %v), want (0, false) — absent, not a measured zero", v, ok)
 	}
 }
