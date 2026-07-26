@@ -29,7 +29,15 @@ PULSE_REF="${PULSE_REF:-v0.4.2}"
 REPO_RAW="https://raw.githubusercontent.com/aytekXR/ams-pulse/${PULSE_REF}"
 REPO_WEB="https://github.com/aytekXR/ams-pulse"
 HEALTHZ_DEADLINE=90   # seconds
+# How long to keep watching the collector AFTER the stack reports healthy, so a
+# wrong AMS URL / wrong credentials is reported by the INSTALLER rather than
+# discovered in the UI a minute later. Must exceed the 30 s collector staleness
+# floor (D-164) for the verdict to be meaningful.
+COLLECTOR_SETTLE_SECONDS="${COLLECTOR_SETTLE_SECONDS:-40}"
 export PULSE_IMAGE="${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.2}"
+# Host port for the Pulse UI/API. Override when 8090 is already taken on this
+# machine: PULSE_HOST_PORT=18090 ./install.sh …
+export PULSE_HOST_PORT="${PULSE_HOST_PORT:-8090}"
 
 # ── Locate working directory ──────────────────────────────────────────────────
 # When executed via `curl ... | bash`, BASH_SOURCE[0] is empty or set to "bash".
@@ -79,6 +87,13 @@ Flags:
   --password     <pass>  AMS admin password
   --license-key  <key>   Pulse license key  (optional; empty = Free tier)
   --help                 Show this message and exit
+
+Environment overrides:
+  PULSE_HOST_PORT             Host port for the Pulse UI/API (default 8090).
+                              Use this when 8090 is already taken.
+  COLLECTOR_SETTLE_SECONDS    How long to keep verifying the AMS connection
+                              after the stack is up (default 40).
+  PULSE_IMAGE                 Override the container image.
 
 All required flags are prompted interactively when a TTY is attached.
 When stdin is not a TTY (CI, piped input) every required flag must be passed
@@ -201,20 +216,37 @@ if [[ $PULL_RC -ne 0 ]]; then
 fi
 printf 'Image OK.\n'
 
-# ── Reuse PULSE_SECRET_KEY / PULSE_LICENSE_KEY from an existing .env ─────────
+# ── Reuse operator-set values from an existing .env ──────────────────────────
 # Extract single values with grep — do NOT `source` the file: it is a Compose
 # env file, not a shell script. Unquoted values written by this script (an AMS
 # password with a space, `$(…)`, or `;`) would be word-split or EXECUTED by the
 # shell on re-run (REVIEW-MP3 N5). grep-extract is inert by construction.
+#
+# The anchor tolerates leading whitespace and an `export ` prefix (REVIEW-MP3-R12):
+# a hand-edited .env with `export PULSE_SECRET_KEY=…` used to miss the strict
+# `^PULSE_SECRET_KEY=` anchor, so the key read back EMPTY, a fresh one was minted,
+# and the existing meta store became undecryptable — the same data loss the N5 fix
+# was written to prevent.
+env_value() {
+  grep -E "^[[:space:]]*(export[[:space:]]+)?$1=" "$ENV_FILE" 2>/dev/null \
+    | head -1 | cut -d= -f2- || true
+}
+
 if [[ -f "$ENV_FILE" ]]; then
   if [[ -z "${PULSE_SECRET_KEY:-}" ]]; then
-    PULSE_SECRET_KEY="$(grep -E '^PULSE_SECRET_KEY=' "$ENV_FILE" | head -1 | cut -d= -f2- || true)"
+    PULSE_SECRET_KEY="$(env_value PULSE_SECRET_KEY)"
   fi
   # Preserve an operator-added license key when --license-key was not passed —
   # the rewrite below would otherwise blank it on every re-run.
   if [[ -z "$LICENSE_KEY" ]]; then
-    LICENSE_KEY="$(grep -E '^PULSE_LICENSE_KEY=' "$ENV_FILE" | head -1 | cut -d= -f2- || true)"
+    LICENSE_KEY="$(env_value PULSE_LICENSE_KEY)"
   fi
+  # Preserve a SELF-SIGNED verification key (REVIEW-MP3-R11). The write below
+  # stamped the official pubkey unconditionally, so every re-run silently
+  # reverted the operator's own key and invalidated their self-signed licenses —
+  # the same class of bug as N5, in the one case the code's own comment
+  # ("do not change unless self-signing") anticipates.
+  EXISTING_PUBKEY="$(env_value PULSE_LICENSE_PUBKEY)"
 fi
 
 # ── Generate PULSE_SECRET_KEY if not already in environment ──────────────────
@@ -222,10 +254,17 @@ if [[ -z "${PULSE_SECRET_KEY:-}" ]]; then
   PULSE_SECRET_KEY="$(openssl rand -hex 32)"
 fi
 
+# ── Official Pulse license verification key ──────────────────────────────────
+OFFICIAL_PUBKEY="6403d7b49951d0220c7219e491b6525971edf10f0e64616b17023eab002ab4ba"
+LICENSE_PUBKEY="${EXISTING_PUBKEY:-$OFFICIAL_PUBKEY}"
+if [[ -n "${EXISTING_PUBKEY:-}" && "$EXISTING_PUBKEY" != "$OFFICIAL_PUBKEY" ]]; then
+  printf 'Keeping the existing PULSE_LICENSE_PUBKEY (self-signed setup detected).\n'
+fi
+
 # ── Write .env ────────────────────────────────────────────────────────────────
 # Mark as freshly created only when the file did not exist before this run;
-# on re-runs the file existed (we sourced it above), so we must NOT delete it
-# on a pre-start failure — the operator's secret key would be lost.
+# on re-runs the file already existed, so we must NOT delete it on a pre-start
+# failure — the operator's secret key would be lost.
 if [[ ! -f "$ENV_FILE" ]]; then
   CREATED_ENV=1
 fi
@@ -239,11 +278,31 @@ fi
   printf 'PULSE_AMS_LOGIN_PASSWORD=%s\n' "$PASSWORD"
   printf 'PULSE_LICENSE_KEY=%s\n' "$LICENSE_KEY"
   # Official Pulse license verification key — do not change unless self-signing.
-  printf 'PULSE_LICENSE_PUBKEY=%s\n' \
-    "6403d7b49951d0220c7219e491b6525971edf10f0e64616b17023eab002ab4ba"
+  # A self-signed key already present in .env is preserved across re-runs.
+  printf 'PULSE_LICENSE_PUBKEY=%s\n' "$LICENSE_PUBKEY"
 } >"$ENV_FILE"
 chmod 600 "$ENV_FILE"
 printf 'Wrote %s (mode 600)\n' "$ENV_FILE"
+
+# ── Preflight: host port availability ────────────────────────────────────────
+# Without this, a machine that already uses 8090 fails inside `docker compose up`
+# with a raw daemon error ("Bind for 0.0.0.0:8090 failed: port is already
+# allocated") and no hint that the port — not Pulse — is the problem
+# (clean-room audit A2).
+if command -v ss >/dev/null 2>&1; then
+  _PORT_IN_USE="$(ss -ltn 2>/dev/null | awk -v p=":${PULSE_HOST_PORT}\$" '$4 ~ p {print $4}' | head -1)"
+elif command -v netstat >/dev/null 2>&1; then
+  _PORT_IN_USE="$(netstat -ltn 2>/dev/null | awk -v p=":${PULSE_HOST_PORT}\$" '$4 ~ p {print $4}' | head -1)"
+else
+  _PORT_IN_USE=""
+fi
+if [[ -n "${_PORT_IN_USE:-}" ]]; then
+  printf '\nError: host port %s is already in use (%s).\n' "$PULSE_HOST_PORT" "$_PORT_IN_USE" >&2
+  printf '       Pulse cannot publish its UI there. Either stop whatever is using it, or\n' >&2
+  printf '       pick another port and re-run:\n' >&2
+  printf '         PULSE_HOST_PORT=18090 bash install.sh --ams-url %s --email %s --password <pw>\n' "$AMS_URL" "$EMAIL" >&2
+  exit 1
+fi
 
 # ── Start the stack ───────────────────────────────────────────────────────────
 # Image is already in local cache from the preflight pull above.
@@ -261,7 +320,7 @@ DEADLINE=$(( $(date +%s) + HEALTHZ_DEADLINE ))
 HEALTHY=0
 LAST_BODY=""
 while true; do
-  LAST_BODY="$(curl -sf http://localhost:8090/healthz 2>/dev/null || true)"
+  LAST_BODY="$(curl -sf "http://localhost:${PULSE_HOST_PORT}/healthz" 2>/dev/null || true)"
   if printf '%s' "$LAST_BODY" | grep -qE '"status":"(ok|degraded)"'; then
     HEALTHY=1
     break
@@ -283,14 +342,35 @@ fi
 # ── Diagnose collector degradation (AMS unreachable) — not a hard failure ────
 # Extract only the collector component status; never match the whole body
 # (other components' "ok" would mask a degraded collector).
-_COLLECTOR_STATUS=""
-if command -v python3 >/dev/null 2>&1; then
-  _COLLECTOR_STATUS="$(printf '%s' "$LAST_BODY" \
-    | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('components',{}).get('collector',{}).get('status',''))" \
-    2>/dev/null || true)"
-elif command -v jq >/dev/null 2>&1; then
-  _COLLECTOR_STATUS="$(printf '%s' "$LAST_BODY" \
-    | jq -r '.components.collector.status // ""' 2>/dev/null || true)"
+collector_status_of() {
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s' "$1" \
+      | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('components',{}).get('collector',{}).get('status',''))" \
+      2>/dev/null || true
+  elif command -v jq >/dev/null 2>&1; then
+    printf '%s' "$1" | jq -r '.components.collector.status // ""' 2>/dev/null || true
+  fi
+}
+
+# Let the collector's verdict SETTLE before reporting it (REVIEW-MP3-R14 companion,
+# clean-room audit A3). The collector reports "ok" until the staleness floor
+# (30 s, D-164) has elapsed since start-up, and the health loop above exits at the
+# first 200 — typically ~10 s in. So an installer given a wrong AMS URL or wrong
+# credentials printed a confident "Pulse is healthy." and the operator only met the
+# failure seconds later in the UI. Re-poll until the floor has passed, or until the
+# collector goes degraded on its own (whichever comes first).
+_COLLECTOR_STATUS="$(collector_status_of "$LAST_BODY")"
+if [[ "$_COLLECTOR_STATUS" != "degraded" ]]; then
+  printf 'Verifying the AMS connection (up to %ss)...\n' "$COLLECTOR_SETTLE_SECONDS"
+  SETTLE_DEADLINE=$(( $(date +%s) + COLLECTOR_SETTLE_SECONDS ))
+  while [[ $(date +%s) -lt $SETTLE_DEADLINE ]]; do
+    sleep 5
+    BODY="$(curl -sf "http://localhost:${PULSE_HOST_PORT}/healthz" 2>/dev/null || true)"
+    [[ -z "$BODY" ]] && continue
+    LAST_BODY="$BODY"
+    _COLLECTOR_STATUS="$(collector_status_of "$LAST_BODY")"
+    [[ "$_COLLECTOR_STATUS" == "degraded" ]] && break
+  done
 fi
 
 if [[ "$_COLLECTOR_STATUS" == "degraded" ]]; then
@@ -324,7 +404,7 @@ if [[ -n "$TOKEN" ]]; then
   printf '\n'
   printf '    %s\n' "$TOKEN"
   printf '\n'
-  printf '  UI:  http://localhost:8090\n'
+  printf '  UI:  http://localhost:%s\n' "$PULSE_HOST_PORT"
   printf '======================================================================\n'
 else
   printf '\nNo bootstrap token found in logs — expected on a re-run.\n'
@@ -335,7 +415,7 @@ fi
 
 # ── Next steps ────────────────────────────────────────────────────────────────
 printf '\nNext steps:\n'
-printf '  1. Open http://localhost:8090 and enter the admin token shown above.\n'
+printf '  1. Open http://localhost:%s and enter the admin token shown above.\n' "$PULSE_HOST_PORT"
 printf '  2. Complete the 4-step onboarding wizard (welcome → source → verify → done).\n'
 if [[ -z "$LICENSE_KEY" ]]; then
   printf '  3. Free tier active (1 AMS node, 7-day retention).\n'

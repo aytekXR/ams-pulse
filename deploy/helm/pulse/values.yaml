@@ -287,10 +287,13 @@ clickhouse:
   # Low-footprint tuning (see deploy/config/clickhouse-low-footprint.xml).
   # These are injected into a ConfigMap mounted into the container.
   config:
-    maxMemoryUsage: "536870912"          # 512 MB
+    maxMemoryUsage: "536870912"          # 512 MB — per-query cap (default profile)
+    maxServerMemoryUsage: "805306368"    # 768 MB — server-wide cap; must exceed the per-query cap
+    # Deprecated alias for maxServerMemoryUsage, honoured when the new key is
+    # unset so existing values files keep working. Remove in a future chart major.
     maxMemoryUsageForAllQueries: "805306368"  # 768 MB
     maxConcurrentQueries: 16
-    maxThreads: 2
+    maxThreads: 2                        # per-query; rendered into the default profile
     backgroundPoolSize: 2
     backgroundSchedulePoolSize: 2
     uncompressedCacheSize: "67108864"    # 64 MB

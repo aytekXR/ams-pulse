@@ -6,7 +6,7 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.0
+    helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.2"
@@ -23,7 +23,7 @@ metadata:
   name: pulse-clickhouse-config
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.0
+    helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.2"
@@ -51,8 +51,14 @@ data:
         <console>1</console>
       </logger>
 
-      <!-- Low-footprint memory limits (2-vCPU tier) -->
-      <max_server_memory_usage>536870912</max_server_memory_usage>
+      <!-- Low-footprint memory limits (2-vCPU tier).
+           max_server_memory_usage is the SERVER-WIDE cap and must be larger than
+           the per-query max_memory_usage set in the profile below. It was wired to
+           maxMemoryUsage (the per-query value), making the chart's server cap
+           512 MB against the compose XML's 768 MB despite the XML claiming parity
+           (REVIEW-MP3-R4). maxMemoryUsageForAllQueries is the legacy name for this
+           value — the ClickHouse setting it used to render is deprecated in 24.x. -->
+      <max_server_memory_usage>805306368</max_server_memory_usage>
       <max_concurrent_queries>16</max_concurrent_queries>
       <uncompressed_cache_size>67108864</uncompressed_cache_size>
       <mark_cache_size>67108864</mark_cache_size>
@@ -61,8 +67,10 @@ data:
       <background_pool_size>2</background_pool_size>
       <background_schedule_pool_size>2</background_schedule_pool_size>
 
-      <!-- Max threads per query -->
-      <max_threads>2</max_threads>
+      <!-- max_threads is a QUERY-level setting and is set in the default profile
+           in users.xml below. ClickHouse silently IGNORES it at the bare
+           <clickhouse> root, so setting it here did nothing (REVIEW-MP3-R4) —
+           the same defect already fixed in deploy/config/clickhouse-low-footprint.xml. -->
 
       <!-- Users config loaded from separate ConfigMap key -->
       <users_config>/etc/clickhouse-server/users.xml</users_config>
@@ -72,8 +80,9 @@ data:
     <clickhouse>
       <profiles>
         <default>
+          <!-- Query-level settings must live in a profile to take effect. -->
           <max_memory_usage>536870912</max_memory_usage>
-          <max_memory_usage_for_all_queries>805306368</max_memory_usage_for_all_queries>
+          <max_threads>2</max_threads>
         </default>
       </profiles>
       <users>
@@ -102,7 +111,7 @@ metadata:
   name: pulse-data
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.0
+    helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.2"
@@ -123,7 +132,7 @@ metadata:
   name: pulse-clickhouse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.0
+    helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.2"
@@ -154,7 +163,7 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.0
+    helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.2"
@@ -184,7 +193,7 @@ metadata:
   name: pulse-ingest
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.0
+    helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.2"
@@ -215,7 +224,7 @@ metadata:
   name: pulse-postgres
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.0
+    helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.2"
@@ -240,7 +249,7 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.0
+    helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.2"
@@ -420,7 +429,7 @@ metadata:
   name: pulse-clickhouse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.0
+    helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.2"
@@ -509,7 +518,7 @@ metadata:
   name: pulse-postgres
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.0
+    helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.2"
@@ -592,7 +601,7 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.0
+    helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.2"
@@ -625,7 +634,7 @@ metadata:
   name: pulse-ingest
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.0
+    helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.2"

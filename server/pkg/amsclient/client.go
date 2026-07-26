@@ -195,26 +195,54 @@ func (n ClusterNodeDTO) PrimaryID() string {
 // Double.toString emits these literally) are rejected: a NaN reaching the WS
 // broadcast makes json.Marshal fail silently (REVIEW-MP3 N-cluster d).
 func (n ClusterNodeDTO) CPUPct() float64 {
+	v, _ := n.CPUPctOK()
+	return v
+}
+
+// CPUPctOK is CPUPct with a PRESENCE flag. ok=false means "not measured" and the
+// caller must omit the field rather than record the zero value.
+//
+// Rejecting a non-finite parse is only half the fix (REVIEW-MP3-R5): falling back
+// to the alias field yields 0 on a real AMS (which never sends cpuUsage), so a
+// single "cpu":"NaN" JMX hiccup used to be recorded as a measured CPU of 0% —
+// dragging the Welford anomaly baselines toward zero and rendering a false idle
+// node in the Fleet card. The alias is now honoured only when it actually carries
+// a value; otherwise the reading is reported absent.
+func (n ClusterNodeDTO) CPUPctOK() (float64, bool) {
 	if n.CPU != "" {
 		s := strings.TrimSuffix(strings.TrimSpace(string(n.CPU)), "%")
 		if v, err := strconv.ParseFloat(s, 64); err == nil && !math.IsNaN(v) && !math.IsInf(v, 0) {
-			return v
+			return v, true
 		}
+		if n.CPUUsage != 0 {
+			return n.CPUUsage, true
+		}
+		return 0, false
 	}
-	return n.CPUUsage
+	return n.CPUUsage, true
 }
 
 // MemPct returns the memory usage as a percentage float64. It prefers the real AMS
 // wire field Memory (string, e.g. "40.2%"), falling back to the old invented
 // MemoryUsage float64 field. Non-finite parses are rejected (see CPUPct).
 func (n ClusterNodeDTO) MemPct() float64 {
+	v, _ := n.MemPctOK()
+	return v
+}
+
+// MemPctOK is MemPct with a PRESENCE flag — see CPUPctOK (REVIEW-MP3-R5).
+func (n ClusterNodeDTO) MemPctOK() (float64, bool) {
 	if n.Memory != "" {
 		s := strings.TrimSuffix(strings.TrimSpace(string(n.Memory)), "%")
 		if v, err := strconv.ParseFloat(s, 64); err == nil && !math.IsNaN(v) && !math.IsInf(v, 0) {
-			return v
+			return v, true
 		}
+		if n.MemoryUsage != 0 {
+			return n.MemoryUsage, true
+		}
+		return 0, false
 	}
-	return n.MemoryUsage
+	return n.MemoryUsage, true
 }
 
 // flexString decodes a JSON string OR bare number into a string, so a numeric

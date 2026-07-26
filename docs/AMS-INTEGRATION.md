@@ -104,7 +104,8 @@ broadcast object on AMS 3.0.3 (health scoring redistributes the FPS weight);
 >
 > **NOTE — SRT publishType:** AMS BroadcastDTO reports `publishType="RTMP"` for SRT-ingested
 > streams (live-observed 2026-07-14). Pulse copies AMS's `publishType` verbatim
-> (`server/pkg/amsclient/client.go:88`). Therefore SRT ingest is counted as RTMP in Pulse's
+> (`normalizePublishType` in `server/internal/collector/normalize.go`). Therefore SRT
+> ingest is counted as RTMP in Pulse's
 > protocol breakdown (ProtocolDonut / protocol filters). Pulse cannot distinguish SRT from
 > RTMP without a heuristic; it reports what AMS reports. This was listed as "unknown at S29
 > authoring" and is now KNOWN and recorded.
@@ -146,7 +147,7 @@ broadcast object on AMS 3.0.3 (health scoring redistributes the FPS weight);
 > verification pending).  This is the normal RTMP workflow; pre-creating
 > a broadcast is optional, not required for publishing.
 >
-> Pulse handles this correctly: `detectEnded()` (`restpoller.go:438–479`) fires
+> Pulse handles this correctly: `detectEnded()` (`restpoller.go`) fires
 > when a `status=broadcasting` stream that was present in the previous poll
 > cycle is **absent** from the current broadcast list.  It emits
 > `EventStreamPublishEnd` with `reason: "disappeared"` — not `reason:
@@ -173,7 +174,7 @@ option; use `http://` only on trusted private networks.
 
 Body safety: every response is capped at 10 MB (`client.go`, `io.LimitReader`
 in `getJSON`). Individual
-request timeout defaults to 10 s (`serve.go:236`).
+request timeout defaults to 10 s (`serve.go`).
 
 AMS version tolerance: the client was hardened in W2c (D-025) + D-030 to tolerate
 v2.10/v2.14/v3.0 wire variance — unknown JSON fields are silently ignored, missing
@@ -188,17 +189,17 @@ units table above for the complete set of unit corrections.
 `server/internal/collector/webhook/webhook.go` receives AMS lifecycle events by
 HTTP POST. Lower latency than polling for publish-start visibility (F1 criterion:
 10 s) and alert detection (F5 criterion: 30 s). Activated when both
-`PULSE_WEBHOOK_ADDR` and `PULSE_WEBHOOK_SECRET` are set (`serve.go:368–404`).
+`PULSE_WEBHOOK_ADDR` and `PULSE_WEBHOOK_SECRET` are set (`serve.go`).
 
-**Fail-closed** (B2): `serve.go:373–375` logs an error and skips starting the
+**Fail-closed** (B2): `serve.go` logs an error and skips starting the
 listener when `PULSE_WEBHOOK_ADDR` is set but `PULSE_WEBHOOK_SECRET` is empty.
-`validateHMAC` in `webhook.go:361` independently returns `false` when the
+`validateHMAC` in `webhook.go` independently returns `false` when the
 secret is empty, so even if the listener were somehow started without a secret,
 every request would be rejected.
 
 ### 1.3 Kafka source (optional, high-throughput)
 
-Activated when `PULSE_KAFKA_BROKERS` is non-empty (`serve.go:279–290`). Not
+Activated when `PULSE_KAFKA_BROKERS` is non-empty (`serve.go`). Not
 covered further here; see `server/internal/collector/kafka`.
 
 ### 1.4 Beacon-JS SDK (client QoE)
@@ -278,7 +279,7 @@ PULSE_AMS_APPLICATIONS=live,vod
 
 `PULSE_AMS_APPLICATIONS` is optional. When omitted or empty, Pulse calls
 `/rest/v2/applications` on each poll cycle and monitors all discovered apps
-(`config.go:259–267`). Set it explicitly to narrow polling to specific apps and
+(`config.go`). Set it explicitly to narrow polling to specific apps and
 reduce load on AMS.
 
 ### 3.2 Bring up the production stack with the real-AMS overlay
@@ -354,7 +355,7 @@ curl -s -X POST https://your-domain/api/v1/admin/sources \
   }'
 ```
 
-Request fields accepted by `amsSourceFromAPI` (`server/internal/api/server.go:2296`):
+Request fields accepted by `amsSourceFromAPI` (`server/internal/api/server.go`):
 
 | Field | Purpose | Required |
 |---|---|---|
@@ -376,7 +377,7 @@ curl -s -X POST https://your-domain/api/v1/admin/sources/${SOURCE_ID}/test \
   -H "Authorization: Bearer plt_<your-admin-token>"
 ```
 
-The test handler (`server/internal/api/server.go:1696`) GETs `{rest_url}/rest/v2/version` with a
+The test handler (`server/internal/api/server.go`) GETs `{rest_url}/rest/v2/version` with a
 5-second timeout. It uses a redirect-blocking client (no SSRF via redirect chains).
 Response shape:
 
@@ -394,7 +395,7 @@ Response shape:
 `reachable: false` means a network error (timeout, DNS failure, TLS cert mismatch).
 
 **B6 (shipped, S2x):** when `rest_user` is set, the test now decrypts the stored
-credential before the test request (`server/internal/api/server.go:1746–1759`).
+credential before the test request (`server/internal/api/server.go`).
 A reachable-but-auth-failed result from the test endpoint means the stored
 credential itself is wrong, not a decryption gap.
 
@@ -462,13 +463,13 @@ PULSE_WEBHOOK_SECRET=your-strong-random-secret
 ```
 
 `PULSE_WEBHOOK_ADDR` is the listen address for the webhook HTTP server
-(`config.go:246`). `PULSE_WEBHOOK_SECRET` is the shared HMAC-SHA256 secret
-(`config.go:263`).
+(`config.go`). `PULSE_WEBHOOK_SECRET` is the shared HMAC-SHA256 secret
+(`config.go`).
 
 ### 4.2 The webhook listener and its path
 
 The webhook handler registers two paths on the webhook listener port
-(legacy: `webhook.go:92`; per-source: `webhook.go:95`). With `PULSE_WEBHOOK_ADDR=:8092`,
+(legacy: `webhook.go`; per-source: `webhook.go`). With `PULSE_WEBHOOK_ADDR=:8092`,
 AMS should POST events to the shared path:
 
 ```
@@ -483,8 +484,8 @@ https://your-domain/webhook/ams
 
 ### 4.3 HMAC signature validation
 
-Pulse reads the `X-Ams-Signature` request header (`webhook.go:187`) and validates
-it as `sha256=<hex(HMAC-SHA256(body, secret))>` (`webhook.go:361`). AMS must
+Pulse reads the `X-Ams-Signature` request header (`webhook.go`) and validates
+it as `sha256=<hex(HMAC-SHA256(body, secret))>` (`webhook.go`). AMS must
 be configured to send this header with the same secret. If the signature is missing
 or wrong, the handler returns HTTP 401 and logs a warning.
 
@@ -538,7 +539,7 @@ sudo nginx -t && sudo systemctl reload nginx
 >   BUG-002 is fixed and closed.** `recording_gb` is populated by the REST poll
 >   path: the restpoller calls `/{app}/rest/v2/vods/list/{offset}/200` (200 per
 >   page, paginated) every 12 broadcast ticks (60 s at the 5 s default interval)
->   via `pollVods()` (`restpoller.go:296–386`). New VoDs not yet in the
+>   via `pollVods()` (`restpoller.go`). New VoDs not yet in the
 >   persistent seen-set (`vod_poll_state` meta table, migration 0003) emit
 >   `EventRecordingReady`; ClickHouse migration 0009 (`mv_recording_1d`) flows
 >   those events into `rollup_usage_1d.recording_bytes`. Live prod:
@@ -662,13 +663,13 @@ for `http://` — this is a known gap noted for future improvement.
 ### 5.2 Inject secrets via Docker secrets (`_FILE` convention — shipped)
 
 Pulse supports the `_FILE` convention via `config.GetSecret()`
-(`server/internal/config/secrets.go:27`): for each secret variable `NAME`, set
+(`server/internal/config/secrets.go`): for each secret variable `NAME`, set
 `NAME_FILE` to a file path; the value is read from that file at startup
 (fail-closed if unreadable — a missing or unreadable file is a hard error, not a
 fallback to the plain env var). The following secrets honour this convention:
 `PULSE_AMS_AUTH_TOKEN`, `PULSE_AMS_LOGIN_PASSWORD`, `PULSE_WEBHOOK_SECRET`,
-`PULSE_METRICS_TOKEN` (`config.go:219–242`), `PULSE_OIDC_CLIENT_SECRET`
-(`config.go:375`).
+`PULSE_METRICS_TOKEN` (`config.go`), `PULSE_OIDC_CLIENT_SECRET`
+(`config.go`).
 
 An opt-in overlay `deploy/docker-compose.secrets.yml` wires Docker secrets via
 this mechanism. Apply it instead of the stack's plain env injection (from
@@ -695,8 +696,12 @@ the `Content-Security-Policy` header in `deploy/nginx/pulse.beyondkaira.com.conf
 
 ## 6. Env surface
 
-Complete table of `PULSE_*` variables relevant to AMS integration, read from
-`server/cmd/pulse/config.go` (`loadEnvConfig`, `config.go:204–405`):
+`PULSE_*` variables **relevant to AMS integration**, read from
+`server/cmd/pulse/config.go` (`loadEnvConfig`). This table is deliberately
+scoped to the integration surface and is **not** the complete configuration
+reference — Pulse defines roughly 50 `PULSE_*` variables in total (storage,
+alerting, auth/OIDC, reports, TLS, rate limits). The single complete reference is
+[`admin-guide.md`](admin-guide.md); when the two disagree, the admin guide wins.
 
 | Variable | Purpose | Default | Required |
 |---|---|---|---|
@@ -749,7 +754,7 @@ here as a history record for developers.
 
 ### B6 — Source test decrypts stored credential (shipped, S2x)
 
-**File:** `server/internal/api/server.go:1746–1759`
+**File:** `server/internal/api/server.go`
 
 The `/admin/sources/{id}/test` endpoint now decrypts the stored `rest_password`
 before the test request (`B6:` comment at line 1746). A source configured with
@@ -771,9 +776,9 @@ inject events for another.
 - **Read flag:** `SourceRead.webhook_secret_set` — boolean, `true` when a per-source
   secret is stored; the secret value is never echoed back (`pulse-api.yaml:2631`).
 - **Routes:**
-  - Legacy: `POST /webhook/ams` — uses the global `PULSE_WEBHOOK_SECRET` (`webhook.go:64`).
+  - Legacy: `POST /webhook/ams` — uses the global `PULSE_WEBHOOK_SECRET` (`webhook.go`).
   - Per-source: `POST /webhook/ams/{source_name}` — uses the per-source secret for that
-    name, with no fallback to the global secret (`webhook.go:67`).
+    name, with no fallback to the global secret (`webhook.go`).
 - **Auth semantics:**
   - If `SourceSecrets[name]` is set: per-source secret is used **exclusively** — the
     global `PULSE_WEBHOOK_SECRET` is NOT accepted for that source.
@@ -782,8 +787,8 @@ inject events for another.
   - Unknown source names never return 404 — to avoid leaking which source names exist
     (returns 200 when SharedSecret is valid, 401 when it is empty or the HMAC is wrong).
 - **Startup-only load:** `SourceSecrets` is built once at startup from the meta store
-  (`serve.go:378–403`). **Rotating a per-source secret requires a `pulse` process
-  restart** to take effect (B7 limitation, `serve.go:371–372`).
+  (`serve.go`). **Rotating a per-source secret requires a `pulse` process
+  restart** to take effect (B7 limitation, `serve.go`).
 
 **Set a per-source secret via the API:**
 
@@ -838,7 +843,7 @@ own per-source URL (`/webhook/ams/production-us`) and its own secret. Requests o
 
 `PULSE_AMS_AUTH_TOKEN`, `PULSE_AMS_LOGIN_PASSWORD`, `PULSE_WEBHOOK_SECRET`, and
 `PULSE_METRICS_TOKEN` now support the `_FILE` convention via `config.GetSecret()`
-(`server/internal/config/secrets.go:27`). The secret-file reading requirement of
+(`server/internal/config/secrets.go`). The secret-file reading requirement of
 B3 is met. An opt-in overlay `deploy/docker-compose.secrets.yml` wires Docker
 `secrets:` entries via this mechanism. Until an operator explicitly opts into
 `docker-compose.secrets.yml`, mitigate by restricting `deploy/.env` permissions
@@ -846,16 +851,16 @@ B3 is met. An opt-in overlay `deploy/docker-compose.secrets.yml` wires Docker
 
 ### A2 — Rate-limit beacon ingest on the main API port (shipped, S2x)
 
-**File:** `server/internal/api/server.go:2007–2011`
+**File:** `server/internal/api/server.go`
 
-The main-port `/ingest/beacon` handler (`server/internal/api/server.go:1989`) now
+The main-port `/ingest/beacon` handler (`server/internal/api/server.go`) now
 applies the same per-token token-bucket rate limiter as the dedicated beacon server
-(100 rps / burst 200 — matching `serve.go:796`). The `A2:` comment at line 2007
+(100 rps / burst 200 — matching `serve.go`). The `A2:` comment at line 2007
 documents this parity. No further work is required.
 
 ### A7 — Rate-limit `GET /metrics` (shipped, S2x)
 
-**File:** `server/internal/api/server.go:836–842`
+**File:** `server/internal/api/server.go`
 
 `GET /metrics` now applies a per-IP token bucket (10 rps / burst 20) before the
 auth check, so an unauthenticated flood is throttled ahead of the constant-time

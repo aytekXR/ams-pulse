@@ -34,11 +34,9 @@ compatibility with AMS 2.10+ via mock wire-format profile tests.
 
 ---
 
-## Category (proposed)
+## Category
 
 **Analytics & Monitoring**
-
-*Proposed pending Ant Media confirmation — verify at the developer meeting.*
 
 ---
 
@@ -250,7 +248,7 @@ All shots at 1920×1080, dark theme, captured from a live deployment.
 |---|------|---------|
 | SS1 | `ss1-dashboard.png` | Live ops dashboard — streams, viewer counts by protocol, fleet node health |
 | SS2 | `ss2-ingest-health.png` | Ingest health detail — bitrate timeline, health score, protocol breakdown |
-| SS3 | `ss3-alerting.png` | Alerting rules with incident history — active rule and firing badge |
+| SS3 | `ss3-alerting.png` | Alert incident history — firing and resolved events with severity, metric value and timestamp |
 | SS4 | `ss4-analytics.png` | Audience analytics — viewer count chart, QoE rollups, geo breakdown |
 | SS5 | `ss5-reports.png` | Usage reports — viewer-minutes, egress estimate, VoD storage (Business tier) |
 | SS6 | `ss6-probes.png` | Synthetic viewer probes — HLS, WebRTC, RTMP, DASH probe results |

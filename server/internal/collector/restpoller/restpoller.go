@@ -92,6 +92,17 @@ type Poller struct {
 	// poll() runs only from Run's loop, same as vodTick. D-087.
 	consecAPIErrors int
 
+	// lastClusterNodeIDs is the real node-ID set from the most recent SUCCESSFUL
+	// cluster poll. On a later cluster failure the failure-streak event must be
+	// keyed to these IDs, not to cfg.NodeID: post-N2 the aggregator knows cluster
+	// nodes only by their real IDs, and its D-087 contract drops api_unreachable
+	// events for unknown keys ("failure events create nothing"). Stamping the
+	// single configured ID (default "standalone") therefore left ConsecAPIErrors
+	// pinned at 0 for every real node, so node_degraded could never fire during an
+	// AMS outage — the whole point of the streak ladder (REVIEW-MP3-R1).
+	// Single-goroutine invariant: same as consecAPIErrors.
+	lastClusterNodeIDs []string
+
 	// Poll-loop freshness for /healthz (D-164). Written by Run's goroutine,
 	// read concurrently by the API handler, so it has its own lock — never take
 	// this and mu together, so no lock-order rule is needed.
@@ -257,6 +268,14 @@ func (p *Poller) poll(ctx context.Context) error {
 		if len(nodes) > 0 {
 			// Cluster path: successful — reset streak, emit each node with RTT.
 			p.consecAPIErrors = 0
+			// Remember the real IDs so a later cluster failure can key its
+			// failure-streak events to nodes the aggregator actually knows
+			// (REVIEW-MP3-R1). Rebuilt every successful poll, so nodes that
+			// leave the cluster stop receiving streak events.
+			p.lastClusterNodeIDs = p.lastClusterNodeIDs[:0]
+			for _, n := range nodes {
+				p.lastClusterNodeIDs = append(p.lastClusterNodeIDs, n.PrimaryID())
+			}
 			for _, n := range nodes {
 				// NormalizeClusterNode keys the event to the node's REAL cluster ID
 				// (PrimaryID). Never override with p.cfg.NodeID here: stamping every
@@ -284,6 +303,10 @@ func (p *Poller) poll(ctx context.Context) error {
 			if sErr == nil {
 				// Standalone success: reset streak, emit with RTT.
 				p.consecAPIErrors = 0
+				// AMS is answering as standalone now, so any remembered cluster
+				// IDs are stale — drop them rather than address failure-streak
+				// events to nodes that no longer exist (REVIEW-MP3-R1).
+				p.lastClusterNodeIDs = p.lastClusterNodeIDs[:0]
 				// GetVersion is best-effort: version="" on error (older AMS without /rest/v2/version).
 				versionName := ""
 				if vDTO, vErr := p.client.GetVersion(ctx); vErr == nil && vDTO != nil {
@@ -296,16 +319,19 @@ func (p *Poller) poll(ctx context.Context) error {
 				p.sink.WriteServerEvent(ev)
 			} else {
 				// Standalone failure: increment streak, emit FAILURE-STREAK event.
+				// Standalone identity is cfg.NodeID — AMS provides no node ID on
+				// this path, and NormalizeSystemStats keys its success events the
+				// same way, so the aggregator knows this node.
 				p.logger.Warn("restpoller: system stats poll failed", "error", sErr)
 				p.consecAPIErrors++
-				p.sink.WriteServerEvent(p.failureStreakEvent())
+				p.sink.WriteServerEvent(p.failureStreakEvent(p.cfg.NodeID))
 			}
 		}
 	} else {
-		// Cluster failure (non-404 error): increment streak, emit FAILURE-STREAK event.
+		// Cluster failure (non-404 error): increment streak, emit FAILURE-STREAK events.
 		p.logger.Warn("restpoller: cluster nodes poll failed", "error", clusterErr)
 		p.consecAPIErrors++
-		p.sink.WriteServerEvent(p.failureStreakEvent())
+		p.emitFailureStreak()
 	}
 
 	for _, app := range apps {
@@ -342,17 +368,43 @@ func (p *Poller) poll(ctx context.Context) error {
 //
 // The aggregator's onNodeStats handles api_unreachable=true events in-place
 // (updates ConsecAPIErrors only; does NOT refresh LastSeenAt). D-087.
-func (p *Poller) failureStreakEvent() domain.ServerEvent {
+//
+// nodeID must be an identity the aggregator already knows: its D-087 contract
+// drops api_unreachable events for unknown keys, so an event addressed to a
+// node that never reported is silently a no-op (REVIEW-MP3-R1).
+func (p *Poller) failureStreakEvent(nodeID string) domain.ServerEvent {
 	return domain.ServerEvent{
 		Version: 1,
 		Type:    domain.EventNodeStats,
 		TS:      time.Now().UnixMilli(),
 		Source:  domain.SourceRestPoll,
-		NodeID:  p.cfg.NodeID,
+		NodeID:  nodeID,
 		Data: map[string]any{
 			"api_unreachable":   true,
 			"consec_api_errors": float64(p.consecAPIErrors),
 		},
+	}
+}
+
+// emitFailureStreak emits the FAILURE-STREAK event(s) for a failed CLUSTER poll.
+//
+// One event per node seen in the last successful cluster poll: the AMS API being
+// unreachable is a fleet-wide condition, and every real node's ConsecAPIErrors
+// must advance so the node_degraded ladder (rung 3 of D-087) fires during the
+// outage. Before REVIEW-MP3-R1 this emitted a single event keyed to cfg.NodeID —
+// an identity no cluster node carries post-N2, so the aggregator dropped it and
+// the ladder stayed dead for the whole outage.
+//
+// Fallback to cfg.NodeID when nothing has been discovered yet (first poll fails,
+// or a cluster that has never answered): the event is then a no-op at the
+// aggregator, exactly as before, but /healthz and the logs still carry the failure.
+func (p *Poller) emitFailureStreak() {
+	if len(p.lastClusterNodeIDs) == 0 {
+		p.sink.WriteServerEvent(p.failureStreakEvent(p.cfg.NodeID))
+		return
+	}
+	for _, nodeID := range p.lastClusterNodeIDs {
+		p.sink.WriteServerEvent(p.failureStreakEvent(nodeID))
 	}
 }
 
@@ -437,10 +489,17 @@ func (p *Poller) pollVods(ctx context.Context, app string) error {
 		}
 
 		ev := domain.ServerEvent{
-			Version:  1,
-			Type:     domain.EventRecordingReady,
-			TS:       ts,
-			Source:   domain.SourceRestPoll,
+			Version: 1,
+			Type:    domain.EventRecordingReady,
+			TS:      ts,
+			Source:  domain.SourceRestPoll,
+			// Stream/VoD events are keyed to the CONFIGURED node ID, while
+			// node_stats on a cluster carry AMS's real per-node IDs (N2). On a
+			// cluster the two therefore disagree, so filtering streams by a node
+			// ID taken from the Fleet view returns nothing (REVIEW-MP3-R15,
+			// disclosed as LIM-28). Fixing it needs the owning node threaded
+			// through per-app polling — deferred until the cluster path is
+			// live-validated (LIM-10), rather than guessed at now.
 			NodeID:   p.cfg.NodeID,
 			App:      app,
 			StreamID: v.StreamID,

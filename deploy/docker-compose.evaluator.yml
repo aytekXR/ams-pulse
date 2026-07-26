@@ -1,0 +1,23 @@
+# Evaluator overlay — publishes the Pulse UI/API on the LOOPBACK interface only.
+#
+# Why this file exists: deploy/docker-compose.yml declares `expose:` (container
+# network only), never `ports:`, because the production path fronts Pulse with a
+# TLS-terminating reverse proxy. Passing explicit `-f` flags also SUPPRESSES the
+# automatic loading of docker-compose.override.yml, so the documented evaluator
+# command started a healthy stack whose UI was unreachable from the host — with
+# no error to explain it.
+#
+# docker-compose.override.yml is not the answer for evaluation: it publishes port
+# 80 on 0.0.0.0 without TLS (a deliberate demo/dev convenience, marked UNSAFE).
+# This overlay binds 127.0.0.1 only, so nothing is exposed off-box.
+#
+# Usage:
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.evaluator.yml up -d
+#   # UI: http://localhost:8090
+#
+# Override the host port when 8090 is taken:
+#   PULSE_HOST_PORT=18090 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.evaluator.yml up -d
+services:
+  pulse:
+    ports:
+      - "127.0.0.1:${PULSE_HOST_PORT:-8090}:8090"

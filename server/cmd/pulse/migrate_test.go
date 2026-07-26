@@ -14,8 +14,12 @@ func TestMaskDSN(t *testing.T) {
 	}{
 		{"empty", "", ""},
 		{
+			// NEVER use a real credential (or any prefix of one) as test input,
+			// even in the test that exists to prevent credential leaks: the value
+			// is committed to a public repository and stays in git history forever.
+			// This literal is a fixed dummy with no relationship to any deployment.
 			"user+password redacted",
-			"clickhouse://pulse:b6c23a46d4589f127915e42cd736869a@clickhouse:9000/pulse",
+			"clickhouse://pulse:0123456789abcdef0123456789abcdef@clickhouse:9000/pulse",
 			"clickhouse://pulse:xxxxx@clickhouse:9000/pulse",
 		},
 		{

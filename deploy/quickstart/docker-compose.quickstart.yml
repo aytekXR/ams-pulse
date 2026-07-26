@@ -44,7 +44,7 @@ services:
       # public or shared deployment: remove this binding, publish only on 127.0.0.1,
       # and front Pulse with a TLS-terminating reverse proxy (see
       # deploy/docker-compose.prod.yml and deploy/nginx/).
-      - "8090:8090"
+      - "${PULSE_HOST_PORT:-8090}:8090"
     environment:
       # ── Core ─────────────────────────────────────────────────────────────────
       PULSE_LISTEN_ADDR: ":8090"
