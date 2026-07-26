@@ -18,7 +18,7 @@ For a guided 15-minute install wizard, see [deploy/quickstart/](deploy/quickstar
 **Released image:** `ghcr.io/aytekxr/ams-pulse` — **public** (no authentication needed to
 pull), cosign-signed, multi-arch (amd64/arm64), SBOM + provenance, published by a CI-gated
 tag pipeline.
-Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.4.1**).
+Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.4.2**).
 
 **Docker Compose (signed image — recommended for evaluators):**
 
@@ -31,7 +31,7 @@ cp deploy/.env.example deploy/.env
 docker compose -f deploy/docker-compose.yml up -d
 ```
 
-This pulls `ghcr.io/aytekxr/ams-pulse:0.4.1` — cosign-signed, SBOM-attached, no
+This pulls `ghcr.io/aytekxr/ams-pulse:0.4.2` — cosign-signed, SBOM-attached, no
 authentication required (`ghcr.io/aytekxr/ams-pulse` is public).
 To verify the image signature before running:
 
@@ -39,7 +39,7 @@ To verify the image signature before running:
 cosign verify \
   --certificate-identity-regexp 'https://github.com/aytekXR/ams-pulse' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/aytekxr/ams-pulse:0.4.1
+  ghcr.io/aytekxr/ams-pulse:0.4.2
 ```
 
 **Building from source** (development or local patches):
@@ -88,7 +88,7 @@ PULSE_SECRET_KEY=$(openssl rand -hex 32) \
 
 ## Feature status
 
-Last updated: **2026-07-22 (D-161)** — all 10 PRD features shipped; prod live at **v0.4.1**
+Last updated: **2026-07-26 (D-173)** — all 10 PRD features shipped; latest release **v0.4.2**
 behind host-nginx TLS against a real AMS 3.0.3 Enterprise. Product one-pager: [docs/product.md](docs/product.md).
 
 | Feature | PRD ref | Status | Notes |

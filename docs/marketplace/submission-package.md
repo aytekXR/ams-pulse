@@ -86,4 +86,4 @@ operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
    operator re-records the final with voiceover.
 5. **Reply to Ankush Banyal** — draft ready (`ankush-reply-draft.md`, D-170); operator fills the
    [brackets] and sends.
-6. Optional: **roll prod to v0.4.1** (prod is healthy on v0.4.0-139); **rotate** the exposed secrets.
+6. Optional: **roll prod to v0.4.2** (prod is healthy on v0.4.0-139); **rotate** the exposed secrets.

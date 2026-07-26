@@ -138,8 +138,9 @@ jobs:
             fi
           done
 
-          # 6. Helm values.yaml image tag
-          HELM_TAG="$(grep '^  tag:' deploy/helm/pulse/values.yaml | head -1 \
+          # 6. Helm values.yaml image tag (first tag: key is the image tag;
+          #    indent-agnostic so a values re-indent can't blind this check)
+          HELM_TAG="$(grep -E '^[[:space:]]*tag:' deploy/helm/pulse/values.yaml | head -1 \
             | sed 's/.*tag:[[:space:]]*//; s/\"//g')"
           if [ "$HELM_TAG" != "$TAG_VERSION" ]; then
             echo "FAIL: deploy/helm/pulse/values.yaml image tag ($HELM_TAG) != tag ($TAG_VERSION)"

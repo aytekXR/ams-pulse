@@ -1,6 +1,6 @@
 # Pulse — Known Limitations
 
-**Product:** Pulse v0.4.1 (last refreshed S106, 2026-07-26)  
+**Product:** Pulse v0.4.2 (last refreshed S107, 2026-07-26)  
 **Source:** `docs/assessment/documentation-gaps.md` (DG-01 through DG-18),
 `docs/assessment/final-assessment.md` §1 and Appendix B (v0.3.0 baseline; see
 `docs/assessment/marketplace-compliance-review-2026-07-25.md` for current

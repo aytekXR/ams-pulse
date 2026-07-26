@@ -25,11 +25,11 @@ set -euo pipefail
 # PULSE_REF pins all raw.githubusercontent.com downloads to a specific tree.
 # Defaults to 'main' until the v0.4.2 release tag is cut; after the release
 # this will be set to 'v0.4.2' (a release-time guard will enforce it).
-PULSE_REF="${PULSE_REF:-main}"
+PULSE_REF="${PULSE_REF:-v0.4.2}"
 REPO_RAW="https://raw.githubusercontent.com/aytekXR/ams-pulse/${PULSE_REF}"
 REPO_WEB="https://github.com/aytekXR/ams-pulse"
 HEALTHZ_DEADLINE=90   # seconds
-export PULSE_IMAGE="${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.1}"
+export PULSE_IMAGE="${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.2}"
 
 # ── Locate working directory ──────────────────────────────────────────────────
 # When executed via `curl ... | bash`, BASH_SOURCE[0] is empty or set to "bash".

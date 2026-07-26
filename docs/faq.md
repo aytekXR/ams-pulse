@@ -1,6 +1,6 @@
 # Pulse — Operator FAQ
 
-**Product:** Pulse v0.4.1 · **Last updated:** 2026-07-25 (D-172)
+**Product:** Pulse v0.4.2 · **Last updated:** 2026-07-26 (D-173)
 
 Short answers to the questions operators ask most often.
 Each answer links to the canonical doc for deeper reading.
