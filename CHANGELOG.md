@@ -10,7 +10,83 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Security
+
+- **Removed a production credential prefix from the repository (D-175).**
+  `server/cmd/pulse/migrate_test.go` — the regression test that exists to prevent password
+  leaks in logs — used the first 32 of the 48 hex characters of the live production
+  `CLICKHOUSE_PASSWORD` as its test input, committed since `98b011c`. Replaced with a fixed
+  dummy. Git history cannot be un-published, so **rotation of that credential is required**
+  and is the top item in `docs/operator-expected.md`. ClickHouse is not internet-facing, so
+  this was never remotely exploitable.
+- **A failed release no longer leaves a vulnerable image publicly pullable (D-175, R7).**
+  The Trivy quarantine flow pushed `candidate-<sha>` and never cleaned it up, so an image
+  that FAILED its scan stayed public under the candidate tag forever. Cleanup now runs on
+  every outcome — but only when the candidate tag is the digest's sole tag, because a GHCR
+  package "version" is a digest and promotion re-tags that same digest; deleting it
+  unconditionally would have deleted the published release, its SBOM and its signature.
+
+### Fixed
+
+- **Cluster degraded-node alerting was dead during AMS API outages (D-175, R1).** After the
+  0.4.2 change that gave cluster events their real AMS node IDs, failure-streak events were
+  still stamped with the single configured `PULSE_AMS_NODE_ID`. The aggregator drops
+  `api_unreachable` events for unknown node keys, so `ConsecAPIErrors` never advanced for any
+  real node and `node_degraded` could not fire for the entire outage — the exact condition
+  the alert ladder exists to catch. Streak events now fan out over the nodes seen in the last
+  successful cluster poll.
+- **Cluster node metrics were being overwritten with fabricated zeros (D-175, R2).**
+  `cluster.Discovery` emitted `disk_pct` / `net_in_mbps` / `net_out_mbps` / `jvm_heap_used_mb`
+  / `version` unconditionally — fields real AMS 3.x never sends. Since both emitters now key
+  on the same real node ID, those zeros overwrote the poller's clean event every 30 s: the
+  Fleet card rendered "Disk 0%" as a measurement and the zeros fed the Welford anomaly
+  baselines. Emission is now conditional and test-pinned to match the poller key-for-key.
+- **A dead cluster node reported healthy forever (D-175, R6).** AMS keeps a dead member listed
+  with a frozen `lastUpdateTime`, so the vanish-based staleness sweep never fired for it.
+  AMS's own `status` and `lastUpdateTime` now mark a node down, which also releases the
+  origin-viewer suppression that a dead edge used to hold open.
+- **A single `NaN` CPU reading was recorded as a measured 0% (D-175, R5).** Non-finite values
+  were rejected but fell through to an alias field that is 0 on real AMS. Readings with no
+  usable value are now reported absent rather than fabricated.
+- **The documented README evaluator command published no ports (D-175).** The base compose
+  file is `expose:`-only and explicit `-f` flags suppress the auto-override, so
+  `docker compose -f deploy/docker-compose.yml up -d` produced a healthy stack with an
+  unreachable UI. Added `deploy/docker-compose.evaluator.yml` (loopback-only publish); CI now
+  boots the documented command and asserts the UI over the published host port.
+- **Quickstart installer (D-175, R11/R12).** A self-signed `PULSE_LICENSE_PUBKEY` was
+  overwritten with the official key on every re-run; `export`-prefixed or indented keys in a
+  hand-edited `.env` were missed by the value extractor, minting a new secret key and leaving
+  the meta store undecryptable. Both fixed. The installer also now detects a busy host port
+  with actionable guidance (`PULSE_HOST_PORT`), and keeps verifying the AMS connection past
+  the collector's 30 s staleness floor instead of printing "healthy" ~20 s too early.
+- **Helm ClickHouse tuning was partly inert (D-175, R4).** `max_threads` sat at server scope
+  where ClickHouse silently ignores it, the deprecated `max_memory_usage_for_all_queries` was
+  still rendered, and the server-wide memory cap was wired to the per-query value (512 MB
+  instead of 768 MB), contradicting the compose XML's stated parity. Chart bumped to 0.3.1 —
+  `helm push` overwrites an existing version, so a content change without a version bump
+  silently replaces a published artifact. New release-guard check enforces that bump.
+- **Marketplace assets (D-175).** The flagship screenshot showed all 8 streams as UNKNOWN
+  state/health and 0 viewers/0 publishers per application, because the capture mocks used
+  field names the API schema does not define; the alerting screenshot showed only the Rules
+  tab while its caption promised incident history. Both regenerated and visually verified.
+  The protocol-mix donut's slice labels, which overlapped its own legend and were clipped at
+  the card edge, now fit.
+- **Docs (D-175, R3/R9/R10/R15).** SDK install instructions pointed at the 0.4.1 tarball —
+  the build whose `Pulse.init()` was a silent no-op — now 0.4.2 and guarded at release time.
+  `licensing-public.md` understated the Pro tier (analytics CSV export is Pro+, not
+  Business+). The submission-package index still announced v0.4.1. All 32 line-number source
+  citations in `AMS-INTEGRATION.md` were de-numbered (one pointed at the wrong file entirely),
+  removing the drift mechanism. New limitations disclosed: LIM-27 (ingest-error webhooks are
+  recorded but not yet surfaced) and LIM-28 (cluster-only stream/node ID mismatch).
+
+### Changed
+
+- **CI boots the release commit instead of skipping it (D-175, R14).** `compose-boot` deferred
+  whenever the image pin equalled `VERSION` and wasn't on GHCR yet — which is always true on
+  the commit a release gates on, so the evaluator path was never booted against a
+  to-be-released state. It now builds the pinned image locally and boots it.
+- **Release version guard: 13 → 16 checks** — submission-package header stamp, SDK
+  install-section tarball version, and the Helm chart-version bump.
 
 ---
 

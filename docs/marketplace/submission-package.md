@@ -1,7 +1,7 @@
 # Ant Media Marketplace — Submission Package Index
 
 **Product:** Pulse — Analytics & QoE Monitoring for Ant Media Server
-**Version:** v0.4.1 (released, GHCR public) · **Prepared:** 2026-07-22; updated 2026-07-25
+**Version:** v0.4.2 (released 2026-07-26, GHCR public, anonymously pullable) · **Prepared:** 2026-07-22; updated 2026-07-26
 
 This is the single page to hand Ant Media when the listing process starts: every
 submission artifact, where it lives, and its state. Statuses: **READY** (accurate,
@@ -17,6 +17,7 @@ reviewable now) · **DRAFT-OP** (content complete; blocked only on an operator d
 | Screenshots — 6 listing shots, 1920×1080 live-app | [`screenshot-list.md`](screenshot-list.md) + `screenshots/` (regenerate: `node qa/marketplace/capture-live-screenshots.mjs`) | READY (committed to `docs/marketplace/screenshots/`; portable capture script; regenerable at any time) |
 | Logo / media kit | `brandkit/logo/` (SVG + PNG variants), OG banner `brandkit/assets/png/og-1200x630.png` | READY (final specs = meeting assumption A3) |
 | Demo video | [`demo-video-script.md`](demo-video-script.md) + rough-cut `docs/marketplace/demo/pulse-demo-roughcut.webm` | DRAFT-OP (rough-cut rendered and attached to [GitHub release v0.4.1](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.1); operator records final with voiceover — TBD-EXT for voiceover only) |
+| Beacon SDK tarball | `ams-pulse-beacon-0.4.2.tgz` on the [v0.4.2 release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.2) | READY (0.4.1 tarball must NOT be advertised — it shipped the `Pulse.init()` silent-no-op defect fixed in 0.4.2) |
 | Release notes ("what's new in 0.4") | [`release-notes.md`](release-notes.md) | READY |
 
 ## Documentation set (linkable as the product docs)
@@ -30,7 +31,7 @@ reviewable now) · **DRAFT-OP** (content complete; blocked only on an operator d
 | API guide + rendered OpenAPI reference | [`../api-guide.md`](../api-guide.md) + [`../api/index.html`](../api/index.html) | READY |
 | Beacon SDK integration (player-side QoE) | [`../beacon-sdk.md`](../beacon-sdk.md) + [`../../sdk/beacon-js/README.md`](../../sdk/beacon-js/README.md) | READY |
 | Compatibility matrix (AMS versions, G-27, capacity) | [`../compatibility.md`](../compatibility.md) | READY except capacity row (load lane pending) |
-| Known limitations (26 honest disclosures) | [`../known-limitations.md`](../known-limitations.md) | READY |
+| Known limitations (28 honest disclosures) | [`../known-limitations.md`](../known-limitations.md) | READY |
 | Troubleshooting | [`../troubleshooting.md`](../troubleshooting.md) | READY |
 | FAQ | [`../faq.md`](../faq.md) | READY |
 | Upgrade & rollback | [`../../deploy/runbooks/upgrade-rollback.md`](../../deploy/runbooks/upgrade-rollback.md) | READY |
@@ -61,7 +62,10 @@ operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
 **✅ DONE (2026-07-25):**
 - ~~**GHCR public** — reviewers must `docker pull` anonymously.~~ **DONE (D-168):** package is
   public; the anonymous clean-room install (`docker pull …:0.4.1` → quickstart → live dashboard,
-  collector `ok`, events flowing) was verified end-to-end with zero credentials.
+  collector `ok`, events flowing) was verified end-to-end with zero credentials. **Re-verified
+  against `0.4.2` (2026-07-26):** `0.4.2` and `latest` resolve to the same digest and are
+  anonymously pullable; the Helm chart OCI package `ghcr.io/aytekxr/charts/pulse:0.3.0` is
+  anonymously pullable too.
 - ~~**MaxNodes reconcile** (Pro 10 vs Business 5 inversion)~~ **DONE (D-166):** Business is now 50;
   ladder is monotonic (Free 1 / Pro 10 / Business 50 / Enterprise ∞) with a regression test.
 - ~~**Pricing sign-off**~~ **DECIDED (D-169, operator-delegated):** standard Free $0 / Pro $99 /
@@ -77,20 +81,26 @@ operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
   is created and live; `support.md` + `licensing-public.md` already publish it.
 
 **Still needed — the real gate list (kept in sync with `docs/operator-expected.md`):**
-1. **v0.4.2 release cut** — the published artifact must contain the S105/S106/S107 fixes the
-   docs describe (loop task; the version guard + release pipeline enforce the sweep).
-2. **Submit the listing** to the Ant Media Marketplace (operator account) — paste from
-   [`listing.md`](listing.md).
-3. **Set up billing** for the tiers / campaign / trial in the marketplace's billing system.
-4. **Confirm the category** ("Analytics & Monitoring" is proposed, pending Ant Media
-   confirmation at the developer meeting — assumption A10).
-5. **Capacity number** — run the load lane on a dedicated PAYG AMS → replaces the PROVISIONAL claim
+
+- ~~**v0.4.2 release cut**~~ **DONE (2026-07-26, D-174):** tagged, released, and verified —
+  image Trivy-scanned on both arches before the public tags existed, `0.4.2`/`latest` same-digest
+  and anonymously pullable, cosign-signed, binaries + SHA256SUMS + SDK tarball + Helm chart
+  attached. The published artifact now matches the code and docs.
+- ~~**Confirm the category**~~ **SET:** "Analytics & Monitoring" is stated plainly in
+  `listing.md`. Ant Media may reassign it at review; that is their call to make, not a blocker.
+
+1. **Submit the listing** to the Ant Media Marketplace (operator account) — paste from
+   [`listing.md`](listing.md), never from `listing-draft.md`.
+2. **Set up billing** for the tiers / campaign / trial in the marketplace's billing system.
+3. **Capacity number** — run the load lane on a dedicated PAYG AMS → replaces the PROVISIONAL claim
    now in `docs/compatibility.md`. Same instance: set `server.kafka_brokers` for the AV-15 live
    Kafka validation (drops the EXPERIMENTAL label), and a 2-node cluster closes LIM-10.
-6. **npm publish** — add an `NPM_TOKEN` repo secret so the release workflow publishes
+4. **npm publish** — add an `NPM_TOKEN` repo secret so the release workflow publishes
    `ams-pulse-beacon` (without it the tarball still attaches to the release; nothing fails).
-7. **Demo video** — rough-cut rendered (D-170, `docs/marketplace/demo/pulse-demo-roughcut.webm`)
+5. **Demo video** — rough-cut rendered (D-170, `docs/marketplace/demo/pulse-demo-roughcut.webm`)
    and attached to the GitHub release; operator re-records the final with voiceover.
-8. **Reply to Ankush Banyal** — draft ready (`ankush-reply-draft.md`, D-170); operator fills the
+6. **Reply to Ankush Banyal** — draft ready (`ankush-reply-draft.md`, D-170); operator fills the
    [brackets] and sends.
-9. Optional: **roll prod to v0.4.2** (prod is healthy on v0.4.0-139); **rotate** the exposed secrets.
+7. **Rotate the exposed secrets** — see `docs/operator-expected.md`. The `CLICKHOUSE_PASSWORD`
+   rotation is the one with a public-history exposure and should go first.
+8. Optional: **roll prod to v0.4.2** (prod is healthy on v0.4.0-139).

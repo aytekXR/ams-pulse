@@ -199,6 +199,47 @@ jobs:
             fi
           done
 
+          # 14. Submission-package index header (REVIEW-MP3-R10) — this is the page
+          #     handed to Ant Media; check #3 only reads doc HEADERS in three other
+          #     files, so this one drifted to v0.4.1 unnoticed through a whole release.
+          PKG_STAMP="$(grep -oE '^\*\*Version:\*\* v[0-9]+\.[0-9]+\.[0-9]+' docs/marketplace/submission-package.md \
+            | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
+          if [ "$PKG_STAMP" != "$TAG_STAMP" ]; then
+            echo "FAIL: docs/marketplace/submission-package.md Version header is '${PKG_STAMP:-<missing>}', expected $TAG_STAMP"
+            exit 1
+          fi
+
+          # 15. Beacon SDK install instructions (REVIEW-MP3-R10 companion) — customers
+          #     follow these verbatim. Advertising an older tarball ships them a known-bad
+          #     SDK (0.4.1's Pulse.init() was a silent no-op). Only the install sections
+          #     are scanned; the changelogs further down legitimately name old versions.
+          for doc in docs/beacon-sdk.md sdk/beacon-js/README.md; do
+            if head -120 "$doc" | grep -oE 'ams-pulse-beacon-[0-9]+\.[0-9]+\.[0-9]+\.tgz' \
+               | grep -v "ams-pulse-beacon-${TAG_VERSION}.tgz" | head -1 | grep -q .; then
+              echo "FAIL: $doc install section advertises a tarball other than ams-pulse-beacon-${TAG_VERSION}.tgz"
+              exit 1
+            fi
+          done
+
+          # 16. Helm chart SEMVER bump when chart content changed (REVIEW-MP3-R8).
+          #     'helm push' to an OCI registry OVERWRITES an existing chart version,
+          #     so re-publishing 0.3.0 with different templates silently replaces the
+          #     artifact someone already pulled. Chart.yaml 'version' is the chart's
+          #     own semver and is independent of appVersion (checked at #2).
+          PREV_TAG="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+          if [ -n "$PREV_TAG" ]; then
+            CHART_SEMVER="$(grep -E '^version:' deploy/helm/pulse/Chart.yaml | sed 's/version:[[:space:]]*//; s/"//g')"
+            PREV_CHART_SEMVER="$(git show "${PREV_TAG}:deploy/helm/pulse/Chart.yaml" 2>/dev/null \
+              | grep -E '^version:' | sed 's/version:[[:space:]]*//; s/"//g' || true)"
+            if ! git diff --quiet "${PREV_TAG}" "${GITHUB_REF_NAME}" -- deploy/helm/pulse/ 2>/dev/null; then
+              if [ -n "$PREV_CHART_SEMVER" ] && [ "$CHART_SEMVER" = "$PREV_CHART_SEMVER" ]; then
+                echo "FAIL: deploy/helm/pulse/ changed since ${PREV_TAG} but Chart.yaml version is still ${CHART_SEMVER};"
+                echo "      pushing it would overwrite the published chart ${CHART_SEMVER} with different content."
+                exit 1
+              fi
+            fi
+          fi
+
           echo "Version guard: PASS (VERSION=$FILE_VERSION Chart=$CHART_VERSION sdk=$PKG_VERSION swift_sdk=$SWIFT_VER tag=$GITHUB_REF_NAME)"
 
       # GHCR login is unconditional — dry-run still needs credentials for the
@@ -360,6 +401,48 @@ jobs:
             docker buildx imagetools create -t "$TAG" "ghcr.io/aytekxr/ams-pulse@${DIGEST}"
             echo "promoted: $TAG"
           done <<< "${{ steps.meta.outputs.tags }}"
+
+      # ── Empty the quarantine on a FAILED release (REVIEW-MP3-R7) ──────────────────
+      # if: always() — the whole point is the failure path. Without this, a release
+      # that Trivy blocked left the vulnerable image publicly pullable forever under
+      # candidate-<sha8>; a quarantine that is never emptied is just a second public
+      # tag.
+      #
+      # CRITICAL: a GHCR "package version" is a MANIFEST DIGEST, not a tag, and there
+      # is no delete-a-single-tag API. Promotion re-tags the SAME digest, so on the
+      # success path this version also carries X.Y.Z / X.Y / X / latest — deleting it
+      # would delete the published release along with its SBOM, provenance and cosign
+      # signature. So: delete ONLY when the candidate tag is the sole tag on the
+      # digest, which is exactly the un-promoted (failed) case. On the success path
+      # the extra alias is harmless and is left in place deliberately.
+      - name: Empty quarantine on failure
+        if: always() && github.ref_type == 'tag'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE: candidate-${{ steps.version.outputs.COMMIT }}
+        run: |
+          set +e
+          VERSION_JSON=$(gh api "/user/packages/container/ams-pulse/versions" --paginate \
+            --jq ".[] | select(.metadata.container.tags[]? == \"${CANDIDATE}\")" 2>/dev/null | head -1)
+          if [ -z "$VERSION_JSON" ]; then
+            echo "::notice::quarantine tag ${CANDIDATE} not found — nothing to clean up"
+            exit 0
+          fi
+          VERSION_ID=$(echo "$VERSION_JSON" | jq -r '.id')
+          TAG_COUNT=$(echo "$VERSION_JSON" | jq -r '.metadata.container.tags | length')
+          ALL_TAGS=$(echo "$VERSION_JSON" | jq -r '.metadata.container.tags | join(",")')
+
+          if [ "$TAG_COUNT" != "1" ]; then
+            echo "::notice::digest also carries release tags (${ALL_TAGS}) — promotion succeeded, leaving it untouched (deleting the version would delete the release)"
+            exit 0
+          fi
+
+          if gh api -X DELETE "/user/packages/container/ams-pulse/versions/${VERSION_ID}" >/dev/null 2>&1; then
+            echo "release failed before promotion — deleted un-promoted quarantine image ${CANDIDATE}"
+          else
+            echo "::warning::could not delete un-promoted quarantine image ${CANDIDATE} (version id ${VERSION_ID}); a vulnerable image may be publicly pullable — delete it by hand: GitHub → Packages → ams-pulse → versions"
+          fi
 
       # ── cosign keyless signing (tag push only) ─────────────────────────────────────
       # SKIPPED on workflow_dispatch (dry-run): same if condition as push step.

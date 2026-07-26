@@ -7,7 +7,7 @@
 marketplace readiness),
 `docs/assessment/capability-map.md`
 
-This document lists every known operator-facing limitation of Pulse v0.4.1 in
+This document lists every known operator-facing limitation of Pulse v0.4.2 in
 priority order. Each entry states what the limitation means for you, and what
 workaround or roadmap path exists.
 
@@ -596,6 +596,62 @@ are chosen.
 
 ---
 
+### LIM-27: AMS ingest-error webhooks are recorded but have no dashboard or alert surface yet
+
+**What it means for you:** Pulse accepts the three official AMS error webhooks —
+`endpointFailed`, `publishTimeoutError`, `encoderNotOpenedError` — and stores each
+one as a `stream_ingest_error` row in ClickHouse with its action and stream name.
+Nothing in the UI shows them, no alert rule can trigger on them, and the API has
+no filter for them. They are captured (so no ingest failure is silently lost, and
+the history is queryable), but you must query ClickHouse directly to see them.
+
+**Root cause:** The webhook mapping and persistence landed in v0.4.2 (migration
+`0011`); the read path — aggregator counter, ingest-health panel, alert condition —
+is a separate piece of work that has not shipped.
+
+**Workaround:** Query the rows directly:
+
+```sql
+SELECT ts, node_id, app, stream_id, stream_name, action
+FROM pulse.server_events
+WHERE event_type = 'stream_ingest_error'
+  AND ts > now() - INTERVAL 1 DAY
+ORDER BY ts DESC;
+```
+
+The `action` column carries the AMS webhook action, so you can tell an encoder
+failure from a publish timeout from a failed RTMP re-publish.
+
+**Roadmap:** Surface these in ingest health + an alert condition in a following
+release. Until then, treat the disclosure above as the honest state: the data is
+recorded, not yet presented.
+
+---
+
+### LIM-28: On a cluster, stream-level node filtering does not match the Fleet view's node IDs
+
+**What it means for you:** *Cluster deployments only — standalone is unaffected.*
+Node metrics (the Fleet view) are keyed to the **real** AMS cluster node IDs
+returned by the cluster API. Stream, VoD and publish-end events are keyed to the
+node ID **you configured** in `PULSE_AMS_NODE_ID` (default `standalone`). So if
+you take a node ID shown in the Fleet view and filter streams by it, you get no
+rows — the two surfaces use different identifiers for the same fleet.
+
+**Root cause:** AMS's per-application REST endpoints (`broadcasts/list`, `vods/list`)
+are queried through a single base URL and do not tell Pulse which cluster node is
+serving each stream, so there is no reliable per-stream node identity to stamp.
+Node metrics come from the cluster endpoint, which does supply real IDs.
+
+**Workaround:** On a cluster, filter streams by app and stream name rather than by
+node. Fleet-level node metrics, alerts and rollups are unaffected and correct.
+
+**Roadmap:** The owning node is derivable from the broadcast `originAdress` field;
+threading it through per-app polling is deferred until the cluster path is
+live-validated against a real multi-node cluster (LIM-10), so the change can be
+verified rather than guessed.
+
+---
+
 ## Changelog
 
 | Version | Change |
@@ -607,6 +663,7 @@ are chosen.
 | D-106 (S44, 2026-07-15) | Security hardening (not a new limitation): CSV export/statements now neutralize formula-injection cells (LIM-24 workaround note updated); email/SMTP channel creds encrypted at rest; OIDC state cookie Secure on HTTPS. No count change |
 | D-161 (S97, 2026-07-22) | Marketplace-docs fact sweep: header → v0.4.0; LIM-24 corrected (scheduled PDF reports ARE implemented, Business+; only interactive export is CSV-only); added LIM-25 (user management API-only, no UI tab yet) and LIM-26 (firing alert can outlive a vanished source, pending §2.44 `[FO-1]` ruling); count 24 → 26 |
 | S105 (2026-07-25) | Kafka consumer aligned to official AMS topics (`ams-instance-stats`/`ams-webrtc-stats`, source-derived from AMS `StatsCollector.java`, fixture-tested + broker-integration-tested); LIM-01/LIM-04 topic refs updated; LIM-19 title and body updated to reflect fixed consumer alignment (what remains open is live AMS-producer validation, AV-15); header → v0.4.1 |
+| REVIEW-MP3 R9/R15 (S108, 2026-07-26) | Added LIM-27 (AMS ingest-error webhooks recorded in `stream_ingest_error` but not yet surfaced in UI/alerts/API — includes the ClickHouse query) and LIM-28 (cluster-only: stream-level node filtering uses the configured node ID while the Fleet view uses real AMS cluster IDs); header → v0.4.2; count 26 → 28 |
 
 ---
 

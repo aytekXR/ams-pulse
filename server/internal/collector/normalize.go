@@ -256,14 +256,18 @@ func NormalizeSystemStats(stats map[string]any, nodeID, version string) domain.S
 // cpuUsage, memoryUsage, …) used by test mocks and fixtures.
 func NormalizeClusterNode(n amsclient.ClusterNodeDTO) domain.ServerEvent {
 	nodeID := n.PrimaryID()
-	// cpu_pct / mem_pct come from the real AMS 3.x wire fields and are always
-	// emitted. The remaining fields are alias-only (real AMS 3.x does not send
-	// them — they decode to zero/empty against a real cluster): emit them only
-	// when present, never fabricate zeros — same rule as NormalizeSystemStats
-	// above ("Disk 0%" rendered as a measurement is a lie; REVIEW-MP3 N-cluster c).
-	data := map[string]any{
-		"cpu_pct": n.CPUPct(),
-		"mem_pct": n.MemPct(),
+	// cpu_pct / mem_pct come from the real AMS 3.x wire fields, but even those are
+	// conditional: a non-finite JMX reading ("NaN"/"Inf") with no usable alias is
+	// ABSENT, not zero (REVIEW-MP3-R5). The remaining fields are alias-only (real
+	// AMS 3.x does not send them — they decode to zero/empty against a real
+	// cluster). Never fabricate zeros — same rule as NormalizeSystemStats above
+	// ("Disk 0%" rendered as a measurement is a lie; REVIEW-MP3 N-cluster c).
+	data := map[string]any{}
+	if v, ok := n.CPUPctOK(); ok {
+		data["cpu_pct"] = v
+	}
+	if v, ok := n.MemPctOK(); ok {
+		data["mem_pct"] = v
 	}
 	if n.DiskUsage != 0 {
 		data["disk_pct"] = n.DiskUsage

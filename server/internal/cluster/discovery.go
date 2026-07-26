@@ -22,6 +22,7 @@ package cluster
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -160,11 +161,26 @@ func (d *Discovery) poll(ctx context.Context) {
 			role = "origin" // default — AMS does not expose role on cluster/nodes endpoint
 		}
 
-		cpuPct := n.CPUPct()
-		memPct := n.MemPct()
+		cpuPct, cpuOK := n.CPUPctOK()
+		memPct, memOK := n.MemPctOK()
 		status := "ok"
-		if cpuPct > 90 || memPct > 90 {
+		// An absent reading is not a low reading — never let a missing metric
+		// count as evidence of health, nor a fabricated 0 suppress a degrade.
+		if (cpuOK && cpuPct > 90) || (memOK && memPct > 90) {
 			status = "degraded"
+		}
+		// AMS's OWN liveness signals override the load heuristic (REVIEW-MP3-R6).
+		// AMS keeps a dead cluster member listed with a frozen lastUpdateTime rather
+		// than dropping it from the response, so the vanish-based staleness sweep
+		// below never fires for it: without this, a dead node reports its last-known
+		// stats as "ok" forever and IsEdgeStream's origin-viewer suppression stays
+		// stuck on an edge that is gone. Both fields are real AMS 3.x wire fields;
+		// the alias mock profiles omit them, so each check is gated on presence.
+		switch {
+		case n.Status != "" && !strings.EqualFold(n.Status, "running"):
+			status = "down"
+		case n.LastUpdateTime > 0 && now.Sub(time.UnixMilli(n.LastUpdateTime)) > d.cfg.StaleTimeout:
+			status = "down"
 		}
 
 		info, exists := d.nodes[nodeID]
@@ -176,6 +192,17 @@ func (d *Discovery) poll(ctx context.Context) {
 				"ip", n.IP,
 				"role", role,
 				"status", status,
+			)
+		}
+
+		// Surface the listed-but-dead transition once, at the same level the
+		// vanish-based sweep uses — otherwise a node going down while AMS still
+		// lists it changes the fleet silently (REVIEW-MP3-R6).
+		if exists && info.Status != "down" && status == "down" {
+			d.logger.Warn("cluster: node down (AMS liveness)",
+				"node_id", nodeID,
+				"ams_status", n.Status,
+				"last_update_time", n.LastUpdateTime,
 			)
 		}
 
@@ -191,22 +218,46 @@ func (d *Discovery) poll(ctx context.Context) {
 		info.ActiveStreams = n.ActiveStreamCount
 
 		// Collect the node_stats event; emit after releasing d.mu (see above).
+		//
+		// Emission is CONDITIONAL, mirroring collector.NormalizeClusterNode exactly
+		// (REVIEW-MP3-R2). cpu_pct/mem_pct come from real AMS 3.x wire fields and are
+		// always present; disk/net/jvm/version are alias-only fields that real AMS
+		// never sends, so they decode to zero and emitting them unconditionally
+		// fabricates measurements. That mattered more after N2 gave both emitters the
+		// SAME key (PrimaryID): discovery's zeros overwrote the poller's clean event
+		// every 30 s, flapping the aggregator's *Reported presence flags, rendering
+		// "Disk 0%" in the Fleet card as if measured, and feeding zeros into the
+		// Welford anomaly baselines the D-088 flags exist to protect.
 		if d.sink != nil {
+			data := map[string]any{}
+			if cpuOK {
+				data["cpu_pct"] = cpuPct
+			}
+			if memOK {
+				data["mem_pct"] = memPct
+			}
+			if n.DiskUsage != 0 {
+				data["disk_pct"] = n.DiskUsage
+			}
+			if n.NetworkInputBps != 0 {
+				data["net_in_mbps"] = n.NetworkInputBps / 1_000_000
+			}
+			if n.NetworkOutputBps != 0 {
+				data["net_out_mbps"] = n.NetworkOutputBps / 1_000_000
+			}
+			if n.JvmMemoryUsage != 0 {
+				data["jvm_heap_used_mb"] = n.JvmMemoryUsage
+			}
+			if n.Version != "" {
+				data["version"] = n.Version // VD-40
+			}
 			pending = append(pending, domain.ServerEvent{
 				Version: 1,
 				Type:    domain.EventNodeStats,
 				TS:      now.UnixMilli(),
 				Source:  domain.SourceRestPoll,
 				NodeID:  nodeID,
-				Data: map[string]any{
-					"cpu_pct":          cpuPct,
-					"mem_pct":          memPct,
-					"disk_pct":         n.DiskUsage,
-					"net_in_mbps":      n.NetworkInputBps / 1_000_000,
-					"net_out_mbps":     n.NetworkOutputBps / 1_000_000,
-					"jvm_heap_used_mb": n.JvmMemoryUsage,
-					"version":          n.Version, // VD-40
-				},
+				Data:    data,
 			})
 		}
 	}

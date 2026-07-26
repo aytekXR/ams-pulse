@@ -36,7 +36,10 @@ export function renderPieLabel({
 }: PieLabelRenderProps) {
   if (percent < 0.05) return null;
   const RADIAN = Math.PI / 180;
-  const radius = outerRadius + 15;
+  // Small offset: this donut lives in a narrow dashboard column, and a larger
+  // gap pushed the left/right labels past the card edge (they were clipped
+  // mid-word in the marketplace screenshot).
+  const radius = outerRadius + 10;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
   return (
@@ -68,16 +71,23 @@ export function ProtocolDonut({ data }: Props) {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={180}>
+    // height 180 gave the donut (144 px across) plus its outside labels (which sit
+    // at outerRadius + 15) essentially the whole box, so the lower labels landed on
+    // top of the Legend and rendered as overlapping text — visible in the primary
+    // marketplace screenshot. 220 gives the legend its own band. The radii shrink
+    // slightly so the labels also stay inside this card's narrow column; the labels
+    // must keep the protocol NAME (not just the percentage) because encoding the
+    // series by colour alone would break WCAG 1.4.1 (P-1).
+    <ResponsiveContainer width="100%" height={220}>
       {/* accessibilityLayer is already true by default in Recharts v3 PolarChart;
           stated explicitly here so the intent is visible (P-2). */}
       <PieChart accessibilityLayer>
         <Pie
           data={entries}
           cx="50%"
-          cy="50%"
-          innerRadius={50}
-          outerRadius={72}
+          cy="45%"
+          innerRadius={38}
+          outerRadius={54}
           paddingAngle={2}
           dataKey="value"
           isAnimationActive={false}

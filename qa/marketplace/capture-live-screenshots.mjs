@@ -144,24 +144,37 @@ const OVERVIEW_POPULATED = {
     { node_id: "edge-us-1", role: "edge",   status: "up", cpu_pct: 22, mem_pct: 44, net_out_mbps: 188 },
     { node_id: "edge-eu-1", role: "edge",   status: "up", cpu_pct: 19, mem_pct: 38, net_out_mbps: 141 },
   ],
-  protocol_mix: { webrtc: 5, hls: 4, rtmp: 2, dash: 1, other: 0 },
+  // ProtocolMix is VIEWER counts per protocol, not stream counts — the values
+  // must sum to total_viewers (847) or the donut contradicts the headline card.
+  protocol_mix: { webrtc: 356, hls: 280, rtmp: 145, dash: 66, other: 0 },
+  // AppOverview requires `viewers` and `publishers` (schema.d.ts). The old keys
+  // (stream_count / viewer_count) matched nothing, so the BY APPLICATION panel
+  // rendered 0/0 for every app in the flagship listing screenshot — the same
+  // class of defect as the STATE/HEALTH columns below. Viewers sum to 847.
   apps: [
-    { app: "live",     stream_count: 5, viewer_count: 612 },
-    { app: "webrtc",   stream_count: 2, viewer_count: 180 },
-    { app: "vod",      stream_count: 1, viewer_count:  55 },
+    { app: "live",     viewers: 612, publishers: 5 },
+    { app: "webrtc",   viewers: 180, publishers: 2 },
+    { app: "vod",      viewers:  55, publishers: 5 },
   ],
 };
 
+// publisher_state and health_score are REQUIRED by the live-streams schema
+// (web/src/lib/api/schema.d.ts) and are what StreamsTable renders in the STATE and
+// HEALTH columns. Omitting them made every row in the flagship listing screenshot
+// read "UNKNOWN / UNKNOWN" — a monitoring product whose own dashboard showed
+// nothing monitored. publisher_state is a closed enum: "publishing" | "idle" |
+// "offline". Values below are deliberately varied (one idle, one mid-band health)
+// so the screenshot shows the badge palette rather than a uniform green wall.
 const STREAMS_POPULATED = {
   items: [
-    { stream_id: "live/main-broadcast",  app: "live",   node_id: "origin-1", viewers: 312, bitrate_kbps: 4800, fps: 30, uptime_s: 7200, publisher_ip: "203.0.113.10" },
-    { stream_id: "live/gaming-channel",  app: "live",   node_id: "origin-1", viewers: 189, bitrate_kbps: 6000, fps: 60, uptime_s: 3600, publisher_ip: "203.0.113.11" },
-    { stream_id: "live/sports-coverage", app: "live",   node_id: "edge-us-1", viewers: 111, bitrate_kbps: 3200, fps: 30, uptime_s: 1800, publisher_ip: "203.0.113.12" },
-    { stream_id: "live/news-live",       app: "live",   node_id: "origin-1", viewers:  88, bitrate_kbps: 2500, fps: 25, uptime_s: 5400, publisher_ip: "203.0.113.13" },
-    { stream_id: "live/concert-stream",  app: "live",   node_id: "edge-eu-1", viewers:  72, bitrate_kbps: 5600, fps: 30, uptime_s: 2700, publisher_ip: "203.0.113.14" },
-    { stream_id: "webrtc/conf-a",        app: "webrtc", node_id: "origin-1", viewers:  44, bitrate_kbps: 1800, fps: 30, uptime_s:  900, publisher_ip: "203.0.113.15" },
-    { stream_id: "webrtc/conf-b",        app: "webrtc", node_id: "origin-1", viewers:  18, bitrate_kbps: 1200, fps: 24, uptime_s:  600, publisher_ip: "203.0.113.16" },
-    { stream_id: "vod/replay-1",         app: "vod",    node_id: "edge-us-1", viewers:  13, bitrate_kbps: 3800, fps: 30, uptime_s: 9000, publisher_ip: "203.0.113.17" },
+    { stream_id: "live/main-broadcast",  app: "live",   node_id: "origin-1", viewers: 312, bitrate_kbps: 4800, fps: 30, uptime_s: 7200, publisher_ip: "203.0.113.10", publisher_state: "publishing", health_score: 96 },
+    { stream_id: "live/gaming-channel",  app: "live",   node_id: "origin-1", viewers: 189, bitrate_kbps: 6000, fps: 60, uptime_s: 3600, publisher_ip: "203.0.113.11", publisher_state: "publishing", health_score: 92 },
+    { stream_id: "live/sports-coverage", app: "live",   node_id: "edge-us-1", viewers: 111, bitrate_kbps: 3200, fps: 30, uptime_s: 1800, publisher_ip: "203.0.113.12", publisher_state: "publishing", health_score: 88 },
+    { stream_id: "live/news-live",       app: "live",   node_id: "origin-1", viewers:  88, bitrate_kbps: 2500, fps: 25, uptime_s: 5400, publisher_ip: "203.0.113.13", publisher_state: "publishing", health_score: 71 },
+    { stream_id: "live/concert-stream",  app: "live",   node_id: "edge-eu-1", viewers:  72, bitrate_kbps: 5600, fps: 30, uptime_s: 2700, publisher_ip: "203.0.113.14", publisher_state: "publishing", health_score: 94 },
+    { stream_id: "webrtc/conf-a",        app: "webrtc", node_id: "origin-1", viewers:  44, bitrate_kbps: 1800, fps: 30, uptime_s:  900, publisher_ip: "203.0.113.15", publisher_state: "publishing", health_score: 90 },
+    { stream_id: "webrtc/conf-b",        app: "webrtc", node_id: "origin-1", viewers:  18, bitrate_kbps: 1200, fps: 24, uptime_s:  600, publisher_ip: "203.0.113.16", publisher_state: "publishing", health_score: 83 },
+    { stream_id: "vod/replay-1",         app: "vod",    node_id: "edge-us-1", viewers:  13, bitrate_kbps: 3800, fps: 30, uptime_s: 9000, publisher_ip: "203.0.113.17", publisher_state: "idle",       health_score: 79 },
   ],
   meta: { total: 8, has_more: false, next_cursor: null },
 };
@@ -223,11 +236,30 @@ const ALERT_CHANNELS = {
     { id: "ch2", name: "PagerDuty",    type: "webhook", config: { url: "https://pd.example.com/x" },          enabled: true },
   ],
 };
+// Must match AlertHistoryEntry (schema.d.ts): state / ts / metric / value /
+// threshold are what the History table renders. The previous shape invented
+// rule_name / fired_at / resolved_at / node_id, so every STATE, TIME and VALUE
+// cell rendered as an em dash — an incident history showing no incident detail.
+// One firing + one resolved entry so both badge states appear.
 const ALERT_HISTORY = {
   items: [
-    { id: "h1", rule_id: "r1", rule_name: "CPU Critical",    severity: "critical", fired_at: NOW - 1800_000, resolved_at: NOW - 1200_000, node_id: "origin-1" },
-    { id: "h2", rule_id: "r3", rule_name: "Packet Loss Spike", severity: "warning", fired_at: NOW -  900_000, resolved_at: null,           node_id: "edge-us-1" },
+    {
+      id: "h2", rule_id: "packet-loss-spike", state: "firing", severity: "warning",
+      ts: NOW - 900_000, metric: "packet_loss_pct", value: 4.8, threshold: 2.0,
+      scope: { app: "live", stream_id: "live/news-live", node_id: "edge-us-1" },
+    },
+    {
+      id: "h1", rule_id: "cpu-critical", state: "resolved", severity: "critical",
+      ts: NOW - 1800_000, metric: "cpu_pct", value: 91.4, threshold: 90.0,
+      scope: { node_id: "origin-1" },
+    },
+    {
+      id: "h3", rule_id: "stream-offline", state: "resolved", severity: "critical",
+      ts: NOW - 5400_000, metric: "publisher_state", value: 0, threshold: 1,
+      scope: { app: "live", stream_id: "live/sports-coverage" },
+    },
   ],
+  meta: { total: 3, has_more: false, next_cursor: null },
 };
 
 // Analytics — audience tab with line charts + totals
@@ -489,6 +521,19 @@ async function main() {
       await page.route("**/api/v1/alerts/channels**",(r) => r.fulfill(json(ALERT_CHANNELS)));
       await page.route("**/api/v1/alerts/history**", (r) => r.fulfill(json(ALERT_HISTORY)));
       await page.goto(`${BASE_URL}/alerts`);
+      // The page opens on the Rules tab, so the shot used to show ONLY rules —
+      // while both the listing caption and screenshot-list.md promise incident
+      // history with a firing badge. Switch to History, which is where the
+      // still-firing entry (resolved_at: null) renders. The shared Tabs component
+      // emits id="tab-{id}" on each button.
+      await page.waitForSelector("#tab-history", { timeout: 8_000 }).catch(() => {});
+      const historyTab = page.locator("#tab-history").first();
+      if (await historyTab.count() > 0) {
+        await historyTab.click();
+        await page.waitForLoadState("networkidle").catch(() => {});
+      } else {
+        log("WARN: #tab-history not found — ss3 will show the Rules tab; check the caption still matches");
+      }
       await shot(page, join(OUT_DIR, "ss3-alerting.png"), {
         waitFor: '[role="tabpanel"]',
       });

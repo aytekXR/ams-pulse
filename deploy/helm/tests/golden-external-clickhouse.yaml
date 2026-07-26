@@ -6,7 +6,7 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.0
+    helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.2"
@@ -21,7 +21,7 @@ metadata:
   name: pulse-data
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.0
+    helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.2"
@@ -43,7 +43,7 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.0
+    helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.2"
@@ -73,7 +73,7 @@ metadata:
   name: pulse-ingest
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.0
+    helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.2"
@@ -102,7 +102,7 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.0
+    helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
     app.kubernetes.io/version: "0.4.2"

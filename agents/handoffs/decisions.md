@@ -9785,3 +9785,76 @@ Everything else that was "operator-owned" is now decided. No code changed; no pr
 **Gates:** server gofmt/vet clean + FULL `-race` suite green (golang:1.25 container); qa/mock-ams + qa/licensegen green; beacon-js build + dist-version grep + size + lint + tests; web tsc + suite; shellcheck; contracts (ajv + redocly). PR → 13 required checks → squash-merge → **v0.4.2 tag pushed on the merge commit** (this session completes the standing S105→S107 release goal; release.yml runs the new quarantine-promote flow).
 
 **operator-expected.md:** rewritten per directive — open items only; the superseded S93–S106 header stack (≈3 000 lines) dropped (history lives in git + sessions/).
+
+---
+
+## D-175 — §S108: third-party review round 3 (R1–R15) verified & executed; artifact audit found 5 more
+
+**Input:** operator supplied a consolidated third-party review whose Round-3 pass raised
+R1–R15 against the v0.4.2 tree, with "Add this to your fixes."
+
+**Verify-first result.** Every finding was re-checked against the tree before any edit:
+**14 CONFIRMED**, **1 already dispositioned** (R13, the VPS-IP scrub — D-174 deliberately keeps
+functional occurrences; rotation stays the operator's item), and **one premise of the review is
+stale**: it asserts "tag not yet pushed — GitHub Latest is still v0.4.1" and makes pushing the
+tag its P0. v0.4.2 was in fact released 2026-07-26 17:44 UTC (verified directly: `0.4.2` and
+`latest` same-digest and anonymously pullable, chart OCI package anonymously pullable). So R1/R2
+could not "land before tagging" — v0.4.2 shipped with them, and they land in the next release.
+
+One of my own intermediate judgements was wrong and is recorded as such: I initially refuted
+R4's numeric-mismatch sub-claim, then re-checked and confirmed it — the chart wired
+`max_server_memory_usage` to the per-query value (512 MB) against the XML's 768 MB.
+
+**Shipped — code (all with regression tests):**
+- **R1:** failure-streak events fan out over the real node IDs from the last successful cluster
+  poll; standalone keeps `cfg.NodeID`; the remembered set is cleared when the cluster goes away.
+  The pre-existing streak tests could not catch this — they use one identity for both sides.
+- **R2:** `discovery.go` node_stats emission made conditional, mirroring `NormalizeClusterNode`.
+  An anti-drift test asserts the two emitters agree key-for-key, since they now share a key.
+- **R5:** `CPUPctOK`/`MemPctOK` return a presence flag; a non-finite reading with no usable
+  alias is ABSENT, not a fabricated 0.
+- **R6:** AMS `status` / `lastUpdateTime` mark a node down, overriding the load heuristic;
+  includes the consequence pin (a dead edge stops suppressing origin viewer counts).
+- **R15:** documented (LIM-28) + code comments; the real fix needs the owning node threaded
+  through per-app polling and waits for a live cluster (LIM-10) rather than being guessed.
+
+**Shipped — pipeline:** R7 quarantine cleanup (**only when the candidate tag is the digest's
+sole tag** — a GHCR "version" is a digest and promotion re-tags it, so unconditional deletion
+would have deleted the published release + SBOM + signature); R8 chart → 0.3.1 + guard check
+#16; R14 compose-boot builds locally instead of deferring; guard 13 → 16 checks.
+
+**Shipped — docs/assets:** R3 all 32 line citations de-numbered (one pointed at the wrong file)
++ env table re-scoped; R4 configmap scoping + 5 goldens regenerated + `helm-golden-update` now
+covers all 5 (it covered 3, which is how two goldens became "awaiting regeneration" debt);
+R9 LIM-27; R10 three stamps + guard #14/#15; R11/R12 installer.
+
+**Found independently by a parallel verify-first audit of the published artifact — not in the
+review:**
+1. **Production `CLICKHOUSE_PASSWORD` prefix in public git history** (`migrate_test.go`, since
+   `98b011c`) — 32 of 48 hex chars, in the very test written to prevent credential leaks.
+   Source fixed; **rotation is now operator item #1**. Not remotely exploitable (ClickHouse is
+   Docker-internal), but public.
+2. **`ss1-dashboard.png` showed a broken product** — all 8 streams UNKNOWN state/health, and
+   0 viewers / 0 publishers in BY APPLICATION, because the capture mocks used field names the
+   schema does not define. This is the primary marketplace image.
+3. **`ss3-alerting.png`** showed only the Rules tab against a caption promising incident
+   history; its history mock also used non-schema fields, so every cell was an em dash.
+4. **SDK install docs advertised the 0.4.1 tarball** — the build with the silent-no-op
+   `Pulse.init()`.
+5. **The documented README evaluator command published no port** — `expose:`-only base file +
+   `-f` suppressing the auto-override. Added `docker-compose.evaluator.yml`; CI now boots the
+   documented command and asserts the UI over the published host port.
+
+Also corrected: `licensing-public.md` gated analytics CSV export at Business+ when the code
+gates it at Pro+ (`CheckDataAPI`); the internal "*Proposed pending Ant Media confirmation*" note
+was still sitting in the paste-verbatim listing copy. The audit's claim of a licensor-name
+mismatch was **refuted** — `LICENSE` and `licensing-public.md` carry the identical string.
+
+**Gates:** server build + gofmt + vet + FULL `-race` suite green (golang:1.25 container) ·
+web tsc clean, 681/682 (the one failure is `SettingsPage` ARIA wiring, which passes in
+isolation — parallel-run test pollution, pre-existing, now tracked) · SDK build + 3.52 KB +
+70/70 · contracts ajv + 3 fixtures · shellcheck clean · actionlint clean · helm lint + 5
+goldens regenerated. Prod untouched.
+
+**Deliberately NOT done:** no prod roll; no new tag (these fixes ride the next release); no
+outbound/marketplace action; R13 left as D-174 decided.

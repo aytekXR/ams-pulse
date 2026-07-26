@@ -115,6 +115,10 @@ helm-template: ## Render Helm templates with default values (no cluster required
 	helm template pulse deploy/helm/pulse/
 
 helm-golden-update: ## Update golden template files (run after chart changes)
+	# Must cover EVERY golden CI diffs (currently 5). This target rendered only
+	# three of them, so two goldens could only be refreshed by hand — which is how
+	# they drifted into "awaiting regeneration" debt. Keep this list in sync with
+	# the golden-file diff step in .github/workflows/ci.yml.
 	helm template pulse deploy/helm/pulse/ \
 	  > deploy/helm/tests/golden-default.yaml
 	helm template pulse deploy/helm/pulse/ \
@@ -123,7 +127,13 @@ helm-golden-update: ## Update golden template files (run after chart changes)
 	helm template pulse deploy/helm/pulse/ \
 	  -f deploy/helm/tests/values-external-clickhouse.yaml \
 	  > deploy/helm/tests/golden-external-clickhouse.yaml
-	@echo "Golden files updated."
+	helm template pulse deploy/helm/pulse/ \
+	  -f deploy/helm/tests/values-ch-persistence-off.yaml \
+	  > deploy/helm/tests/golden-ch-persistence-off.yaml
+	helm template pulse deploy/helm/pulse/ \
+	  -f deploy/helm/tests/values-existing-secret.yaml \
+	  > deploy/helm/tests/golden-existing-secret.yaml
+	@echo "Golden files updated (5)."
 
 # ---------------------------------------------------------------------------
 # Local developer path (wraps qa/ scripts)

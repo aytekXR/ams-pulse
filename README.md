@@ -28,8 +28,13 @@ cp deploy/.env.example deploy/.env
 # edit deploy/.env:
 #   PULSE_SECRET_KEY — generate with: openssl rand -hex 32
 #   PULSE_AMS_URL    — set to your AMS REST base URL, e.g. http://10.0.1.10:5080
-docker compose -f deploy/docker-compose.yml up -d
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.evaluator.yml up -d
 ```
+
+The `evaluator` overlay publishes the UI on **http://localhost:8090** (loopback
+only). Without it the base file is `expose:`-only — correct for the production
+path, where a TLS-terminating reverse proxy sits in front, but it leaves the UI
+unreachable from the host. Set `PULSE_HOST_PORT` if 8090 is already taken.
 
 This pulls `ghcr.io/aytekxr/ams-pulse:0.4.2` — cosign-signed, SBOM-attached, no
 authentication required (`ghcr.io/aytekxr/ams-pulse` is public).
@@ -51,10 +56,17 @@ docker compose \
   up -d --build
 ```
 
-> After the stack starts the UI is at **http://localhost:8090** when using
-> `make up` / `cd deploy && docker compose up -d` (the `docker-compose.override.yml`
-> publishes port 80 on all interfaces). With explicit `-f` flags, port 8090 is
-> `expose:`d only inside the Docker network — bind it or front with a reverse proxy.
+> **Port publishing, in one place.** `deploy/docker-compose.yml` only `expose:`s
+> 8090 (container network), and passing explicit `-f` flags also suppresses the
+> automatic `docker-compose.override.yml`. So:
+> - `-f deploy/docker-compose.yml -f deploy/docker-compose.evaluator.yml` → UI on
+>   **http://localhost:8090**, loopback only. Use this to evaluate.
+> - `make up` / `cd deploy && docker compose up -d` → picks up
+>   `docker-compose.override.yml`, which publishes port **80 on all interfaces
+>   without TLS**. Demo/dev only.
+> - `-f deploy/docker-compose.yml` alone → nothing published; front it with a
+>   reverse proxy yourself. This is the production shape.
+>
 > The stack terminates no TLS itself.
 
 > Full walkthrough (incl. AMS wiring, TLS/edge exposure, backups):

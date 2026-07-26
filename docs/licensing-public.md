@@ -98,8 +98,8 @@ Prices are set for launch (operator-delegated, D-169) — subject to operator ov
 | Feature | Minimum tier |
 |---------|-------------|
 | Player QoE beacon SDK events | Pro+ |
-| CSV data export | Business+ |
-| Usage and billing reports (viewer-minutes, egress, VoD storage) | Business+ |
+| Analytics CSV export (audience / geo / device, `?format=csv`) | Pro+ |
+| Usage and billing reports (viewer-minutes, egress, VoD storage) + their CSV/PDF export | Business+ |
 | Multi-tenant billing | Business+ |
 | Prometheus `/metrics` endpoint | Business+ |
 | Anomaly detection (Welford baselines) | Enterprise |

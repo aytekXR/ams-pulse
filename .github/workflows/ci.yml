@@ -502,35 +502,76 @@ jobs:
       # Release-cut window: the cut commit repoints the image pin to the NEW
       # version before the tag exists, so the pinned tag is unpublishable-yet by
       # construction — pulling it can only fail until release.yml pushes it.
-      # Defer (exit 0, loud notice) ONLY when the missing pin exactly equals the
-      # VERSION file — the same equality the release version guard enforces at
-      # tag time.  Any other missing pin (typo, deleted tag) still fails hard.
-      - name: Check pinned image is published (defer during release-cut window)
+      #
+      # REVIEW-MP3-R14: deferring by SKIPPING was the wrong remedy. The release
+      # gate requires a green `ci` run for the very SHA being tagged, and on that
+      # SHA the pin always equals VERSION — so the README evaluator path was never
+      # booted against any state that actually got released, and after a failed
+      # release every later main run kept deferring too. Now the deferral path
+      # BUILDS the image locally and boots the same compose file against it: the
+      # boot is still exercised, only the registry round-trip is skipped.
+      # Any missing pin that does NOT equal VERSION (typo, deleted tag) still
+      # fails hard.
+      - name: Check pinned image is published (build locally during release-cut window)
         id: pin
         run: |
           PIN=$(grep -oEm1 'ams-pulse:[0-9]+\.[0-9]+\.[0-9]+' deploy/docker-compose.yml | cut -d: -f2)
+          echo "pin=${PIN}" >> "$GITHUB_OUTPUT"
           if docker manifest inspect "ghcr.io/aytekxr/ams-pulse:${PIN}" >/dev/null 2>&1; then
-            echo "published=true" >> "$GITHUB_OUTPUT"
-            echo "pinned tag ${PIN} is published — running boot test"
+            echo "mode=published" >> "$GITHUB_OUTPUT"
+            echo "pinned tag ${PIN} is published — booting the published image"
           elif [ "$PIN" = "$(cat VERSION)" ]; then
-            echo "published=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::pinned tag ${PIN} == VERSION and not yet on GHCR (release-cut window) — boot test deferred until the release publishes"
+            echo "mode=local" >> "$GITHUB_OUTPUT"
+            echo "::notice::pinned tag ${PIN} == VERSION and not yet on GHCR (release-cut window) — building it locally so the boot test still runs"
           else
             echo "FAIL: pinned tag ${PIN} is not on GHCR and != VERSION ($(cat VERSION)) — broken image pin"
             exit 1
           fi
 
-      - name: Boot base compose stack (README evaluator path)
-        if: steps.pin.outputs.published == 'true'
+      # Build the pinned tag locally so `docker compose up` resolves it from the
+      # local daemon instead of the registry. Same tag string the compose file
+      # pins, so the compose file under test is byte-identical to the shipped one.
+      - name: Build pinned image locally (release-cut window)
+        if: steps.pin.outputs.mode == 'local'
+        run: |
+          docker build \
+            -f deploy/docker/pulse.Dockerfile \
+            -t "ghcr.io/aytekxr/ams-pulse:${{ steps.pin.outputs.pin }}" \
+            --build-arg VERSION="${{ steps.pin.outputs.pin }}" \
+            --build-arg COMMIT="$(git rev-parse --short HEAD)" \
+            --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            .
+
+      # Boots the EXACT command README documents, including the evaluator overlay.
+      # Booting the base file alone (as this job used to) proved the containers
+      # start but not that an evaluator can reach the UI — the base file is
+      # expose:-only and explicit -f flags suppress docker-compose.override.yml,
+      # so the documented command produced a healthy stack with an unreachable UI.
+      - name: Boot compose stack (README evaluator path)
         env:
           PULSE_SECRET_KEY: ci-boot-smoke-key-0123456789abcdef01234567
         run: |
-          docker compose -f deploy/docker-compose.yml up -d --wait --wait-timeout 120
+          docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.evaluator.yml \
+            up -d --wait --wait-timeout 120
+
+      # Reaches the UI the way an evaluator does — over the PUBLISHED host port,
+      # not via `docker compose exec` into the container network.
+      - name: Assert the UI is reachable on the published host port
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:8090/healthz >/dev/null 2>&1; then
+              echo "PASS: /healthz reachable on the published host port"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "FAIL: http://localhost:8090/healthz unreachable from the host — the documented evaluator command does not publish the UI"
+          docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.evaluator.yml ps
+          exit 1
 
       - name: Assert /healthz — HTTP 200 and component-scoped status
-        if: steps.pin.outputs.published == 'true'
         run: |
-          BODY=$(docker compose -f deploy/docker-compose.yml exec -T pulse \
+          BODY=$(docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.evaluator.yml exec -T pulse \
             wget -qO- http://localhost:8090/healthz)
           echo "healthz response: $BODY"
           echo "$BODY" | python3 -c "
@@ -551,8 +592,8 @@ jobs:
           "
 
       - name: Tear down compose stack
-        if: always() && steps.pin.outputs.published == 'true'
-        run: docker compose -f deploy/docker-compose.yml down -v
+        if: always()
+        run: docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.evaluator.yml down -v
 
   slack-notify:
     name: Slack notification
