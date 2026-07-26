@@ -26,9 +26,19 @@
 | SS6 | `ss6-probes.png` | **AUTOMATED (live app)** | `capture-live-screenshots.mjs` (was operator-manual) |
 
 **Primary script:** `qa/marketplace/capture-live-screenshots.mjs` — real React UI at
-1920×1080 (dark theme), populated via the same route-mock data shapes the e2e suite
-uses; verified populated on 2026-07-22 (viewer counts, charts, badges all non-empty).
-Also produces the user-guide set (below).
+1920×1080 (dark theme), populated via route-mock data. Also produces the user-guide
+set (below).
+
+> **⚠ Verify the output by eye, every time — the capture cannot fail loudly.**
+> Route mocks are plain objects with no schema validation, and React renders a missing
+> field as `UNKNOWN` / `—` / `0` rather than throwing. In S108 this shipped a flagship
+> `ss1-dashboard.png` in which **all 8 streams read UNKNOWN state and health** and the
+> BY APPLICATION panel read **0 viewers / 0 publishers** — a monitoring product whose own
+> dashboard displayed nothing monitored — because three separate mocks used field names
+> `web/src/lib/api/schema.d.ts` does not define (`state` vs `publisher_state`,
+> `viewer_count` vs `viewers`, `fired_at` vs `ts`). The script exited successfully every
+> time. **After any capture: open each PNG and read every panel, not just the one you
+> changed, and diff mock keys against the schema before trusting a "successful" run.**
 **Fallback script:** `qa/marketplace/render-screenshots.mjs` (brandkit hi-fi mocks, SS1/SS2/SS4 only).
 **Rerun command:** `node qa/marketplace/capture-live-screenshots.mjs` (from repo root)  
 **Output directory:** `docs/marketplace/screenshots/` — six listing PNGs and the user-guide
@@ -158,15 +168,18 @@ Options:
 **Caption:** "Alerting on any metric — stream offline, bitrate floor, viewer drop.
 Delivers to Slack, email, Telegram, PagerDuty, or webhook in under 201 ms."
 
-**Screen to capture:** The alert rules list with at least one active rule (e.g.,
-"stream offline" or "ingest bitrate floor"), plus the incident history panel showing
-a recent alert event. The Slack/email channel configuration UI would be a bonus
-if visible.
+**Screen to capture:** The Alerts **History** tab, showing real incident events —
+at least one still firing and one resolved.
+
+> The Alerts screen is tabbed (Rules · Channels · History), so rules and history
+> **cannot** appear in the same shot; this spec previously asked for both, which is
+> why the capture drifted. History is the stronger listing asset: it shows the
+> product *catching* something, whereas the Rules tab only shows it configured.
 
 **Key elements to show:**
-- Alert rule card with threshold and channel assignment
-- Alert history list with timestamp, stream ID, and status (fired / resolved)
-- Maintenance window indicator (if visible in the screen)
+- Alert history rows with severity, state badge (firing / resolved), timestamp and
+  the metric value that crossed the threshold
+- At least one row in the `firing` state so the live badge colour is visible
 
 **Evidence basis:** F5 PARTIALLY; TC-H-04/05 (S18); N13 (201 ms detection CI).
 
