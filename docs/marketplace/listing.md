@@ -80,7 +80,7 @@ percent accuracy (confirmed in CI against 10,000 synthetic events); egress figur
 directional estimate derived from AMS REST counters and should be cross-checked with CDN logs
 for billing-grade invoicing.
 
-Pulse ships all ten analytics features in v0.4.1, validated against a live AMS 3.0.3 Enterprise
+Pulse ships all ten analytics features in v0.4.2, validated against a live AMS 3.0.3 Enterprise
 deployment. Install takes under 15 minutes from a Docker Compose quickstart. A 14-day Pro trial
 (no credit card) is available on request; the deployment gracefully reverts to the Free tier on
 expiry with no data loss.

@@ -1,6 +1,6 @@
 {
   "name": "ams-pulse-beacon",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Pulse QoE beacon for Ant Media Server players — startup time, rebuffering, errors, bitrate. Self-hosted; your viewer data never leaves your infrastructure.",
   "license": "MIT",
   "repository": {

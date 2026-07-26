@@ -10,6 +10,12 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+---
+
+## [0.4.2] - 2026-07-26
+
 ### Fixed
 
 - **Cluster fleet discovery works against real AMS 3.x clusters (D-173, REVIEW-MP2-2026-07-25
