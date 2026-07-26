@@ -11,7 +11,47 @@
 
 ---
 
-## ▶ START HERE (next session — S106/D-173 done: the SECOND external marketplace review (REVIEW-MP2) was adversarially verified and executed; G-21 SETTLED, cluster discovery rebuilt against the real AMS wire. Confirm the S106 PR merged + CI green, then CUT v0.4.2 — read SESSION-106.md §SESSION-107 for the changed cut sequencing BEFORE tagging.)
+## ▶ START HERE (next session — S107/D-174 done: REVIEW-MP3 executed AND **v0.4.2 RELEASED & VERIFIED**. The engineering gate list is EMPTY except tracked P2 debt; the marketplace submission is operator-gated. Next session = post-release housekeeping + P2 debt in low-frequency wait mode.)
+
+> **✅ Where we are (2026-07-26 late, D-174):** the operator supplied the reviewer's second
+> pass (REVIEW-MP3, N1–N9 — recorded: `docs/assessment/marketplace-compliance-review-2026-07-26.md`)
+> + "update operator-expected to open items only". S107 verified every claim first (4 sub-claims
+> refuted; rest confirmed), fixed all confirmed findings (headlines: cluster-path hardening —
+> probe owns the mode cache, real node IDs, no fabricated metrics; hardened overlay boots again
+> + merged-config CI assert; `stream_ingest_error` persisted via migration 0011; installer
+> shell-injection fixed; **Trivy now gates BEFORE the public tags exist** via candidate-tag
+> promote; `__SDK_VERSION__` runtime fallback + dist grep; licensegen→license.New e2e ladder
+> test; version guard 10→13), then merged PR #218 (15/15 — the integration lane caught one
+> real bug: migration 0011 needed the `{db}.` qualifier) and **pushed the v0.4.2 tag: release
+> run 30212599498 SUCCESS, `0.4.2`+`latest` verified same-digest pullable, all assets attached.**
+> `docs/operator-expected.md` is now OPEN-ITEMS-ONLY (operator directive — keep it that way:
+> replace the status block in place, never re-grow the header stack).
+>
+> **Next session (in order):**
+> 1. **Gate reads:** prod health (CH rows/h + collector component — prod is still v0.4.0-139
+>    by design), git/PR drift, whether the operator flipped the chart OCI package public or
+>    added `NPM_TOKEN` (if the token appeared, `workflow_dispatch` `publish_tag=v0.4.2`
+>    publishes the SDK to npm).
+> 2. **Confirm compose-boot ran un-deferred** on the first main push after the release (the
+>    pinned 0.4.2 image now exists on GHCR, so the deferral path must not trigger; a real boot
+>    failure here would be new signal).
+> 3. **P2 debt backlog (loop-owned, from SESSION-107):** N-cluster remainder (AMS
+>    `status`/`lastUpdateTime`-based node liveness + edge-dedup inertness disclosure +
+>    poller/discovery cadence consolidation + WS-broadcast marshal-error logging) · quickstart
+>    boot(+re-run) CI job (REVIEW-MP3 N5 residual) · helm nits needing golden regen (configmap
+>    comment, NetworkPolicy golden variant) — bundle them.
+> 4. **Operator-gated (do NOT do autonomously):** listing submission/billing/Ankush reply ·
+>    PAYG load lane (capacity + AV-15 + 2-node cluster closes LIM-10 and live-validates the
+>    S106/S107 cluster path) · prod roll to 0.4.2 (deliberate `deployment.sh`, operator
+>    go-ahead) · secret rotation. Queue: `docs/operator-expected.md`.
+>
+> **Gates green at close:** server full `-race` + gofmt/vet · qa modules (+ new mint-path e2e)
+> · SDK (+ dist-version grep) · web · shellcheck · contracts (+2 new fixtures) · PR 15/15 ·
+> release pipeline incl. 13-point guard. Prod: 719 rows/h, untouched.
+
+---
+
+## (previous) ▶ START HERE (S106/D-173 done: the SECOND external marketplace review (REVIEW-MP2) was adversarially verified and executed; G-21 SETTLED, cluster discovery rebuilt against the real AMS wire. Confirm the S106 PR merged + CI green, then CUT v0.4.2 — read SESSION-106.md §SESSION-107 for the changed cut sequencing BEFORE tagging.)
 
 > **✅ Where we are (2026-07-26, D-173):** the operator supplied a second independent
 > marketplace review (recorded: `docs/assessment/marketplace-compliance-review-2026-07-25.md`)
