@@ -1,7 +1,7 @@
 # Test values: ClickHouse persistence disabled (emptyDir data volume).
 # Locks the fix for the duplicate volumes: key that appeared in the else branch
 # when clickhouse.persistence.enabled=false.
-# Used by: helm template golden-file test (manual; not yet wired into CI).
+# Used by: helm template golden-file test (diffed against its golden in the ci.yml helm job).
 
 clickhouse:
   persistence:

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "type": "stream_ingest_error",
+  "ts": 1700000120000,
+  "source": "webhook",
+  "node_id": "standalone",
+  "app": "live",
+  "stream_id": "stream-1",
+  "data": {
+    "stream_name": "missing required action key"
+  }
+}

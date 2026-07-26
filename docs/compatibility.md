@@ -137,7 +137,7 @@ most important divergence in the version matrix. Operators on AMS 3.x should exp
 | Fleet resource metrics (CPU/mem) | Unknown | Unknown | Unknown | **Via Kafka only** (REST absent for standalone); consumer aligned to the official `ams-instance-stats` topic/shape, fixture-tested (`ams-webrtc-stats` subscribed but skipped); **live validation pending (AV-15)** |
 | Webhook signing | Unknown | Unknown | Unknown | **UNSIGNED — webhook path disabled** |
 | VoD recording (REST poll) | Unknown | Unknown | Unknown | **LIVE-VALIDATED** (BUG-002 FIXED S23/D-085) |
-| Anomaly detection | Mock-compatible | Mock-compatible | Mock-compatible | **LIVE-VALIDATED** (0.259 false alarms/node-week) |
+| Anomaly detection | Mock-compatible | Mock-compatible | Mock-compatible | **Pipeline LIVE-VALIDATED; false-alarm rate is CI-measured** (0.259 false alarms/node-week from `TestAnomaly_FalseAlarmRate_ModeledTarget` — a modeled-workload test, not a live long-run) |
 
 ---
 

@@ -11,7 +11,7 @@
 
 **Pulse — Analytics & QoE Monitoring for AMS**
 
-Character count: 43 (limit 60).
+Character count: 42 (limit 60).
 
 ---
 
@@ -36,9 +36,9 @@ compatibility with AMS 2.10+ via mock wire-format profile tests.
 
 ## Category (proposed)
 
-**Analytics and Monitoring**
+**Analytics & Monitoring**
 
-*Proposed pending Ant Media confirmation (assumption A10 — verify at the developer meeting).*
+*Proposed pending Ant Media confirmation — verify at the developer meeting.*
 
 ---
 
@@ -212,7 +212,8 @@ Pulse installs in under 15 minutes via:
 - **Docker Compose** — `install.sh` (health-gated, no-TTY safe) sets up the full stack with a
   single command; database migrations are baked into the Docker image (no bind mount required).
 - **Helm** — chart available in-repo; install from a local chart path.
-- **Binary** — build from source with Go 1.22+.
+- **Binary** — build from source with Go 1.25+, or use the signed release binaries
+  (`pulse-linux-amd64` / `pulse-linux-arm64` + SHA256SUMS) attached to each GitHub release.
 
 After installing:
 
@@ -243,7 +244,7 @@ Full support policy: docs/support.md · Licensing details: docs/licensing-public
 
 ## Screenshots
 
-All shots at 1920×1080, dark theme. Regenerate: `node qa/marketplace/capture-live-screenshots.mjs`.
+All shots at 1920×1080, dark theme, captured from a live deployment.
 
 | # | File | Subject |
 |---|------|---------|

@@ -256,16 +256,32 @@ func NormalizeSystemStats(stats map[string]any, nodeID, version string) domain.S
 // cpuUsage, memoryUsage, …) used by test mocks and fixtures.
 func NormalizeClusterNode(n amsclient.ClusterNodeDTO) domain.ServerEvent {
 	nodeID := n.PrimaryID()
-	// FIX 1 (VD-40): Version was decoded from the DTO but never written into Data,
-	// so aggregator.onNodeStats always read Data["version"] == "". Write it now.
+	// cpu_pct / mem_pct come from the real AMS 3.x wire fields and are always
+	// emitted. The remaining fields are alias-only (real AMS 3.x does not send
+	// them — they decode to zero/empty against a real cluster): emit them only
+	// when present, never fabricate zeros — same rule as NormalizeSystemStats
+	// above ("Disk 0%" rendered as a measurement is a lie; REVIEW-MP3 N-cluster c).
 	data := map[string]any{
-		"cpu_pct":          n.CPUPct(),
-		"mem_pct":          n.MemPct(),
-		"disk_pct":         n.DiskUsage,
-		"net_in_mbps":      n.NetworkInputBps / 1_000_000,
-		"net_out_mbps":     n.NetworkOutputBps / 1_000_000,
-		"jvm_heap_used_mb": n.JvmMemoryUsage,
-		"version":          n.Version,
+		"cpu_pct": n.CPUPct(),
+		"mem_pct": n.MemPct(),
+	}
+	if n.DiskUsage != 0 {
+		data["disk_pct"] = n.DiskUsage
+	}
+	if n.NetworkInputBps != 0 {
+		data["net_in_mbps"] = n.NetworkInputBps / 1_000_000
+	}
+	if n.NetworkOutputBps != 0 {
+		data["net_out_mbps"] = n.NetworkOutputBps / 1_000_000
+	}
+	if n.JvmMemoryUsage != 0 {
+		data["jvm_heap_used_mb"] = n.JvmMemoryUsage
+	}
+	// FIX 1 (VD-40): Version was decoded from the DTO but never written into Data.
+	// Emit it when present (mock/alias profiles); real AMS 3.x sends no version on
+	// this endpoint, so cluster nodes legitimately show no version rather than "".
+	if n.Version != "" {
+		data["version"] = n.Version
 	}
 	return domain.ServerEvent{
 		Version: 1,

@@ -221,8 +221,8 @@ and activate it via any of the three paths in §2.3 to restore full access.
 Yes. License verification is entirely offline — no connection to any external
 server is needed. Activate via environment variable (`PULSE_LICENSE_KEY`) or
 offline file (`PULSE_LICENSE_FILE`) before starting the server. The
-Enterprise tier is the recommended tier for air-gapped deployments (see §6
-of `docs/marketplace/listing.md`).
+Enterprise tier is the recommended tier for air-gapped deployments (see the
+"What's included per tier" section of `docs/marketplace/listing.md`).
 
 ### Can I modify the source code and run my modified version commercially?
 
@@ -234,4 +234,4 @@ requires a commercial license from the copyright holder.
 
 *Sources: `LICENSE` (PolyForm NC 1.0.0), `sdk/beacon-js/LICENSE` (MIT),
 `docs/licensing.md`, `server/internal/license/license.go:90–150`,
-`docs/marketplace/listing.md` §5–7.*
+`docs/marketplace/listing.md` (tier/pricing and per-tier sections).*

@@ -176,6 +176,29 @@ jobs:
             exit 1
           fi
 
+          # 11. Root README image pins — the first thing an evaluator reads;
+          #     any stale ams-pulse:<semver> pin fails, not just a missing new one.
+          if grep -oE 'ams-pulse:[0-9]+\.[0-9]+\.[0-9]+' README.md | grep -v ":${TAG_VERSION}$" | head -1 | grep -q .; then
+            echo "FAIL: README.md contains a stale ams-pulse image pin (want only :${TAG_VERSION})"
+            exit 1
+          fi
+
+          # 12. Marketplace listing copy version claim (REVIEW-MP3 N8) — the
+          #     submission copy names the shipping version in prose.
+          if ! grep -q "v${TAG_VERSION}" docs/marketplace/listing.md 2>/dev/null; then
+            echo "FAIL: docs/marketplace/listing.md does not mention v${TAG_VERSION} — update the listing copy before tagging"
+            exit 1
+          fi
+
+          # 13. Helm golden-test values files — stale tags here make the goldens
+          #     assert the previous release's pin.
+          for f in deploy/helm/tests/values-*.yaml; do
+            if grep -E '^[[:space:]]*tag:' "$f" | grep -v "${TAG_VERSION}" | head -1 | grep -q .; then
+              echo "FAIL: $f pins a tag other than ${TAG_VERSION} — update + regenerate goldens before tagging"
+              exit 1
+            fi
+          done
+
           echo "Version guard: PASS (VERSION=$FILE_VERSION Chart=$CHART_VERSION sdk=$PKG_VERSION swift_sdk=$SWIFT_VER tag=$GITHUB_REF_NAME)"
 
       # GHCR login is unconditional — dry-run still needs credentials for the
@@ -264,11 +287,19 @@ jobs:
           ignore-unfixed: true
           severity: HIGH,CRITICAL
 
-      # ── Push multi-arch image (tag push only) ──────────────────────────────────────
+      # ── Push multi-arch image under a QUARANTINE tag (tag push only) ───────────────
       # SKIPPED on workflow_dispatch (dry-run): if: github.ref_type == 'tag' ensures
       # the push only happens on actual semver tag refs (v*).
       # linux/amd64 + linux/arm64; provenance + SBOM attached to the manifest.
-      - name: Build and push multi-arch image
+      #
+      # Two-stage publish (REVIEW-MP3 N6): the image is pushed ONLY as
+      # candidate-<sha8> first, Trivy-scanned by digest (both arches), and the real
+      # tags (X.Y.Z / X.Y / X / latest) are created AFTER the scan passes by
+      # re-tagging the same digest. A HIGH/CRITICAL finding therefore never leaves a
+      # vulnerable image pullable under a release tag — only the quarantine tag,
+      # which evaluators are never pointed at. Provenance/SBOM/cosign all bind to
+      # the digest, which promotion does not change.
+      - name: Build and push multi-arch image (quarantine tag)
         if: github.ref_type == 'tag'
         id: push
         uses: docker/build-push-action@v6
@@ -279,7 +310,7 @@ jobs:
           push: true
           provenance: true
           sbom: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ghcr.io/aytekxr/ams-pulse:candidate-${{ steps.version.outputs.COMMIT }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.version.outputs.VERSION }}
@@ -290,7 +321,7 @@ jobs:
       # Scans the EXACT image users will pull: both amd64 and arm64 platform layers
       # from the pushed manifest digest.  TRIVY_PLATFORM selects the platform-specific
       # layer from the multi-arch index.
-      # exit-code: "1" blocks release on any FIXABLE HIGH/CRITICAL CVE.
+      # exit-code: "1" blocks tag promotion on any FIXABLE HIGH/CRITICAL CVE.
       - name: Trivy vulnerability scan — pushed amd64 layer by digest
         if: github.ref_type == 'tag'
         uses: aquasecurity/trivy-action@v0.36.0
@@ -314,6 +345,21 @@ jobs:
           exit-code: "1"
           ignore-unfixed: true
           severity: HIGH,CRITICAL
+
+      # ── Promote the scanned digest to the real release tags ───────────────────────
+      # Runs only after BOTH per-arch Trivy scans pass. imagetools create with a
+      # single unmodified source re-tags the existing manifest index — the digest
+      # (and its attached SBOM/provenance) is byte-identical to what was scanned.
+      - name: Promote scanned digest to release tags
+        if: github.ref_type == 'tag'
+        run: |
+          DIGEST="${{ steps.push.outputs.digest }}"
+          echo "Promoting ghcr.io/aytekxr/ams-pulse@${DIGEST}"
+          while IFS= read -r TAG; do
+            [ -z "$TAG" ] && continue
+            docker buildx imagetools create -t "$TAG" "ghcr.io/aytekxr/ams-pulse@${DIGEST}"
+            echo "promoted: $TAG"
+          done <<< "${{ steps.meta.outputs.tags }}"
 
       # ── cosign keyless signing (tag push only) ─────────────────────────────────────
       # SKIPPED on workflow_dispatch (dry-run): same if condition as push step.

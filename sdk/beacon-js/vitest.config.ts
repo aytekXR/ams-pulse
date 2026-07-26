@@ -5,7 +5,7 @@ const { version } = JSON.parse(readFileSync('./package.json', 'utf8')) as { vers
 
 export default defineConfig({
   define: {
-    SDK_VERSION: JSON.stringify(version),
+    __SDK_VERSION__: JSON.stringify(version),
   },
   test: {
     environment: 'jsdom',

@@ -18,6 +18,73 @@ _Nothing yet._
 
 ### Fixed
 
+- **Cluster path hardened against real-cluster failure modes (D-174, REVIEW-MP3-2026-07-26
+  N1/N2/N-cluster).** Adversarial re-review of the D-173 cluster rebuild found the fix itself
+  had new defects; all closed before this tag:
+  - A transient 500 from the nodes route on a REAL cluster (Mongo/Redis blip) was mapped to
+    the standalone fallback, silently collapsing the fleet to a synthetic single node,
+    resetting the failure-streak alerting, and poisoning the cluster-mode cache for ~60 calls
+    (N1). The `cluster-mode-status` probe now owns the mode cache exclusively; first-page
+    404/500 maps to standalone only while the probe has not said "cluster"; mid-pagination
+    errors and cluster-mode errors surface as real failures feeding the streak ladder. The
+    regression test that appeared to cover this passed for the wrong reason (its fixture
+    lacked `system-status`) — fixture fixed, plus new transient-500/mid-pagination/cache-
+    survival tests.
+  - Every cluster node event was stamped with the single configured `PULSE_AMS_NODE_ID`
+    (default `standalone`), collapsing an N-node fleet onto one flickering identity while
+    cluster discovery emitted the same nodes under their real IDs (N2). Node events now keep
+    the node's real cluster ID; the configured ID remains only the standalone-path identity.
+  - Alias-only fields real AMS 3.x never sends (`disk_pct`, `net_*`, `jvm_heap_used_mb`,
+    `version`) are no longer emitted as fabricated zeros; `"NaN"`/`"Inf"` CPU/mem strings
+    (Java `Double.toString`) are rejected instead of reaching the WS broadcast where
+    `json.Marshal` fails; numeric `cpu`/`memory` JSON variants decode instead of failing the
+    page; pagination is capped at 40 pages (2 000 nodes) with a 10 s per-poll deadline; the
+    mode probe backs off (~1 min) instead of firing every poll while the endpoint errors.
+- **Hardened Compose overlay boots again (D-174, N3).** The Issue-C base-file fix
+  (`CLICKHOUSE_SKIP_USER_SETUP: "1"`) merged per-key into the hardened overlay, which
+  silently skipped named-user provisioning — the authenticated healthcheck then failed
+  forever and `pulse`/`pulse-migrate` never started. The overlay now explicitly neutralizes
+  the flag, and CI asserts the merged base+hardened config keeps auth enforced.
+- **`stream_ingest_error` events are persisted, not write-only (D-174, N4).** The Issue-J fix
+  mapped AMS error webhooks to a new event type but the ClickHouse sink discarded the
+  payload, storing indistinguishable rows. Migration 0011 adds `action` +
+  `stream_name` columns, the sink populates them, and the event schema gained a
+  `stream_ingest_error` data clause with valid/invalid contract fixtures.
+- **Quickstart re-runs are safe with special-character passwords (D-174, N5).** The Issue-G
+  secret-reuse fix `source`d the `.env` it had written unquoted — an AMS password containing
+  a space aborted every re-run, and `$(…)` was executed by the installer itself. Values are
+  now grep-extracted (inert by construction), and an operator-added `PULSE_LICENSE_KEY` is
+  preserved on re-run instead of being blanked.
+- **Trivy gates the release tags again (D-174, N6).** The digest-scan rework had moved
+  scanning after the push, so a HIGH/CRITICAL finding failed the release only after the
+  vulnerable image was publicly pullable under `X.Y.Z`/`latest`. The image is now pushed
+  under a `candidate-<sha>` quarantine tag, scanned by digest (both arches), and promoted to
+  the real tags only after the scans pass (identical digest — SBOM/provenance/cosign
+  unaffected).
+- **Beacon-JS survives a lost version define (D-174, N7).** `declare const SDK_VERSION`
+  emitted no JS, so a build without the tsup define turned every `Pulse.init()` into a
+  silent no-op session (the ReferenceError is swallowed by the zero-throw guard). The define
+  is now `__SDK_VERSION__` with a `0.0.0-dev` runtime fallback, and CI greps the built dist
+  for the real version literal.
+- **Mint-path end-to-end regression (D-174, Issue-F residue).** The D-173 "mint-path" test
+  only decoded the claims it minted; a new server-side test runs the real `qa/licensegen`
+  binary for every tier through real license verification and asserts the published ladder
+  (Free 1/7 d · Pro 10/90 d · Business 50/396 d · Enterprise unlimited).
+- **Release version guard extended to 13 checks (D-174).** Now also covers root `README.md`
+  image pins (any stale semver pin fails), the `docs/marketplace/listing.md` version claim,
+  and the four Helm golden-test values files.
+- **Docs/CI accuracy batch (D-174, N8/N9).** Listing copy: Go 1.25, internal "A10" reference
+  removed, dev command stripped, category aligned to "Analytics & Monitoring", title
+  char-count corrected; submission-package gate list reconciled with the real one (v0.4.2
+  cut, category confirmation, AV-15, npm publish); dangling section references fixed;
+  `final-assessment.md` superseded rows annotated; AMS-INTEGRATION documents all three auth
+  modes, the `/metrics` Business+ gate, the 500-when-standalone quirk, and drops stale line
+  citations; OpenAPI/API-reference `PULSE_AMS_BASE_URL` typo → `PULSE_AMS_URL`;
+  `.env.example` placeholder-guard claim scoped to what the code checks; webrtc-stats fetch
+  failures now surface once per outage at Warn; `clickhouse-low-footprint.xml` settings moved
+  to the scope ClickHouse honors (query-level settings into a profile; deprecated
+  `max_memory_usage_for_all_queries` → `max_server_memory_usage`); webhook unknown-action log
+  demoted to Debug; residual IP scrub in qa/realams README.
 - **Cluster fleet discovery works against real AMS 3.x clusters (D-173, REVIEW-MP2-2026-07-25
   Issue A; settles G-21).** `amsclient.ClusterNodes` called a flat `GET /rest/v2/cluster/nodes`
   that AMS 3.x does not register (source-verified at tag `ams-v3.0.3`: `ClusterRestServiceV2`
@@ -25,7 +92,8 @@ _Nothing yet._
   "standalone". The client now probes `GET /rest/v2/cluster-mode-status` (cached, re-probed
   every ~60 calls) and pages through `nodes/{offset}/{size}` when in cluster mode; a live
   standalone AMS 3.0.3 probe confirmed the paginated path 500s (not 404s) outside cluster
-  mode, so both 404 and 500 map to the standalone fallback. `ClusterNodeDTO` now decodes the
+  mode, so a first-page 404/500 maps to the standalone fallback (guarded — see the D-174
+  entry above). `ClusterNodeDTO` now decodes the
   real AMS wire fields (`id`, `ip`, `lastUpdateTime`, `memory`, `cpu`, `dbQueryAveargeTimeMs`,
   `status` — previously only `ip` overlapped, so nodes decoded all-zero) with tolerant aliases
   for the old keys; the dead `NodeInfo` method is removed. `qa/mock-ams` now serves the real

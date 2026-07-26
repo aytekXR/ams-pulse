@@ -540,6 +540,155 @@ func TestClusterNodes_ClusterModeStatusFalseReturnsNilNoError(t *testing.T) {
 	}
 }
 
+// TestClusterNodes_Transient500InClusterMode_ReturnsError pins REVIEW-MP3 N1:
+// when the cluster-mode-status probe authoritatively said "cluster", a 500 from
+// the paginated nodes route is a REAL error — it must never be mapped to the
+// standalone fallback (which would silently collapse a live fleet to a synthetic
+// single node and reset the failure-streak alerting), and it must never downgrade
+// the cached mode (a transient Mongo/Redis blip would otherwise short-circuit to
+// standalone for ~60 calls). The follow-up call proves the cache survived.
+func TestClusterNodes_Transient500InClusterMode_ReturnsError(t *testing.T) {
+	nodesFail := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/rest/v2/cluster-mode-status":
+			fmt.Fprint(w, `{"success":true,"message":"","dataId":"","errorId":0}`)
+		case strings.HasPrefix(r.URL.Path, "/rest/v2/cluster/nodes/"):
+			if nodesFail {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			fmt.Fprint(w, `[{"id":"node-a","ip":"10.0.0.1","cpu":"12.5","memory":"40.2","status":"Running"}]`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+
+	// Transient 500 while the probe says cluster → error, never (nil, nil).
+	nodes, err := c.ClusterNodes(context.Background())
+	if err == nil {
+		t.Fatalf("cluster-mode 500 must surface as an error, got (nodes=%v, nil)", nodes)
+	}
+
+	// Recovery: the mode cache must still say cluster, so the next call reaches
+	// the paginated route again and returns the real fleet.
+	nodesFail = false
+	nodes, err = c.ClusterNodes(context.Background())
+	if err != nil {
+		t.Fatalf("post-recovery call errored: %v", err)
+	}
+	if len(nodes) != 1 || nodes[0].PrimaryID() != "node-a" {
+		t.Errorf("post-recovery call must return the real fleet (cache not downgraded), got: %v", nodes)
+	}
+}
+
+// TestClusterNodes_MidPagination500_ReturnsError pins the mid-pagination half of
+// REVIEW-MP3 N1: an error on page 2+ (after a successful full page) is a real
+// error even when the mode is unknown — a standalone node fails on page 1,
+// never after serving a full page.
+func TestClusterNodes_MidPagination500_ReturnsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/rest/v2/cluster-mode-status":
+			// Probe unavailable → mode unknown.
+			w.WriteHeader(http.StatusNotFound)
+		case strings.HasPrefix(r.URL.Path, "/rest/v2/cluster/nodes/0/"):
+			// Full first page (50 entries) → pager continues to page 2.
+			nodes := make([]map[string]any, 50)
+			for i := range nodes {
+				nodes[i] = map[string]any{"id": fmt.Sprintf("node-%d", i), "ip": "10.0.0.1"}
+			}
+			json.NewEncoder(w).Encode(nodes) //nolint:errcheck
+		case strings.HasPrefix(r.URL.Path, "/rest/v2/cluster/nodes/"):
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+	_, err := c.ClusterNodes(context.Background())
+	if err == nil {
+		t.Fatal("mid-pagination 500 must surface as an error, not the standalone fallback")
+	}
+}
+
+// TestClusterNodes_PaginationCapped pins REVIEW-MP3 N-cluster (b): a server (or
+// proxy) that ignores the offset segment and always returns a full page must not
+// loop forever — the pager aborts with an error at maxClusterPages.
+func TestClusterNodes_PaginationCapped(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/rest/v2/cluster-mode-status":
+			fmt.Fprint(w, `{"success":true,"message":"","dataId":"","errorId":0}`)
+		case strings.HasPrefix(r.URL.Path, "/rest/v2/cluster/nodes/"):
+			// Always a full page regardless of offset — the pathological proxy.
+			nodes := make([]map[string]any, 50)
+			for i := range nodes {
+				nodes[i] = map[string]any{"id": fmt.Sprintf("node-%d", i), "ip": "10.0.0.1"}
+			}
+			json.NewEncoder(w).Encode(nodes) //nolint:errcheck
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv)
+	_, err := c.ClusterNodes(context.Background())
+	if err == nil {
+		t.Fatal("unbounded pagination must abort with an error at the page cap")
+	}
+	if !strings.Contains(err.Error(), "pagination exceeded") {
+		t.Errorf("expected pagination-cap error, got: %v", err)
+	}
+}
+
+// TestClusterNodeDTO_NumericCPUMemory pins REVIEW-MP3 N-cluster (e): a bare
+// numeric cpu/memory value from any AMS build must not fail the page decode.
+func TestClusterNodeDTO_NumericCPUMemory(t *testing.T) {
+	var nodes []amsclient.ClusterNodeDTO
+	raw := `[{"id":"n1","ip":"10.0.0.1","cpu":15.3,"memory":40.2},{"id":"n2","ip":"10.0.0.2","cpu":"12.5","memory":"33.1%"}]`
+	if err := json.Unmarshal([]byte(raw), &nodes); err != nil {
+		t.Fatalf("numeric cpu/memory must decode, got: %v", err)
+	}
+	if got := nodes[0].CPUPct(); got != 15.3 {
+		t.Errorf("numeric cpu: CPUPct() = %v, want 15.3", got)
+	}
+	if got := nodes[0].MemPct(); got != 40.2 {
+		t.Errorf("numeric memory: MemPct() = %v, want 40.2", got)
+	}
+	if got := nodes[1].MemPct(); got != 33.1 {
+		t.Errorf("percent-suffixed memory: MemPct() = %v, want 33.1", got)
+	}
+}
+
+// TestClusterNodeDTO_NonFiniteCPURejected pins REVIEW-MP3 N-cluster (d): Java's
+// Double.toString(NaN) is literally "NaN" — a non-finite parse must fall back
+// (NaN in an event makes the WS broadcast's json.Marshal fail silently).
+func TestClusterNodeDTO_NonFiniteCPURejected(t *testing.T) {
+	for _, s := range []string{"NaN", "Inf", "+Inf", "-Inf", "Infinity"} {
+		var n amsclient.ClusterNodeDTO
+		raw := fmt.Sprintf(`{"cpu":%q,"memory":%q,"cpuUsage":7.5}`, s, s)
+		if err := json.Unmarshal([]byte(raw), &n); err != nil {
+			t.Fatalf("decode with cpu=%q failed: %v", s, err)
+		}
+		if got := n.CPUPct(); got != 7.5 {
+			t.Errorf("CPU=%q: CPUPct() = %v, want fallback 7.5 (non-finite rejected)", s, got)
+		}
+		if got := n.MemPct(); got != 0 {
+			t.Errorf("Memory=%q: MemPct() = %v, want 0 (non-finite rejected)", s, got)
+		}
+	}
+}
+
 // ─── ListApplications: envelope decoding ─────────────────────────────────────
 
 func TestListApplications_DecodesEnvelope(t *testing.T) {

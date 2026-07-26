@@ -357,7 +357,10 @@ func (h *Handler) translateWebhook(raw map[string]json.RawMessage) []domain.Serv
 		}
 
 	default:
-		h.logger.Info("webhook: unrecognized action", "action", action)
+		// Debug, not Info: an AMS emitting unmapped actions (there are many —
+		// subscriber events, play events, …) would otherwise produce steady
+		// default-level log noise on every webhook (REVIEW-MP3 N4).
+		h.logger.Debug("webhook: unrecognized action", "action", action)
 		return nil
 	}
 

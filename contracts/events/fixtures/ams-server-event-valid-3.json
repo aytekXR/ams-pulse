@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "type": "stream_ingest_error",
+  "ts": 1700000120000,
+  "source": "webhook",
+  "node_id": "standalone",
+  "app": "live",
+  "stream_id": "stream-1",
+  "data": {
+    "action": "publishTimeoutError",
+    "stream_name": "Studio Cam 1",
+    "metadata": {
+      "id": "stream-1",
+      "action": "publishTimeoutError",
+      "streamName": "Studio Cam 1"
+    }
+  }
+}

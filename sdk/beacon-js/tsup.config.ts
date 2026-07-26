@@ -9,6 +9,6 @@ export default defineConfig({
   dts: true,
   minify: true,
   define: {
-    SDK_VERSION: JSON.stringify(version),
+    __SDK_VERSION__: JSON.stringify(version),
   },
 });

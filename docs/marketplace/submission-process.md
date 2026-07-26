@@ -9,7 +9,8 @@ Marketplace, separating **established facts** (from the email thread and public 
 from **assumptions** that must be verified at the developer meeting. Companion docs:
 [`developer-meeting-brief.md`](developer-meeting-brief.md) (the meeting agenda),
 [`submission-package.md`](submission-package.md) (the artifact index),
-[`listing-draft.md`](listing-draft.md) (the listing copy).
+[`listing.md`](listing.md) (the submission listing copy — `listing-draft.md` is the
+internal working file and is not pasted into the marketplace form).
 
 ---
 

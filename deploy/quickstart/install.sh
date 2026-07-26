@@ -22,9 +22,9 @@
 
 set -euo pipefail
 
-# PULSE_REF pins all raw.githubusercontent.com downloads to a specific tree.
-# Defaults to 'main' until the v0.4.2 release tag is cut; after the release
-# this will be set to 'v0.4.2' (a release-time guard will enforce it).
+# PULSE_REF pins all raw.githubusercontent.com downloads to the release tag
+# matching the pinned image, so a curl|bash install can never pair an old image
+# with a newer compose file from main (the release-time guard enforces the pin).
 PULSE_REF="${PULSE_REF:-v0.4.2}"
 REPO_RAW="https://raw.githubusercontent.com/aytekXR/ams-pulse/${PULSE_REF}"
 REPO_WEB="https://github.com/aytekXR/ams-pulse"
@@ -201,15 +201,20 @@ if [[ $PULL_RC -ne 0 ]]; then
 fi
 printf 'Image OK.\n'
 
-# ── Reuse PULSE_SECRET_KEY from an existing .env (re-run safety) ─────────────
-# Source the existing file first so the key check below finds the stored value.
-# set -a exports all newly defined variables so the subsequent check picks up
-# PULSE_SECRET_KEY even if it was not exported in the caller's shell.
+# ── Reuse PULSE_SECRET_KEY / PULSE_LICENSE_KEY from an existing .env ─────────
+# Extract single values with grep — do NOT `source` the file: it is a Compose
+# env file, not a shell script. Unquoted values written by this script (an AMS
+# password with a space, `$(…)`, or `;`) would be word-split or EXECUTED by the
+# shell on re-run (REVIEW-MP3 N5). grep-extract is inert by construction.
 if [[ -f "$ENV_FILE" ]]; then
-  set -a
-  # shellcheck source=/dev/null
-  source "$ENV_FILE"
-  set +a
+  if [[ -z "${PULSE_SECRET_KEY:-}" ]]; then
+    PULSE_SECRET_KEY="$(grep -E '^PULSE_SECRET_KEY=' "$ENV_FILE" | head -1 | cut -d= -f2- || true)"
+  fi
+  # Preserve an operator-added license key when --license-key was not passed —
+  # the rewrite below would otherwise blank it on every re-run.
+  if [[ -z "$LICENSE_KEY" ]]; then
+    LICENSE_KEY="$(grep -E '^PULSE_LICENSE_KEY=' "$ENV_FILE" | head -1 | cut -d= -f2- || true)"
+  fi
 fi
 
 # ── Generate PULSE_SECRET_KEY if not already in environment ──────────────────

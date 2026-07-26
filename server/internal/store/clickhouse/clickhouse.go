@@ -14,7 +14,6 @@ package clickhouse
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -463,10 +462,6 @@ func (s *Store) insertServerEvents(ctx context.Context, batch []domain.ServerEve
 	}
 
 	for _, ev := range batch {
-		// Extract typed fields from the Data map.
-		dataJSON, _ := json.Marshal(ev.Data)
-		_ = dataJSON
-
 		// Unpack data fields (zero-safe).
 		d := ev.Data
 		if d == nil {
@@ -537,6 +532,11 @@ func (s *Store) insertServerEvents(ctx context.Context, batch []domain.ServerEve
 			clientDevice,
 			clientOS,
 			clientBrowser,
+			// ingest-error (0011, REVIEW-MP3 N4): AMS error-webhook action + the
+			// human stream name — without these the three error kinds were stored
+			// indistinguishably.
+			strFromData(d, "action"),
+			strFromData(d, "stream_name"),
 		); err != nil {
 			return fmt.Errorf("append row: %w", err)
 		}

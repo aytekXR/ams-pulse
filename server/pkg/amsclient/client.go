@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -34,6 +35,17 @@ const minLoginInterval = 3 * time.Second
 // relative to the total number of ClusterNodes calls. At the default 5 s restpoller cadence,
 // 60 calls ≈ 5 minutes between cluster-mode re-probes.
 const clusterProbeInterval = 60
+
+// clusterProbeRetryInterval is the re-probe backoff while the mode is UNKNOWN
+// (the probe endpoint errors, e.g. an older AMS without it). Without this the
+// probe would fire on every single ClusterNodes call (REVIEW-MP3 N-cluster f).
+// 12 calls ≈ 1 minute at the default 5 s cadence.
+const clusterProbeRetryInterval = 12
+
+// maxClusterPages caps ClusterNodes pagination at 40 pages × 50 = 2 000 nodes,
+// so a proxy or AMS build that ignores the {offset} path segment cannot make the
+// pager loop forever (REVIEW-MP3 N-cluster b).
+const maxClusterPages = 40
 
 // clusterModeResult decodes the AMS Result envelope from GET /rest/v2/cluster-mode-status.
 type clusterModeResult struct {
@@ -142,13 +154,13 @@ type WebRTCClientStatsDTO struct {
 // but are kept so test mock profiles and old fixtures continue to decode correctly.
 type ClusterNodeDTO struct {
 	// Real AMS 3.x wire fields.
-	ID                   string `json:"id"`
-	IP                   string `json:"ip"`
-	LastUpdateTime       int64  `json:"lastUpdateTime"`       // Unix epoch ms
-	Memory               string `json:"memory"`               // e.g. "40.2%" or "40.2"
-	CPU                  string `json:"cpu"`                  // e.g. "15.3"
-	DbQueryAveargeTimeMs int    `json:"dbQueryAveargeTimeMs"` // AMS's own typo preserved
-	Status               string `json:"status"`               // e.g. "Running"
+	ID                   string     `json:"id"`
+	IP                   string     `json:"ip"`
+	LastUpdateTime       int64      `json:"lastUpdateTime"`       // Unix epoch ms
+	Memory               flexString `json:"memory"`               // e.g. "40.2%", "40.2", or bare 40.2
+	CPU                  flexString `json:"cpu"`                  // e.g. "15.3" or bare 15.3
+	DbQueryAveargeTimeMs int        `json:"dbQueryAveargeTimeMs"` // AMS's own typo preserved
+	Status               string     `json:"status"`               // e.g. "Running"
 
 	// Tolerant aliases for old invented keys (kept for test mock compat; real AMS does
 	// not send these fields — they decode to zero/empty against a real cluster).
@@ -179,11 +191,13 @@ func (n ClusterNodeDTO) PrimaryID() string {
 
 // CPUPct returns the CPU usage as a percentage float64. It prefers the real AMS
 // wire field CPU (string, e.g. "15.3"), falling back to the old invented CPUUsage
-// float64 field used by test mocks.
+// float64 field used by test mocks. Non-finite parses ("NaN"/"Inf" — Java's
+// Double.toString emits these literally) are rejected: a NaN reaching the WS
+// broadcast makes json.Marshal fail silently (REVIEW-MP3 N-cluster d).
 func (n ClusterNodeDTO) CPUPct() float64 {
 	if n.CPU != "" {
-		s := strings.TrimSuffix(strings.TrimSpace(n.CPU), "%")
-		if v, err := strconv.ParseFloat(s, 64); err == nil {
+		s := strings.TrimSuffix(strings.TrimSpace(string(n.CPU)), "%")
+		if v, err := strconv.ParseFloat(s, 64); err == nil && !math.IsNaN(v) && !math.IsInf(v, 0) {
 			return v
 		}
 	}
@@ -192,15 +206,41 @@ func (n ClusterNodeDTO) CPUPct() float64 {
 
 // MemPct returns the memory usage as a percentage float64. It prefers the real AMS
 // wire field Memory (string, e.g. "40.2%"), falling back to the old invented
-// MemoryUsage float64 field.
+// MemoryUsage float64 field. Non-finite parses are rejected (see CPUPct).
 func (n ClusterNodeDTO) MemPct() float64 {
 	if n.Memory != "" {
-		s := strings.TrimSuffix(strings.TrimSpace(n.Memory), "%")
-		if v, err := strconv.ParseFloat(s, 64); err == nil {
+		s := strings.TrimSuffix(strings.TrimSpace(string(n.Memory)), "%")
+		if v, err := strconv.ParseFloat(s, 64); err == nil && !math.IsNaN(v) && !math.IsInf(v, 0) {
 			return v
 		}
 	}
 	return n.MemoryUsage
+}
+
+// flexString decodes a JSON string OR bare number into a string, so a numeric
+// `"cpu": 15.3` from any AMS build cannot fail the whole cluster-nodes page
+// decode (REVIEW-MP3 N-cluster e). null decodes to "".
+type flexString string
+
+func (f *flexString) UnmarshalJSON(b []byte) error {
+	if string(b) == "null" {
+		*f = ""
+		return nil
+	}
+	if len(b) > 0 && b[0] == '"' {
+		var s string
+		if err := json.Unmarshal(b, &s); err != nil {
+			return err
+		}
+		*f = flexString(s)
+		return nil
+	}
+	var n json.Number
+	if err := json.Unmarshal(b, &n); err != nil {
+		return err
+	}
+	*f = flexString(n.String())
+	return nil
 }
 
 // ApplicationDTO represents one AMS application (object form, older AMS versions).
@@ -246,6 +286,7 @@ type Client struct {
 	clusterModeKnown     bool // true once cluster-mode-status has been probed successfully
 	clusterModeIsCluster bool // last successful probe result (true = cluster mode)
 	clusterCallCount     int  // total ClusterNodes() calls; drives re-probe cadence
+	clusterLastProbeCall int  // clusterCallCount at the last probe ATTEMPT (backoff while unknown)
 }
 
 // Config holds Client construction options.
@@ -601,9 +642,13 @@ func (c *Client) ClusterModeStatus(ctx context.Context) (bool, error) {
 // GET /rest/v2/cluster/nodes/{offset}/{size} (pageSize 50) until a short page.
 //
 // Defensive fallback: on a standalone AMS 3.0.3 the paginated path returns HTTP 500
-// (NoSuchBeanDefinitionException: No bean named 'tomcat.cluster'), not 404. Both 404
-// and 500 from the paginated route are mapped to the standalone fallback (nil, nil)
-// and update the cache so subsequent calls skip the cluster-mode-status probe.
+// (NoSuchBeanDefinitionException: No bean named 'tomcat.cluster'), not 404. A
+// FIRST-page 404/500 is mapped to the standalone fallback (nil, nil) — but ONLY
+// when the probe has not authoritatively said "cluster": the cluster-mode-status
+// probe owns the mode cache, and a data-path error never downgrades it, so a
+// transient 500 on a real cluster surfaces as an error (feeding the poller's
+// failure-streak accounting) instead of silently flipping the fleet to
+// standalone (REVIEW-MP3 N1). Mid-pagination errors are always real errors.
 func (c *Client) ClusterNodes(ctx context.Context) ([]ClusterNodeDTO, error) {
 	// Read + update call counter under the lock; read cached mode outside the lock
 	// to avoid holding it during the network call.
@@ -612,19 +657,32 @@ func (c *Client) ClusterNodes(ctx context.Context) ([]ClusterNodeDTO, error) {
 	callCount := c.clusterCallCount
 	known := c.clusterModeKnown
 	isCluster := c.clusterModeIsCluster
+	lastProbe := c.clusterLastProbeCall
 	c.clusterMu.Unlock()
 
-	needProbe := !known || callCount%clusterProbeInterval == 0
+	// Once the mode is known, re-probe every clusterProbeInterval calls. While it
+	// is unknown (probe endpoint erroring), back off to every
+	// clusterProbeRetryInterval calls instead of probing on every poll.
+	var needProbe bool
+	if known {
+		needProbe = callCount%clusterProbeInterval == 0
+	} else {
+		needProbe = lastProbe == 0 || callCount-lastProbe >= clusterProbeRetryInterval
+	}
 	if needProbe {
+		c.clusterMu.Lock()
+		c.clusterLastProbeCall = callCount
+		c.clusterMu.Unlock()
 		clusterStatus, err := c.ClusterModeStatus(ctx)
 		if err == nil {
-			// Successful probe: update the cache.
+			// Successful probe: update the cache. This is the ONLY place the
+			// mode cache transitions — data-path errors below never touch it.
 			c.clusterMu.Lock()
 			c.clusterModeKnown = true
 			c.clusterModeIsCluster = clusterStatus
+			c.clusterMu.Unlock()
 			known = true
 			isCluster = clusterStatus
-			c.clusterMu.Unlock()
 		}
 		// On error (e.g. older AMS without the endpoint): leave known/isCluster
 		// unchanged so we fall through to the paginated path.
@@ -638,30 +696,31 @@ func (c *Client) ClusterNodes(ctx context.Context) ([]ClusterNodeDTO, error) {
 	const pageSize = 50
 	var all []ClusterNodeDTO
 	offset := 0
-	for {
+	for pageNum := 0; pageNum < maxClusterPages; pageNum++ {
 		path := fmt.Sprintf("/rest/v2/cluster/nodes/%d/%d", offset, pageSize)
 		var page []ClusterNodeDTO
 		if err := c.getJSON(ctx, path, &page); err != nil {
 			var hse *httpStatusError
-			if errors.As(err, &hse) && (hse.Status == http.StatusNotFound || hse.Status == http.StatusInternalServerError) {
-				// Standalone AMS 3.0.3 returns HTTP 500 (not 404) on the paginated path.
-				// Map both to the standalone fallback and update the cache so subsequent
-				// calls short-circuit to (nil, nil) without hitting this route again.
-				c.clusterMu.Lock()
-				c.clusterModeKnown = true
-				c.clusterModeIsCluster = false
-				c.clusterMu.Unlock()
+			if errors.As(err, &hse) &&
+				(hse.Status == http.StatusNotFound || hse.Status == http.StatusInternalServerError) &&
+				offset == 0 && !(known && isCluster) {
+				// First-page 404/500 with the mode not authoritatively cluster:
+				// this is the standalone-AMS signature (3.0.3 returns 500 here).
+				// Standalone for THIS call only — the probe owns the cache.
 				return nil, nil
 			}
-			return all, err
+			// Real failure: the probe said cluster, or the error arrived
+			// mid-pagination (a standalone node fails on page 1, never after a
+			// successful page). Surface it — do not fabricate an empty fleet.
+			return nil, err
 		}
 		all = append(all, page...)
 		if len(page) < pageSize {
-			break
+			return all, nil
 		}
 		offset += pageSize
 	}
-	return all, nil
+	return all, fmt.Errorf("amsclient: cluster nodes pagination exceeded %d pages (%d nodes) — aborting; is a proxy ignoring the offset path segment?", maxClusterPages, len(all))
 }
 
 // SystemStats returns aggregate system statistics from the AMS node.

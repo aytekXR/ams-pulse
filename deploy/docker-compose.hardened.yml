@@ -99,7 +99,13 @@ services:
     environment:
       CLICKHOUSE_USER: "${CLICKHOUSE_USER}"
       CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD}"
-      # CLICKHOUSE_SKIP_USER_SETUP must NOT be set here — auth must be enforced.
+      # Explicitly neutralize the base file's CLICKHOUSE_SKIP_USER_SETUP=1.
+      # Compose merges environment maps per-key, so merely omitting the key here
+      # keeps the base value — which would skip named-user provisioning and make
+      # the authenticated healthcheck below fail forever (REVIEW-MP3 N3). An
+      # empty value means "don't skip" to the ClickHouse entrypoint, so USER/
+      # PASSWORD provisioning runs and auth is enforced.
+      CLICKHOUSE_SKIP_USER_SETUP: ""
     healthcheck:
       # Override the base healthcheck to pass credentials once auth is enabled.
       # Use CMD-SHELL with $$-prefixed vars so the password expands at runtime

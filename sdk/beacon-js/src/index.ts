@@ -17,10 +17,16 @@ import { Transport } from './transport.js';
 import { WebRTCAdapter } from './webrtc.js';
 import { MediaElementAdapter, HlsAdapter } from './hls.js';
 
-/** SDK version injected from package.json at build time via tsup define (tsup.config.ts).
- *  Vitest also defines this constant (vitest.config.ts) so unit tests receive the same value.
- *  Declared ambient so esbuild can substitute it; the literal never drifts from package.json. */
-declare const SDK_VERSION: string;
+/** SDK version injected from package.json at build time via the __SDK_VERSION__
+ *  define (tsup.config.ts; vitest.config.ts injects the same value for tests).
+ *  The typeof guard is a RUNTIME fallback: if the define is ever lost (a plain
+ *  tsc build, or a downstream bundler consuming src/ directly) the SDK reports
+ *  '0.0.0-dev' instead of hitting a ReferenceError that init()'s catch would
+ *  turn into a silent NoOpSession — losing every beacon with no trace
+ *  (REVIEW-MP3 N7). CI greps dist/ for the real version after build, so a lost
+ *  define cannot ship unnoticed. */
+declare const __SDK_VERSION__: string | undefined;
+const SDK_VERSION: string = typeof __SDK_VERSION__ !== 'undefined' ? __SDK_VERSION__ : '0.0.0-dev';
 
 /** Internal no-op session returned when sampling excludes the session or config is invalid. */
 class NoOpSession implements SessionHandle {
