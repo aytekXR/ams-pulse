@@ -9,7 +9,7 @@ metadata:
     helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.2"
+    app.kubernetes.io/version: "0.4.3"
     app.kubernetes.io/managed-by: Helm
 ---
 # Source: pulse/templates/configmap-clickhouse.yaml
@@ -26,7 +26,7 @@ metadata:
     helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.2"
+    app.kubernetes.io/version: "0.4.3"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: clickhouse
 data:
@@ -57,7 +57,10 @@ data:
            maxMemoryUsage (the per-query value), making the chart's server cap
            512 MB against the compose XML's 768 MB despite the XML claiming parity
            (REVIEW-MP3-R4). maxMemoryUsageForAllQueries is the legacy name for this
-           value — the ClickHouse setting it used to render is deprecated in 24.x. -->
+           value — the ClickHouse setting it used to render is deprecated in 24.x.
+           Precedence: new key → deprecated alias → built-in 768 MB default. The default
+           lives HERE rather than in values.yaml because a chart default is never empty,
+           which would make the alias fallback unreachable (round-4 review F-09). -->
       <max_server_memory_usage>805306368</max_server_memory_usage>
       <max_concurrent_queries>16</max_concurrent_queries>
       <uncompressed_cache_size>67108864</uncompressed_cache_size>
@@ -114,7 +117,7 @@ metadata:
     helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.2"
+    app.kubernetes.io/version: "0.4.3"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: pulse
 spec:
@@ -135,7 +138,7 @@ metadata:
     helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.2"
+    app.kubernetes.io/version: "0.4.3"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: clickhouse
 spec:
@@ -166,7 +169,7 @@ metadata:
     helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.2"
+    app.kubernetes.io/version: "0.4.3"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: pulse
 spec:
@@ -196,7 +199,7 @@ metadata:
     helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.2"
+    app.kubernetes.io/version: "0.4.3"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: pulse-ingest
   annotations:
@@ -225,7 +228,7 @@ metadata:
     helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.2"
+    app.kubernetes.io/version: "0.4.3"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: pulse
 spec:
@@ -261,7 +264,7 @@ spec:
               echo "ClickHouse ready."
       containers:
         - name: pulse
-          image: "ghcr.io/aytekxr/ams-pulse:0.4.2"
+          image: "ghcr.io/aytekxr/ams-pulse:0.4.3"
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -381,7 +384,7 @@ metadata:
     helm.sh/chart: pulse-0.3.1
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.2"
+    app.kubernetes.io/version: "0.4.3"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: clickhouse
 spec:

@@ -219,7 +219,16 @@ func (n ClusterNodeDTO) CPUPctOK() (float64, bool) {
 		}
 		return 0, false
 	}
-	return n.CPUUsage, true
+	// No real wire field. Fall back to the alias only when it actually carries a
+	// reading: with both absent the node has NO CPU measurement, and returning
+	// (0, true) here fabricated a measured 0% — rendering "CPU 0%" in the Fleet card
+	// as if observed and feeding a false zero into the Welford anomaly baselines the
+	// D-088 presence flags exist to protect. Same rule as the branch above
+	// (external review round 4, F-14).
+	if n.CPUUsage != 0 {
+		return n.CPUUsage, true
+	}
+	return 0, false
 }
 
 // MemPct returns the memory usage as a percentage float64. It prefers the real AMS
@@ -242,7 +251,11 @@ func (n ClusterNodeDTO) MemPctOK() (float64, bool) {
 		}
 		return 0, false
 	}
-	return n.MemoryUsage, true
+	// See CPUPctOK: absent real field AND absent alias means no reading, not 0%.
+	if n.MemoryUsage != 0 {
+		return n.MemoryUsage, true
+	}
+	return 0, false
 }
 
 // flexString decodes a JSON string OR bare number into a string, so a numeric

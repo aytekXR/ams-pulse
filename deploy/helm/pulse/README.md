@@ -73,7 +73,7 @@ helm upgrade pulse ./deploy/helm/pulse -f my-values.yaml
 | Key | Default | Description |
 |-----|---------|-------------|
 | `pulse.image.repository` | `ghcr.io/aytekxr/ams-pulse` | Canonical GHCR image (cosign-signed on release) |
-| `pulse.image.tag` | `0.4.2` | Image tag |
+| `pulse.image.tag` | `0.4.3` | Image tag |
 | `pulse.image.digest` | `""` | Manifest digest for immutable pinning (overrides tag when set) |
 | `pulse.replicaCount` | `1` | Pulse replicas (use 1 with SQLite; N with postgres.enabled) |
 | `pulse.resources.requests.cpu` | `250m` | CPU request (2-vCPU tier) |

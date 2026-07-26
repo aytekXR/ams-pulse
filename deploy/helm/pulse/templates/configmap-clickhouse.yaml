@@ -39,8 +39,11 @@ data:
            maxMemoryUsage (the per-query value), making the chart's server cap
            512 MB against the compose XML's 768 MB despite the XML claiming parity
            (REVIEW-MP3-R4). maxMemoryUsageForAllQueries is the legacy name for this
-           value — the ClickHouse setting it used to render is deprecated in 24.x. -->
-      <max_server_memory_usage>{{ .Values.clickhouse.config.maxServerMemoryUsage | default .Values.clickhouse.config.maxMemoryUsageForAllQueries }}</max_server_memory_usage>
+           value — the ClickHouse setting it used to render is deprecated in 24.x.
+           Precedence: new key → deprecated alias → built-in 768 MB default. The default
+           lives HERE rather than in values.yaml because a chart default is never empty,
+           which would make the alias fallback unreachable (round-4 review F-09). -->
+      <max_server_memory_usage>{{ .Values.clickhouse.config.maxServerMemoryUsage | default .Values.clickhouse.config.maxMemoryUsageForAllQueries | default "805306368" }}</max_server_memory_usage>
       <max_concurrent_queries>{{ .Values.clickhouse.config.maxConcurrentQueries }}</max_concurrent_queries>
       <uncompressed_cache_size>{{ .Values.clickhouse.config.uncompressedCacheSize }}</uncompressed_cache_size>
       <mark_cache_size>{{ .Values.clickhouse.config.markCacheSize }}</mark_cache_size>

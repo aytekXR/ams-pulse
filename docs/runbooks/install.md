@@ -80,6 +80,13 @@ ${EDITOR:-nano} .env
 docker compose -f docker-compose.quickstart.yml --env-file .env up -d
 ```
 
+> **Why these fetch from `main`:** the compose file carries its own image pin
+> (`ghcr.io/aytekxr/ams-pulse:<release>`), so downloading compose + `.env.example` from the
+> same ref keeps them self-consistent. The `install.sh` path is different: the *script* is
+> pinned (`PULSE_REF`) and fetches the compose at that tag, so an old script can never pair
+> its image with a newer compose file. Set `PULSE_HOST_PORT` in `.env` to publish the UI on
+> a port other than 8090.
+
 After the stack starts, extract the bootstrap admin token (first run only):
 
 ```sh
@@ -96,9 +103,9 @@ starts automatically after you sign in, when no AMS sources are configured yet.
 ## Path A: Docker Compose (supported production path)
 
 > **Note:** This is the supported production path — it is what the live production
-> deployment runs. A full clean-install verification of the step-by-step below (fresh
-> machine, released image, real AMS) is scheduled (D-069);
-> any step that diverges will be corrected there.
+> deployment runs. A clean-install verification (anonymous `docker pull` of the released
+> image on a fresh machine → quickstart → live dashboard with the collector reporting `ok`)
+> was completed end-to-end in D-168 and re-verified against `0.4.2`.
 
 ### Prerequisites
 
@@ -163,9 +170,20 @@ export PULSE_LICENSE_PUBKEY=6403d7b49951d0220c7219e491b6525971edf10f0e64616b1702
 **4. Start the stack**
 
 ```sh
-make up
-# or: cd deploy && docker compose up -d
+docker compose \
+  -f deploy/docker-compose.yml \
+  -f deploy/docker-compose.evaluator.yml \
+  up -d
 ```
+
+> **Do not use `make up` for this path.** `make up` adds `docker-compose.build.yml` and
+> **builds the image from source** with a local tag — it does not run the released image
+> this section is about, and it also pulls in `docker-compose.override.yml` (port 80 on all
+> interfaces, no TLS). Use `make up` only for development builds.
+>
+> The `evaluator.yml` overlay above publishes the UI on **loopback only**
+> (`127.0.0.1:8090`). For production, drop it and front the stack with your own reverse
+> proxy — see the port-publishing note below.
 
 > **Warning — `docker-compose.override.yml` auto-loads from `deploy/`:** Docker Compose
 > v2 automatically merges `docker-compose.override.yml` when you run `docker compose`
@@ -335,12 +353,13 @@ PULSE_META_DSN=/tmp/pulse_meta.db \
 ```
 
 This runs both:
-- **Meta migrations** (SQLite) — creates 14 tables: `alert_rules`, `alert_channels`,
+- **Meta migrations** (SQLite) — creates 16 tables: `alert_rules`, `alert_channels`,
   `alert_history`, `api_tokens`, `ams_sources`, `ingest_tokens`, `users`, `tenants`,
   `license`, `cluster_nodes`, `probes`, `anomaly_baselines`, `report_schedules`,
-  `schema_migrations`. The DDL is embedded in the binary; no external file needed.
-- **ClickHouse migrations** — creates the `pulse` database with 9 raw/rollup tables
-  and 5 materialized views.
+  `audit_log`, `vod_poll_state`, `schema_migrations`. The DDL is embedded in the
+  binary; no external file needed.
+- **ClickHouse migrations** — creates the `pulse` database with 11 raw/rollup tables
+  and 7 materialized views.
 
 Verified output (QA-verified 2026-06-12):
 ```
@@ -472,8 +491,10 @@ See `deploy/config/pulse.example.yaml` for the full annotated file.
 
 ### Environment variables
 
-All variables are listed below. Omit any variable marked as having a default to get that
-default; the binary runs correctly without it.
+The most commonly needed variables are listed below. This is a **subset** — the server reads
+69 distinct `PULSE_*` variables in total, and the complete code-verified reference is
+[`docs/admin-guide.md`](../admin-guide.md). Omit any variable marked as having a default to
+get that default; the binary runs correctly without it.
 
 **Core variables (collector + API):**
 
@@ -509,8 +530,8 @@ default; the binary runs correctly without it.
 | `PULSE_METRICS_TOKEN` | — (401 without) | Prometheus scrape token. Set to enable `/metrics` with token auth. See [Prometheus guide](../guides/prometheus.md). |
 | `PULSE_ANONYMIZE_IP` | `false` | Set `true` to zero last IPv4 octet / last 80 IPv6 bits before geo lookup and ClickHouse storage (GDPR/KVKK posture). |
 | `PULSE_GEO_MMDB_PATH` | — (no-op) | Path to a MaxMind GeoLite2 `.mmdb` file for geo enrichment. Absent = no-op, one WARN logged. Register at maxmind.com for the free GeoLite2 download (D-007.4). |
-| `PULSE_KAFKA_BROKERS` | — (disabled) | Comma-separated Kafka broker addresses, e.g. `kafka1:9092,kafka2:9092`. Empty = Kafka source disabled. |
-| `PULSE_KAFKA_GROUP_ID` | `pulse-collector` | Kafka consumer group ID. |
+| `PULSE_KAFKA_BROKERS` | — (disabled) | **EXPERIMENTAL** (LIM-19: never live-validated against a real AMS broker). Comma-separated Kafka broker addresses, e.g. `kafka1:9092,kafka2:9092`. Empty = Kafka source disabled. |
+| `PULSE_KAFKA_GROUP_ID` | `pulse-collector` | **EXPERIMENTAL** — Kafka consumer group ID. |
 | `PULSE_SESSION_IDLE_TIMEOUT` | `5m` | Viewer session idle close timeout (Go duration, e.g. `3m`, `10m`). |
 | `PULSE_CLUSTER_DISCOVERY_INTERVAL` | `30s` | How often to poll AMS for cluster nodes. New node visible within 1 poll cycle (≤ 2 min budget). |
 | `PULSE_INGEST_TARGET_BITRATE_KBPS` | `2000` | Expected healthy ingest bitrate for the health score formula. |
@@ -757,7 +778,7 @@ Pulse starts in Free tier when no license key is configured:
 
 | Limit | Free | Pro | Business | Enterprise |
 |---|---|---|---|---|
-| AMS source nodes | 1 | 10 | 5 | Unlimited |
+| AMS source nodes | 1 | 10 | 50 | Unlimited |
 | Notification channels | Email only | Email, Slack, Telegram | Email, Slack, Telegram, PagerDuty, Webhook | All |
 | Data retention | 7 days | 90 days | 13 months | Unlimited |
 | Data API, CSV export | No | Yes | Yes | Yes |

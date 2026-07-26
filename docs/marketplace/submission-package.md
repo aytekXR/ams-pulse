@@ -1,7 +1,7 @@
 # Ant Media Marketplace — Submission Package Index
 
 **Product:** Pulse — Analytics & QoE Monitoring for Ant Media Server
-**Version:** v0.4.2 (released 2026-07-26, GHCR public, anonymously pullable) · **Prepared:** 2026-07-22; updated 2026-07-26
+**Version:** v0.4.3 (GHCR public, anonymously pullable) · **Prepared:** 2026-07-22; updated 2026-07-27
 
 This is the single page to hand Ant Media when the listing process starts: every
 submission artifact, where it lives, and its state. Statuses: **READY** (accurate,
@@ -17,7 +17,7 @@ reviewable now) · **DRAFT-OP** (content complete; blocked only on an operator d
 | Screenshots — 6 listing shots, 1920×1080 live-app | [`screenshot-list.md`](screenshot-list.md) + `screenshots/` (regenerate: `node qa/marketplace/capture-live-screenshots.mjs`) | READY (committed to `docs/marketplace/screenshots/`; portable capture script; regenerable at any time) |
 | Logo / media kit | `brandkit/logo/` (SVG + PNG variants), OG banner `brandkit/assets/png/og-1200x630.png` | READY (final specs = meeting assumption A3) |
 | Demo video | [`demo-video-script.md`](demo-video-script.md) + rough-cut `docs/marketplace/demo/pulse-demo-roughcut.webm` | DRAFT-OP (rough-cut rendered and attached to [GitHub release v0.4.1](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.1); operator records final with voiceover — TBD-EXT for voiceover only) |
-| Beacon SDK tarball | `ams-pulse-beacon-0.4.2.tgz` on the [v0.4.2 release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.2) | READY (0.4.1 tarball must NOT be advertised — it shipped the `Pulse.init()` silent-no-op defect fixed in 0.4.2) |
+| Beacon SDK tarball | `ams-pulse-beacon-0.4.3.tgz` on the [v0.4.3 release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.3) | READY (0.4.1 tarball must NOT be advertised — it shipped the `Pulse.init()` silent-no-op defect fixed in 0.4.2) |
 | Release notes ("what's new in 0.4") | [`release-notes.md`](release-notes.md) | READY |
 
 ## Documentation set (linkable as the product docs)
@@ -61,11 +61,11 @@ operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
 
 **✅ DONE (2026-07-25):**
 - ~~**GHCR public** — reviewers must `docker pull` anonymously.~~ **DONE (D-168):** package is
-  public; the anonymous clean-room install (`docker pull …:0.4.1` → quickstart → live dashboard,
-  collector `ok`, events flowing) was verified end-to-end with zero credentials. **Re-verified
-  against `0.4.2` (2026-07-26):** `0.4.2` and `latest` resolve to the same digest and are
-  anonymously pullable; the Helm chart OCI package `ghcr.io/aytekxr/charts/pulse:0.3.0` is
-  anonymously pullable too.
+  public; the anonymous clean-room install (`docker pull …:0.4.2` → quickstart → live dashboard,
+  collector `ok`, events flowing) was verified end-to-end with zero credentials — first run
+  against `0.4.1` (D-168), re-verified against `0.4.2` on 2026-07-26, where `0.4.2` and
+  `latest` resolve to the same digest and are anonymously pullable; the Helm chart OCI
+  package `ghcr.io/aytekxr/charts/pulse:0.3.0` is anonymously pullable too.
 - ~~**MaxNodes reconcile** (Pro 10 vs Business 5 inversion)~~ **DONE (D-166):** Business is now 50;
   ladder is monotonic (Free 1 / Pro 10 / Business 50 / Enterprise ∞) with a regression test.
 - ~~**Pricing sign-off**~~ **DECIDED (D-169, operator-delegated):** standard Free $0 / Pro $99 /
@@ -88,6 +88,15 @@ operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
   attached. The published artifact now matches the code and docs.
 - ~~**Confirm the category**~~ **SET:** "Analytics & Monitoring" is stated plainly in
   `listing.md`. Ant Media may reassign it at review; that is their call to make, not a blocker.
+- **v0.4.3 release cut (D-176)** — **submit against this tag, not v0.4.2.** External review
+  round 4 found that the corrected documentation, the regenerated screenshots, the evaluator
+  compose overlay and the parameterised quickstart host port all lived on `main` and were
+  absent from the published v0.4.2. Everything an evaluator meets in their first ten minutes
+  is in 0.4.3.
+- **Rotate `CLICKHOUSE_PASSWORD`** (operator) — a 32-hex prefix of the live production value
+  is in public git history since `98b011c`. Not remotely exploitable (ClickHouse is
+  Docker-internal only) and the source is scrubbed, but only rotation closes it. Should
+  happen before the repo receives marketplace traffic.
 
 1. **Submit the listing** to the Ant Media Marketplace (operator account) — paste from
    [`listing.md`](listing.md), never from `listing-draft.md`.
@@ -103,4 +112,4 @@ operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
    [brackets] and sends.
 7. **Rotate the exposed secrets** — see `docs/operator-expected.md`. The `CLICKHOUSE_PASSWORD`
    rotation is the one with a public-history exposure and should go first.
-8. Optional: **roll prod to v0.4.2** (prod is healthy on v0.4.0-139).
+8. Optional: **roll prod to v0.4.3** (prod is healthy on v0.4.0-139).

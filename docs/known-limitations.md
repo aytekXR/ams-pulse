@@ -1,13 +1,13 @@
 # Pulse — Known Limitations
 
-**Product:** Pulse v0.4.2 (last refreshed S107, 2026-07-26)  
+**Product:** Pulse v0.4.3 (last refreshed S109, 2026-07-27)  
 **Source:** `docs/assessment/documentation-gaps.md` (DG-01 through DG-18),
 `docs/assessment/final-assessment.md` §1 and Appendix B (v0.3.0 baseline; see
 `docs/assessment/marketplace-compliance-review-2026-07-25.md` for current
 marketplace readiness),
 `docs/assessment/capability-map.md`
 
-This document lists every known operator-facing limitation of Pulse v0.4.2 in
+This document lists every known operator-facing limitation of Pulse v0.4.3 in
 priority order. Each entry states what the limitation means for you, and what
 workaround or roadmap path exists.
 
@@ -33,8 +33,10 @@ AMS broker still pending, AV-15 BLOCKED — see LIM-19).
 consumer (`server/internal/collector/kafka/`). **Read LIM-19 first** — the
 Kafka integration has never been live-validated against a real AMS broker; gauges
 may stay empty if the topic or field names do not match your AMS version. If you
-run AMS in cluster mode, cluster-node REST responses include `cpuUsage` and
-`memoryUsage` fields (no Kafka needed).
+run AMS in cluster mode, cluster-node REST responses carry per-node CPU and memory in
+the `cpu` and `memory` fields (no Kafka needed). Note the field names: `cpuUsage` /
+`memoryUsage` are tolerant aliases Pulse keeps for mock and fixture compatibility and
+are **not** sent by real AMS 3.x.
 
 **Roadmap:** DG-05; roadmap item P1 "Standalone CPU/mem/disk via Kafka"
 (`docs/assessment/final-assessment.md` §5).
@@ -208,12 +210,27 @@ polling the per-connection `/{app}/connections` endpoint.
 
 ---
 
-### LIM-10: Cluster fleet discovery wire shape source-verified; live multi-node validation pending
+### LIM-10: Cluster fleet discovery wire shape source-verified; node roles/versions are not exposed by AMS 3.x, and edge/origin dedup is therefore inactive
 
-**What it means for you:** Edge/origin viewer dedup (`IsEdgeStream()`), cluster
-node auto-discovery, and aggregate fleet metrics are implemented and unit-tested.
-Cluster-specific behavior has not been live-validated against a real multi-node AMS
-cluster — the validation VPS ran single-node AMS only.
+**What it means for you:** Cluster node auto-discovery and aggregate fleet metrics
+are implemented and unit-tested. Two consequences of the real AMS 3.x wire shape are
+**not** confidence gaps but statically provable facts, so read them as current product
+behaviour rather than as pending validation:
+
+- **Every node displays as `origin`, with no version.** The AMS 3.x cluster-nodes
+  endpoint carries no `role` and no `version` field (`ClusterNode.java` at tag
+  `ams-v3.0.3`; the `role`/`version` keys in Pulse's DTO are tolerant aliases kept for
+  mock/fixture compatibility). Discovery therefore defaults every node's role to
+  `origin` and emits no version.
+- **Edge/origin viewer dedup (`IsEdgeStream()`) never activates on AMS 3.x.** It
+  requires a node whose role is literally `edge`, which the paragraph above shows
+  cannot occur. The code is implemented and unit-tested against mock profiles that do
+  send a role; on a real AMS 3.x cluster it is inert, and origin viewer counts are
+  therefore never suppressed. It would begin working unchanged if a future AMS exposed
+  roles.
+
+Beyond those two, cluster-specific behavior has not been live-validated against a real
+multi-node AMS cluster — the validation VPS ran single-node AMS only.
 
 **Wire shape (G-21 settled, S106):** AMS source at tag `ams-v3.0.3`
 (`ClusterRestServiceV2`, class-level `@Path("/v2/cluster")`) exposes exactly three
@@ -226,12 +243,35 @@ tomcat.cluster`) on a standalone node; `GET /rest/v2/cluster-mode-status` →
 probes `cluster-mode-status` first and only paginates when `success:true`.
 
 **What is proven:** Standalone mode fully live-validated (46/50 PASS); wire shape
-source-verified at ams-v3.0.3 + standalone live-verified; `IsEdgeStream()` dedup
-unit-tested; node discovery in 24.4 ms (CI). Live cluster behaviour (multi-node
-paginated response) remains unvalidated — no multi-node AMS cluster is available.
+source-verified at ams-v3.0.3 + standalone live-verified; node discovery in 24.4 ms
+(CI). `IsEdgeStream()` dedup is unit-tested **against mock profiles that send a role**
+— which real AMS 3.x does not, so those tests do not demonstrate the feature working in
+production (see above). Live cluster behaviour (multi-node paginated response) remains
+unvalidated — no multi-node AMS cluster is available.
 
-**Workaround:** If you run a multi-node AMS cluster, treat cluster node listing and
-fleet aggregates as provisionally implemented, not live-proven. Report any
+**Node alerting on a cluster is not fully reliable during an AMS API outage.** External
+review round 4 (F-04/F-05/F-06) identified several independent ways the degraded-node
+ladder can miss on a cluster, each verified against the code:
+
+- `node_degraded` needs 3 consecutive API errors (15 s at the default cadence), but
+  stale-node eviction also fires at 3×`PULSE_POLL_INTERVAL`, so the degraded state can
+  exist for only a short window before the node is evicted outright.
+- A discovery poll that succeeds mid-outage resets the error streak for every node.
+- If `/rest/v2/applications` is the endpoint that fails, the poll short-circuits before
+  the cluster branch runs, so no streak accrues at all.
+- The `down` state computed from AMS's `status`/`lastUpdateTime` is internal only: it is
+  not emitted on `node_stats`, the Fleet API has no `down` value, and no alert keys on it.
+- The `lastUpdateTime` **unit is an unverified assumption** (epoch ms). If AMS emits
+  seconds, all nodes are silently classified down. See `AMS-INTEGRATION.md` §1.1.
+- A cluster→standalone mode flip leaves a blind window of roughly 4–20 minutes depending
+  on poll cadence, during which node events may be missing or falsely alarming.
+
+Net effect: on a cluster, treat `node_down` and `/healthz` as the dependable signals and
+do not rely on `node_degraded` as an early-warning rung until this is reworked and
+live-validated. Standalone deployments are unaffected — the ladder is live-validated there.
+
+**Workaround:** If you run a multi-node AMS cluster, treat cluster node listing, fleet
+aggregates and node alerting as provisionally implemented, not live-proven. Report any
 discrepancies as issues.
 
 **Roadmap:** Live cluster validation (N3 PARTIALLY in prd-validation-matrix.md).
@@ -642,10 +682,29 @@ are queried through a single base URL and do not tell Pulse which cluster node i
 serving each stream, so there is no reliable per-stream node identity to stamp.
 Node metrics come from the cluster endpoint, which does supply real IDs.
 
-**Workaround:** On a cluster, filter streams by app and stream name rather than by
-node. Fleet-level node metrics, alerts and rollups are unaffected and correct.
+**Consequences beyond labelling.** Per-app polling only ever queries the single node at
+`PULSE_AMS_URL`, so on a cluster this is not only a mismatched label:
 
-**Roadmap:** The owning node is derivable from the broadcast `originAdress` field;
+- **Apps that live on other nodes are invisible, not mislabelled.** If an application is
+  deployed on a subset of nodes that does not include the one at `PULSE_AMS_URL`, its
+  streams do not appear at all.
+- **Per-viewer QoE via REST is largely absent on clusters.** `webrtc-client-stats` returns
+  the answering node's in-memory peer table only, so viewers served by other nodes are not
+  represented.
+- **Point `PULSE_AMS_URL` at ONE origin node — do not use a load balancer.** A
+  load-balanced or round-robin base URL breaks two things: stream-disappearance detection
+  (consecutive polls landing on different members make streams look ended, emitting false
+  `publish_end{disappeared}` events), and the per-host cookie jar (login and retry can land
+  on different members). Sticky sessions in front of Pulse's AMS URL are not a supported
+  configuration.
+
+**Workaround:** On a cluster, filter streams by app and stream name rather than by node,
+and pin `PULSE_AMS_URL` to a single origin node. Fleet-level node metrics are gathered from
+the cluster endpoint and are unaffected by the above.
+
+**Roadmap:** The owning node is derivable from the broadcast `originAdress` field (present
+in the real-AMS 3.0.3 response captures under `server/pkg/amsclient/testdata/`, though not
+yet decoded into the DTO);
 threading it through per-app polling is deferred until the cluster path is
 live-validated against a real multi-node cluster (LIM-10), so the change can be
 verified rather than guessed.
@@ -664,6 +723,7 @@ verified rather than guessed.
 | D-161 (S97, 2026-07-22) | Marketplace-docs fact sweep: header → v0.4.0; LIM-24 corrected (scheduled PDF reports ARE implemented, Business+; only interactive export is CSV-only); added LIM-25 (user management API-only, no UI tab yet) and LIM-26 (firing alert can outlive a vanished source, pending §2.44 `[FO-1]` ruling); count 24 → 26 |
 | S105 (2026-07-25) | Kafka consumer aligned to official AMS topics (`ams-instance-stats`/`ams-webrtc-stats`, source-derived from AMS `StatsCollector.java`, fixture-tested + broker-integration-tested); LIM-01/LIM-04 topic refs updated; LIM-19 title and body updated to reflect fixed consumer alignment (what remains open is live AMS-producer validation, AV-15); header → v0.4.1 |
 | REVIEW-MP3 R9/R15 (S108, 2026-07-26) | Added LIM-27 (AMS ingest-error webhooks recorded in `stream_ingest_error` but not yet surfaced in UI/alerts/API — includes the ClickHouse query) and LIM-28 (cluster-only: stream-level node filtering uses the configured node ID while the Fleet view uses real AMS cluster IDs); header → v0.4.2; count 26 → 28 |
+| Review round 4 F-03/F-04/F-05/F-06/F-13 (S109, 2026-07-27) | **LIM-10 rewritten** from a confidence gap to provable fact: AMS 3.x exposes no node `role` or `version`, so all nodes display as `origin` and edge/origin viewer dedup is **inactive**, not merely unvalidated; added the cluster node-alerting reliability gaps (eviction race, discovery streak reset, `/applications` short-circuit, invisible `down` state, unverified `lastUpdateTime` unit, mode-flip blind window). **LIM-28 extended** — apps on other cluster nodes are invisible rather than mislabelled, per-viewer QoE via REST is largely absent on clusters, and `PULSE_AMS_URL` must point at one origin node (load balancing breaks stream-end detection and the cookie jar); `originAdress` sourced to the real-AMS capture fixtures. **LIM-01 corrected** — real wire fields are `cpu`/`memory`, not the mock-only `cpuUsage`/`memoryUsage` aliases. Count unchanged at 28 |
 
 ---
 

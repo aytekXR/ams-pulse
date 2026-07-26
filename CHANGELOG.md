@@ -10,6 +10,73 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-07-27
+
+Honesty release. External review round 4 found the residual risk was concentrated in
+*claims* rather than code: several documents asserted cluster capabilities that AMS 3.x
+makes structurally impossible, and two release-note claims about 0.4.2 were falsifiable in
+minutes. This release makes the documentation match the code, and fixes the supply-chain and
+installer defects found alongside it. See `docs/assessment/marketplace-compliance-review-2026-07-27-round4.md`.
+
+### Changed
+
+- **Cluster capability claims corrected across the documentation set (D-176, review round 4
+  F-03).** README, `overview.md`, `product.md`, `api-guide.md`, `ARCHITECTURE.md` and the
+  demo voiceover script asserted "real origin/edge roles", a populated node version field,
+  and active edge/origin viewer dedup. AMS 3.x exposes **no `role` and no `version`** on its
+  cluster-nodes endpoint, so discovery defaults every node to `origin`, the version stays
+  empty, and `IsEdgeStream()` — which requires `role == "edge"` — can never activate. These
+  were statically provable facts, not pending validation. LIM-10 rewritten accordingly, and
+  `/live/overview` now resolves node role through cluster discovery instead of hardcoding
+  `"standalone"`, so it agrees with `/fleet/nodes`.
+- **Marketplace release notes no longer overstate v0.4.2 (D-176, F-02).** Error webhooks are
+  described as recorded and queryable (per LIM-27) rather than "captured for ingest health";
+  the boot claim now names the documented evaluator command instead of the plain compose
+  path, which publishes no ports and is not what CI exercises.
+
+### Fixed
+
+- **`CPUPctOK`/`MemPctOK` fabricated a measured 0% when the field was absent entirely
+  (D-176, F-14).** With neither the real wire field nor the alias present, both returned
+  `(0, true)` — a false "measured zero" reaching the Fleet card and the Welford anomaly
+  baselines through a different input than the NaN case fixed in D-175. The test that pinned
+  this behaviour as correct was rewritten and a regression test added.
+- **The Helm chart's deprecated ClickHouse memory alias was silently ignored (D-176, F-09).**
+  `maxMemoryUsageForAllQueries` was documented as honoured when `maxServerMemoryUsage` is
+  unset, but shipping **both** as chart defaults made the `| default` fallback unreachable —
+  an operator values file tuning only the old key was dropped and the server cap snapped back
+  to 768 MB on upgrade. The default now lives in the template so precedence is genuinely
+  new key → deprecated alias → 768 MB (verified across all four cases).
+- **Release guard #16 never ran (D-176, F-09).** It resolves the previous tag with
+  `git describe`, but the release checkout was shallow with no tags, so it silently no-opped
+  on every release. Added `fetch-depth: 0` + `fetch-tags: true`; the check now fails loudly
+  rather than skipping, and its diff is scoped to `templates/` + `values.yaml` so it no
+  longer degenerates into "always bump the chart semver".
+- **Quickstart installer: re-runs hard-failed and the port remedy was unreachable
+  (D-176, F-08).** The new busy-port preflight matched *any* listener including Pulse's own
+  published port, so re-running the installer on a healthy install exited 1 — breaking the
+  idempotent re-run path. It now exempts a listener owned by the quickstart's own stack. A
+  second preflight fails loudly when the pinned compose cannot honour a requested
+  `PULSE_HOST_PORT` (releases up to v0.4.2 hardcode `8090:8090`) instead of health-polling a
+  dead port until timeout. The header's `| bash` example corrected to `| bash -s --`.
+- **mock-ams marked every cluster node permanently "down" (D-176, F-05).** Cluster fixtures
+  hardcoded a **2024** `lastUpdateTime`, which is far beyond the staleness timeout, so every
+  mock cluster run operated in the all-down state — and because first-sight transitions are
+  not logged, nothing surfaced it. Timestamps are now `now`-relative.
+- **The poller emitted cluster nodes with an empty identity (D-176, F-14).** `PrimaryID()`
+  returns `""` when `id`, `nodeId` and `ip` are all absent; discovery guarded this, the
+  poller did not, producing a blank phantom node and a `""` entry in the failure-streak
+  fan-out set.
+- **Documentation residue batch (D-176, F-10/F-11/F-13/F-14).** `install.md`'s tier table
+  claimed Business = **5** nodes against the code's 50; schema counts were wrong (meta 14→16,
+  ClickHouse 9 tables/5 MVs → 11/7); "all variables are listed below" covered 38 of 69;
+  `make up` was recommended as the released-image path while it builds from source; the
+  clean-install status contradicted the submission pack. Also: LIM-01's cluster field names
+  corrected to the real `cpu`/`memory`, Kafka marked EXPERIMENTAL at the README and
+  `install.md` surfaces, `alerting.md`'s two false `node_degraded` descriptions corrected,
+  README's production-version claim corrected to the true v0.4.0-139, and three
+  non-functional occurrences of the VPS public IP scrubbed.
+
 ### Security
 
 - **Removed a production credential prefix from the repository (D-175).**
@@ -25,6 +92,13 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
   every outcome — but only when the candidate tag is the digest's sole tag, because a GHCR
   package "version" is a digest and promotion re-tags that same digest; deleting it
   unconditionally would have deleted the published release, its SBOM and its signature.
+  **Correction (external review round 4, F-07):** as first shipped this step could never
+  execute — it authenticated with `GITHUB_TOKEN`, which has no authenticated-user context
+  for `/user/packages/...` and lacks the `delete:packages` scope, so the list call came back
+  empty and the step exited 0 reporting "nothing to clean up". It now uses the
+  `/users/{owner}/...` endpoint with a dedicated `GHCR_CLEANUP_TOKEN` secret and asserts the
+  HTTP status. **Until that secret is configured the step warns loudly and the quarantine
+  tag must be deleted by hand** after a failed release.
 
 ### Fixed
 
@@ -35,6 +109,13 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
   real node and `node_degraded` could not fire for the entire outage — the exact condition
   the alert ladder exists to catch. Streak events now fan out over the nodes seen in the last
   successful cluster poll.
+  **Scope (corrected after external review round 4, F-04):** this fixes the addressing, not
+  the whole ladder. `node_degraded` needs 3 consecutive errors (15 s at the default cadence)
+  while stale-node eviction also fires at 3×`PollInterval`, so on a cluster the degraded
+  state can exist for only a short window before the node is evicted; a discovery poll
+  succeeding mid-outage resets the streak; and an outage of `/rest/v2/applications`
+  short-circuits the poll before the cluster branch runs at all. Cluster alerting during an
+  AMS API outage remains **not fully reliable and not live-validated** — see LIM-10.
 - **Cluster node metrics were being overwritten with fabricated zeros (D-175, R2).**
   `cluster.Discovery` emitted `disk_pct` / `net_in_mbps` / `net_out_mbps` / `jvm_heap_used_mb`
   / `version` unconditionally — fields real AMS 3.x never sends. Since both emitters now key
@@ -45,6 +126,10 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
   with a frozen `lastUpdateTime`, so the vanish-based staleness sweep never fired for it.
   AMS's own `status` and `lastUpdateTime` now mark a node down, which also releases the
   origin-viewer suppression that a dead edge used to hold open.
+  **Scope (corrected after external review round 4, F-05):** the `down` state is currently
+  internal — it is not emitted on `node_stats`, the Fleet API has no `down` value, and no
+  alert keys on it, so its only user-visible effect today is a Warn log. Surfacing it end to
+  end is tracked debt.
 - **A single `NaN` CPU reading was recorded as a measured 0% (D-175, R5).** Non-finite values
   were rejected but fell through to an alias field that is 0 on real AMS. Readings with no
   usable value are now reported absent rather than fabricated.

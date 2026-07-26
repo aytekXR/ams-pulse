@@ -12,7 +12,7 @@ type: application
 # pulled (REVIEW-MP3-R8). Release guard check #16 now enforces this.
 version: 0.3.1
 # App version matches the pulse binary release tag.
-appVersion: "0.4.2"
+appVersion: "0.4.3"
 
 keywords:
   - antmedia

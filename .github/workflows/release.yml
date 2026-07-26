@@ -48,6 +48,13 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          # Guard check #16 resolves the previous tag with `git describe --tags`, which
+          # needs full history AND tags. The default shallow depth-1 checkout has
+          # neither, so PREV_TAG came back empty and #16 silently no-opped on every
+          # release (external review round 4, F-09).
+          fetch-depth: 0
+          fetch-tags: true
 
       # ── Checkout specific tag (dispatch npm-publish path) ──────────────────────────
       # When a caller supplies publish_tag on workflow_dispatch, re-checkout that ref
@@ -192,8 +199,10 @@ jobs:
 
           # 13. Helm golden-test values files — stale tags here make the goldens
           #     assert the previous release's pin.
+          # Anchored+quoted match: a bare `grep -v 0.4.2` is a SUBSTRING test, so a
+          # stale `0.4.20` pin would pass a 0.4.2 release (round-4 review F-14).
           for f in deploy/helm/tests/values-*.yaml; do
-            if grep -E '^[[:space:]]*tag:' "$f" | grep -v "${TAG_VERSION}" | head -1 | grep -q .; then
+            if grep -E '^[[:space:]]*tag:' "$f" | grep -vE "^[[:space:]]*tag:[[:space:]]*\"?${TAG_VERSION}\"?[[:space:]]*$" | head -1 | grep -q .; then
               echo "FAIL: $f pins a tag other than ${TAG_VERSION} — update + regenerate goldens before tagging"
               exit 1
             fi
@@ -227,11 +236,22 @@ jobs:
           #     artifact someone already pulled. Chart.yaml 'version' is the chart's
           #     own semver and is independent of appVersion (checked at #2).
           PREV_TAG="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+          if [ -z "$PREV_TAG" ]; then
+            # Fail loudly rather than skipping: a silent no-op here is what let the
+            # check pass vacuously on every prior release (round-4 review F-09).
+            echo "FAIL: check #16 could not resolve the previous tag — is the checkout shallow or missing tags?"
+            exit 1
+          fi
           if [ -n "$PREV_TAG" ]; then
             CHART_SEMVER="$(grep -E '^version:' deploy/helm/pulse/Chart.yaml | sed 's/version:[[:space:]]*//; s/"//g')"
             PREV_CHART_SEMVER="$(git show "${PREV_TAG}:deploy/helm/pulse/Chart.yaml" 2>/dev/null \
               | grep -E '^version:' | sed 's/version:[[:space:]]*//; s/"//g' || true)"
-            if ! git diff --quiet "${PREV_TAG}" "${GITHUB_REF_NAME}" -- deploy/helm/pulse/ 2>/dev/null; then
+            # Scoped to templates/ + values.yaml: check #2 already forces an appVersion
+            # bump in Chart.yaml on EVERY release, so diffing all of deploy/helm/pulse/
+            # made this check equivalent to "always bump the chart semver" rather than
+            # "bump it when the chart's rendered content changed" (round-4 review F-09).
+            if ! git diff --quiet "${PREV_TAG}" "${GITHUB_REF_NAME}" \
+                 -- deploy/helm/pulse/templates/ deploy/helm/pulse/values.yaml 2>/dev/null; then
               if [ -n "$PREV_CHART_SEMVER" ] && [ "$CHART_SEMVER" = "$PREV_CHART_SEMVER" ]; then
                 echo "FAIL: deploy/helm/pulse/ changed since ${PREV_TAG} but Chart.yaml version is still ${CHART_SEMVER};"
                 echo "      pushing it would overwrite the published chart ${CHART_SEMVER} with different content."
@@ -415,16 +435,37 @@ jobs:
       # signature. So: delete ONLY when the candidate tag is the sole tag on the
       # digest, which is exactly the un-promoted (failed) case. On the success path
       # the extra alias is harmless and is left in place deliberately.
+      #
+      # TOKEN: this needs GHCR_CLEANUP_TOKEN — a PAT with `delete:packages`. The default
+      # GITHUB_TOKEN CANNOT do this job (external review round 4, F-07): it is an app
+      # installation token with no authenticated-user context, so `/user/packages/...`
+      # does not resolve for it, and package-version deletion requires the
+      # `delete:packages` scope that `permissions: packages: write` does not grant. With
+      # GITHUB_TOKEN the LIST call returned empty and the step exited 0 via the
+      # "nothing to clean up" branch — reporting success while never deleting anything.
+      # So: when the PAT is absent, say so loudly instead of silently no-opping.
       - name: Empty quarantine on failure
         if: always() && github.ref_type == 'tag'
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GHCR_CLEANUP_TOKEN }}
           CANDIDATE: candidate-${{ steps.version.outputs.COMMIT }}
+          OWNER: ${{ github.repository_owner }}
         run: |
           set +e
-          VERSION_JSON=$(gh api "/user/packages/container/ams-pulse/versions" --paginate \
-            --jq ".[] | select(.metadata.container.tags[]? == \"${CANDIDATE}\")" 2>/dev/null | head -1)
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::warning::GHCR_CLEANUP_TOKEN is not configured, so the quarantine tag ${CANDIDATE} cannot be deleted automatically. If this release FAILED before promotion, an unscanned image is publicly pullable under that tag — delete it by hand: GitHub → Packages → ams-pulse → versions. (Add a PAT with delete:packages as GHCR_CLEANUP_TOKEN to automate this.)"
+            exit 0
+          fi
+
+          # /users/{owner}/... is the correct endpoint for a PAT acting on a
+          # user-owned package; /user/... only works for the token's own identity.
+          if ! VERSIONS=$(gh api "/users/${OWNER}/packages/container/ams-pulse/versions" --paginate 2>&1); then
+            echo "::warning::could not list package versions (${VERSIONS}); delete quarantine tag ${CANDIDATE} by hand if this release failed"
+            exit 0
+          fi
+
+          VERSION_JSON=$(echo "$VERSIONS" | jq -c ".[] | select(.metadata.container.tags[]? == \"${CANDIDATE}\")" 2>/dev/null | head -1)
           if [ -z "$VERSION_JSON" ]; then
             echo "::notice::quarantine tag ${CANDIDATE} not found — nothing to clean up"
             exit 0
@@ -438,10 +479,13 @@ jobs:
             exit 0
           fi
 
-          if gh api -X DELETE "/user/packages/container/ams-pulse/versions/${VERSION_ID}" >/dev/null 2>&1; then
+          # Assert the HTTP status so a silent auth failure cannot read as success.
+          HTTP_CODE=$(gh api -X DELETE "/users/${OWNER}/packages/container/ams-pulse/versions/${VERSION_ID}" \
+            --include --silent 2>&1 | grep -oiE '^HTTP/[0-9.]+ [0-9]+' | grep -oE '[0-9]+$' | head -1)
+          if [ "$HTTP_CODE" = "204" ]; then
             echo "release failed before promotion — deleted un-promoted quarantine image ${CANDIDATE}"
           else
-            echo "::warning::could not delete un-promoted quarantine image ${CANDIDATE} (version id ${VERSION_ID}); a vulnerable image may be publicly pullable — delete it by hand: GitHub → Packages → ams-pulse → versions"
+            echo "::warning::could not delete un-promoted quarantine image ${CANDIDATE} (version id ${VERSION_ID}, HTTP ${HTTP_CODE:-unknown}); a vulnerable image may be publicly pullable — delete it by hand: GitHub → Packages → ams-pulse → versions"
           fi
 
       # ── cosign keyless signing (tag push only) ─────────────────────────────────────

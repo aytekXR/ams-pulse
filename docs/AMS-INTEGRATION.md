@@ -181,8 +181,18 @@ v2.10/v2.14/v3.0 wire variance — unknown JSON fields are silently ignored, mis
 fields zero. ~~`speed` was a bitrate fallback~~ — **removed D-030**: `speed` is a
 dimensionless realtime ratio (≈1.0), not a bitrate; the old fallback emitted ~1 "kbps"
 garbage. The `version` field on `ClusterNodeDTO` is preserved so the Fleet page can
-render it. Empty `streamId` in list responses is guarded. See the D-029v real-wire
-units table above for the complete set of unit corrections.
+render it — but note real AMS 3.x does **not** send `version` (nor `role`) on the
+cluster-nodes endpoint, so both stay empty against a real cluster (LIM-10). Empty
+`streamId` in list responses is guarded. See the D-029v real-wire units table above for
+the complete set of unit corrections.
+
+**`ClusterNodeDTO.lastUpdateTime` unit — UNVERIFIED ASSUMPTION.** Pulse treats it as Unix
+epoch **milliseconds** and marks a node `down` once it is older than the staleness
+timeout. This unit has not been confirmed against AMS source or a live cluster; it is an
+inference from the field's magnitude in captured responses. **If AMS 3.x actually emits
+seconds, every node is instantly and silently classified `down`** (first-sight transitions
+are not logged). Confirm against `ClusterNode.java` before relying on node-liveness
+behaviour on a real cluster, and record the result here. Tracked with LIM-10.
 
 ### 1.2 Webhook source (low-latency, now wired)
 
@@ -699,7 +709,7 @@ the `Content-Security-Policy` header in `deploy/nginx/pulse.beyondkaira.com.conf
 `PULSE_*` variables **relevant to AMS integration**, read from
 `server/cmd/pulse/config.go` (`loadEnvConfig`). This table is deliberately
 scoped to the integration surface and is **not** the complete configuration
-reference — Pulse defines roughly 50 `PULSE_*` variables in total (storage,
+reference — Pulse defines 69 `PULSE_*` variables in total (storage,
 alerting, auth/OIDC, reports, TLS, rate limits). The single complete reference is
 [`admin-guide.md`](admin-guide.md); when the two disagree, the admin guide wins.
 

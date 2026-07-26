@@ -30,7 +30,7 @@ to an Ant Media Server (AMS) deployment and answers, out of the box:
 agencies operating AMS for clients — anyone who must answer "is the stream OK?" for paying
 customers without shipping viewer data to a third party.
 
-**The 10 features (all shipped; current release v0.4.2):**
+**The 10 features (all shipped; current release v0.4.3):**
 
 | # | Feature | One-liner | Tier |
 |---|---|---|---|
@@ -40,7 +40,7 @@ customers without shipping viewer data to a third party.
 | F4 | Ingest health | 0–100 health score per stream, degradation detection | Free+ |
 | F5 | Alerting | email/Slack/Telegram/PagerDuty/webhook, mute, grouping, maintenance windows | Free+ (channels tiered) |
 | F6 | Usage/billing reports | per-tenant CSV/PDF, S3 export, ±1% reconciliation | Business+ |
-| F7 | Cluster fleet view | auto-discovery ≤30 s, origin/edge roles | Free+ |
+| F7 | Cluster fleet view | auto-discovery ≤30 s (roles not exposed by AMS 3.x — LIM-10) | Free+ |
 | F8 | Data API + Prometheus | full REST/WS API + /metrics scrape | Pro+ |
 | F9 | Anomaly detection | Welford baselines, σ-deviation alerts, <1 false alarm/node-week | Enterprise |
 | F10 | Synthetic probes | HLS probing (TTFB, bitrate); WebRTC/RTMP/DASH reachability | Pro+ |

@@ -149,9 +149,19 @@ func (s *Service) LiveOverview(ctx context.Context, app, nodeID, tenant string) 
 		if nodeID != "" && nid != nodeID {
 			continue
 		}
+		// Use the same role resolution as FleetNodes (VD-39): a hardcoded
+		// "standalone" here made /live/overview and /fleet/nodes disagree about the
+		// role of the same node on a cluster. Falls back to "standalone" when
+		// discovery has not polled the node yet.
+		role := "standalone"
+		if s.clusterDiscovery != nil {
+			if r := s.clusterDiscovery.NodeRole(nid); r != "" {
+				role = r
+			}
+		}
 		nh := NodeHealth{
 			NodeID:   nid,
-			Role:     "standalone",
+			Role:     role,
 			Status:   "up",
 			LastSeen: n.UpdatedAt.UnixMilli(),
 			CPUPCT:   n.CPUPCT,
