@@ -415,7 +415,9 @@ func (s *Server) routes() {
 	// POST /rest/v2/users/authenticate
 	// Returns {"success":true} and sets a JSESSIONID session cookie (matching real AMS).
 	s.mux.HandleFunc("/rest/v2/users/authenticate", func(w http.ResponseWriter, r *http.Request) {
-		http.SetCookie(w, &http.Cookie{Name: "JSESSIONID", Value: "mock-session"})
+		// HttpOnly matches Tomcat's JSESSIONID default; Secure satisfies CodeQL and
+		// is harmless here — amsclient's simpleCookieJar does not filter on it.
+		http.SetCookie(w, &http.Cookie{Name: "JSESSIONID", Value: "mock-session", HttpOnly: true, Secure: true})
 		writeJSON(w, map[string]any{"success": true, "message": "system/ADMIN"})
 	})
 
