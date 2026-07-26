@@ -9,10 +9,14 @@ only** — the superseded S93–S106 status stack lives in git history and
 > with evidence, the rest confirmed), all confirmed defects were fixed — including three that
 > would have shipped broken inside v0.4.2: a real cluster's transient 500 silently flipping
 > the Fleet view to "standalone", every cluster node collapsing onto one identity, and the
-> hardened Compose overlay not booting at all. **v0.4.2 was tagged only after those landed**
-> (the release now Trivy-scans BEFORE the public tags exist, via a quarantine-tag promote
-> flow). All gates green; **prod untouched** (v0.4.0-139). Full record: `decisions.md` D-174
-> · `sessions/SESSION-107.md` · review verbatim:
+> hardened Compose overlay not booting at all. **v0.4.2 is RELEASED and verified**: tagged
+> only after those fixes landed (PR #218, 15/15 checks), release pipeline green on its first
+> quarantine-flow run — image Trivy-scanned on both arches BEFORE the public tags existed,
+> `0.4.2` and `latest` confirmed anonymously pullable at the SAME digest, cosign-signed,
+> binaries + SHA256SUMS + SDK tarball + Helm chart attached. **The published artifact now
+> matches the code and docs — the #1 finding across all three review passes is closed.**
+> Prod untouched (v0.4.0-139, 719 rows/h at session close). Full record: `decisions.md`
+> D-174 · `sessions/SESSION-107.md` · review verbatim:
 > `docs/assessment/marketplace-compliance-review-2026-07-26.md`.
 
 ---
@@ -36,9 +40,10 @@ only** — the superseded S93–S106 status stack lives in git history and
    the release workflow then publishes automatically on the next tag (or via
    workflow_dispatch `publish_tag`). v0.4.2 shipped without it; the tarball is attached to
    the release and nothing failed.
-7. **Flip the Helm chart OCI package public** on GHCR once the v0.4.2 release created it
-   (`ghcr.io/aytekxr/charts/pulse`) — web-UI only, no API, exactly like the image was:
-   GitHub → Packages → package settings → Change visibility → Public.
+7. **Flip the Helm chart OCI package public** on GHCR — it EXISTS now (the v0.4.2 release
+   pushed `ghcr.io/aytekxr/charts/pulse`) and starts private. Web-UI only, no API, exactly
+   like the image was: GitHub → Packages → package settings → Change visibility → Public.
+   Until flipped, `helm install` from OCI fails anonymously (the in-repo chart path works).
 8. **Demo FINAL** — re-record voiceover over the dark rough-cut attached to the release.
 9. **Confirm the licensor legal name** stamped in LICENSE/licensing docs:
    "Aytek Erdoğan (beyondkaira.com)" — one word if right, or give the exact form.
