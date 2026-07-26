@@ -8,6 +8,6 @@
 -- unaffected; columns are appended at the table end to keep the positional batch
 -- insert in server/internal/store/clickhouse/clickhouse.go aligned.
 
-ALTER TABLE server_events ADD COLUMN IF NOT EXISTS action LowCardinality(String) DEFAULT '';
+ALTER TABLE {db}.server_events ADD COLUMN IF NOT EXISTS action LowCardinality(String) DEFAULT '';
 
-ALTER TABLE server_events ADD COLUMN IF NOT EXISTS stream_name String DEFAULT '';
+ALTER TABLE {db}.server_events ADD COLUMN IF NOT EXISTS stream_name String DEFAULT '';
