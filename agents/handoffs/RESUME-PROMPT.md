@@ -11,7 +11,60 @@
 
 ---
 
-## ▶ START HERE (next session — S107/D-174 done: REVIEW-MP3 executed AND **v0.4.2 RELEASED & VERIFIED**. The engineering gate list is EMPTY except tracked P2 debt; the marketplace submission is operator-gated. Next session = post-release housekeeping + P2 debt in low-frequency wait mode.)
+## ▶ START HERE (next session — S108/D-175 done: review round 3 (R1–R15) executed AND a parallel artifact audit found 5 more, incl. a public-history credential and a broken flagship screenshot. PR #220 merged green. **The tree is staged for the operator's NEXT external review.**)
+
+> **✅ Where we are (2026-07-26 late, D-175):** the operator supplied a third-party review's
+> Round-3 pass (R1–R15) with "add this to your fixes". Verify-first: **14 CONFIRMED, R13
+> already dispositioned by D-174, and one premise of the review STALE** — it assumed the
+> v0.4.2 tag was unpushed when v0.4.2 had already been released and verified, so R1/R2 could
+> not "land before tagging"; they ride the next release. Four real code defects fixed with
+> regression tests — headline: **cluster degraded-node alerting was DEAD during AMS API
+> outages** (streak events addressed to an identity no cluster node carries post-N2, so the
+> aggregator dropped them and `node_degraded` could never fire). Also: discovery's fabricated
+> zeros overwriting the poller on the same key, dead-but-listed nodes reporting healthy
+> forever, `NaN` recorded as a measured 0%.
+>
+> **A parallel verify-first audit of the PUBLISHED artifact found 5 the review missed:**
+> (1) the **production `CLICKHOUSE_PASSWORD` prefix is in public git history** since `98b011c`
+> — inside the very test written to prevent credential leaks (source fixed; **rotation is now
+> operator item #1**); (2) `ss1-dashboard.png`, the flagship listing image, showed **all 8
+> streams UNKNOWN and 0 viewers/0 publishers** because capture mocks used field names the
+> schema doesn't define; (3) the alerting screenshot's history cells were all em dashes;
+> (4) SDK docs advertised the **0.4.1 tarball** (the silent-no-op `Pulse.init()` build);
+> (5) the **documented README evaluator command published no port** — healthy stack,
+> unreachable UI. All fixed; CI now boots the documented command and asserts the UI over the
+> published host port.
+>
+> **⚠ Two corrections worth carrying:** the review's R7 fix as written would have been
+> DESTRUCTIVE — a GHCR "package version" is a *digest* and promotion re-tags it, so deleting
+> the candidate unconditionally would have deleted the published release + SBOM + signature.
+> Scoped to the un-promoted case only. And the audit's licensor-name mismatch claim was
+> **refuted** (both files carry an identical string). Verify agent/reviewer claims; roughly a
+> third don't survive.
+>
+> **Next session (in order):**
+> 1. **Gate reads:** prod health (component-scoped collector + a ClickHouse count), git/PR
+>    drift, whether the operator rotated `CLICKHOUSE_PASSWORD` or added `NPM_TOKEN`.
+> 2. **The operator is running a NEW external review against this tree.** When its findings
+>    arrive: verify every claim FIRST (see the D-175 disposition table for the pattern), then
+>    fix. Do not assume the reviewer's tree state matches ours — two of the last three reviews
+>    carried a stale premise about what was published.
+> 3. **P2 debt (loop-owned):** surface `stream_ingest_error` in ingest health + an alert
+>    condition (LIM-27) · thread the owning cluster node through per-app polling (LIM-28,
+>    waits for a live cluster) · poller/discovery cadence consolidation · helm NetworkPolicy
+>    golden · isolate the `SettingsPage` ARIA test flake (passes alone, fails under parallel).
+> 4. **Operator-gated — do NOT do autonomously:** secret rotation · listing submission ·
+>    billing · Ankush reply · PAYG load lane (capacity + AV-15 + 2-node cluster closes LIM-10
+>    and live-validates the R1/R2/R5/R6 cluster work) · prod roll to 0.4.2.
+>
+> **Gates at close:** PR #220 — **19/19 checks green**. Server build+gofmt+vet+full `-race` ·
+> web tsc + 682/682 in CI · SDK 70/70 @ 3.52 KB · contracts · shellcheck · actionlint · helm
+> lint + 5 goldens · compose-boot green. Prod untouched: v0.4.0-139, collector `ok`,
+> 719 rows/h, 1,320,803 total.
+
+---
+
+## (previous) ▶ START HERE (S107/D-174 done: REVIEW-MP3 executed AND **v0.4.2 RELEASED & VERIFIED**. The engineering gate list is EMPTY except tracked P2 debt; the marketplace submission is operator-gated.)
 
 > **✅ Where we are (2026-07-26 late, D-174):** the operator supplied the reviewer's second
 > pass (REVIEW-MP3, N1–N9 — recorded: `docs/assessment/marketplace-compliance-review-2026-07-26.md`)

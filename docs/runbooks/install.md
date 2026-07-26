@@ -226,13 +226,17 @@ The entry point depends on which compose path you ran:
 
 | Path | URL |
 |---|---|
+| **Evaluator path** (README Quick Start — base `+ deploy/docker-compose.evaluator.yml`) | `http://localhost:8090` — the evaluator overlay publishes the UI on loopback only. Set `PULSE_HOST_PORT` if 8090 is taken. |
 | **Plain path** (`make up` / `cd deploy && docker compose up -d`) | `http://your-server` (port 80, published on all interfaces by the dev override) or `http://localhost:8090` (loopback-only debug binding) |
-| **Signed-image path** (README Quick Start — `docker compose -f deploy/docker-compose.yml up -d`) | Port 8090 is `expose:`d only inside Docker — add a `ports:` binding or reverse proxy. The stack terminates no TLS itself (see `productionize.md`). |
+| **Base file alone** (`docker compose -f deploy/docker-compose.yml up -d`) | Nothing is published — this is the production shape. Front it with a TLS-terminating reverse proxy (see `productionize.md`); the stack terminates no TLS itself. |
 
-> With explicit `-f` flags (no override) the base compose only `expose`s 8090 inside the
-> Docker network — nothing is reachable from the host unless you add a `ports:` binding
-> (e.g. `- "127.0.0.1:8090:8090"` in a local override) or front the stack with a
-> reverse proxy (see `productionize.md`).
+> **Why the base file publishes nothing.** `deploy/docker-compose.yml` declares `expose:`
+> (Docker network only), and passing explicit `-f` flags also suppresses the automatic
+> `docker-compose.override.yml`. So the base file on its own starts a *healthy* stack whose
+> UI is unreachable from the host, with no error explaining why. Add
+> `-f deploy/docker-compose.evaluator.yml` to publish it on loopback (CI boots exactly that
+> command and asserts the UI over the published port), or front the stack with a reverse
+> proxy for a real deployment.
 
 On first run, the bootstrap token is printed to the Pulse container logs:
 
