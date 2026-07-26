@@ -459,13 +459,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Release-cut window: the cut commit repoints the image pin to the NEW
+      # version before the tag exists, so the pinned tag is unpublishable-yet by
+      # construction — pulling it can only fail until release.yml pushes it.
+      # Defer (exit 0, loud notice) ONLY when the missing pin exactly equals the
+      # VERSION file — the same equality the release version guard enforces at
+      # tag time.  Any other missing pin (typo, deleted tag) still fails hard.
+      - name: Check pinned image is published (defer during release-cut window)
+        id: pin
+        run: |
+          PIN=$(grep -oEm1 'ams-pulse:[0-9]+\.[0-9]+\.[0-9]+' deploy/docker-compose.yml | cut -d: -f2)
+          if docker manifest inspect "ghcr.io/aytekxr/ams-pulse:${PIN}" >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "pinned tag ${PIN} is published — running boot test"
+          elif [ "$PIN" = "$(cat VERSION)" ]; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::pinned tag ${PIN} == VERSION and not yet on GHCR (release-cut window) — boot test deferred until the release publishes"
+          else
+            echo "FAIL: pinned tag ${PIN} is not on GHCR and != VERSION ($(cat VERSION)) — broken image pin"
+            exit 1
+          fi
+
       - name: Boot base compose stack (README evaluator path)
+        if: steps.pin.outputs.published == 'true'
         env:
           PULSE_SECRET_KEY: ci-boot-smoke-key-0123456789abcdef01234567
         run: |
           docker compose -f deploy/docker-compose.yml up -d --wait --wait-timeout 120
 
       - name: Assert /healthz — HTTP 200 and component-scoped status
+        if: steps.pin.outputs.published == 'true'
         run: |
           BODY=$(docker compose -f deploy/docker-compose.yml exec -T pulse \
             wget -qO- http://localhost:8090/healthz)
@@ -488,7 +511,7 @@ jobs:
           "
 
       - name: Tear down compose stack
-        if: always()
+        if: always() && steps.pin.outputs.published == 'true'
         run: docker compose -f deploy/docker-compose.yml down -v
 
   slack-notify:
