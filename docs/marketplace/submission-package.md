@@ -67,7 +67,7 @@ operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
 - ~~**Pricing sign-off**~~ **DECIDED (D-169, operator-delegated):** standard Free $0 / Pro $99 /
   Business $299 / Enterprise from $799 per month, + the "Founding Operators" near-free-year-1
   launch campaign (Pro $9 / Business $29 for the first 12 months). Written into `licensing-public.md`
-  + `listing-draft.md`. Operator may override any figure.
+  + `listing.md` (the submission copy). Operator may override any figure.
 - ~~**Support channel + SLA**~~ **DECIDED (D-169):** `support@beyondkaira.com`; Pro 2-day / Business
   1-day / Enterprise 4-business-hour targets; hours Mon–Fri 09:00–18:00 UTC. Written into `support.md`.
 - ~~**Trial mechanics**~~ **DECIDED (D-169):** 14-day Pro trial (no credit card; key delivered by email via support@beyondkaira.com or marketplace listing), graceful revert to Free.
@@ -76,14 +76,21 @@ operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
 - ~~**Provision `support@beyondkaira.com`**~~ **DONE (2026-07-25, operator, D-171):** the mailbox
   is created and live; `support.md` + `licensing-public.md` already publish it.
 
-**Still needed — OUTBOUND / operator-infra only (the loop physically cannot do these):**
-1. **Submit the listing** to the Ant Media Marketplace (operator account).
-2. **Set up billing** for the tiers / campaign / trial in the marketplace's billing system.
-3. **Capacity number** — run the load lane on a dedicated PAYG AMS → replaces the PROVISIONAL claim
-   now in `docs/compatibility.md`.
-4. **Demo video** — rough-cut rendered (D-170, `docs/marketplace/demo/pulse-demo-roughcut.webm`)
-   and attached to [GitHub release v0.4.1](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.1);
-   operator re-records the final with voiceover.
-5. **Reply to Ankush Banyal** — draft ready (`ankush-reply-draft.md`, D-170); operator fills the
+**Still needed — the real gate list (kept in sync with `docs/operator-expected.md`):**
+1. **v0.4.2 release cut** — the published artifact must contain the S105/S106/S107 fixes the
+   docs describe (loop task; the version guard + release pipeline enforce the sweep).
+2. **Submit the listing** to the Ant Media Marketplace (operator account) — paste from
+   [`listing.md`](listing.md).
+3. **Set up billing** for the tiers / campaign / trial in the marketplace's billing system.
+4. **Confirm the category** ("Analytics & Monitoring" is proposed, pending Ant Media
+   confirmation at the developer meeting — assumption A10).
+5. **Capacity number** — run the load lane on a dedicated PAYG AMS → replaces the PROVISIONAL claim
+   now in `docs/compatibility.md`. Same instance: set `server.kafka_brokers` for the AV-15 live
+   Kafka validation (drops the EXPERIMENTAL label), and a 2-node cluster closes LIM-10.
+6. **npm publish** — add an `NPM_TOKEN` repo secret so the release workflow publishes
+   `ams-pulse-beacon` (without it the tarball still attaches to the release; nothing fails).
+7. **Demo video** — rough-cut rendered (D-170, `docs/marketplace/demo/pulse-demo-roughcut.webm`)
+   and attached to the GitHub release; operator re-records the final with voiceover.
+8. **Reply to Ankush Banyal** — draft ready (`ankush-reply-draft.md`, D-170); operator fills the
    [brackets] and sends.
-6. Optional: **roll prod to v0.4.2** (prod is healthy on v0.4.0-139); **rotate** the exposed secrets.
+9. Optional: **roll prod to v0.4.2** (prod is healthy on v0.4.0-139); **rotate** the exposed secrets.

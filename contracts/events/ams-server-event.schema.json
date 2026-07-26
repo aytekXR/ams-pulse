@@ -91,6 +91,10 @@
     {
       "if": { "properties": { "type": { "const": "viewer_leave" } }, "required": ["type"] },
       "then": { "properties": { "data": { "$ref": "#/$defs/ViewerLeaveData" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "stream_ingest_error" } }, "required": ["type"] },
+      "then": { "properties": { "data": { "$ref": "#/$defs/StreamIngestErrorData" } }, "required": ["data"] }
     }
   ],
   "$defs": {
@@ -275,6 +279,26 @@
         "referrer": {
           "type": "string",
           "description": "HTTP Referer if available"
+        }
+      }
+    },
+    "StreamIngestErrorData": {
+      "type": "object",
+      "description": "stream_ingest_error: an official AMS error webhook (ingest-failure signal). Actions per the AMS webhooks guide; metadata carries the raw webhook payload.",
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["endpointFailed", "publishTimeoutError", "encoderNotOpenedError"],
+          "description": "The AMS webhook action that reported the error"
+        },
+        "stream_name": {
+          "type": "string",
+          "description": "Human-readable stream name from the webhook payload, if present"
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Raw webhook payload as received (form-urlencoded or JSON keys)"
         }
       }
     },

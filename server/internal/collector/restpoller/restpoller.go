@@ -76,6 +76,10 @@ type Poller struct {
 	// prevStatus tracks each stream's last known AMS status for transition detection.
 	mu         sync.Mutex
 	prevStatus map[string]string // key = nodeID+"/"+app+"/"+streamID
+	// webrtcStatsFailing marks apps whose webrtc-client-stats fetches failed last
+	// cycle, so the failure is surfaced ONCE per outage at Warn (visible at the
+	// default info level — REVIEW-MP3 N9) instead of only per-stream Debug spam.
+	webrtcStatsFailing map[string]bool
 
 	// vodState is the persistent seen-set backend (nil = VoD polling disabled).
 	vodState VodStateStore
@@ -157,13 +161,14 @@ func New(
 		logger = slog.Default()
 	}
 	return &Poller{
-		cfg:        cfg,
-		client:     client,
-		sink:       sink,
-		dedup:      collector.NewDeduplicator(cfg.PollInterval * 2),
-		logger:     logger,
-		prevStatus: make(map[string]string),
-		vodState:   cfg.VodState,
+		cfg:                cfg,
+		client:             client,
+		sink:               sink,
+		dedup:              collector.NewDeduplicator(cfg.PollInterval * 2),
+		logger:             logger,
+		prevStatus:         make(map[string]string),
+		webrtcStatsFailing: make(map[string]bool),
+		vodState:           cfg.VodState,
 	}
 }
 
@@ -239,8 +244,13 @@ func (p *Poller) poll(ctx context.Context) error {
 	//   cluster path → ClusterNodes RTT; standalone path → SystemStats RTT.
 	// Failures increment p.consecAPIErrors and emit a FAILURE-STREAK event
 	// (api_unreachable=true). Successes reset the counter and include the RTT.
+	// Per-poll deadline: without it, a hung nodes route (or a proxy that ignores
+	// the offset segment) would stall the whole poll loop indefinitely
+	// (REVIEW-MP3 N-cluster b). 10 s matches cluster.Discovery's own timeout.
 	t0 := time.Now()
-	nodes, clusterErr := p.client.ClusterNodes(ctx)
+	clusterCtx, clusterCancel := context.WithTimeout(ctx, 10*time.Second)
+	nodes, clusterErr := p.client.ClusterNodes(clusterCtx)
+	clusterCancel()
 	clusterRTTMS := float64(time.Since(t0).Microseconds()) / 1000.0
 
 	if clusterErr == nil {
@@ -248,8 +258,15 @@ func (p *Poller) poll(ctx context.Context) error {
 			// Cluster path: successful — reset streak, emit each node with RTT.
 			p.consecAPIErrors = 0
 			for _, n := range nodes {
+				// NormalizeClusterNode keys the event to the node's REAL cluster ID
+				// (PrimaryID). Never override with p.cfg.NodeID here: stamping every
+				// node with the single configured ID collapses an N-node fleet onto
+				// one flickering identity in the aggregator and poisons per-node
+				// ClickHouse rollups, while cluster.Discovery emits the same nodes
+				// under their real IDs (REVIEW-MP3 N2). p.cfg.NodeID remains the
+				// identity only for the standalone SystemStats path below, where
+				// AMS provides no node ID.
 				ev := collector.NormalizeClusterNode(n)
-				ev.NodeID = p.cfg.NodeID // override with our configured ID
 				ev.Data["api_latency_ms"] = clusterRTTMS
 				// Emit the live counter (0 after the reset above), never a literal:
 				// a hardcoded 0 here would mask a missing reset (D-087 verify M4).
@@ -450,6 +467,9 @@ func (p *Poller) pollApp(ctx context.Context, app string) error {
 		return fmt.Errorf("list broadcasts: %w", err)
 	}
 
+	webrtcStatsFailures := 0
+	var lastWebRTCStatsErr error
+
 	for _, b := range broadcasts {
 		key := p.cfg.NodeID + "/" + app + "/" + b.StreamID
 
@@ -477,6 +497,11 @@ func (p *Poller) pollApp(ctx context.Context, app string) error {
 		if b.Status == "broadcasting" && b.WebRTCViewerCount > 0 {
 			stats, wsErr := p.client.WebRTCClientStats(ctx, app, b.StreamID)
 			if wsErr != nil {
+				webrtcStatsFailures++
+				lastWebRTCStatsErr = wsErr
+				// Per-stream detail stays at Debug; the once-per-outage Warn
+				// below keeps the failure visible at the default info level
+				// without per-stream spam (REVIEW-MP3 N9).
 				p.logger.Debug("restpoller: webrtc client stats fetch failed",
 					"app", app,
 					"stream", b.StreamID,
@@ -491,6 +516,22 @@ func (p *Poller) pollApp(ctx context.Context, app string) error {
 				}
 			}
 		}
+	}
+
+	// Surface webrtc-stats failures once per outage at Warn; reset on a clean
+	// cycle so the next outage warns again.
+	p.mu.Lock()
+	wasFailing := p.webrtcStatsFailing[app]
+	p.webrtcStatsFailing[app] = webrtcStatsFailures > 0
+	p.mu.Unlock()
+	if webrtcStatsFailures > 0 && !wasFailing {
+		p.logger.Warn("restpoller: webrtc client stats fetches failing (per-stream detail at debug level)",
+			"app", app,
+			"failed_this_cycle", webrtcStatsFailures,
+			"error", lastWebRTCStatsErr,
+		)
+	} else if webrtcStatsFailures == 0 && wasFailing {
+		p.logger.Info("restpoller: webrtc client stats fetches recovered", "app", app)
 	}
 
 	// Detect streams that disappeared (publish_end transition).

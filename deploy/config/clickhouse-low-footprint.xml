@@ -1,14 +1,25 @@
 <!-- ClickHouse 24.8 config.d drop-in: conservative 2-vCPU / low-RAM tuning.
-     Matches the inline values in deploy/helm/pulse/values.yaml (lines 290-296).
+     Matches the inline values in deploy/helm/pulse/values.yaml.
      Mount read-only into the clickhouse service via docker-compose.yml:
        ./config/clickhouse-low-footprint.xml:/etc/clickhouse-server/config.d/pulse.xml:ro
      Uncomment that volume line in docker-compose.yml to activate these limits.
+
+     Scoping matters (REVIEW-MP3 N9): max_memory_usage and max_threads are
+     QUERY-level settings — ClickHouse only honors them inside a settings
+     profile, never at the bare <clickhouse> root (where they are silently
+     ignored). The remaining keys are genuine server-scope settings. The old
+     max_memory_usage_for_all_queries knob is deprecated in 24.x; the modern
+     server-wide cap is max_server_memory_usage.
 -->
 <clickhouse>
-  <max_memory_usage>536870912</max_memory_usage>                   <!-- 512 MB per query -->
-  <max_memory_usage_for_all_queries>805306368</max_memory_usage_for_all_queries>  <!-- 768 MB total -->
+  <profiles>
+    <default>
+      <max_memory_usage>536870912</max_memory_usage> <!-- 512 MB per query -->
+      <max_threads>2</max_threads>
+    </default>
+  </profiles>
+  <max_server_memory_usage>805306368</max_server_memory_usage>    <!-- 768 MB total -->
   <max_concurrent_queries>16</max_concurrent_queries>
-  <max_threads>2</max_threads>
   <background_pool_size>2</background_pool_size>
   <background_schedule_pool_size>2</background_schedule_pool_size>
   <uncompressed_cache_size>67108864</uncompressed_cache_size>      <!-- 64 MB -->

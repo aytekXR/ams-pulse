@@ -82,7 +82,7 @@ helm upgrade pulse ./deploy/helm/pulse -f my-values.yaml
 | `pulse.resources.limits.memory` | `512Mi` | Memory limit |
 | `pulse.listenAddr` | `:8090` | `PULSE_LISTEN_ADDR` — API + UI port |
 | `pulse.ingestListenAddr` | `:8091` | `PULSE_INGEST_LISTEN_ADDR` — beacon ingest port (matches `ingestService.port`; leave empty to disable) |
-| `pulse.reportsDir` | `/var/lib/pulse/reports` | `PULSE_REPORTS_DIR` — report artifact directory (always set to PVC-backed path) |
+| *(not configurable)* | `/var/lib/pulse/reports` | `PULSE_REPORTS_DIR` — report artifact directory; the chart always renders the PVC-backed path (no values key) |
 | `pulse.ams.url` | `http://localhost:5080` | `PULSE_AMS_URL` — AMS REST base URL |
 | `pulse.ams.nodeId` | `standalone` | `PULSE_AMS_NODE_ID` — node identifier in events |
 | `pulse.ams.applications` | `""` | `PULSE_AMS_APPLICATIONS` — comma-separated app filter (empty = all) |

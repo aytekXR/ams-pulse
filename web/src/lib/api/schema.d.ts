@@ -739,7 +739,7 @@ export interface paths {
          * Add an AMS data source
          * @description Persists the source configuration and webhook secret to the meta store,
          *     and enforces the license node limit. **Does not activate a new REST poll
-         *     cycle** — the REST poller is wired to `PULSE_AMS_BASE_URL` once at
+         *     cycle** — the REST poller is wired to `PULSE_AMS_URL` once at
          *     process startup. To begin polling a newly registered source, restart the
          *     server. Webhook secrets registered here take effect after a restart for
          *     the same reason.

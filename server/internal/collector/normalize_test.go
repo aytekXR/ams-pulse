@@ -175,7 +175,10 @@ func TestNormalizeClusterNode_NodeIDFallback(t *testing.T) {
 }
 
 // TestNormalizeClusterNode_BoundaryValues ensures values at the 0 and 100
-// boundaries are passed through unchanged.
+// boundaries are passed through unchanged. cpu_pct/mem_pct (real wire fields)
+// are always emitted; disk_pct is alias-only and is OMITTED when zero — real
+// AMS 3.x doesn't send it, and a fabricated "Disk 0%" would render as a
+// measurement (REVIEW-MP3 N-cluster c).
 func TestNormalizeClusterNode_BoundaryValues(t *testing.T) {
 	cases := []struct {
 		name string
@@ -202,10 +205,27 @@ func TestNormalizeClusterNode_BoundaryValues(t *testing.T) {
 			if got := ev.Data["mem_pct"].(float64); got != tc.mem {
 				t.Errorf("mem_pct = %.1f, want %.1f", got, tc.mem)
 			}
-			if got := ev.Data["disk_pct"].(float64); got != tc.disk {
+			if tc.disk == 0 {
+				if _, present := ev.Data["disk_pct"]; present {
+					t.Errorf("disk_pct present for zero value — fabricated metric (want omitted)")
+				}
+			} else if got := ev.Data["disk_pct"].(float64); got != tc.disk {
 				t.Errorf("disk_pct = %.1f, want %.1f", got, tc.disk)
 			}
 		})
+	}
+}
+
+// TestNormalizeClusterNode_OmitsAbsentAliasFields pins REVIEW-MP3 N-cluster (c):
+// a real AMS 3.x cluster node (no alias fields on the wire) must produce an
+// event WITHOUT disk/net/jvm/version keys — never fabricated zeros.
+func TestNormalizeClusterNode_OmitsAbsentAliasFields(t *testing.T) {
+	dto := amsclient.ClusterNodeDTO{ID: "real-node", IP: "10.0.0.9"}
+	ev := NormalizeClusterNode(dto)
+	for _, key := range []string{"disk_pct", "net_in_mbps", "net_out_mbps", "jvm_heap_used_mb", "version"} {
+		if _, present := ev.Data[key]; present {
+			t.Errorf("Data[%q] present on a real-wire node — fabricated value %v", key, ev.Data[key])
+		}
 	}
 }
 

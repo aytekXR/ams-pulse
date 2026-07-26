@@ -208,6 +208,19 @@ jobs:
       - name: Build beacon SDK
         run: cd sdk/beacon-js && npm run build
 
+      # The unit test cannot see the tsup output (vitest injects its own define),
+      # so the BUILT artifact is asserted here: the version literal must be
+      # substituted and no unsubstituted define may remain (REVIEW-MP3 N7).
+      - name: Assert dist carries package.json version (HARD)
+        run: |
+          cd sdk/beacon-js
+          V="$(node -p 'require("./package.json").version')"
+          grep -q "\"$V\"" dist/index.js || { echo "FAIL: dist/index.js missing version literal \"$V\" — tsup define lost"; exit 1; }
+          if grep -q "__SDK_VERSION__" dist/index.js; then
+            echo "FAIL: unsubstituted __SDK_VERSION__ in dist/index.js"; exit 1
+          fi
+          echo "dist version literal: PASS ($V)"
+
       # Hard 15 KB gzip gate (PRD §7, ADR-0003).
       - name: Size gate (15 KB gzip — HARD)
         run: cd sdk/beacon-js && npm run size
@@ -424,6 +437,33 @@ jobs:
             -f deploy/docker-compose.ci.yml \
             config --quiet
           echo "docker compose (CI override): PASS"
+
+      # Merged base+hardened semantics (REVIEW-MP3 N3): compose merges environment
+      # maps per-key, so the base file's CLICKHOUSE_SKIP_USER_SETUP=1 survives into
+      # the hardened stack unless the overlay explicitly neutralizes it — with the
+      # flag active the named ClickHouse user is never provisioned, the hardened
+      # (authenticated) healthcheck fails forever, and pulse never starts.
+      - name: Assert merged base+hardened enforces ClickHouse auth
+        env:
+          PULSE_SECRET_KEY: ci-config-validation-dummy-16b
+          CLICKHOUSE_USER: ci_dummy_user
+          CLICKHOUSE_PASSWORD: ci-dummy-password
+        run: |
+          MERGED="$(docker compose \
+            -f deploy/docker-compose.yml \
+            -f deploy/docker-compose.hardened.yml \
+            config)"
+          printf '%s' "$MERGED" | grep -q 'CLICKHOUSE_USER' \
+            || { echo "FAIL: merged hardened config lost CLICKHOUSE_USER"; exit 1; }
+          printf '%s' "$MERGED" | grep -q 'CLICKHOUSE_PASSWORD' \
+            || { echo "FAIL: merged hardened config lost CLICKHOUSE_PASSWORD"; exit 1; }
+          # No service in the merged hardened stack may keep the skip flag ACTIVE
+          # (the overlay neutralizes it to the empty string, which renders as '').
+          if printf '%s' "$MERGED" | grep -E 'CLICKHOUSE_SKIP_USER_SETUP: .*1' >/dev/null; then
+            echo "FAIL: CLICKHOUSE_SKIP_USER_SETUP is still active in the merged hardened config"
+            exit 1
+          fi
+          echo "docker compose (base+hardened merged auth): PASS"
 
   # ── 9. Shellcheck ────────────────────────────────────────────────────────────
   # Validates deploy shell scripts for portability and common errors.

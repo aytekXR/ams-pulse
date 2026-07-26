@@ -112,6 +112,15 @@ func clusterAMSServer(t *testing.T, clusterNodesHandler func(w http.ResponseWrit
 			// Cluster mode: success=true → client will call the paginated endpoint.
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]any{"success": true}) //nolint:errcheck
+		case r.URL.Path == "/rest/v2/system-status":
+			// Served deliberately (REVIEW-MP3 N1): a real cluster answers this
+			// endpoint. If a regression ever re-maps a cluster-path 500 back to the
+			// standalone fallback, the poller reaches this handler and emits a
+			// SUCCESS event — making the failure-streak assertions fail loudly
+			// instead of passing for the wrong reason (the pre-fix fixture 404'd
+			// here, which masked exactly that bug).
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"osName": "Linux"}) //nolint:errcheck
 		case strings.HasPrefix(r.URL.Path, "/rest/v2/cluster/nodes/"):
 			// Paginated cluster/nodes/{offset}/{size} — delegate to the injected handler.
 			clusterNodesHandler(w, r)
@@ -482,7 +491,10 @@ func TestAPIStreak_ClusterPath_RTTOnSuccess(t *testing.T) {
 // produces a failure-streak node_stats event with api_unreachable=true.
 func TestAPIStreak_ClusterPath_FailureEvent(t *testing.T) {
 	srv := clusterAMSServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		// 500 error (not 404) — treated as a real failure, not standalone.
+		// 500 with the probe having said cluster: a real failure (never the
+		// standalone fallback — the probe owns the mode; REVIEW-MP3 N1). The
+		// fixture also serves system-status, so if this 500 were wrongly mapped
+		// to standalone the test would see a SUCCESS event and fail below.
 		w.WriteHeader(http.StatusInternalServerError)
 	})
 	defer srv.Close()

@@ -20,7 +20,7 @@ no state-changing calls; the only non-GET is the optional cookie-login
 `POST /rest/v2/users/authenticate` when cookie auth is used (`PULSE_AMS_LOGIN_EMAIL`).
 `server/internal/collector/restpoller` polls AMS on `PULSE_POLL_INTERVAL`
 (default 5 s) and is always wired regardless of other source config
-(`serve.go:353–366`).
+(`serve.go`, `restpoller.New` wiring).
 
 AMS endpoints polled per cycle:
 
@@ -32,7 +32,7 @@ earlier root-level `/rest/v2/broadcasts/...` paths 404'd; real AMS uses per-app 
 | `ListApplications` | `GET /rest/v2/applications` | Discover apps — **array-of-strings** envelope `{"applications":["LiveApp",…]}` |
 | `ListBroadcastsPaged` | `GET /{app}/rest/v2/broadcasts/list/{offset}/{size}` | All broadcasts, 200/page (per-app) |
 | `WebRTCClientStats` | `GET /{app}/rest/v2/broadcasts/{streamId}/webrtc-client-stats/0/100` | Per-peer WebRTC QoE (empty `[]` when no viewers) |
-| `ClusterNodes` | `GET /rest/v2/cluster-mode-status` → then `GET /rest/v2/cluster/nodes/{offset}/{size}` | Cluster probe: `success:false` → standalone (nil, nil); `success:true` → paginate nodes (AMS 3.x has no flat `/nodes` route; G-21 settled S106) |
+| `ClusterNodes` | `GET /rest/v2/cluster-mode-status` → then `GET /rest/v2/cluster/nodes/{offset}/{size}` | Cluster probe: `success:false` → standalone (nil, nil); `success:true` → paginate nodes @50/page, capped at 40 pages (AMS 3.x has no flat `/nodes` route; G-21 settled S106). Standalone 3.0.3 answers the paginated route with HTTP **500** (`NoSuchBeanDefinitionException`), not 404 — a FIRST-page 404/500 maps to standalone only while the probe has not said "cluster"; once it has, any nodes-route error is a real failure feeding the failure-streak alerting (never a silent standalone flip — REVIEW-MP3 N1) |
 | `SystemStats` | `GET /rest/v2/system-status` | `{osName,osArch,javaVersion,processorCount}` — **no cpu/mem** on AMS 3.x |
 | `ListVodsPaged` | `GET /{app}/rest/v2/vods/list/{offset}/200` | VoD list for recording billing — polled every 12 broadcast ticks (60 s at 5 s default); deduped via `vod_poll_state` seen-set; emits `EventRecordingReady` (BUG-002 fix, S23/D-085) |
 | `GetVersion` | `GET /rest/v2/version` | AMS version string for fleet node card (standalone path only); best-effort — returns nil on AMS < v3 without this endpoint |
@@ -171,7 +171,8 @@ the Go stdlib provides. If `PULSE_AMS_URL` begins with `https://`, the stdlib TL
 stack verifies the server cert against system roots. There is no `InsecureSkipVerify`
 option; use `http://` only on trusted private networks.
 
-Body safety: every response is capped at 10 MB (`client.go:388`). Individual
+Body safety: every response is capped at 10 MB (`client.go`, `io.LimitReader`
+in `getJSON`). Individual
 request timeout defaults to 10 s (`serve.go:236`).
 
 AMS version tolerance: the client was hardened in W2c (D-025) + D-030 to tolerate
@@ -220,8 +221,9 @@ Before connecting Pulse to a real AMS node:
    or a private LAN IP). Default AMS REST port is **5080** (HTTP) or **5443**
    (HTTPS).
 
-2. **AMS credentials** — Pulse supports two auth modes depending on your AMS
-   configuration:
+2. **AMS credentials** — Pulse supports three auth modes depending on your AMS
+   configuration (the third — HTTP Basic — applies only to the admin
+   source-connectivity test, not the poll loop):
    - **Bearer token** (AMS < 3.x or custom JWT): log into AMS Management Console >
      Settings > Security to generate or retrieve the REST API token. Set
      `PULSE_AMS_AUTH_TOKEN`. Some self-hosted AMS installs have auth disabled; in
@@ -238,6 +240,7 @@ Before connecting Pulse to a real AMS node:
    |---|---|---|---|
    | Cookie-session (default, live-validated) | `PULSE_AMS_LOGIN_EMAIL` + `PULSE_AMS_LOGIN_PASSWORD` | AMS default panel auth (`jwtServerControlEnabled=false`) | Primary path for AMS 3.x Enterprise; Pulse manages JSESSIONID automatically |
    | Static Bearer token | `PULSE_AMS_AUTH_TOKEN` | App-scope: per-app `jwtControlEnabled`; management-scope: server-level `server.jwtServerControlEnabled` | Pulse sends both `Authorization: Bearer <token>` **and** `ProxyAuthorization: <token>` on every request — a single token value covers both scopes |
+   | HTTP Basic (source-test only) | per-source `rest_user` / `rest_password` fields | Reverse proxy / basic-auth in front of AMS | Used only by `POST /api/v1/admin/sources/test` when a source stores REST credentials; the poll loop never sends Basic auth |
 
 3. **Network path** — Pulse's `pulse` container must be able to open a TCP
    connection to `PULSE_AMS_URL`. Verify with:
@@ -588,7 +591,7 @@ load limitation.
 
 AMS sends events for stream start, stream stop, and recording-ready. The webhook
 handler maps them to domain events via the `action`, `event`, and `type` fields
-(`webhook.go:159–210`). Supported action strings: `liveStreamStarted`,
+(`webhook.go`, `translateWebhook`). Supported action strings: `liveStreamStarted`,
 `startBroadcast`, `publish_started`, `liveStreamEnded`, `stopBroadcast`,
 `publish_ended`, `vodReady`, `recording_ready`.
 
@@ -720,7 +723,7 @@ Complete table of `PULSE_*` variables relevant to AMS integration, read from
 | `PULSE_SECRET_KEY` | AES-GCM key for encrypting stored credentials | _(empty or <16 bytes → hard startup failure for non-`:memory:` DSNs)_ | Yes |
 | `PULSE_RETENTION_DAYS` | Raw event TTL in days | `90` | No |
 | `PULSE_ROLLUP_TTL_DAYS` | Rollup table TTL in days | `395` | No |
-| `PULSE_METRICS_TOKEN` | Bearer token required on `GET /metrics`; empty = open; supports `_FILE` convention | _(empty)_ | Recommended |
+| `PULSE_METRICS_TOKEN` | Bearer token required on `GET /metrics`; empty = no token check (the endpoint still requires a Business+ license — below that tier it returns 403 regardless of token); supports `_FILE` convention | _(empty)_ | Recommended |
 | `PULSE_CORS_ALLOWED_ORIGINS` | Comma-separated CORS origins for `/api/v1/*` | _(empty)_ | No |
 | `PULSE_LOG_LEVEL` | Log level: `debug`, `info`, `warn`, `error` | `info` | No |
 | `PULSE_GEO_MMDB_PATH` | Path to MaxMind .mmdb for geo enrichment; empty = disabled | _(empty)_ | No |

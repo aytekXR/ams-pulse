@@ -35,7 +35,7 @@ committed to `agents/handoffs/real-ams-captures/` instead.
 
 1. VPS access with `sg docker` permissions.
 2. `deploy/.env` contains:
-   - `PULSE_AMS_URL` — AMS base URL (e.g. `http://161.97.172.146:5080`)
+   - `PULSE_AMS_URL` — AMS base URL (e.g. `http://<your-ams-host>:5080`)
    - `PULSE_AMS_LOGIN_EMAIL` — AMS admin email for harness polling account
    - `PULSE_AMS_LOGIN_PASSWORD` — Plaintext password (AMS REST accepts plaintext)
 3. For the `realams` target: `pulse-realams-pulse-1` container is running.
