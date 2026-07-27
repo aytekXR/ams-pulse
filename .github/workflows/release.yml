@@ -250,6 +250,10 @@ jobs:
             # bump in Chart.yaml on EVERY release, so diffing all of deploy/helm/pulse/
             # made this check equivalent to "always bump the chart semver" rather than
             # "bump it when the chart's rendered content changed" (round-4 review F-09).
+            # Excluding Chart.yaml itself is DELIBERATE (round-5 review G-07): a
+            # metadata-only edit there (description, maintainers, a dependency bump)
+            # does not change what `helm template` renders, so it does not risk
+            # overwriting a published chart and does not need a semver bump.
             if ! git diff --quiet "${PREV_TAG}" "${GITHUB_REF_NAME}" \
                  -- deploy/helm/pulse/templates/ deploy/helm/pulse/values.yaml 2>/dev/null; then
               if [ -n "$PREV_CHART_SEMVER" ] && [ "$CHART_SEMVER" = "$PREV_CHART_SEMVER" ]; then
@@ -259,6 +263,25 @@ jobs:
               fi
             fi
           fi
+
+          # 17. Image pins in the customer-facing docs (round-5 review G-17/G-06).
+          #     Checks #5/#8/#11 cover deploy surfaces and the root README, but the
+          #     install, troubleshooting and SDK guides sit outside every existing
+          #     window — so their `docker pull` examples silently drifted a release
+          #     behind. Deliberately reuses check #11's precise pattern
+          #     (ams-pulse:<semver>) rather than a bare version grep: prose that
+          #     legitimately names an OLD release ("re-verified against 0.4.2") must
+          #     not trip this, only a runnable pin that would pull the wrong image.
+          for f in \
+            docs/runbooks/install.md \
+            docs/troubleshooting.md \
+            docs/beacon-sdk.md; do
+            if grep -oE 'ams-pulse:[0-9]+\.[0-9]+\.[0-9]+' "$f" 2>/dev/null \
+               | grep -v ":${TAG_VERSION}$" | head -1 | grep -q .; then
+              echo "FAIL: $f contains a stale ams-pulse image pin (want only :${TAG_VERSION})"
+              exit 1
+            fi
+          done
 
           echo "Version guard: PASS (VERSION=$FILE_VERSION Chart=$CHART_VERSION sdk=$PKG_VERSION swift_sdk=$SWIFT_VER tag=$GITHUB_REF_NAME)"
 
@@ -460,6 +483,9 @@ jobs:
 
           # /users/{owner}/... is the correct endpoint for a PAT acting on a
           # user-owned package; /user/... only works for the token's own identity.
+          # NOTE (round-5 review G-07): if this package ever moves to an ORG, this
+          # becomes /orgs/{org}/packages/... — the call would 404 and hit the loud
+          # warning below rather than failing silently, but change it at move time.
           if ! VERSIONS=$(gh api "/users/${OWNER}/packages/container/ams-pulse/versions" --paginate 2>&1); then
             echo "::warning::could not list package versions (${VERSIONS}); delete quarantine tag ${CANDIDATE} by hand if this release failed"
             exit 0

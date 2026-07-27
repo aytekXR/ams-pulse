@@ -303,13 +303,18 @@ fi
 # Compose will recreate that container and re-bind the port itself, so a listener owned
 # by THIS stack must not abort the install. Without this exemption, re-running the
 # installer against a healthy install exits 1 on Pulse's own published port.
+#
+# Exempt on the PORT the stack actually publishes, not merely on the stack existing
+# (round-5 review G-04): re-running with PULSE_HOST_PORT=18090 while an unrelated process
+# owns 18090 and the quickstart stack is up on 8090 would otherwise skip the preflight and
+# fail later with the raw daemon port-conflict this check exists to pre-empt.
 if [[ -n "${_PORT_IN_USE:-}" ]]; then
-  _OWN_CONTAINER=""
-  if docker compose -f "$COMPOSE_FILE" ps -q pulse >/dev/null 2>&1; then
-    _OWN_CONTAINER="$(docker compose -f "$COMPOSE_FILE" ps -q pulse 2>/dev/null | head -1)"
-  fi
-  if [[ -n "$_OWN_CONTAINER" ]]; then
-    printf '\nPort %s is held by an existing Pulse quickstart install — re-using it.\n' "$PULSE_HOST_PORT"
+  # `docker compose port` prints the host binding (e.g. "0.0.0.0:8090") for the service's
+  # container port, or nothing when the stack is down. Error-tolerant: any failure leaves
+  # _OWN_PORT empty and the conflict is reported, which is the safe direction.
+  _OWN_PORT="$(docker compose -f "$COMPOSE_FILE" port pulse 8090 2>/dev/null | sed 's/.*://' | head -1)"
+  if [[ -n "$_OWN_PORT" && "$_OWN_PORT" == "$PULSE_HOST_PORT" ]]; then
+    printf '\nPort %s is published by an existing Pulse quickstart install — re-using it.\n' "$PULSE_HOST_PORT"
     printf 'This is a re-run: the stack will be recreated in place.\n'
     _PORT_IN_USE=""
   fi

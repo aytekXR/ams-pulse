@@ -88,28 +88,32 @@ operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
   attached. The published artifact now matches the code and docs.
 - ~~**Confirm the category**~~ **SET:** "Analytics & Monitoring" is stated plainly in
   `listing.md`. Ant Media may reassign it at review; that is their call to make, not a blocker.
-- **v0.4.3 release cut (D-176)** — **submit against this tag, not v0.4.2.** External review
-  round 4 found that the corrected documentation, the regenerated screenshots, the evaluator
-  compose overlay and the parameterised quickstart host port all lived on `main` and were
-  absent from the published v0.4.2. Everything an evaluator meets in their first ten minutes
-  is in 0.4.3.
-- **Rotate `CLICKHOUSE_PASSWORD`** (operator) — a 32-hex prefix of the live production value
-  is in public git history since `98b011c`. Not remotely exploitable (ClickHouse is
-  Docker-internal only) and the source is scrubbed, but only rotation closes it. Should
-  happen before the repo receives marketplace traffic.
+- ~~**v0.4.3 release cut (D-176)**~~ **DONE (2026-07-27):** **submit against this tag, not
+  v0.4.2.** External review round 4 found that the corrected documentation, the regenerated
+  screenshots, the evaluator compose overlay and the parameterised quickstart host port all
+  lived on `main` and were absent from the published v0.4.2. Everything an evaluator meets in
+  their first ten minutes is in 0.4.3.
 
-1. **Submit the listing** to the Ant Media Marketplace (operator account) — paste from
+**Open gates, in order (this numbered list is the single source of truth — nothing above is
+still open):**
+
+1. **⚠ Rotate `CLICKHOUSE_PASSWORD` — do this first.** A 32-hex prefix of the live production
+   value has been in public git history since `98b011c`. Not remotely exploitable (ClickHouse
+   is Docker-internal only) and the source is scrubbed, but git history cannot be
+   un-published — only rotation closes it, and it should happen **before the repo receives
+   marketplace traffic.** Then rotate the remaining chat-exposed set. Detail:
+   `docs/operator-expected.md` item 1.
+2. **Submit the listing** to the Ant Media Marketplace (operator account) — paste from
    [`listing.md`](listing.md), never from `listing-draft.md`.
-2. **Set up billing** for the tiers / campaign / trial in the marketplace's billing system.
-3. **Capacity number** — run the load lane on a dedicated PAYG AMS → replaces the PROVISIONAL claim
+3. **Set up billing** for the tiers / campaign / trial in the marketplace's billing system.
+4. **Capacity number** — run the load lane on a dedicated PAYG AMS → replaces the PROVISIONAL claim
    now in `docs/compatibility.md`. Same instance: set `server.kafka_brokers` for the AV-15 live
    Kafka validation (drops the EXPERIMENTAL label), and a 2-node cluster closes LIM-10.
-4. **npm publish** — add an `NPM_TOKEN` repo secret so the release workflow publishes
+5. **npm publish** — add an `NPM_TOKEN` repo secret so the release workflow publishes
    `ams-pulse-beacon` (without it the tarball still attaches to the release; nothing fails).
-5. **Demo video** — rough-cut rendered (D-170, `docs/marketplace/demo/pulse-demo-roughcut.webm`)
+6. **Demo video** — rough-cut rendered (D-170, `docs/marketplace/demo/pulse-demo-roughcut.webm`)
    and attached to the GitHub release; operator re-records the final with voiceover.
-6. **Reply to Ankush Banyal** — draft ready (`ankush-reply-draft.md`, D-170); operator fills the
+   ⚠ The script changed in D-176 — re-read `demo-video-script.md` before recording.
+7. **Reply to Ankush Banyal** — draft ready (`ankush-reply-draft.md`, D-170); operator fills the
    [brackets] and sends.
-7. **Rotate the exposed secrets** — see `docs/operator-expected.md`. The `CLICKHOUSE_PASSWORD`
-   rotation is the one with a public-history exposure and should go first.
 8. Optional: **roll prod to v0.4.3** (prod is healthy on v0.4.0-139).

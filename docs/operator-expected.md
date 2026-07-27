@@ -1,33 +1,30 @@
 # Operator TODO — the items only YOU can do
 
-*Updated 2026-07-27, SESSION-109 (D-176). Kept to **open items only** per your directive —
-the superseded S93–S108 status stack lives in git history and `agents/handoffs/sessions/`.*
+*Updated 2026-07-27, SESSION-110 (D-177). Kept to **open items only** per your directive —
+the superseded S93–S109 status stack lives in git history and `agents/handoffs/sessions/`.*
 
-> **▶ S109 in one paragraph:** you sent the external review's **round 4** (F-01…F-14), which
-> for the first time got the tree state exactly right — no stale premise to correct. Every
-> finding was re-verified against the code before any fix: **all of them confirmed**, plus one
-> sub-claim refuted (it said the `originAdress` field appears nowhere in the tree; it is in the
-> real-AMS 3.0.3 capture fixtures, so LIM-28's roadmap is sound). Its verdict — *"the residual
-> risk is concentrated almost entirely in claims, not code"* — is fair, and the claims are now
-> fixed. Headlines: the README/LIM-10 **cluster capability claims were wrong, not merely
-> unvalidated** (AMS 3.x sends no node role or version, so all nodes show as `origin` and
-> edge/origin viewer dedup can never activate — that claim had propagated into six documents
-> including **the demo voiceover script you are about to re-record**); `release-notes.md`
-> asserted two things about v0.4.2 that an evaluator could falsify in minutes; and the release
-> pipeline's GHCR quarantine cleanup **could never have run** — it authenticated with a token
-> type that has no access to the endpoint it called, and exited reporting success. **Nothing
-> here changes your #1 item: the ClickHouse password is still un-rotated** (verified directly
-> this session — the live 48-char value's first 32 characters still match what is in public git
-> history). Prod untouched and healthy. Full record: `decisions.md` D-176 ·
-> `sessions/SESSION-109.md` · review + disposition table:
-> `docs/assessment/marketplace-compliance-review-2026-07-27-round4.md`.
+> **▶ Where we are, in one paragraph:** rounds 4 and 5 of the external review are both executed.
+> Round 4 (F-01…F-14) found the residual risk was in *claims, not code* — the biggest being that
+> the **cluster capability claims were wrong, not merely unvalidated** (AMS 3.x sends no node
+> role or version, so all nodes show as `origin` and edge/origin viewer dedup can never
+> activate; that claim had spread to six documents, including **the demo voiceover script you
+> are about to re-record**). All fixed, and **v0.4.3 was cut and released**. Round 5 then
+> re-audited every one of those fixes against the code rather than trusting the changelog and
+> confirmed them, adding six small copy/hardening items — all now fixed too. It also
+> **retracted one of its own earlier claims**, confirming a refutation we had made: the
+> verify-first loop is now demonstrably working in both directions.
 >
-> **▶ Recommended next move (the review's, and mine): cut `v0.4.3` from `main` and submit
-> against that tag, not against v0.4.2.** The fixes an evaluator would hit in their first ten
-> minutes — the honest docs, the regenerated screenshots, the evaluator compose overlay, the
-> quickstart host-port parameterization — all live on `main` and are *not* in the published
-> v0.4.2. Releasing costs one tag push; an evaluator hitting a fixed-on-main defect costs the
-> review. See item 2.
+> **▶ Round 5's verdict: "Ready to submit — conditional on two operator gates, neither of them
+> code."** One of those gates has closed (the v0.4.3 release pipeline completed). **The other
+> is yours and is item 1 below: rotate `CLICKHOUSE_PASSWORD`.** You chose to defer it when you
+> authorised the release, which is recorded as a decision rather than an oversight — but it is
+> now the *only* thing the reviewer considers blocking. Their words: *"the remaining
+> pre-submission work is: rotate one password, confirm one CI run finished, delete one
+> contradictory bullet."* The second and third are done.
+>
+> Prod untouched and healthy throughout. Full record: `decisions.md` D-176/D-177 ·
+> `sessions/SESSION-109.md`, `SESSION-110.md` · disposition tables:
+> `docs/assessment/marketplace-compliance-review-2026-07-27-round4.md` and `…-round5.md`.
 
 ---
 
@@ -41,13 +38,14 @@ the superseded S93–S108 status stack lives in git history and `agents/handoffs
    still 128 bits of the secret sitting in a public repo, and anyone can find it with
    `git log -S`. Rotate before the repo gets marketplace traffic. Then rotate the rest
    (`deploy/.env`, `oguz-testing.md` — the latter's file mode is now 600).
-2. **Say go on cutting `v0.4.3`, then submit against it.** One word from you and the loop
-   tags it — the release pipeline does the rest. Why it matters: everything the round-4
-   review says an evaluator would trip over in their first ten minutes is fixed **on `main`
-   only**. The published v0.4.2 still has the wrong cluster claims, the pre-fix screenshots,
-   no evaluator compose overlay, and a quickstart compose that ignores `PULSE_HOST_PORT`.
-   Submitting v0.4.2 while the corrected tree sits on `main` is the likeliest way this
-   submission goes sideways. (Do item 1 first — the tag makes the repo interesting.)
+2. ~~**Cut `v0.4.3`**~~ — **DONE (2026-07-27).** Tagged, released and verified. **Submit
+   against `v0.4.3`, not v0.4.2**: everything an evaluator meets in their first ten minutes —
+   the corrected cluster claims, the regenerated screenshots, the evaluator compose overlay,
+   the parameterised quickstart host port — exists only in 0.4.3.
+   *Worth knowing:* the first release attempt failed in 21 seconds at the pipeline's own CI
+   gate, because the tag was pushed before main's post-merge CI finished (the PR's green
+   checks belong to the pre-squash commit). Nothing was built or published; re-running after
+   CI went green was the whole fix. The gate did its job.
 3. **Review `docs/marketplace/listing.md`** — the submission copy. The internal
    "*Proposed pending Ant Media confirmation*" note under Category has been removed, so the
    file is now safe to paste verbatim. Override anything; the category and all price wording
@@ -138,11 +136,18 @@ load-evidence format (A9). Details: `docs/marketplace/submission-process.md`.
   if it is seconds, every node is silently marked down). Recorded as an explicit unverified
   assumption in `AMS-INTEGRATION.md` §1.1.
 
-**Cleared this session (S109):** the cluster capability overclaims across 6 documents · the
+**Cleared in S109 (round 4):** the cluster capability overclaims across 6 documents · the
 two false v0.4.2 release-note claims · the `install.md` tier inversion and 6 other residues ·
 the GHCR cleanup token/endpoint · the Helm deprecated-alias inversion + inert guard #16 ·
 `CPUPctOK` fabricating a measured 0% · the mock-AMS 2024 timestamp that put every mock
 cluster node permanently "down" · the quickstart re-run hard-fail.
+
+**Cleared in S110 (round 5):** the duplicated/contradictory rotation entry in the submission
+pack · the quickstart port exemption that keyed on the stack existing rather than on the port
+it publishes · three numbered source citations that had **already drifted** (the exact failure
+de-numbering exists to prevent — and a genuine miss from S109, since round 4 flagged them too)
+· version stragglers in `troubleshooting.md`, `beacon-sdk.md`, `install.md`, `CLAUDE.md` and
+the Ankush draft, now backed by a new **guard check #17** so they cannot silently drift again.
 
 *Prod: healthy and untouched — v0.4.0-139, collector `ok`, 1.32 M events. A prod roll is
 item 12, never automatic.*
