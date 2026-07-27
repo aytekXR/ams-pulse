@@ -24,16 +24,20 @@
 > **Replace this block each session — never append to it.**
 
 **Where the product is:** **v0.4.4 is the release and the marketplace submission target.**
-S112 (D-179) executed external review **round 6**: all nine findings confirmed, eight fixed,
-none refuted. The significant one was filed LOW as a *probe the reviewer could not run* — we ran
-it, and it **closed LIM-01**: standalone AMS reports CPU/memory/disk after all, via
-`GET /rest/v2/system-resources`, with no Kafka. Because that is a code change, the operator
-authorised cutting **v0.4.4** (round 6 H-02) so the submission target contains it.
+S113 (D-181) executed external review **round 7**: all six findings confirmed, all six fixed,
+none refuted. Round 7's verdict is *"ready to submit as soon as G-02 closes"* — it re-verified
+every round-6 disposition against the **published artifacts**, confirmed the tag↔main drift
+pattern is broken, and found only prose/comment drift plus one metric nit. **The external review
+loop has converged**; further rounds are optional polish, not gating.
+
+The round-6 headline still stands as the product change: LIM-01 is closed — standalone AMS
+reports CPU/memory/disk via `GET /rest/v2/system-resources`, no Kafka.
 
 **One thing blocks submission, and it is the operator's:** rotate `CLICKHOUSE_PASSWORD`. A
 32-hex prefix of the live value is in public git history since `98b011c`. Deliberately deferred
-when the v0.4.3 cut was authorised — a recorded decision, not an oversight. **Re-checked S112:
-still un-rotated** (live prefix still matches 2 commits).
+when the v0.4.3 cut was authorised — a recorded decision, not an oversight. **Re-checked S113:
+still un-rotated** (live prefix still matches 2 commits). Both the reviewer and the loop agree
+it is the only remaining gate: rotate, then submit against `v0.4.4`.
 
 **Do first, every session:**
 1. **Gate reads** — prod health (component-scoped `/healthz` + a ClickHouse count), git/PR
@@ -65,10 +69,18 @@ product's entire life: a sibling console endpoint had the data all along. When a
 "the platform cannot do X", check whether what was actually tested was "this one endpoint does
 not do X". Sibling endpoints cost one curl.
 
-**Tag/main parity:** `v0.4.4` closed the gap that H-02 flagged — the tag now carries every
-round-5 and round-6 fix, including the LIM-01 code. Keep it that way: **the moment a fix an
+**Tag/main parity:** `v0.4.4` closed the gap that H-02 flagged, and round 7 confirmed the
+pattern is broken — post-tag drift is now internal-only. Keep it that way: **the moment a fix an
 evaluator would meet lands on `main`, it belongs in a release**, because "it rides the next one"
-is exactly the ruling round 6 had to overturn.
+is exactly the ruling round 6 had to overturn. `main` currently carries the round-7 prose/comment
+fixes, which genuinely do ride the next cut (the reviewer's own recommendation).
+
+**Guard scope is a decision; scope gaps are where drift lands (S113's lesson).** Guard #17 was
+deliberately narrowed to runnable `ams-pulse:<semver>` pins to avoid false positives — correct,
+and the exact reason the README's prose pointer shipped one release stale *inside* the new
+submission target hours later. New check **#19** closes that. When you narrow a guard, write down
+what the narrowing leaves uncovered. And **de-literalize whatever drifts twice**: the cosign
+version range and the chart-version sentence were both "just bump the number" the first time.
 
 **Standing rules learned the hard way:**
 - **After a squash merge, wait for main's post-merge CI before tagging.** The PR's green checks

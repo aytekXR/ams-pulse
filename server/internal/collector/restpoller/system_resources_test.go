@@ -226,3 +226,84 @@ func TestStandalone_BothSystemRoutesFail_EmitsFailureStreak(t *testing.T) {
 		t.Errorf("api_latency_ms must be ABSENT on a failure event (D-075 semantics), got %v", ev.Data["api_latency_ms"])
 	}
 }
+
+// ─── I-04 (review round 7): api_latency_ms must time ONE call ────────────────
+//
+// D-087's contract is "measure RTT around the deterministic stats call". D-179
+// introduced a preference chain (system-resources → system-status → version) and
+// left the timing window open across the whole chain, so on the FALLBACK path the
+// emitted api_latency_ms covered up to three round-trips instead of one. That
+// silently inflates the metric — and the ams_api_latency_ms anomaly baseline fed
+// from it — on exactly the deployments that take the fallback.
+//
+// The window must cover the call that PRODUCED the event, nothing else.
+
+// slowRoute wraps a handler with a deliberate delay so the test can distinguish
+// "timed one call" from "timed the whole chain" without relying on wall-clock luck.
+func slowRoute(d time.Duration, body []byte) func(http.ResponseWriter) {
+	return func(w http.ResponseWriter) {
+		time.Sleep(d)
+		w.Write(body)
+	}
+}
+
+// Fallback path: system-resources 404s slowly and /rest/v2/version is slow too;
+// only the system-status call should be inside the window.
+func TestStandalone_FallbackLatency_TimesOnlyTheStatsCall(t *testing.T) {
+	statusBody := loadFixture(t, "system_status.json")
+	versionBody := loadFixture(t, "version.json")
+	const slow = 300 * time.Millisecond
+
+	ev := runStandalonePoller(t, standaloneRoutes(func(w http.ResponseWriter, r *http.Request) bool {
+		switch r.URL.Path {
+		case "/rest/v2/system-resources":
+			time.Sleep(slow) // old AMS: slow 404
+			w.WriteHeader(http.StatusNotFound)
+			return true
+		case "/rest/v2/system-status":
+			w.Write(statusBody) // fast — this is the call that produces the event
+			return true
+		case "/rest/v2/version":
+			slowRoute(slow, versionBody)(w)
+			return true
+		}
+		return false
+	}))
+
+	got, ok := ev.Data["api_latency_ms"].(float64)
+	if !ok {
+		t.Fatalf("api_latency_ms missing: %v", ev.Data)
+	}
+	// Timing only system-status → well under one slow leg. Timing the whole chain
+	// would be ≥600 ms. The 250 ms bound sits far from both.
+	if got >= 250 {
+		t.Errorf("api_latency_ms = %.1f ms — the window spans the 404 probe and/or the version call; "+
+			"D-087 requires the RTT of the call that produced the event", got)
+	}
+}
+
+// Preferred path: the version and status routes are slow but never called, so the
+// window must reflect the (fast) system-resources call alone.
+func TestStandalone_PreferredLatency_TimesOnlyTheResourcesCall(t *testing.T) {
+	body := loadFixture(t, "system_resources_real_v303.json")
+
+	ev := runStandalonePoller(t, standaloneRoutes(func(w http.ResponseWriter, r *http.Request) bool {
+		switch r.URL.Path {
+		case "/rest/v2/system-resources":
+			w.Write(body)
+			return true
+		case "/rest/v2/system-status", "/rest/v2/version":
+			time.Sleep(300 * time.Millisecond)
+			return false
+		}
+		return false
+	}))
+
+	got, ok := ev.Data["api_latency_ms"].(float64)
+	if !ok {
+		t.Fatalf("api_latency_ms missing: %v", ev.Data)
+	}
+	if got >= 250 {
+		t.Errorf("api_latency_ms = %.1f ms on the preferred path — nothing but system-resources should be timed", got)
+	}
+}

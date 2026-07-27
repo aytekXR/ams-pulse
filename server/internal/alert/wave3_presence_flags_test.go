@@ -93,7 +93,7 @@ func TestEvalAnomalyNodes_UnreportedCPU_NoEval(t *testing.T) {
 	if len(calls) > 0 {
 		t.Errorf("evalAnomalyNodes: baseline reader was called with metric=%v for a node "+
 			"with CPUPCTReported=false — the presence guard must skip this node "+
-			"(standalone AMS 3.x never reports cpu_pct)", calls)
+			"(the node snapshot carries no cpu_pct)", calls)
 	}
 
 	hist, err := store.ListAlertHistory(ctx, "", "", 0, 0, 10, "")

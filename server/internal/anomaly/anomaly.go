@@ -108,7 +108,7 @@ type BaselineStore interface {
 // BaselineSweeper is an optional capability of BaselineStore implementations.
 // When d.store satisfies this interface, Detector.Run sweeps stale zero-mean
 // baselines on startup (before the first tick) to evict rows poisoned by
-// standalone AMS nodes that never report cpu/mem/disk (D-088).
+// nodes that did not report cpu/mem/disk (D-088).
 // The sweep is a Detector-startup operation; it is not a schema migration.
 type BaselineSweeper interface {
 	// DeleteZeroMeanNodeBaselines deletes baseline rows where metric is one of
@@ -285,8 +285,8 @@ func (d *Detector) WarmHysteresis(ctx context.Context) error {
 // WarmHysteresis is called once before the first tick to restore cooldown state
 // across process restarts when a flagStore is configured.
 // When d.store implements BaselineSweeper, DeleteZeroMeanNodeBaselines is called
-// once after WarmHysteresis to evict baselines poisoned by standalone AMS nodes
-// that never report cpu_pct/mem_pct/disk_pct (D-088 startup sweep).
+// once after WarmHysteresis to evict baselines poisoned by nodes that did not
+// report cpu_pct/mem_pct/disk_pct (D-088 startup sweep).
 func (d *Detector) Run(ctx context.Context) {
 	ticker := time.NewTicker(d.tickInterval)
 	defer ticker.Stop()

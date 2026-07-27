@@ -100,7 +100,7 @@ func s67StreamSnap(streams ...*domain.LiveStream) *domain.LiveSnapshot {
 // TestEvalNodeMetric_UnreportedCPU_NoFire_S67: a node that did not report cpu_pct
 // (CPUPCTReported=false, CPUPCT=0) must be skipped. Without the guard, `node_cpu lt 50`
 // fires on the phantom 0 (compare(0,"lt",50)=true) — a false alert for a standalone
-// AMS 3.x node that never reports cpu_pct.
+// node whose snapshot lacks cpu_pct (e.g. the system-status fallback path).
 func TestEvalNodeMetric_UnreportedCPU_NoFire_S67(t *testing.T) {
 	notifs := s67RunTick(t,
 		s67ThresholdRule("s67-cpu-unreported", "node_cpu", "lt", 50),

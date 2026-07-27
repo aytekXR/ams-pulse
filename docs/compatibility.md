@@ -1,7 +1,8 @@
 # Pulse — AMS Version Compatibility Matrix
 
 **Product:** Pulse: Self-Hosted Analytics, QoE Monitoring and Alerting for Ant Media Server  
-**Last updated:** D-176 (2026-07-27) — reviewed against AMS 3.0.3 (still the latest AMS
+**Last updated:** D-179 (2026-07-27) — AMS 2.16/2.17 coverage added and source citations
+de-numbered; reviewed against AMS 3.0.3 (still the latest AMS
 release); G-27 section added D-161 (2026-07-22)
 
 ---

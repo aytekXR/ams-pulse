@@ -3,7 +3,8 @@
 Authoritative technical-design document. PRD: `docs/prd-report.md` §7. Decisions with
 trade-offs get an ADR in `docs/adr/`.
 
-Last updated: D-161 staleness sweep (2026-07-22); content baseline D-062 with
+Last updated: D-179 (2026-07-27) — §3 rule 2 now names `internal/cluster` and is
+enforced by a test; previous sweep D-161 (2026-07-22); content baseline D-062 with
 subsequent per-section amendments. QA gate: PASS_WITH_LIMITATIONS.
 
 ## 1. System context

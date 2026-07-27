@@ -55,7 +55,9 @@ kubectl create secret generic pulse-clickhouse-secret \
 #    Published to GHCR as an OCI artifact on every release, anonymously pullable:
 #      helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.2 \
 #        --set pulse.ams.url=http://your-ams:5080 ...
-#    The chart semver is independent of appVersion: 0.3.1 carries appVersion 0.4.3.
+#    The chart semver is independent of appVersion and moves on its own schedule —
+#    read both from Chart.yaml rather than assuming they track (round-7 review I-02:
+#    this line used to name a literal pair and went stale the release after it was written).
 #    From a local checkout instead:
 helm install pulse ./deploy/helm/pulse \
   --set pulse.ams.url=http://your-ams:5080 \

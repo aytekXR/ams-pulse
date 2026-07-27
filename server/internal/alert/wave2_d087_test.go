@@ -42,14 +42,16 @@ func makeNodeDegradedRule(ctx context.Context, t *testing.T, store *meta.Store, 
 }
 
 // snapWithNodeConsecErrors returns a LiveSnapshot with one node whose ConsecAPIErrors is set.
-// CPU and mem are explicitly 0 to model a standalone AMS node (they never report OS metrics).
+// CPU and mem are explicitly 0 to model a node whose snapshot carries no OS metrics
+// (the system-status fallback path — see I-05: this is about ABSENCE, not about which
+// AMS versions report what).
 func snapWithNodeConsecErrors(nodeID string, consecErrors int) *domain.LiveSnapshot {
 	return &domain.LiveSnapshot{
 		Streams: map[string]*domain.LiveStream{},
 		Nodes: map[string]*domain.LiveNodeStats{
 			nodeID: {
 				NodeID:          nodeID,
-				CPUPCT:          0, // standalone AMS — OS metrics never reported
+				CPUPCT:          0, // no OS metrics in this node's snapshot
 				MemPCT:          0,
 				ConsecAPIErrors: consecErrors,
 			},
@@ -71,7 +73,7 @@ func TestNodeDegraded_ConsecAPIErrors_Three_Fires(t *testing.T) {
 	ctx := context.Background()
 	makeNodeDegradedRule(ctx, t, store, "")
 
-	// ConsecAPIErrors=3, cpu=mem=0 (standalone AMS never reports OS metrics).
+	// ConsecAPIErrors=3, cpu=mem=0 (this node's snapshot carries no OS metrics).
 	live.setSnap(snapWithNodeConsecErrors("node-1", 3))
 
 	// Advance past window_s=5s.

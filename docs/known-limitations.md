@@ -227,24 +227,29 @@ polling the per-connection `/{app}/connections` endpoint.
 
 ---
 
-### LIM-10: Cluster fleet discovery wire shape source-verified; node roles/versions are not exposed by AMS 3.x, and edge/origin dedup is therefore inactive
+### LIM-10: Cluster fleet discovery wire shape source-verified; node roles/versions are not exposed by AMS 2.14–3.x, and edge/origin dedup is therefore inactive
 
 **What it means for you:** Cluster node auto-discovery and aggregate fleet metrics
-are implemented and unit-tested. Two consequences of the real AMS 3.x wire shape are
+are implemented and unit-tested. Two consequences of the real AMS wire shape are
 **not** confidence gaps but statically provable facts, so read them as current product
 behaviour rather than as pending validation:
 
-- **Every node displays as `origin`, with no version.** The AMS 3.x cluster-nodes
-  endpoint carries no `role` and no `version` field (`ClusterNode.java` at tag
-  `ams-v3.0.3`; the `role`/`version` keys in Pulse's DTO are tolerant aliases kept for
+- **Every node displays as `origin`, with no version.** The AMS cluster-nodes endpoint
+  carries no `role` and no `version` field. **This holds across the whole supported
+  range, not only 3.x**: `ClusterNode.java` is field-identical at tags `ams-v2.14.0`,
+  `ams-v2.16.2`, `ams-v2.17.1` and `ams-v3.0.3` — exactly
+  `{id, ip, lastUpdateTime, memory, cpu, dbQueryAveargeTimeMs, status}` (source-verified
+  D-179; the `role`/`version` keys in Pulse's DTO are tolerant aliases kept for
   mock/fixture compatibility). Discovery therefore defaults every node's role to
   `origin` and emits no version.
-- **Edge/origin viewer dedup (`IsEdgeStream()`) never activates on AMS 3.x.** It
-  requires a node whose role is literally `edge`, which the paragraph above shows
-  cannot occur. The code is implemented and unit-tested against mock profiles that do
-  send a role; on a real AMS 3.x cluster it is inert, and origin viewer counts are
-  therefore never suppressed. It would begin working unchanged if a future AMS exposed
-  roles.
+- **Edge/origin viewer dedup (`IsEdgeStream()`) never activates on any AMS version
+  Pulse supports.** It requires a node whose role is literally `edge`, which the
+  paragraph above shows cannot occur on 2.14 through 3.0.3. The code is implemented and
+  unit-tested against mock profiles that do send a role; on a real AMS cluster it is
+  inert, and origin viewer counts are therefore never suppressed. It would begin working
+  unchanged if a future AMS exposed roles. **If you are evaluating Pulse for a 2.16/2.17
+  cluster specifically: this applies to you too** — upgrading or downgrading within the
+  supported range does not activate dedup.
 
 Beyond those two, cluster-specific behavior has not been live-validated against a real
 multi-node AMS cluster — the validation VPS ran single-node AMS only.
