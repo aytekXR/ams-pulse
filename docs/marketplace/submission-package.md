@@ -57,13 +57,14 @@ AMS version-matrix, CodeQL) · cosign-signed multi-arch images + SBOM/provenance
 Trivy-gated releases · load-lane budgets L-1…L-9 (**capacity number pending the
 operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
 
-> **If a reviewer verifies the signature, tell them to use cosign v3+.** From `v0.4.0`
-> on, images are signed by cosign v3, which publishes the signature as an OCI 1.1
-> referrer rather than under the legacy `sha256-<digest>.sig` tag. A **cosign v2 client
-> prints `Error: no signatures found` against a correctly signed image.** Verified
-> 2026-07-27 against `0.4.3`: cosign v2.4.3 fails, cosign v3.0.2 passes (digest
-> `sha256:75a76c67…727b4`, claims + Rekor transparency-log inclusion + Fulcio cert chain
-> all validated). Command in [`../../README.md`](../../README.md).
+> **If a reviewer verifies the signature, tell them to use cosign v3+.** From `v0.3.0` on,
+> the signature is published as an OCI 1.1 referrer rather than under the legacy
+> `sha256-<digest>.sig` tag. A **cosign v2 client prints `Error: no signatures found`
+> against a correctly signed image.** Verified 2026-07-27: cosign **v2.4.3 fails** on
+> `0.3.0`…`0.4.3` and passes on `0.2.0` (the last legacy-layout release); cosign **v3.0.2
+> passes** on `0.4.3` — digest `sha256:75a76c67…727b4`, claims + Rekor transparency-log
+> inclusion + Fulcio cert chain all validated. Command in
+> [`../../README.md`](../../README.md).
 
 ## Blocking items before external submission
 

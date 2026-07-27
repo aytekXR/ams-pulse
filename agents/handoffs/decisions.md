@@ -10032,13 +10032,19 @@ rather than by re-reading our own documentation.
 
 **The finding that justifies the method (M-01, HIGH).** The `cosign verify` command Pulse
 publishes — in the README, in `release.yml`, in the Helm values — **fails**. A cosign **v2**
-client prints `Error: no signatures found` against a perfectly signed image. From `v0.4.0` on,
-`cosign-installer@v4` installs cosign v3, which publishes the signature as an **OCI 1.1
-referrer** rather than under the legacy `sha256-<digest>.sig` tag. Verified in both directions
-against `0.4.3`: **cosign v2.4.3 fails; cosign v3.0.2 passes** (claims + Rekor inclusion +
-Fulcio chain all validated, digest `sha256:75a76c67…727b4`). The registry corroborates it — the
-0.2.0-era digests carry `.sig` tags, the 0.4.x digests do not; that is also why the D-070
-verification passed with a v2 client at the time.
+client prints `Error: no signatures found` against a perfectly signed image. From **`v0.3.0`**
+on, the signature is published as an **OCI 1.1 referrer** rather than under the legacy
+`sha256-<digest>.sig` tag. Verified in both directions against `0.4.3`: **cosign v2.4.3 fails;
+cosign v3.0.2 passes** (claims + Rekor inclusion + Fulcio chain all validated, digest
+`sha256:75a76c67…727b4`).
+
+**The boundary was established empirically, and the first draft of this entry got it wrong.**
+The registry layout suggested v0.4.0; probing every tag showed the legacy `.sig` exists only
+for `0.2.0`, and running cosign v2.4.3 against each release confirmed it — **fails on `0.3.0`
+through `0.4.3`, passes on `0.2.0`** with Rekor logIndex 2128354996, the very entry D-070
+recorded when that verification was performed with a v2 client. Worth keeping as a prior: an
+inferred version boundary is a claim like any other, and the six commands that settle it cost
+less than shipping the wrong number into customer-facing docs.
 
 The artifact was never defective. **The instruction we hand a reviewer was.** A marketplace
 security reviewer running our own published command would have concluded the image was
