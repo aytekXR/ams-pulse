@@ -21,11 +21,11 @@ input for the next round. Prompt in, ledger out, same shape every time.
 | Parameter | Value |
 |---|---|
 | Round number | `<N>` |
-| Review target | e.g. `v0.4.3` (a release tag) **or** `main@<sha>` |
+| Review target | e.g. `v0.4.4` (a release tag) **or** `main@<sha>` |
 | Published image | `ghcr.io/aytekxr/ams-pulse:<version>` (tags have **no** `v` prefix) |
 | Repository | `https://github.com/aytekXR/ams-pulse` (public) |
-| Prior-round file | `docs/assessment/external-review-<date>-round<N-1>.md` (omit for round 1) |
-| Finding ID prefix | one unused letter, e.g. round 6 → `H-01`, `H-02`, … |
+| Prior-round file | `docs/assessment/marketplace-compliance-review-<date>-round<N-1>.md` (omit for round 1) — e.g. round 7's input is `…-2026-07-27-round6.md` |
+| Finding ID prefix | one unused letter, e.g. round 6 used `H-01`…, so round 7 uses `I-01`, `I-02`, … |
 
 **Say which tree you actually reviewed, as a SHA, in the first line of your output.** Past
 rounds have gone wrong because the reviewer assumed `main` and the tag were identical when
