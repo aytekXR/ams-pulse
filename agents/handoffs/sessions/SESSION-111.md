@@ -41,6 +41,18 @@ signature is valid and transparency-logged. What was defective was **the instruc
 reviewer.** No amount of re-reading our own docs would have surfaced it; only running the
 published command with a client version we had not thought about did.
 
+## Release-guard check #18 (new)
+
+Fixing M-03 introduced a hardcoded chart version into four customer-facing files — exactly the
+drift class checks #1–#17 exist to prevent, and none of them covered it (Chart.yaml's `version`
+is the chart semver and moves independently of `appVersion`, which #2 pins). **Check #18** now
+fails the release when a *runnable* OCI-chart pin in the docs disagrees with `Chart.yaml`.
+Scoped to the two copy-pasteable forms (`charts/pulse … --version X.Y.Z` and
+`charts/pulse:X.Y.Z`) rather than a bare version grep, so prose naming an older chart cannot
+trip it — the G-06 over-widening warning applies here too. Tested both directions before
+commit: passes on the current tree, and fails on all four files when the chart is simulated
+bumped to `0.3.2` with the docs left behind.
+
 ## Deliberate non-actions
 
 - **No release cut.** Every fix is documentation or comment; none changes the image. D-177

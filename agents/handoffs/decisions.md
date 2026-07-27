@@ -10070,6 +10070,16 @@ then torn down with no residue · `install.sh` byte-identical to the tagged tree
 doc links unbroken · listing copy free of internal identifiers with both stated character
 counts exact.
 
+**New release-guard check #18.** Fixing M-03 put a hardcoded chart version into four
+customer-facing files — the exact drift class checks #1–#17 exist to prevent, and none covered
+it, because `Chart.yaml`'s `version` is the chart semver and moves independently of the
+`appVersion` that check #2 pins. Check #18 fails the release when a **runnable** OCI-chart pin
+in the docs disagrees with `Chart.yaml`, scoped to the two copy-pasteable forms rather than a
+bare version grep (the G-06 over-widening warning applies here too). Tested in both directions
+before commit: passes on the current tree; fails on all four files when the chart is simulated
+bumped to `0.3.2` with the docs left behind. Introducing a guard alongside the doc change that
+needs it is the pattern worth keeping — the fix and its regression test land together.
+
 **Deliberate non-actions.** **No release cut** — every fix is documentation or comment and none
 changes the image; D-177 ruled these items ride the next release and nothing here overturns
 that, so **`v0.4.3` remains the submission target** and the `v0.4.3`→`main` doc delta is
