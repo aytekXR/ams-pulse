@@ -24,22 +24,28 @@
 > **Replace this block each session — never append to it.**
 
 **Where the product is:** **v0.4.4 is the release and the marketplace submission target.**
-S114 (D-182) executed external review **round 8**: all three findings confirmed as defects, but
-J-02's stated *mechanism* was refuted and it downgraded to LOW by the reviewer's own written
-rule. Two of three were wider than filed, and **five further items were found by us** — the
-largest being `GeoBreakdown`, which the reviewer explicitly reassured us was safe and which
-turned out to be the bigger instance of the very class they filed. Round 8's verdict is again
-*"ready to submit as soon as G-02 closes"*. **The external review loop has converged**; further
-rounds are optional polish, not gating. `main` carries the round-8 fixes, which ride the next cut.
+S115 (D-183) executed external review **round 9**: both findings confirmed, both one-line doc
+LOWs. K-02 was fixed at 4 sites rather than the 2 filed; K-01's *conclusion* was adopted and its
+*evidence refuted* — for the second round running the reviewer reproduced from an untracked
+`external-review-…-round6.md` that has never existed on this tree. **Six further items were found
+by us**, the largest being a documentation surface still telling operators they need Kafka for
+standalone CPU/memory/disk — false since D-179, and left standing because D-181's fix for the
+same class was scoped to code comments only. Round 9's verdict is again *"ready to submit as soon
+as G-02 closes"*. **The external review loop has converged**; further rounds are optional polish,
+not gating. `main` now carries the round-7, round-8 and round-9 fixes, which ride the next cut.
 
 The round-6 headline still stands as the product change: LIM-01 is closed — standalone AMS
-reports CPU/memory/disk via `GET /rest/v2/system-resources`, no Kafka.
+reports CPU/memory/disk via `GET /rest/v2/system-resources`, no Kafka. **As of D-183 the
+documentation finally says so everywhere** (`kafka-integration.md`, `compatibility.md`, and the
+assessment records, which are marked superseded rather than rewritten).
 
 **One thing blocks submission, and it is the operator's:** rotate `CLICKHOUSE_PASSWORD`. A
 32-hex prefix of the live value is in public git history since `98b011c`. Deliberately deferred
-when the v0.4.3 cut was authorised — a recorded decision, not an oversight. **Re-checked S113:
-still un-rotated** (live prefix still matches 2 commits). Both the reviewer and the loop agree
-it is the only remaining gate: rotate, then submit against `v0.4.4`.
+when the v0.4.3 cut was authorised — a recorded decision, not an oversight. **Re-checked S115:
+still un-rotated** (live prefix still matches 2 commits). Nine rounds in, both the reviewer and
+the loop agree it is the only remaining gate. The submission-day motion is one movement:
+**rotate (G-02), cut v0.4.5, submit against it** — that single cut also clears the tag-frozen
+prose items and ships the behavioural breakdown cap.
 
 **Do first, every session:**
 1. **Gate reads** — prod health (component-scoped `/healthz` + a ClickHouse count), git/PR
@@ -91,7 +97,22 @@ query is a second round trip. It emitted `uniques=-20`. **Both the authoring lan
 adversarial verifier certified that code SOUND** — an in-code proof is a claim to test, exactly
 like a changelog entry. Reproduce numerically before believing any arithmetic argument.
 
-**Guard scope is a decision; scope gaps are where drift lands (S113's lesson, re-earned in S114).**
+**A reviewer's claim about OUR tree state is the cheapest thing to verify — and we have been
+handed it wrong twice (S115).** Round 8's J-03 and round 9's K-01 both reproduce from an
+untracked `docs/assessment/external-review-2026-07-27-round6.md`. It has never existed here:
+`git status --porcelain --untracked-files=all` is empty, `git log --all` knows no such path, and
+a filesystem search finds only round 8's ledger. **Both findings were still right about the
+defect.** Run the reviewer's reproduction command before accepting the evidence, and disposition
+the conclusion and the evidence separately — a refuted premise does not refute the finding, and
+an accepted finding does not launder the premise.
+
+**Guard scope is a decision; scope gaps are where drift lands (S113's lesson, re-earned in S114
+and again in S115 — four rounds running).** S115's instance was the worst yet: D-181 corrected
+the stale "standalone AMS never reports `cpu_pct`" claim at eight *code comment* sites and swept
+no *documentation*, so `kafka-integration.md` spent two more rounds contradicting itself inside
+twenty lines and `compatibility.md`'s customer-facing matrix kept saying "Via Kafka only". **Write
+what a sweep did NOT cover into the decision entry** — otherwise the next reviewer writes it for
+you.
 Round 8's sweep found round 7's *own* fixed classes still live in two unswept files —
 `submission-package.md` carried I-01's stale range **inside the marketplace submission document**,
 and `install.md` carried I-02's chart-version contradiction. Both round-7 fixes were file-scoped.
@@ -154,8 +175,8 @@ behind LIM-01 turned out to be wrong (LIM-04 rests on a similar inference).
 - **Production** runs behind host nginx on this VPS at `https://pulse.beyondkaira.com`, against
   the operator's own `antmedia` container (AMS Enterprise 3.0.3, `--network host`). It is on the
   stamped **v0.4.0-139** build — rolling prod forward is deliberate and operator-gated, never
-  automatic. Health at last check (S112, 2026-07-27): all three `/healthz` components `ok`,
-  **1,328,195** server events, collector actively ingesting.
+  automatic. Health at last check (S115, 2026-07-27): all three `/healthz` components `ok`,
+  **1,336,799** server events, newest 16 s old, collector actively ingesting.
 - **`main` is protected** (required contexts, strict, 1 review, `enforce_admins=false` so owner
   pushes work). Work on a branch → PR → merge on green.
 - **Known limitations are disclosed, not hidden:** `docs/known-limitations.md` carries 28

@@ -194,6 +194,16 @@ func NewEmbeddedUAParser() EmbeddedUAParser { return EmbeddedUAParser{} }
 // Parse implements UAParser.
 func (EmbeddedUAParser) Parse(ua string) domain.ClientEnrichment {
 	if ua == "" {
+		// INVARIANT (review round 9): leave OS and Browser empty here. The
+		// device breakdown's capped-tail row is identified by the literal
+		// "other" in device AND os AND browser simultaneously (query.go →
+		// breakdownRowCap). Real rows never reach that tuple: an empty UA is
+		// the only path to Device "other", and it yields empty OS/Browser,
+		// while a non-empty UA always resolves Device to a concrete category
+		// (detectDevice falls back to "desktop", never "other"). Filling
+		// OS/Browser with "other" here would make a genuine row
+		// indistinguishable from the aggregate tail row in the API response.
+		// Pinned by TestEmbeddedUAParser_NeverCollidesWithBreakdownSentinel.
 		return domain.ClientEnrichment{Device: "other"}
 	}
 	uaLow := strings.ToLower(ua)
