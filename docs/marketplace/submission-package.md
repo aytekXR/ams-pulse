@@ -61,11 +61,13 @@ operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
 > **If a reviewer verifies the signature, tell them to use cosign v3+.** From `v0.3.0` on,
 > the signature is published as an OCI 1.1 referrer rather than under the legacy
 > `sha256-<digest>.sig` tag. A **cosign v2 client prints `Error: no signatures found`
-> against a correctly signed image.** Verified 2026-07-27: cosign **v2.4.3 fails** on
-> `0.3.0`…`0.4.3` and passes on `0.2.0` (the last legacy-layout release); cosign **v3.0.2
-> passes** on `0.4.3` — digest `sha256:75a76c67…727b4`, claims + Rekor transparency-log
-> inclusion + Fulcio cert chain all validated. Command in
-> [`../../README.md`](../../README.md).
+> against a correctly signed image.** The layout is a structural property of
+> `release.yml`, not a per-release decision, so every release from `0.3.0` on behaves this
+> way and every future one will too. Spot-verified 2026-07-27 with cosign v2.4.3 and
+> v3.0.2 against `0.3.0`, `0.4.3` and `0.4.4`: v2.4.3 fails on all three and passes only on
+> `0.2.0` (the last legacy-layout release); v3.0.2 passes on all three — for `0.4.3`, digest
+> `sha256:75a76c67…727b4`, claims + Rekor transparency-log inclusion + Fulcio cert chain all
+> validated. Command in [`../../README.md`](../../README.md).
 
 ## Blocking items before external submission
 

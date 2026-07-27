@@ -1103,7 +1103,16 @@ export interface components {
             watch_time_s: number;
             peak_concurrency: number;
         };
+        /**
+         * @description Geography breakdown. Capped at the top 100 rows ordered by views
+         *     descending. When additional rows exist, a tail row aggregates their
+         *     totals; identified by "other" in the country (and region) field.
+         */
         GeoResponse: {
+            /**
+             * @description Top rows by views, plus an optional "other" tail row aggregating
+             *     any remaining rows beyond the cap.
+             */
             rows: components["schemas"]["GeoRow"][];
         };
         GeoRow: {
@@ -1115,7 +1124,16 @@ export interface components {
             uniques: number;
             watch_time_s: number;
         };
+        /**
+         * @description Device/OS/browser/protocol breakdown. Capped at the top 100 rows
+         *     ordered by views descending. When additional rows exist, a tail row
+         *     aggregates their totals; identified by "other" in all grouping fields.
+         */
         DeviceResponse: {
+            /**
+             * @description Top rows by views, plus an optional "other" tail row aggregating
+             *     any remaining rows beyond the cap.
+             */
             rows: components["schemas"]["DeviceRow"][];
         };
         DeviceRow: {
@@ -2134,7 +2152,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Geo breakdown rows */
+            /**
+             * @description Geo breakdown rows. The response is capped at the top 100 rows
+             *     ordered by views descending. When additional rows exist, a single
+             *     tail row aggregates their totals; this row is identified by the
+             *     sentinel value "other" in the country field (and region field when
+             *     region=true). Totals therefore remain complete even when individual
+             *     rows are elided.
+             */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2169,7 +2194,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Device breakdown rows */
+            /**
+             * @description Device breakdown rows. The response is capped at the top 100 rows
+             *     ordered by views descending. When additional rows exist, a single
+             *     tail row aggregates their totals; this row is identified by the
+             *     sentinel value "other" in the device, os, browser, and protocol
+             *     fields. Totals therefore remain complete even when individual rows
+             *     are elided.
+             */
             200: {
                 headers: {
                     [name: string]: unknown;

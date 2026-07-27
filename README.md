@@ -63,13 +63,14 @@ cosign verify \
 > the published `0.4.3` — it passes, and the same regexp with `refs/heads/` in place of
 > `refs/tags/` correctly fails.
 
-> **Requires cosign v3.0 or newer.** Releases from `v0.3.0` on store the signature as an
-> OCI 1.1 *referrer* rather than under the legacy `sha256-<digest>.sig` tag. A **cosign v2
-> client reports `Error: no signatures found` against a correctly signed image** — it is
-> looking for a tag that is no longer written. This applies to `0.3.0` **and every release
-> since** — the layout has not changed. Verified 2026-07-27: cosign v2.4.3 fails on `0.3.0`
-> through the current release and succeeds only on `0.2.0` (the last legacy-layout build);
-> cosign v3.0.2 succeeds on all of them.
+> **Requires cosign v3.0 or newer.** Every release from `v0.3.0` on publishes its signature
+> as an OCI 1.1 *referrer* rather than under the legacy `sha256-<digest>.sig` tag. A **cosign
+> v2 client reports `Error: no signatures found` against a correctly signed image** — it is
+> looking for a tag that the release pipeline no longer writes. The layout is a structural
+> property of the release workflow (`release.yml`), not a per-release decision, so all future
+> releases will behave the same way. Spot-verified 2026-07-27 with cosign v2.4.3 and v3.0.2
+> against `0.3.0`, `0.4.3`, and `0.4.4`: v2.4.3 fails on all three, v3.0.2 succeeds on all
+> three; `0.2.0` (the last legacy-layout build) succeeds on both clients.
 > Check with `cosign version` and upgrade if it prints 2.x.
 
 **Building from source** (development or local patches):
@@ -129,7 +130,7 @@ PULSE_SECRET_KEY=$(openssl rand -hex 32) \
 
 ## Feature status
 
-Last updated: **2026-07-27 (D-181)** — all 10 PRD features shipped; latest release **v0.4.4**.
+Last updated: **2026-07-27 (D-182)** — all 10 PRD features shipped; latest release **v0.4.4**.
 The maintainer's production instance runs behind host-nginx TLS against a real AMS 3.0.3
 Enterprise (currently on the stamped **v0.4.0-139** build; the roll to 0.4.4 is deliberate,
 not automatic). Product one-pager: [docs/product.md](docs/product.md).
