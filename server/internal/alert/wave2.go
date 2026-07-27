@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/aytekXR/ams-pulse/server/internal/domain"
+	"github.com/aytekXR/ams-pulse/server/internal/ssrfguard"
 	"github.com/aytekXR/ams-pulse/server/internal/store/meta"
 )
 
@@ -284,6 +285,13 @@ type CertChecker struct {
 }
 
 // NewCertChecker creates a CertChecker with the given dial timeout.
+// DaysUntilExpiry dials through ssrfguard.DialControl, so a rule scope pointing
+// at a link-local or IMDS address (e.g. 169.254.169.254) is refused at dial
+// time — a cert_expiry rule's host is operator-supplied through the alert-rule
+// API. The guard lives on the checker's own dial rather than at the wiring site
+// in serve.go, so a future call site cannot forget it: this defect class
+// (D-184, round-10 audit M-01) existed precisely because the guard was
+// wiring-dependent.
 func NewCertChecker(dialTimeout time.Duration) *CertChecker {
 	if dialTimeout <= 0 {
 		dialTimeout = 10 * time.Second
@@ -293,6 +301,7 @@ func NewCertChecker(dialTimeout time.Duration) *CertChecker {
 
 // NewCertCheckerWithTLSConfig creates a CertChecker with a custom TLS config.
 // Use for testing with self-signed certificates.
+// The guard is installed the same as NewCertChecker — see its docstring.
 func NewCertCheckerWithTLSConfig(cfg *tls.Config, dialTimeout time.Duration) *CertChecker {
 	if dialTimeout <= 0 {
 		dialTimeout = 10 * time.Second
@@ -323,8 +332,10 @@ func (c *CertChecker) DaysUntilExpiry(ctx context.Context, host string) (float64
 		tlsCfg = &tls.Config{InsecureSkipVerify: false, ServerName: h}
 	}
 
+	// ssrfguard.DialControl prevents SSRF via operator-supplied scope host
+	// targeting link-local addresses (D-184, round-10 audit M-01).
 	dialer := &tls.Dialer{
-		NetDialer: &net.Dialer{},
+		NetDialer: &net.Dialer{Control: ssrfguard.DialControl},
 		Config:    tlsCfg,
 	}
 	conn, err := dialer.DialContext(dialCtx, "tcp", addr)

@@ -481,7 +481,30 @@ jobs:
           shellcheck \
             deploy/quickstart/install.sh \
             deploy/scripts/pulse-backup.sh \
-            deploy/nginx/deployment.sh
+            deploy/nginx/deployment.sh \
+            .github/check-doc-stamps.sh
+
+  # ── 11. Doc "Last updated" stamp guard ───────────────────────────────────────
+  # Stamp drift is this repo's most-repeated defect class — external review
+  # rounds 7, 8, 9 and 10 each filed an instance, and each fix was scoped to the
+  # one file that round happened to name, so the next round found it somewhere
+  # else. Rationale, both checks, and an explicit list of what they do NOT cover
+  # live at the top of .github/check-doc-stamps.sh.
+  #
+  # fetch-depth: 0 is required — check B diffs the PR range against the base to
+  # assert that a change to a stamped doc also moved its stamp.
+  doc-stamps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check doc stamps
+        run: |
+          BASE="origin/${{ github.base_ref || github.event.repository.default_branch }}"
+          git rev-parse --verify --quiet "$BASE" >/dev/null || BASE=""
+          .github/check-doc-stamps.sh $BASE
 
   # ── 10. Compose boot smoke ───────────────────────────────────────────────────
   # Boots the base deploy/docker-compose.yml (the exact README evaluator command)

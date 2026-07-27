@@ -3,8 +3,8 @@
 Authoritative technical-design document. PRD: `docs/prd-report.md` §7. Decisions with
 trade-offs get an ADR in `docs/adr/`.
 
-Last updated: D-179 (2026-07-27) — §3 rule 2 now names `internal/cluster` and is
-enforced by a test; previous sweep D-161 (2026-07-22); content baseline D-062 with
+Last updated: 2026-07-27 — §3 rule 2 now names `internal/cluster` and is enforced by
+a test (D-179); previous sweep 2026-07-22 (D-161); content baseline D-062 with
 subsequent per-section amendments. QA gate: PASS_WITH_LIMITATIONS.
 
 ## 1. System context
@@ -42,7 +42,7 @@ Default deployment is all-in-one + ClickHouse via Docker Compose.
 
 ### Wave-3-Plus implementation status (2026-06-15)
 
-Last updated: Wave-3-Plus complete (2026-06-15). QA gate: **PASS_WITH_LIMITATIONS**
+Last updated: 2026-06-15 — Wave-3-Plus complete. QA gate: **PASS_WITH_LIMITATIONS**
 (waivers D-002 no-Docker, D-007.5 no-Kafka; 0 FAIL defects; all guard tests green).
 
 The V3a and V3b fix-loops resolved 30 defects from the adversarial validation (V2
@@ -65,7 +65,7 @@ triage report). Key functional changes:
 
 ### Wave-3 implementation status (2026-06-14)
 
-Last updated: Wave 3-MVP complete (2026-06-14). QA gate: **PASS_WITH_LIMITATIONS**
+Last updated: 2026-06-14 — Wave 3-MVP complete. QA gate: **PASS_WITH_LIMITATIONS**
 (two D-002 waivers; no FAIL defects; see `qa/wave-3/gate-report.md`).
 
 | Component | Package | Status |
@@ -94,7 +94,7 @@ Phase-3 deltas (remaining):
 
 ### Wave-2 implementation status
 
-Last updated: Wave 2 implementation complete (2026-06-14).
+Last updated: 2026-06-14 — Wave 2 implementation complete.
 
 | Component | Package | Status |
 |---|---|---|

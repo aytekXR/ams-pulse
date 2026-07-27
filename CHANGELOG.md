@@ -10,6 +10,41 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ## [Unreleased]
 
+### Security
+
+- **The SSRF dial guard now covers three outbound clients it was missing from (D-184, round-10
+  exculpation audit M-01).** `ssrfguard.DialControl` was installed on the webhook channel, the
+  Slack channel, the prober, the RTMP probe and the AMS connectivity test, but **not** on the
+  **email channel** (`smtp_addr`, supplied through the alert-channel config API), the
+  **certificate-expiry checker** (host taken from a `cert_expiry` rule's scope, supplied through
+  the alert-rule API) or the **S3 report uploader** (`PULSE_S3_ENDPOINT`). An authenticated
+  operator could therefore point any of them at a link-local address such as `169.254.169.254`
+  and reach the cloud metadata service. All three now dial through the guard, and the guard sits
+  on each component's own dial rather than at its wiring site so a future call site cannot omit
+  it. Loopback and RFC-1918 remain deliberately allowed — Pulse must reach AMS nodes on private
+  networks. Regression tests assert a link-local target is refused and a private one is not.
+- **Beacon field limits now apply on the documented ingest path (D-184, M-02).** `/ingest/beacon`
+  has two implementations: the optional dedicated listener
+  (`PULSE_INGEST_LISTEN_ADDR`) and the main API port — and the main port is the one
+  `docs/beacon-sdk.md` tells operators to use. Only the dedicated listener applied the A10 field
+  limits, so a batch posted to the main port stored `tenant` and event `data` string values
+  **untruncated**. Both paths now call one shared helper that owns the 64-byte limits, so they
+  cannot diverge again. (S101 fixed this same divergence once for schema validation and left the
+  field limits behind.) **No API contract change** — over-long values were never valid to rely on.
+
+### Changed
+
+- **Paid alert channels stop delivering when a licence tier is downgraded (D-184, M-03).**
+  Channel create, update and test-fire were gated by tier at the HTTP boundary, but the
+  background evaluator was not: a tenant that configured a Slack, PagerDuty, webhook or Telegram
+  channel on a paid tier and then downgraded kept receiving notifications indefinitely. The
+  evaluator now consults a channel-entitlement gate both when it syncs channels from the store
+  and again immediately before each delivery (the second check closes the sync window). A
+  tier-skipped delivery is logged at debug and is **not** recorded as a `delivery_failure` — it
+  is a policy decision, not an error. This mirrors the runtime gate the synthetic prober has had
+  since D-108. **Behaviour change for downgraded tenants** — paid-type channels go quiet instead
+  of continuing to deliver.
+
 ### Fixed
 
 - **Fallback-path `api_latency_ms` timed up to three calls instead of one (D-181, review round 7

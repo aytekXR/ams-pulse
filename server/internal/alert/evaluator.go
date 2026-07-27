@@ -209,6 +209,15 @@ type Evaluator struct {
 	// meta store by syncRegistryFromStore. Used to remove deleted channels from
 	// the registry without touching manually-registered channels (e.g. test fakes).
 	syncedChannelIDs map[string]bool
+
+	// channelEntitlementGate is an optional gate that checks whether a channel
+	// type is allowed by the current licence tier. Mirrors prober.Config.EntitlementGate
+	// (S37 / D-108 precedent). Nil = allow all (backward compat). Checked in BOTH
+	// syncRegistryFromStore (do not register paid-tier channels for a downgraded
+	// tenant) AND the per-channel delivery path (check again before Send, because
+	// sync is periodic and a downgrade inside that window would otherwise deliver).
+	// A tier skip is NOT a delivery_failure — it is a policy decision (M-03).
+	channelEntitlementGate func(channelType string) error
 }
 
 // deliveryCtx carries the alert event data used if a delivery_failure must
@@ -301,6 +310,22 @@ func (e *Evaluator) SetAnomalyBaselineReader(r AnomalyBaselineReader) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.anomalyReader = r
+}
+
+// SetChannelEntitlementGate wires the licence-tier gate for alert channel types.
+// The gate is checked in BOTH syncRegistryFromStore (do not register paid-tier
+// channels for a downgraded tenant) AND the per-channel delivery path (check again
+// before Send, because sync is periodic and a downgrade inside that window would
+// otherwise deliver). Nil gate means allow-all (backward compat). A tier skip is
+// NOT recorded as a delivery_failure — it is a policy decision.
+//
+// Mirrors prober.Config.EntitlementGate (S37 / D-108): "a tenant that downgrades
+// below the probe tier stops probing at runtime, not just at the HTTP CRUD boundary."
+// M-03: the alert evaluator must enforce the same invariant for paid channel types.
+func (e *Evaluator) SetChannelEntitlementGate(gate func(channelType string) error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.channelEntitlementGate = gate
 }
 
 // Start runs the evaluator loop until ctx is cancelled.
@@ -523,6 +548,11 @@ func (e *Evaluator) pruneNodeDownTrackers(keep map[string]bool) {
 //   - Decrypt failure or unknown type: logged + skipped; other channels still delivered.
 //   - Channels removed from the store are removed from the registry on the next tick,
 //     causing deliver() to skip them (no delivery_failure row for deleted channels).
+//   - Entitlement gate: a channel whose type is rejected by channelEntitlementGate
+//     is not registered (and is removed if it was previously registered). This
+//     ensures a tier downgrade takes effect on the next sync — a tenant that
+//     downgrades below a paid channel tier (e.g. slack, pagerduty) stops receiving
+//     notifications on that channel type at runtime (M-03, mirrors S37 / D-108).
 func (e *Evaluator) syncRegistryFromStore(ctx context.Context) {
 	storedChannels, err := e.store.ListAlertChannels(ctx, 0, "")
 	if err != nil {
@@ -534,10 +564,29 @@ func (e *Evaluator) syncRegistryFromStore(ctx context.Context) {
 		e.syncedChannelIDs = make(map[string]bool)
 	}
 
+	// Snapshot the gate under the lock so the loop sees a consistent value.
+	e.mu.Lock()
+	gate := e.channelEntitlementGate
+	e.mu.Unlock()
+
 	// Build the desired set from the store.
 	desiredIDs := make(map[string]bool, len(storedChannels))
 	for i := range storedChannels {
 		row := &storedChannels[i]
+		// M-03: check entitlement gate BEFORE building/registering the channel.
+		// A channel whose type is rejected by the gate is NOT registered (and is
+		// removed below if it was previously synced). This is the primary path for
+		// enforcing a tier downgrade — the HTTP CRUD boundary gates creation/update,
+		// but the runtime sync must ALSO gate so a pre-existing channel stops
+		// delivering after downgrade.
+		if gate != nil {
+			if err := gate(row.Type); err != nil {
+				e.logger.Debug("alert evaluator: skip channel — tier gate rejected",
+					"channel_id", row.ID, "type", row.Type, "error", err)
+				// Do NOT add to desiredIDs — the removal loop below will unregister it.
+				continue
+			}
+		}
 		desiredIDs[row.ID] = true
 		built, err := BuildChannelFromRow(e.store, row)
 		if err != nil {
@@ -548,7 +597,8 @@ func (e *Evaluator) syncRegistryFromStore(ctx context.Context) {
 		e.registry.Register(row.ID, built)
 	}
 
-	// Remove channels that were previously synced from the store but are now gone.
+	// Remove channels that were previously synced from the store but are now gone
+	// (or whose type is no longer entitled — they are not in desiredIDs).
 	// We only remove IDs we previously added — never touching manually-registered ones.
 	for id := range e.syncedChannelIDs {
 		if !desiredIDs[id] {
@@ -812,10 +862,17 @@ func (e *Evaluator) resolve(ctx context.Context, rule meta.AlertRuleRow, scope d
 // Each channel is delivered in its own goroutine so that a slow or failing
 // channel never blocks the 5-second evaluate tick.  Goroutines are counted in
 // deliveryWg so Stop() can wait for a bounded shutdown.
+//
+// M-03: the entitlement gate is checked AGAIN inside each delivery goroutine
+// (after the sync-time check in syncRegistryFromStore) because a downgrade may
+// happen inside the sync window. A tier-skipped channel is silently dropped — it
+// is NOT a delivery_failure, it is a policy decision. Mirrors the prober pattern
+// (S37 / D-108): "a tenant that downgrades stops probing at runtime".
 func (e *Evaluator) deliver(ctx context.Context, rule meta.AlertRuleRow, payload []byte, dc deliveryCtx) {
 	// Call notify sink synchronously (kept for backward compatibility with tests).
 	e.mu.Lock()
 	sink := e.notifySink
+	gate := e.channelEntitlementGate
 	e.mu.Unlock()
 	if sink != nil {
 		sink(payload)
@@ -832,6 +889,25 @@ func (e *Evaluator) deliver(ctx context.Context, rule meta.AlertRuleRow, payload
 		e.deliveryWg.Add(1)
 		go func(channelID string, ch channels.Channel) {
 			defer e.deliveryWg.Done()
+			// M-03: check gate BEFORE sending — a downgrade since the last sync must
+			// not deliver. ch.Name() returns the channel type (e.g. "slack", "webhook"),
+			// and those strings match the stored row.Type vocabulary that
+			// CheckChannelAllowed expects (verified across all five real channel types).
+			// A tier skip is logged at Debug and exits silently — NOT recorded as a
+			// delivery_failure, which is reserved for actual Send errors.
+			//
+			// Scope note: CheckChannelAllowed is a positive-membership test, so this
+			// gates MANUALLY-registered channels too — a NoopChannel (Name() "noop")
+			// would be refused. That is unreachable in production, where every channel
+			// is built from the store by syncRegistryFromStore and "noop" is not a
+			// storable type; test fakes run with a nil gate, which allows all.
+			if gate != nil {
+				if err := gate(ch.Name()); err != nil {
+					e.logger.Debug("alert: skip delivery — tier gate rejected",
+						"channel_id", channelID, "type", ch.Name(), "error", err)
+					return
+				}
+			}
 			e.retryDeliver(ctx, channelID, ch, payload, dc)
 		}(id, ch)
 	}

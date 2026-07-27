@@ -10482,3 +10482,131 @@ events, newest 16 s old.
 **Still open, unchanged:** **G-02** — rotate `CLICKHOUSE_PASSWORD`. Re-checked silently: the
 live value's 32-hex prefix still matches 2 commits in public history. Ninth consecutive round as
 the sole submission blocker. Operator-gated.
+
+---
+
+## D-184 — §S116: external review round 10 (L-01…L-02) verified & executed; the round's security all-clear audited, three defects found and fixed
+
+**Round 10 was the reviewer's declared final round.** Verdict: *"Not blocked by engineering.
+Blocked by one operator rotation and one tag. Rotate, cut v0.4.5, submit — and stop reviewing."*
+Ledger: `docs/assessment/external-review-2026-07-27-round10.md`.
+
+**Both filed findings are REFUTED as filed — a first — and both still pointed at something real.**
+
+**L-01 (filed MEDIUM): objection confirmed, evidence refuted, mechanism finally identified.**
+The finding accused `review-chain.md` of asserting a falsehood, citing "four independent
+receipts" for two untracked reviewer ledgers. Five probes at `a59c2ca` say otherwise:
+`git status --porcelain --untracked-files=all --ignored` empty, `git log --all` knows neither
+path, a whole-filesystem `find -xdev` returns only rounds 8 and 9, `git worktree list` shows one
+worktree and the box has one checkout, and there is no `.git/index.lock`. The reported byte sizes
+(42,463 / 24,066) do not match the similarly-named maintainer files that do exist (12,422 / 7,788).
+
+**But L-01's objection was right and is adopted:** the file claimed what the reviewer's
+*deliveries contained*. We cannot observe their outbound channel, only its effect here. The
+sentence now claims only that no round-6/7 file has ever *reached* this repository, which is
+verifiable and stays true whatever any receipt on the other side says.
+
+**The mechanism — three rounds late, and it is nobody's dishonesty.** L-01 also reported a stale
+`.git/index.lock` that could not be unlinked (`Operation not permitted`). This tree has no lock,
+`.git` is writable, the repo is on native ext4, and D-183 was committed and pushed from it. A
+lock its own owner cannot remove is characteristic of an overlay/bind-mounted sandbox.
+**The reviewer's device bridge is attached to a mirror of the repository, not the repository.**
+Its writes land there, are reported successful to the review session, and never arrive here;
+rounds 8 and 9 arrived only as pasted chat text transcribed by the maintainer. Chat text reaches
+this repo, bridge writes do not. J-03, K-01 and L-01 were all this one fact. Recorded in
+`review-chain.md` so round 11 cannot spend a fourth round on it.
+
+**L-02 (filed LOW): refuted as filed; the class is four times wider.** The README footer was
+**correct** — `git log -- README.md` shows its last modification is `9928f70` (D-182) and the
+stamp said D-182. A stamp naming the session in which the file last changed is doing its job;
+"lags the tree" is not the defect definition. Sweeping every tracked `.md` found the real drift
+elsewhere: `faq.md` (said D-176, last changed D-180), `overview.md` (D-163 vs D-176),
+`ARCHITECTURE.md` (D-179 vs D-181), plus four non-date stamps a first-match-per-file grep missed.
+`decisions.md` and `brandkit/uploads/` were false positives in our own first sweep — body text and
+a frozen snapshot respectively.
+
+**Fourth consecutive round for this class (I-01, I-03, J-03/K-01, L-02), so it is closed
+mechanically rather than by hand.** Every stamp is now date-valued; D-numbers survive as prose
+provenance *after* the date, where they inform and cannot rot. `.github/check-doc-stamps.sh` plus
+a new `doc-stamps` CI job enforce (A) the stamp's value is an ISO date — always fatal, and (B) a
+change to a stamped doc must also move its stamp — fatal whenever a base ref resolves. Check B is
+what catches forgetting, and unlike comparing the stamp date to the commit date it cannot
+false-positive when a PR merges days after it was written. **What the guard does not cover is
+written at the top of the script** (S113's rule). Neither proposed fix was adopted as stated:
+option (b), adding the D-stamp to guard #19, is not implementable — #19 runs at tag time against
+`TAG_VERSION`, and a session D-number has no relationship to the tag being cut.
+
+**The checker found four instances our own careful manual sweep had missed** (`ARCHITECTURE.md`
+§§45/68/97, `runbooks/alerting.md:5`) on its first run. **And testing the guard found two bugs in
+the guard**: check B diffed `BASE...HEAD`, so an uncommitted edit was invisible and running it
+locally before committing reported PASS no matter what had changed; and the `^`-anchored marker
+was matched against diff lines still carrying their `+` prefix, so it fired on files whose stamps
+*had* moved. Both are fixed and both directions are now tested. **A guard written to enforce
+"verify, don't assume" would have shipped broken had it been assumed rather than verified.**
+
+## The round's real substance: auditing the exculpations
+
+Round 10 is ~90% reassurance — a security deep-dive over a core the loop had never read, plus a
+PRD F1–F10 conformance table. Per S114 (*"a reviewer's 'this one is safe' is the one place nobody
+looks twice"*), nine adversarial lanes attacked the exculpations, each told to default to refuted
+and to hunt the scoping gap; every surviving claim was then **re-verified by hand** — which
+mattered, because two lanes' prose contradicted their own structured output and two
+apparently-confirmed claims did not survive a direct read.
+
+**The all-clear holds in five areas of nine** (`ssrfguard` *policy*, secrets at rest, auth
+transport, audit trail, LIM citations) **and one claimed gap was refuted** (the webhook
+unknown-source shared-secret fallback is deliberate, documented and pinned by
+`TestPerSource_UnknownName_SharedSecretFallback_200`). **Three areas failed:**
+
+- **M-01 — the SSRF guard covers five outbound clients and missed three.** Email channel
+  (`smtp_addr`, API-supplied), CertChecker (`cert_expiry` rule scope, API-supplied, wired in prod
+  at `serve.go:547`), S3 uploader (`PULSE_S3_ENDPOINT`, wired at `scheduler.go:91`). An
+  authenticated operator could dial `169.254.169.254`. **Not an unauthenticated hole** — all three
+  need rights that already permit configuration — but it is a scoping gap in a control this
+  codebase has already decided it wants, and it becomes privilege escalation under delegated
+  admin. Fixed on each component's own dial, not at the wiring site, because the class exists
+  precisely because the guard was wiring-dependent.
+- **M-02 — `/ingest/beacon` has two implementations and the documented default is the unhardened
+  one.** The A10 field limits live in the optional dedicated listener; the main-port route the SDK
+  actually targets applied neither. **S101 fixed this exact divergence once, scoped to schema
+  validation, and left the field limits behind** — the signature defect class, fifth round running.
+  Both paths now share one helper.
+- **M-03 — paid alert channels keep delivering after a downgrade.** The API gates create, update
+  and test-fire and its comments name the downgrade case, but the background evaluator consulted
+  nothing. The decisive evidence that this is a defect and not a choice: **the identical gate
+  already exists one package over** (`prober.executeProbe`, D-108). Mirrored.
+- **M-04 — `session_id`/`stream_id`/`app`/`player_kind` are length-unbounded. Deliberately NOT
+  fixed.** Truncating a `session_id` would silently merge distinct sessions and corrupt the
+  `uniq(session_id)` aggregates K-02 was about — worse than the defect it closes. Rejecting
+  instead is a behavioural break needing a contract change, and contracts are frozen (D-004).
+  Needs a product ruling on limit *and* failure mode; added to the operator's decision-gated list.
+
+**Reviewer generalization, not reviewer analysis, is what failed.** "The webhook channel wires the
+guard" became "operator-controlled outbound URLs are guarded"; "the beacon package truncates
+fields" became "beacon ingest truncates fields". Both true of the file read, false of the system —
+the same error the reviewer has corrected in themselves three times for *findings* (I-03, I-05,
+J-03) and never thought to apply to an *exculpation*.
+
+**Author-lane output required central correction before it was fit to commit.** The three TDD
+lanes produced sound logic and honest red→green evidence (the SSRF red shows a real dial reaching
+`169.254.169.254`; the beacon red shows `len=200, want <=64`), but shipped a literal `(D-xxx
+finding)` placeholder, a fabricated finding id (`K-03` — round 10's prefix is `L-`, and this was
+maintainer-found `M-03`), a wrong session number (`S115`, which was D-183) and two docstrings
+claiming the guard was installed in a constructor when the dialer is built per call. All corrected
+centrally. **A lane's self-report is not a gate.**
+
+**Also found while reading:** `operator-expected.md` item 3 said "Submit against `v0.4.4`" while
+the same file's closing note and `RESUME-PROMPT.md` both prescribe "rotate, cut v0.4.5, submit
+against it". Aligned; the choice stays the operator's.
+
+**Gates:** `gofmt -l` empty · `go build` (CGO_ENABLED=0) OK · `go vet` clean · full
+`go test ./... -race -count=1` with the repo-root mount — **26 packages, 0 FAIL, 0 SKIP** ·
+release version guard extracted from `release.yml` and dry-run at `GITHUB_REF_NAME=v0.4.4` →
+**PASS** after the README edit · `check-doc-stamps.sh` verified in both directions ·
+ShellCheck clean on **both** 0.9.0 (CI's) and 0.11.0 · 0 broken internal doc links.
+Prod at session start: all three `/healthz` components `ok`, **1,337,678** server events, newest
+**1 s** old.
+
+**Still open, unchanged:** **G-02** — rotate `CLICKHOUSE_PASSWORD`. Re-checked silently: the live
+value's 32-char prefix still matches 2 commits in public history. **Tenth** consecutive round as
+the sole submission blocker. Operator-gated; no review round can close it.

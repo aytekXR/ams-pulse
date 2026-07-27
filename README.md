@@ -130,7 +130,7 @@ PULSE_SECRET_KEY=$(openssl rand -hex 32) \
 
 ## Feature status
 
-Last updated: **2026-07-27 (D-182)** — all 10 PRD features shipped; latest release **v0.4.4**.
+Last updated: **2026-07-27** — all 10 PRD features shipped; latest release **v0.4.4**.
 The maintainer's production instance runs behind host-nginx TLS against a real AMS 3.0.3
 Enterprise (currently on the stamped **v0.4.0-139** build; the roll to 0.4.4 is deliberate,
 not automatic). Product one-pager: [docs/product.md](docs/product.md).

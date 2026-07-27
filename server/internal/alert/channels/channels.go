@@ -84,6 +84,12 @@ type EmailChannel struct {
 }
 
 // NewEmailChannel creates a new email channel.
+// Send dials through ssrfguard.DialControl, so an SMTP address pointing at a
+// link-local or IMDS address (e.g. 169.254.169.254) is refused at dial time —
+// smtp_addr is operator-supplied through the alert-channel config API. The
+// guard lives on the channel's own dial rather than at the wiring site in
+// serve.go, so a future call site cannot forget it: this defect class (D-184,
+// round-10 audit M-01) existed precisely because the guard was wiring-dependent.
 func NewEmailChannel(cfg EmailConfig) *EmailChannel {
 	if cfg.SMTPAddr == "" {
 		cfg.SMTPAddr = "localhost:587"
@@ -106,9 +112,10 @@ func (e *EmailChannel) Send(ctx context.Context, payload []byte) error {
 
 	host, _, _ := net.SplitHostPort(e.cfg.SMTPAddr)
 
-	// Dial with deadline from context.
+	// Dial with deadline from context + ssrfguard.DialControl to prevent SSRF via
+	// operator-supplied smtp_addr targeting link-local addresses (D-184, round-10 audit M-01).
 	deadline, ok := ctx.Deadline()
-	dialer := &net.Dialer{}
+	dialer := &net.Dialer{Control: ssrfguard.DialControl}
 	if ok {
 		dialer.Deadline = deadline
 	}

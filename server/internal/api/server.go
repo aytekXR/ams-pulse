@@ -2498,6 +2498,13 @@ func (s *Server) handleIngestBeacon(w http.ResponseWriter, r *http.Request) {
 				evt.Tenant = tenant
 			}
 		}
+		// D-184: apply A10 field limits via the shared helper from the beacon package.
+		// Before D-184 this route applied NEITHER the tenant nor the Data-string
+		// truncation that the dedicated beacon handler applies (S101 fixed only
+		// SCHEMA validation parity). beacon.ApplyA10FieldLimits is the single owner
+		// of the 64/64 limits — both handlers now share this code and can never
+		// diverge again.
+		beacon.ApplyA10FieldLimits(&evt)
 		// Non-blocking async write — matches the dedicated handler's pattern.
 		go s.eventSink.WriteBeaconEvent(evt)
 	}
