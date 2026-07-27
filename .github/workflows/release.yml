@@ -16,6 +16,14 @@
 #     ghcr.io/aytekxr/ams-pulse:X.Y.Z
 #   (image tags have NO v prefix — git tag vX.Y.Z publishes image tag X.Y.Z;
 #    verified live D-070 addendum: 0.2.0 digest 9c6c1204…, Rekor logIndex 2128354996)
+#
+#   ⚠ REQUIRES A COSIGN v3+ CLIENT (D-178). cosign-installer@v4 installs cosign v3,
+#   which publishes the signature as an OCI 1.1 referrer instead of the legacy
+#   `sha256-<digest>.sig` tag. A v2 client therefore prints "Error: no signatures
+#   found" against a perfectly signed image — verified 2026-07-27 against 0.4.3:
+#   cosign v2.4.3 FAILS, cosign v3.0.2 PASSES (same digest 75a76c67…727b4).
+#   The 0.2.0-era `.sig` tags in the registry are the legacy layout and are why
+#   the D-070 verification above passed with a v2 client at the time.
 
 name: release
 
@@ -524,6 +532,12 @@ jobs:
       #     --certificate-identity-regexp 'github.com/aytekXR/ams-pulse' \
       #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
       #     ghcr.io/aytekxr/ams-pulse:X.Y.Z    # image tags have NO v prefix (see header)
+      #
+      # ⚠ The verifier needs cosign v3+ — see the header note (D-178). Do NOT "fix" a
+      # v2 client's "no signatures found" by re-signing in legacy tag mode without
+      # deciding that deliberately: the referrer layout is the OCI 1.1 standard
+      # direction, and switching back would silently change what every downstream
+      # verifier has to look for.
       - name: Install cosign
         if: github.ref_type == 'tag'
         uses: sigstore/cosign-installer@v4.1.2

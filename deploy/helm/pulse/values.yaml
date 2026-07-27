@@ -21,7 +21,8 @@ pulse:
     # To obtain the digest after a release:
     #   docker pull ghcr.io/aytekxr/ams-pulse:0.4.3
     #   docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/aytekxr/ams-pulse:0.4.3
-    # Or from the cosign SBOM attestation:
+    # Or from the cosign signature payload (needs a cosign v3+ client — a v2 client
+    # reports "no signatures found" against these images; see README):
     #   cosign verify ghcr.io/aytekxr/ams-pulse:0.4.3 | jq -r '.[0].critical.image.docker-manifest-digest'
     digest: ""   # e.g. sha256:abc123...
 

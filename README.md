@@ -54,6 +54,12 @@ cosign verify \
   ghcr.io/aytekxr/ams-pulse:0.4.3
 ```
 
+> **Requires cosign v3.0 or newer.** Releases from `v0.4.0` on are signed by cosign v3,
+> which stores the signature as an OCI 1.1 *referrer* rather than under the legacy
+> `sha256-<digest>.sig` tag. A **cosign v2 client reports `Error: no signatures found`
+> against a correctly signed image** — it is looking for a tag that v3 no longer writes.
+> Check with `cosign version` and upgrade if it prints 2.x.
+
 **Building from source** (development or local patches):
 
 ```sh

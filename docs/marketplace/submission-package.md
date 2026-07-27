@@ -14,7 +14,7 @@ reviewable now) · **DRAFT-OP** (content complete; blocked only on an operator d
 |---|---|---|
 | **Listing copy** (title, tagline, long-form description, bullets, tiers, pricing) | [`listing.md`](listing.md) — submission copy; no internal identifiers | READY (submission copy; paste verbatim into the marketplace form) |
 | Listing working notes (internal cross-references, decision history) | [`listing-draft.md`](listing-draft.md) | INTERNAL (do not paste into the marketplace form) |
-| Screenshots — 6 listing shots, 1920×1080 live-app | [`screenshot-list.md`](screenshot-list.md) + `screenshots/` (regenerate: `node qa/marketplace/capture-live-screenshots.mjs`) | READY (committed to `docs/marketplace/screenshots/`; portable capture script; regenerable at any time) |
+| Screenshots — 6 listing shots, 1920×1080, shipping UI + representative demo data (route-mocked capture, not a customer instance) | [`screenshot-list.md`](screenshot-list.md) + `screenshots/` (regenerate: `node qa/marketplace/capture-live-screenshots.mjs`) | READY (committed to `docs/marketplace/screenshots/`; portable capture script; regenerable at any time) |
 | Logo / media kit | `brandkit/logo/` (SVG + PNG variants), OG banner `brandkit/assets/png/og-1200x630.png` | READY (final specs = meeting assumption A3) |
 | Demo video | [`demo-video-script.md`](demo-video-script.md) + rough-cut `docs/marketplace/demo/pulse-demo-roughcut.webm` | DRAFT-OP (rough-cut rendered and attached to [GitHub release v0.4.1](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.1); operator records final with voiceover — TBD-EXT for voiceover only) |
 | Beacon SDK tarball | `ams-pulse-beacon-0.4.3.tgz` on the [v0.4.3 release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.3) | READY (0.4.1 tarball must NOT be advertised — it shipped the `Pulse.init()` silent-no-op defect fixed in 0.4.2) |
@@ -57,15 +57,28 @@ AMS version-matrix, CodeQL) · cosign-signed multi-arch images + SBOM/provenance
 Trivy-gated releases · load-lane budgets L-1…L-9 (**capacity number pending the
 operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
 
+> **If a reviewer verifies the signature, tell them to use cosign v3+.** From `v0.4.0`
+> on, images are signed by cosign v3, which publishes the signature as an OCI 1.1
+> referrer rather than under the legacy `sha256-<digest>.sig` tag. A **cosign v2 client
+> prints `Error: no signatures found` against a correctly signed image.** Verified
+> 2026-07-27 against `0.4.3`: cosign v2.4.3 fails, cosign v3.0.2 passes (digest
+> `sha256:75a76c67…727b4`, claims + Rekor transparency-log inclusion + Fulcio cert chain
+> all validated). Command in [`../../README.md`](../../README.md).
+
 ## Blocking items before external submission
 
 **✅ DONE (2026-07-25):**
 - ~~**GHCR public** — reviewers must `docker pull` anonymously.~~ **DONE (D-168):** package is
   public; the anonymous clean-room install (`docker pull …:0.4.2` → quickstart → live dashboard,
   collector `ok`, events flowing) was verified end-to-end with zero credentials — first run
-  against `0.4.1` (D-168), re-verified against `0.4.2` on 2026-07-26, where `0.4.2` and
-  `latest` resolve to the same digest and are anonymously pullable; the Helm chart OCI
-  package `ghcr.io/aytekxr/charts/pulse:0.3.0` is anonymously pullable too.
+  against `0.4.1` (D-168), re-verified against `0.4.2` on 2026-07-26, and **re-verified
+  against the `0.4.3` submission target on 2026-07-27 (D-178)**: `curl | bash` of the
+  documented `install.sh` → stack healthy → all three `/healthz` components `ok` →
+  `/fleet/nodes` returning the real AMS 3.0.3 node, with the pulled image digest
+  `sha256:75a76c67…727b4` matching the anonymously-resolved `0.4.3` and `latest` manifests.
+  The Helm chart OCI package is anonymously pullable too — currently
+  `ghcr.io/aytekxr/charts/pulse:0.3.1` (chart semver is independent of appVersion; `0.3.1`
+  carries appVersion `0.4.3`).
 - ~~**MaxNodes reconcile** (Pro 10 vs Business 5 inversion)~~ **DONE (D-166):** Business is now 50;
   ladder is monotonic (Free 1 / Pro 10 / Business 50 / Enterprise ∞) with a regression test.
 - ~~**Pricing sign-off**~~ **DECIDED (D-169, operator-delegated):** standard Free $0 / Pro $99 /

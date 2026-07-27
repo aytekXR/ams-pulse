@@ -8,7 +8,13 @@
  *   node qa/marketplace/capture-live-screenshots.mjs
  *
  * Output:
- *   docs/marketplace/screenshots/  (gitignored — safe to write PNGs there)
+ *   docs/marketplace/screenshots/  — these PNGs are COMMITTED (S105/D-172): docs/user-guide.md
+ *   embeds them and the marketplace listing ships them. Re-running this script therefore
+ *   dirties tracked files; review the diff before committing.
+ *
+ * The captures are route-mocked, so they show the shipping UI with representative demo
+ * data, NOT a live deployment. Say exactly that wherever they are published — the listing
+ * copy is worded to match (D-178).
  *
  * Self-contained: starts vite preview, captures, then stops it.
  */
