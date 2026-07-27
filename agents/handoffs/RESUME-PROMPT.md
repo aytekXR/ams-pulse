@@ -25,12 +25,16 @@
 
 **Where the product is:** **v0.4.3 is released and verified**, and is the marketplace
 submission target. The standing external-review verdict is *"ready to submit — conditional on
-operator gates, neither of them code."*
+operator gates, neither of them code."* S111 (D-178) audited the submission pack **against the
+published artifacts, anonymously, from outside the repo** and closed six defects — including
+one that would have failed an Ant Media security review. Submission readiness is now
+artifact-verified, not doc-asserted.
 
 **The one blocking item, and it is the operator's:** rotate `CLICKHOUSE_PASSWORD`. A 32-hex
 prefix of the live production value is in public git history since `98b011c`. The operator
 deferred it deliberately when authorising the v0.4.3 cut — a recorded decision, not an
-oversight. Nothing else blocks submission.
+oversight. **Re-checked S111: still un-rotated** (the live prefix still matches 2 commits).
+Nothing else blocks submission.
 
 **Do first, every session:**
 1. **Gate reads** — prod health (component-scoped `/healthz` + a ClickHouse count), git/PR
@@ -38,10 +42,25 @@ oversight. Nothing else blocks submission.
    live value's first 32 chars against `git log -S`, never print the secret).
 2. **If a new review arrives** — verify every claim against the code BEFORE fixing anything,
    and check the reviewer's assumptions about the tree state as carefully as their findings.
-   This has caught errors in both directions — ours and the reviewer's.
+   This has caught errors in both directions — ours and the reviewer's. To commission a review,
+   hand over `docs/assessment/EXTERNAL-REVIEW-PROMPT.md` verbatim (blackbox → docs → code; one
+   output file whose Disposition column you fill and feed back as the next round's input).
 3. **If a 2-node cluster appears** (the operator's PAYG load-lane item) — the deferred cluster
    work (LIM-10: node alerting during an AMS API outage) becomes fixable with verification
    instead of guesswork. Highest-value technical unblock.
+
+**Test the artifact, not the documentation (S111's lesson).** The highest-severity finding of
+D-178 was invisible to every doc review: the `cosign verify` command Pulse publishes **fails on
+a cosign v2 client** ("no signatures found") because v0.4.x images are signed in the cosign-v3
+OCI 1.1 referrer layout. The image was fine; the *instruction we hand a reviewer* was not. When
+a claim names a command a third party will run, **run it as that third party would**, on the
+published artifact, with a client version you did not choose. Do not change how releases are
+signed to accommodate old clients — that is deliberate (see `release.yml`).
+
+**Known state, not drift:** `main` carries doc/copy fixes that are **not** in the `v0.4.3` tag
+(D-177's round-5 items + D-178's). This is deliberate — they change no image and ride the next
+release. Submission docs are linked from `main`, which is correct; only a reader browsing the
+tag itself sees the older copy.
 
 **Standing rules learned the hard way:**
 - **After a squash merge, wait for main's post-merge CI before tagging.** The PR's green checks

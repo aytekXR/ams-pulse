@@ -7,6 +7,14 @@ has already been done lives in `agents/handoffs/decisions.md` and `agents/handof
 > submission target. The external review's verdict is *"ready to submit — conditional on
 > operator gates, neither of them code."* **Item 1 below is the only thing blocking
 > submission.** Prod is healthy and untouched.
+>
+> **New since you last looked (D-178):** the submission pack was audited against the
+> **published** artifacts rather than against our own docs — anonymous image pull, anonymous
+> Helm chart pull, checksum + signature verification, and a **full clean-room install of
+> v0.4.3** (documented one-liner → healthy stack → real AMS 3.0.3 data → torn down). Six
+> defects found and fixed. The one worth your attention is item 3's note: **our published
+> `cosign verify` command fails on a cosign v2 client** — the image is correctly signed, but a
+> reviewer using the older client would have concluded otherwise.
 
 ---
 
@@ -28,10 +36,20 @@ has already been done lives in `agents/handoffs/decisions.md` and `agents/handof
    latter is already mode 600).
 2. **Review `docs/marketplace/listing.md`** — the submission copy. It is free of placeholders
    and internal notes, so it is safe to paste verbatim. Override anything; the category and all
-   price wording are yours.
+   price wording are yours. *Two lines changed in D-178:* the screenshot note now says the shots
+   are the shipping UI with **representative demo data** (it previously claimed "captured from a
+   live deployment", which was not true — they are route-mocked captures), and the Helm bullet
+   now advertises the published OCI chart instead of understating it as a local chart path.
 3. **Submit the listing** to the Ant Media Marketplace (your account) — paste from
    `listing.md`, never from `listing-draft.md` (internal). **Submit against `v0.4.3`.**
    Artifact index: `docs/marketplace/submission-package.md`.
+
+   ⚠ **If their reviewer verifies our image signature, tell them to use cosign v3 or newer.**
+   Our images are correctly signed, but cosign v3 stores the signature as an OCI 1.1 *referrer*
+   rather than under the old `sha256-<digest>.sig` tag, so a **cosign v2 client reports
+   `Error: no signatures found`** — verified both ways against `0.4.3` (v2.4.3 fails, v3.0.2
+   passes). Saying this up front costs one sentence; not saying it risks a security reviewer
+   concluding we ship unsigned images.
 4. **Set up billing** in the marketplace (tiers / Founding-Operators campaign / trial).
 5. **Send the Ankush reply** — draft ready at `docs/marketplace/ankush-reply-draft.md` (fill
    the [brackets], send from your account).

@@ -10019,3 +10019,64 @@ the submission target.**
 
 **G-02 (rotation) remains OPEN and operator-gated** — deferred by explicit operator decision
 when authorising the cut, and now the single blocking pre-submission item.
+
+---
+
+## D-178 — §S111: marketplace-integration readiness — the submission pack audited against the published artifacts
+
+**Directive:** *"get ready for the marketplace integration."* Every open item in the submission
+queue is an operator **action**, so this session took the engineering half: verify that nothing
+on our side can block or embarrass the submission — by testing the published `v0.4.3` artifacts
+**the way an Ant Media qualification reviewer will**, anonymously and from outside the repo,
+rather than by re-reading our own documentation.
+
+**The finding that justifies the method (M-01, HIGH).** The `cosign verify` command Pulse
+publishes — in the README, in `release.yml`, in the Helm values — **fails**. A cosign **v2**
+client prints `Error: no signatures found` against a perfectly signed image. From `v0.4.0` on,
+`cosign-installer@v4` installs cosign v3, which publishes the signature as an **OCI 1.1
+referrer** rather than under the legacy `sha256-<digest>.sig` tag. Verified in both directions
+against `0.4.3`: **cosign v2.4.3 fails; cosign v3.0.2 passes** (claims + Rekor inclusion +
+Fulcio chain all validated, digest `sha256:75a76c67…727b4`). The registry corroborates it — the
+0.2.0-era digests carry `.sig` tags, the 0.4.x digests do not; that is also why the D-070
+verification passed with a v2 client at the time.
+
+The artifact was never defective. **The instruction we hand a reviewer was.** A marketplace
+security reviewer running our own published command would have concluded the image was
+unsigned — during exactly the review where supply-chain posture is our strongest card. No
+amount of re-reading our docs would have caught it; only running the command with a client
+version we had not considered did. Fixed by documenting the v3+ requirement at every published
+location, each stating symptom, cause and evidence.
+
+**Also fixed:** `listing.md` claimed the screenshots were *"captured from a live deployment"*
+when they are route-mocked captures (M-02 — the internal draft was honest, the copy actually
+being submitted was not); the published, anonymously-pullable **OCI Helm chart was documented
+nowhere** while the listing undersold it as "in-repo, local chart path" (M-03); the chart
+version was named `0.3.0` where the release ships `0.3.1` (M-04); the clean-install note was
+stale at `0.4.2` (M-05); and the capture script claimed its committed output directory was
+gitignored (M-06).
+
+**Verified green, with evidence:** anonymous image pull (`0.4.3` ≡ `latest`, same digest) ·
+anonymous `helm pull` of the OCI chart · **a full clean-room evaluator install of the published
+v0.4.3** — documented `curl | bash` → healthy stack → all three `/healthz` components `ok` →
+`/fleet/nodes` returning the real AMS 3.0.3 node, pulled digest matching the anonymous manifest,
+then torn down with no residue · `install.sh` byte-identical to the tagged tree ·
+`sha256sum -c SHA256SUMS` OK with `pulse version` = `v0.4.3 (commit 669952ed)` · 96 relative
+doc links unbroken · listing copy free of internal identifiers with both stated character
+counts exact.
+
+**Deliberate non-actions.** **No release cut** — every fix is documentation or comment and none
+changes the image; D-177 ruled these items ride the next release and nothing here overturns
+that, so **`v0.4.3` remains the submission target** and the `v0.4.3`→`main` doc delta is
+recorded rather than papered over. **No change to how releases are signed** — the referrer
+layout is the standards-track direction, and reverting to legacy tag mode to satisfy old
+clients would silently change what every downstream verifier must look for; `release.yml` now
+carries a comment warning against "fixing" it reflexively. **No rotation, no prod roll** —
+operator-gated; the ClickHouse password was re-checked silently and is **still un-rotated**.
+
+**Shipped alongside (operator request):** `docs/assessment/EXTERNAL-REVIEW-PROMPT.md`, a
+standing reusable brief that enforces **black box → documentation → code** ordering — the source
+tree stays closed until the black-box phase is written up, because reading the code first
+destroys that evidence for the round — and mandates a **single** output file whose schema the
+maintenance loop consumes directly (falsifiable claims, reproduction commands, `file → symbol`
+citations instead of drift-prone line numbers, an empty **Disposition** column, a prior-round
+re-audit table). The completed file is the input for the next round.
