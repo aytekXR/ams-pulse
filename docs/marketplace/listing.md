@@ -209,7 +209,9 @@ Pulse installs in under 15 minutes via:
 
 - **Docker Compose** — `install.sh` (health-gated, no-TTY safe) sets up the full stack with a
   single command; database migrations are baked into the Docker image (no bind mount required).
-- **Helm** — chart available in-repo; install from a local chart path.
+- **Helm** — chart published to GHCR as an OCI artifact, anonymously pullable:
+  `helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.1`. Installing from
+  a local chart path is also supported.
 - **Binary** — build from source with Go 1.25+, or use the signed release binaries
   (`pulse-linux-amd64` / `pulse-linux-arm64` + SHA256SUMS) attached to each GitHub release.
 
@@ -242,7 +244,8 @@ Full support policy: docs/support.md · Licensing details: docs/licensing-public
 
 ## Screenshots
 
-All shots at 1920×1080, dark theme, captured from a live deployment.
+All shots at 1920×1080, dark theme, captured from the shipping Pulse web UI running
+representative demo data (not a customer's production instance).
 
 | # | File | Subject |
 |---|------|---------|

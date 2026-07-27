@@ -52,6 +52,11 @@ kubectl create secret generic pulse-clickhouse-secret \
   --from-literal=PULSE_CLICKHOUSE_DSN="clickhouse://pulse:${CH_PASS}@pulse-clickhouse:9000/pulse"
 
 # 2. Install the chart (default: SQLite meta, bundled ClickHouse).
+#    Published to GHCR as an OCI artifact on every release, anonymously pullable:
+#      helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.1 \
+#        --set pulse.ams.url=http://your-ams:5080 ...
+#    The chart semver is independent of appVersion: 0.3.1 carries appVersion 0.4.3.
+#    From a local checkout instead:
 helm install pulse ./deploy/helm/pulse \
   --set pulse.ams.url=http://your-ams:5080 \
   --set pulse.ams.nodeId=node-01 \

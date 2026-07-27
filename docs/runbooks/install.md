@@ -105,7 +105,9 @@ starts automatically after you sign in, when no AMS sources are configured yet.
 > **Note:** This is the supported production path — it is what the live production
 > deployment runs. A clean-install verification (anonymous `docker pull` of the released
 > image on a fresh machine → quickstart → live dashboard with the collector reporting `ok`)
-> was completed end-to-end in D-168 and re-verified against `0.4.2`.
+> was completed end-to-end in D-168, re-verified against `0.4.2`, and re-verified against
+> `0.4.3` on 2026-07-27 (D-178) — including that the pulled image digest matches the
+> anonymously-resolved `0.4.3` manifest.
 
 ### Prerequisites
 
@@ -681,6 +683,23 @@ with a `POSTGRES_PASSWORD` key before install. The chart does not auto-generate
 passwords.
 
 **2. Install the chart**
+
+The chart is published to GHCR as an OCI artifact on every release and is **anonymously
+pullable** — no clone and no registry login required (verified 2026-07-27 against chart
+`0.3.1` / appVersion `0.4.3`):
+
+```sh
+helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.1 \
+  --set pulse.ams.url=http://your-ams:5080 \
+  --set pulse.ams.nodeId=node-01 \
+  --set pulse.secretRef.name=pulse-secrets
+```
+
+> The chart's own semver (`0.3.1`) is independent of the Pulse release it deploys —
+> chart `0.3.1` carries `appVersion: 0.4.3`. Inspect before installing with
+> `helm show chart oci://ghcr.io/aytekxr/charts/pulse --version 0.3.1`.
+
+Or install from a local checkout (equivalent; use this when applying local patches):
 
 ```sh
 helm install pulse ./deploy/helm/pulse \

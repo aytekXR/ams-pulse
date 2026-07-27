@@ -1,12 +1,12 @@
 # Pulse — Resume / handoff prompt (SINGLE source of truth)
 
 > **This is the one handoff doc.** Update THIS file + `decisions.md` every session; never
-> create a second handoff file, and never stack past sessions here (operator directive, S110).
+> create a second handoff file, and never stack past sessions here (operator directive).
 >
 > Pulse = self-hosted analytics/QoE/alerting for Ant Media Server. Repo:
 > `/home/aytek/repo/ams-pulse` on the operator's VPS.
 >
-> - Decision log (binding): `agents/handoffs/decisions.md` (D-001…D-177)
+> - Decision log (binding): `agents/handoffs/decisions.md`
 > - Per-session detail: `agents/handoffs/sessions/SESSION-NNN.md`
 > - Plan of record: `agents/handoffs/ROADMAP-V2.md`
 > - Operator queue: `docs/operator-expected.md`
@@ -16,31 +16,52 @@
 
 ---
 
-## ▶ START HERE — S110/D-177 (2026-07-27)
+## ▶ START HERE — current state
 
-> **Only the CURRENT session block lives here.** Past sessions are not stacked in this file —
-> they live in `agents/handoffs/sessions/SESSION-NNN.md` and `decisions.md` (operator directive,
-> S110). Replace this block each session; never re-grow a superseded-header stack.
+> **This file carries only current, forward-looking state.** No session history, no superseded
+> blocks, nothing struck through. How we got here lives in
+> `agents/handoffs/sessions/SESSION-NNN.md` and `decisions.md` (operator directive).
+> **Replace this block each session — never append to it.**
 
-**State:** External review rounds 4 and 5 are both executed. **v0.4.3 is released** and is the
-submission target. Round 5's verdict: *"Ready to submit — conditional on two operator gates,
-neither of them code."*
+**Where the product is:** **v0.4.3 is released and verified**, and is the marketplace
+submission target. The standing external-review verdict is *"ready to submit — conditional on
+operator gates, neither of them code."* S111 (D-178) audited the submission pack **against the
+published artifacts, anonymously, from outside the repo** and closed six defects — including
+one that would have failed an Ant Media security review. Submission readiness is now
+artifact-verified, not doc-asserted.
 
-**One gate remains, and it is the operator's:** rotate `CLICKHOUSE_PASSWORD`. A 32-hex prefix
-of the live production value is in public git history since `98b011c`. The operator explicitly
-deferred it when authorising the v0.4.3 cut — recorded as a decision, not an oversight. It is
-the single blocking pre-submission item.
+**The one blocking item, and it is the operator's:** rotate `CLICKHOUSE_PASSWORD`. A 32-hex
+prefix of the live production value is in public git history since `98b011c`. The operator
+deferred it deliberately when authorising the v0.4.3 cut — a recorded decision, not an
+oversight. **Re-checked S111: still un-rotated** (the live prefix still matches 2 commits).
+Nothing else blocks submission.
 
 **Do first, every session:**
 1. **Gate reads** — prod health (component-scoped `/healthz` + a ClickHouse count), git/PR
    drift, and whether the operator rotated `CLICKHOUSE_PASSWORD` (check silently: compare the
    live value's first 32 chars against `git log -S`, never print the secret).
-2. **If a new review arrives** — verify every claim against the code BEFORE fixing anything.
-   This has caught reviewer errors twice, and round 5 retracted one of its own claims because
-   of it. Check the reviewer's tree-state assumptions as carefully as their findings.
-3. **If a 2-node cluster appears** (operator queue item 7) — the deferred cluster work
-   (LIM-10: node alerting during an AMS API outage) becomes fixable with verification instead
-   of guesswork. Highest-value technical unblock.
+2. **If a new review arrives** — verify every claim against the code BEFORE fixing anything,
+   and check the reviewer's assumptions about the tree state as carefully as their findings.
+   This has caught errors in both directions — ours and the reviewer's. To commission a review,
+   hand over `docs/assessment/EXTERNAL-REVIEW-PROMPT.md` verbatim (blackbox → docs → code; one
+   output file whose Disposition column you fill and feed back as the next round's input).
+3. **If a 2-node cluster appears** (the operator's PAYG load-lane item) — the deferred cluster
+   work (LIM-10: node alerting during an AMS API outage) becomes fixable with verification
+   instead of guesswork. Highest-value technical unblock.
+
+**Test the artifact, not the documentation (S111's lesson).** The highest-severity finding of
+D-178 was invisible to every doc review: the `cosign verify` command Pulse publishes **fails on
+a cosign v2 client** ("no signatures found") because every release from `v0.3.0` on stores its
+signature in the OCI 1.1 referrer layout, not the legacy `.sig` tag a v2 client looks for.
+The image was fine; the *instruction we hand a reviewer* was not. When
+a claim names a command a third party will run, **run it as that third party would**, on the
+published artifact, with a client version you did not choose. Do not change how releases are
+signed to accommodate old clients — that is deliberate (see `release.yml`).
+
+**Known state, not drift:** `main` carries doc/copy fixes that are **not** in the `v0.4.3` tag
+(D-177's round-5 items + D-178's). This is deliberate — they change no image and ride the next
+release. Submission docs are linked from `main`, which is correct; only a reader browsing the
+tag itself sees the older copy.
 
 **Standing rules learned the hard way:**
 - **After a squash merge, wait for main's post-merge CI before tagging.** The PR's green checks
@@ -60,9 +81,8 @@ surface `stream_ingest_error` (LIM-27) · thread the owning node through per-app
 (LIM-28) · poller/discovery cadence consolidation · helm NetworkPolicy golden · the
 `SettingsPage` ARIA test flake under parallel execution.
 
-**Operator queue + full detail:** `docs/operator-expected.md` · `decisions.md` D-176/D-177 ·
-`sessions/SESSION-109.md`, `SESSION-110.md` · review dispositions:
-`docs/assessment/marketplace-compliance-review-2026-07-27-round4.md` and `…-round5.md`.
+**Operator queue:** `docs/operator-expected.md`. **How we got here** (read only if you need it):
+`decisions.md` · `agents/handoffs/sessions/` · `docs/assessment/`.
 
 ---
 ## 1. CURRENT STATE (verified facts — refresh each session, never let this go stale)
@@ -73,7 +93,8 @@ surface `stream_ingest_error` (LIM-27) · thread the owning node through per-app
 - **Production** runs behind host nginx on this VPS at `https://pulse.beyondkaira.com`, against
   the operator's own `antmedia` container (AMS Enterprise 3.0.3, `--network host`). It is on the
   stamped **v0.4.0-139** build — rolling prod forward is deliberate and operator-gated, never
-  automatic. Health at last check: all three `/healthz` components `ok`, 1,321,757 events.
+  automatic. Health at last check (2026-07-27): all three `/healthz` components `ok`,
+  1,323,315 server events, collector actively ingesting.
 - **`main` is protected** (required contexts, strict, 1 review, `enforce_admins=false` so owner
   pushes work). Work on a branch → PR → merge on green.
 - **Known limitations are disclosed, not hidden:** `docs/known-limitations.md` carries 28
@@ -185,8 +206,7 @@ health scoring, (4) AMS wire decode/normalize, (5) the query layer. Report cover
 ## 7. ENVIRONMENT (VPS)
 
 - **Ubuntu 24.04 VPS `161.97.172.146`**, Docker 29 + Compose v5. **`go` is NOT on PATH** — run Go only in Docker
-  (`golang:1.25`). node 20 + npm 10 on PATH. **`gh` IS installed + authed as owner `aytekXR`** (U6, 2026-06-30 —
-  the old "`gh` NOT installed" note was stale, corrected D-057).
+  (`golang:1.25`). node 20 + npm 10 on PATH. **`gh` IS installed + authed as owner `aytekXR`**.
 - **⚠️ For `go test` mount the REPO ROOT** (`-v /home/aytek/repo/ams-pulse:/repo -w /repo/server -e
   GOFLAGS=-buildvcs=false`): a `server/`-only mount makes `metaDDLPath` escape the mount → `t.Skip` →
   skip-counts-as-pass false green (~90 api tests). Confirm **0 SKIP** for api.
@@ -200,8 +220,7 @@ health scoring, (4) AMS wire decode/normalize, (5) the query layer. Report cover
   (gitignored) — persisted in the `pulse-prod_pulse-data` volume; **never `down -v` that volume.** TLS check: always
   `--resolve beyondkaira.com:443:161.97.172.146` (VPS DNS is stale). Rollback: runbook §5.
 - `deploy/.env`, `*.db*`, `oguz-testing.md`, `web/pulse_secret.key` are gitignored — never commit.
-- ~~brier Caddyfile warning~~ RETIRED (D-062 verified): D-046 removed the brier block + `.bak-brier`
-  file; `deploy/config/Caddyfile.prod` is clean, tracked, and uses `{$AMS_UPSTREAM}` since D-062.
+- `deploy/config/Caddyfile.prod` is clean and tracked, and uses `{$AMS_UPSTREAM}`.
 - ⚠️ **Concurrent-session hazard (learned D-062):** the operator may run a second Claude session in
   this repo. If HEAD moves or the tree dirties mid-session with work you didn't do, STOP and inspect
   before committing/pushing — a foreign unpushed commit once carried a hardcoded live secret (O11).

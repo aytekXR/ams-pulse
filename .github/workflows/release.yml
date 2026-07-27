@@ -16,6 +16,14 @@
 #     ghcr.io/aytekxr/ams-pulse:X.Y.Z
 #   (image tags have NO v prefix — git tag vX.Y.Z publishes image tag X.Y.Z;
 #    verified live D-070 addendum: 0.2.0 digest 9c6c1204…, Rekor logIndex 2128354996)
+#
+#   ⚠ REQUIRES A COSIGN v3+ CLIENT (D-178). cosign-installer@v4 installs cosign v3,
+#   which publishes the signature as an OCI 1.1 referrer instead of the legacy
+#   `sha256-<digest>.sig` tag. A v2 client therefore prints "Error: no signatures
+#   found" against a perfectly signed image — verified 2026-07-27 against 0.4.3:
+#   cosign v2.4.3 FAILS, cosign v3.0.2 PASSES (same digest 75a76c67…727b4).
+#   The 0.2.0-era `.sig` tags in the registry are the legacy layout and are why
+#   the D-070 verification above passed with a v2 client at the time.
 
 name: release
 
@@ -283,7 +291,38 @@ jobs:
             fi
           done
 
-          echo "Version guard: PASS (VERSION=$FILE_VERSION Chart=$CHART_VERSION sdk=$PKG_VERSION swift_sdk=$SWIFT_VER tag=$GITHUB_REF_NAME)"
+          # 18. RUNNABLE OCI-chart pins in the docs must match the chart's own semver
+          #     (D-178). The chart is published to oci://ghcr.io/aytekxr/charts on every
+          #     release and is now an advertised install path, so these commands are
+          #     copy-pasted by evaluators — a stale pin installs the PREVIOUS chart.
+          #     Chart.yaml `version` is the chart semver and moves independently of
+          #     appVersion (checked at #2), which is why no existing check covers this.
+          #     Scoped to the two runnable forms — `--version X.Y.Z` on a charts/pulse
+          #     reference, and a `charts/pulse:X.Y.Z` OCI ref — deliberately NOT a bare
+          #     version grep, so prose naming an older chart cannot trip it (the G-06
+          #     over-widening warning applies here too).
+          CHART_SEMVER_NOW="$(grep -E '^version:' deploy/helm/pulse/Chart.yaml | sed 's/version:[[:space:]]*//; s/"//g')"
+          if [ -z "$CHART_SEMVER_NOW" ]; then
+            echo "FAIL: check #18 could not read 'version:' from deploy/helm/pulse/Chart.yaml"
+            exit 1
+          fi
+          for f in \
+            docs/runbooks/install.md \
+            docs/marketplace/listing.md \
+            docs/marketplace/submission-package.md \
+            deploy/helm/pulse/README.md; do
+            [ -f "$f" ] || continue
+            STALE="$( { grep -oE 'charts/pulse[^ ]* --version [0-9]+\.[0-9]+\.[0-9]+' "$f" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+$'
+                        grep -oE 'charts/pulse:[0-9]+\.[0-9]+\.[0-9]+' "$f" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+$'
+                      } 2>/dev/null | grep -v "^${CHART_SEMVER_NOW}$" | head -1 )"
+            if [ -n "$STALE" ]; then
+              echo "FAIL: $f pins OCI chart version ${STALE} but deploy/helm/pulse/Chart.yaml is ${CHART_SEMVER_NOW}"
+              echo "      An evaluator copy-pasting that command installs the wrong chart."
+              exit 1
+            fi
+          done
+
+          echo "Version guard: PASS (VERSION=$FILE_VERSION Chart=$CHART_VERSION chart_semver=$CHART_SEMVER_NOW sdk=$PKG_VERSION swift_sdk=$SWIFT_VER tag=$GITHUB_REF_NAME)"
 
       # GHCR login is unconditional — dry-run still needs credentials for the
       # local Trivy-scan build step (pulling base layers from GHCR if cached).
@@ -524,6 +563,12 @@ jobs:
       #     --certificate-identity-regexp 'github.com/aytekXR/ams-pulse' \
       #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
       #     ghcr.io/aytekxr/ams-pulse:X.Y.Z    # image tags have NO v prefix (see header)
+      #
+      # ⚠ The verifier needs cosign v3+ — see the header note (D-178). Do NOT "fix" a
+      # v2 client's "no signatures found" by re-signing in legacy tag mode without
+      # deciding that deliberately: the referrer layout is the OCI 1.1 standard
+      # direction, and switching back would silently change what every downstream
+      # verifier has to look for.
       - name: Install cosign
         if: github.ref_type == 'tag'
         uses: sigstore/cosign-installer@v4.1.2
