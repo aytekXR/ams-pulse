@@ -53,7 +53,7 @@ kubectl create secret generic pulse-clickhouse-secret \
 
 # 2. Install the chart (default: SQLite meta, bundled ClickHouse).
 #    Published to GHCR as an OCI artifact on every release, anonymously pullable:
-#      helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.1 \
+#      helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.2 \
 #        --set pulse.ams.url=http://your-ams:5080 ...
 #    The chart semver is independent of appVersion: 0.3.1 carries appVersion 0.4.3.
 #    From a local checkout instead:
@@ -78,7 +78,7 @@ helm upgrade pulse ./deploy/helm/pulse -f my-values.yaml
 | Key | Default | Description |
 |-----|---------|-------------|
 | `pulse.image.repository` | `ghcr.io/aytekxr/ams-pulse` | Canonical GHCR image (cosign-signed on release) |
-| `pulse.image.tag` | `0.4.3` | Image tag |
+| `pulse.image.tag` | `0.4.4` | Image tag |
 | `pulse.image.digest` | `""` | Manifest digest for immutable pinning (overrides tag when set) |
 | `pulse.replicaCount` | `1` | Pulse replicas (use 1 with SQLite; N with postgres.enabled) |
 | `pulse.resources.requests.cpu` | `250m` | CPU request (2-vCPU tier) |

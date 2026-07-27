@@ -23,23 +23,17 @@
 > `agents/handoffs/sessions/SESSION-NNN.md` and `decisions.md` (operator directive).
 > **Replace this block each session — never append to it.**
 
-**Where the product is:** **v0.4.3 is released**; `main` is two rounds of fixes ahead of it.
+**Where the product is:** **v0.4.4 is the release and the marketplace submission target.**
 S112 (D-179) executed external review **round 6**: all nine findings confirmed, eight fixed,
-none refuted. The significant one was filed LOW as a *probe the reviewer could not run* — we
-ran it, and it **closed LIM-01**: standalone AMS reports CPU/memory/disk after all, via
-`GET /rest/v2/system-resources`, with no Kafka. That is a code change, so the `v0.4.3`→`main`
-delta is no longer docs-only.
+none refuted. The significant one was filed LOW as a *probe the reviewer could not run* — we ran
+it, and it **closed LIM-01**: standalone AMS reports CPU/memory/disk after all, via
+`GET /rest/v2/system-resources`, with no Kafka. Because that is a code change, the operator
+authorised cutting **v0.4.4** (round 6 H-02) so the submission target contains it.
 
-**Two things block submission; both are the operator's:**
-1. **Rotate `CLICKHOUSE_PASSWORD`.** A 32-hex prefix of the live value is in public git history
-   since `98b011c`. Deliberately deferred when the v0.4.3 cut was authorised — a recorded
-   decision, not an oversight. **Re-checked S112: still un-rotated** (live prefix still matches
-   2 commits).
-2. **Decide review round 6's H-02** — whether to cut **v0.4.4** and retarget the submission, or
-   submit against `v0.4.3` with main-state docs. The loop recommends cutting: the delta now
-   contains a Priority-1 limitation fix, an anchored `cosign verify` command, a 4-asset
-   `SHA256SUMS` and an installer exit-code contract. Everything is staged; the cut is one tag
-   push **after main's post-merge CI is green** (see the standing rule below).
+**One thing blocks submission, and it is the operator's:** rotate `CLICKHOUSE_PASSWORD`. A
+32-hex prefix of the live value is in public git history since `98b011c`. Deliberately deferred
+when the v0.4.3 cut was authorised — a recorded decision, not an oversight. **Re-checked S112:
+still un-rotated** (live prefix still matches 2 commits).
 
 **Do first, every session:**
 1. **Gate reads** — prod health (component-scoped `/healthz` + a ClickHouse count), git/PR
@@ -71,10 +65,10 @@ product's entire life: a sibling console endpoint had the data all along. When a
 "the platform cannot do X", check whether what was actually tested was "this one endpoint does
 not do X". Sibling endpoints cost one curl.
 
-**Known state, not drift:** `main` is ahead of the `v0.4.3` tag by D-177's copy fixes, D-178's,
-and now **D-179's, which include code** (the LIM-01 fix, `SHA256SUMS` coverage, the installer
-exit code). Submission docs are linked from `main`, which is correct; a reader browsing the tag
-sees older copy *and* misses the LIM-01 fix. This is what H-02 asks the operator to decide.
+**Tag/main parity:** `v0.4.4` closed the gap that H-02 flagged — the tag now carries every
+round-5 and round-6 fix, including the LIM-01 code. Keep it that way: **the moment a fix an
+evaluator would meet lands on `main`, it belongs in a release**, because "it rides the next one"
+is exactly the ruling round 6 had to overturn.
 
 **Standing rules learned the hard way:**
 - **After a squash merge, wait for main's post-merge CI before tagging.** The PR's green checks
@@ -112,7 +106,7 @@ behind LIM-01 turned out to be wrong (LIM-04 rests on a similar inference).
 ## 1. CURRENT STATE (verified facts — refresh each session, never let this go stale)
 
 - **Shipped product, pre-marketplace.** All 10 PRD features implemented and live-validated
-  against a real AMS 3.0.3 Enterprise (46/50 scenarios). **Latest release: v0.4.3** (2026-07-27,
+  against a real AMS 3.0.3 Enterprise (46/50 scenarios). **Latest release: v0.4.4** (2026-07-27,
   the marketplace submission target). AMS 3.0.3 is still the latest AMS release.
 - **Production** runs behind host nginx on this VPS at `https://pulse.beyondkaira.com`, against
   the operator's own `antmedia` container (AMS Enterprise 3.0.3, `--network host`). It is on the

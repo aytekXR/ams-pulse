@@ -43,7 +43,7 @@ only). Without it the base file is `expose:`-only — correct for the production
 path, where a TLS-terminating reverse proxy sits in front, but it leaves the UI
 unreachable from the host. Set `PULSE_HOST_PORT` if 8090 is already taken.
 
-This pulls `ghcr.io/aytekxr/ams-pulse:0.4.3` — cosign-signed, SBOM-attached, no
+This pulls `ghcr.io/aytekxr/ams-pulse:0.4.4` — cosign-signed, SBOM-attached, no
 authentication required (`ghcr.io/aytekxr/ams-pulse` is public).
 To verify the image signature before running:
 
@@ -51,7 +51,7 @@ To verify the image signature before running:
 cosign verify \
   --certificate-identity-regexp '^https://github\.com/aytekXR/ams-pulse/\.github/workflows/release\.yml@refs/tags/v.+$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/aytekxr/ams-pulse:0.4.3
+  ghcr.io/aytekxr/ams-pulse:0.4.4
 ```
 
 > **The regexp is anchored on purpose.** `--certificate-identity-regexp` is an

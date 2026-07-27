@@ -30,7 +30,7 @@ to an Ant Media Server (AMS) deployment and answers, out of the box:
 agencies operating AMS for clients — anyone who must answer "is the stream OK?" for paying
 customers without shipping viewer data to a third party.
 
-**The 10 features (all shipped; current release v0.4.3):**
+**The 10 features (all shipped; current release v0.4.4):**
 
 | # | Feature | One-liner | Tier |
 |---|---|---|---|

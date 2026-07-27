@@ -1,13 +1,13 @@
 # Pulse — Known Limitations
 
-**Product:** Pulse v0.4.3 (last refreshed S109, 2026-07-27)  
+**Product:** Pulse v0.4.4 (last refreshed S109, 2026-07-27)  
 **Source:** `docs/assessment/documentation-gaps.md` (DG-01 through DG-18),
 `docs/assessment/final-assessment.md` §1 and Appendix B (v0.3.0 baseline; see
 `docs/assessment/marketplace-compliance-review-2026-07-25.md` for current
 marketplace readiness),
 `docs/assessment/capability-map.md`
 
-This document lists every known operator-facing limitation of Pulse v0.4.3 in
+This document lists every known operator-facing limitation of Pulse v0.4.4 in
 priority order. Each entry states what the limitation means for you, and what
 workaround or roadmap path exists.
 

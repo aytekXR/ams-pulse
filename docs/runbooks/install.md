@@ -64,7 +64,7 @@ and bootstrap-token extraction.
 
 > **Image tag format:** Pulse image tags have **no `v` prefix**. The git release tag
 > `v0.4.3` is published as image tag `0.4.3` (not `v0.4.3`). Always omit the `v`
-> when specifying an image tag (e.g. `ghcr.io/aytekxr/ams-pulse:0.4.3`).
+> when specifying an image tag (e.g. `ghcr.io/aytekxr/ams-pulse:0.4.4`).
 
 ### Prerequisites
 
@@ -244,7 +244,7 @@ docker compose \
 > at startup so that env var must be set.
 
 > **Note — base compose defaults to the signed GHCR image:** `docker-compose.yml`
-> now defaults to `ghcr.io/aytekxr/ams-pulse:0.4.3` (cosign-signed, SBOM-attached;
+> now defaults to `ghcr.io/aytekxr/ams-pulse:0.4.4` (cosign-signed, SBOM-attached;
 > `ghcr.io/aytekxr/ams-pulse` is **public** — no `docker login` needed). Image tags
 > have no `v` prefix: the git tag `v0.4.3` publishes the image tag `0.4.3`
 > (also `0.4`, `0`, `latest`). The image tag is overridable via the `PULSE_IMAGE`
@@ -723,7 +723,7 @@ pullable** — no clone and no registry login required (verified 2026-07-27 agai
 `0.3.1` / appVersion `0.4.3`):
 
 ```sh
-helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.1 \
+helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.2 \
   --set pulse.ams.url=http://your-ams:5080 \
   --set pulse.ams.nodeId=node-01 \
   --set pulse.secretRef.name=pulse-secrets
@@ -731,7 +731,7 @@ helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.1 \
 
 > The chart's own semver (`0.3.1`) is independent of the Pulse release it deploys —
 > chart `0.3.1` carries `appVersion: 0.4.3`. Inspect before installing with
-> `helm show chart oci://ghcr.io/aytekxr/charts/pulse --version 0.3.1`.
+> `helm show chart oci://ghcr.io/aytekxr/charts/pulse --version 0.3.2`.
 
 Or install from a local checkout (equivalent; use this when applying local patches):
 

@@ -83,7 +83,7 @@ percent accuracy (confirmed in CI against 10,000 synthetic events); egress figur
 directional estimate derived from AMS REST counters and should be cross-checked with CDN logs
 for billing-grade invoicing.
 
-Pulse ships all ten analytics features in v0.4.3, validated against a live AMS 3.0.3 Enterprise
+Pulse ships all ten analytics features in v0.4.4, validated against a live AMS 3.0.3 Enterprise
 deployment. Install takes under 15 minutes from a Docker Compose quickstart. A 14-day Pro trial
 (no credit card) is available on request; the deployment gracefully reverts to the Free tier on
 expiry with no data loss.
@@ -216,7 +216,7 @@ Pulse installs in under 15 minutes via:
 - **Docker Compose** — `install.sh` (health-gated, no-TTY safe) sets up the full stack with a
   single command; database migrations are baked into the Docker image (no bind mount required).
 - **Helm** — chart published to GHCR as an OCI artifact, anonymously pullable:
-  `helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.1`. Installing from
+  `helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.2`. Installing from
   a local chart path is also supported.
 - **Binary** — build from source with Go 1.25+, or use the checksummed release binaries
   (`pulse-linux-amd64` / `pulse-linux-arm64`, verifiable against the `SHA256SUMS` asset)
