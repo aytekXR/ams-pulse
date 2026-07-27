@@ -264,7 +264,7 @@ jobs:
             fi
           fi
 
-          # 17. Image pins in the customer-facing docs (round-5 review G-17/G-06).
+          # 17. Image pins in the customer-facing docs (round-5 review G-06).
           #     Checks #5/#8/#11 cover deploy surfaces and the root README, but the
           #     install, troubleshooting and SDK guides sit outside every existing
           #     window — so their `docker pull` examples silently drifted a release
