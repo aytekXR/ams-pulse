@@ -74,6 +74,17 @@ is exactly the ruling round 6 had to overturn.
 - **After a squash merge, wait for main's post-merge CI before tagging.** The PR's green checks
   belong to the pre-squash SHA; the release pipeline's CI gate requires a successful run for
   the commit being tagged. Tagging early fails the gate (cleanly — nothing gets published).
+- **Dry-run the version guard BEFORE tagging** (learned D-180). Extract the
+  `Version consistency guard` step out of `release.yml`, create a throwaway local tag, and run
+  it: `GITHUB_REF_NAME=vX.Y.Z bash guard.sh`. It caught a real miss on the first pass. The 18
+  checks cover: `VERSION` · `Chart.yaml` appVersion · doc header stamps
+  (`product.md`, `faq.md`, `known-limitations.md`, `submission-package.md`) · SDK
+  `package.json` + lock · Swift SDK constant · deploy-surface image pins · helm `values.yaml`
+  + README table + `tests/values-*.yaml` · `install.sh` `PULSE_IMAGE` **and** `PULSE_REF` ·
+  root README pins · `listing.md` version mention · beacon tarball names · customer-doc image
+  pins · runnable OCI-chart pins. **Bump the chart semver whenever `templates/` or
+  `values.yaml` changed** — `helm push` overwrites a published chart version — and regenerate
+  goldens with helm **3.17.0**.
 - **Mount the repo root for every container gate**, Go and Node alike — tests reach into
   `contracts/`. A subtree mount produces fake failures that look like regressions.
 - **Regenerate helm goldens with CI's pinned helm 3.17.0**; newer helm injects blank lines and

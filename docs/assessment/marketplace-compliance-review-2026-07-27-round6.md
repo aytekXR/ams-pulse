@@ -4,10 +4,17 @@
 tag `v0.4.3` = commit `669952e`
 **Reviewer verdict:** *Not ready to submit today* — one listing overclaim (H-01), the open
 credential rotation (G-02), and a decision on the tag-vs-main gap (H-02).
-**Executed in:** SESSION-112 / D-179.
+**Executed in:** SESSION-112 / D-179 (findings) and D-180 (the `v0.4.4` cut).
 
-**Our verdict after verification: all nine findings CONFIRMED against the tree. Eight are
-fixed; one (H-02) is an operator decision, prepared but not taken.** No finding was refuted.
+**Status at close: two of the reviewer's three blockers are closed.** H-01 is fixed; H-02 is
+resolved by cutting **`v0.4.4`**, now the submission target. **G-02 (rotate
+`CLICKHOUSE_PASSWORD`) remains the single open blocker**, and only the operator can close it.
+By the reviewer's own criterion — *"if items 1–3 close, my verdict flips to ready to submit"* —
+the remaining distance is one credential rotation.
+
+**Our verdict after verification: all nine findings CONFIRMED against the tree, and all nine
+are now dispositioned** — eight fixed in code and docs, H-02 resolved by the operator
+authorising the `v0.4.4` cut. No finding was refuted.
 
 The reviewer ran in a sandbox with almost no egress — no image pull, no cosign, no live AMS.
 Several findings were therefore raised as *probes* rather than defects. **We ran the probes.**
@@ -22,7 +29,7 @@ That is the headline result of this round.
 | ID | Sev | Subject | Verified? | Disposition |
 |---|---|---|---|---|
 | **H-01** | HIGH | Listing omits the HLS viewer-count accuracy caveat | **CONFIRMED** | **FIXED.** The caveat now appears in all three places a reader meets the claim: feature bullet 1, the long-form description, and the SS1 screenshot caption — mirroring the egress-caveat pattern the reviewer identified as the house style. Also corrected in passing: "signed release binaries" → "checksummed release binaries (the image is cosign-signed)", which the reviewer flagged inside H-03 as a slight overstatement. Verified the stated character counts (title 42, short description 240) are unaffected — neither edited string is inside them. |
-| **H-02** | MEDIUM | `v0.4.3` lacks main's evaluator-facing corrections | **CONFIRMED** | **OPEN — operator decision, and the case for cutting is now stronger than the reviewer knew.** Every hunk they cite is real (`git diff v0.4.3..HEAD`). This round adds materially more to the gap than round 5's copy fixes: a **code change closing LIM-01**, an anchored cosign command, a 4-asset `SHA256SUMS`, and an installer exit-code contract. Recommendation: cut **v0.4.4** and retarget the submission. Everything is staged; the cut is one tag push after main's post-merge CI goes green. Not taken autonomously — release cuts are operator-gated. |
+| **H-02** | MEDIUM | `v0.4.3` lacks main's evaluator-facing corrections | **CONFIRMED** | **RESOLVED — `v0.4.4` cut and the submission retargeted (D-180).** Every hunk cited was real. The operator took the decision the same session, and the case had grown beyond what the reviewer saw: the delta also contained the **LIM-01 code fix**. Released and verified anonymously — README@`v0.4.4` carries the cosign-v3 note *and* the anchored regexp, `install.md`@`v0.4.4` carries "Verify your downloads" and the installer exit-code table, and every `ams-pulse:` pin at the tag is `0.4.4`. The reviewer's framing was right: a recorded ruling ("doc fixes ride the next release") deserved revisiting once the facts under it moved. |
 | **H-03** | MEDIUM | `SHA256SUMS` covers 2 of 4 assets; no doc uses it | **CONFIRMED** | **FIXED.** `SHA256SUMS` generation moved out of the binary-build step into a new final step that runs after the SDK tarball and Helm chart exist, and checksums **all four** assets with bare filenames so `sha256sum -c` works from one download directory. The step asserts a 4-line result and runs `sha256sum -c` on itself before uploading — without that assertion a silently missing artifact would republish a short file and read as success, which is the defect itself. Both directions rehearsed locally (4 lines pass; missing SDK tarball aborts the step). Customer-facing instructions added: a **Verify your downloads** section in `install.md` and a verification table in `SECURITY.md` covering all four artifacts plus the image. |
 | **H-04** | MEDIUM | "AMS 2.10+" has zero coverage for the maintained 2.x line | **CONFIRMED** | **FIXED — with source evidence rather than a guessed profile.** Confirmed upstream: 2.15.0, 2.16.x, 2.17.0/.1 all exist (2.17.1 released 2026-02-12) and none was covered. Added a **`v2.17.1` mock profile** derived from AMS's own source at tag `ams-v2.17.1` — the LIM-10 technique, not invention. Cross-checking `Broadcast.java` and `ClusterNode.java` at `ams-v2.14.0` / `2.16.2` / `2.17.1` / `3.0.3` shows **every field Pulse consumes is present and identically typed across the whole range**; 2.17.1 → 3.0.3 removes only `conferenceMode` and `subTrackStreamIds`, neither of which Pulse reads. `compatibility.md` gains 2.17/2.16/2.15 rows and a precise "what 2.10+ means" block that says plainly that **2.15 is untested**; the listing's compatibility line now names the profiled versions instead of implying the range. The new profile also uses the *real* cluster-node field names, making it better evidence than the older profiles it sits beside. |
 | **H-05** | MEDIUM | Unanchored cosign identity regexp | **CONFIRMED** | **FIXED, and verified against the published image rather than reasoned about.** README and both workflow comments now use `^https://github\.com/aytekXR/ams-pulse/\.github/workflows/release\.yml@refs/tags/v.+$`. Ran cosign v3.0.2 against the published `0.4.3`: the anchored form **passes** (digest `sha256:75a76c67…727b4`), and the same regexp with `refs/heads/` **fails** — which also printed the exact SAN, `…/release.yml@refs/tags/v0.4.3`, confirming the anchors match reality. A note explains why the anchoring is load-bearing so it is not "simplified" later. |
@@ -73,7 +80,8 @@ Recorded in both directions, per the standing protocol.
 
 ## What this round did not change
 
-- **No release cut.** H-02 is the operator's call; see the disposition above.
 - **No rotation, no prod roll.** Operator-gated. Prod was read-only this session and is
   healthy (3/3 `/healthz` components `ok`, 1,328,195 server events, collector ingesting).
+  Note that prod stays on its stamped v0.4.0-139 build, so the new Fleet gauges are not visible
+  there until the operator rolls it — a deliberate, separate decision.
 - **Cluster engineering (LIM-10)** stays disclosed and gated on a live multi-node cluster.
