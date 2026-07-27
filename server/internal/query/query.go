@@ -909,6 +909,17 @@ func (s *Service) DeviceBreakdown(ctx context.Context, p DeviceParams) ([]Device
 		}
 
 		// Build the tail row.
+		//
+		// The sentinel is the all-"other" TUPLE, not the word "other" in any
+		// single column: "other" is also a legitimate enum value from
+		// collector/enrichment.go. What makes the tuple unambiguous is an
+		// invariant in the parser, not in this file — an empty UA is the only
+		// path to Device "other" and it leaves OS/Browser empty, while any
+		// non-empty UA resolves Device to a concrete category. Pinned there by
+		// TestEmbeddedUAParser_NeverCollidesWithBreakdownSentinel (review round
+		// 9); if that invariant is ever relaxed, a real row becomes
+		// indistinguishable from this aggregate row and the sentinel must
+		// change.
 		tailRow := DeviceRow{
 			Device:     "other",
 			OS:         "other",

@@ -236,8 +236,11 @@ paths:
             ordered by views descending. When additional rows exist, a single
             tail row aggregates their totals; this row is identified by the
             sentinel value "other" in the country field (and region field when
-            region=true). Totals therefore remain complete even when individual
-            rows are elided.
+            region=true). The tail keeps the elided rows inside the response
+            totals rather than dropping them, but those totals are approximate,
+            not exact: the tail is derived from a separate totals query (so
+            concurrent ingest can shift it) and is floored at zero, and uniques
+            additionally carries ClickHouse uniq() estimation error.
           content:
             application/json:
               schema:
@@ -265,8 +268,11 @@ paths:
             ordered by views descending. When additional rows exist, a single
             tail row aggregates their totals; this row is identified by the
             sentinel value "other" in the device, os, browser, and protocol
-            fields. Totals therefore remain complete even when individual rows
-            are elided.
+            fields. The tail keeps the elided rows inside the response totals
+            rather than dropping them, but those totals are approximate, not
+            exact: the tail is derived from a separate totals query (so
+            concurrent ingest can shift it) and is floored at zero, and uniques
+            additionally carries ClickHouse uniq() estimation error.
           content:
             application/json:
               schema:
@@ -2065,6 +2071,7 @@ components:
         Geography breakdown. Capped at the top 100 rows ordered by views
         descending. When additional rows exist, a tail row aggregates their
         totals; identified by "other" in the country (and region) field.
+        Tail-row aggregates are approximate — see the endpoint description.
       required: [rows]
       properties:
         rows:
@@ -2081,7 +2088,10 @@ components:
       properties:
         country:
           type: string
-          description: ISO 3166-1 alpha-2 country code
+          description: |
+            ISO 3166-1 alpha-2 country code. Empty when geo enrichment is
+            disabled or the IP could not be resolved. The literal string
+            "other" identifies the aggregated tail row, not a country.
         region:
           type: [string, 'null']
           description: Region name; present only when region=true was requested
@@ -2098,6 +2108,7 @@ components:
         Device/OS/browser/protocol breakdown. Capped at the top 100 rows
         ordered by views descending. When additional rows exist, a tail row
         aggregates their totals; identified by "other" in all grouping fields.
+        Tail-row aggregates are approximate — see the endpoint description.
       required: [rows]
       properties:
         rows:
@@ -2121,7 +2132,10 @@ components:
           type: string
         protocol:
           type: string
-          description: webrtc, hls, rtmp, dash, other
+          description: |
+            webrtc, hls, rtmp, dash, other. Populated only from viewer_join
+            server events; sessions stitched from beacon data alone — the
+            common case today — carry an empty protocol.
         views:
           type: integer
         uniques:

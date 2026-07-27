@@ -19,9 +19,50 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
   is now timed separately and the emitted RTT belongs to the call that produced the event, with
   `GetVersion` outside the window as it was before D-179. Reproduced at 603 ms in a test before
   fixing; two regression tests pin both paths.
+- **The breakdown tail row's `"other"` sentinel was unambiguous only by accident (D-183).**
+  `"other"` is also a genuine device/OS/browser value, so a real row could in principle be
+  indistinguishable from the aggregated tail row — and the UI renders device/OS/browser but
+  not protocol, so the two would look identical. The collision turns out to be unreachable:
+  an empty User-Agent is the only path to `device = "other"` and it leaves OS and browser
+  empty, while any non-empty UA resolves the device to a concrete category. That invariant
+  lived in a different package from the code that depends on it and was written down nowhere;
+  a plausible cleanup would have broken the API silently. Now stated at both sites and pinned
+  by `TestEmbeddedUAParser_NeverCollidesWithBreakdownSentinel`. No behaviour change.
 
 ### Changed
 
+- **Geo and device breakdowns are capped at 100 rows, with an aggregated tail row (D-182,
+  review round 8 J-02).** `GET /analytics/geo` and `GET /analytics/devices` now return at
+  most the top 100 rows by views. When more exist, one additional row carries the remainder
+  and is identified by the sentinel `"other"` in every grouping field — `country` (and
+  `region` when `region=true`) for geo, `device`/`os`/`browser`/`protocol` for devices. The
+  tail keeps the elided rows inside the response totals instead of dropping them, so charts
+  and reports stay honest; those totals are approximate rather than exact (see below). This
+  bounds response size for high-cardinality breakdowns. **Behaviour change for API
+  consumers** — a client that assumed every group appears as its own row will now see the
+  remainder folded into one.
+- **The breakdown contract no longer over-claims what the tail row guarantees (D-183, review
+  round 9 K-02).** Four OpenAPI descriptions said totals "remain complete even when
+  individual rows are elided". They do not: the tail is derived from a separate totals query
+  (so concurrent ingest can shift it, which affects the otherwise-exact `views` and
+  `watch_time_s` too) and is floored at zero, and `uniques` additionally carries ClickHouse
+  `uniq()` estimation error. The descriptions now say so. Two further contract over-claims
+  found in the same sweep: `GeoRow.country` promised an ISO 3166-1 code where the API also
+  sends `""` (geo enrichment off or IP unresolved — the default configuration) and the
+  `"other"` sentinel, and `DeviceRow.protocol` documented an enum that is empty for every
+  session stitched from beacon data. Description-only — no response shape moved.
+- **Documentation no longer tells standalone operators they need Kafka for CPU/memory/disk
+  (D-183).** D-179 closed LIM-01 — the metrics come from `GET /rest/v2/system-resources`
+  with no broker — and D-181 corrected the eight stale *code comments*, but the *documents*
+  were never swept. `docs/kafka-integration.md` contradicted itself within twenty lines
+  ("No longer true since D-179" one bullet, "cannot fire … those fields never arrive" the
+  next, "Kafka is the only supported path" in §1.2, `Absent` in the §1.3 table, "No CPU/mem
+  alerts without Kafka" in §7) and sold itself on a capability that no longer needs it;
+  `docs/compatibility.md`'s per-version matrix still read "**Via Kafka only** (REST absent
+  for standalone)". Corrected throughout, with the residual case kept honest: on an AMS that
+  does not serve the route, Pulse falls back to `/system-status` and Kafka *is* still the way
+  to get resource metrics. Kafka's remaining unique value — per-stream FPS, keyframe
+  interval, jitter, packet loss — is now what that guide leads with.
 - **README, Helm README and doc stamps corrected, and the drift class guarded (I-01/I-02/I-03).**
   The README inside the v0.4.4 tag still pointed at v0.4.3 in prose, because guard #17 matches
   only runnable image pins. **New release-guard check #19** pins the README's release-pointer

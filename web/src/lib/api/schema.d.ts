@@ -1107,6 +1107,7 @@ export interface components {
          * @description Geography breakdown. Capped at the top 100 rows ordered by views
          *     descending. When additional rows exist, a tail row aggregates their
          *     totals; identified by "other" in the country (and region) field.
+         *     Tail-row aggregates are approximate — see the endpoint description.
          */
         GeoResponse: {
             /**
@@ -1116,7 +1117,11 @@ export interface components {
             rows: components["schemas"]["GeoRow"][];
         };
         GeoRow: {
-            /** @description ISO 3166-1 alpha-2 country code */
+            /**
+             * @description ISO 3166-1 alpha-2 country code. Empty when geo enrichment is
+             *     disabled or the IP could not be resolved. The literal string
+             *     "other" identifies the aggregated tail row, not a country.
+             */
             country: string;
             /** @description Region name; present only when region=true was requested */
             region?: string | null;
@@ -1128,6 +1133,7 @@ export interface components {
          * @description Device/OS/browser/protocol breakdown. Capped at the top 100 rows
          *     ordered by views descending. When additional rows exist, a tail row
          *     aggregates their totals; identified by "other" in all grouping fields.
+         *     Tail-row aggregates are approximate — see the endpoint description.
          */
         DeviceResponse: {
             /**
@@ -1141,7 +1147,11 @@ export interface components {
             device: string;
             os: string;
             browser: string;
-            /** @description webrtc, hls, rtmp, dash, other */
+            /**
+             * @description webrtc, hls, rtmp, dash, other. Populated only from viewer_join
+             *     server events; sessions stitched from beacon data alone — the
+             *     common case today — carry an empty protocol.
+             */
             protocol: string;
             views: number;
             uniques: number;
@@ -2157,8 +2167,11 @@ export interface operations {
              *     ordered by views descending. When additional rows exist, a single
              *     tail row aggregates their totals; this row is identified by the
              *     sentinel value "other" in the country field (and region field when
-             *     region=true). Totals therefore remain complete even when individual
-             *     rows are elided.
+             *     region=true). The tail keeps the elided rows inside the response
+             *     totals rather than dropping them, but those totals are approximate,
+             *     not exact: the tail is derived from a separate totals query (so
+             *     concurrent ingest can shift it) and is floored at zero, and uniques
+             *     additionally carries ClickHouse uniq() estimation error.
              */
             200: {
                 headers: {
@@ -2199,8 +2212,11 @@ export interface operations {
              *     ordered by views descending. When additional rows exist, a single
              *     tail row aggregates their totals; this row is identified by the
              *     sentinel value "other" in the device, os, browser, and protocol
-             *     fields. Totals therefore remain complete even when individual rows
-             *     are elided.
+             *     fields. The tail keeps the elided rows inside the response totals
+             *     rather than dropping them, but those totals are approximate, not
+             *     exact: the tail is derived from a separate totals query (so
+             *     concurrent ingest can shift it) and is floored at zero, and uniques
+             *     additionally carries ClickHouse uniq() estimation error.
              */
             200: {
                 headers: {

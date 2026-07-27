@@ -1,8 +1,13 @@
 # Pulse — Kafka Integration Guide
 
-> **Audience:** operators who want Fleet resource gauges (CPU, memory, disk) on
-> standalone AMS deployments, or who want higher-frequency per-stream ingest
-> metrics not available from AMS's REST API.
+> **Audience:** operators who want higher-frequency per-stream ingest metrics
+> (FPS, keyframe interval, jitter, packet loss) that AMS's REST API does not
+> expose.
+>
+> **You do NOT need Kafka for Fleet resource gauges.** Since D-179, CPU, memory
+> and disk populate on standalone AMS from `GET /rest/v2/system-resources`, and
+> CPU/memory/disk alert rules fire without a broker (`docs/known-limitations.md`
+> LIM-01). This guide's §1 used to argue the opposite; it is corrected below.
 >
 > **Accuracy note:** every file reference, endpoint path, field name, and code
 > fact below was read directly from the source files cited at the exact line
@@ -23,27 +28,32 @@
 
 ## 1. Why Kafka?
 
-### 1.1 The REST limitation for standalone AMS
+### 1.1 What standalone REST does and does not give you
 
-AMS 3.x exposes system status via `GET /rest/v2/system-status`. On a standalone
-(non-cluster) node, that response contains only operating-system metadata:
-`osName`, `osArch`, `javaVersion`, `processorCount`. No CPU utilisation, memory
-usage, or disk usage fields are present in this response
-(`docs/assessment/prd-validation-matrix.md`, AV-06;
-`docs/assessment/capability-map.md` §5).
+`GET /rest/v2/system-status` returns operating-system metadata only on a
+standalone (non-cluster) node — `osName`, `osArch`, `javaVersion`,
+`processorCount`, no CPU/memory/disk (`docs/assessment/prd-validation-matrix.md`,
+AV-06; `docs/assessment/capability-map.md` §5). That was the original argument
+for Kafka, and **it no longer holds**: Pulse prefers
+`GET /rest/v2/system-resources`, which does return `cpuUsage`,
+`systemMemoryInfo` and `fileSystemInfo` on standalone. The route exists at
+`ams-v2.10.0` and every version since, and was live-verified against a
+standalone AMS 3.0.3 Enterprise on 2026-07-27 (D-179; `docs/known-limitations.md`
+LIM-01; capture committed at
+`server/pkg/amsclient/testdata/system_resources_real_v303.json`).
 
-Consequences for Pulse without Kafka:
+Consequences for Pulse without Kafka, as they stand today:
 
-- The Fleet page shows OS/JVM metadata only; the CPU%, Memory%, and Disk%
-  gauges came only from Kafka for standalone nodes. **No longer true since D-179**:
-  Pulse reads them from `/rest/v2/system-resources` (DG-05,
-  `docs/known-limitations.md` LIM-01). Kafka stays optional for this purpose.
-- Alert rules that condition on `cpu_pct`, `mem_pct`, or `disk_pct` cannot
-  fire for standalone AMS because those fields never arrive
-  (`docs/assessment/prd-validation-matrix.md` line 189).
+- **Fleet CPU%, Memory% and Disk% populate** from `/rest/v2/system-resources`,
+  and **alert rules on `cpu_pct`, `mem_pct` and `disk_pct` fire** — no broker
+  required (D-179). On an AMS that does not serve that route Pulse falls back to
+  `/rest/v2/system-status`, where the gauges stay honestly absent rather than
+  zero-filled; that fallback case is the one where Kafka still buys you resource
+  metrics.
 - Real-time ingest FPS (`fps`), keyframe interval, jitter, and packet-loss
-  fields are also absent from standalone REST; they appear only in the Kafka
-  ingest-stats message stream.
+  fields are absent from standalone REST at every version; they appear only in
+  the Kafka ingest-stats message stream. **This is now the whole reason to run
+  Kafka.**
 
 ### 1.2 Cluster mode: an alternative path
 
@@ -52,16 +62,21 @@ AMS cluster-node REST responses (`GET /rest/v2/cluster/nodes`) include
 consumes those automatically; no Kafka configuration is needed for cluster
 deployments.
 
-**Standalone deployments have no cluster REST endpoint.** Kafka is the only
-supported path to resource metrics for standalone AMS.
+**Standalone deployments have no cluster REST endpoint** — but they do not need
+one: `/rest/v2/system-resources` carries the same CPU/memory/disk figures on a
+standalone node (D-179). Kafka is one of three paths to resource metrics
+(console REST, cluster REST, Kafka), not the only one.
 
 ### 1.3 What Kafka adds beyond REST
 
+"REST (standalone)" below means `/rest/v2/system-resources` with fallback to
+`/rest/v2/system-status`, which is what Pulse actually polls since D-179.
+
 | Metric | REST (standalone) | Kafka |
 |---|---|---|
-| CPU utilisation (`cpu_pct`) | Absent | Present |
-| Memory utilisation (`mem_pct`) | Absent | Present |
-| Disk utilisation (`disk_pct`) | Absent | Present |
+| CPU utilisation (`cpu_pct`) | **Present** (D-179) | Present |
+| Memory utilisation (`mem_pct`) | **Present** (D-179) | Present |
+| Disk utilisation (`disk_pct`) | **Present** (D-179) | Present |
 | Ingest FPS (`fps`) | Absent (AMS 3.0.3) | Present (field name unconfirmed — see §4.4) |
 | Keyframe interval | Absent | Present |
 | Per-stream jitter | Absent | Present |
@@ -433,7 +448,7 @@ If the gauges remain empty after 30 seconds:
 | **First-start history replay** | With a fresh (uncommitted) consumer group the consumer starts at the earliest retained message and ingests topic history once; later restarts resume from committed offsets. |
 | **At-least-once delivery** | A crash between process and commit causes redelivery and may produce a duplicate event in ClickHouse. |
 | **FPS field name unconfirmed** | `docs/assessment/final-assessment.md` lines 409–413 flags this as an open question. If AMS uses a different key name, `fps` output will be 0. |
-| **No CPU/mem alerts without Kafka** | Alert rules on `cpu_pct`, `mem_pct`, `disk_pct` cannot fire for standalone AMS without an active Kafka connection and matching AMS node-stats messages. |
+| **CPU/mem alerts do NOT require Kafka** (D-179) | Alert rules on `cpu_pct`, `mem_pct`, `disk_pct` fire for standalone AMS from `/rest/v2/system-resources`. Kafka is only required for these on an AMS that does not serve that route, where Pulse falls back to `/rest/v2/system-status` and the gauges are absent. See LIM-01. |
 
 ---
 
@@ -444,5 +459,5 @@ If the gauges remain empty after 30 seconds:
 | `docs/AMS-INTEGRATION.md` §1.3 | Two-line stub describing Kafka activation; this document is the complete reference for Kafka operators. |
 | `docs/known-limitations.md` LIM-01 | Rewritten in D-179: Fleet resource gauges now come from `/rest/v2/system-resources`; `PULSE_KAFKA_BROKERS` is no longer required for them. |
 | `docs/adr/0006-kafka-client-kafka-go.md` | ADR for the `github.com/segmentio/kafka-go` library choice, message format expectations, and estimated publish interval. |
-| `docs/assessment/final-assessment.md` §5 P1 | Roadmap item: "Standalone CPU/mem/disk via Kafka" — blocked pending AV-15 live validation. |
-| `docs/assessment/prd-validation-matrix.md` AV-15 | Validation status: BLOCKED. |
+| `docs/assessment/final-assessment.md` §4.1 / §5 P1 | Both marked **superseded (D-179)**: the roadmap item "Standalone CPU/mem/disk via Kafka" is DONE without Kafka, and §4.1 is kept as the historical record of the premise that turned out to carry an unverified conclusion. |
+| `docs/assessment/prd-validation-matrix.md` AV-15 | Kafka-path validation status: still BLOCKED — but no longer gating CPU/mem/disk, which are validated via REST (D-179). |

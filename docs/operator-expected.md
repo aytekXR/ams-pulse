@@ -96,8 +96,15 @@ load-evidence format (A9). Details: `docs/marketplace/submission-process.md`.
 
 ---
 
-*Prod: healthy and untouched — v0.4.0-139, all three `/healthz` components `ok`, 1,328,195
-server events, collector actively ingesting. A prod roll is item 11, never automatic.*
+*Prod: healthy and untouched — v0.4.0-139, all three `/healthz` components `ok`, 1,336,799
+server events, newest 16 s old, collector actively ingesting. A prod roll is item 11, never
+automatic.*
+
+*On item 1: external review rounds 7, 8 and 9 have now each landed fixes on `main` that are not
+in the v0.4.4 tag, and one of them (the geo/device breakdown row cap) changes API responses.
+Nothing here changes item 1's priority — but when you rotate, the same sitting authorises one
+motion: **rotate, cut v0.4.5, submit against it**. That single cut also clears the stale prose
+frozen inside the v0.4.4 tag, which is the only remaining thing an evaluator could catch.*
 
 *Noticed while probing your AMS: its licence shows `type: trial`, `endDate 2026-07-27` —
 expiring today. It affects nothing we ship, but it does affect future live validation against

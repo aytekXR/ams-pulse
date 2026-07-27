@@ -311,3 +311,46 @@ func TestUA_MacOS_Safari(t *testing.T) {
 		t.Errorf("browser = %q, want Safari", got.Browser)
 	}
 }
+
+// TestEmbeddedUAParser_NeverCollidesWithBreakdownSentinel pins the invariant the
+// device breakdown's tail row depends on (review round 9, found while verifying
+// K-02): the capped tail row is identified by the literal "other" in device, os
+// AND browser simultaneously, so no real enrichment result may produce that
+// tuple — otherwise a genuine row and the aggregate row become indistinguishable
+// in the API response, and the UI (which renders device/os/browser but not
+// protocol) would show two identical-looking rows.
+//
+// Two properties together make the tuple unreachable, and both are asserted:
+//   - an empty UA is the only path to Device "other", and it leaves OS/Browser
+//     empty (enrichment.go's empty-UA branch);
+//   - a non-empty UA always resolves Device to a concrete category, because
+//     detectDevice falls back to "desktop", never "other".
+func TestEmbeddedUAParser_NeverCollidesWithBreakdownSentinel(t *testing.T) {
+	p := NewEmbeddedUAParser()
+
+	// The empty-UA branch: Device "other", but OS/Browser must stay empty.
+	if got := p.Parse(""); got.Device != "other" || got.OS != "" || got.Browser != "" {
+		t.Errorf("empty UA = %+v, want {Device:other OS: Browser:} — filling OS/Browser "+
+			"with %q would collide with the breakdown tail-row sentinel", got, "other")
+	}
+
+	// No UA — however exotic — may yield the all-"other" tuple.
+	uas := []string{
+		"",
+		"curl/8.5.0",
+		"Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+		"AppleCoreMedia/1.0.0.21F79 (Apple TV; U; CPU OS 17_5 like Mac OS X)",
+		"SomeCompletelyUnknownPlayer/1.0",
+		"Mozilla/5.0 (X11; CrOS x86_64 14541.0.0)",
+		"\x00\xff invalid bytes",
+		strings.Repeat("a", 4096),
+	}
+	for _, ua := range uas {
+		got := p.Parse(ua)
+		if got.Device == "other" && got.OS == "other" && got.Browser == "other" {
+			t.Errorf("UA %.40q produced the breakdown tail-row sentinel tuple "+
+				"(device=os=browser=other); a real row is now indistinguishable "+
+				"from the aggregated 'other' row", ua)
+		}
+	}
+}

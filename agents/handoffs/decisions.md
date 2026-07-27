@@ -10390,3 +10390,95 @@ server events, newest 9 s old.
 **Still open, unchanged:** **G-02** — rotate `CLICKHOUSE_PASSWORD`. Re-checked silently: the
 live value's 32-hex prefix still matches 2 commits in public history. Operator-gated; the sole
 submission blocker.
+
+---
+
+## D-183 — §S115: external review round 9 (K-01…K-02) verified & executed
+
+**Input:** external review round 9 against `9928f70`, verdict *"ready to submit as soon as G-02
+closes"*, two LOW findings. **Result: both CONFIRMED as defects; K-02 fixed at 4 sites rather
+than the 2 filed; K-01's conclusion adopted and its evidence refuted. Six further items found by
+us, one of them larger than either filed finding.** Dispositions are filled into the reviewer's
+own ledger: `docs/assessment/external-review-2026-07-27-round9.md`.
+
+**The finding of the round was ours, and it was a scope gap for the fourth round running.**
+D-179 closed LIM-01: standalone AMS *does* report CPU/memory/disk, via
+`/rest/v2/system-resources`, with no Kafka. D-181 then corrected the stale claim at **eight code
+comment sites** — and swept no documentation. `docs/kafka-integration.md` was left contradicting
+itself inside twenty lines: one bullet reading "**No longer true since D-179**" and the next
+saying alert rules "cannot fire … because those fields never arrive"; §1.2 asserting "**Kafka is
+the only supported path to resource metrics for standalone AMS**"; the §1.3 table marking
+CPU/mem/disk `Absent` under REST; the §7 limitations table promising "**No CPU/mem alerts
+without Kafka**"; and an audience header selling the guide on precisely the capability that no
+longer requires it. `docs/compatibility.md`'s per-version matrix — customer-facing — still read
+"**Via Kafka only** (REST absent for standalone)". A prospect reading either document would
+conclude Pulse needs a Kafka broker to monitor the most common AMS deployment. It does not, and
+has not since D-179. **The lesson is not "sweep the docs too" — it is that a fix's scope is a
+decision, and D-181 recorded the eight comment sites without recording that documentation was
+outside the sweep.** Corrected throughout, with the residual case kept honest: on an AMS that
+does not serve the route Pulse falls back to `/system-status`, and there Kafka genuinely is the
+path.
+
+**K-01: the conclusion was right, the evidence was invented.** The finding says
+`review-chain.md` overstates why rounds 4–7 reviewer prose cannot be recovered — correct, one
+sentence collapsed two different situations, and the fix is adopted. But its reproduction
+("`git status --porcelain | grep round6`", "sits untracked in `docs/assessment/` on the
+operator's machine right now", "visible in `git status` in every session since, including this
+one") is false: at `9928f70` `git status --porcelain --untracked-files=all` is **empty**,
+`git log --all` knows no such path, and a filesystem search of the operator's home directory
+finds only round 8's ledger. Round 8's J-03 asserted the same non-existent file. **A claim about
+our tree state is the cheapest thing in a review to verify, and it is the class we have now been
+handed wrong twice** — the fix records the refutation in `review-chain.md` itself, because that
+file exists to be audited.
+
+**K-02 was filed one rule short of the reviewer's own standard.** Two endpoint descriptions
+claimed the tail row keeps totals "complete"; the same claim also sits in the `GeoResponse` and
+`DeviceResponse` schema descriptions in the same file. We also declined the proposed wording:
+it scopes the caveat to `uniques` (the separate totals query perturbs the otherwise-exact
+`views` and `watch_time_s` too) and it implies under-reporting is the only direction, when a
+race can shift the tail either way. The shipped text names both causes and claims no direction.
+Sweeping the file for the class then found two more over-claims the reviewer never reached:
+`GeoRow.country` promised an ISO 3166-1 code where the API also emits `""` (geo enrichment off
+or IP unresolved — the *default* configuration, not an edge case) and the `"other"` sentinel,
+and `DeviceRow.protocol` documented an enum that is empty for every beacon-stitched session.
+
+**The `"other"` sentinel is safe by accident, and now on purpose.** Chasing a suspected
+collision: `"other"` is a real enum value from `enrichment.go` as well as D-182's tail-row
+sentinel, and the UI renders device/OS/browser but not protocol — so a genuine row and the
+aggregate row would render identically. **The collision is unreachable**, for a reason written
+down nowhere: an empty User-Agent is the only path to `Device: "other"` and it leaves OS and
+Browser empty, while any non-empty UA resolves device to a concrete category (`detectDevice`
+falls back to `"desktop"`, never `"other"`). The invariant lived in a different package from the
+code depending on it, and filling OS/Browser with `"other"` in that branch — a plausible
+cleanup — would have broken the API silently. Stated at both sites and pinned by
+`TestEmbeddedUAParser_NeverCollidesWithBreakdownSentinel`. **Refuted hypotheses are worth
+recording when the refutation depends on an accident.**
+
+**We applied K-01's standard to ourselves and found the same defect.** D-182 records itself as
+`§S114`; `agents/handoffs/sessions/` went 113 → 115 with no `SESSION-114.md`. Reconstructed from
+D-182's decision entry and labelled as a reconstruction — the same evidence-chain class the
+reviewer filed against us, missed by us in the same round we fixed theirs.
+
+**D-182's breakdown cap never reached the changelog.** A 100-row cap plus a sentinel tail row
+changes what every consumer of `/analytics/geo` and `/analytics/devices` receives, and
+`[Unreleased]` did not mention it. Recorded now, so it reaches the v0.4.5 notes rather than an
+integrator's bug report.
+
+**Assessment records superseded, not rewritten.** `prd-validation-matrix.md` (4 rows) and
+`final-assessment.md` (§4.1 and the P1 roadmap row still costing "High — requires Kafka broker
+deployment") carried the same staleness. These are dated validation records, so they keep their
+original evidence and gain the house supersession marker (the `DG-05` pattern): AV-06's
+*finding* is preserved and re-scoped to `/system-status`, the endpoint it actually probed, and
+only the conclusion drawn from it is marked superseded. §4.1 is now labelled the canonical
+example of a verified premise carrying an unverified conclusion.
+
+**Gates:** `gofmt -l` empty · `go vet` clean · full `go test ./... -race` with the repo-root
+mount, 26 packages, **0 FAIL** · `npm run gen:api` reproduced `schema.d.ts` with **JSDoc-comment
+changes only** (verified mechanically: zero non-comment diff lines) · `npm run typecheck` and
+`npm run lint` clean · the new enrichment test verified to fail when the invariant it pins is
+relaxed. Prod gate at session start: all three `/healthz` components `ok`, 1,336,799 server
+events, newest 16 s old.
+
+**Still open, unchanged:** **G-02** — rotate `CLICKHOUSE_PASSWORD`. Re-checked silently: the
+live value's 32-hex prefix still matches 2 commits in public history. Ninth consecutive round as
+the sole submission blocker. Operator-gated.
