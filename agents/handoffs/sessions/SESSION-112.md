@@ -96,6 +96,20 @@ instead of a failed pipeline. Re-run: **all 18 checks PASS**.
 history, "what changed" narration and the loop-owned engineering-debt section removed; eleven
 actionable items remain.
 
+## Post-release verification (the published v0.4.4, as a customer sees it)
+
+Pipeline green is not evidence; the artifacts are. All checked anonymously after the tag:
+
+| Check | Result |
+|---|---|
+| **`SHA256SUMS` covers all four assets (H-03)** | **343 B, 4 lines** — was 168 B / 2 lines. The documented command `sha256sum --ignore-missing -c SHA256SUMS` returns **OK for all four** (both binaries, the beacon tarball, the Helm chart) |
+| Binary identity | `./pulse-linux-amd64 version` → `pulse v0.4.4 (commit 34a25fc4)` — the merged SHA |
+| Anonymous image | `0.4.4` ≡ `latest` → same digest `sha256:81673359…45df`, no auth; `amd64` + `arm64` both present |
+| **Published cosign command (H-05)** | The **exact anchored block from README@v0.4.4** verifies the published image; reported digest matches the anonymously-resolved manifest |
+| Anonymous OCI chart | `helm pull oci://ghcr.io/aytekxr/charts/pulse --version 0.3.2` → `version 0.3.2 / appVersion 0.4.4` |
+| **H-02 closed at the tag** | README@v0.4.4 carries the cosign-v3 note **and** the anchored regexp; `install.md`@v0.4.4 carries "Verify your downloads" and the installer exit-code table; every `ams-pulse:` pin at the tag is `0.4.4` |
+| Installer at the tag | `PULSE_REF:-v0.4.4`, `PULSE_IMAGE` `0.4.4`, the `EXIT_CODE=2` branch, and the G-04 port exemption — byte-identical to the local tree |
+
 ## Left for the operator
 
 1. **Rotate `CLICKHOUSE_PASSWORD`** — now the *only* thing blocking submission.

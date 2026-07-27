@@ -10239,3 +10239,16 @@ clean · beacon SDK size gate 3.52 kB / 15 kB · tree clean after `npm install`.
 **Tag pushed only after main's post-merge CI went green** — the standing rule from D-177, since
 a PR's checks belong to the pre-squash SHA and the release pipeline's CI gate requires a
 successful run for the commit being tagged.
+
+**Post-release verification (D-180, after the pipeline went green).** Pipeline success is not
+evidence that the artifacts are right — S111's rule. Checked anonymously against the published
+`v0.4.4`: `SHA256SUMS` is **343 B / 4 lines** (was 168 B / 2), and the command the docs now
+publish, `sha256sum --ignore-missing -c SHA256SUMS`, returns OK for **all four** assets — H-03
+confirmed in production, not just in the workflow diff. `pulse-linux-amd64 version` reports
+`v0.4.4 (commit 34a25fc4)`, the merged SHA. `0.4.4` ≡ `latest` at digest `sha256:81673359…45df`
+with both arches. The **exact anchored cosign block from README@v0.4.4** verifies that image and
+reports the same digest (H-05 confirmed against the artifact it documents). The OCI chart pulls
+anonymously at `version 0.3.2 / appVersion 0.4.4`. And H-02 itself is closed: a reader browsing
+the **tag** now gets the cosign-v3 note, the anchored regexp, "Verify your downloads", the
+installer exit-code table, and `0.4.4` image pins throughout — which was the entire point of
+cutting.
