@@ -326,6 +326,30 @@ jobs:
             fi
           done
 
+          # 19. PROSE release pointers in the root README (round-7 review I-01).
+          #     Checks #11/#17 match only runnable `ams-pulse:<semver>` pins — a scoping
+          #     round 4 endorsed to avoid false positives — so the README's two English
+          #     release pointers sat outside every guard window and shipped one release
+          #     stale INSIDE the new submission target, hours after #17 landed.
+          #     A customer reading "current: v0.4.3" installs the previous release.
+          #     Exact-string match on the two known patterns, not a bare version grep:
+          #     prose that legitimately names an older release must still not trip this.
+          for pat in "current: \*\*v${TAG_VERSION}\*\*" "latest release \*\*v${TAG_VERSION}\*\*"; do
+            if ! grep -qE "$pat" README.md 2>/dev/null; then
+              echo "FAIL: README.md is missing the release pointer matching '${pat}'."
+              echo "      Found instead: $(grep -oE '(current: |latest release )\*\*v[0-9]+\.[0-9]+\.[0-9]+\*\*' README.md | tr '\n' ' ')"
+              echo "      Update the prose pointers to v${TAG_VERSION} before tagging (round-7 I-01)."
+              exit 1
+            fi
+          done
+          # And no OTHER version may appear in those two patterns.
+          STALE_PTR="$(grep -oE '(current: |latest release )\*\*v[0-9]+\.[0-9]+\.[0-9]+\*\*' README.md 2>/dev/null \
+            | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | grep -v "^v${TAG_VERSION}$" | head -1)"
+          if [ -n "$STALE_PTR" ]; then
+            echo "FAIL: README.md still carries a release pointer for ${STALE_PTR} (tag is v${TAG_VERSION})"
+            exit 1
+          fi
+
           echo "Version guard: PASS (VERSION=$FILE_VERSION Chart=$CHART_VERSION chart_semver=$CHART_SEMVER_NOW sdk=$PKG_VERSION swift_sdk=$SWIFT_VER tag=$GITHUB_REF_NAME)"
 
       # GHCR login is unconditional — dry-run still needs credentials for the

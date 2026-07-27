@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/aytekXR/ams-pulse/main/deploy/quick
 **Released image:** `ghcr.io/aytekxr/ams-pulse` — **public** (no authentication needed to
 pull), cosign-signed, multi-arch (amd64/arm64), SBOM + provenance, published by a CI-gated
 tag pipeline.
-Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.4.3**).
+Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.4.4**).
 
 **Docker Compose (signed image — recommended for evaluators):**
 
@@ -66,8 +66,10 @@ cosign verify \
 > **Requires cosign v3.0 or newer.** Releases from `v0.3.0` on store the signature as an
 > OCI 1.1 *referrer* rather than under the legacy `sha256-<digest>.sig` tag. A **cosign v2
 > client reports `Error: no signatures found` against a correctly signed image** — it is
-> looking for a tag that is no longer written. Verified 2026-07-27: cosign v2.4.3 fails on
-> `0.3.0` through `0.4.3` and succeeds on `0.2.0`; cosign v3.0.2 succeeds on all of them.
+> looking for a tag that is no longer written. This applies to `0.3.0` **and every release
+> since** — the layout has not changed. Verified 2026-07-27: cosign v2.4.3 fails on `0.3.0`
+> through the current release and succeeds only on `0.2.0` (the last legacy-layout build);
+> cosign v3.0.2 succeeds on all of them.
 > Check with `cosign version` and upgrade if it prints 2.x.
 
 **Building from source** (development or local patches):
@@ -127,9 +129,9 @@ PULSE_SECRET_KEY=$(openssl rand -hex 32) \
 
 ## Feature status
 
-Last updated: **2026-07-27 (D-176)** — all 10 PRD features shipped; latest release **v0.4.3**.
+Last updated: **2026-07-27 (D-181)** — all 10 PRD features shipped; latest release **v0.4.4**.
 The maintainer's production instance runs behind host-nginx TLS against a real AMS 3.0.3
-Enterprise (currently on the stamped **v0.4.0-139** build; the roll to 0.4.3 is deliberate,
+Enterprise (currently on the stamped **v0.4.0-139** build; the roll to 0.4.4 is deliberate,
 not automatic). Product one-pager: [docs/product.md](docs/product.md).
 
 | Feature | PRD ref | Status | Notes |

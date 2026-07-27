@@ -317,15 +317,26 @@ func (p *Poller) poll(ctx context.Context) error {
 			// A payload with no gauges is treated as no better than system-status
 			// (HasResourceMetrics), so a stripped/proxied response cannot cost us
 			// the identity fields.
-			t1 := time.Now()
+			//
+			// D-181 (review round 7, I-04): each call is timed SEPARATELY and
+			// sysRTTMS carries the RTT of the call that actually produced the event.
+			// A single window opened before SystemResources and closed after the
+			// fallback chain reported up to three round-trips as one "API latency",
+			// inflating the metric — and the ams_api_latency_ms anomaly baseline fed
+			// from it — on precisely the deployments that take the fallback. The
+			// GetVersion call is deliberately outside the window on the fallback
+			// path, exactly as it was before D-179.
 			var (
-				ev      domain.ServerEvent
-				haveEv  bool
-				sErr    error
-				stats   map[string]any
-				resFail bool
+				ev       domain.ServerEvent
+				haveEv   bool
+				sErr     error
+				stats    map[string]any
+				resFail  bool
+				sysRTTMS float64
 			)
+			t1 := time.Now()
 			res, rErr := p.client.SystemResources(ctx)
+			resRTTMS := float64(time.Since(t1).Microseconds()) / 1000.0
 			switch {
 			case rErr != nil:
 				// A real error (not 404/405) — remember it, but still try
@@ -336,12 +347,16 @@ func (p *Poller) poll(ctx context.Context) error {
 			case collector.HasResourceMetrics(res):
 				ev = collector.NormalizeSystemResources(res, p.cfg.NodeID, "")
 				haveEv = true
+				sysRTTMS = resRTTMS
 			}
 			if !haveEv {
+				t2 := time.Now()
 				stats, sErr = p.client.SystemStats(ctx)
+				statsRTTMS := float64(time.Since(t2).Microseconds()) / 1000.0
 				if sErr == nil {
+					sysRTTMS = statsRTTMS
 					// GetVersion is best-effort: version="" on error (older AMS
-					// without /rest/v2/version).
+					// without /rest/v2/version). Outside the RTT window on purpose.
 					versionName := ""
 					if vDTO, vErr := p.client.GetVersion(ctx); vErr == nil && vDTO != nil {
 						versionName = vDTO.VersionName
@@ -354,7 +369,6 @@ func (p *Poller) poll(ctx context.Context) error {
 					p.logger.Warn("restpoller: system-resources poll also failed", "error", rErr)
 				}
 			}
-			sysRTTMS := float64(time.Since(t1).Microseconds()) / 1000.0
 
 			if haveEv {
 				// Standalone success: reset streak, emit with RTT.

@@ -1,6 +1,7 @@
 # Pulse licensing — repo license, and how product license keys are minted & distributed
 
-Last updated: 2026-07-09 (D-066).
+Last updated: 2026-07-27 (D-181 stamp correction; last content change D-173, which
+replaced the dev key with the official verification key below).
 
 ## 1. Repository license (what users may do with the code)
 

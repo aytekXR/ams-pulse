@@ -293,9 +293,17 @@ func (e *Evaluator) evalAnomalyNodes(ctx context.Context, snap *domain.LiveSnaps
 		var val float64
 		switch rule.Metric {
 		case "cpu_pct":
-			// D-088 presence guard: standalone AMS 3.x never reports cpu_pct.
+			// D-088 presence guard: a node snapshot may simply LACK cpu_pct.
 			// CPUPCTReported=false means the key was absent in the collector event.
 			// Comparing 0 to a real baseline would produce false alerts.
+			//
+			// The rationale here used to read "standalone AMS 3.x never reports
+			// cpu_pct". That stopped being true in D-179: standalone AMS reports it
+			// over /rest/v2/system-resources. The GUARD is still exactly right — the
+			// key can still be absent (the system-status fallback path, a cluster
+			// node whose JMX reading is non-finite, a Kafka-only gap) — but skip on
+			// ABSENCE, never on an assumption about which AMS versions report what
+			// (review round 7, I-05).
 			if !n.CPUPCTReported {
 				continue
 			}

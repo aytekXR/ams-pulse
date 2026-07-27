@@ -10,6 +10,34 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Fallback-path `api_latency_ms` timed up to three calls instead of one (D-181, review round 7
+  I-04).** D-179's preference chain (`system-resources` → `system-status` → `version`) left a
+  single timing window open across the whole chain, so on deployments that take the fallback the
+  metric — and the `ams_api_latency_ms` anomaly baseline fed from it — read 2–3× high. Each call
+  is now timed separately and the emitted RTT belongs to the call that produced the event, with
+  `GetVersion` outside the window as it was before D-179. Reproduced at 603 ms in a test before
+  fixing; two regression tests pin both paths.
+
+### Changed
+
+- **README, Helm README and doc stamps corrected, and the drift class guarded (I-01/I-02/I-03).**
+  The README inside the v0.4.4 tag still pointed at v0.4.3 in prose, because guard #17 matches
+  only runnable image pins. **New release-guard check #19** pins the README's release-pointer
+  strings to the tag. The cosign-version range and the Helm chart-version example were
+  **de-literalized** rather than bumped, so neither can drift again. Stale "Last updated" stamps
+  refreshed in `compatibility.md`, `ARCHITECTURE.md` and `licensing.md`.
+- **LIM-10 correctly scoped to AMS 2.14–3.x (I-06).** D-179 proved `ClusterNode` carries no
+  `role`/`version` at `ams-v2.14.0`, `2.16.2`, `2.17.1` and `3.0.3`, but the disclosure still
+  said "AMS 3.x" — leaving a 2.16/2.17-cluster prospect free to hope edge/origin dedup activates
+  on their version. It does not.
+- **Presence-guard rationale comments corrected at eight sites (I-05).** Comments asserting that
+  standalone AMS never reports `cpu_pct`/`mem_pct`/`disk_pct` became false when D-179 closed
+  LIM-01. The guards themselves were and remain correct; they now state the durable invariant —
+  skip on key ABSENCE, never on an assumption about which AMS versions report what. No behaviour
+  change.
+
 ## [0.4.4] - 2026-07-27
 
 Review-round-6 release. Cut so the marketplace submission targets a tag that actually contains

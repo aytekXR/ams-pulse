@@ -79,7 +79,7 @@ func (s *Store) DeleteAnomalyBaseline(ctx context.Context, id string) error {
 
 // DeleteZeroMeanNodeBaselines deletes baseline rows where metric is one of the
 // given metrics and both mean=0 AND stddev=0. This removes baselines poisoned by
-// standalone AMS nodes that never report cpu_pct/mem_pct/disk_pct — they
+// nodes that did not report cpu_pct/mem_pct/disk_pct — they
 // accumulated hundreds or thousands of zero observations before D-088 presence
 // flags were deployed. The sample_count clause is intentionally absent because
 // poisoned rows commonly have n in the hundreds/thousands (live: realams n=733,

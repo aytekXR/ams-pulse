@@ -10252,3 +10252,67 @@ anonymously at `version 0.3.2 / appVersion 0.4.4`. And H-02 itself is closed: a 
 the **tag** now gets the cosign-v3 note, the anchored regexp, "Verify your downloads", the
 installer exit-code table, and `0.4.4` image pins throughout — which was the entire point of
 cutting.
+
+---
+
+## D-181 — §S113: external review round 7 (I-01…I-06) verified & executed
+
+**Input:** external review round 7 against `463927e`, verdict *"ready to submit as soon as G-02
+closes"*. **Result: all six findings CONFIRMED, all six fixed, none refuted — and two were
+larger than filed.** Dispositions:
+`docs/assessment/marketplace-compliance-review-2026-07-27-round7.md`.
+
+**The round that found nothing structural is the useful signal.** Round 7 independently
+re-verified all nine round-6 dispositions against the **published** v0.4.4 artifacts rather than
+the changelog, confirmed the H-02 recurrence pattern is broken (post-tag drift is now
+internal-only), and read the new `system-resources` code as hostile-input code rather than
+diffing it. What it found was six items of prose and comment drift plus one metric-semantics
+nit. That is what a mature pack looks like.
+
+**I-01 is the interesting one, because it is a guard gap rather than an oversight.** The README
+inside the *new* submission target still said "current: **v0.4.3**" — hours after guard #17
+shipped specifically to stop version staleness. It slipped because #17 is deliberately scoped to
+runnable `ams-pulse:<semver>` pins (round 4 endorsed that scoping to avoid false positives), and
+English release-pointers sit outside every guard window. Fixed twice over: the strings are
+corrected, **and new guard check #19** pins both prose patterns to the tag by exact-string
+match. Mutation-proved both directions. The cosign-history range was **de-literalized** instead
+of bumped — "fails on `0.3.0` and every release since" cannot go stale; "through `0.4.3`" was
+guaranteed to. Same treatment for I-02's chart-version sentence: the fix for a literal that
+drifted twice is to stop naming literals, not to update them again.
+
+**Two findings were undercounted, and sweeping beat trusting the citation list.**
+- **I-03** named one stale "Last updated" stamp (`compatibility.md`, D-176 vs a D-179 rewrite).
+  Sweeping every stamped doc found two more: `ARCHITECTURE.md` (D-161, though D-179 rewrote §3
+  rule 2) and `licensing.md` (**D-066** — eighteen decisions stale, over content D-173 changed
+  when it replaced the dev key with the official verification key).
+- **I-05** named three stale comments asserting "standalone AMS 3.x never reports cpu_pct",
+  false since D-179. A repo-wide sweep found **eight**, including three in
+  `alert/wave2_d087_test.go` and two in the anomaly/meta packages. All now state the durable
+  invariant — *skip on ABSENCE, never on an assumption about which AMS versions report what* —
+  which is the form that cannot rot when AMS's capabilities change again.
+
+**I-04 was read off a diff by a reviewer who could run nothing; we reproduced it numerically
+before fixing.** D-179's preference chain left one timing window open across
+`SystemResources` → `SystemStats` → `GetVersion`, so on the fallback path `api_latency_ms`
+reported up to three round-trips as one. A test with deliberate per-route delays measured
+**603 ms** — exactly the sum of the two legs that should not have been in the window. Each call
+is now timed separately and the emitted RTT belongs to the call that produced the event, with
+`GetVersion` back outside it as it was pre-D-179. Two regression tests, one per path.
+
+**I-06 is the failure mode worth naming: an observation that never became an edit.** D-179
+proved `ClusterNode` is field-identical across 2.14 → 3.0.3 and wrote it in the round-6 "Found
+by us" section — but LIM-10 still said "AMS 3.x". A prospect on a 2.17 cluster could have read
+that and hoped edge/origin dedup activates on their version. Recording a finding in a review
+ledger is not the same as shipping it into the disclosure the customer reads.
+
+**Deliberate non-actions.** **No release cut** — five of six are prose/comments and I-04's
+impact is confined to deployments not serving `/rest/v2/system-resources` (absent since
+`ams-v2.10.0`); they ride the next natural cut, which is the reviewer's own recommendation, and
+guard #19 now makes the README pointers impossible to forget at that cut. **No rotation, no prod
+roll** — operator-gated; the ClickHouse password was re-checked silently and is **still
+un-rotated**. It remains the single blocker both the reviewer and the loop agree on.
+
+**Gates:** `gofmt -l` empty · `go build` OK · `go vet` clean · full `go test ./... -race` green
+with the repo-root mount (0 FAIL) · alert/anomaly/meta suites green under `-race` after the
+comment sweep · guard check #19 mutation-proved both directions · ShellCheck clean on 0.9.0 and
+0.11.0 · both workflows parse as YAML.
