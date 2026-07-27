@@ -51,8 +51,9 @@ Nothing else blocks submission.
 
 **Test the artifact, not the documentation (S111's lesson).** The highest-severity finding of
 D-178 was invisible to every doc review: the `cosign verify` command Pulse publishes **fails on
-a cosign v2 client** ("no signatures found") because v0.4.x images are signed in the cosign-v3
-OCI 1.1 referrer layout. The image was fine; the *instruction we hand a reviewer* was not. When
+a cosign v2 client** ("no signatures found") because every release from `v0.3.0` on stores its
+signature in the OCI 1.1 referrer layout, not the legacy `.sig` tag a v2 client looks for.
+The image was fine; the *instruction we hand a reviewer* was not. When
 a claim names a command a third party will run, **run it as that third party would**, on the
 published artifact, with a client version you did not choose. Do not change how releases are
 signed to accommodate old clients — that is deliberate (see `release.yml`).
