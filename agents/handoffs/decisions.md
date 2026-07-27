@@ -10194,3 +10194,48 @@ un-rotated**. Prod was read-only and healthy throughout (3/3 `/healthz` `ok`, 1,
 repo-root mount (**0 FAIL**, 309 api tests, 4 skips — all the known environment-gated ones:
 Kafka broker, ajv fixtures, poppler) · ShellCheck clean on 0.9.0 and 0.11.0 · both release
 workflows parse as YAML · 55 relative doc links in the changed files resolve, anchors included.
+
+---
+
+## D-180 — §S112: v0.4.4 cut — the submission target retargeted at the round-6 fixes
+
+**Operator decision on round 6's H-02, taken during S112.** The review asked whether to keep
+`v0.4.3` as the marketplace submission target or cut a new release. The operator chose to cut.
+
+**Why the round-5 ruling did not survive.** D-177 ruled that copy fixes "ride the next release",
+and D-178 reaffirmed it — both correct at the time, because the `v0.4.3`→`main` delta was
+documentation only. D-179 changed the premise: the delta now contains **code** an evaluator
+meets in their first ten minutes — the LIM-01 fix (standalone Fleet CPU/memory/disk gauges), an
+anchored `cosign verify` command, `SHA256SUMS` covering all four release assets, and the
+installer's degraded exit code. Submitting against `v0.4.3` would have meant an evaluator
+installing from the tag getting blank Fleet gauges for a reason already fixed, and a published
+verify command that does not pin what it claims to pin. A recorded ruling is worth revisiting
+when the facts under it move; that is the whole content of this decision.
+
+**Chart semver bumped 0.3.1 → 0.3.2, and the guard is why.** `helm push` to an OCI registry
+**overwrites** an existing chart version, so re-publishing `0.3.1` with different templates
+would silently replace the artifact someone already pulled. D-178 had changed
+`deploy/helm/pulse/values.yaml`, which check #16 scopes on, so the bump was mandatory rather
+than cosmetic. Goldens regenerated with **CI's pinned helm 3.17.0** (newer helm injects blank
+lines and fakes drift); the only diff is the version and tag lines. Runnable OCI-chart pins in
+the docs moved to `0.3.2` under check #18.
+
+**The guard was dry-run before tagging, not after.** The `Version consistency guard` step was
+extracted from `release.yml` and executed locally against a throwaway `v0.4.4` tag. It caught a
+real miss on the first pass — check #12: `docs/marketplace/listing.md` still said "ships all ten
+analytics features in v0.4.3". Fixed, re-run, **all 18 checks PASS**
+(`VERSION=0.4.4 Chart=0.4.4 chart_semver=0.3.2 sdk=0.4.4 swift_sdk=0.4.4`). Running the release
+gate before the release costs nothing and turns a failed pipeline into a local one-line fix.
+
+**Also in this commit, per operator directive:** `docs/operator-expected.md` **pruned to open
+items only** — the "what changed since you last looked" narration, the per-item history of which
+D-number touched which line, and the entire loop-owned "tracked engineering debt" section
+(explicitly "no action from you") are gone. Eleven actionable items remain, rotation first. The
+debt list lives in `RESUME-PROMPT.md`, which is where the loop reads it.
+
+**Gates:** all 18 release-guard checks PASS · helm goldens byte-match under 3.17.0 · `helm lint`
+clean · beacon SDK size gate 3.52 kB / 15 kB · tree clean after `npm install`.
+
+**Tag pushed only after main's post-merge CI went green** — the standing rule from D-177, since
+a PR's checks belong to the pre-squash SHA and the release pipeline's CI gate requires a
+successful run for the commit being tagged.
