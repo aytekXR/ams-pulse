@@ -16,7 +16,7 @@ honestly disclosed**. No new code defect and no falsifiable claim was found.
 
 | Gate | State |
 |---|---|
-| **G-01** — confirm the v0.4.3 release pipeline completed | **Resolved.** The reviewer saw only 2 assets because they were looking at the *tag* page while the pipeline was still running (GitHub renders 2 auto source archives on a tag with no Release object yet). The first release attempt did legitimately fail — see below — and the re-run completed. |
+| **G-01** — confirm the v0.4.3 release pipeline completed | **RESOLVED & VERIFIED.** Release run `30225886730` succeeded; all 5 expected assets published (`pulse-linux-amd64`, `pulse-linux-arm64`, `SHA256SUMS`, `ams-pulse-beacon-0.4.3.tgz`, `pulse-0.3.1.tgz`). Verified **anonymously**: `0.4.3` and `latest` resolve to the same digest `sha256:75a76c67…727b4`, HTTP 200 with no auth, both `linux/amd64` and `linux/arm64` present. The reviewer saw 2 assets because they were reading the *tag* page while the pipeline was still running. |
 | **G-02** — rotate `CLICKHOUSE_PASSWORD` | **OPEN, operator-gated.** The operator explicitly chose to defer rotation when authorising the v0.4.3 cut. Unchanged in severity: still the #1 pre-submission item. |
 
 ### G-01 in full — what actually happened

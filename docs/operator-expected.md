@@ -38,8 +38,9 @@ the superseded S93–S109 status stack lives in git history and `agents/handoffs
    still 128 bits of the secret sitting in a public repo, and anyone can find it with
    `git log -S`. Rotate before the repo gets marketplace traffic. Then rotate the rest
    (`deploy/.env`, `oguz-testing.md` — the latter's file mode is now 600).
-2. ~~**Cut `v0.4.3`**~~ — **DONE (2026-07-27).** Tagged, released and verified. **Submit
-   against `v0.4.3`, not v0.4.2**: everything an evaluator meets in their first ten minutes —
+2. ~~**Cut `v0.4.3`**~~ — **DONE & VERIFIED (2026-07-27).** Tagged and released: all 5 assets
+   published, and `0.4.3`/`latest` confirmed **anonymously pullable at the same digest**
+   (`sha256:75a76c67…727b4`, amd64 + arm64). **Submit against `v0.4.3`, not v0.4.2**: everything an evaluator meets in their first ten minutes —
    the corrected cluster claims, the regenerated screenshots, the evaluator compose overlay,
    the parameterised quickstart host port — exists only in 0.4.3.
    *Worth knowing:* the first release attempt failed in 21 seconds at the pipeline's own CI
@@ -85,7 +86,7 @@ the superseded S93–S109 status stack lives in git history and `agents/handoffs
    "Aytek Erdoğan (beyondkaira.com)" — one word if right, or give the exact form. (Both
    `LICENSE` and `licensing-public.md` already carry this identical string; nothing is
    inconsistent, this is purely your sign-off that it is the correct legal form.)
-12. *Optional:* **roll prod to v0.4.2 or v0.4.3** (deliberate `deployment.sh` deploy on your
+12. *Optional:* **roll prod to v0.4.3** (deliberate `deployment.sh` deploy on your
     go-ahead; prod is healthy on its stamped v0.4.0-139 build) · VPS Chromium deps
     (`sudo npx playwright install-deps chromium`) if you want captures to run natively on
     the VPS (they currently run fine via the Playwright container).
