@@ -1,6 +1,6 @@
-# SESSION-112 — 2026-07-27 — external review round 6 (H-01…H-09) verified & executed; LIM-01 closed
+# SESSION-112 — 2026-07-27 — external review round 6 (H-01…H-09) verified & executed; LIM-01 closed; v0.4.4 cut
 
-**Decision:** D-179. **Operator directive:** *"A new review is landed… don't forget to update
+**Decisions:** D-179 (review execution), D-180 (the v0.4.4 cut). **Operator directive:** *"A new review is landed… don't forget to update
 resume prompts afterwards."*
 
 Round 6 was reviewed by a sandbox with almost no egress — no image pull, no cosign, no live AMS.
@@ -80,10 +80,24 @@ AMS computes `inUseMemory = totalMemory − freeMemory`, so `mem_pct` counts pag
 poppler) · ShellCheck clean on 0.9.0 and 0.11.0 · both workflows parse as YAML · 55 relative doc
 links resolve, anchors included · clean-room installs torn down with no residue.
 
+## The cut (D-180)
+
+The operator took H-02 mid-session and authorised **v0.4.4**. Round 5 had ruled that copy fixes
+ride the next release; that ruling predated the code, and D-179 put a Priority-1 limitation fix
+in the delta. Chart semver went `0.3.1` → `0.3.2` because D-178 had touched `values.yaml` and
+`helm push` **overwrites** a published chart version — guard check #16 exists for exactly that.
+
+**The version guard was dry-run locally before tagging**, by extracting the step from
+`release.yml` and running it against a throwaway tag. It caught check #12 on the first pass —
+`listing.md` still read "ships all ten analytics features in v0.4.3". One-line fix locally
+instead of a failed pipeline. Re-run: **all 18 checks PASS**.
+
+`docs/operator-expected.md` was also pruned to **open items only** (operator directive):
+history, "what changed" narration and the loop-owned engineering-debt section removed; eleven
+actionable items remain.
+
 ## Left for the operator
 
-1. **Rotate `CLICKHOUSE_PASSWORD`** — unchanged, still the only hard blocker.
-2. **Decide H-02** — cut `v0.4.4` and retarget the submission (recommended), or submit against
-   `v0.4.3` with main-state docs.
-3. The AMS trial licence on the validation VPS shows `endDate 2026-07-27` — expiring today.
+1. **Rotate `CLICKHOUSE_PASSWORD`** — now the *only* thing blocking submission.
+2. The AMS trial licence on the validation VPS shows `endDate 2026-07-27` — expiring today.
    Affects future live validation, not any shipped claim.

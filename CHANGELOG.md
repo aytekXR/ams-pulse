@@ -10,6 +10,14 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-07-27
+
+Review-round-6 release. Cut so the marketplace submission targets a tag that actually contains
+the fixes an evaluator meets: the closed LIM-01, a `cosign verify` command that pins what it
+claims to pin, checksums for every published artifact, and an installer whose exit code tells
+automation the truth. Round 5's "these ride the next release" ruling predated the code.
+See `docs/assessment/marketplace-compliance-review-2026-07-27-round6.md`.
+
 ### Added
 
 - **Standalone AMS now reports CPU, memory and disk — no Kafka required (D-179, external
@@ -17,12 +25,10 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
   `cpuUsage` / `systemMemoryInfo` / `fileSystemInfo` on a standalone node, plus the whole
   `system-status` body under `systemInfo` and the whole `/rest/v2/version` body under
   `softwareVersion` — so one call replaces the previous two. Live-verified end-to-end
-  against a standalone AMS 3.0.3 Enterprise (capture:
-  committed verbatim as
-  `server/pkg/amsclient/testdata/system_resources_real_v303.json`, license and instance id
-  redacted). Percentages use the same
-  formulas as the Kafka `ams-instance-stats` path, because both decode the same serialized
-  AMS `StatsCollector` object. An AMS that does not serve the route (404/405) falls back to
+  against a standalone AMS 3.0.3 Enterprise; the captured response ships as
+  `server/pkg/amsclient/testdata/system_resources_real_v303.json` (licence block and instance
+  id redacted). Percentages use the same formulas as the Kafka `ams-instance-stats` path,
+  because both decode the same serialized AMS `StatsCollector` object. An AMS that does not serve the route (404/405) falls back to
   `system-status`, where the gauges stay honestly absent rather than zero-filled.
 
   This closes **LIM-01**, the first limitation in the Priority-1 list since the product's
@@ -42,6 +48,45 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
   caveat, mirroring the pattern already used for the egress estimate. Also corrected
   "signed release binaries" → "checksummed release binaries" (the image is cosign-signed;
   the binaries are checksummed).
+- **Compatibility claims name the AMS versions actually covered (H-04).** "Best-effort
+  compatibility with AMS 2.10+" read as inclusive of 2.15–2.17, which had no coverage at all.
+  Added a **source-derived `v2.17.1` wire-format profile** — built by reading AMS's own
+  `Broadcast.java` and `ClusterNode.java` at tag `ams-v2.17.1`, not invented — after confirming
+  that every field Pulse consumes is present and identically typed at `ams-v2.14.0`,
+  `2.16.2`, `2.17.1` and `3.0.3`. `docs/compatibility.md` gains 2.17/2.16/2.15 rows and states
+  plainly that **2.15 is untested**. By-product: `ClusterNode` carries no `role` and no
+  `version` at *any* version from 2.14 on, so LIM-10 applies to the whole 2.x line.
+- **`internal/cluster` is named as part of the AMS boundary (H-07)**, and ARCHITECTURE §3
+  rule 2 is now enforced by a test that fails on any new `amsclient` importer outside an
+  explicit allow-list — plus a companion test that fails on stale allow-list entries.
+- **Helm chart `0.3.1` → `0.3.2`** (values.yaml changed since the last release).
+
+### Fixed
+
+- **`SHA256SUMS` covered 2 of 4 release assets (H-03).** The beacon SDK tarball a player team
+  embeds and the Helm chart an operator installs shipped with no published checksum. Checksum
+  generation now runs after every artifact exists, covers all four with bare filenames so
+  `sha256sum -c` works from one download directory, asserts a 4-line result, and verifies
+  itself before upload. Customer-facing instructions added: **Verify your downloads** in
+  `docs/runbooks/install.md` and a per-artifact verification table in `SECURITY.md`.
+- **The quickstart installer exited 0 on a degraded install (H-06).** With an unreachable AMS
+  it printed an honest warning but returned the same status as a healthy run, so scripted
+  installs and install-validation harnesses could not tell them apart. It now exits **2**,
+  documented in the script header and `install.md`. The admin token and next-steps still
+  print — the status is set early and returned last, so an interactive operator loses nothing.
+
+### Security
+
+- **The published `cosign verify` command now pins what it claims to pin (H-05).**
+  `--certificate-identity-regexp` is an *unanchored* RE2 match, so the previous
+  `'https://github.com/aytekXR/ams-pulse'` also accepted a signature from any other workflow in
+  the repo, any branch or pull-request ref, and any future repository whose path merely started
+  the same way. The anchored form pins **built and signed by `release.yml`, from a version
+  tag**. Verified against the published `0.4.3`: the anchored regexp passes, and the same
+  regexp with `refs/heads/` fails.
+- **`SECURITY.md` explains the `candidate-<sha>` tags** visible on the GHCR package (H-09).
+  They are aliases of the released digest — the pre-scan quarantine tag, kept because GHCR
+  deletes package *versions* (digests), and on the success path that digest is the release.
 
 ## [0.4.3] - 2026-07-27
 

@@ -26,7 +26,7 @@ services:
   # `docker compose -f deploy/docker-compose.yml up -d` path booted an
   # unmigrated ClickHouse. It belongs in the base file.
   pulse-migrate:
-    image: ${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.3}
+    image: ${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.4}
     entrypoint: ["pulse", "migrate"]
     restart: "no"
     environment:
@@ -45,7 +45,7 @@ services:
   pulse:
     # Default: the cosign-signed published image (cosign/SBOM — see README).
     # To build from source instead, add: -f deploy/docker-compose.build.yml --build
-    image: ${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.3}
+    image: ${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.4}
     expose:
       - "8090"    # UI + API — publish via an override (demo/CI) or a reverse proxy
       - "8091"    # Beacon ingest — publish via an override or TLS-terminating proxy
