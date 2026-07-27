@@ -307,33 +307,72 @@ func (p *Poller) poll(ctx context.Context) error {
 		} else {
 			// len(nodes)==0 && err==nil → standalone AMS (404 mapped to nil,nil).
 			// Best-effort: log and continue on any SystemStats error.
-			// D-087: measure RTT around the standalone SystemStats call specifically.
+			// D-087: measure RTT around the standalone stats call specifically.
+			//
+			// D-179 (review round 6, H-08): PREFER /rest/v2/system-resources. It
+			// returns the same identity body as /rest/v2/system-status PLUS the
+			// cpu/mem/disk gauges LIM-01 used to say were Kafka-only, PLUS the
+			// version — one call replacing two. Older AMS 404s it, in which case
+			// SystemResources yields (nil, nil) and we take the historical path.
+			// A payload with no gauges is treated as no better than system-status
+			// (HasResourceMetrics), so a stripped/proxied response cannot cost us
+			// the identity fields.
 			t1 := time.Now()
-			stats, sErr := p.client.SystemStats(ctx)
+			var (
+				ev      domain.ServerEvent
+				haveEv  bool
+				sErr    error
+				stats   map[string]any
+				resFail bool
+			)
+			res, rErr := p.client.SystemResources(ctx)
+			switch {
+			case rErr != nil:
+				// A real error (not 404/405) — remember it, but still try
+				// system-status before declaring the node unreachable: the two
+				// routes are served by different AMS REST services.
+				resFail = true
+				p.logger.Debug("restpoller: system-resources poll failed, falling back to system-status", "error", rErr)
+			case collector.HasResourceMetrics(res):
+				ev = collector.NormalizeSystemResources(res, p.cfg.NodeID, "")
+				haveEv = true
+			}
+			if !haveEv {
+				stats, sErr = p.client.SystemStats(ctx)
+				if sErr == nil {
+					// GetVersion is best-effort: version="" on error (older AMS
+					// without /rest/v2/version).
+					versionName := ""
+					if vDTO, vErr := p.client.GetVersion(ctx); vErr == nil && vDTO != nil {
+						versionName = vDTO.VersionName
+					}
+					ev = collector.NormalizeSystemStats(stats, p.cfg.NodeID, versionName)
+					haveEv = true
+				} else if resFail {
+					// Both routes failed — surface the resources error too, so an
+					// AMS that breaks only the console service is diagnosable.
+					p.logger.Warn("restpoller: system-resources poll also failed", "error", rErr)
+				}
+			}
 			sysRTTMS := float64(time.Since(t1).Microseconds()) / 1000.0
 
-			if sErr == nil {
+			if haveEv {
 				// Standalone success: reset streak, emit with RTT.
 				p.consecAPIErrors = 0
 				// AMS is answering as standalone now, so any remembered cluster
 				// IDs are stale — drop them rather than address failure-streak
 				// events to nodes that no longer exist (REVIEW-MP3-R1).
 				p.lastClusterNodeIDs = p.lastClusterNodeIDs[:0]
-				// GetVersion is best-effort: version="" on error (older AMS without /rest/v2/version).
-				versionName := ""
-				if vDTO, vErr := p.client.GetVersion(ctx); vErr == nil && vDTO != nil {
-					versionName = vDTO.VersionName
-				}
-				ev := collector.NormalizeSystemStats(stats, p.cfg.NodeID, versionName)
 				ev.Data["api_latency_ms"] = sysRTTMS
 				// Live counter, not a literal — see the cluster-path note (D-087 M4).
 				ev.Data["consec_api_errors"] = float64(p.consecAPIErrors)
 				p.sink.WriteServerEvent(ev)
 			} else {
-				// Standalone failure: increment streak, emit FAILURE-STREAK event.
-				// Standalone identity is cfg.NodeID — AMS provides no node ID on
-				// this path, and NormalizeSystemStats keys its success events the
-				// same way, so the aggregator knows this node.
+				// Standalone failure: BOTH /rest/v2/system-resources and
+				// /rest/v2/system-status failed. Increment streak, emit
+				// FAILURE-STREAK event. Standalone identity is cfg.NodeID — AMS
+				// provides no node ID on this path, and both normalizers key their
+				// success events the same way, so the aggregator knows this node.
 				p.logger.Warn("restpoller: system stats poll failed", "error", sErr)
 				p.consecAPIErrors++
 				p.sink.WriteServerEvent(p.failureStreakEvent(p.cfg.NodeID))

@@ -35,8 +35,9 @@ usage, or disk usage fields are present in this response
 Consequences for Pulse without Kafka:
 
 - The Fleet page shows OS/JVM metadata only; the CPU%, Memory%, and Disk%
-  gauges remain empty for all standalone nodes (DG-05,
-  `docs/known-limitations.md` LIM-01).
+  gauges came only from Kafka for standalone nodes. **No longer true since D-179**:
+  Pulse reads them from `/rest/v2/system-resources` (DG-05,
+  `docs/known-limitations.md` LIM-01). Kafka stays optional for this purpose.
 - Alert rules that condition on `cpu_pct`, `mem_pct`, or `disk_pct` cannot
   fire for standalone AMS because those fields never arrive
   (`docs/assessment/prd-validation-matrix.md` line 189).
@@ -441,7 +442,7 @@ If the gauges remain empty after 30 seconds:
 | Document | Relationship |
 |---|---|
 | `docs/AMS-INTEGRATION.md` §1.3 | Two-line stub describing Kafka activation; this document is the complete reference for Kafka operators. |
-| `docs/known-limitations.md` LIM-01 | References `PULSE_KAFKA_BROKERS` as the resolution path for absent Fleet resource gauges. |
+| `docs/known-limitations.md` LIM-01 | Rewritten in D-179: Fleet resource gauges now come from `/rest/v2/system-resources`; `PULSE_KAFKA_BROKERS` is no longer required for them. |
 | `docs/adr/0006-kafka-client-kafka-go.md` | ADR for the `github.com/segmentio/kafka-go` library choice, message format expectations, and estimated publish interval. |
 | `docs/assessment/final-assessment.md` §5 P1 | Roadmap item: "Standalone CPU/mem/disk via Kafka" — blocked pending AV-15 live validation. |
 | `docs/assessment/prd-validation-matrix.md` AV-15 | Validation status: BLOCKED. |

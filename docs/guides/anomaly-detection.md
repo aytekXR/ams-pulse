@@ -18,9 +18,9 @@ The detector tracks six metrics:
 |---|---|---|---|
 | `viewers` | per-stream | Current viewer count for a stream | |
 | `ingest_bitrate_kbps` | per-stream | Ingest bitrate for active publishers | |
-| `cpu_pct` | per-node | Node CPU utilisation percentage | Absent on standalone AMS via REST (DG-05); available in cluster mode or via Kafka |
-| `mem_pct` | per-node | Node memory utilisation percentage | Absent on standalone AMS via REST (DG-05) |
-| `disk_pct` | per-node | Node disk utilisation percentage | Absent on standalone AMS via REST (DG-05) |
+| `cpu_pct` | per-node | Node CPU utilisation percentage | Available on standalone AMS via `/rest/v2/system-resources` since D-179 (LIM-01); also cluster mode and Kafka |
+| `mem_pct` | per-node | Node memory utilisation percentage | Available on standalone AMS since D-179; counts page cache as in-use, so baseline-relative anomaly rules suit it better than fixed thresholds (LIM-01) |
+| `disk_pct` | per-node | Node disk utilisation percentage | Available on standalone AMS via `/rest/v2/system-resources` since D-179 (LIM-01) |
 | `ams_api_latency_ms` | per-node | Pulse poller round-trip time to AMS REST API | Key-absent on failed polls — see §Key-absent semantics below |
 
 A flag is emitted when the current observed value deviates from the stored
@@ -316,7 +316,7 @@ timestamps, providing the forensic timeline the #7926 reporter lacked.
 | GAP-3-004 | Zero-stddev blind spot | **CLOSED Wave-3-Plus** — epsilon floor applied in `ComputeFlags` (see "Epsilon floor" above) |
 | Single window | Only a 1-hour rolling window is tracked. Multi-window anomaly detection (e.g., 24-hour baseline) is Phase 3. | Phase 3 |
 | error\_rate / rebuffer\_ratio absent | These QoE metrics are not tracked as anomaly signals. `rebuffer_ratio` and `error_rate` are gated by beacon data sparsity (S25/D-087 assessment: prod `beacon_events` = 2 rows / 1 stream; all-zero baselines would make the first real rebuffer event an instant false alarm). Re-assess when a real beacon deployment shows sustained multi-viewer traffic and a sub-hour windowing design exists. | Phase 3 |
-| cpu\_pct / mem\_pct / disk\_pct absent for standalone AMS | These node metrics are unavailable via REST on standalone AMS deployments (DG-05); available in cluster mode or via Kafka. | Environment |
+| cpu\_pct / mem\_pct / disk\_pct absent for standalone AMS | **Fixed in D-179** — these now populate on standalone AMS via `/rest/v2/system-resources`. If they are still blank, your AMS does not serve that route (Pulse falls back to `/rest/v2/system-status`, which omits them); cluster mode and Kafka remain alternatives. | Environment |
 
 ---
 

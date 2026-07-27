@@ -13,6 +13,16 @@
 #   8. Polls /healthz for up to 90 s (fails hard on timeout — NEVER claims success)
 #   9. Extracts the bootstrap admin token from container logs (honest re-run handling)
 #
+# Exit codes (external review round 6, H-06 — scripted installs read $?, and
+# "degraded" must not be indistinguishable from "healthy"):
+#   0  Pulse is installed AND the collector reached AMS.
+#   2  Pulse is installed and running, but the collector could NOT reach AMS
+#      (wrong URL/credentials, or AMS unreachable from this host). The stack is
+#      up and the admin token has been printed — do NOT re-run the installer;
+#      fix .env and `docker compose … up -d`. Everything after the health gate
+#      still runs, so an interactive operator loses nothing by this being nonzero.
+#   1  Any hard failure (missing Docker, image pull denied, health-gate timeout).
+#
 # Usage:
 #   bash install.sh --ams-url http://10.0.1.10:5080 --email admin@example.com --password <pw>
 #   bash install.sh --help
@@ -68,6 +78,13 @@ STACK_STARTED=0 # set to 1 after `docker compose up -d` succeeds
 # Remove the .env ONLY when: (a) the exit is non-zero, AND (b) this run created
 # it, AND (c) the stack never started (deleting it while containers run leaves an
 # orphaned stack with no key file for the next operator run).
+# shellcheck disable=SC2317,SC2329  # invoked indirectly by `trap cleanup EXIT`.
+# Both codes are the same false positive in different ShellCheck generations
+# (SC2317 in 0.9.x, which CI runs; SC2329 from 0.10 on): the reachability pass
+# sees the success path disarm with `trap - EXIT` and the script end in an
+# explicit `exit` (added for H-06), and concludes the body is dead. It is not —
+# the trap is armed for every failure between here and that disarm. Verified
+# clean under both 0.9.0 and 0.11.0 before commit; keep both codes when editing.
 cleanup() {
   local rc=$?
   if [[ $rc -ne 0 && "$CREATED_ENV" -eq 1 && "$STACK_STARTED" -eq 0 && -f "$ENV_FILE" ]]; then
@@ -411,7 +428,13 @@ if [[ "$_COLLECTOR_STATUS" != "degraded" ]]; then
   done
 fi
 
+# EXIT_CODE carries the degraded verdict to the very end of the script. It is NOT
+# an early exit: the admin token and the next-steps block below are exactly what an
+# operator with a wrong AMS URL needs, so they must still print (H-06).
+EXIT_CODE=0
+
 if [[ "$_COLLECTOR_STATUS" == "degraded" ]]; then
+  EXIT_CODE=2
   printf '\n'
   printf '============================================================\n'
   printf '  WARNING: Pulse is installed and running, but the\n'
@@ -421,6 +444,9 @@ if [[ "$_COLLECTOR_STATUS" == "degraded" ]]; then
   printf '  Check your AMS URL, admin email, and password, then\n'
   printf '  update %s and restart:\n' "$ENV_FILE"
   printf '    docker compose -f %s --env-file %s up -d\n' "$COMPOSE_FILE" "$ENV_FILE"
+  printf '\n'
+  printf '  This installer will exit 2 (degraded) rather than 0, so\n'
+  printf '  scripted installs can tell this apart from a clean run.\n'
   printf '============================================================\n'
 else
   printf 'Pulse is healthy.\n'
@@ -462,3 +488,7 @@ if [[ -z "$LICENSE_KEY" ]]; then
   printf '       docker compose -f %s --env-file %s up -d\n' "$COMPOSE_FILE" "$ENV_FILE"
 fi
 printf '\nFor more: %s/blob/main/docs/runbooks/install.md\n' "$REPO_WEB"
+
+# Degraded installs exit 2 so automation can distinguish them; interactive users
+# have already seen everything above. See the exit-code table in the header.
+exit "$EXIT_CODE"

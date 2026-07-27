@@ -775,6 +775,36 @@ func (c *Client) SystemStats(ctx context.Context) (map[string]any, error) {
 	return result, nil
 }
 
+// SystemResources returns the AMS console's full resource snapshot.
+// Path: /rest/v2/system-resources (real AMS v3 path, live-probe-verified against a
+// standalone AMS 3.0.3 Enterprise on 2026-07-27 — see
+// testdata/system_resources_real_v303.json — the captured response, committed).
+//
+// WHY THIS EXISTS (D-179, external review round 6 H-08): /rest/v2/system-status
+// returns identity ONLY on a standalone node ({osName, osArch, javaVersion,
+// processorCount}), which is what LIM-01 documented as "CPU/memory/disk gauges
+// need Kafka". This endpoint returns those metrics on the same standalone node,
+// under the SAME nested shape AMS pushes to the ams-instance-stats Kafka topic
+// (cpuUsage / systemMemoryInfo / fileSystemInfo — both are serialized from
+// StatsCollector). No Kafka required.
+//
+// Returns (nil, nil) when the endpoint is unavailable (404/405 — older AMS), so
+// the caller can fall back to SystemStats. Any other error surfaces: a broken
+// AMS must not be mistaken for an old one.
+//
+// Returns a raw map since the shape varies by AMS version.
+func (c *Client) SystemResources(ctx context.Context) (map[string]any, error) {
+	var result map[string]any
+	if err := c.getJSON(ctx, "/rest/v2/system-resources", &result); err != nil {
+		var hse *httpStatusError
+		if errors.As(err, &hse) && (hse.Status == http.StatusNotFound || hse.Status == http.StatusMethodNotAllowed) {
+			return nil, nil // older AMS without /rest/v2/system-resources
+		}
+		return nil, err
+	}
+	return result, nil
+}
+
 // VersionDTO is the AMS REST v2 version response.
 // Real AMS 3.x GET /rest/v2/version returns: versionName, versionType, buildNumber.
 type VersionDTO struct {

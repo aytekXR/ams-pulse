@@ -49,10 +49,19 @@ To verify the image signature before running:
 
 ```sh
 cosign verify \
-  --certificate-identity-regexp 'https://github.com/aytekXR/ams-pulse' \
+  --certificate-identity-regexp '^https://github\.com/aytekXR/ams-pulse/\.github/workflows/release\.yml@refs/tags/v.+$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   ghcr.io/aytekxr/ams-pulse:0.4.3
 ```
+
+> **The regexp is anchored on purpose.** `--certificate-identity-regexp` is an
+> *unanchored* RE2 match, so the shorter `'https://github.com/aytekXR/ams-pulse'` would
+> also accept a signature produced by any other workflow in the repo, from any branch or
+> pull request, or by any future repository whose path merely starts the same way
+> (`ams-pulse-something`). The anchored form above pins the property you actually want:
+> **built and signed by `release.yml`, from a version tag.** Verified 2026-07-27 against
+> the published `0.4.3` — it passes, and the same regexp with `refs/heads/` in place of
+> `refs/tags/` correctly fails.
 
 > **Requires cosign v3.0 or newer.** Releases from `v0.3.0` on store the signature as an
 > OCI 1.1 *referrer* rather than under the legacy `sha256-<digest>.sig` tag. A **cosign v2

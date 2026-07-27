@@ -696,3 +696,249 @@ func TestNormalizeSystemStats_VersionParam(t *testing.T) {
 		t.Errorf("version key must be absent when version param is empty")
 	}
 }
+
+// ─── NormalizeSystemResources (D-179, review round 6 H-08) ───────────────────
+//
+// LIM-01 said standalone AMS cannot report CPU/memory/disk without Kafka. A live
+// probe of AMS 3.0.3 Enterprise (2026-07-27) showed /rest/v2/system-resources
+// returns all three, fully populated — the metrics /rest/v2/system-status omits.
+// These tests pin the decode against the captured real response.
+
+// realSystemResources is the shape captured from the live standalone AMS 3.0.3
+// (server/pkg/amsclient/testdata/system_resources_real_v303.json), trimmed to the
+// fields NormalizeSystemResources reads.
+func realSystemResources() map[string]any {
+	return map[string]any{
+		"instanceId": "e4c585f61edfa6c9f5f8d38bfa1168f3",
+		"cpuUsage": map[string]any{
+			"processCPUTime":              float64(21813510000),
+			"systemCPULoad":               float64(34),
+			"processCPULoad":              float64(0),
+			"systemLoadAverageLastMinute": 5.31591796875,
+		},
+		"systemMemoryInfo": map[string]any{
+			"virtualMemory":   float64(7239294976),
+			"totalMemory":     float64(12541485056),
+			"freeMemory":      float64(2947465216),
+			"inUseMemory":     float64(9594019840),
+			"availableMemory": float64(11331276800),
+		},
+		"fileSystemInfo": map[string]any{
+			"usableSpace": float64(34851323904),
+			"totalSpace":  float64(206900281344),
+			"freeSpace":   float64(34868101120),
+			"inUseSpace":  float64(172032180224),
+		},
+		"systemInfo": map[string]any{
+			"osName":         "Linux",
+			"osArch":         "amd64",
+			"javaVersion":    "17",
+			"processorCount": float64(6),
+		},
+		"softwareVersion": map[string]any{
+			"versionName": "3.0.3",
+			"versionType": "Enterprise Edition",
+			"buildNumber": "20260504_1443",
+		},
+	}
+}
+
+// The whole point of H-08: the three gauges LIM-01 called unavailable are
+// present and correct. Percentages use the SAME formulas as the Kafka
+// ams-instance-stats path (collector/kafka: inUseMemory/totalMemory,
+// inUseSpace/totalSpace) so one node reports identically on either transport.
+func TestNormalizeSystemResources_RealV303_EmitsCPUMemDisk(t *testing.T) {
+	ev := NormalizeSystemResources(realSystemResources(), "node-a", "")
+
+	if ev.Type != domain.EventNodeStats {
+		t.Fatalf("Type = %q, want %q", ev.Type, domain.EventNodeStats)
+	}
+	if ev.NodeID != "node-a" {
+		t.Errorf("NodeID = %q, want node-a", ev.NodeID)
+	}
+
+	// cpu_pct: AMS already converts [0,1]→percent server-side (SystemUtils
+	// .getSystemCpuLoad casts (int)(load*100)). Multiplying again would report
+	// 3400% — the exact S105 trap the Kafka path documents.
+	cpu, ok := ev.Data["cpu_pct"].(float64)
+	if !ok || cpu != 34 {
+		t.Errorf("cpu_pct = %v (%T), want 34 — do NOT rescale systemCPULoad", ev.Data["cpu_pct"], ev.Data["cpu_pct"])
+	}
+
+	mem, ok := ev.Data["mem_pct"].(float64)
+	wantMem := 9594019840.0 / 12541485056.0 * 100
+	if !ok || math.Abs(mem-wantMem) > 0.001 {
+		t.Errorf("mem_pct = %v, want %.4f", ev.Data["mem_pct"], wantMem)
+	}
+
+	disk, ok := ev.Data["disk_pct"].(float64)
+	wantDisk := 172032180224.0 / 206900281344.0 * 100
+	if !ok || math.Abs(disk-wantDisk) > 0.001 {
+		t.Errorf("disk_pct = %v, want %.4f", ev.Data["disk_pct"], wantDisk)
+	}
+}
+
+// Identity fields live under systemInfo here, not at the top level as they do
+// in /rest/v2/system-status. The fleet card must render identically on both paths.
+func TestNormalizeSystemResources_ReadsIdentityFromSystemInfo(t *testing.T) {
+	ev := NormalizeSystemResources(realSystemResources(), "node-a", "")
+
+	for key, want := range map[string]any{
+		"os_name":         "Linux",
+		"os_arch":         "amd64",
+		"java_version":    "17",
+		"processor_count": 6,
+	} {
+		if got := ev.Data[key]; got != want {
+			t.Errorf("%s = %v (%T), want %v", key, got, got, want)
+		}
+	}
+}
+
+// softwareVersion.versionName makes the separate /rest/v2/version call redundant
+// on this path, but an explicitly-supplied version must still win (the caller
+// may have a better source).
+func TestNormalizeSystemResources_VersionPrecedence(t *testing.T) {
+	ev := NormalizeSystemResources(realSystemResources(), "n1", "")
+	if got := ev.Data["version"]; got != "3.0.3" {
+		t.Errorf("version = %v, want 3.0.3 from softwareVersion.versionName", got)
+	}
+
+	ev2 := NormalizeSystemResources(realSystemResources(), "n1", "9.9.9")
+	if got := ev2.Data["version"]; got != "9.9.9" {
+		t.Errorf("explicit version = %v, want 9.9.9 to win", got)
+	}
+
+	// No version anywhere → absent key, never an empty string.
+	bare := realSystemResources()
+	delete(bare, "softwareVersion")
+	if _, ok := NormalizeSystemResources(bare, "n1", "").Data["version"]; ok {
+		t.Error("version key must be absent when neither source supplies one")
+	}
+}
+
+// The standing honesty rule (NormalizeSystemStats / NormalizeClusterNode):
+// an absent metric is ABSENT, never a fabricated zero. "Disk 0%" rendered as a
+// measurement is a lie.
+func TestNormalizeSystemResources_AbsentMetricsAreAbsentNotZero(t *testing.T) {
+	cases := []struct {
+		name    string
+		mutate  func(map[string]any)
+		absent  string
+		present []string
+	}{
+		{
+			name:    "no fileSystemInfo",
+			mutate:  func(m map[string]any) { delete(m, "fileSystemInfo") },
+			absent:  "disk_pct",
+			present: []string{"cpu_pct", "mem_pct"},
+		},
+		{
+			name:    "no cpuUsage",
+			mutate:  func(m map[string]any) { delete(m, "cpuUsage") },
+			absent:  "cpu_pct",
+			present: []string{"mem_pct", "disk_pct"},
+		},
+		{
+			name: "totalMemory zero (div-by-zero guard must omit, not emit 0)",
+			mutate: func(m map[string]any) {
+				m["systemMemoryInfo"] = map[string]any{"inUseMemory": float64(5), "totalMemory": float64(0)}
+			},
+			absent:  "mem_pct",
+			present: []string{"cpu_pct", "disk_pct"},
+		},
+		{
+			name: "systemCPULoad missing from a present cpuUsage object",
+			mutate: func(m map[string]any) {
+				m["cpuUsage"] = map[string]any{"processCPULoad": float64(3)}
+			},
+			absent:  "cpu_pct",
+			present: []string{"mem_pct", "disk_pct"},
+		},
+		{
+			name: "wrong-typed cpuUsage does not panic",
+			mutate: func(m map[string]any) {
+				m["cpuUsage"] = "not-an-object"
+			},
+			absent:  "cpu_pct",
+			present: []string{"mem_pct", "disk_pct"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := realSystemResources()
+			tc.mutate(raw)
+			ev := NormalizeSystemResources(raw, "n1", "")
+			if v, ok := ev.Data[tc.absent]; ok {
+				t.Errorf("%s must be ABSENT, got %v (fabricated metric)", tc.absent, v)
+			}
+			for _, key := range tc.present {
+				if _, ok := ev.Data[key]; !ok {
+					t.Errorf("%s must still be present", key)
+				}
+			}
+		})
+	}
+}
+
+// HasResourceMetrics is the caller's fallback signal: a payload carrying none of
+// the three gauges is no better than /rest/v2/system-status, so the poller
+// should fall back rather than lose the version/identity call.
+func TestHasResourceMetrics(t *testing.T) {
+	if !HasResourceMetrics(realSystemResources()) {
+		t.Error("real v3.0.3 capture must report resource metrics")
+	}
+	if HasResourceMetrics(nil) {
+		t.Error("nil payload must not report resource metrics")
+	}
+	bare := map[string]any{"systemInfo": map[string]any{"osName": "Linux"}}
+	if HasResourceMetrics(bare) {
+		t.Error("identity-only payload must not report resource metrics")
+	}
+}
+
+// Empty/nil input must not panic and must still produce a well-formed event.
+func TestNormalizeSystemResources_EmptyDoesNotPanic(t *testing.T) {
+	ev := NormalizeSystemResources(nil, "n1", "")
+	if ev.Type != domain.EventNodeStats || ev.NodeID != "n1" {
+		t.Fatalf("nil payload produced malformed event: %+v", ev)
+	}
+	if len(ev.Data) != 0 {
+		t.Errorf("nil payload must yield no data fields, got %v", ev.Data)
+	}
+}
+
+// cpu_pct must stay inside the contract's [0,100] bound
+// (contracts/events/ams-server-event.schema.json → NodeStatsData), and a negative
+// reading is nonsense rather than a measurement.
+func TestNormalizeSystemResources_CPUPctRespectsContractBounds(t *testing.T) {
+	cases := []struct {
+		name   string
+		load   float64
+		want   float64
+		absent bool
+	}{
+		{name: "normal", load: 34, want: 34},
+		{name: "exactly 100", load: 100, want: 100},
+		{name: "over 100 clamps", load: 3400, want: 100},
+		{name: "negative is absent", load: -1, absent: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := realSystemResources()
+			raw["cpuUsage"] = map[string]any{"systemCPULoad": tc.load}
+			ev := NormalizeSystemResources(raw, "n1", "")
+			got, ok := ev.Data["cpu_pct"]
+			if tc.absent {
+				if ok {
+					t.Errorf("cpu_pct must be absent for load=%v, got %v", tc.load, got)
+				}
+				return
+			}
+			if !ok || got != tc.want {
+				t.Errorf("cpu_pct = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

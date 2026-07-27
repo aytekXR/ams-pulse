@@ -30,6 +30,28 @@ overlays, behind host-nginx TLS; see `productionize.md`). Released images: `ghcr
 
 ---
 
+## Verify your downloads
+
+Every GitHub release attaches a `SHA256SUMS` asset covering **all four** downloadable
+artifacts: both `pulse` binaries, the beacon SDK tarball, and the Helm chart. Download
+the assets you want plus `SHA256SUMS` into the same directory, then:
+
+```sh
+# Verify only what you downloaded (unlisted files are reported as missing — expected):
+sha256sum --ignore-missing -c SHA256SUMS
+# → pulse-linux-amd64: OK
+```
+
+Expect one `OK` line per file you downloaded. Any `FAILED` line means the file does not
+match what the release pipeline built — do not run it.
+
+The container image is additionally **cosign-signed**; verify it with the `cosign verify`
+command in [`README.md`](../../README.md) (note the cosign v3 requirement documented
+alongside it). The release binaries are checksummed, not individually signed —
+`SHA256SUMS` is the integrity check for them.
+
+---
+
 ## Path A0 — One-command quickstart
 
 The quickstart path uses a pre-built released image (`ghcr.io/aytekxr/ams-pulse`) with
@@ -61,6 +83,17 @@ curl -fsSL https://raw.githubusercontent.com/aytekXR/ams-pulse/main/deploy/quick
 
 The script prompts interactively for any missing required flags when a TTY is attached.
 Append `--license-key <key>` to activate a Pro/Business/Enterprise license on first boot.
+
+**Exit codes** (for scripted installs — a degraded install is not a healthy one):
+
+| Code | Meaning | What to do |
+|---|---|---|
+| `0` | Installed, and the collector reached AMS. | Nothing — open the UI with the printed token. |
+| `2` | Installed and running, but the collector **could not reach AMS** (wrong URL or credentials, or AMS unreachable from this host). | Do **not** re-run the installer — the stack is up. Fix `.env` and `docker compose -f docker-compose.quickstart.yml --env-file .env up -d`. |
+| `1` | Hard failure — Docker missing, image pull denied, or the health gate timed out. | Read the error; nothing is left half-configured. |
+
+On exit `2` the installer still prints the admin token and the next-steps block, so an
+interactive operator loses nothing by the nonzero status.
 
 ### Option 2 — manual (3 commands)
 
@@ -332,7 +365,8 @@ Verify it is ready:
 # → 1
 ```
 
-**2. Build the Pulse binary**
+**2. Build the Pulse binary** — or download a released one (see
+[Verify your downloads](#verify-your-downloads) below to check it first).
 
 ```sh
 cd server && CGO_ENABLED=0 go build -o /tmp/pulse ./cmd/pulse/

@@ -23,18 +23,23 @@
 > `agents/handoffs/sessions/SESSION-NNN.md` and `decisions.md` (operator directive).
 > **Replace this block each session — never append to it.**
 
-**Where the product is:** **v0.4.3 is released and verified**, and is the marketplace
-submission target. The standing external-review verdict is *"ready to submit — conditional on
-operator gates, neither of them code."* S111 (D-178) audited the submission pack **against the
-published artifacts, anonymously, from outside the repo** and closed six defects — including
-one that would have failed an Ant Media security review. Submission readiness is now
-artifact-verified, not doc-asserted.
+**Where the product is:** **v0.4.3 is released**; `main` is two rounds of fixes ahead of it.
+S112 (D-179) executed external review **round 6**: all nine findings confirmed, eight fixed,
+none refuted. The significant one was filed LOW as a *probe the reviewer could not run* — we
+ran it, and it **closed LIM-01**: standalone AMS reports CPU/memory/disk after all, via
+`GET /rest/v2/system-resources`, with no Kafka. That is a code change, so the `v0.4.3`→`main`
+delta is no longer docs-only.
 
-**The one blocking item, and it is the operator's:** rotate `CLICKHOUSE_PASSWORD`. A 32-hex
-prefix of the live production value is in public git history since `98b011c`. The operator
-deferred it deliberately when authorising the v0.4.3 cut — a recorded decision, not an
-oversight. **Re-checked S111: still un-rotated** (the live prefix still matches 2 commits).
-Nothing else blocks submission.
+**Two things block submission; both are the operator's:**
+1. **Rotate `CLICKHOUSE_PASSWORD`.** A 32-hex prefix of the live value is in public git history
+   since `98b011c`. Deliberately deferred when the v0.4.3 cut was authorised — a recorded
+   decision, not an oversight. **Re-checked S112: still un-rotated** (live prefix still matches
+   2 commits).
+2. **Decide review round 6's H-02** — whether to cut **v0.4.4** and retarget the submission, or
+   submit against `v0.4.3` with main-state docs. The loop recommends cutting: the delta now
+   contains a Priority-1 limitation fix, an anchored `cosign verify` command, a 4-asset
+   `SHA256SUMS` and an installer exit-code contract. Everything is staged; the cut is one tag
+   push **after main's post-merge CI is green** (see the standing rule below).
 
 **Do first, every session:**
 1. **Gate reads** — prod health (component-scoped `/healthz` + a ClickHouse count), git/PR
@@ -49,19 +54,27 @@ Nothing else blocks submission.
    work (LIM-10: node alerting during an AMS API outage) becomes fixable with verification
    instead of guesswork. Highest-value technical unblock.
 
-**Test the artifact, not the documentation (S111's lesson).** The highest-severity finding of
-D-178 was invisible to every doc review: the `cosign verify` command Pulse publishes **fails on
-a cosign v2 client** ("no signatures found") because every release from `v0.3.0` on stores its
-signature in the OCI 1.1 referrer layout, not the legacy `.sig` tag a v2 client looks for.
-The image was fine; the *instruction we hand a reviewer* was not. When
-a claim names a command a third party will run, **run it as that third party would**, on the
-published artifact, with a client version you did not choose. Do not change how releases are
-signed to accommodate old clients — that is deliberate (see `release.yml`).
+**Test the artifact, not the documentation (S111's lesson, re-earned twice in S112).** D-178's
+worst finding was invisible to every doc review: the published `cosign verify` command **fails
+on a cosign v2 client** because releases from `v0.3.0` on use the OCI 1.1 referrer layout, not
+the legacy `.sig` tag. When a claim names a command a third party will run, **run it as that
+third party would**, on the published artifact, with a client version you did not choose. Do not
+change how releases are signed to accommodate old clients — that is deliberate (`release.yml`).
+S112 applied the rule again: the anchored cosign regexp was run against the published `0.4.3`
+(and its negative control), and the installer's new exit code was clean-room tested in both
+directions rather than reasoned about.
 
-**Known state, not drift:** `main` carries doc/copy fixes that are **not** in the `v0.4.3` tag
-(D-177's round-5 items + D-178's). This is deliberate — they change no image and ride the next
-release. Submission docs are linked from `main`, which is correct; only a reader browsing the
-tag itself sees the older copy.
+**Re-test the generalization, not just the premise (S112's lesson).** LIM-01 rested on a
+verified fact — `/rest/v2/system-status` omits CPU/mem/disk — and an *inferred* conclusion,
+"therefore AMS cannot report it on standalone", which nobody ever probed. It was wrong for the
+product's entire life: a sibling console endpoint had the data all along. When a limitation says
+"the platform cannot do X", check whether what was actually tested was "this one endpoint does
+not do X". Sibling endpoints cost one curl.
+
+**Known state, not drift:** `main` is ahead of the `v0.4.3` tag by D-177's copy fixes, D-178's,
+and now **D-179's, which include code** (the LIM-01 fix, `SHA256SUMS` coverage, the installer
+exit code). Submission docs are linked from `main`, which is correct; a reader browsing the tag
+sees older copy *and* misses the LIM-01 fix. This is what H-02 asks the operator to decide.
 
 **Standing rules learned the hard way:**
 - **After a squash merge, wait for main's post-merge CI before tagging.** The PR's green checks
@@ -74,12 +87,23 @@ tag itself sees the older copy.
 - **Don't guess at cluster fixes.** They retune alert timing and there is no live cluster to
   verify against; trading a missed alert for a false one is not an improvement. Disclose in
   LIM-10 instead.
+- **Pin ShellCheck to CI's version when touching `deploy/` scripts.** CI installs Ubuntu's
+  **0.9.0**; `koalaman/shellcheck:stable` is 0.11.0 and renumbered the reachability check
+  (SC2317 → SC2329). A change can be clean on `:stable` and red in CI. Run both.
+- **When a review proposes a fix, verify it is implementable before executing it.** Round 6's
+  H-09 asked for a GHCR tag delete that would have deleted the release digest. The finding was
+  right and the remedy was wrong; both go in the disposition.
 
 **Open engineering debt (loop-owned, non-blocking):** cluster node-alerting rework (LIM-10,
 waits on a real cluster) · verify the `ClusterNodeDTO.lastUpdateTime` unit against AMS source ·
 surface `stream_ingest_error` (LIM-27) · thread the owning node through per-app polling
 (LIM-28) · poller/discovery cadence consolidation · helm NetworkPolicy golden · the
-`SettingsPage` ARIA test flake under parallel execution.
+`SettingsPage` ARIA test flake under parallel execution · **release: switch the candidate push
+to buildx `push-by-digest=true`** so promoted images stop carrying a public `candidate-<sha>`
+alias (round 6 H-09 — the correct fix, deferred because it changes the publish mechanism and
+only a real tag exercises it; reasoning is recorded in `release.yml`) · **probe whether AMS's
+`ams-webrtc-stats` shape can restore per-stream FPS** now that the console-endpoint assumption
+behind LIM-01 turned out to be wrong (LIM-04 rests on a similar inference).
 
 **Operator queue:** `docs/operator-expected.md`. **How we got here** (read only if you need it):
 `decisions.md` · `agents/handoffs/sessions/` · `docs/assessment/`.
@@ -93,12 +117,14 @@ surface `stream_ingest_error` (LIM-27) · thread the owning node through per-app
 - **Production** runs behind host nginx on this VPS at `https://pulse.beyondkaira.com`, against
   the operator's own `antmedia` container (AMS Enterprise 3.0.3, `--network host`). It is on the
   stamped **v0.4.0-139** build — rolling prod forward is deliberate and operator-gated, never
-  automatic. Health at last check (2026-07-27): all three `/healthz` components `ok`,
-  1,323,315 server events, collector actively ingesting.
+  automatic. Health at last check (S112, 2026-07-27): all three `/healthz` components `ok`,
+  **1,328,195** server events, collector actively ingesting.
 - **`main` is protected** (required contexts, strict, 1 review, `enforce_admins=false` so owner
   pushes work). Work on a branch → PR → merge on green.
 - **Known limitations are disclosed, not hidden:** `docs/known-limitations.md` carries 28
-  entries. LIM-10 (cluster) is the significant one — AMS 3.x exposes no node role or version, so
+  entries. **LIM-01 was closed in D-179** (standalone CPU/mem/disk now work without Kafka) and
+  rewritten down to a memory-threshold calibration note rather than deleted. LIM-10 (cluster) is
+  the significant remaining one — AMS 3.x exposes no node role or version, so
   all nodes display as `origin`, edge/origin viewer dedup is inert, and node alerting during an
   AMS API outage is not fully reliable. All deliberate and written down.
 - **Operator-gated items** (never do these autonomously): secret rotation · marketplace listing

@@ -11,9 +11,13 @@
 #
 # Verify a released image:
 #   cosign verify \
-#     --certificate-identity-regexp 'github.com/aytekXR/ams-pulse' \
+#     --certificate-identity-regexp '^https://github\.com/aytekXR/ams-pulse/\.github/workflows/release\.yml@refs/tags/v.+$' \
 #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
 #     ghcr.io/aytekxr/ams-pulse:X.Y.Z
+#   (the regexp is ANCHORED on purpose — review round 6, H-05. Cosign matches
+#    --certificate-identity-regexp UNANCHORED, so a bare 'github.com/aytekXR/ams-pulse'
+#    also accepts any other workflow, any branch/PR ref, and any repo path that merely
+#    starts the same way. Keep the anchors, the escaped dots, and refs/tags/v.)
 #   (image tags have NO v prefix — git tag vX.Y.Z publishes image tag X.Y.Z;
 #    verified live D-070 addendum: 0.2.0 digest 9c6c1204…, Rekor logIndex 2128354996)
 #
@@ -495,8 +499,28 @@ jobs:
       # success path this version also carries X.Y.Z / X.Y / X / latest — deleting it
       # would delete the published release along with its SBOM, provenance and cosign
       # signature. So: delete ONLY when the candidate tag is the sole tag on the
-      # digest, which is exactly the un-promoted (failed) case. On the success path
-      # the extra alias is harmless and is left in place deliberately.
+      # digest, which is exactly the un-promoted (failed) case.
+      #
+      # CONSEQUENCE, and it is deliberate (external review round 6, H-09): every
+      # SUCCESSFUL release leaves its `candidate-<sha8>` alias publicly visible on the
+      # package's versions page, riding the same digest as 0.4.3/latest. A reviewer
+      # diffing tags will notice. It is an alias, not a second image — pulling it
+      # yields byte-identically the released image.
+      #
+      # Round 6 proposed "delete the candidate tag on successful promote via the same
+      # token path". That is NOT implementable: the endpoint deletes a version (=digest),
+      # which on the success path IS the release. Two alternatives were considered and
+      # rejected for now:
+      #   1. Push candidates to a separate quarantine PACKAGE. Cross-repo promotion
+      #      copies the manifest but NOT its referrers, so SBOM and provenance would
+      #      silently stop being attached to the released digest — trading a cosmetic
+      #      wart for a real supply-chain regression.
+      #   2. buildx `push-by-digest=true` (push untagged, tag only after the scan
+      #      passes). This is the correct fix and keeps referrers on the same digest,
+      #      but it changes the publish mechanism and cannot be exercised by the
+      #      dry-run path — only by a real tag. Deferred until after the marketplace
+      #      submission rather than altering the release mechanism untested.
+      # Until then the alias stays, documented rather than hidden.
       #
       # TOKEN: this needs GHCR_CLEANUP_TOKEN — a PAT with `delete:packages`. The default
       # GITHUB_TOKEN CANNOT do this job (external review round 4, F-07): it is an app
@@ -560,9 +584,10 @@ jobs:
       #
       # Verify a released image:
       #   cosign verify \
-      #     --certificate-identity-regexp 'github.com/aytekXR/ams-pulse' \
+      #     --certificate-identity-regexp '^https://github\.com/aytekXR/ams-pulse/\.github/workflows/release\.yml@refs/tags/v.+$' \
       #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
       #     ghcr.io/aytekxr/ams-pulse:X.Y.Z    # image tags have NO v prefix (see header)
+      #   The anchoring is load-bearing — see the header note (H-05).
       #
       # ⚠ The verifier needs cosign v3+ — see the header note (D-178). Do NOT "fix" a
       # v2 client's "no signatures found" by re-signing in legacy tag mode without
@@ -581,15 +606,17 @@ jobs:
 
       # ── Pulse binaries (tag push only) ────────────────────────────────────────────
       # Builds static linux/amd64 + linux/arm64 pulse binaries (CGO_ENABLED=0; the
-      # sqlite driver is pure-Go modernc.org/sqlite — no C runtime needed) and a
-      # SHA256SUMS file.  All three are attached to the GitHub Release below.
+      # sqlite driver is pure-Go modernc.org/sqlite — no C runtime needed).
+      # SHA256SUMS is NOT written here: it covers ALL FOUR release assets and is
+      # therefore generated after the SDK tarball and Helm chart exist, in the
+      # "Checksum all release assets" step below (review round 6, H-03).
       - name: Set up Go for binary builds
         if: github.ref_type == 'tag'
         uses: actions/setup-go@v6
         with:
           go-version: "1.25"
 
-      - name: Build pulse binaries and SHA256SUMS
+      - name: Build pulse binaries
         if: github.ref_type == 'tag'
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
@@ -604,9 +631,7 @@ jobs:
             -ldflags "$LDFLAGS" \
             -o ../pulse-linux-arm64 ./cmd/pulse/
           cd ..
-          sha256sum pulse-linux-amd64 pulse-linux-arm64 > SHA256SUMS
-          echo "Built binaries and SHA256SUMS:"
-          cat SHA256SUMS
+          ls -l pulse-linux-amd64 pulse-linux-arm64
 
       # ── SDK tarball + Helm chart + GitHub Release (tag push only) ──────────────────
       # Builds the beacon-js SDK, packs it, creates the GitHub Release (if it doesn't
@@ -637,13 +662,13 @@ jobs:
             --clobber
           echo "Uploaded sdk/beacon-js/${TARBALL} to release ${GITHUB_REF_NAME}"
 
-          # Upload pulse binaries and SHA256SUMS built above.
+          # Upload pulse binaries built above. SHA256SUMS is uploaded later, once
+          # every asset it covers exists (review round 6, H-03).
           gh release upload "${GITHUB_REF_NAME}" \
             pulse-linux-amd64 \
             pulse-linux-arm64 \
-            SHA256SUMS \
             --clobber
-          echo "Uploaded pulse-linux-amd64, pulse-linux-arm64, SHA256SUMS to release ${GITHUB_REF_NAME}"
+          echo "Uploaded pulse-linux-amd64, pulse-linux-arm64 to release ${GITHUB_REF_NAME}"
 
       # ── Helm chart — package, push to OCI registry, attach to release ──────────────
       - name: Install Helm for chart packaging
@@ -670,6 +695,46 @@ jobs:
           # Also attach the chart .tgz to the GitHub Release for offline installs.
           gh release upload "${GITHUB_REF_NAME}" "$CHART_TGZ" --clobber
           echo "Helm chart pushed to oci://ghcr.io/aytekxr/charts and attached to ${GITHUB_REF_NAME}"
+
+      # ── SHA256SUMS over EVERY downloadable asset (tag push only) ──────────────────
+      # Review round 6 (H-03): SHA256SUMS used to cover only the two binaries, so the
+      # beacon SDK tarball a player team embeds and the Helm chart an operator installs
+      # shipped with no published checksum at all. It runs LAST because it must checksum
+      # artifacts the earlier steps produce.
+      #
+      # Filenames are written bare (no directory component) so that a user who downloads
+      # all five assets into one directory can run `sha256sum -c SHA256SUMS` unmodified —
+      # which is exactly what docs/runbooks/install.md now tells them to do.
+      #
+      # The line-count assertion is the point of the step: without it, a silently missing
+      # artifact would republish a short SHA256SUMS and read as success — the defect this
+      # finding was about in the first place.
+      - name: Checksum all release assets and upload SHA256SUMS
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf _sums && mkdir _sums
+          cp pulse-linux-amd64 pulse-linux-arm64 _sums/
+          cp sdk/beacon-js/ams-pulse-beacon-*.tgz _sums/
+          cp pulse-[0-9]*.tgz _sums/          # Helm chart (pulse-<chartversion>.tgz)
+          cd _sums
+          sha256sum pulse-linux-amd64 pulse-linux-arm64 ams-pulse-beacon-*.tgz pulse-[0-9]*.tgz > SHA256SUMS
+
+          COUNT=$(wc -l < SHA256SUMS)
+          if [ "$COUNT" -ne 4 ]; then
+            echo "::error::SHA256SUMS covers ${COUNT} assets, expected 4 (2 binaries + SDK tarball + Helm chart)"
+            cat SHA256SUMS
+            exit 1
+          fi
+          # Prove the file verifies before publishing it.
+          sha256sum -c SHA256SUMS
+          echo "SHA256SUMS (${COUNT} assets):"
+          cat SHA256SUMS
+
+          gh release upload "${GITHUB_REF_NAME}" SHA256SUMS --clobber
+          echo "Uploaded SHA256SUMS covering ${COUNT} assets to release ${GITHUB_REF_NAME}"
 
       # ── npm publish (gated on NPM_TOKEN; never blocks the release) ────────────────
       # Step 1: probe whether the secret is present and write a step output.

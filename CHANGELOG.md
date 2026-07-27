@@ -10,6 +10,39 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ## [Unreleased]
 
+### Added
+
+- **Standalone AMS now reports CPU, memory and disk — no Kafka required (D-179, external
+  review round 6 H-08).** Pulse polls `GET /rest/v2/system-resources`, which returns
+  `cpuUsage` / `systemMemoryInfo` / `fileSystemInfo` on a standalone node, plus the whole
+  `system-status` body under `systemInfo` and the whole `/rest/v2/version` body under
+  `softwareVersion` — so one call replaces the previous two. Live-verified end-to-end
+  against a standalone AMS 3.0.3 Enterprise (capture:
+  committed verbatim as
+  `server/pkg/amsclient/testdata/system_resources_real_v303.json`, license and instance id
+  redacted). Percentages use the same
+  formulas as the Kafka `ams-instance-stats` path, because both decode the same serialized
+  AMS `StatsCollector` object. An AMS that does not serve the route (404/405) falls back to
+  `system-status`, where the gauges stay honestly absent rather than zero-filled.
+
+  This closes **LIM-01**, the first limitation in the Priority-1 list since the product's
+  first release: node CPU/memory/disk gauges and their alert rules now work out of the box.
+  The endpoint was never missing — Pulse was calling a sibling route that omits the fields,
+  and "endpoint X omits it" had been generalized to "AMS cannot report it" without a probe.
+  LIM-01 is rewritten rather than deleted, and now carries the one caveat that survives:
+  AMS computes `inUseMemory` as `totalMemory - freeMemory`, so `mem_pct` counts page cache
+  as in-use and reads 75–90% on a healthy Linux host.
+
+### Changed
+
+- **Listing copy no longer implies session-accurate HLS viewer counts (review round 6
+  H-01).** `docs/marketplace/listing.md` advertised per-protocol viewer counts with no
+  accuracy caveat while LIM-02 disclosed that AMS's HLS count runs ~9× real sessions. The
+  feature bullet, the long-form description and the SS1 screenshot caption now carry the
+  caveat, mirroring the pattern already used for the egress estimate. Also corrected
+  "signed release binaries" → "checksummed release binaries" (the image is cosign-signed;
+  the binaries are checksummed).
+
 ## [0.4.3] - 2026-07-27
 
 Honesty release. External review round 4 found the residual risk was concentrated in

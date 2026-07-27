@@ -11,15 +11,38 @@ release); G-27 section added D-161 (2026-07-22)
 | AMS Version | Validation Status | Pulse Support Level | Source |
 |-------------|------------------|---------------------|--------|
 | 3.0.3 Enterprise (build 20260504\_1443) | **LIVE-VALIDATED** | **Supported — primary target** | 46/50 scenario scripts PASS, qa/realams S17–S18, D-079/D-080 |
-| 3.0.2 | Mock-profile only | Mock-compatible | `.github/workflows/ams-version-matrix.yml`; `server/internal/collector/ams_version_matrix_test.go` lines 134–171 |
-| 2.14.x | Mock-profile only | Mock-compatible | `ams_version_matrix_test.go` lines 99–133 |
-| 2.10.0 | Mock-profile only | Mock-compatible | `ams_version_matrix_test.go` lines 63–97 |
+| 3.0.2 | Mock-profile only | Mock-compatible | `.github/workflows/ams-version-matrix.yml`; `ams_version_matrix_test.go` → `amsProfiles` entry `v3.0.2` |
+| 2.17.x | Mock-profile only (**source-verified** against `ams-v2.17.1`) | Mock-compatible | `ams_version_matrix_test.go` → `amsProfiles` entry `v2.17.1` |
+| 2.16.x | **Not profiled** — source-verified only | Expected compatible | AMS `Broadcast.java` / `ClusterNode.java` at `ams-v2.16.2` carry every field Pulse consumes, identically typed |
+| 2.15.0 | **Not profiled, not source-checked** | Untested | — |
+| 2.14.x | Mock-profile only | Mock-compatible | `ams_version_matrix_test.go` → `amsProfiles` entry `v2.14.0` |
+| 2.10.0 | Mock-profile only | Mock-compatible | `ams_version_matrix_test.go` → `amsProfiles` entry `v2.10.0` |
 
 **Recommendation: deploy AMS 3.x.** All versions earlier than 3.0.3 have mock-profile
 coverage only. Real Docker images for those older versions are unavailable on Docker Hub
 (all tags return 404 as of 2026-07-13; confirmed in the workflow header comment,
-`.github/workflows/ams-version-matrix.yml` lines 5–8). The version-matrix CI workflow
+`.github/workflows/ams-version-matrix.yml`). The version-matrix CI workflow
 runs Go in-process mock profiles — not live containers.
+
+**What "2.10+" means precisely** (external review round 6, H-04 — the claim previously
+read as inclusive of versions with zero coverage):
+
+- **Profiled in CI:** 2.10.0, 2.14.0, **2.17.1**, 3.0.2 — mock wire-format profiles.
+- **Source-verified (2026-07-27):** every field Pulse consumes from `Broadcast.java`
+  (`hlsViewerCount`, `webRTCViewerCount`, `rtmpViewerCount`, `dashViewerCount`, `bitrate`,
+  `speed`, `status`, `publishType`, `startTime`, `originAdress`) is present and identically
+  typed at `ams-v2.14.0`, `ams-v2.16.2`, `ams-v2.17.1` and `ams-v3.0.3`. `ClusterNode.java`
+  is field-identical across that whole range (`{id, ip, lastUpdateTime, memory, cpu,
+  dbQueryAveargeTimeMs, status}` — no role, no version, which is why LIM-10 applies to every
+  version, not only 3.x). 2.17.1 → 3.0.3 removes only `conferenceMode` and
+  `subTrackStreamIds`, neither of which Pulse reads.
+- **Console REST:** `/rest/v2/system-resources` — the route that supplies node CPU/memory/disk
+  (LIM-01) — exists at `ams-v2.10.0` and every version since, so that capability spans the
+  full claimed range.
+- **Not covered:** 2.15.0 is neither profiled nor source-checked. 2.11–2.13 likewise.
+  No AMS 2.x version has been run live against Pulse.
+
+Report incompatibilities at `https://github.com/aytekXR/ams-pulse/issues`.
 
 ---
 
@@ -44,8 +67,8 @@ RTMP capacity ~5–7 streams) and are not AMS version regressions. See
 
 | Behavior | Impact on Pulse | Source |
 |----------|-----------------|--------|
-| `currentFPS` absent from REST BroadcastDTO | `fps = 0` for all REST-polled streams; health score redistributes FPS weight | AV-04; `server/pkg/amsclient/client.go:97` comment; DG-03 |
-| CPU / mem / disk absent from `GET /rest/v2/system-status` for standalone AMS | Fleet resource gauges empty; available only via Kafka (`ams-instance-stats` — official AMS topic, verified from AMS `StatsCollector.java`, fixture-tested; `ams-webrtc-stats` is subscribed but currently skipped — **live broker validation pending, AV-15**) or cluster mode | AV-06; DG-05 |
+| `currentFPS` absent from REST BroadcastDTO | `fps = 0` for all REST-polled streams; health score redistributes FPS weight | AV-04; `server/pkg/amsclient/client.go` → `BroadcastDTO` comment; DG-03 |
+| CPU / mem / disk absent from `GET /rest/v2/system-status` for standalone AMS | **No longer an operator-facing gap (D-179):** Pulse polls `GET /rest/v2/system-resources`, which carries `cpuUsage` / `systemMemoryInfo` / `fileSystemInfo` on a standalone node — live-verified on 3.0.3. `system-status` is the 404 fallback. Kafka is optional | AV-06; DG-05; LIM-01 |
 | AMS 3.0.3 cannot HMAC-sign lifecycle webhooks | Webhook listener returns 401 for all unsigned deliveries; REST polling covers stream lifecycle within ≤10 s budget | AV-08; decisions.md O3; DG-04 |
 | `GET /rest/v2/applications/info` returns HTTP 405 | Not used by Pulse; VoD ground truth uses per-app `GET /{app}/rest/v2/vods/list` | S17 corrections; `docs/assessment/scenario-matrix.md` |
 | Per-app RTMP broadcast deleted on stop (implicit broadcasts return 404, not `finished`) | Pulse treats 404-after-broadcasting as stream end (correct); operators polling for `finished` via AMS directly will miss the event | DG-11; TC-F-02 |
@@ -61,62 +84,90 @@ The following AMS versions are covered by mock profiles in
 `server/internal/collector/ams_version_matrix_test.go`.
 **No live containers were available for validation**; the mock profiles embody
 design intent and in-code documentation only. Wire-format facts below are derived
-from the Go test file header comments and CI mock fixtures (lines 41–160), not
+from the Go test file header comments and CI mock fixtures (`amsProfiles`), not
 from real AMS REST responses.
 
 > **Honesty notice:** the `.github/workflows/ams-version-matrix.yml` workflow
 > previously pulled `antmedia/ant-media-server-community:<ver>` images and stood
 > up ClickHouse, but "those public image tags no longer exist (Docker Hub returns
 > 404 for every tag AND the repo), so every leg silently fell back to mock-ams,
-> making the 'version matrix' fictional" (workflow header comment, lines 5–8).
+> making the 'version matrix' fictional" (workflow header comment).
 > The current workflow runs in-process mock tests only. If a pullable real-AMS
 > image for these versions becomes available, add a container-backed job per the
-> comment at `ams-version-matrix.yml` line 16.
+> comment in `ams-version-matrix.yml`.
 
 ### AMS 2.10.0
 
-Mock profile source: `ams_version_matrix_test.go` lines 63–97.
+Mock profile source: `ams_version_matrix_test.go` → `amsProfiles` entry `v2.10.0`.
 
 | Field | Mock-profile behavior | Notes |
 |-------|-----------------------|-------|
-| `speed` | Primary bitrate field (~ratio, ~1.0 = real-time) | `ams_version_matrix_test.go:78`; labeled MISLEADING — stores AMS real-time ratio, not a kbps value |
-| `bitrate` | Present in mock (set to 0); may be absent in real v2.10.x | `ams_version_matrix_test.go:79` comment: "CI-ONLY: real v2.10 may use 'speed' only" |
-| `webRTCViewerCount` | Present in mock (50) | `ams_version_matrix_test.go:75` |
+| `speed` | Primary bitrate field (~ratio, ~1.0 = real-time) | `amsProfiles` entry `v2.10.0`, `speed` field; labeled MISLEADING — stores AMS real-time ratio, not a kbps value |
+| `bitrate` | Present in mock (set to 0); may be absent in real v2.10.x | `amsProfiles` entry `v2.10.0`, `bitrate` comment: "CI-ONLY: real v2.10 may use 'speed' only" |
+| `webRTCViewerCount` | Present in mock (50) | `amsProfiles` entry `v2.10.0` |
 | `currentFPS` | Present in mock (30) | Mock-only; behavior on real v2.10.x unverified |
 
 **Wire format note:** Pulse's normalizer reads **only** `BitRate` (from `bitrate`):
 `bitrateKbps := b.BitRate / 1000.0`. A historical fallback to `Speed` when
 `BitRate == 0` was deliberately **removed** — AMS `speed` is a real-time RATIO
 (≈1.0), not a bitrate, and the fallback emitted ~1 "kbps" of garbage (see the
-comment at `server/internal/collector/normalize.go:73-79`). Consequence for real
+comment at `server/internal/collector/normalize.go`, `NormalizeBroadcast` bitrate comment). Consequence for real
 v2.10.x deployments whose DTOs carry only `speed`: Pulse reports bitrate 0
 (honest absence) rather than a fabricated value.
 
 ### AMS 2.14.x
 
-Mock profile source: `ams_version_matrix_test.go` lines 99–133.
+Mock profile source: `ams_version_matrix_test.go` → `amsProfiles` entry `v2.14.0`.
 
 | Field | Mock-profile behavior | Notes |
 |-------|-----------------------|-------|
-| `bitrate` | Primary bitrate field (set to 2500 bits/s in mock) | `ams_version_matrix_test.go:114` |
-| `webRTCViewerCount` | Present and distinct from `hlsViewerCount` | `ams_version_matrix_test.go:111`; v2.14 comment: "adds webRTCViewerCount distinct from hlsViewerCount" |
+| `bitrate` | Primary bitrate field (set to 2500 bits/s in mock) | `amsProfiles` entry `v2.14.0` |
+| `webRTCViewerCount` | Present and distinct from `hlsViewerCount` | `amsProfiles` entry `v2.14.0`; v2.14 comment: "adds webRTCViewerCount distinct from hlsViewerCount" |
 | `currentFPS` | Present in mock (30) | Mock-only |
 | `speed` | Absent from v2.14 mock | v2.14 switched primary bitrate to `bitrate` field |
 
 **AMS analytics log added in v2.10:** the JSON analytics log
 (`ant-media-server-analytics.log`) was introduced in AMS v2.10.0 per PRD §7.3
-(`docs/prd-report.md` line 43). The Kafka producer was also introduced as an
+(`docs/prd-report.md` §7.3). The Kafka producer was also introduced as an
 optional feature in this era.
+
+### AMS 2.16.x / 2.17.x — the currently-maintained 2.x line
+
+Mock profile source: `ams_version_matrix_test.go` → `amsProfiles` entry `v2.17.1`.
+Added D-179 after external review round 6 (H-04) observed that the versions real
+customers run today — 2.15 through 2.17 — had no coverage at all.
+
+**This profile is source-derived, not invented.** It was built by reading AMS's own
+source at tag `ams-v2.17.1` (the same technique that settled LIM-10), then cross-checking
+`ams-v2.16.2` and `ams-v3.0.3`:
+
+| Field Pulse consumes | 2.14.0 | 2.16.2 | 2.17.1 | 3.0.3 |
+|---|---|---|---|---|
+| `hlsViewerCount`, `webRTCViewerCount`, `rtmpViewerCount`, `dashViewerCount` (int) | ✓ | ✓ | ✓ | ✓ |
+| `bitrate` (long), `speed` (double) | ✓ | ✓ | ✓ | ✓ |
+| `status`, `publishType`, `startTime`, `originAdress` | ✓ | ✓ | ✓ | ✓ |
+| `currentFPS` | absent | absent | absent | absent |
+| `ClusterNode`: `{id, ip, lastUpdateTime, memory, cpu, dbQueryAveargeTimeMs, status}` | ✓ | ✓ | ✓ | ✓ |
+| `ClusterNode`: `role`, `version` | — | — | — | — |
+
+The only `Broadcast` fields that change between 2.17.1 and the live-validated 3.0.3 are
+`conferenceMode` and `subTrackStreamIds`, both **removed** in 3.x and neither read by
+Pulse. `/rest/v2/system-resources` (node CPU/memory/disk — LIM-01) is present from
+`ams-v2.10.0` onward.
+
+**Still mock-only.** No 2.16/2.17 container has been run against Pulse; Docker Hub serves
+no pullable image for these tags. Source-identical wire shapes are strong evidence, not a
+live validation, and this table says so deliberately.
 
 ### AMS 3.0.2
 
-Mock profile source: `ams_version_matrix_test.go` lines 134–171.
+Mock profile source: `ams_version_matrix_test.go` → `amsProfiles` entry `v3.0.2`.
 
 | Field | Mock-profile behavior | AMS 3.0.3 live reality |
 |-------|----------------------|------------------------|
-| `bitrate` | Primary bitrate field (3000 bits/s mock) | Confirmed live AV-04; normalize.go:79 |
+| `bitrate` | Primary bitrate field (3000 bits/s mock) | Confirmed live AV-04; `normalize.go` → `NormalizeBroadcast` |
 | `speed` | May be absent (3.0.x switched to `bitrate`) | Live 3.0.3: `speed` ~1.0 still present in some captures |
-| `currentFPS` | 60 in mock | **ABSENT in real AMS 3.0.3** REST BroadcastDTO (AV-04 CONFIRMED; `client.go:97` comment) |
+| `currentFPS` | 60 in mock | **ABSENT in real AMS 3.0.3** REST BroadcastDTO (AV-04 CONFIRMED; `client.go` → `BroadcastDTO` currentFPS comment) |
 | `webRTCViewerCount` | 80 in mock | Confirmed live (TC-V-03) |
 
 The gap between mock (`currentFPS=60`) and live reality (`currentFPS` absent) is the
@@ -254,7 +305,7 @@ The nightly workflow also runs a REST v2 contract smoke against the mock-ams bin
 (`.github/workflows/ams-version-matrix.yml`).
 
 To add a real-AMS container leg (when images become available), see the comment at
-`.github/workflows/ams-version-matrix.yml` line 16.
+`.github/workflows/ams-version-matrix.yml`.
 
 ---
 
