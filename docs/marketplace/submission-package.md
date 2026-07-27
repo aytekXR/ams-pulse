@@ -48,6 +48,7 @@ reviewable now) · **DRAFT-OP** (content complete; blocked only on an operator d
 | Developer-meeting brief & agenda | [`developer-meeting-brief.md`](developer-meeting-brief.md) | READY (internal) |
 | Readiness checklist (17 rows) | [`../assessment/final-assessment.md`](../assessment/final-assessment.md) §3 | Rows 7–11 operator-gated |
 | Fact ledger (claims verified against code) | [`../../agents/handoffs/validation/S97-fact-ledger.md`](../../agents/handoffs/validation/S97-fact-ledger.md) | Evidence record |
+| **External-review brief** (hand verbatim to a reviewer: blackbox → docs → code, one output file whose Disposition column feeds the next round) | [`../assessment/EXTERNAL-REVIEW-PROMPT.md`](../assessment/EXTERNAL-REVIEW-PROMPT.md) | READY (internal; standing, reusable) |
 
 ## Validation evidence
 
