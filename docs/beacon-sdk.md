@@ -92,7 +92,7 @@ requests from any player page origin are accepted without allowlisting (see
 **Option A — tarball from GitHub Release (works today)**
 
 Download `ams-pulse-beacon-0.4.3.tgz` from the
-[v0.4.2 GitHub Release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.2) and install it
+[v0.4.3 GitHub Release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.3) and install it
 locally:
 
 ```bash
@@ -330,7 +330,7 @@ Allowed `BeaconEventType` values: `session_start`, `startup_complete`, `heartbea
 | `app` | As provided to `Pulse.init()`. |
 | `meta` | `metadata` key-value pairs as provided. |
 | `player.kind` | `PlayerKind` value passed to `Pulse.init()`. |
-| `player.sdk_version` | SDK version string (`0.4.2`). |
+| `player.sdk_version` | SDK version string (`0.4.3`). |
 
 Each `Pulse.init()` call creates a distinct `session_id`, mapping to one playback
 attempt. Call `Pulse.init()` again for each new playback attempt — page refresh,

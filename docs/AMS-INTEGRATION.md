@@ -779,12 +779,12 @@ inject events for another.
 
 **How it works:**
 
-- **Storage:** `ams_sources.webhook_secret_enc TEXT` (AES-256-GCM encrypted,
-  `contracts/db/meta/0001_init.sql:88`).
+- **Storage:** `ams_sources.webhook_secret_enc TEXT` (AES-256-GCM encrypted; column defined
+  in `contracts/db/meta/0001_init.sql`).
 - **Write field:** `SourceWrite.webhook_secret` — nullable string, write-only, stored
-  encrypted (`contracts/openapi/pulse-api.yaml:2672`).
+  encrypted (schema `SourceWrite` in `contracts/openapi/pulse-api.yaml`).
 - **Read flag:** `SourceRead.webhook_secret_set` — boolean, `true` when a per-source
-  secret is stored; the secret value is never echoed back (`pulse-api.yaml:2631`).
+  secret is stored; the secret value is never echoed back (schema `SourceRead`, same file).
 - **Routes:**
   - Legacy: `POST /webhook/ams` — uses the global `PULSE_WEBHOOK_SECRET` (`webhook.go`).
   - Per-source: `POST /webhook/ams/{source_name}` — uses the per-source secret for that

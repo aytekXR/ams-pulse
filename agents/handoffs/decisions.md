@@ -9958,3 +9958,64 @@ tarball row pointed at the wrong release page. Both fixed.
 
 Gates: server gofmt/vet/tests clean · SDK 6/6 files 70/70 tests @ 3.52 kB · web tsc clean ·
 helm lint + 5 goldens regenerated at helm 3.17.0 · shellcheck · actionlint · guard 16/16.
+
+---
+
+## D-177 — §S110: external review round 5 (G-01…G-08) verified & executed
+
+**Input:** the operator supplied round 5, reviewed against `669952e` — **the `v0.4.3` tag
+itself**, the first round where the review target and the published release are the same tree.
+
+**Reviewer's verdict:** *"Ready to submit — conditional on two operator gates, neither of them
+code."* Round 5 re-audited all 14 round-4 dispositions **against the code rather than the
+changelog** and confirmed them; it found no new code defect and no falsifiable claim.
+
+**G-08 — the reviewer retracted one of their own round-4 claims, confirming ours.** Round 4 had
+said the broadcast `originAdress` field "appears nowhere in the tree"; S109 refuted that from
+the real-AMS capture fixtures. Round 5 verified the refutation and recorded the erratum. The
+verify-first loop is now demonstrably working in both directions — worth keeping as a prior:
+adversarial verification is not just defence against reviewer error, it is how reviewer error
+gets corrected.
+
+**G-01 — the release gate failure was ours, and the gate was right.** The first `v0.4.3`
+release run failed in 21 s at the pipeline's CI gate, which requires a successful `ci.yml` run
+for the *commit being tagged*. PR #222's 19 green checks belonged to the **pre-squash branch
+SHA**, not the squashed merge commit. The tag had been pushed immediately after merging instead
+of waiting for main's post-merge CI. Nothing was built, scanned, promoted or published — the
+gate stopped it cleanly. Re-running the job after `ci`/`e2e` went green on `669952e` was the
+entire fix: no re-tag, no force-push. **Standing rule added: after a squash merge, wait for
+main's CI before tagging.** The reviewer was right to record the asset count as unverified
+rather than assume; their "2 assets" observation was the GitHub *tag* page, which renders two
+auto source archives when no Release object exists yet.
+
+**Fixed this session:**
+- **G-03** (self-inflicted in S109): the submission pack listed the credential rotation both as
+  a bullet inside a block of struck-through DONE items and as numbered gate 7. The bullet block
+  is now explicitly closed and rotation is **numbered item 1** of one authoritative open list.
+- **G-04**: the S109 quickstart port exemption skipped the preflight whenever the quickstart
+  stack existed, regardless of which port it published — so a re-run with
+  `PULSE_HOST_PORT=18090` against an unrelated listener on 18090 would skip the check and hit
+  the raw daemon conflict it exists to pre-empt. Now compares the requested port against the
+  port the stack actually publishes, error-tolerant in the safe direction.
+- **G-05 (a genuine miss)**: three numbered source citations in `AMS-INTEGRATION.md` survived
+  an "all de-numbered" claim made in *both* the D-175 and D-176 changelogs. Round 4 flagged
+  them (F-11) and S109 fixed only the accompanying env-var count. They had **already drifted**
+  — `pulse-api.yaml:2672`/`:2631` now resolve to 3152/3109 — which is exactly the failure
+  de-numbering prevents. Now symbolized; the file is at zero numbered citations.
+- **G-06**: version stragglers in `troubleshooting.md`, `beacon-sdk.md`, `install.md`,
+  `CLAUDE.md`, `ankush-reply-draft.md`, `faq.md`'s date stamp. Backed by new **guard check
+  #17**, which reuses check #11's precise `ams-pulse:<semver>` pattern over the three
+  customer-facing docs — deliberately not a bare version grep, so prose legitimately naming an
+  older release ("re-verified against 0.4.2") does not trip it. Honours the reviewer's own
+  warning about over-widening.
+- **G-07**: two clarifying comments — the GHCR cleanup endpoint records that an org move needs
+  `/orgs/{org}/packages/...`, and guard #16 records that excluding `Chart.yaml` from its diff
+  scope is deliberate (metadata-only edits do not change rendered output).
+
+**Unchanged:** cluster engineering (F-04/F-05/F-06) stays disclosed in LIM-10 — the reviewer
+called the rewrite *"a disclosure I could not improve on"*. Still gated on a live multi-node
+cluster. No version bump: these are copy/hardening items riding the next release; **v0.4.3 is
+the submission target.**
+
+**G-02 (rotation) remains OPEN and operator-gated** — deferred by explicit operator decision
+when authorising the cut, and now the single blocking pre-submission item.
