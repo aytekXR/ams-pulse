@@ -10096,3 +10096,101 @@ destroys that evidence for the round — and mandates a **single** output file w
 maintenance loop consumes directly (falsifiable claims, reproduction commands, `file → symbol`
 citations instead of drift-prone line numbers, an empty **Disposition** column, a prior-round
 re-audit table). The completed file is the input for the next round.
+
+---
+
+## D-179 — §S112: external review round 6 (H-01…H-09) verified & executed; LIM-01 closed by a probe the reviewer could not run
+
+**Input:** external review round 6 against `2412d58`, verdict *"not ready to submit today"* —
+one listing overclaim, the open credential rotation, and a decision on the tag-vs-main gap.
+**Result: all nine findings CONFIRMED against the tree; eight fixed; H-02 prepared and left to
+the operator. None refuted.** Dispositions:
+`docs/assessment/marketplace-compliance-review-2026-07-27-round6.md`.
+
+**The headline is a LOW-severity finding the reviewer explicitly could not test.** Their sandbox
+had no live AMS, so **H-08** was filed as a *probe*, not a defect: "AMS's console REST also
+exposes `/cpu-status`, `/system-memory-status`, `/jvm-memory-status` — if any returns data on a
+standalone node, a Priority-1 limitation shrinks. Unverified here; confidence medium-low;
+falsifiable in one minute on the operator's VPS." We have that VPS. It took four curls.
+
+All of them return HTTP 200 with populated data on a standalone AMS 3.0.3 — and
+**`/rest/v2/system-resources`** is the whole answer: `cpuUsage`, `systemMemoryInfo` **and**
+`fileSystemInfo`, plus the entire `system-status` body nested under `systemInfo` and the entire
+`/rest/v2/version` body under `softwareVersion`. **LIM-01 is closed.** Standalone Fleet
+CPU/memory/disk gauges and their alert rules now work with no Kafka, on the endpoint AMS has
+served since `ams-v2.10.0` — the full range Pulse claims to support.
+
+**The instructive part is *why* we had it wrong.** `normalize.go` carried a careful comment
+explaining that the old code parsed `cpuUsage` / `systemMemoryInfo` / `fileSystemInfo` and got
+zeros, and that those fields "do not exist". They exist. The code had been reading the right
+shape from the **wrong endpoint**, and the fix at the time — stop emitting fabricated zeros —
+was correct but stopped one question short. `capability-map.md` recorded "`/rest/v2/system-status`
+omits CPU/mem/disk" (verified, true) and concluded "therefore AMS cannot report it on standalone"
+(inferred, never probed). **A verified premise carried an unverified conclusion for the product's
+entire life**, and the conclusion became a Priority-1 disclosure, a Kafka integration, and a
+roadmap item. Sibling endpoints are cheap to check; the generalization is what needed the test.
+
+Percentages deliberately reuse the Kafka path's formulas (`cpuUsage.systemCPULoad` — already a
+percent, never rescale; `inUseMemory/totalMemory`; `inUseSpace/totalSpace`), because
+`/rest/v2/system-resources` and the `ams-instance-stats` topic serialize the same
+`StatsCollector` object; a node must not report differently depending on which transport saw it.
+Live-verified end-to-end through the real client and normalizer against the production AMS:
+`cpu_pct 62, mem_pct 88.97, disk_pct 83.24, version 3.0.3`. LIM-01 is **rewritten, not deleted**,
+and keeps the one caveat that survives: AMS computes `inUseMemory = totalMemory − freeMemory`, so
+`mem_pct` counts page cache and reads 75–90% on a healthy Linux host.
+
+**Two fixes were promoted from doc edits to enforced invariants**, because prose is what allowed
+the drift in both cases:
+- **H-07** (`internal/cluster` outside the AMS boundary) — ARCHITECTURE §3 rule 2 now names it,
+  *and* `TestAMSBoundary_ImportersAreCollectorOnly` parses every non-test Go file and fails on
+  any amsclient importer outside an explicit allow-list, with a companion test that fails on
+  **stale** allow-list entries. Mutation-proved in both directions.
+- **H-03** (`SHA256SUMS` covered 2 of 4 assets) — the new step asserts a 4-line result and runs
+  `sha256sum -c` on itself before uploading. Without that assertion a silently missing artifact
+  would republish a short file and read as success, which is the defect being fixed.
+
+**H-04 was answered with source, not a guessed profile.** The listing claimed "AMS 2.10+" while
+2.15–2.17 had no coverage at all. Rather than invent a 2.17 shape, we read AMS's own
+`Broadcast.java` and `ClusterNode.java` at `ams-v2.14.0` / `2.16.2` / `2.17.1` / `3.0.3` (the
+LIM-10 technique): **every field Pulse consumes is present and identically typed across the whole
+range**; 2.17.1 → 3.0.3 removes only `conferenceMode` and `subTrackStreamIds`, neither of which
+Pulse reads. Added a source-derived `v2.17.1` profile that uses the *real* cluster-node field
+names, plus compatibility rows that state plainly that **2.15 is untested**. A by-product worth
+recording: `ClusterNode` has no `role` and no `version` at **any** version from 2.14 on, so
+LIM-10 applies to the whole 2.x line — the disclosure did not previously say that.
+
+**Verified against the artifact, not the description** — the S111 rule, applied twice more.
+The anchored cosign regexp (**H-05**) was run against the published `0.4.3`: it passes, and the
+`refs/heads/` variant fails, which also printed the exact SAN and proved the anchors match
+reality. The installer exit code (**H-06**) was tested in a clean room in both directions:
+unreachable AMS → **exit 2** with the admin token still printed, real AMS → **exit 0**. That
+change also nearly broke CI in a way no amount of reading would have caught: adding a trailing
+`exit` makes ShellCheck's reachability pass call the `trap cleanup EXIT` body dead code —
+**SC2317 on 0.9.0, which is the version CI actually installs.** Suppressed explicitly with both
+generation codes and re-verified clean under 0.9.0 and 0.11.0.
+
+**H-09's proposed fix was rejected as unimplementable, and the reasoning written down.**
+Deleting the promoted `candidate-<sha>` tag via the packages API would delete the *digest* —
+which on the success path is the release, its SBOM, provenance and signature. A separate
+quarantine package would strand the referrers; buildx `push-by-digest=true` is the genuinely
+correct fix but changes the publish mechanism and can only be exercised by a real tag, which is
+the wrong thing to alter untested days before submission. Both alternatives are recorded in
+`release.yml`, and `SECURITY.md` now tells any reviewer who diffs tags that `candidate-<sha>` is
+an **alias of the released digest**, not a second image.
+
+**Found alongside the review:** `compatibility.md` carried nine drifting line-number citations —
+the exact class G-05 removed from `AMS-INTEGRATION.md`, in a file nobody re-checked. Inserting
+the 2.17 profile invalidated three of them on the spot. All are now symbol-based; the file is at
+zero numbered citations.
+
+**Deliberate non-actions.** **No release cut** — H-02 (retarget the submission at a docs+code
+`v0.4.4`) is an operator decision, and the case for it is now stronger than the reviewer knew,
+since the `v0.4.3`→`main` delta includes a code change that closes a Priority-1 limitation.
+Everything is staged; the cut is one tag push after main's post-merge CI is green. **No rotation,
+no prod roll** — operator-gated; the ClickHouse password was re-checked silently and is **still
+un-rotated**. Prod was read-only and healthy throughout (3/3 `/healthz` `ok`, 1,328,195 events).
+
+**Gates:** `go vet` clean · `gofmt -l` empty · full `go test ./... -race` green with the
+repo-root mount (**0 FAIL**, 309 api tests, 4 skips — all the known environment-gated ones:
+Kafka broker, ajv fixtures, poppler) · ShellCheck clean on 0.9.0 and 0.11.0 · both release
+workflows parse as YAML · 55 relative doc links in the changed files resolve, anchors included.

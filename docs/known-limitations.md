@@ -15,31 +15,47 @@ workaround or roadmap path exists.
 
 ## Priority 1 — Affects the default installation experience
 
-### LIM-01: Fleet resource gauges (CPU, memory, disk) are blank for standalone AMS
+### LIM-01: Fleet memory % counts page cache as in-use
 
-**What it means for you:** The Pulse Fleet page shows your AMS node with OS, JVM,
-and version info, but CPU %, memory %, and disk % gauges are empty. You cannot
-set CPU or memory alert rules for a standalone AMS deployment.
+> **RESOLVED, and the entry was rewritten (D-179, 2026-07-27).** This limitation
+> used to read *"Fleet resource gauges (CPU, memory, disk) are blank for standalone
+> AMS — deploy Kafka to see CPU."* **That is no longer true, and no Kafka is
+> required.** What remains is a much smaller calibration caveat, below.
 
-**Root cause:** AMS 3.x `GET /rest/v2/system-status` for standalone nodes returns
-only `{osName, osArch, javaVersion, processorCount}` — no CPU, memory, or disk
-fields (AV-06; `docs/assessment/capability-map.md` §5). These metrics are
-available via Kafka (official AMS topics `ams-instance-stats` / `ams-webrtc-stats`,
-verified from AMS `StatsCollector.java`; the Pulse consumer is now aligned to these
-official topics and message shapes, fixture-tested; live validation against a real
-AMS broker still pending, AV-15 BLOCKED — see LIM-19).
+**What it means for you:** CPU %, memory % and disk % now populate on a standalone
+AMS, and CPU/memory/disk alert rules work without Kafka. One caveat when you set
+thresholds: the memory figure is **in-use including page cache and buffers**, not
+memory pressure. AMS computes it as `totalMemory - freeMemory`, so a perfectly
+healthy Linux host commonly reads 75–90%. Calibrate memory alert thresholds against
+your own baseline (or prefer the anomaly rule, which learns it for you) rather than
+assuming 85% means trouble. CPU % and disk % need no such adjustment.
 
-**Workaround:** Set `PULSE_KAFKA_BROKERS=<your-kafka>` to activate the Kafka
-consumer (`server/internal/collector/kafka/`). **Read LIM-19 first** — the
-Kafka integration has never been live-validated against a real AMS broker; gauges
-may stay empty if the topic or field names do not match your AMS version. If you
-run AMS in cluster mode, cluster-node REST responses carry per-node CPU and memory in
-the `cpu` and `memory` fields (no Kafka needed). Note the field names: `cpuUsage` /
-`memoryUsage` are tolerant aliases Pulse keeps for mock and fixture compatibility and
-are **not** sent by real AMS 3.x.
+**Root cause of the original limitation:** Pulse polled `GET /rest/v2/system-status`,
+which on a standalone node returns identity only —
+`{osName, osArch, javaVersion, processorCount}`, no CPU/memory/disk (AV-06;
+`docs/assessment/capability-map.md` §5). The metrics were always exposed, on a
+different console route Pulse did not call.
 
-**Roadmap:** DG-05; roadmap item P1 "Standalone CPU/mem/disk via Kafka"
-(`docs/assessment/final-assessment.md` §5).
+**The fix (D-179):** Pulse now prefers `GET /rest/v2/system-resources`, which
+returns `cpuUsage`, `systemMemoryInfo` and `fileSystemInfo` — plus the whole
+`system-status` body under `systemInfo` and the whole `/rest/v2/version` body under
+`softwareVersion`, so one call replaces the previous two. Live-verified against a
+standalone AMS 3.0.3 Enterprise on 2026-07-27; the captured response is committed as
+`server/pkg/amsclient/testdata/system_resources_real_v303.json`. An AMS that does not
+serve the route (404/405) falls back to the old `system-status` path, where the
+gauges stay honestly absent rather than zero-filled.
+
+The percentages use the same formulas as the Kafka path
+(`cpuUsage.systemCPULoad`, `inUseMemory/totalMemory`, `inUseSpace/totalSpace`), so a
+node reports identically whichever transport observes it. This is not a
+coincidence: `/rest/v2/system-resources` and the `ams-instance-stats` Kafka topic
+serialize the same AMS `StatsCollector` object.
+
+**Kafka is now optional for this purpose.** `PULSE_KAFKA_BROKERS` remains supported
+and is still the route for per-viewer WebRTC stats, but you no longer need a broker
+to see node CPU/memory/disk. See LIM-19 for the Kafka path's own status.
+
+**Credit:** external review round 6 (H-08) proposed the probe that found this.
 
 ---
 
@@ -98,7 +114,8 @@ stream, regardless of actual frame rate. The health score formula redistributes
 FPS weight so a healthy 2 Mbps stream still scores above 80 (confirmed TC-I-06).
 
 **Root cause:** `currentFPS` is absent from the AMS 3.0.3 BroadcastDTO REST
-response (AV-04; `server/pkg/amsclient/client.go:97` comment). The official
+response (AV-04; `server/pkg/amsclient/client.go` → `BroadcastDTO.CurrentFPS`
+comment). The official
 `ams-webrtc-stats` Kafka topic carries **per-viewer WebRTC client records**
 (verified from AMS `StatsCollector.java`), not per-stream encoder stats — Pulse
 subscribes to it but currently **skips** those messages because the shape has no

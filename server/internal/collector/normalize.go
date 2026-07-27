@@ -16,6 +16,7 @@ package collector
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"math"
 	"time"
 
 	"github.com/aytekXR/ams-pulse/server/internal/domain"
@@ -239,6 +240,158 @@ func NormalizeSystemStats(stats map[string]any, nodeID, version string) domain.S
 	}
 	// cpu_pct / mem_pct / disk_pct / net_* are NOT present in the real AMS 3.x
 	// system-status response — do not emit zeros (those are fabricated metrics).
+
+	return domain.ServerEvent{
+		Version: 1,
+		Type:    domain.EventNodeStats,
+		TS:      time.Now().UnixMilli(),
+		Source:  domain.SourceRestPoll,
+		NodeID:  nodeID,
+		Data:    data,
+	}
+}
+
+// ─── /rest/v2/system-resources (D-179) ───────────────────────────────────────
+
+// nestedMap returns m[key] as a map when it is one, else nil. Wrong-typed or
+// absent values yield nil rather than panicking (hostile-input discipline).
+func nestedMap(m map[string]any, key string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	sub, _ := m[key].(map[string]any)
+	return sub
+}
+
+// floatOK reads a JSON number field. ok=false when the key is absent or is not
+// a finite number — the caller must then OMIT the derived metric rather than
+// emit a zero (see the honesty rule on NormalizeSystemStats).
+func floatOK(m map[string]any, key string) (float64, bool) {
+	if m == nil {
+		return 0, false
+	}
+	switch v := m[key].(type) {
+	case float64:
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return 0, false
+		}
+		return v, true
+	case int:
+		return float64(v), true
+	default:
+		return 0, false
+	}
+}
+
+// pctOK computes inUse/total*100, capped at 100. ok=false when either field is
+// missing or total is zero — an unmeasurable ratio is absent, never 0%.
+func pctOK(m map[string]any, inUseKey, totalKey string) (float64, bool) {
+	inUse, okIn := floatOK(m, inUseKey)
+	total, okTotal := floatOK(m, totalKey)
+	if !okIn || !okTotal || total == 0 {
+		return 0, false
+	}
+	v := inUse / total * 100
+	if v > 100 {
+		v = 100
+	}
+	return v, true
+}
+
+// HasResourceMetrics reports whether a /rest/v2/system-resources payload carries
+// at least one of the three gauges. When it does not, the payload is no more
+// informative than /rest/v2/system-status and the caller should fall back.
+func HasResourceMetrics(res map[string]any) bool {
+	if res == nil {
+		return false
+	}
+	if _, ok := floatOK(nestedMap(res, "cpuUsage"), "systemCPULoad"); ok {
+		return true
+	}
+	if _, ok := pctOK(nestedMap(res, "systemMemoryInfo"), "inUseMemory", "totalMemory"); ok {
+		return true
+	}
+	_, ok := pctOK(nestedMap(res, "fileSystemInfo"), "inUseSpace", "totalSpace")
+	return ok
+}
+
+// NormalizeSystemResources converts a raw AMS /rest/v2/system-resources map into
+// a domain.ServerEvent of type node_stats for a standalone (non-cluster) AMS node.
+//
+// This is the richer sibling of NormalizeSystemStats: same event, same node
+// identity keys, but it also carries cpu_pct / mem_pct / disk_pct, which a
+// standalone AMS does report — just not on /rest/v2/system-status (D-179; this
+// is what closed LIM-01).
+//
+// REAL AMS 3.0.3 shape (live capture, agents/handoffs/real-ams-captures/
+// system-resources.json):
+//
+//	cpuUsage        {processCPUTime, systemCPULoad, processCPULoad, systemLoadAverageLastMinute}
+//	systemMemoryInfo{virtualMemory, totalMemory, freeMemory, inUseMemory, …}
+//	fileSystemInfo  {usableSpace, totalSpace, freeSpace, inUseSpace}
+//	systemInfo      {osName, osArch, javaVersion, processorCount}   ← the whole system-status body
+//	softwareVersion {versionName, versionType, buildNumber}          ← the whole /rest/v2/version body
+//
+// The percentage formulas are deliberately IDENTICAL to the Kafka
+// ams-instance-stats path (internal/collector/kafka): both decode the same
+// serialized StatsCollector object, so a node must not report different numbers
+// depending on which transport observed it.
+//
+// Honesty rule (shared with NormalizeSystemStats / NormalizeClusterNode): a
+// metric that cannot be computed is ABSENT from Data — never a zero. The UI and
+// alert evaluator both treat key-absent as "not measured".
+//
+// Defensive: missing or wrong-typed fields are skipped — never panics.
+func NormalizeSystemResources(res map[string]any, nodeID, version string) domain.ServerEvent {
+	data := make(map[string]any)
+
+	// Identity lives under systemInfo here (it is the system-status body verbatim),
+	// but tolerate a flattened shape from an older/proxied AMS.
+	info := nestedMap(res, "systemInfo")
+	if info == nil {
+		info = res
+	}
+	if v, ok := info["osName"].(string); ok && v != "" {
+		data["os_name"] = v
+	}
+	if v, ok := info["osArch"].(string); ok && v != "" {
+		data["os_arch"] = v
+	}
+	if v, ok := info["javaVersion"].(string); ok && v != "" {
+		data["java_version"] = v
+	}
+	if v, ok := floatOK(info, "processorCount"); ok && v > 0 {
+		data["processor_count"] = int(v)
+	}
+
+	// Version: the caller's explicit value wins (it may have a better source);
+	// otherwise softwareVersion.versionName makes a separate /rest/v2/version
+	// call unnecessary on this path.
+	if version == "" {
+		if v, ok := nestedMap(res, "softwareVersion")["versionName"].(string); ok {
+			version = v
+		}
+	}
+	if version != "" {
+		data["version"] = version
+	}
+
+	// cpu_pct: systemCPULoad is ALREADY an integer percent (0-100). AMS's
+	// SystemUtils.getSystemCpuLoad() casts (int)(load*100.0) before serializing,
+	// so rescaling here would report 3400% CPU — the S105 trap, documented at
+	// the Kafka call site too. systemCPULoad (whole node) not processCPULoad (JVM).
+	if v, ok := floatOK(nestedMap(res, "cpuUsage"), "systemCPULoad"); ok && v >= 0 {
+		// contracts/events/ams-server-event.schema.json bounds cpu_pct to [0,100];
+		// clamp so an unexpected wire value cannot emit a contract-invalid event.
+		// A negative reading is nonsense, not a measurement — omit it entirely.
+		data["cpu_pct"] = math.Min(v, 100)
+	}
+	if v, ok := pctOK(nestedMap(res, "systemMemoryInfo"), "inUseMemory", "totalMemory"); ok {
+		data["mem_pct"] = v
+	}
+	if v, ok := pctOK(nestedMap(res, "fileSystemInfo"), "inUseSpace", "totalSpace"); ok {
+		data["disk_pct"] = v
+	}
 
 	return domain.ServerEvent{
 		Version: 1,

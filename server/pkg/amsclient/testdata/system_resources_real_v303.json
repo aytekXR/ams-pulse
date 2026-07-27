@@ -1,0 +1,74 @@
+{
+  "instanceId": "REDACTED-instance-id",
+  "cpuUsage": {
+    "processCPUTime": 21813510000,
+    "systemCPULoad": 34,
+    "processCPULoad": 0,
+    "systemLoadAverageLastMinute": 5.31591796875
+  },
+  "jvmMemoryUsage": {
+    "maxMemory": 3137339392,
+    "totalMemory": 1073741824,
+    "freeMemory": 844344832,
+    "inUseMemory": 229396992
+  },
+  "systemInfo": {
+    "osName": "Linux",
+    "osArch": "amd64",
+    "javaVersion": "17",
+    "processorCount": 6
+  },
+  "systemMemoryInfo": {
+    "virtualMemory": 7239294976,
+    "totalMemory": 12541485056,
+    "freeMemory": 2947465216,
+    "inUseMemory": 9594019840,
+    "totalSwapSpace": 0,
+    "freeSwapSpace": 0,
+    "inUseSwapSpace": 0,
+    "availableMemory": 11331276800
+  },
+  "fileSystemInfo": {
+    "usableSpace": 34851323904,
+    "totalSpace": 206900281344,
+    "freeSpace": 34868101120,
+    "inUseSpace": 172032180224
+  },
+  "jvmNativeMemoryUsage": {
+    "inUseMemory": 1185611776,
+    "maxMemory": 12549357568
+  },
+  "softwareVersion": {
+    "versionName": "3.0.3",
+    "versionType": "Enterprise Edition",
+    "buildNumber": "20260504_1443"
+  },
+  "gpuUsageInfo": [],
+  "ffmpegBuildInfo": "--prefix=.. --disable-iconv --disable-opencl --disable-sdl2 --disable-bzlib --disable-lzma --disable-linux-perf --disable-xlib --disable-decoder=h264_crystalhd --disable-decoder=mpeg2_crystalhd --disable-decoder=vc1_crystalhd --disable-decoder=mpeg4_crystalhd --disable-decoder=msmpeg4_crystalhd --disable-decoder=msmpeg4_crystalhd --disable-decoder=wmv3_crystalhd --enable-shared --enable-version3 --enable-runtime-cpudetect --enable-zlib --enable-libmp3lame --enable-libspeex --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libvo-amrwbenc --enable-openssl --enable-libopenh264 --enable-libvpx --enable-libfreetype --enable-libopus --enable-libxml2 --enable-libsrt --enable-libwebp --enable-libaom --enable-libsvtav1 --enable-libzimg --enable-libmfx --enable-libdrm --enable-cuda --enable-cuvid --enable-nvenc --enable-pthreads --enable-libxcb --enable-libpulse --cc='gcc -m64' --extra-cflags='-I../include/ -I../include/libxml2 -I../include/mfx -I../include/svt-av1' --extra-ldflags=-L../lib/ --extra-libs='-lstdc++ -lpthread -ldl -lz -lm -lva-drm -lva-x11 -lva'",
+  "dbAverageQueryTimeMs": 1,
+  "localWebRTCLiveStreams": 0,
+  "localLiveStreams": 0,
+  "localWebRTCViewers": 0,
+  "localHLSViewers": 0,
+  "localDASHViewers": 0,
+  "encoders-blocked": 0,
+  "encoders-not-opened": 0,
+  "publish-timeout-errors": 0,
+  "vertx-worker-thread-queue-size": 0,
+  "webrtc-vertx-worker-thread-queue-size": 0,
+  "server-timing": {
+    "up-time": 313465294,
+    "start-time": 1784823194839
+  },
+  "totalLiveStreamSize": 0,
+  "license": {
+    "licenceId": "REDACTED",
+    "startDate": "2026-07-13T13:45:19.246Z",
+    "endDate": "2026-07-27T13:45:19.246Z",
+    "type": "trial",
+    "licenceCount": "1",
+    "owner": "REDACTED",
+    "status": "valid",
+    "hourUsed": "318"
+  }
+}

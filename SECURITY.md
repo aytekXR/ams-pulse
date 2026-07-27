@@ -119,6 +119,33 @@ The meta store (SQLite) is a file on the `pulse-data` Docker volume and is not n
 API routes: per-user rate limiting via middleware.
 (Verified: `server/internal/api/ratelimit.go:20-21`; `server/internal/api/server.go`.)
 
+## Verifying what you downloaded
+
+Every release publishes integrity material, and every artifact is covered:
+
+| Artifact | How to verify |
+|---|---|
+| Container image `ghcr.io/aytekxr/ams-pulse` | `cosign verify` with the **anchored** identity regexp in [`README.md`](README.md). Signed by digest via keyless Sigstore/GitHub OIDC; SBOM and provenance are attached to the manifest. **Requires a cosign v3+ client** — a v2 client reports `no signatures found` against a correctly signed image because the signature is stored as an OCI 1.1 referrer, not a legacy `.sig` tag. |
+| `pulse-linux-amd64`, `pulse-linux-arm64` | `sha256sum --ignore-missing -c SHA256SUMS` |
+| `ams-pulse-beacon-<version>.tgz` (beacon SDK) | `sha256sum --ignore-missing -c SHA256SUMS` |
+| `pulse-<chartversion>.tgz` (Helm chart) | `sha256sum --ignore-missing -c SHA256SUMS` |
+
+`SHA256SUMS` is a release asset covering all four downloadable files; the release pipeline
+fails if it does not. Step-by-step instructions:
+[`docs/runbooks/install.md` → Verify your downloads](docs/runbooks/install.md#verify-your-downloads).
+
+The binaries are checksummed rather than individually signed; the checksum file itself is
+published by the same tag-triggered, CI-gated pipeline that signs the image.
+
+**About the `candidate-<sha>` tags you will see on the GHCR package.** Images are published
+in two stages: pushed first under `candidate-<commit-sha8>`, Trivy-scanned by digest on both
+architectures, and only then given the real tags (`X.Y.Z`, `X.Y`, `X`, `latest`) by re-tagging
+**the same digest**. A HIGH/CRITICAL finding therefore never leaves a vulnerable image
+pullable under a release tag. Because promotion re-tags rather than rebuilds,
+`candidate-<sha>` remains as an alias of the released digest — it is not a separate or
+unscanned image, and pulling it gives you byte-identically what `X.Y.Z` gives you. Verify by
+digest if you want certainty: `docker buildx imagetools inspect ghcr.io/aytekxr/ams-pulse:X.Y.Z`.
+
 ## License
 
 The server, web UI, and deployment tooling are licensed under

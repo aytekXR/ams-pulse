@@ -103,11 +103,11 @@ operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
   attached. The published artifact now matches the code and docs.
 - ~~**Confirm the category**~~ **SET:** "Analytics & Monitoring" is stated plainly in
   `listing.md`. Ant Media may reassign it at review; that is their call to make, not a blocker.
-- ~~**v0.4.3 release cut (D-176)**~~ **DONE (2026-07-27):** **submit against this tag, not
-  v0.4.2.** External review round 4 found that the corrected documentation, the regenerated
-  screenshots, the evaluator compose overlay and the parameterised quickstart host port all
-  lived on `main` and were absent from the published v0.4.2. Everything an evaluator meets in
-  their first ten minutes is in 0.4.3.
+- ~~**v0.4.3 release cut (D-176)**~~ **DONE (2026-07-27).** External review round 4 found that
+  the corrected documentation, the regenerated screenshots, the evaluator compose overlay and
+  the parameterised quickstart host port all lived on `main` and were absent from the published
+  v0.4.2. Everything an evaluator met in their first ten minutes went into 0.4.3. *Which tag to
+  submit against is now gate 2 below — the same argument has recurred with a larger delta.*
 
 **Open gates, in order (this numbered list is the single source of truth — nothing above is
 still open):**
@@ -118,17 +118,26 @@ still open):**
    un-published — only rotation closes it, and it should happen **before the repo receives
    marketplace traffic.** Then rotate the remaining chat-exposed set. Detail:
    `docs/operator-expected.md` item 1.
-2. **Submit the listing** to the Ant Media Marketplace (operator account) — paste from
+2. **⚠ Decide the submission target: cut `v0.4.4`, or submit against `v0.4.3`?** (round 6, H-02).
+   `main` is ahead of the `v0.4.3` tag by more than copy now: the **LIM-01 fix** (standalone
+   Fleet CPU/memory/disk gauges, no Kafka — a Priority-1 limitation closed in code), the anchored
+   `cosign verify` command, `SHA256SUMS` covering all four release assets, the installer's
+   degraded exit code, the listing's HLS caveat, and AMS 2.17 compatibility coverage.
+   Round 5 ruled that doc fixes ride the next release; that ruling predates the code.
+   **Recommended: cut v0.4.4** — one tag push, *after* main's post-merge CI is green — and submit
+   against it. Detail: `docs/operator-expected.md` item 2.
+3. **Submit the listing** to the Ant Media Marketplace (operator account) — paste from
    [`listing.md`](listing.md), never from `listing-draft.md`.
-3. **Set up billing** for the tiers / campaign / trial in the marketplace's billing system.
-4. **Capacity number** — run the load lane on a dedicated PAYG AMS → replaces the PROVISIONAL claim
+4. **Set up billing** for the tiers / campaign / trial in the marketplace's billing system.
+5. **Capacity number** — run the load lane on a dedicated PAYG AMS → replaces the PROVISIONAL claim
    now in `docs/compatibility.md`. Same instance: set `server.kafka_brokers` for the AV-15 live
    Kafka validation (drops the EXPERIMENTAL label), and a 2-node cluster closes LIM-10.
-5. **npm publish** — add an `NPM_TOKEN` repo secret so the release workflow publishes
+6. **npm publish** — add an `NPM_TOKEN` repo secret so the release workflow publishes
    `ams-pulse-beacon` (without it the tarball still attaches to the release; nothing fails).
-6. **Demo video** — rough-cut rendered (D-170, `docs/marketplace/demo/pulse-demo-roughcut.webm`)
+7. **Demo video** — rough-cut rendered (D-170, `docs/marketplace/demo/pulse-demo-roughcut.webm`)
    and attached to the GitHub release; operator re-records the final with voiceover.
    ⚠ The script changed in D-176 — re-read `demo-video-script.md` before recording.
-7. **Reply to Ankush Banyal** — draft ready (`ankush-reply-draft.md`, D-170); operator fills the
+8. **Reply to Ankush Banyal** — draft ready (`ankush-reply-draft.md`, D-170); operator fills the
    [brackets] and sends.
-8. Optional: **roll prod to v0.4.3** (prod is healthy on v0.4.0-139).
+9. Optional: **roll prod forward** (prod is healthy on v0.4.0-139; the new Fleet CPU/memory/disk
+   gauges only appear on prod once it is rolled, since D-179 is a code change).

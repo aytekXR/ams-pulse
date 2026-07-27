@@ -420,7 +420,40 @@ When AMS has active streams, `total_viewers` and `total_publishers` will be
 non-zero. The REST poller runs every `PULSE_POLL_INTERVAL` (default 5 s), so
 allow up to 10 s after startup.
 
-### 3.7 Standalone resource metrics and Kafka (DG-05)
+### 3.7 Standalone resource metrics (DG-05)
+
+**No Kafka required (since D-179).** Pulse polls
+`GET /rest/v2/system-resources`, the AMS console route that carries real-time
+node load. On a standalone AMS 3.0.3 Enterprise it returns:
+
+| Key | Contents | Pulse mapping |
+|---|---|---|
+| `cpuUsage` | `systemCPULoad`, `processCPULoad`, `processCPUTime`, `systemLoadAverageLastMinute` | `cpu_pct` ← `systemCPULoad` (already a 0–100 integer server-side — never rescale) |
+| `systemMemoryInfo` | `totalMemory`, `freeMemory`, `inUseMemory`, `availableMemory`, swap | `mem_pct` ← `inUseMemory / totalMemory` |
+| `fileSystemInfo` | `totalSpace`, `usableSpace`, `freeSpace`, `inUseSpace` | `disk_pct` ← `inUseSpace / totalSpace` |
+| `systemInfo` | the entire `/rest/v2/system-status` body | `os_name`, `os_arch`, `java_version`, `processor_count` |
+| `softwareVersion` | the entire `/rest/v2/version` body | `version` |
+
+Because `systemInfo` and `softwareVersion` are embedded, this single call replaces
+the previous `system-status` + `version` pair. An AMS that does not serve the route
+answers 404/405, and Pulse falls back to the old pair — with the three gauges
+honestly absent rather than zero-filled.
+
+`mem_pct` is **in-use including page cache**: AMS reports
+`inUseMemory = totalMemory - freeMemory`, so a healthy Linux host commonly reads
+75–90%. Calibrate memory thresholds to your own baseline (see LIM-01).
+
+The formulas above are shared verbatim with the Kafka consumer, because
+`/rest/v2/system-resources` and the `ams-instance-stats` topic serialize the same
+AMS `StatsCollector` object. Live capture:
+`server/pkg/amsclient/testdata/system_resources_real_v303.json` (captured 2026-07-27
+from a standalone AMS 3.0.3 Enterprise; license block and instance id redacted).
+
+> **Historical note.** Until D-179 this section said standalone CPU/memory/disk
+> "require a Kafka feed". That was wrong — the data was on a console route Pulse
+> did not call. Found by external review round 6 (H-08), settled with two curls.
+
+#### Kafka (optional — per-viewer WebRTC stats)
 
 > **⚠️ EXPERIMENTAL / PREVIEW — pending AV-15 live validation.**
 > The Kafka consumer is aligned to official AMS topic names and message shapes
@@ -428,10 +461,8 @@ allow up to 10 s after startup.
 > been connected to a live AMS Kafka producer. Treat the Kafka ingest path as
 > preview until AV-15 is resolved.
 
-Standalone resource metrics (CPU, memory, disk) for the fleet node card require
-a Kafka feed from AMS — the REST `/rest/v2/system-status` endpoint on AMS 3.x
-returns only `{osName, osArch, javaVersion, processorCount}` and does not carry
-real-time load data.
+Kafka remains supported and is still the route for per-viewer WebRTC records. It is
+no longer needed for node CPU/memory/disk.
 
 **AMS-side setup (`conf/red5.properties`):**
 
@@ -444,7 +475,7 @@ AMS publishes to two official topics:
 
 | Topic | Content | Pulse handling |
 |---|---|---|
-| `ams-instance-stats` | Node-level CPU, memory, disk utilisation | Parsed → Fleet resource gauges |
+| `ams-instance-stats` | Node-level CPU, memory, disk utilisation | Parsed → Fleet resource gauges (same fields the REST route above already supplies) |
 | `ams-webrtc-stats` | Per-viewer WebRTC client records | Subscribed but currently **skipped** — the per-viewer shape has no clean domain mapping yet (`docs/kafka-integration.md` §4.5) |
 
 **Pulse-side setup (`deploy/.env`):**

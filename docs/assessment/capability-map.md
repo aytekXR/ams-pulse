@@ -220,9 +220,17 @@ env var activates the consumer (`server/internal/collector/kafka/`).
 (agents/handoffs/real-ams-captures/system-status.json:
 `{osName:Linux, osArch:amd64, javaVersion:17, processorCount:8}`)
 
-**Critical gap:** AMS 3.x `/rest/v2/system-status` does NOT return
-`cpu_pct`, `mem_pct`, `disk_pct`, or network metrics. This is a real AMS
-wire behavior, not a Pulse bug.
+**Critical gap — CLOSED (D-179, 2026-07-27).** AMS 3.x `/rest/v2/system-status`
+does NOT return `cpu_pct`, `mem_pct`, `disk_pct`, or network metrics — that part
+was always correct. What this map got wrong was the conclusion: the metrics are
+served by a *different* console route, `GET /rest/v2/system-resources`, on the same
+standalone node (live-verified against AMS 3.0.3 Enterprise; capture at
+`server/pkg/amsclient/testdata/system_resources_real_v303.json`). Pulse now prefers that
+route and falls back to `system-status` on 404/405. See LIM-01, AMS-INTEGRATION §3.7.
+
+The lesson worth keeping: "endpoint X omits the field" was verified, but
+"therefore AMS cannot report it" was inferred and never probed. Sibling endpoints
+are cheap to check.
 
 **Pulse pipeline:**
 - `amsclient.SystemStats()` at client.go:535 — parses the raw map

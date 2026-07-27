@@ -1266,3 +1266,69 @@ func TestWebRTCClientStats_EscapesStreamID(t *testing.T) {
 		})
 	}
 }
+
+// ─── /rest/v2/system-resources (D-179, review round 6 H-08) ──────────────────
+//
+// LIVE-PROBE ORIGIN: a standalone AMS 3.0.3 Enterprise returns fully populated
+// cpuUsage / systemMemoryInfo / fileSystemInfo from this endpoint — the very
+// metrics /rest/v2/system-status omits. The fixture is that captured response
+// (license + instanceId redacted).
+func TestSystemResources_DecodesRealV303Capture(t *testing.T) {
+	body, err := os.ReadFile("testdata/system_resources_real_v303.json")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/rest/v2/system-resources" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(body)
+	}))
+	defer srv.Close()
+
+	res, err := newTestClient(srv).SystemResources(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res == nil {
+		t.Fatal("SystemResources returned nil map on a 200 response")
+	}
+	for _, key := range []string{"cpuUsage", "systemMemoryInfo", "fileSystemInfo", "systemInfo", "softwareVersion"} {
+		if _, ok := res[key]; !ok {
+			t.Errorf("captured payload key %q missing from decoded map", key)
+		}
+	}
+}
+
+// Older AMS without the console resources route must yield (nil, nil) so the
+// caller falls back to /rest/v2/system-status instead of dropping the node.
+// Same tolerance contract as GetVersion: only 404/405 are swallowed.
+func TestSystemResources_404ReturnsNilNoError(t *testing.T) {
+	for _, code := range []int{http.StatusNotFound, http.StatusMethodNotAllowed} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(code)
+		}))
+		res, err := newTestClient(srv).SystemResources(context.Background())
+		srv.Close()
+		if err != nil {
+			t.Fatalf("HTTP %d must map to nil error, got %v", code, err)
+		}
+		if res != nil {
+			t.Fatalf("HTTP %d must return a nil map, got %+v", code, res)
+		}
+	}
+}
+
+// A genuine server error must NOT be swallowed — otherwise a broken AMS looks
+// like an old AMS and the fallback masks a real outage.
+func TestSystemResources_500ReturnsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	if _, err := newTestClient(srv).SystemResources(context.Background()); err == nil {
+		t.Fatal("500 must surface as an error, got nil")
+	}
+}

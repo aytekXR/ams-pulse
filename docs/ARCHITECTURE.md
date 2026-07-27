@@ -126,10 +126,18 @@ Last updated: Wave 2 implementation complete (2026-06-14).
 
 1. **Contracts first.** All shapes in `contracts/` (OpenAPI, event schemas, DDL).
    Implementation follows contracts, never the other way around.
-2. **AMS isolation.** Only `server/pkg/amsclient` and `server/internal/collector/*`
-   parse AMS wire formats. Everything downstream consumes normalized `domain` types.
-   This is what makes the Phase 3 Wowza/Red5/Flussonic expansion a collector swap,
-   not a rewrite.
+2. **AMS isolation.** Only `server/pkg/amsclient`, `server/internal/collector/*` and
+   `server/internal/cluster` parse AMS wire formats. Everything downstream consumes
+   normalized `domain` types. This is what makes the Phase 3 Wowza/Red5/Flussonic
+   expansion a collector swap, not a rewrite.
+
+   `internal/cluster` is named explicitly because it *is* the cluster collector — it
+   consumes `amsclient.ClusterNodeDTO` directly — but sits outside `internal/collector/`
+   for historical reasons (external review round 6, H-07). It counts as part of the
+   collector boundary and must be swapped alongside it. The only other package importing
+   `amsclient` is `cmd/pulse/serve.go`, the composition root, which wires but never
+   interprets. `internal/domain` mentions amsclient in a comment and does **not** import it.
+   Enforced by `TestAMSBoundary_ImportersAreCollectorOnly` in `server/internal/api`.
 3. **Two stores, strict split.** ClickHouse = events and rollups (high volume,
    append-only). Meta store (SQLite/Postgres) = config and small relational state.
    Metrics never go in the meta store; config never goes in ClickHouse.

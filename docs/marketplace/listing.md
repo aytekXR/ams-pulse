@@ -29,8 +29,10 @@ PDF/CSV usage reports, and anomaly detection — self-hosted.
 
 Character count: 240 (limit 250).
 
-**Compatibility:** Validated live on AMS 3.0.3 Enterprise (current release); best-effort
-compatibility with AMS 2.10+ via mock wire-format profile tests.
+**Compatibility:** Validated live on AMS 3.0.3 Enterprise (current release). Best-effort
+support for AMS 2.x: mock wire-format profile tests cover 2.10, 2.14 and 2.17, and every
+field Pulse reads is source-verified identical across 2.14–3.0.3. AMS 2.15 is untested.
+Full matrix: `docs/compatibility.md`.
 
 ---
 
@@ -54,7 +56,10 @@ UI require a commercial subscription for production use.
 Out of the box Pulse answers the questions AMS does not: who is watching, on what device, with
 what quality, and is anything broken right now. The live operations dashboard surfaces stream
 health, viewer counts by protocol (HLS, WebRTC, RTMP, DASH), ingest bitrate, and fleet node
-status — all updated within ten seconds of a publish event, with no page refresh required. A
+status — all updated within ten seconds of a publish event, with no page refresh required.
+WebRTC and DASH counts are session-accurate; HLS counts mirror the value AMS itself reports,
+which is a sliding segment-request window and overcounts concurrent sessions (AMS platform
+behaviour, not a Pulse defect — see Known Limitations LIM-02). A
 player-side QoE beacon SDK (3.52 KB gzip, MIT-licensed) captures startup latency, rebuffer
 ratio, bitrate switches, and error rates directly from viewers' browsers without routing data
 through any third-party server.
@@ -88,7 +93,8 @@ expiry with no data loss.
 ## Feature bullets
 
 1. **Live ops dashboard** — new stream visible within 4 seconds of publish (measured in live AMS
-   3.0.3 validation); viewer counts per protocol (HLS, WebRTC, RTMP, DASH); fleet node health;
+   3.0.3 validation); viewer counts per protocol (HLS, WebRTC, RTMP, DASH — HLS mirrors AMS's
+   segment-request window and overcounts concurrent sessions, see LIM-02); fleet node health;
    auto-discovers all AMS applications; cluster fleet view with wire shape verified against AMS
    3.0.3 source — live multi-node validation pending.
 
@@ -212,8 +218,9 @@ Pulse installs in under 15 minutes via:
 - **Helm** — chart published to GHCR as an OCI artifact, anonymously pullable:
   `helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.1`. Installing from
   a local chart path is also supported.
-- **Binary** — build from source with Go 1.25+, or use the signed release binaries
-  (`pulse-linux-amd64` / `pulse-linux-arm64` + SHA256SUMS) attached to each GitHub release.
+- **Binary** — build from source with Go 1.25+, or use the checksummed release binaries
+  (`pulse-linux-amd64` / `pulse-linux-arm64`, verifiable against the `SHA256SUMS` asset)
+  attached to each GitHub release. The container image is additionally cosign-signed.
 
 After installing:
 
@@ -249,7 +256,7 @@ representative demo data (not a customer's production instance).
 
 | # | File | Subject |
 |---|------|---------|
-| SS1 | `ss1-dashboard.png` | Live ops dashboard — streams, viewer counts by protocol, fleet node health |
+| SS1 | `ss1-dashboard.png` | Live ops dashboard — streams, viewer counts by protocol (HLS counts mirror AMS's segment-request window, LIM-02), fleet node health |
 | SS2 | `ss2-ingest-health.png` | Ingest health detail — bitrate timeline, health score, protocol breakdown |
 | SS3 | `ss3-alerting.png` | Alert incident history — firing and resolved events with severity, metric value and timestamp |
 | SS4 | `ss4-analytics.png` | Audience analytics — viewer count chart, QoE rollups, geo breakdown |

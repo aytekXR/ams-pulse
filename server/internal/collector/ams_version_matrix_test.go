@@ -41,6 +41,7 @@ import (
 //
 //	v2.10.x: "speed" field for bitrate, cpuUsage is 0–100 percentage
 //	v2.14.x: same core fields; adds "webRTCViewerCount" distinct from "hlsViewerCount"
+//	v2.17.x: source-verified identical to 3.0.x for every field Pulse consumes
 //	v3.0.x:  adds "currentFPS" field; "bitrate" replaces "speed" for bitrate reporting
 //
 // QA-01 emulates what mock-ams documents; assertions that require a real AMS
@@ -128,6 +129,66 @@ var amsProfiles = []amsProfile{
 				"networkOutputBps":  float64(4096000),
 				"jvmMemoryUsage":    float64(30.0),
 				"activeStreamCount": 3,
+			},
+		},
+	},
+	{
+		// v2.17.1 — the newest 2.x line Ant Media maintains (released 2026-02-12;
+		// docs.antmedia.io keeps parallel 2.16/2.17 trees). Added for external
+		// review round 6, H-04: the listing claims "best-effort compatibility with
+		// AMS 2.10+", and 2.15–2.17 — the 2.x versions customers actually run —
+		// previously had no coverage at all, not even synthetic.
+		//
+		// SOURCE-DERIVED, not invented. The field set below was read from AMS's own
+		// source at tag ams-v2.17.1 (same technique as LIM-10):
+		//   Broadcast.java   — every field Pulse consumes (hlsViewerCount,
+		//                      webRTCViewerCount, rtmpViewerCount, dashViewerCount,
+		//                      bitrate (long), speed (double), status, publishType,
+		//                      startTime, originAdress) is present and identically
+		//                      typed at 2.14.0, 2.16.2, 2.17.1 and 3.0.3.
+		//   ClusterNode.java — byte-identical field set across 2.14 → 3.0.3:
+		//                      {id, ip, lastUpdateTime, memory, cpu,
+		//                       dbQueryAveargeTimeMs, status}. No role, no version —
+		//                      which is why LIM-10 applies to every version, not just 3.x.
+		// 2.17.1 → 3.0.3 removes only conferenceMode and subTrackStreamIds, neither
+		// of which Pulse reads.
+		//
+		// This profile deliberately uses the REAL cluster-node field names rather
+		// than the invented aliases (nodeId/cpuUsage/memoryUsage) carried by the
+		// older profiles above for fixture back-compat — real AMS sends id/cpu/memory.
+		//
+		// STILL MOCK-ONLY: no 2.17 container has been run. compatibility.md labels it
+		// exactly that way.
+		name: "v2.17.1",
+		broadcasts: []map[string]any{
+			{
+				"streamId":          "live-stream-1",
+				"name":              "live-stream-1",
+				"status":            "broadcasting",
+				"type":              "liveStream",
+				"publishType":       "webrtc",
+				"startTime":         int64(1700000000000),
+				"hlsViewerCount":    12,
+				"webRTCViewerCount": 60,
+				"rtmpViewerCount":   3,
+				"dashViewerCount":   1,
+				"bitrate":           float64(2800),
+				"speed":             float64(1.0), // still present at 2.17 (double)
+				"originAdress":      "192.168.1.10",
+				"appName":           "live",
+				// currentFPS is deliberately ABSENT: it is not a Broadcast field at
+				// 2.17.1 or 3.0.3 (verified in source), matching real-3.0.3 captures.
+			},
+		},
+		nodes: []map[string]any{
+			{
+				"id":                   "node-1",
+				"ip":                   "192.168.1.10",
+				"cpu":                  float64(35.0),
+				"memory":               float64(58.0),
+				"status":               "active",
+				"lastUpdateTime":       int64(1700000000000),
+				"dbQueryAveargeTimeMs": float64(2), // AMS's own spelling — do not "fix"
 			},
 		},
 	},
