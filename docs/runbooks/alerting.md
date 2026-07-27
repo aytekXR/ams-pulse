@@ -2,7 +2,7 @@
 
 **PRD ref:** F5 (core alerting)  
 **Budget:** alert detection-to-notification < 30 s (QA-verified: 15 s)  
-**Last updated:** V3b fix-loop (2026-06-15) — muted suppression, group_by grouping, node_down absence detection, cron range syntax all verified and shipped.
+**Last updated:** 2026-06-15 — V3b fix-loop: muted suppression, group_by grouping, node_down absence detection, cron range syntax all verified and shipped.
 
 ---
 

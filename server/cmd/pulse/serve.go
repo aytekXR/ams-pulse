@@ -437,6 +437,12 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		TickInterval: 5 * time.Second,
 		BaseURL:      resolveAlertBaseURL(cfg.PulseBaseURL, cfg.ListenAddr),
 	}, agg, metaStore, chanRegistry, nil, logger)
+	// M-03: wire channel entitlement gate so a tenant that downgrades below a
+	// paid channel tier (e.g. slack, pagerduty) stops receiving notifications on
+	// that channel type at runtime. Mirrors prober.Config.EntitlementGate (S37 /
+	// D-108): "a tenant that downgrades stops probing at runtime, not just at
+	// the HTTP CRUD boundary."
+	alertEval.SetChannelEntitlementGate(lic.CheckChannelAllowed)
 
 	// HOOK(BE-02): Wire query service.
 	qsvc := query.New(agg, store.GetConn(), lic)

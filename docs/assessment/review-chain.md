@@ -1,6 +1,6 @@
 # External Review Chain Index
 
-This file indexes the nine rounds of external review conducted for the Pulse
+This file indexes the ten rounds of external review conducted for the Pulse
 marketplace submission. Each round follows the protocol in
 [`EXTERNAL-REVIEW-PROMPT.md`](EXTERNAL-REVIEW-PROMPT.md): the reviewer writes a
 ledger file with findings, the maintainer verifies and dispositions each finding
@@ -21,6 +21,7 @@ in-place, and the completed file becomes the prior-round input for the next roun
 | 7 | 2026-07-27 | I- (I-01–I-06) | [`marketplace-compliance-review-2026-07-27-round7.md`](marketplace-compliance-review-2026-07-27-round7.md) | Dispositioned in D-181 |
 | 8 | 2026-07-27 | J- (J-01–J-03) | [`external-review-2026-07-27-round8.md`](external-review-2026-07-27-round8.md) | Dispositioned in D-182 |
 | 9 | 2026-07-27 | K- (K-01–K-02) | [`external-review-2026-07-27-round9.md`](external-review-2026-07-27-round9.md) | Dispositioned in D-183 |
+| 10 | 2026-07-27 | L- (L-01–L-02) | [`external-review-2026-07-27-round10.md`](external-review-2026-07-27-round10.md) | Dispositioned in D-184 |
 
 ---
 
@@ -37,6 +38,7 @@ grepping each file for the reviewer schema markers (`**Claim.`, `**Reproduction.
 | 4–7 | Maintainer disposition tables only — round 4/5 as `\| ID \| Verdict \| Disposition \|`, round 6/7 as `\| ID \| Sev \| Subject \| Verified? \| Disposition \|` | **Absent** — 0 schema markers in all four files |
 | 8 | The reviewer ledger in the standardized schema (9 schema markers, 3 detail sections) | **Complete** — the first round to land in-tree as written |
 | 9 | The reviewer ledger in the standardized schema, Disposition column filled | **Complete** |
+| 10 | The reviewer ledger in the standardized schema, Disposition column filled | **Complete** |
 
 What rounds 4–7 preserve is the finding **subject** and the maintainer's
 **disposition**. What they do not preserve is how the reviewer originally described
@@ -56,19 +58,54 @@ rationale, and the Confidence assessment.
   written in the review session and delivered as chat text rather than as files, and
   round 7's commit attempt failed when the reviewer's device bridge dropped. That
   account is the reviewer's, recorded here as attribution rather than as something we
-  verified. What we can confirm from this side: neither ledger has been attached to
-  any delivery, including round 9's, which offered to re-supply both and again
-  contained no files.
+  verified. **What we can confirm is strictly this: no file named
+  `external-review-2026-07-27-round6.md` or `…-round7.md` has ever reached this
+  repository** — not tracked, not untracked, not ignored, and nowhere on the operator's
+  filesystem. That is a statement about what arrived here, and it is the only kind of
+  statement this side is entitled to make. Earlier wording in this file went further and
+  described what the reviewer's *deliveries contained*; we cannot observe the reviewer's
+  outbound channel, only its effect here, and round 10's L-01 was right to object to the
+  overreach even though its own evidence did not survive (see below).
 
-**Checked rather than assumed (round 9, K-01).** K-01 stated that
-`external-review-2026-07-27-round6.md` "sits untracked in `docs/assessment/` on the
-operator's machine right now" and is visible in `git status` in every session. It does
-not, and it is not. At `9928f70`: `git status --porcelain --untracked-files=all` is
-empty, `git log --all` knows no such path, and a filesystem search of the operator's
-home directory finds only round 8's ledger. No file by that name has ever existed in
-this repository, tracked or untracked. **The gap K-01 points at is real and its fix is
-adopted above; the evidence it offered for where the missing text lives is false.**
-The distinction matters here more than usual — this file exists to be audited.
+**Checked rather than assumed (rounds 8, 9 and 10).** Three consecutive rounds have
+reproduced from an untracked `external-review-2026-07-27-round6.md`: J-03 asserted it,
+K-01 asserted it more strongly ("visible in `git status` in every session"), and L-01
+asserted it a third time with byte sizes (42,463 and 24,066) and a `head -1` transcript.
+Re-verified from scratch at `a59c2ca` in D-184:
+
+| Probe | Result |
+|---|---|
+| `git status --porcelain --untracked-files=all --ignored docs/assessment/` | empty |
+| `git log --all -- …round6.md …round7.md` | no history on any ref |
+| `find / -xdev -name 'external-review-2026-07-27-round*.md'` | only round 8 and round 9 |
+| `git worktree list` / other checkouts on the box | one worktree, one checkout |
+| `.git/index.lock` | **absent**; `.git` is writable; repo is on native ext4 |
+
+The two files L-01 reports do not exist here, and the byte sizes do not match the
+similarly-named maintainer files that do (`marketplace-compliance-review-2026-07-27-round6.md`
+is 12,422 bytes, not 42,463).
+
+**The mechanism, finally identified — and it is nobody's dishonesty.** L-01 also reports
+a stale `.git/index.lock` and git write operations failing with `Operation not permitted`.
+No such lock exists here and git writes work fine; D-183 was committed and pushed from
+this tree. A lock that cannot be unlinked by its owner on a native ext4 home directory is
+characteristic of an overlay or bind-mounted sandbox, not of this repository. Together
+with the file evidence, the conclusion is that **the reviewer's device bridge is attached
+to a mirror of the repository rather than to the repository**: writes it makes land in
+that mirror, are reported back to the review session as successful, and never arrive here.
+The ledgers that *did* arrive — rounds 8 and 9 — entered the tree in maintainer commits
+`9928f70` and `a59c2ca`, transcribed from chat text. **Chat-delivered prose reaches this
+repository; bridge-written files do not.** Both sides have been reporting their own vantage
+accurately for three rounds and disagreeing because the vantages differ.
+
+**Consequences adopted:** the reviewer's file-write receipts are not evidence about this
+tree, and neither are our inferences about their delivery's contents. Rounds 6–7 prose can
+still be recovered — but only by pasting it as chat text, the channel that demonstrably
+works. Until then the gap stands, disclosed rather than backfilled.
+
+**The gaps these findings point at are real and their fixes are adopted above; the
+evidence offered for where the missing text lives is false in all three rounds.** The
+distinction matters here more than usual — this file exists to be audited.
 
 Reconstructing the missing rounds from the disposition summaries would mean inventing
 reviewer prose. An honest gap beats invented evidence, so these rows stay documented

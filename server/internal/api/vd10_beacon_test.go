@@ -22,9 +22,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/aytekXR/ams-pulse/server/internal/api"
 	"github.com/aytekXR/ams-pulse/server/internal/domain"
@@ -339,4 +341,221 @@ func TestVD10_BeaconPOST_NoSink_StillAccepts(t *testing.T) {
 	} else {
 		t.Logf("PASS: Pro tier + no sink → handler still returns 202 (graceful degradation)")
 	}
+}
+
+// ─── A10 field limits parity tests ────────────────────────────────────────────
+//
+// The dedicated beacon handler (collector/beacon) applies A10 field limits:
+// - tenant truncated to maxTenantLen (64)
+// - string values in event Data truncated to maxStringDataValueLen (64)
+// Both truncations use truncateUTF8 which preserves UTF-8 validity.
+//
+// Before D-184 the main-port /ingest/beacon handler applied NEITHER truncation,
+// so the two implementations diverged. These tests verify the main-port handler
+// applies identical limits, using the same exported helper from the beacon
+// package so they can never diverge again.
+
+// TestMainPort_BeaconPOST_TenantTruncation verifies that a tenant value longer
+// than 64 bytes is truncated to 64 bytes by the main-port handler (A10 parity).
+// Before D-184 this passed the full tenant through unchanged.
+func TestMainPort_BeaconPOST_TenantTruncation(t *testing.T) {
+	ts, ingestToken, sink, cleanup := setupServerWithSink(t)
+	defer cleanup()
+
+	// 200-byte tenant — must be truncated to 64 bytes.
+	longTenant := strings.Repeat("a", 200)
+	batch := map[string]any{
+		"version":    1,
+		"session_id": "truncate-tenant-session",
+		"stream_id":  "truncate-tenant-stream",
+		"meta":       map[string]string{"tenant": longTenant},
+		"events": []any{
+			map[string]any{
+				"type": "heartbeat",
+				"ts":   int64(1700000000000),
+				"data": map[string]any{"watch_ms": 1000},
+			},
+		},
+	}
+	body, _ := json.Marshal(batch)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/ingest/beacon", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Pulse-Ingest-Token", ingestToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /ingest/beacon: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 202, got %d: %s", resp.StatusCode, b)
+	}
+
+	// Wait for async sink write.
+	var lastEvt domain.BeaconEvent
+	var got bool
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		lastEvt, got = sink.LastEvent()
+		if got {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !got {
+		t.Fatal("EventSink never received a BeaconEvent")
+	}
+
+	// A10 parity: tenant must be truncated to 64 bytes, same as dedicated handler.
+	if len(lastEvt.Tenant) > 64 {
+		t.Errorf("FAIL A10 parity: main-port tenant not truncated: len=%d, want <=64", len(lastEvt.Tenant))
+	} else {
+		t.Logf("PASS A10: main-port tenant truncated to %d bytes", len(lastEvt.Tenant))
+	}
+}
+
+// TestMainPort_BeaconPOST_DataStringTruncation verifies that string values in
+// event Data longer than 64 bytes are truncated by the main-port handler.
+// Before D-184 string values were passed through unchanged.
+func TestMainPort_BeaconPOST_DataStringTruncation(t *testing.T) {
+	ts, ingestToken, sink, cleanup := setupServerWithSink(t)
+	defer cleanup()
+
+	// 200-byte string value in Data — must be truncated to 64 bytes.
+	longValue := strings.Repeat("x", 200)
+	batch := map[string]any{
+		"version":    1,
+		"session_id": "truncate-data-session",
+		"stream_id":  "truncate-data-stream",
+		"events": []any{
+			map[string]any{
+				"type": "error",
+				"ts":   int64(1700000000000),
+				"data": map[string]any{
+					"code":    "MEDIA_ERR_DECODE",
+					"message": longValue, // must be truncated
+				},
+			},
+		},
+	}
+	body, _ := json.Marshal(batch)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/ingest/beacon", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Pulse-Ingest-Token", ingestToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /ingest/beacon: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 202, got %d: %s", resp.StatusCode, b)
+	}
+
+	// Wait for async sink write.
+	var lastEvt domain.BeaconEvent
+	var got bool
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		lastEvt, got = sink.LastEvent()
+		if got {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !got {
+		t.Fatal("EventSink never received a BeaconEvent")
+	}
+
+	if len(lastEvt.Events) == 0 {
+		t.Fatal("no events in BeaconEvent")
+	}
+	msg, ok := lastEvt.Events[0].Data["message"].(string)
+	if !ok {
+		t.Fatalf("expected Data[message] to be string, got %T", lastEvt.Events[0].Data["message"])
+	}
+	if len(msg) > 64 {
+		t.Errorf("FAIL A10 parity: main-port Data string not truncated: len=%d, want <=64", len(msg))
+	} else {
+		t.Logf("PASS A10: main-port Data string truncated to %d bytes", len(msg))
+	}
+}
+
+// TestMainPort_BeaconPOST_UTF8SafeTruncation verifies that multi-byte UTF-8
+// runes are not split by truncation in the main-port handler.
+// This test uses a string that would be split mid-rune at 64 bytes.
+func TestMainPort_BeaconPOST_UTF8SafeTruncation(t *testing.T) {
+	ts, ingestToken, sink, cleanup := setupServerWithSink(t)
+	defer cleanup()
+
+	// Build a string where byte 64 falls in the middle of a multi-byte rune.
+	// "a" repeated 62 times + "日本語" (3 chars, 9 bytes) = 71 bytes.
+	// truncateUTF8(s, 64) should return 62 "a"s + the first 2 bytes of "日" which
+	// is invalid UTF-8, so it backtracks to 62 "a"s.
+	// Actually: "日" is 3 bytes, so bytes 62..64 is incomplete — the result is 62 "a"s.
+	value := strings.Repeat("a", 62) + "日本語"
+	if len(value) != 71 {
+		t.Fatalf("test setup: expected 71 bytes, got %d", len(value))
+	}
+
+	batch := map[string]any{
+		"version":    1,
+		"session_id": "utf8-safe-session",
+		"stream_id":  "utf8-safe-stream",
+		"meta":       map[string]string{"tenant": value}, // truncate tenant
+		"events": []any{
+			map[string]any{
+				"type": "heartbeat",
+				"ts":   int64(1700000000000),
+				"data": map[string]any{"watch_ms": 1000},
+			},
+		},
+	}
+	body, _ := json.Marshal(batch)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/ingest/beacon", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Pulse-Ingest-Token", ingestToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /ingest/beacon: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 202, got %d: %s", resp.StatusCode, b)
+	}
+
+	// Wait for async sink write.
+	var lastEvt domain.BeaconEvent
+	var got bool
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		lastEvt, got = sink.LastEvent()
+		if got {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !got {
+		t.Fatal("EventSink never received a BeaconEvent")
+	}
+
+	// The truncated string must be valid UTF-8 (no split runes).
+	if !utf8.ValidString(lastEvt.Tenant) {
+		t.Errorf("FAIL A10 parity: truncated tenant is not valid UTF-8: %q", lastEvt.Tenant)
+	}
+	// Should be 62 "a"s — the rune was incomplete so truncateUTF8 backtracked.
+	if lastEvt.Tenant != strings.Repeat("a", 62) {
+		t.Errorf("UTF-8 safe truncation: got %q, want %q", lastEvt.Tenant, strings.Repeat("a", 62))
+	}
+	t.Logf("PASS A10 UTF-8: main-port truncation is UTF-8 safe (%d bytes)", len(lastEvt.Tenant))
 }

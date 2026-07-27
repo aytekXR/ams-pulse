@@ -541,20 +541,45 @@ func truncateUTF8(s string, maxBytes int) string {
 	return t
 }
 
+// ApplyA10FieldLimits applies the A10 field limits to a domain.BeaconEvent:
+//   - Tenant truncated to MaxTenantLen (64) bytes
+//   - String values in event Data truncated to MaxStringDataValueLen (64) bytes
+//
+// Both truncations use UTF-8-safe truncation (no split runes). The function
+// modifies ev in place and returns it for chaining convenience.
+//
+// Exported so the main-port /ingest/beacon handler (server/internal/api)
+// applies identical limits to the dedicated beacon handler — before D-184
+// (round-10 exculpation audit, finding M-02) the main-port handler
+// applied NEITHER limit, so oversized values reached ClickHouse via that route.
+// Sharing this function ensures both handlers can never diverge again.
+//
+// NOTE: This function is the SINGLE OWNER of the 64/64 limits. Do not redeclare
+// the constants in internal/api; import and call this function instead.
+func ApplyA10FieldLimits(ev *domain.BeaconEvent) *domain.BeaconEvent {
+	// Truncate tenant.
+	if len(ev.Tenant) > maxTenantLen {
+		ev.Tenant = truncateUTF8(ev.Tenant, maxTenantLen)
+	}
+	// Truncate string values in each event's Data map.
+	for i := range ev.Events {
+		if ev.Events[i].Data != nil {
+			for k, v := range ev.Events[i].Data {
+				if s, ok := v.(string); ok && len(s) > maxStringDataValueLen {
+					ev.Events[i].Data[k] = truncateUTF8(s, maxStringDataValueLen)
+				}
+			}
+		}
+	}
+	return ev
+}
+
 // batchToDomain converts a parsed batch to a domain.BeaconEvent.
 // VD-08: extract client IP (X-Forwarded-For / RemoteAddr) and User-Agent,
 // call geo+UA resolvers, populate Enrichment on the event.
 func batchToDomain(b *beaconBatch, r *http.Request, geo collector.GeoResolver, ua collector.UAParser) domain.BeaconEvent {
 	items := make([]domain.BeaconItem, len(b.Events))
 	for i, ev := range b.Events {
-		// A10: truncate oversized string values in event data.
-		if ev.Data != nil {
-			for k, v := range ev.Data {
-				if s, ok := v.(string); ok && len(s) > maxStringDataValueLen {
-					ev.Data[k] = truncateUTF8(s, maxStringDataValueLen)
-				}
-			}
-		}
 		items[i] = domain.BeaconItem{Type: ev.Type, TS: ev.TS, Data: ev.Data}
 	}
 
@@ -571,13 +596,14 @@ func batchToDomain(b *beaconBatch, r *http.Request, geo collector.GeoResolver, u
 	}
 	if b.Meta != nil {
 		if tenant, ok := b.Meta["tenant"]; ok {
-			// A10: truncate tenant to maxTenantLen to prevent unbounded string growth.
-			if len(tenant) > maxTenantLen {
-				tenant = truncateUTF8(tenant, maxTenantLen)
-			}
 			evt.Tenant = tenant
 		}
 	}
+
+	// D-184: apply A10 field limits via the shared helper. Before D-184 this code
+	// was inline here; now it is shared so the main-port /ingest/beacon handler
+	// can call the same function — the two implementations can never diverge.
+	ApplyA10FieldLimits(&evt)
 
 	// VD-08: Extract client IP and User-Agent from the HTTP request.
 	// X-Forwarded-For is checked first (CDN/proxy deployments);

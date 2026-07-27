@@ -32,7 +32,10 @@
    price wording are yours.
 
 3. **Submit the listing** to the Ant Media Marketplace (your account) — paste from
-   `listing.md`, never from `listing-draft.md` (internal). **Submit against `v0.4.4`.**
+   `listing.md`, never from `listing-draft.md` (internal). **Submit against the tag you cut in
+   item 1's sitting — `v0.4.5` if you take the recommended motion, `v0.4.4` if you decide not to
+   cut.** (Until D-184 this line read "submit against `v0.4.4`" while the same file's closing note
+   recommended cutting `v0.4.5` first — the two now agree, and the choice is yours either way.)
    Artifact index: `docs/marketplace/submission-package.md`.
 
    ⚠ **If their reviewer verifies our image signature, tell them to use cosign v3 or newer.**
@@ -84,6 +87,14 @@
   tier/channels ruling. (The Prometheus half has already shipped.)
 - **§2.44 `[FO-1]`** firing-orphan behaviour for node/QoE alerts whose subject vanishes:
   auto-resolve-after-grace (the loop's lean) / stay-firing / leave-as-is.
+- **`[M-04]`** beacon identity-field length limits. `session_id`, `stream_id`, `app` and
+  `player_kind` have no maximum length, so a holder of a valid ingest token can write very large
+  high-cardinality strings into ClickHouse (bounded only by the 64 KB body cap and the per-token
+  rate limit). **Not fixed on purpose:** truncating a `session_id` would silently merge distinct
+  sessions and corrupt the `uniq(session_id)` aggregates, which is worse than the problem;
+  rejecting over-long ids instead is a behavioural break that needs a contract change (frozen,
+  D-004). Two words unblock it — the **limit** (e.g. 128 bytes) and the **failure mode** (reject
+  the batch with 422, or accept and drop the event).
 - **Dependabot queue** (17 PRs open, operator-held): confirm the hold, or authorise a
   batch-absorb session per `docs/dependabot-policy.md`.
 
@@ -96,15 +107,17 @@ load-evidence format (A9). Details: `docs/marketplace/submission-process.md`.
 
 ---
 
-*Prod: healthy and untouched — v0.4.0-139, all three `/healthz` components `ok`, 1,336,799
-server events, newest 16 s old, collector actively ingesting. A prod roll is item 11, never
+*Prod: healthy and untouched — v0.4.0-139, all three `/healthz` components `ok`, 1,337,678
+server events, newest 1 s old, collector actively ingesting. A prod roll is item 11, never
 automatic.*
 
-*On item 1: external review rounds 7, 8 and 9 have now each landed fixes on `main` that are not
+*On item 1: external review rounds 7 through 10 have now each landed fixes on `main` that are not
 in the v0.4.4 tag, and one of them (the geo/device breakdown row cap) changes API responses.
 Nothing here changes item 1's priority — but when you rotate, the same sitting authorises one
 motion: **rotate, cut v0.4.5, submit against it**. That single cut also clears the stale prose
-frozen inside the v0.4.4 tag, which is the only remaining thing an evaluator could catch.*
+frozen inside the v0.4.4 tag, which is the only remaining thing an evaluator could catch.
+Round 10 (the reviewer's own final round) reaches the same conclusion independently: "not blocked
+by engineering — blocked by one operator rotation and one tag."*
 
 *Noticed while probing your AMS: its licence shows `type: trial`, `endDate 2026-07-27` —
 expiring today. It affects nothing we ship, but it does affect future live validation against

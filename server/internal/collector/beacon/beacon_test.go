@@ -13,6 +13,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/aytekXR/ams-pulse/server/internal/collector"
 	"github.com/aytekXR/ams-pulse/server/internal/collector/beacon"
@@ -884,4 +885,136 @@ func TestBeacon_TenantTruncation(t *testing.T) {
 		t.Errorf("Tenant truncation wrong: got %q, want %q", ev.Tenant, longTenant[:64])
 	}
 	t.Logf("PASS A10: tenant truncated to %d chars (was %d)", len(ev.Tenant), len(longTenant))
+}
+
+// TestBeacon_DataStringTruncation verifies that string values in event Data
+// longer than 64 bytes are truncated by the dedicated beacon handler (A10).
+// D-184 parity: must match TestMainPort_BeaconPOST_DataStringTruncation.
+func TestBeacon_DataStringTruncation(t *testing.T) {
+	validToken := "data-truncate-token"
+	store := beacon.NewMemTokenStore(validToken)
+	sink := newCaptureEnrichSink()
+
+	cfg := beacon.Config{
+		RateLimitPerTokenRPS: 100,
+		RateBurst:            200,
+	}
+	h := beacon.New(cfg, store, sink, nil)
+	defer h.Close()
+
+	// 200-byte string value in Data — must be truncated to 64 bytes.
+	longValue := strings.Repeat("x", 200)
+	batch := map[string]any{
+		"version":    1,
+		"session_id": "550e8400-e29b-41d4-a716-446655440000",
+		"stream_id":  "test-stream",
+		"events": []any{
+			map[string]any{
+				"type": "error",
+				"ts":   int64(1700000000000),
+				"data": map[string]any{
+					"code":    "MEDIA_ERR_DECODE",
+					"message": longValue,
+				},
+			},
+		},
+	}
+	body, err := json.Marshal(batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/ingest/beacon", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Pulse-Ingest-Token", validToken)
+	rr := httptest.NewRecorder()
+	h.Handle(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	ev := sink.WaitEvent(t)
+	if ev == nil {
+		t.Fatal("no beacon event received")
+	}
+	if len(ev.Events) == 0 {
+		t.Fatal("no events in BeaconEvent")
+	}
+	msg, ok := ev.Events[0].Data["message"].(string)
+	if !ok {
+		t.Fatalf("expected Data[message] to be string, got %T", ev.Events[0].Data["message"])
+	}
+	if len(msg) > 64 {
+		t.Errorf("Data string not truncated: got len=%d, want <=64", len(msg))
+	}
+	t.Logf("PASS A10: Data string truncated to %d bytes (was %d)", len(msg), len(longValue))
+}
+
+// TestBeacon_UTF8SafeTruncation verifies that multi-byte UTF-8 runes are not
+// split by truncation in the dedicated beacon handler (A10).
+// D-184 parity: must match TestMainPort_BeaconPOST_UTF8SafeTruncation.
+func TestBeacon_UTF8SafeTruncation(t *testing.T) {
+	validToken := "utf8-safe-token"
+	store := beacon.NewMemTokenStore(validToken)
+	sink := newCaptureEnrichSink()
+
+	cfg := beacon.Config{
+		RateLimitPerTokenRPS: 100,
+		RateBurst:            200,
+	}
+	h := beacon.New(cfg, store, sink, nil)
+	defer h.Close()
+
+	// Build a string where byte 64 falls in the middle of a multi-byte rune.
+	// "a" repeated 62 times + "日本語" (3 chars, 9 bytes) = 71 bytes.
+	// truncateUTF8(s, 64) backtracks to 62 "a"s because bytes 62..64 are
+	// incomplete "日" (which needs 3 bytes).
+	value := strings.Repeat("a", 62) + "日本語"
+	if len(value) != 71 {
+		t.Fatalf("test setup: expected 71 bytes, got %d", len(value))
+	}
+
+	batch := map[string]any{
+		"version":    1,
+		"session_id": "550e8400-e29b-41d4-a716-446655440000",
+		"stream_id":  "test-stream",
+		"meta":       map[string]string{"tenant": value},
+		"events": []any{
+			map[string]any{
+				"type": "heartbeat",
+				"ts":   int64(1700000000000),
+				"data": map[string]any{"watch_ms": 1000},
+			},
+		},
+	}
+	body, err := json.Marshal(batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/ingest/beacon", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Pulse-Ingest-Token", validToken)
+	rr := httptest.NewRecorder()
+	h.Handle(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	ev := sink.WaitEvent(t)
+	if ev == nil {
+		t.Fatal("no beacon event received")
+	}
+
+	// The truncated string must be valid UTF-8 (no split runes).
+	if !utf8.ValidString(ev.Tenant) {
+		t.Errorf("truncated tenant is not valid UTF-8: %q", ev.Tenant)
+	}
+	// Should be 62 "a"s — the rune was incomplete so truncateUTF8 backtracked.
+	if ev.Tenant != strings.Repeat("a", 62) {
+		t.Errorf("UTF-8 safe truncation: got %q, want %q", ev.Tenant, strings.Repeat("a", 62))
+	}
+	t.Logf("PASS A10 UTF-8: dedicated handler truncation is UTF-8 safe (%d bytes)", len(ev.Tenant))
 }

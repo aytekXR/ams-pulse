@@ -27,11 +27,14 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/aytekXR/ams-pulse/server/internal/ssrfguard"
 )
 
 // S3Config holds S3-compatible upload configuration.
@@ -55,6 +58,12 @@ type S3Uploader struct {
 }
 
 // NewS3Uploader creates an S3Uploader.
+// The HTTP client is guarded by ssrfguard.DialControl so that an S3 endpoint
+// targeting link-local or IMDS addresses (e.g. 169.254.169.254) is refused at
+// dial time. The guard is installed in the constructor (not at the call site
+// in serve.go) so that every call site inherits the protection automatically —
+// this defect class exists precisely because the guard was wiring-dependent.
+// Proxy is disabled to prevent SSRF via HTTP_PROXY environment variable.
 func NewS3Uploader(cfg S3Config, logger *slog.Logger) *S3Uploader {
 	if cfg.Region == "" {
 		cfg.Region = "us-east-1"
@@ -62,7 +71,15 @@ func NewS3Uploader(cfg S3Config, logger *slog.Logger) *S3Uploader {
 	return &S3Uploader{
 		cfg:    cfg,
 		logger: logger,
-		client: &http.Client{Timeout: 60 * time.Second},
+		client: &http.Client{
+			Timeout: 60 * time.Second,
+			Transport: &http.Transport{
+				Proxy: nil, // Disable proxy to prevent SSRF via HTTP_PROXY
+				DialContext: (&net.Dialer{
+					Control: ssrfguard.DialControl,
+				}).DialContext,
+			},
+		},
 	}
 }
 
