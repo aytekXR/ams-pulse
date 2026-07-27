@@ -719,8 +719,9 @@ passwords.
 **2. Install the chart**
 
 The chart is published to GHCR as an OCI artifact on every release and is **anonymously
-pullable** — no clone and no registry login required (verified 2026-07-27 against chart
-`0.3.1` / appVersion `0.4.3`):
+pullable** — no clone and no registry login required (verified 2026-07-27; the chart
+version and its `appVersion` are whatever `deploy/helm/pulse/Chart.yaml` carries at the
+tag you install — see the `--version` pin below):
 
 ```sh
 helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.2 \

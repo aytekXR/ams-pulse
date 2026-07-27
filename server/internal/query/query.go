@@ -586,6 +586,43 @@ func (s *Service) QueryProbeResults(ctx context.Context, probeID string, from, t
 	return s.probeResultQuerier.QueryProbeResults(ctx, probeID, from, to, limit, cursor)
 }
 
+// ─── VD-06: Breakdown row cap (J-02 fix) ─────────────────────────────────────
+
+// breakdownRowCap is the maximum number of distinct group rows returned by
+// DeviceBreakdown and GeoBreakdown before aggregating the remainder into an
+// "other" tail row. This caps response size for high-cardinality GROUP BY
+// queries (J-02 defect class).
+//
+// Rationale for 100: device combos are ~450 today (enum-bounded); geo
+// country×region is ~4000 (MaxMind-bounded). 100 captures the top contributors
+// (typically 80%+ of traffic) while keeping the response payload under 50KB
+// JSON. The tail row preserves aggregate totals so charts/reports stay honest.
+const breakdownRowCap = 100
+
+// clampTailAggregate floors a tail-row aggregate at zero.
+//
+// The tail is derived as total − Σ(capped rows), and that subtraction can
+// legitimately go negative for two independent reasons:
+//
+//  1. uniq(session_id) is an APPROXIMATE aggregate (ClickHouse adaptive
+//     HyperLogLog). The total and the per-group values are estimated
+//     independently, so Σ(per-group) can exceed the total estimate even when
+//     the underlying session sets are provably disjoint.
+//  2. The grouped query and the totals query are two separate round trips
+//     against a live table. Concurrent ingest, or a ReplacingMergeTree FINAL
+//     merge landing between them, means neither reads a snapshot of the other.
+//
+// count() and sum() are exact aggregates, so only (2) applies to them — but a
+// negative count in an API response is visibly wrong either way, so all three
+// are floored. Under-reporting the tail slightly is strictly better than
+// emitting a negative. Pinned by TestBreakdownTailRow_NeverNegative.
+func clampTailAggregate(v int64) int64 {
+	if v < 0 {
+		return 0
+	}
+	return v
+}
+
 // ─── VD-06: Geo breakdown ────────────────────────────────────────────────────
 
 // GeoParams holds filters for the geo breakdown query.
@@ -639,6 +676,8 @@ func (s *Service) GeoBreakdown(ctx context.Context, p GeoParams) ([]GeoRow, erro
 		args = append(args, p.Tenant)
 	}
 
+	// J-02 fix: fetch at most breakdownRowCap+1 rows so we know whether capping
+	// is needed without scanning the entire result set.
 	q := fmt.Sprintf(`
 		SELECT
 			geo_country%s,
@@ -648,8 +687,9 @@ func (s *Service) GeoBreakdown(ctx context.Context, p GeoParams) ([]GeoRow, erro
 		FROM viewer_sessions FINAL
 		WHERE %s
 		GROUP BY %s
-		ORDER BY views DESC`,
-		selectRegion, where, groupBy)
+		ORDER BY views DESC
+		LIMIT %d`,
+		selectRegion, where, groupBy, breakdownRowCap+1)
 
 	rows, err := s.conn.Query(ctx, q, args...)
 	if err != nil {
@@ -676,6 +716,65 @@ func (s *Service) GeoBreakdown(ctx context.Context, p GeoParams) ([]GeoRow, erro
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+
+	// J-02 fix: if we fetched more than the cap, compute an aggregated tail row.
+	// The tail row is labelled with sentinel country="other" (and region="other"
+	// when Region=true) so consumers can distinguish it from real data.
+	//
+	// Tail math justification: viewer_sessions is a ReplacingMergeTree keyed by
+	// (stream_id, session_id). Each session_id has fixed geo_country and
+	// geo_region columns (per-session attributes set at session creation). After
+	// FINAL deduplication, a session_id appears in exactly ONE (country, region)
+	// tuple. Therefore:
+	//   - count() is additive across disjoint groups (each row counted once)
+	//   - sum(watch_time_s) is additive (each session's watch_time counted once)
+	//   - uniq(session_id) partitions cleanly across groups because a session_id
+	//     cannot appear in two different (country, region) tuples.
+	//
+	// Disjointness is necessary but NOT sufficient: uniq() is an approximate
+	// aggregate and the totals query is a second round trip against a live
+	// table, so tail_X = total_X - sum(capped_X) can still underflow. See
+	// clampTailAggregate.
+	if len(result) > breakdownRowCap {
+		// Trim to cap rows.
+		capped := result[:breakdownRowCap]
+
+		// Sum the capped rows' aggregates.
+		var cappedViews, cappedUniques, cappedWatchS int64
+		for _, r := range capped {
+			cappedViews += r.Views
+			cappedUniques += r.Uniques
+			cappedWatchS += r.WatchTimeS
+		}
+
+		// Fetch totals with the same WHERE clause but no GROUP BY.
+		totalsQ := fmt.Sprintf(`
+			SELECT
+				toInt64(count())            AS views,
+				toInt64(uniq(session_id))   AS uniques,
+				toInt64(sum(watch_time_s))  AS watch_time_s
+			FROM viewer_sessions FINAL
+			WHERE %s`, where)
+		var totalViews, totalUniques, totalWatchS int64
+		if err := s.conn.QueryRow(ctx, totalsQ, args...).Scan(&totalViews, &totalUniques, &totalWatchS); err != nil {
+			return nil, fmt.Errorf("geo breakdown totals: %w", err)
+		}
+
+		// Build the tail row.
+		tailRow := GeoRow{
+			Country:    "other",
+			Views:      clampTailAggregate(totalViews - cappedViews),
+			Uniques:    clampTailAggregate(totalUniques - cappedUniques),
+			WatchTimeS: clampTailAggregate(totalWatchS - cappedWatchS),
+		}
+		if p.Region {
+			otherRegion := "other"
+			tailRow.Region = &otherRegion
+		}
+
+		result = append(capped, tailRow)
+	}
+
 	if result == nil {
 		result = []GeoRow{}
 	}
@@ -729,6 +828,8 @@ func (s *Service) DeviceBreakdown(ctx context.Context, p DeviceParams) ([]Device
 		args = append(args, p.Tenant)
 	}
 
+	// J-02 fix: fetch at most breakdownRowCap+1 rows so we know whether capping
+	// is needed without scanning the entire result set.
 	q := fmt.Sprintf(`
 		SELECT
 			client_device,
@@ -741,7 +842,8 @@ func (s *Service) DeviceBreakdown(ctx context.Context, p DeviceParams) ([]Device
 		FROM viewer_sessions FINAL
 		WHERE %s
 		GROUP BY client_device, client_os, client_browser, protocol
-		ORDER BY views DESC`, where)
+		ORDER BY views DESC
+		LIMIT %d`, where, breakdownRowCap+1)
 
 	rows, err := s.conn.Query(ctx, q, args...)
 	if err != nil {
@@ -761,6 +863,65 @@ func (s *Service) DeviceBreakdown(ctx context.Context, p DeviceParams) ([]Device
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+
+	// J-02 fix: if we fetched more than the cap, compute an aggregated tail row.
+	// The tail row is labelled with sentinel device/os/browser="other" and
+	// protocol="other" so consumers can distinguish it from real data.
+	//
+	// Tail math justification: viewer_sessions is a ReplacingMergeTree keyed by
+	// (stream_id, session_id). Each session_id has fixed client_device,
+	// client_os, client_browser, and protocol columns (per-session attributes
+	// derived from User-Agent at session creation). After FINAL deduplication, a
+	// session_id appears in exactly ONE (device, os, browser, protocol) tuple.
+	// Therefore:
+	//   - count() is additive across disjoint groups (each row counted once)
+	//   - sum(watch_time_s) is additive (each session's watch_time counted once)
+	//   - uniq(session_id) partitions cleanly across groups because a session_id
+	//     cannot appear in two different device tuples.
+	//
+	// Disjointness is necessary but NOT sufficient: uniq() is an approximate
+	// aggregate and the totals query is a second round trip against a live
+	// table, so tail_X = total_X - sum(capped_X) can still underflow. See
+	// clampTailAggregate.
+	if len(result) > breakdownRowCap {
+		// Trim to cap rows.
+		capped := result[:breakdownRowCap]
+
+		// Sum the capped rows' aggregates.
+		var cappedViews, cappedUniques, cappedWatchS int64
+		for _, r := range capped {
+			cappedViews += r.Views
+			cappedUniques += r.Uniques
+			cappedWatchS += r.WatchTimeS
+		}
+
+		// Fetch totals with the same WHERE clause but no GROUP BY.
+		totalsQ := fmt.Sprintf(`
+			SELECT
+				toInt64(count())            AS views,
+				toInt64(uniq(session_id))   AS uniques,
+				toInt64(sum(watch_time_s))  AS watch_time_s
+			FROM viewer_sessions FINAL
+			WHERE %s`, where)
+		var totalViews, totalUniques, totalWatchS int64
+		if err := s.conn.QueryRow(ctx, totalsQ, args...).Scan(&totalViews, &totalUniques, &totalWatchS); err != nil {
+			return nil, fmt.Errorf("device breakdown totals: %w", err)
+		}
+
+		// Build the tail row.
+		tailRow := DeviceRow{
+			Device:     "other",
+			OS:         "other",
+			Browser:    "other",
+			Protocol:   "other",
+			Views:      clampTailAggregate(totalViews - cappedViews),
+			Uniques:    clampTailAggregate(totalUniques - cappedUniques),
+			WatchTimeS: clampTailAggregate(totalWatchS - cappedWatchS),
+		}
+
+		result = append(capped, tailRow)
+	}
+
 	if result == nil {
 		result = []DeviceRow{}
 	}

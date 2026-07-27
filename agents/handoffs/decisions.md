@@ -10316,3 +10316,77 @@ un-rotated**. It remains the single blocker both the reviewer and the loop agree
 with the repo-root mount (0 FAIL) · alert/anomaly/meta suites green under `-race` after the
 comment sweep · guard check #19 mutation-proved both directions · ShellCheck clean on 0.9.0 and
 0.11.0 · both workflows parse as YAML.
+
+---
+
+## D-182 — §S114: external review round 8 (J-01…J-03) verified & executed
+
+**Input:** external review round 8 against `1380b5e`, verdict *"ready to submit as soon as G-02
+closes"*. **Result: all three findings CONFIRMED as defects, but J-02's stated mechanism is
+REFUTED and it downgrades to LOW by the reviewer's own written rule. Two of three were wider
+than filed, and five further items were found by us.** Dispositions are filled into the
+reviewer's own ledger: `docs/assessment/external-review-2026-07-27-round8.md` (the first round
+to follow the §5 naming — see J-03).
+
+**The reassurance is where the bug was.** Round 8's most useful sentence was not a finding, it
+was a reassurance: *"the sibling `GeoBreakdown` is shape-identical but domain-bounded (~250
+countries), so it is fine — which is exactly why the unbounded sibling is easy to miss."* It is
+not fine. `GeoBreakdown` switches its `GROUP BY` to `geo_country, geo_region` when `p.Region` is
+set, and `?region=true` is a documented API parameter. Country × region is thousands of rows,
+uncapped — strictly larger than the instance actually filed, whose keys turned out to be capped
+at 448 combinations. **A reviewer's "this one is fine" is the one place nobody looks twice.
+Verify the exculpations with the same rigor as the accusations.**
+
+**J-02's mechanism was refuted, its class was confirmed.** The claim was that
+`client_device`/`client_os`/`client_browser` are viewer-controlled. They are not:
+`collector/enrichment.go` maps *any* User-Agent through literal switch statements into a closed
+set (`detectDevice` 4, `detectOS` 8, `detectBrowser` 14). `protocol` is emptier still — its only
+writer reads a `viewer_join` ServerEvent and **nothing in non-test code emits one**, so the
+column is `""` in production. 10,000 hostile User-Agents produce the same 448 combos. The
+reviewer stated their own downgrade condition ("if ingest normalizes these columns to a closed
+enum … this downgrades to a LOW") and it fires. What survived is what they were right about:
+the response was uncapped. Both breakdowns now cap at `breakdownRowCap = 100` with an
+aggregated `other` tail row.
+
+**Our own fix shipped the defect it was fixing.** The first cap implementation computed
+`tail = total − Σ(capped)` and asserted in-comment that the subtraction was *exact* for all
+three metrics because the groups are disjoint. Disjointness is necessary but not sufficient:
+`uniq(session_id)` is an **approximate** aggregate (ClickHouse adaptive HLL) whose total and
+per-group estimates are computed independently, and the totals query is a second round trip
+against a live table. Reproduced numerically — `views=-100 uniques=-20 watch_s=-1000` — then
+clamped via `clampTailAggregate`, comment corrected. **An in-code proof of exactness is a claim
+to test, not evidence** — the same rule we apply to changelogs, applied to ourselves. Both the
+authoring lane and its adversarial verifier certified this code SOUND.
+
+**J-03 was undercounted the same way round 7 was.** Filed against rounds 6–7; a tree-scoped grep
+for the reviewer schema markers (`**Claim.`, `**Reproduction.`, `Proposed fix`) returns 0 in
+**rounds 4, 5, 6 and 7**. Rounds 1–3 preserve substantial per-issue narrative in a
+pre-standardization format. Root cause was a self-contradiction inside
+`EXTERNAL-REVIEW-PROMPT.md` — §0 named the maintainer file as the prior-round input while §5
+told the reviewer to write `external-review-…`. Both sections now agree. New
+`docs/assessment/review-chain.md` indexes all eight rounds and **states the rounds 4–7 gap
+rather than backfilling it**: that source text is not available to this repo, and reconstructing
+it would mean inventing reviewer prose.
+
+**J-01's class had two more instances, both outside the filed file.** The README's dated cosign
+claim is now structural (the OCI 1.1 referrer layout is a property of `release.yml`) plus a
+*closed* spot-verification naming v2.4.3/v3.0.2 against `0.3.0`/`0.4.3`/`0.4.4`. A tree-scoped
+sweep then found round 7's *own* classes still live elsewhere: `submission-package.md` carried
+the stale closed range "`0.3.0`…`0.4.3`" (I-01's under-claim direction) **in the marketplace
+submission document itself**, and `docs/runbooks/install.md` said "verified … against chart
+`0.3.1` / appVersion `0.4.3`" directly above `helm install … --version 0.3.2` (I-02's class,
+fixed in `deploy/helm/pulse/README.md` only). Both de-literalized. **When a guard or a fix is
+scoped to one file, write down what the scoping leaves uncovered** — this is the third
+consecutive round where drift landed exactly in that gap.
+
+**Gates:** `gofmt -l` empty · `go vet` clean · full `go test ./... -race` green with the
+repo-root mount, 26 packages, **0 FAIL, 0 unexpected SKIP** (`internal/api` ran 153 s, proving
+the ~90 api tests were not silently skipped) · `npm run typecheck` + `npm run lint` clean ·
+`npm run gen:api` reproduced `schema.d.ts` with **JSDoc-comment changes only**, no shape drift ·
+new regression tests `TestBreakdownTailRow_NeverNegative` (red→green, reproduced numerically)
+plus 7 cap tests. Prod gate at session start: all three `/healthz` components `ok`, 1,334,294
+server events, newest 9 s old.
+
+**Still open, unchanged:** **G-02** — rotate `CLICKHOUSE_PASSWORD`. Re-checked silently: the
+live value's 32-hex prefix still matches 2 commits in public history. Operator-gated; the sole
+submission blocker.

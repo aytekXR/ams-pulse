@@ -24,11 +24,13 @@
 > **Replace this block each session — never append to it.**
 
 **Where the product is:** **v0.4.4 is the release and the marketplace submission target.**
-S113 (D-181) executed external review **round 7**: all six findings confirmed, all six fixed,
-none refuted. Round 7's verdict is *"ready to submit as soon as G-02 closes"* — it re-verified
-every round-6 disposition against the **published artifacts**, confirmed the tag↔main drift
-pattern is broken, and found only prose/comment drift plus one metric nit. **The external review
-loop has converged**; further rounds are optional polish, not gating.
+S114 (D-182) executed external review **round 8**: all three findings confirmed as defects, but
+J-02's stated *mechanism* was refuted and it downgraded to LOW by the reviewer's own written
+rule. Two of three were wider than filed, and **five further items were found by us** — the
+largest being `GeoBreakdown`, which the reviewer explicitly reassured us was safe and which
+turned out to be the bigger instance of the very class they filed. Round 8's verdict is again
+*"ready to submit as soon as G-02 closes"*. **The external review loop has converged**; further
+rounds are optional polish, not gating. `main` carries the round-8 fixes, which ride the next cut.
 
 The round-6 headline still stands as the product change: LIM-01 is closed — standalone AMS
 reports CPU/memory/disk via `GET /rest/v2/system-resources`, no Kafka.
@@ -75,7 +77,25 @@ evaluator would meet lands on `main`, it belongs in a release**, because "it rid
 is exactly the ruling round 6 had to overturn. `main` currently carries the round-7 prose/comment
 fixes, which genuinely do ride the next cut (the reviewer's own recommendation).
 
-**Guard scope is a decision; scope gaps are where drift lands (S113's lesson).** Guard #17 was
+**Verify the exculpations, not just the accusations (S114's lesson).** Round 8's most valuable
+sentence was not a finding — it was a reassurance: *"the sibling `GeoBreakdown` is shape-identical
+but domain-bounded (~250 countries), so it is fine."* It was wrong (`?region=true` switches the
+grouping to `geo_country, geo_region`), and it was hiding a defect strictly larger than the one
+actually filed. **A reviewer's "this one is safe" is the one place nobody looks twice.** The same
+round, the filed MEDIUM turned out to be bounded at 448 rows once the enum mapping was read.
+
+**Apply "verify, don't trust" to our own code comments (S114).** Our J-02 fix shipped with an
+in-code proof that `tail = total − Σ(capped)` was exact because the groups are disjoint.
+Disjointness is necessary but not sufficient: `uniq()` is an approximate aggregate and the totals
+query is a second round trip. It emitted `uniques=-20`. **Both the authoring lane and its
+adversarial verifier certified that code SOUND** — an in-code proof is a claim to test, exactly
+like a changelog entry. Reproduce numerically before believing any arithmetic argument.
+
+**Guard scope is a decision; scope gaps are where drift lands (S113's lesson, re-earned in S114).**
+Round 8's sweep found round 7's *own* fixed classes still live in two unswept files —
+`submission-package.md` carried I-01's stale range **inside the marketplace submission document**,
+and `install.md` carried I-02's chart-version contradiction. Both round-7 fixes were file-scoped.
+Third consecutive round where drift landed in a known scoping gap. Guard #17 was
 deliberately narrowed to runnable `ams-pulse:<semver>` pins to avoid false positives — correct,
 and the exact reason the README's prose pointer shipped one release stale *inside* the new
 submission target hours later. New check **#19** closes that. When you narrow a guard, write down

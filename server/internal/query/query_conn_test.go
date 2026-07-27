@@ -632,6 +632,205 @@ func TestGeoBreakdown_Filters(t *testing.T) {
 	}
 }
 
+// TestBreakdownTailRow_NeverNegative pins the underflow guard on the tail row.
+//
+// The tail is computed as total − Σ(capped). That subtraction is NOT safe by
+// construction, for two independent reasons:
+//
+//  1. uniq(session_id) is an APPROXIMATE aggregate (ClickHouse adaptive
+//     HyperLogLog). The total and the per-group values are estimated
+//     independently, so Σ(per-group) can exceed the total estimate even when
+//     the underlying session sets are perfectly disjoint.
+//  2. The grouped query and the totals query are two round trips against a live
+//     table. Concurrent ingest, or a ReplacingMergeTree FINAL merge landing
+//     between them, means neither is a snapshot of the other.
+//
+// A negative count in an API response is visibly wrong, so the tail clamps at
+// zero. Feeds totals BELOW the capped sum to force the underflow.
+func TestBreakdownTailRow_NeverNegative(t *testing.T) {
+	t.Run("geo", func(t *testing.T) {
+		var mainData [][]any
+		for i := 0; i < breakdownRowCap+1; i++ {
+			mainData = append(mainData, []any{fmt.Sprintf("C%03d", i), int64(10), int64(5), int64(100)})
+		}
+		// Capped sum is 1000 views / 500 uniques / 10000 watch_s. Totals come
+		// back lower than that on all three — the underflow case.
+		conn := newFakeConn().
+			withQuery(newFakeRows(mainData...), nil).
+			withRow(newFakeRow(int64(900), int64(480), int64(9000)))
+		svc := New(nilSnapLive{}, conn, nil)
+
+		rows, err := svc.GeoBreakdown(context.Background(), GeoParams{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		tail := rows[len(rows)-1]
+		if tail.Country != "other" {
+			t.Fatalf("expected tail row, got country %q", tail.Country)
+		}
+		if tail.Views < 0 || tail.Uniques < 0 || tail.WatchTimeS < 0 {
+			t.Errorf("tail row must never carry a negative aggregate: views=%d uniques=%d watch_s=%d",
+				tail.Views, tail.Uniques, tail.WatchTimeS)
+		}
+	})
+
+	t.Run("device", func(t *testing.T) {
+		var mainData [][]any
+		for i := 0; i < breakdownRowCap+1; i++ {
+			mainData = append(mainData, []any{
+				fmt.Sprintf("d%03d", i), "os", "br", "proto",
+				int64(10), int64(5), int64(100),
+			})
+		}
+		conn := newFakeConn().
+			withQuery(newFakeRows(mainData...), nil).
+			withRow(newFakeRow(int64(900), int64(480), int64(9000)))
+		svc := New(nilSnapLive{}, conn, nil)
+
+		rows, err := svc.DeviceBreakdown(context.Background(), DeviceParams{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		tail := rows[len(rows)-1]
+		if tail.Device != "other" {
+			t.Fatalf("expected tail row, got device %q", tail.Device)
+		}
+		if tail.Views < 0 || tail.Uniques < 0 || tail.WatchTimeS < 0 {
+			t.Errorf("tail row must never carry a negative aggregate: views=%d uniques=%d watch_s=%d",
+				tail.Views, tail.Uniques, tail.WatchTimeS)
+		}
+	})
+}
+
+// ─── J-02 fix: GeoBreakdown row cap tests ─────────────────────────────────────
+
+func TestGeoBreakdown_RowCap_UnderCap(t *testing.T) {
+	// 50 rows (< cap 100) → no tail row, no totals query.
+	var data [][]any
+	for i := 0; i < 50; i++ {
+		data = append(data, []any{fmt.Sprintf("C%02d", i), int64(100 - i), int64(80 - i), int64(5000 - i*10)})
+	}
+	conn := newFakeConn().withQuery(newFakeRows(data...), nil)
+	svc := New(nilSnapLive{}, conn, nil)
+
+	rows, err := svc.GeoBreakdown(context.Background(), GeoParams{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rows) != 50 {
+		t.Errorf("want 50 rows, got %d", len(rows))
+	}
+	// No tail row should exist.
+	for _, r := range rows {
+		if r.Country == "other" {
+			t.Error("unexpected tail row when result is under cap")
+		}
+	}
+}
+
+func TestGeoBreakdown_RowCap_OverCap_TailRow(t *testing.T) {
+	// 105 rows (> cap 100) → 100 capped + 1 tail row.
+	// Main query returns 101 rows (cap+1).
+	var mainData [][]any
+	for i := 0; i < 101; i++ {
+		// Each row: views=10, uniques=5, watch_time_s=100
+		mainData = append(mainData, []any{fmt.Sprintf("C%03d", i), int64(10), int64(5), int64(100)})
+	}
+	// Totals query response: 105 total rows, each with views=10/uniques=5/watch=100.
+	// Total: views=1050, uniques=525, watch_time_s=10500
+	totalsRow := newFakeRow(int64(1050), int64(525), int64(10500))
+
+	conn := newFakeConn().
+		withQuery(newFakeRows(mainData...), nil). // main query
+		withRow(totalsRow)                        // totals query
+	svc := New(nilSnapLive{}, conn, nil)
+
+	rows, err := svc.GeoBreakdown(context.Background(), GeoParams{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Expect exactly 101 rows: 100 capped + 1 tail.
+	if len(rows) != 101 {
+		t.Errorf("want 101 rows (100 capped + 1 tail), got %d", len(rows))
+	}
+
+	// Last row must be the tail with country="other".
+	tail := rows[len(rows)-1]
+	if tail.Country != "other" {
+		t.Errorf("tail country: got %q, want 'other'", tail.Country)
+	}
+	// Capped rows sum: 100 * 10 = 1000 views.
+	// Tail views: 1050 - 1000 = 50.
+	if tail.Views != 50 {
+		t.Errorf("tail views: got %d, want 50", tail.Views)
+	}
+	// Capped uniques sum: 100 * 5 = 500.
+	// Tail uniques: 525 - 500 = 25.
+	if tail.Uniques != 25 {
+		t.Errorf("tail uniques: got %d, want 25", tail.Uniques)
+	}
+	// Capped watch_time_s sum: 100 * 100 = 10000.
+	// Tail watch: 10500 - 10000 = 500.
+	if tail.WatchTimeS != 500 {
+		t.Errorf("tail watch_time_s: got %d, want 500", tail.WatchTimeS)
+	}
+}
+
+func TestGeoBreakdown_RowCap_Region_TailRow(t *testing.T) {
+	// Region=true path: 101 rows → tail row with region="other".
+	var mainData [][]any
+	for i := 0; i < 101; i++ {
+		// With region: (country, region, views, uniques, watch_time_s)
+		mainData = append(mainData, []any{fmt.Sprintf("C%02d", i/5), fmt.Sprintf("R%03d", i), int64(10), int64(5), int64(100)})
+	}
+	totalsRow := newFakeRow(int64(1050), int64(525), int64(10500))
+
+	conn := newFakeConn().
+		withQuery(newFakeRows(mainData...), nil).
+		withRow(totalsRow)
+	svc := New(nilSnapLive{}, conn, nil)
+
+	rows, err := svc.GeoBreakdown(context.Background(), GeoParams{Region: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rows) != 101 {
+		t.Errorf("want 101 rows, got %d", len(rows))
+	}
+
+	tail := rows[len(rows)-1]
+	if tail.Country != "other" {
+		t.Errorf("tail country: got %q, want 'other'", tail.Country)
+	}
+	if tail.Region == nil || *tail.Region != "other" {
+		t.Errorf("tail region: got %v, want 'other'", tail.Region)
+	}
+	if tail.Views != 50 {
+		t.Errorf("tail views: got %d, want 50", tail.Views)
+	}
+}
+
+func TestGeoBreakdown_RowCap_TotalsQueryError(t *testing.T) {
+	// If totals query fails, GeoBreakdown returns an error.
+	var mainData [][]any
+	for i := 0; i < 101; i++ {
+		mainData = append(mainData, []any{fmt.Sprintf("C%03d", i), int64(10), int64(5), int64(100)})
+	}
+	totalsErr := errors.New("totals query failed")
+	conn := newFakeConn().
+		withQuery(newFakeRows(mainData...), nil).
+		withRow(newErrRow(totalsErr))
+	svc := New(nilSnapLive{}, conn, nil)
+
+	_, err := svc.GeoBreakdown(context.Background(), GeoParams{})
+	if err == nil {
+		t.Fatal("expected error from totals query, got nil")
+	}
+	if !strings.Contains(err.Error(), "totals") {
+		t.Errorf("expected error to mention totals, got: %v", err)
+	}
+}
+
 // ─── DeviceBreakdown tests ────────────────────────────────────────────────────
 
 func TestDeviceBreakdown_NilConn(t *testing.T) {
@@ -749,6 +948,112 @@ func TestDeviceBreakdown_Filters(t *testing.T) {
 	}
 	if len(rows) != 0 {
 		t.Errorf("want 0 rows, got %d", len(rows))
+	}
+}
+
+// ─── J-02 fix: DeviceBreakdown row cap tests ──────────────────────────────────
+
+func TestDeviceBreakdown_RowCap_UnderCap(t *testing.T) {
+	// 50 rows (< cap 100) → no tail row.
+	var data [][]any
+	for i := 0; i < 50; i++ {
+		data = append(data, []any{
+			fmt.Sprintf("dev%02d", i),
+			fmt.Sprintf("os%02d", i),
+			fmt.Sprintf("br%02d", i),
+			"hls",
+			int64(100 - i), int64(80 - i), int64(5000 - i*10),
+		})
+	}
+	conn := newFakeConn().withQuery(newFakeRows(data...), nil)
+	svc := New(nilSnapLive{}, conn, nil)
+
+	rows, err := svc.DeviceBreakdown(context.Background(), DeviceParams{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rows) != 50 {
+		t.Errorf("want 50 rows, got %d", len(rows))
+	}
+	for _, r := range rows {
+		if r.Device == "other" {
+			t.Error("unexpected tail row when result is under cap")
+		}
+	}
+}
+
+func TestDeviceBreakdown_RowCap_OverCap_TailRow(t *testing.T) {
+	// 105 rows (> cap 100) → 100 capped + 1 tail row.
+	// Main query returns 101 rows (cap+1).
+	var mainData [][]any
+	for i := 0; i < 101; i++ {
+		// Each row: views=10, uniques=5, watch_time_s=100
+		mainData = append(mainData, []any{
+			fmt.Sprintf("dev%03d", i),
+			fmt.Sprintf("os%03d", i),
+			fmt.Sprintf("br%03d", i),
+			"hls",
+			int64(10), int64(5), int64(100),
+		})
+	}
+	// Totals: 105 combos, each with views=10/uniques=5/watch=100.
+	// Total: views=1050, uniques=525, watch_time_s=10500
+	totalsRow := newFakeRow(int64(1050), int64(525), int64(10500))
+
+	conn := newFakeConn().
+		withQuery(newFakeRows(mainData...), nil).
+		withRow(totalsRow)
+	svc := New(nilSnapLive{}, conn, nil)
+
+	rows, err := svc.DeviceBreakdown(context.Background(), DeviceParams{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rows) != 101 {
+		t.Errorf("want 101 rows (100 capped + 1 tail), got %d", len(rows))
+	}
+
+	// Last row must be the tail.
+	tail := rows[len(rows)-1]
+	if tail.Device != "other" || tail.OS != "other" || tail.Browser != "other" || tail.Protocol != "other" {
+		t.Errorf("tail row labels: got (%s,%s,%s,%s), want all 'other'",
+			tail.Device, tail.OS, tail.Browser, tail.Protocol)
+	}
+	// Capped rows sum: 100 * 10 = 1000 views.
+	// Tail views: 1050 - 1000 = 50.
+	if tail.Views != 50 {
+		t.Errorf("tail views: got %d, want 50", tail.Views)
+	}
+	if tail.Uniques != 25 {
+		t.Errorf("tail uniques: got %d, want 25", tail.Uniques)
+	}
+	if tail.WatchTimeS != 500 {
+		t.Errorf("tail watch_time_s: got %d, want 500", tail.WatchTimeS)
+	}
+}
+
+func TestDeviceBreakdown_RowCap_TotalsQueryError(t *testing.T) {
+	// If totals query fails, DeviceBreakdown returns an error.
+	var mainData [][]any
+	for i := 0; i < 101; i++ {
+		mainData = append(mainData, []any{
+			fmt.Sprintf("dev%03d", i), fmt.Sprintf("os%03d", i),
+			fmt.Sprintf("br%03d", i), "hls",
+			int64(10), int64(5), int64(100),
+		})
+	}
+	totalsErr := errors.New("totals query failed")
+	conn := newFakeConn().
+		withQuery(newFakeRows(mainData...), nil).
+		withRow(newErrRow(totalsErr))
+	svc := New(nilSnapLive{}, conn, nil)
+
+	_, err := svc.DeviceBreakdown(context.Background(), DeviceParams{})
+	if err == nil {
+		t.Fatal("expected error from totals query, got nil")
+	}
+	if !strings.Contains(err.Error(), "totals") {
+		t.Errorf("expected error to mention totals, got: %v", err)
 	}
 }
 

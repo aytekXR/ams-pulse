@@ -231,7 +231,13 @@ paths:
             default: false
       responses:
         "200":
-          description: Geo breakdown rows
+          description: |
+            Geo breakdown rows. The response is capped at the top 100 rows
+            ordered by views descending. When additional rows exist, a single
+            tail row aggregates their totals; this row is identified by the
+            sentinel value "other" in the country field (and region field when
+            region=true). Totals therefore remain complete even when individual
+            rows are elided.
           content:
             application/json:
               schema:
@@ -254,7 +260,13 @@ paths:
         - $ref: "#/components/parameters/tenant"
       responses:
         "200":
-          description: Device breakdown rows
+          description: |
+            Device breakdown rows. The response is capped at the top 100 rows
+            ordered by views descending. When additional rows exist, a single
+            tail row aggregates their totals; this row is identified by the
+            sentinel value "other" in the device, os, browser, and protocol
+            fields. Totals therefore remain complete even when individual rows
+            are elided.
           content:
             application/json:
               schema:
@@ -2049,10 +2061,17 @@ components:
 
     GeoResponse:
       type: object
+      description: |
+        Geography breakdown. Capped at the top 100 rows ordered by views
+        descending. When additional rows exist, a tail row aggregates their
+        totals; identified by "other" in the country (and region) field.
       required: [rows]
       properties:
         rows:
           type: array
+          description: |
+            Top rows by views, plus an optional "other" tail row aggregating
+            any remaining rows beyond the cap.
           items:
             $ref: "#/components/schemas/GeoRow"
 
@@ -2075,10 +2094,17 @@ components:
 
     DeviceResponse:
       type: object
+      description: |
+        Device/OS/browser/protocol breakdown. Capped at the top 100 rows
+        ordered by views descending. When additional rows exist, a tail row
+        aggregates their totals; identified by "other" in all grouping fields.
       required: [rows]
       properties:
         rows:
           type: array
+          description: |
+            Top rows by views, plus an optional "other" tail row aggregating
+            any remaining rows beyond the cap.
           items:
             $ref: "#/components/schemas/DeviceRow"
 

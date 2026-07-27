@@ -442,6 +442,30 @@ Response codes:
 > `PULSE_INGEST_LISTEN_ADDR` when you want beacon traffic on a separate port
 > for DMZ routing, not for rate-limit coverage.
 
+### Server-side limits and overflow behavior
+
+The ingest handler enforces hard limits to bound resource usage. The limits are
+defined in `server/internal/collector/beacon/beacon.go` and apply to every batch:
+
+| Limit | Value | Server behavior on violation |
+|---|---|---|
+| **Body size** | 64 KB (`maxBodyBytes`) | **Rejected** with HTTP 413 `REQUEST_TOO_LARGE`. The server reads up to 64 KB and rejects the entire batch if exceeded. |
+| **Events per batch** | 100 (`maxEventsPerBatch`) | **Rejected** with HTTP 422 `SCHEMA_ERROR` listing "events array must not exceed 100 items". The entire batch is discarded. |
+| **Tenant string length** | 64 bytes (`maxTenantLen`) | **Truncated** silently to 64 UTF-8-safe bytes. No rejection, but excess characters are dropped. |
+| **Event data string values** | 64 bytes (`maxStringDataValueLen`) | **Truncated** silently to 64 UTF-8-safe bytes per string value in any event's `data` map. No rejection. |
+
+> **Design rationale:** rejection (413, 422) is used for whole-batch violations that
+> the SDK should never produce under normal operation — an oversized body or an
+> enormous event array indicates a bug or an attacker. Truncation is used for
+> per-field overruns (tenant, data strings) so that a legitimately large metadata
+> value degrades gracefully rather than failing the entire batch.
+
+The SDK's own batching logic (flush every 25 events or 10 s) keeps well under the
+100-event limit. If you call `session.event()` in a tight loop, the SDK queues
+internally and flushes in compliant chunks. The 64 KB body cap is rarely hit in
+practice because event JSON is compact; a 100-event batch with typical fields is
+under 20 KB.
+
 ---
 
 ## 10. Transport behavior

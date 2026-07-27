@@ -14,6 +14,11 @@ input for the next round. Prompt in, ledger out, same shape every time.
    **Disposition** column in that same file, and carries it forward as the prior-round
    input for round N+1.
 
+**File ownership (resolves round-8 finding J-03):**
+- **Reviewer writes:** `external-review-<YYYY-MM-DD>-round<N>.md` — the review ledger
+- **Maintainer writes:** `marketplace-compliance-review-<YYYY-MM-DD>-round<N>.md` — the disposition file (originally used before the prompt was standardized; later rounds use the reviewer's file directly with Disposition filled)
+- **Prior-round input for round N:** the reviewer's `external-review-…-round<N-1>.md` with its Disposition column filled by the maintainer (or, for early rounds before the naming was standardized, the maintainer's `marketplace-compliance-review-…-round<N-1>.md`)
+
 ---
 
 ## 0. Assignment parameters (fill these in before sending)
@@ -24,7 +29,7 @@ input for the next round. Prompt in, ledger out, same shape every time.
 | Review target | e.g. `v0.4.4` (a release tag) **or** `main@<sha>` |
 | Published image | `ghcr.io/aytekxr/ams-pulse:<version>` (tags have **no** `v` prefix) |
 | Repository | `https://github.com/aytekXR/ams-pulse` (public) |
-| Prior-round file | `docs/assessment/marketplace-compliance-review-<date>-round<N-1>.md` (omit for round 1) — e.g. round 8's input is `…-2026-07-27-round7.md` |
+| Prior-round file | `docs/assessment/external-review-<YYYY-MM-DD>-round<N-1>.md` (omit for round 1). For early rounds before naming was standardized, use `marketplace-compliance-review-<date>-round<N-1>.md`. |
 | Finding ID prefix | one unused letter, e.g. round 7 used `I-01`…, so round 8 uses `J-01`, `J-02`, … |
 
 **Say which tree you actually reviewed, as a SHA, in the first line of your output.** Past
