@@ -3,6 +3,12 @@
 // RED pass: these tests FAIL before alertRuleToAPI encodes rule_type/sigma/min_samples
 // and before handleCreateAlertRule calls ValidateAnomalyRule.
 // GREEN pass: all assertions pass after WO-B api/server.go changes are applied.
+//
+// D-185: these run on an ENTERPRISE server. They assert the response SHAPE of an
+// anomaly rule, and anomaly detection is an Enterprise feature (PRD §7.11) — they
+// were only ever passing on the default Free-tier harness because rule create/update
+// had no tier gate at all. The gate landing turned that omission into two red tests,
+// which is the gate working: the fixture, not the assertion, was wrong.
 package api_test
 
 import (
@@ -15,7 +21,7 @@ import (
 // TestContractAlertRuleIncludesRuleType verifies that POST /api/v1/alerts/rules with
 // rule_type=anomaly returns a 201 response body with rule_type, sigma, min_samples.
 func TestContractAlertRuleIncludesRuleType(t *testing.T) {
-	ts, token, cleanup := setupTestServer(t)
+	ts, token, cleanup := setupEnterpriseAnomalyServer(t)
 	defer cleanup()
 
 	body := map[string]any{
@@ -67,7 +73,7 @@ func TestContractAlertRuleIncludesRuleType(t *testing.T) {
 // with rule_type=anomaly and an unsupported metric returns HTTP 400 INVALID_ANOMALY_RULE.
 // Uses rebuffer_ratio (beacon QoE — excluded until U3; truly unsupported).
 func TestContractAlertRule_AnomalyBadMetric400(t *testing.T) {
-	ts, token, cleanup := setupTestServer(t)
+	ts, token, cleanup := setupEnterpriseAnomalyServer(t)
 	defer cleanup()
 
 	body := map[string]any{

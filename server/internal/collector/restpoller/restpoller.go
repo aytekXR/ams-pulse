@@ -142,7 +142,12 @@ func (p *Poller) recordPoll(err error) {
 	p.healthMu.Lock()
 	defer p.healthMu.Unlock()
 	if err != nil {
-		p.lastErr = err.Error()
+		// D-185: HealthSafeError, not err.Error(). lastErr exists only to feed
+		// PollHealth, which /healthz republishes to unauthenticated callers, and
+		// the amsclient error carries up to 4 KB of the upstream RESPONSE BODY.
+		// The full error is still logged at the poll call sites, where the
+		// audience is the operator.
+		p.lastErr = amsclient.HealthSafeError(err)
 		return
 	}
 	p.lastSuccess = time.Now()

@@ -23,31 +23,44 @@
 > `agents/handoffs/sessions/SESSION-NNN.md` and `decisions.md` (operator directive).
 > **Replace this block each session — never append to it.**
 
-**Where the product is:** **v0.4.4 is the release and the marketplace submission target.**
-S116 (D-184) executed external review **round 10 — the reviewer's declared final round**. Verdict:
-*"Not blocked by engineering. Blocked by one operator rotation and one tag."* **Both filed findings
-were refuted as filed** (a first) and both still pointed at something real. The round's substance
-came from somewhere else entirely: it was ~90% *reassurance* — a security deep-dive over a core the
-loop had never read — so the exculpations were audited adversarially. **The all-clear held in five
-areas of nine and failed in three**, yielding three real defects, all fixed under TDD in D-184:
-the SSRF guard was missing from three outbound clients that dial API-supplied addresses (M-01),
-`/ingest/beacon` had two implementations and the *documented default* lacked the field limits the
-reviewer credited (M-02), and paid alert channels kept delivering after a tier downgrade while the
-prober one package over already had exactly that runtime gate (M-03). `main` now carries the
-round-7 through round-10 fixes, three of them behavioural, which ride the next cut.
+**Where the product is:** **v0.4.4 is the release; `v0.4.5` is the submission target once cut.**
+S117 (D-185) executed external review **round 11** — the reviewer's *second* declared final round,
+and a genuinely adversarial one: it opened by retracting round 10's convergence call, verified
+D-184's three fixes against the code, filed one finding (N-01), and owned three errata precisely,
+including the mirror-bridge retraction that ends the three-round `review-chain` dispute.
 
-**The external review loop has converged and should be closed by decision.** Rounds 6→10 ran
-H(9) → I(6) → J(3) → K(2) → L(2, both refuted). No product code defect filed *by the reviewer* has
-survived verification since round 6 — but note carefully that D-184 found three by auditing what
-the reviewer called safe. If another round happens, that is where to spend it.
+**N-01 was confirmed in mechanism, refuted in reachability, and RAISED in severity.** `amsclient`
+really was the last outbound client with no `Control` hook — but the filed chain (an API-created
+`ams_sources.rest_url` being polled) does not exist: the poll client is built once from
+`PULSE_AMS_URL`, and that column reaches only the already-guarded connectivity test. What *is*
+real is the response side, which the ledger's own LOW rating had ruled out: `CheckRedirect` follows
+ten hops to a `Location` **the responder chooses**, and a non-2xx body (4 KB) was copied into the
+poll error that unauthenticated `/healthz` republishes. So an ordinary AMS 401/500 page was being
+echoed to any caller who could reach the port, SSRF or not. Both closed in D-185.
+
+**Auditing the reassurances outproduced the finding for the third round running** — four more
+items: the beacon identity fields were reversed off M-04's deferral (rejection, unlike truncation,
+does not corrupt `uniq()`, and the deferral had been priced without a ~50× write amplification);
+the advertised tier prose and the code disagree about whether anomaly detection is Enterprise-only
+(the loop enforced the prose, e2e A5 refuted it — see the lesson below, and the operator item); and
+D-184's `doc-stamps` guard was never added to `branch-protection.sh`, so the class L-02 belonged to
+was reported-on but not actually blocked.
+`main` now carries the round-7 through round-11 fixes, five of them behavioural.
+
+**The review loop is closed by decision, not by proof.** Rounds 6→11 ran H(9) → I(6) → J(3) →
+K(2) → L(2, both refuted) → N(1, reachability refuted). But the loop's own audits found 3 (D-184)
+and 5 (D-185) items inside the rounds that declared themselves clean. **If a round 12 happens,
+spend all of it on the exculpations and on enumerating sets the reviewer describes as lists.**
+Remaining product risk needs a live lab — a pentest for the dials, a 2-node cluster for LIM-10, a
+Kafka broker for LIM-19 — not another read-through.
 
 **One thing blocks submission, and it is the operator's:** rotate `CLICKHOUSE_PASSWORD`. A
 32-hex prefix of the live value is in public git history since `98b011c`. Deliberately deferred
-when the v0.4.3 cut was authorised — a recorded decision, not an oversight. **Re-checked S116:
-still un-rotated** (live prefix still matches 2 commits). Ten rounds in, both the reviewer and
+when the v0.4.3 cut was authorised — a recorded decision, not an oversight. **Re-checked S117:
+still un-rotated** (live prefix still matches 2 commits). Eleven rounds in, both the reviewer and
 the loop agree it is the only remaining gate. The submission-day motion is one movement:
 **rotate (G-02), cut v0.4.5, submit against it** — that single cut also clears the tag-frozen
-prose items and ships the behavioural breakdown cap.
+prose items and ships the behavioural breakdown cap and the D-185 security fixes.
 
 **Do first, every session:**
 1. **Gate reads** — prod health (component-scoped `/healthz` + a ClickHouse count), git/PR
@@ -99,13 +112,11 @@ query is a second round trip. It emitted `uniques=-20`. **Both the authoring lan
 adversarial verifier certified that code SOUND** — an in-code proof is a claim to test, exactly
 like a changelog entry. Reproduce numerically before believing any arithmetic argument.
 
-**A reviewer's claim about OUR tree state is the cheapest thing to verify — three rounds running
-it was wrong, and S116 finally found out why.** J-03, K-01 and L-01 all reproduce from an untracked
-`external-review-…-round6.md` that has never existed here. L-01 also reported a stale
-`.git/index.lock` that could not be unlinked — and *that* is the tell: this tree has no lock, `.git`
-is writable, it is native ext4, and D-183 was pushed from it. **The reviewer's device bridge is
-attached to a mirror of the repository, not the repository.** Its writes land there, report success
-to the review session, and never arrive; rounds 8 and 9 arrived only as pasted chat text.
+**A reviewer's claim about OUR tree state is the cheapest thing to verify — and round 11 closed
+this one from the other side.** J-03, K-01 and L-01 all reproduced from an untracked
+`external-review-…-round6.md` that has never existed here. S116 diagnosed the cause (their device
+bridge is attached to a *mirror*: its writes land there, report success, and never arrive), and
+round 11's errata E-1 **confirms it in the reviewer's own words and retracts the finding**.
 **Chat text reaches this repo, bridge writes do not** — if a future round offers files, ask for the
 text inline. Every one of those findings was still right about its defect: disposition the
 conclusion and the evidence separately, always.
@@ -157,6 +168,39 @@ for mechanizing a class instead of sweeping it again: the fifth hand-sweep would
 too. The S101 beacon divergence (M-02) is the same shape and is now shared-code rather than
 duplicated — prefer *making divergence impossible* over *checking for divergence*.
 
+**The e2e corpus is the behavioural contract — check it BEFORE writing a gate, not after CI says no
+(S117, and the second time this exact lesson has been paid for).** D-185 enforced the advertised
+"anomaly detection is Enterprise-only" tier table at three points, with unit tests, a negative
+control, a green `-race` suite, and an adversarial workflow lane that certified it SOUND after
+asking exactly the right question ("which tiers now stop computing baselines?") and checking the
+answer against the tier table. **e2e A5 then failed:** it mints a *Business* licence, POSTs an
+anomaly rule expecting 201, and asserts the alert fires — green for many sessions. The gate was
+reverted and the contradiction filed for the operator. **Documentation is not the contract; the
+live scenarios are.** When a change would newly REFUSE something, grep `.github/workflows/e2e.yml`
+and `qa/` for that request shape first — it costs one grep and it is the only artifact that knows
+what the product actually accepts. Over-rejection is as much a regression as under-rejection.
+
+**Enumerate the set; a reviewer's list is not the set (S117's lesson, and the sharpest form of
+"verify the exculpations").** Round 11 wrote *"prober ✓ / reports ✓ / alerts ✓ are now uniform"* —
+three true checks and a false universal. The anomaly detector is a fourth tier-gated background
+loop and was ungated. The same shape produced M-01 (one guarded client → "the class is guarded")
+and M-02 (one guarded ingest path → "beacon ingest is guarded"). **When a claim names N things and
+implies all things, go and count.** The corrective is cheap: `grep` for the pattern, not for the
+names you were given.
+
+**A test that cannot fail is worse than no test (S117).** `TestClient_IgnoresProxyEnv` asserted the
+transport ignores `HTTP_PROXY` by watching an httptest proxy for hits — and passed identically with
+the fix reverted, because Go's `ProxyFromEnvironment` never proxies loopback, so the proxy could
+never have been hit either way. It looked like coverage and asserted nothing. **Re-run every new
+test against a reverted tree** (copy to `/tmp` inside the container; never edit the repo to do it)
+and delete or rewrite whichever ones still pass. This is the only way to find a vacuous assertion.
+
+**A guard job without a branch-protection context is advisory (S117).** D-184 closed a four-round
+drift class "mechanically" with the `doc-stamps` CI job, but never added it to
+`.github/branch-protection.sh` — so it reported and could not block a merge. **Add the context in
+the same change that adds the job**, and remember the `gh` token here has repo-admin, so the PUT is
+executable from this box (D-162 precedent) rather than something to queue for the operator.
+
 **Standing rules learned the hard way:**
 - **After a squash merge, wait for main's post-merge CI before tagging.** The PR's green checks
   belong to the pre-squash SHA; the release pipeline's CI gate requires a successful run for
@@ -190,7 +234,11 @@ duplicated — prefer *making divergence impossible* over *checking for divergen
 waits on a real cluster) · verify the `ClusterNodeDTO.lastUpdateTime` unit against AMS source ·
 surface `stream_ingest_error` (LIM-27) · thread the owning node through per-app polling
 (LIM-28) · poller/discovery cadence consolidation · helm NetworkPolicy golden · the
-`SettingsPage` ARIA test flake under parallel execution · **release: switch the candidate push
+`SettingsPage` ARIA test flake under parallel execution · **alert retry loop does not re-check the
+entitlement gate between attempts** (~5 s window; the sync gate closes it within one interval —
+D-185 recorded it rather than adding a licence read inside a retry loop) · **`check-doc-stamps.sh`
+validates stamps inside fenced code blocks** (a false *positive*: it can fail CI on a doc showing an
+example stamp, never pass a real stale one) · **release: switch the candidate push
 to buildx `push-by-digest=true`** so promoted images stop carrying a public `candidate-<sha>`
 alias (round 6 H-09 — the correct fix, deferred because it changes the publish mechanism and
 only a real tag exercises it; reasoning is recorded in `release.yml`) · **probe whether AMS's
@@ -209,10 +257,11 @@ behind LIM-01 turned out to be wrong (LIM-04 rests on a similar inference).
 - **Production** runs behind host nginx on this VPS at `https://pulse.beyondkaira.com`, against
   the operator's own `antmedia` container (AMS Enterprise 3.0.3, `--network host`). It is on the
   stamped **v0.4.0-139** build — rolling prod forward is deliberate and operator-gated, never
-  automatic. Health at last check (S116, 2026-07-27): all three `/healthz` components `ok`,
-  **1,337,678** server events, newest 1 s old, collector actively ingesting.
-- **`main` is protected** (required contexts, strict, 1 review, `enforce_admins=false` so owner
-  pushes work). Work on a branch → PR → merge on green.
+  automatic. Health at last check (S117, 2026-07-28): all three `/healthz` components `ok`,
+  **1,340,393** server events, ingest steady at 720/h, collector actively ingesting.
+- **`main` is protected** (strict, 1 review, `enforce_admins=false` so owner pushes work; **15**
+  required contexts since D-185 added `shellcheck` and `doc-stamps` — a guard job that is not in
+  that list cannot block a merge). Work on a branch → PR → merge on green.
 - **Known limitations are disclosed, not hidden:** `docs/known-limitations.md` carries 28
   entries. **LIM-01 was closed in D-179** (standalone CPU/mem/disk now work without Kafka) and
   rewritten down to a memory-threshold calibration note rather than deleted. LIM-10 (cluster) is
