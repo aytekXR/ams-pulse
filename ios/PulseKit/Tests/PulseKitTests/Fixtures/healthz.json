@@ -1,0 +1,25 @@
+{
+  "status": "ok",
+  "ams_env_configured": true,
+  "components": {
+    "clickhouse": {
+      "status": "ok",
+      "latency_ms": 5
+    },
+    "meta_store": {
+      "status": "ok",
+      "latency_ms": 2,
+      "message": null
+    },
+    "collector": {
+      "status": "degraded",
+      "message": "AMS unreachable"
+    },
+    "kafka": {
+      "status": "ok",
+      "latency_ms": 10,
+      "lag": 100,
+      "parse_errors": 2
+    }
+  }
+}

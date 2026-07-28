@@ -1,0 +1,19 @@
+{
+  "totals": {
+    "startup_p50_ms": 850.0,
+    "startup_p95_ms": 2100.0,
+    "rebuffer_ratio": 0.015,
+    "error_rate": 0.005
+  },
+  "bitrate_timeline": [
+    {
+      "ts": 1700000000000,
+      "bitrate_kbps_p50": 2500.0,
+      "bitrate_kbps_p95": 4500.0
+    },
+    {
+      "ts": 1700003600000,
+      "bitrate_kbps_p50": 2400.0
+    }
+  ]
+}

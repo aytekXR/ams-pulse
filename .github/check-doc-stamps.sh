@@ -106,8 +106,22 @@ if [ -n "$BASE_REF" ]; then
       # Added lines for this file across the same range. The leading '+' must be
       # stripped before matching: MARKER is anchored at ^, and the anchor would
       # otherwise land on the diff marker instead of the start of the line.
-      if ! git diff -U0 "$base_commit" -- "$f" \
-        | grep -E '^\+' | sed -E 's/^\+//' | grep -qE "$MARKER"; then
+      #
+      # ⚠ Collect into a variable, then match with a HERESTRING. Do NOT pipe
+      # straight into `grep -q`. This script runs under `set -o pipefail`, and
+      # `grep -q` exits the instant it matches — which sends SIGPIPE to the `sed`
+      # and `grep` upstream of it, which makes the PIPELINE status non-zero, which
+      # this reads as "no stamp found". So a SUCCESSFUL match was reported as a
+      # FAILURE, and only sometimes: whether the upstream commands had already
+      # finished writing is a buffering race. It presented as two of three
+      # correctly-stamped files failing, with `sed: couldn't flush stdout: Broken
+      # pipe` in the CI log as the only clue.
+      #
+      # Third time this guard has shipped a bug of its own (see the header). A
+      # check that cannot be trusted to fail correctly is worse than no check: it
+      # trains people to work around it.
+      added_lines="$(git diff -U0 "$base_commit" -- "$f" | grep -E '^\+' | sed -E 's/^\+//' || true)"
+      if ! grep -qE "$MARKER" <<<"$added_lines"; then
         note "FAIL [B] $f — modified since $BASE_REF but its 'Last updated:' stamp was not."
         note "        Bump the stamp in the same change, or the doc starts lying the moment it merges."
         fail=1

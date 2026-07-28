@@ -1,0 +1,4 @@
+{
+  "code": "UNAUTHORIZED",
+  "message": "Invalid or expired bearer token"
+}

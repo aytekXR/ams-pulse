@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Join the iOS Beta | Pulse for Ant Media Server</title>
+  <meta name="description" content="Test the Pulse iOS app via TestFlight. Monitor your Ant Media Server streams from your iPhone.">
+  <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="../assets/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="../assets/favicon-16.png" sizes="16x16" type="image/png">
+  <link rel="stylesheet" href="../assets/pulse.css">
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="nav">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <div class="container nav-inner">
+    <a href="../" class="nav-brand">
+      <img src="../assets/pulse-mark.svg" alt="" width="32" height="32">
+      <span class="nav-brand-name">Pulse</span>
+      <span class="nav-brand-sub">beta</span>
+    </a>
+    <div class="nav-links">
+      <a href="../privacy/">Privacy</a>
+      <a href="../terms/">Terms</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<header class="hero">
+  <div class="container hero-content">
+    <span class="hero-badge">IOS BETA</span>
+    <h1 class="hero-title">Pulse on iPhone</h1>
+    <p class="hero-subtitle max-w-prose" style="margin-left:auto;margin-right:auto;">
+      Monitor your Ant Media Server from anywhere. Join the TestFlight beta
+      and help shape the mobile experience.
+    </p>
+  </div>
+</header>
+
+<!-- Main content -->
+<main id="main-content" tabindex="-1">
+
+<!-- What the Beta Is -->
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <p class="label">About This Beta</p>
+      <h2>What you are testing</h2>
+    </div>
+    <div class="grid grid-auto">
+      <div class="card">
+        <h3>Live dashboard</h3>
+        <p class="text-secondary mb-0">
+          Total viewers, publishers, and protocol breakdown (HLS, WebRTC, RTMP)
+          update in real time.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Stream list</h3>
+        <p class="text-secondary mb-0">
+          See active streams with viewer counts, health scores, and ingest bitrate.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Alerts</h3>
+        <p class="text-secondary mb-0">
+          View firing and resolved alerts. Push notifications are not yet implemented.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Fleet status</h3>
+        <p class="text-secondary mb-0">
+          For cluster deployments: see all discovered AMS nodes with CPU and memory.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Not Yet Implemented -->
+<section class="section section-alt">
+  <div class="container">
+    <div class="section-header">
+      <p class="label">Beta Scope</p>
+      <h2>What the app does not do yet</h2>
+    </div>
+    <p class="text-secondary max-w-prose">
+      This is an early beta. The following features are planned but not yet implemented:
+    </p>
+    <ul class="text-secondary max-w-prose" style="padding-left:var(--space-5);margin-top:var(--space-4);">
+      <li style="margin-bottom:var(--space-2);">Push notifications for alerts</li>
+      <li style="margin-bottom:var(--space-2);">Offline mode (the app requires an active connection)</li>
+      <li style="margin-bottom:var(--space-2);">Multi-server support (one server at a time)</li>
+      <li style="margin-bottom:var(--space-2);">Historical charts (use the web UI for time-range queries)</li>
+      <li style="margin-bottom:var(--space-2);">Write operations (creating alerts, managing tokens)</li>
+    </ul>
+    <p class="text-secondary max-w-prose mt-4">
+      Please do not report these as bugs. They are known scope limitations for this beta.
+    </p>
+  </div>
+</section>
+
+<!-- Known Platform Limitations -->
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <p class="label">Data Accuracy</p>
+      <h2>What you might notice</h2>
+    </div>
+    <p class="text-secondary max-w-prose">
+      These are known limitations of the Pulse platform that affect the data the app displays.
+      They are not app bugs.
+    </p>
+    <ul class="text-secondary max-w-prose" style="padding-left:var(--space-5);margin-top:var(--space-4);">
+      <li style="margin-bottom:var(--space-2);">
+        <strong>HLS viewer count is higher than actual:</strong> AMS reports HLS viewers
+        as a sliding window of segment requests, not unique sessions. A count of 45 might
+        represent 5 real viewers. This is AMS platform behavior.
+      </li>
+      <li style="margin-bottom:var(--space-2);">
+        <strong>FPS always shows 0:</strong> Frame rate is not exposed in the AMS REST API
+        for streams polled via REST. The health score compensates for this.
+      </li>
+      <li style="margin-bottom:var(--space-2);">
+        <strong>Fleet CPU/memory requires REST polling or Kafka:</strong> For standalone AMS,
+        node resource gauges require the REST system-resources endpoint (AMS 3.x) or a Kafka
+        broker connection.
+      </li>
+      <li style="margin-bottom:var(--space-2);">
+        <strong>SRT streams appear as RTMP:</strong> AMS 3.0.3 reports SRT-ingested streams
+        with <code>publishType="RTMP"</code>, so the protocol breakdown may miscount.
+      </li>
+    </ul>
+    <p class="text-secondary max-w-prose mt-4">
+      For the full list, see
+      <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/known-limitations.md">docs/known-limitations.md</a>.
+    </p>
+  </div>
+</section>
+
+<!-- Requirements -->
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <p class="label">Before You Start</p>
+      <h2>What you need</h2>
+    </div>
+    <div class="grid grid-auto-steps">
+      <div class="card-step">
+        <h3>iPhone or iPad</h3>
+        <p class="text-secondary mb-0">
+          Running <strong>iOS 17.0</strong> or later. The app requires iOS 17 minimum.
+        </p>
+      </div>
+      <div class="card-step">
+        <h3>A running Pulse server</h3>
+        <p class="text-secondary mb-0">
+          The iOS app is a monitoring client. It connects to a Pulse server that you
+          operate. If you do not have a Pulse deployment, see the
+          <a href="https://github.com/aytekXR/ams-pulse">setup documentation</a>.
+        </p>
+      </div>
+      <div class="card-step">
+        <h3>An API token</h3>
+        <p class="text-secondary mb-0">
+          The app authenticates with a bearer token. Generate one in
+          <strong>Settings &rarr; API Tokens</strong> on your Pulse web UI.
+          A read-only token (scope: <code>read</code>) is sufficient.
+        </p>
+      </div>
+      <div class="card-step">
+        <h3>Network access to your server</h3>
+        <p class="text-secondary mb-0">
+          Your iPhone must be able to reach your Pulse server over the network.
+          For deployments behind a firewall, you may need VPN or public HTTPS access.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Install Steps -->
+<section class="section section-alt">
+  <div class="container">
+    <div class="section-header">
+      <p class="label">Installation</p>
+      <h2>Join via TestFlight</h2>
+    </div>
+    <div class="grid grid-auto-steps">
+      <div class="card-step">
+        <h3>1. Install TestFlight</h3>
+        <p class="text-secondary mb-0">
+          TestFlight is Apple's official beta testing app.
+          <a href="https://apps.apple.com/app/testflight/id899247664">Download it from the App Store</a>
+          if you do not already have it.
+        </p>
+      </div>
+      <div class="card-step">
+        <h3>2. Open the public link</h3>
+        <p class="text-secondary mb-0">
+          <!-- TESTFLIGHT_PUBLIC_LINK_PLACEHOLDER: The operator replaces this entire
+               <span> block with a working <a> tag after creating the App Store
+               Connect app record and enabling public TestFlight distribution.
+               See docs/mobile/ios-testflight.md section 10 for instructions.
+               Search for TESTFLIGHT_PUBLIC_LINK_PLACEHOLDER to find this marker. -->
+          <span class="btn btn-primary btn-disabled" style="margin-top:var(--space-3);display:inline-flex;opacity:0.5;cursor:not-allowed;" aria-disabled="true">
+            TestFlight link not yet available
+          </span>
+        </p>
+        <p class="caption text-muted mt-4">
+          The public TestFlight link will appear here once the operator completes
+          App Store Connect setup. In the meantime, request a manual invitation below.
+        </p>
+      </div>
+      <div class="card-step">
+        <h3>3. Install Pulse</h3>
+        <p class="text-secondary mb-0">
+          TestFlight opens and shows the Pulse app. Tap <strong>Install</strong>.
+          The app appears on your home screen with an orange beta dot.
+        </p>
+      </div>
+      <div class="card-step">
+        <h3>4. Connect to your server</h3>
+        <p class="text-secondary mb-0">
+          Open Pulse, enter your server URL (e.g., <code>https://pulse.example.com</code>),
+          then enter your API token. The dashboard loads when the connection succeeds.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Fallback Path -->
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <p class="label">No Public Link Yet?</p>
+      <h2>Request an invitation</h2>
+    </div>
+    <p class="text-secondary max-w-prose">
+      The TestFlight public link is created by the operator after enrolling in the
+      Apple Developer Program and completing the App Store Connect setup. If the link
+      above shows a placeholder or 404, the setup is not yet complete.
+    </p>
+    <p class="text-secondary max-w-prose mt-4">
+      To request a manual invitation:
+    </p>
+    <ul class="text-secondary max-w-prose" style="padding-left:var(--space-5);margin-top:var(--space-3);">
+      <li style="margin-bottom:var(--space-2);">
+        <strong>Email:</strong> Contact <a href="mailto:aytek@beyondkaira.com">aytek@beyondkaira.com</a>
+        with the subject "Pulse iOS Beta" and include your Apple ID email address.
+      </li>
+      <li style="margin-bottom:var(--space-2);">
+        <strong>GitHub:</strong> Open an issue at
+        <a href="https://github.com/aytekXR/ams-pulse/issues">github.com/aytekXR/ams-pulse/issues</a>
+        with the title "Request iOS beta access" and include your Apple ID email.
+      </li>
+    </ul>
+    <p class="text-secondary max-w-prose mt-4">
+      The operator adds your Apple ID as a TestFlight tester. You receive an email
+      from Apple with a link to accept the invitation.
+    </p>
+  </div>
+</section>
+
+<!-- Feedback -->
+<section class="section section-alt">
+  <div class="container">
+    <div class="section-header">
+      <p class="label">Help Us Improve</p>
+      <h2>Sending feedback</h2>
+    </div>
+    <div class="grid grid-auto">
+      <div class="card">
+        <h3>In-app (recommended)</h3>
+        <p class="text-secondary mb-0">
+          Take a screenshot while using Pulse. TestFlight prompts you to submit
+          feedback. The screenshot and device logs are attached automatically.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Shake to report</h3>
+        <p class="text-secondary mb-0">
+          Shake your device while in the app. TestFlight opens a feedback dialog.
+          Describe what happened and tap Submit.
+        </p>
+      </div>
+      <div class="card">
+        <h3>GitHub issues</h3>
+        <p class="text-secondary mb-0">
+          For bugs or feature requests with detailed reproduction steps,
+          <a href="https://github.com/aytekXR/ams-pulse/issues">open an issue</a>.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main><!-- end main -->
+
+<!-- Footer -->
+<footer class="footer">
+  <div class="container footer-inner">
+    <div class="footer-brand">
+      <img src="../assets/pulse-mark.svg" alt="" width="28" height="28">
+      <span class="footer-brand-name">Pulse</span>
+      <span class="footer-brand-sub">for Ant Media Server</span>
+    </div>
+    <div class="footer-links">
+      <a href="../privacy/">Privacy</a>
+      <a href="../terms/">Terms</a>
+      <a href="https://github.com/aytekXR/ams-pulse">GitHub</a>
+    </div>
+    <p class="footer-legal">Last updated: 2026-07-28</p>
+  </div>
+</footer>
+
+</body>
+</html>

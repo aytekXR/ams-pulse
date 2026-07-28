@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Info.plist for PulseApp
+
+  Notable entries:
+
+  1. App Transport Security (NSAppTransportSecurity):
+     Pulse is self-hosted software. Users may run it on:
+       - HTTPS with a valid CA certificate (works by default)
+       - HTTPS with a self-signed certificate (requires user trust)
+       - HTTP on a local network (development/isolated LANs)
+
+     We do NOT blanket-disable ATS (NSAllowsArbitraryLoads). Instead:
+       - NSAllowsLocalNetworking = true: allows HTTP to local network addresses
+         (192.168.*, 10.*, localhost, .local domains) without affecting external hosts.
+
+     For self-signed HTTPS, the user must:
+       1. Trust the certificate in iOS Settings > General > About > Certificate Trust.
+       2. Or configure the server with a valid certificate (recommended).
+
+     This approach:
+       - Maintains security for public internet connections.
+       - Allows development/LAN usage without certificate hassles.
+       - Follows Apple's guidance for enterprise/self-hosted apps.
+
+  2. Launch Screen:
+     UILaunchStoryboardName = LaunchScreen. The storyboard must be created in Xcode.
+     It shows during app startup with the brand background color.
+
+  3. Supported Orientations:
+     Portrait only for iPhone (standard for dashboard apps).
+     All orientations for iPad (if we support it later).
+-->
+<plist version="1.0">
+<dict>
+    <!-- Bundle Identifiers -->
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleName</key>
+    <string>Pulse</string>
+    <key>CFBundleDisplayName</key>
+    <string>Pulse</string>
+
+    <!-- Version
+         These MUST be build-setting references, not literals. GENERATE_INFOPLIST_FILE
+         is NO, so whatever is written here is what ships: a literal would silently
+         beat MARKETING_VERSION/CURRENT_PROJECT_VERSION from project.yml and beat the
+         build number CI stamps from the run number. The failure mode is nasty and
+         late — App Store Connect rejects a duplicate build number at UPLOAD, long
+         after CI has gone green. -->
+    <key>CFBundleShortVersionString</key>
+    <string>$(MARKETING_VERSION)</string>
+    <key>CFBundleVersion</key>
+    <string>$(CURRENT_PROJECT_VERSION)</string>
+
+    <!-- Package Type -->
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+
+    <!-- Development Info -->
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+
+    <!-- Launch Screen
+         UILaunchScreen (iOS 14+) replaces the storyboard, and an EMPTY dictionary is
+         a valid, complete declaration: the system composes a launch screen using the
+         app's background colour and safe areas. The previous value named a
+         LaunchScreen storyboard that does not exist in this project — an app with a
+         declared-but-missing launch screen is treated as having none, which means
+         iOS runs it letterboxed at a compatibility size on modern devices. That is
+         the kind of defect nobody sees until a tester opens a screenshot. -->
+    <key>UILaunchScreen</key>
+    <dict/>
+
+    <!-- Supported Orientations -->
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+
+    <!-- App Transport Security -->
+    <!--
+      Self-hosted Pulse servers may be:
+        - On a local network with HTTP (development, isolated LANs)
+        - On HTTPS with self-signed certs (user must trust in Settings)
+        - On HTTPS with valid CA certs (works by default)
+
+      NSAllowsLocalNetworking enables HTTP for local network addresses only:
+        - 192.168.*, 10.*, 172.16-31.*, localhost, *.local
+
+      This does NOT disable ATS for public internet connections.
+      For self-signed certs on public addresses, users must manually trust them.
+    -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+
+    <!-- Required Device Capabilities -->
+    <key>UIRequiredDeviceCapabilities</key>
+    <array>
+        <string>arm64</string>
+    </array>
+
+    <!-- Status Bar -->
+    <key>UIViewControllerBasedStatusBarAppearance</key>
+    <true/>
+
+    <!-- Background Modes (none for now; add if push notifications are needed) -->
+
+    <!-- Scene Configuration (SwiftUI app lifecycle) -->
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+        <key>UIApplicationSupportsMultipleScenes</key>
+        <false/>
+    </dict>
+
+    <!--
+      Export Compliance (ITSAppUsesNonExemptEncryption)
+
+      The app uses ONLY standard HTTPS via URLSession for API communication.
+      Apple's guidance (TN3157): Apps using standard web protocols (HTTPS, TLS)
+      for communication with servers are exempt from export documentation
+      requirements under ECCN 5D992.
+
+      Setting this to false means:
+      - The app does NOT use encryption beyond standard HTTPS.
+      - No custom encryption algorithms are implemented.
+      - No App Store Connect export compliance documentation is required.
+
+      This avoids the "Missing Export Compliance" warning in TestFlight.
+    -->
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
+</dict>
+</plist>

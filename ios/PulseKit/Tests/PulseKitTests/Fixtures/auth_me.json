@@ -1,0 +1,5 @@
+{
+  "name": "admin@example.com",
+  "role": "admin",
+  "auth_method": "bearer"
+}

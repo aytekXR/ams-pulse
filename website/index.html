@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pulse - Real-Time Analytics for Ant Media Server</title>
+  <meta name="description" content="Self-hosted streaming analytics, alerting, and viewer QoE for Ant Media Server operators. Read-only integration, data never leaves your infrastructure.">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Pulse - Real-Time Analytics for Ant Media Server">
+  <meta property="og:description" content="Self-hosted streaming analytics, alerting, and viewer QoE for Ant Media Server operators.">
+  <meta property="og:image" content="assets/og-image.png">
+  <meta property="og:url" content="https://pulse.beyondkaira.com/">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Pulse - Real-Time Analytics for Ant Media Server">
+  <meta name="twitter:description" content="Self-hosted streaming analytics, alerting, and viewer QoE for Ant Media Server operators.">
+  <meta name="twitter:image" content="assets/og-image.png">
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png">
+
+  <link rel="stylesheet" href="assets/pulse.css">
+</head>
+<body>
+  <a href="#main" class="sr-only">Skip to main content</a>
+
+  <!-- NAV -->
+  <nav class="nav" aria-label="Main navigation">
+    <div class="container nav-inner">
+      <a href="./" class="nav-brand" aria-label="Pulse home">
+        <img src="assets/pulse-mark.svg" alt="" width="32" height="32">
+        <span class="nav-brand-name">pulse</span>
+        <span class="nav-brand-sub">for Ant Media Server</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="#tiers">Tiers</a>
+        <a href="#faq">FAQ</a>
+        <a href="beta/" class="btn btn-sm btn-secondary">iOS Beta</a>
+        <a href="https://github.com/aytekXR/ams-pulse" class="btn btn-sm btn-primary">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <!-- Source: docs/product.md section 1: "Pulse answers who is watching, where, on what device, with what quality - and is anything broken right now?" -->
+  <header class="hero">
+    <div class="container hero-content">
+      <span class="hero-badge">SELF-HOSTED</span>
+      <h1 class="hero-title">Know your stream is OK.</h1>
+      <!-- Source: docs/product.md section 1 positioning -->
+      <p class="hero-subtitle max-w-prose" style="margin-left:auto;margin-right:auto;">
+        Pulse answers <em>who is watching, where, on what device, with what quality</em> —
+        and <em>is anything broken right now</em> — for every Ant Media Server deployment.
+        On your infrastructure. Never ours.
+      </p>
+      <div class="flex gap-4 justify-center" style="margin-top:var(--space-5);">
+        <a href="https://github.com/aytekXR/ams-pulse" class="btn btn-primary">View on GitHub</a>
+        <a href="#how-it-works" class="btn btn-secondary">See how it works</a>
+      </div>
+      <!-- Source: docs/ARCHITECTURE.md section 4 numeric acceptance criteria -->
+      <!-- STREAM VISIBLE: budget 10 s, measured 1.50 s (B-01); ALERT DELIVERY: budget 30 s, measured 201 ms (VD-31); BEACON SDK: 3.52 KB gzip (C-W2-03); 13-MONTH QUERY: budget 3 s, measured 145 ms (C9b) -->
+      <div class="hero-metrics">
+        <span>STREAM VISIBLE IN 10 S</span>
+        <span>ALERT DELIVERY IN 201 MS</span>
+        <span>3.52 KB BEACON SDK</span>
+        <span>13-MONTH ANALYTICS IN 3 S</span>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <!-- FEATURES SECTION -->
+    <!-- Source: docs/product.md section 1 feature table; docs/marketplace/listing.md feature bullets -->
+    <section id="features" class="section">
+      <div class="container">
+        <div class="section-header">
+          <p class="label text-signal">FEATURES</p>
+          <h2>One binary. The whole observability story.</h2>
+        </div>
+        <div class="grid grid-auto">
+          <!-- F1: Live ops dashboard - Source: docs/product.md feature table row F1; docs/marketplace/listing.md bullet 1 -->
+          <div class="card">
+            <p class="label text-signal mb-3">F1 - FREE</p>
+            <h3 class="mb-3">Live ops dashboard</h3>
+            <p class="text-secondary mb-0">
+              Streams, viewers, nodes with real-time visibility over WebSocket push.
+              New streams appear within 10 seconds of publish.
+            </p>
+          </div>
+          <!-- F2: Historical analytics - Source: docs/product.md feature table row F2 -->
+          <div class="card">
+            <p class="label text-signal mb-3">F2 - FREE</p>
+            <h3 class="mb-3">Historical analytics</h3>
+            <p class="text-secondary mb-0">
+              Geo and device breakdowns with rollup history. Dimensional queries answer
+              in under 3 seconds across 13 months of data.
+            </p>
+          </div>
+          <!-- F3: QoE beacon SDK - Source: docs/product.md feature table row F3; docs/marketplace/listing.md bullet 2 -->
+          <div class="card">
+            <p class="label text-signal mb-3">F3 - PRO</p>
+            <h3 class="mb-3">Player QoE beacon SDK</h3>
+            <p class="text-secondary mb-0">
+              3.52 KB MIT-licensed JavaScript SDK measures startup time, rebuffering,
+              bitrate switches, and errors from real viewers.
+            </p>
+          </div>
+          <!-- F4: Ingest health - Source: docs/product.md feature table row F4 -->
+          <div class="card">
+            <p class="label text-signal mb-3">F4 - FREE</p>
+            <h3 class="mb-3">Ingest health</h3>
+            <p class="text-secondary mb-0">
+              A 0-100 health score per stream from bitrate, FPS, keyframe cadence, loss,
+              and jitter. Degradation flagged within 15 seconds.
+            </p>
+          </div>
+          <!-- F5: Alerting - Source: docs/product.md feature table row F5; docs/marketplace/listing.md bullet 3 -->
+          <div class="card">
+            <p class="label text-signal mb-3">F5 - FREE+</p>
+            <h3 class="mb-3">Alerting</h3>
+            <p class="text-secondary mb-0">
+              Email, Slack, Telegram, PagerDuty, and webhooks with grouping, muting,
+              and maintenance windows. Channels gated by tier.
+            </p>
+          </div>
+          <!-- F6: Usage/billing reports - Source: docs/product.md feature table row F6; docs/marketplace/listing.md bullet 5 -->
+          <div class="card">
+            <p class="label text-signal mb-3">F6 - BUSINESS</p>
+            <h3 class="mb-3">Usage and billing reports</h3>
+            <p class="text-secondary mb-0">
+              Per-tenant CSV and PDF statements with S3 export. Viewer-minutes reconciled
+              to within 1% accuracy.
+            </p>
+          </div>
+          <!-- F7: Cluster fleet view - Source: docs/product.md feature table row F7 -->
+          <div class="card">
+            <p class="label text-signal mb-3">F7 - FREE</p>
+            <h3 class="mb-3">Cluster fleet view</h3>
+            <p class="text-secondary mb-0">
+              Auto-discovers AMS cluster nodes within 30 seconds with per-node IDs,
+              CPU, and memory metrics.
+            </p>
+          </div>
+          <!-- F8: Data API + Prometheus - Source: docs/product.md feature table row F8; docs/marketplace/listing.md bullet 4 -->
+          <div class="card">
+            <p class="label text-signal mb-3">F8 - PRO+</p>
+            <h3 class="mb-3">Data API + Prometheus</h3>
+            <p class="text-secondary mb-0">
+              The full REST and WebSocket API the dashboard uses, plus a /metrics scrape
+              endpoint for existing Prometheus stacks.
+            </p>
+          </div>
+          <!-- F9: Anomaly detection - Source: docs/product.md feature table row F9; docs/marketplace/listing.md bullet 6 -->
+          <div class="card">
+            <p class="label text-signal mb-3">F9 - ENTERPRISE</p>
+            <h3 class="mb-3">Anomaly detection</h3>
+            <p class="text-secondary mb-0">
+              Welford online baselines flag sigma-deviations in viewers, CPU, and memory.
+              Fewer than 1 false alarm per node per week.
+            </p>
+          </div>
+          <!-- F10: Synthetic probes - Source: docs/product.md feature table row F10 -->
+          <div class="card">
+            <p class="label text-signal mb-3">F10 - PRO</p>
+            <h3 class="mb-3">Synthetic probes</h3>
+            <p class="text-secondary mb-0">
+              HLS probing from outside-in: manifest and segment TTFB, measured bitrate,
+              reachability for WebRTC, RTMP, and DASH.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS SECTION -->
+    <!-- Source: docs/overview.md "How Pulse Attaches to AMS"; docs/product.md section 1 positioning facts 1-2 -->
+    <section id="how-it-works" class="section section-alt">
+      <div class="container">
+        <div class="section-header">
+          <p class="label text-signal">ARCHITECTURE</p>
+          <h2>A read-only sidecar, next to AMS.</h2>
+        </div>
+
+        <!-- Source: docs/product.md section 1 positioning facts; docs/overview.md ingest paths table -->
+        <div class="grid grid-auto-lg mb-7">
+          <div class="card-step">
+            <p class="label text-signal mb-3">READ-ONLY</p>
+            <p class="mb-0">
+              Pulse polls AMS REST v2 on a 5-second cycle and never writes to AMS.
+              It survives AMS upgrades and cannot break a production streaming stack.
+            </p>
+          </div>
+          <div class="card-step">
+            <p class="label text-signal mb-3">DATA NEVER LEAVES</p>
+            <p class="mb-0">
+              Single Go binary plus ClickHouse on your own infrastructure. No SaaS,
+              no phone-home. License keys verify offline via ed25519.
+            </p>
+          </div>
+          <div class="card-step">
+            <p class="label text-signal mb-3">TURNKEY</p>
+            <p class="mb-0">
+              Docker Compose or Helm. One URL plus token. Streams appear on the dashboard
+              within 10 seconds. Install to first dashboard in under 15 minutes.
+            </p>
+          </div>
+          <div class="card-step">
+            <p class="label text-signal mb-3">BEACON SDK</p>
+            <p class="mb-0">
+              One script tag in your player adds viewer-side QoE: startup time, rebuffer
+              ratio, bitrate. 3.52 KB gzip, MIT-licensed.
+            </p>
+          </div>
+        </div>
+
+        <!-- Install command callout - Source: docs/faq.md Q5; README.md quick start -->
+        <div class="callout text-center" style="max-width:720px;margin:0 auto;">
+          <code><span class="callout-code">$</span> docker compose up -d</code>
+          <span class="code-comment"> # pulse + clickhouse, single Go binary, no AMS changes</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- NOT A BOLT-ON SECTION -->
+    <!-- Source: brandkit/website/Marketing Site.dc.html AMS integration section; docs/AMS-INTEGRATION.md -->
+    <section class="section">
+      <div class="container">
+        <div class="section-header">
+          <p class="label text-signal">AMS ECOSYSTEM</p>
+          <h2>Not a bolt-on. A module.</h2>
+        </div>
+        <!-- Source: docs/marketplace/listing.md long-form description; docs/overview.md -->
+        <div class="grid grid-2-lg" style="align-items:start;">
+          <div>
+            <p class="text-secondary">
+              Pulse speaks AMS natively — applications, broadcasts, WebRTC client stats,
+              cluster nodes — across AMS 2.10 through 3.x, standalone or clustered.
+              It tolerates version variance and needs zero changes to your streaming stack.
+            </p>
+            <ul class="text-secondary" style="padding-left:var(--space-5);line-height:2;">
+              <!-- Source: docs/overview.md feature F7; docs/marketplace/listing.md bullet 1 -->
+              <li>Auto-discovers AMS applications and cluster nodes</li>
+              <!-- Source: docs/marketplace/listing.md long-form description -->
+              <li>Read-only: polls AMS REST, never writes</li>
+              <!-- Source: docs/overview.md ingest paths table -->
+              <li>Cookie-session and bearer auth, TLS-verified</li>
+              <!-- Source: docs/product.md section 1: "survives AMS upgrades" -->
+              <li>Upgrade-tolerant: survives AMS version changes</li>
+            </ul>
+          </div>
+          <!-- Install snippet - Source: README.md quick start; docs/runbooks/install.md -->
+          <pre><code><span class="code-comment"># deploy/.env — the entire integration</span>
+<span class="code-var">PULSE_AMS_URL</span>=https://ams-origin-01:5443
+<span class="code-var">PULSE_AMS_AUTH_TOKEN</span>=your_ams_token
+<span class="code-var">PULSE_POLL_INTERVAL</span>=5s
+
+<span class="code-comment"># then</span>
+<span class="code-prompt">$</span> docker compose up -d
+<span class="code-success">Streams visible within 10 s</span></code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- TIERS SECTION -->
+    <!-- Source: server/internal/license/license.go tier constants; docs/faq.md Q10; docs/overview.md tier table -->
+    <section id="tiers" class="section section-alt">
+      <div class="container">
+        <div class="section-header">
+          <p class="label text-signal">TIERS</p>
+          <h2>Start free. Pay for depth.</h2>
+        </div>
+        <p class="text-secondary mb-7 max-w-prose">
+          All tiers are self-hosted with offline ed25519 license keys — no phone-home, ever.
+          Noncommercial self-hosting is free under PolyForm Noncommercial.
+        </p>
+        <!-- Source: server/internal/license/license.go lines 83-88; docs/overview.md tier table; docs/faq.md Q10 -->
+        <div class="grid grid-auto-lg">
+          <!-- FREE tier -->
+          <div class="card">
+            <p class="label text-signal mb-3">FREE</p>
+            <h3 class="mb-4">Solo operators</h3>
+            <ul class="text-secondary" style="padding-left:var(--space-5);line-height:2;">
+              <!-- Source: docs/overview.md tier table: Free row -->
+              <li>Live dashboard + fleet view</li>
+              <li>Historical analytics (7-day retention)</li>
+              <li>Ingest health scoring</li>
+              <li>Email alerts only</li>
+              <li>1 AMS node</li>
+            </ul>
+          </div>
+          <!-- PRO tier -->
+          <div class="card card-featured">
+            <p class="label text-signal mb-3">PRO</p>
+            <h3 class="mb-4">Production streams</h3>
+            <ul class="text-secondary" style="padding-left:var(--space-5);line-height:2;">
+              <!-- Source: docs/overview.md tier table: Pro row -->
+              <li>Everything in Free</li>
+              <li>Player QoE beacon SDK</li>
+              <li>Synthetic HLS probes</li>
+              <li>Slack + Telegram alerts</li>
+              <li>Data API</li>
+              <li>90-day retention, up to 10 nodes</li>
+            </ul>
+          </div>
+          <!-- BUSINESS tier -->
+          <div class="card">
+            <p class="label text-signal mb-3">BUSINESS</p>
+            <h3 class="mb-4">Platforms and agencies</h3>
+            <ul class="text-secondary" style="padding-left:var(--space-5);line-height:2;">
+              <!-- Source: docs/overview.md tier table: Business row -->
+              <li>Everything in Pro</li>
+              <li>Usage and billing reports</li>
+              <li>Multi-tenant CSV/PDF + S3</li>
+              <li>PagerDuty + webhook channels</li>
+              <li>Prometheus /metrics</li>
+              <li>13-month retention, up to 50 nodes</li>
+            </ul>
+          </div>
+          <!-- ENTERPRISE tier -->
+          <div class="card">
+            <p class="label text-signal mb-3">ENTERPRISE</p>
+            <h3 class="mb-4">OEM and broadcast</h3>
+            <ul class="text-secondary" style="padding-left:var(--space-5);line-height:2;">
+              <!-- Source: docs/overview.md tier table: Enterprise row -->
+              <li>Everything in Business</li>
+              <li>Anomaly detection (sigma-baselines)</li>
+              <li>White-label + OEM embedding</li>
+              <li>SSO / OIDC</li>
+              <li>Priority support</li>
+              <li>Unlimited nodes and retention</li>
+            </ul>
+          </div>
+        </div>
+        <!-- Source: docs/marketplace/listing.md tier table note -->
+        <p class="text-muted caption text-center mt-6">
+          Pricing is set by the operator. Contact for current rates and trial access.
+        </p>
+      </div>
+    </section>
+
+    <!-- FAQ SECTION -->
+    <!-- Source: docs/faq.md -->
+    <section id="faq" class="section">
+      <div class="container" style="max-width:860px;">
+        <div class="section-header">
+          <p class="label text-signal">FAQ</p>
+          <h2>Questions operators actually ask.</h2>
+        </div>
+        <!-- Source: docs/faq.md Q1 -->
+        <details>
+          <summary>Does Pulse modify my Ant Media Server?</summary>
+          <p>
+            No. Pulse is read-only. It polls the AMS REST v2 API on a configurable interval
+            (default 5 seconds) and never writes to AMS, never changes AMS configuration, and
+            never touches the AMS filesystem or database. It survives AMS upgrades without any
+            coordination.
+          </p>
+        </details>
+        <!-- Source: docs/faq.md Q11 -->
+        <details>
+          <summary>Does my data leave my infrastructure?</summary>
+          <p>
+            No. Pulse is entirely self-hosted. There is no SaaS component and no phone-home.
+            License verification is offline — keys are validated locally via an ed25519 signature
+            check. Viewer IPs from the beacon SDK are SHA-256 hashed before storage.
+          </p>
+        </details>
+        <!-- Source: docs/faq.md Q5; docs/marketplace/listing.md install summary -->
+        <details>
+          <summary>What does installation involve?</summary>
+          <p>
+            Docker Compose or Helm. One Go binary plus ClickHouse, configured with a handful of
+            environment variables. The acceptance criterion: install to first live dashboard in
+            under 15 minutes.
+          </p>
+        </details>
+        <!-- Source: docs/faq.md paraphrased from multiple entries; docs/marketplace/listing.md long description -->
+        <details>
+          <summary>We already run Prometheus and Grafana. Why Pulse?</summary>
+          <p>
+            Keep them — Pulse ships a /metrics endpoint. Grafana measures your servers; Pulse
+            measures your audience: who is watching, on what device, with what startup time and
+            rebuffer ratio, deduplicated across origin and edge nodes.
+          </p>
+        </details>
+        <!-- Source: docs/faq.md Q9 -->
+        <details>
+          <summary>What happens when my license expires?</summary>
+          <p>
+            Pulse degrades gracefully to Free tier. The server keeps running; you can still read
+            all already-collected data. Tier-gated features return 403 LICENSE_REQUIRED. A banner
+            appears in the UI indicating the license state. Nothing crashes.
+          </p>
+        </details>
+        <!-- Source: docs/faq.md Q12 -->
+        <details>
+          <summary>Where do viewer QoE numbers come from?</summary>
+          <p>
+            Viewer-side QoE metrics (startup time, stall/rebuffer ratio, bitrate, error rate)
+            come from the Pulse Beacon JS SDK embedded in your player. The SDK posts events to
+            your Pulse instance. No data is sent to any third party.
+          </p>
+        </details>
+        <!-- Source: docs/marketplace/listing.md bullet 2; docs/faq.md Q12 -->
+        <details>
+          <summary>Does the player beacon slow down my player?</summary>
+          <p>
+            The SDK is 3.52 KB gzipped with a hard 15 KB budget, MIT-licensed and white-labelable.
+            It batches events and posts to a rate-limited, token-authenticated ingest endpoint
+            that is isolated from the admin API.
+          </p>
+        </details>
+        <!-- Source: docs/faq.md synthesized from Q11 privacy section -->
+        <details>
+          <summary>GDPR / KVKK — can we anonymize viewers?</summary>
+          <p>
+            Yes. Set PULSE_ANONYMIZE_IP=true and IPs are anonymized before geo lookup and storage;
+            geo resolution degrades gracefully to country level. Data retention windows are
+            configurable (90-day raw, 13-month rollups by default).
+          </p>
+        </details>
+      </div>
+    </section>
+
+    <!-- KNOWN LIMITATIONS SECTION -->
+    <!-- Source: docs/known-limitations.md — operators see the same honesty we show them about their streams -->
+    <section id="limitations" class="section section-alt">
+      <div class="container" style="max-width:860px;">
+        <div class="section-header">
+          <p class="label text-signal">HONEST DISCLOSURE</p>
+          <h2>What Pulse does not do (yet).</h2>
+        </div>
+        <p class="text-secondary mb-6">
+          Pulse exists to tell you the truth about your streams. That commitment starts here:
+          these are the current limitations you should know before deploying.
+        </p>
+        <div class="grid grid-auto">
+          <!-- LIM-02: HLS viewer count -->
+          <div class="card">
+            <h3 class="mb-3">HLS viewer counts are approximate</h3>
+            <p class="text-secondary mb-0">
+              <code>hlsViewerCount</code> from AMS is a sliding segment-request window, not a session count.
+              With 5 real HLS viewers, Pulse may show 45. This is AMS platform behavior, not a Pulse defect.
+              <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/known-limitations.md#lim-02-hls-viewer-count-is-approximately-9-higher-than-the-real-session-count">LIM-02</a>
+            </p>
+          </div>
+          <!-- LIM-04: FPS always 0 -->
+          <div class="card">
+            <h3 class="mb-3">FPS reads 0 from AMS REST</h3>
+            <p class="text-secondary mb-0">
+              <code>currentFPS</code> is absent from AMS 3.x BroadcastDTO.
+              The health score redistributes the FPS weight so healthy streams still score above 80.
+              <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/known-limitations.md#lim-04-fps-is-always-0-for-streams-polled-from-ams-3x-rest">LIM-04</a>
+            </p>
+          </div>
+          <!-- LIM-05: Geo needs MaxMind -->
+          <div class="card">
+            <h3 class="mb-3">Geo analytics need a MaxMind database</h3>
+            <p class="text-secondary mb-0">
+              Country-level geo analytics require GeoLite2-City.mmdb, which is not bundled (MaxMind licensing).
+              Mount the file and set <code>PULSE_GEO_MMDB_PATH</code>. Without it, country fields are blank.
+              <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/known-limitations.md#lim-05-geo-country-analytics-require-a-maxmind-geolite2-database-that-is-not-bundled">LIM-05</a>
+            </p>
+          </div>
+          <!-- LIM-10: Cluster node roles -->
+          <div class="card">
+            <h3 class="mb-3">Cluster edge/origin dedup is inactive</h3>
+            <p class="text-secondary mb-0">
+              AMS 2.14 through 3.x exposes no node <code>role</code> field. All nodes display as origin,
+              and edge/origin viewer deduplication never activates. This is provable from the AMS wire shape.
+              <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/known-limitations.md#lim-10-cluster-fleet-discovery-wire-shape-source-verified-node-rolesversions-are-not-exposed-by-ams-214-3x-and-edgeorigin-dedup-is-therefore-inactive">LIM-10</a>
+            </p>
+          </div>
+          <!-- LIM-19: Kafka not live-validated -->
+          <div class="card">
+            <h3 class="mb-3">Kafka path is experimental</h3>
+            <p class="text-secondary mb-0">
+              The Kafka consumer is code-complete and fixture-tested, but has never connected to a real
+              AMS Kafka producer. Topic names are source-derived. Treat this path as preview until live-validated.
+              <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/known-limitations.md#lim-19-kafka-consumer-not-yet-live-validated-against-a-real-ams-broker-av-15-blocked">LIM-19</a>
+            </p>
+          </div>
+          <!-- LIM-24: Interactive PDF -->
+          <div class="card">
+            <h3 class="mb-3">Interactive PDF export is not implemented</h3>
+            <p class="text-secondary mb-0">
+              On-demand <code>format=pdf</code> returns 501. Scheduled PDF reports (Business+) work.
+              Use CSV export or browser Print for one-off PDFs.
+              <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/known-limitations.md#lim-24-interactive-pdf-export-is-not-implemented-scheduled-pdf-reports-are">LIM-24</a>
+            </p>
+          </div>
+        </div>
+        <p class="text-secondary text-center mt-6">
+          <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/known-limitations.md">
+            Full limitations list (28 entries)
+          </a>
+        </p>
+      </div>
+    </section>
+
+    <!-- CTA / LINKS SECTION -->
+    <section class="section">
+      <div class="container text-center">
+        <h2 class="mb-4">See every viewer. Tonight.</h2>
+        <p class="text-secondary max-w-prose mb-6" style="margin-left:auto;margin-right:auto;">
+          The free tier needs no key, no signup, no phone-home. Fifteen minutes from
+          <code>docker compose up</code> to your first live dashboard.
+        </p>
+        <div class="flex gap-4 justify-center" style="flex-wrap:wrap;">
+          <a href="https://github.com/aytekXR/ams-pulse" class="btn btn-primary">View on GitHub</a>
+          <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/runbooks/install.md" class="btn btn-secondary">Install Guide</a>
+          <a href="beta/" class="btn btn-secondary">iOS Beta</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="assets/pulse-mark.svg" alt="" width="28" height="28">
+        <span class="footer-brand-name">pulse</span>
+        <span class="footer-brand-sub">Real-time analytics for Ant Media Server</span>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/aytekXR/ams-pulse">GitHub</a>
+        <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/overview.md">Docs</a>
+        <a href="beta/">iOS Beta</a>
+        <a href="support/">Support</a>
+      </div>
+      <p class="footer-legal">PolyForm Noncommercial 1.0.0 (server) / MIT (beacon SDK)</p>
+    </div>
+  </footer>
+</body>
+</html>

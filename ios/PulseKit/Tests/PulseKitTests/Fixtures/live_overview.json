@@ -1,0 +1,46 @@
+{
+  "ts": 1700000000000,
+  "total_viewers": 1234,
+  "total_publishers": 56,
+  "protocol_mix": {
+    "webrtc": 500,
+    "hls": 600,
+    "rtmp": 100,
+    "dash": 34,
+    "other": 0
+  },
+  "apps": [
+    {
+      "app": "live",
+      "viewers": 1000,
+      "publishers": 50,
+      "streams": 25
+    },
+    {
+      "app": "webinar",
+      "viewers": 234,
+      "publishers": 6,
+      "streams": 3
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "node-1",
+      "role": "origin",
+      "status": "up",
+      "last_seen": 1700000000000,
+      "cpu_pct": 45.5,
+      "mem_pct": 60.0,
+      "version": "3.0.3"
+    },
+    {
+      "node_id": "node-2",
+      "role": "edge",
+      "status": "degraded",
+      "last_seen": 1699999990000,
+      "cpu_pct": 85.0,
+      "mem_pct": 90.0,
+      "version": "3.0.3"
+    }
+  ]
+}

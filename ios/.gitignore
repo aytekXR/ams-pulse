@@ -1,0 +1,32 @@
+# XcodeGen output — regenerated from project.yml; never commit.
+Pulse.xcodeproj/
+*.xcodeproj/
+
+# Xcode user data
+xcuserdata/
+*.xcuserstate
+*.xcworkspace/
+
+# Swift Package Manager
+.swiftpm/
+.build/
+Package.resolved
+
+# Derived Data — Xcode build artifacts.
+DerivedData/
+build/
+
+# macOS metadata
+.DS_Store
+**/.DS_Store
+
+# IDE
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Archives and IPAs (release artifacts belong in CI, not the repo)
+*.xcarchive
+*.ipa

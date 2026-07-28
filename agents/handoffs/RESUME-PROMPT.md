@@ -23,227 +23,109 @@
 > `agents/handoffs/sessions/SESSION-NNN.md` and `decisions.md` (operator directive).
 > **Replace this block each session — never append to it.**
 
-**Where the product is:** **v0.4.4 is the release; `v0.4.5` is the submission target once cut.**
-S117 (D-185) executed external review **round 11** — the reviewer's *second* declared final round,
-and a genuinely adversarial one: it opened by retracting round 10's convergence call, verified
-D-184's three fixes against the code, filed one finding (N-01), and owned three errata precisely,
-including the mirror-bridge retraction that ends the three-round `review-chain` dispute.
+**Where the product is:** **v0.4.4 is the release and the marketplace submission target.** S118
+(D-186) opened a second track: **the Pulse iOS app and the public website now exist and are
+CI-verified.** The external-review loop converged at round 11 (D-185, merged) and is closed by
+decision — rounds 6→11 ran H(9) → I(6) → J(3) → K(2) → L(2, both refuted) → N(1), and no reviewer-
+filed product defect has survived verification since round 6.
 
-**N-01 was confirmed in mechanism, refuted in reachability, and RAISED in severity.** `amsclient`
-really was the last outbound client with no `Control` hook — but the filed chain (an API-created
-`ams_sources.rest_url` being polled) does not exist: the poll client is built once from
-`PULSE_AMS_URL`, and that column reaches only the already-guarded connectivity test. What *is*
-real is the response side, which the ledger's own LOW rating had ruled out: `CheckRedirect` follows
-ten hops to a `Location` **the responder chooses**, and a non-2xx body (4 KB) was copied into the
-poll error that unauthenticated `/healthz` republishes. So an ordinary AMS 401/500 page was being
-echoed to any caller who could reach the port, SSRF or not. Both closed in D-185.
+**There are now two independent tracks, each blocked by exactly one operator action, and neither
+blocks the other:**
 
-**Auditing the reassurances outproduced the finding for the third round running** — four more
-items: the beacon identity fields were reversed off M-04's deferral (rejection, unlike truncation,
-does not corrupt `uniq()`, and the deferral had been priced without a ~50× write amplification);
-the advertised tier prose and the code disagree about whether anomaly detection is Enterprise-only
-(the loop enforced the prose, e2e A5 refuted it — see the lesson below, and the operator item); and
-D-184's `doc-stamps` guard was never added to `branch-protection.sh`, so the class L-02 belonged to
-was reported-on but not actually blocked.
-`main` now carries the round-7 through round-11 fixes, five of them behavioural.
+- **Marketplace** — blocked by **G-02: rotate `CLICKHOUSE_PASSWORD`** (a 32-hex prefix of the live
+  value has been in public git history since `98b011c`; re-checked S118, still 2 commits). The
+  submission-day motion is one movement: **rotate, cut `v0.4.5`, submit against it** — that cut
+  also clears the tag-frozen prose and ships rounds 7–11.
+- **iOS TestFlight** — blocked by **Apple Developer Program enrolment**. Everything a machine can
+  do is done: the app builds for iOS 26 under Swift 6 strict concurrency on a real macOS runner,
+  259 Linux tests + 50 simulator tests pass, the archive/sign/upload job is written, and the
+  tester-facing site is built. `docs/operator-expected.md` §A is the eight-step critical path.
 
-**The review loop is closed by decision, not by proof.** Rounds 6→11 ran H(9) → I(6) → J(3) →
-K(2) → L(2, both refuted) → N(1, reachability refuted). But the loop's own audits found 3 (D-184)
-and 5 (D-185) items inside the rounds that declared themselves clean. **If a round 12 happens,
-spend all of it on the exculpations and on enumerating sets the reviewer describes as lists.**
-Remaining product risk needs a live lab — a pentest for the dials, a 2-node cluster for LIM-10, a
-Kafka broker for LIM-19 — not another read-through.
-
-**One thing blocks submission, and it is the operator's:** rotate `CLICKHOUSE_PASSWORD`. A
-32-hex prefix of the live value is in public git history since `98b011c`. Deliberately deferred
-when the v0.4.3 cut was authorised — a recorded decision, not an oversight. **Re-checked S117:
-still un-rotated** (live prefix still matches 2 commits). Eleven rounds in, both the reviewer and
-the loop agree it is the only remaining gate. The submission-day motion is one movement:
-**rotate (G-02), cut v0.4.5, submit against it** — that single cut also clears the tag-frozen
-prose items and ships the behavioural breakdown cap and the D-185 security fixes.
+**The website is live-able with no operator action.** GitHub Pages was enabled from here via the
+API (`build_type: workflow`); it publishes to **https://aytekxr.github.io/ams-pulse/** on merge to
+`main`. `/privacy/` and `/support/` are the two URLs App Store Connect demands; `/beta/` is the
+tester page. Until the operator has a TestFlight link, `/beta/` shows a **disabled** button plus a
+working manual-invitation route — honest and usable today. The grep marker for the swap is
+`TESTFLIGHT_PUBLIC_LINK_PLACEHOLDER`, and it appears exactly once.
 
 **Do first, every session:**
-1. **Gate reads** — prod health (component-scoped `/healthz` + a ClickHouse count), git/PR
-   drift, and whether the operator rotated `CLICKHOUSE_PASSWORD` (check silently: compare the
-   live value's first 32 chars against `git log -S`, never print the secret).
-2. **If a new review arrives** — verify every claim against the code BEFORE fixing anything,
-   and check the reviewer's assumptions about the tree state as carefully as their findings.
-   This has caught errors in both directions — ours and the reviewer's. To commission a review,
-   hand over `docs/assessment/EXTERNAL-REVIEW-PROMPT.md` verbatim (blackbox → docs → code; one
-   output file whose Disposition column you fill and feed back as the next round's input).
-3. **If a 2-node cluster appears** (the operator's PAYG load-lane item) — the deferred cluster
-   work (LIM-10: node alerting during an AMS API outage) becomes fixable with verification
-   instead of guesswork. Highest-value technical unblock.
+1. **Gate reads** — prod health (component-scoped `/healthz` + a ClickHouse count), git/PR drift,
+   and whether the operator rotated `CLICKHOUSE_PASSWORD` (check silently: compare the live
+   value's first 32 chars against `git log -S`, never print the secret).
+2. **Check whether the Apple account exists yet.** If the three `APP_STORE_CONNECT_*` secrets are
+   present (`gh secret list`), the TestFlight path is unblocked: dispatch the `ios` workflow, watch
+   the archive/upload, and drive the rest. That job has **never executed** — treat its first run as
+   a discovery exercise, not a regression check.
+3. **If a TestFlight public link arrives**, do the `/beta/` swap and redeploy the site.
 
-**Test the artifact, not the documentation (S111's lesson, re-earned twice in S112).** D-178's
-worst finding was invisible to every doc review: the published `cosign verify` command **fails
-on a cosign v2 client** because releases from `v0.3.0` on use the OCI 1.1 referrer layout, not
-the legacy `.sig` tag. When a claim names a command a third party will run, **run it as that
-third party would**, on the published artifact, with a client version you did not choose. Do not
-change how releases are signed to accommodate old clients — that is deliberate (`release.yml`).
-S112 applied the rule again: the anchored cosign regexp was run against the published `0.4.3`
-(and its negative control), and the installer's new exit code was clean-room tested in both
-directions rather than reasoned about.
+**Test the artifact, not the documentation — and run it the way CI will (S111, re-earned hard in
+S118).** PulseKit passed 206/206 on this host and failed **28** in the container CI actually uses,
+because a fixture loader hardcoded a path under `/home/aytek`. The host run was never evidence for
+the claim being made. The same session: the published `cosign verify` command fails on a cosign v2
+client (D-178), and the iOS `Info.plist` would have silently discarded CI's build number at upload
+time. **When a claim names an environment you are not in, reproduce it in that environment.**
 
-**Re-test the generalization, not just the premise (S112's lesson).** LIM-01 rested on a
-verified fact — `/rest/v2/system-status` omits CPU/mem/disk — and an *inferred* conclusion,
-"therefore AMS cannot report it on standalone", which nobody ever probed. It was wrong for the
-product's entire life: a sibling console endpoint had the data all along. When a limitation says
-"the platform cannot do X", check whether what was actually tested was "this one endpoint does
-not do X". Sibling endpoints cost one curl.
+**Measure the third party before you write code that depends on it (S118).** A ten-minute
+throwaway probe on a real `macos-15` runner (`docs/mobile/ci-runner-facts.md`) paid for itself
+instantly: the runner's *default* Xcode is 16.4, and App Store Connect has refused anything below
+Xcode 26 / iOS 26 SDK since 2026-04-28. A CI job taking the default goes green and produces an
+artifact Apple rejects. Re-measure after a runner-image bump; the default moves.
 
-**Tag/main parity:** `v0.4.4` closed the gap that H-02 flagged, and round 7 confirmed the
-pattern is broken — post-tag drift is now internal-only. Keep it that way: **the moment a fix an
-evaluator would meet lands on `main`, it belongs in a release**, because "it rides the next one"
-is exactly the ruling round 6 had to overturn. `main` currently carries the round-7 prose/comment
-fixes, which genuinely do ride the next cut (the reviewer's own recommendation).
+**"Verified" is a claim about a specific thing, not about a neighbourhood (S118).** The TestFlight
+upload step was pinned to `Apple-Actions/upload-testflight-build@v3` under a comment saying the
+action had been verified that day. The action is real and maintained. **The `v3` tag does not
+exist.** Verify the exact string you are about to depend on — the version, the tag, the field name
+— not the thing it belongs to.
 
-**Verify the exculpations, not just the accusations (S114's lesson).** Round 8's most valuable
-sentence was not a finding — it was a reassurance: *"the sibling `GeoBreakdown` is shape-identical
-but domain-bounded (~250 countries), so it is fine."* It was wrong (`?region=true` switches the
-grouping to `geo_country, geo_region`), and it was hiding a defect strictly larger than the one
-actually filed. **A reviewer's "this one is safe" is the one place nobody looks twice.** The same
-round, the filed MEDIUM turned out to be bounded at 448 rows once the enum mapping was read.
+**Verify the exculpations, not just the accusations (S114/S116, still the highest-yield move).**
+Round 10 filed two findings, both refuted; auditing the same round's *reassurances* produced three
+real defects. What fails is the generalisation step: "this file truncates its fields" becomes "the
+system truncates its fields". When a review says an area is clean, ask which file they read, then
+go and find its siblings.
 
-**Apply "verify, don't trust" to our own code comments (S114).** Our J-02 fix shipped with an
-in-code proof that `tail = total − Σ(capped)` was exact because the groups are disjoint.
-Disjointness is necessary but not sufficient: `uniq()` is an approximate aggregate and the totals
-query is a second round trip. It emitted `uniques=-20`. **Both the authoring lane and its
-adversarial verifier certified that code SOUND** — an in-code proof is a claim to test, exactly
-like a changelog entry. Reproduce numerically before believing any arithmetic argument.
+**Test the guard you write to enforce testing (S116, third instance in S118).**
+`check-doc-stamps.sh` reported **correctly-stamped files as failing**: it runs under `pipefail` and
+piped into `grep -q`, which exits on first match, SIGPIPEs the upstream `sed`, and turns a
+successful match into a non-zero pipeline. Non-deterministic, buffering-dependent, and it presented
+as two of three files failing while the third passed. Run every new check in **both** directions —
+make it fail on purpose — and re-check that your negative test tests what you think (the first one
+here picked an unstamped doc, which is exempt by design, and the resulting PASS looked like a bug).
 
-**A reviewer's claim about OUR tree state is the cheapest thing to verify — and round 11 closed
-this one from the other side.** J-03, K-01 and L-01 all reproduced from an untracked
-`external-review-…-round6.md` that has never existed here. S116 diagnosed the cause (their device
-bridge is attached to a *mirror*: its writes land there, report success, and never arrive), and
-round 11's errata E-1 **confirms it in the reviewer's own words and retracts the finding**.
-**Chat text reaches this repo, bridge writes do not** — if a future round offers files, ask for the
-text inline. Every one of those findings was still right about its defect: disposition the
-conclusion and the evidence separately, always.
+**Guard scope is a decision; scope gaps are where drift lands (S113→S118, five rounds).** The new
+website checker defaulted its web root to `$PWD`, so run from the repo root it walked
+`node_modules` and failed on files it has no business policing. **Write down what a guard does NOT
+cover, in the guard.** And de-literalize whatever drifts twice.
 
-**Verify the exculpations — this is now the highest-yield move in a review round (S116's lesson,
-and the strongest form of S114's).** Round 10 filed two findings, both refuted. Auditing the
-*reassurances* in the same round produced three real defects. What failed was never the reviewer's
-analysis, it was the **generalization step**: "the webhook channel wires the guard" became
-"operator-controlled outbound URLs are guarded"; "the beacon package truncates fields" became
-"beacon ingest truncates fields". Both true of the file read, false of the system. When a review
-says an area is clean, ask which file they read and then go and find its siblings.
+**A subagent lane's self-report is not a gate (S116, held again in S118).** Lanes produced sound
+logic and honest evidence and still shipped: an app layer bound to types that do not exist, a
+nonexistent action tag under a "verified" comment, and a stale comment naming the wrong test
+target. Read every diff yourself and correct provenance centrally before committing.
 
-**A subagent lane's self-report is not a gate (S116).** All three TDD lanes produced sound logic and
-honest red→green evidence — and shipped a literal `(D-xxx finding)` placeholder, a **fabricated
-finding id** (`K-03`, when round 10's prefix is `L-` and the item was maintainer-found `M-03`), a
-wrong session number, and two docstrings claiming a guard was installed in a constructor when the
-dialer is built per call. Read every diff yourself and correct provenance centrally before
-committing; lanes invent plausible-looking ids when you do not hand them one.
+**⚠ The concurrent-session hazard is real and it happened (S118).** A second autonomous session
+wrote `ios/` at the same time as this one, and its completion notifications arrived here. It
+produced a flat `PulseKit` while this session produced the layered contract-derived one — two
+implementations of the same public types in one target, which cannot compile. Handling that worked:
+**quarantine, never delete** (its files were preserved outside the repo), keep the contract-derived
+version as canonical, and harvest what was genuinely better (its `PlayerView` and its
+"honest-absent" principle both survive). If HEAD moves or the tree dirties with work you did not
+do, STOP and inspect before committing.
 
-**Test the guard you write to enforce testing (S116).** `check-doc-stamps.sh` shipped two bugs that
-only a negative test exposed: it diffed `BASE...HEAD`, so uncommitted edits were invisible and a
-local pre-commit run reported PASS no matter what had changed; and its `^`-anchored pattern was
-matched against diff lines still carrying `+`, so it fired on files whose stamps *had* moved. Run a
-new check in **both** directions — make it fail on purpose — before trusting a PASS.
+**Tag/main parity:** `main` carries rounds 7–11 plus D-186. **The moment a fix an evaluator would
+meet lands on `main`, it belongs in a release** — "it rides the next one" is exactly the ruling
+round 6 had to overturn.
 
-**Guard scope is a decision; scope gaps are where drift lands (S113's lesson, re-earned in S114
-and again in S115 — four rounds running).** S115's instance was the worst yet: D-181 corrected
-the stale "standalone AMS never reports `cpu_pct`" claim at eight *code comment* sites and swept
-no *documentation*, so `kafka-integration.md` spent two more rounds contradicting itself inside
-twenty lines and `compatibility.md`'s customer-facing matrix kept saying "Via Kafka only". **Write
-what a sweep did NOT cover into the decision entry** — otherwise the next reviewer writes it for
-you.
-Round 8's sweep found round 7's *own* fixed classes still live in two unswept files —
-`submission-package.md` carried I-01's stale range **inside the marketplace submission document**,
-and `install.md` carried I-02's chart-version contradiction. Both round-7 fixes were file-scoped.
-Third consecutive round where drift landed in a known scoping gap. Guard #17 was
-deliberately narrowed to runnable `ams-pulse:<semver>` pins to avoid false positives — correct,
-and the exact reason the README's prose pointer shipped one release stale *inside* the new
-submission target hours later. New check **#19** closes that. When you narrow a guard, write down
-what the narrowing leaves uncovered. And **de-literalize whatever drifts twice**: the cosign
-version range and the chart-version sentence were both "just bump the number" the first time.
-
-**S116 closed the doc-stamp half of this class mechanically, after four rounds of fixing it by
-hand.** Stamps are now date-valued (a session D-number cannot be interpreted by any reader outside
-this repo and cannot distinguish "content changed" from "someone bumped the stamp"), and
-`.github/check-doc-stamps.sh` + the `doc-stamps` CI job enforce it. On its first run the checker
-found **four instances the same session's careful manual sweep had missed**. That is the argument
-for mechanizing a class instead of sweeping it again: the fifth hand-sweep would have missed them
-too. The S101 beacon divergence (M-02) is the same shape and is now shared-code rather than
-duplicated — prefer *making divergence impossible* over *checking for divergence*.
-
-**The e2e corpus is the behavioural contract — check it BEFORE writing a gate, not after CI says no
-(S117, and the second time this exact lesson has been paid for).** D-185 enforced the advertised
-"anomaly detection is Enterprise-only" tier table at three points, with unit tests, a negative
-control, a green `-race` suite, and an adversarial workflow lane that certified it SOUND after
-asking exactly the right question ("which tiers now stop computing baselines?") and checking the
-answer against the tier table. **e2e A5 then failed:** it mints a *Business* licence, POSTs an
-anomaly rule expecting 201, and asserts the alert fires — green for many sessions. The gate was
-reverted and the contradiction filed for the operator. **Documentation is not the contract; the
-live scenarios are.** When a change would newly REFUSE something, grep `.github/workflows/e2e.yml`
-and `qa/` for that request shape first — it costs one grep and it is the only artifact that knows
-what the product actually accepts. Over-rejection is as much a regression as under-rejection.
-
-**Enumerate the set; a reviewer's list is not the set (S117's lesson, and the sharpest form of
-"verify the exculpations").** Round 11 wrote *"prober ✓ / reports ✓ / alerts ✓ are now uniform"* —
-three true checks and a false universal. The anomaly detector is a fourth tier-gated background
-loop and was ungated. The same shape produced M-01 (one guarded client → "the class is guarded")
-and M-02 (one guarded ingest path → "beacon ingest is guarded"). **When a claim names N things and
-implies all things, go and count.** The corrective is cheap: `grep` for the pattern, not for the
-names you were given.
-
-**A test that cannot fail is worse than no test (S117).** `TestClient_IgnoresProxyEnv` asserted the
-transport ignores `HTTP_PROXY` by watching an httptest proxy for hits — and passed identically with
-the fix reverted, because Go's `ProxyFromEnvironment` never proxies loopback, so the proxy could
-never have been hit either way. It looked like coverage and asserted nothing. **Re-run every new
-test against a reverted tree** (copy to `/tmp` inside the container; never edit the repo to do it)
-and delete or rewrite whichever ones still pass. This is the only way to find a vacuous assertion.
-
-**A guard job without a branch-protection context is advisory (S117).** D-184 closed a four-round
-drift class "mechanically" with the `doc-stamps` CI job, but never added it to
-`.github/branch-protection.sh` — so it reported and could not block a merge. **Add the context in
-the same change that adds the job**, and remember the `gh` token here has repo-admin, so the PUT is
-executable from this box (D-162 precedent) rather than something to queue for the operator.
-
-**Standing rules learned the hard way:**
-- **After a squash merge, wait for main's post-merge CI before tagging.** The PR's green checks
-  belong to the pre-squash SHA; the release pipeline's CI gate requires a successful run for
-  the commit being tagged. Tagging early fails the gate (cleanly — nothing gets published).
-- **Dry-run the version guard BEFORE tagging** (learned D-180). Extract the
-  `Version consistency guard` step out of `release.yml`, create a throwaway local tag, and run
-  it: `GITHUB_REF_NAME=vX.Y.Z bash guard.sh`. It caught a real miss on the first pass. The 18
-  checks cover: `VERSION` · `Chart.yaml` appVersion · doc header stamps
-  (`product.md`, `faq.md`, `known-limitations.md`, `submission-package.md`) · SDK
-  `package.json` + lock · Swift SDK constant · deploy-surface image pins · helm `values.yaml`
-  + README table + `tests/values-*.yaml` · `install.sh` `PULSE_IMAGE` **and** `PULSE_REF` ·
-  root README pins · `listing.md` version mention · beacon tarball names · customer-doc image
-  pins · runnable OCI-chart pins. **Bump the chart semver whenever `templates/` or
-  `values.yaml` changed** — `helm push` overwrites a published chart version — and regenerate
-  goldens with helm **3.17.0**.
-- **Mount the repo root for every container gate**, Go and Node alike — tests reach into
-  `contracts/`. A subtree mount produces fake failures that look like regressions.
-- **Regenerate helm goldens with CI's pinned helm 3.17.0**; newer helm injects blank lines and
-  fakes golden drift.
-- **Don't guess at cluster fixes.** They retune alert timing and there is no live cluster to
-  verify against; trading a missed alert for a false one is not an improvement. Disclose in
-  LIM-10 instead.
-- **Pin ShellCheck to CI's version when touching `deploy/` scripts.** CI installs Ubuntu's
-  **0.9.0**; `koalaman/shellcheck:stable` is 0.11.0 and renumbered the reachability check
-  (SC2317 → SC2329). A change can be clean on `:stable` and red in CI. Run both.
-- **When a review proposes a fix, verify it is implementable before executing it.** Round 6's
-  H-09 asked for a GHCR tag delete that would have deleted the release digest. The finding was
-  right and the remedy was wrong; both go in the disposition.
-
-**Open engineering debt (loop-owned, non-blocking):** cluster node-alerting rework (LIM-10,
-waits on a real cluster) · verify the `ClusterNodeDTO.lastUpdateTime` unit against AMS source ·
-surface `stream_ingest_error` (LIM-27) · thread the owning node through per-app polling
-(LIM-28) · poller/discovery cadence consolidation · helm NetworkPolicy golden · the
-`SettingsPage` ARIA test flake under parallel execution · **alert retry loop does not re-check the
-entitlement gate between attempts** (~5 s window; the sync gate closes it within one interval —
-D-185 recorded it rather than adding a licence read inside a retry loop) · **`check-doc-stamps.sh`
-validates stamps inside fenced code blocks** (a false *positive*: it can fail CI on a doc showing an
-example stamp, never pass a real stale one) · **release: switch the candidate push
-to buildx `push-by-digest=true`** so promoted images stop carrying a public `candidate-<sha>`
-alias (round 6 H-09 — the correct fix, deferred because it changes the publish mechanism and
-only a real tag exercises it; reasoning is recorded in `release.yml`) · **probe whether AMS's
+**Open engineering debt (loop-owned, non-blocking):** the app's `KeychainService` duplicates
+PulseKit's `TokenStore`/`KeychainTokenStore` — two ways to store a credential, the divergence shape
+this repo keeps getting bitten by · cluster node-alerting rework (LIM-10, waits on a real cluster) ·
+verify the `ClusterNodeDTO.lastUpdateTime` unit against AMS source · surface `stream_ingest_error`
+(LIM-27) · thread the owning node through per-app polling (LIM-28) · poller/discovery cadence
+consolidation · helm NetworkPolicy golden · the `SettingsPage` ARIA test flake under parallel
+execution · **release: switch the candidate push to buildx `push-by-digest=true`** so promoted
+images stop carrying a public `candidate-<sha>` alias (round 6 H-09) · **probe whether AMS's
 `ams-webrtc-stats` shape can restore per-stream FPS** now that the console-endpoint assumption
-behind LIM-01 turned out to be wrong (LIM-04 rests on a similar inference).
+behind LIM-01 turned out to be wrong (LIM-04 rests on a similar inference) · self-host the IBM Plex
+OFL woff2 files (the website and the app both fall back to system fonts today, which `tokens.json`
+does not intend).
 
 **Operator queue:** `docs/operator-expected.md`. **How we got here** (read only if you need it):
 `decisions.md` · `agents/handoffs/sessions/` · `docs/assessment/`.
@@ -257,11 +139,27 @@ behind LIM-01 turned out to be wrong (LIM-04 rests on a similar inference).
 - **Production** runs behind host nginx on this VPS at `https://pulse.beyondkaira.com`, against
   the operator's own `antmedia` container (AMS Enterprise 3.0.3, `--network host`). It is on the
   stamped **v0.4.0-139** build — rolling prod forward is deliberate and operator-gated, never
-  automatic. Health at last check (S117, 2026-07-28): all three `/healthz` components `ok`,
-  **1,340,393** server events, ingest steady at 720/h, collector actively ingesting.
-- **`main` is protected** (strict, 1 review, `enforce_admins=false` so owner pushes work; **15**
-  required contexts since D-185 added `shellcheck` and `doc-stamps` — a guard job that is not in
-  that list cannot block a merge). Work on a branch → PR → merge on green.
+  automatic. Health at last check (S118, 2026-07-28): all three `/healthz` components `ok`,
+  **1,355,548** server events, newest 2 s old, collector actively ingesting.
+- **The iOS app exists and is CI-verified** (D-186). `ios/PulseKit` — Foundation-only, **259 tests
+  green on Linux**, which is the point of the split: no Apple toolchain exists on this VPS, so
+  anything living in a SwiftUI view is logic no gate here can check. `ios/PulseApp` — SwiftUI plus
+  an AVPlayer view instrumented with our own `PulseBeacon` SDK, **50 tests green on a real iOS 26.2
+  simulator** via `macos-15`. The archive/sign/upload job is written and has **never executed** —
+  it cannot until an Apple Developer account exists. Measured runner facts (re-measure after an
+  image bump): `docs/mobile/ci-runner-facts.md`.
+- **The public website exists** (D-186) at `website/` — landing, `/beta/`, `/privacy/`, `/support/`,
+  `/terms/`, built from the brandkit against `tokens.json`, zero external requests (enforced by a
+  check, not by intent). GitHub Pages is **enabled** (`build_type: workflow`) and publishes to
+  `https://aytekxr.github.io/ams-pulse/` on merge to `main`.
+- **`main` is protected** (strict, 1 review, `enforce_admins=false` so owner pushes work; **16**
+  required contexts — D-185 added `shellcheck` and `doc-stamps`, D-186 added `ios-kit`. A guard job
+  that is not in that list cannot block a merge. `ios-app` is deliberately excluded: it depends on
+  a third-party runner image and Homebrew, the same argument that excludes `compose-boot`. What
+  that leaves uncovered is that a SwiftUI regression can merge on a red `ios-app` if ignored).
+  ⚠ **`.github/branch-protection.sh` must be re-run to apply the `ios-kit` context** — the script
+  is the source of truth and the live setting follows it, not the other way round.
+  Work on a branch → PR → merge on green.
 - **Known limitations are disclosed, not hidden:** `docs/known-limitations.md` carries 28
   entries. **LIM-01 was closed in D-179** (standalone CPU/mem/disk now work without Kafka) and
   rewritten down to a memory-threshold calibration note rather than deleted. LIM-10 (cluster) is

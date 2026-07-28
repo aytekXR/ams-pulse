@@ -10807,3 +10807,144 @@ test, because it reports coverage that does not exist.**
 **G-02: rotate `CLICKHOUSE_PASSWORD`.** Re-checked silently this session — the live prefix still
 matches 2 commits. Eleventh consecutive round as the sole submission blocker. The motion is
 unchanged: rotate → cut `v0.4.5` (which now also carries D-185) → submit against it.
+
+---
+
+## D-186 — §S118: the Pulse iOS app, its CI, and the public website for testers
+
+**Goal of the session:** get the iOS app and the website to the point where TestFlight testers can
+have the app — and find out honestly what part of that a machine on this VPS cannot do.
+
+**Starting position:** `main` at D-185; an untracked `ios/PulseKit/Package.swift` and an empty
+source tree, left by an interrupted attempt; no website of any kind; PR #233 (D-185) open and green
+but unmerged. Merged it first, so this session built on a current `main`.
+
+### The shape of the problem
+
+There is no Apple toolchain on this box and there never will be. Every statement about Xcode,
+simulators, code signing or App Store Connect is therefore a claim about a machine we cannot see —
+the exact class this repository has lost the most time to. Two decisions followed from that:
+
+1. **Split the app so the majority of it is verifiable here.** `ios/PulseKit` is Foundation-only —
+   no UIKit, no SwiftUI, no AVFoundation outside a `canImport` guard — and builds and tests on
+   Linux. Models, the API client, the transport seam, credential handling, view models and
+   formatting all live there. `ios/PulseApp` is the thin SwiftUI shell. The split is not
+   architectural taste; it is the difference between logic a gate can check and logic that only a
+   Mac can.
+2. **Measure the runner before writing anything that depends on it.** A throwaway probe
+   (`ci/macos-probe`, run 30392825535) ran on a real `macos-15` runner and answered: which Xcodes
+   exist, which simulator runtimes exist, whether Homebrew has XcodeGen, and whether a SwiftPM
+   package in this repo compiles for an iOS Simulator destination. Results in
+   `docs/mobile/ci-runner-facts.md`. **It paid for itself immediately** — the runner's *default*
+   Xcode is 16.4, and Apple has refused any App Store Connect upload not built with Xcode 26 / the
+   iOS 26 SDK since 2026-04-28. A CI job taking the default goes green and produces an artifact
+   Apple rejects, which is a defect discovered at the worst possible moment.
+
+### Delivered
+
+- **`ios/PulseKit`** — derived from `ios/PULSEKIT-CONTRACT.md`, written against the frozen
+  `contracts/openapi/pulse-api.yaml` *before* any code, per the repo's contracts-before-code rule.
+  11 schema groups, an injected transport seam (no test touches the network), a typed error enum, a
+  server-URL validator that accepts `http` only for loopback/`.local`/RFC1918/RFC4193 hosts,
+  Observation-based view models with an explicit loading-state enum, and formatters with an
+  injected clock. **259 tests, green in the CI container.**
+- **`ios/PulseApp`** — SwiftUI: connect, live dashboard, streams, alerts, settings, and a
+  `PlayerView` that plays HLS through AVPlayer instrumented with our own `PulseBeacon` SDK. **50
+  tests green on a real iOS 26.2 simulator.**
+- **`ios/project.yml`** — XcodeGen; the `.xcodeproj` is generated in CI and never committed.
+- **`.github/workflows/ios.yml`** — `ios-kit` (Linux, hard gate, added to the required contexts),
+  `ios-app` (macos-15, builds *and* tests), `ios-testflight` (archive → sign → upload; skips loudly
+  without secrets).
+- **`website/`** — landing, `/beta/`, `/privacy/`, `/support/`, `/terms/`, built from
+  `brandkit/website/Marketing Site.dc.html` against `tokens.json`, with **zero external requests**
+  enforced by a check that fails the build. GitHub Pages enabled via the API this session
+  (`build_type: workflow`) — **no operator action was needed for hosting**, which was not obvious
+  going in.
+- **`docs/mobile/`** — one merged operator runbook, a tester guide, and the measured runner facts.
+
+### Defects worth remembering
+
+**The host run was never evidence.** PulseKit passed 206/206 locally and failed **28** in the
+container CI actually uses: the fixture loader used an absolute path under `/home/aytek`. Fixed via
+`Bundle.module`, then re-verified from a *second, different* mount point — because "works at
+/repo" would have been the same defect wearing a new prefix.
+
+**`Int(Double.nan)` is a trap, not an error.** Every formatter that narrowed a `Double` could
+terminate the app. `max(0, nan)` is `nan` — every NaN comparison is false — so the clamp did not
+protect the conversion. JSON cannot spell NaN, which is why nobody wrote the test; it *can* spell
+`1e400`, which decodes to `+Infinity` in any `Double` the API returns. The new suite killed the
+test process with SIGILL before the fix. Non-finite now renders as absent, which is also the honest
+answer: it was never a measurement.
+
+**Two defects that fire only at upload, long after green.** `Info.plist` pinned
+`CFBundleShortVersionString`/`CFBundleVersion` to *literals* while `GENERATE_INFOPLIST_FILE` is
+`NO`, so literals win and CI's per-run build number — stamped precisely so two uploads cannot
+collide — would have been silently discarded. And it declared a `LaunchScreen` storyboard that does
+not exist, which iOS treats as having no launch screen and runs letterboxed.
+
+**"Verified" was true of the action and false of the version.** The TestFlight upload step was
+pinned to `Apple-Actions/upload-testflight-build@v3`, above a comment saying the action had been
+verified that day. The action is real and maintained; **the `v3` tag does not exist** (v4 and v5
+only), so the job would have died at "Unable to resolve action" after a ten-minute build. Same
+round: the *same secret* was documented as base64 and handed raw to that action — whichever
+encoding the operator chose, one consumer would break.
+
+**Ad-hoc signing is load-bearing for the Keychain.** `CODE_SIGNING_ALLOWED=NO` is the obvious
+setting for a CI simulator build and it silently disables the Keychain: an unsigned app has no
+keychain access group, so every `SecItem` call returns `-34018` and all twelve
+`KeychainServiceTests` failed with an error naming nothing about signing. 38 of 50 passing is the
+sort of partial red that invites deleting the awkward tests instead of fixing the cause.
+
+**The doc-stamp guard reported correctly-stamped files as failing — its third own-goal.** It runs
+under `set -o pipefail` and piped into `grep -q`; `grep -q` exits on first match, SIGPIPEs the
+`sed` upstream, and the non-zero *pipeline* status reads as "no stamp found". A successful match
+reported as a failure — and only sometimes, since whether the upstream finished writing is a
+buffering race. Two of three files failed on CI while the third passed, with `sed: couldn't flush
+stdout: Broken pipe` as the only clue. Fixed with a herestring, then tested in **both** directions.
+
+**The website's checker had the defect it exists to prevent.** It defaulted its web root to `$PWD`,
+so run from the repo root it walked `node_modules` and reported 28 violations against files it has
+no business policing. Scope is now the site, written down at the top of the script.
+
+### The concurrent-session hazard, made concrete
+
+A **second autonomous session was writing `ios/` at the same time**, and its completion
+notifications arrived in this session. It produced a flat `PulseKit` (`Models.swift`, `PulseAPI.swift`)
+while this one produced the layered package the contract specifies — two implementations of the
+same public types in one SwiftPM target, which cannot compile. Its files were **quarantined, not
+deleted** (preserved outside the repo), the layered contract-derived package was kept as canonical,
+and its genuinely good ideas were kept: the `PlayerView` with beacon instrumentation is theirs, and
+its "honest-absent" principle — a missing metric renders as absent, never as zero — is the same
+rule the NaN fix landed on independently. D-062's rule held up: inspect before committing, decide
+centrally, and never let a lane revert shared-tree work.
+
+### Gates
+
+`ios-kit` green (259 tests, zero warnings under Swift 6 language mode, in `swift:6.1` with the repo
+mounted as CI mounts it). `ios-app` green on `macos-15`: Xcode 26.2 **asserted**, destination
+resolved with `simctl` before use, 50 tests. Website: axe reports **0 violations** across all five
+pages in both colour schemes, both root and `/ams-pulse/` subpath hosting pass, no horizontal
+scroll at 320px, zero external requests — and the pages were opened and looked at, not merely
+measured. `shellcheck`, `doc-stamps`, and the full existing CI suite green.
+
+### Not done, deliberately
+
+The archive/sign/upload path is **written but never executed** — it cannot be until an Apple
+Developer account exists, and pretending otherwise would be the exact failure mode this session
+spent its effort avoiding. It is marked UNVERIFIED in the runbook, and the two things most likely
+to need adjustment on first run (`DEVELOPMENT_TEAM`, and whether automatic signing infers the team
+from the API key) are called out with the fix beside them.
+
+`ios-app` is deliberately **not** a required context: it depends on a third-party runner image and
+Homebrew, the same argument `branch-protection.sh` already makes for excluding `compose-boot`. What
+that leaves uncovered: a SwiftUI regression could merge on a red `ios-app` if someone ignores it.
+
+The app's `KeychainService` duplicates PulseKit's `TokenStore`/`KeychainTokenStore` — two ways to
+store a credential, which is the divergence shape this repo keeps getting bitten by. Left as
+recorded debt rather than refactored under time pressure.
+
+### Still blocking, still not ours
+
+**Marketplace: G-02, rotate `CLICKHOUSE_PASSWORD`.** Re-checked silently — the live prefix still
+matches 2 commits. **iOS: Apple Developer Program enrolment.** Nothing else gates either track.
+Both queues are in `docs/operator-expected.md`, the iOS one as an eight-step critical path.

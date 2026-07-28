@@ -67,7 +67,15 @@
 - **§2.12 Android Kotlin SDK** — needs a JVM+Gradle toolchain (Temurin 21 + Gradle) on the host.
   **Standing GO (D-154):** the loop auto-starts `sdk/beacon-kotlin` on the first tick
   `command -v gradle && command -v java` succeeds — no further prompt.
-- **§2.12 iOS Phase 2** — needs an Apple/Xcode CI runner (Phase 1 shipped, D-153).
+- **§2.12 iOS Phase 2** — ✅ **DONE (D-186, S118)**, and the blocker turned out not to exist:
+  GitHub-hosted `macos-15` runners are free for public repositories, so the "needs an Apple/Xcode
+  CI runner" premise was true of a *self-hosted* runner and false of the platform. Probed, then
+  built: `ios/PulseKit` (Linux-tested) + `ios/PulseApp` (SwiftUI, verified on a real simulator) +
+  `.github/workflows/ios.yml`. What genuinely remains gated is **distribution**, not building —
+  TestFlight needs an Apple Developer Program account (operator queue §A).
+- **§2.47 Public website** — ✅ **DONE (D-186, S118)**. `website/`, deployed to GitHub Pages,
+  which was enabled from the loop via the API. This closes the "marketing-site build" item that
+  §2.15 explicitly deferred out of the brandkit adoption phases.
 
 ### C. Operator decision / product call
 - **§2.44 `[FO-1]` firing-orphan** (found S96/D-160) — a non-`stream_offline` alert sticks

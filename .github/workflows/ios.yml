@@ -1,0 +1,479 @@
+# Pulse iOS CI — validates PulseKit on Linux, builds PulseApp on macOS, uploads to TestFlight.
+#
+# ARCHITECTURE DECISION (ios/PULSEKIT-CONTRACT.md): The iOS app is split into two layers:
+#   - PulseKit: Foundation-only API client, models, formatters. Builds on Linux.
+#   - PulseApp: SwiftUI/AVKit UI layer. Builds only on macOS/iOS.
+#
+# This split means logic bugs surface in the fast Linux job (ios-kit) before the
+# expensive macOS runner spins up. Only the thin UI layer requires Xcode.
+#
+# PATH FILTER DECISION: This workflow does NOT use a paths filter.
+#
+# A paths filter would skip this workflow on PRs that don't touch ios/. But ios-kit
+# is a REQUIRED status check in branch-protection.sh. A required check that never
+# runs on an unrelated PR blocks that PR forever — GitHub shows the check as "pending"
+# and merge is impossible. The standard workaround (a no-op job with the same name
+# that runs when paths don't match) would require a matrix or complex conditionals.
+#
+# Cost-benefit: ios-kit runs in ~30s (container pull + swift build/test); ios-app
+# adds ~2-3 minutes on a macOS runner. The total ~3 minute tax on unrelated PRs is
+# acceptable vs. the complexity and failure modes of a path-filtered required check.
+#
+# If build times become problematic, the correct fix is: remove ios-kit from the
+# required contexts list and add a no-op companion job. Do NOT add a paths filter
+# to a required check without that companion — it blocks all unrelated PRs.
+#
+# TESTFLIGHT RELEASE TAG PATTERN: ios-v* (e.g., ios-v0.1.0, ios-v1.0.0-beta.1).
+# This pattern is distinct from the product release tags (v*) consumed by release.yml.
+# The product tags ship the backend image to GHCR; the ios-v* tags ship the iOS app
+# to TestFlight. Different cadences, different artifact, no collision.
+name: ios
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - "ios-v*"
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same branch/PR. iOS builds are expensive (macOS
+# runner time), so canceling stale runs saves quota.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ── 1. ios-kit ──────────────────────────────────────────────────────────────
+  # HARD GATE: validates the Foundation-only logic layer on Linux.
+  # This catches model/API/formatting bugs before the macOS runner starts.
+  # Runs in the official Swift 6.1 container (same image family as sdk-swift in ci.yml).
+  # This job is in the required status checks list in branch-protection.sh.
+  ios-kit:
+    runs-on: ubuntu-latest
+    container: swift:6.1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build PulseKit
+        run: cd ios/PulseKit && swift build
+
+      - name: Test PulseKit (HARD)
+        run: cd ios/PulseKit && swift test
+
+  # ── 2. ios-app ──────────────────────────────────────────────────────────────
+  # Builds PulseApp on macOS with Xcode. Proves the SwiftUI layer compiles and
+  # tests pass (when test targets exist). Uses XcodeGen to generate the project.
+  #
+  # RUNNER: macos-15 (GitHub-hosted, free for public repositories).
+  #
+  # XCODE PIN: Xcode 26.2.0.
+  # RATIONALE: Apple requires Xcode 26+ with iOS 26 SDK for all App Store Connect
+  # uploads since 2026-04-28 (docs/mobile/ci-runner-facts.md). The macos-15 runner
+  # (image 20260715.0234) has Xcode 26.0 through 26.3.0 installed. We pin 26.2.0
+  # specifically because:
+  #   1. It is not the oldest (avoids early-release bugs fixed in 26.1+).
+  #   2. It is not the newest (26.3.0 may be unstable; let others find issues).
+  #   3. The ios-testflight job uses the same pin, so build and upload use the
+  #      same compiler — no "it built locally" surprises.
+  # The pin is ASSERTED: the step prints xcodebuild -version and fails if the
+  # major version is not 26. A pin without assertion is a comment.
+  #
+  # DESTINATION: "platform=iOS Simulator,OS=26.2,name=iPhone 17 Pro".
+  # RATIONALE: Xcode 26.2 ships with iOS 26.2 SDK and simulator. The macos-15
+  # runner has iOS 18.5, 18.6, 26.0, 26.1, 26.2 runtimes (docs/mobile/ci-runner-facts.md).
+  # Pairing Xcode 26.2 with iOS 26.2 simulator matches the SDK used for archiving.
+  # iPhone 17 Pro is verified present. The destination is ASSERTED: xcrun simctl
+  # resolves it before building; if it fails, the step prints a clear message.
+  #
+  # NOT IN REQUIRED CONTEXTS: This job depends on third-party runner images and
+  # Homebrew availability. Adding it to required checks would make every merge
+  # dependent on Homebrew uptime and Apple's simulator versioning decisions. It
+  # is still a real gate on main; it just cannot hold a PR hostage to a third
+  # party. Same rationale as compose-boot exclusion in branch-protection.sh.
+  ios-app:
+    runs-on: macos-15
+    needs: ios-kit
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pin Xcode version and ASSERT the selection.
+      - name: Select and assert Xcode 26.2
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.2.0.app/Contents/Developer
+          XCODE_VERSION=$(xcodebuild -version | head -1)
+          echo "Selected: $XCODE_VERSION"
+          MAJOR=$(echo "$XCODE_VERSION" | grep -oE '^Xcode [0-9]+' | grep -oE '[0-9]+')
+          if [ "$MAJOR" != "26" ]; then
+            echo "::error::Xcode major version is $MAJOR, expected 26. The pin is stale or incorrect."
+            exit 1
+          fi
+          echo "Xcode assertion PASSED: major version is 26"
+
+      # Assert the destination exists before building.
+      - name: Assert simulator destination exists
+        run: |
+          RUNTIME="com.apple.CoreSimulator.SimRuntime.iOS-26-2"
+          DEVICE="iPhone 17 Pro"
+          echo "Looking for runtime: $RUNTIME"
+          echo "Looking for device: $DEVICE"
+          xcrun simctl list runtimes
+          xcrun simctl list devices
+          # Check runtime exists
+          if ! xcrun simctl list runtimes | grep -q "iOS 26.2"; then
+            echo "::error::iOS 26.2 runtime not found. Check docs/mobile/ci-runner-facts.md and update the destination."
+            exit 1
+          fi
+          # Check device exists for this runtime
+          if ! xcrun simctl list devices available | grep -q "$DEVICE"; then
+            echo "::error::Device '$DEVICE' not found. Check docs/mobile/ci-runner-facts.md and update the destination."
+            exit 1
+          fi
+          echo "Destination assertion PASSED: iOS 26.2 runtime and $DEVICE are available"
+          echo "Resolved destination: platform=iOS Simulator,OS=26.2,name=$DEVICE"
+
+      # XcodeGen generates Pulse.xcodeproj from project.yml.
+      # Homebrew is pre-installed on macos-15 runners.
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: |
+          cd ios
+          xcodegen generate
+          ls -la Pulse.xcodeproj/
+
+      # Resolve the local Swift packages (PulseKit, PulseBeacon) before building.
+      # xcodebuild -resolvePackageDependencies ensures packages are fetched and
+      # linked correctly. Without this, incremental builds sometimes fail to find
+      # the local package products.
+      - name: Resolve Swift packages
+        run: |
+          cd ios
+          xcodebuild -resolvePackageDependencies \
+            -project Pulse.xcodeproj \
+            -scheme Pulse
+
+      # Build for iOS Simulator, AD-HOC SIGNED.
+      #
+      # ⚠ Do not "simplify" this back to CODE_SIGNING_ALLOWED=NO. That is the
+      # obvious setting for a CI simulator build and it silently breaks the
+      # Keychain: an unsigned app has no keychain access group, so every
+      # SecItem call returns -34018 (errSecMissingEntitlement) and all twelve
+      # KeychainServiceTests fail with an error that says nothing about signing.
+      # It cost a CI round-trip to find. An iOS SIMULATOR build needs no team and
+      # no provisioning profile — the ad-hoc identity "-" is enough, and it is
+      # what gives the app its default keychain access group.
+      #
+      # Destination is spelled out so a missing simulator fails LOUD.
+      # -quiet is deliberately NOT used — on failure we need the whole log.
+      - name: Build for iOS Simulator
+        run: |
+          cd ios
+          xcodebuild build \
+            -project Pulse.xcodeproj \
+            -scheme Pulse \
+            -destination "platform=iOS Simulator,OS=26.2,name=iPhone 17 Pro" \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES
+
+      # Run tests. The scheme's test action is configured in project.yml.
+      # The test target is named PulseTests in project.yml (its SOURCES live in
+      # PulseApp/Tests/PulseAppTests — directory name and target name differ, so
+      # do not "correct" one to match the other). If no tests are
+      # found, that is a BUG, not an expected state — the build must fail so
+      # someone adds tests. Exit code 66 ("no tests found") is NOT swallowed.
+      # Ad-hoc signed for the same reason as the build step above — the Keychain
+      # tests are the ones that care, and they are the ones worth having.
+      - name: Test (HARD)
+        run: |
+          cd ios
+          xcodebuild test \
+            -project Pulse.xcodeproj \
+            -scheme Pulse \
+            -destination "platform=iOS Simulator,OS=26.2,name=iPhone 17 Pro" \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES
+
+  # ── 3. ios-testflight ───────────────────────────────────────────────────────
+  # Archives PulseApp and uploads to TestFlight.
+  #
+  # TRIGGERS:
+  #   - workflow_dispatch: Manual trigger for ad-hoc uploads.
+  #   - push to ios-v* tag: Automated release upload.
+  #
+  # TAG PATTERN: ios-v* (e.g., ios-v0.1.0, ios-v1.0.0-beta.1).
+  # This is distinct from the product release tags (v*) used by release.yml.
+  # The product tags ship the backend Docker image; the ios tags ship the iOS app.
+  #
+  # SECRETS REQUIRED (must be configured in GitHub → Settings → Secrets):
+  #   - APP_STORE_CONNECT_ISSUER_ID: The Issuer ID (UUID) from App Store Connect.
+  #   - APP_STORE_CONNECT_KEY_ID: The Key ID (10 alphanumeric characters).
+  #   - APP_STORE_CONNECT_PRIVATE_KEY: The .p8 file contents VERBATIM — the whole
+  #     file, including the BEGIN PRIVATE KEY and END PRIVATE KEY lines. NOT
+  #     base64-wrapped.
+  #
+  #     ⚠ This encoding is not a free choice. The upload action below takes the
+  #     key as a PKCS8 STRING and there is no decode step in front of it, so the
+  #     secret has to be usable as-is. It was previously documented as
+  #     base64-encoded while ALSO being handed to that action raw — the two uses
+  #     disagreed, and the failure would have landed on the operator's very first
+  #     upload attempt with an opaque parse error.
+  #
+  #   - APPLE_TEAM_ID (optional): the 10-character Team ID. Passed to xcodebuild as
+  #     DEVELOPMENT_TEAM when present. Automatic signing can usually infer the team
+  #     from the API key when the key belongs to exactly one team; if it cannot,
+  #     the archive fails with "Signing for Pulse requires a development team" and
+  #     this secret is the fix. UNVERIFIED either way — nobody here has an Apple
+  #     account to test it against.
+  #
+  # If secrets are missing, the job SKIPS with a loud notice — it never fails
+  # silently and never succeeds silently. This allows CI to run without an Apple
+  # account configured while making the gap obvious.
+  #
+  # BUILD NUMBER: Set from GITHUB_RUN_NUMBER. App Store Connect rejects duplicate
+  # build numbers for the same version, and a collision is a slow, confusing
+  # failure. Using the run number guarantees uniqueness across CI runs.
+  #
+  # UPLOAD MECHANISM: Apple-Actions/upload-testflight-build with backend: appstore-api.
+  # This is Apple's official GitHub Action, actively maintained (verified via WebFetch
+  # 2026-07-28). The appstore-api backend uses the App Store Connect API directly
+  # and works on macOS runners. This is the modern path; xcrun altool is deprecated
+  # for notarization (replaced by notarytool) and the App Store Connect API is the
+  # recommended CI upload method. The action handles authentication via the API key.
+  #
+  # NOT IN REQUIRED CONTEXTS: This job only runs on ios-v* tags and dispatch,
+  # never on PRs. Adding it to required checks would make it "pending" on PRs
+  # forever. It is still a real gate on main for iOS releases.
+  ios-testflight:
+    runs-on: macos-15
+    needs: [ios-kit, ios-app]
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/ios-v')
+    steps:
+      - uses: actions/checkout@v4
+
+      # Check for required secrets BEFORE doing any work.
+      # If any are missing, skip loudly with an explanatory notice.
+      - name: Check App Store Connect credentials
+        id: creds
+        env:
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          MISSING=""
+          if [ -z "$ASC_ISSUER_ID" ]; then
+            MISSING="${MISSING}APP_STORE_CONNECT_ISSUER_ID "
+          fi
+          if [ -z "$ASC_KEY_ID" ]; then
+            MISSING="${MISSING}APP_STORE_CONNECT_KEY_ID "
+          fi
+          if [ -z "$ASC_PRIVATE_KEY" ]; then
+            MISSING="${MISSING}APP_STORE_CONNECT_PRIVATE_KEY "
+          fi
+          if [ -n "$MISSING" ]; then
+            echo "::notice::SKIPPING TestFlight upload — missing secrets: ${MISSING}"
+            echo "::notice::See docs/mobile/ios-testflight.md for setup instructions."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # All remaining steps are gated on credentials being available.
+      - name: Select and assert Xcode 26.2
+        if: steps.creds.outputs.available == 'true'
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.2.0.app/Contents/Developer
+          XCODE_VERSION=$(xcodebuild -version | head -1)
+          echo "Selected: $XCODE_VERSION"
+          MAJOR=$(echo "$XCODE_VERSION" | grep -oE '^Xcode [0-9]+' | grep -oE '[0-9]+')
+          if [ "$MAJOR" != "26" ]; then
+            echo "::error::Xcode major version is $MAJOR, expected 26. The pin is stale or incorrect."
+            exit 1
+          fi
+          echo "Xcode assertion PASSED: major version is 26"
+
+      - name: Install XcodeGen
+        if: steps.creds.outputs.available == 'true'
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        if: steps.creds.outputs.available == 'true'
+        run: |
+          cd ios
+          xcodegen generate
+
+      - name: Resolve Swift packages
+        if: steps.creds.outputs.available == 'true'
+        run: |
+          cd ios
+          xcodebuild -resolvePackageDependencies \
+            -project Pulse.xcodeproj \
+            -scheme Pulse
+
+      # Compute version strings for the build.
+      - name: Compute version
+        if: steps.creds.outputs.available == 'true'
+        id: version
+        run: |
+          # Marketing version from tag (ios-v1.0.0 -> 1.0.0) or VERSION file.
+          if [[ "$GITHUB_REF" == refs/tags/ios-v* ]]; then
+            MARKETING_VERSION="${GITHUB_REF#refs/tags/ios-v}"
+          else
+            MARKETING_VERSION="$(cat VERSION)"
+          fi
+          # Build number from run number — guaranteed unique across CI runs.
+          BUILD_NUMBER="${GITHUB_RUN_NUMBER}"
+          echo "MARKETING_VERSION=${MARKETING_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "BUILD_NUMBER=${BUILD_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "Marketing version: ${MARKETING_VERSION}"
+          echo "Build number: ${BUILD_NUMBER}"
+
+      # Write the App Store Connect API key to a file for xcodebuild.
+      - name: Install App Store Connect API key
+        if: steps.creds.outputs.available == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          KEYFILE=~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          printf '%s\n' "$ASC_PRIVATE_KEY" > "$KEYFILE"
+          chmod 600 "$KEYFILE"
+          # Fail here, with a sentence that says what to do, rather than 200 lines
+          # later inside xcodebuild's signing machinery.
+          if ! grep -q "BEGIN PRIVATE KEY" "$KEYFILE"; then
+            echo "::error::APP_STORE_CONNECT_PRIVATE_KEY does not look like a .p8 key." \
+                 "Store the file contents VERBATIM, including the BEGIN/END lines — not base64."
+            exit 1
+          fi
+          echo "Installed API key AuthKey_${ASC_KEY_ID}.p8"
+
+      # Archive for App Store distribution with automatic signing.
+      # -allowProvisioningUpdates with the API key enables automatic signing
+      # without manual provisioning profile management.
+      - name: Archive for App Store
+        if: steps.creds.outputs.available == 'true'
+        env:
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          cd ios
+          # DEVELOPMENT_TEAM only when the operator supplied one. Passing an EMPTY
+          # value is not the same as passing nothing: it pins the setting to blank
+          # and defeats the inference that -allowProvisioningUpdates would
+          # otherwise do from the API key's own team.
+          TEAM_ARG=()
+          if [ -n "${APPLE_TEAM_ID:-}" ]; then
+            TEAM_ARG=(DEVELOPMENT_TEAM="${APPLE_TEAM_ID}")
+            echo "Signing with team ${APPLE_TEAM_ID}"
+          else
+            echo "::notice::APPLE_TEAM_ID not set — relying on the API key's team. If this step fails with 'requires a development team', set that secret."
+          fi
+          xcodebuild archive \
+            -project Pulse.xcodeproj \
+            -scheme Pulse \
+            -archivePath "$RUNNER_TEMP/Pulse.xcarchive" \
+            -destination "generic/platform=iOS" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
+            -authenticationKeyID "${ASC_KEY_ID}" \
+            -authenticationKeyIssuerID "${ASC_ISSUER_ID}" \
+            MARKETING_VERSION="${{ steps.version.outputs.MARKETING_VERSION }}" \
+            CURRENT_PROJECT_VERSION="${{ steps.version.outputs.BUILD_NUMBER }}" \
+            "${TEAM_ARG[@]}"
+          echo "Archive created at $RUNNER_TEMP/Pulse.xcarchive"
+
+      # Export the archive as an App Store IPA.
+      - name: Export App Store IPA
+        if: steps.creds.outputs.available == 'true'
+        env:
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+        run: |
+          # Create export options plist for App Store distribution.
+          cat > "$RUNNER_TEMP/ExportOptions.plist" << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store-connect</string>
+              <key>destination</key>
+              <string>upload</string>
+              <key>signingStyle</key>
+              <string>automatic</string>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Pulse.xcarchive" \
+            -exportPath "$RUNNER_TEMP/Export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
+            -authenticationKeyID "${ASC_KEY_ID}" \
+            -authenticationKeyIssuerID "${ASC_ISSUER_ID}"
+          echo "IPA exported to $RUNNER_TEMP/Export"
+          ls -la "$RUNNER_TEMP/Export"
+
+      # Upload to App Store Connect using Apple's official GitHub Action.
+      # This action uses the App Store Connect API directly (appstore-api backend).
+      # Verified 2026-07-28: Apple-Actions/upload-testflight-build is actively
+      # maintained and the appstore-api backend is recommended for .ipa uploads.
+      # The exported filename follows PRODUCT_NAME, so it should be Pulse.ipa —
+      # but "should be" is how a job fails at the last step of a ten-minute run.
+      # Resolve it, assert exactly one, and hand the real path onward.
+      - name: Locate the exported IPA
+        id: ipa
+        if: steps.creds.outputs.available == 'true'
+        run: |
+          COUNT=$(find "$RUNNER_TEMP/Export" -maxdepth 1 -name '*.ipa' | wc -l | tr -d ' ')
+          if [ "$COUNT" != "1" ]; then
+            echo "::error::expected exactly one .ipa in $RUNNER_TEMP/Export, found $COUNT"
+            ls -la "$RUNNER_TEMP/Export" || true
+            exit 1
+          fi
+          IPA=$(find "$RUNNER_TEMP/Export" -maxdepth 1 -name '*.ipa')
+          echo "path=$IPA" >> "$GITHUB_OUTPUT"
+          echo "Uploading $IPA"
+
+      # ⚠ The version pin here is load-bearing. This was written as @v3, which
+      # does NOT EXIST — the action publishes v4 and v5 only, so the job would
+      # have died at "Unable to resolve action". The claim that the action was
+      # "verified 2026-07-28" was true of the ACTION and false of the VERSION.
+      # Re-check the tag list before bumping: gh api repos/Apple-Actions/upload-testflight-build/tags
+      - name: Upload to TestFlight
+        if: steps.creds.outputs.available == 'true'
+        uses: Apple-Actions/upload-testflight-build@v5.2.1
+        with:
+          app-path: ${{ steps.ipa.outputs.path }}
+          app-type: ios
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          # Matches ITSAppUsesNonExemptEncryption=false in Info.plist. Declaring it
+          # here too stops TestFlight parking the build on "Missing Compliance",
+          # which blocks testers from installing it until someone clicks through.
+          uses-non-exempt-encryption: "false"
+
+      # Print where the operator should look for the build.
+      - name: Print TestFlight location
+        if: steps.creds.outputs.available == 'true'
+        run: |
+          echo "============================================================"
+          echo "TestFlight upload complete."
+          echo ""
+          echo "The build is now processing at App Store Connect."
+          echo "Processing typically takes 10-30 minutes."
+          echo ""
+          echo "To find this build:"
+          echo "  1. Go to https://appstoreconnect.apple.com/"
+          echo "  2. Click 'My Apps' > 'Pulse' (or your app name)"
+          echo "  3. Click 'TestFlight' in the sidebar"
+          echo "  4. Look under 'Builds' for version ${{ steps.version.outputs.MARKETING_VERSION }} (${{ steps.version.outputs.BUILD_NUMBER }})"
+          echo ""
+          echo "Once processing completes, add the build to a tester group"
+          echo "to make it available for download."
+          echo "============================================================"

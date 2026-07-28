@@ -1,0 +1,33 @@
+{
+  "items": [
+    {
+      "stream_id": "stream-001",
+      "app": "live",
+      "node_id": "node-1",
+      "tenant": "acme-corp",
+      "viewers": 500,
+      "publisher_state": "publishing",
+      "health_score": 95.5,
+      "protocol_mix": {
+        "webrtc": 300,
+        "hls": 200
+      },
+      "bitrate_kbps": 2500.5,
+      "started_at": 1699996400000,
+      "viewer_rtt_ms": 45.5,
+      "viewer_jitter_ms": 5.2,
+      "viewer_loss_pct": 0.5
+    },
+    {
+      "stream_id": "stream-002",
+      "app": "webinar",
+      "viewers": 100,
+      "publisher_state": "idle",
+      "health_score": 80.0
+    }
+  ],
+  "meta": {
+    "next_cursor": "eyJsYXN0X2lkIjoic3RyZWFtLTAwMiJ9",
+    "total": 150
+  }
+}

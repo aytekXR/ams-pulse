@@ -1,0 +1,98 @@
+# Pulse public website — deploy to GitHub Pages.
+#
+# Triggers on push to main when website/ changes, plus manual dispatch.
+# Runs lint and accessibility checks BEFORE deploying — a broken or
+# inaccessible page does not ship.
+#
+# Site URL: https://aytekxr.github.io/ams-pulse/
+# Pages is enabled with build_type=workflow.
+#
+# Manual deployment from a feature branch:
+#   gh workflow run pages.yml -f branch=feat/my-branch
+#   Then view: https://aytekxr.github.io/ams-pulse/
+#
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "website/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to deploy (defaults to the branch the workflow runs on)"
+        required: false
+        default: ""
+        type: string
+
+# Allow only one concurrent deployment, skipping runs queued between the
+# run in-progress and the latest queued. Do not cancel in-progress runs
+# since we want deployments to complete.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # ── 1. Lint + accessibility checks ──────────────────────────────────────────
+  # Must pass BEFORE deploy runs.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Install Playwright and Chromium for accessibility checks
+      - name: Install Playwright dependencies
+        working-directory: web
+        run: |
+          npm ci
+          npx playwright install chromium --with-deps
+
+      # Both hosting shapes, deliberately. Pages serves this site under the
+      # /ams-pulse/ subpath today, but the operator may point a custom domain at
+      # the same files tomorrow and then it is served from the root. A page that
+      # works under exactly one of those is a page that breaks on the day the
+      # domain changes — and the failure (an unstyled page) looks like a CDN
+      # problem, not like a link that was always wrong.
+      - name: Run website checks — root hosting
+        working-directory: website
+        run: ./tests/run-checks.sh . /
+
+      - name: Run website checks — subpath hosting (how Pages serves it)
+        working-directory: website
+        run: ./tests/run-checks.sh . /ams-pulse/
+
+  # ── 2. Deploy to GitHub Pages ───────────────────────────────────────────────
+  deploy:
+    runs-on: ubuntu-latest
+    needs: check
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch || github.ref }}
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
