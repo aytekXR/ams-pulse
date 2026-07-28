@@ -459,3 +459,76 @@ struct FormatterTests {
         #expect(Formatters.relativeTime(fromEpochMs: epochMs, to: now) == "3m ago")
     }
 }
+
+// MARK: - Non-finite input (D-186 regression)
+//
+// JSON cannot encode NaN or Infinity by name, which is why nobody wrote these
+// tests the first time. It CAN encode a numeric literal that overflows: 1e400
+// decodes to +Infinity in a Double field without raising. So a hostile — or
+// simply buggy — server can put a non-finite value into any Double the API
+// returns, and every one of these formatters is on a path that renders such a
+// value in the UI. Int(Double.nan) and Int(Double.infinity) are a *trap*, not an
+// error: the app terminates.
+//
+// The rule this suite pins: a non-finite number is not a measurement, so it
+// renders as absent — the same placeholder a nil renders as. Never a crash,
+// never the string "nan".
+@Suite("Formatters — non-finite input")
+struct FormatterNonFiniteTests {
+    @Test("bitrateString does not trap on NaN")
+    func bitrate_nan() {
+        #expect(Formatters.bitrateString(kbps: Double.nan) == "-- kbps")
+    }
+
+    @Test("bitrateString does not trap on +infinity")
+    func bitrate_posInf() {
+        #expect(Formatters.bitrateString(kbps: Double.infinity) == "-- kbps")
+    }
+
+    @Test("bitrateString does not trap on -infinity")
+    func bitrate_negInf() {
+        #expect(Formatters.bitrateString(kbps: -Double.infinity) == "-- kbps")
+    }
+
+    @Test("latencyMs Double does not trap on NaN")
+    func latency_nan() {
+        #expect(Formatters.latencyMs(Double.nan) == "-- ms")
+    }
+
+    @Test("latencyMs Double does not trap on infinity")
+    func latency_inf() {
+        #expect(Formatters.latencyMs(Double.infinity) == "-- ms")
+    }
+
+    @Test("percentage renders NaN as absent, not as the text nan")
+    func percentage_nan() {
+        #expect(Formatters.percentage(Double.nan) == "--%")
+    }
+
+    @Test("percentageRaw renders NaN as absent, not as the text nan")
+    func percentageRaw_nan() {
+        #expect(Formatters.percentageRaw(Double.nan) == "--%")
+    }
+
+    @Test("healthScoreDisplay renders NaN as absent")
+    func healthScore_nan() {
+        #expect(Formatters.healthScoreDisplay(Double.nan) == "--")
+    }
+
+    @Test("healthScoreNormalized returns nil for NaN rather than a NaN")
+    func healthScoreNormalized_nan() {
+        #expect(Formatters.healthScoreNormalized(Double.nan) == nil)
+    }
+
+    @Test("healthScoreNormalized returns nil for infinity")
+    func healthScoreNormalized_inf() {
+        #expect(Formatters.healthScoreNormalized(Double.infinity) == nil)
+    }
+
+    @Test("relativeTime does not trap on a non-finite date")
+    func relativeTime_nonFiniteDate() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let bogus = Date(timeIntervalSince1970: Double.nan)
+        #expect(Formatters.relativeTime(from: bogus, to: now) == "--")
+    }
+}

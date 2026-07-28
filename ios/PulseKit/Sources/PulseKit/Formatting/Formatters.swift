@@ -17,6 +17,11 @@ public enum Formatters {
     /// Scale: kbps -> Mbps -> Gbps -> Tbps -> Pbps
     /// Negative values are clamped to zero.
     public static func bitrateString(kbps: Double) -> String {
+        // A non-finite value is not a measurement — render it as absent.
+        // This guard is load-bearing, not defensive style: the kbps range below
+        // ends in Int(clamped), and Int(Double.nan) TRAPS. See the non-finite
+        // suite in FormatterTests for how such a value reaches us from the wire.
+        guard kbps.isFinite else { return "-- kbps" }
         let clamped = max(0, kbps)
 
         // Petabit range (1e12 kbps = 1 Pbps)
@@ -112,6 +117,10 @@ public enum Formatters {
     public static func relativeTime(from date: Date, to now: Date) -> String {
         let interval = now.timeIntervalSince(date)
 
+        // A Date built from a non-finite interval yields a non-finite delta, and
+        // Int(interval) below traps on it. "just now" would be a lie; "--" is not.
+        guard interval.isFinite else { return "--" }
+
         // Future or very recent
         if interval < 2 {
             return "just now"
@@ -186,7 +195,9 @@ public enum Formatters {
     ///
     /// Values are clamped to [0, 1] range. Nil returns "--".
     public static func percentage(_ ratio: Double?) -> String {
-        guard let ratio = ratio else {
+        // Non-finite does not trap here, but it renders the literal text "nan%"
+        // in the UI, which is worse than an honest placeholder.
+        guard let ratio = ratio, ratio.isFinite else {
             return "--%"
         }
         let clamped = max(0, min(1, ratio))
@@ -201,7 +212,7 @@ public enum Formatters {
     ///
     /// Values are clamped to [0, 100] range. Nil returns "--".
     public static func percentageRaw(_ value: Double?) -> String {
-        guard let value = value else {
+        guard let value = value, value.isFinite else {
             return "--%"
         }
         let clamped = max(0, min(100, value))
@@ -233,7 +244,10 @@ public enum Formatters {
     /// - Parameter ms: Latency in milliseconds; nil displays as "--".
     /// - Returns: Formatted latency string (e.g., "45 ms", "1.2 s").
     public static func latencyMs(_ ms: Double?) -> String {
-        guard let ms = ms else {
+        // isFinite must be checked BEFORE the Int conversion below: max(0, nan)
+        // is nan (every NaN comparison is false), so clamping does not protect
+        // the conversion — Int(nan) and Int(infinity) both trap.
+        guard let ms = ms, ms.isFinite else {
             return "-- ms"
         }
         let clamped = max(0, Int(ms.rounded()))
@@ -249,7 +263,7 @@ public enum Formatters {
     ///
     /// Clamped to [0, 100] range.
     public static func healthScoreDisplay(_ score: Double?) -> String {
-        guard let score = score else {
+        guard let score = score, score.isFinite else {
             return "--"
         }
         let clamped = max(0, min(100, score))
@@ -263,7 +277,9 @@ public enum Formatters {
     ///
     /// Useful for progress indicators and color interpolation.
     public static func healthScoreNormalized(_ score: Double?) -> Double? {
-        guard let score = score else {
+        // Returning a NaN here would poison whatever the caller does with it —
+        // a progress bar width, a colour interpolation — far from this call site.
+        guard let score = score, score.isFinite else {
             return nil
         }
         return max(0, min(1, score / 100.0))

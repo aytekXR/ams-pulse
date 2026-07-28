@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  PrivacyInfo.xcprivacy — App Privacy Manifest
+
+  Required by Apple since May 2024. Missing or incorrect manifests cause
+  TestFlight processing rejections.
+
+  What this manifest declares:
+  1. NSPrivacyTracking = false: The app does NOT track users.
+  2. NSPrivacyTrackingDomains = []: No tracking domains.
+  3. NSPrivacyCollectedDataTypes = []: No data collection for tracking or linking.
+  4. NSPrivacyAccessedAPITypes = []: No required-reason APIs are used.
+
+  Required-reason API analysis (WWDC23-10060):
+    - File timestamp APIs: NOT USED. The app does not read file modification times.
+    - System boot time APIs: NOT USED. No CACurrentMediaTime/mach_absolute_time.
+    - Disk space APIs: NOT USED. No NSFileManager disk space queries.
+    - Active keyboards API: NOT USED. No UITextInputMode queries.
+    - User defaults APIs: NOT USED. Credentials are stored in Keychain (Security
+      framework), not UserDefaults. See KeychainService.swift.
+
+  Data collection analysis:
+    - The app connects to user-specified Pulse servers on their own infrastructure.
+    - Credentials (server URL, bearer token) are stored locally in the iOS Keychain.
+    - No data is sent to the developer (Beyond Kaira) or any third party.
+    - Analytics data flows from Pulse servers to the app, not the reverse.
+
+  This is a "zero collection" app: all data stays on the user's device and their
+  own Pulse server. The manifest reflects this honestly.
+-->
+<plist version="1.0">
+<dict>
+    <!-- The app does not engage in tracking as defined by Apple. -->
+    <key>NSPrivacyTracking</key>
+    <false/>
+
+    <!-- No tracking domains are contacted. -->
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+
+    <!-- No data is collected for tracking or linking to the user. -->
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array/>
+
+    <!--
+      Required-reason APIs used by the app.
+      Empty because none of the privacy-sensitive APIs are used:
+        - NSPrivacyAccessedAPICategoryFileTimestamp: NOT USED
+        - NSPrivacyAccessedAPICategorySystemBootTime: NOT USED
+        - NSPrivacyAccessedAPICategoryDiskSpace: NOT USED
+        - NSPrivacyAccessedAPICategoryActiveKeyboards: NOT USED
+        - NSPrivacyAccessedAPICategoryUserDefaults: NOT USED (Keychain only)
+    -->
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array/>
+</dict>
+</plist>
