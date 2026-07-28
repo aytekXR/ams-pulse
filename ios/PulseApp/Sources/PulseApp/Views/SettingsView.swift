@@ -182,6 +182,12 @@ struct SettingsView: View {
                 return ("Degraded", BrandColors.warning.opacity(0.15), BrandColors.warning)
             case .down:
                 return ("Down", BrandColors.critical.opacity(0.15), BrandColors.critical)
+            case .unknown(let raw):
+                // A state this build has never heard of, from a newer server.
+                // Show the server's own word for it rather than inventing a
+                // severity — neutral is grey, so it cannot read as healthy and
+                // does not claim a fault we have not observed.
+                return (raw.uppercased(), BrandColors.neutral.opacity(0.15), BrandColors.neutral)
             }
         }()
 

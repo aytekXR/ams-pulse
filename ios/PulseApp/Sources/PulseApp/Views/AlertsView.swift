@@ -180,6 +180,13 @@ struct AlertsView: View {
         case .info:
             icon = "info.circle.fill"
             color = BrandColors.info
+        case .unknown:
+            // A severity this build does not know. A circle is the shape used
+            // nowhere else here, so an operator can tell it apart at a glance —
+            // status is always shape AND colour in this product, never colour
+            // alone (brandkit design-rationale section 2, the CVD rule).
+            icon = "questionmark.circle.fill"
+            color = BrandColors.neutral
         }
 
         return Image(systemName: icon)
@@ -193,6 +200,7 @@ struct AlertsView: View {
         case .critical: return BrandColors.critical
         case .warning: return BrandColors.warning
         case .info: return BrandColors.info
+        case .unknown: return BrandColors.neutral
         }
     }
 
@@ -201,6 +209,7 @@ struct AlertsView: View {
         case .critical: return BrandColors.critical.opacity(0.3)
         case .warning: return BrandColors.warning.opacity(0.3)
         case .info: return BrandColors.border
+        case .unknown: return BrandColors.border
         }
     }
 
@@ -213,6 +222,10 @@ struct AlertsView: View {
                 return ("Resolved", BrandColors.healthy.opacity(0.15), BrandColors.healthy)
             case .deliveryFailure:
                 return ("Delivery Failed", BrandColors.warning.opacity(0.15), BrandColors.warning)
+            case .unknown(let raw):
+                // Show the server's own word. An alert in a state we cannot
+                // interpret is exactly when hiding the raw value costs most.
+                return (raw.uppercased(), BrandColors.neutral.opacity(0.15), BrandColors.neutral)
             }
         }()
 

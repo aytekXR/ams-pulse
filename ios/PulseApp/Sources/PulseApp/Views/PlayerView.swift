@@ -275,12 +275,16 @@ struct PlayerView: View {
         while !Task.isCancelled {
             do {
                 try await Task.sleep(nanoseconds: checkInterval)
-                await checkPlaybackState()
+                // Not `await`: both helpers are synchronous and already on this
+                // isolation domain. Swift 6 warns "no async operations occur
+                // within 'await' expression", and a needless await here would
+                // read as if it could suspend mid-playback-check, which it cannot.
+                checkPlaybackState()
 
                 // Emit heartbeat every 10 seconds while playing.
                 let now = Date()
                 if now.timeIntervalSince(lastHeartbeat) >= 10 {
-                    await emitHeartbeatIfPlaying()
+                    emitHeartbeatIfPlaying()
                     lastHeartbeat = now
                 }
             } catch {
