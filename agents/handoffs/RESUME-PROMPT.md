@@ -62,6 +62,16 @@ working manual-invitation route — honest and usable today. The grep marker for
    a discovery exercise, not a regression check.
 3. **If a TestFlight public link arrives**, do the `/beta/` swap and redeploy the site.
 
+**The app RUNS, and that is a separate claim from "the app builds" (S120).** CI now boots a
+simulator, installs, launches, waits 12 s (a SwiftUI crash in `body` happens *after* `simctl
+launch` returns a pid), screenshots both appearances and fails on a crash report or a dead process.
+Opening those PNGs found two defects no test could: the capture step itself was mislabelling a
+light screenshot as dark (a simulator boots in light), and the Server URL placeholder rendered as a
+blue Markdown autolink — `TextField("https://…", text:)` takes a `LocalizedStringKey`, which SwiftUI
+parses as Markdown. **The first fix for that was wrong and the screenshot said so**: reasoning from
+the sibling field produced a confident, plausible, useless change, and the next run came back just
+as blue. A fix that does not change the artifact has not been verified.
+
 **Before filing a defect against code, confirm the artifact you tested was built from it (S119).**
 The live harness found `/live/streams` returning `{"items":null}` against its own contract. The
 obvious write-up — "the server is wrong" — was wrong: the server code is correct, commented, and
