@@ -5,8 +5,20 @@ import Foundation
 /// Paginated list of anomaly flags.
 /// Spec reference: lines 2764-2773 (`AnomalyList` schema).
 public struct AnomalyList: Decodable, Sendable, Equatable {
+    /// Anomaly flags. Decodes as empty array if null or missing (older server compat).
     public let items: [AnomalyFlag]
     public let meta: PaginatedMeta
+
+    enum CodingKeys: String, CodingKey {
+        case items
+        case meta
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        items = try container.decodeArrayOrEmpty([AnomalyFlag].self, forKey: .items)
+        meta = try container.decode(PaginatedMeta.self, forKey: .meta)
+    }
 }
 
 // MARK: - AnomalyFlag

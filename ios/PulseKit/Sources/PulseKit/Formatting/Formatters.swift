@@ -158,6 +158,7 @@ public enum Formatters {
     /// - `.ok` -> "healthy"
     /// - `.degraded` -> "warning"
     /// - `.down` -> "critical"
+    /// - `.unknown` -> "neutral"
     public static func healthTokenName(_ status: HealthState) -> String {
         switch status {
         case .ok:
@@ -166,6 +167,15 @@ public enum Formatters {
             return "warning"
         case .down:
             return "critical"
+        case .unknown:
+            // A state this build has never heard of, from a newer server. "warning"
+            // was the obvious choice and it is wrong: it asserts something is
+            // degraded when the truth is that we do not know, which is the same
+            // invention the honest-absent rule exists to prevent. "neutral" is grey
+            // — it cannot be mistaken for healthy, and it does not claim a fault.
+            // The raw value is preserved on the case, so the UI can show what the
+            // server actually said instead of hiding it behind a colour.
+            return "neutral"
         }
     }
 

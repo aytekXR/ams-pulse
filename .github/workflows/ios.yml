@@ -477,3 +477,98 @@ jobs:
           echo "Once processing completes, add the build to a tester group"
           echo "to make it available for download."
           echo "============================================================"
+
+  # ── 4. ios-simulator-artifact ───────────────────────────────────────────────
+  # Uploads a simulator .app bundle as a workflow artifact on pushes to main.
+  #
+  # WHY THIS EXISTS: TestFlight requires an Apple Developer account that may not
+  # be configured yet. But a tester or reviewer with a Mac can run a simulator
+  # .app TODAY — no Apple account, no signing, no provisioning. This bridges
+  # the gap between "the code exists" and "you can see it running."
+  #
+  # LIMITATION: A simulator build does NOT run on a physical iPhone. It runs
+  # only in the iOS Simulator on a Mac with Xcode installed. Most testers do
+  # not have a Mac; this is a fallback for those who do, not a replacement for
+  # TestFlight.
+  #
+  # HOW TO USE THE ARTIFACT:
+  #   1. Download the artifact from the workflow run's "Artifacts" section.
+  #   2. Unzip it: unzip Pulse-Simulator.zip
+  #   3. Boot a simulator: xcrun simctl boot "iPhone 17 Pro"
+  #   4. Install the app: xcrun simctl install booted Pulse.app
+  #   5. Launch: xcrun simctl launch booted com.beyondkaira.pulse
+  #   Or: drag and drop Pulse.app onto an already-running Simulator window.
+  #
+  # TRIGGER: pushes to main only. PRs do not upload artifacts (saves storage).
+  # The job still runs on PRs (reuses ios-app build), just skips the upload.
+  #
+  # RETENTION: 14 days. Artifacts are large (~50 MB zipped) and mainly useful
+  # for the most recent builds. Older builds can be rebuilt if needed.
+  #
+  # NOT IN REQUIRED CONTEXTS: same reasons as ios-app.
+  ios-simulator-artifact:
+    runs-on: macos-15
+    needs: ios-app
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select and assert Xcode 26.2
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.2.0.app/Contents/Developer
+          XCODE_VERSION=$(xcodebuild -version | head -1)
+          echo "Selected: $XCODE_VERSION"
+          MAJOR=$(echo "$XCODE_VERSION" | grep -oE '^Xcode [0-9]+' | grep -oE '[0-9]+')
+          if [ "$MAJOR" != "26" ]; then
+            echo "::error::Xcode major version is $MAJOR, expected 26. The pin is stale or incorrect."
+            exit 1
+          fi
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: |
+          cd ios
+          xcodegen generate
+
+      - name: Resolve Swift packages
+        run: |
+          cd ios
+          xcodebuild -resolvePackageDependencies \
+            -project Pulse.xcodeproj \
+            -scheme Pulse
+
+      # Build for simulator. The build products land in DerivedData.
+      # We use a known DerivedData path so we can find the .app afterward.
+      - name: Build for iOS Simulator
+        run: |
+          cd ios
+          xcodebuild build \
+            -project Pulse.xcodeproj \
+            -scheme Pulse \
+            -destination "platform=iOS Simulator,OS=26.2,name=iPhone 17 Pro" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES
+
+      # Locate the .app bundle. It should be in Build/Products/Debug-iphonesimulator/.
+      - name: Locate simulator app bundle
+        id: app
+        run: |
+          APP_PATH=$(find "$RUNNER_TEMP/DerivedData/Build/Products" -name "Pulse.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::Could not find Pulse.app in DerivedData"
+            find "$RUNNER_TEMP/DerivedData" -name "*.app" -type d || true
+            exit 1
+          fi
+          echo "path=$APP_PATH" >> "$GITHUB_OUTPUT"
+          echo "Found app at: $APP_PATH"
+
+      # Zip and upload. The zip contains the .app directory itself.
+      - name: Upload simulator artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pulse-Simulator
+          path: ${{ steps.app.outputs.path }}
+          retention-days: 14
+          if-no-files-found: error

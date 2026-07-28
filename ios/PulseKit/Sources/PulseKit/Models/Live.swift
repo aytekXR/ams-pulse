@@ -21,9 +21,11 @@ public struct LiveOverview: Decodable, Sendable, Equatable {
     public let protocolMix: ProtocolMix
 
     /// Per-application overview stats.
+    /// Decodes as empty array if null or missing (older server compat).
     public let apps: [AppOverview]
 
     /// Per-node health status.
+    /// Decodes as empty array if null or missing (older server compat).
     public let nodes: [NodeHealth]
 
     enum CodingKeys: String, CodingKey {
@@ -33,6 +35,16 @@ public struct LiveOverview: Decodable, Sendable, Equatable {
         case protocolMix = "protocol_mix"
         case apps
         case nodes
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ts = try container.decode(Int64.self, forKey: .ts)
+        totalViewers = try container.decode(Int.self, forKey: .totalViewers)
+        totalPublishers = try container.decode(Int.self, forKey: .totalPublishers)
+        protocolMix = try container.decode(ProtocolMix.self, forKey: .protocolMix)
+        apps = try container.decodeArrayOrEmpty([AppOverview].self, forKey: .apps)
+        nodes = try container.decodeArrayOrEmpty([NodeHealth].self, forKey: .nodes)
     }
 }
 
@@ -129,10 +141,38 @@ public struct NodeHealth: Decodable, Sendable, Equatable, Hashable {
 
 /// Node role in the AMS cluster.
 /// Spec reference: line 1949.
-public enum NodeRole: String, Decodable, Sendable, Equatable, Hashable {
+///
+/// ## Unknown Value Handling
+/// If the server sends an unrecognized role (e.g., a value added in a newer server version),
+/// it decodes to `.unknown(rawValue)` rather than throwing. This ensures the app remains
+/// functional against newer servers.
+///
+/// **Trade-off:** Adding `.unknown` removes compile-time exhaustiveness for new known cases.
+/// To find all switch sites when adding a case: temporarily remove `@unknown default`, build,
+/// and fix all flagged sites.
+public enum NodeRole: ResilientRawRepresentable {
     case origin
     case edge
     case standalone
+    case unknown(String)
+
+    public var rawValue: String {
+        switch self {
+        case .origin: return "origin"
+        case .edge: return "edge"
+        case .standalone: return "standalone"
+        case .unknown(let v): return v
+        }
+    }
+
+    public init(rawValue: String) {
+        switch rawValue {
+        case "origin": self = .origin
+        case "edge": self = .edge
+        case "standalone": self = .standalone
+        default: self = .unknown(rawValue)
+        }
+    }
 }
 
 // MARK: - NodeStatus
@@ -141,9 +181,30 @@ public enum NodeRole: String, Decodable, Sendable, Equatable, Hashable {
 /// Spec reference: line 1952-1954.
 ///
 /// D-090: "down" removed — AMS evicts nodes instead of marking them down.
-public enum NodeStatus: String, Decodable, Sendable, Equatable, Hashable {
+///
+/// ## Unknown Value Handling
+/// If the server sends an unrecognized status, it decodes to `.unknown(rawValue)`.
+/// See `NodeRole` for the trade-off discussion.
+public enum NodeStatus: ResilientRawRepresentable {
     case up
     case degraded
+    case unknown(String)
+
+    public var rawValue: String {
+        switch self {
+        case .up: return "up"
+        case .degraded: return "degraded"
+        case .unknown(let v): return v
+        }
+    }
+
+    public init(rawValue: String) {
+        switch rawValue {
+        case "up": self = .up
+        case "degraded": self = .degraded
+        default: self = .unknown(rawValue)
+        }
+    }
 }
 
 // MARK: - LiveStreamList
@@ -151,8 +212,20 @@ public enum NodeStatus: String, Decodable, Sendable, Equatable, Hashable {
 /// Paginated list of currently active streams.
 /// Spec reference: lines 1967-1976 (`LiveStreamList` schema).
 public struct LiveStreamList: Decodable, Sendable, Equatable {
+    /// Active streams. Decodes as empty array if null or missing (older server compat).
     public let items: [LiveStream]
     public let meta: PaginatedMeta
+
+    enum CodingKeys: String, CodingKey {
+        case items
+        case meta
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        items = try container.decodeArrayOrEmpty([LiveStream].self, forKey: .items)
+        meta = try container.decode(PaginatedMeta.self, forKey: .meta)
+    }
 }
 
 // MARK: - LiveStream
@@ -199,8 +272,31 @@ public struct LiveStream: Decodable, Sendable, Equatable, Hashable, Identifiable
 
 /// Publisher state for a live stream.
 /// Spec reference: line 1998.
-public enum PublisherState: String, Decodable, Sendable, Equatable, Hashable {
+///
+/// ## Unknown Value Handling
+/// If the server sends an unrecognized state (e.g., "reconnecting" added in a future version),
+/// it decodes to `.unknown(rawValue)`. See `NodeRole` for the trade-off discussion.
+public enum PublisherState: ResilientRawRepresentable {
     case publishing
     case idle
     case offline
+    case unknown(String)
+
+    public var rawValue: String {
+        switch self {
+        case .publishing: return "publishing"
+        case .idle: return "idle"
+        case .offline: return "offline"
+        case .unknown(let v): return v
+        }
+    }
+
+    public init(rawValue: String) {
+        switch rawValue {
+        case "publishing": self = .publishing
+        case "idle": self = .idle
+        case "offline": self = .offline
+        default: self = .unknown(rawValue)
+        }
+    }
 }

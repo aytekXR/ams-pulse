@@ -524,8 +524,10 @@ struct ModelDecodingTests {
         }
     }
 
-    @Test("NodeHealth invalid status enum throws")
-    func test_NodeHealth_invalidStatusEnum_throws() throws {
+    @Test("NodeHealth unknown status enum decodes as unknown")
+    func test_NodeHealth_unknownStatusEnum_decodesAsUnknown() throws {
+        // Changed from "throws" test: unknown enum values now decode gracefully
+        // to support forward compatibility with newer server versions.
         let json = """
         {
             "node_id": "node-1",
@@ -534,13 +536,19 @@ struct ModelDecodingTests {
         """
 
         let data = json.data(using: .utf8)!
-        #expect(throws: DecodingError.self) {
-            _ = try JSONDecoder().decode(NodeHealth.self, from: data)
+        let node = try JSONDecoder().decode(NodeHealth.self, from: data)
+
+        if case .unknown(let raw) = node.status {
+            #expect(raw == "invalid_status")
+        } else {
+            Issue.record("Expected .unknown case, got \(node.status)")
         }
     }
 
-    @Test("AlertState unknown value throws")
-    func test_AlertState_unknownValue_throws() throws {
+    @Test("AlertState unknown value decodes as unknown")
+    func test_AlertState_unknownValue_decodesAsUnknown() throws {
+        // Changed from "throws" test: unknown enum values now decode gracefully
+        // to support forward compatibility with newer server versions.
         let json = """
         {
             "id": "alert-1",
@@ -555,8 +563,12 @@ struct ModelDecodingTests {
         """
 
         let data = json.data(using: .utf8)!
-        #expect(throws: DecodingError.self) {
-            _ = try JSONDecoder().decode(AlertHistoryEntry.self, from: data)
+        let entry = try JSONDecoder().decode(AlertHistoryEntry.self, from: data)
+
+        if case .unknown(let raw) = entry.state {
+            #expect(raw == "unknown_state")
+        } else {
+            Issue.record("Expected .unknown case, got \(entry.state)")
         }
     }
 

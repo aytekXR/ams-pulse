@@ -1,6 +1,6 @@
 # Pulse iOS Beta Tester Guide
 
-Last updated: 2026-07-28 — created in D-186 (S118)
+Last updated: 2026-07-28
 
 Welcome to the Pulse iOS beta. This guide explains how to install the app,
 connect to your Pulse server, and send feedback.
@@ -9,8 +9,9 @@ connect to your Pulse server, and send feedback.
 
 ## What you need
 
-1. **An iPhone or iPad** running iOS 17.0 or later
-2. **A TestFlight invitation** (email from Apple)
+1. **An iPhone or iPad** running iOS 17.0 or later (for TestFlight)
+   — OR a **Mac with Xcode** (for simulator testing)
+2. **A TestFlight invitation** (email from Apple) — OR the simulator artifact
 3. **A Pulse server URL** (e.g., `https://pulse.example.com`)
 4. **An API token** (starts with `plt_`)
 
@@ -46,6 +47,57 @@ indicate it is a beta.
 ### Step 3: Open Pulse
 
 Tap the Pulse icon to launch the app. You will see the connection screen.
+
+---
+
+## Alternative: Running in the iOS Simulator (Mac only)
+
+If TestFlight is not available yet, testers with a Mac and Xcode can run the
+app in the iOS Simulator. This does NOT work on a physical iPhone — it runs
+only in the simulator on your Mac.
+
+### Requirements
+
+- A Mac with Xcode 26 or later installed
+- The Pulse-Simulator artifact from a recent CI build
+
+### Steps
+
+1. **Download the artifact** from the GitHub Actions workflow:
+   - Go to the [ams-pulse repository](https://github.com/aytekXR/ams-pulse)
+   - Click **Actions** > **ios** workflow
+   - Find a recent successful run on the `main` branch
+   - Scroll to **Artifacts** and download **Pulse-Simulator.zip**
+
+2. **Unzip the artifact:**
+   ```bash
+   unzip Pulse-Simulator.zip
+   ```
+
+3. **Boot a simulator:**
+   ```bash
+   xcrun simctl boot "iPhone 17 Pro"
+   ```
+   Or open Simulator.app from Xcode (Xcode > Open Developer Tool > Simulator).
+
+4. **Install the app:**
+   ```bash
+   xcrun simctl install booted Pulse.app
+   ```
+   Or drag and drop `Pulse.app` onto the Simulator window.
+
+5. **Launch the app:**
+   ```bash
+   xcrun simctl launch booted com.beyondkaira.pulse
+   ```
+   Or tap the Pulse icon in the Simulator.
+
+### Limitations
+
+- The simulator is not an iPhone. Network behavior, performance, and some
+  hardware features differ.
+- The simulator build expires after 14 days (artifact retention).
+- This is for reviewers and developers, not end users.
 
 ---
 

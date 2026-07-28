@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2317,SC2329,SC2044,SC2295,SC2034  # justified below, above `set -euo pipefail`
+# (SC2317 and SC2329 are the SAME check: CI ships shellcheck 0.9.0, the :stable
+#  container ships 0.11.0, and it was renumbered between them. Both must be named
+#  or the script is clean at one version and red at the other.)
 # =============================================================================
 # run-checks.sh — validate the Pulse public website before deploy.
 #
@@ -24,6 +28,26 @@
 # =============================================================================
 set -euo pipefail
 
+# ── shellcheck scope, and what is deliberately silenced ──────────────────────
+# This script is now covered by the `shellcheck` CI job (D-187). It was not,
+# which is the same scope gap this repo keeps re-learning: a guard that names its
+# targets one by one stops covering the file someone adds next. Four classes are
+# silenced here, each on purpose:
+#
+#   SC2317  "command appears unreachable" — every cleanup function in this script
+#           is invoked by a `trap`, which shellcheck cannot see. Real, and 14 of
+#           the findings. Note CI runs 0.9.0, where this check is SC2317; the
+#           :stable container renumbered it to SC2329, so a fix for one can be
+#           red on the other.
+#   SC2044  "for loops over find output are fragile" — true when a path contains
+#           whitespace. Every path here comes from website/, whose contents this
+#           repo controls and which are asserted elsewhere to be plain ASCII
+#           names. Rewriting seven loops to `while read -d ''` would add risk to
+#           a working checker for no reachable defect.
+#   SC2295  quoting inside ${..} — the patterns stripped here are literal
+#           prefixes computed in this script, not user input.
+#   SC2034  two counters kept for symmetry with the sections that do use them.
+
 # Default the web root to the site this script belongs to, NOT to $PWD.
 #
 # It used to default to "." — so running it from the repository root walked the
@@ -35,6 +59,19 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WEBROOT="${1:-$(dirname "$SCRIPT_DIR")}"
 BASEURL="${2:-/}"
+
+# Temp files this script creates must be removed even when a LATER trap replaces
+# an earlier one. They live under $PLAYWRIGHT_DIR (web/) rather than /tmp because
+# node resolves @playwright/test by walking up from the script's own directory —
+# so the price of running the checks was two untracked files left in web/, which
+# then show up in `git status` and read like someone's forgotten work. A checker
+# that dirties the tree it is checking is a small bug with an outsized cost in a
+# repo where an unexpected untracked file is a signal worth investigating.
+#
+# trap replaces; it does not append. Register here, remove in one place.
+_TMP_FILES=()
+_rm_tmp_files() { local f; for f in "${_TMP_FILES[@]:-}"; do [ -n "$f" ] && rm -f "$f"; done; }
+trap _rm_tmp_files EXIT
 
 cd "$WEBROOT"
 WEBROOT_ABS="$(pwd)"
@@ -410,10 +447,13 @@ main().catch((err) => {
   process.exit(1);
 });
 A11YSCRIPT
-  trap "rm -f '$A11Y_SCRIPT'; cleanup" EXIT
+  _TMP_FILES+=("$A11Y_SCRIPT")
+  trap "_rm_tmp_files; cleanup" EXIT
 
   cd "$PLAYWRIGHT_DIR"
-  output=$(node "$A11Y_SCRIPT" "$PORT" $PAGE_LIST 2>&1) || true
+  # shellcheck disable=SC2086  # intentional: the page list is a space-separated
+# string that must split into separate argv entries for the node script.
+output=$(node "$A11Y_SCRIPT" "$PORT" $PAGE_LIST 2>&1) || true
   exit_code=$?
 
   if echo "$output" | grep -qE "Failed to launch|browserType.launch|Executable doesn't exist|Cannot find"; then
@@ -658,13 +698,14 @@ if [ "$BASEURL" != "/" ] && [ -n "$PLAYWRIGHT_DIR" ]; then
   sleep 1
 
   cleanup2() {
-    [ -n "$SERVER_PID2" ] && kill "$SERVER_PID2" 2>/dev/null || true
+    if [ -n "$SERVER_PID2" ]; then kill "$SERVER_PID2" 2>/dev/null || true; fi
     rm -rf "$SUBPATH_DIR"
   }
-  trap "cleanup; cleanup2" EXIT
+  trap "_rm_tmp_files; cleanup; cleanup2" EXIT
 
   # Create a Playwright script to verify CSS loads (in web/ directory so it can import)
   CSS_CHECK_SCRIPT="$PLAYWRIGHT_DIR/_css-check.mjs"
+  _TMP_FILES+=("$CSS_CHECK_SCRIPT")
   cat > "$CSS_CHECK_SCRIPT" << 'CSSCHECK'
 import { chromium } from '@playwright/test';
 
@@ -741,10 +782,14 @@ CSSCHECK
     PAGE_LIST2="$PAGE_LIST2 ${html#$WEBROOT_ABS/}"
   done
 
-  if node "$CSS_CHECK_SCRIPT" "$PORT2" "$BASEURL" $PAGE_LIST2 2>&1; then
+  # shellcheck disable=SC2086  # intentional: the page list is a space-separated
+# string that must split into separate argv entries for the node script.
+if node "$CSS_CHECK_SCRIPT" "$PORT2" "$BASEURL" $PAGE_LIST2 2>&1; then
     info "stylesheets load correctly from subpath $BASEURL"
   else
-    output=$(node "$CSS_CHECK_SCRIPT" "$PORT2" "$BASEURL" $PAGE_LIST2 2>&1 || true)
+    # shellcheck disable=SC2086  # intentional: the page list is a space-separated
+# string that must split into separate argv entries for the node script.
+output=$(node "$CSS_CHECK_SCRIPT" "$PORT2" "$BASEURL" $PAGE_LIST2 2>&1 || true)
     if echo "$output" | grep -qE "Failed to launch|browserType.launch"; then
       info "subpath CSS check: skipped (Playwright browsers not installed)"
     else

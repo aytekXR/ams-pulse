@@ -29,10 +29,33 @@ public struct HealthStatus: Decodable, Sendable, Equatable {
 
 /// Health status enum.
 /// Spec reference: line 3069.
-public enum HealthState: String, Decodable, Sendable, Equatable, Hashable {
+///
+/// ## Unknown Value Handling
+/// If the server sends an unrecognized state (e.g., "maintenance" added in a future version),
+/// it decodes to `.unknown(rawValue)`. See `NodeRole` in Live.swift for the trade-off discussion.
+public enum HealthState: ResilientRawRepresentable {
     case ok
     case degraded
     case down
+    case unknown(String)
+
+    public var rawValue: String {
+        switch self {
+        case .ok: return "ok"
+        case .degraded: return "degraded"
+        case .down: return "down"
+        case .unknown(let v): return v
+        }
+    }
+
+    public init(rawValue: String) {
+        switch rawValue {
+        case "ok": self = .ok
+        case "degraded": self = .degraded
+        case "down": self = .down
+        default: self = .unknown(rawValue)
+        }
+    }
 }
 
 // MARK: - HealthComponents
