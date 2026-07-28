@@ -1,6 +1,6 @@
 # Pulse iOS Beta Tester Guide
 
-Last updated: 2026-07-28
+Last updated: 2026-07-29
 
 Welcome to the Pulse iOS beta. This guide explains how to install the app,
 connect to your Pulse server, and send feedback.
@@ -199,6 +199,60 @@ Shows:
 - **Components** — ClickHouse, Meta Store, Collector, Kafka status and latency
 - **App** — version and build number
 - **Sign Out** — disconnects and clears stored credentials
+
+---
+
+## Screen reference (CI-verified captures)
+
+The following screenshots are captured automatically by CI on every push to
+main. They are taken by XCUITest driving the real app against a fixture
+server, so they reflect actual app behavior rather than design mockups.
+
+To view the latest screenshots:
+
+1. Go to the [ams-pulse repository](https://github.com/aytekXR/ams-pulse)
+2. Click **Actions** > **ios** workflow
+3. Find a recent successful run on the `main` branch
+4. Scroll to **Artifacts** and download **ios-ui-test-screenshots**
+
+### Connect screen
+
+The first screen you see. Enter your Pulse server URL (e.g.,
+`https://pulse.example.com`) and API token. The Connect button enables only
+when both fields have content. Error messages appear inline below the form
+when connection fails.
+
+### Live dashboard
+
+The main screen after connecting. Shows:
+
+- **Overview tiles** at the top: total viewers, publishers, streams
+- **Protocol mix** showing WebRTC/HLS/RTMP distribution
+- **Active Streams list** with per-stream health indicators (green = healthy,
+  yellow = degraded, red = unhealthy)
+- Each stream row shows ID, app name, viewer count, and bitrate
+
+The dashboard auto-refreshes every 10 seconds.
+
+### Alerts tab
+
+Shows alert history sorted by time (newest first). Each alert card shows:
+
+- Severity badge (critical = red, warning = yellow, info = blue)
+- Metric name and threshold breach (e.g., "rebuffer_ratio 0.18 > 0.10")
+- Relative time ("2 min ago")
+- State badge (Firing, Resolved, or Delivery Failed)
+- Scope pills showing affected node/app/stream/tenant
+
+### Settings tab
+
+Shows connection and component health:
+
+- **Server section**: connected URL and overall server health
+- **Components section**: individual status for ClickHouse, Meta Store,
+  Collector, and Kafka with latency values
+- **App section**: version and build number
+- **Sign Out button**: disconnects and returns to the Connect screen
 
 ---
 

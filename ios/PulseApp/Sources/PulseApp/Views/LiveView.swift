@@ -128,6 +128,7 @@ struct LiveView: View {
                 icon: "person.2.fill",
                 color: BrandColors.signal
             )
+            .accessibilityIdentifier(AccessibilityID.live_viewersTile)
 
             // Publishers tile.
             metricTile(
@@ -136,6 +137,7 @@ struct LiveView: View {
                 icon: "video.fill",
                 color: BrandColors.info
             )
+            .accessibilityIdentifier(AccessibilityID.live_publishersTile)
 
             // Active streams tile.
             metricTile(
@@ -144,9 +146,11 @@ struct LiveView: View {
                 icon: "play.circle.fill",
                 color: BrandColors.healthy
             )
+            .accessibilityIdentifier(AccessibilityID.live_streamsTile)
 
             // Protocol mix tile.
             protocolMixTile(protocolMix: overview.protocolMix)
+                .accessibilityIdentifier(AccessibilityID.live_protocolMixTile)
         }
     }
 
@@ -232,6 +236,7 @@ struct LiveView: View {
 
             if streams.isEmpty {
                 emptyStreamsView
+                    .accessibilityIdentifier(AccessibilityID.live_emptyStreamsView)
             } else {
                 LazyVStack(spacing: 12) {
                     ForEach(streams, id: \.streamId) { stream in
@@ -239,8 +244,10 @@ struct LiveView: View {
                             streamRow(stream: stream)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier(AccessibilityID.live_streamRow(id: stream.streamId))
                     }
                 }
+                .accessibilityIdentifier(AccessibilityID.live_streamsList)
             }
         }
         .navigationDestination(for: LiveStream.self) { stream in

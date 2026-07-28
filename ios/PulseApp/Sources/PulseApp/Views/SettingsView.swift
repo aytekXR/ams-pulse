@@ -82,6 +82,7 @@ struct SettingsView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
+                .accessibilityIdentifier(AccessibilityID.settings_serverRow)
 
                 // Overall health status.
                 if let health = appState?.health {
@@ -91,6 +92,7 @@ struct SettingsView: View {
                         Spacer()
                         statusBadge(status: health.status)
                     }
+                    .accessibilityIdentifier(AccessibilityID.settings_statusRow)
                 }
             }
         } header: {
@@ -104,11 +106,15 @@ struct SettingsView: View {
     private func componentsSection(health: HealthStatus) -> some View {
         Section {
             componentRow(name: "ClickHouse", status: health.components.clickhouse)
+                .accessibilityIdentifier(AccessibilityID.settings_componentClickhouse)
             componentRow(name: "Meta Store", status: health.components.metaStore)
+                .accessibilityIdentifier(AccessibilityID.settings_componentMetaStore)
             componentRow(name: "Collector", status: health.components.collector)
+                .accessibilityIdentifier(AccessibilityID.settings_componentCollector)
 
             if let kafka = health.components.kafka {
                 kafkaRow(kafka: kafka)
+                    .accessibilityIdentifier(AccessibilityID.settings_componentKafka)
             }
         } header: {
             Text("Components")
@@ -213,6 +219,7 @@ struct SettingsView: View {
                     .font(.system(size: 14, weight: .regular))
                     .foregroundColor(BrandColors.textSecondary)
             }
+            .accessibilityIdentifier(AccessibilityID.settings_versionRow)
 
             // Build number.
             HStack {
@@ -223,6 +230,7 @@ struct SettingsView: View {
                     .font(.system(size: 14, weight: .regular))
                     .foregroundColor(BrandColors.textSecondary)
             }
+            .accessibilityIdentifier(AccessibilityID.settings_buildRow)
         } header: {
             Text("App")
         }
@@ -244,6 +252,7 @@ struct SettingsView: View {
                     Spacer()
                 }
             }
+            .accessibilityIdentifier(AccessibilityID.settings_signOutButton)
         }
         .listRowBackground(BrandColors.surface)
     }

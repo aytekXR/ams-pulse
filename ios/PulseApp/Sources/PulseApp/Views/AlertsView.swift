@@ -35,8 +35,10 @@ struct AlertsView: View {
             Group {
                 if isLoading && alerts.isEmpty {
                     loadingView
+                        .accessibilityIdentifier(AccessibilityID.alerts_loadingView)
                 } else if alerts.isEmpty {
                     emptyView
+                        .accessibilityIdentifier(AccessibilityID.alerts_emptyView)
                 } else {
                     alertsList
                 }
@@ -104,11 +106,13 @@ struct AlertsView: View {
                 // Alert rows.
                 ForEach(alerts, id: \.id) { alert in
                     alertRow(alert: alert)
+                        .accessibilityIdentifier(AccessibilityID.alerts_row(id: alert.id))
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 16)
         }
+        .accessibilityIdentifier(AccessibilityID.alerts_list)
     }
 
     private func alertRow(alert: AlertHistoryEntry) -> some View {
