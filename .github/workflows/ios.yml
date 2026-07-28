@@ -509,7 +509,13 @@ jobs:
   ios-simulator-artifact:
     runs-on: macos-15
     needs: ios-app
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # main pushes produce the downloadable build; workflow_dispatch exists so this
+    # job can be exercised on a branch BEFORE it is merged. Without that, the only
+    # way to test a change to this job is to merge it to a protected branch and
+    # find out — which is how a smoke test that never ran gets called a smoke test.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     steps:
       - uses: actions/checkout@v4
 
@@ -563,6 +569,107 @@ jobs:
           fi
           echo "path=$APP_PATH" >> "$GITHUB_OUTPUT"
           echo "Found app at: $APP_PATH"
+
+      # ── SMOKE: actually RUN the thing ────────────────────────────────────────
+      #
+      # Everything before this point proves the app COMPILES and that its unit
+      # tests pass. Neither of those has ever launched it. An iOS app can build
+      # clean, pass every test, and still terminate on the first frame — a missing
+      # asset catalog entry, a bad Info.plist key, a @main that throws, a SwiftUI
+      # crash in body evaluation. None of that is visible to xcodebuild.
+      #
+      # So: boot a simulator, install, launch, wait, screenshot, and fail if the
+      # system wrote a crash report for us. The screenshot is uploaded because a
+      # PASS here means "did not crash", which is NOT the same as "shows the right
+      # thing" — and this repo has a standing rule that a capture is only evidence
+      # once a human has opened it.
+      - name: Boot simulator
+        run: |
+          set -x
+          xcrun simctl bootstatus "iPhone 17 Pro" -b
+          xcrun simctl list devices booted
+
+      - name: Install and launch
+        id: launch
+        run: |
+          APP="${{ steps.app.outputs.path }}"
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist")
+          echo "Bundle id: $BUNDLE_ID"
+          echo "bundle_id=$BUNDLE_ID" >> "$GITHUB_OUTPUT"
+
+          # Clear any crash reports predating this run so the check below cannot
+          # be tripped by someone else's ghost.
+          rm -rf ~/Library/Logs/DiagnosticReports/* || true
+
+          xcrun simctl install booted "$APP"
+          xcrun simctl launch booted "$BUNDLE_ID"
+
+          # Give SwiftUI time to evaluate the first real frame. A crash in body
+          # evaluation happens after launch returns a pid, so checking the pid
+          # immediately would report success on an app that is already dying.
+          sleep 12
+
+      # ⚠ SET THE APPEARANCE BEFORE **EVERY** CAPTURE, never once and never never.
+      #
+      # The first version of this step captured immediately after launch, called
+      # that shot the default, then switched to light and captured again. A
+      # simulator BOOTS IN LIGHT, so both files were light and one of them was
+      # named as if it were not. Nothing failed; the artifact simply asserted
+      # something untrue, which is the failure mode this repo has a standing rule
+      # about — a capture is not evidence until a human opens it, and a MISLABELLED
+      # capture is worse than none because opening it confirms the wrong thing.
+      #
+      # The sleep after each switch is load-bearing: the appearance change
+      # propagates asynchronously and a screenshot taken too soon catches the old
+      # rendering, which reintroduces the same lie by a different route.
+      - name: Capture screenshots (both appearances, each one pinned)
+        run: |
+          mkdir -p "$RUNNER_TEMP/shots"
+
+          xcrun simctl ui booted appearance dark
+          sleep 4
+          xcrun simctl io booted screenshot "$RUNNER_TEMP/shots/01-launch-dark.png"
+
+          xcrun simctl ui booted appearance light
+          sleep 4
+          xcrun simctl io booted screenshot "$RUNNER_TEMP/shots/02-launch-light.png"
+
+          # Prove the two captures actually DIFFER. If a future change breaks the
+          # appearance switch, identical bytes are the tell — and this assertion is
+          # the only thing standing between that and two files that look fine.
+          if cmp -s "$RUNNER_TEMP/shots/01-launch-dark.png" "$RUNNER_TEMP/shots/02-launch-light.png"; then
+            echo "::error::The dark and light screenshots are byte-identical — the appearance switch did not take effect, so one of these files is mislabelled."
+            exit 1
+          fi
+          echo "Dark and light captures differ, as they must."
+          ls -la "$RUNNER_TEMP/shots"
+
+      - name: Fail if the app crashed
+        run: |
+          # A .ips in DiagnosticReports naming our binary is an unambiguous crash.
+          CRASHES=$(find ~/Library/Logs/DiagnosticReports -name "Pulse*.ips" 2>/dev/null || true)
+          if [ -n "$CRASHES" ]; then
+            echo "::error::The app crashed on launch. Reports:"
+            echo "$CRASHES"
+            for c in $CRASHES; do echo "─── $c"; head -60 "$c"; done
+            exit 1
+          fi
+          # And it must still be running: a clean early exit is also a failure for
+          # an app whose whole job is to stay on screen.
+          if ! xcrun simctl spawn booted launchctl list 2>/dev/null | grep -q "${{ steps.launch.outputs.bundle_id }}"; then
+            echo "::error::The app is not running 12s after launch, and left no crash report."
+            echo "Running processes:"
+            xcrun simctl spawn booted launchctl list 2>/dev/null | head -40 || true
+            exit 1
+          fi
+          echo "App is alive and left no crash report."
+
+      - name: Upload launch screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-launch-screenshots
+          path: ${{ runner.temp }}/shots
+          retention-days: 14
 
       # Zip and upload. The zip contains the .app directory itself.
       - name: Upload simulator artifact

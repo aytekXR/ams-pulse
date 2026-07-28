@@ -42,6 +42,13 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **The Server URL placeholder rendered as a blue link (D-188).** `TextField("https://…", text:)`
+  takes a `LocalizedStringKey`, which SwiftUI parses as **Markdown**, and a bare URL is a Markdown
+  autolink — so the placeholder read like already-entered text above a disabled Connect button, on
+  the first screen any tester sees. Fixed with an explicit `Text(verbatim:)` prompt. Found by
+  looking at a screenshot from CI, which now boots a simulator, launches the app, and fails if it
+  crashes or dies — the app had never been *run* by anything before this.
+
 - **PulseKit could not survive a Pulse server it was not compiled against (D-187).** The client is
   now tolerant of what real deployments actually send: a `null` or absent array decodes as empty
   (observed on a real server build only ten days old), and an unrecognised enum value decodes into

@@ -11052,3 +11052,77 @@ build as broken and its three test-coverage gaps, all of which were real and are
 Unchanged from D-186: **marketplace** waits on the `CLICKHOUSE_PASSWORD` rotation; **iOS
 TestFlight** waits on Apple Developer Program enrolment. Nothing in this session moved either
 gate, and nothing in either gate blocked this session.
+
+---
+
+## D-188 — §S120: run the app
+
+**Goal of the session:** the app had been built, unit-tested and shipped through a green CI matrix.
+Nothing had ever *launched* it.
+
+That gap is not academic. An iOS app can build clean, pass every test, and terminate on the first
+frame — a missing asset-catalog entry, a bad `Info.plist` key, a SwiftUI crash during `body`
+evaluation. `xcodebuild` sees none of it. Every claim made about this app so far was a claim about
+a compiler's opinion of it.
+
+### The smoke job
+
+`ios-simulator-artifact` now boots a simulator, installs, launches, waits **12 seconds** — a crash
+in `body` happens *after* `simctl launch` returns a pid, so checking the pid immediately would
+report success on an app that is already dying — screenshots both appearances, and fails if the
+system wrote a crash report **or** if the app is no longer running. It also gained
+`workflow_dispatch`: without it, the only way to test a change to a main-only job is to merge it to
+a protected branch and find out, which is how a smoke test that has never run gets called a smoke
+test.
+
+**The app runs.** Booted, installed, launched, alive, no crash report. That is the first
+evidence in this project's life that the iOS app does anything at all.
+
+### Then I opened the PNG, which is the part that is easy to skip
+
+**1. The capture step lied — inside the step written to satisfy the rule about lying captures.**
+It shot immediately after launch, called that the default appearance, switched to light, and shot
+again. **A simulator boots in light.** Both files were light and one was named dark. Nothing
+failed; the artifact simply asserted something untrue. Fixed by pinning the appearance before
+*every* capture, sleeping for the async propagation, and **asserting the two files differ** —
+byte-identical output now fails the job, because that is the tell that the switch silently stopped
+working and a label is wrong again.
+
+**2. The Server URL placeholder rendered as a blue link**, reading like already-entered text above
+a disabled Connect button, on the first screen any tester will ever see.
+
+The first fix was wrong, and the screenshot said so. Reasoning from the sibling field — the API
+Token placeholder was grey and carried a `.foregroundColor` line the URL field lacked — produced a
+confident, plausible, useless change: `.foregroundColor` styles *entered text*, never the
+placeholder. The next run came back just as blue.
+
+The real cause: `TextField("https://pulse.example.com", text:)` takes a **`LocalizedStringKey`**,
+and SwiftUI parses those as **Markdown**. A bare URL is a Markdown autolink. The sibling looked
+fine for the only reason that "Bearer token" is not a URL — which is exactly why comparing the two
+fields pointed at the wrong difference. Fixed with `Text(verbatim:)` as an explicit prompt, and
+the app swept for other literals in `LocalizedStringKey` positions containing URLs or Markdown
+syntax (none).
+
+**A fix that does not change the artifact has not been verified, however good the reasoning behind
+it looked.** The answer was in the second look at the same screenshot.
+
+### Delivered alongside
+
+The verified screenshot is now on the public `/beta/` page, which had been asking people to
+install an app they could not see. It is not a mockup or a render of a design file — it is the
+actual first screen, captured by CI, so it cannot drift from what a tester gets. Centred with
+`margin-inline` rather than `text-align`, because the stylesheet makes images `display:block` and
+`text-align` does nothing to them; verified by measuring the rendered bounding box against the
+viewport centre (640 = 640) rather than by looking and deciding it seemed fine.
+
+### Gates
+
+`ios-kit` 291 tests; `ios-app` 50 tests on iOS 26.2; smoke: launch + alive + no crash report +
+two genuinely different appearance captures. Website checks PASS at root and subpath. The three
+screenshots produced across this session's runs were each opened and read, and two of them
+contained the defects above.
+
+### Still blocking, still not ours
+
+Unchanged: **marketplace** waits on the `CLICKHOUSE_PASSWORD` rotation; **iOS TestFlight** waits on
+Apple Developer Program enrolment. `docs/operator-expected.md` §A is the critical path.
