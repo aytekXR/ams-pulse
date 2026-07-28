@@ -159,4 +159,129 @@ public enum Formatters {
             return "critical"
         }
     }
+
+    // MARK: - Viewer Count
+
+    /// Format viewer count for display.
+    ///
+    /// - Parameter count: Number of viewers; nil displays as "--".
+    /// - Returns: Formatted viewer string (e.g., "12.8K viewers", "1 viewer").
+    ///
+    /// Uses abbreviatedCount for large numbers. Singular/plural "viewer(s)".
+    public static func viewerCount(_ count: Int?) -> String {
+        guard let count = count else {
+            return "-- viewers"
+        }
+        let abbreviated = abbreviatedCount(count)
+        let suffix = abs(count) == 1 ? "viewer" : "viewers"
+        return "\(abbreviated) \(suffix)"
+    }
+
+    // MARK: - Percentage
+
+    /// Format a ratio as a percentage string.
+    ///
+    /// - Parameter ratio: Value between 0 and 1 (e.g., 0.156 -> "15.6%").
+    /// - Returns: Percentage string with one decimal place.
+    ///
+    /// Values are clamped to [0, 1] range. Nil returns "--".
+    public static func percentage(_ ratio: Double?) -> String {
+        guard let ratio = ratio else {
+            return "--%"
+        }
+        let clamped = max(0, min(1, ratio))
+        let pct = clamped * 100
+        return String(format: "%.1f%%", pct)
+    }
+
+    /// Format a raw percentage value (already 0-100 scale).
+    ///
+    /// - Parameter value: Percentage value (e.g., 85.5 -> "85.5%").
+    /// - Returns: Percentage string with one decimal place.
+    ///
+    /// Values are clamped to [0, 100] range. Nil returns "--".
+    public static func percentageRaw(_ value: Double?) -> String {
+        guard let value = value else {
+            return "--%"
+        }
+        let clamped = max(0, min(100, value))
+        return String(format: "%.1f%%", clamped)
+    }
+
+    // MARK: - Latency
+
+    /// Format latency in milliseconds for display.
+    ///
+    /// - Parameter ms: Latency in milliseconds; nil displays as "--".
+    /// - Returns: Formatted latency string (e.g., "45 ms", "1.2 s").
+    ///
+    /// Values >= 1000 ms are shown in seconds. Negative clamped to zero.
+    public static func latencyMs(_ ms: Int?) -> String {
+        guard let ms = ms else {
+            return "-- ms"
+        }
+        let clamped = max(0, ms)
+        if clamped >= 1000 {
+            let seconds = Double(clamped) / 1000.0
+            return String(format: "%.1f s", seconds)
+        }
+        return "\(clamped) ms"
+    }
+
+    /// Format latency from a Double value.
+    ///
+    /// - Parameter ms: Latency in milliseconds; nil displays as "--".
+    /// - Returns: Formatted latency string (e.g., "45 ms", "1.2 s").
+    public static func latencyMs(_ ms: Double?) -> String {
+        guard let ms = ms else {
+            return "-- ms"
+        }
+        let clamped = max(0, Int(ms.rounded()))
+        return latencyMs(clamped)
+    }
+
+    // MARK: - Health Score
+
+    /// Format health score as a display string.
+    ///
+    /// - Parameter score: Health score 0-100; nil displays as "--".
+    /// - Returns: Formatted score (e.g., "95.5", "100.0").
+    ///
+    /// Clamped to [0, 100] range.
+    public static func healthScoreDisplay(_ score: Double?) -> String {
+        guard let score = score else {
+            return "--"
+        }
+        let clamped = max(0, min(100, score))
+        return String(format: "%.1f", clamped)
+    }
+
+    /// Convert health score to normalized 0-1 value.
+    ///
+    /// - Parameter score: Health score 0-100; nil returns nil.
+    /// - Returns: Normalized value in [0, 1] range.
+    ///
+    /// Useful for progress indicators and color interpolation.
+    public static func healthScoreNormalized(_ score: Double?) -> Double? {
+        guard let score = score else {
+            return nil
+        }
+        return max(0, min(1, score / 100.0))
+    }
+
+    // MARK: - Relative Time (Epoch Milliseconds)
+
+    /// Format relative time from an epoch timestamp in milliseconds.
+    ///
+    /// - Parameters:
+    ///   - epochMs: Unix timestamp in milliseconds.
+    ///   - now: The current date (explicit for testing).
+    /// - Returns: Relative string (e.g., "30s ago", "1h ago", "2d ago").
+    ///
+    /// This variant takes the wire format (epoch milliseconds) directly.
+    public static func relativeTime(fromEpochMs epochMs: Int64, to now: Date) -> String {
+        let epochSeconds = TimeInterval(epochMs) / 1000.0
+        let date = Date(timeIntervalSince1970: epochSeconds)
+        return relativeTime(from: date, to: now)
+    }
 }

@@ -43,7 +43,7 @@ public struct HealthComponents: Decodable, Sendable, Equatable {
     public let clickhouse: ComponentStatus
     public let metaStore: ComponentStatus
     public let collector: ComponentStatus
-    public let kafka: ComponentStatus?
+    public let kafka: KafkaComponentStatus?
 
     enum CodingKeys: String, CodingKey {
         case clickhouse
@@ -71,5 +71,38 @@ public struct ComponentStatus: Decodable, Sendable, Equatable, Hashable {
         case status
         case latencyMs = "latency_ms"
         case message
+    }
+}
+
+// MARK: - KafkaComponentStatus
+
+/// Health status for the Kafka component with additional metrics.
+/// Spec reference: lines 3102-3112 (`KafkaComponentStatus` schema).
+///
+/// Extends ComponentStatus with:
+/// - `lag`: Total consumer group lag across all topic partitions
+/// - `parse_errors`: Number of message parse errors since last reset
+public struct KafkaComponentStatus: Decodable, Sendable, Equatable, Hashable {
+    /// Status.
+    public let status: HealthState
+
+    /// Latency in milliseconds; nil if not measured or component is down.
+    public let latencyMs: Int?
+
+    /// Human-readable message (e.g., error detail); nil when healthy.
+    public let message: String?
+
+    /// Total consumer group lag across all topic partitions.
+    public let lag: Int?
+
+    /// Number of message parse errors since last reset.
+    public let parseErrors: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case latencyMs = "latency_ms"
+        case message
+        case lag
+        case parseErrors = "parse_errors"
     }
 }

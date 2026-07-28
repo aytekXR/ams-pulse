@@ -875,6 +875,133 @@ struct ModelDecodingTests {
         #expect(health.components.kafka != nil)
     }
 
+    @Test("KafkaComponentStatus decodes lag and parse_errors")
+    func test_KafkaComponentStatus_decodesLagAndParseErrors() throws {
+        let json = """
+        {
+            "status": "ok",
+            "ams_env_configured": true,
+            "components": {
+                "clickhouse": {"status": "ok", "latency_ms": 5},
+                "meta_store": {"status": "ok", "latency_ms": 2},
+                "collector": {"status": "ok"},
+                "kafka": {
+                    "status": "ok",
+                    "latency_ms": 10,
+                    "lag": 100,
+                    "parse_errors": 2
+                }
+            }
+        }
+        """
+
+        let data = json.data(using: .utf8)!
+        let health = try JSONDecoder().decode(HealthStatus.self, from: data)
+
+        #expect(health.components.kafka != nil)
+        #expect(health.components.kafka?.status == .ok)
+        #expect(health.components.kafka?.latencyMs == 10)
+        #expect(health.components.kafka?.lag == 100)
+        #expect(health.components.kafka?.parseErrors == 2)
+    }
+
+    @Test("KafkaComponentStatus absent decodes to nil")
+    func test_KafkaComponentStatus_absentDecodesToNil() throws {
+        let json = """
+        {
+            "status": "ok",
+            "ams_env_configured": true,
+            "components": {
+                "clickhouse": {"status": "ok", "latency_ms": 5},
+                "meta_store": {"status": "ok", "latency_ms": 2},
+                "collector": {"status": "ok"}
+            }
+        }
+        """
+
+        let data = json.data(using: .utf8)!
+        let health = try JSONDecoder().decode(HealthStatus.self, from: data)
+
+        #expect(health.status == .ok)
+        #expect(health.components.kafka == nil)
+    }
+
+    @Test("KafkaComponentStatus without extended fields decodes")
+    func test_KafkaComponentStatus_withoutExtendedFields() throws {
+        let json = """
+        {
+            "status": "ok",
+            "ams_env_configured": true,
+            "components": {
+                "clickhouse": {"status": "ok"},
+                "meta_store": {"status": "ok"},
+                "collector": {"status": "ok"},
+                "kafka": {"status": "degraded", "message": "High lag"}
+            }
+        }
+        """
+
+        let data = json.data(using: .utf8)!
+        let health = try JSONDecoder().decode(HealthStatus.self, from: data)
+
+        #expect(health.components.kafka?.status == .degraded)
+        #expect(health.components.kafka?.message == "High lag")
+        #expect(health.components.kafka?.lag == nil)
+        #expect(health.components.kafka?.parseErrors == nil)
+    }
+
+    @Test("KafkaComponentStatus zero values")
+    func test_KafkaComponentStatus_zeroValues() throws {
+        let json = """
+        {
+            "status": "ok",
+            "ams_env_configured": true,
+            "components": {
+                "clickhouse": {"status": "ok"},
+                "meta_store": {"status": "ok"},
+                "collector": {"status": "ok"},
+                "kafka": {
+                    "status": "ok",
+                    "lag": 0,
+                    "parse_errors": 0
+                }
+            }
+        }
+        """
+
+        let data = json.data(using: .utf8)!
+        let health = try JSONDecoder().decode(HealthStatus.self, from: data)
+
+        #expect(health.components.kafka?.lag == 0)
+        #expect(health.components.kafka?.parseErrors == 0)
+    }
+
+    @Test("KafkaComponentStatus large lag value")
+    func test_KafkaComponentStatus_largeLagValue() throws {
+        let json = """
+        {
+            "status": "degraded",
+            "ams_env_configured": true,
+            "components": {
+                "clickhouse": {"status": "ok"},
+                "meta_store": {"status": "ok"},
+                "collector": {"status": "ok"},
+                "kafka": {
+                    "status": "degraded",
+                    "lag": \(Int.max),
+                    "parse_errors": 999999
+                }
+            }
+        }
+        """
+
+        let data = json.data(using: .utf8)!
+        let health = try JSONDecoder().decode(HealthStatus.self, from: data)
+
+        #expect(health.components.kafka?.lag == Int.max)
+        #expect(health.components.kafka?.parseErrors == 999999)
+    }
+
     @Test("Auth me fixture matches spec")
     func test_authMeFixture_matchesSpec() throws {
         let json = """

@@ -214,4 +214,248 @@ struct FormatterTests {
         #expect(result == "12.3K")
         #expect(result.allSatisfy { $0.isASCII })
     }
+
+    // MARK: - Viewer Count
+
+    @Test("viewerCount singular")
+    func viewerCount_singular() {
+        #expect(Formatters.viewerCount(1) == "1 viewer")
+    }
+
+    @Test("viewerCount plural")
+    func viewerCount_plural() {
+        #expect(Formatters.viewerCount(0) == "0 viewers")
+        #expect(Formatters.viewerCount(2) == "2 viewers")
+        #expect(Formatters.viewerCount(100) == "100 viewers")
+    }
+
+    @Test("viewerCount abbreviated")
+    func viewerCount_abbreviated() {
+        #expect(Formatters.viewerCount(1234) == "1.2K viewers")
+        #expect(Formatters.viewerCount(1_000_000) == "1.0M viewers")
+    }
+
+    @Test("viewerCount nil")
+    func viewerCount_nil() {
+        #expect(Formatters.viewerCount(nil) == "-- viewers")
+    }
+
+    @Test("viewerCount negative")
+    func viewerCount_negative() {
+        // Negative -1 has abs value 1, so singular form
+        #expect(Formatters.viewerCount(-1) == "-1 viewer")
+        #expect(Formatters.viewerCount(-1234) == "-1.2K viewers")
+    }
+
+    // MARK: - Percentage
+
+    @Test("percentage from ratio")
+    func percentage_fromRatio() {
+        #expect(Formatters.percentage(0.156) == "15.6%")
+        #expect(Formatters.percentage(0.5) == "50.0%")
+        #expect(Formatters.percentage(1.0) == "100.0%")
+    }
+
+    @Test("percentage zero")
+    func percentage_zero() {
+        #expect(Formatters.percentage(0.0) == "0.0%")
+    }
+
+    @Test("percentage clamped above 1")
+    func percentage_clampedAbove() {
+        #expect(Formatters.percentage(1.5) == "100.0%")
+        #expect(Formatters.percentage(2.0) == "100.0%")
+    }
+
+    @Test("percentage clamped below 0")
+    func percentage_clampedBelow() {
+        #expect(Formatters.percentage(-0.5) == "0.0%")
+    }
+
+    @Test("percentage nil")
+    func percentage_nil() {
+        #expect(Formatters.percentage(nil) == "--%")
+    }
+
+    @Test("percentage fractional")
+    func percentage_fractional() {
+        #expect(Formatters.percentage(0.001) == "0.1%")
+        #expect(Formatters.percentage(0.999) == "99.9%")
+    }
+
+    @Test("percentageRaw values")
+    func percentageRaw_values() {
+        #expect(Formatters.percentageRaw(85.5) == "85.5%")
+        #expect(Formatters.percentageRaw(0.0) == "0.0%")
+        #expect(Formatters.percentageRaw(100.0) == "100.0%")
+    }
+
+    @Test("percentageRaw clamped")
+    func percentageRaw_clamped() {
+        #expect(Formatters.percentageRaw(150.0) == "100.0%")
+        #expect(Formatters.percentageRaw(-10.0) == "0.0%")
+    }
+
+    @Test("percentageRaw nil")
+    func percentageRaw_nil() {
+        #expect(Formatters.percentageRaw(nil) == "--%")
+    }
+
+    // MARK: - Latency
+
+    @Test("latencyMs milliseconds range")
+    func latencyMs_millisecondsRange() {
+        #expect(Formatters.latencyMs(45) == "45 ms")
+        #expect(Formatters.latencyMs(0) == "0 ms")
+        #expect(Formatters.latencyMs(999) == "999 ms")
+    }
+
+    @Test("latencyMs seconds range")
+    func latencyMs_secondsRange() {
+        #expect(Formatters.latencyMs(1000) == "1.0 s")
+        #expect(Formatters.latencyMs(1500) == "1.5 s")
+        #expect(Formatters.latencyMs(5000) == "5.0 s")
+    }
+
+    @Test("latencyMs nil")
+    func latencyMs_nil() {
+        let nilInt: Int? = nil
+        #expect(Formatters.latencyMs(nilInt) == "-- ms")
+    }
+
+    @Test("latencyMs negative clamped")
+    func latencyMs_negativeClamped() {
+        #expect(Formatters.latencyMs(-100) == "0 ms")
+    }
+
+    @Test("latencyMs large value")
+    func latencyMs_largeValue() {
+        #expect(Formatters.latencyMs(60000) == "60.0 s")
+        #expect(Formatters.latencyMs(3600000) == "3600.0 s")
+    }
+
+    @Test("latencyMs from Double")
+    func latencyMs_fromDouble() {
+        #expect(Formatters.latencyMs(45.6) == "46 ms")
+        #expect(Formatters.latencyMs(1500.3) == "1.5 s")
+    }
+
+    @Test("latencyMs Double nil")
+    func latencyMs_doubleNil() {
+        let nilDouble: Double? = nil
+        #expect(Formatters.latencyMs(nilDouble) == "-- ms")
+    }
+
+    // MARK: - Health Score Display
+
+    @Test("healthScoreDisplay values")
+    func healthScoreDisplay_values() {
+        #expect(Formatters.healthScoreDisplay(95.5) == "95.5")
+        #expect(Formatters.healthScoreDisplay(100.0) == "100.0")
+        #expect(Formatters.healthScoreDisplay(0.0) == "0.0")
+    }
+
+    @Test("healthScoreDisplay clamped")
+    func healthScoreDisplay_clamped() {
+        #expect(Formatters.healthScoreDisplay(105.0) == "100.0")
+        #expect(Formatters.healthScoreDisplay(-5.0) == "0.0")
+    }
+
+    @Test("healthScoreDisplay nil")
+    func healthScoreDisplay_nil() {
+        #expect(Formatters.healthScoreDisplay(nil) == "--")
+    }
+
+    @Test("healthScoreDisplay fractional")
+    func healthScoreDisplay_fractional() {
+        #expect(Formatters.healthScoreDisplay(50.123) == "50.1")
+        #expect(Formatters.healthScoreDisplay(99.999) == "100.0")
+    }
+
+    // MARK: - Health Score Normalized
+
+    @Test("healthScoreNormalized values")
+    func healthScoreNormalized_values() {
+        #expect(Formatters.healthScoreNormalized(100.0) == 1.0)
+        #expect(Formatters.healthScoreNormalized(50.0) == 0.5)
+        #expect(Formatters.healthScoreNormalized(0.0) == 0.0)
+    }
+
+    @Test("healthScoreNormalized clamped")
+    func healthScoreNormalized_clamped() {
+        #expect(Formatters.healthScoreNormalized(150.0) == 1.0)
+        #expect(Formatters.healthScoreNormalized(-50.0) == 0.0)
+    }
+
+    @Test("healthScoreNormalized nil")
+    func healthScoreNormalized_nil() {
+        #expect(Formatters.healthScoreNormalized(nil) == nil)
+    }
+
+    @Test("healthScoreNormalized fractional")
+    func healthScoreNormalized_fractional() {
+        let result = Formatters.healthScoreNormalized(75.0)
+        #expect(result == 0.75)
+    }
+
+    // MARK: - Relative Time from Epoch Milliseconds
+
+    @Test("relativeTime fromEpochMs seconds ago")
+    func relativeTime_epochMs_seconds() {
+        let now = Date(timeIntervalSince1970: 1000)
+        let epochMs: Int64 = 970_000  // 970 seconds = 30 seconds before now
+        #expect(Formatters.relativeTime(fromEpochMs: epochMs, to: now) == "30s ago")
+    }
+
+    @Test("relativeTime fromEpochMs minutes ago")
+    func relativeTime_epochMs_minutes() {
+        let now = Date(timeIntervalSince1970: 1000)
+        let epochMs: Int64 = 700_000  // 700 seconds = 5 minutes before now
+        #expect(Formatters.relativeTime(fromEpochMs: epochMs, to: now) == "5m ago")
+    }
+
+    @Test("relativeTime fromEpochMs hours ago")
+    func relativeTime_epochMs_hours() {
+        let now = Date(timeIntervalSince1970: 10000)
+        let epochMs: Int64 = 6_400_000  // 6400 seconds = 1 hour before now
+        #expect(Formatters.relativeTime(fromEpochMs: epochMs, to: now) == "1h ago")
+    }
+
+    @Test("relativeTime fromEpochMs days ago")
+    func relativeTime_epochMs_days() {
+        let now = Date(timeIntervalSince1970: 172800)
+        let epochMs: Int64 = 0  // epoch = 2 days before now
+        #expect(Formatters.relativeTime(fromEpochMs: epochMs, to: now) == "2d ago")
+    }
+
+    @Test("relativeTime fromEpochMs future")
+    func relativeTime_epochMs_future() {
+        let now = Date(timeIntervalSince1970: 1000)
+        let epochMs: Int64 = 2_000_000  // 2000 seconds = future
+        #expect(Formatters.relativeTime(fromEpochMs: epochMs, to: now) == "just now")
+    }
+
+    @Test("relativeTime fromEpochMs zero")
+    func relativeTime_epochMs_zero() {
+        let now = Date(timeIntervalSince1970: 86400)  // 1 day after epoch
+        let epochMs: Int64 = 0
+        #expect(Formatters.relativeTime(fromEpochMs: epochMs, to: now) == "1d ago")
+    }
+
+    @Test("relativeTime fromEpochMs large value")
+    func relativeTime_epochMs_largeValue() {
+        // Timestamp close to Int64.max / 1000 to stay in valid Date range
+        let now = Date(timeIntervalSince1970: 1_700_000_000)  // Nov 2023
+        let epochMs: Int64 = 1_699_913_600_000  // about 1 day before
+        #expect(Formatters.relativeTime(fromEpochMs: epochMs, to: now) == "1d ago")
+    }
+
+    @Test("relativeTime fromEpochMs negative")
+    func relativeTime_epochMs_negative() {
+        // Negative epoch = before 1970
+        let now = Date(timeIntervalSince1970: 100)
+        let epochMs: Int64 = -100_000  // -100 seconds before epoch
+        // 100 - (-100) = 200 seconds = 3m 20s -> "3m ago"
+        #expect(Formatters.relativeTime(fromEpochMs: epochMs, to: now) == "3m ago")
+    }
 }

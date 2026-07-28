@@ -695,9 +695,23 @@ struct PulseAPIClientTests {
     // MARK: - Helpers
 
     private func loadFixture(_ name: String) throws -> Data {
-        // Build the path to the fixture
-        let fixturesPath = "/home/aytek/repo/ams-pulse/ios/PulseKit/Tests/PulseKitTests/Fixtures"
-        let url = URL(fileURLWithPath: fixturesPath).appendingPathComponent(name)
+        // Load fixture from the test bundle's copied resources
+        guard let url = Bundle.module.url(forResource: name, withExtension: nil, subdirectory: "Fixtures") else {
+            throw FixtureLoadError.fileNotFound(name)
+        }
         return try Data(contentsOf: url)
+    }
+}
+
+// MARK: - FixtureLoadError
+
+enum FixtureLoadError: Error, LocalizedError {
+    case fileNotFound(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .fileNotFound(let name):
+            return "Fixture file not found: \(name)"
+        }
     }
 }

@@ -37,6 +37,9 @@ let package = Package(
         .testTarget(
             name: "PulseKitTests",
             dependencies: ["PulseKit"],
+            resources: [
+                .copy("Fixtures")
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6)
             ]
