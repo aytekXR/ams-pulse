@@ -10610,3 +10610,189 @@ Prod at session start: all three `/healthz` components `ok`, **1,337,678** serve
 **Still open, unchanged:** **G-02** — rotate `CLICKHOUSE_PASSWORD`. Re-checked silently: the live
 value's 32-char prefix still matches 2 commits in public history. **Tenth** consecutive round as
 the sole submission blocker. Operator-gated; no review round can close it.
+
+---
+
+## D-185 — §S117: external review round 11 (N-01) verified & executed; the round's reassurances audited, five more items found
+
+**Round 11 was the reviewer's second "final round", and it was a good one** — it opened by
+retracting its own round-10 convergence call, verified D-184's three fixes against the code rather
+than the changelog, filed one finding, and owned three errata precisely. Ledger:
+`docs/assessment/external-review-2026-07-28-round11.md`. Verdict offered: *"Not blocked by review.
+Blocked by one rotation, one one-line SSRF wire, and one tag."*
+
+**Eleven adversarial lanes ran** — two on the finding, five on the round's *reassurances*, three on
+the D-184 delta no sweep had covered, one on release readiness. Every lane defaulted to refuted and
+every surviving claim was re-read by hand. Two lane claims did not survive that re-read and are
+recorded below, because a lane that is wrong in our favour is the same failure mode as a reviewer
+who is wrong in theirs.
+
+### N-01 — confirmed in mechanism, refuted in reachability, RAISED in severity, fixed
+
+`amsclient.New` built `&http.Client{Timeout: timeout}` with no `Control` hook. That much is exactly
+as filed, and it was the last outbound client without one.
+
+**The reachability is refuted.** The ledger's chain was "create a source with a link-local
+`rest_url` → the collector polls it every interval". `ams_sources.rest_url` is never polled:
+`grep` gives it three consumers — the *guarded* `handleTestSource` (`server.go:2008,2021`), the API
+read shape (`:2736`) and the write path (`:2768`) — while the poll client is constructed once at
+`serve.go:241` from `cfg.AMSBaseURL`, i.e. `PULSE_AMS_URL` (`cmd/pulse/config.go:242`). The filed
+reproduction cannot reproduce. **Neither can the fix be skipped on that basis**, which is the
+interesting part.
+
+**The bounding argument is refuted in the direction that raises severity.** The reviewer graded LOW
+on "the poll loop only ever appends fixed AMS request paths, so IMDS credential paths are
+unreachable". Two independent facts break it:
+
+1. **The path is not ours to bound.** `CheckRedirect` follows up to ten hops and constrains neither
+   host nor path, so the *responder* picks the next URL. AMS is a separate trust domain from Pulse;
+   a compromised or hostile one can steer the poll at
+   `169.254.169.254/latest/meta-data/iam/security-credentials/…`.
+2. **The response comes back out.** `getJSON` copies up to 4 KB of a non-2xx body into its error
+   (`client.go:650`), `recordPoll` stores it as `lastErr` (`restpoller.go:150`), and `/healthz`
+   republishes it in `components.collector.message` (`server.go:999`) — from a route registered
+   under the literal comment "Operational (unauthenticated)" (`server.go:446`).
+
+So it was not blind SSRF, and **independently of any SSRF an ordinary AMS 401 or 500 page was
+already being echoed to any unauthenticated caller who could reach the port.** That second half is
+a live disclosure that neither the reviewer nor D-184 caught, and it is the more valuable of the
+two.
+
+**Fixed:** `ssrfguard.DialControl` on the amsclient dialer with `Proxy` disabled (the prober D-130 /
+S3 D-184 ruling: an egress proxy resolves and connects for us and defeats a resolved-IP guard);
+`amsclient.HealthSafeError` strips the upstream body from health-facing renderings while the full
+error still goes to the logs; the login path became a *typed* error because it was a **second**
+route by which a body reached `/healthz` — sanitizing only `getJSON` would have missed it; and
+`url.PathEscape` now wraps the `app` segment in all four path builders, where its sibling
+`streamID` was already escaped in the same `Sprintf` and `app` arrives from the remote server's own
+application list.
+
+**Deliberately not adopted:** `ssrfguard.IsDenied` in `amsSourceFromAPI`. It guards a path that
+reaches no dialer, and the endpoint it would protect already refuses at dial time with a named
+error. A check whose only effect is to look thorough is how a guard list drifts from what it guards.
+
+**Behaviour change, stated not buried:** this client previously inherited `http.DefaultTransport`
+and honoured `HTTP(S)_PROXY`. It no longer does. Nothing in the docs routes AMS polling via a proxy.
+
+### The reassurances — the third consecutive round where they outproduced the findings
+
+**Upheld:** the nine-outbound-client sweep (telegram's custom-URL constructor and PagerDuty's
+`SetAPIURL` really are `_test.go`-only, so both are fixed-endpoint); M-01 (email has no
+`smtp.SendMail` bypass and STARTTLS upgrades in place; cert-expiry has no OCSP/CRL side-fetch; S3
+is hand-rolled SigV4, **not** the AWS SDK, so there is no separate IMDS credential-provider client
+to leave unguarded — the obvious way that fix could have been incomplete); M-02 (exactly two ingest
+paths, one shared helper, identical caps and ordering, `truncateUTF8` does backtrack off a split
+rune). One clerical slip: the round's prose lists seven guarded clients where its own arithmetic
+says eight — **slack** is missing from the list, not from the guard.
+
+**M-04 reversed — the deferral was priced without the amplification.** D-184 declined to bound the
+beacon identity fields because truncating a `session_id` merges sessions and corrupts
+`uniq(session_id)`, and round 11 confirmed that as "an honest deferral". The reasoning is right
+about *truncation* and never reaches *rejection*. What neither pass computed: those fields are
+copied onto **every row a batch produces**, so a 64 KB body carrying a 30 KB `session_id` and 100
+minimal events writes ~50× its own size — inside the body cap, available to one ingest token.
+Contract now sets `"maxLength": 256` on `session_id`/`stream_id`/`app` and the server rejects past
+it. Rejection is precisely the operation that does **not** corrupt `uniq()`: nothing oversized is
+ever stored. 256 is ~7× a UUIDv4. `player_kind` was the last unbounded per-row string and is
+truncated, not rejected — it is not an identity key.
+
+**The cap counts characters, not bytes — an adversarial lane caught the first cut of this.** JSON
+Schema defines `maxLength` in characters; the Go check used `len()`, which counts bytes. A
+256-character multi-byte id was therefore **valid per the published contract and rejected by the
+server** — a contract/implementation disagreement, and the kind that is easy to defend as "we are
+merely stricter" and still wrong. Now `utf8.RuneCountInString`, with the error text saying
+"characters", and a test that sends 256 four-byte runes and requires acceptance. The honest
+consequence: the byte bound is 4× the character bound, so worst-case identity storage is ~300 KB
+per request (4.7× the 64 KB body cap) rather than the ~50× and rising it replaced — stated in a
+test that computes it rather than in a comment that asserts it.
+
+**M-03's uniformity claim partially refuted — there are four background loops, not three.** The
+sentence was *"prober ✓ / reports ✓ / alerts ✓ are now uniform. No report-side residual."* The
+report half is correct. The **anomaly detector** is a fourth tier-gated background process and was
+the only one still ungated at runtime: `serve.go:614` starts `Run`, whose ticker called
+`UpdateBaselines` unconditionally, so a downgraded tenant kept having baselines computed and
+written while only the read API returned 403. Gate added via `Config.EntitlementGate` mirroring
+`prober.Config.EntitlementGate` (D-108) and the M-03 channel gate, wired to `lic.CheckAnomalies`.
+**This was found by enumerating the set rather than accepting the list** — which is the same
+correction the reviewer names in their own errata E-2.
+
+**And chasing it surfaced a larger, pre-existing leak running the other way — the more valuable
+half.** Anomaly detection is advertised **Enterprise-only** (`docs/overview.md:220` tier table,
+`docs/marketplace/listing.md:138`, PRD §7.11) and `GET /anomalies` enforces that via
+`CheckAnomalies` — but **alert-rule create and update never did**. A Pro tenant could POST
+`rule_type=anomaly` and receive Enterprise-only alerts off the same baselines. Proven, not
+inferred: with the new gate removed, `TestAnomalyRule_CreateBlockedBelowEnterprise` gets a **201**
+on a Pro-tier server.
+
+**The two halves are load-bearing on each other, and this is the part worth remembering.** Gating
+only the detector loop would have left those already-created rules in place, reading progressively
+staler baselines and **silently ceasing to fire**. A silent stop is a worse defect than the leak it
+closes — the repo's own D-162 addendum says over-rejection is as much a regression as
+under-rejection, and a silent one is worse than either. So the enforcement is now at all three
+points, matching the M-03 shape exactly: **config** (`handleCreateAlertRule` +
+`handleUpdateAlertRule` → 403 `LICENSE_REQUIRED`, scoped strictly to `rule_type == "anomaly"`),
+**compute** (the detector loop), and **evaluation** (`evaluateRule` skips anomaly rules at Debug
+when the gate refuses — a policy skip, not a failure).
+
+**Two older tests went red and the fixture was what was wrong, not the assertion.**
+`api_anomaly_contract_test.go` asserts the response *shape* of an anomaly rule and was running on
+the default **Free**-tier harness — which only ever worked because no tier gate existed. Both now
+use `setupEnterpriseAnomalyServer`. A negative control pins the scope of the gate:
+`TestThresholdRule_StillAllowedBelowEnterprise` proves ordinary threshold rules are untouched,
+because a gate that caught those would break alerting for every non-Enterprise tenant — a far
+worse regression than the leak.
+
+**⚠ This is a pricing-enforcement behaviour change and the operator can veto it with one word.**
+Any existing below-Enterprise tenant using anomaly rules stops receiving those alerts. It matches
+what is advertised and it matches the M-03 ruling already shipped, but it is a product call, so it
+is written into `docs/operator-expected.md` rather than left implicit in a diff.
+
+### The doc-stamp guard did not block anything
+
+L-02 was closed "mechanically" in D-184 with a `doc-stamps` CI job. `.github/branch-protection.sh`
+never listed it — confirmed live, `gh api …/branches/main/protection` returned 13 contexts with
+neither `doc-stamps` nor `shellcheck`. **A job that runs and reports but cannot fail a merge is
+advisory**, so the class L-02 belonged to was not actually closed. Both contexts added, and the
+script now carries the rule next to the list: *add a gating job's context in the same change that
+adds the job.* `compose-boot` is deliberately left advisory — it pulls from GHCR, and a merge
+should not depend on a third party's uptime. **The `gh` token has repo-admin and the PUT is
+executable from here (D-162 precedent), so this is applied, not queued.**
+
+### Two lane claims that did not survive the hand re-read
+
+- A lane filed the PRD section as "factually wrong" for reporting *8 MET / 2 PARTIAL* against
+  `prd-validation-matrix.md`'s *1 FULLY / 9 PARTIALLY*. They measure different things — the matrix
+  scores live-validated acceptance criteria at v0.3.0 with D-179 supersessions inline, not feature
+  presence. A vocabulary mismatch, not an overclaim, and it runs the safe way: **our own scoring is
+  the stricter of the two.** Recorded because a marketplace evaluator reading both would notice.
+- A lane filed S3's `Proxy: nil` as a D-184 regression. It is the deliberate, documented ruling from
+  D-130, applied consistently — and now applied to amsclient too, with the behaviour change stated
+  in the changelog rather than discovered later.
+
+### Not fixed, deliberately
+
+The alert retry loop does not re-check entitlement between attempts (~5 s at default backoff; the
+sync gate removes the channel within one interval and a downgrade inside that window changes at
+most two attempts). `check-doc-stamps.sh` validates stamps inside fenced code blocks — a false
+*positive* that can only fail CI on a doc showing an example, never pass a real stale stamp. The
+`/healthz` dial error still names the AMS host: that is the operator's own `PULSE_AMS_URL` and the
+same payload already publishes `ams_env_configured`, so stripping it would cost the web UI its
+degraded-reason display and gain nothing; the upstream-controlled **body** was the part that was
+not ours to republish, and that is what was removed.
+
+### Gates
+
+`gofmt -l` clean, `go vet` clean, `go test -race ./...` green (all in `golang:1.25`; there is no
+native Go on this box). ShellCheck clean at **both** CI's 0.9.0 and the container's stable — the
+two disagree on SC2317/SC2329 and a script clean at one can be red at the other. Every new test was
+re-run against a **reverted** tree to prove it fails without its fix: one of them didn't, and was
+replaced — `TestClient_IgnoresProxyEnv` passed with `Proxy = nil` removed, because Go's
+`ProxyFromEnvironment` never proxies loopback, so an httptest-based proxy assertion is structurally
+vacuous. It is now a white-box field assertion. **A test that cannot fail is worth less than no
+test, because it reports coverage that does not exist.**
+
+### Still blocking, still not ours
+
+**G-02: rotate `CLICKHOUSE_PASSWORD`.** Re-checked silently this session — the live prefix still
+matches 2 commits. Eleventh consecutive round as the sole submission blocker. The motion is
+unchanged: rotate → cut `v0.4.5` (which now also carries D-185) → submit against it.

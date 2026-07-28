@@ -4,9 +4,9 @@
 `agents/handoffs/decisions.md`, `agents/handoffs/sessions/` and
 `agents/handoffs/RESUME-PROMPT.md`.*
 
-> **Blocking submission: item 1, and nothing else.** The submission target is **v0.4.4**
-> (you authorised the cut; it contains the closed LIM-01, the anchored `cosign verify`
-> command, checksums for all four release assets, and the installer exit code).
+> **Blocking submission: item 1, and nothing else.** The submission target is **`v0.4.5`, once
+> you cut it** — `v0.4.4` is still the published Latest, and `main` has since accumulated the
+> round-7 through round-11 fixes, five of them behavioural (see the note at the foot of this file).
 > Prod is healthy and untouched.
 
 ---
@@ -87,14 +87,14 @@
   tier/channels ruling. (The Prometheus half has already shipped.)
 - **§2.44 `[FO-1]`** firing-orphan behaviour for node/QoE alerts whose subject vanishes:
   auto-resolve-after-grace (the loop's lean) / stay-firing / leave-as-is.
-- **`[M-04]`** beacon identity-field length limits. `session_id`, `stream_id`, `app` and
-  `player_kind` have no maximum length, so a holder of a valid ingest token can write very large
-  high-cardinality strings into ClickHouse (bounded only by the 64 KB body cap and the per-token
-  rate limit). **Not fixed on purpose:** truncating a `session_id` would silently merge distinct
-  sessions and corrupt the `uniq(session_id)` aggregates, which is worse than the problem;
-  rejecting over-long ids instead is a behavioural break that needs a contract change (frozen,
-  D-004). Two words unblock it — the **limit** (e.g. 128 bytes) and the **failure mode** (reject
-  the batch with 422, or accept and drop the event).
+- ~~**`[M-04]`** beacon identity-field length limits~~ — **CLOSED in D-185, no ruling needed.** The
+  deferral rested on truncation corrupting `uniq(session_id)`, which is true, and on rejection
+  needing a contract change, which turned out to be a *tightening* no conforming client can notice:
+  `session_id`/`stream_id`/`app` are now capped at 256 bytes (~7× a UUIDv4) in the contract and
+  rejected past it, and `player_kind` is truncated. What forced the call was arithmetic the
+  original deferral did not have — those fields are copied onto every row a batch produces, so one
+  64 KB request could write ~50× its own size. Override the cap or the failure mode if you disagree;
+  both are one constant.
 - **Dependabot queue** (17 PRs open, operator-held): confirm the hold, or authorise a
   batch-absorb session per `docs/dependabot-policy.md`.
 
@@ -107,18 +107,36 @@ load-evidence format (A9). Details: `docs/marketplace/submission-process.md`.
 
 ---
 
-*Prod: healthy and untouched — v0.4.0-139, all three `/healthz` components `ok`, 1,337,678
-server events, newest 1 s old, collector actively ingesting. A prod roll is item 11, never
+*Prod: healthy and untouched — v0.4.0-139, all three `/healthz` components `ok`, 1,340,393
+server events, ingest steady at 720/h, collector actively ingesting. A prod roll is item 11, never
 automatic.*
 
-*On item 1: external review rounds 7 through 10 have now each landed fixes on `main` that are not
-in the v0.4.4 tag, and one of them (the geo/device breakdown row cap) changes API responses.
-Nothing here changes item 1's priority — but when you rotate, the same sitting authorises one
-motion: **rotate, cut v0.4.5, submit against it**. That single cut also clears the stale prose
-frozen inside the v0.4.4 tag, which is the only remaining thing an evaluator could catch.
-Round 10 (the reviewer's own final round) reaches the same conclusion independently: "not blocked
-by engineering — blocked by one operator rotation and one tag."*
+*On item 1: external review rounds 7 through **11** have now each landed fixes on `main` that are
+not in the v0.4.4 tag. Five of them are behavioural — the geo/device breakdown row cap (changes API
+responses), the three D-184 security/enforcement fixes, and D-185's AMS-poll SSRF guard plus the
+`/healthz` fix that stops an AMS error body being republished to unauthenticated callers. Nothing
+here changes item 1's priority — but when you rotate, the same sitting authorises one motion:
+**rotate, cut v0.4.5, submit against it**. That single cut also clears the stale prose frozen inside
+the v0.4.4 tag. Round 11 reaches the same conclusion independently: "not blocked by review —
+blocked by one rotation, one SSRF wire, and one tag." The SSRF wire is done; the rotation and the
+tag are yours.*
 
-*Noticed while probing your AMS: its licence shows `type: trial`, `endDate 2026-07-27` —
-expiring today. It affects nothing we ship, but it does affect future live validation against
-that instance.*
+*⚠ **One D-185 change is a pricing call, and it is yours to veto with one word.** Anomaly detection
+is advertised Enterprise-only (`overview.md` tier table, `listing.md`), and `GET /anomalies` always
+enforced that — but alert-rule create/update never did, so **any tier could configure a
+`rule_type=anomaly` rule and receive Enterprise-only alerts**. D-185 closes it at all three points
+(rule create/update → 403, the evaluator, and the baseline loop). **Effect on real users:** any
+existing below-Enterprise tenant using anomaly rules stops receiving those alerts. It matches what
+you advertise and it matches the M-03 ruling you already have; say the word and it reverts to
+advertised-but-unenforced, or moves to a lower tier. Ordinary threshold alerting is untouched on
+every tier — that is pinned by a test.*
+
+*Two other things D-185 changed that you may want to know about before the cut: the AMS poll client no
+longer honours `HTTP(S)_PROXY` (an egress proxy defeats the SSRF guard — same ruling already applied
+to the prober and the S3 uploader; no documented deployment routes AMS polling through a proxy), and
+`main`'s required-status-check list grew from 13 to 15 (`shellcheck`, `doc-stamps` — they were
+running but could not block a merge). The branch-protection change is already applied.*
+
+*Noticed while probing your AMS: its licence shows `type: trial`, `endDate 2026-07-27` — i.e.
+**expired as of 2026-07-28**. It affects nothing we ship, but it does affect future live validation
+against that instance, including item 6's load lane.*

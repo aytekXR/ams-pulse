@@ -12,6 +12,39 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Security
 
+- **The AMS poll client now dials through the SSRF guard, and stops republishing upstream
+  response bodies on `/healthz` (D-185, external review round 11 N-01).** `amsclient` was the
+  last outbound client building a plain `http.Client` with no `Control` hook on its dialer. The
+  round-11 ledger filed it as reachable from an API-created AMS source; it is not — the poll
+  client is built once from `PULSE_AMS_URL`, and `ams_sources.rest_url` reaches only the
+  already-guarded connectivity test. The reachable problem is on the response side: the client
+  follows up to ten redirects to a `Location` **the responder chooses**, so a hostile or
+  compromised AMS could steer the poll onto a link-local address with an arbitrary path, and a
+  non-2xx **response body** (up to 4 KB) was copied into the poll error that the collector stores
+  and that unauthenticated `/healthz` republishes in `components.collector.message`. Both are
+  closed: the dialer refuses restricted addresses on every hop, and health-facing errors are
+  rendered by a new `amsclient.HealthSafeError` that keeps the diagnosis (request, status) and
+  drops the body. The full error still reaches the logs, where the audience is the operator.
+  The AMS application name is now URL-escaped in every request path (it arrives from the remote
+  server's own application list; the sibling `streamID` was already escaped).
+  **Behaviour change:** this client previously inherited `http.DefaultTransport` and therefore
+  honoured `HTTP(S)_PROXY`; it no longer does. An egress proxy resolves and connects on our
+  behalf, which defeats a resolved-IP guard — the same ruling already applied to the prober
+  (D-130) and the S3 uploader (D-184). No documented deployment routes AMS polling via a proxy.
+- **Beacon identity fields are now length-bounded (D-185, revisiting D-184's M-04).** `session_id`,
+  `stream_id` and `app` are copied onto *every* row a batch produces, so one 64 KB request
+  carrying a 30 KB `session_id` and 100 minimal events wrote roughly fifty times its own size to
+  ClickHouse — inside the body cap, available to any holder of one ingest token. M-04 deferred
+  this because *truncating* a `session_id` would merge distinct sessions and corrupt
+  `uniq(session_id)`. That is true of truncation and not of **rejection**, which is what this
+  does: `contracts/events/beacon-event.schema.json` now sets `"maxLength": 256` on all three and
+  the server rejects a batch that exceeds it. 256 is about seven times a UUIDv4, so no conforming
+  client can reach it. The server counts **characters**, not bytes, because that is what JSON
+  Schema's `maxLength` means — counting bytes would reject a payload the published contract calls
+  valid. Worst-case identity storage per request is now ~300 KB (4.7× the 64 KB body cap) instead
+  of unbounded. `player_kind`, the last unbounded per-row string, is truncated
+  rather than rejected — it is not an identity key.
+
 - **The SSRF dial guard now covers three outbound clients it was missing from (D-184, round-10
   exculpation audit M-01).** `ssrfguard.DialControl` was installed on the webhook channel, the
   Slack channel, the prober, the RTMP probe and the AMS connectivity test, but **not** on the
@@ -34,6 +67,31 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Changed
 
+- **Anomaly alert rules are now enforced as Enterprise-only, at all three points (D-185).**
+  Anomaly detection is an Enterprise feature (PRD §7.11) and `GET /anomalies` has always enforced
+  that — but **alert-rule create and update never did**, so any tier could configure a
+  `rule_type=anomaly` rule and receive Enterprise-only alerts. Rule create/update now return
+  **403 `LICENSE_REQUIRED`** for anomaly rules below Enterprise, the evaluator skips anomaly rules
+  when the tier does not allow them (a policy skip, logged at debug — not a delivery failure), and
+  the baseline loop below stops computing. Ordinary **threshold** rules are unaffected on every
+  tier; a regression test pins that, because a gate that caught those would break alerting for
+  everyone below Enterprise. **Behaviour change:** an existing below-Enterprise tenant using
+  anomaly rules stops receiving those alerts. The three points are gated together deliberately —
+  gating only the baseline loop would have left such rules in place to read staler and staler
+  baselines and stop firing *silently*, which is worse than the leak being closed.
+- **The anomaly detector stops computing baselines after a tier downgrade (D-185).** D-108
+  established the rule for the synthetic prober and D-184's M-03 extended it to alert channels: an
+  HTTP gate does not reach a background goroutine, so a downgraded tenant keeps getting the paid
+  work done for them until the process restarts. Round 11 reported the class "now uniform across
+  prober / reports / alerts" — correct for the three it listed, and the set has four members. The
+  anomaly baseline loop was gated at its read API only, and went on recomputing and writing
+  baselines regardless of tier. It now consults the same licence check once per tick. A skipped
+  tick is a policy state, logged at debug, not a fault.
+- **`doc-stamps` and `shellcheck` are now required status checks (D-185).** D-184 closed the
+  doc-stamp drift class "mechanically" with a CI job — but the job was never added to
+  `.github/branch-protection.sh`, so it reported without being able to block a merge. A guard that
+  cannot fail a merge is advisory. `compose-boot` is deliberately left advisory: it pulls the
+  pinned image from GHCR, and merges should not depend on a third party's uptime.
 - **Paid alert channels stop delivering when a licence tier is downgraded (D-184, M-03).**
   Channel create, update and test-fire were gated by tier at the HTTP boundary, but the
   background evaluator was not: a tenant that configured a Slack, PagerDuty, webhook or Telegram

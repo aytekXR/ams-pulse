@@ -1587,6 +1587,18 @@ func (s *Server) handleCreateAlertRule(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// D-185: anomaly rules are an Enterprise feature (PRD §7.11; docs/overview.md
+	// tier table; listing.md). GET /anomalies has always been gated by
+	// CheckAnomalies — rule create/update never was, so any tier could configure a
+	// rule that fires off Enterprise-only baselines. Found while gating the
+	// detector loop: gating the compute alone would have made these rules stop
+	// firing SILENTLY, which is a worse defect than the leak it closes.
+	if row.RuleType == "anomaly" {
+		if err := s.lic.CheckAnomalies(); err != nil {
+			writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+			return
+		}
+	}
 	// S11 WO-B: validate anomaly-specific constraints (metric support, window_s=3600).
 	if valErr := alert.ValidateAnomalyRule(row); valErr != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_ANOMALY_RULE", valErr.Error())
@@ -1622,6 +1634,18 @@ func (s *Server) handleUpdateAlertRule(w http.ResponseWriter, r *http.Request) {
 	if row.RuleType != "anomaly" {
 		if valErr := alert.ValidateRuleSpec(row.Metric, row.Operator, int64(row.WindowS), row.Severity, row.Threshold); valErr != nil {
 			writeError(w, http.StatusUnprocessableEntity, "INVALID_RULE", valErr.Error())
+			return
+		}
+	}
+	// D-185: anomaly rules are an Enterprise feature (PRD §7.11; docs/overview.md
+	// tier table; listing.md). GET /anomalies has always been gated by
+	// CheckAnomalies — rule create/update never was, so any tier could configure a
+	// rule that fires off Enterprise-only baselines. Found while gating the
+	// detector loop: gating the compute alone would have made these rules stop
+	// firing SILENTLY, which is a worse defect than the leak it closes.
+	if row.RuleType == "anomaly" {
+		if err := s.lic.CheckAnomalies(); err != nil {
+			writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
 			return
 		}
 	}

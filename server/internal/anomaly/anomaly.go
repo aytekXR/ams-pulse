@@ -193,6 +193,9 @@ type Detector struct {
 	hysteresisTicks int
 	tickInterval    time.Duration
 
+	// entitlementGate is the optional runtime licence check (D-185). See Config.
+	entitlementGate func() error
+
 	// hysteresis tracks how many ticks remain before re-firing is allowed.
 	hysteresis map[hysteresisKey]int
 
@@ -213,6 +216,22 @@ type Config struct {
 	HysteresisTicks int
 	// TickInterval is how often UpdateBaselines is called. 0 → 60 s.
 	TickInterval time.Duration
+
+	// EntitlementGate is an optional runtime licence-tier check, called once per
+	// tick before any baseline work. Nil = allow (backward compatible; tests and
+	// a pure-collector deployment pass nil).
+	//
+	// D-185 (external review round 11). D-108 established the rule for the prober
+	// and M-03 applied it to alert channels: the HTTP CRUD gate does not reach a
+	// background goroutine, so a tenant that downgrades keeps getting the paid
+	// work done for them until the process restarts. The anomaly detector was the
+	// fourth such background process and the only one still ungated — round 11
+	// asserted the class was "now uniform across prober / reports / alerts", which
+	// was true of the three it looked at and false of the set.
+	//
+	// Skipping a tick is silent by design (Debug, not Warn): a downgraded tier is
+	// a policy state, not a fault, and this loop ticks every 60 s.
+	EntitlementGate func() error
 }
 
 // New creates a Detector.
@@ -239,6 +258,7 @@ func New(cfg Config, store BaselineStore, live domain.LiveProvider, logger *slog
 		minSamples:      cfg.MinSamples,
 		hysteresisTicks: cfg.HysteresisTicks,
 		tickInterval:    cfg.TickInterval,
+		entitlementGate: cfg.EntitlementGate,
 		hysteresis:      make(map[hysteresisKey]int),
 		logger:          logger,
 	}
@@ -306,6 +326,14 @@ func (d *Detector) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// Runtime entitlement enforcement (D-185), mirroring
+			// prober.executeProbe (D-108) and the alert channel gate (M-03).
+			if d.entitlementGate != nil {
+				if err := d.entitlementGate(); err != nil {
+					d.logger.Debug("anomaly: skipping baseline update — entitlement check failed", "error", err)
+					continue
+				}
+			}
 			if err := d.UpdateBaselines(ctx); err != nil {
 				d.logger.Warn("anomaly: baseline update failed", "error", err)
 			}

@@ -218,6 +218,20 @@ type Evaluator struct {
 	// sync is periodic and a downgrade inside that window would otherwise deliver).
 	// A tier skip is NOT a delivery_failure — it is a policy decision (M-03).
 	channelEntitlementGate func(channelType string) error
+
+	// anomalyEntitlementGate is an optional gate for anomaly-type RULES. Nil =
+	// allow all (backward compat).
+	//
+	// D-185. Anomaly detection is Enterprise-only (PRD §7.11), but only
+	// GET /anomalies enforced it; rule create/update did not, so a lower tier
+	// could configure an anomaly rule and receive Enterprise-only alerts. D-185
+	// gates the API and the detector's baseline loop — and this is the third
+	// place, for the same reason M-03 needed a delivery-time check as well as a
+	// sync-time one: an existing rule on a tenant that downgrades must stop
+	// evaluating, and it must stop VISIBLY. Without this, a downgrade would make
+	// the rule read progressively staler baselines and quietly stop firing, which
+	// is worse than a clean skip because nothing would say why.
+	anomalyEntitlementGate func() error
 }
 
 // deliveryCtx carries the alert event data used if a delivery_failure must
@@ -322,6 +336,14 @@ func (e *Evaluator) SetAnomalyBaselineReader(r AnomalyBaselineReader) {
 // Mirrors prober.Config.EntitlementGate (S37 / D-108): "a tenant that downgrades
 // below the probe tier stops probing at runtime, not just at the HTTP CRUD boundary."
 // M-03: the alert evaluator must enforce the same invariant for paid channel types.
+// SetAnomalyEntitlementGate wires the licence-tier gate for anomaly-type rules.
+// See the anomalyEntitlementGate field for why the gate exists in three places.
+func (e *Evaluator) SetAnomalyEntitlementGate(gate func() error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.anomalyEntitlementGate = gate
+}
+
 func (e *Evaluator) SetChannelEntitlementGate(gate func(channelType string) error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -619,6 +641,18 @@ func (e *Evaluator) evaluateRule(ctx context.Context, rule meta.AlertRuleRow, sn
 	// S11 WO-B: anomaly rules dispatch to evalAnomalyMetric before the threshold switch.
 	// RuleType=="" or RuleType=="threshold" falls through to the existing switch (backward compat).
 	if rule.RuleType == "anomaly" {
+		// D-185: runtime tier gate. A tier skip is a policy decision, not a
+		// delivery failure — same treatment as the channel gate (M-03).
+		e.mu.Lock()
+		anomalyGate := e.anomalyEntitlementGate
+		e.mu.Unlock()
+		if anomalyGate != nil {
+			if err := anomalyGate(); err != nil {
+				e.logger.Debug("alert: skipping anomaly rule — entitlement check failed",
+					"rule_id", rule.ID, "error", err)
+				return
+			}
+		}
 		evals = e.evalAnomalyMetric(ctx, snap, scope, rule)
 	} else {
 		switch rule.Metric {

@@ -12,15 +12,18 @@
     },
     "session_id": {
       "type": "string",
-      "description": "Viewer session UUID (v4), generated client-side, used for session stitching. CMCD: cid (content ID not used here; session is viewer-scoped)."
+      "maxLength": 256,
+      "description": "Viewer session UUID (v4), generated client-side, used for session stitching. CMCD: cid (content ID not used here; session is viewer-scoped). maxLength added in D-185: the identity fields are copied onto EVERY row a batch produces, so an unbounded value amplifies one 64 KB request into megabytes of ClickHouse storage. They are REJECTED above the cap rather than truncated — truncating a session_id would silently merge distinct sessions and corrupt uniq(session_id)."
     },
     "stream_id": {
       "type": "string",
-      "description": "Stream identifier matching the AMS stream name"
+      "maxLength": 256,
+      "description": "Stream identifier matching the AMS stream name. Rejected above maxLength — see session_id (D-185)."
     },
     "app": {
       "type": "string",
-      "description": "AMS application name"
+      "maxLength": 256,
+      "description": "AMS application name. Rejected above maxLength — see session_id (D-185)."
     },
     "meta": {
       "type": "object",

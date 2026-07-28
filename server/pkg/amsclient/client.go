@@ -19,12 +19,23 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	// ssrfguard is the single owner of the resolved-IP dial policy (D-130). It is
+	// imported rather than reimplemented here precisely because a second copy of
+	// the policy is how D-184's M-01 defect class arises. It lives under internal/
+	// while this package lives under pkg/; that compiles (the internal rule admits
+	// any importer rooted at server/), but if this package is ever extracted for
+	// open-sourcing as the package doc contemplates, ssrfguard must travel with it
+	// — a client that dials an operator-supplied URL has no business shipping
+	// without its guard.
+	"github.com/aytekXR/ams-pulse/server/internal/ssrfguard"
 )
 
 // minLoginInterval is the shortest interval between two forced re-logins.
@@ -294,13 +305,63 @@ type ApplicationDTO struct {
 // httpStatusError is returned by getJSON on non-2xx responses so callers can
 // branch on HTTP status (e.g. to make 404 tolerant for standalone AMS nodes).
 type httpStatusError struct {
+	Method string // "GET" unless set (login POSTs); keeps Error() honest
 	Path   string
 	Status int
 	Body   string
 }
 
+func (e *httpStatusError) method() string {
+	if e.Method == "" {
+		return http.MethodGet
+	}
+	return e.Method
+}
+
 func (e *httpStatusError) Error() string {
-	return fmt.Sprintf("amsclient: GET %s: HTTP %d: %s", e.Path, e.Status, e.Body)
+	return fmt.Sprintf("amsclient: %s %s: HTTP %d: %s", e.method(), e.Path, e.Status, e.Body)
+}
+
+// maxHealthErrLen bounds the sanitized string HealthSafeError returns.
+const maxHealthErrLen = 200
+
+// HealthSafeError renders err for a surface that is NOT operator-only.
+//
+// D-185 (external review round 11). getJSON copies up to 4 KB of the upstream
+// response BODY into the error it returns, and Error() prints it — which is what
+// an operator wants in a log. But the restpoller stores that same string as its
+// last-error and /healthz republishes it in components.collector.message, and
+// /healthz is explicitly unauthenticated (api/server.go: "Operational
+// (unauthenticated)"). So any body an upstream chooses to return — an AMS stack
+// trace, an error page from whatever a redirect actually landed on — was being
+// echoed verbatim to any caller who can reach the port.
+//
+// This drops the body and keeps the diagnosis (which request, which status),
+// then bounds the length. Call it for any not-operator-only surface; log err
+// itself where the audience is the operator.
+//
+// Deliberately NOT stripped: the AMS host in a dial error. That address is the
+// operator's own PULSE_AMS_URL and /healthz already discloses whether AMS is
+// configured and reachable by design; stripping it would cost the web UI its
+// degraded-reason display for no gain against a caller who can already tell.
+// The upstream-controlled body is the part that is not ours to republish.
+func HealthSafeError(err error) string {
+	if err == nil {
+		return ""
+	}
+	var hse *httpStatusError
+	var msg string
+	if errors.As(err, &hse) {
+		msg = fmt.Sprintf("amsclient: %s %s: HTTP %d", hse.method(), hse.Path, hse.Status)
+	} else {
+		msg = err.Error()
+	}
+	// Cap by runes, not bytes: err.Error() can carry arbitrary text and a byte
+	// slice would be free to split a multi-byte rune into invalid UTF-8.
+	if r := []rune(msg); len(r) > maxHealthErrLen {
+		msg = string(r[:maxHealthErrLen]) + "…"
+	}
+	return msg
 }
 
 // ─── Client ──────────────────────────────────────────────────────────────────
@@ -367,7 +428,35 @@ func New(cfg Config) *Client {
 		auth = "Bearer " + cfg.AuthToken
 	}
 
-	hc := &http.Client{Timeout: timeout}
+	// D-185 (external review round 11, N-01): dial through ssrfguard, exactly like
+	// every other outbound client (prober, webhook, slack, email, cert-expiry, S3,
+	// source-test). This was the last unguarded one.
+	//
+	// The reachability the round-11 ledger described — an API-created ams_sources
+	// row being polled — does not exist: the poll client is built once from
+	// PULSE_AMS_URL and ams_sources.rest_url reaches only the (already guarded)
+	// source-test handler. The exposure that IS real, and that makes this more than
+	// tidiness, is the response side: CheckRedirect below follows up to 10 hops to a
+	// Location the *responder* chooses, so a hostile or compromised AMS — a separate
+	// trust domain from Pulse — can redirect the poll onto 169.254.169.254 with an
+	// arbitrary path, and getJSON copies up to 4 KB of a non-2xx body into the error
+	// that /healthz republishes unauthenticated. A resolved-IP check on the dialer
+	// closes that at the socket, DNS-rebinding-safely, on every hop.
+	//
+	// Proxy is disabled for the same reason the prober (D-130) and S3 (D-184)
+	// disable it: with an egress proxy the transport dials the proxy — which passes
+	// the guard — and the proxy then fetches the real target, bypassing the
+	// resolved-IP check entirely. NOTE this is a behaviour change: before D-185 this
+	// client inherited http.DefaultTransport and therefore honoured HTTP(S)_PROXY.
+	// No documented deployment routes AMS polling through a proxy.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{
+		Timeout:   timeout,
+		KeepAlive: 30 * time.Second,
+		Control:   ssrfguard.DialControl,
+	}).DialContext
+	transport.Proxy = nil
+	hc := &http.Client{Timeout: timeout, Transport: transport}
 	// net/http strips Authorization on cross-host redirects, but "ProxyAuthorization"
 	// (no hyphen — the AMS management-API header, not RFC Proxy-Authorization) is not
 	// in its sensitive-header list, so it would be forwarded to a foreign host. Strip
@@ -430,7 +519,12 @@ func (c *Client) login(ctx context.Context) error {
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("amsclient: login HTTP %d: %s", resp.StatusCode, b)
+		// D-185: typed, not fmt.Errorf, so HealthSafeError can strip the body
+		// before /healthz republishes it. A login failure propagates all the way
+		// out of getJSON (the re-login path surfaces loginErr), so this was the
+		// second route by which an upstream body reached the unauthenticated
+		// endpoint — sanitizing only getJSON's own error would have missed it.
+		return &httpStatusError{Method: http.MethodPost, Path: "/rest/v2/users/authenticate", Status: resp.StatusCode, Body: string(b)}
 	}
 
 	var result struct {
@@ -606,7 +700,7 @@ func (c *Client) ListBroadcasts(ctx context.Context, app string, offset, size in
 	if size <= 0 {
 		size = 200
 	}
-	path := fmt.Sprintf("/%s/rest/v2/broadcasts/list/%d/%d", app, offset, size)
+	path := fmt.Sprintf("/%s/rest/v2/broadcasts/list/%d/%d", url.PathEscape(app), offset, size)
 	var result []BroadcastDTO
 	if err := c.getJSON(ctx, path, &result); err != nil {
 		return nil, err
@@ -625,7 +719,7 @@ func (c *Client) ListBroadcastsPaged(ctx context.Context, app string) ([]Broadca
 	var all []BroadcastDTO
 	offset := 0
 	for {
-		path := fmt.Sprintf("/%s/rest/v2/broadcasts/list/%d/%d", app, offset, pageSize)
+		path := fmt.Sprintf("/%s/rest/v2/broadcasts/list/%d/%d", url.PathEscape(app), offset, pageSize)
 		var page []BroadcastDTO
 		if err := c.getJSON(ctx, path, &page); err != nil {
 			return all, err
@@ -654,7 +748,7 @@ func (c *Client) ListBroadcastsPaged(ctx context.Context, app string) ([]Broadca
 // the poller. app is AMS/operator-controlled (not publisher-chosen) and is left
 // raw, matching the sibling list path-builders.
 func (c *Client) WebRTCClientStats(ctx context.Context, app, streamID string) ([]WebRTCClientStatsDTO, error) {
-	path := fmt.Sprintf("/%s/rest/v2/broadcasts/%s/webrtc-client-stats/0/100", app, url.PathEscape(streamID))
+	path := fmt.Sprintf("/%s/rest/v2/broadcasts/%s/webrtc-client-stats/0/100", url.PathEscape(app), url.PathEscape(streamID))
 	var result []WebRTCClientStatsDTO
 	if err := c.getJSON(ctx, path, &result); err != nil {
 		return nil, err
@@ -858,7 +952,7 @@ func (c *Client) ListVods(ctx context.Context, app string, offset, size int) ([]
 	if size <= 0 {
 		size = 200
 	}
-	path := fmt.Sprintf("/%s/rest/v2/vods/list/%d/%d", app, offset, size)
+	path := fmt.Sprintf("/%s/rest/v2/vods/list/%d/%d", url.PathEscape(app), offset, size)
 	var result []VodDTO
 	return result, c.getJSON(ctx, path, &result)
 }
@@ -871,7 +965,7 @@ func (c *Client) ListVodsPaged(ctx context.Context, app string) ([]VodDTO, error
 	var all []VodDTO
 	offset := 0
 	for {
-		path := fmt.Sprintf("/%s/rest/v2/vods/list/%d/%d", app, offset, pageSize)
+		path := fmt.Sprintf("/%s/rest/v2/vods/list/%d/%d", url.PathEscape(app), offset, pageSize)
 		var page []VodDTO
 		if err := c.getJSON(ctx, path, &page); err != nil {
 			return all, err

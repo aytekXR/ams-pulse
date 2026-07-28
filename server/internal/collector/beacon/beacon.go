@@ -58,6 +58,26 @@ const (
 	// maxStringDataValueLen is the maximum length for string values in event data (A10).
 	maxStringDataValueLen = 64
 
+	// maxIdentityLen bounds the identity fields (session_id, stream_id, app) that
+	// are copied onto EVERY row a batch produces (D-185, round-11 audit of M-04).
+	// Without it a single 64 KB request carrying a 30 KB session_id and 100 minimal
+	// events expands to ~100 × 30 KB of ClickHouse storage — a ~50× write
+	// amplification available to any holder of one ingest token, inside the body cap.
+	//
+	// These are REJECTED above the cap, never truncated: truncation would map two
+	// distinct sessions onto one key and corrupt uniq(session_id), which is exactly
+	// why M-04 declined the truncating fix. Rejection has no such effect, and 256
+	// is ~7× a UUIDv4, so no conforming client can reach it.
+	//
+	// Counted in CHARACTERS (code points), not bytes, because it mirrors
+	// "maxLength": 256 in contracts/events/beacon-event.schema.json and JSON Schema
+	// defines maxLength in characters. Using len() here would reject a 256-character
+	// multi-byte id that the published contract calls valid — the contract and the
+	// implementation must not disagree about what they accept. The storage bound is
+	// therefore 4 bytes/char worst case: 3 fields × 256 chars × 4 × 100 rows ≈ 300 KB
+	// from a 64 KB request (~5×), down from the unbounded ~50× and rising.
+	maxIdentityLen = 256
+
 	// bucketIdleTTL is the maximum idle time before a rate-limit bucket is evicted (A3).
 	bucketIdleTTL = 10 * time.Minute
 
@@ -473,9 +493,17 @@ func validateBeaconBatch(b *beaconBatch) []string {
 	}
 	if b.SessionID == "" {
 		errs = append(errs, "session_id is required")
+	} else if n := utf8.RuneCountInString(b.SessionID); n > maxIdentityLen {
+		errs = append(errs, fmt.Sprintf("session_id must not exceed %d characters, got %d", maxIdentityLen, n))
 	}
 	if b.StreamID == "" {
 		errs = append(errs, "stream_id is required")
+	} else if n := utf8.RuneCountInString(b.StreamID); n > maxIdentityLen {
+		errs = append(errs, fmt.Sprintf("stream_id must not exceed %d characters, got %d", maxIdentityLen, n))
+	}
+	// app is optional, but it is stored on every row like the two above.
+	if n := utf8.RuneCountInString(b.App); n > maxIdentityLen {
+		errs = append(errs, fmt.Sprintf("app must not exceed %d characters, got %d", maxIdentityLen, n))
 	}
 	if len(b.Events) == 0 {
 		errs = append(errs, "events array must have at least 1 item")
@@ -560,6 +588,14 @@ func ApplyA10FieldLimits(ev *domain.BeaconEvent) *domain.BeaconEvent {
 	// Truncate tenant.
 	if len(ev.Tenant) > maxTenantLen {
 		ev.Tenant = truncateUTF8(ev.Tenant, maxTenantLen)
+	}
+	// D-185: player_kind is stored on every row like tenant and was the one
+	// remaining unbounded per-row string. Unlike session_id/stream_id/app it is
+	// not an identity key — no aggregate counts distinct player kinds — so the
+	// truncating treatment is safe here and rejection would be needlessly hostile
+	// to a player the enum has not been extended for yet.
+	if len(ev.PlayerKind) > maxStringDataValueLen {
+		ev.PlayerKind = truncateUTF8(ev.PlayerKind, maxStringDataValueLen)
 	}
 	// Truncate string values in each event's Data map.
 	for i := range ev.Events {
