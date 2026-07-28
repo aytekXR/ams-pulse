@@ -3,7 +3,7 @@
 Visual foundation for the Pulse public website.
 Generated from `brandkit/design-system/tokens.json` v1.0.0.
 
-Last updated: 2026-07-28
+Last updated: 2026-07-28 — contrast table recomputed in D-186 after the muted-token fixes
 
 ## 1. Font Stack — Known Gap
 

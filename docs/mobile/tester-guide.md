@@ -1,6 +1,6 @@
 # Pulse iOS Beta Tester Guide
 
-Last updated: 2026-07-28
+Last updated: 2026-07-28 — created in D-186 (S118)
 
 Welcome to the Pulse iOS beta. This guide explains how to install the app,
 connect to your Pulse server, and send feedback.

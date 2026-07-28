@@ -1,6 +1,6 @@
 # iOS TestFlight Distribution Runbook
 
-Last updated: 2026-07-28
+Last updated: 2026-07-28 — created in D-186 (S118), reconciled against the workflow it documents
 
 This runbook walks the operator through every step required to distribute the
 Pulse iOS app via TestFlight. It is written for someone who has never shipped
