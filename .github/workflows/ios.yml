@@ -155,9 +155,19 @@ jobs:
             -project Pulse.xcodeproj \
             -scheme Pulse
 
-      # Build for iOS Simulator with code signing disabled.
-      # Destination is spelled out so missing simulator fails LOUD (see comments above).
-      # The -quiet flag is NOT used here — on failure we need the full log.
+      # Build for iOS Simulator, AD-HOC SIGNED.
+      #
+      # ⚠ Do not "simplify" this back to CODE_SIGNING_ALLOWED=NO. That is the
+      # obvious setting for a CI simulator build and it silently breaks the
+      # Keychain: an unsigned app has no keychain access group, so every
+      # SecItem call returns -34018 (errSecMissingEntitlement) and all twelve
+      # KeychainServiceTests fail with an error that says nothing about signing.
+      # It cost a CI round-trip to find. An iOS SIMULATOR build needs no team and
+      # no provisioning profile — the ad-hoc identity "-" is enough, and it is
+      # what gives the app its default keychain access group.
+      #
+      # Destination is spelled out so a missing simulator fails LOUD.
+      # -quiet is deliberately NOT used — on failure we need the whole log.
       - name: Build for iOS Simulator
         run: |
           cd ios
@@ -165,7 +175,7 @@ jobs:
             -project Pulse.xcodeproj \
             -scheme Pulse \
             -destination "platform=iOS Simulator,OS=26.2,name=iPhone 17 Pro" \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES
 
       # Run tests. The scheme's test action is configured in project.yml.
       # The test target is named PulseTests in project.yml (its SOURCES live in
@@ -173,6 +183,8 @@ jobs:
       # do not "correct" one to match the other). If no tests are
       # found, that is a BUG, not an expected state — the build must fail so
       # someone adds tests. Exit code 66 ("no tests found") is NOT swallowed.
+      # Ad-hoc signed for the same reason as the build step above — the Keychain
+      # tests are the ones that care, and they are the ones worth having.
       - name: Test (HARD)
         run: |
           cd ios
@@ -180,7 +192,7 @@ jobs:
             -project Pulse.xcodeproj \
             -scheme Pulse \
             -destination "platform=iOS Simulator,OS=26.2,name=iPhone 17 Pro" \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES
 
   # ── 3. ios-testflight ───────────────────────────────────────────────────────
   # Archives PulseApp and uploads to TestFlight.
