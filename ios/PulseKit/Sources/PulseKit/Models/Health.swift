@@ -1,0 +1,75 @@
+import Foundation
+
+// MARK: - HealthStatus
+
+/// Top-level health check response.
+/// Spec reference: lines 3063-3088 (`HealthStatus` schema).
+///
+/// This endpoint is UNAUTHENTICATED - it's the one call the app can make without
+/// a token to verify the server is reachable before prompting for credentials.
+public struct HealthStatus: Decodable, Sendable, Equatable {
+    /// Aggregate status.
+    public let status: HealthState
+
+    /// True when PULSE_AMS_URL was set via environment (vs. ams_sources table).
+    /// The UI uses this to skip the onboarding wizard for env-configured deployments.
+    public let amsEnvConfigured: Bool?
+
+    /// Per-component health breakdown.
+    public let components: HealthComponents
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case amsEnvConfigured = "ams_env_configured"
+        case components
+    }
+}
+
+// MARK: - HealthState
+
+/// Health status enum.
+/// Spec reference: line 3069.
+public enum HealthState: String, Decodable, Sendable, Equatable, Hashable {
+    case ok
+    case degraded
+    case down
+}
+
+// MARK: - HealthComponents
+
+/// Health status for individual Pulse components.
+/// Spec reference: lines 3077-3088.
+public struct HealthComponents: Decodable, Sendable, Equatable {
+    public let clickhouse: ComponentStatus
+    public let metaStore: ComponentStatus
+    public let collector: ComponentStatus
+    public let kafka: ComponentStatus?
+
+    enum CodingKeys: String, CodingKey {
+        case clickhouse
+        case metaStore = "meta_store"
+        case collector
+        case kafka
+    }
+}
+
+// MARK: - ComponentStatus
+
+/// Health status for a single component.
+/// Spec reference: lines 3090-3101 (`ComponentStatus` schema).
+public struct ComponentStatus: Decodable, Sendable, Equatable, Hashable {
+    /// Status.
+    public let status: HealthState
+
+    /// Latency in milliseconds; nil if not measured or component is down.
+    public let latencyMs: Int?
+
+    /// Human-readable message (e.g., error detail); nil when healthy.
+    public let message: String?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case latencyMs = "latency_ms"
+        case message
+    }
+}

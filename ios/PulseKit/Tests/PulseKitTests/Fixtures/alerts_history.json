@@ -1,0 +1,46 @@
+{
+  "items": [
+    {
+      "id": "alert-001",
+      "rule_id": "rule-rebuffer",
+      "state": "firing",
+      "severity": "critical",
+      "ts": 1700000000000,
+      "metric": "rebuffer_ratio",
+      "value": 0.15,
+      "threshold": 0.1,
+      "scope": {
+        "node_id": "node-1",
+        "app": "live",
+        "stream_id": "stream-001",
+        "tenant": "acme"
+      },
+      "cooldown_until": 1700000300000,
+      "group_key": "stream-001"
+    },
+    {
+      "id": "alert-002",
+      "rule_id": "rule-viewers",
+      "state": "resolved",
+      "severity": "warning",
+      "ts": 1699996400000,
+      "metric": "viewer_count",
+      "value": 0.0,
+      "threshold": 10.0
+    },
+    {
+      "id": "alert-003",
+      "rule_id": "rule-delivery",
+      "state": "delivery_failure",
+      "severity": "info",
+      "ts": 1699990000000,
+      "metric": "error_rate",
+      "value": 0.02,
+      "threshold": 0.01
+    }
+  ],
+  "meta": {
+    "next_cursor": null,
+    "total": 3
+  }
+}

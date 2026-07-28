@@ -1,0 +1,13 @@
+{
+  "tier": "business",
+  "valid": true,
+  "limits": {
+    "max_streams": 1000,
+    "max_nodes": 5,
+    "retention_days": 395,
+    "data_api": true,
+    "white_label": false
+  },
+  "expires_at": 1735689600000,
+  "offline_file": false
+}
