@@ -1,0 +1,50 @@
+# Throwaway capability probe (S118). Answers, with evidence rather than assumption:
+#   1. can this repository run a GitHub-hosted macOS runner at all?
+#   2. which Xcode versions and iOS simulator runtimes exist on macos-15?
+#   3. is xcodegen installable via Homebrew, and how long does it take?
+#   4. does a Swift 6 SwiftPM package build for an iOS Simulator destination?
+# Deleted once its answers are recorded.
+name: macos-probe
+
+on:
+  push:
+    branches: [ci/macos-probe]
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Runner identity
+        run: |
+          sw_vers
+          uname -m
+          echo "--- available Xcodes ---"
+          ls /Applications | grep -i xcode || true
+
+      - name: Default Xcode + SDKs
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks || true
+          swift --version
+
+      - name: Installed simulator runtimes and devices
+        run: |
+          xcrun simctl list runtimes
+          echo "--- iPhone devices ---"
+          xcrun simctl list devices available | sed -n '1,120p'
+
+      - name: Homebrew xcodegen
+        run: |
+          set -x
+          time brew install xcodegen
+          xcodegen --version
+
+      - name: Build the existing beacon SDK for an iOS Simulator destination
+        run: |
+          cd sdk/beacon-swift
+          xcodebuild -scheme PulseBeacon -destination 'generic/platform=iOS Simulator' \
+            -skipPackagePluginValidation CODE_SIGNING_ALLOWED=NO build 2>&1 | tail -40
