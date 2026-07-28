@@ -184,6 +184,14 @@ targets:
       base:
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
+        # The test BUNDLE needs its own Info.plist, and unlike the app target it
+        # has no hand-written one — so let Xcode synthesise it. This is only
+        # required because CI ad-hoc signs the simulator build (it must, or the
+        # Keychain tests get -34018), and signing a bundle with no Info.plist
+        # fails with "Cannot code sign because the target does not have an
+        # Info.plist file". With signing off the whole question never arises,
+        # which is why this was not needed until the Keychain tests were fixed.
+        GENERATE_INFOPLIST_FILE: YES
         # Test host is the Pulse app.
         # XcodeGen doc anchor: "Test Target Settings" in ProjectSpec.md.
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Pulse.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Pulse"
