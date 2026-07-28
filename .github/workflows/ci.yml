@@ -476,13 +476,24 @@ jobs:
       - name: Install shellcheck
         run: sudo apt-get install -y --no-install-recommends shellcheck
 
-      - name: Shellcheck deploy scripts
+      # ⚠ THIS LIST IS THE GUARD'S SCOPE, AND A NAMED LIST STOPS COVERING WHATEVER
+      # IS ADDED NEXT. D-187 found website/tests/run-checks.sh — a 780-line script
+      # that gates the public website — had been in the repo unguarded since the
+      # session that wrote it. Adding a shell script to this repository means
+      # adding it here in the same change.
+      #
+      # Not covered, deliberately: scripts under deploy/quickstart/ other than
+      # install.sh (generated fixtures), and anything under brandkit/ (frozen
+      # third-party export).
+      - name: Shellcheck deploy and tooling scripts
         run: |
           shellcheck \
             deploy/quickstart/install.sh \
             deploy/scripts/pulse-backup.sh \
             deploy/nginx/deployment.sh \
-            .github/check-doc-stamps.sh
+            .github/check-doc-stamps.sh \
+            website/tests/run-checks.sh \
+            website/tools/generate-og-image.sh
 
   # ── 11. Doc "Last updated" stamp guard ───────────────────────────────────────
   # Stamp drift is this repo's most-repeated defect class — external review

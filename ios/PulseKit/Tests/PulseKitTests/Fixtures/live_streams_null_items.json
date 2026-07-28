@@ -1,0 +1,7 @@
+{
+  "_comment": "Regression fixture: exact wire capture from Pulse server build 2026-07-13. The server returned items:null instead of items:[]. Fix landed 2026-07-18; older deployments exhibit this.",
+  "items": null,
+  "meta": {
+    "next_cursor": null
+  }
+}

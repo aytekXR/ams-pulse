@@ -266,6 +266,49 @@
   </div>
 </section>
 
+<!-- Simulator Path (Mac only) -->
+<section class="section section-alt">
+  <div class="container">
+    <div class="section-header">
+      <p class="label">Have a Mac?</p>
+      <h2>Run in the iOS Simulator</h2>
+    </div>
+    <p class="text-secondary max-w-prose">
+      If you have a Mac with Xcode installed, you can run the app in the iOS Simulator
+      today — no Apple Developer account, no TestFlight invitation required.
+    </p>
+    <p class="text-secondary max-w-prose mt-4" style="font-weight:600;">
+      This does NOT work on a physical iPhone. Most testers do not have a Mac;
+      this is a fallback for developers and reviewers, not a replacement for TestFlight.
+    </p>
+    <div class="grid grid-auto-steps" style="margin-top:var(--space-5);">
+      <div class="card-step">
+        <h3>1. Download the simulator build</h3>
+        <p class="text-secondary mb-0">
+          Go to the <a href="https://github.com/aytekXR/ams-pulse/actions/workflows/ios.yml">ios workflow</a>
+          in GitHub Actions. Find a recent successful run on the <code>main</code> branch,
+          scroll to <strong>Artifacts</strong>, and download <strong>Pulse-Simulator.zip</strong>.
+        </p>
+      </div>
+      <div class="card-step">
+        <h3>2. Unzip and install</h3>
+        <p class="text-secondary mb-0">
+          Unzip the download. Open Simulator (Xcode &rarr; Open Developer Tool &rarr; Simulator).
+          Drag <code>Pulse.app</code> onto the Simulator window, or run:
+          <code style="display:block;margin-top:var(--space-2);">xcrun simctl install booted Pulse.app</code>
+        </p>
+      </div>
+      <div class="card-step">
+        <h3>3. Launch and connect</h3>
+        <p class="text-secondary mb-0">
+          Tap the Pulse icon in the Simulator. Enter your server URL and API token
+          to connect to your Pulse deployment.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- Feedback -->
 <section class="section section-alt">
   <div class="container">

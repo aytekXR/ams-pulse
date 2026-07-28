@@ -8,11 +8,18 @@ import Foundation
 /// Answers from hourly/daily rollups. Sliceable by region, device, stream.
 public struct QoeSummaryResponse: Decodable, Sendable, Equatable {
     public let totals: QoeTotals
+    /// Bitrate timeline buckets. Decodes as empty array if null or missing (older server compat).
     public let bitrateTimeline: [BitrateBucket]
 
     enum CodingKeys: String, CodingKey {
         case totals
         case bitrateTimeline = "bitrate_timeline"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        totals = try container.decode(QoeTotals.self, forKey: .totals)
+        bitrateTimeline = try container.decodeArrayOrEmpty([BitrateBucket].self, forKey: .bitrateTimeline)
     }
 }
 

@@ -30,11 +30,36 @@ public struct LicenseInfo: Decodable, Sendable, Equatable {
 
 /// License tier.
 /// Spec reference: line 3236.
-public enum LicenseTier: String, Decodable, Sendable, Equatable, Hashable {
+///
+/// ## Unknown Value Handling
+/// If the server sends an unrecognized tier (e.g., "platinum" added in a future version),
+/// it decodes to `.unknown(rawValue)`. See `NodeRole` in Live.swift for the trade-off discussion.
+public enum LicenseTier: ResilientRawRepresentable {
     case free
     case pro
     case business
     case enterprise
+    case unknown(String)
+
+    public var rawValue: String {
+        switch self {
+        case .free: return "free"
+        case .pro: return "pro"
+        case .business: return "business"
+        case .enterprise: return "enterprise"
+        case .unknown(let v): return v
+        }
+    }
+
+    public init(rawValue: String) {
+        switch rawValue {
+        case "free": self = .free
+        case "pro": self = .pro
+        case "business": self = .business
+        case "enterprise": self = .enterprise
+        default: self = .unknown(rawValue)
+        }
+    }
 }
 
 // MARK: - TierLimits

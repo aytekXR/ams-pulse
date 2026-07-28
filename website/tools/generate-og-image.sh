@@ -46,7 +46,11 @@ fi
 
 # Create a temporary Node.js script in the web directory to access its node_modules
 TEMP_SCRIPT="$WEB_DIR/_og-generator.mjs"
-trap "rm -f '$TEMP_SCRIPT'" EXIT
+# Single quotes: $TEMP_SCRIPT must expand when the trap FIRES, not when it is
+# installed. With double quotes the path is baked in at install time, which is
+# usually the same string — until someone moves the assignment below the trap.
+# shellcheck disable=SC2064  # intentional: see above, the value is already final
+trap 'rm -f "$TEMP_SCRIPT"' EXIT
 
 cat > "$TEMP_SCRIPT" << PLAYWRIGHT_SCRIPT
 import { chromium } from '@playwright/test';

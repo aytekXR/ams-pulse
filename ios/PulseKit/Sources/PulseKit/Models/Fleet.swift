@@ -5,8 +5,20 @@ import Foundation
 /// Paginated list of cluster nodes.
 /// Spec reference: lines 2707-2716 (`FleetNodeList` schema).
 public struct FleetNodeList: Decodable, Sendable, Equatable {
+    /// Fleet nodes. Decodes as empty array if null or missing (older server compat).
     public let items: [FleetNode]
     public let meta: PaginatedMeta
+
+    enum CodingKeys: String, CodingKey {
+        case items
+        case meta
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        items = try container.decodeArrayOrEmpty([FleetNode].self, forKey: .items)
+        meta = try container.decode(PaginatedMeta.self, forKey: .meta)
+    }
 }
 
 // MARK: - FleetNode

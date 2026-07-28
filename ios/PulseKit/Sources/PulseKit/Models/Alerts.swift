@@ -5,8 +5,20 @@ import Foundation
 /// Paginated list of alert firing history.
 /// Spec reference: lines 2542-2551 (`AlertHistoryList` schema).
 public struct AlertHistoryList: Decodable, Sendable, Equatable {
+    /// Alert entries. Decodes as empty array if null or missing (older server compat).
     public let items: [AlertHistoryEntry]
     public let meta: PaginatedMeta
+
+    enum CodingKeys: String, CodingKey {
+        case items
+        case meta
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        items = try container.decodeArrayOrEmpty([AlertHistoryEntry].self, forKey: .items)
+        meta = try container.decode(PaginatedMeta.self, forKey: .meta)
+    }
 }
 
 // MARK: - AlertHistoryEntry
@@ -50,20 +62,66 @@ public struct AlertHistoryEntry: Decodable, Sendable, Equatable, Hashable, Ident
 
 /// Alert firing state.
 /// Spec reference: line 2563.
-public enum AlertState: String, Decodable, Sendable, Equatable, Hashable {
+///
+/// ## Unknown Value Handling
+/// If the server sends an unrecognized state (e.g., "acknowledged" added in a future version),
+/// it decodes to `.unknown(rawValue)`. See `NodeRole` in Live.swift for the trade-off discussion.
+public enum AlertState: ResilientRawRepresentable {
     case firing
     case resolved
-    case deliveryFailure = "delivery_failure"
+    case deliveryFailure
+    case unknown(String)
+
+    public var rawValue: String {
+        switch self {
+        case .firing: return "firing"
+        case .resolved: return "resolved"
+        case .deliveryFailure: return "delivery_failure"
+        case .unknown(let v): return v
+        }
+    }
+
+    public init(rawValue: String) {
+        switch rawValue {
+        case "firing": self = .firing
+        case "resolved": self = .resolved
+        case "delivery_failure": self = .deliveryFailure
+        default: self = .unknown(rawValue)
+        }
+    }
 }
 
 // MARK: - AlertSeverity
 
 /// Alert severity level.
 /// Spec reference: line 2566.
-public enum AlertSeverity: String, Decodable, Sendable, Equatable, Hashable {
+///
+/// ## Unknown Value Handling
+/// If the server sends an unrecognized severity, it decodes to `.unknown(rawValue)`.
+/// See `NodeRole` in Live.swift for the trade-off discussion.
+public enum AlertSeverity: ResilientRawRepresentable {
     case info
     case warning
     case critical
+    case unknown(String)
+
+    public var rawValue: String {
+        switch self {
+        case .info: return "info"
+        case .warning: return "warning"
+        case .critical: return "critical"
+        case .unknown(let v): return v
+        }
+    }
+
+    public init(rawValue: String) {
+        switch rawValue {
+        case "info": self = .info
+        case "warning": self = .warning
+        case "critical": self = .critical
+        default: self = .unknown(rawValue)
+        }
+    }
 }
 
 // MARK: - AlertScope
