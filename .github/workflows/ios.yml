@@ -208,7 +208,23 @@ jobs:
   # SECRETS REQUIRED (must be configured in GitHub → Settings → Secrets):
   #   - APP_STORE_CONNECT_ISSUER_ID: The Issuer ID (UUID) from App Store Connect.
   #   - APP_STORE_CONNECT_KEY_ID: The Key ID (10 alphanumeric characters).
-  #   - APP_STORE_CONNECT_PRIVATE_KEY: The .p8 file contents, base64-encoded.
+  #   - APP_STORE_CONNECT_PRIVATE_KEY: The .p8 file contents VERBATIM — the whole
+  #     file, including the BEGIN PRIVATE KEY and END PRIVATE KEY lines. NOT
+  #     base64-wrapped.
+  #
+  #     ⚠ This encoding is not a free choice. The upload action below takes the
+  #     key as a PKCS8 STRING and there is no decode step in front of it, so the
+  #     secret has to be usable as-is. It was previously documented as
+  #     base64-encoded while ALSO being handed to that action raw — the two uses
+  #     disagreed, and the failure would have landed on the operator's very first
+  #     upload attempt with an opaque parse error.
+  #
+  #   - APPLE_TEAM_ID (optional): the 10-character Team ID. Passed to xcodebuild as
+  #     DEVELOPMENT_TEAM when present. Automatic signing can usually infer the team
+  #     from the API key when the key belongs to exactly one team; if it cannot,
+  #     the archive fails with "Signing for Pulse requires a development team" and
+  #     this secret is the fix. UNVERIFIED either way — nobody here has an Apple
+  #     account to test it against.
   #
   # If secrets are missing, the job SKIPS with a loud notice — it never fails
   # silently and never succeeds silently. This allows CI to run without an Apple
@@ -320,7 +336,16 @@ jobs:
           ASC_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
-          echo "$ASC_PRIVATE_KEY" | base64 -d > ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          KEYFILE=~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          printf '%s\n' "$ASC_PRIVATE_KEY" > "$KEYFILE"
+          chmod 600 "$KEYFILE"
+          # Fail here, with a sentence that says what to do, rather than 200 lines
+          # later inside xcodebuild's signing machinery.
+          if ! grep -q "BEGIN PRIVATE KEY" "$KEYFILE"; then
+            echo "::error::APP_STORE_CONNECT_PRIVATE_KEY does not look like a .p8 key." \
+                 "Store the file contents VERBATIM, including the BEGIN/END lines — not base64."
+            exit 1
+          fi
           echo "Installed API key AuthKey_${ASC_KEY_ID}.p8"
 
       # Archive for App Store distribution with automatic signing.
@@ -331,8 +356,20 @@ jobs:
         env:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           cd ios
+          # DEVELOPMENT_TEAM only when the operator supplied one. Passing an EMPTY
+          # value is not the same as passing nothing: it pins the setting to blank
+          # and defeats the inference that -allowProvisioningUpdates would
+          # otherwise do from the API key's own team.
+          TEAM_ARG=()
+          if [ -n "${APPLE_TEAM_ID:-}" ]; then
+            TEAM_ARG=(DEVELOPMENT_TEAM="${APPLE_TEAM_ID}")
+            echo "Signing with team ${APPLE_TEAM_ID}"
+          else
+            echo "::notice::APPLE_TEAM_ID not set — relying on the API key's team. If this step fails with 'requires a development team', set that secret."
+          fi
           xcodebuild archive \
             -project Pulse.xcodeproj \
             -scheme Pulse \
@@ -343,7 +380,8 @@ jobs:
             -authenticationKeyID "${ASC_KEY_ID}" \
             -authenticationKeyIssuerID "${ASC_ISSUER_ID}" \
             MARKETING_VERSION="${{ steps.version.outputs.MARKETING_VERSION }}" \
-            CURRENT_PROJECT_VERSION="${{ steps.version.outputs.BUILD_NUMBER }}"
+            CURRENT_PROJECT_VERSION="${{ steps.version.outputs.BUILD_NUMBER }}" \
+            "${TEAM_ARG[@]}"
           echo "Archive created at $RUNNER_TEMP/Pulse.xcarchive"
 
       # Export the archive as an App Store IPA.
@@ -384,14 +422,41 @@ jobs:
       # This action uses the App Store Connect API directly (appstore-api backend).
       # Verified 2026-07-28: Apple-Actions/upload-testflight-build is actively
       # maintained and the appstore-api backend is recommended for .ipa uploads.
+      # The exported filename follows PRODUCT_NAME, so it should be Pulse.ipa —
+      # but "should be" is how a job fails at the last step of a ten-minute run.
+      # Resolve it, assert exactly one, and hand the real path onward.
+      - name: Locate the exported IPA
+        id: ipa
+        if: steps.creds.outputs.available == 'true'
+        run: |
+          COUNT=$(find "$RUNNER_TEMP/Export" -maxdepth 1 -name '*.ipa' | wc -l | tr -d ' ')
+          if [ "$COUNT" != "1" ]; then
+            echo "::error::expected exactly one .ipa in $RUNNER_TEMP/Export, found $COUNT"
+            ls -la "$RUNNER_TEMP/Export" || true
+            exit 1
+          fi
+          IPA=$(find "$RUNNER_TEMP/Export" -maxdepth 1 -name '*.ipa')
+          echo "path=$IPA" >> "$GITHUB_OUTPUT"
+          echo "Uploading $IPA"
+
+      # ⚠ The version pin here is load-bearing. This was written as @v3, which
+      # does NOT EXIST — the action publishes v4 and v5 only, so the job would
+      # have died at "Unable to resolve action". The claim that the action was
+      # "verified 2026-07-28" was true of the ACTION and false of the VERSION.
+      # Re-check the tag list before bumping: gh api repos/Apple-Actions/upload-testflight-build/tags
       - name: Upload to TestFlight
         if: steps.creds.outputs.available == 'true'
-        uses: Apple-Actions/upload-testflight-build@v3
+        uses: Apple-Actions/upload-testflight-build@v5.2.1
         with:
-          app-path: "${{ runner.temp }}/Export/Pulse.ipa"
+          app-path: ${{ steps.ipa.outputs.path }}
+          app-type: ios
           issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          # Matches ITSAppUsesNonExemptEncryption=false in Info.plist. Declaring it
+          # here too stops TestFlight parking the build on "Missing Compliance",
+          # which blocks testers from installing it until someone clicks through.
+          uses-non-exempt-encryption: "false"
 
       # Print where the operator should look for the build.
       - name: Print TestFlight location
