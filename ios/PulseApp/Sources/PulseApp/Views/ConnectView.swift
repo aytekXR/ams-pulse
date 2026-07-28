@@ -88,14 +88,23 @@ struct ConnectView: View {
                     .foregroundColor(BrandColors.textSecondary)
                     .textCase(.uppercase)
 
-                TextField("https://pulse.example.com", text: $serverURL)
+                // ⚠ Text(verbatim:) is doing real work here — do NOT simplify this
+                // back to TextField("https://pulse.example.com", text: $serverURL).
+                //
+                // That overload takes a LocalizedStringKey, which SwiftUI parses as
+                // MARKDOWN. A bare URL is a Markdown autolink, so the placeholder
+                // rendered as a blue tappable-looking link — reading like
+                // already-entered text sitting above a disabled Connect button, on
+                // the first screen any tester will ever see. The sibling "Bearer
+                // token" placeholder below looked fine for the only reason that it
+                // is not a URL.
+                //
+                // Worth recording how this was found, because the first fix was
+                // wrong: adding .foregroundColor() changed nothing, since that
+                // styles ENTERED text and never the placeholder. Only re-reading
+                // the screenshot after the failed fix produced the real cause.
+                TextField("", text: $serverURL, prompt: Text(verbatim: "https://pulse.example.com"))
                     .textFieldStyle(.plain)
-                    // Without an explicit foreground colour this field renders its
-                    // placeholder in the system tint — it came out iOS blue in the
-                    // launch screenshot, reading like already-entered text next to a
-                    // disabled Connect button, on the first screen any tester sees.
-                    // The API-token field below always had this line; this one did
-                    // not, and nothing but a screenshot could tell us.
                     .foregroundColor(BrandColors.textPrimary)
                     .padding(16)
                     .background(BrandColors.surface)
