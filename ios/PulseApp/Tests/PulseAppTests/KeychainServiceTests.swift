@@ -1,5 +1,5 @@
 import XCTest
-@testable import PulseApp
+@testable import Pulse
 
 // MARK: - Keychain Service Tests
 //

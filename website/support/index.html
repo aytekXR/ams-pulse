@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Support - Pulse for Ant Media Server</title>
+  <meta name="description" content="Get help with Pulse: GitHub Issues for bugs and questions, security contact, documentation links, and what to include in a report.">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Support - Pulse for Ant Media Server">
+  <meta property="og:description" content="Get help with Pulse: GitHub Issues, security contact, documentation links.">
+  <meta property="og:image" content="../assets/og-image.png">
+  <meta property="og:url" content="https://pulse.beyondkaira.com/support/">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Support - Pulse for Ant Media Server">
+  <meta name="twitter:description" content="Get help with Pulse: GitHub Issues, security contact, documentation links.">
+  <meta name="twitter:image" content="../assets/og-image.png">
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../assets/favicon-16.png">
+
+  <link rel="stylesheet" href="../assets/pulse.css">
+</head>
+<body>
+  <a href="#main" class="sr-only">Skip to main content</a>
+
+  <!-- NAV -->
+  <nav class="nav" aria-label="Main navigation">
+    <div class="container nav-inner">
+      <a href="../" class="nav-brand" aria-label="Pulse home">
+        <img src="../assets/pulse-mark.svg" alt="" width="32" height="32">
+        <span class="nav-brand-name">pulse</span>
+        <span class="nav-brand-sub">for Ant Media Server</span>
+      </a>
+      <div class="nav-links">
+        <a href="../#features">Features</a>
+        <a href="../#tiers">Tiers</a>
+        <a href="../#faq">FAQ</a>
+        <a href="../beta/" class="btn btn-sm btn-secondary">iOS Beta</a>
+        <a href="https://github.com/aytekXR/ams-pulse" class="btn btn-sm btn-primary">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main" tabindex="-1">
+    <!-- SUPPORT HEADER -->
+    <header class="hero" style="padding-bottom:var(--space-8);">
+      <div class="container hero-content" style="padding-top:var(--space-8);">
+        <h1 class="hero-title" style="font-size:var(--type-display-size);">Support</h1>
+        <p class="hero-subtitle max-w-prose" style="margin-left:auto;margin-right:auto;">
+          Pulse is maintained by a single developer. Response times are honest, not aspirational.
+        </p>
+      </div>
+    </header>
+
+    <!-- GETTING HELP -->
+    <section class="section">
+      <div class="container" style="max-width:860px;">
+        <div class="section-header">
+          <p class="label text-signal">GETTING HELP</p>
+          <h2>Where to ask</h2>
+        </div>
+
+        <div class="card mb-6">
+          <h3 class="mb-3">GitHub Issues</h3>
+          <p class="text-secondary mb-4">
+            The primary support channel for bugs, questions, and feature requests.
+          </p>
+          <p class="mb-4">
+            <a href="https://github.com/aytekXR/ams-pulse/issues" class="btn btn-primary">
+              Open an Issue
+            </a>
+          </p>
+          <p class="text-secondary mb-0">
+            Before opening a new issue, search existing issues to see if your question
+            has already been answered.
+          </p>
+        </div>
+
+        <div class="card mb-6">
+          <h3 class="mb-3">Response expectations</h3>
+          <p class="text-secondary mb-0">
+            This is a single-maintainer project. Issues are triaged regularly, but response
+            times vary. Critical bugs and security issues receive priority. Feature requests
+            are tracked but may take time to implement. Thank you for your patience.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- WHAT TO INCLUDE -->
+    <section class="section section-alt">
+      <div class="container" style="max-width:860px;">
+        <div class="section-header">
+          <p class="label text-signal">BUG REPORTS</p>
+          <h2>What to include</h2>
+        </div>
+        <p class="text-secondary mb-6">
+          A good bug report helps resolve issues faster. Please include:
+        </p>
+        <div class="grid grid-auto-steps">
+          <div class="card-step">
+            <h3 class="mb-3">Pulse version</h3>
+            <p class="text-secondary mb-0">
+              The version number from the UI footer or
+              <code>pulse version</code> output.
+            </p>
+          </div>
+          <div class="card-step">
+            <h3 class="mb-3">AMS version</h3>
+            <p class="text-secondary mb-0">
+              Your Ant Media Server version (e.g., 3.0.3 Enterprise).
+            </p>
+          </div>
+          <div class="card-step">
+            <h3 class="mb-3">Steps to reproduce</h3>
+            <p class="text-secondary mb-0">
+              What you did, what you expected, what actually happened.
+            </p>
+          </div>
+          <div class="card-step">
+            <h3 class="mb-3">Logs</h3>
+            <p class="text-secondary mb-0">
+              Relevant output from <code>docker compose logs pulse</code>
+              or the binary stderr.
+            </p>
+          </div>
+          <div class="card-step">
+            <h3 class="mb-3">Environment</h3>
+            <p class="text-secondary mb-0">
+              Docker Compose or Helm, host OS, and any relevant config
+              (sanitize secrets).
+            </p>
+          </div>
+          <div class="card-step">
+            <h3 class="mb-3">Health check</h3>
+            <p class="text-secondary mb-0">
+              Output of <code>curl http://localhost:8090/healthz</code>.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECURITY CONTACT -->
+    <!-- Source: SECURITY.md - security contact must match exactly -->
+    <section class="section">
+      <div class="container" style="max-width:860px;">
+        <div class="section-header">
+          <p class="label text-signal">SECURITY</p>
+          <h2>Reporting vulnerabilities</h2>
+        </div>
+        <div class="card card-featured">
+          <p class="text-secondary mb-4">
+            Please report security vulnerabilities by email. Do not open a public
+            GitHub issue for security vulnerabilities.
+          </p>
+          <!-- Source: SECURITY.md line 5: "aytek@beyondkaira.com" -->
+          <p class="mb-4">
+            <strong>Email:</strong>
+            <a href="mailto:aytek@beyondkaira.com">aytek@beyondkaira.com</a>
+          </p>
+          <p class="text-secondary mb-0">
+            Include a description of the issue, reproduction steps, and potential impact.
+            You will receive a response within 5 business days.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- DOCUMENTATION -->
+    <section class="section section-alt">
+      <div class="container" style="max-width:860px;">
+        <div class="section-header">
+          <p class="label text-signal">DOCUMENTATION</p>
+          <h2>Self-service resources</h2>
+        </div>
+        <p class="text-secondary mb-6">
+          Most questions are answered in the documentation. Start here before opening an issue.
+        </p>
+        <div class="grid grid-auto">
+          <div class="card">
+            <h3 class="mb-3">Install guide</h3>
+            <p class="text-secondary mb-4">
+              Docker Compose, Helm, and binary installation paths.
+            </p>
+            <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/runbooks/install.md">
+              docs/runbooks/install.md
+            </a>
+          </div>
+          <div class="card">
+            <h3 class="mb-3">FAQ</h3>
+            <p class="text-secondary mb-4">
+              Common questions about installation, licensing, privacy, and features.
+            </p>
+            <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/faq.md">
+              docs/faq.md
+            </a>
+          </div>
+          <div class="card">
+            <h3 class="mb-3">Troubleshooting</h3>
+            <p class="text-secondary mb-4">
+              Symptom to cause to fix index for common issues.
+            </p>
+            <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/troubleshooting.md">
+              docs/troubleshooting.md
+            </a>
+          </div>
+          <div class="card">
+            <h3 class="mb-3">Known limitations</h3>
+            <p class="text-secondary mb-4">
+              Current constraints, workarounds, and roadmap status.
+            </p>
+            <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/known-limitations.md">
+              docs/known-limitations.md
+            </a>
+          </div>
+          <div class="card">
+            <h3 class="mb-3">Architecture overview</h3>
+            <p class="text-secondary mb-4">
+              How Pulse works, deployment topology, and data flow.
+            </p>
+            <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/overview.md">
+              docs/overview.md
+            </a>
+          </div>
+          <div class="card">
+            <h3 class="mb-3">API guide</h3>
+            <p class="text-secondary mb-4">
+              REST and WebSocket API reference, authentication, rate limits.
+            </p>
+            <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/api-guide.md">
+              docs/api-guide.md
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- iOS BETA SUPPORT -->
+    <section class="section">
+      <div class="container" style="max-width:860px;">
+        <div class="section-header">
+          <p class="label text-signal">iOS BETA</p>
+          <h2>TestFlight feedback</h2>
+        </div>
+        <div class="card">
+          <p class="text-secondary mb-4">
+            If you are using the iOS beta via TestFlight, you can submit feedback
+            directly through the TestFlight app or by opening a GitHub issue with
+            the <code>ios</code> label.
+          </p>
+          <p class="mb-0">
+            <a href="../beta/">Join the iOS beta</a>
+          </p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="../assets/pulse-mark.svg" alt="" width="28" height="28">
+        <span class="footer-brand-name">pulse</span>
+        <span class="footer-brand-sub">Real-time analytics for Ant Media Server</span>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/aytekXR/ams-pulse">GitHub</a>
+        <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/overview.md">Docs</a>
+        <a href="../beta/">iOS Beta</a>
+        <a href="../">Home</a>
+      </div>
+      <p class="footer-legal">PolyForm Noncommercial 1.0.0 (server) / MIT (beacon SDK)</p>
+    </div>
+  </footer>
+</body>
+</html>

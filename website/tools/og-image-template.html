@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1200, height=630">
+  <title>Pulse OG Image Template</title>
+  <style>
+    /* Design values from brandkit/design-system/tokens.json */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 1200px;
+      height: 630px;
+      overflow: hidden;
+    }
+
+    body {
+      /* tokens.json color.dark.bg */
+      background: #0A0E14;
+      font-family: 'IBM Plex Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 64px;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    .logo-container {
+      margin-bottom: 40px;
+    }
+
+    /* Inline SVG logo - pulse mark from brandkit */
+    .logo-svg {
+      width: 120px;
+      height: 120px;
+    }
+
+    .product-name {
+      /* tokens.json color.dark.textPrimary */
+      color: #E8EEF4;
+      /* tokens.json type.display */
+      font-size: 72px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      margin-bottom: 24px;
+    }
+
+    .tagline {
+      /* tokens.json color.dark.textSecondary */
+      color: #9FB0C0;
+      /* Scaled up for OG image legibility */
+      font-size: 32px;
+      font-weight: 400;
+      line-height: 1.4;
+      max-width: 900px;
+    }
+
+    .brand-line {
+      /* tokens.json color.dark.signal */
+      color: #2CE5A7;
+      font-size: 20px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-top: 48px;
+    }
+
+    /* Bottom decorative line using signal color */
+    .accent-line {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 8px;
+      /* tokens.json color.dark.signal */
+      background: #2CE5A7;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo-container">
+      <!-- Inline SVG from brandkit/logo/pulse-mark.svg - no external assets -->
+      <svg class="logo-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+        <rect x="0" y="0" width="64" height="64" rx="16" fill="#0A0E14"></rect>
+        <path d="M12 32 H22 L27 18 L36 46 L41 32 H52" fill="none" stroke="#2CE5A7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+    </div>
+
+    <h1 class="product-name">Pulse</h1>
+
+    <p class="tagline">Real-time analytics, alerting, and viewer QoE for Ant Media Server</p>
+
+    <p class="brand-line">Self-hosted. Data never leaves.</p>
+  </div>
+
+  <div class="accent-line"></div>
+</body>
+</html>

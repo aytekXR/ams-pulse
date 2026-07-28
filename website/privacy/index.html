@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy | Pulse for Ant Media Server</title>
+  <meta name="description" content="Privacy policy for Pulse, self-hosted analytics for Ant Media Server.">
+  <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="../assets/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="../assets/favicon-16.png" sizes="16x16" type="image/png">
+  <link rel="stylesheet" href="../assets/pulse.css">
+</head>
+<body>
+
+<!--
+  OPERATOR REVIEW REQUIRED: This is a legal document published under your
+  organization's name. Review all statements below for accuracy before
+  publishing. If your deployment differs from the defaults described here
+  (e.g., you add analytics, change data retention, or enable features not
+  covered), update this policy accordingly.
+-->
+
+<!-- Navigation -->
+<nav class="nav">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <div class="container nav-inner">
+    <a href="../" class="nav-brand">
+      <img src="../assets/pulse-mark.svg" alt="" width="32" height="32">
+      <span class="nav-brand-name">Pulse</span>
+    </a>
+    <div class="nav-links">
+      <a href="../beta/">Beta</a>
+      <a href="../terms/">Terms</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Content -->
+<main id="main-content" tabindex="-1" class="section" style="border-bottom:none;">
+  <div class="container max-w-prose">
+    <h1>Privacy Policy</h1>
+    <p class="text-secondary">Last updated: 2026-07-28</p>
+
+    <p>
+      Pulse is self-hosted software for monitoring Ant Media Server deployments.
+      This privacy policy explains what data Pulse collects, how it is stored,
+      and who controls it.
+    </p>
+
+    <h2>1. Self-hosted architecture</h2>
+    <p>
+      Pulse runs entirely on infrastructure you operate. The software does not
+      send data to Anthropic, Beyond Kaira, or any third party by design.
+      All monitoring data stays on your servers.
+    </p>
+    <p>
+      <strong>You are the data controller.</strong> If you operate a Pulse
+      deployment, you decide what data is collected, how long it is retained,
+      and who has access. This policy describes the software's default behavior;
+      your deployment may differ.
+    </p>
+
+    <h2>2. Data collected by the Pulse server</h2>
+    <p>
+      The Pulse server collects two categories of data from your Ant Media Server:
+    </p>
+
+    <h3>2.1 Stream and node metrics (via AMS REST API)</h3>
+    <p>
+      Pulse polls your Ant Media Server's REST API to collect operational metrics:
+    </p>
+    <ul>
+      <li>Stream identifiers, bitrate, viewer counts, protocol type</li>
+      <li>Node CPU, memory, and disk usage (cluster deployments)</li>
+      <li>Application names and stream names</li>
+      <li>VoD recording metadata (file size, duration)</li>
+    </ul>
+    <p>
+      This data describes your streaming infrastructure. It does not include
+      video content or personally identifying information about viewers.
+    </p>
+
+    <h3>2.2 Viewer quality-of-experience (via beacon SDK, optional)</h3>
+    <p>
+      If you embed the Pulse beacon SDK in your video player, the SDK sends
+      playback events to your Pulse server. These events include:
+    </p>
+    <ul>
+      <li>Session identifier (random UUID, not linked to user identity)</li>
+      <li>Stream identifier and application name</li>
+      <li>Playback events: startup time, rebuffering, bitrate changes, errors</li>
+      <li>Watch duration and heartbeat timestamps</li>
+      <li>Player type and SDK version</li>
+    </ul>
+    <p>
+      The beacon SDK does <em>not</em> collect:
+    </p>
+    <ul>
+      <li>Device identifiers, advertising IDs, or persistent tracking IDs</li>
+      <li>Names, email addresses, or other personal contact information</li>
+      <li>Precise geolocation (GPS coordinates)</li>
+      <li>Browsing history or third-party cookies</li>
+    </ul>
+    <p>
+      <strong>IP address and user agent:</strong> When the beacon sends events,
+      the Pulse server extracts the viewer's IP address (from the HTTP request)
+      and User-Agent header. If you configure a GeoIP database
+      (<code>PULSE_GEO_MMDB_PATH</code>), the server resolves the IP to a
+      country and region for geographic analytics. The raw IP address is not
+      stored in the default schema.
+    </p>
+
+    <h3>2.3 Retention</h3>
+    <p>
+      Data retention is configured by the operator. ClickHouse TTL policies
+      control how long metric rows are kept. The default configuration retains
+      raw events for 90 days and aggregated rollups longer. You can adjust
+      these settings in your deployment's ClickHouse schema.
+    </p>
+
+    <h2>3. The Pulse iOS app</h2>
+    <p>
+      The Pulse iOS app is a monitoring client that connects to your Pulse
+      server. The app itself does not collect or transmit data to any third
+      party.
+    </p>
+
+    <h3>3.1 What the app stores locally</h3>
+    <ul>
+      <li>
+        <strong>Server URL:</strong> The URL of your Pulse server, stored in
+        the iOS Keychain (encrypted at rest).
+      </li>
+      <li>
+        <strong>API token:</strong> Your bearer token for authenticating with
+        the Pulse API, stored in the iOS Keychain.
+      </li>
+    </ul>
+    <p>
+      The Keychain is the iOS-recommended location for credentials. Data stored
+      there is encrypted and excluded from unencrypted backups.
+    </p>
+
+    <h3>3.2 What the app transmits</h3>
+    <p>
+      The app communicates only with the Pulse server URL you configure. All
+      requests use HTTPS. The app does not contact any other server. There are
+      no analytics SDKs, advertising networks, or crash-reporting services
+      embedded in the app.
+    </p>
+
+    <h3>3.3 What the app does not collect</h3>
+    <p>
+      The Pulse iOS app does not collect:
+    </p>
+    <ul>
+      <li>Device identifiers (IDFA, IDFV)</li>
+      <li>Location data</li>
+      <li>Contacts, photos, or other personal data</li>
+      <li>Usage analytics or crash reports sent to the developer</li>
+    </ul>
+
+    <h2>4. This website</h2>
+    <p>
+      This website (the pages you are reading now) is static HTML. It does not:
+    </p>
+    <ul>
+      <li>Set cookies</li>
+      <li>Use JavaScript analytics (no Google Analytics, Plausible, or similar)</li>
+      <li>Load resources from third-party domains (no CDN fonts, no external scripts)</li>
+      <li>Collect form submissions (there are no forms)</li>
+    </ul>
+    <p>
+      The web server may log standard HTTP access logs (IP address, timestamp,
+      requested URL, user agent) for operational purposes. These logs are
+      controlled by whoever hosts the website.
+    </p>
+
+    <h2>5. TestFlight beta (Apple)</h2>
+    <p>
+      If you install the Pulse iOS app via TestFlight, Apple collects certain
+      data as part of its beta testing program. This collection is governed by
+      Apple's privacy policy, not ours.
+    </p>
+    <p>
+      According to Apple's TestFlight documentation:
+    </p>
+    <ul>
+      <li>
+        Apple collects crash logs and app usage data from beta testers.
+      </li>
+      <li>
+        Developers (us) can see crash reports and aggregate usage statistics
+        but cannot identify individual testers by name.
+      </li>
+      <li>
+        Testers can opt out of sharing crash data with developers in iOS
+        Settings.
+      </li>
+    </ul>
+    <p>
+      For details, see Apple's
+      <a href="https://www.apple.com/legal/privacy/">Privacy Policy</a> and
+      <a href="https://developer.apple.com/testflight/">TestFlight documentation</a>.
+    </p>
+
+    <h2>6. Third-party services</h2>
+    <p>
+      The Pulse software itself does not integrate with third-party services.
+      However:
+    </p>
+    <ul>
+      <li>
+        <strong>Your Pulse deployment</strong> may connect to external services
+        you configure (e.g., Kafka brokers, SMTP servers for alerts, OIDC
+        providers for authentication). Data shared with those services is
+        governed by their respective privacy policies.
+      </li>
+      <li>
+        <strong>GeoIP enrichment</strong> requires a MaxMind GeoLite2 database
+        file that you obtain separately. MaxMind's data license terms apply to
+        your use of that database.
+      </li>
+    </ul>
+
+    <h2>7. Your rights</h2>
+    <p>
+      Because Pulse is self-hosted, data subject requests (access, deletion,
+      correction) are handled by whoever operates the Pulse deployment.
+      If you are a viewer whose data was collected by a Pulse deployment,
+      contact the organization that operates that deployment.
+    </p>
+    <p>
+      If you operate a Pulse deployment and need to respond to data subject
+      requests, you can query and delete data directly in ClickHouse.
+    </p>
+
+    <h2>8. Changes to this policy</h2>
+    <p>
+      This policy may be updated as the software evolves. The "Last updated"
+      date at the top reflects the most recent revision.
+    </p>
+
+    <h2>9. Contact</h2>
+    <p>
+      For questions about this privacy policy, contact:
+      <a href="mailto:aytek@beyondkaira.com">aytek@beyondkaira.com</a>
+    </p>
+
+  </div>
+</main>
+
+<!-- Footer -->
+<footer class="footer">
+  <div class="container footer-inner">
+    <div class="footer-brand">
+      <img src="../assets/pulse-mark.svg" alt="" width="28" height="28">
+      <span class="footer-brand-name">Pulse</span>
+      <span class="footer-brand-sub">for Ant Media Server</span>
+    </div>
+    <div class="footer-links">
+      <a href="../beta/">Beta</a>
+      <a href="../terms/">Terms</a>
+      <a href="https://github.com/aytekXR/ams-pulse">GitHub</a>
+    </div>
+    <p class="footer-legal">Last updated: 2026-07-28</p>
+  </div>
+</footer>
+
+</body>
+</html>

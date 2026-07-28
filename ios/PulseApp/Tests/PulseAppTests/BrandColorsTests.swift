@@ -1,6 +1,6 @@
 import XCTest
 import SwiftUI
-@testable import PulseApp
+@testable import Pulse
 
 // MARK: - Brand Colors Tests
 //

@@ -155,6 +155,16 @@ targets:
   #
   # The target name is "PulseTests" (not "PulseAppTests") to match the CI
   # workflow's -only-testing:PulseTests flag in .github/workflows/ios.yml.
+  #
+  # ⚠ THREE NAMES ARE IN PLAY HERE AND THEY ARE NOT THE SAME NAME:
+  #     directory     PulseApp/Tests/PulseAppTests   (where the files live)
+  #     test target   PulseTests                     (what CI runs)
+  #     MODULE        Pulse                          (what the tests import)
+  #   The app target is Pulse with PRODUCT_NAME Pulse, so its Swift module is
+  #   "Pulse" — the tests must say `@testable import Pulse`. Importing PulseApp
+  #   (the directory name, which reads like the obvious answer) fails with
+  #   "Unable to find module dependency: 'PulseApp'" only on macOS, so nothing on
+  #   the Linux side can catch it. It cost one CI round-trip; do not re-introduce it.
   # ---------------------------------------------------------------------------
 
   PulseTests:
