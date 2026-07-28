@@ -10,6 +10,50 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ## [Unreleased]
 
+### Added
+
+- **A native iOS app, and the CI that can ship it to TestFlight (D-186).** Two targets, split on a
+  line that matters: `ios/PulseKit` is Foundation-only and builds and tests on **Linux** (259
+  tests), while `ios/PulseApp` is the thin SwiftUI shell verified on a real `macos-15` runner (50
+  tests on an iOS 26.2 simulator). There is no Apple toolchain on the build host, so any logic
+  living in a view is logic no gate can check — the split is what makes most of the app verifiable
+  at all. PulseKit is derived from `ios/PULSEKIT-CONTRACT.md`, written against the frozen OpenAPI
+  contract before any code. The app connects to a self-hosted Pulse server with a bearer token in
+  the Keychain and shows live viewers/publishers/protocol mix, streams, alerts, fleet health — and
+  plays an HLS stream through AVPlayer instrumented with our own `PulseBeacon` SDK.
+  `.github/workflows/ios.yml` adds `ios-kit` (Linux, a required context), `ios-app` (macOS, builds
+  **and** tests), and `ios-testflight` (archive → sign → upload, skipping loudly when the App Store
+  Connect secrets are absent). Distribution needs an Apple Developer Program account; that path is
+  written but **has never executed**, and is marked UNVERIFIED where it is documented.
+- **A public website (D-186).** `website/` — landing, `/beta/` for testers, `/privacy/`, `/support/`
+  and `/terms/` — built from `brandkit/website/Marketing Site.dc.html` against
+  `brandkit/design-system/tokens.json`, with **zero external requests**: no CDN, no webfont, no
+  analytics, enforced by a check that fails the build rather than by good intentions. Publishes to
+  GitHub Pages. The landing page now carries an honest-disclosure section naming six real
+  limitations (the ~9x HLS viewer count, FPS always 0 over AMS REST, geo needing an unbundled
+  MaxMind database, inactive cluster dedup, the unvalidated Kafka path, no interactive PDF export)
+  — a product whose pitch is telling operators the truth about their streams should not hide its
+  own limits.
+- **`docs/mobile/`** — one operator runbook for TestFlight, a tester guide, and
+  `ci-runner-facts.md`: what a real GitHub macOS runner actually provides, measured by a throwaway
+  probe rather than assumed. That probe immediately caught something that would have failed at
+  upload: the runner's *default* Xcode is 16.4, and App Store Connect has required Xcode 26 / the
+  iOS 26 SDK since 2026-04-28.
+
+### Fixed
+
+- **`Formatters` trapped on non-finite input (D-186).** `Int(Double.nan)` is a runtime trap, not an
+  error, and `max(0, nan)` is `nan` because every NaN comparison is false — so the clamp did not
+  protect the conversion. JSON cannot spell NaN, which is why the test did not exist; it *can*
+  spell `1e400`, which decodes to `+Infinity` in any `Double` the API returns. The pinning test
+  killed the test process with SIGILL before the fix. Non-finite values now render as absent.
+- **`check-doc-stamps.sh` reported correctly-stamped files as FAILING (D-186).** Under
+  `set -o pipefail`, piping into `grep -q` turns a successful match into a non-zero pipeline: `-q`
+  exits on the first match and SIGPIPEs the `sed` upstream. Non-deterministic, buffering-dependent,
+  and it presented as two of three files failing while the third passed. Now matched with a
+  herestring, and tested in both directions.
+
+
 ### Security
 
 - **The AMS poll client now dials through the SSRF guard, and stops republishing upstream
