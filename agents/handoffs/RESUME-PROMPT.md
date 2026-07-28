@@ -41,11 +41,10 @@ echoed to any caller who could reach the port, SSRF or not. Both closed in D-185
 **Auditing the reassurances outproduced the finding for the third round running** — four more
 items: the beacon identity fields were reversed off M-04's deferral (rejection, unlike truncation,
 does not corrupt `uniq()`, and the deferral had been priced without a ~50× write amplification);
-the anomaly detector turned out to be a **fourth** tier-gated background loop where round 11 said
-the class was "now uniform" across three — and chasing that found the larger leak underneath it,
-that anomaly *alert rules* were creatable on **any** tier despite being advertised Enterprise-only
-(a Pro tenant got a 201); and D-184's `doc-stamps` guard was never added to
-`branch-protection.sh`, so the class L-02 belonged to was reported-on but not actually blocked.
+the advertised tier prose and the code disagree about whether anomaly detection is Enterprise-only
+(the loop enforced the prose, e2e A5 refuted it — see the lesson below, and the operator item); and
+D-184's `doc-stamps` guard was never added to `branch-protection.sh`, so the class L-02 belonged to
+was reported-on but not actually blocked.
 `main` now carries the round-7 through round-11 fixes, five of them behavioural.
 
 **The review loop is closed by decision, not by proof.** Rounds 6→11 ran H(9) → I(6) → J(3) →
@@ -168,6 +167,18 @@ found **four instances the same session's careful manual sweep had missed**. Tha
 for mechanizing a class instead of sweeping it again: the fifth hand-sweep would have missed them
 too. The S101 beacon divergence (M-02) is the same shape and is now shared-code rather than
 duplicated — prefer *making divergence impossible* over *checking for divergence*.
+
+**The e2e corpus is the behavioural contract — check it BEFORE writing a gate, not after CI says no
+(S117, and the second time this exact lesson has been paid for).** D-185 enforced the advertised
+"anomaly detection is Enterprise-only" tier table at three points, with unit tests, a negative
+control, a green `-race` suite, and an adversarial workflow lane that certified it SOUND after
+asking exactly the right question ("which tiers now stop computing baselines?") and checking the
+answer against the tier table. **e2e A5 then failed:** it mints a *Business* licence, POSTs an
+anomaly rule expecting 201, and asserts the alert fires — green for many sessions. The gate was
+reverted and the contradiction filed for the operator. **Documentation is not the contract; the
+live scenarios are.** When a change would newly REFUSE something, grep `.github/workflows/e2e.yml`
+and `qa/` for that request shape first — it costs one grep and it is the only artifact that knows
+what the product actually accepts. Over-rejection is as much a regression as under-rejection.
 
 **Enumerate the set; a reviewer's list is not the set (S117's lesson, and the sharpest form of
 "verify the exculpations").** Round 11 wrote *"prober ✓ / reports ✓ / alerts ✓ are now uniform"* —

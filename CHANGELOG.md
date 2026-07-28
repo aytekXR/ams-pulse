@@ -67,26 +67,6 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Changed
 
-- **Anomaly alert rules are now enforced as Enterprise-only, at all three points (D-185).**
-  Anomaly detection is an Enterprise feature (PRD §7.11) and `GET /anomalies` has always enforced
-  that — but **alert-rule create and update never did**, so any tier could configure a
-  `rule_type=anomaly` rule and receive Enterprise-only alerts. Rule create/update now return
-  **403 `LICENSE_REQUIRED`** for anomaly rules below Enterprise, the evaluator skips anomaly rules
-  when the tier does not allow them (a policy skip, logged at debug — not a delivery failure), and
-  the baseline loop below stops computing. Ordinary **threshold** rules are unaffected on every
-  tier; a regression test pins that, because a gate that caught those would break alerting for
-  everyone below Enterprise. **Behaviour change:** an existing below-Enterprise tenant using
-  anomaly rules stops receiving those alerts. The three points are gated together deliberately —
-  gating only the baseline loop would have left such rules in place to read staler and staler
-  baselines and stop firing *silently*, which is worse than the leak being closed.
-- **The anomaly detector stops computing baselines after a tier downgrade (D-185).** D-108
-  established the rule for the synthetic prober and D-184's M-03 extended it to alert channels: an
-  HTTP gate does not reach a background goroutine, so a downgraded tenant keeps getting the paid
-  work done for them until the process restarts. Round 11 reported the class "now uniform across
-  prober / reports / alerts" — correct for the three it listed, and the set has four members. The
-  anomaly baseline loop was gated at its read API only, and went on recomputing and writing
-  baselines regardless of tier. It now consults the same licence check once per tick. A skipped
-  tick is a policy state, logged at debug, not a fault.
 - **`doc-stamps` and `shellcheck` are now required status checks (D-185).** D-184 closed the
   doc-stamp drift class "mechanically" with a CI job — but the job was never added to
   `.github/branch-protection.sh`, so it reported without being able to block a merge. A guard that

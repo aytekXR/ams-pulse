@@ -443,10 +443,6 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	// D-108): "a tenant that downgrades stops probing at runtime, not just at
 	// the HTTP CRUD boundary."
 	alertEval.SetChannelEntitlementGate(lic.CheckChannelAllowed)
-	// D-185: the same treatment for anomaly-type RULES. Anomaly detection is
-	// Enterprise-only, but before D-185 only GET /anomalies enforced that — a rule
-	// configured on any tier fired off the same baselines.
-	alertEval.SetAnomalyEntitlementGate(lic.CheckAnomalies)
 
 	// HOOK(BE-02): Wire query service.
 	qsvc := query.New(agg, store.GetConn(), lic)
@@ -607,14 +603,7 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	// Reads live snapshots and maintains rolling baselines in anomaly_baselines.
 	// PULSE_ANOMALY_TICK_S overrides the default 60s tick interval (e.g. CI uses 5s).
 	anomalyTickInterval := time.Duration(cfg.AnomalyTickS) * time.Second
-	// EntitlementGate (D-185): the fourth background process to get the D-108
-	// treatment — a tenant that downgrades below the anomaly tier stops having
-	// baselines computed and written for them, instead of only being denied the
-	// API that reads them.
-	anomalyDet := anomaly.New(anomaly.Config{
-		TickInterval:    anomalyTickInterval,
-		EntitlementGate: lic.CheckAnomalies,
-	}, metaStore, agg, logger)
+	anomalyDet := anomaly.New(anomaly.Config{TickInterval: anomalyTickInterval}, metaStore, agg, logger)
 
 	// Wire anomaly detector into API server.
 	apiServer.SetAnomalyDetector(&anomalyDetectorBridge{det: anomalyDet})

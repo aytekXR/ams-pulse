@@ -10716,36 +10716,47 @@ written while only the read API returned 403. Gate added via `Config.Entitlement
 **This was found by enumerating the set rather than accepting the list** — which is the same
 correction the reviewer names in their own errata E-2.
 
-**And chasing it surfaced a larger, pre-existing leak running the other way — the more valuable
-half.** Anomaly detection is advertised **Enterprise-only** (`docs/overview.md:220` tier table,
-`docs/marketplace/listing.md:138`, PRD §7.11) and `GET /anomalies` enforces that via
-`CheckAnomalies` — but **alert-rule create and update never did**. A Pro tenant could POST
-`rule_type=anomaly` and receive Enterprise-only alerts off the same baselines. Proven, not
-inferred: with the new gate removed, `TestAnomalyRule_CreateBlockedBelowEnterprise` gets a **201**
-on a Pro-tier server.
+**And chasing it surfaced a genuine product inconsistency — which is now REPORTED, not resolved,
+because the loop tried to resolve it and CI proved that was the wrong call.**
 
-**The two halves are load-bearing on each other, and this is the part worth remembering.** Gating
-only the detector loop would have left those already-created rules in place, reading progressively
-staler baselines and **silently ceasing to fire**. A silent stop is a worse defect than the leak it
-closes — the repo's own D-162 addendum says over-rejection is as much a regression as
-under-rejection, and a silent one is worse than either. So the enforcement is now at all three
-points, matching the M-03 shape exactly: **config** (`handleCreateAlertRule` +
-`handleUpdateAlertRule` → 403 `LICENSE_REQUIRED`, scoped strictly to `rule_type == "anomaly"`),
-**compute** (the detector loop), and **evaluation** (`evaluateRule` skips anomaly rules at Debug
-when the gate refuses — a policy skip, not a failure).
+The advertised tier tables say anomaly detection is **Enterprise-only** (`docs/overview.md:220`
+"Business + F9 anomaly detection", `docs/marketplace/listing.md:138`, PRD §7.11). The
+implementation says something narrower: only `GET /anomalies` calls `CheckAnomalies`. Alert rules
+with `rule_type: "anomaly"` are creatable on **any** tier and fire off the same baselines.
 
-**Two older tests went red and the fixture was what was wrong, not the assertion.**
-`api_anomaly_contract_test.go` asserts the response *shape* of an anomaly rule and was running on
-the default **Free**-tier harness — which only ever worked because no tier gate existed. Both now
-use `setupEnterpriseAnomalyServer`. A negative control pins the scope of the gate:
-`TestThresholdRule_StillAllowedBelowEnterprise` proves ordinary threshold rules are untouched,
-because a gate that caught those would break alerting for every non-Enterprise tenant — a far
-worse regression than the leak.
+**What was attempted, and why it was reverted.** D-185 first enforced the tier table at all three
+points — rule create/update (403), the evaluator, and the baseline loop — reasoning that gating
+only the loop would make existing rules read staler baselines and stop firing *silently*, which is
+worse than the leak. Unit tests were written, the negative control for threshold rules passed, and
+the full `-race` suite was green. **Then the `e2e` job failed on scenario A5** — which mints an
+**ephemeral Business licence**, POSTs exactly that anomaly rule expecting **201**, spikes viewers
+and asserts the anomaly alert **fires**. That scenario has been green for many sessions. So
+anomaly *alerting* at Business is not an accident that slipped through review; it is the
+product's live-validated behaviour, and the pricing prose is what disagrees with it.
 
-**⚠ This is a pricing-enforcement behaviour change and the operator can veto it with one word.**
-Any existing below-Enterprise tenant using anomaly rules stops receiving those alerts. It matches
-what is advertised and it matches the M-03 ruling already shipped, but it is a product call, so it
-is written into `docs/operator-expected.md` rather than left implicit in a diff.
+**All three gates reverted.** What was shipped instead is this entry and an operator item. This is
+the D-162 addendum lesson arriving a second time, and the RESUME-PROMPT already stated it in
+advance: *a new gate must be shaped by the system's real accepted inputs (the e2e corpus), not
+only by the hostile examples a review supplies — over-rejection is as much a regression as
+under-rejection.* Both a unit suite and an adversarial workflow lane certified the gate SOUND; the
+adversarial lane even asked the exactly-right question ("which tiers now stop computing
+baselines?"), verified the answer against the tier table, and still missed it — because it checked
+the gate against the *documentation* and the e2e corpus is where the behavioural contract actually
+lives. **The one artifact that knew was a live scenario, not a reviewer, not a test suite, and not
+a doc.**
+
+**The decision is genuinely the operator's, and either answer is one line of code:** the pricing
+pages overstate what Enterprise gates (fix the prose), or the code under-enforces (add the gate
+and update A5 to mint an Enterprise licence). The loop must not pick — the first option changes
+what is advertised, the second stops alerts that below-Enterprise tenants receive today. Filed in
+`docs/operator-expected.md` under decision-gated engineering.
+
+**What that leaves of round 11's M-03 reassurance.** The narrow claim — "prober / reports / alerts
+are now uniform, no report-side residual" — stands as filed. The anomaly detector is a fourth
+tier-gated background loop with no runtime gate, but with anomaly alerting available at Business
+that is **correct as written**, not a gap: gating it would break the live behaviour above. Round
+11's sentence is therefore upheld, and the thing worth carrying forward is not a defect but the
+inconsistency between the tier prose and the code.
 
 ### The doc-stamp guard did not block anything
 

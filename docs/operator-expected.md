@@ -95,6 +95,19 @@
   original deferral did not have — those fields are copied onto every row a batch produces, so one
   64 KB request could write ~50× its own size. Override the cap or the failure mode if you disagree;
   both are one constant.
+- **`[ANOM-TIER]` Is anomaly detection Enterprise-only, or Business-and-up?** Your pricing pages
+  say Enterprise (`docs/overview.md` tier table: "Business + F9 anomaly detection";
+  `docs/marketplace/listing.md`; PRD §7.11). The code says something narrower: only
+  `GET /anomalies` checks the tier, so a **Business** tenant can create a `rule_type=anomaly`
+  alert rule and receive anomaly alerts — and our own e2e scenario A5 mints a Business licence and
+  **requires** exactly that to work, and has for many sessions. So this is not a bug that slipped
+  past review; it is two sources of truth disagreeing. **Either answer is one line**, and the loop
+  deliberately did not pick, because picking changes something real in both directions: enforcing
+  it stops alerts that Business tenants get today, and not enforcing it means the listing
+  advertises as Enterprise-exclusive something Business already has. One word: **"enforce"**
+  (gate rule create/update + the evaluator, and A5 moves to an Enterprise licence) or **"advertise
+  correctly"** (move F9 anomaly alerting down the tier table and leave the code alone). Relevant
+  before you submit the listing — item 3 pastes that tier table.
 - **Dependabot queue** (17 PRs open, operator-held): confirm the hold, or authorise a
   batch-absorb session per `docs/dependabot-policy.md`.
 
@@ -121,17 +134,7 @@ the v0.4.4 tag. Round 11 reaches the same conclusion independently: "not blocked
 blocked by one rotation, one SSRF wire, and one tag." The SSRF wire is done; the rotation and the
 tag are yours.*
 
-*⚠ **One D-185 change is a pricing call, and it is yours to veto with one word.** Anomaly detection
-is advertised Enterprise-only (`overview.md` tier table, `listing.md`), and `GET /anomalies` always
-enforced that — but alert-rule create/update never did, so **any tier could configure a
-`rule_type=anomaly` rule and receive Enterprise-only alerts**. D-185 closes it at all three points
-(rule create/update → 403, the evaluator, and the baseline loop). **Effect on real users:** any
-existing below-Enterprise tenant using anomaly rules stops receiving those alerts. It matches what
-you advertise and it matches the M-03 ruling you already have; say the word and it reverts to
-advertised-but-unenforced, or moves to a lower tier. Ordinary threshold alerting is untouched on
-every tier — that is pinned by a test.*
-
-*Two other things D-185 changed that you may want to know about before the cut: the AMS poll client no
+*Two things D-185 changed that you may want to know about before the cut: the AMS poll client no
 longer honours `HTTP(S)_PROXY` (an egress proxy defeats the SSRF guard — same ruling already applied
 to the prober and the S3 uploader; no documented deployment routes AMS polling through a proxy), and
 `main`'s required-status-check list grew from 13 to 15 (`shellcheck`, `doc-stamps` — they were
