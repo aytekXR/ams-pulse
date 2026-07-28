@@ -10948,3 +10948,107 @@ recorded debt rather than refactored under time pressure.
 **Marketplace: G-02, rotate `CLICKHOUSE_PASSWORD`.** Re-checked silently — the live prefix still
 matches 2 commits. **iOS: Apple Developer Program enrolment.** Nothing else gates either track.
 Both queues are in `docs/operator-expected.md`, the iOS one as an eight-step critical path.
+
+---
+
+## D-187 — §S119: field resilience — what happens when the app meets a server it was not compiled against
+
+**Goal of the session:** find out whether the iOS app actually works, as opposed to whether it
+compiles. D-186 proved the second and quietly assumed the first.
+
+### The finding, and the correction that mattered more
+
+`PulseKit` runs on Linux, so it can be pointed at a real Pulse server from this box. It was, for
+the first time. Eight of nine endpoints decoded perfectly. `GET /live/streams` returned
+
+```
+decoding(context: "null value at 'items': expected Array<Any>")
+```
+
+with `{"items":null,"meta":{"next_cursor":null}}` on the wire, while `/alerts/history` on the
+**same server** returned `{"items":[],...}`.
+
+The obvious write-up was "the server violates its own contract — `items` is a required array".
+That would have been **wrong**, and finding out cost five minutes: the server code is correct, it
+carries an explicit comment about this exact hazard, and it has a regression test. The container
+under test was built **2026-07-13**; the fix landed **2026-07-18**. *The defect was in the test
+target's age, not in the code.* Filing it would have burned a session and taught the wrong lesson.
+**Before filing a defect against code, confirm the artifact you tested was built from it.**
+
+### Why the finding survived anyway, in a better form
+
+Pulse is self-hosted. The app goes to operators running **their own** server, at whatever version
+they last upgraded to, and an App Store app cannot ship in lockstep with them. A client that only
+works against the exact server build it was compiled against is not finished. So the ten-day-old
+container was not a bad test target — it was a preview of the field.
+
+- **Null or absent arrays decode as empty.** All **seven** array-typed properties, swept and
+  listed, not just the one observed. `null` and *absent* are different inputs through different
+  code paths; both are covered, and both directions are tested. The exact 2026-07-13 wire body is
+  a regression fixture that names where it came from.
+- **Unknown enum values no longer throw.** All nine wire enums gained `.unknown(String)` that
+  **preserves the raw value**, so a support conversation can be about `"witness"` rather than
+  about a decode error. Before this, one new `publisher_state` added server-side would have broken
+  the streams list on every already-shipped app — a defect that ships *backwards* in time.
+  The trade-off is written at each enum: resilience costs the compile-time guarantee that a new
+  case gets deliberate UI treatment, and the note says how to find the sites again.
+- **Required fields stay required.** Deliberately not loosened. Identities, state machines,
+  primary metrics and ordering timestamps are structural; a response missing them is broken, not
+  sparse, and turning them optional would trade one clear error for a UI full of dashes.
+
+**Unknown health maps to `neutral`, not `warning`.** The implementing lane proposed `warning` and
+it was the obvious choice. It is also an invention: it asserts a fault that has not been observed,
+which is precisely what the honest-absent rule exists to prevent. `neutral` is grey — it cannot be
+mistaken for healthy and it does not claim a problem, and the raw string is on the case so the UI
+can show what the server actually said.
+
+### Leniency has a floor, and it is pinned
+
+This fix is dangerous in exactly one direction. A decoder that turns every malformed response into
+an empty list makes the app render "no streams" when the truth is "the reverse proxy returned its
+own 502 page". The user cannot tell those apart and the app looks calm while the system is broken.
+So the boundary is executable, not aspirational: an HTML error page, a bare `{}`, a top-level
+array, truncated JSON, a missing structurally-required field, and a JSON number where an enum
+string belongs **all still throw**. A future change that makes any of them decode is wrong however
+convenient it looks at the call site.
+
+### Delivered alongside
+
+- **`ios/livecheck`** — the throwaway harness that found this, promoted to a repeatable one: the
+  real client, every GET endpoint, against a live server, PASS/FAIL each, token from the
+  environment only (arguments land in shell history). Not in CI, because CI has no server to point
+  at — and that is the whole point of it. Re-run after the fix: **9/9 PASS** against the same
+  stale server.
+- **`ios-simulator-artifact`** — CI uploads a runnable simulator build, so a Mac-owning tester or
+  reviewer can see the app *today*, before an Apple Developer account exists. Documented honestly
+  on the beta page: it does not run on a physical iPhone and it does not replace TestFlight.
+- **A guard scope gap closed.** The `shellcheck` job names its targets one file at a time, so the
+  780-line script that gates the public website had been unguarded since the session that wrote
+  it — the fifth instance of this class. Both website scripts are now covered and clean at CI's
+  **0.9.0** *and* at `:stable`; the two renumbered the same check (SC2317 → SC2329), so a script
+  clean at one can be red at the other. Every suppression names its reason.
+- **`run-checks.sh` stopped dirtying the tree it checks.** `trap` *replaces* rather than appends,
+  so a later trap silently dropped an earlier cleanup and left two untracked files in `web/`. In a
+  repo where an unexpected untracked file is a signal worth investigating, that is a small bug
+  with an outsized cost — it cost real time this session.
+
+### Gates
+
+Container (`swift:6.1`, repo mounted as CI mounts it): **291 tests passed**, zero warnings under
+Swift 6 language mode — up from 259, no test deleted or weakened. Live harness 9/9. Website checks
+PASS at both root and `/ams-pulse/` subpath hosting. ShellCheck clean at both versions.
+Doc-stamp guard PASS.
+
+### Process note
+
+The implementing lane hit a cross-scope boundary — its new `.unknown` enum case made a switch in
+`Formatting/` non-exhaustive, which it did not own — and **stopped and escalated instead of
+reaching outside its scope**. That is the protocol working: ORCH made the one-line call (and made
+a different one than the lane proposed). The adversarial verifier then correctly reported the
+build as broken and its three test-coverage gaps, all of which were real and are now closed.
+
+### Still blocking, still not ours
+
+Unchanged from D-186: **marketplace** waits on the `CLICKHOUSE_PASSWORD` rotation; **iOS
+TestFlight** waits on Apple Developer Program enrolment. Nothing in this session moved either
+gate, and nothing in either gate blocked this session.

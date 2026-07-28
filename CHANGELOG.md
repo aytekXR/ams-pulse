@@ -42,6 +42,22 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Fixed
 
+- **PulseKit could not survive a Pulse server it was not compiled against (D-187).** The client is
+  now tolerant of what real deployments actually send: a `null` or absent array decodes as empty
+  (observed on a real server build only ten days old), and an unrecognised enum value decodes into
+  an `.unknown` case that **preserves the raw string** rather than throwing — previously a single
+  new `publisher_state` added server-side would have broken the streams list on every already
+  shipped app. The tolerance has a deliberate floor, pinned by tests: an HTML error page, a bare
+  `{}`, a top-level array, truncated JSON, a missing structural field and a JSON number where an
+  enum string belongs all still fail loudly, because a decoder that renders every malformed
+  response as an empty list makes the app say "no streams" when the truth is "the server is broken".
+- **`website/tests/run-checks.sh` left temp files in `web/` (D-187).** `trap` replaces rather than
+  appends, so a later trap silently dropped an earlier cleanup. Also: that script and
+  `website/tools/generate-og-image.sh` were not covered by the `shellcheck` CI job at all — the job
+  names its targets one at a time, and the 780-line script gating the public website had been
+  unguarded since it was written. Both are now covered and clean at CI's 0.9.0 **and** at
+  `:stable`, which renumbered the same check (SC2317 → SC2329).
+
 - **`Formatters` trapped on non-finite input (D-186).** `Int(Double.nan)` is a runtime trap, not an
   error, and `max(0, nan)` is `nan` because every NaN comparison is false — so the clamp did not
   protect the conversion. JSON cannot spell NaN, which is why the test did not exist; it *can*

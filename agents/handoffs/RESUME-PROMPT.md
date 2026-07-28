@@ -25,7 +25,9 @@
 
 **Where the product is:** **v0.4.4 is the release and the marketplace submission target.** S118
 (D-186) opened a second track: **the Pulse iOS app and the public website now exist and are
-CI-verified.** The external-review loop converged at round 11 (D-185, merged) and is closed by
+CI-verified.** S119 (D-187) then pointed the real client at a real server for the first time and
+made it survive the servers it will actually meet — older ones that send `null` where the contract
+says array, newer ones that send enum values this build has never heard of. The external-review loop converged at round 11 (D-185, merged) and is closed by
 decision — rounds 6→11 ran H(9) → I(6) → J(3) → K(2) → L(2, both refuted) → N(1), and no reviewer-
 filed product defect has survived verification since round 6.
 
@@ -38,8 +40,10 @@ blocks the other:**
   also clears the tag-frozen prose and ships rounds 7–11.
 - **iOS TestFlight** — blocked by **Apple Developer Program enrolment**. Everything a machine can
   do is done: the app builds for iOS 26 under Swift 6 strict concurrency on a real macOS runner,
-  259 Linux tests + 50 simulator tests pass, the archive/sign/upload job is written, and the
-  tester-facing site is built. `docs/operator-expected.md` §A is the eight-step critical path.
+  **291** Linux tests + 50 simulator tests pass, the client is live-validated against a real Pulse
+  server (`ios/livecheck`, 9/9 endpoints), the archive/sign/upload job is written, and CI uploads a
+  **runnable simulator build** so a Mac-owning tester can see the app before TestFlight exists.
+  `docs/operator-expected.md` §A is the eight-step critical path.
 
 **The website is live-able with no operator action.** GitHub Pages was enabled from here via the
 API (`build_type: workflow`); it publishes to **https://aytekxr.github.io/ams-pulse/** on merge to
@@ -57,6 +61,22 @@ working manual-invitation route — honest and usable today. The grep marker for
    the archive/upload, and drive the rest. That job has **never executed** — treat its first run as
    a discovery exercise, not a regression check.
 3. **If a TestFlight public link arrives**, do the `/beta/` swap and redeploy the site.
+
+**Before filing a defect against code, confirm the artifact you tested was built from it (S119).**
+The live harness found `/live/streams` returning `{"items":null}` against its own contract. The
+obvious write-up — "the server is wrong" — was wrong: the server code is correct, commented, and
+has a regression test. The container under test was built 2026-07-13; the fix landed 2026-07-18.
+Five minutes of checking saved a session. `pulse version` and `git merge-base --is-ancestor` are
+the whole procedure.
+
+**A client is not finished when it works against the server it was compiled against (S119).**
+Pulse is self-hosted; the app meets whatever version the operator last upgraded to, and an App
+Store app cannot ship in lockstep. PulseKit now tolerates null/absent arrays and unknown enum
+values (preserving the raw string). **The floor is pinned by tests**: an HTML error page, a bare
+`{}`, a top-level array, truncated JSON and a number-where-an-enum-belongs all still throw — a
+decoder that turns malformed responses into empty lists makes the app say "no streams" when the
+truth is "the server is broken", and that is worse than the brittleness it replaced. Do not lower
+that floor for convenience.
 
 **Test the artifact, not the documentation — and run it the way CI will (S111, re-earned hard in
 S118).** PulseKit passed 206/206 on this host and failed **28** in the container CI actually uses,
