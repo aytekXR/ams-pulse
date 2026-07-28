@@ -90,6 +90,13 @@ struct ConnectView: View {
 
                 TextField("https://pulse.example.com", text: $serverURL)
                     .textFieldStyle(.plain)
+                    // Without an explicit foreground colour this field renders its
+                    // placeholder in the system tint — it came out iOS blue in the
+                    // launch screenshot, reading like already-entered text next to a
+                    // disabled Connect button, on the first screen any tester sees.
+                    // The API-token field below always had this line; this one did
+                    // not, and nothing but a screenshot could tell us.
+                    .foregroundColor(BrandColors.textPrimary)
                     .padding(16)
                     .background(BrandColors.surface)
                     .cornerRadius(12)

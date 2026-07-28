@@ -609,16 +609,39 @@ jobs:
           # immediately would report success on an app that is already dying.
           sleep 12
 
-      - name: Capture screenshots
+      # ⚠ SET THE APPEARANCE BEFORE **EVERY** CAPTURE, never once and never never.
+      #
+      # The first version of this step captured immediately after launch, called
+      # that shot the default, then switched to light and captured again. A
+      # simulator BOOTS IN LIGHT, so both files were light and one of them was
+      # named as if it were not. Nothing failed; the artifact simply asserted
+      # something untrue, which is the failure mode this repo has a standing rule
+      # about — a capture is not evidence until a human opens it, and a MISLABELLED
+      # capture is worse than none because opening it confirms the wrong thing.
+      #
+      # The sleep after each switch is load-bearing: the appearance change
+      # propagates asynchronously and a screenshot taken too soon catches the old
+      # rendering, which reintroduces the same lie by a different route.
+      - name: Capture screenshots (both appearances, each one pinned)
         run: |
           mkdir -p "$RUNNER_TEMP/shots"
-          xcrun simctl io booted screenshot "$RUNNER_TEMP/shots/01-launch.png"
-          # Light appearance too: the brand ships both themes and only one of them
-          # is ever looked at by accident.
-          xcrun simctl ui booted appearance light
-          sleep 3
-          xcrun simctl io booted screenshot "$RUNNER_TEMP/shots/02-launch-light.png"
+
           xcrun simctl ui booted appearance dark
+          sleep 4
+          xcrun simctl io booted screenshot "$RUNNER_TEMP/shots/01-launch-dark.png"
+
+          xcrun simctl ui booted appearance light
+          sleep 4
+          xcrun simctl io booted screenshot "$RUNNER_TEMP/shots/02-launch-light.png"
+
+          # Prove the two captures actually DIFFER. If a future change breaks the
+          # appearance switch, identical bytes are the tell — and this assertion is
+          # the only thing standing between that and two files that look fine.
+          if cmp -s "$RUNNER_TEMP/shots/01-launch-dark.png" "$RUNNER_TEMP/shots/02-launch-light.png"; then
+            echo "::error::The dark and light screenshots are byte-identical — the appearance switch did not take effect, so one of these files is mislabelled."
+            exit 1
+          fi
+          echo "Dark and light captures differ, as they must."
           ls -la "$RUNNER_TEMP/shots"
 
       - name: Fail if the app crashed
