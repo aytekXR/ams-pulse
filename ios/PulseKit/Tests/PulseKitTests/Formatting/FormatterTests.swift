@@ -532,3 +532,51 @@ struct FormatterNonFiniteTests {
         #expect(Formatters.relativeTime(from: bogus, to: now) == "--")
     }
 }
+
+// MARK: - Metric-aware value formatting (D-189)
+//
+// Found by looking at a screenshot of the Alerts screen. The app decided whether
+// a number was a percentage by its MAGNITUDE — "if 0...100, add a % sign" — which
+// is a guess about semantics made from a value, and it was wrong in both
+// directions on the same screen:
+//
+//   viewer_count   50.0   rendered "50.0%"   — a count is not a percentage
+//   rebuffer_ratio  0.18  rendered "0.2%"    — a 0-1 ratio is 18%, not 0.2%
+//   cpu_pct        92.5   rendered "92.5%"   — correct, by luck of the range
+//
+// An alert carries its metric NAME. Decide from that.
+@Suite("Formatters — metric-aware values")
+struct MetricValueTests {
+    @Test("_pct metrics are already 0-100")
+    func pct() {
+        #expect(Formatters.metricValue(92.5, metric: "cpu_pct") == "92.5%")
+        #expect(Formatters.metricValue(0, metric: "mem_pct") == "0.0%")
+        #expect(Formatters.metricValue(100, metric: "disk_pct") == "100.0%")
+    }
+
+    @Test("_ratio metrics are 0-1 and must be scaled")
+    func ratio() {
+        #expect(Formatters.metricValue(0.18, metric: "rebuffer_ratio") == "18.0%")
+        #expect(Formatters.metricValue(0.001, metric: "error_ratio") == "0.1%")
+        #expect(Formatters.metricValue(1, metric: "rebuffer_ratio") == "100.0%")
+    }
+
+    @Test("counts and rates are not percentages")
+    func plain() {
+        #expect(Formatters.metricValue(50, metric: "viewer_count") == "50")
+        #expect(Formatters.metricValue(800, metric: "bitrate_kbps") == "800")
+        #expect(Formatters.metricValue(1234.5, metric: "startup_ms") == "1234.5")
+    }
+
+    @Test("an unknown metric is never dressed up as a percentage")
+    func unknownMetric() {
+        // The old magnitude heuristic would have called this 42.0%.
+        #expect(Formatters.metricValue(42, metric: "something_new") == "42")
+    }
+
+    @Test("non-finite values stay absent here too")
+    func nonFinite() {
+        #expect(Formatters.metricValue(Double.nan, metric: "cpu_pct") == "--")
+        #expect(Formatters.metricValue(Double.infinity, metric: "viewer_count") == "--")
+    }
+}
