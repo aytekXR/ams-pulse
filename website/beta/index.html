@@ -43,19 +43,34 @@
 <!-- Main content -->
 <main id="main-content" tabindex="-1">
 
-<!-- A real screenshot, captured by CI from the app running in an iOS 26.2
-     simulator (workflow run 30407020205). Not a mockup, not a render of a design
-     file — the actual first screen, so a prospective tester can see exactly what
-     they are being invited to install. -->
+<!-- Real screenshots, captured by CI from the app running in an iOS 26.2
+     simulator against a fixture server (workflow run 30414916664). Not mockups,
+     not renders of a design file — these are the actual screens, produced by the
+     same UI test suite that asserts the data on them, so they cannot drift from
+     what a tester gets. -->
 <section class="section">
-  <div class="container" style="text-align:center;">
-    <img src="../assets/app-connect-dark.png"
-         alt="The Pulse app's first screen on iPhone: the Pulse wordmark and pulse-wave logo above a Server URL field, an API Token field, and a Connect button."
-         width="1206" height="2622"
-         style="max-width:min(280px,70vw);height:auto;margin-inline:auto;border-radius:var(--radius-card);border:1px solid var(--color-border);">
-    <p class="text-secondary" style="margin-top:var(--space-4);font-size:var(--type-caption-size);">
-      The first screen, captured from the app running in CI. You supply the server and token.
-    </p>
+  <div class="container">
+    <div class="section-header">
+      <p class="label">The app</p>
+      <h2>What you will be looking at</h2>
+    </div>
+    <div class="screenshot-row">
+      <figure>
+        <img src="../assets/app-live.png" width="1206" height="2622"
+             alt="The Live screen: tiles showing 2.8K viewers, 42 publishers, 6 streams and a WebRTC/HLS/RTMP protocol mix, above a list of active streams each with a health score ring.">
+        <figcaption>Live — viewers, publishers and per-stream health.</figcaption>
+      </figure>
+      <figure>
+        <img src="../assets/app-alerts.png" width="1206" height="2622"
+             alt="The Alerts screen: five alerts, each with a severity icon, the metric that breached, its value and threshold, a firing or resolved badge, and the affected stream, node or tenant.">
+        <figcaption>Alerts — what fired, on what, and whether it recovered.</figcaption>
+      </figure>
+      <figure>
+        <img src="../assets/app-settings.png" width="1206" height="2622"
+             alt="The Settings screen: the connected server URL, an overall OK status, and per-component health for ClickHouse, the meta store, the collector and Kafka.">
+        <figcaption>Settings — your server, and whether its parts are healthy.</figcaption>
+      </figure>
+    </div>
   </div>
 </section>
 

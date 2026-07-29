@@ -11129,15 +11129,15 @@ Apple Developer Program enrolment. `docs/operator-expected.md` §A is the critic
 
 ---
 
-## D-189 — §S121: drive every screen (harness landed, two assertions still red — NOT merged)
+## D-189 — §S121: drive every screen — all green, and the screens are now published
 
 **Goal:** the app had been *launched* (D-188) but only ever reached the Connect screen. Live,
 Alerts, Settings and the player compiled, and that was the whole basis for believing they work.
 
-**Status: the branch `s121/ui-screens` is pushed and NOT merged. `main` is green and unaffected.**
-1 of 3 UI tests passes; 2 need assertion tuning on screens not yet visually reviewed. Merging a
-red suite would have made every future red meaningless, so it stays on the branch with this entry
-as its handover.
+**Status: all three UI tests pass; the whole `ios` workflow is green.** The Live, Alerts and
+Settings screens have now been seen, and the three captures are published on the public `/beta/`
+page so a prospective tester can look at the app before installing it. They come out of the same
+run whose assertions check the data on them, so they cannot drift from what a tester gets.
 
 ### What is now proven, with pictures
 
@@ -11188,7 +11188,40 @@ Recorded because the pattern is the lesson: **the screenshots kept saying the ap
    some other element type. Querying `descendants(matching: .any)[id]` fixed three failures at
    once.
 
-### What remains (precise continuation)
+### The last two failures, and the one real app defect underneath them
+
+**The tab tap never landed.** The accessibility hierarchy captured at the failure still showed
+`tab_live` and a NavigationBar identified `Live` — the Alerts screen had never been on screen and
+the assertion was blaming it. The expensive hypothesis was eliminated *cheaply and locally*: the
+same fixture bodies decode through the real PulseKit client on Linux, all nine endpoints, via
+`ios/livecheck` against the fixture server — no CI round trip needed to rule out the data path.
+Cause: iOS 26's floating tab bar renders an `AdditionalDimmingOverlay` above the content, so a tap
+can be swallowed while the bar settles. `switchToTab` now taps, waits for the *destination's*
+navigation bar, retries, falls back to a coordinate tap, and fails naming **navigation** rather
+than naming the screen's data thirty lines later.
+
+**Sign-out is confirmed by a dialog** — correct product behaviour, since an accidental sign-out
+costs the operator their token — and the helper tapped the row without dismissing the dialog, then
+failed on the next screen's field.
+
+That is five defects in this suite, **every one of them in the test rather than the app**, and
+every one first suspected of being the app. The screenshots said so each time.
+
+**Then the screenshots found a real one.** Opening the Alerts capture — the first time anyone had
+seen that screen — showed values guessing their own units from magnitude (`if 0...100, add a %`):
+
+    viewer_count    50.0   rendered "50.0%"    a count is not a percentage
+    rebuffer_ratio   0.18  rendered "0.2%"     a 0-1 ratio is 18%, not 0.2%
+    cpu_pct         92.5   rendered "92.5%"    correct, by luck of the range
+
+Wrong in both directions on the same five rows. An alert carries its metric NAME, so the rule now
+decides from that (`*_pct` already 0-100, `*_ratio` scales by 100, everything else carries no
+unit) and lives in **PulseKit where Linux can test it** — which is the entire point of the split;
+it should never have been decided inside a view that nothing on this machine can compile. An
+unrecognised metric renders plain rather than being dressed up as a percentage. Verified in the
+next run's screenshot: `18.0% / 10.0%` and `50 / 100`.
+
+### Historical note (superseded)
 
 `testFullAppNavigation` fails at the **Alerts** assertions and `testSecondPassCaptures` at its
 **second-pass Live** assertion. Both are almost certainly the same class as #4 above, one level

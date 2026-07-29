@@ -1259,3 +1259,29 @@ details p {
     text-decoration: underline;
   }
 }
+
+/* ── Screenshot gallery (beta page) ──────────────────────────────────────────
+   Phone captures are tall and narrow; three of them side by side on a wide
+   screen, stacking to one column on a phone. Sized by max-width rather than a
+   fixed width so the images stay crisp on a 3x display, and margin-inline auto
+   because the reset makes images display:block and text-align cannot centre them. */
+.screenshot-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-5);
+  align-items: start;
+}
+.screenshot-row figure { margin: 0; text-align: center; }
+.screenshot-row img {
+  max-width: min(260px, 100%);
+  height: auto;
+  margin-inline: auto;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-border);
+}
+.screenshot-row figcaption {
+  margin-top: var(--space-3);
+  color: var(--color-secondary);
+  font-size: var(--type-caption-size);
+  line-height: 1.5;
+}

@@ -52,13 +52,13 @@ tester page. Until the operator has a TestFlight link, `/beta/` shows a **disabl
 working manual-invitation route — honest and usable today. The grep marker for the swap is
 `TESTFLIGHT_PUBLIC_LINK_PLACEHOLDER`, and it appears exactly once.
 
-**⚠ ONE BRANCH IS OPEN AND DELIBERATELY UNMERGED: `s121/ui-screens` (D-189).** XCUITest drives the
-app through its screens against a fixture server; 1 of 3 tests passes and the Live dashboard,
-connect flow and error state are all visually verified working. Two assertions still fail on the
-Alerts screen. **Do not merge it red** — and when you pick it up, *download the screenshot artifact
-and look at the Alerts screen before touching the assertion*. Every one of this session's four
-defects turned out to be in the test rather than the app, and the one time I reasoned from sibling
-code instead of the picture, the fix was wrong.
+**Every screen of the iOS app is now driven by XCUITest against a fixture server, and the captures
+are published on `/beta/` (D-189).** Five defects surfaced in that suite and **all five were in the
+test, not the app** — the screenshots said so each time. Then the screenshots found a real one: the
+Alerts screen was guessing units from magnitude, rendering a `viewer_count` of 50 as "50.0%" and a
+`rebuffer_ratio` of 0.18 as "0.2%". **When a UI test fails, open the capture before changing the
+assertion** — and when a screen is doing arithmetic or formatting, that logic belongs in PulseKit
+where Linux can test it, not in a view nothing here can compile.
 
 **Do first, every session:**
 1. **Gate reads** — prod health (component-scoped `/healthz` + a ClickHouse count), git/PR drift,
