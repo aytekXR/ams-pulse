@@ -44,6 +44,26 @@ final class PulseUITests: XCTestCase {
 
     // MARK: - Setup
 
+    /// Return the app to the signed-out Connect screen if a previous test left it
+    /// signed in.
+    ///
+    /// This is not test hygiene boilerplate — it encodes a real product fact that
+    /// this suite discovered: credentials live in the KEYCHAIN, which survives app
+    /// termination and reinstall-in-place, so launching the app again lands on the
+    /// dashboard, not on Connect. Good behaviour for an operator opening the app
+    /// on their phone; fatal for a test that assumes a fresh start. The second and
+    /// third tests failed on `serverURLField.waitForExistence` for exactly this
+    /// reason, which read like a UI bug and was not one.
+    private func signOutIfNeeded() {
+        guard app.tabBars.firstMatch.waitForExistence(timeout: 3) else { return }
+        app.tabBars.buttons["Settings"].tap()
+        let signOut = app.buttons[AccessibilityID.settings_signOutButton]
+        if signOut.waitForExistence(timeout: 5) {
+            signOut.tap()
+        }
+        _ = app.textFields.firstMatch.waitForExistence(timeout: 5)
+    }
+
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
@@ -136,16 +156,27 @@ final class PulseUITests: XCTestCase {
         // assertion, because it reports coverage that does not exist.
         //
         // Fixture: total_viewers 2847, total_publishers 42.
-        let viewersTile = app.otherElements[AccessibilityID.live_viewersTile]
-        XCTAssertTrue(viewersTile.waitForExistence(timeout: 10),
+        // Assert the tile CONTAINERS exist (identifier lookup) AND that the exact
+        // fixture values are on screen (text lookup). Both halves matter:
+        // the identifier proves the right view rendered, the value proves it
+        // rendered the right DATA.
+        //
+        // ⚠ Do not assert on descendants of the tile. A SwiftUI container
+        // carrying an .accessibilityIdentifier is exposed as a MERGED
+        // accessibility element with no staticText children, so
+        // descendants(matching: .staticText) under it is empty — this assertion
+        // failed on a dashboard that was, per the screenshot, rendering
+        // perfectly. The test was wrong, not the app.
+        XCTAssertTrue(app.otherElements[AccessibilityID.live_viewersTile].waitForExistence(timeout: 10),
                       "Live dashboard did not render its viewers tile")
-        XCTAssertTrue(descendantLabels(of: viewersTile).contains { $0.contains("2.8K") || $0.contains("2847") },
-                      "Viewers tile should show the fixture's 2847 viewers; saw: \(descendantLabels(of: viewersTile))")
+        XCTAssertTrue(app.otherElements[AccessibilityID.live_publishersTile].exists,
+                      "Live dashboard did not render its publishers tile")
 
-        let publishersTile = app.otherElements[AccessibilityID.live_publishersTile]
-        XCTAssertTrue(publishersTile.exists, "Live dashboard did not render its publishers tile")
-        XCTAssertTrue(descendantLabels(of: publishersTile).contains { $0.contains("42") },
-                      "Publishers tile should show the fixture's 42 publishers; saw: \(descendantLabels(of: publishersTile))")
+        // Fixture: total_viewers 2847 (formatted 2.8K), total_publishers 42.
+        XCTAssertTrue(app.staticTexts["2.8K"].waitForExistence(timeout: 5),
+                      "Dashboard should show 2.8K viewers from the fixture's 2847")
+        XCTAssertTrue(app.staticTexts["42"].exists,
+                      "Dashboard should show the fixture's 42 publishers")
 
         // And a specific stream from the fixture must be listed by name.
         XCTAssertTrue(app.staticTexts["keynote-2026-main"].waitForExistence(timeout: 5),
@@ -192,11 +223,11 @@ final class PulseUITests: XCTestCase {
 
         takeScreenshot(name: "05-settings")
 
-        let serverRow = app.otherElements[AccessibilityID.settings_serverRow]
-        XCTAssertTrue(serverRow.waitForExistence(timeout: 10),
+        XCTAssertTrue(app.otherElements[AccessibilityID.settings_serverRow].waitForExistence(timeout: 10),
                       "Settings did not render the server row")
-        XCTAssertTrue(descendantLabels(of: serverRow).contains { $0.contains("localhost") },
-                      "Settings should show the connected server; saw: \(descendantLabels(of: serverRow))")
+        // Same merged-element caveat as the live tiles — match the text directly.
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "localhost")).firstMatch.exists,
+                      "Settings should show the connected server host")
         // The fixture's /healthz reports every component ok — so the component
         // rows must be present, not merely the section heading.
         XCTAssertTrue(app.otherElements[AccessibilityID.settings_componentClickhouse].exists,
@@ -217,6 +248,7 @@ final class PulseUITests: XCTestCase {
     /// This test verifies that the error UI renders correctly when
     /// the server is unreachable. Uses a URL that will never connect.
     func testConnectErrorState() throws {
+        signOutIfNeeded()
         // Enter a URL that won't resolve — a port with no server.
         let serverURLField = app.textFields.firstMatch
         XCTAssertTrue(serverURLField.waitForExistence(timeout: 5))
@@ -229,6 +261,13 @@ final class PulseUITests: XCTestCase {
         tokenField.typeText("invalid_token")
 
         let connectButton = app.buttons["Connect"]
+        // Assert the PRECONDITION. If the text never landed in the fields, the
+        // button stays disabled, the tap does nothing, and the test then fails on
+        // "no error banner" — blaming the app for a defect in the test's typing.
+        // A screenshot of an empty form with a disabled Connect button is exactly
+        // what that looks like, and it is not an app defect.
+        XCTAssertTrue(connectButton.isEnabled,
+                      "Connect should be enabled once a URL and token are entered — if this fails, the test's typing did not land, not the app")
         connectButton.tap()
 
         // Wait for the error to appear. Connection failure takes a few seconds.
@@ -259,6 +298,8 @@ final class PulseUITests: XCTestCase {
     /// the same screens, with the same assertions, producing a second set of
     /// captures. It is named for what it does.
     func testSecondPassCaptures() throws {
+        signOutIfNeeded()
+
         // Connect first.
         let serverURLField = app.textFields.firstMatch
         XCTAssertTrue(serverURLField.waitForExistence(timeout: 5))
@@ -291,17 +332,6 @@ final class PulseUITests: XCTestCase {
                       "Second pass: settings did not render")
         takeScreenshot(name: "10-settings-second-pass")
     }
-
-    // MARK: - Assertion helpers
-
-    /// All labels beneath an element, for asserting on a composed tile rather
-    /// than on whatever free text happens to be on screen.
-    private func descendantLabels(of element: XCUIElement) -> [String] {
-        let texts = element.descendants(matching: .staticText)
-        return (0..<texts.count).map { texts.element(boundBy: $0).label }
-    }
-
-    // MARK: - Helpers
 
     /// Takes a screenshot and attaches it to the test result.
     ///
