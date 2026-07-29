@@ -12,6 +12,14 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Added
 
+- **The iOS app is driven end to end by XCUITest (D-189)** against a dependency-free fixture server
+  on the CI runner: type a server URL and token, tap Connect, and visit every tab, asserting the
+  specific data on each screen. No runtime backdoor was added to reach the signed-in state —
+  deliberately, since the app holds an operator's bearer token in the Keychain and an
+  authentication bypass must not exist in the source at all. The captures are published on the
+  public `/beta/` page, produced by the same run that asserts their contents, so they cannot drift
+  from what a tester actually gets.
+
 - **A native iOS app, and the CI that can ship it to TestFlight (D-186).** Two targets, split on a
   line that matters: `ios/PulseKit` is Foundation-only and builds and tests on **Linux** (259
   tests), while `ios/PulseApp` is the thin SwiftUI shell verified on a real `macos-15` runner (50
@@ -41,6 +49,13 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
   iOS 26 SDK since 2026-04-28.
 
 ### Fixed
+
+- **Alert values guessed their own units from magnitude (D-189).** The rule was "if the value is
+  between 0 and 100, add a % sign", which is semantics inferred from a number — and it was wrong in
+  both directions on the same five rows: a `viewer_count` of 50 rendered as "50.0%", and a
+  `rebuffer_ratio` of 0.18 (18%) rendered as "0.2%". An alert carries its metric NAME, so the rule
+  now decides from that and lives in PulseKit where Linux can test it. Found by opening a
+  screenshot of the Alerts screen — the first time anyone had seen it.
 
 - **The Server URL placeholder rendered as a blue link (D-188).** `TextField("https://…", text:)`
   takes a `LocalizedStringKey`, which SwiftUI parses as **Markdown**, and a bare URL is a Markdown

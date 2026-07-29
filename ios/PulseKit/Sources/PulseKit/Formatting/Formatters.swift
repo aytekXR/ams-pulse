@@ -147,6 +147,45 @@ public enum Formatters {
         return "\(seconds)s ago"
     }
 
+    // MARK: - Metric-aware values
+
+    /// Format an alert's value or threshold using the METRIC's semantics.
+    ///
+    /// - Parameters:
+    ///   - value: The raw number the API returned.
+    ///   - metric: The metric name that came with it, e.g. "cpu_pct".
+    /// - Returns: A display string with the right unit, or "--" if not finite.
+    ///
+    /// ⚠ Decide from the NAME, never from the magnitude. The app previously used
+    /// "if the value is between 0 and 100, add a % sign", which is a guess about
+    /// semantics inferred from a value — and it was wrong in both directions on
+    /// one screen: viewer_count 50 rendered as "50.0%", and rebuffer_ratio 0.18
+    /// (i.e. 18%) rendered as "0.2%". cpu_pct was right only because its range
+    /// happened to suit the heuristic.
+    ///
+    /// The conventions come from the metric names the API actually emits:
+    ///   *_pct    already 0-100
+    ///   *_ratio  0-1, scale by 100
+    ///   anything else — counts, kbps, ms — carries no unit here
+    /// An unrecognised metric is rendered as a plain number rather than being
+    /// dressed up as a percentage, because being silently wrong about a unit is
+    /// worse than being plain.
+    public static func metricValue(_ value: Double, metric: String) -> String {
+        guard value.isFinite else { return "--" }
+
+        let name = metric.lowercased()
+        if name.hasSuffix("_pct") {
+            return String(format: "%.1f%%", value)
+        }
+        if name.hasSuffix("_ratio") {
+            return String(format: "%.1f%%", value * 100)
+        }
+        if value == value.rounded() && abs(value) < 1e15 {
+            return "\(Int(value))"
+        }
+        return String(format: "%.1f", value)
+    }
+
     // MARK: - Health Token Name
 
     /// Map health status to a design system token name.

@@ -11126,3 +11126,118 @@ contained the defects above.
 
 Unchanged: **marketplace** waits on the `CLICKHOUSE_PASSWORD` rotation; **iOS TestFlight** waits on
 Apple Developer Program enrolment. `docs/operator-expected.md` §A is the critical path.
+
+---
+
+## D-189 — §S121: drive every screen — all green, and the screens are now published
+
+**Goal:** the app had been *launched* (D-188) but only ever reached the Connect screen. Live,
+Alerts, Settings and the player compiled, and that was the whole basis for believing they work.
+
+**Status: all three UI tests pass; the whole `ios` workflow is green.** The Live, Alerts and
+Settings screens have now been seen, and the three captures are published on the public `/beta/`
+page so a prospective tester can look at the app before installing it. They come out of the same
+run whose assertions check the data on them, so they cannot drift from what a tester gets.
+
+### What is now proven, with pictures
+
+XCUITest drives the real controls against a dependency-free fixture server on the runner: type a
+URL and token, tap Connect, land on the dashboard, visit tabs. Screenshots come out of the
+`.xcresult` and were opened:
+
+- **The Live dashboard works.** 2,847 viewers rendered as "2.8K", 42 publishers, 6 streams, the
+  protocol mix, and the stream list with health rings — 98.5 and 95.0 in green, 88.0 and 75.0 in
+  amber. Real data through the real client.
+- **The connect flow works**, including the placeholder fix from D-188.
+- **The error state works and is good.** An unreachable host produces a red banner with a warning
+  triangle — shape *and* colour, per the CVD rule — an actionable sentence, and the form
+  preserved. `testConnectErrorState` passes, including its negative assertion that a failed
+  connection does not navigate into the dashboard.
+
+### No runtime backdoor, deliberately
+
+The obvious way to reach the dashboard in a test is a launch argument that skips the login. That
+was refused. This app holds an operator's bearer token in the Keychain, and an authentication
+bypass must not exist in the source *at all* — the guard around it is one build-setting mistake
+from shipping. XCUITest lives in a target that is never part of the app binary. The verifier
+confirmed by grep that no such path exists.
+
+### The harness arrived as theatre and was rewritten
+
+Five checks computed a boolean and then *printed a warning* instead of failing, so Alerts,
+Settings and the error test passed on an empty list, a permanent spinner and an error screen
+alike. `testLightModeAppearance` had **zero** assertions, did not set the appearance, and would
+have passed with every screen black. The live check matched any label containing a digit or the
+letter "K" — it passes on a screen showing "OK". All rewritten to assert specific fixture values;
+the misnamed test renamed for what it does.
+
+### Four defects found, every one of them in the test rather than the app
+
+Recorded because the pattern is the lesson: **the screenshots kept saying the app was fine.**
+
+1. **`@MainActor`** — `XCUIApplication` is main-actor isolated and the target builds with strict
+   concurrency, so the suite did not compile.
+2. **The fixture server took 36 seconds to bind.** `http.server`'s `server_bind()` calls
+   `getfqdn()`, and that reverse lookup blocks until a DNS timeout on a macOS runner. It printed
+   "Listening" four seconds *after* the readiness wait gave up. Fixed at the cause; the window
+   widened afterwards, not instead.
+3. **Credentials persist in the Keychain across launches**, so the 2nd and 3rd tests started
+   signed in and failed waiting for a Connect field. Correct product behaviour, broken test
+   assumption — they now sign out first.
+4. **`app.otherElements[id]` silently matches nothing** when SwiftUI exposes an identified view as
+   some other element type. Querying `descendants(matching: .any)[id]` fixed three failures at
+   once.
+
+### The last two failures, and the one real app defect underneath them
+
+**The tab tap never landed.** The accessibility hierarchy captured at the failure still showed
+`tab_live` and a NavigationBar identified `Live` — the Alerts screen had never been on screen and
+the assertion was blaming it. The expensive hypothesis was eliminated *cheaply and locally*: the
+same fixture bodies decode through the real PulseKit client on Linux, all nine endpoints, via
+`ios/livecheck` against the fixture server — no CI round trip needed to rule out the data path.
+Cause: iOS 26's floating tab bar renders an `AdditionalDimmingOverlay` above the content, so a tap
+can be swallowed while the bar settles. `switchToTab` now taps, waits for the *destination's*
+navigation bar, retries, falls back to a coordinate tap, and fails naming **navigation** rather
+than naming the screen's data thirty lines later.
+
+**Sign-out is confirmed by a dialog** — correct product behaviour, since an accidental sign-out
+costs the operator their token — and the helper tapped the row without dismissing the dialog, then
+failed on the next screen's field.
+
+That is five defects in this suite, **every one of them in the test rather than the app**, and
+every one first suspected of being the app. The screenshots said so each time.
+
+**Then the screenshots found a real one.** Opening the Alerts capture — the first time anyone had
+seen that screen — showed values guessing their own units from magnitude (`if 0...100, add a %`):
+
+    viewer_count    50.0   rendered "50.0%"    a count is not a percentage
+    rebuffer_ratio   0.18  rendered "0.2%"     a 0-1 ratio is 18%, not 0.2%
+    cpu_pct         92.5   rendered "92.5%"    correct, by luck of the range
+
+Wrong in both directions on the same five rows. An alert carries its metric NAME, so the rule now
+decides from that (`*_pct` already 0-100, `*_ratio` scales by 100, everything else carries no
+unit) and lives in **PulseKit where Linux can test it** — which is the entire point of the split;
+it should never have been decided inside a view that nothing on this machine can compile. An
+unrecognised metric renders plain rather than being dressed up as a percentage. Verified in the
+next run's screenshot: `18.0% / 10.0%` and `50 / 100`.
+
+### Historical note (superseded)
+
+`testFullAppNavigation` fails at the **Alerts** assertions and `testSecondPassCaptures` at its
+**second-pass Live** assertion. Both are almost certainly the same class as #4 above, one level
+deeper: the alert *rows* may not carry the identifier, or the alert text asserted
+(`rebuffer_ratio`) may not be what the row actually renders. **Download the artifact, open the
+Alerts screenshot, and read what the screen says before changing the assertion** — that is what
+resolved every previous instance, and reasoning about it from the sibling code produced a wrong
+fix once already this session.
+
+### Gates
+
+PulseKit 291 tests, unchanged, zero warnings. `ios-kit` green. Screenshot extraction now tries the
+modern `xcresulttool` spelling, falls back to legacy, asserts PNGs appeared, and prints the tool's
+own `--help` when none did — because there is no Xcode on the machine this was written on.
+
+### Still blocking, still not ours
+
+Unchanged: **marketplace** waits on the `CLICKHOUSE_PASSWORD` rotation; **iOS TestFlight** waits
+on Apple Developer Program enrolment.

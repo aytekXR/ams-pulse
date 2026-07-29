@@ -35,8 +35,10 @@ struct AlertsView: View {
             Group {
                 if isLoading && alerts.isEmpty {
                     loadingView
+                        .accessibilityIdentifier(AccessibilityID.alerts_loadingView)
                 } else if alerts.isEmpty {
                     emptyView
+                        .accessibilityIdentifier(AccessibilityID.alerts_emptyView)
                 } else {
                     alertsList
                 }
@@ -104,11 +106,13 @@ struct AlertsView: View {
                 // Alert rows.
                 ForEach(alerts, id: \.id) { alert in
                     alertRow(alert: alert)
+                        .accessibilityIdentifier(AccessibilityID.alerts_row(id: alert.id))
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 16)
         }
+        .accessibilityIdentifier(AccessibilityID.alerts_list)
     }
 
     private func alertRow(alert: AlertHistoryEntry) -> some View {
@@ -133,7 +137,7 @@ struct AlertsView: View {
 
                 // Breach details.
                 HStack(spacing: 4) {
-                    Text(formatValue(alert.value))
+                    Text(formatValue(alert.value, metric: alert.metric))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(severityColor(alert.severity))
 
@@ -141,7 +145,7 @@ struct AlertsView: View {
                         .font(.system(size: 12, weight: .regular))
                         .foregroundColor(BrandColors.textSecondary)
 
-                    Text(formatValue(alert.threshold))
+                    Text(formatValue(alert.threshold, metric: alert.metric))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(BrandColors.textSecondary)
                 }
@@ -266,19 +270,15 @@ struct AlertsView: View {
         }
     }
 
-    private func formatValue(_ value: Double) -> String {
-        // Format metric value for display.
-        // Use percentageRaw if it looks like a percentage (0-100).
-        if value >= 0 && value <= 100 {
-            return Formatters.percentageRaw(value)
-        } else {
-            // General number formatting.
-            if value == value.rounded() {
-                return "\(Int(value))"
-            } else {
-                return String(format: "%.2f", value)
-            }
-        }
+    /// Format an alert value using the metric's own semantics.
+    ///
+    /// This used to guess from the magnitude ("0...100 means percentage"), which
+    /// put "50.0%" next to a viewer_count of 50 and "0.2%" next to a
+    /// rebuffer_ratio of 0.18 — on the same screen. The rule now lives in
+    /// PulseKit where Linux can test it, which is the point of the split: this is
+    /// logic, not layout.
+    private func formatValue(_ value: Double, metric: String) -> String {
+        Formatters.metricValue(value, metric: metric)
     }
 
     private func errorBanner(error: PulseAPIError) -> some View {

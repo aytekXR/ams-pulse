@@ -52,6 +52,14 @@ tester page. Until the operator has a TestFlight link, `/beta/` shows a **disabl
 working manual-invitation route — honest and usable today. The grep marker for the swap is
 `TESTFLIGHT_PUBLIC_LINK_PLACEHOLDER`, and it appears exactly once.
 
+**Every screen of the iOS app is now driven by XCUITest against a fixture server, and the captures
+are published on `/beta/` (D-189).** Five defects surfaced in that suite and **all five were in the
+test, not the app** — the screenshots said so each time. Then the screenshots found a real one: the
+Alerts screen was guessing units from magnitude, rendering a `viewer_count` of 50 as "50.0%" and a
+`rebuffer_ratio` of 0.18 as "0.2%". **When a UI test fails, open the capture before changing the
+assertion** — and when a screen is doing arithmetic or formatting, that logic belongs in PulseKit
+where Linux can test it, not in a view nothing here can compile.
+
 **Do first, every session:**
 1. **Gate reads** — prod health (component-scoped `/healthz` + a ClickHouse count), git/PR drift,
    and whether the operator rotated `CLICKHOUSE_PASSWORD` (check silently: compare the live

@@ -117,6 +117,7 @@ struct ConnectView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .foregroundColor(BrandColors.textPrimary)
+                    .accessibilityIdentifier(AccessibilityID.connect_serverURLField)
             }
 
             // API token field.
@@ -138,6 +139,7 @@ struct ConnectView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .foregroundColor(BrandColors.textPrimary)
+                    .accessibilityIdentifier(AccessibilityID.connect_tokenField)
 
                     Button {
                         showToken.toggle()
@@ -145,6 +147,8 @@ struct ConnectView: View {
                         Image(systemName: showToken ? "eye.slash" : "eye")
                             .foregroundColor(BrandColors.textMuted)
                     }
+                    .accessibilityIdentifier(AccessibilityID.connect_showTokenButton)
+                    .accessibilityLabel(showToken ? "Hide token" : "Show token")
                 }
                 .padding(16)
                 .background(BrandColors.surface)
@@ -172,6 +176,7 @@ struct ConnectView: View {
         .padding(16)
         .background(BrandColors.critical.opacity(0.1))
         .cornerRadius(12)
+        .accessibilityIdentifier(AccessibilityID.connect_errorBanner)
     }
 
     private var connectButton: some View {
@@ -195,6 +200,7 @@ struct ConnectView: View {
             .cornerRadius(12)
         }
         .disabled(!isValid || isLoading)
+        .accessibilityIdentifier(AccessibilityID.connect_connectButton)
     }
 
     // MARK: - Validation

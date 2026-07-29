@@ -86,17 +86,21 @@ struct PlayerView: View {
             if let player = player {
                 VideoPlayer(player: player)
                     .ignoresSafeArea(.all, edges: .horizontal)
+                    .accessibilityIdentifier(AccessibilityID.player_videoView)
             } else {
                 loadingView
+                    .accessibilityIdentifier(AccessibilityID.player_loadingView)
             }
 
             // Error overlay.
             if let errorMessage = errorMessage {
                 errorView(message: errorMessage)
+                    .accessibilityIdentifier(AccessibilityID.player_errorView)
             }
 
             // Stream info bar.
             streamInfoBar
+                .accessibilityIdentifier(AccessibilityID.player_infoBar)
         }
         .background(Color.black)
         .navigationTitle(stream.streamId)

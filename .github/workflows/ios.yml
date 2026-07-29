@@ -192,7 +192,145 @@ jobs:
             -project Pulse.xcodeproj \
             -scheme Pulse \
             -destination "platform=iOS Simulator,OS=26.2,name=iPhone 17 Pro" \
+            -resultBundlePath "$RUNNER_TEMP/TestResults.xcresult" \
             CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES
+
+      # ────────────────────────────────────────────────────────────────────────────
+      # UI TESTS: Drive the real app through every screen via XCUITest.
+      #
+      # RATIONALE (D-188): The app only ever reaches the CONNECT screen in CI
+      # because nothing supplies a server. Every other screen — live dashboard,
+      # streams, alerts, settings, the AVPlayer view — has NEVER BEEN SEEN.
+      # They compile. That is the entire basis on which they are believed to work.
+      #
+      # SOLUTION: A local fixture server serves realistic JSON for all
+      # PulseAPIClient endpoints. XCUITest drives the connect form with
+      # localhost:8090 and the fixture token, navigates every tab, and takes
+      # screenshots. The screenshots are uploaded as an artifact.
+      #
+      # CONSTRAINT (hard): No runtime backdoor in the app binary. The fixture
+      # server is the only instrumentation; the app code path is identical to
+      # production. XCUITest lives in a separate test target that is never part
+      # of the app binary.
+      # ────────────────────────────────────────────────────────────────────────────
+
+      # Start the fixture server in the background. The server writes a ready file
+      # when it is listening; we poll for that file rather than sleeping.
+      - name: Start fixture server
+        run: |
+          mkdir -p "$RUNNER_TEMP/fixture"
+          export FIXTURE_SERVER_READY_FILE="$RUNNER_TEMP/fixture/ready"
+          python3 ios/PulseApp/UITests/Fixtures/fixture_server.py --port 8090 &
+          echo $! > "$RUNNER_TEMP/fixture/pid"
+          # Wait for the ready file (max 30s). Fail loud if the server never starts.
+          for i in {1..30}; do
+            if [ -f "$RUNNER_TEMP/fixture/ready" ]; then
+              echo "Fixture server is ready (waited ${i}s)"
+              break
+            fi
+            sleep 1
+          done
+          if [ ! -f "$RUNNER_TEMP/fixture/ready" ]; then
+            echo "::error::Fixture server did not start within 60s. Check fixture_server.py for errors."
+            exit 1
+          fi
+          # Verify it responds.
+          if ! curl -sf http://localhost:8090/healthz >/dev/null; then
+            echo "::error::Fixture server started but /healthz is not responding."
+            exit 1
+          fi
+          echo "Fixture server verified at http://localhost:8090"
+
+      # Run UI tests. These are in a separate scheme (PulseUITests) that
+      # builds the app and the UI test target, installs both in the simulator,
+      # and drives the app through XCUITest.
+      - name: Run UI tests
+        run: |
+          cd ios
+          xcodebuild test \
+            -project Pulse.xcodeproj \
+            -scheme PulseUITests \
+            -destination "platform=iOS Simulator,OS=26.2,name=iPhone 17 Pro" \
+            -resultBundlePath "$RUNNER_TEMP/UITestResults.xcresult" \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES
+
+      # Stop the fixture server.
+      - name: Stop fixture server
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/fixture/pid" ]; then
+            PID=$(cat "$RUNNER_TEMP/fixture/pid")
+            if kill -0 "$PID" 2>/dev/null; then
+              kill "$PID" || true
+              echo "Fixture server (pid $PID) stopped"
+            fi
+          fi
+
+      # Extract screenshots from the .xcresult bundle.
+      #
+      # ⚠ xcresulttool's interface changed in recent Xcode and this step has no
+      # way to be sure which spelling the runner's version accepts — there is no
+      # Xcode on the machine this was written on. So it TRIES the modern form,
+      # falls back to the legacy form, and then ASSERTS that PNGs actually
+      # appeared. The previous version swallowed the exit code with `|| echo
+      # warning` and then listed the (empty) output directory, which meant a
+      # green job could ship zero screenshots — and screenshots are the entire
+      # product of this job.
+      - name: Extract UI test screenshots
+        id: shots
+        if: always()
+        run: |
+          set +e
+          RESULT_BUNDLE="$RUNNER_TEMP/UITestResults.xcresult"
+          OUT="$RUNNER_TEMP/ui-screenshots"
+          mkdir -p "$OUT"
+          if [ ! -d "$RESULT_BUNDLE" ]; then
+            echo "::warning::No UITestResults.xcresult found — the UI tests did not get far enough to produce one."
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "── attempt 1: modern export"
+          xcrun xcresulttool export attachments \
+            --path "$RESULT_BUNDLE" --output-path "$OUT" 2>&1 | tail -20
+
+          if [ -z "$(find "$OUT" -name '*.png' -type f 2>/dev/null)" ]; then
+            echo "── attempt 2: legacy export"
+            xcrun xcresulttool export --legacy \
+              --path "$RESULT_BUNDLE" --output-path "$OUT" --type directory 2>&1 | tail -20
+          fi
+
+          COUNT=$(find "$OUT" -name '*.png' -type f 2>/dev/null | wc -l | tr -d ' ')
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Extracted $COUNT screenshot(s):"
+          find "$OUT" -name '*.png' -type f | sort
+          if [ "$COUNT" = "0" ]; then
+            # Print the tool's own interface so the next iteration is informed by
+            # the runner rather than by a guess made on a Linux box.
+            echo "── xcresulttool interface on this runner, for the next attempt:"
+            xcrun xcresulttool export --help 2>&1 | head -40
+          fi
+          exit 0
+
+      # Screenshots missing while the tests PASSED means extraction is broken and
+      # nobody would notice — the job would be green and the artifact empty. If the
+      # tests failed, the job is already red and a warning is enough.
+      - name: Fail if a passing UI test run produced no screenshots
+        if: success() && steps.shots.outputs.count == '0'
+        run: |
+          echo "::error::UI tests passed but no screenshots were extracted from the xcresult bundle."
+          echo "See the 'xcresulttool interface on this runner' output in the previous step."
+          exit 1
+
+      # Upload UI test screenshots as an artifact.
+      - name: Upload UI test screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ui-test-screenshots
+          path: ${{ runner.temp }}/ui-screenshots
+          retention-days: 14
+          if-no-files-found: warn
 
   # ── 3. ios-testflight ───────────────────────────────────────────────────────
   # Archives PulseApp and uploads to TestFlight.

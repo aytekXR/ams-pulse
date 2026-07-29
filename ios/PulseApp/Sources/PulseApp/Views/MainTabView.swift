@@ -51,20 +51,24 @@ struct MainTabView: View {
                     Label(Tab.live.title, systemImage: Tab.live.icon)
                 }
                 .tag(Tab.live)
+                .accessibilityIdentifier(AccessibilityID.tabBar_live)
 
             AlertsView()
                 .tabItem {
                     Label(Tab.alerts.title, systemImage: Tab.alerts.icon)
                 }
                 .tag(Tab.alerts)
+                .accessibilityIdentifier(AccessibilityID.tabBar_alerts)
 
             SettingsView()
                 .tabItem {
                     Label(Tab.settings.title, systemImage: Tab.settings.icon)
                 }
                 .tag(Tab.settings)
+                .accessibilityIdentifier(AccessibilityID.tabBar_settings)
         }
         .tint(BrandColors.signal)
+        .accessibilityIdentifier(AccessibilityID.tabBar)
     }
 }
 
