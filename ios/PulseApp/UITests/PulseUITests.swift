@@ -102,12 +102,32 @@ final class PulseUITests: XCTestCase {
         expectation(for: hittable, evaluatedWith: field)
         waitForExpectations(timeout: 10)
         field.tap()
-        // Focus is what makes typing land; without it the keystrokes go nowhere
-        // and the failure surfaces later as an empty field.
+
+        // Give focus a moment, but do NOT make it a hard assertion.
+        //
+        // Waiting on hasKeyboardFocus was tried and it timed out on the FIRST
+        // test of the run — a freshly installed app whose software keyboard is
+        // still initialising — while passing in the two tests after it. Focus is
+        // an implementation detail of how the text gets in; whether the text
+        // actually got in is the thing worth asserting, and it is asserted below
+        // and again at the Connect button's enabled state. Pinning the mechanism
+        // instead of the outcome is what made this brittle.
         let focused = NSPredicate(format: "hasKeyboardFocus == true")
-        expectation(for: focused, evaluatedWith: field)
-        waitForExpectations(timeout: 10)
+        let gotFocus = XCTNSPredicateExpectation(predicate: focused, object: field)
+        _ = XCTWaiter().wait(for: [gotFocus], timeout: 5)
+
         field.typeText(text)
+
+        // Assert the OUTCOME. A secure field masks its value, so it can only be
+        // checked for non-emptiness; a plain field can be checked exactly.
+        if field.elementType == .secureTextField {
+            let value = (field.value as? String) ?? ""
+            XCTAssertFalse(value.isEmpty, "Typing into \(name) did not land")
+        } else {
+            let value = (field.value as? String) ?? ""
+            XCTAssertTrue(value.contains(text),
+                          "Typing into \(name) did not land — field reads '\(value)'")
+        }
     }
 
     /// Switch tabs and PROVE the switch happened before asserting anything about
