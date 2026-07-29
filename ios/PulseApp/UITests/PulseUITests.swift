@@ -57,11 +57,30 @@ final class PulseUITests: XCTestCase {
     private func signOutIfNeeded() {
         guard app.tabBars.firstMatch.waitForExistence(timeout: 3) else { return }
         switchToTab("Settings")
-        let signOut = app.buttons[AccessibilityID.settings_signOutButton]
-        if signOut.waitForExistence(timeout: 5) {
-            signOut.tap()
+        let signOut = app.descendants(matching: .any)[AccessibilityID.settings_signOutButton]
+        guard signOut.waitForExistence(timeout: 5) else {
+            XCTFail("Signed in, but Settings has no sign-out control to get back out with")
+            return
         }
-        _ = app.textFields.firstMatch.waitForExistence(timeout: 5)
+        signOut.tap()
+
+        // Signing out is CONFIRMED — SettingsView presents a confirmationDialog
+        // with a destructive "Sign Out". That is the right product behaviour (an
+        // accidental sign-out costs the operator their token) and it is why the
+        // first version of this helper never got back to the Connect screen: it
+        // tapped the row, the dialog opened, and nothing dismissed it. The test
+        // then failed on the NEXT screen's field, blaming it.
+        let confirm = app.sheets.buttons["Sign Out"].firstMatch
+        if confirm.waitForExistence(timeout: 5) {
+            confirm.tap()
+        } else {
+            // Fall back to any Sign Out button that is not the row we just tapped.
+            let anyConfirm = app.buttons["Sign Out"].firstMatch
+            if anyConfirm.waitForExistence(timeout: 3) { anyConfirm.tap() }
+        }
+
+        XCTAssertTrue(app.textFields.firstMatch.waitForExistence(timeout: 10),
+                      "Sign out did not return to the Connect screen")
     }
 
     /// Switch tabs and PROVE the switch happened before asserting anything about
