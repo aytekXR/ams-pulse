@@ -167,9 +167,16 @@ final class PulseUITests: XCTestCase {
         // descendants(matching: .staticText) under it is empty — this assertion
         // failed on a dashboard that was, per the screenshot, rendering
         // perfectly. The test was wrong, not the app.
-        XCTAssertTrue(app.otherElements[AccessibilityID.live_viewersTile].waitForExistence(timeout: 10),
+        // descendants(matching: .any), not otherElements. SwiftUI decides for
+        // itself which XCUIElement TYPE a view with an identifier is exposed as —
+        // a VStack may surface as an image, a button, or merged text depending on
+        // its content — and otherElements[...] silently matches nothing when the
+        // guess is wrong. The dashboard in the screenshot was rendering all four
+        // tiles while this query returned empty. Query by identifier across all
+        // types and let the identifier do the work it exists to do.
+        XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.live_viewersTile].waitForExistence(timeout: 10),
                       "Live dashboard did not render its viewers tile")
-        XCTAssertTrue(app.otherElements[AccessibilityID.live_publishersTile].exists,
+        XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.live_publishersTile].exists,
                       "Live dashboard did not render its publishers tile")
 
         // Fixture: total_viewers 2847 (formatted 2.8K), total_publishers 42.
@@ -200,12 +207,12 @@ final class PulseUITests: XCTestCase {
         // list, a permanent spinner, and an error state alike — the exact
         // "harness that silently skips" shape this repo treats as no
         // verification at all.
-        let alertsList = app.otherElements[AccessibilityID.alerts_list]
+        let alertsList = app.descendants(matching: .any)[AccessibilityID.alerts_list]
         XCTAssertTrue(alertsList.waitForExistence(timeout: 10),
                       "Alerts screen did not render its list container")
-        XCTAssertFalse(app.otherElements[AccessibilityID.alerts_emptyView].exists,
+        XCTAssertFalse(app.descendants(matching: .any)[AccessibilityID.alerts_emptyView].exists,
                        "Alerts showed its empty state, but the fixture serves 5 alerts")
-        XCTAssertFalse(app.otherElements[AccessibilityID.alerts_loadingView].exists,
+        XCTAssertFalse(app.descendants(matching: .any)[AccessibilityID.alerts_loadingView].exists,
                        "Alerts was still loading after 10s")
         XCTAssertTrue(app.staticTexts["rebuffer_ratio"].waitForExistence(timeout: 5),
                       "Alerts should list the fixture's rebuffer_ratio alert")
@@ -223,14 +230,14 @@ final class PulseUITests: XCTestCase {
 
         takeScreenshot(name: "05-settings")
 
-        XCTAssertTrue(app.otherElements[AccessibilityID.settings_serverRow].waitForExistence(timeout: 10),
+        XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.settings_serverRow].waitForExistence(timeout: 10),
                       "Settings did not render the server row")
         // Same merged-element caveat as the live tiles — match the text directly.
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "localhost")).firstMatch.exists,
                       "Settings should show the connected server host")
         // The fixture's /healthz reports every component ok — so the component
         // rows must be present, not merely the section heading.
-        XCTAssertTrue(app.otherElements[AccessibilityID.settings_componentClickhouse].exists,
+        XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.settings_componentClickhouse].exists,
                       "Settings should show the ClickHouse component health row")
 
         // ────────────────────────────────────────────────────────────────────
@@ -278,7 +285,7 @@ final class PulseUITests: XCTestCase {
         // A test named testConnectErrorState that cannot fail is not a test of
         // error state. The error banner has an identifier precisely so this can
         // be asserted rather than guessed at from free text.
-        let banner = app.otherElements[AccessibilityID.connect_errorBanner]
+        let banner = app.descendants(matching: .any)[AccessibilityID.connect_errorBanner]
         XCTAssertTrue(banner.waitForExistence(timeout: 15),
                       "Connecting to an unreachable host must surface the error banner")
         // And we must still be on the connect screen — a failed connection that
@@ -318,17 +325,17 @@ final class PulseUITests: XCTestCase {
 
         sleep(2)
 
-        XCTAssertTrue(app.otherElements[AccessibilityID.live_viewersTile].waitForExistence(timeout: 10),
+        XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.live_viewersTile].waitForExistence(timeout: 10),
                       "Second pass: live dashboard did not render")
         takeScreenshot(name: "08-live-second-pass")
 
         tabBar.buttons["Alerts"].tap()
-        XCTAssertTrue(app.otherElements[AccessibilityID.alerts_list].waitForExistence(timeout: 10),
+        XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.alerts_list].waitForExistence(timeout: 10),
                       "Second pass: alerts did not render")
         takeScreenshot(name: "09-alerts-second-pass")
 
         tabBar.buttons["Settings"].tap()
-        XCTAssertTrue(app.otherElements[AccessibilityID.settings_serverRow].waitForExistence(timeout: 10),
+        XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.settings_serverRow].waitForExistence(timeout: 10),
                       "Second pass: settings did not render")
         takeScreenshot(name: "10-settings-second-pass")
     }
