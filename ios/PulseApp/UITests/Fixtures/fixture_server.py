@@ -39,6 +39,30 @@ import json
 import os
 import sys
 from http.server import HTTPServer, BaseHTTPRequestHandler
+
+
+class FastBindHTTPServer(HTTPServer):
+    """HTTPServer that does not stall for ~35 seconds on bind.
+
+    http.server's server_bind() calls socket.getfqdn() to populate server_name.
+    On a GitHub macOS runner that reverse lookup blocks until a DNS timeout: the
+    server printed "Listening" 36 SECONDS after start, having sailed past CI's
+    30-second readiness wait, so the job failed on a server that was in fact
+    about to work. Nothing was wrong with the fixtures or the app.
+
+    We know the name — we bound it ourselves — so skip the lookup entirely.
+    """
+
+    def server_bind(self):
+        # Deliberately NOT calling HTTPServer.server_bind(); that is the method
+        # containing the getfqdn() call. Go straight to its parent and set the
+        # two attributes it would have derived.
+        import socketserver
+
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name = "localhost"
+        self.server_port = port
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 import time
@@ -607,7 +631,7 @@ def main():
     args = parser.parse_args()
 
     # Bind only to localhost — this is a test fixture, not a production server.
-    server = HTTPServer(("127.0.0.1", args.port), FixtureHandler)
+    server = FastBindHTTPServer(("127.0.0.1", args.port), FixtureHandler)
 
     # Signal readiness by touching a file if FIXTURE_SERVER_READY_FILE is set.
     # This is more reliable than sleeping in CI.

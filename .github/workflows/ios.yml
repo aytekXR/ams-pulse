@@ -231,7 +231,7 @@ jobs:
             sleep 1
           done
           if [ ! -f "$RUNNER_TEMP/fixture/ready" ]; then
-            echo "::error::Fixture server did not start within 30s. Check fixture_server.py for errors."
+            echo "::error::Fixture server did not start within 60s. Check fixture_server.py for errors."
             exit 1
           fi
           # Verify it responds.
