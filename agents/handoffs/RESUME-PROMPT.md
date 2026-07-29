@@ -52,6 +52,14 @@ tester page. Until the operator has a TestFlight link, `/beta/` shows a **disabl
 working manual-invitation route — honest and usable today. The grep marker for the swap is
 `TESTFLIGHT_PUBLIC_LINK_PLACEHOLDER`, and it appears exactly once.
 
+**⚠ ONE BRANCH IS OPEN AND DELIBERATELY UNMERGED: `s121/ui-screens` (D-189).** XCUITest drives the
+app through its screens against a fixture server; 1 of 3 tests passes and the Live dashboard,
+connect flow and error state are all visually verified working. Two assertions still fail on the
+Alerts screen. **Do not merge it red** — and when you pick it up, *download the screenshot artifact
+and look at the Alerts screen before touching the assertion*. Every one of this session's four
+defects turned out to be in the test rather than the app, and the one time I reasoned from sibling
+code instead of the picture, the fix was wrong.
+
 **Do first, every session:**
 1. **Gate reads** — prod health (component-scoped `/healthz` + a ClickHouse count), git/PR drift,
    and whether the operator rotated `CLICKHOUSE_PASSWORD` (check silently: compare the live
