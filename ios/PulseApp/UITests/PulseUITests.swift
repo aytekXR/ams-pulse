@@ -83,6 +83,33 @@ final class PulseUITests: XCTestCase {
                       "Sign out did not return to the Connect screen")
     }
 
+    /// Tap a text field and type into it, waiting until the field is actually
+    /// ready to receive the event.
+    ///
+    /// XCUITest raised "Failed to synthesize event" on a run where the same test
+    /// had passed twice before — an intermittent, not a regression. It happens
+    /// when an element is tapped while the UI is still settling (here: right
+    /// after a sign-out transition, with the keyboard animating in). An
+    /// intermittently-red gate is worse than a slow one, because the first
+    /// response to a flaky failure is to re-run it, and the second is to stop
+    /// reading it.
+    ///
+    /// So: wait for existence, wait for hittability, tap, confirm the field took
+    /// focus, and only then type.
+    private func type(_ text: String, into field: XCUIElement, name: String) {
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "\(name) never appeared")
+        let hittable = NSPredicate(format: "isHittable == true")
+        expectation(for: hittable, evaluatedWith: field)
+        waitForExpectations(timeout: 10)
+        field.tap()
+        // Focus is what makes typing land; without it the keystrokes go nowhere
+        // and the failure surfaces later as an empty field.
+        let focused = NSPredicate(format: "hasKeyboardFocus == true")
+        expectation(for: focused, evaluatedWith: field)
+        waitForExpectations(timeout: 10)
+        field.typeText(text)
+    }
+
     /// Switch tabs and PROVE the switch happened before asserting anything about
     /// content.
     ///
@@ -159,21 +186,9 @@ final class PulseUITests: XCTestCase {
                       "App should start on ConnectView")
         takeScreenshot(name: "01-connect-empty")
 
-        // Enter the fixture server URL.
-        // Find the text field — there should be one for the URL.
-        let serverURLField = app.textFields.firstMatch
-        XCTAssertTrue(serverURLField.waitForExistence(timeout: 5),
-                      "Server URL field should exist")
-        serverURLField.tap()
-        serverURLField.typeText(fixtureServerURL)
-
-        // Enter the fixture token.
         // The token field is a SecureField, which XCUITest sees as a secureTextField.
-        let tokenField = app.secureTextFields.firstMatch
-        XCTAssertTrue(tokenField.waitForExistence(timeout: 5),
-                      "Token field should exist")
-        tokenField.tap()
-        tokenField.typeText(fixtureToken)
+        type(fixtureServerURL, into: app.textFields.firstMatch, name: "Server URL field")
+        type(fixtureToken, into: app.secureTextFields.firstMatch, name: "API token field")
 
         takeScreenshot(name: "02-connect-filled")
 
@@ -306,15 +321,9 @@ final class PulseUITests: XCTestCase {
     func testConnectErrorState() throws {
         signOutIfNeeded()
         // Enter a URL that won't resolve — a port with no server.
-        let serverURLField = app.textFields.firstMatch
-        XCTAssertTrue(serverURLField.waitForExistence(timeout: 5))
-        serverURLField.tap()
-        serverURLField.typeText("http://localhost:19999")
+        type("http://localhost:19999", into: app.textFields.firstMatch, name: "Server URL field")
 
-        let tokenField = app.secureTextFields.firstMatch
-        XCTAssertTrue(tokenField.waitForExistence(timeout: 5))
-        tokenField.tap()
-        tokenField.typeText("invalid_token")
+        type("invalid_token", into: app.secureTextFields.firstMatch, name: "API token field")
 
         let connectButton = app.buttons["Connect"]
         // Assert the PRECONDITION. If the text never landed in the fields, the
@@ -357,14 +366,9 @@ final class PulseUITests: XCTestCase {
         signOutIfNeeded()
 
         // Connect first.
-        let serverURLField = app.textFields.firstMatch
-        XCTAssertTrue(serverURLField.waitForExistence(timeout: 5))
-        serverURLField.tap()
-        serverURLField.typeText(fixtureServerURL)
+        type(fixtureServerURL, into: app.textFields.firstMatch, name: "Server URL field")
 
-        let tokenField = app.secureTextFields.firstMatch
-        tokenField.tap()
-        tokenField.typeText(fixtureToken)
+        type(fixtureToken, into: app.secureTextFields.firstMatch, name: "API token field")
 
         app.buttons["Connect"].tap()
 
