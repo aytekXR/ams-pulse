@@ -21,6 +21,14 @@ import XCTest
 ///
 /// SCREENSHOTS: Each test takes screenshots using XCTAttachment. These are
 /// extracted from the .xcresult bundle and uploaded as workflow artifacts.
+// @MainActor on the whole class, not on each test.
+//
+// XCUIApplication and every XCUIElement query it returns are MainActor-isolated,
+// and this target builds under Swift 6 strict concurrency — so a nonisolated test
+// method touching `app` is a compile error, not a warning. Annotating the class
+// is the single place that covers setUp, every test, and the helpers, and it
+// cannot be forgotten on the next test someone adds.
+@MainActor
 final class PulseUITests: XCTestCase {
 
     // MARK: - Properties
