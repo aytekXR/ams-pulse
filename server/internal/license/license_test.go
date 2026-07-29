@@ -216,10 +216,12 @@ func TestMultiTenant_BusinessAllowed(t *testing.T) {
 	t.Logf("PASS: CheckMultiTenant on free tier → error (correct gate): %v", err)
 }
 
-// TestAnomalies_RequiresEnterprise guards that anomaly detection still
-// requires Enterprise tier (unchanged by VD-01; Business does NOT include anomalies
-// per PRD §7.11 Enterprise column).
-func TestAnomalies_RequiresEnterprise(t *testing.T) {
+// TestAnomalies_RequiresBusinessOrHigher guards that anomaly detection is gated at all.
+// The tier was Enterprise-only until S122, when the operator resolved a standing
+// contradiction — the docs advertised Enterprise while the code gated only GET
+// /anomalies, leaving anomaly ALERTING open to Business — in the grant-only direction.
+// Free must still be blocked; the Pro floor is pinned in license_coverage_test.go.
+func TestAnomalies_RequiresBusinessOrHigher(t *testing.T) {
 	lic, _ := license.New("", "") // free tier
 	if err := lic.CheckAnomalies(); err == nil {
 		t.Error("free tier: CheckAnomalies must return error")

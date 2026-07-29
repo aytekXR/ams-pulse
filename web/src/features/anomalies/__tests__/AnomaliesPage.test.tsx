@@ -48,6 +48,10 @@ import { AnomaliesPage } from "../AnomaliesPage";
 const enterpriseLicense: LicenseInfo = { tier: "enterprise", valid: true };
 const freeLicense: LicenseInfo = { tier: "free", valid: true };
 const proLicense: LicenseInfo = { tier: "pro", valid: true };
+// S122: anomaly detection is Business+, not Enterprise-only. Business must reach the
+// table, and Pro must still hit the gate — the pair is what pins the boundary, since a
+// gate that accidentally opened to everyone would still satisfy the Business case alone.
+const businessLicense: LicenseInfo = { tier: "business", valid: true };
 
 const sampleFlags: AnomalyFlag[] = [
   {
@@ -96,7 +100,7 @@ describe("AnomaliesPage rendering", () => {
     render(<AnomaliesPage />);
     await waitFor(() => {
       expect(
-        screen.getByText(/anomaly detection requires enterprise tier/i),
+        screen.getByText(/anomaly detection requires business tier/i),
       ).toBeInTheDocument();
     });
   });
@@ -114,9 +118,25 @@ describe("AnomaliesPage rendering", () => {
     render(<AnomaliesPage />);
     await waitFor(() => {
       expect(
-        screen.getByText(/anomaly detection requires enterprise tier/i),
+        screen.getByText(/anomaly detection requires business tier/i),
       ).toBeInTheDocument();
     });
+  });
+
+  // S122 boundary: Business is the new floor. This is the test that would have caught the
+  // UI half of the tier split — the API granted Business access while the page still
+  // rendered an "upgrade to Enterprise" wall.
+  it("shows anomaly flags table when business-entitled", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue(businessLicense);
+    vi.mocked(anomaliesApi.list).mockResolvedValue({
+      items: sampleFlags,
+      meta: { total: 3 },
+    });
+    render(<AnomaliesPage />);
+    await waitFor(() => {
+      expect(screen.getByText("viewers")).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/requires business tier/i)).not.toBeInTheDocument();
   });
 
   it("shows anomaly flags table when enterprise-entitled", async () => {

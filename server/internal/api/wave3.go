@@ -43,7 +43,7 @@ import (
 // Branch runs BEFORE the nil-anomalyDetector early-return so servers without an
 // anomaly detector can still serve history queries.
 func (s *Server) handleAnomalies(w http.ResponseWriter, r *http.Request) {
-	// Tier gate: anomaly detection is Enterprise only.
+	// Tier gate: anomaly detection is Business or higher (S122).
 	if err := s.lic.CheckAnomalies(); err != nil {
 		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
 		return

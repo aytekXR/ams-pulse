@@ -380,11 +380,19 @@ func (m *Manager) CheckProbes() error {
 }
 
 // CheckAnomalies returns nil if the tier includes anomaly detection access (F9).
-// Anomaly detection requires Enterprise tier (§7.11 pricing table).
+// Anomaly detection requires Business tier or higher.
+//
+// This gate was Enterprise-only until S122, and it was the only anomaly gate in the
+// product: anomaly ALERTING (rule_type=anomaly rules and their evaluation) was never
+// tier-checked at all, so a Business tenant already received anomaly alerts while this
+// function denied them the endpoint that explains those alerts. Two sources of truth
+// disagreed rather than one being a bug. The operator resolved it toward Business+, the
+// grant-only direction: no tenant loses a capability it has today, and the tier tables
+// in the docs and the marketplace listing now describe what the code actually does.
 func (m *Manager) CheckAnomalies() error {
 	t := m.Tier()
-	if t != TierEnterprise {
-		return fmt.Errorf("anomaly detection (F9) requires Enterprise tier (current: %q)", t)
+	if t != TierBusiness && t != TierEnterprise {
+		return fmt.Errorf("anomaly detection (F9) requires Business tier or higher (current: %q)", t)
 	}
 	return nil
 }
