@@ -56,12 +56,46 @@ final class PulseUITests: XCTestCase {
     /// reason, which read like a UI bug and was not one.
     private func signOutIfNeeded() {
         guard app.tabBars.firstMatch.waitForExistence(timeout: 3) else { return }
-        app.tabBars.buttons["Settings"].tap()
+        switchToTab("Settings")
         let signOut = app.buttons[AccessibilityID.settings_signOutButton]
         if signOut.waitForExistence(timeout: 5) {
             signOut.tap()
         }
         _ = app.textFields.firstMatch.waitForExistence(timeout: 5)
+    }
+
+    /// Switch tabs and PROVE the switch happened before asserting anything about
+    /// content.
+    ///
+    /// Evidence from a failed run: the accessibility hierarchy captured at the
+    /// moment the alerts assertion failed still showed `tab_live` as the visible
+    /// content and a NavigationBar identified 'Live'. The alerts data was fine —
+    /// the same fixture bodies decode cleanly through the real client on Linux,
+    /// all nine endpoints. The tap simply had not taken effect, and every
+    /// downstream assertion then blamed the Alerts screen for it.
+    ///
+    /// iOS 26's floating tab bar renders an `AdditionalDimmingOverlay` above the
+    /// content (it is in that same dump), so a tap can land before the bar is
+    /// hittable. Tap, wait for the destination's navigation bar, and retry once.
+    /// If it still has not moved, fail HERE with a message naming navigation —
+    /// not thirty lines later with a message naming the screen's data.
+    @discardableResult
+    private func switchToTab(_ name: String) -> Bool {
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(tabBar.waitForExistence(timeout: 10), "Tab bar never appeared")
+        let button = tabBar.buttons[name]
+        XCTAssertTrue(button.waitForExistence(timeout: 5), "Tab button '\(name)' does not exist")
+
+        for attempt in 1...2 {
+            if button.isHittable { button.tap() } else { button.forceTap() }
+            if app.navigationBars[name].waitForExistence(timeout: 8) { return true }
+            if attempt == 1 {
+                // The overlay can swallow the first tap while the bar settles.
+                Thread.sleep(forTimeInterval: 1.0)
+            }
+        }
+        XCTFail("Tapping the '\(name)' tab did not navigate — still showing \(app.navigationBars.firstMatch.identifier)")
+        return false
     }
 
     override func setUpWithError() throws {
@@ -193,9 +227,7 @@ final class PulseUITests: XCTestCase {
         // Step 3: Navigate to Alerts tab
         // ────────────────────────────────────────────────────────────────────
 
-        let alertsTab = tabBar.buttons["Alerts"]
-        XCTAssertTrue(alertsTab.exists, "Alerts tab should exist")
-        alertsTab.tap()
+        switchToTab("Alerts")
 
         // Wait for content to load.
         sleep(2)
@@ -221,9 +253,7 @@ final class PulseUITests: XCTestCase {
         // Step 4: Navigate to Settings tab
         // ────────────────────────────────────────────────────────────────────
 
-        let settingsTab = tabBar.buttons["Settings"]
-        XCTAssertTrue(settingsTab.exists, "Settings tab should exist")
-        settingsTab.tap()
+        switchToTab("Settings")
 
         // Wait for content to load.
         sleep(2)
@@ -329,12 +359,12 @@ final class PulseUITests: XCTestCase {
                       "Second pass: live dashboard did not render")
         takeScreenshot(name: "08-live-second-pass")
 
-        tabBar.buttons["Alerts"].tap()
+        switchToTab("Alerts")
         XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.alerts_list].waitForExistence(timeout: 10),
                       "Second pass: alerts did not render")
         takeScreenshot(name: "09-alerts-second-pass")
 
-        tabBar.buttons["Settings"].tap()
+        switchToTab("Settings")
         XCTAssertTrue(app.descendants(matching: .any)[AccessibilityID.settings_serverRow].waitForExistence(timeout: 10),
                       "Second pass: settings did not render")
         takeScreenshot(name: "10-settings-second-pass")
@@ -351,5 +381,20 @@ final class PulseUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+}
+
+// MARK: - XCUIElement conveniences
+
+extension XCUIElement {
+    /// Tap by coordinate when the element is present but reports as not hittable.
+    ///
+    /// iOS 26's floating tab bar sits under a dimming overlay, and XCUITest will
+    /// refuse an ordinary tap on an element it believes is obscured — even when a
+    /// person could tap it. A coordinate tap goes through. Used only as the
+    /// fallback in switchToTab, never as the default: the default should fail
+    /// loudly when something really is unreachable.
+    func forceTap() {
+        coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 }
