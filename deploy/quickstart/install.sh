@@ -38,7 +38,7 @@ set -euo pipefail
 # PULSE_REF pins all raw.githubusercontent.com downloads to the release tag
 # matching the pinned image, so a curl|bash install can never pair an old image
 # with a newer compose file from main (the release-time guard enforces the pin).
-PULSE_REF="${PULSE_REF:-v0.4.4}"
+PULSE_REF="${PULSE_REF:-v0.4.5}"
 REPO_RAW="https://raw.githubusercontent.com/aytekXR/ams-pulse/${PULSE_REF}"
 REPO_WEB="https://github.com/aytekXR/ams-pulse"
 HEALTHZ_DEADLINE=90   # seconds
@@ -47,7 +47,7 @@ HEALTHZ_DEADLINE=90   # seconds
 # discovered in the UI a minute later. Must exceed the 30 s collector staleness
 # floor (D-164) for the verdict to be meaningful.
 COLLECTOR_SETTLE_SECONDS="${COLLECTOR_SETTLE_SECONDS:-40}"
-export PULSE_IMAGE="${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.4}"
+export PULSE_IMAGE="${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.5}"
 # Host port for the Pulse UI/API. Override when 8090 is already taken on this
 # machine: PULSE_HOST_PORT=18090 ./install.sh …
 export PULSE_HOST_PORT="${PULSE_HOST_PORT:-8090}"

@@ -10,9 +10,9 @@ type: application
 # OVERWRITES an existing version in the OCI registry, so re-publishing the same
 # version with different templates silently replaces the artifact someone already
 # pulled (REVIEW-MP3-R8). Release guard check #16 now enforces this.
-version: 0.3.2
+version: 0.3.3
 # App version matches the pulse binary release tag.
-appVersion: "0.4.4"
+appVersion: "0.4.5"
 
 keywords:
   - antmedia
