@@ -65,7 +65,7 @@ test.describe("Anomalies", () => {
     // TierGate renders its own h2 with the feature-locked copy.
     await expect(
       page.getByRole("heading", {
-        name: "Anomaly Detection requires Enterprise tier",
+        name: "Anomaly detection requires Business tier or higher",
         level: 2,
       })
     ).toBeVisible();
@@ -87,7 +87,26 @@ test.describe("Anomalies", () => {
     await expect(page.getByRole("cell", { name: "viewers" })).toBeVisible();
     // TierGate heading must not exist when enterprise.
     await expect(
-      page.getByRole("heading", { name: "Anomaly Detection requires Enterprise tier" })
+      page.getByRole("heading", { name: "Anomaly detection requires Business tier or higher" })
+    ).toHaveCount(0);
+  });
+
+  // S122: Business is the tier FLOOR for anomaly detection, and this is the test whose absence
+  // let half the tier change ship invisibly. The API admitted Business while this page still
+  // rendered an "upgrade to Enterprise" wall, so an entitled tenant was shown an upsell over data
+  // it was owed — and no browser test covered a Business tenant reaching the page at all. Pinning
+  // it here as well as in the unit suite, because this is the layer the operator actually sees.
+  test("business tier: table renders, TierGate absent", async ({ page }) => {
+    await stubApp(page, { tier: "business" });
+    await page.route("**/api/v1/anomalies**", (route) => json(route, SAMPLE_FLAGS_BODY));
+
+    await page.goto("/anomalies");
+
+    await expect(page.getByRole("table", { name: "Anomaly flags table" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "viewers" })).toBeVisible();
+    // No gate for an entitled tier.
+    await expect(
+      page.getByRole("heading", { name: "Anomaly detection requires Business tier or higher" })
     ).toHaveCount(0);
   });
 

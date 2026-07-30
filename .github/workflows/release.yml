@@ -284,16 +284,40 @@ jobs:
           #     (ams-pulse:<semver>) rather than a bare version grep: prose that
           #     legitimately names an OLD release ("re-verified against 0.4.2") must
           #     not trip this, only a runnable pin that would pull the wrong image.
-          for f in \
-            docs/runbooks/install.md \
-            docs/troubleshooting.md \
-            docs/beacon-sdk.md; do
-            if grep -oE 'ams-pulse:[0-9]+\.[0-9]+\.[0-9]+' "$f" 2>/dev/null \
-               | grep -v ":${TAG_VERSION}$" | head -1 | grep -q .; then
-              echo "FAIL: $f contains a stale ams-pulse image pin (want only :${TAG_VERSION})"
-              exit 1
+          #     S122 widened this again, for the third time, and the pattern is now clear
+          #     enough to name: every time this check was written as an EXPLICIT FILE LIST,
+          #     the next stale pin appeared in a file just outside it. This round it was
+          #     deploy/quickstart/.env.example (pinned 0.4.2, three releases behind, in the
+          #     file a quickstart user copies) and docs/marketplace/ankush-reply-draft.md
+          #     (the message the operator sends Ant Media, which pinned 0.4.4 under prose
+          #     claiming v0.4.3 — stale AND self-contradictory). So it is no longer a list:
+          #     it scans every tracked Markdown, YAML, env-example and shell file, minus an
+          #     explicit exclusion set.
+          #
+          #     WHAT THIS DOES NOT COVER, deliberately:
+          #       - docs/assessment/** and agents/** — dated review records and handoffs.
+          #         A historical report pinning 0.4.1 was TRUE when written; forcing it to
+          #         the current tag would falsify an audit trail.
+          #       - CHANGELOG.md — old entries legitimately name the release they shipped in.
+          #     Anything else is in scope. If a new directory needs exempting, add it here
+          #     WITH the reason, rather than narrowing the scan back into a file list.
+          STALE_PINS=0
+          while IFS= read -r f; do
+            case "$f" in
+              docs/assessment/*|agents/*|CHANGELOG.md) continue ;;
+            esac
+            [ -f "$f" ] || continue
+            BAD="$(grep -oE 'ams-pulse:[0-9]+\.[0-9]+\.[0-9]+' "$f" 2>/dev/null \
+                   | grep -v ":${TAG_VERSION}$" | sort -u | tr '\n' ' ')"
+            if [ -n "$BAD" ]; then
+              echo "FAIL: $f contains a stale ams-pulse image pin: ${BAD}(want only :${TAG_VERSION})"
+              STALE_PINS=1
             fi
-          done
+          done <<EOF
+          $(git ls-files '*.md' '*.yml' '*.yaml' '*.sh' '*.example' '.env.example' '**/.env.example')
+          EOF
+          [ "$STALE_PINS" -eq 0 ] || exit 1
+          echo "Image-pin scan: PASS (no stale ams-pulse pins outside the documented exclusions)"
 
           # 18. RUNNABLE OCI-chart pins in the docs must match the chart's own semver
           #     (D-178). The chart is published to oci://ghcr.io/aytekxr/charts on every

@@ -24,7 +24,7 @@ the code governs.
 | Prometheus `/metrics` endpoint | Business+ | `businessTierEntitlements` in license.go |
 | 396-day retention | Business+ | `businessTierEntitlements` in license.go |
 | CSV export / usage reports | Business+ | `CheckReports()` in `license.go:394` (Business/Enterprise) |
-| Anomaly detection | Enterprise | `enterpriseTierEntitlements`; anomaly evaluator checks Enterprise tier flag |
+| Anomaly detection | Business+ | `license.CheckAnomalies` (Business or Enterprise), enforced on `GET /anomalies` in `api/wave3.go`. Note the anomaly *evaluator* has never tier-checked at all — anomaly alert rules fire for any tier that can create them, which is why the old "Enterprise" claim here was wrong in both halves and was resolved toward Business+ in S122. |
 | White-label PDF reports | Enterprise | `WhiteLabel: true` only in `enterpriseTierEntitlements` |
 | PagerDuty / Webhook channels | Business+ | `businessTierEntitlements.Channels` |
 | Air-gapped licensing | Enterprise (recommended) | Supported at all tiers via `PULSE_LICENSE_FILE` (no tier gate); Enterprise is recommended for air-gapped production |

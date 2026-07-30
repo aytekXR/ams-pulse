@@ -3,7 +3,7 @@
 Authoritative technical-design document. PRD: `docs/prd-report.md` §7. Decisions with
 trade-offs get an ADR in `docs/adr/`.
 
-Last updated: 2026-07-27 — §3 rule 2 now names `internal/cluster` and is enforced by
+Last updated: 2026-07-30 — §3 rule 2 now names `internal/cluster` and is enforced by
 a test (D-179); previous sweep 2026-07-22 (D-161); content baseline D-062 with
 subsequent per-section amendments. QA gate: PASS_WITH_LIMITATIONS.
 
@@ -73,7 +73,7 @@ Last updated: 2026-06-14 — Wave 3-MVP complete. QA gate: **PASS_WITH_LIMITATIO
 | Probe runner | `internal/prober` | **Shipped** (F10 MVP + D-072/D-073/D-074/D-075) — HLS full; dash full (MPD+segment); webrtc phase-2a signaling+ICE (`ice_state`) + phase-2b RTP stats (`rtt_ms`/`jitter_ms`/`loss_pct`, D-075); rtmp phase-1 TCP handshake; 4-worker pool; 60 s config refresh |
 | Probe results store | `internal/store/clickhouse` | **Shipped** (F10) — `InsertProbeResult` + `QueryProbeResults`; `{retention_days}`-configurable TTL (D-073, default 90) |
 | Probe CRUD + API | `internal/api` | **Shipped** (F10) — `POST/GET/PUT/DELETE /probes`; `GET /probes/{id}/results`; Pro+ tier gate |
-| Anomaly detector | `internal/anomaly` | **Shipped** (F9 MVP) — Welford online baselines; σ=4.0; 0.259 FA/node-week; `GET /anomalies`; Enterprise-only |
+| Anomaly detector | `internal/anomaly` | **Shipped** (F9 MVP) — Welford online baselines; σ=4.0; 0.43 FA/node-week; `GET /anomalies`; Business+ |
 | Web UI — anomalies | `web/src/features/anomalies` | **Shipped** (F9) — flag table; sigma selector; severity badges; Enterprise gate |
 | Web UI — probes | `web/src/features/probes` | **Shipped** (F10) — CRUD form; results panel with TTFB+bitrate charts; 4-level synthetic labeling; Pro+ gate |
 
@@ -182,7 +182,7 @@ Wave-3-Plus re-gate: PASS_WITH_LIMITATIONS (2026-06-15, `qa/wave-3-plus/gate-rep
 | Peak concurrency (billing) — true windowed max | F6 | — | Session-count proxy | **True windowed max** via `maxState(viewer_count)` → `rollup_concurrency_1d` → `maxMerge` on read; peak=25 for alpha, peak=5 for beta (overlapping snapshots; `TestAccountant_CHIntegration` integration test; VD-38 CLOSED) |
 | New cluster nodes auto-discovered ≤ 2 min | F7 | Stub | **24.4 ms** (C-W2-07) | Unchanged |
 | ~1–2 GB ClickHouse per 1M viewer-sessions | §7.10 | Not measurable | Not measurable | Not measurable |
-| F9 false-alarm rate < 1/node-week | F9 | — | — | **0.259/node-week** (σ=4.0, hysteresis=10; `TestAnomaly_FalseAlarmRate_ModeledTarget`) |
+| F9 false-alarm rate < 1/node-week | F9 | — | — | **0.43/node-week** (σ=4.0, hysteresis=10; `TestAnomaly_FalseAlarmRate_ModeledTarget`) |
 | Anomaly RULE evaluation overhead ≤ 50 ms per 5 s evaluator tick @ 500 streams | F9/F5 (S11 WO-B, D-070 — PRD §7 has no anomaly latency target; defined at scoping) | — | — | Design bound: one batch baseline read (SQLite, ~1.5 ms @1.5k rows) + O(1) z-score per stream (~0.05 ms @500); e2e A5 proves fire ≤ 30 s under CI mock |
 | F10 HLS probe: success, TTFB > 0, bitrate > 0 | F10 | — | — | **success=true, ttfb_ms=1, bitrate_kbps=66.7** (`TestHLSProbe_Success`) |
 | F10 HLS probe: segment TTFB (`segment_ttfb_ms`) > 0 | F10 | — | — | **segment_ttfb_ms=1** (`TestHLSProbe_Success`; `result.SegmentTTFBMs > 0` assertion; GAP-3-001 CLOSED) — serialized as `segment_ttfb_ms` in API response (wave3.go) |
@@ -455,7 +455,7 @@ Configurable via: `PULSE_INGEST_TARGET_BITRATE_KBPS` (default 2000),
 |---|---|---|---|
 | GAP-3-001 | HLS TTFB is manifest TTFB only; segment TTFB not stored separately | BE-01 | **CLOSED Wave-3-Plus** — `segment_ttfb_ms` column added (`0003_probe_segment_ttfb.sql`); `ProbeResult.SegmentTTFBMs` field populated by prober; `TestHLSProbe_Success` asserts `segment_ttfb_ms > 0`; serialized as `segment_ttfb_ms` in API response |
 | GAP-3-003 | Master HLS playlist probe: `bitrate_kbps=0` — follow first variant URL | BE-01 | **CLOSED Wave-3-Plus** — prober follows master-playlist variant to a media segment; `TestHLSProbe_MasterFollowsVariant` asserts `bitrate=66.7 seg_ttfb_ms=1` |
-| GAP-3-004 | Zero-stddev blind spot: constant metric streams prevent z-score computation | BE-02 | **CLOSED Wave-3-Plus** — epsilon floor applied in `ComputeFlags`: `effStddev = max(stddev, relEps·|mean|, absEps)`; `TestAnomaly_ConstantBaseline_LargeDeviation_Flags` PASS (sigma=80.00, 1 flag); false-alarm rate unchanged 0.259/node-week |
+| GAP-3-004 | Zero-stddev blind spot: constant metric streams prevent z-score computation | BE-02 | **CLOSED Wave-3-Plus** — epsilon floor applied in `ComputeFlags`: `effStddev = max(stddev, relEps·|mean|, absEps)`; `TestAnomaly_ConstantBaseline_LargeDeviation_Flags` PASS (sigma=80.00, 1 flag); false-alarm rate unchanged 0.43/node-week |
 | GAP-3-005 | `GET /probes/{id}/results` returns empty list when ClickHouse is unavailable (correct behavior) | BE-02 | Open — by design |
 | GAP-3-006 | Pro tier license test gap: only Enterprise key tested for probe entitlement | BE-02 | Open — Phase-3 |
 

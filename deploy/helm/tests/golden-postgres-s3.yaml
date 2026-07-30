@@ -6,10 +6,10 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.2
+    helm.sh/chart: pulse-0.3.3
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.4"
+    app.kubernetes.io/version: "0.4.5"
     app.kubernetes.io/managed-by: Helm
 ---
 # Source: pulse/templates/configmap-clickhouse.yaml
@@ -23,10 +23,10 @@ metadata:
   name: pulse-clickhouse-config
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.2
+    helm.sh/chart: pulse-0.3.3
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.4"
+    app.kubernetes.io/version: "0.4.5"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: clickhouse
 data:
@@ -114,10 +114,10 @@ metadata:
   name: pulse-data
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.2
+    helm.sh/chart: pulse-0.3.3
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.4"
+    app.kubernetes.io/version: "0.4.5"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: pulse
 spec:
@@ -135,10 +135,10 @@ metadata:
   name: pulse-clickhouse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.2
+    helm.sh/chart: pulse-0.3.3
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.4"
+    app.kubernetes.io/version: "0.4.5"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: clickhouse
 spec:
@@ -166,10 +166,10 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.2
+    helm.sh/chart: pulse-0.3.3
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.4"
+    app.kubernetes.io/version: "0.4.5"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: pulse
 spec:
@@ -196,10 +196,10 @@ metadata:
   name: pulse-ingest
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.2
+    helm.sh/chart: pulse-0.3.3
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.4"
+    app.kubernetes.io/version: "0.4.5"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: pulse-ingest
   annotations:
@@ -227,10 +227,10 @@ metadata:
   name: pulse-postgres
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.2
+    helm.sh/chart: pulse-0.3.3
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.4"
+    app.kubernetes.io/version: "0.4.5"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: postgres
 spec:
@@ -252,10 +252,10 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.2
+    helm.sh/chart: pulse-0.3.3
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.4"
+    app.kubernetes.io/version: "0.4.5"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: pulse
 spec:
@@ -291,7 +291,7 @@ spec:
               echo "ClickHouse ready."
       containers:
         - name: pulse
-          image: "ghcr.io/aytekxr/ams-pulse:0.4.4"
+          image: "ghcr.io/aytekxr/ams-pulse:0.4.5"
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -432,10 +432,10 @@ metadata:
   name: pulse-clickhouse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.2
+    helm.sh/chart: pulse-0.3.3
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.4"
+    app.kubernetes.io/version: "0.4.5"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: clickhouse
 spec:
@@ -521,10 +521,10 @@ metadata:
   name: pulse-postgres
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.2
+    helm.sh/chart: pulse-0.3.3
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.4"
+    app.kubernetes.io/version: "0.4.5"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: postgres
 spec:
@@ -604,10 +604,10 @@ metadata:
   name: pulse
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.2
+    helm.sh/chart: pulse-0.3.3
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.4"
+    app.kubernetes.io/version: "0.4.5"
     app.kubernetes.io/managed-by: Helm
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
@@ -637,10 +637,10 @@ metadata:
   name: pulse-ingest
   namespace: default
   labels:
-    helm.sh/chart: pulse-0.3.2
+    helm.sh/chart: pulse-0.3.3
     app.kubernetes.io/name: pulse
     app.kubernetes.io/instance: pulse
-    app.kubernetes.io/version: "0.4.4"
+    app.kubernetes.io/version: "0.4.5"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: pulse-ingest
   annotations:

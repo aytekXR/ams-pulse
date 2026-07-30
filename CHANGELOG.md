@@ -8,7 +8,7 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ---
 
-## [Unreleased]
+## [0.4.5] - 2026-07-30
 
 ### Added
 
@@ -48,7 +48,125 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
   upload: the runner's *default* Xcode is 16.4, and App Store Connect has required Xcode 26 / the
   iOS 26 SDK since 2026-04-28.
 
+### Changed
+
+- **Anomaly detection is Business-and-up, not Enterprise-only (D-190).** The docs advertised
+  Enterprise while the code gated only `GET /anomalies` — anomaly *alerting* was never
+  tier-checked at all, so a Business tenant already received anomaly alerts while being denied
+  the endpoint that explains them, and our own e2e scenario A5 had depended on exactly that for
+  many sessions. This was two sources of truth disagreeing, not a bug that slipped past review,
+  and the operator resolved it in the grant-only direction: `license.CheckAnomalies` now admits
+  Business, and the tier tables in the README, `docs/overview.md`, `docs/product.md`,
+  `docs/faq.md`, `docs/licensing-public.md`, `docs/api-guide.md`, `docs/user-guide.md`, the PRD,
+  the marketplace listing and the website all say Business+. No tenant loses a capability it had.
+  The web UI moved with it — `AnomaliesPage` gated on Enterprise, so an entitled Business tenant
+  would have met an "upgrade to Enterprise" wall over data the API was already serving it; the
+  Pro floor is now pinned by tests on both sides, because widening a gate is only safe when the
+  new boundary is asserted too.
+
+- **`doc-stamps` and `shellcheck` are now required status checks (D-185).** D-184 closed the
+  doc-stamp drift class "mechanically" with a CI job — but the job was never added to
+  `.github/branch-protection.sh`, so it reported without being able to block a merge. A guard that
+  cannot fail a merge is advisory. `compose-boot` is deliberately left advisory: it pulls the
+  pinned image from GHCR, and merges should not depend on a third party's uptime.
+- **Paid alert channels stop delivering when a licence tier is downgraded (D-184, M-03).**
+  Channel create, update and test-fire were gated by tier at the HTTP boundary, but the
+  background evaluator was not: a tenant that configured a Slack, PagerDuty, webhook or Telegram
+  channel on a paid tier and then downgraded kept receiving notifications indefinitely. The
+  evaluator now consults a channel-entitlement gate both when it syncs channels from the store
+  and again immediately before each delivery (the second check closes the sync window). A
+  tier-skipped delivery is logged at debug and is **not** recorded as a `delivery_failure` — it
+  is a policy decision, not an error. This mirrors the runtime gate the synthetic prober has had
+  since D-108. **Behaviour change for downgraded tenants** — paid-type channels go quiet instead
+  of continuing to deliver.
+
+
+- **Geo and device breakdowns are capped at 100 rows, with an aggregated tail row (D-182,
+  review round 8 J-02).** `GET /analytics/geo` and `GET /analytics/devices` now return at
+  most the top 100 rows by views. When more exist, one additional row carries the remainder
+  and is identified by the sentinel `"other"` in every grouping field — `country` (and
+  `region` when `region=true`) for geo, `device`/`os`/`browser`/`protocol` for devices. The
+  tail keeps the elided rows inside the response totals instead of dropping them, so charts
+  and reports stay honest; those totals are approximate rather than exact (see below). This
+  bounds response size for high-cardinality breakdowns. **Behaviour change for API
+  consumers** — a client that assumed every group appears as its own row will now see the
+  remainder folded into one.
+- **The breakdown contract no longer over-claims what the tail row guarantees (D-183, review
+  round 9 K-02).** Four OpenAPI descriptions said totals "remain complete even when
+  individual rows are elided". They do not: the tail is derived from a separate totals query
+  (so concurrent ingest can shift it, which affects the otherwise-exact `views` and
+  `watch_time_s` too) and is floored at zero, and `uniques` additionally carries ClickHouse
+  `uniq()` estimation error. The descriptions now say so. Two further contract over-claims
+  found in the same sweep: `GeoRow.country` promised an ISO 3166-1 code where the API also
+  sends `""` (geo enrichment off or IP unresolved — the default configuration) and the
+  `"other"` sentinel, and `DeviceRow.protocol` documented an enum that is empty for every
+  session stitched from beacon data. Description-only — no response shape moved.
+- **Documentation no longer tells standalone operators they need Kafka for CPU/memory/disk
+  (D-183).** D-179 closed LIM-01 — the metrics come from `GET /rest/v2/system-resources`
+  with no broker — and D-181 corrected the eight stale *code comments*, but the *documents*
+  were never swept. `docs/kafka-integration.md` contradicted itself within twenty lines
+  ("No longer true since D-179" one bullet, "cannot fire … those fields never arrive" the
+  next, "Kafka is the only supported path" in §1.2, `Absent` in the §1.3 table, "No CPU/mem
+  alerts without Kafka" in §7) and sold itself on a capability that no longer needs it;
+  `docs/compatibility.md`'s per-version matrix still read "**Via Kafka only** (REST absent
+  for standalone)". Corrected throughout, with the residual case kept honest: on an AMS that
+  does not serve the route, Pulse falls back to `/system-status` and Kafka *is* still the way
+  to get resource metrics. Kafka's remaining unique value — per-stream FPS, keyframe
+  interval, jitter, packet loss — is now what that guide leads with.
+- **README, Helm README and doc stamps corrected, and the drift class guarded (I-01/I-02/I-03).**
+  The README inside the v0.4.4 tag still pointed at v0.4.3 in prose, because guard #17 matches
+  only runnable image pins. **New release-guard check #19** pins the README's release-pointer
+  strings to the tag. The cosign-version range and the Helm chart-version example were
+  **de-literalized** rather than bumped, so neither can drift again. Stale "Last updated" stamps
+  refreshed in `compatibility.md`, `ARCHITECTURE.md` and `licensing.md`.
+- **LIM-10 correctly scoped to AMS 2.14–3.x (I-06).** D-179 proved `ClusterNode` carries no
+  `role`/`version` at `ams-v2.14.0`, `2.16.2`, `2.17.1` and `3.0.3`, but the disclosure still
+  said "AMS 3.x" — leaving a 2.16/2.17-cluster prospect free to hope edge/origin dedup activates
+  on their version. It does not.
+- **Presence-guard rationale comments corrected at eight sites (I-05).** Comments asserting that
+  standalone AMS never reports `cpu_pct`/`mem_pct`/`disk_pct` became false when D-179 closed
+  LIM-01. The guards themselves were and remain correct; they now state the durable invariant —
+  skip on key ABSENCE, never on an assumption about which AMS versions report what. No behaviour
+  change.
+
 ### Fixed
+
+- **The advertised anomaly false-alarm rate understated the real one by 66% (D-190).** Every
+  product-facing document claimed 0.259 false alarms per node per week. That figure was true when
+  the detector tracked 3 metrics; D-087 added `ams_api_latency_ms` and the conservative budget is
+  now 5 metrics, so `TestAnomaly_FalseAlarmRate_ModeledTarget` has been printing **0.4323** for
+  many releases — the test's own comments said so. The claim is now 0.43 across five metrics in the
+  README, the listing, the website, `docs/overview.md`, `docs/compatibility.md`,
+  `docs/known-limitations.md`, `docs/ARCHITECTURE.md`, ADR-0007 (which also still said "3 metrics")
+  and the PRD validation matrix, and it is labelled as a *modeled* calculation rather than a live
+  long-run measurement, which is what the test actually computes. The historical gate reports under
+  `qa/` and `agents/handoffs/` were deliberately left alone: 0.259 was a true measurement at 3
+  metrics, and rewriting an audit trail to match today's number is not a correction.
+
+- **The website advertised Prometheus `/metrics` to Pro (D-190).** The F8 feature card read
+  "F8 - PRO+" over copy naming both the data API and the `/metrics` endpoint, but
+  `license.CheckPrometheus` requires Business — so a Pro subscriber buying on that card would have
+  met a `403 LICENSE_REQUIRED` on the one feature they bought it for. The card now splits the two
+  tiers explicitly, matching `docs/overview.md` and `docs/licensing-public.md`, which had it right.
+  `docs/product.md` carried the same conflation and was corrected with it.
+
+- **The privacy policy under-disclosed what the beacon SDK transmits (D-190).** The SDK sends
+  `page_url: window.location.href` with the first event of every session, and the policy's list of
+  collected fields omitted it. It is now disclosed precisely: the field crosses the network and the
+  event contract accepts it, but `beacon_events` has no column for it, so the server discards it —
+  and the policy says so, along with the caveat that it can still land in an operator's own
+  reverse-proxy logs if they log request bodies. Under-disclosure is an App Store review risk and
+  an operator liability; over-disclosure invents obligations. Neither is acceptable in a document
+  published in the operator's name.
+
+- **LIM-19 contradicted LIM-01 about Kafka (D-190).** LIM-19 called the Kafka consumer "the only
+  route to Fleet CPU/memory/disk gauges on standalone AMS" and cited LIM-01 — which, since D-179
+  added the `/rest/v2/system-resources` path, says the opposite in the same file. LIM-19 now scopes
+  Kafka to what it is still uniquely needed for (per-viewer WebRTC stats and FPS, LIM-04).
+
+- **`docs/faq.md` counted 26 known limitations where the list holds 28 (D-190).** The count is
+  removed rather than corrected — a number duplicated across documents goes stale silently, which
+  is precisely what happened when LIM-27 and LIM-28 landed. The FAQ now points at the list.
 
 - **Alert values guessed their own units from magnitude (D-189).** The rule was "if the value is
   between 0 and 100, add a % sign", which is semantics inferred from a number — and it was wrong in
@@ -91,6 +209,24 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
   and it presented as two of three files failing while the third passed. Now matched with a
   herestring, and tested in both directions.
 
+
+
+- **Fallback-path `api_latency_ms` timed up to three calls instead of one (D-181, review round 7
+  I-04).** D-179's preference chain (`system-resources` → `system-status` → `version`) left a
+  single timing window open across the whole chain, so on deployments that take the fallback the
+  metric — and the `ams_api_latency_ms` anomaly baseline fed from it — read 2–3× high. Each call
+  is now timed separately and the emitted RTT belongs to the call that produced the event, with
+  `GetVersion` outside the window as it was before D-179. Reproduced at 603 ms in a test before
+  fixing; two regression tests pin both paths.
+- **The breakdown tail row's `"other"` sentinel was unambiguous only by accident (D-183).**
+  `"other"` is also a genuine device/OS/browser value, so a real row could in principle be
+  indistinguishable from the aggregated tail row — and the UI renders device/OS/browser but
+  not protocol, so the two would look identical. The collision turns out to be unreachable:
+  an empty User-Agent is the only path to `device = "other"` and it leaves OS and browser
+  empty, while any non-empty UA resolves the device to a concrete category. That invariant
+  lived in a different package from the code that depends on it and was written down nowhere;
+  a plausible cleanup would have broken the API silently. Now stated at both sites and pinned
+  by `TestEmbeddedUAParser_NeverCollidesWithBreakdownSentinel`. No behaviour change.
 
 ### Security
 
@@ -146,93 +282,6 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
   **untruncated**. Both paths now call one shared helper that owns the 64-byte limits, so they
   cannot diverge again. (S101 fixed this same divergence once for schema validation and left the
   field limits behind.) **No API contract change** — over-long values were never valid to rely on.
-
-### Changed
-
-- **`doc-stamps` and `shellcheck` are now required status checks (D-185).** D-184 closed the
-  doc-stamp drift class "mechanically" with a CI job — but the job was never added to
-  `.github/branch-protection.sh`, so it reported without being able to block a merge. A guard that
-  cannot fail a merge is advisory. `compose-boot` is deliberately left advisory: it pulls the
-  pinned image from GHCR, and merges should not depend on a third party's uptime.
-- **Paid alert channels stop delivering when a licence tier is downgraded (D-184, M-03).**
-  Channel create, update and test-fire were gated by tier at the HTTP boundary, but the
-  background evaluator was not: a tenant that configured a Slack, PagerDuty, webhook or Telegram
-  channel on a paid tier and then downgraded kept receiving notifications indefinitely. The
-  evaluator now consults a channel-entitlement gate both when it syncs channels from the store
-  and again immediately before each delivery (the second check closes the sync window). A
-  tier-skipped delivery is logged at debug and is **not** recorded as a `delivery_failure` — it
-  is a policy decision, not an error. This mirrors the runtime gate the synthetic prober has had
-  since D-108. **Behaviour change for downgraded tenants** — paid-type channels go quiet instead
-  of continuing to deliver.
-
-### Fixed
-
-- **Fallback-path `api_latency_ms` timed up to three calls instead of one (D-181, review round 7
-  I-04).** D-179's preference chain (`system-resources` → `system-status` → `version`) left a
-  single timing window open across the whole chain, so on deployments that take the fallback the
-  metric — and the `ams_api_latency_ms` anomaly baseline fed from it — read 2–3× high. Each call
-  is now timed separately and the emitted RTT belongs to the call that produced the event, with
-  `GetVersion` outside the window as it was before D-179. Reproduced at 603 ms in a test before
-  fixing; two regression tests pin both paths.
-- **The breakdown tail row's `"other"` sentinel was unambiguous only by accident (D-183).**
-  `"other"` is also a genuine device/OS/browser value, so a real row could in principle be
-  indistinguishable from the aggregated tail row — and the UI renders device/OS/browser but
-  not protocol, so the two would look identical. The collision turns out to be unreachable:
-  an empty User-Agent is the only path to `device = "other"` and it leaves OS and browser
-  empty, while any non-empty UA resolves the device to a concrete category. That invariant
-  lived in a different package from the code that depends on it and was written down nowhere;
-  a plausible cleanup would have broken the API silently. Now stated at both sites and pinned
-  by `TestEmbeddedUAParser_NeverCollidesWithBreakdownSentinel`. No behaviour change.
-
-### Changed
-
-- **Geo and device breakdowns are capped at 100 rows, with an aggregated tail row (D-182,
-  review round 8 J-02).** `GET /analytics/geo` and `GET /analytics/devices` now return at
-  most the top 100 rows by views. When more exist, one additional row carries the remainder
-  and is identified by the sentinel `"other"` in every grouping field — `country` (and
-  `region` when `region=true`) for geo, `device`/`os`/`browser`/`protocol` for devices. The
-  tail keeps the elided rows inside the response totals instead of dropping them, so charts
-  and reports stay honest; those totals are approximate rather than exact (see below). This
-  bounds response size for high-cardinality breakdowns. **Behaviour change for API
-  consumers** — a client that assumed every group appears as its own row will now see the
-  remainder folded into one.
-- **The breakdown contract no longer over-claims what the tail row guarantees (D-183, review
-  round 9 K-02).** Four OpenAPI descriptions said totals "remain complete even when
-  individual rows are elided". They do not: the tail is derived from a separate totals query
-  (so concurrent ingest can shift it, which affects the otherwise-exact `views` and
-  `watch_time_s` too) and is floored at zero, and `uniques` additionally carries ClickHouse
-  `uniq()` estimation error. The descriptions now say so. Two further contract over-claims
-  found in the same sweep: `GeoRow.country` promised an ISO 3166-1 code where the API also
-  sends `""` (geo enrichment off or IP unresolved — the default configuration) and the
-  `"other"` sentinel, and `DeviceRow.protocol` documented an enum that is empty for every
-  session stitched from beacon data. Description-only — no response shape moved.
-- **Documentation no longer tells standalone operators they need Kafka for CPU/memory/disk
-  (D-183).** D-179 closed LIM-01 — the metrics come from `GET /rest/v2/system-resources`
-  with no broker — and D-181 corrected the eight stale *code comments*, but the *documents*
-  were never swept. `docs/kafka-integration.md` contradicted itself within twenty lines
-  ("No longer true since D-179" one bullet, "cannot fire … those fields never arrive" the
-  next, "Kafka is the only supported path" in §1.2, `Absent` in the §1.3 table, "No CPU/mem
-  alerts without Kafka" in §7) and sold itself on a capability that no longer needs it;
-  `docs/compatibility.md`'s per-version matrix still read "**Via Kafka only** (REST absent
-  for standalone)". Corrected throughout, with the residual case kept honest: on an AMS that
-  does not serve the route, Pulse falls back to `/system-status` and Kafka *is* still the way
-  to get resource metrics. Kafka's remaining unique value — per-stream FPS, keyframe
-  interval, jitter, packet loss — is now what that guide leads with.
-- **README, Helm README and doc stamps corrected, and the drift class guarded (I-01/I-02/I-03).**
-  The README inside the v0.4.4 tag still pointed at v0.4.3 in prose, because guard #17 matches
-  only runnable image pins. **New release-guard check #19** pins the README's release-pointer
-  strings to the tag. The cosign-version range and the Helm chart-version example were
-  **de-literalized** rather than bumped, so neither can drift again. Stale "Last updated" stamps
-  refreshed in `compatibility.md`, `ARCHITECTURE.md` and `licensing.md`.
-- **LIM-10 correctly scoped to AMS 2.14–3.x (I-06).** D-179 proved `ClusterNode` carries no
-  `role`/`version` at `ams-v2.14.0`, `2.16.2`, `2.17.1` and `3.0.3`, but the disclosure still
-  said "AMS 3.x" — leaving a 2.16/2.17-cluster prospect free to hope edge/origin dedup activates
-  on their version. It does not.
-- **Presence-guard rationale comments corrected at eight sites (I-05).** Comments asserting that
-  standalone AMS never reports `cpu_pct`/`mem_pct`/`disk_pct` became false when D-179 closed
-  LIM-01. The guards themselves were and remain correct; they now state the durable invariant —
-  skip on key ABSENCE, never on an assumption about which AMS versions report what. No behaviour
-  change.
 
 ## [0.4.4] - 2026-07-27
 

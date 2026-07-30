@@ -84,14 +84,14 @@ describe("SettingsPage rendering", () => {
   it("(b) tab container has role='tablist'", async () => {
     render(<SettingsPage />);
     await waitFor(() => { expect(mockGetSources).toHaveBeenCalled(); });
-    const tablist = screen.getByRole("tablist");
+    const tablist = await screen.findByRole("tablist");
     expect(tablist).toBeInTheDocument();
   });
 
   it("(b) sources tab is aria-selected='true' by default", async () => {
     render(<SettingsPage />);
     await waitFor(() => { expect(mockGetSources).toHaveBeenCalled(); });
-    const sourcesTab = screen.getByRole("tab", { name: /^sources$/i });
+    const sourcesTab = await screen.findByRole("tab", { name: /^sources$/i });
     expect(sourcesTab).toHaveAttribute("aria-selected", "true");
   });
 
@@ -111,7 +111,7 @@ describe("SettingsPage rendering", () => {
   it("(d) Tokens tab — empty state shown when navigating to tokens tab", async () => {
     render(<SettingsPage />);
     await waitFor(() => { expect(mockGetTokens).toHaveBeenCalled(); });
-    fireEvent.click(screen.getByRole("tab", { name: /api tokens/i }));
+    fireEvent.click(await screen.findByRole("tab", { name: /api tokens/i }));
     await waitFor(() => {
       expect(screen.getByText(/no api tokens/i)).toBeInTheDocument();
     });
@@ -120,7 +120,7 @@ describe("SettingsPage rendering", () => {
   it("(e) License tab — activate form with key input is shown", async () => {
     render(<SettingsPage />);
     await waitFor(() => { expect(mockGetLicense).toHaveBeenCalled(); });
-    fireEvent.click(screen.getByRole("tab", { name: /license/i }));
+    fireEvent.click(await screen.findByRole("tab", { name: /license/i }));
     await waitFor(() => {
       expect(screen.getByPlaceholderText(/PULSE-XXXX/i)).toBeInTheDocument();
     });
@@ -129,7 +129,7 @@ describe("SettingsPage rendering", () => {
   it("(f) Users tab — shows placeholder message about user management", async () => {
     render(<SettingsPage />);
     await waitFor(() => { expect(mockGetSources).toHaveBeenCalled(); });
-    fireEvent.click(screen.getByRole("tab", { name: /users/i }));
+    fireEvent.click(await screen.findByRole("tab", { name: /users/i }));
     await waitFor(() => {
       expect(screen.getByText(/user management/i)).toBeInTheDocument();
     });
@@ -138,7 +138,7 @@ describe("SettingsPage rendering", () => {
   it("(g) Integrations tab — Prometheus section is shown", async () => {
     render(<SettingsPage />);
     await waitFor(() => { expect(mockGetSources).toHaveBeenCalled(); });
-    fireEvent.click(screen.getByRole("tab", { name: /integrations/i }));
+    fireEvent.click(await screen.findByRole("tab", { name: /integrations/i }));
     await waitFor(() => {
       // Multiple "Prometheus Metrics" headings may appear; check at least one is present
       const prometheusEls = screen.getAllByText(/prometheus metrics/i);
@@ -149,7 +149,7 @@ describe("SettingsPage rendering", () => {
   it("(g) Integrations tab — S3 Export section is shown", async () => {
     render(<SettingsPage />);
     await waitFor(() => { expect(mockGetSources).toHaveBeenCalled(); });
-    fireEvent.click(screen.getByRole("tab", { name: /integrations/i }));
+    fireEvent.click(await screen.findByRole("tab", { name: /integrations/i }));
     await waitFor(() => {
       expect(screen.getByText(/s3 export destination/i)).toBeInTheDocument();
     });
@@ -175,14 +175,14 @@ describe("SettingsPage — tabpanel ARIA wiring (Wave 4)", () => {
   it("sources tab panel has role='tabpanel' after load", async () => {
     render(<SettingsPage />);
     await waitFor(() => { expect(mockGetSources).toHaveBeenCalled(); });
-    const panel = screen.getByRole("tabpanel");
+    const panel = await screen.findByRole("tabpanel");
     expect(panel).toBeInTheDocument();
   });
 
   it("sources tabpanel id and aria-labelledby are correctly wired", async () => {
     render(<SettingsPage />);
     await waitFor(() => { expect(mockGetSources).toHaveBeenCalled(); });
-    const panel = screen.getByRole("tabpanel");
+    const panel = await screen.findByRole("tabpanel");
     expect(panel.id).toBe("settings-panel-sources");
     expect(panel.getAttribute("aria-labelledby")).toBe("tab-sources");
     // The element with that id must actually exist in the DOM
@@ -193,7 +193,7 @@ describe("SettingsPage — tabpanel ARIA wiring (Wave 4)", () => {
   it("tokens tabpanel has correct id and aria-labelledby after tab switch", async () => {
     render(<SettingsPage />);
     await waitFor(() => { expect(mockGetTokens).toHaveBeenCalled(); });
-    fireEvent.click(screen.getByRole("tab", { name: /api tokens/i }));
+    fireEvent.click(await screen.findByRole("tab", { name: /api tokens/i }));
     await waitFor(() => {
       const panel = screen.getByRole("tabpanel");
       expect(panel.id).toBe("settings-panel-tokens");
@@ -205,7 +205,7 @@ describe("SettingsPage — tabpanel ARIA wiring (Wave 4)", () => {
   it("integrations tabpanel has correct wiring", async () => {
     render(<SettingsPage />);
     await waitFor(() => { expect(mockGetSources).toHaveBeenCalled(); });
-    fireEvent.click(screen.getByRole("tab", { name: /integrations/i }));
+    fireEvent.click(await screen.findByRole("tab", { name: /integrations/i }));
     await waitFor(() => {
       const panel = screen.getByRole("tabpanel");
       expect(panel.id).toBe("settings-panel-integrations");
@@ -248,7 +248,7 @@ describe("SettingsPage — API token creation persistent panel", () => {
     render(<SettingsPage />);
     await waitFor(() => { expect(mockGetTokens).toHaveBeenCalled(); });
 
-    fireEvent.click(screen.getByRole("tab", { name: /api tokens/i }));
+    fireEvent.click(await screen.findByRole("tab", { name: /api tokens/i }));
     vi.spyOn(window, "prompt").mockReturnValueOnce("test-api-token");
     fireEvent.click(screen.getByRole("button", { name: /\+ new token/i }));
 
@@ -261,7 +261,7 @@ describe("SettingsPage — API token creation persistent panel", () => {
     render(<SettingsPage />);
     await waitFor(() => { expect(mockGetTokens).toHaveBeenCalled(); });
 
-    fireEvent.click(screen.getByRole("tab", { name: /api tokens/i }));
+    fireEvent.click(await screen.findByRole("tab", { name: /api tokens/i }));
     vi.spyOn(window, "prompt").mockReturnValueOnce("test-api-token");
     fireEvent.click(screen.getByRole("button", { name: /\+ new token/i }));
 
@@ -274,7 +274,7 @@ describe("SettingsPage — API token creation persistent panel", () => {
     render(<SettingsPage />);
     await waitFor(() => { expect(mockGetTokens).toHaveBeenCalled(); });
 
-    fireEvent.click(screen.getByRole("tab", { name: /api tokens/i }));
+    fireEvent.click(await screen.findByRole("tab", { name: /api tokens/i }));
     vi.spyOn(window, "prompt").mockReturnValueOnce("test-api-token");
     fireEvent.click(screen.getByRole("button", { name: /\+ new token/i }));
 
@@ -295,6 +295,9 @@ describe("SettingsPage — API token creation persistent panel", () => {
     // Flush the initial Promise.all data load (getSources, getTokens, getLicense)
     await act(async () => { await vi.runAllTimersAsync(); });
 
+    // Synchronous getByRole is REQUIRED here, not findByRole: fake timers are installed,
+    // and findBy* polls through waitFor on a clock this test has frozen, so it can never
+    // settle. The runAllTimersAsync above has already flushed the render this reads.
     fireEvent.click(screen.getByRole("tab", { name: /api tokens/i }));
     vi.spyOn(window, "prompt").mockReturnValueOnce("test-api-token");
     fireEvent.click(screen.getByRole("button", { name: /\+ new token/i }));
@@ -316,7 +319,7 @@ describe("SettingsPage — API token creation persistent panel", () => {
     render(<SettingsPage />);
     await waitFor(() => { expect(mockGetTokens).toHaveBeenCalled(); });
 
-    fireEvent.click(screen.getByRole("tab", { name: /api tokens/i }));
+    fireEvent.click(await screen.findByRole("tab", { name: /api tokens/i }));
     vi.spyOn(window, "prompt").mockReturnValueOnce("test-api-token");
     fireEvent.click(screen.getByRole("button", { name: /\+ new token/i }));
 

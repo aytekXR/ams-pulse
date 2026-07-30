@@ -554,13 +554,32 @@ func TestCheckAnomalies_AllowedOnEnterprise(t *testing.T) {
 	}
 }
 
-func TestCheckAnomalies_BlockedOnBusiness(t *testing.T) {
+// TestCheckAnomalies_AllowedOnBusiness pins the S122 tier ruling: anomaly detection
+// is Business-and-up, not Enterprise-only. The enforced gate and the advertised gate
+// had disagreed — only GET /anomalies checked the tier, so a Business tenant could
+// already create a rule_type=anomaly rule and receive anomaly alerts (and e2e scenario
+// A5 required exactly that). The operator resolved it in the grant-only direction, so
+// the read path now matches the alerting path instead of contradicting it.
+func TestCheckAnomalies_AllowedOnBusiness(t *testing.T) {
 	mgr := newMgr(t, map[string]interface{}{
 		"tier":     "business",
 		"data_api": true,
 	})
+	if err := mgr.CheckAnomalies(); err != nil {
+		t.Errorf("business tier: CheckAnomalies want nil got %v", err)
+	}
+}
+
+// TestCheckAnomalies_BlockedOnPro pins the FLOOR of that ruling. Widening a gate is
+// only safe if the new boundary is itself asserted: without this, CheckAnomalies could
+// degrade to "always nil" and every remaining anomaly test would still pass.
+func TestCheckAnomalies_BlockedOnPro(t *testing.T) {
+	mgr := newMgr(t, map[string]interface{}{
+		"tier":     "pro",
+		"data_api": true,
+	})
 	if err := mgr.CheckAnomalies(); err == nil {
-		t.Error("business tier: CheckAnomalies must return error (Enterprise-only)")
+		t.Error("pro tier: CheckAnomalies must return error (Business+ required)")
 	}
 }
 

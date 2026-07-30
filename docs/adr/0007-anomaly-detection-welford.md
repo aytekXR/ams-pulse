@@ -43,7 +43,7 @@ M2 (the variance accumulator) is re-derived on each update as
 With Welford statistics and σ=4.0 threshold, the Gaussian tail probability
 P(|Z| ≥ 4.0) ≈ 6.33e-5 per tick. With hysteresis suppression (10 ticks
 cooldown after each flag), the renewal-process effective rate is
-0.259 false alarms/node-week across 3 metrics — below the PRD target of
+modeled 0.43 false alarms/node-week across 5 metrics — below the PRD target of
 < 1/node-week.
 
 See `docs/guides/anomaly-detection.md` §Sensitivity for the full derivation.

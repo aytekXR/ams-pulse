@@ -1,7 +1,7 @@
 import Foundation
 
 /// SDK version string reported in every batch's `player.sdk_version`.
-public let pulseBeaconSDKVersion = "0.4.4"
+public let pulseBeaconSDKVersion = "0.4.5"
 
 /// Player kind, matching the schema enum (`player.kind`).
 public enum PlayerKind: String, Codable, Equatable {

@@ -1,13 +1,13 @@
 # Pulse — Known Limitations
 
-**Product:** Pulse v0.4.4 (last refreshed S109, 2026-07-27)  
+**Product:** Pulse v0.4.5 (last refreshed S109, 2026-07-27)  
 **Source:** `docs/assessment/documentation-gaps.md` (DG-01 through DG-18),
 `docs/assessment/final-assessment.md` §1 and Appendix B (v0.3.0 baseline; see
 `docs/assessment/marketplace-compliance-review-2026-07-25.md` for current
 marketplace readiness),
 `docs/assessment/capability-map.md`
 
-This document lists every known operator-facing limitation of Pulse v0.4.4 in
+This document lists every known operator-facing limitation of Pulse v0.4.5 in
 priority order. Each entry states what the limitation means for you, and what
 workaround or roadmap path exists.
 
@@ -154,7 +154,7 @@ EULA) determines whether the mmdb can be bundled in the Docker image.
 ### LIM-06: Error-rate and rebuffer-ratio anomaly signals are not implemented (F9 sparsity gate)
 
 **What it means for you:** The PRD F9 anomaly detection covers `viewers` and
-`bitrate` deviations (implemented, 0.259 false alarms/node-week). It does NOT
+`bitrate` deviations (implemented, modeled 0.43 false alarms/node-week). It does NOT
 cover `error_rate` or `rebuffer_ratio`, which the PRD also lists. TC-AN-05 confirms
 these signals are absent from the anomaly evaluator.
 
@@ -323,8 +323,10 @@ RTT/jitter/loss values as unvalidated. Report suspicious readings.
 ### LIM-19: Kafka consumer not yet live-validated against a real AMS broker (AV-15 BLOCKED)
 
 **What it means for you:** Setting `PULSE_KAFKA_BROKERS` activates the Kafka
-consumer path — the only route to Fleet CPU/memory/disk gauges on standalone AMS
-(LIM-01) and to FPS data (LIM-04). The consumer is code-complete, aligned to the
+consumer path — which remains the only route to per-viewer WebRTC stats and FPS
+data (LIM-04). It is **no longer** required for Fleet CPU/memory/disk gauges:
+D-179 added the `/rest/v2/system-resources` REST path, so those gauges work on a
+standalone AMS with no broker at all (see LIM-01). The consumer is code-complete, aligned to the
 official AMS topic names (`ams-instance-stats`, `ams-webrtc-stats`, verified from
 AMS `StatsCollector.java`) and official nested message shapes, and covered by
 contract tests against an in-process fake broker plus broker-integration tests.

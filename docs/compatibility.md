@@ -1,7 +1,7 @@
 # Pulse — AMS Version Compatibility Matrix
 
 **Product:** Pulse: Self-Hosted Analytics, QoE Monitoring and Alerting for Ant Media Server  
-**Last updated:** 2026-07-27 — fleet resource metrics row corrected: CPU/mem/disk come
+**Last updated:** 2026-07-30 — fleet resource metrics row corrected: CPU/mem/disk come
 from `/rest/v2/system-resources` (D-179), not "via Kafka only"; AMS 2.16/2.17 coverage added and
 source citations de-numbered in D-179; reviewed against AMS 3.0.3 (still the latest AMS
 release); G-27 section added D-161 (2026-07-22)
@@ -191,7 +191,7 @@ most important divergence in the version matrix. Operators on AMS 3.x should exp
 | Fleet resource metrics (CPU/mem/disk) | Route present (source) | Route present (source) | Route present (source) | **LIVE-VALIDATED via REST** — `/rest/v2/system-resources` (D-179), no Kafka required; route exists at `ams-v2.10.0` and every version since, but only 3.0.3 was exercised live. Kafka remains an alternative path, still **pending live validation (AV-15)** |
 | Webhook signing | Unknown | Unknown | Unknown | **UNSIGNED — webhook path disabled** |
 | VoD recording (REST poll) | Unknown | Unknown | Unknown | **LIVE-VALIDATED** (BUG-002 FIXED S23/D-085) |
-| Anomaly detection | Mock-compatible | Mock-compatible | Mock-compatible | **Pipeline LIVE-VALIDATED; false-alarm rate is CI-measured** (0.259 false alarms/node-week from `TestAnomaly_FalseAlarmRate_ModeledTarget` — a modeled-workload test, not a live long-run) |
+| Anomaly detection | Mock-compatible | Mock-compatible | Mock-compatible | **Pipeline LIVE-VALIDATED; false-alarm rate is CI-measured** (modeled 0.43 false alarms/node-week from `TestAnomaly_FalseAlarmRate_ModeledTarget` — a modeled-workload test, not a live long-run) |
 
 ---
 

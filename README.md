@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/aytekXR/ams-pulse/main/deploy/quick
 **Released image:** `ghcr.io/aytekxr/ams-pulse` — **public** (no authentication needed to
 pull), cosign-signed, multi-arch (amd64/arm64), SBOM + provenance, published by a CI-gated
 tag pipeline.
-Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.4.4**).
+Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.4.5**).
 
 **Docker Compose (signed image — recommended for evaluators):**
 
@@ -43,7 +43,7 @@ only). Without it the base file is `expose:`-only — correct for the production
 path, where a TLS-terminating reverse proxy sits in front, but it leaves the UI
 unreachable from the host. Set `PULSE_HOST_PORT` if 8090 is already taken.
 
-This pulls `ghcr.io/aytekxr/ams-pulse:0.4.4` — cosign-signed, SBOM-attached, no
+This pulls `ghcr.io/aytekxr/ams-pulse:0.4.5` — cosign-signed, SBOM-attached, no
 authentication required (`ghcr.io/aytekxr/ams-pulse` is public).
 To verify the image signature before running:
 
@@ -51,7 +51,7 @@ To verify the image signature before running:
 cosign verify \
   --certificate-identity-regexp '^https://github\.com/aytekXR/ams-pulse/\.github/workflows/release\.yml@refs/tags/v.+$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/aytekxr/ams-pulse:0.4.4
+  ghcr.io/aytekxr/ams-pulse:0.4.5
 ```
 
 > **The regexp is anchored on purpose.** `--certificate-identity-regexp` is an
@@ -69,7 +69,7 @@ cosign verify \
 > looking for a tag that the release pipeline no longer writes. The layout is a structural
 > property of the release workflow (`release.yml`), not a per-release decision, so all future
 > releases will behave the same way. Spot-verified 2026-07-27 with cosign v2.4.3 and v3.0.2
-> against `0.3.0`, `0.4.3`, and `0.4.4`: v2.4.3 fails on all three, v3.0.2 succeeds on all
+> against `0.3.0`, `0.4.3`, and `0.4.5`: v2.4.3 fails on all three, v3.0.2 succeeds on all
 > three; `0.2.0` (the last legacy-layout build) succeeds on both clients.
 > Check with `cosign version` and upgrade if it prints 2.x.
 
@@ -130,9 +130,9 @@ PULSE_SECRET_KEY=$(openssl rand -hex 32) \
 
 ## Feature status
 
-Last updated: **2026-07-27** — all 10 PRD features shipped; latest release **v0.4.4**.
+Last updated: **2026-07-27** — all 10 PRD features shipped; latest release **v0.4.5**.
 The maintainer's production instance runs behind host-nginx TLS against a real AMS 3.0.3
-Enterprise (currently on the stamped **v0.4.0-139** build; the roll to 0.4.4 is deliberate,
+Enterprise (currently on the stamped **v0.4.0-139** build; the roll to 0.4.5 is deliberate,
 not automatic). Product one-pager: [docs/product.md](docs/product.md).
 
 | Feature | PRD ref | Status | Notes |
@@ -151,7 +151,7 @@ not automatic). Product one-pager: [docs/product.md](docs/product.md).
 | Licensing + tier enforcement | — | **Shipped** | 4-tier: Free/Pro/Business/Enterprise (PRD §7.11); ed25519 verification; 403 on gated features; token kind enforcement |
 | API (REST + WebSocket) | — | **Shipped** | 42 paths, 59 ops, OpenAPI-conformant; WS origin enforcement; idempotent DELETE documented |
 | Onboarding wizard | §7.12 | **Shipped** | 4-step first-run flow |
-| Anomaly detection | F9 | **Shipped** (Wave 3-MVP + Wave-3-Plus, Enterprise) | Welford baselines; σ=4.0; 0.259 false alarms/node-week (target <1); minSamples=30 warmup; hysteresis cooldown; epsilon floor — constant-baseline deviations now flagged |
+| Anomaly detection | F9 | **Shipped** (Wave 3-MVP + Wave-3-Plus, Business+) | Welford baselines; σ=4.0; modeled 0.43 false alarms/node-week across 5 metrics (target <1); minSamples=30 warmup; hysteresis cooldown; epsilon floor — constant-baseline deviations now flagged |
 | Synthetic probes | F10 | **Shipped** (Wave 3-MVP + Wave-3-Plus, Pro+) | HLS full — media and master playlists; `ttfb_ms` + `segment_ttfb_ms` stored separately; bitrate >0 for master playlists; dash full MPD+segment (D-073); webrtc signaling+ICE+RTP stats rtt/jitter/loss (D-072/D-074/D-075); rtmp TCP handshake (D-073); 60 s config refresh; 4-worker pool; 90-day result TTL |
 
 ### Known limitations (Phase-3 / deferred)
@@ -247,7 +247,7 @@ Cluster fleet discovery ──────────────────�
 | [docs/runbooks/reports.md](docs/runbooks/reports.md) | Usage reports: tenant mapping, egress estimation, schedule setup, S3 export, reconciliation |
 | [docs/beacon-sdk.md](docs/beacon-sdk.md) | Beacon SDK integration: AMS WebRTC, hls.js, video.js, native video; sampling; privacy |
 | [docs/guides/prometheus.md](docs/guides/prometheus.md) | Prometheus scrape config, metric reference, Grafana starter panels |
-| [docs/guides/anomaly-detection.md](docs/guides/anomaly-detection.md) | F9 anomaly detection: Welford statistical model, sensitivity calibration, false-alarm math, tuning min_sigma, API usage (Enterprise) |
+| [docs/guides/anomaly-detection.md](docs/guides/anomaly-detection.md) | F9 anomaly detection: Welford statistical model, sensitivity calibration, false-alarm math, tuning min_sigma, API usage (Business+) |
 | [docs/runbooks/probes.md](docs/runbooks/probes.md) | F10 synthetic probes: creating probes, HLS/protocol coverage, result interpretation, synthetic vs organic labeling (Pro+) |
 | [docs/adr/0001-tech-stack.md](docs/adr/0001-tech-stack.md) | ADR: Go + React + ClickHouse stack decision |
 | [docs/adr/0002-storage-clickhouse.md](docs/adr/0002-storage-clickhouse.md) | ADR: two-store split (ClickHouse + SQLite) |
@@ -303,7 +303,7 @@ sqlite3 :memory: < contracts/db/meta/0001_init.sql        # meta DDL
 
 - **Wave 1 / MVP (complete):** Collector, live ops dashboard (F1), historical analytics (F2), core alerting (F5), Docker Compose installer, licensing.
 - **Wave 2 (complete):** QoE beacon SDK (F3, now 3.52 KB gzip), ingest health (F4, 250 µs detection), usage/billing reports (F6, ±1% reconciliation), cluster fleet view (F7, ≤30 s discovery), full data API + Prometheus (F8), Telegram/PD/webhook channels, Helm chart.
-- **Wave 3-MVP (complete):** Anomaly detection (F9, Enterprise — Welford baselines, 0.259 false alarms/node-week), synthetic probes (F10, Pro+ — HLS full coverage; webrtc/rtmp/dash grew real probes in D-072…D-075).
+- **Wave 3-MVP (complete):** Anomaly detection (F9, Business+ — Welford baselines, modeled 0.43 false alarms/node-week across 5 metrics), synthetic probes (F10, Pro+ — HLS full coverage; webrtc/rtmp/dash grew real probes in D-072…D-075).
 - **V3a/V3b fix-loop (complete, 2026-06-15):** Beacon round-trip end-to-end (SDK header, main-port sink, Pro+ gate, geo enrichment); geo/device analytics; QoE rollup queries; ingest health non-zero; alerting muted/group_by/node_down; 4-tier license model (Business tier); report tier gates; 5-field cron; security hardening (CT compare, WS origin, token kind). See `docs/ARCHITECTURE.md` for full defect list.
 - **Wave-3-Plus (complete, 2026-06-15):** True windowed peak concurrency in billing (`rollup_concurrency_1d`, maxState/maxMerge; VD-38); alert detect→notify wall-clock test passes at 201 ms (VD-31); 13-month dimensional GROUP BY query at 145 ms (VD-18/C9b); HLS probe segment TTFB (`segment_ttfb_ms`) and master-playlist variant-following for real bitrate; anomaly epsilon floor — constant-baseline deviations now flagged; Kafka lag + parse_errors in `/healthz`.
 - **Post-MVP (Phase 3):** Mobile beacons, air-gapped licensing, distributed probe network, native RTMP client (AMF0 connect), multi-window anomaly baselines, headless render-time benchmarks. (SSO shipped D-070/D-074; white-label PDF shipped D-070.)
@@ -317,3 +317,13 @@ sqlite3 :memory: < contracts/db/meta/0001_init.sql        # meta DDL
   Free for noncommercial use; commercial tiers available — see `docs/licensing-public.md`.
 - **SDKs** (`sdk/beacon-js`, `sdk/beacon-swift`): MIT —
   Copyright (c) 2026 Aytek Erdoğan (beyondkaira.com).
+  Both ship with **zero runtime dependencies**, so embedding either adds no third-party
+  obligations of its own.
+- **Third-party code Pulse redistributes:** [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) —
+  56 Go modules linked into the binary and 66 npm packages bundled into the web UI, with full
+  licence texts. All permissive (MIT, BSD-2/3-Clause, Apache-2.0, ISC); **no GPL, AGPL, LGPL or
+  SSPL**, and no undetermined licences. The file is *generated* from the dependencies' own
+  licence files by `scripts/gen-third-party-licenses.sh`, so it cannot drift into claiming a
+  licence a dependency does not carry; `--check` fails the build if it is stale.
+  ClickHouse, Caddy, Postgres and busybox are **referenced by image pin, not redistributed** —
+  your runtime pulls them from their upstream registries. (ClickHouse is Apache-2.0, not SSPL.)

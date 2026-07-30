@@ -17,6 +17,18 @@ import { Badge } from "@/components/Badge";
 import { TierGate } from "@/components/TierGate";
 import type { AnomalyFlag, LicenseInfo, AlertScope } from "@/lib/api/types";
 
+// ─── Tier entitlement ─────────────────────────────────────────────────────────
+
+/**
+ * Anomaly detection (F9) is Business-and-up as of S122. The server's
+ * license.CheckAnomalies is the authority; this exists so the page cannot drift from it
+ * in only one direction — it previously gated on Enterprise while the API already served
+ * Business, which showed an entitled tenant an upgrade wall over data it was owed.
+ */
+function anomaliesEntitled(tier: LicenseInfo["tier"]): boolean {
+  return tier === "business" || tier === "enterprise";
+}
+
 // ─── Sigma severity ───────────────────────────────────────────────────────────
 
 function sigmaSeverity(sigma: number): "error" | "warning" | "info" {
@@ -228,9 +240,10 @@ export function AnomaliesPage() {
       });
   }, [minSigma]);
 
-  // Fetch anomalies once license is confirmed as enterprise
+  // Fetch anomalies once the license is confirmed as entitled (Business+, per S122 —
+  // the server gate in license.CheckAnomalies is the authority; this mirrors it).
   useEffect(() => {
-    if (license?.tier === "enterprise") {
+    if (license && anomaliesEntitled(license.tier)) {
       fetchAnomalies();
     }
   }, [license, fetchAnomalies]);
@@ -243,8 +256,8 @@ export function AnomaliesPage() {
     return <ErrorBanner message={licenseError} />;
   }
 
-  // Gate: only Enterprise
-  if (license && license.tier !== "enterprise") {
+  // Gate: Business and above
+  if (license && !anomaliesEntitled(license.tier)) {
     return (
       <div style={{ maxWidth: 700, margin: "0 auto", paddingTop: 40 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 24px" }}>Anomaly Detection</h1>
@@ -264,9 +277,9 @@ export function AnomaliesPage() {
               <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
           }
-          heading="Anomaly Detection requires Enterprise tier"
+          heading="Anomaly detection requires Business tier or higher"
           tier={license.tier}
-          upgradeText="Upgrade to Enterprise to unlock anomaly detection, baseline learning, and deviation alerts."
+          upgradeText="Upgrade to Business to unlock anomaly detection, baseline learning, and deviation alerts."
         />
       </div>
     );
