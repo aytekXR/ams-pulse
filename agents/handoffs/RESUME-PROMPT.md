@@ -170,7 +170,11 @@ PulseKit's `TokenStore`/`KeychainTokenStore` — two ways to store a credential,
 this repo keeps getting bitten by · cluster node-alerting rework (LIM-10, waits on a real cluster) ·
 verify the `ClusterNodeDTO.lastUpdateTime` unit against AMS source · surface `stream_ingest_error`
 (LIM-27) · thread the owning node through per-app polling (LIM-28) · poller/discovery cadence
-consolidation · helm NetworkPolicy golden · **release: switch the candidate push to buildx
+consolidation · helm NetworkPolicy golden · **the ClickHouse integration harness's 45 s startup
+budget is too tight for a slow runner** — `TestIntegration_BatchInsert` failed with "timeout
+waiting for ClickHouse to start" on a DOCS-ONLY PR in S122 and passed on re-run, with the same
+test green on the previous three `main` runs; it is a `server`-job flake in a required context, so
+it can red a merge for no reason (`server/internal/store/clickhouse/integration_test.go:83-101`) · **release: switch the candidate push to buildx
 `push-by-digest=true`** so promoted images stop carrying a public `candidate-<sha>` alias (round 6
 H-09) · **probe whether AMS's `ams-webrtc-stats` shape can restore per-stream FPS** now that the
 console-endpoint assumption behind LIM-01 turned out to be wrong (LIM-04 rests on a similar
