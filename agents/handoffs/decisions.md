@@ -11241,3 +11241,127 @@ own `--help` when none did — because there is no Xcode on the machine this was
 
 Unchanged: **marketplace** waits on the `CLICKHOUSE_PASSWORD` rotation; **iOS TestFlight** waits
 on Apple Developer Program enrolment.
+
+---
+
+## D-190 — §S122: the brutal-review rehearsal, and what surviving it actually required
+
+**Mandate.** "Make your last preparation for the marketplace. There will be brutal reviews — make
+sure you survive. Documentation, security, and functionality should be more than okay and working."
+
+**Method.** Eleven hostile lenses in one workflow (listing numbers · tier matrix · cross-document
+consistency · API security · supply chain · website · iOS · clean-room install · live prod probe ·
+every gate · reviewer's-eye compliance), each finding refuted by independent skeptics before it
+counted, then a **second pass attacking the all-clears** — the move that has out-yielded the
+findings four rounds running.
+
+**Result: 6 confirmed defects, all documentation. Zero security, zero functionality.**
+
+That zero deserved suspicion and got it. The lenses had genuinely done the work — full race suite
+(26 packages, 79.2% coverage), 683 web tests, 296 PulseKit tests in CI's container, a real
+clean-room stack boot, live prod probed including `/debug/pprof` — so the all-clears were evidenced,
+not lazy. **The highest-value artefact of the entire audit was the lenses' own honest blind-spot
+statements**, which named three things a marketplace reviewer certainly does and which nobody here
+had *ever* executed:
+
+- `cosign verify` with the documented command → **PASSES** on a v3 client (digest `81673359…`).
+- `helm pull oci://ghcr.io/aytekxr/charts/pulse` → **pulls anonymously**.
+- the `curl … | bash` quickstart URL → **200**.
+
+All three now verified against the published artifacts. **Rule: when a lens reports what it did not
+check, that list is the next work item, not a footnote.**
+
+### The tier ruling, and the half nobody had looked at
+
+Operator ruled `[ANOM-TIER]` = "advertise correctly" → anomaly detection is **Business+**.
+Implemented grant-only (`CheckAnomalies` admits Business), so no tenant loses a capability and e2e
+A5 keeps passing. Two things surfaced while doing it that the ticket had not contemplated:
+
+1. **The web UI also gated on Enterprise.** `AnomaliesPage` would have shown an entitled Business
+   tenant an "upgrade to Enterprise" wall over data the API was already serving. It would have
+   shipped invisibly: no test covered a Business tenant reaching that page. Fixed, and the Pro
+   **floor** is now pinned on both sides — widening a gate is only safe when the new boundary is
+   asserted, or `CheckAnomalies` could decay to "always nil" with every remaining test still green.
+2. **The exculpation was false again.** The operator queue stated the website "deliberately does not
+   state anomaly detection's tier at all". It said `F9 - ENTERPRISE` in the feature card *and* filed
+   anomaly detection under Enterprise in the pricing table. Fourth consecutive round in which a
+   reassurance hid a real defect.
+
+### The four measurable claims a reviewer would have caught
+
+- **False-alarm rate understated 66%.** Docs claimed 0.259/node-week — true at 3 tracked metrics.
+  D-087 added a 4th and the budget is now 5, so the test has printed **0.4323** for many releases and
+  *its own comments said so*. Corrected to 0.43 across five metrics in ten product-facing documents,
+  and relabelled a **modeled** calculation rather than a measurement, which is what it is. The
+  historical gate reports under `qa/` and `agents/handoffs/` were deliberately **left alone**: 0.259
+  was true at 3 metrics, and rewriting an audit trail to match today's number is not a correction.
+- **The website sold Prometheus `/metrics` to Pro** while `CheckPrometheus` requires Business — a Pro
+  subscriber would have hit 403 on the feature they bought.
+- **The privacy policy under-disclosed the beacon SDK.** It transmits `page_url` with each session's
+  first event. Now disclosed precisely, which required reading code rather than docs: the field
+  crosses the network and the contract accepts it, but `beacon_events` has **no column for it**, so
+  the server discards it — and it can still land in an operator's own proxy logs. Under-disclosure is
+  an App Store risk; over-disclosure invents obligations. Published in the operator's name, so it
+  states exactly what happens.
+- **LIM-19 contradicted LIM-01 in the same file** about whether Kafka is still required for fleet
+  CPU/memory/disk (it is not, since D-179).
+
+### Two things fixed that were not on anyone's list
+
+- **The `SettingsPage` flake — open debt for sessions — was a class, not a test.** Sixteen sites
+  awaited a *mock call* then read the DOM synchronously; `waitFor` resolves before React commits.
+  The first fix **made it worse**: converting a test that installs `vi.useFakeTimers()` to `findBy*`
+  produced a deterministic failure, because `findBy*` polls on a clock that test had frozen. Also
+  learned: isolation runs had been passing 23/23 the whole time CI's full run failed — **an isolation
+  run is not evidence about a flake.** Proof is 6 consecutive full-suite runs, 683/683.
+- **Third-party licence attribution did not exist.** Now `THIRD-PARTY-LICENSES.md`, **generated** by
+  `scripts/gen-third-party-licenses.sh` from the dependencies' own licence files, with `--check` to
+  fail when stale. It justified itself on run one by reporting `nhooyr.io/websocket` as UNKNOWN — the
+  detector matched only the ISC wording "and/or distribute" while that module says "and distribute".
+  A hand-written file would have recorded a guess. 56 Go modules + 66 npm packages redistributed,
+  **zero GPL/AGPL/LGPL/SSPL, zero undetermined**; both SDKs have zero runtime dependencies (so the
+  listing's "embeddable in commercial products without restriction" holds); **ClickHouse is
+  Apache-2.0, not SSPL**, stated explicitly as the claim most likely to be challenged wrongly.
+  *Note: the synthesis agent was killed by a content filter for being asked to reproduce full licence
+  texts. Generating them from the real files was the better answer anyway — a model retyping a legal
+  text from memory is exactly the wrong tool.*
+
+### v0.4.5, and the guard that escaped a third time
+
+Cut against the release workflow's **nineteen-point** consistency guard, walked by hand locally
+before tagging so a bad tag could not be pushed. Chart semver **0.3.2 → 0.3.3 is forced, not chosen**
+(check #16: bumping the values.yaml image tag *is* a chart-content change, and `helm push`
+overwrites a published version), which drags four runnable OCI pins in the docs. Goldens regenerated
+with **helm 3.17.0 exactly** — `latest` injects blank lines and manufactures drift. CHANGELOG
+`[Unreleased]` → `[0.4.5]`, verified **not** the 0.4.0 rollup trap (the 227 lines really are the
+v0.4.4..HEAD delta) and the duplicate `### Fixed`/`### Changed` headers merged with proof that no
+entry moved (sorted entry titles byte-identical, 24 both sides).
+
+Walking those checks by hand found two stale image pins living in the band *between* guards:
+`deploy/quickstart/.env.example` at `0.4.2` (three releases behind, in the file a quickstart user
+copies) and the Ankush reply draft at `0.4.4` under prose claiming "v0.4.3 is released". Check #17
+had now escaped its scope three times, each time patched into a slightly longer **explicit file
+list**. It is no longer a list: it scans every tracked md/yml/yaml/sh/example minus a documented
+exclusion set (`docs/assessment/**`, `agents/**`, `CHANGELOG.md` — dated records where an old pin was
+true when written). **What it does not cover is now written inside the guard, with the reason.**
+Verified in both directions by planting a stale pin in `docs/support.md`, which the old version
+sailed past.
+
+Also: a stamp guard that greps for a *version string* is satisfied by bumping the version on the same
+line as the date — which is how `faq.md` carried a 2026-07-27 date through a version bump. Dates
+fixed explicitly, and the doc-stamps guard was re-proven to fail on purpose.
+
+### Corrected stale claims from the previous handoff
+
+- `.github/branch-protection.sh` did **not** need re-running for `ios-kit` — already live, 16
+  contexts matching the script. Verified via API.
+- "The website and the app both fall back to system fonts" **overstated it**: the web UI already
+  self-hosts IBM Plex (`web/dist/assets/ibm-plex-*.woff2`, bundled via npm). Scoped to `website/`
+  and the iOS app.
+
+### Still blocking, still not ours
+
+**Marketplace** waits on the `CLICKHOUSE_PASSWORD` rotation — re-checked 2026-07-30, still
+un-rotated, still 2 commits, and now the **only** thing left, since v0.4.5 is cut. Nothing in the
+release claims or implies rotation happened. **iOS TestFlight** waits on Apple Developer Program
+enrolment.

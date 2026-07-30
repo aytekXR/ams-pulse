@@ -67,14 +67,26 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
    recreated in that same `up -d` or it keeps the stale password. Afterwards rotate the
    remaining chat-exposed set (`deploy/.env`, `oguz-testing.md` — already mode 600).
 
+   **Re-checked 2026-07-30: still un-rotated, still 2 commits.** This is now the *only* thing
+   between the product and submission — `v0.4.5` is cut, so the "rotate, cut, submit" motion is
+   down to "rotate, submit". Nothing in the v0.4.5 release claims or implies rotation happened.
+
 2. **Review `docs/marketplace/listing.md`** — the submission copy. Free of placeholders and
    internal notes, so it is safe to paste verbatim. Override anything; the category and all
    price wording are yours.
 
 3. **Submit the listing** to the Ant Media Marketplace (your account) — paste from
-   `listing.md`, never from `listing-draft.md` (internal). **Submit against the tag you cut in
-   item 1's sitting — `v0.4.5` if you take the recommended motion, `v0.4.4` if you decide not to
-   cut.** Artifact index: `docs/marketplace/submission-package.md`.
+   `listing.md`, never from `listing-draft.md` (internal). **`v0.4.5` is cut and is the submission
+   target** — it carries review rounds 7–11 plus the S122 corrections, so the tag an evaluator
+   pulls now contains its own security fixes. Artifact index:
+   `docs/marketplace/submission-package.md`.
+
+   The three things a reviewer verifies by hand were each run end-to-end against the published
+   artifacts rather than assumed, because none of them had ever actually been executed here:
+   `cosign verify` with a v3 client **passes** (digest `81673359…`), `helm pull
+   oci://ghcr.io/aytekxr/charts/pulse --version 0.3.3` **pulls anonymously**, and the
+   `curl … | bash` quickstart URL **resolves 200**. Chart semver is **0.3.3** now, not 0.3.2 —
+   the listing and install docs say so.
 
    ⚠ **If their reviewer verifies our image signature, tell them to use cosign v3 or newer.**
    Our images are correctly signed, but the signature is stored as an OCI 1.1 *referrer* rather
@@ -132,17 +144,15 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
   tier/channels ruling. (The Prometheus half has already shipped.)
 - **§2.44 `[FO-1]`** firing-orphan behaviour for node/QoE alerts whose subject vanishes:
   auto-resolve-after-grace (the loop's lean) / stay-firing / leave-as-is.
-- **`[ANOM-TIER]` Is anomaly detection Enterprise-only, or Business-and-up?** Your pricing pages
-  say Enterprise (`docs/overview.md` tier table; `docs/marketplace/listing.md`; PRD §7.11). The
-  code says something narrower: only `GET /anomalies` checks the tier, so a **Business** tenant
-  can create a `rule_type=anomaly` alert rule and receive anomaly alerts — and our own e2e
-  scenario A5 mints a Business licence and **requires** exactly that to work, and has for many
-  sessions. Two sources of truth disagreeing, not a bug that slipped past review. **Either answer
-  is one line**, and the loop deliberately did not pick: enforcing stops alerts Business tenants
-  get today; not enforcing means the listing advertises as Enterprise-exclusive something
-  Business already has. One word: **"enforce"** or **"advertise correctly"**. Relevant before you
-  submit the listing — item 3 pastes that tier table. *(The new website deliberately does not
-  state anomaly detection's tier at all, so it is not blocked on this.)*
+- ~~**`[ANOM-TIER]`**~~ **RESOLVED S122 — you ruled "advertise correctly", so anomaly detection is
+  now Business+ everywhere.** Implemented in the grant-only direction: `CheckAnomalies` admits
+  Business, so no tenant loses anything and e2e A5 keeps passing. Two things turned up while doing
+  it. The web UI also gated on Enterprise, so an entitled Business tenant would have met an
+  "upgrade to Enterprise" wall over data the API was already serving — fixed, with the Pro floor
+  now pinned by tests on both sides. And the note above that said *"the new website deliberately
+  does not state anomaly detection's tier at all"* **was wrong**: the site said `F9 - ENTERPRISE`
+  in the feature card *and* listed anomaly detection under Enterprise in the pricing table. Both
+  corrected. Nothing is outstanding for you here; the tier table in item 3 is safe to paste.
 - **Dependabot queue** (17 PRs open, operator-held): confirm the hold, or authorise a
   batch-absorb session per `docs/dependabot-policy.md`.
 
