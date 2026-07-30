@@ -216,8 +216,8 @@ and no phone-home; all tiers run fully self-hosted.
 |---|---|---|---|---|
 | **Free** | 1 | 7 days | F1 live dashboard, F2 historical analytics, F4 ingest health, F7 fleet view | Email only |
 | **Pro** | 10 | 90 days | Free + F3 QoE beacon SDK, F8 data API (REST + WebSocket), F10 synthetic probes | + Slack, Telegram |
-| **Business** | 50 | 396 days | Pro + F8 Prometheus `/metrics`, F6 usage/billing reports (CSV/PDF, S3, multi-tenant) | + PagerDuty, Webhook |
-| **Enterprise** | Unlimited | Unlimited | Business + F9 anomaly detection (Welford baselines), SSO (OIDC), white-label PDF reports | All five channels |
+| **Business** | 50 | 396 days | Pro + F8 Prometheus `/metrics`, F6 usage/billing reports (CSV/PDF, S3, multi-tenant), F9 anomaly detection (Welford baselines) | + PagerDuty, Webhook |
+| **Enterprise** | Unlimited | Unlimited | Business + SSO (OIDC), white-label PDF reports | All five channels |
 
 Max streams is unlimited on every tier. The node limit ladder is Free 1 / Pro 10 / Business 50 / Enterprise unlimited — Business targets high-retention reporting and multi-tenant billing use cases where up to 50 nodes suffice; Pro targets medium-scale streaming networks needing full API and QoE access. Unlimited nodes require Enterprise.
 
@@ -240,7 +240,7 @@ See [`docs/licensing.md`](licensing.md) for minting and activation instructions.
 | F6 | Usage/billing reports | Per-tenant CSV and PDF statements with S3 export, ±0.0000% reconciliation drift, true windowed peak concurrency |
 | F7 | Cluster fleet view | Auto-discovers cluster nodes within 30 s with real per-node IDs and CPU/memory. AMS 3.x exposes no node role, so all nodes display as `origin` and edge/origin viewer dedup stays inactive (LIM-10) |
 | F8 | Data API and Prometheus | Full public REST and WebSocket API (42 paths, 59 operations); `/metrics` scrape endpoint with bounded cardinality |
-| F9 | Anomaly detection | Welford online baselines, σ = 4.0 threshold, 0.259 false alarms/node-week (target < 1); epsilon floor for constant-baseline streams |
+| F9 | Anomaly detection | Welford online baselines, σ = 4.0 threshold, modeled 0.43 false alarms/node-week across 5 metrics (target < 1); epsilon floor for constant-baseline streams |
 | F10 | Synthetic probes | HLS full (TTFB + segment TTFB + bitrate); DASH MPD + segment; WebRTC ICE + RTP stats; RTMP TCP handshake; 4-worker pool, 60 s config refresh |
 
 ---

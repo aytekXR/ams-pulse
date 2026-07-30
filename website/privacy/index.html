@@ -91,6 +91,15 @@
       <li>Playback events: startup time, rebuffering, bitrate changes, errors</li>
       <li>Watch duration and heartbeat timestamps</li>
       <li>Player type and SDK version</li>
+      <li>
+        The address of the page where playback started, sent once with the first event
+        of a session. Your Pulse server accepts this field but does <em>not</em> store
+        it &mdash; there is no column for it in the events table, so it is discarded
+        after the request is handled. It may still appear in your own reverse-proxy or
+        application logs if you log request bodies. If your player pages carry sensitive
+        values in the URL (session tokens, account identifiers), treat those logs
+        accordingly.
+      </li>
     </ul>
     <p>
       The beacon SDK does <em>not</em> collect:

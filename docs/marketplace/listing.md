@@ -83,7 +83,7 @@ percent accuracy (confirmed in CI against 10,000 synthetic events); egress figur
 directional estimate derived from AMS REST counters and should be cross-checked with CDN logs
 for billing-grade invoicing.
 
-Pulse ships all ten analytics features in v0.4.4, validated against a live AMS 3.0.3 Enterprise
+Pulse ships all ten analytics features in v0.4.5, validated against a live AMS 3.0.3 Enterprise
 deployment. Install takes under 15 minutes from a Docker Compose quickstart. A 14-day Pro trial
 (no credit card) is available on request; the deployment gracefully reverts to the Free tier on
 expiry with no data loss.
@@ -122,9 +122,9 @@ expiry with no data loss.
    a directional estimate — use CDN logs for invoicing; on-demand CSV export and scheduled PDF
    and CSV delivery. (Business+)
 
-6. **Anomaly detection** — Welford statistical baseline on viewer counts and bitrate; fewer than
-   0.26 false alarms per node per week at default sensitivity (measured in CI/lab validation).
-   (Enterprise)
+6. **Anomaly detection** — Welford statistical baseline on viewer counts and bitrate; a modeled
+   0.43 false alarms per node per week at default sensitivity across five tracked metrics
+   (calculated in CI, not a live long-run measurement; the PRD target is under 1). (Business+)
 
 ---
 
@@ -134,8 +134,8 @@ expiry with no data loss.
 |------|-------|-----------|-----------|----------------|-------|
 | **Free** | $0/month | 1 | 7 days | Email only | **Noncommercial use only** (PolyForm Noncommercial 1.0.0); commercial deployments start at Pro |
 | **Pro** | $99/month | 10 | 90 days | Email, Slack, Telegram | QoE beacon SDK; synthetic probes; data API |
-| **Business** | $299/month | 50 | 396 days (13 months) | All 5 channels | Usage reports; Prometheus /metrics; scheduled PDF/CSV; multi-tenant |
-| **Enterprise** | from $799/month | Unlimited | Unlimited | All 5 channels | Anomaly detection; white-label PDF; SSO/OIDC; air-gapped licensing |
+| **Business** | $299/month | 50 | 396 days (13 months) | All 5 channels | Usage reports; Prometheus /metrics; scheduled PDF/CSV; multi-tenant; anomaly detection |
+| **Enterprise** | from $799/month | Unlimited | Unlimited | All 5 channels | White-label PDF; SSO/OIDC; air-gapped licensing; SLA |
 
 Monthly pricing. Annual subscriptions billed at 10× the monthly rate (two months free). Standard
 rates from year two — see the Founding Operators campaign below.
@@ -193,13 +193,13 @@ campaign price.
 - Multi-tenant billing (stream-name pattern or metadata tag)
 - Prometheus /metrics endpoint
 - PagerDuty and webhook alert channels (all 5 channel types)
+- Anomaly detection (Welford baselines on viewers, bitrate, CPU/memory)
 - 396-day (13-month) data retention — enables long-horizon trend analysis and rollups
 - Priority email support (1-business-day response target)
 - Up to 50 AMS nodes
 
 ### Enterprise (from $799/month)
 - Everything in Business, plus:
-- Anomaly detection (Welford baselines on viewers, bitrate, CPU/memory)
 - White-label PDF reports
 - SSO / OIDC
 - Unlimited nodes and retention
@@ -216,7 +216,7 @@ Pulse installs in under 15 minutes via:
 - **Docker Compose** — `install.sh` (health-gated, no-TTY safe) sets up the full stack with a
   single command; database migrations are baked into the Docker image (no bind mount required).
 - **Helm** — chart published to GHCR as an OCI artifact, anonymously pullable:
-  `helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.2`. Installing from
+  `helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.3`. Installing from
   a local chart path is also supported.
 - **Binary** — build from source with Go 1.25+, or use the checksummed release binaries
   (`pulse-linux-amd64` / `pulse-linux-arm64`, verifiable against the `SHA256SUMS` asset)

@@ -354,8 +354,8 @@ Optional lightweight probes (cloud or customer-placed) that periodically play se
 |---|---|---|
 | Free | $0 | 1 node, live dashboard, 7-day retention, email alerts, community support |
 | Pro | $99/month | 1 to 2 nodes, full QoE beacons, 90-day retention, Slack/Telegram alerts, CSV export |
-| Business | $299/month | Up to 5 nodes, 13-month retention, PagerDuty + webhooks, usage/billing reports, multi-tenant, API + Prometheus, priority support |
-| Enterprise | from $799/month | Unlimited nodes, SSO, white-label reports, air-gapped licensing, anomaly detection, SLA, onboarding |
+| Business | $299/month | Up to 5 nodes, 13-month retention, PagerDuty + webhooks, usage/billing reports, multi-tenant, API + Prometheus, anomaly detection, priority support |
+| Enterprise | from $799/month | Unlimited nodes, SSO, white-label reports, air-gapped licensing, SLA, onboarding |
 
 Flat per-deployment pricing is a deliberate wedge against per-view SaaS pricing: at 1M monthly views, Mux Data lists $499/month and grows linearly; Pulse Business stays $299 regardless of audience, which is exactly the cost-control argument that brought these buyers to self-hosted AMS in the first place.
 

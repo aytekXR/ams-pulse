@@ -102,7 +102,7 @@ Prices are set for launch (operator-delegated, D-169) — subject to operator ov
 | Usage and billing reports (viewer-minutes, egress, VoD storage) + their CSV/PDF export | Business+ |
 | Multi-tenant billing | Business+ |
 | Prometheus `/metrics` endpoint | Business+ |
-| Anomaly detection (Welford baselines) | Enterprise |
+| Anomaly detection (Welford baselines) | Business+ |
 | White-label PDF reports | Enterprise |
 | SSO / OIDC | Enterprise |
 

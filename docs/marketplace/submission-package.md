@@ -1,7 +1,7 @@
 # Ant Media Marketplace — Submission Package Index
 
 **Product:** Pulse — Analytics & QoE Monitoring for Ant Media Server
-**Version:** v0.4.4 (GHCR public, anonymously pullable) · **Prepared:** 2026-07-22; updated 2026-07-27
+**Version:** v0.4.5 (GHCR public, anonymously pullable) · **Prepared:** 2026-07-22; updated 2026-07-27
 
 This is the single page to hand Ant Media when the listing process starts: every
 submission artifact, where it lives, and its state. Statuses: **READY** (accurate,
@@ -17,7 +17,7 @@ reviewable now) · **DRAFT-OP** (content complete; blocked only on an operator d
 | Screenshots — 6 listing shots, 1920×1080, shipping UI + representative demo data (route-mocked capture, not a customer instance) | [`screenshot-list.md`](screenshot-list.md) + `screenshots/` (regenerate: `node qa/marketplace/capture-live-screenshots.mjs`) | READY (committed to `docs/marketplace/screenshots/`; portable capture script; regenerable at any time) |
 | Logo / media kit | `brandkit/logo/` (SVG + PNG variants), OG banner `brandkit/assets/png/og-1200x630.png` | READY (final specs = meeting assumption A3) |
 | Demo video | [`demo-video-script.md`](demo-video-script.md) + rough-cut `docs/marketplace/demo/pulse-demo-roughcut.webm` | DRAFT-OP (rough-cut rendered and attached to [GitHub release v0.4.1](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.1); operator records final with voiceover — TBD-EXT for voiceover only) |
-| Beacon SDK tarball | `ams-pulse-beacon-0.4.3.tgz` on the [v0.4.4 release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.3) | READY (0.4.1 tarball must NOT be advertised — it shipped the `Pulse.init()` silent-no-op defect fixed in 0.4.2) |
+| Beacon SDK tarball | `ams-pulse-beacon-0.4.3.tgz` on the [v0.4.5 release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.3) | READY (0.4.1 tarball must NOT be advertised — it shipped the `Pulse.init()` silent-no-op defect fixed in 0.4.2) |
 | Release notes ("what's new in 0.4") | [`release-notes.md`](release-notes.md) | READY |
 
 ## Documentation set (linkable as the product docs)
@@ -64,7 +64,7 @@ operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
 > against a correctly signed image.** The layout is a structural property of
 > `release.yml`, not a per-release decision, so every release from `0.3.0` on behaves this
 > way and every future one will too. Spot-verified 2026-07-27 with cosign v2.4.3 and
-> v3.0.2 against `0.3.0`, `0.4.3` and `0.4.4`: v2.4.3 fails on all three and passes only on
+> v3.0.2 against `0.3.0`, `0.4.3` and `0.4.5`: v2.4.3 fails on all three and passes only on
 > `0.2.0` (the last legacy-layout release); v3.0.2 passes on all three — for `0.4.3`, digest
 > `sha256:75a76c67…727b4`, claims + Rekor transparency-log inclusion + Fulcio cert chain all
 > validated. Command in [`../../README.md`](../../README.md).
@@ -81,8 +81,8 @@ operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
   `/fleet/nodes` returning the real AMS 3.0.3 node, with the pulled image digest
   `sha256:75a76c67…727b4` matching the anonymously-resolved `0.4.3` and `latest` manifests.
   The Helm chart OCI package is anonymously pullable too — currently
-  `ghcr.io/aytekxr/charts/pulse:0.3.2` (chart semver is independent of appVersion; `0.3.2`
-  carries appVersion `0.4.4`, `0.3.1` carried `0.4.3`).
+  `ghcr.io/aytekxr/charts/pulse:0.3.3` (chart semver is independent of appVersion; `0.3.3`
+  carries appVersion `0.4.5`, `0.3.2` carried `0.4.4`, `0.3.1` carried `0.4.3`).
 - ~~**MaxNodes reconcile** (Pro 10 vs Business 5 inversion)~~ **DONE (D-166):** Business is now 50;
   ladder is monotonic (Free 1 / Pro 10 / Business 50 / Enterprise ∞) with a regression test.
 - ~~**Pricing sign-off**~~ **DECIDED (D-169, operator-delegated):** standard Free $0 / Pro $99 /
@@ -120,14 +120,14 @@ still open):**
    un-published — only rotation closes it, and it should happen **before the repo receives
    marketplace traffic.** Then rotate the remaining chat-exposed set. Detail:
    `docs/operator-expected.md` item 1.
-2. ~~**Decide the submission target**~~ **DECIDED (2026-07-27): cut `v0.4.4` and submit against
+2. ~~**Decide the submission target**~~ **DECIDED (2026-07-27): cut `v0.4.5` and submit against
    it** (round 6, H-02). `main` had moved ahead of `v0.4.3` by **code**, not just copy: the
    **LIM-01 fix** (standalone Fleet CPU/memory/disk gauges, no Kafka — a Priority-1 limitation
    closed), the anchored `cosign verify` command, `SHA256SUMS` covering all four release assets,
    the installer's degraded exit code, the listing's HLS caveat, and AMS 2.17 compatibility
    coverage. Round 5's "doc fixes ride the next release" ruling predated the code.
 3. **Submit the listing** to the Ant Media Marketplace (operator account) — paste from
-   [`listing.md`](listing.md), never from `listing-draft.md`. **Submit against `v0.4.4`.**
+   [`listing.md`](listing.md), never from `listing-draft.md`. **Submit against `v0.4.5`.**
 4. **Set up billing** for the tiers / campaign / trial in the marketplace's billing system.
 5. **Capacity number** — run the load lane on a dedicated PAYG AMS → replaces the PROVISIONAL claim
    now in `docs/compatibility.md`. Same instance: set `server.kafka_brokers` for the AV-15 live

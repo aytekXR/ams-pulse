@@ -218,7 +218,7 @@ Cluster topology.
 
 ### anomalies — 1 operation
 
-Baseline-deviation anomaly flags (Enterprise tier).
+Baseline-deviation anomaly flags (Business tier or higher).
 
 | Method | Path | Purpose |
 |--------|------|---------|
@@ -498,7 +498,7 @@ HTTP 403 Forbidden
 | Multi-tenant (`/admin/tenants`) | Business |
 | Data API (public `/api/v1` with ingest token) | Pro |
 | White-label PDF reports | Enterprise |
-| Anomaly detection (`/anomalies`, anomaly alert rules) | Enterprise |
+| Anomaly detection (`/anomalies`, anomaly alert rules) | Business |
 | SSO/OIDC (`/auth/oidc/*`) | Enterprise |
 
 Free tier requires no license key and never phones home. Upgrade by calling

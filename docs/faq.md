@@ -1,6 +1,6 @@
 # Pulse — Operator FAQ
 
-**Product:** Pulse v0.4.4 · **Last updated:** 2026-07-27
+**Product:** Pulse v0.4.5 · **Last updated:** 2026-07-27
 
 Short answers to the questions operators ask most often.
 Each answer links to the canonical doc for deeper reading.
@@ -184,7 +184,7 @@ To renew, activate a new key via any of three routes:
 | Beacon QoE ingest (F3) | No | Yes | Yes | Yes |
 | Data API + Prometheus `/metrics` (F8) | No | API only | Yes | Yes |
 | Usage/billing reports (F6) | No | No | Yes | Yes |
-| Anomaly detection (F9) | No | No | No | Yes |
+| Anomaly detection (F9) | No | No | Yes | Yes |
 | SSO / OIDC | No | No | No | Yes |
 | White-label PDF | No | No | No | Yes |
 | Notification channels | Email | Email, Slack, Telegram | + PagerDuty, Webhook | All |
@@ -423,4 +423,6 @@ The meta store schema is backwards-compatible within a major version.
 
 *Every answer above is traceable to a primary source cited inline.
 For the full list of known operator-facing limitations see
-`docs/known-limitations.md` (26 LIMs as of D-161).*
+`docs/known-limitations.md` — it is the authoritative list and is kept current there
+rather than counted here, because a count duplicated across documents goes stale
+silently (it had said 26 while the list held 28).*

@@ -6,7 +6,7 @@ PRD: `docs/prd-report.md` §7 (the rest of that file is market analysis — cont
 ## Current state
 
 **Shipped product, pre-marketplace.** All 10 PRD features are implemented and live-validated
-against a real AMS 3.0.3 Enterprise (46/50 scenarios); latest release v0.4.3; production runs
+against a real AMS 3.0.3 Enterprise (46/50 scenarios); latest release v0.4.5; production runs
 behind host nginx on this VPS. The wave plan in `agents/manifest.yaml` is complete — current
 work follows `agents/handoffs/ROADMAP-V2.md` and the session protocol in
 `agents/handoffs/RESUME-PROMPT.md` (start there, not at the wave plan). Remaining open items
