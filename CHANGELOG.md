@@ -230,8 +230,15 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ### Security
 
-- **The AMS poll client now dials through the SSRF guard, and stops republishing upstream
-  response bodies on `/healthz` (D-185, external review round 11 N-01).** `amsclient` was the
+- **`golang.org/x/text` bumped 0.38.0 → 0.39.0 for CVE-2026-56852 (D-190).** A HIGH-severity
+  denial of service: `norm.Iter` can enter an infinite loop on certain input. It reached the
+  shipping binary as an indirect dependency, and **the release pipeline caught it rather than a
+  reviewer** — Trivy runs with `ignore-unfixed: true, severity: HIGH,CRITICAL, exit-code: 1`, so
+  a fixable HIGH blocks the release, and it did. Worth stating exactly what that gate protected:
+  the quarantine image is pushed *before* the scan and promotion happens *after*, so no public
+  `0.4.5` tag and no moved `latest` was ever created from the vulnerable build — verified by
+  manifest inspection, not assumed. The rebuilt binary re-scans clean (0 HIGH/CRITICAL), and the
+  Alpine base had 0 findings throughout.
   last outbound client building a plain `http.Client` with no `Control` hook on its dialer. The
   round-11 ledger filed it as reachable from an API-created AMS source; it is not — the poll
   client is built once from `PULSE_AMS_URL`, and `ams_sources.rest_url` reaches only the
