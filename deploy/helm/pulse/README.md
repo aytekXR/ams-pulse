@@ -53,7 +53,7 @@ kubectl create secret generic pulse-clickhouse-secret \
 
 # 2. Install the chart (default: SQLite meta, bundled ClickHouse).
 #    Published to GHCR as an OCI artifact on every release, anonymously pullable:
-#      helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.2 \
+#      helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.3 \
 #        --set pulse.ams.url=http://your-ams:5080 ...
 #    The chart semver is independent of appVersion and moves on its own schedule —
 #    read both from Chart.yaml rather than assuming they track (round-7 review I-02:
