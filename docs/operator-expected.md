@@ -15,7 +15,7 @@
 ## A. iOS TestFlight — the critical path
 
 **Everything on our side is built and verified.** The app compiles for iOS 26 under Swift 6
-strict concurrency on a real GitHub macOS runner, 259 Linux tests and 50 simulator tests pass,
+strict concurrency on a real GitHub macOS runner, 296 Linux tests and 50 simulator tests pass,
 the archive-and-upload pipeline is written, and the tester-facing website is live. What is left
 is the part that legally requires your Apple identity. **Nothing below can be automated away —
 each step needs a human with your Apple ID.**
@@ -29,7 +29,7 @@ Full runbook with screenshots-worth-of-detail: **`docs/mobile/ios-testflight.md`
 | **A3** | **Create the App Store Connect app record.** ⚠ The App Store *name* must be globally unique and plain "Pulse" is certainly taken. Suggestions: "Pulse for Ant Media", "Pulse Stream Monitor", "Pulse AMS". The on-device name stays "Pulse" regardless. | appstoreconnect.apple.com | 10 min |
 | **A4** | **Create an App Store Connect API key** — Users and Access → Integrations → App Store Connect API → **App Manager** role. You get an Issuer ID, a Key ID, and a `.p8` file **that can only be downloaded once.** | appstoreconnect.apple.com | 5 min |
 | **A5** | **Add three repository secrets** (Settings → Secrets and variables → Actions): `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_PRIVATE_KEY`. ⚠ The private key is the **`.p8` contents verbatim**, BEGIN/END lines included — *not* base64. Optionally `APPLE_TEAM_ID` (10 chars); add it if A6 fails with "requires a development team". | github.com repo settings | 5 min |
-| **A6** | **Trigger the build**: Actions → **ios** → Run workflow, or push a tag `ios-v0.4.4`. The job archives, signs, uploads, and prints where to look. Without the secrets it skips loudly rather than failing — so a run before A5 tells you nothing is broken, only that it is waiting. | github.com Actions | 15 min |
+| **A6** | **Trigger the build**: Actions → **ios** → Run workflow, or push a tag `ios-v0.4.5`. The job archives, signs, uploads, and prints where to look. Without the secrets it skips loudly rather than failing — so a run before A5 tells you nothing is broken, only that it is waiting. | github.com Actions | 15 min |
 | **A7** | **Invite testers.** *Internal* (up to 100 App Store Connect users, **no review**, available minutes after processing) is the fast path — use it first. *External* (up to 10,000, needs a one-time Beta App Review, gives you a public link) is the one that produces a shareable URL. | appstoreconnect.apple.com | 10 min |
 | **A8** | **Publish the public link.** Once external testing is approved, App Store Connect gives you a `testflight.apple.com/join/…` URL. Search the repo for **`TESTFLIGHT_PUBLIC_LINK_PLACEHOLDER`** — it appears once, in `website/beta/index.html`, currently rendered as a disabled button. Replace that block with a real link (the exact replacement is in the HTML comment beside it) and the site redeploys on merge. Or hand the loop the URL and it will do it. | repo | 5 min |
 
@@ -68,25 +68,30 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
    remaining chat-exposed set (`deploy/.env`, `oguz-testing.md` — already mode 600).
 
    **Re-checked 2026-07-30: still un-rotated, still 2 commits.** This is now the *only* thing
-   between the product and submission — `v0.4.5` is cut, so the "rotate, cut, submit" motion is
-   down to "rotate, submit". Nothing in the v0.4.5 release claims or implies rotation happened.
+   between the product and submission — `v0.4.5` is released, so the old "rotate, cut, submit"
+   motion is down to "rotate, submit". Nothing in the v0.4.5 release claims or implies rotation happened.
 
 2. **Review `docs/marketplace/listing.md`** — the submission copy. Free of placeholders and
    internal notes, so it is safe to paste verbatim. Override anything; the category and all
    price wording are yours.
 
 3. **Submit the listing** to the Ant Media Marketplace (your account) — paste from
-   `listing.md`, never from `listing-draft.md` (internal). **`v0.4.5` is cut and is the submission
-   target** — it carries review rounds 7–11 plus the S122 corrections, so the tag an evaluator
+   `listing.md`, never from `listing-draft.md` (internal). **`v0.4.5` is RELEASED and is the
+   submission target** — it carries review rounds 7–11 plus the S122 corrections, so the tag an evaluator
    pulls now contains its own security fixes. Artifact index:
    `docs/marketplace/submission-package.md`.
 
-   The three things a reviewer verifies by hand were each run end-to-end against the published
-   artifacts rather than assumed, because none of them had ever actually been executed here:
-   `cosign verify` with a v3 client **passes** (digest `81673359…`), `helm pull
-   oci://ghcr.io/aytekxr/charts/pulse --version 0.3.3` **pulls anonymously**, and the
-   `curl … | bash` quickstart URL **resolves 200**. Chart semver is **0.3.3** now, not 0.3.2 —
-   the listing and install docs say so.
+   Everything a reviewer checks by hand was executed against the **published v0.4.5 artifacts**,
+   not assumed: `cosign verify` with a v3 client **passes** (digest `542fead1…`), `helm pull
+   oci://ghcr.io/aytekxr/charts/pulse --version 0.3.3` **pulls anonymously**, the
+   `curl … | bash` quickstart URL **resolves 200**, and a Trivy scan of the released image returns
+   **0 HIGH/CRITICAL** (Alpine 0, Go binary 0). Chart semver is **0.3.3** now, not 0.3.2 — the
+   listing and install docs say so.
+
+   One thing to have ready if their reviewer asks about CVEs: the release pipeline **blocked
+   v0.4.5 once** on a HIGH finding (CVE-2026-56852 in `golang.org/x/text`, an indirect dependency)
+   and the release only went out after it was patched. That is a good story, not a bad one — it
+   demonstrates the gate is real — and `CHANGELOG.md` records it under 0.4.5 Security.
 
    ⚠ **If their reviewer verifies our image signature, tell them to use cosign v3 or newer.**
    Our images are correctly signed, but the signature is stored as an OCI 1.1 *referrer* rather
@@ -112,10 +117,18 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
    release workflow then publishes automatically on the next tag (or via `workflow_dispatch`
    `publish_tag`). Without it nothing fails; the tarball still attaches to the release.
 
-8. *Optional:* **add a `GHCR_CLEANUP_TOKEN` repo secret** (a PAT with `delete:packages`) so the
-   release pipeline's quarantine-tag cleanup can run. **Without it nothing breaks**: the step
-   warns loudly, and you would delete the `candidate-<sha>` tag by hand only after a release
-   that actually *failed* its vulnerability scan.
+8. **Add a `GHCR_CLEANUP_TOKEN` repo secret** (a PAT with `delete:packages`) — this moved from
+   *optional* to *worth doing*, because the exact scenario it covers has now happened. The v0.4.5
+   release failed its vulnerability scan once (CVE-2026-56852, since fixed), and the quarantine
+   image is pushed **before** the scan runs. So GHCR now carries a **public
+   `candidate-5c561bc4` tag pointing at an image with a known HIGH CVE**, plus three older
+   `candidate-*` aliases. Nothing consumes those tags and no release references them, but a
+   security reviewer enumerating your package tags can pull a vulnerable image from your registry.
+
+   Two ways to close it, and they are complementary: the secret lets the pipeline delete
+   quarantine tags itself, and the loop-owned **round-6 H-09** fix (push candidates by digest with
+   buildx `push-by-digest=true`) stops them acquiring a public alias at all. Until either lands,
+   deleting the four `candidate-*` tags by hand in the GHCR package UI is a two-minute job.
 
 9. **Demo FINAL** — re-record the voiceover over the dark rough-cut attached to the release.
    ⚠ **Re-read `docs/marketplace/demo-video-script.md` first:** the edge/origin viewer-dedup

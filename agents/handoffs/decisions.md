@@ -11365,3 +11365,42 @@ fixed explicitly, and the doc-stamps guard was re-proven to fail on purpose.
 un-rotated, still 2 commits, and now the **only** thing left, since v0.4.5 is cut. Nothing in the
 release claims or implies rotation happened. **iOS TestFlight** waits on Apple Developer Program
 enrolment.
+
+### Addendum — the release itself, and two lessons that cost real time
+
+**v0.4.5 is released and its artifacts are verified**, not assumed: GitHub release with binaries,
+`SHA256SUMS` and both SDK tarballs; `ghcr.io/aytekxr/ams-pulse:0.4.5` signed and **cosign
+v3-verifying** (digest `542fead1…`); `latest` moved; helm chart **0.3.3 anonymously pullable**; and a
+Trivy scan of the *released* image returning **0 HIGH/CRITICAL** (Alpine 0, Go binary 0).
+
+**The pipeline blocked the release twice and both were real defects.**
+
+1. **The version guard rejected the tag** over `deploy/helm/pulse/README.md` still pinning chart
+   `0.3.2`. I had walked the nineteen checks locally and thought #18 clean — because **my local
+   replication scanned two files where the real check scans four**. A re-implemented guard has its
+   own scope, and its own scope gap. **Run the actual guard; do not paraphrase it.** The irony is
+   exact: this session had just spent a commit de-literalizing check #17 for the same class of bug.
+
+2. **Trivy blocked on CVE-2026-56852** — HIGH, `norm.Iter` infinite-loop DoS in
+   `golang.org/x/text` 0.38.0, reaching the shipping binary as an **indirect** dependency. Fixed by
+   0.39.0, and re-verified by scanning the **rebuilt binary** rather than trusting the version
+   string. The gate's design held up under inspection: the quarantine image is pushed *before* the
+   scan and promotion happens *after*, so no public `0.4.5` tag and no moved `latest` ever existed
+   while the CVE was in the tree — confirmed by manifest inspection, not inferred.
+
+   Side effect now in the operator queue: GHCR carries a public `candidate-5c561bc4` alias pointing
+   at the CVE-carrying image. That is round-6 **H-09** (candidates should be pushed by digest so
+   they never get a public alias), and it just stopped being theoretical.
+
+**⚠ A tag push landed on the wrong commit.** `git tag -d v0.4.5` was run with its output suppressed
+(`>/dev/null 2>&1`), it did not do what I assumed, the old annotated tag survived, and the push
+shipped the **pre-CVE-fix commit** — while `git tag -a` had errored "already exists" in the very
+same command, which I read past. The release began building vulnerable code before it was cancelled.
+Two rules out of it: **`git rev-parse v0.4.5` returns the TAG OBJECT, not the commit** — deref with
+`v0.4.5^{commit}` and diff against HEAD *before* pushing; and **never suppress the output of a
+destructive git command.** The recovery was clean only because promotion is scan-gated.
+
+**A stuck runner is not a red build.** `ci` on the merge commit sat 39 minutes in the race step
+against a ~7-minute norm. Same tree hash had already passed `server` in 7m16s on the PR, so it was
+infrastructure, not code — cancel and re-run, do not start debugging. Confirm with the tree hash,
+which is the cheap discriminator.

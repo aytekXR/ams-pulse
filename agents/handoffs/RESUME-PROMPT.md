@@ -23,7 +23,31 @@
 > `agents/handoffs/sessions/SESSION-NNN.md` and `decisions.md` (operator directive).
 > **Replace this block each session — never append to it.**
 
-**Where the product is:** **v0.4.5 is cut and is the marketplace submission target.** S122 ran a
+**Where the product is:** **v0.4.5 is RELEASED and verified, and is the marketplace submission
+target.** Published artifacts checked the way a reviewer would, not assumed: GitHub release with
+binaries + `SHA256SUMS` + both SDK tarballs, `ghcr.io/aytekxr/ams-pulse:0.4.5` signed and
+**cosign v3-verifying**, `latest` moved, helm chart `0.3.3` **anonymously pullable**, and the
+released image **scans 0 HIGH/CRITICAL** (Alpine 0, Go binary 0).
+
+**The release pipeline earned its keep twice, and both failures were real.** First the version guard
+rejected the tag over a `deploy/helm/pulse/README.md` chart pin still on 0.3.2 — *my local
+replication of that check scanned two files when the real one scans four.* **Run the actual guard;
+do not paraphrase it.** Then Trivy blocked the release on **CVE-2026-56852** (HIGH: `norm.Iter`
+infinite-loop DoS in `golang.org/x/text` 0.38.0, reaching the binary as an *indirect* dependency).
+Bumped to 0.39.0 and re-verified by scanning the **rebuilt binary**, not the version number. Nothing
+vulnerable was ever promoted: the quarantine image is pushed *before* the scan and promotion happens
+*after*, so no public `0.4.5` tag and no moved `latest` existed while the CVE was in the tree —
+verified by manifest inspection.
+
+**⚠ A tag push went to the wrong commit, and the reason is worth not repeating.** `git tag -d`
+was run with its output suppressed, it did not do what I assumed, the old annotated tag survived,
+and `git push origin v0.4.5` shipped the **pre-CVE-fix commit** — while `git tag -a` had already
+errored "already exists" in the same breath. The release started building vulnerable code before it
+was cancelled. **`git rev-parse v0.4.5` returns the TAG OBJECT, not the commit — always deref with
+`v0.4.5^{commit}` and compare against HEAD before pushing a tag, and never suppress the output of a
+destructive git command.**
+
+S122 also ran a
 brutal-review rehearsal — 11 hostile lenses across documentation, security and functionality, every
 finding refuted before it counted, then a second pass attacking the *all-clears*. Result: **six
 confirmed defects, every one of them documentation**, and zero in security or functionality. That
