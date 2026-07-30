@@ -266,4 +266,4 @@ See [`docs/licensing.md`](licensing.md) for minting and activation instructions.
 
 ---
 
-_Last updated: 2026-07-27._
+_Last updated: 2026-07-30._

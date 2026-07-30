@@ -16,8 +16,8 @@ the documentation package is complete, so I'd like to take you up on it.
 
 **Where things stand:**
 
-- **Pulse v0.4.3 is released and publicly installable.** The image is published and public on GHCR
-  (`ghcr.io/aytekxr/ams-pulse:0.4.4`, multi-arch, cosign-signed); a one-command Docker Compose
+- **Pulse v0.4.5 is released and publicly installable.** The image is published and public on GHCR
+  (`ghcr.io/aytekxr/ams-pulse:0.4.5`, multi-arch, cosign-signed); a one-command Docker Compose
   quickstart brings up the full stack in ~15 minutes. I verified the anonymous install path
   end-to-end this week — a fresh pull with no credentials reaches a live dashboard.
 - **Integration is read-only.** Pulse polls AMS REST v2 (plus optional webhook/Kafka), never modifies

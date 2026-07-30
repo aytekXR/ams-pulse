@@ -1,6 +1,6 @@
 # Pulse — Licensing Explained
 
-**Last updated:** 2026-07-25
+**Last updated:** 2026-07-30
 
 This page is the human-readable guide to Pulse licensing. It covers the
 open-source licenses that govern the code, the commercial tiers and what each

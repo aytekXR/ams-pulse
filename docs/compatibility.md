@@ -1,7 +1,7 @@
 # Pulse — AMS Version Compatibility Matrix
 
 **Product:** Pulse: Self-Hosted Analytics, QoE Monitoring and Alerting for Ant Media Server  
-**Last updated:** 2026-07-27 — fleet resource metrics row corrected: CPU/mem/disk come
+**Last updated:** 2026-07-30 — fleet resource metrics row corrected: CPU/mem/disk come
 from `/rest/v2/system-resources` (D-179), not "via Kafka only"; AMS 2.16/2.17 coverage added and
 source citations de-numbered in D-179; reviewed against AMS 3.0.3 (still the latest AMS
 release); G-27 section added D-161 (2026-07-22)

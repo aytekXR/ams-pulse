@@ -687,4 +687,4 @@ The density and theme settings are stored in `localStorage`.
 
 ---
 
-_Last updated: 2026-07-22_
+_Last updated: 2026-07-30_
