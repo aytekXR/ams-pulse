@@ -47,8 +47,7 @@ was cancelled. **`git rev-parse v0.4.5` returns the TAG OBJECT, not the commit �
 `v0.4.5^{commit}` and compare against HEAD before pushing a tag, and never suppress the output of a
 destructive git command.**
 
-S122 also ran a
-brutal-review rehearsal — 11 hostile lenses across documentation, security and functionality, every
+**S122 also ran a brutal-review rehearsal before any of that** — 11 hostile lenses across documentation, security and functionality, every
 finding refuted before it counted, then a second pass attacking the *all-clears*. Result: **six
 confirmed defects, every one of them documentation**, and zero in security or functionality. That
 zero is credible rather than lazy: the lenses ran the full race suite (26 packages, 79.2% coverage),
@@ -56,8 +55,9 @@ zero is credible rather than lazy: the lenses ran the full race suite (26 packag
 live prod including `/debug/pprof`. **The single most valuable thing they produced was their honest
 blind-spot statements**, which named three things a marketplace reviewer certainly does and nobody
 here had ever executed: `cosign verify`, the anonymous Helm OCI pull, and the `curl | bash`
-quickstart URL. All three were then run for real and all three pass (cosign v3 digest `81673359…`;
-chart `0.3.3` pulls anonymously; quickstart URL 200). **When a lens reports its own blind spots,
+quickstart URL. All three were then run for real and all three pass — and re-run against the
+released v0.4.5 artifacts afterwards (cosign v3 verifies digest `542fead1…`; chart `0.3.3` pulls
+anonymously; quickstart URL 200). **When a lens reports its own blind spots,
 that list is the next work item, not a footnote.**
 
 **`[ANOM-TIER]` is resolved and it was bigger than the ticket said.** The operator ruled "advertise
