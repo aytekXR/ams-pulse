@@ -193,6 +193,33 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
     vhost is written and waiting at `deploy/nginx/pulse-website.conf` and needs your `sudo`.
     Either way the App Store URLs in A3 change, so decide before A3 if you care.
 
+13. **⚠ Four open HIGH CodeQL alerts are visible in your PUBLIC repo's Security tab** — and
+    they have been open since **2026-07-09/10**, roughly three weeks, with every CI gate green
+    the whole time. A marketplace security reviewer will open that tab. **None was introduced by
+    the S123 work**; they are pre-existing on `main`.
+
+    **Why nothing caught them:** the required contexts include `Analyze (go)` and
+    `Analyze (javascript-typescript)`, which report whether the *scan ran*, not whether it
+    *found anything*. The aggregate `CodeQL` check-run — the one that says "2 new alerts
+    including 1 high severity" — is **not** a required context. Same class as the three gate
+    gaps closed in S123: a guard that cannot fail.
+
+    | Alert | Location | Assessment |
+    |---|---|---|
+    | `go/weak-sensitive-data-hashing` | `server/internal/store/meta/meta.go:1649` | **Conditionally real.** SHA-256 turns `PULSE_SECRET_KEY` into the AES key that encrypts stored AMS credentials. Fine for the documented `openssl rand -hex 32` value (and the hex path skips SHA-256 entirely), weak if an operator sets a short guessable string. ⚠ **Do NOT "fix" this by switching to a KDF without a migration** — it would change the derived key and make every already-encrypted credential undecryptable. |
+    | `go/weak-sensitive-data-hashing` | `server/internal/api/oidc.go:124` | **Effectively a false positive.** Derives an HMAC key for OIDC state cookies from the same high-entropy secret. The "use a slow hash" rule targets low-entropy user passwords. Safe to switch to HKDF if you want it silenced — changing it only invalidates in-flight state cookies. |
+    | `js/insecure-randomness` ×2 | `sdk/beacon-js/src/index.ts:35,54` | **Low but genuine.** `Math.random()` generates beacon session IDs. They are analytics correlation IDs, not auth tokens, and the ingest endpoint requires a token — but guessable IDs let someone attribute events to another session. `crypto.getRandomValues` with a `Math.random` fallback is a small, safe change; it needs an SDK re-release and a re-run of the 15 KB size gate. |
+
+    **Your call, three options:** fix them (only the SDK one is risk-free), dismiss each in the
+    Security tab with the rationale above (GitHub records the reason, which is a *better* look to
+    a reviewer than four untriaged alerts), or leave them. **Doing nothing is the only option
+    that looks bad**, because the tab shows "4 open" with no explanation.
+
+    **Also worth doing either way:** add `CodeQL` to the required contexts in
+    `.github/branch-protection.sh` so new alerts cannot sit unnoticed again. It was deliberately
+    NOT added in S123 because it would have blocked that PR on these pre-existing alerts — triage
+    them first, then require it.
+
 ## Decision-gated engineering (one word each unblocks a build)
 
 - **§2.45** Pulse-native self-alert paging half — maintenance-window semantics plus the

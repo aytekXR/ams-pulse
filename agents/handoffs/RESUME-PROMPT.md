@@ -91,6 +91,17 @@ loading the page with `--network none` found it.**
 retention window — a Free request for 30 days returns 7, HTTP 200, no warning field, indistinguishable
 from a complete answer.
 
+**⚠ Four open HIGH CodeQL alerts have been public since 2026-07-09/10 with every gate green.**
+None is from S123. They survived because the required contexts are `Analyze (go)` /
+`Analyze (javascript-typescript)`, which report that the scan RAN, not what it FOUND — the
+aggregate `CodeQL` check-run that reports alerts is not required. Same class as the three gate
+gaps closed this session. Two are `go/weak-sensitive-data-hashing` on SHA-256 key derivation from
+`PULSE_SECRET_KEY` (`meta.go:1649`, `oidc.go:124`) — ⚠ **`meta.go` must NOT be switched to a KDF
+without a migration; it derives the AES key for stored AMS credentials and changing it orphans
+every existing ciphertext.** Two are `js/insecure-randomness` on `Math.random()` beacon session
+IDs. Triage them, then add `CodeQL` to the required contexts (not added yet because it would have
+blocked the S123 PR on pre-existing alerts). Detail: `docs/operator-expected.md` item 13.
+
 **Two independent tracks remain:**
 - **Marketplace** — **unblocked.** Submit `v0.4.5`. Queue: `docs/operator-expected.md` §B.
 - **iOS TestFlight** — blocked by **Apple Developer Program enrolment** only. §A is the eight-step path.
