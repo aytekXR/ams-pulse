@@ -1,6 +1,6 @@
 # CodeQL alert triage record
 
-**Last updated:** 2026-07-31
+**Last updated:** 2026-07-31 — all six alerts dispositioned; the standing gap is closed (CodeQL is now a required context).
 
 This is the standing record of how every CodeQL alert on this repository was
 dispositioned, and why. It exists because "4 open alerts, no explanation" is a
@@ -140,7 +140,7 @@ hide our own findings.
 
 ---
 
-## Standing gap
+## Standing gap — CLOSED 2026-07-31
 
 `Analyze (go)` and `Analyze (javascript-typescript)` are required status checks,
 but they report whether the **scan ran**, not what it **found**. The aggregate
@@ -152,3 +152,13 @@ Adding `CodeQL` to the required contexts in `.github/branch-protection.sh` is th
 fix, and it is safe to do **once this triage is reflected in the alert states** —
 attempting it earlier would have blocked the PR that performed the triage on the
 alerts it was triaging.
+
+**Done.** With every alert dispositioned and zero open, `CodeQL` was added as the
+**18th required context**. A new HIGH finding now blocks the merge that
+introduces it, instead of waiting three weeks for someone to open the Security
+tab.
+
+Note for whoever hits this later: if `CodeQL` goes red on an unrelated PR, that
+is the advisory database or the query pack moving, not necessarily your change.
+Triage it here and record the disposition — do NOT remove the context to get
+unblocked, which would restore exactly the gap this closed.
