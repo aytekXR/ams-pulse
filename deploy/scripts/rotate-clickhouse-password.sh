@@ -84,21 +84,28 @@ done
 
 [ -n "$ENV_FILE" ] || ENV_FILE="${REPO_ROOT}/deploy/.env"
 
-# The standing five-overlay production combo. Omitting the backup overlay on
-# `up -d` would REMOVE the backup sidecar, so it is part of the combo, not optional.
-COMPOSE_FILES=(
-	"${REPO_ROOT}/deploy/docker-compose.yml"
-	"${REPO_ROOT}/deploy/docker-compose.hardened.yml"
-	"${REPO_ROOT}/deploy/docker-compose.prod-tls.yml"
+# ── Which compose files? ASK THE RUNNING STACK. ──────────────────────────────
+#
+# Do NOT hardcode this list. It has already drifted once, badly: the handoff docs
+# described a "standing five-overlay combo"
+#   base + hardened + prod-tls + real-ams + backup
+# but PR #199 (the Caddy -> host-nginx cutover, 2026-07-23) DELETED
+# docker-compose.prod-tls.yml and consolidated the stack into
+# docker-compose.prod.yml. The documented command therefore names a file that
+# does not exist, and the live stack actually runs
+#   prod + real-ams + backup
+# A rotation driven by the stale list would not recreate the stack that is
+# running — and this script must not be the thing that discovers that at 3am.
+#
+# Compose stamps the exact file set it was brought up with onto every container
+# as com.docker.compose.project.config_files, so the running stack is the
+# authority. The documented set is only a fallback for a stack that is down.
+DEFAULT_COMPOSE_FILES=(
+	"${REPO_ROOT}/deploy/docker-compose.prod.yml"
 	"${REPO_ROOT}/deploy/docker-compose.real-ams.yml"
 	"${REPO_ROOT}/deploy/docker-compose.backup.yml"
 )
-
-DC_ARGS=(-p "$PROJECT")
-for f in "${COMPOSE_FILES[@]}"; do
-	DC_ARGS+=(-f "$f")
-done
-DC_ARGS+=(--env-file "$ENV_FILE")
+COMPOSE_FILES=()
 
 # `sg docker` is needed on hosts where the docker group is stale in non-login
 # shells; fall back to plain docker when the user already has the group.
@@ -110,6 +117,29 @@ docker_cmd() {
 		q="$(printf '%q ' docker "$@")"
 		sg docker -c "$q"
 	fi
+}
+
+# Read the compose file set off any running container of the target project.
+discover_compose_files() {
+	local cid files
+	cid="$(docker_cmd ps -q --filter "label=com.docker.compose.project=${PROJECT}" 2>/dev/null | head -1)"
+	[ -n "$cid" ] || return 1
+	files="$(docker_cmd inspect "$cid" \
+		--format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' 2>/dev/null)"
+	[ -n "$files" ] || return 1
+	local IFS=','
+	# shellcheck disable=SC2206 # deliberate word-split on the comma-separated label
+	COMPOSE_FILES=($files)
+	return 0
+}
+
+DC_ARGS=()
+rebuild_dc_args() {
+	DC_ARGS=(-p "$PROJECT")
+	for f in "${COMPOSE_FILES[@]}"; do
+		DC_ARGS+=(-f "$f")
+	done
+	DC_ARGS+=(--env-file "$ENV_FILE")
 }
 
 compose() { docker_cmd compose "${DC_ARGS[@]}" "$@"; }
@@ -125,9 +155,18 @@ step "Preconditions"
 
 [ -f "$ENV_FILE" ] || die "env file not found: $ENV_FILE"
 docker_cmd version >/dev/null 2>&1 || die "cannot talk to docker"
+
+if discover_compose_files; then
+	info "compose files: discovered from the running '$PROJECT' stack"
+else
+	COMPOSE_FILES=("${DEFAULT_COMPOSE_FILES[@]}")
+	info "compose files: '$PROJECT' is not running — falling back to the documented set"
+fi
 for f in "${COMPOSE_FILES[@]}"; do
-	[ -f "$f" ] || die "compose file missing: $f"
+	[ -f "$f" ] || die "compose file missing: $f (the stack references a file that is not in this tree)"
+	info "  $(basename "$f")"
 done
+rebuild_dc_args
 
 PERMS="$(stat -c '%a' "$ENV_FILE")"
 [ "$PERMS" = "600" ] || echo "  WARNING: $ENV_FILE is mode $PERMS, expected 600"
@@ -146,6 +185,97 @@ info "current:   $(mask "$OLD_PW")"
 CH_CONTAINER="$(compose ps -q clickhouse 2>/dev/null | head -1 || true)"
 [ -n "$CH_CONTAINER" ] || die "no running clickhouse container in project '$PROJECT' — start the stack first"
 info "clickhouse container: ${CH_CONTAINER:0:12}"
+
+# ── PENDING-MIGRATION GUARD ──────────────────────────────────────────────────
+#
+# THIS CHECK EXISTS BECAUSE ITS ABSENCE TOOK PRODUCTION DOWN.
+#
+# pulse-migrate BIND-MOUNTS contracts/ FROM THE HOST WORKING TREE, so `up -d`
+# does not merely restart the stack — it applies whatever migrations are in the
+# checked-out repo. If the deployed binary is older than those migrations, the
+# schema advances past the binary and every insert fails:
+#
+#   clickhouse: insert server_events failed:
+#     clickhouse [Append]: expected 42 arguments, got 40
+#
+# That happened on 2026-07-31. Prod ran the pinned v0.4.0-139 build (2026-07-23)
+# while the tree carried 0011_server_events_ingest_error.sql (added in v0.4.2),
+# which appends two columns to server_events. Five minutes of dropped ingest,
+# from a password rotation that never intended to touch the schema. Recovery was
+# to drop the two columns and clear the ledger row.
+#
+# So: before recreating anything, find migrations present in the tree but not yet
+# applied, and refuse if any did not exist at the commit the deployed binary was
+# built from.
+check_pending_migrations() {
+	local pulse_c="$1"
+	local mig_dir="${REPO_ROOT}/contracts/db/clickhouse"
+	[ -d "$mig_dir" ] || return 0
+
+	local deployed_commit applied f base
+	local pending=() incompatible=()
+
+	deployed_commit="$(docker_cmd exec "$pulse_c" pulse version 2>/dev/null |
+		grep -oE 'commit [0-9a-f]{7,40}' | awk '{print $2}' | head -1 || true)"
+
+	# shellcheck disable=SC2016 # deliberate: $CLICKHOUSE_* expand inside the
+	# container, so no credential reaches this host's process table.
+	applied="$(printf 'SELECT name FROM pulse.schema_migrations FORMAT TSV\n' |
+		docker_cmd exec -i "$CH_CONTAINER" sh -c \
+			'clickhouse-client --user "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD"' 2>/dev/null || true)"
+
+	for f in "$mig_dir"/*.sql; do
+		[ -e "$f" ] || continue
+		base="$(basename "$f")"
+		printf '%s\n' "$applied" | grep -qxF "$base" || pending+=("$base")
+	done
+
+	[ "${#pending[@]}" -gt 0 ] || {
+		info "pending migrations: none"
+		return 0
+	}
+
+	echo "  WARNING: ${#pending[@]} migration(s) in the working tree are NOT applied:"
+	printf '    - %s\n' "${pending[@]}"
+	echo "    Recreating WILL apply them (pulse-migrate bind-mounts contracts/)."
+
+	if [ -z "$deployed_commit" ]; then
+		echo "    Could not read the deployed binary's commit, so compatibility cannot be"
+		echo "    verified. Refusing rather than guessing."
+		return 1
+	fi
+
+	for base in "${pending[@]}"; do
+		# Did this migration exist in the tree the deployed binary was built from?
+		if ! git -C "$REPO_ROOT" cat-file -e \
+			"${deployed_commit}:contracts/db/clickhouse/${base}" 2>/dev/null; then
+			incompatible+=("$base")
+		fi
+	done
+
+	if [ "${#incompatible[@]}" -gt 0 ]; then
+		echo
+		echo "    REFUSING: the deployed binary (commit ${deployed_commit}) predates:"
+		printf '      %s\n' "${incompatible[@]}"
+		echo "    Applying these breaks every insert until the binary is rolled forward."
+		echo
+		echo "    Do ONE of these first, then re-run:"
+		echo "      - roll prod forward to a build containing these migrations, or"
+		echo "      - check the tree out at the deployed commit (${deployed_commit}) so"
+		echo "        pulse-migrate has nothing new to apply."
+		return 1
+	fi
+
+	info "pending migrations all exist at the deployed commit (${deployed_commit}) — safe"
+	return 0
+}
+
+PULSE_C="$(compose ps -q pulse 2>/dev/null | head -1 || true)"
+if [ -n "$PULSE_C" ]; then
+	check_pending_migrations "$PULSE_C" || die "aborted on a schema/binary mismatch — NOTHING was changed"
+else
+	echo "  WARNING: no running pulse container — migration compatibility not checked"
+fi
 
 # ── 2. Baseline ──────────────────────────────────────────────────────────────
 step "Baseline (pre-rotation)"

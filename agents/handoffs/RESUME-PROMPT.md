@@ -327,7 +327,12 @@ health scoring, (4) AMS wire decode/normalize, (5) the query layer. Report cover
   Vite + TS strict; recharts; no external fonts/CDNs. `go test -race` needs `CGO_ENABLED=1` + gcc.
 - **4 tiers** (free/pro/**business**/enterprise) in the contract enum + `internal/license/license.go` (D-014).
 - Deploy fixes live in `deploy/`. Base `docker-compose.yml` stays clean (`expose:`, no host ports); exposure in
-  overrides. Prod stack = `base + hardened + prod-tls + real-ams + backup` (5 overlays since D-054 — see §14).
+  overrides. **Prod stack = `prod + real-ams + backup` (THREE files).** The old "5 overlays
+  (base + hardened + prod-tls + real-ams + backup)" wording was stale: PR #199 (the Caddy →
+  host-nginx cutover, 2026-07-23) **deleted `docker-compose.prod-tls.yml`** and consolidated the
+  stack into `docker-compose.prod.yml`. The documented command named a file that no longer exists.
+  Canonical command: `deploy/runbooks/upgrade-rollback.md` §1. Verified against the live stack's
+  own `com.docker.compose.project.config_files` label on 2026-07-31.
 
 ---
 
@@ -341,14 +346,28 @@ health scoring, (4) AMS wire decode/normalize, (5) the query layer. Report cover
 - **Docker:** user `aytek` is in `docker` group but stale in non-login shells → prefix `sg docker -c "…"`. `sudo` needs
   a password → ask the user via the `! <cmd>` prompt for privileged ops. For host-root debugging without sudo, run a
   privileged container in the host netns (e.g. `docker run --rm --net=host --cap-add=NET_RAW corfr/tcpdump …`, D-036).
-- **Real-AMS prod ops** (run from repo root): `DC="-p pulse-prod -f deploy/docker-compose.yml -f
-  deploy/docker-compose.hardened.yml -f deploy/docker-compose.prod-tls.yml -f deploy/docker-compose.real-ams.yml
-  -f deploy/docker-compose.backup.yml --env-file deploy/.env"` (backup overlay is part of the standing combo
-  since D-054 — omitting it on `up -d` would REMOVE the backup sidecar). Status: `sg docker -c "docker compose $DC ps"`. Admin token: in `oguz-testing.md`
-  (gitignored) — persisted in the `pulse-prod_pulse-data` volume; **never `down -v` that volume.** TLS check: always
+- **Real-AMS prod ops** (run from repo root): `DC="-p pulse-prod -f deploy/docker-compose.prod.yml
+  -f deploy/docker-compose.real-ams.yml -f deploy/docker-compose.backup.yml --env-file deploy/.env"`
+  — **three files, not five.** The backup overlay is part of the standing combo; omitting it on
+  `up -d` would REMOVE the backup sidecar. Status: `sg docker -c "docker compose $DC ps"`. Admin
+  token: in `oguz-testing.md` (gitignored) — persisted in the `pulse-prod_pulse-data` volume;
+  **never `down -v` that volume.** TLS check: always
   `--resolve beyondkaira.com:443:161.97.172.146` (VPS DNS is stale). Rollback: runbook §5.
-- `deploy/.env`, `*.db*`, `oguz-testing.md`, `web/pulse_secret.key` are gitignored — never commit.
-- `deploy/config/Caddyfile.prod` is clean and tracked, and uses `{$AMS_UPSTREAM}`.
+  *(The previous five-file command here named `docker-compose.prod-tls.yml`, deleted by PR #199
+  on 2026-07-23. Never trust this block over the running stack's own
+  `com.docker.compose.project.config_files` label.)*
+- **⚠⚠ `docker compose up -d` ON PROD APPLIES WORKING-TREE MIGRATIONS.** `pulse-migrate`
+  **bind-mounts `contracts/` from the host repo**, so recreating the stack runs whatever
+  migrations are in the current checkout — against whatever binary is deployed. Prod is pinned to
+  an old build (v0.4.0-139, 2026-07-23) while `main` has moved on, so this is a live landmine, not
+  a theoretical one: on 2026-07-31 a password rotation recreated the stack, applied
+  `0011_server_events_ingest_error.sql` (v0.4.2), took `server_events` from 40 to 42 columns, and
+  every insert failed for five minutes with *"expected 42 arguments, got 40"* until the two
+  columns were dropped and the ledger row cleared. **Before any prod `up -d`: check whether
+  `contracts/db/clickhouse/*.sql` has files not in `pulse.schema_migrations`, and whether the
+  deployed commit contains them.** `deploy/scripts/rotate-clickhouse-password.sh` now does this
+  automatically and refuses; borrow its `check_pending_migrations` for any other prod recreate.
+- `deploy/.env`, `deploy/.env.*`, `*.db*`, `oguz-testing.md`, `web/pulse_secret.key` are gitignored — never commit.
 - ⚠️ **Concurrent-session hazard (learned D-062):** the operator may run a second Claude session in
   this repo. If HEAD moves or the tree dirties mid-session with work you didn't do, STOP and inspect
   before committing/pushing — a foreign unpushed commit once carried a hardcoded live secret (O11).
