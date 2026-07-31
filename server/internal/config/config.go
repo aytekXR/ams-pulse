@@ -448,16 +448,16 @@ func validate(cfg *Config) error {
 		errs = append(errs, "beacon.sample_rate must be between 0 and 1.0")
 	}
 
-	// Require PULSE_SECRET_KEY (>= 16 bytes) unless the meta DSN is ":memory:"
-	// (dev/test mode — e.g. `go test` or a bare `pulse diag`).
-	// In production, set PULSE_SECRET_KEY to a 32-byte random hex string:
-	//   openssl rand -hex 32
-	if cfg.Storage.MetaDSN != ":memory:" {
-		if len(cfg.SecretKey) == 0 {
-			errs = append(errs, "PULSE_SECRET_KEY must be set (min 16 bytes); generate with: openssl rand -hex 32")
-		} else if len(cfg.SecretKey) < 16 {
-			errs = append(errs, fmt.Sprintf("PULSE_SECRET_KEY is too short (%d bytes); minimum is 16 bytes; generate with: openssl rand -hex 32", len(cfg.SecretKey)))
-		}
+	// PULSE_SECRET_KEY: one implementation, in ValidateSecretKey. This used to be
+	// a fourth copy of the same checks and was one of the two that never gained
+	// the placeholder ("changeme") check.
+	//
+	// Warnings are dropped here on purpose: validate() has no logger and is
+	// called from contexts that only want a pass/fail. The command entry points
+	// (serve, migrate, reconcile) call ValidateSecretKey directly and DO surface
+	// the warnings, which is where an operator will actually see them.
+	if _, keyErr := ValidateSecretKey(cfg.SecretKey, cfg.Storage.MetaDSN); keyErr != nil {
+		errs = append(errs, keyErr.Error())
 	}
 
 	if len(errs) > 0 {
