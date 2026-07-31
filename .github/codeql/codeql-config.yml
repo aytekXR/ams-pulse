@@ -1,0 +1,46 @@
+name: "Pulse CodeQL config"
+
+# ── paths-ignore: VENDORED THIRD-PARTY BUILD OUTPUT ONLY ─────────────────────
+#
+# ⚠ SCOPE DISCIPLINE. This list exists to stop CodeQL analysing code we did not
+# write and cannot fix, NOT to silence findings in our own source. Adding a path
+# here because an alert is inconvenient defeats the entire point of the scan.
+# Every entry must be third-party output that is committed only so a reader can
+# open it offline.
+#
+# Currently exactly one entry, added 2026-07-31 (D-191):
+#
+#   docs/api/index.html — the rendered OpenAPI reference. It embeds the ReDoc
+#   v2.5.3 standalone bundle inline (~1.1 MB of minified vendor JavaScript;
+#   longest line is ~729,000 characters). The bundle was inlined deliberately:
+#   redocly's default output loads it from cdn.redocly.com and pulls fonts from
+#   fonts.googleapis.com, which contradicted both this repo's no-CDN rule and
+#   api-guide.md's claim that the file is self-contained, and left the page blank
+#   offline. See scripts/build-api-docs.sh.
+#
+#   Inlining it made CodeQL start scanning ReDoc's own minified code, which
+#   immediately produced two alerts against the vendor bundle:
+#     #21 js/prototype-pollution-utility  docs/api/index.html:23
+#     #22 js/double-escaping              docs/api/index.html:62
+#   Neither is Pulse code, neither ships in the product (the file is
+#   documentation, not part of the pulse binary or the web UI bundle), and
+#   neither is fixable here short of patching a vendored minified artifact.
+#
+#   The alternative — reverting to the CDN — would trade two unfixable alerts in
+#   a docs file for a real privacy and supply-chain regression on every reader.
+#   Excluding the path is the correct trade.
+#
+# NOT excluded, deliberately:
+#   - brandkit/** — a frozen third-party design export, but its 13 tracked
+#     js/html/css files are unminified and have produced no alerts. If that ever
+#     changes, decide then rather than pre-emptively widening this list.
+#   - web/** and server/** — our source. Never exclude these.
+#   - sdk/** — shipped to customers. Never exclude this.
+#
+# Verify this list is still minimal:
+#   for f in $(git ls-files '*.js' '*.html' '*.mjs' '*.css'); do
+#     awk -v F="$f" '{ if (length($0) > m) m = length($0) }
+#                    END { if (m > 5000) printf "%8d  %s\n", m, F }' "$f"
+#   done
+paths-ignore:
+  - docs/api/index.html

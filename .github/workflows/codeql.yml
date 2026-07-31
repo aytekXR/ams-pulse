@@ -51,11 +51,16 @@ jobs:
         with:
           go-version: "1.25"
 
+      # config-file carries paths-ignore. It excludes exactly ONE path — the
+      # rendered API reference, which embeds ReDoc's minified vendor bundle
+      # inline. Rationale and the scope-discipline rules are in the config file
+      # itself; read them before adding anything to that list.
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
+          config-file: ./.github/codeql/codeql-config.yml
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v3

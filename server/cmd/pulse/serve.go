@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 	"time"
 
 	oidclib "github.com/coreos/go-oidc/v3/oidc"
@@ -331,17 +330,16 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	if err != nil {
 		return nil, fmt.Errorf("PULSE_SECRET_KEY: %w", err)
 	}
-	// Validate key length for non-:memory: DSNs, mirroring internal/config.validate.
-	// meta.New silently falls back to a persisted key file when the key is empty, which
-	// hides operator misconfiguration. Fail loudly here instead.
-	if metaDSN != ":memory:" && len(metaSecretKey) < 16 {
-		if metaSecretKey == "" {
-			return nil, fmt.Errorf("PULSE_SECRET_KEY must be set (min 16 bytes); generate with: openssl rand -hex 32")
-		}
-		return nil, fmt.Errorf("PULSE_SECRET_KEY is too short (%d bytes); minimum is 16 bytes; generate with: openssl rand -hex 32", len(metaSecretKey))
+	// Single implementation in internal/config — these checks were duplicated in
+	// four places and had already drifted (two copies lacked the placeholder
+	// check). meta.New silently falls back to a persisted key file when the key
+	// is empty, which hides operator misconfiguration, so fail loudly here.
+	keyWarnings, keyErr := config.ValidateSecretKey(metaSecretKey, metaDSN)
+	if keyErr != nil {
+		return nil, keyErr
 	}
-	if metaDSN != ":memory:" && strings.Contains(strings.ToLower(metaSecretKey), "changeme") {
-		return nil, fmt.Errorf("PULSE_SECRET_KEY appears to be a placeholder value; generate a real key with: openssl rand -hex 32")
+	for _, w := range keyWarnings {
+		logger.Warn("pulse: " + w)
 	}
 	metaStore, err := meta.New(ctx, metaBackend, metaDSN, metaSecretKey)
 	if err != nil {

@@ -174,14 +174,14 @@ func runMigrate(args []string) error {
 	if secretErr != nil {
 		return fmt.Errorf("PULSE_SECRET_KEY: %w", secretErr)
 	}
-	if metaDSN != ":memory:" && len(metaSecretKey) < 16 {
-		if metaSecretKey == "" {
-			return fmt.Errorf("PULSE_SECRET_KEY must be set (min 16 bytes); generate with: openssl rand -hex 32")
-		}
-		return fmt.Errorf("PULSE_SECRET_KEY is too short (%d bytes); minimum is 16 bytes; generate with: openssl rand -hex 32", len(metaSecretKey))
+	// Single implementation in internal/config — see ValidateSecretKey for why
+	// the non-hex case warns rather than errors.
+	keyWarnings, keyErr := config.ValidateSecretKey(metaSecretKey, metaDSN)
+	if keyErr != nil {
+		return keyErr
 	}
-	if metaDSN != ":memory:" && strings.Contains(strings.ToLower(metaSecretKey), "changeme") {
-		return fmt.Errorf("PULSE_SECRET_KEY appears to be a placeholder value; generate a real key with: openssl rand -hex 32")
+	for _, w := range keyWarnings {
+		logger.Warn("pulse: " + w)
 	}
 	logger.Info("pulse migrate: running meta store migrations", "dsn", metaDSN, "backend", metaBackend)
 	metaStore, metaErr := meta.New(ctx, metaBackend, metaDSN, metaSecretKey)
@@ -310,11 +310,14 @@ func runReconcile(cfg EnvConfig) error {
 	if secretErr != nil {
 		return fmt.Errorf("PULSE_SECRET_KEY: %w", secretErr)
 	}
-	if metaDSN != ":memory:" && len(metaSecretKey) < 16 {
-		if metaSecretKey == "" {
-			return fmt.Errorf("PULSE_SECRET_KEY must be set (min 16 bytes); generate with: openssl rand -hex 32")
-		}
-		return fmt.Errorf("PULSE_SECRET_KEY is too short (%d bytes); minimum is 16 bytes; generate with: openssl rand -hex 32", len(metaSecretKey))
+	// Single implementation in internal/config — see ValidateSecretKey for why
+	// the non-hex case warns rather than errors.
+	keyWarnings, keyErr := config.ValidateSecretKey(metaSecretKey, metaDSN)
+	if keyErr != nil {
+		return keyErr
+	}
+	for _, w := range keyWarnings {
+		logger.Warn("pulse: " + w)
 	}
 	metaStore, err := meta.New(ctx, metaBackend, metaDSN, metaSecretKey)
 	if err != nil {
