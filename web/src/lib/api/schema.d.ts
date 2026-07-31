@@ -1768,17 +1768,17 @@ export interface components {
          *     | Tier       | Nodes | Retention | Channels               | Data API | White-label | Multi-tenant | Anomalies |
          *     |------------|-------|-----------|------------------------|----------|-------------|--------------|-----------|
          *     | free       | 1     | 7 days    | email                  | no       | no          | no           | no        |
-         *     | pro        | 1–2   | 90 days   | email, slack, telegram | yes      | no          | no           | no        |
-         *     | business   | ≤5    | 13 months | + pagerduty, webhook   | yes      | no          | yes          | no        |
+         *     | pro        | 10    | 90 days   | email, slack, telegram | yes      | no          | no           | no        |
+         *     | business   | 50    | 13 months | + pagerduty, webhook   | yes      | no          | yes          | yes       |
          *     | enterprise | ∞     | unlimited | all                    | yes      | yes         | yes          | yes       |
          */
         LicenseInfo: {
             /**
              * @description License tier (PRD §7.11):
              *     - `free`: 1 node, 7-day retention, email alerts only — $0/mo
-             *     - `pro`: 1–2 nodes, 90-day retention, Slack/Telegram, CSV export — $99/mo
-             *     - `business`: ≤5 nodes, 13-month retention, PagerDuty/webhooks, usage reports, multi-tenant, API+Prometheus — $299/mo
-             *     - `enterprise`: unlimited nodes, SSO, white-label reports, anomaly detection, air-gapped licensing — from $799/mo
+             *     - `pro`: 10 nodes, 90-day retention, Slack/Telegram, CSV export — $99/mo
+             *     - `business`: 50 nodes, 13-month retention, PagerDuty/webhooks, usage reports, multi-tenant, API+Prometheus, anomaly detection — $299/mo
+             *     - `enterprise`: unlimited nodes, SSO, white-label reports, air-gapped licensing — from $799/mo
              * @enum {string}
              */
             tier: "free" | "pro" | "business" | "enterprise";
@@ -2843,7 +2843,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            /** @description Enterprise tier required — anomaly detection (F9) is gated to Enterprise subscribers */
+            /** @description Business tier or higher required — anomaly detection (F9) is gated to Business and Enterprise subscribers (license.CheckAnomalies) */
             403: {
                 headers: {
                     [name: string]: unknown;
