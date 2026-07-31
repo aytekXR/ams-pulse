@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/Badge";
 import { TierGate } from "@/components/TierGate";
 import type { AnomalyFlag, LicenseInfo, AlertScope } from "@/lib/api/types";
+import { canUseAnomalies } from "@/lib/entitlements";
 
 // ─── Tier entitlement ─────────────────────────────────────────────────────────
 
@@ -24,9 +25,13 @@ import type { AnomalyFlag, LicenseInfo, AlertScope } from "@/lib/api/types";
  * license.CheckAnomalies is the authority; this exists so the page cannot drift from it
  * in only one direction — it previously gated on Enterprise while the API already served
  * Business, which showed an entitled tenant an upgrade wall over data it was owed.
+ *
+ * The rule itself now lives in src/lib/entitlements so the entitlement test can import
+ * it. It used to be inline here, and the test that "guarded" it kept its own copy — so
+ * the test passed while asserting the pre-S122 (wrong) rule.
  */
 function anomaliesEntitled(tier: LicenseInfo["tier"]): boolean {
-  return tier === "business" || tier === "enterprise";
+  return canUseAnomalies(tier);
 }
 
 // ─── Sigma severity ───────────────────────────────────────────────────────────

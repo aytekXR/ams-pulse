@@ -122,11 +122,11 @@ describe("TierGate — full prefix sentence (T2 fix)", () => {
 
 describe("TierGate — upgradeText placement (T3 fix)", () => {
   it("renders upgradeText inside the description <p>, not elsewhere", () => {
-    const upgradeText = "Upgrade to Enterprise to unlock anomaly detection.";
+    const upgradeText = "Upgrade to Business to unlock anomaly detection.";
     const { container } = render(
       <TierGate
         icon={testIcon}
-        heading="Anomaly Detection requires Enterprise tier"
+        heading="Anomaly detection requires Business tier or higher"
         tier="free"
         upgradeText={upgradeText}
       />,
@@ -136,7 +136,7 @@ describe("TierGate — upgradeText placement (T3 fix)", () => {
     expect(p.textContent).toContain(upgradeText);
     // h2 must NOT contain the upgradeText — structural misplacement would fail here.
     const h2 = container.querySelector("h2")!;
-    expect(h2.textContent).not.toContain("Upgrade to Enterprise");
+    expect(h2.textContent).not.toContain("Upgrade to Business");
   });
 });
 
@@ -169,7 +169,7 @@ describe("TierGate — icon aria-hidden enforcement (G-2 / T5 fix)", () => {
     render(
       <TierGate
         icon={testIcon}
-        heading="Anomaly Detection requires Enterprise tier"
+        heading="Anomaly detection requires Business tier or higher"
         tier="free"
         upgradeText="Upgrade to Enterprise."
       />,
@@ -207,19 +207,19 @@ describe("TierGate — per-call-site prop combinations (T4 fix)", () => {
     const { container } = render(
       <TierGate
         icon={testIcon}
-        heading="Anomaly Detection requires Enterprise tier"
+        heading="Anomaly detection requires Business tier or higher"
         tier="free"
-        upgradeText="Upgrade to Enterprise to unlock anomaly detection, baseline learning, and deviation alerts."
+        upgradeText="Upgrade to Business to unlock anomaly detection, baseline learning, and deviation alerts."
       />,
     );
     expect(
-      screen.getByRole("heading", { level: 2, name: /anomaly detection requires enterprise tier/i }),
+      screen.getByRole("heading", { level: 2, name: /anomaly detection requires business tier or higher/i }),
     ).toBeInTheDocument();
     const p = container.querySelector("p")!;
     expect(p.getAttribute("style")).toContain("var(--color-secondary)");
     expect(p.style.maxWidth).toBe("400px");
     expect(p.textContent).toContain(
-      "Upgrade to Enterprise to unlock anomaly detection, baseline learning, and deviation alerts.",
+      "Upgrade to Business to unlock anomaly detection, baseline learning, and deviation alerts.",
     );
   });
 
@@ -280,13 +280,13 @@ describe("TierGate — tier-entitlement upsell gate (existing contracts)", () =>
     render(
       <TierGate
         icon={testIcon}
-        heading="Anomaly Detection requires Enterprise tier"
+        heading="Anomaly detection requires Business tier or higher"
         tier="free"
-        upgradeText="Upgrade to Enterprise to unlock anomaly detection."
+        upgradeText="Upgrade to Business to unlock anomaly detection."
       />,
     );
     expect(
-      screen.getByText(/upgrade to enterprise to unlock anomaly detection/i),
+      screen.getByText(/upgrade to business to unlock anomaly detection/i),
     ).toBeInTheDocument();
   });
 
@@ -320,9 +320,9 @@ describe("TierGate — tier-entitlement upsell gate (existing contracts)", () =>
     const { container } = render(
       <TierGate
         icon={testIcon}
-        heading="Anomaly Detection requires Enterprise tier"
+        heading="Anomaly detection requires Business tier or higher"
         tier="free"
-        upgradeText="Upgrade to Enterprise to unlock anomaly detection."
+        upgradeText="Upgrade to Business to unlock anomaly detection."
       />,
     );
     const p = container.querySelector("p")!;
@@ -348,9 +348,9 @@ describe("TierGate — tier-entitlement upsell gate (existing contracts)", () =>
     const { container } = render(
       <TierGate
         icon={testIcon}
-        heading="Anomaly Detection requires Enterprise tier"
+        heading="Anomaly detection requires Business tier or higher"
         tier="free"
-        upgradeText="Upgrade to Enterprise to unlock anomaly detection."
+        upgradeText="Upgrade to Business to unlock anomaly detection."
       />,
     );
     const p = container.querySelector("p")!;
