@@ -36,6 +36,47 @@ endpoints ignored `limit`/`cursor` pagination; two server panics under paginatio
 Standalone AMS 3.x nodes no longer build poisoned zero-mean anomaly baselines. The production
 compose overlay now correctly passes license env vars.
 
+## New in 0.4.5 (since 0.4.4) — the current release and the submission target
+
+- **Anomaly detection is Business-and-up, not Enterprise-only.** The docs and the web UI both
+  advertised it as Enterprise while the API already served Business, so an entitled Business
+  tenant met an "upgrade to Enterprise" wall over data it was already paying for. The gate was
+  widened in the grant-only direction — no tenant loses anything — and the server, the web UI,
+  the pricing table and the feature cards now all say Business+.
+- **A native iOS app, and the CI that can ship it to TestFlight.** Two targets split so the
+  logic layer (`PulseKit`, Foundation-only) is testable on Linux; the SwiftUI app builds for
+  iOS 26 under Swift 6 strict concurrency on a real macOS runner. The app's player is
+  instrumented with the Pulse beacon SDK, and the whole app is driven end to end by XCUITest
+  against a dependency-free fixture server.
+- **A public website** — landing page, tester page, privacy, terms and support, built from the
+  brandkit with zero external requests (enforced by a check, not by intention).
+- **Third-party licence attribution** (`THIRD-PARTY-LICENSES.md`), generated from the Go module
+  cache and `node_modules` rather than written by hand, so it cannot claim a licence a
+  dependency does not carry. 56 Go modules and 64 npm packages redistributed; zero
+  GPL/AGPL/LGPL/SSPL; both SDKs have zero runtime dependencies.
+
+**Security:** the release pipeline blocked this release once, on CVE-2026-56852 (a HIGH
+infinite-loop DoS in `golang.org/x/text`, reaching the binary as an *indirect* dependency).
+The image is pushed to a quarantine tag *before* the scan and promoted only after it passes,
+so no public `0.4.5` tag and no moved `latest` ever pointed at the vulnerable build. Fixed by
+bumping to `0.39.0` and re-verified by scanning the rebuilt binary rather than the version
+number.
+
+## New in 0.4.4 (since 0.4.3)
+
+- **Standalone AMS now reports CPU, memory and disk — no Kafka required.** Previously these
+  Fleet gauges were documented as needing a Kafka broker; `GET /rest/v2/system-resources`
+  supplies them directly on a standalone node. Live-verified against AMS 3.0.3 Enterprise.
+  This closed the highest-priority known limitation (LIM-01) for the most common deployment.
+- **`SHA256SUMS` now covers all four release assets.** It previously covered two, so the
+  beacon SDK tarball a player team would actually download had no published checksum.
+- **The quickstart installer no longer exits 0 on a degraded install.** With an unreachable
+  AMS it reported success; it now exits non-zero and says what is wrong.
+- **Listing copy no longer implies session-accurate HLS viewer counts**, and compatibility
+  claims name the AMS versions actually covered rather than "best-effort".
+- **The published `cosign verify` command pins what it claims to pin.** The identity regexp
+  was unanchored, so it would have accepted a signature from any workflow in the repo.
+
 ## New in 0.4.3 (since 0.4.2)
 
 An honesty-and-hardening release. An external technical review checked the 0.4.2 artifact
@@ -136,7 +177,10 @@ carries the signed-image digest, binaries, checksums, chart, and SDK tarball.
 
 ---
 
-The [GitHub release page for v0.4.1](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.1)
-is live; the demo rough-cut video (`pulse-demo-roughcut.webm`) is attached to that release.
+The current release is
+[**v0.4.5**](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.5) — binaries,
+`SHA256SUMS`, the beacon SDK tarball and the Helm chart are attached there. The demo
+rough-cut video (`pulse-demo-roughcut.webm`) is attached to the older
+[v0.4.1 release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.1).
 
 Full change history: [`CHANGELOG.md`](../../CHANGELOG.md)

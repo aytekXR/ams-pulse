@@ -730,9 +730,18 @@ helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.3 \
   --set pulse.secretRef.name=pulse-secrets
 ```
 
-> The chart's own semver (`0.3.1`) is independent of the Pulse release it deploys —
-> chart `0.3.1` carries `appVersion: 0.4.3`. Inspect before installing with
-> `helm show chart oci://ghcr.io/aytekxr/charts/pulse --version 0.3.3`.
+> The chart's own semver is independent of the Pulse release it deploys: the chart
+> version moves when the chart's templates or values change, the `appVersion` moves
+> when Pulse does, and the two advance at different rates. **Do not infer one from
+> the other** — ask the chart:
+>
+> ```sh
+> helm show chart oci://ghcr.io/aytekxr/charts/pulse --version 0.3.3 | grep -E '^(version|appVersion):'
+> ```
+>
+> *(This note deliberately no longer states a chart-version/appVersion pair. It used
+> to, and the pair went stale across three releases — the release guard's pin scan
+> covers runnable `--version` flags, not prose, so nothing caught it.)*
 
 Or install from a local checkout (equivalent; use this when applying local patches):
 

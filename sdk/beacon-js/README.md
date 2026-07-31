@@ -23,7 +23,7 @@ community; the viewer-side moat no server-side DIY stack can replicate.
 ### Option A — tarball from GitHub Release (works today)
 
 Download `ams-pulse-beacon-0.4.5.tgz` from the
-[v0.4.2 GitHub Release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.2) and install it
+[v0.4.5 GitHub Release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.5) and install it
 locally:
 
 ```bash

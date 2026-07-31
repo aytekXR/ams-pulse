@@ -259,7 +259,7 @@ representative demo data (not a customer's production instance).
 | SS1 | `ss1-dashboard.png` | Live ops dashboard — streams, viewer counts by protocol (HLS counts mirror AMS's segment-request window, LIM-02), fleet node health |
 | SS2 | `ss2-ingest-health.png` | Ingest health detail — bitrate timeline, health score, protocol breakdown |
 | SS3 | `ss3-alerting.png` | Alert incident history — firing and resolved events with severity, metric value and timestamp |
-| SS4 | `ss4-analytics.png` | Audience analytics — viewer count chart, QoE rollups, geo breakdown |
+| SS4 | `ss4-analytics.png` | Audience analytics — total views, unique viewers, watch time and peak concurrency, with an audience-over-time chart; Geo and Device breakdowns are the adjacent tabs |
 | SS5 | `ss5-reports.png` | Usage reports — viewer-minutes, egress estimate, VoD storage (Business tier) |
 | SS6 | `ss6-probes.png` | Synthetic viewer probes — HLS, WebRTC, RTMP, DASH probe results |
 

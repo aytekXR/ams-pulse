@@ -35,6 +35,9 @@ cp deploy/.env.example deploy/.env
 # edit deploy/.env:
 #   PULSE_SECRET_KEY — generate with: openssl rand -hex 32
 #   PULSE_AMS_URL    — set to your AMS REST base URL, e.g. http://10.0.1.10:5080
+#   AMS Enterprise also needs credentials, or the collector comes up DEGRADED:
+#   PULSE_AMS_LOGIN_EMAIL + PULSE_AMS_LOGIN_PASSWORD  (or PULSE_AMS_AUTH_TOKEN)
+#   Details and the Community-Edition case: docs/runbooks/install.md
 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.evaluator.yml up -d
 ```
 
@@ -130,7 +133,7 @@ PULSE_SECRET_KEY=$(openssl rand -hex 32) \
 
 ## Feature status
 
-Last updated: **2026-07-27** — all 10 PRD features shipped; latest release **v0.4.5**.
+Last updated: **2026-07-30** — all 10 PRD features shipped; latest release **v0.4.5**.
 The maintainer's production instance runs behind host-nginx TLS against a real AMS 3.0.3
 Enterprise (currently on the stamped **v0.4.0-139** build; the roll to 0.4.5 is deliberate,
 not automatic). Product one-pager: [docs/product.md](docs/product.md).

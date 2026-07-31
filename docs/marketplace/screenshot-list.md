@@ -185,18 +185,28 @@ at least one still firing and one resolved.
 
 ---
 
-### Screenshot 4 — Audience Analytics and QoE Rollups
+### Screenshot 4 — Audience Analytics
 
 **Status:** AUTOMATED (live app) — `node qa/marketplace/capture-live-screenshots.mjs`  
 **Output:** `docs/marketplace/screenshots/ss4-analytics.png` (1920×1080; brandkit fallback 1282×802)
 
-**Caption:** "Historical audience analytics with viewer QoE: startup time, rebuffer
-ratio, watch time, and geo breakdown. 13-month rollup queries return in under 150 ms."
+**Caption:** "Historical audience analytics: total views, unique viewers, watch time
+and peak concurrency, over a selectable range. 13-month rollup queries return in
+under 150 ms."
 
-**Screen to capture:** The audience analytics view showing the historical viewer
-count chart, QoE summary tile (startup_p50_ms, rebuffer_ratio), and geo analytics
-(country breakdown — note: country column blank without GeoLite2 mmdb, but chart
-structure is visible). Date range selector visible.
+**Screen to capture:** The Analytics view on its **Audience** tab — the four
+headline tiles (total views, unique viewers, watch time, peak concurrency) above
+the audience-over-time chart, with the range selector and the Geo/Device tabs
+visible but not selected.
+
+> ⚠ **The caption must describe what the capture actually contains.** This entry
+> previously promised "QoE rollups" and a "geo breakdown"; the committed capture
+> shows neither — it is the Audience tab alone. A listing caption that describes a
+> richer screen than the image is the kind of thing a reviewer notices immediately.
+> If you want geo in the shot, change the capture script and re-verify the PNG by
+> opening it, not by re-reading this file. Note that the country column renders
+> blank without a GeoLite2 mmdb, so a geo capture needs that database present or it
+> will look broken.
 
 **Key elements to show:**
 - Viewer count over time (line chart)

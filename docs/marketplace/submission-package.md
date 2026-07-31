@@ -31,7 +31,7 @@ reviewable now) · **DRAFT-OP** (content complete; blocked only on an operator d
 | API guide + rendered OpenAPI reference | [`../api-guide.md`](../api-guide.md) + [`../api/index.html`](../api/index.html) | READY |
 | Beacon SDK integration (player-side QoE) | [`../beacon-sdk.md`](../beacon-sdk.md) + [`../../sdk/beacon-js/README.md`](../../sdk/beacon-js/README.md) | READY |
 | Compatibility matrix (AMS versions, G-27, capacity) | [`../compatibility.md`](../compatibility.md) | READY except capacity row (load lane pending) |
-| Known limitations (28 honest disclosures) | [`../known-limitations.md`](../known-limitations.md) | READY |
+| Known limitations (29 honest disclosures) | [`../known-limitations.md`](../known-limitations.md) | READY |
 | Troubleshooting | [`../troubleshooting.md`](../troubleshooting.md) | READY |
 | FAQ | [`../faq.md`](../faq.md) | READY |
 | Upgrade & rollback | [`../../deploy/runbooks/upgrade-rollback.md`](../../deploy/runbooks/upgrade-rollback.md) | READY |
