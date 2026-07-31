@@ -97,6 +97,8 @@ Prices are set for launch (operator-delegated, D-169) — subject to operator ov
 
 | Feature | Minimum tier |
 |---------|-------------|
+| Historical analytics — audience, geo and device breakdowns (F2) | Pro+ |
+| Ingest health scoring — per-stream 0–100 score and bitrate timeline (F4) | Pro+ |
 | Player QoE beacon SDK events | Pro+ |
 | Analytics CSV export (audience / geo / device, `?format=csv`) | Pro+ |
 | Usage and billing reports (viewer-minutes, egress, VoD storage) + their CSV/PDF export | Business+ |

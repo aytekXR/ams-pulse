@@ -214,8 +214,8 @@ and no phone-home; all tiers run fully self-hosted.
 
 | Tier | Max nodes | Retention | Features | Alert channels |
 |---|---|---|---|---|
-| **Free** | 1 | 7 days | F1 live dashboard, F2 historical analytics, F4 ingest health, F7 fleet view | Email only |
-| **Pro** | 10 | 90 days | Free + F3 QoE beacon SDK, F8 data API (REST + WebSocket), F10 synthetic probes | + Slack, Telegram |
+| **Free** | 1 | 7 days | F1 live dashboard, F5 alerting (email), F7 fleet view | Email only |
+| **Pro** | 10 | 90 days | Free + F2 historical analytics, F3 QoE beacon SDK, F4 ingest health, F8 data API (REST + WebSocket), F10 synthetic probes | + Slack, Telegram |
 | **Business** | 50 | 396 days | Pro + F8 Prometheus `/metrics`, F6 usage/billing reports (CSV/PDF, S3, multi-tenant), F9 anomaly detection (Welford baselines) | + PagerDuty, Webhook |
 | **Enterprise** | Unlimited | Unlimited | Business + SSO (OIDC), white-label PDF reports | All five channels |
 

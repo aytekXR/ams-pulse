@@ -37,7 +37,7 @@ customers without shipping viewer data to a third party.
 | F1 | Live ops dashboard | streams, viewers, nodes, ≤10 s visibility, WS push | Free+ |
 | F2 | Historical analytics | geo/device breakdowns; rollup history capped by tier retention (Pro 90 d, Business+ 13 mo) | Pro+ |
 | F3 | Player QoE beacon SDK | 3.52 KB JS SDK (MIT): startup time, rebuffer, bitrate, errors | Pro+ |
-| F4 | Ingest health | 0–100 health score per stream, degradation detection | Free+ |
+| F4 | Ingest health | 0–100 health score per stream, degradation detection | Pro+ |
 | F5 | Alerting | email/Slack/Telegram/PagerDuty/webhook, mute, grouping, maintenance windows | Free+ (channels tiered) |
 | F6 | Usage/billing reports | per-tenant CSV/PDF, S3 export, ±1% reconciliation | Business+ |
 | F7 | Cluster fleet view | auto-discovery ≤30 s (roles not exposed by AMS 3.x — LIM-10) | Free+ |

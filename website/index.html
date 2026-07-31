@@ -114,7 +114,7 @@
           </div>
           <!-- F4: Ingest health - Source: docs/product.md feature table row F4 -->
           <div class="card">
-            <p class="label text-signal mb-3">F4 - FREE</p>
+            <p class="label text-signal mb-3">F4 - PRO</p>
             <h3 class="mb-3">Ingest health</h3>
             <p class="text-secondary mb-0">
               A 0-100 health score per stream from bitrate, FPS, keyframe cadence, loss,
@@ -287,12 +287,14 @@
             <p class="label text-signal mb-3">FREE</p>
             <h3 class="mb-4">Solo operators</h3>
             <ul class="text-secondary" style="padding-left:var(--space-5);line-height:2;">
-              <!-- Source: docs/overview.md tier table: Free row -->
+              <!-- Source: docs/overview.md tier table: Free row.
+                   Historical analytics (F2) and ingest health (F4) are NOT here:
+                   both are CheckDataAPI-gated on the server, i.e. Pro+. They were
+                   listed as Free and a Free user following this would have hit a
+                   403 on both. -->
               <li>Live dashboard + fleet view</li>
-              <li>Historical analytics (7-day retention)</li>
-              <li>Ingest health scoring</li>
               <li>Email alerts only</li>
-              <li>1 AMS node</li>
+              <li>1 AMS node, 7-day retention</li>
             </ul>
           </div>
           <!-- PRO tier -->
@@ -302,6 +304,8 @@
             <ul class="text-secondary" style="padding-left:var(--space-5);line-height:2;">
               <!-- Source: docs/overview.md tier table: Pro row -->
               <li>Everything in Free</li>
+              <li>Historical analytics (geo + device breakdowns)</li>
+              <li>Ingest health scoring</li>
               <li>Player QoE beacon SDK</li>
               <li>Synthetic HLS probes</li>
               <li>Slack + Telegram alerts</li>
