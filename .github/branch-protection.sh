@@ -8,13 +8,22 @@
 #   - The `ci` workflow has run at least once on a PR so GitHub knows the check
 #     names (contexts) below.
 #
-# Required status checks = the 17-context list below: the ci.yml job names, CodeQL
+# Required status checks = the 18-context list below: the ci.yml job names, CodeQL
 # analyses, the e2e workflow jobs (e2e / csp-e2e / web-e2e were promoted to hard
 # gates at D-162; sdk-swift added D-153; shellcheck + doc-stamps added D-185),
 # ios-kit from ios.yml (D-186), and npm-audit (D-191) — which exists because
 # Trivy scans the image (OS packages + Go binary) and therefore never saw the web
 # UI's bundled npm dependencies. A HIGH advisory sat in react-router for weeks
 # with every gate green.
+#
+# `CodeQL` (D-191) is the AGGREGATE check-run, and it is NOT the same thing as the
+# two `Analyze (...)` contexts. Those report whether the scan RAN; only the
+# aggregate reports what it FOUND. That distinction is not academic: four HIGH
+# alerts sat open from 2026-07-09 to 2026-07-31 behind fully green CI because
+# nothing required the check that would have gone red. It was added only AFTER
+# every open alert was triaged (docs/security/codeql-triage.md) — requiring it
+# earlier would have blocked the very PR doing the triage on the alerts it was
+# triaging.
 # Keep this list in sync with what `gh api .../protection/required_status_checks`
 # reports — this script is the restore path if protection is ever reset.
 #
@@ -56,7 +65,7 @@ gh api -X PUT "repos/${REPO}/branches/${BRANCH}/protection" \
 {
   "required_status_checks": {
     "strict": true,
-    "contexts": ["contracts", "server", "web", "npm-audit", "sdk", "docker-build", "helm", "compose", "Analyze (go)", "Analyze (javascript-typescript)", "e2e", "csp-e2e", "web-e2e", "sdk-swift", "shellcheck", "doc-stamps", "ios-kit"]
+    "contexts": ["contracts", "server", "web", "npm-audit", "sdk", "docker-build", "helm", "compose", "Analyze (go)", "Analyze (javascript-typescript)", "CodeQL", "e2e", "csp-e2e", "web-e2e", "sdk-swift", "shellcheck", "doc-stamps", "ios-kit"]
   },
   "enforce_admins": false,
   "required_pull_request_reviews": {
