@@ -23,170 +23,110 @@
 > `agents/handoffs/sessions/SESSION-NNN.md` and `decisions.md` (operator directive).
 > **Replace this block each session — never append to it.**
 
-**Where the product is:** **v0.4.5 is RELEASED and verified, and is the marketplace submission
-target.** Published artifacts checked the way a reviewer would, not assumed: GitHub release with
-binaries + `SHA256SUMS` + both SDK tarballs, `ghcr.io/aytekxr/ams-pulse:0.4.5` signed and
-**cosign v3-verifying**, `latest` moved, helm chart `0.3.3` **anonymously pullable**, and the
-released image **scans 0 HIGH/CRITICAL** (Alpine 0, Go binary 0).
+**Where the product is:** **v0.4.5 is the marketplace submission target, and the last technical
+blocker is gone.** `CLICKHOUSE_PASSWORD` was rotated on 2026-07-31 (S123) and verified the only
+way that counts: `git log -S` on the new value's 32-char prefix returns **0 commits across all
+refs**. The two commits carrying the old prefix now hold a dead password. **Submission is now an
+operator action, not an engineering one.**
 
-**The release pipeline earned its keep twice, and both failures were real.** First the version guard
-rejected the tag over a `deploy/helm/pulse/README.md` chart pin still on 0.3.2 — *my local
-replication of that check scanned two files when the real one scans four.* **Run the actual guard;
-do not paraphrase it.** Then Trivy blocked the release on **CVE-2026-56852** (HIGH: `norm.Iter`
-infinite-loop DoS in `golang.org/x/text` 0.38.0, reaching the binary as an *indirect* dependency).
-Bumped to 0.39.0 and re-verified by scanning the **rebuilt binary**, not the version number. Nothing
-vulnerable was ever promoted: the quarantine image is pushed *before* the scan and promotion happens
-*after*, so no public `0.4.5` tag and no moved `latest` existed while the CVE was in the tree —
-verified by manifest inspection.
+**The rotation's real yield was the landmine it tripped, not the rotation.** Recreating the prod
+stack applied `0011_server_events_ingest_error.sql` *from the working tree* to the pinned
+v0.4.0-139 binary, took `server_events` 40 → 42 columns, and dropped ingest for five minutes
+(`expected 42 arguments, got 40`). Cause: **`pulse-migrate` bind-mounts `contracts/` from the host
+repo, so prod's schema follows the git checkout rather than the deployed image.** Any `up -d` on
+prod would have done this. Recovered to the *pre-rotation* state deliberately (dropped the two
+columns, cleared the ledger row) rather than rolling forward, because a version roll was not
+authorised. `rotate-clickhouse-password.sh` now refuses on a schema/binary mismatch, and the
+pre-flight check is in `deploy/runbooks/upgrade-rollback.md` §1. **Before ANY prod `up -d`, check
+pending migrations against the deployed commit.**
 
-**⚠ A tag push went to the wrong commit, and the reason is worth not repeating.** `git tag -d`
-was run with its output suppressed, it did not do what I assumed, the old annotated tag survived,
-and `git push origin v0.4.5` shipped the **pre-CVE-fix commit** — while `git tag -a` had already
-errored "already exists" in the same breath. The release started building vulnerable code before it
-was cancelled. **`git rev-parse v0.4.5` returns the TAG OBJECT, not the commit — always deref with
-`v0.4.5^{commit}` and compare against HEAD before pushing a tag, and never suppress the output of a
-destructive git command.**
+**The documented prod command was stale and would have failed.** It named
+`deploy/docker-compose.prod-tls.yml`, deleted by PR #199 in the Caddy→nginx cutover. The live
+stack runs **three** files (`prod + real-ams + backup`). Fixed in §6/§7. The lesson generalises:
+**read the running stack's own `com.docker.compose.project.config_files` label rather than trusting
+a doc.**
 
-**S122 also ran a brutal-review rehearsal before any of that** — 11 hostile lenses across documentation, security and functionality, every
-finding refuted before it counted, then a second pass attacking the *all-clears*. Result: **six
-confirmed defects, every one of them documentation**, and zero in security or functionality. That
-zero is credible rather than lazy: the lenses ran the full race suite (26 packages, 79.2% coverage),
-683 web tests, 296 PulseKit tests in CI's own container, booted a real clean-room stack, and probed
-live prod including `/debug/pprof`. **The single most valuable thing they produced was their honest
-blind-spot statements**, which named three things a marketplace reviewer certainly does and nobody
-here had ever executed: `cosign verify`, the anonymous Helm OCI pull, and the `curl | bash`
-quickstart URL. All three were then run for real and all three pass — and re-run against the
-released v0.4.5 artifacts afterwards (cosign v3 verifies digest `542fead1…`; chart `0.3.3` pulls
-anonymously; quickstart URL 200). **When a lens reports its own blind spots,
-that list is the next work item, not a footnote.**
+**A nine-lens hostile marketplace audit (32 agents) plus my own sweep found 17 verified defects.**
+Two were customer-facing tier lies: the website sold **historical analytics (F2)** and **ingest
+health (F4)** inside the Free plan while both are `CheckDataAPI`-gated (Pro+) — a Free user
+following our own pricing page got `403 LICENSE_REQUIRED` on both. The operator ruled **code is
+right, F4 is Pro+**; all ten features now agree across code, `product.md`, `overview.md`,
+`licensing-public.md` and the site. **The audit's own all-clears were then attacked, and its
+loudest "BLOCKER — no cosign signatures exist" was REFUTED by running the documented command with
+a v3 client (digest `542fead1…`, exit 0). The attacker had fallen into the exact trap our docs warn
+about.** Audit the audit.
 
-**`[ANOM-TIER]` is resolved and it was bigger than the ticket said.** The operator ruled "advertise
-correctly", so anomaly detection is Business+ now (`CheckAnomalies` admits Business — grant-only, so
-nothing regresses and e2e A5 still passes). Two discoveries in the doing: the **web UI also gated on
-Enterprise**, so an entitled Business tenant would have met an upgrade wall over data the API was
-already serving — a half that would have shipped invisibly because no test covered a Business tenant
-reaching that page. And the operator queue's own reassurance that *"the website deliberately does
-not state anomaly detection's tier"* **was false** — it said `F9 - ENTERPRISE` in the card and put
-anomaly detection under Enterprise in the pricing table. **The exculpation was wrong again; that is
-now four rounds running.**
+**Three gate gaps were closing over real defects:**
+- **npm advisories were ungated entirely.** Trivy scans the image (OS packages + Go binary), so the
+  web UI's bundled npm deps were analysed by nothing. `react-router` 7.18.1 carried a HIGH
+  (GHSA-qwww-vcr4-c8h2) for weeks with every gate green. Migrated to 8.3.0 (the only patched
+  version) — `react-router-dom` is folded into `react-router` in v8, so it was a package swap plus
+  four imports. New `npm-audit` job, now a **required context (17)**.
+- **`THIRD-PARTY-LICENSES.md` had a `--check` mode nothing ever ran.** It was silently stale. Now a
+  hard gate.
+- **The shellcheck guard was a hand-list of 6 paths** that had already drifted once. Three more were
+  uncovered, one of which **ships to customers inside the Helm chart**. Now discovers every tracked
+  `*.sh` under `deploy/ scripts/ .github/ website/` (9 → 10 files) with exclusions written inside
+  the guard. ⚠ My first attempt used `scripts/**/*.sh`, which git pathspec requires an intervening
+  directory for — it silently covered LESS than the list it replaced. Caught only by testing the
+  guard; it now asserts a discovery floor and runs a negative test.
 
-**A fix that does not change the artifact has not been verified — re-earned on the SettingsPage
-flake.** It had been open debt for sessions. The cause was a class, not a test: sixteen sites did
-`await waitFor(() => expect(mock).toHaveBeenCalled())` and then read the DOM synchronously, and
-`waitFor` resolves *before* React commits the render. Converting them to `findBy*` fixed the flake
-**and introduced a new deterministic failure**, because one of those tests installs
-`vi.useFakeTimers()` and `findBy*` polls on a clock that test has frozen. Isolation runs had been
-passing 23/23 the whole time while CI's full run failed — **an isolation run is not evidence about a
-flake.** Proof is now 6 consecutive full-suite runs, 683/683 each.
+**A test that mirrors production logic instead of importing it is not a test.**
+`TierGate.test.ts` defined its own copies of the gate predicates, so when anomalies moved to
+Business+ it kept passing while asserting `isAnomaliesGated("business") === true`. Rules now live
+in `web/src/lib/entitlements.ts` (each mapped to its server `Check*`), the test imports them, and
+planting the historical drift now fails. `ProbesPage` also gated on `tier !== "free"` — negative
+membership, so an unknown tier was *granted* access; the server abandoned that shape in D-133.
 
-**Guard scope escaped for the third time, so check #17 is no longer a file list.** Two stale image
-pins were sitting in the band between guards: `deploy/quickstart/.env.example` pinned `0.4.2` (three
-releases behind, in the file a quickstart user copies) and the Ankush reply draft pinned `0.4.4`
-under prose saying "v0.4.3 is released". Each previous fix had rewritten the check as a slightly
-longer explicit list; it now scans every tracked md/yml/yaml/sh/example minus a documented exclusion
-set, and **what it does not cover is written down inside the guard, with the reason.** Verified by
-planting a stale pin in `docs/support.md` — a file the old version sailed past.
+**The contract lied to integrators.** `pulse-api.yaml` still described the pre-D-166/pre-S122
+matrix: Pro 1–2 nodes (really 10), Business ≤5 (really 50), Business anomalies "no" (really yes),
+`/anomalies` 403 as "Enterprise required". It generates `docs/api/index.html`, the reference a
+reviewer opens — which also loaded ReDoc from a CDN **and Google Fonts**, despite being advertised
+as self-contained and despite the repo's no-CDN rule. Now built by `scripts/build-api-docs.sh`,
+inlined against redocly's own SRI hash. ⚠ A static tag-grep passed while the browser still fetched
+`cdn.redoc.ly` — the bundle injects its logo at runtime from a string in minified JS. **Only
+loading the page with `--network none` found it.**
 
-**Third-party licence attribution now exists** (`THIRD-PARTY-LICENSES.md`), and it is **generated,
-not written** — `scripts/gen-third-party-licenses.sh` reads licence text from the Go module cache
-and `node_modules`, so it cannot claim a licence a dependency does not carry, and `--check` fails
-when stale. That paid off on the first run: it reported `nhooyr.io/websocket` as UNKNOWN because the
-detector only matched the ISC wording "and/or distribute" while that module says "and distribute".
-A hand-written file would have recorded a guess. Findings: 56 Go modules + 66 npm packages
-redistributed, **zero GPL/AGPL/LGPL/SSPL, zero undetermined**, both SDKs have zero runtime
-dependencies (so the listing's "embed in commercial products without restriction" holds), and
-**ClickHouse is Apache-2.0, not SSPL** — stated explicitly because it is the dependency most likely
-to be challenged on a wrong assumption.
+**Undisclosed behaviour is now LIM-29:** historical queries are **silently** capped to the tier's
+retention window — a Free request for 30 days returns 7, HTTP 200, no warning field, indistinguishable
+from a complete answer.
 
-**Stale claim corrected:** the previous handoff warned that `.github/branch-protection.sh` "must be
-re-run to apply the `ios-kit` context". It was already live — 16 contexts, exactly matching the
-script. Verified, not assumed.
-
-**Two local-hygiene traps for the next session:** container runs as root leave root-owned
-`.build/`, `node_modules/.vite/` and `coverage/` in the working tree, which makes `npm ci` fail
-EACCES and makes `swift test` fail with a PCH module-cache path error. Nothing tracked is affected
-(checked). Test Swift from a clean `git archive` copy, which is also what CI does.
-
-**Two independent tracks remain, each blocked by exactly one operator action; neither blocks the
-other:**
-
-- **Marketplace** — blocked by **G-02: rotate `CLICKHOUSE_PASSWORD`**, and now by nothing else. A
-  32-hex prefix of the live value has been in public git history since `98b011c`; re-checked
-  2026-07-30, still 2 commits. `v0.4.5` is already cut, so the motion is down to **rotate, then
-  submit**. Not remotely exploitable today (ClickHouse is Docker-internal, never published to the
-  host), but it is 128 bits of a live secret in a public repo. Nothing in v0.4.5 claims it was
-  rotated.
-- **iOS TestFlight** — blocked by **Apple Developer Program enrolment**. Everything a machine can do
-  is done: builds for iOS 26 under Swift 6 strict concurrency on a real macOS runner, 296 PulseKit
-  tests on Linux + 50 simulator tests, live-validated against a real Pulse server, archive/sign/
-  upload job written but **never executed** — treat its first run as discovery, not regression.
-  `docs/operator-expected.md` §A is the eight-step path.
-
-**The website is live with no operator action** — GitHub Pages publishes to
-https://aytekxr.github.io/ams-pulse/ on merge to `main`. `/privacy/` and `/support/` are the two
-URLs App Store Connect demands; `/beta/` shows a disabled button plus a working manual-invitation
-route until a TestFlight link exists. The swap marker is `TESTFLIGHT_PUBLIC_LINK_PLACEHOLDER`,
-appearing exactly once.
+**Two independent tracks remain:**
+- **Marketplace** — **unblocked.** Submit `v0.4.5`. Queue: `docs/operator-expected.md` §B.
+- **iOS TestFlight** — blocked by **Apple Developer Program enrolment** only. §A is the eight-step path.
 
 **Standing lessons that keep paying (condensed — session narration lives in `sessions/`):**
 
-- **Test the artifact, not the documentation, and run it the way CI will.** PulseKit once passed
-  206/206 on this host and failed 28 in CI's container over a hardcoded `/home/aytek` fixture path.
-  A host-green run is not evidence for a CI claim. Corollary re-earned in S122: an *isolation* run
-  is not evidence about a *flake*.
+- **Test the artifact, not the documentation, and run it the way CI will.** Re-earned twice this
+  session: the API reference passed a static CDN grep and still hit the network; and extracting a CI
+  guard with `set -euo pipefail` made it fail where CI's `bash -e` passes. **Run the guard the way
+  CI runs it.**
+- **Audit the exculpations, not just the findings.** Five rounds running. This time the audit's own
+  BLOCKER was the false one.
+- **A fix that does not change the artifact has not been verified.** Prove a guard in BOTH
+  directions — plant the defect, watch it fail.
 - **Before filing a defect against code, confirm the artifact you tested was built from it.**
-  `pulse version` + `git merge-base --is-ancestor` is the whole procedure; it once saved a session.
-- **Audit the exculpations, not just the findings.** Four rounds running, a review's "this area is
-  clean" has hidden more real defects than its findings contained. What fails is the generalisation
-  step. In S122 the highest-yield artefact was the lenses' own *blind-spot* statements.
-- **Verify the exact string you depend on** — the version, the tag, the field name — not the thing
-  it belongs to. A `v3` action tag once shipped under a comment saying it had been verified; the tag
-  did not exist.
-- **Measure the third party before writing code against it.** A ten-minute probe on a real
-  `macos-15` runner (`docs/mobile/ci-runner-facts.md`) caught that the default Xcode is 16.4 while
-  App Store Connect requires 26. Re-measure after a runner-image bump.
-- **Test the guard you write to enforce testing, in BOTH directions** — make it fail on purpose, and
-  check the negative test tests what you think. And **write down what a guard does NOT cover, inside
-  the guard**; scope gaps are where drift lands.
+  `pulse version` + `git merge-base --is-ancestor` is the whole procedure.
+- **⚠ Concurrent-session hazard is real.** If HEAD moves or the tree dirties with work you did not
+  do, STOP and inspect. Quarantine, never delete.
 - **A subagent lane's self-report is not a gate.** Read every diff yourself; ORCH commits centrally.
-- **⚠ Concurrent-session hazard is real and has happened.** If HEAD moves or the tree dirties with
-  work you did not do, STOP and inspect. Quarantine, never delete.
-- **A client is not finished when it works against the server it was compiled against.** PulseKit
-  tolerates null/absent arrays and unknown enum values, but the floor is pinned by tests: an HTML
-  error page, a bare `{}`, a top-level array, truncated JSON and a number-where-an-enum-belongs must
-  all still throw. Do not lower that floor for convenience.
+
+**Open engineering debt (loop-owned, non-blocking):** roll prod forward (would permanently close
+the migration/binary gap) · the app's `KeychainService` duplicates PulseKit's `TokenStore` ·
+cluster node-alerting rework (LIM-10, waits on a real cluster) · surface `stream_ingest_error`
+(LIM-27) · thread the owning node through per-app polling (LIM-28) · the ClickHouse integration
+harness's 45 s startup budget is too tight for a slow runner (flaky in a required context) ·
+release: switch the candidate push to buildx `push-by-digest=true` (round 6 H-09) · probe whether
+`ams-webrtc-stats` can restore per-stream FPS (LIM-04 rests on a LIM-01-style inference) ·
+self-host the IBM Plex OFL woff2 files for `website/` and the iOS app (the **web UI already
+self-hosts them**).
 
 **Do first, every session:**
-1. **Gate reads** — prod health (component-scoped `/healthz`, not a whole-body `"status":"ok"` grep,
-   which passes while the collector is degraded — plus a ClickHouse count), git/PR drift, and
-   whether the operator rotated `CLICKHOUSE_PASSWORD` (compare the live value's first 32 chars
-   against `git log -S`; never print the secret).
+1. **Gate reads** — prod health (component-scoped `/healthz`, plus a ClickHouse count AND a second
+   sample to prove it is *moving*), git/PR drift, concurrent-session check.
 2. **Check whether the Apple account exists yet** (`gh secret list` for the three
-   `APP_STORE_CONNECT_*` secrets). If present, the TestFlight path is unblocked.
+   `APP_STORE_CONNECT_*` secrets).
 3. **If a TestFlight public link arrives**, do the `/beta/` swap and redeploy.
-
-**Open engineering debt (loop-owned, non-blocking):** the app's `KeychainService` duplicates
-PulseKit's `TokenStore`/`KeychainTokenStore` — two ways to store a credential, the divergence shape
-this repo keeps getting bitten by · cluster node-alerting rework (LIM-10, waits on a real cluster) ·
-verify the `ClusterNodeDTO.lastUpdateTime` unit against AMS source · surface `stream_ingest_error`
-(LIM-27) · thread the owning node through per-app polling (LIM-28) · poller/discovery cadence
-consolidation · helm NetworkPolicy golden · **the ClickHouse integration harness's 45 s startup
-budget is too tight for a slow runner** — `TestIntegration_BatchInsert` failed with "timeout
-waiting for ClickHouse to start" on a DOCS-ONLY PR in S122 and passed on re-run, with the same
-test green on the previous three `main` runs; it is a `server`-job flake in a required context, so
-it can red a merge for no reason (`server/internal/store/clickhouse/integration_test.go:83-101`) · **release: switch the candidate push to buildx
-`push-by-digest=true`** so promoted images stop carrying a public `candidate-<sha>` alias (round 6
-H-09) · **probe whether AMS's `ams-webrtc-stats` shape can restore per-stream FPS** now that the
-console-endpoint assumption behind LIM-01 turned out to be wrong (LIM-04 rests on a similar
-inference) · **self-host the IBM Plex OFL woff2 files for `website/` and the iOS app** — note the
-previous wording ("the website *and the app both* fall back to system fonts") overstated it: the
-**web UI already self-hosts them** (`web/dist/assets/ibm-plex-*.woff2` are present and were
-confirmed during the S122 licence inventory), so this is scoped to `website/` and the app, not the
-dashboard.
-
-**Closed in S122:** the `SettingsPage` ARIA flake (fixed at the class level — sixteen racy sites,
-proven over 6 consecutive full-suite runs) · `[ANOM-TIER]` (operator-ruled Business+, enforced in
-server, web UI and every doc) · missing third-party licence attribution.
 
 **Operator queue:** `docs/operator-expected.md`. **How we got here** (read only if you need it):
 `decisions.md` · `agents/handoffs/sessions/` · `docs/assessment/`.
@@ -201,8 +141,11 @@ server, web UI and every doc) · missing third-party licence attribution.
 - **Production** runs behind host nginx on this VPS at `https://pulse.beyondkaira.com`, against
   the operator's own `antmedia` container (AMS Enterprise 3.0.3, `--network host`). It is on the
   stamped **v0.4.0-139** build — rolling prod forward is deliberate and operator-gated, never
-  automatic. Health at last check (S122, 2026-07-30): all three `/healthz` components `ok`,
-  **1,373,306** server events, newest 6 s old, collector actively ingesting.
+  automatic. Health at last check (S123, 2026-07-31, AFTER the rotation and its 5-minute ingest
+  outage): all three `/healthz` components `ok`, **1,400,267** server events, newest 5 s old,
+  0 ERROR lines in the preceding 90 s, row count verified *increasing* across two samples.
+  ⚠ Prod's schema is now one migration BEHIND the tree on purpose (0011 reverted) so the pinned
+  binary keeps working — see §7.
 - **The iOS app exists and is CI-verified** (D-186). `ios/PulseKit` — Foundation-only, **296 tests
   green on Linux** (re-verified S122 in CI's `swift:6.1` container from a clean `git archive` copy), which is the point of the split: no Apple toolchain exists on this VPS, so
   anything living in a SwiftUI view is logic no gate here can check. `ios/PulseApp` — SwiftUI plus
@@ -215,7 +158,7 @@ server, web UI and every doc) · missing third-party licence attribution.
   check, not by intent). GitHub Pages is **enabled** (`build_type: workflow`) and publishes to
   `https://aytekxr.github.io/ams-pulse/` on merge to `main`.
 - **`main` is protected** (strict, 1 review, `enforce_admins=false` so owner pushes work; **16**
-  required contexts — D-185 added `shellcheck` and `doc-stamps`, D-186 added `ios-kit`. A guard job
+  required contexts — D-185 added `shellcheck` and `doc-stamps`, D-186 added `ios-kit`; D-191 added `npm-audit`. A guard job
   that is not in that list cannot block a merge. `ios-app` is deliberately excluded: it depends on
   a third-party runner image and Homebrew, the same argument that excludes `compose-boot`. What
   that leaves uncovered is that a SwiftUI regression can merge on a red `ios-app` if ignored).

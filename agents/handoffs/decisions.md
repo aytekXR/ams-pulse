@@ -11244,6 +11244,97 @@ on Apple Developer Program enrolment.
 
 ---
 
+## D-191 — §S123: the marketplace blocker is gone, and the rotation found a landmine
+
+**Date:** 2026-07-31 · **Trigger:** operator asked "are we ready for the marketplace? if not make
+it ready." · **Outcome:** G-02 CLOSED; 17 verified defects fixed; three CI gate gaps closed; one
+5-minute production ingest outage caused and recovered.
+
+### The headline
+
+`CLICKHOUSE_PASSWORD` is rotated. `git log -S` on the new value's 32-char prefix returns **0
+commits across all refs**; the two commits carrying the old prefix now hold a dead password.
+Marketplace submission is now purely an operator action.
+
+### The incident, and why it is the most valuable thing here
+
+Rotation requires recreating the stack. That recreate applied
+`0011_server_events_ingest_error.sql` **from the host working tree** to the pinned v0.4.0-139
+binary, taking `server_events` from 40 to 42 columns. Every insert then failed
+(`expected 42 arguments, got 40`) for five minutes.
+
+**Root cause is structural, not incidental:** `pulse-migrate` bind-mounts `contracts/` from the
+host repo, so **prod's schema follows the git checkout, not the deployed image.** Prod is pinned
+to a build from 2026-07-23 while `main` has moved on, so *any* `docker compose up -d` on prod was
+going to do this. The rotation merely went first.
+
+**Recovery was deliberately backwards, not forwards.** Dropped the two columns (no row had ever
+carried data — every insert since the migration had failed) and deleted the `0011` row from
+`pulse.schema_migrations` (column is `name`, not `version`) so a later roll-forward re-applies it
+cleanly. Prod is on exactly the binary and schema it had before. A version roll would also have
+fixed it and was NOT taken: the operator authorised a rotation, not a deployment.
+
+**Guards added:** `check_pending_migrations` refuses when the tree holds migrations the deployed
+commit predates (`git cat-file -e <commit>:<path>`), tested in both directions. The pre-flight
+check is documented in `deploy/runbooks/upgrade-rollback.md` §1 for any other prod recreate.
+
+### The documented prod command was stale and would have failed
+
+`RESUME-PROMPT` §6/§7 named `deploy/docker-compose.prod-tls.yml` — deleted by PR #199 (Caddy →
+host-nginx, 2026-07-23). The live stack runs **three** files. The rotation script now reads
+`com.docker.compose.project.config_files` off the running stack instead of hardcoding a list.
+**Generalisation: ask the running system, do not trust a doc about it.**
+
+### Tier advertising was wrong in a way no cross-check could catch
+
+The website sold **historical analytics (F2)** and **ingest health (F4)** inside the Free plan.
+Both are `CheckDataAPI`-gated (Pro+), so a Free user following our own pricing page got
+`403 LICENSE_REQUIRED` on both. F2 was website-vs-docs (docs were right); **F4 was wrong in the
+docs AND the website simultaneously**, which is exactly why nothing caught it — the cross-check
+compared two copies of the same error. **Operator ruling: the code is right, F4 is Pro+.** All ten
+features now agree across code, `product.md`, `overview.md`, `licensing-public.md` and the site.
+
+### Three CI gates existed only on paper
+
+- **npm advisories were ungated.** Trivy scans the image (OS packages + Go binary) and never sees
+  bundled JS. `react-router` 7.18.1 carried HIGH GHSA-qwww-vcr4-c8h2 for weeks, green the whole
+  time. Migrated to 8.3.0 (only patched version; `react-router-dom` folds into `react-router` in
+  v8). New `npm-audit` job → **17 required contexts**.
+- **`THIRD-PARTY-LICENSES.md --check` was never run by anything.** Silently stale. Now hard-gated.
+- **The shellcheck guard was a 6-path hand-list** that had drifted once already. Three more
+  uncovered, one shipping to customers inside the Helm chart. Now discovery-based.
+  ⚠ My first attempt used `scripts/**/*.sh` — git pathspec `**` requires an intervening directory,
+  so it covered LESS than the list it replaced. Caught only by testing the guard. It now asserts a
+  discovery floor and runs a negative test.
+
+### A test that mirrors production cannot test production
+
+`TierGate.test.ts` defined its own copies of the gate predicates. When anomalies moved to
+Business+, it kept passing while asserting the opposite. Rules extracted to
+`web/src/lib/entitlements.ts`, each mapped to its server `Check*`; the test imports them; planting
+the historical drift now fails. Also fixed `ProbesPage`'s `tier !== "free"` negative-membership
+gate, which *granted* access to unknown tiers — the shape the server abandoned in D-133.
+
+### Audit the audit
+
+A nine-lens hostile audit (32 agents) ran, with every finding adversarially verified and a second
+pass attacking the all-clears. Its loudest finding — **"BLOCKER: no cosign signatures exist"** —
+was **refuted** by running the documented command with a v3 client (exit 0, digest `542fead1…`).
+The attacking agent had fallen into precisely the trap our own docs warn about at length. Its
+companion claim that SBOM/provenance were missing was also refuted (they are buildkit attestation
+manifests). **Five rounds running, the review's confident statements have been less reliable than
+its uncertain ones.**
+
+### Also closed
+
+`LIM-29` (historical queries silently capped to tier retention — 200 OK, no warning, indistinguishable
+from a complete answer) · `docs/api/index.html` loaded ReDoc from a CDN **and Google Fonts** while
+being advertised as self-contained; now inlined against redocly's own SRI hash by
+`scripts/build-api-docs.sh`. ⚠ A static tag-grep passed while the browser still fetched
+`cdn.redoc.ly` (runtime injection from a string in minified JS) — found only by loading the page
+with `--network none`. · A licence 403 now renders the designed upgrade prompt instead of a red
+error banner on QoE/Analytics/Ingest, derived from the server's response so it cannot drift.
+
 ## D-190 — §S122: the brutal-review rehearsal, and what surviving it actually required
 
 **Mandate.** "Make your last preparation for the marketplace. There will be brutal reviews — make
