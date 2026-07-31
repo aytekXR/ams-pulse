@@ -117,18 +117,40 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
    release workflow then publishes automatically on the next tag (or via `workflow_dispatch`
    `publish_tag`). Without it nothing fails; the tarball still attaches to the release.
 
-8. **Add a `GHCR_CLEANUP_TOKEN` repo secret** (a PAT with `delete:packages`) — this moved from
-   *optional* to *worth doing*, because the exact scenario it covers has now happened. The v0.4.5
-   release failed its vulnerability scan once (CVE-2026-56852, since fixed), and the quarantine
-   image is pushed **before** the scan runs. So GHCR now carries a **public
-   `candidate-5c561bc4` tag pointing at an image with a known HIGH CVE**, plus three older
-   `candidate-*` aliases. Nothing consumes those tags and no release references them, but a
-   security reviewer enumerating your package tags can pull a vulnerable image from your registry.
+8. **Delete exactly ONE GHCR tag — and do NOT delete the other four.** ⚠ The previous version of
+   this item told you to delete "the four `candidate-*` tags by hand in the GHCR package UI".
+   **Following that would have deleted the v0.4.5 release.** A GHCR *package version* is a
+   manifest digest, not a tag, and the UI deletes versions. Four of the five `candidate-*` tags
+   ride the **same digest as a release tag**, so deleting them deletes the release — along with
+   its SBOM, provenance and cosign signature. `release.yml` has always known this (its cleanup
+   step refuses to delete a multi-tag digest); only this doc was wrong.
 
-   Two ways to close it, and they are complementary: the secret lets the pipeline delete
-   quarantine tags itself, and the loop-owned **round-6 H-09** fix (push candidates by digest with
-   buildx `push-by-digest=true`) stops them acquiring a public alias at all. Until either lands,
-   deleting the four `candidate-*` tags by hand in the GHCR package UI is a two-minute job.
+   Verified against the live package on 2026-07-31:
+
+   | Version id | Tags on that digest | Action |
+   |---|---|---|
+   | `1080500729` | `candidate-5c561bc4` **only** | **DELETE — this is the vulnerable one** |
+   | `1080581868` | `0.4.5`, `latest`, `0.4`, `0`, `candidate-7d522596` | **DO NOT DELETE** |
+   | `1069926970` | `0.4.4`, `candidate-34a25fc4` | **DO NOT DELETE** |
+   | `1068860998` | `0.4.3`, `candidate-669952ed` | **DO NOT DELETE** |
+   | `1068283272` | `0.4.2`, `candidate-e318a053` | **DO NOT DELETE** |
+
+   Only `candidate-5c561bc4` is a standalone image, and it is the one that matters: it was built
+   from commit `5c561bc4`, which `git merge-base --is-ancestor 5c561bc4 7d52259` confirms predates
+   the CVE-2026-56852 fix. It is publicly pullable and carries the HIGH CVE. The other four are
+   harmless aliases — pulling one yields byte-identically the released image.
+
+   **Do it in the web UI** (GitHub → Packages → ams-pulse → versions → the version whose only tag
+   is `candidate-5c561bc4` → Delete). This cannot be automated from here: the session token holds
+   `read:packages`, not `delete:packages` (re-probed 2026-07-31), so the loop cannot do it for you.
+
+   **To stop it recurring**, add a **`GHCR_CLEANUP_TOKEN`** repo secret (a PAT with
+   `delete:packages`). `release.yml` already has the cleanup step wired and correctly guarded — it
+   deletes a quarantine image only when the candidate tag is the *sole* tag on the digest, i.e.
+   only on the failed-release path. Without the secret that step warns loudly and no-ops, which is
+   exactly what happened here. The complementary loop-owned fix (round-6 H-09, buildx
+   `push-by-digest=true`) remains deliberately deferred until after submission — it changes the
+   publish mechanism and cannot be exercised by the dry-run path, only by a real tag.
 
 9. **Demo FINAL** — re-record the voiceover over the dark rough-cut attached to the release.
    ⚠ **Re-read `docs/marketplace/demo-video-script.md` first:** the edge/origin viewer-dedup

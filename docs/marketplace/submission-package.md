@@ -17,7 +17,7 @@ reviewable now) · **DRAFT-OP** (content complete; blocked only on an operator d
 | Screenshots — 6 listing shots, 1920×1080, shipping UI + representative demo data (route-mocked capture, not a customer instance) | [`screenshot-list.md`](screenshot-list.md) + `screenshots/` (regenerate: `node qa/marketplace/capture-live-screenshots.mjs`) | READY (committed to `docs/marketplace/screenshots/`; portable capture script; regenerable at any time) |
 | Logo / media kit | `brandkit/logo/` (SVG + PNG variants), OG banner `brandkit/assets/png/og-1200x630.png` | READY (final specs = meeting assumption A3) |
 | Demo video | [`demo-video-script.md`](demo-video-script.md) + rough-cut `docs/marketplace/demo/pulse-demo-roughcut.webm` | DRAFT-OP (rough-cut rendered and attached to [GitHub release v0.4.1](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.1); operator records final with voiceover — TBD-EXT for voiceover only) |
-| Beacon SDK tarball | `ams-pulse-beacon-0.4.3.tgz` on the [v0.4.5 release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.3) | READY (0.4.1 tarball must NOT be advertised — it shipped the `Pulse.init()` silent-no-op defect fixed in 0.4.2) |
+| Beacon SDK tarball | `ams-pulse-beacon-0.4.5.tgz` on the [v0.4.5 release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.5) | READY (verified against the published release 2026-07-31. The 0.4.1 tarball must NOT be advertised — it shipped the `Pulse.init()` silent-no-op defect fixed in 0.4.2) |
 | Release notes ("what's new in 0.4") | [`release-notes.md`](release-notes.md) | READY |
 
 ## Documentation set (linkable as the product docs)
