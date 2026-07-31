@@ -122,8 +122,20 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
 
 4. **Set up billing** in the marketplace (tiers / Founding-Operators campaign / trial).
 
-5. **Send the Ankush reply** — draft at `docs/marketplace/ankush-reply-draft.md` (fill the
-   [brackets], send from your account).
+5. **Send the Ankush email — this is the one that starts the process.** Full text at
+   `docs/marketplace/ankush-reply-draft.md`, rewritten 2026-07-31: it links every public document
+   a reviewer needs (all 23 URLs HTTP-checked), gives the anonymous install and `cosign verify`
+   commands, states the read-only/zero-phone-home posture up front, and asks the seven questions
+   we actually need answered — listing shape (A1) first, because it shapes everything else.
+   Fill the `[brackets]` and send from your account.
+
+   ⚠ **Two prerequisites, both in the file's header:**
+   - **Merge PR #244 first.** Every link points at `main` and the website deploys from `main`.
+     Until it merges, the live site still sells historical analytics (F2) and ingest health (F4)
+     inside the **Free** plan while both return `403 LICENSE_REQUIRED` — verified against the
+     live site on 2026-07-31. Sending before the merge points Ant Media straight at the defect.
+   - **Confirm the address.** `ankush@antmedia.io` was never verified. Replying on the original
+     thread is safer and keeps the context.
 
 6. **Load lane on a PAYG AMS** → the real capacity number for the listing. Same instance, two
    birds: set `server.kafka_brokers` in `red5.properties` so the loop can run **AV-15** (live
