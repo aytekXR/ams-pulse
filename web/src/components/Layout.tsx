@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router";
 import { clearToken } from "@/api/client";
 import type { LiveOverview } from "@/lib/api/types";
 import { useTheme } from "@/lib/ThemeContext";

@@ -22,6 +22,7 @@ import { CHART_COLORS } from "@/lib/chartColors";
 import { DateRangePicker, defaultDateRange } from "@/features/analytics/DateRangePicker";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { LicenseRequiredGate, isLicenseError } from "@/components/LicenseRequiredGate";
 import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/Badge";
 import type { QoeSummaryResponse } from "@/lib/api/types";
@@ -32,11 +33,15 @@ export function QoePage() {
   const [appFilter, setAppFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A licence 403 is a tier boundary, not a malfunction — it renders as the
+  // designed upgrade prompt rather than a red error banner.
+  const [licenseError, setLicenseError] = useState<ApiError | null>(null);
   const [data, setData] = useState<QoeSummaryResponse | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setLicenseError(null);
     try {
       const result = await qoeApi.getSummary({
         from: range.from,
@@ -46,8 +51,12 @@ export function QoePage() {
       });
       setData(result);
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : "Failed to load QoE data";
-      setError(msg);
+      if (isLicenseError(err)) {
+        setLicenseError(err);
+      } else {
+        const msg = err instanceof ApiError ? err.message : "Failed to load QoE data";
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -87,6 +96,38 @@ export function QoePage() {
     fontWeight: 700,
     lineHeight: 1,
   };
+
+  // A licence refusal replaces the page body: showing filters and an empty chart
+  // above an upsell reads as a broken screen. The heading stays for orientation.
+  if (licenseError) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)" }}>
+          <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Viewer QoE</h1>
+        </div>
+        <LicenseRequiredGate
+          error={licenseError}
+          feature="Player QoE"
+          unlocks="player QoE analytics: startup time, rebuffer ratio and error rates"
+          icon={
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--color-accent)"
+              strokeWidth="1.5"
+              aria-hidden="true"
+            >
+              <path d="M12 2 2 7l10 5 10-5-10-5Z" />
+              <path d="m2 17 10 5 10-5" />
+              <path d="m2 12 10 5 10-5" />
+            </svg>
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>

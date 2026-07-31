@@ -4,11 +4,21 @@
 `agents/handoffs/decisions.md`, `agents/handoffs/sessions/` and
 `agents/handoffs/RESUME-PROMPT.md`.*
 
-> **Two independent tracks, one blocker each.**
-> **Marketplace** is blocked by item 1 (rotate `CLICKHOUSE_PASSWORD`) and nothing else.
-> **iOS TestFlight** is blocked by item A (Apple Developer Program enrolment) and nothing else.
-> Neither blocks the other; do them in whichever order suits you.
-> Prod is healthy and untouched.
+> **✅ THE MARKETPLACE BLOCKER IS GONE.** `CLICKHOUSE_PASSWORD` was rotated on 2026-07-31 and
+> verified: `git log -S` on the new value returns **0 commits across all refs**. The two commits
+> that carried the old prefix now hold a dead password. **Nothing technical stands between
+> Pulse and submission** — item 1 below is now the submission itself.
+>
+> **iOS TestFlight** is still blocked by item A (Apple Developer Program enrolment) and nothing
+> else. The two tracks are independent.
+>
+> **Prod:** healthy, on the same pinned v0.4.0-139 build as before. ⚠ The rotation's stack
+> recreate exposed a real landmine and caused a **5-minute ingest outage** (11:27–11:32 UTC,
+> since recovered): `pulse-migrate` bind-mounts `contracts/` from the working tree, so **any
+> `docker compose up -d` on prod applies migrations from the git checkout to whatever binary is
+> deployed.** Details and the pre-flight check: `deploy/runbooks/upgrade-rollback.md` §1.
+> This makes item 11 (roll prod forward) more attractive than it was — it would close the gap
+> permanently.
 
 ---
 
@@ -52,24 +62,34 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
 
 ## B. Marketplace queue (leverage order)
 
-1. **⚠ Rotate `CLICKHOUSE_PASSWORD` — the hard blocker.** A 32-hex prefix of the live
-   48-character production password sits in the **public** repo's git history (since `98b011c`,
-   via an old test input). The source is scrubbed, but history cannot be un-published — only
-   rotation closes it. Not remotely exploitable today (ClickHouse is Docker-internal and never
-   published to the host), but it is 128 bits of the secret in a public repo that anyone can
-   find with `git log -S`. **Re-checked 2026-07-28: still un-rotated** (2 commits still carry
-   the live prefix). **Rotate before the repo gets marketplace traffic.**
+1. ~~**Rotate `CLICKHOUSE_PASSWORD`**~~ **✅ DONE 2026-07-31.** Rotated with
+   `deploy/scripts/rotate-clickhouse-password.sh`, which backs up `deploy/.env`, recreates every
+   consumer (including the backup sidecar — the classic miss), then verifies the new credential
+   works, **the old one is REJECTED**, the row count did not go backwards, all three `/healthz`
+   components are `ok`, and the sidecar carries the new value. It rolls back automatically on any
+   failure.
 
-   *Mechanics — no volume surgery (verified against the live container 2026-07-27):* the
-   ClickHouse user is defined in `users_xml` and the image entrypoint rewrites it from the
-   environment on **every** container start. So: new value into `deploy/.env` → `up -d` with the
-   standing five-overlay combo. The **backup sidecar reads the same variables**, so it must be
-   recreated in that same `up -d` or it keeps the stale password. Afterwards rotate the
-   remaining chat-exposed set (`deploy/.env`, `oguz-testing.md` — already mode 600).
+   **Verification, without printing the secret:** `git log -S` on the new value's 32-char prefix
+   returns **0 commits across all refs**. The old prefix still appears in 2 commits — history
+   cannot be un-published, which is precisely why rotation was the only fix — but that value is
+   now dead.
 
-   **Re-checked 2026-07-30: still un-rotated, still 2 commits.** This is now the *only* thing
-   between the product and submission — `v0.4.5` is released, so the old "rotate, cut, submit"
-   motion is down to "rotate, submit". Nothing in the v0.4.5 release claims or implies rotation happened.
+   **Two things you should still do:**
+   - The plaintext backup of the previous env file is at `deploy/.env.bak.20260731T112701Z`
+     (mode 600, gitignored). Once you are satisfied: `shred -u deploy/.env.bak.20260731T112701Z`.
+   - The *other* chat-exposed credentials in `deploy/.env` and `oguz-testing.md` were **not**
+     rotated — only ClickHouse was. Rotate the rest when convenient.
+
+   ⚠ **What this rotation uncovered, which matters more than the rotation.** Recreating the
+   stack applied `0011_server_events_ingest_error.sql` from the working tree to the pinned
+   v0.4.0-139 binary, took `server_events` from 40 to 42 columns, and **dropped ingest for five
+   minutes** (`expected 42 arguments, got 40`). Recovered by dropping the two columns and clearing
+   the ledger row; prod is back on exactly the build and schema it had before. The cause is
+   structural: **`pulse-migrate` bind-mounts `contracts/` from the host repo, so prod's schema
+   follows the git checkout rather than the deployed image.** The rotation script now refuses when
+   the tree holds migrations the deployed binary predates, and
+   `deploy/runbooks/upgrade-rollback.md` §1 carries the pre-flight check for any other prod
+   `up -d`. Rolling prod forward (item 11) closes the gap for good.
 
 2. **Review `docs/marketplace/listing.md`** — the submission copy. Free of placeholders and
    internal notes, so it is safe to paste verbatim. Override anything; the category and all
@@ -102,8 +122,20 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
 
 4. **Set up billing** in the marketplace (tiers / Founding-Operators campaign / trial).
 
-5. **Send the Ankush reply** — draft at `docs/marketplace/ankush-reply-draft.md` (fill the
-   [brackets], send from your account).
+5. **Send the Ankush email — this is the one that starts the process.** Full text at
+   `docs/marketplace/ankush-reply-draft.md`, rewritten 2026-07-31: it links every public document
+   a reviewer needs (all 23 URLs HTTP-checked), gives the anonymous install and `cosign verify`
+   commands, states the read-only/zero-phone-home posture up front, and asks the seven questions
+   we actually need answered — listing shape (A1) first, because it shapes everything else.
+   Fill the `[brackets]` and send from your account.
+
+   ⚠ **Two prerequisites, both in the file's header:**
+   - **Merge PR #244 first.** Every link points at `main` and the website deploys from `main`.
+     Until it merges, the live site still sells historical analytics (F2) and ingest health (F4)
+     inside the **Free** plan while both return `403 LICENSE_REQUIRED` — verified against the
+     live site on 2026-07-31. Sending before the merge points Ant Media straight at the defect.
+   - **Confirm the address.** `ankush@antmedia.io` was never verified. Replying on the original
+     thread is safer and keeps the context.
 
 6. **Load lane on a PAYG AMS** → the real capacity number for the listing. Same instance, two
    birds: set `server.kafka_brokers` in `red5.properties` so the loop can run **AV-15** (live
@@ -117,18 +149,40 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
    release workflow then publishes automatically on the next tag (or via `workflow_dispatch`
    `publish_tag`). Without it nothing fails; the tarball still attaches to the release.
 
-8. **Add a `GHCR_CLEANUP_TOKEN` repo secret** (a PAT with `delete:packages`) — this moved from
-   *optional* to *worth doing*, because the exact scenario it covers has now happened. The v0.4.5
-   release failed its vulnerability scan once (CVE-2026-56852, since fixed), and the quarantine
-   image is pushed **before** the scan runs. So GHCR now carries a **public
-   `candidate-5c561bc4` tag pointing at an image with a known HIGH CVE**, plus three older
-   `candidate-*` aliases. Nothing consumes those tags and no release references them, but a
-   security reviewer enumerating your package tags can pull a vulnerable image from your registry.
+8. **Delete exactly ONE GHCR tag — and do NOT delete the other four.** ⚠ The previous version of
+   this item told you to delete "the four `candidate-*` tags by hand in the GHCR package UI".
+   **Following that would have deleted the v0.4.5 release.** A GHCR *package version* is a
+   manifest digest, not a tag, and the UI deletes versions. Four of the five `candidate-*` tags
+   ride the **same digest as a release tag**, so deleting them deletes the release — along with
+   its SBOM, provenance and cosign signature. `release.yml` has always known this (its cleanup
+   step refuses to delete a multi-tag digest); only this doc was wrong.
 
-   Two ways to close it, and they are complementary: the secret lets the pipeline delete
-   quarantine tags itself, and the loop-owned **round-6 H-09** fix (push candidates by digest with
-   buildx `push-by-digest=true`) stops them acquiring a public alias at all. Until either lands,
-   deleting the four `candidate-*` tags by hand in the GHCR package UI is a two-minute job.
+   Verified against the live package on 2026-07-31:
+
+   | Version id | Tags on that digest | Action |
+   |---|---|---|
+   | `1080500729` | `candidate-5c561bc4` **only** | **DELETE — this is the vulnerable one** |
+   | `1080581868` | `0.4.5`, `latest`, `0.4`, `0`, `candidate-7d522596` | **DO NOT DELETE** |
+   | `1069926970` | `0.4.4`, `candidate-34a25fc4` | **DO NOT DELETE** |
+   | `1068860998` | `0.4.3`, `candidate-669952ed` | **DO NOT DELETE** |
+   | `1068283272` | `0.4.2`, `candidate-e318a053` | **DO NOT DELETE** |
+
+   Only `candidate-5c561bc4` is a standalone image, and it is the one that matters: it was built
+   from commit `5c561bc4`, which `git merge-base --is-ancestor 5c561bc4 7d52259` confirms predates
+   the CVE-2026-56852 fix. It is publicly pullable and carries the HIGH CVE. The other four are
+   harmless aliases — pulling one yields byte-identically the released image.
+
+   **Do it in the web UI** (GitHub → Packages → ams-pulse → versions → the version whose only tag
+   is `candidate-5c561bc4` → Delete). This cannot be automated from here: the session token holds
+   `read:packages`, not `delete:packages` (re-probed 2026-07-31), so the loop cannot do it for you.
+
+   **To stop it recurring**, add a **`GHCR_CLEANUP_TOKEN`** repo secret (a PAT with
+   `delete:packages`). `release.yml` already has the cleanup step wired and correctly guarded — it
+   deletes a quarantine image only when the candidate tag is the *sole* tag on the digest, i.e.
+   only on the failed-release path. Without the secret that step warns loudly and no-ops, which is
+   exactly what happened here. The complementary loop-owned fix (round-6 H-09, buildx
+   `push-by-digest=true`) remains deliberately deferred until after submission — it changes the
+   publish mechanism and cannot be exercised by the dry-run path, only by a real tag.
 
 9. **Demo FINAL** — re-record the voiceover over the dark rough-cut attached to the release.
    ⚠ **Re-read `docs/marketplace/demo-video-script.md` first:** the edge/origin viewer-dedup
@@ -150,6 +204,33 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
     record plus one repo setting), or serving the same static files from this VPS — the nginx
     vhost is written and waiting at `deploy/nginx/pulse-website.conf` and needs your `sudo`.
     Either way the App Store URLs in A3 change, so decide before A3 if you care.
+
+13. **⚠ Four open HIGH CodeQL alerts are visible in your PUBLIC repo's Security tab** — and
+    they have been open since **2026-07-09/10**, roughly three weeks, with every CI gate green
+    the whole time. A marketplace security reviewer will open that tab. **None was introduced by
+    the S123 work**; they are pre-existing on `main`.
+
+    **Why nothing caught them:** the required contexts include `Analyze (go)` and
+    `Analyze (javascript-typescript)`, which report whether the *scan ran*, not whether it
+    *found anything*. The aggregate `CodeQL` check-run — the one that says "2 new alerts
+    including 1 high severity" — is **not** a required context. Same class as the three gate
+    gaps closed in S123: a guard that cannot fail.
+
+    | Alert | Location | Assessment |
+    |---|---|---|
+    | `go/weak-sensitive-data-hashing` | `server/internal/store/meta/meta.go:1649` | **Conditionally real.** SHA-256 turns `PULSE_SECRET_KEY` into the AES key that encrypts stored AMS credentials. Fine for the documented `openssl rand -hex 32` value (and the hex path skips SHA-256 entirely), weak if an operator sets a short guessable string. ⚠ **Do NOT "fix" this by switching to a KDF without a migration** — it would change the derived key and make every already-encrypted credential undecryptable. |
+    | `go/weak-sensitive-data-hashing` | `server/internal/api/oidc.go:124` | **Effectively a false positive.** Derives an HMAC key for OIDC state cookies from the same high-entropy secret. The "use a slow hash" rule targets low-entropy user passwords. Safe to switch to HKDF if you want it silenced — changing it only invalidates in-flight state cookies. |
+    | `js/insecure-randomness` ×2 | `sdk/beacon-js/src/index.ts:35,54` | **Low but genuine.** `Math.random()` generates beacon session IDs. They are analytics correlation IDs, not auth tokens, and the ingest endpoint requires a token — but guessable IDs let someone attribute events to another session. `crypto.getRandomValues` with a `Math.random` fallback is a small, safe change; it needs an SDK re-release and a re-run of the 15 KB size gate. |
+
+    **Your call, three options:** fix them (only the SDK one is risk-free), dismiss each in the
+    Security tab with the rationale above (GitHub records the reason, which is a *better* look to
+    a reviewer than four untriaged alerts), or leave them. **Doing nothing is the only option
+    that looks bad**, because the tab shows "4 open" with no explanation.
+
+    **Also worth doing either way:** add `CodeQL` to the required contexts in
+    `.github/branch-protection.sh` so new alerts cannot sit unnoticed again. It was deliberately
+    NOT added in S123 because it would have blocked that PR on these pre-existing alerts — triage
+    them first, then require it.
 
 ## Decision-gated engineering (one word each unblocks a build)
 
@@ -178,16 +259,18 @@ load-evidence format (A9). Details: `docs/marketplace/submission-process.md`.
 
 ---
 
-*Prod: healthy and untouched — v0.4.0-139, all three `/healthz` components `ok`, **1,355,548**
-server events, newest 2 s old at the check, collector actively ingesting. A prod roll is item 11,
-never automatic.*
-
-*On item 1: external review rounds 7 through 11 have each landed fixes on `main` that are not in
-the `v0.4.4` tag. Five are behavioural — the geo/device breakdown row cap, the three D-184
-security/enforcement fixes, and D-185's AMS-poll SSRF guard plus the `/healthz` fix that stops an
-AMS error body being republished to unauthenticated callers. When you rotate, the same sitting
-authorises one motion: **rotate, cut `v0.4.5`, submit against it**.*
+*Prod: healthy — v0.4.0-139 (unchanged), all three `/healthz` components `ok`, **1,400,267**
+server events, newest 5 s old at the check, collector actively ingesting, 0 errors in the
+preceding 90 s. It survived a 5-minute ingest outage during the rotation (see item 1) and is back
+on exactly the build and schema it had before. A prod roll is item 11, never automatic.*
 
 *Noticed while probing your AMS: its licence shows `type: trial`, `endDate 2026-07-27` — i.e.
 **expired as of 2026-07-28**. It affects nothing we ship, but it does affect future live
 validation against that instance, including item 6's load lane.*
+
+*Tier packaging ruling you gave on 2026-07-31, now enforced everywhere: **ingest health (F4) is
+Pro+, not Free.** The server had gated it at Pro+ since a deliberate fix ("was leaking to Free"),
+while `docs/product.md`, `docs/overview.md` and the website all advertised it as Free — wrong
+together, so no cross-check caught it. The website's pricing table was selling both F4 **and**
+historical analytics (F2) inside the Free plan; a Free user following it hit `403
+LICENSE_REQUIRED` on both. All ten features now agree across code, docs and site.*

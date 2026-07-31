@@ -25,6 +25,46 @@ DC_ARGS="-p pulse-prod \
 sg docker -c "docker compose ${DC_ARGS} config -q" && echo CONFIG_OK
 ```
 
+> ### ⚠ `up -d` applies migrations from your WORKING TREE, not from the image
+>
+> `pulse-migrate` bind-mounts `contracts/` from the host repo. So recreating the
+> stack runs whatever migrations are in the current checkout, against whatever
+> binary is deployed. If the tree is ahead of the deployed build, the schema
+> advances past the binary and **every insert fails**:
+>
+> ```
+> clickhouse: insert server_events failed:
+>   clickhouse [Append]: expected 42 arguments, got 40
+> ```
+>
+> This is not hypothetical. On 2026-07-31 a routine password rotation recreated
+> the stack while prod was pinned to v0.4.0-139 (2026-07-23) and the tree carried
+> `0011_server_events_ingest_error.sql` (shipped in v0.4.2). It appended two
+> columns to `server_events`; ingest dropped for five minutes.
+>
+> **Before any prod `up -d`, check for pending migrations the deployed binary
+> does not know about:**
+>
+> ```sh
+> # 1. what the DB has applied
+> printf 'SELECT name FROM pulse.schema_migrations FORMAT TSV\n' \
+>   | sg docker -c "docker exec -i pulse-prod-clickhouse-1 sh -c \
+>       'clickhouse-client --user \$CLICKHOUSE_USER --password \$CLICKHOUSE_PASSWORD'"
+> # 2. what the tree has
+> ls contracts/db/clickhouse/*.sql
+> # 3. the deployed commit
+> sg docker -c "docker exec pulse-prod-pulse-1 pulse version"
+> # 4. for each file in (2) not in (1): does it exist at the commit from (3)?
+> git cat-file -e <commit>:contracts/db/clickhouse/<file> && echo SAFE || echo WILL BREAK
+> ```
+>
+> `deploy/scripts/rotate-clickhouse-password.sh` performs exactly this check and
+> refuses; its `check_pending_migrations` is reusable for any other prod recreate.
+>
+> **Recovery, if it has already happened:** drop the columns the pending migration
+> added, then delete its row from `pulse.schema_migrations` (column is `name`, not
+> `version`) so a later roll-forward re-applies it cleanly.
+
 Overlay purpose:
 - `docker-compose.prod.yml` — consolidated prod stack (formerly base + hardened + nginx-edge):
   pulse + ClickHouse (auth), container hardening, resource limits, webhook listener,

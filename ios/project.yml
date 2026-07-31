@@ -30,7 +30,7 @@ settings:
   base:
     # Marketing version displayed to users (e.g., "1.0.0").
     # CI stamps this from VERSION file or git tag via MARKETING_VERSION build arg.
-    MARKETING_VERSION: "0.4.4"
+    MARKETING_VERSION: "0.4.5"
     # Build number incremented per CI run (e.g., "42").
     # CI stamps this via CURRENT_PROJECT_VERSION build arg.
     CURRENT_PROJECT_VERSION: "1"

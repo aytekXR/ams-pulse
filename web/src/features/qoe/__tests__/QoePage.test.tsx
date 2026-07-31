@@ -27,6 +27,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { QoePage } from "../QoePage";
 import { CHART_COLORS } from "@/lib/chartColors";
+// Resolves to the mocked class defined below, which is what the page sees too.
+import { ApiError } from "@/api/client";
 
 // ─── Slice-state reducer (pure logic extracted for unit testing) ───────────────
 
@@ -164,6 +166,35 @@ describe("QoePage rendering", () => {
 
   it("shows error banner when fetch fails", async () => {
     mockGetSummary.mockRejectedValue(new Error("network error"));
+    render(<QoePage />);
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+    });
+  });
+
+  // A licence 403 is a tier boundary, not a malfunction. This page used to funnel
+  // it into the same red ErrorBanner as a network failure, so a Free user was told
+  // LICENSE_REQUIRED in an alert box on one of the product's main screens.
+  it("renders the upgrade prompt, NOT an error banner, on a licence 403", async () => {
+    const err = new ApiError(403, {
+      code: "LICENSE_REQUIRED",
+      message: 'Data API (F8) requires Pro tier or higher (current: "free")',
+    });
+    mockGetSummary.mockRejectedValue(err);
+    render(<QoePage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { level: 2, name: /player qoe requires pro tier/i }),
+      ).toBeInTheDocument();
+    });
+    // The distinguishing assertion: no alert role at all.
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("still shows an error banner for a NON-licence 403", async () => {
+    const err = new ApiError(403, { code: "FORBIDDEN", message: "not allowed" });
+    mockGetSummary.mockRejectedValue(err);
     render(<QoePage />);
     await waitFor(() => {
       expect(screen.getByRole("alert")).toBeInTheDocument();

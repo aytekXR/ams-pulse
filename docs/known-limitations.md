@@ -735,6 +735,50 @@ verified rather than guessed.
 
 ---
 
+### LIM-29: Historical queries are silently capped to your tier's retention window
+
+**What it means for you:** If you ask for a longer time range than your licence
+retains, Pulse does not refuse the request and does not tell you it shortened
+it — it silently moves the start of the range forward and answers for the
+shorter window. On a Free licence a request for "the last 30 days" returns the
+last **7** days, and the response looks exactly like a successful 30-day answer:
+same shape, same HTTP 200, no warning field, no header.
+
+The practical effect is that a chart or an exported CSV can look like a complete
+answer to the question you asked when it is not. It matters most when you are
+comparing periods ("this month vs last month") or exporting for a report,
+because the truncation is invisible in the output.
+
+The caps are the retention figures from your tier:
+
+| Tier | Retention | A request for 30 days returns |
+|---|---|---|
+| Free | 7 days | 7 days |
+| Pro | 90 days | 30 days |
+| Business | 396 days (13 months) | 30 days |
+| Enterprise | unlimited | 30 days |
+
+**Root cause:** `applyRetention` in `server/internal/query/query.go` clamps the
+`from` parameter to `now - retentionDays` before the query runs. The clamp is
+deliberate — it stops a query scanning partitions that the retention policy is
+entitled to have deleted, and it keeps a long-range request from becoming an
+expensive scan — but it was implemented as a silent clamp rather than a reported
+one.
+
+**Workaround:** Compare the `from` you asked for against the earliest bucket in
+the response; if they differ, you hit the cap. Equivalently, keep requested
+ranges within your tier's retention. Note that the underlying data really is
+subject to the retention policy, so a longer window would not return more rows
+in any case — what is missing is the *signal*, not the data.
+
+**Roadmap:** Report the clamp rather than hide it — return the effective range
+in the response `meta` and surface a note in the UI when the requested range was
+shortened. This is an additive response-shape change, so it needs a contract
+revision (`contracts/openapi/pulse-api.yaml`) rather than a code-only fix, and
+it is deliberately not being slipped in ahead of the marketplace submission.
+
+---
+
 ## Changelog
 
 | Version | Change |

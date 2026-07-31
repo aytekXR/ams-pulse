@@ -18,6 +18,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/Badge";
 import { useToast } from "@/components/Toast";
 import { TierGate } from "@/components/TierGate";
+import { canUseReports } from "@/lib/entitlements";
 import type {
   UsageReportResponse,
   ReportSchedule,
@@ -709,10 +710,9 @@ export function ReportsPage() {
   }, []);
 
   // VD-01: Reports require Business tier or higher (PRD §7.11). Gate: free and pro → upsell.
-  // license?.tier can be "free" | "pro" | "business" | "enterprise" (per generated schema).
-  const isGated = license != null
-    && license.tier !== "business"
-    && license.tier !== "enterprise";
+  // The rule lives in src/lib/entitlements (mirroring server CheckReports) so the
+  // entitlement test can import it instead of keeping its own copy.
+  const isGated = license != null && !canUseReports(license.tier);
 
   const loadUsage = useCallback(async () => {
     setLoading(true);

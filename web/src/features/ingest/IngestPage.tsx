@@ -21,6 +21,7 @@ import {
 import { qoeApi, ApiError } from "@/api/client";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { LicenseRequiredGate, isLicenseError } from "@/components/LicenseRequiredGate";
 import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/Badge";
 import { CHART_COLORS, useStatusColors } from "@/lib/chartColors";
@@ -176,12 +177,16 @@ function StreamDetail({ stream, onClose }: StreamDetailProps) {
 export function IngestPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A licence 403 is a tier boundary, not a malfunction — it renders as the
+  // designed upgrade prompt rather than a red error banner.
+  const [licenseError, setLicenseError] = useState<ApiError | null>(null);
   const [data, setData] = useState<IngestHealthResponse | null>(null);
   const [selected, setSelected] = useState<IngestStream | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setLicenseError(null);
     try {
       const result = await qoeApi.getIngestHealth({
         from: Date.now() - 15 * 60 * 1000, // last 15 min
@@ -189,8 +194,12 @@ export function IngestPage() {
       });
       setData(result);
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : "Failed to load ingest health";
-      setError(msg);
+      if (isLicenseError(err)) {
+        setLicenseError(err);
+      } else {
+        const msg = err instanceof ApiError ? err.message : "Failed to load ingest health";
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -204,6 +213,38 @@ export function IngestPage() {
   }, [load]);
 
   const streams = data?.streams ?? [];
+
+  // A licence refusal replaces the page body: showing filters and an empty chart
+  // above an upsell reads as a broken screen. The heading stays for orientation.
+  if (licenseError) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)" }}>
+          <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Ingest Health</h1>
+        </div>
+        <LicenseRequiredGate
+          error={licenseError}
+          feature="Ingest health"
+          unlocks="publisher and ingest health, bitrate timelines and drop tracking"
+          icon={
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--color-accent)"
+              strokeWidth="1.5"
+              aria-hidden="true"
+            >
+              <path d="M12 2 2 7l10 5 10-5-10-5Z" />
+              <path d="m2 17 10 5 10-5" />
+              <path d="m2 12 10 5 10-5" />
+            </svg>
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>

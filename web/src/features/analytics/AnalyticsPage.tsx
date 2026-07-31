@@ -14,6 +14,7 @@ import { DateRangePicker, defaultDateRange } from "./DateRangePicker";
 import { Tabs } from "@/components/Tabs";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { LicenseRequiredGate, isLicenseError } from "@/components/LicenseRequiredGate";
 import { EmptyState } from "@/components/EmptyState";
 import { StatCard } from "@/features/live/StatCard";
 import { CHART_COLORS } from "@/lib/chartColors";
@@ -30,6 +31,9 @@ export function AnalyticsPage() {
   const [tab, setTab] = useState<Tab>("audience");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A licence 403 is a tier boundary, not a malfunction — it renders as the
+  // designed upgrade prompt rather than a red error banner.
+  const [licenseError, setLicenseError] = useState<ApiError | null>(null);
   const [audience, setAudience] = useState<AudienceResponse | null>(null);
   const [geo, setGeo] = useState<GeoResponse | null>(null);
   const [device, setDevice] = useState<DeviceResponse | null>(null);
@@ -37,6 +41,7 @@ export function AnalyticsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setLicenseError(null);
     try {
       const params = { from: range.from, to: range.to };
       const [audienceData, geoData, deviceData] = await Promise.all([
@@ -48,8 +53,12 @@ export function AnalyticsPage() {
       setGeo(geoData);
       setDevice(deviceData);
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : "Failed to load analytics";
-      setError(msg);
+      if (isLicenseError(err)) {
+        setLicenseError(err);
+      } else {
+        const msg = err instanceof ApiError ? err.message : "Failed to load analytics";
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -72,6 +81,38 @@ export function AnalyticsPage() {
   }));
 
   const totals = audience?.totals;
+
+  // A licence refusal replaces the page body: showing filters and an empty chart
+  // above an upsell reads as a broken screen. The heading stays for orientation.
+  if (licenseError) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)" }}>
+          <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Analytics</h1>
+        </div>
+        <LicenseRequiredGate
+          error={licenseError}
+          feature="Historical analytics"
+          unlocks="historical audience analytics with geo and device breakdowns"
+          icon={
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--color-accent)"
+              strokeWidth="1.5"
+              aria-hidden="true"
+            >
+              <path d="M12 2 2 7l10 5 10-5-10-5Z" />
+              <path d="m2 17 10 5 10-5" />
+              <path d="m2 12 10 5 10-5" />
+            </svg>
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>

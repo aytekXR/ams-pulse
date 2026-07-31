@@ -33,6 +33,7 @@ import { Badge } from "@/components/Badge";
 import { useToast } from "@/components/Toast";
 import { TierGate } from "@/components/TierGate";
 import type { Probe, ProbeWrite, ProbeResult, LicenseInfo } from "@/lib/api/types";
+import { canUseProbes } from "@/lib/entitlements";
 
 // ─── Synthetic label badge ────────────────────────────────────────────────────
 
@@ -1196,9 +1197,12 @@ export function ProbesPage() {
       });
   }, []);
 
-  // Load probes after license confirmed as Pro+
+  // Load probes after license confirmed as Pro+.
+  // Positive membership, not `tier !== "free"`: an unrecognised tier string must be
+  // DENIED, not granted. The server made exactly this change in D-133/S71 and the
+  // client had kept the old negative check.
   useEffect(() => {
-    if (license && license.tier !== "free") {
+    if (license && canUseProbes(license.tier)) {
       fetchProbes();
     }
   }, [license, fetchProbes]);
@@ -1259,8 +1263,8 @@ export function ProbesPage() {
     return <ErrorBanner message={licenseError} />;
   }
 
-  // Gate: only Pro+
-  if (license && license.tier === "free") {
+  // Gate: only Pro+ (positive membership — see the fetch effect above)
+  if (license && !canUseProbes(license.tier)) {
     return (
       <div style={{ maxWidth: 700, margin: "0 auto", paddingTop: 40 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 24px" }}>

@@ -191,6 +191,85 @@ jobs:
       - name: Test
         run: cd web && npm test
 
+  # ── 3b. JavaScript dependency vulnerabilities ────────────────────────────────
+  # WHY THIS EXISTS: the release pipeline blocks on Go and OS-package CVEs via
+  # Trivy, but Trivy scans the IMAGE — OS packages plus the compiled Go binary.
+  # The web UI's npm dependencies are bundled into JS assets that Trivy does not
+  # analyse, so npm advisories were entirely ungated. That gap shipped a real
+  # one: react-router 7.18.1 carried GHSA-qwww-vcr4-c8h2 (HIGH) for weeks while
+  # every gate stayed green, and it was found only by running npm audit by hand.
+  # A marketplace security reviewer runs exactly that command.
+  #
+  # SCOPE: production dependencies, HIGH and above, for every package.json that
+  # ships code (web UI + the beacon SDK that customers embed in their players).
+  # Dev dependencies are REPORTED but do not fail the build — they never reach a
+  # user — so a dev-only advisory does not block a release, but nobody can claim
+  # they did not know about it.
+  #
+  # WHEN THIS GOES RED ON AN UNRELATED PR: that is the advisory database moving,
+  # not your change. Fix the dependency; do not raise --audit-level to paper over
+  # it. If a finding is genuinely not exploitable here, that argument belongs in
+  # the changelog with the reasoning, not in a silenced gate.
+  npm-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Audit production dependencies (HARD — high and above)
+        run: |
+          set -euo pipefail
+          FAILED=0
+          for dir in web sdk/beacon-js; do
+            echo "::group::npm audit --omit=dev --audit-level=high ($dir)"
+            if ! (cd "$dir" && npm audit --omit=dev --audit-level=high); then
+              echo "FAIL: $dir has a HIGH or CRITICAL advisory in a SHIPPED dependency"
+              FAILED=1
+            fi
+            echo "::endgroup::"
+          done
+          [ "$FAILED" -eq 0 ] || exit 1
+          echo "OK: no high/critical advisories in shipped dependencies"
+
+      - name: Audit dev dependencies (report only — never fails the build)
+        continue-on-error: true
+        run: |
+          for dir in web sdk/beacon-js; do
+            echo "::group::npm audit (all deps, $dir)"
+            (cd "$dir" && npm audit || true)
+            echo "::endgroup::"
+          done
+
+      # THIRD-PARTY-LICENSES.md is a legal attribution document and it is
+      # GENERATED, not written, so it cannot claim a licence a dependency does
+      # not carry. The generator has always had a --check mode that fails when
+      # the file is stale — but nothing ever ran it, so the guarantee was
+      # theoretical. It was silently stale as soon as a dependency changed.
+      # Regenerating needs the Go module cache and node_modules, hence the setup
+      # below rather than a bare script call.
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25"
+
+      - name: Install dependencies for the licence scan
+        run: |
+          (cd web && npm ci --legacy-peer-deps)
+          (cd sdk/beacon-js && npm ci)
+          (cd server && go mod download)
+
+      - name: Third-party licence attribution is current (HARD)
+        run: |
+          if ! scripts/gen-third-party-licenses.sh --check; then
+            echo
+            echo "FAIL: THIRD-PARTY-LICENSES.md does not match the dependency tree."
+            echo "A dependency was added, removed or bumped without regenerating it."
+            echo "Fix: scripts/gen-third-party-licenses.sh  (then commit the result)"
+            exit 1
+          fi
+
   # ── 4. SDK ───────────────────────────────────────────────────────────────────
   sdk:
     runs-on: ubuntu-latest
@@ -476,24 +555,69 @@ jobs:
       - name: Install shellcheck
         run: sudo apt-get install -y --no-install-recommends shellcheck
 
-      # ⚠ THIS LIST IS THE GUARD'S SCOPE, AND A NAMED LIST STOPS COVERING WHATEVER
-      # IS ADDED NEXT. D-187 found website/tests/run-checks.sh — a 780-line script
-      # that gates the public website — had been in the repo unguarded since the
-      # session that wrote it. Adding a shell script to this repository means
-      # adding it here in the same change.
+      # ⚠ SCOPE IS DISCOVERED, NOT LISTED — and that is the whole point.
       #
-      # Not covered, deliberately: scripts under deploy/quickstart/ other than
-      # install.sh (generated fixtures), and anything under brandkit/ (frozen
-      # third-party export).
-      - name: Shellcheck deploy and tooling scripts
+      # This guard used to be a hand-maintained list of six paths, and the list
+      # drifted twice. D-187 found website/tests/run-checks.sh (780 lines, gates
+      # the public website) unguarded since the session that wrote it. A later
+      # sweep found THREE more the list had never covered, one of which ships to
+      # customers inside the Helm chart:
+      #   - deploy/helm/pulse/files/pulse-backup.sh  (shipped in the chart)
+      #   - scripts/gen-third-party-licenses.sh      (generates a legal document)
+      #   - .github/branch-protection.sh             (mutates repo security settings)
+      # Each previous fix appended the one file that round happened to name, which
+      # is why it kept recurring. So the guard now DISCOVERS every tracked *.sh
+      # under the directories that ship or gate, and a new script is covered the
+      # moment it is committed.
+      #
+      # WHAT THIS DOES NOT COVER, and why (write gaps down inside the guard):
+      #   - qa/**  — the live-AMS test harness (~80 scripts, 678 style notes, zero
+      #     errors). These never ship and never gate a merge; enrolling them would
+      #     mean a 678-finding cleanup for no safety gain. If a qa/ script ever
+      #     becomes load-bearing, move it out of qa/ or add it explicitly.
+      #   - brandkit/** — frozen third-party design export, not ours to edit.
+      #   - Files with a shell shebang but no .sh extension. Checked at the time of
+      #     writing: the only match in the tree is a .sh.example fixture. If you add
+      #     an extensionless script, it is NOT covered — give it a .sh extension.
+      #
+      # The failing branch is exercised deliberately: see the "negative test" step.
+      - name: Shellcheck every shipped and gating script
         run: |
-          shellcheck \
-            deploy/quickstart/install.sh \
-            deploy/scripts/pulse-backup.sh \
-            deploy/nginx/deployment.sh \
-            .github/check-doc-stamps.sh \
-            website/tests/run-checks.sh \
-            website/tools/generate-og-image.sh
+          set -euo pipefail
+          # Directory pathspecs + a suffix filter, NOT a '**/*.sh' glob: git's
+          # pathspec '**' requires an intervening directory, so 'scripts/**/*.sh'
+          # silently misses scripts/gen-third-party-licenses.sh and both
+          # .github/*.sh. That mistake was made and caught while writing this.
+          mapfile -t SCRIPTS < <(git ls-files -- deploy scripts .github website \
+            | grep '\.sh$' | sort)
+          # Floor assertion: the hand-maintained list this replaced had 6 entries
+          # and the discovered set must never fall below it. A glob that silently
+          # matches nothing would otherwise read as a green guard.
+          if [ "${#SCRIPTS[@]}" -lt 6 ]; then
+            echo "FAIL: discovery found only ${#SCRIPTS[@]} scripts (expected >= 6)."
+            echo "The pathspec is broken, not the tree — do not 'fix' this by lowering the floor."
+            exit 1
+          fi
+          echo "Checking ${#SCRIPTS[@]} scripts:"
+          printf '  %s\n' "${SCRIPTS[@]}"
+          shellcheck "${SCRIPTS[@]}"
+
+      # A guard that has never been seen to fail is not known to work. This plants
+      # a script with an unambiguous defect in a covered directory, asserts the
+      # guard rejects it, and removes it. If this step ever passes silently, the
+      # guard above has stopped guarding.
+      - name: Negative test — the guard must reject a bad script
+        run: |
+          set -uo pipefail
+          BAD=deploy/scripts/__shellcheck_negative_test__.sh
+          printf '#!/usr/bin/env bash\nif [ $x = 1 ]; then echo hi; fi\n' > "$BAD"
+          if shellcheck "$BAD" >/dev/null 2>&1; then
+            rm -f "$BAD"
+            echo "FAIL: shellcheck accepted a script with an unquoted undefined variable"
+            exit 1
+          fi
+          rm -f "$BAD"
+          echo "OK: the guard rejects a defective script"
 
   # ── 11. Doc "Last updated" stamp guard ───────────────────────────────────────
   # Stamp drift is this repo's most-repeated defect class — external review
