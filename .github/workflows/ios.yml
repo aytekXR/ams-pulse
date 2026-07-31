@@ -54,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     container: swift:6.1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build PulseKit
         run: cd ios/PulseKit && swift build
@@ -96,7 +96,7 @@ jobs:
     runs-on: macos-15
     needs: ios-kit
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Pin Xcode version and ASSERT the selection.
       - name: Select and assert Xcode 26.2
@@ -387,7 +387,7 @@ jobs:
     needs: [ios-kit, ios-app]
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/ios-v')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Check for required secrets BEFORE doing any work.
       # If any are missing, skip loudly with an explanatory notice.
@@ -655,7 +655,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Select and assert Xcode 26.2
         run: |
