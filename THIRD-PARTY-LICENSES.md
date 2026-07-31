@@ -39,7 +39,7 @@ and `ios/PulseKit/Package.swift` both declare no package dependencies.
 ## Summary
 
 - Go modules linked into the `pulse` binary: **56**
-- npm packages bundled into the web UI: **66**
+- npm packages bundled into the web UI: **64**
 - Copyleft (GPL / AGPL / LGPL / SSPL) among redistributed dependencies: **none**
 - Dependencies with an undetermined licence: **none**
 
@@ -95,7 +95,7 @@ and `ios/PulseKit/Package.swift` both declare no package dependencies.
 | `golang.org/x/oauth2` | v0.30.0 | BSD-3-Clause | Copyright 2009 The Go Authors. |
 | `golang.org/x/sync` | v0.21.0 | BSD-3-Clause | Copyright 2009 The Go Authors. |
 | `golang.org/x/sys` | v0.46.0 | BSD-3-Clause | Copyright 2009 The Go Authors. |
-| `golang.org/x/text` | v0.38.0 | BSD-3-Clause | Copyright 2009 The Go Authors. |
+| `golang.org/x/text` | v0.39.0 | BSD-3-Clause | Copyright 2009 The Go Authors. |
 | `golang.org/x/time` | v0.14.0 | BSD-3-Clause | Copyright 2009 The Go Authors. |
 | `gopkg.in/yaml.v3` | v3.0.1 | Apache-2.0 | copyright staring in 2011 when the project was ported over: |
 | `modernc.org/libc` | v1.73.4 | BSD-2-Clause | Copyright (c) 2017 The Libc Authors. All rights reserved. |
@@ -135,7 +135,7 @@ and `ios/PulseKit/Package.swift` both declare no package dependencies.
 | `ansi-styles` | 5.2.0 | MIT | Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com) |
 | `aria-query` | 5.3.0 | Apache-2.0 | copyright notice that is included in or attached to the work |
 | `clsx` | 2.1.1 | MIT | Copyright (c) Luke Edwards <luke.edwards05@gmail.com> (lukeed.com) |
-| `cookie` | 1.1.1 | MIT | Copyright (c) 2012-2014 Roman Shtylman <shtylman@gmail.com> |
+| `cookie-es` | 3.1.1 | MIT | Copyright (c) 2012-2014 Roman Shtylman <shtylman@gmail.com> |
 | `csstype` | 3.2.3 | MIT | Copyright (c) 2017-2018 Fredrik Nicol |
 | `d3-array` | 3.2.4 | ISC | Copyright 2010-2023 Mike Bostock |
 | `d3-color` | 3.1.0 | ISC | Copyright 2010-2022 Mike Bostock |
@@ -163,14 +163,12 @@ and `ios/PulseKit/Package.swift` both declare no package dependencies.
 | `react-dom` | 19.2.7 | MIT | Copyright (c) Meta Platforms, Inc. and affiliates. |
 | `react-is` | 17.0.2 | MIT | Copyright (c) Facebook, Inc. and its affiliates. |
 | `react-redux` | 9.3.0 | MIT | Copyright (c) 2015-present Dan Abramov |
-| `react-router` | 7.18.1 | MIT | Copyright (c) React Training LLC 2015-2019 |
-| `react-router-dom` | 7.18.1 | MIT | Copyright (c) React Training LLC 2015-2019 |
+| `react-router` | 8.3.0 | MIT | Copyright (c) React Training LLC 2015-2019 |
 | `recharts` | 3.9.2 | MIT | Copyright (c) 2015-present recharts |
 | `redux` | 5.0.1 | MIT | Copyright (c) 2015-present Dan Abramov |
 | `redux-thunk` | 3.1.0 | MIT | Copyright (c) 2015-present Dan Abramov |
 | `reselect` | 5.2.0 | MIT | Copyright (c) 2015-2018 Reselect Contributors |
 | `scheduler` | 0.27.0 | MIT | Copyright (c) Meta Platforms, Inc. and affiliates. |
-| `set-cookie-parser` | 2.7.2 | MIT | Copyright (c) 2015 Nathan Friedly <nathan@nfriedly.com> (http://nfriedly.com/) |
 | `tiny-invariant` | 1.3.3 | MIT | Copyright (c) 2019 Alexander Reardon |
 | `use-sync-external-store` | 1.6.0 | MIT | Copyright (c) Meta Platforms, Inc. and affiliates. |
 | `victory-vendor` | 37.3.6 | MIT AND ISC |  |
@@ -2610,9 +2608,44 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+### MIT — text `5ac8200244c9`
+
+Applies to: `cookie-es`
+
+```text
+MIT License
+
+Cookie-es copyright (c) Pooya Parsa <pooya@pi0.io>
+
+Cookie parsing based on https://github.com/jshttp/cookie
+Copyright (c) 2012-2014 Roman Shtylman <shtylman@gmail.com>
+Copyright (c) 2015 Douglas Christopher Wilson <doug@somethingdoug.com>
+
+Set-Cookie parsing based on https://github.com/nfriedly/set-cookie-parser
+Copyright (c) 2015 Nathan Friedly <nathan@nfriedly.com> (http://nfriedly.com/)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ### MIT — text `5df121ef2d3a`
 
-Applies to: `react-router`, `react-router-dom`
+Applies to: `react-router`
 
 ```text
 MIT License
@@ -3219,34 +3252,6 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### MIT — text `ebcdd88d8731`
-
-Applies to: `set-cookie-parser`
-
-```text
-The MIT License (MIT)
-
-Copyright (c) 2015 Nathan Friedly <nathan@nfriedly.com> (http://nfriedly.com/)
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-```
-
 ### MIT — text `f325ae307732`
 
 Applies to: `reselect`
@@ -3325,36 +3330,6 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-```
-
-### MIT — text `fb8efe7d3847`
-
-Applies to: `cookie`
-
-```text
-(The MIT License)
-
-Copyright (c) 2012-2014 Roman Shtylman <shtylman@gmail.com>
-Copyright (c) 2015 Douglas Christopher Wilson <doug@somethingdoug.com>
-
-Permission is hereby granted, free of charge, to any person obtaining
-a copy of this software and associated documentation files (the
-'Software'), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish,
-distribute, sublicense, and/or sell copies of the Software, and to
-permit persons to whom the Software is furnished to do so, subject to
-the following conditions:
-
-The above copyright notice and this permission notice shall be
-included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
 ### MIT — text `fb956d42825b`

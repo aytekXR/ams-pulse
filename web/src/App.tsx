@@ -15,7 +15,7 @@
  *   /settings    → sources, tokens, license, users
  */
 
-import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router";
 import { useState, useEffect, useRef } from "react";
 import { AuthGate } from "@/components/AuthGate";
 import { Layout } from "@/components/Layout";
