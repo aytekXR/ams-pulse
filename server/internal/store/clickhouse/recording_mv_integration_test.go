@@ -79,7 +79,12 @@ func TestIntegration_MvRecording(t *testing.T) {
 	dsn := fmt.Sprintf("clickhouse://127.0.0.1:%d/%s", tcpPort, dbName)
 
 	// 2. Wait for ClickHouse to accept connections (up to 45s).
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), 45*time.Second)
+	// Startup budget: a CI-reliability control, not a performance assertion.
+	// 45s was marginal on a loaded GitHub runner and produced a false failure on
+	// a docs-only PR (S122) in the `server` job, which is a REQUIRED check.
+	// Nothing is measured against this deadline; the enclosing `go test -timeout`
+	// is the real backstop. See integration_test.go for the full rationale.
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 150*time.Second)
 	defer waitCancel()
 
 	t.Logf("waiting for ClickHouse on 127.0.0.1:%d...", tcpPort)
@@ -100,7 +105,7 @@ func TestIntegration_MvRecording(t *testing.T) {
 		}
 		select {
 		case <-waitCtx.Done():
-			t.Fatal("timeout waiting for ClickHouse to start")
+			t.Fatal("ClickHouse did not accept connections within the startup budget. This is a container startup-time failure, not a store defect.")
 		case <-time.After(500 * time.Millisecond):
 		}
 	}
@@ -275,7 +280,7 @@ func TestIntegration_MvRecording_IdempotentRun(t *testing.T) {
 	startupDSN := fmt.Sprintf("clickhouse://127.0.0.1:%d/default", tcpPort)
 	const dbName = "pulse_mv_idem_test"
 
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), 45*time.Second)
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 150*time.Second) // startup budget: see the note on the first such wait in this package
 	defer waitCancel()
 
 	for {

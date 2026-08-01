@@ -76,7 +76,12 @@ func TestIntegration_Migrations_IdempotentRun(t *testing.T) {
 	startupDSN := fmt.Sprintf("clickhouse://127.0.0.1:%d/default", tcpPort)
 
 	// Wait for ClickHouse to accept TCP connections (first startup can take 45s).
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), 45*time.Second)
+	// Startup budget: a CI-reliability control, not a performance assertion.
+	// 45s was marginal on a loaded GitHub runner and produced a false failure on
+	// a docs-only PR (S122) in the `server` job, which is a REQUIRED check.
+	// Nothing is measured against this deadline; the enclosing `go test -timeout`
+	// is the real backstop. See integration_test.go for the full rationale.
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 150*time.Second)
 	defer waitCancel()
 
 	t.Logf("waiting for ClickHouse on 127.0.0.1:%d...", tcpPort)
@@ -97,7 +102,7 @@ func TestIntegration_Migrations_IdempotentRun(t *testing.T) {
 		}
 		select {
 		case <-waitCtx.Done():
-			t.Fatal("timeout waiting for ClickHouse to start")
+			t.Fatal("ClickHouse did not accept connections within the startup budget. This is a container startup-time failure, not a store defect.")
 		case <-time.After(500 * time.Millisecond):
 		}
 	}
