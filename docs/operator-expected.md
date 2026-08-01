@@ -4,21 +4,23 @@
 `agents/handoffs/decisions.md`, `agents/handoffs/sessions/` and
 `agents/handoffs/RESUME-PROMPT.md`.*
 
-> **✅ THE MARKETPLACE BLOCKER IS GONE.** `CLICKHOUSE_PASSWORD` was rotated on 2026-07-31 and
-> verified: `git log -S` on the new value returns **0 commits across all refs**. The two commits
-> that carried the old prefix now hold a dead password. **Nothing technical stands between
-> Pulse and submission** — item 1 below is now the submission itself.
+> **✅ SUBMITTED SIDE DONE — the ball is with Ant Media.** `CLICKHOUSE_PASSWORD` is rotated
+> (`git log -S` on the live value returns **0 commits across all refs**), and the outreach email
+> to Ankush is **sent**. Per the agreed process they now arrange a developer meeting and hand
+> over the qualification steps. Item 5 lists what to capture from that reply.
+>
+> **Nothing on the engineering side blocks the marketplace.** The remaining loop-owned work is
+> either waiting on something external (a real 2-node cluster, a PAYG AMS, an Apple account) or
+> deliberately deferred — see `agents/handoffs/RESUME-PROMPT.md`.
 >
 > **iOS TestFlight** is still blocked by item A (Apple Developer Program enrolment) and nothing
 > else. The two tracks are independent.
 >
-> **Prod:** healthy, on the same pinned v0.4.0-139 build as before. ⚠ The rotation's stack
-> recreate exposed a real landmine and caused a **5-minute ingest outage** (11:27–11:32 UTC,
-> since recovered): `pulse-migrate` bind-mounts `contracts/` from the working tree, so **any
-> `docker compose up -d` on prod applies migrations from the git checkout to whatever binary is
-> deployed.** Details and the pre-flight check: `deploy/runbooks/upgrade-rollback.md` §1.
-> This makes item 11 (roll prod forward) more attractive than it was — it would close the gap
-> permanently.
+> **Prod:** healthy on the pinned v0.4.0-139 build. ⚠ Standing hazard, not yet closed: `pulse-migrate`
+> bind-mounts `contracts/` from the working tree, so **any `docker compose up -d` on prod applies
+> migrations from the git checkout to whatever binary is deployed.** That caused a 5-minute ingest
+> outage on 2026-07-31 (recovered). Pre-flight check: `deploy/runbooks/upgrade-rollback.md` §1.
+> Rolling prod forward (item 11) closes it permanently.
 
 ---
 
@@ -122,20 +124,25 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
 
 4. **Set up billing** in the marketplace (tiers / Founding-Operators campaign / trial).
 
-5. **Send the Ankush email — this is the one that starts the process.** Full text at
-   `docs/marketplace/ankush-reply-draft.md`, rewritten 2026-07-31: it links every public document
-   a reviewer needs (all 23 URLs HTTP-checked), gives the anonymous install and `cosign verify`
-   commands, states the read-only/zero-phone-home posture up front, and asks the seven questions
-   we actually need answered — listing shape (A1) first, because it shapes everything else.
-   Fill the `[brackets]` and send from your account.
+5. ~~**Send the Ankush email**~~ **✅ SENT 2026-07-31/08-01 (operator).** The process is now
+   in Ant Media's court: per the agreed flow, they arrange a developer meeting and hand over
+   the qualification steps their dev team defined. Text kept at
+   `docs/marketplace/ankush-reply-draft.md` for reference — it is what they received.
 
-   ⚠ **Two prerequisites, both in the file's header:**
-   - **Merge PR #244 first.** Every link points at `main` and the website deploys from `main`.
-     Until it merges, the live site still sells historical analytics (F2) and ingest health (F4)
-     inside the **Free** plan while both return `403 LICENSE_REQUIRED` — verified against the
-     live site on 2026-07-31. Sending before the merge points Ant Media straight at the defect.
-   - **Confirm the address.** `ankush@antmedia.io` was never verified. Replying on the original
-     thread is safer and keeps the context.
+   **When the reply lands, the useful things to capture** (these close the A1–A10 assumptions
+   that several docs still carry as `⚠ ASSUMPTION` markers):
+   - **A1, ask first — it shapes everything else:** can Pulse list as a standalone self-hosted
+     service, or do they want an AMS-side artifact? Bitmovin lists as a WAR.
+   - The qualification checklist itself, plus screenshot/logo/video specs (A2/A3) and whether
+     linking to our GitHub docs is acceptable or they need uploads (A8).
+   - Review flow, timeline, and whether the security review is audited or self-certified (A5).
+   - **Load-evidence format and thresholds (A9)** — this one gates item 6 below. Better to run
+     the lane once to their specification than produce a number in the wrong shape.
+   - AMS version-support expectation (A7), trial mechanics (A6), listing category (A10).
+   - Post-year-one revenue terms **in writing**, and whether the vendor agreement can carry an
+     API-stability / deprecation-notice commitment.
+
+   Log every answer here and close the rows in `docs/marketplace/submission-process.md` §2.
 
 6. **Load lane on a PAYG AMS** → the real capacity number for the listing. Same instance, two
    birds: set `server.kafka_brokers` in `red5.properties` so the loop can run **AV-15** (live
@@ -205,32 +212,17 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
     vhost is written and waiting at `deploy/nginx/pulse-website.conf` and needs your `sudo`.
     Either way the App Store URLs in A3 change, so decide before A3 if you care.
 
-13. **⚠ Four open HIGH CodeQL alerts are visible in your PUBLIC repo's Security tab** — and
-    they have been open since **2026-07-09/10**, roughly three weeks, with every CI gate green
-    the whole time. A marketplace security reviewer will open that tab. **None was introduced by
-    the S123 work**; they are pre-existing on `main`.
+13. ~~**Four open HIGH CodeQL alerts**~~ **✅ DONE 2026-07-31 — zero open alerts.** All six
+    were triaged adversarially and dispositioned; the record a security reviewer can read is
+    `docs/security/codeql-triage.md`. Three dismissed false-positive, one dismissed won't-fix
+    **with a mitigation shipped** (a startup warning when `PULSE_SECRET_KEY` is not canonical
+    64-hex — the derivation was deliberately NOT changed, because a KDF swap would orphan every
+    existing encrypted credential and no `pulse rekey` exists yet). Two were vendored ReDoc
+    bundle code and are excluded from analysis.
 
-    **Why nothing caught them:** the required contexts include `Analyze (go)` and
-    `Analyze (javascript-typescript)`, which report whether the *scan ran*, not whether it
-    *found anything*. The aggregate `CodeQL` check-run — the one that says "2 new alerts
-    including 1 high severity" — is **not** a required context. Same class as the three gate
-    gaps closed in S123: a guard that cannot fail.
-
-    | Alert | Location | Assessment |
-    |---|---|---|
-    | `go/weak-sensitive-data-hashing` | `server/internal/store/meta/meta.go:1649` | **Conditionally real.** SHA-256 turns `PULSE_SECRET_KEY` into the AES key that encrypts stored AMS credentials. Fine for the documented `openssl rand -hex 32` value (and the hex path skips SHA-256 entirely), weak if an operator sets a short guessable string. ⚠ **Do NOT "fix" this by switching to a KDF without a migration** — it would change the derived key and make every already-encrypted credential undecryptable. |
-    | `go/weak-sensitive-data-hashing` | `server/internal/api/oidc.go:124` | **Effectively a false positive.** Derives an HMAC key for OIDC state cookies from the same high-entropy secret. The "use a slow hash" rule targets low-entropy user passwords. Safe to switch to HKDF if you want it silenced — changing it only invalidates in-flight state cookies. |
-    | `js/insecure-randomness` ×2 | `sdk/beacon-js/src/index.ts:35,54` | **Low but genuine.** `Math.random()` generates beacon session IDs. They are analytics correlation IDs, not auth tokens, and the ingest endpoint requires a token — but guessable IDs let someone attribute events to another session. `crypto.getRandomValues` with a `Math.random` fallback is a small, safe change; it needs an SDK re-release and a re-run of the 15 KB size gate. |
-
-    **Your call, three options:** fix them (only the SDK one is risk-free), dismiss each in the
-    Security tab with the rationale above (GitHub records the reason, which is a *better* look to
-    a reviewer than four untriaged alerts), or leave them. **Doing nothing is the only option
-    that looks bad**, because the tab shows "4 open" with no explanation.
-
-    **Also worth doing either way:** add `CodeQL` to the required contexts in
-    `.github/branch-protection.sh` so new alerts cannot sit unnoticed again. It was deliberately
-    NOT added in S123 because it would have blocked that PR on these pre-existing alerts — triage
-    them first, then require it.
+    The gap that hid them is closed too: `CodeQL` is now the **18th required context**. The two
+    `Analyze (…)` checks that were already required only report whether the scan *ran*; the
+    aggregate reports what it *found*. Nothing is needed from you here.
 
 ## Decision-gated engineering (one word each unblocks a build)
 
