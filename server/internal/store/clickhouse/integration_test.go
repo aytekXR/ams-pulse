@@ -73,14 +73,32 @@ func TestIntegration_BatchInsert(t *testing.T) {
 		_ = cmd.Wait()
 	})
 
-	// 3. Wait for ClickHouse to accept connections (up to 45s — first startup is slow).
-	// Use 'default' database for the startup ping (target DB doesn't exist yet).
+	// 3. Wait for ClickHouse to accept connections. Use the 'default' database for
+	// the startup ping (the target DB does not exist yet).
+	//
+	// ⚠ THE BUDGET HERE IS A CI-RELIABILITY CONTROL, NOT A PERFORMANCE ASSERTION.
+	// It was 45s, which is comfortable locally and marginal on a loaded GitHub
+	// runner: TestIntegration_BatchInsert failed with "timeout waiting for
+	// ClickHouse to start" on a DOCS-ONLY pull request (S122) and passed on
+	// re-run, with the same test green on the three preceding main runs. This
+	// test lives in the `server` job, which is a REQUIRED status check, so a
+	// slow cold start reds a merge that changed nothing.
+	//
+	// Nothing is measured against this deadline — no budget, no SLO, no product
+	// claim. Its only job is to fail eventually instead of hanging forever, so
+	// making it generous costs nothing and removes a false-failure class. The
+	// enclosing `go test -timeout 300s` is the real backstop.
+	//
+	// The elapsed time IS logged on success, so a genuine slowdown is still
+	// visible rather than silently absorbed by the larger budget.
+	const startupBudget = 150 * time.Second
 	startupDSN := fmt.Sprintf("clickhouse://127.0.0.1:%d/default", tcpPort)
 	dsn := fmt.Sprintf("clickhouse://127.0.0.1:%d/pulse_integration_test", tcpPort)
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), 45*time.Second)
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), startupBudget)
 	defer waitCancel()
 
-	t.Logf("waiting for ClickHouse on 127.0.0.1:%d...", tcpPort)
+	startupBegan := time.Now()
+	t.Logf("waiting for ClickHouse on 127.0.0.1:%d (budget %s)...", tcpPort, startupBudget)
 	for {
 		opts, err := clickhousego.ParseDSN(startupDSN)
 		if err != nil {
@@ -98,11 +116,21 @@ func TestIntegration_BatchInsert(t *testing.T) {
 		}
 		select {
 		case <-waitCtx.Done():
-			t.Fatal("timeout waiting for ClickHouse to start")
+			// Name the likely cause. The previous message ("timeout waiting for
+			// ClickHouse to start") read as a product failure and sent at least
+			// one reader looking for a bug in the store.
+			t.Fatalf("ClickHouse did not accept connections within %s. This is a container "+
+				"startup-time failure, not a store defect: nothing in the product is being "+
+				"measured against this deadline. Check `docker logs` for the ClickHouse "+
+				"container and whether the runner is starved; if a healthy cold start now "+
+				"legitimately exceeds %s, raise startupBudget rather than retrying blindly.",
+				startupBudget, startupBudget)
 		case <-time.After(500 * time.Millisecond):
 		}
 	}
-	t.Log("ClickHouse is ready")
+	// Logged so a real regression stays visible instead of being absorbed by the
+	// larger budget — if this creeps toward the budget, that is a signal.
+	t.Logf("ClickHouse is ready after %s (budget %s)", time.Since(startupBegan).Round(time.Millisecond), startupBudget)
 
 	// 4. Run migrations.
 	_, thisFile, _, ok := runtime.Caller(0)
@@ -437,7 +465,7 @@ func startClickHouseForProbes(t *testing.T, dbName string) (*clickhouse.Store, c
 	startupDSN := fmt.Sprintf("clickhouse://127.0.0.1:%d/default", tcpPort)
 	dsn := fmt.Sprintf("clickhouse://127.0.0.1:%d/%s", tcpPort, dbName)
 
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), 45*time.Second)
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 150*time.Second) // startup budget: see the note on the first such wait in this package
 	defer waitCancel()
 
 	t.Logf("waiting for ClickHouse on 127.0.0.1:%d...", tcpPort)
@@ -771,7 +799,7 @@ func TestIntegration_ViewerSessionsAndRollups(t *testing.T) {
 	dsn := fmt.Sprintf("clickhouse://127.0.0.1:%d/%s", tcpPort, dbName)
 
 	// Wait for ClickHouse.
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), 45*time.Second)
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 150*time.Second) // startup budget: see the note on the first such wait in this package
 	defer waitCancel()
 
 	t.Logf("waiting for ClickHouse on 127.0.0.1:%d...", tcpPort)
