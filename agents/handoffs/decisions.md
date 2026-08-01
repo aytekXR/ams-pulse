@@ -11335,6 +11335,45 @@ being advertised as self-contained; now inlined against redocly's own SRI hash b
 with `--network none`. · A licence 403 now renders the designed upgrade prompt instead of a red
 error banner on QoE/Analytics/Ingest, derived from the server's response so it cannot drift.
 
+### S123 close (2026-08-01)
+
+**Our side of the marketplace submission is complete.** The operator sent the Ankush email; per
+the agreed process Ant Media now arranges the developer meeting and hands over the qualification
+steps. `docs/operator-expected.md` item 5 lists what to capture from the reply, ordered so A1
+(listing shape) is asked first, because it determines everything downstream.
+
+**CodeQL: six alerts triaged, zero open.** Method mattered here — each alert got an
+exploit-builder, a false-positive advocate, and an independent judge required to verify the
+load-bearing claim of both. The judge **overruled a unanimous FALSE_POSITIVE verdict** on
+`meta.go:1649` and was right to: the "high-entropy machine secret" defence holds only for the hex
+path, and nothing forces an operator onto it. Shipped a startup warning rather than changing the
+derivation, because a KDF swap orphans every existing encrypted credential and no `pulse rekey`
+exists. Two alerts (#21/#22) were **self-inflicted** — inlining the ReDoc bundle to remove a CDN
+dependency made CodeQL scan vendor code — and are excluded by path, with scope discipline written
+into the config so that list cannot become a hiding place. Record:
+`docs/security/codeql-triage.md`.
+
+**`CodeQL` is now the 18th required context.** Sequenced deliberately: requiring it before the
+triage landed would have blocked the triage PR on the alerts it was triaging.
+
+**The ClickHouse startup-flake class is closed.** A 45s container-startup budget in a REQUIRED
+job had reddened a docs-only PR. Measured: a healthy cold start is 1.5s, so 45s was already 30×
+the observed time and still flaked — the tell that it was runner starvation, not a real limit.
+⚠ My first pass fixed ONE site; re-checking found **six across four files, two of them in the
+file I had just "fixed"**. Migration-execution timeouts were deliberately left alone — different
+concern, no evidence of flaking, and raising every 45s in the tree would be shotgunning.
+
+**Four gate gaps closed this session, all the same shape: a check that could not fail.** npm
+advisories ungated (Trivy never sees bundled JS), the licence `--check` never invoked, the
+shellcheck guard a stale hand-list, and `CodeQL` not required. The pattern is worth naming
+because it will recur: *a guard that has never been seen to fail is not known to work.*
+
+**Incidental live bug:** secret-key validation existed in four copy-pasted places and two lacked
+the `changeme` check, so a placeholder key `pulse serve` rejected was accepted by
+`pulse reconcile`. One implementation now, with tests.
+
+---
+
 ## D-190 — §S122: the brutal-review rehearsal, and what surviving it actually required
 
 **Mandate.** "Make your last preparation for the marketplace. There will be brutal reviews — make

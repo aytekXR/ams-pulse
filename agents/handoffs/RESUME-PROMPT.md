@@ -23,121 +23,115 @@
 > `agents/handoffs/sessions/SESSION-NNN.md` and `decisions.md` (operator directive).
 > **Replace this block each session — never append to it.**
 
-**Where the product is:** **v0.4.5 is the marketplace submission target, and the last technical
-blocker is gone.** `CLICKHOUSE_PASSWORD` was rotated on 2026-07-31 (S123) and verified the only
-way that counts: `git log -S` on the new value's 32-char prefix returns **0 commits across all
-refs**. The two commits carrying the old prefix now hold a dead password. **Submission is now an
-operator action, not an engineering one.**
+**Where the product is:** **Our side of the marketplace submission is DONE.** `v0.4.5` is the
+submission target, `CLICKHOUSE_PASSWORD` is rotated (`git log -S` on the live value returns **0
+commits across all refs**), and the outreach email to Ankush at Ant Media is **sent** (S123,
+2026-08-01). Per the agreed process they now arrange a developer meeting and hand over the
+qualification steps their dev team defined. **The next move is theirs, not ours.**
 
-**The rotation's real yield was the landmine it tripped, not the rotation.** Recreating the prod
-stack applied `0011_server_events_ingest_error.sql` *from the working tree* to the pinned
-v0.4.0-139 binary, took `server_events` 40 → 42 columns, and dropped ingest for five minutes
-(`expected 42 arguments, got 40`). Cause: **`pulse-migrate` bind-mounts `contracts/` from the host
-repo, so prod's schema follows the git checkout rather than the deployed image.** Any `up -d` on
-prod would have done this. Recovered to the *pre-rotation* state deliberately (dropped the two
-columns, cleared the ledger row) rather than rolling forward, because a version roll was not
-authorised. `rotate-clickhouse-password.sh` now refuses on a schema/binary mismatch, and the
-pre-flight check is in `deploy/runbooks/upgrade-rollback.md` §1. **Before ANY prod `up -d`, check
-pending migrations against the deployed commit.**
+**Nothing on the engineering side blocks the marketplace.** Everything left is waiting on
+something external or deliberately deferred — the list is at the bottom of this block. Do not
+invent work to fill the wait; re-verify the delta instead (see the standing lessons).
 
-**The documented prod command was stale and would have failed.** It named
+**⚠⚠ THE LIVE HAZARD, and it is the single most important thing on this page.** `pulse-migrate`
+**bind-mounts `contracts/` from the host working tree**, so prod's schema follows the git
+checkout rather than the deployed image. Prod is pinned to v0.4.0-139 (2026-07-23) while `main`
+has moved well past it, so **any `docker compose up -d` on prod applies migrations the deployed
+binary does not understand.** On 2026-07-31 a password rotation did exactly that: it applied
+`0011_server_events_ingest_error.sql`, took `server_events` 40 → 42 columns, and every insert
+failed (`expected 42 arguments, got 40`) for five minutes. Recovered by dropping the two columns
+and clearing the ledger row, deliberately back to the pre-rotation state rather than forward,
+because a version roll was not authorised. `deploy/scripts/rotate-clickhouse-password.sh` now
+refuses on this mismatch (`check_pending_migrations`); the manual pre-flight is in
+`deploy/runbooks/upgrade-rollback.md` §1. **Rolling prod forward closes it permanently and is the
+highest-value item on the debt list.**
+
+**The prod compose command in this file was stale and would have failed** — it named
 `deploy/docker-compose.prod-tls.yml`, deleted by PR #199 in the Caddy→nginx cutover. The live
-stack runs **three** files (`prod + real-ams + backup`). Fixed in §6/§7. The lesson generalises:
-**read the running stack's own `com.docker.compose.project.config_files` label rather than trusting
-a doc.**
+stack runs **three** files (`prod + real-ams + backup`). Fixed in §6/§7. Generalisation worth
+keeping: **ask the running stack (`com.docker.compose.project.config_files`), do not trust a doc
+about it.**
 
-**A nine-lens hostile marketplace audit (32 agents) plus my own sweep found 17 verified defects.**
-Two were customer-facing tier lies: the website sold **historical analytics (F2)** and **ingest
-health (F4)** inside the Free plan while both are `CheckDataAPI`-gated (Pro+) — a Free user
-following our own pricing page got `403 LICENSE_REQUIRED` on both. The operator ruled **code is
-right, F4 is Pro+**; all ten features now agree across code, `product.md`, `overview.md`,
-`licensing-public.md` and the site. **The audit's own all-clears were then attacked, and its
-loudest "BLOCKER — no cosign signatures exist" was REFUTED by running the documented command with
-a v3 client (digest `542fead1…`, exit 0). The attacker had fallen into the exact trap our docs warn
-about.** Audit the audit.
+**All CodeQL alerts are triaged and zero are open** (`docs/security/codeql-triage.md`). Three
+dismissed false-positive, one dismissed won't-fix **with a mitigation shipped**, two excluded as
+vendored ReDoc bundle code. The judge in that triage **overruled both analysts** on the one that
+mattered: they argued "high-entropy machine secret, the rule does not apply", which holds only
+for the hex path — `deriveKey` SHA-256s anything that is not exactly 64 hex chars, and
+`PULSE_SECRET_KEY=mysecretpassword1` clears the 16-byte floor. **A floor on length is not a floor
+on entropy.** The derivation was NOT changed: a KDF swap orphans every existing encrypted
+credential and no `pulse rekey` exists. A startup warning ships instead.
 
-**Three gate gaps were closing over real defects:**
-- **npm advisories were ungated entirely.** Trivy scans the image (OS packages + Go binary), so the
-  web UI's bundled npm deps were analysed by nothing. `react-router` 7.18.1 carried a HIGH
-  (GHSA-qwww-vcr4-c8h2) for weeks with every gate green. Migrated to 8.3.0 (the only patched
-  version) — `react-router-dom` is folded into `react-router` in v8, so it was a package swap plus
-  four imports. New `npm-audit` job, now a **required context (17)**.
-- **`THIRD-PARTY-LICENSES.md` had a `--check` mode nothing ever ran.** It was silently stale. Now a
-  hard gate.
-- **The shellcheck guard was a hand-list of 6 paths** that had already drifted once. Three more were
-  uncovered, one of which **ships to customers inside the Helm chart**. Now discovers every tracked
-  `*.sh` under `deploy/ scripts/ .github/ website/` (9 → 10 files) with exclusions written inside
-  the guard. ⚠ My first attempt used `scripts/**/*.sh`, which git pathspec requires an intervening
-  directory for — it silently covered LESS than the list it replaced. Caught only by testing the
-  guard; it now asserts a discovery floor and runs a negative test.
+**Four gate gaps were closed this session, and all four were the same shape: a check that could
+not fail.**
+- **npm advisories were ungated entirely** — Trivy scans the image (OS packages + Go binary) and
+  never sees bundled JS, so a HIGH in `react-router` sat green for weeks. New `npm-audit` job.
+- **`THIRD-PARTY-LICENSES.md --check` was never run by anything** — silently stale.
+- **The shellcheck guard was a 6-path hand-list** that had already drifted; three more scripts
+  were uncovered, one shipping to customers inside the Helm chart. Now discovery-based.
+- **`CodeQL` was not a required context** — only `Analyze (…)`, which reports that the scan RAN,
+  not what it FOUND. That is why four HIGH alerts sat open for three weeks behind green CI.
+Required contexts are now **18** and the live setting matches the script (verified via the API).
 
-**A test that mirrors production logic instead of importing it is not a test.**
-`TierGate.test.ts` defined its own copies of the gate predicates, so when anomalies moved to
-Business+ it kept passing while asserting `isAnomaliesGated("business") === true`. Rules now live
-in `web/src/lib/entitlements.ts` (each mapped to its server `Check*`), the test imports them, and
-planting the historical drift now fails. `ProbesPage` also gated on `tier !== "free"` — negative
-membership, so an unknown tier was *granted* access; the server abandoned that shape in D-133.
+**Two defects were "wrong in two places at once", which is why nothing caught them.** The website
+sold historical analytics (F2) and ingest health (F4) inside the **Free** plan while both are
+`CheckDataAPI`-gated — a Free user following our own pricing page got `403 LICENSE_REQUIRED`.
+F2 was website-vs-docs; **F4 was wrong in the docs AND the website simultaneously**, so the
+cross-check compared two copies of the same error. Operator ruled the code is right. All ten
+features now agree across code, `product.md`, `overview.md`, `licensing-public.md` and the site.
 
-**The contract lied to integrators.** `pulse-api.yaml` still described the pre-D-166/pre-S122
-matrix: Pro 1–2 nodes (really 10), Business ≤5 (really 50), Business anomalies "no" (really yes),
-`/anomalies` 403 as "Enterprise required". It generates `docs/api/index.html`, the reference a
-reviewer opens — which also loaded ReDoc from a CDN **and Google Fonts**, despite being advertised
-as self-contained and despite the repo's no-CDN rule. Now built by `scripts/build-api-docs.sh`,
-inlined against redocly's own SRI hash. ⚠ A static tag-grep passed while the browser still fetched
-`cdn.redoc.ly` — the bundle injects its logo at runtime from a string in minified JS. **Only
-loading the page with `--network none` found it.**
+**A test that mirrors production logic cannot test production.** `TierGate.test.ts` kept its own
+copies of the gate predicates and passed while asserting the opposite of shipped behaviour. Rules
+now live in `web/src/lib/entitlements.ts`, each mapped to its server `Check*`; planting the
+historical drift now fails.
 
-**Undisclosed behaviour is now LIM-29:** historical queries are **silently** capped to the tier's
-retention window — a Free request for 30 days returns 7, HTTP 200, no warning field, indistinguishable
-from a complete answer.
-
-**⚠ Four open HIGH CodeQL alerts have been public since 2026-07-09/10 with every gate green.**
-None is from S123. They survived because the required contexts are `Analyze (go)` /
-`Analyze (javascript-typescript)`, which report that the scan RAN, not what it FOUND — the
-aggregate `CodeQL` check-run that reports alerts is not required. Same class as the three gate
-gaps closed this session. Two are `go/weak-sensitive-data-hashing` on SHA-256 key derivation from
-`PULSE_SECRET_KEY` (`meta.go:1649`, `oidc.go:124`) — ⚠ **`meta.go` must NOT be switched to a KDF
-without a migration; it derives the AES key for stored AMS credentials and changing it orphans
-every existing ciphertext.** Two are `js/insecure-randomness` on `Math.random()` beacon session
-IDs. Triage them, then add `CodeQL` to the required contexts (not added yet because it would have
-blocked the S123 PR on pre-existing alerts). Detail: `docs/operator-expected.md` item 13.
-
-**Two independent tracks remain:**
-- **Marketplace** — **unblocked.** Submit `v0.4.5`. Queue: `docs/operator-expected.md` §B.
-- **iOS TestFlight** — blocked by **Apple Developer Program enrolment** only. §A is the eight-step path.
+**Two independent tracks:**
+- **Marketplace** — our side complete; awaiting Ant Media's reply. Queue:
+  `docs/operator-expected.md` §B (item 5 lists what to capture).
+- **iOS TestFlight** — blocked by **Apple Developer Program enrolment** only. §A is the path.
 
 **Standing lessons that keep paying (condensed — session narration lives in `sessions/`):**
 
-- **Test the artifact, not the documentation, and run it the way CI will.** Re-earned twice this
-  session: the API reference passed a static CDN grep and still hit the network; and extracting a CI
-  guard with `set -euo pipefail` made it fail where CI's `bash -e` passes. **Run the guard the way
-  CI runs it.**
-- **Audit the exculpations, not just the findings.** Five rounds running. This time the audit's own
-  BLOCKER was the false one.
-- **A fix that does not change the artifact has not been verified.** Prove a guard in BOTH
-  directions — plant the defect, watch it fail.
+- **Run the guard the way CI runs it — same shell flags AND same argument passing.** Re-earned
+  twice: extracting a guard under `set -euo pipefail` failed where CI's `bash -e` passes, and
+  passing `check-doc-stamps.sh` its base ref as an ENV var silently skipped check B and reported
+  PASS, because the script reads it positionally.
+- **Fix the class, not the instance — then check you actually did.** The shellcheck guard, the
+  startup-flake budget (6 sites across 4 files, and my first pass fixed ONE), and the four
+  copy-pasted secret-key validators were all the same failure. Grep for siblings before claiming
+  a fix.
+- **Test the artifact, not the source.** The API reference passed a static CDN grep while the
+  browser still fetched `cdn.redoc.ly` — the bundle injects its logo at runtime from a string in
+  minified JS. Only loading it with `--network none` found it.
+- **Audit the exculpations.** Five rounds running. This session the hostile audit's loudest
+  finding — "BLOCKER: no cosign signatures exist" — was itself **refuted** by running the
+  documented command with a v3 client. Its author fell into the trap our docs warn about.
+- **A fix that does not change the artifact has not been verified.** Prove a guard BOTH ways —
+  plant the defect, watch it fail.
 - **Before filing a defect against code, confirm the artifact you tested was built from it.**
-  `pulse version` + `git merge-base --is-ancestor` is the whole procedure.
-- **⚠ Concurrent-session hazard is real.** If HEAD moves or the tree dirties with work you did not
-  do, STOP and inspect. Quarantine, never delete.
-- **A subagent lane's self-report is not a gate.** Read every diff yourself; ORCH commits centrally.
+- **⚠ Concurrent-session hazard is real.** If HEAD moves or the tree dirties with work you did
+  not do, STOP and inspect. Quarantine, never delete.
 
-**Open engineering debt (loop-owned, non-blocking):** roll prod forward (would permanently close
-the migration/binary gap) · the app's `KeychainService` duplicates PulseKit's `TokenStore` ·
-cluster node-alerting rework (LIM-10, waits on a real cluster) · surface `stream_ingest_error`
-(LIM-27) · thread the owning node through per-app polling (LIM-28) · the ClickHouse integration
-harness's 45 s startup budget is too tight for a slow runner (flaky in a required context) ·
-release: switch the candidate push to buildx `push-by-digest=true` (round 6 H-09) · probe whether
-`ams-webrtc-stats` can restore per-stream FPS (LIM-04 rests on a LIM-01-style inference) ·
-self-host the IBM Plex OFL woff2 files for `website/` and the iOS app (the **web UI already
-self-hosts them**).
+**Open engineering debt — NOTHING here blocks the marketplace:**
+- **Roll prod forward** — closes the migrate/binary hazard above permanently. Highest value.
+- **`pulse rekey`** — prerequisite for properly closing CodeQL #6 (Argon2id behind a versioned
+  blob format, with migration). ADR-0004 defers it.
+- Waiting on external things: cluster node-alerting rework (LIM-10, needs a real 2-node cluster) ·
+  capacity number + AV-15 live Kafka validation (needs a PAYG AMS) · TestFlight (needs Apple).
+- Deliberately deferred: release candidate push via buildx `push-by-digest=true` (round 6 H-09) —
+  changes the publish mechanism and cannot be exercised by the dry-run path, only a real tag.
+- Smaller: the iOS app's `KeychainService` duplicates PulseKit's `TokenStore` · surface
+  `stream_ingest_error` (LIM-27) · thread the owning node through per-app polling (LIM-28) ·
+  probe whether `ams-webrtc-stats` can restore per-stream FPS (LIM-04 rests on a LIM-01-style
+  inference) · self-host the IBM Plex OFL woff2 files for `website/` and the iOS app (the **web
+  UI already self-hosts them**) · optional: a `crypto.getRandomValues` middle tier in the beacon
+  SDK (better than the `Math.random` fallback in HTTP contexts; would not close any alert).
 
 **Do first, every session:**
-1. **Gate reads** — prod health (component-scoped `/healthz`, plus a ClickHouse count AND a second
-   sample to prove it is *moving*), git/PR drift, concurrent-session check.
-2. **Check whether the Apple account exists yet** (`gh secret list` for the three
-   `APP_STORE_CONNECT_*` secrets).
-3. **If a TestFlight public link arrives**, do the `/beta/` swap and redeploy.
+1. **Gate reads** — prod health (component-scoped `/healthz`, plus a ClickHouse count sampled
+   TWICE to prove it is *moving*, not merely non-zero), git/PR drift, concurrent-session check.
+2. **Has Ant Media replied?** If so, capture the answers per `docs/operator-expected.md` item 5.
+3. **Check whether the Apple account exists yet** (`gh secret list` for `APP_STORE_CONNECT_*`).
+4. **If a TestFlight public link arrives**, do the `/beta/` swap and redeploy.
 
 **Operator queue:** `docs/operator-expected.md`. **How we got here** (read only if you need it):
 `decisions.md` · `agents/handoffs/sessions/` · `docs/assessment/`.
@@ -154,7 +148,8 @@ self-hosts them**).
   stamped **v0.4.0-139** build — rolling prod forward is deliberate and operator-gated, never
   automatic. Health at last check (S123, 2026-07-31, AFTER the rotation and its 5-minute ingest
   outage): all three `/healthz` components `ok`, **1,400,267** server events, newest 5 s old,
-  0 ERROR lines in the preceding 90 s, row count verified *increasing* across two samples.
+  0 ERROR lines in the preceding 30 min, row count verified *increasing* across two samples
+  (re-read S123 close, 2026-08-01: **1,417,734** events, newest 4 s old).
   ⚠ Prod's schema is now one migration BEHIND the tree on purpose (0011 reverted) so the pinned
   binary keeps working — see §7.
 - **The iOS app exists and is CI-verified** (D-186). `ios/PulseKit` — Foundation-only, **296 tests
@@ -169,7 +164,7 @@ self-hosts them**).
   check, not by intent). GitHub Pages is **enabled** (`build_type: workflow`) and publishes to
   `https://aytekxr.github.io/ams-pulse/` on merge to `main`.
 - **`main` is protected** (strict, 1 review, `enforce_admins=false` so owner pushes work; **16**
-  required contexts — D-185 added `shellcheck` and `doc-stamps`, D-186 added `ios-kit`; D-191 added `npm-audit`. A guard job
+  required contexts — D-185 added `shellcheck` and `doc-stamps`, D-186 added `ios-kit`; D-191 added `npm-audit` and `CodeQL`. A guard job
   that is not in that list cannot block a merge. `ios-app` is deliberately excluded: it depends on
   a third-party runner image and Homebrew, the same argument that excludes `compose-boot`. What
   that leaves uncovered is that a SwiftUI regression can merge on a red `ios-app` if ignored).
