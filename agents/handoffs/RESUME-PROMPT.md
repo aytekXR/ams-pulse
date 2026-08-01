@@ -163,7 +163,7 @@ historical drift now fails.
   `/terms/`, built from the brandkit against `tokens.json`, zero external requests (enforced by a
   check, not by intent). GitHub Pages is **enabled** (`build_type: workflow`) and publishes to
   `https://aytekxr.github.io/ams-pulse/` on merge to `main`.
-- **`main` is protected** (strict, 1 review, `enforce_admins=false` so owner pushes work; **16**
+- **`main` is protected** (strict, 1 review, `enforce_admins=false` so owner pushes work; **18**
   required contexts — D-185 added `shellcheck` and `doc-stamps`, D-186 added `ios-kit`; D-191 added `npm-audit` and `CodeQL`. A guard job
   that is not in that list cannot block a merge. `ios-app` is deliberately excluded: it depends on
   a third-party runner image and Homebrew, the same argument that excludes `compose-boot`. What
@@ -172,8 +172,9 @@ historical drift now fails.
   script's 14 plus the two CodeQL `Analyze (…)` jobs. The earlier warning that the script still
   needed re-running was stale.
   Work on a branch → PR → merge on green.
-- **Known limitations are disclosed, not hidden:** `docs/known-limitations.md` carries 28
-  entries. **LIM-01 was closed in D-179** (standalone CPU/mem/disk now work without Kafka) and
+- **Known limitations are disclosed, not hidden:** `docs/known-limitations.md` carries 29
+  entries (LIM-29, added S123: historical queries are silently capped to the tier's retention
+  window — a Free request for 30 days returns 7, HTTP 200, no warning field). **LIM-01 was closed in D-179** (standalone CPU/mem/disk now work without Kafka) and
   rewritten down to a memory-threshold calibration note rather than deleted. LIM-10 (cluster) is
   the significant remaining one — AMS 3.x exposes no node role or version, so
   all nodes display as `origin`, edge/origin viewer dedup is inert, and node alerting during an
