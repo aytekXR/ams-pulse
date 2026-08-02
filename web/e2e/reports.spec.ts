@@ -214,8 +214,8 @@ test.describe("Reports", () => {
 
     await page.goto("/reports");
     await page.getByRole("tab", { name: "Tenants" }).click();
-    await expect(page.getByRole("button", { name: "+ New tenant" })).toBeVisible();
-    await page.getByRole("button", { name: "+ New tenant" }).click();
+    await expect(page.getByRole("button", { name: "New tenant" })).toBeVisible();
+    await page.getByRole("button", { name: "New tenant" }).click();
     await expect(page.getByTestId("tenant-form")).toBeVisible();
 
     await page.getByLabel("Tenant name").fill("Test Tenant");

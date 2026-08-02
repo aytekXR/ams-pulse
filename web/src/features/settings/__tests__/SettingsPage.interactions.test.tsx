@@ -89,7 +89,7 @@ describe("SettingsPage — ingest tokens", () => {
     });
     await gotoTab(/ingest tokens/i);
     vi.spyOn(window, "prompt").mockReturnValueOnce("player-prod");
-    fireEvent.click(screen.getByRole("button", { name: /\+ new ingest token/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^new ingest token$/i }));
 
     // Raw token shows in both the panel and the SDK snippet.
     await waitFor(() => {
@@ -119,7 +119,7 @@ describe("SettingsPage — ingest tokens", () => {
     });
     await gotoTab(/ingest tokens/i);
     vi.spyOn(window, "prompt").mockReturnValueOnce("p");
-    fireEvent.click(screen.getByRole("button", { name: /\+ new ingest token/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^new ingest token$/i }));
     await waitFor(() => expect(screen.getByText(/Pulse\.init/)).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: /^copy$/i }));
@@ -131,7 +131,7 @@ describe("SettingsPage — ingest tokens", () => {
   it("cancelling the name prompt creates nothing", async () => {
     await gotoTab(/ingest tokens/i);
     vi.spyOn(window, "prompt").mockReturnValueOnce(null);
-    fireEvent.click(screen.getByRole("button", { name: /\+ new ingest token/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^new ingest token$/i }));
     expect(h.createToken).not.toHaveBeenCalled();
   });
 
@@ -198,7 +198,7 @@ describe("SettingsPage — sources & API tokens", () => {
   it("Add source button shows the onboarding hint toast", async () => {
     render(<SettingsPage />);
     await waitFor(() => expect(h.getSources).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("button", { name: /\+ add source/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^add source$/i }));
     expect(h.toast).toHaveBeenCalledWith("Use the onboarding wizard to add sources", "info");
   });
 
@@ -233,7 +233,7 @@ describe("SettingsPage — sources & API tokens", () => {
     await gotoTab(/api tokens/i);
     vi.spyOn(window, "prompt").mockReturnValueOnce("ci");
     vi.spyOn(window, "confirm").mockReturnValueOnce(false); // read-only scope
-    fireEvent.click(screen.getByRole("button", { name: /\+ new token/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^new token$/i }));
 
     await waitFor(() => expect(screen.getByText("api_raw_ABC")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /^copy$/i }));
@@ -243,7 +243,7 @@ describe("SettingsPage — sources & API tokens", () => {
   it("cancelling the API-token name prompt creates nothing", async () => {
     await gotoTab(/api tokens/i);
     vi.spyOn(window, "prompt").mockReturnValueOnce(null);
-    fireEvent.click(screen.getByRole("button", { name: /\+ new token/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^new token$/i }));
     expect(h.createToken).not.toHaveBeenCalled();
   });
 });

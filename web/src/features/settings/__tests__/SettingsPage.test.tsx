@@ -105,7 +105,7 @@ describe("SettingsPage rendering", () => {
   it("(c) Sources tab — Add source button is present", async () => {
     render(<SettingsPage />);
     await waitFor(() => { expect(screen.queryByText(/loading/i)).not.toBeInTheDocument(); });
-    expect(screen.getByRole("button", { name: /\+ add source/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^add source$/i })).toBeInTheDocument();
   });
 
   it("(d) Tokens tab — empty state shown when navigating to tokens tab", async () => {
@@ -250,7 +250,7 @@ describe("SettingsPage — API token creation persistent panel", () => {
 
     fireEvent.click(await screen.findByRole("tab", { name: /api tokens/i }));
     vi.spyOn(window, "prompt").mockReturnValueOnce("test-api-token");
-    fireEvent.click(screen.getByRole("button", { name: /\+ new token/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^new token$/i }));
 
     await waitFor(() => {
       expect(screen.getByText(FAKE_TOKEN)).toBeInTheDocument();
@@ -263,7 +263,7 @@ describe("SettingsPage — API token creation persistent panel", () => {
 
     fireEvent.click(await screen.findByRole("tab", { name: /api tokens/i }));
     vi.spyOn(window, "prompt").mockReturnValueOnce("test-api-token");
-    fireEvent.click(screen.getByRole("button", { name: /\+ new token/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^new token$/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/won't be shown again/i)).toBeInTheDocument();
@@ -276,7 +276,7 @@ describe("SettingsPage — API token creation persistent panel", () => {
 
     fireEvent.click(await screen.findByRole("tab", { name: /api tokens/i }));
     vi.spyOn(window, "prompt").mockReturnValueOnce("test-api-token");
-    fireEvent.click(screen.getByRole("button", { name: /\+ new token/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^new token$/i }));
 
     await waitFor(() => {
       expect(screen.getByText(FAKE_TOKEN)).toBeInTheDocument();
@@ -300,7 +300,7 @@ describe("SettingsPage — API token creation persistent panel", () => {
     // settle. The runAllTimersAsync above has already flushed the render this reads.
     fireEvent.click(screen.getByRole("tab", { name: /api tokens/i }));
     vi.spyOn(window, "prompt").mockReturnValueOnce("test-api-token");
-    fireEvent.click(screen.getByRole("button", { name: /\+ new token/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^new token$/i }));
 
     // Flush the createToken promise and the resulting setState
     await act(async () => { await vi.runAllTimersAsync(); });
@@ -321,7 +321,7 @@ describe("SettingsPage — API token creation persistent panel", () => {
 
     fireEvent.click(await screen.findByRole("tab", { name: /api tokens/i }));
     vi.spyOn(window, "prompt").mockReturnValueOnce("test-api-token");
-    fireEvent.click(screen.getByRole("button", { name: /\+ new token/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^new token$/i }));
 
     await waitFor(() => {
       expect(screen.getByText(FAKE_TOKEN)).toBeInTheDocument();
@@ -345,7 +345,7 @@ describe("SettingsPage — API token creation persistent panel", () => {
 
     vi.spyOn(window, "prompt").mockReturnValueOnce("ci-reader");
     vi.spyOn(window, "confirm").mockReturnValueOnce(false);
-    fireEvent.click(screen.getByRole("button", { name: /\+ new token/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^new token$/i }));
 
     await waitFor(() => expect(mockCreateToken).toHaveBeenCalled());
     expect(mockCreateToken).toHaveBeenCalledWith(
@@ -360,7 +360,7 @@ describe("SettingsPage — API token creation persistent panel", () => {
 
     vi.spyOn(window, "prompt").mockReturnValueOnce("ops-admin");
     vi.spyOn(window, "confirm").mockReturnValueOnce(true);
-    fireEvent.click(screen.getByRole("button", { name: /\+ new token/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^new token$/i }));
 
     await waitFor(() => expect(mockCreateToken).toHaveBeenCalled());
     expect(mockCreateToken).toHaveBeenCalledWith(

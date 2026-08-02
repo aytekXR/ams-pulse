@@ -16,6 +16,7 @@ import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/Badge";
+import { StatCard } from "@/features/live/StatCard";
 import { useToast } from "@/components/Toast";
 import { TierGate } from "@/components/TierGate";
 import { canUseReports } from "@/lib/entitlements";
@@ -84,14 +85,15 @@ function ScheduleForm({ initial, onSave, onCancel }: ScheduleFormProps) {
     }
   };
 
+  // s111 D4-pattern: outline:"none" removed — inputs carry
+  // className="filter-input" so the shared :focus-visible ring applies.
   const inputStyle: React.CSSProperties = {
     background: "var(--color-surface-2)",
     border: "1px solid var(--color-border)",
-    borderRadius: 6,
+    borderRadius: "var(--radius-control)",
     padding: "7px 10px",
     color: "var(--color-text)",
     fontSize: 13,
-    outline: "none",
     width: "100%",
     boxSizing: "border-box",
   };
@@ -106,11 +108,11 @@ function ScheduleForm({ initial, onSave, onCancel }: ScheduleFormProps) {
   };
 
   return (
-    <form onSubmit={(e) => void handleSubmit(e)} style={{
+    <form onSubmit={(e) => void handleSubmit(e)} className="panel-enter" style={{
       background: "var(--color-surface)",
       border: "1px solid var(--color-border)",
-      borderRadius: 8,
-      padding: 20,
+      borderRadius: "var(--radius-card)",
+      padding: "var(--space-5)",
       display: "flex",
       flexDirection: "column",
       gap: 14,
@@ -130,7 +132,7 @@ function ScheduleForm({ initial, onSave, onCancel }: ScheduleFormProps) {
             setCronPreset(e.target.value);
             if (e.target.value !== "custom") setCronRaw(e.target.value);
           }}
-          style={inputStyle}
+          className="filter-input" style={inputStyle}
         >
           {CRON_PRESETS.map((p) => (
             <option key={p.value} value={p.value}>{p.label}</option>
@@ -147,7 +149,7 @@ function ScheduleForm({ initial, onSave, onCancel }: ScheduleFormProps) {
             value={cronRaw}
             onChange={(e) => setCronRaw(e.target.value)}
             placeholder="0 6 1 * *"
-            style={inputStyle}
+            className="filter-input" style={inputStyle}
           />
         </label>
       )}
@@ -155,7 +157,7 @@ function ScheduleForm({ initial, onSave, onCancel }: ScheduleFormProps) {
       {/* Format */}
       <label style={labelStyle}>
         Format
-        <select value={format} onChange={(e) => setFormat(e.target.value as "csv" | "pdf")} style={inputStyle}>
+        <select value={format} onChange={(e) => setFormat(e.target.value as "csv" | "pdf")} className="filter-input" style={inputStyle}>
           <option value="csv">CSV</option>
           <option value="pdf">PDF</option>
         </select>
@@ -170,7 +172,7 @@ function ScheduleForm({ initial, onSave, onCancel }: ScheduleFormProps) {
             value={appScope}
             onChange={(e) => setAppScope(e.target.value)}
             placeholder="e.g. live"
-            style={inputStyle}
+            className="filter-input" style={inputStyle}
           />
         </label>
         <label style={labelStyle}>
@@ -180,7 +182,7 @@ function ScheduleForm({ initial, onSave, onCancel }: ScheduleFormProps) {
             value={tenantScope}
             onChange={(e) => setTenantScope(e.target.value)}
             placeholder="e.g. acme-corp"
-            style={inputStyle}
+            className="filter-input" style={inputStyle}
           />
         </label>
       </div>
@@ -189,12 +191,11 @@ function ScheduleForm({ initial, onSave, onCancel }: ScheduleFormProps) {
         <button
           type="button"
           onClick={onCancel}
+          className="btn-secondary"
           style={{
             background: "none",
-            border: "1px solid var(--color-border)",
-            color: "var(--color-secondary)",
-            borderRadius: 6,
-            padding: "7px 14px",
+            borderRadius: "var(--radius-control)",
+            padding: "var(--space-2) var(--space-4)",
             cursor: "pointer",
             fontSize: 13,
           }}
@@ -204,16 +205,14 @@ function ScheduleForm({ initial, onSave, onCancel }: ScheduleFormProps) {
         <button
           type="submit"
           disabled={saving}
+          className="btn-primary"
           style={{
-            background: "var(--color-accent)",
             border: "none",
             color: "var(--color-on-signal)",
-            borderRadius: 6,
-            padding: "7px 14px",
-            cursor: "pointer",
+            borderRadius: "var(--radius-control)",
+            padding: "var(--space-2) var(--space-4)",
             fontSize: 13,
             fontWeight: 600,
-            opacity: saving ? 0.7 : 1,
           }}
         >
           {saving ? "Saving…" : "Save schedule"}
@@ -239,14 +238,15 @@ function TenantForm({ initial, onSave, onCancel }: TenantFormProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // s111 D4-pattern: outline:"none" removed — inputs carry
+  // className="filter-input" so the shared :focus-visible ring applies.
   const inputStyle: React.CSSProperties = {
     background: "var(--color-surface-2)",
     border: "1px solid var(--color-border)",
-    borderRadius: 6,
+    borderRadius: "var(--radius-control)",
     padding: "7px 10px",
     color: "var(--color-text)",
     fontSize: 13,
-    outline: "none",
     width: "100%",
     boxSizing: "border-box",
   };
@@ -291,11 +291,12 @@ function TenantForm({ initial, onSave, onCancel }: TenantFormProps) {
     <form
       onSubmit={(e) => void handleSubmit(e)}
       data-testid="tenant-form"
+      className="panel-enter"
       style={{
         background: "var(--color-surface)",
         border: "1px solid var(--color-border)",
-        borderRadius: 8,
-        padding: 20,
+        borderRadius: "var(--radius-card)",
+        padding: "var(--space-5)",
         display: "flex",
         flexDirection: "column",
         gap: 14,
@@ -315,14 +316,14 @@ function TenantForm({ initial, onSave, onCancel }: TenantFormProps) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Acme Corp"
-          style={inputStyle}
+          className="filter-input" style={inputStyle}
           aria-label="Tenant name"
         />
       </label>
 
       <div style={{
         background: "var(--color-surface-2)",
-        borderRadius: 6,
+        borderRadius: "var(--radius-control)",
         padding: "var(--space-2) var(--space-3)",
         fontSize: 12,
         color: "var(--color-secondary)",
@@ -338,7 +339,7 @@ function TenantForm({ initial, onSave, onCancel }: TenantFormProps) {
           value={streamPattern}
           onChange={(e) => setStreamPattern(e.target.value)}
           placeholder="e.g. live/acme-% or ^live/acme"
-          style={inputStyle}
+          className="filter-input" style={inputStyle}
           aria-label="Stream pattern"
         />
       </label>
@@ -352,7 +353,7 @@ function TenantForm({ initial, onSave, onCancel }: TenantFormProps) {
             value={metaTagKey}
             onChange={(e) => setMetaTagKey(e.target.value)}
             placeholder="e.g. tenant_id"
-            style={inputStyle}
+            className="filter-input" style={inputStyle}
             aria-label="Meta tag key"
           />
         </label>
@@ -363,7 +364,7 @@ function TenantForm({ initial, onSave, onCancel }: TenantFormProps) {
             value={metaTagValue}
             onChange={(e) => setMetaTagValue(e.target.value)}
             placeholder="e.g. acme"
-            style={inputStyle}
+            className="filter-input" style={inputStyle}
             aria-label="Meta tag value"
           />
         </label>
@@ -373,12 +374,11 @@ function TenantForm({ initial, onSave, onCancel }: TenantFormProps) {
         <button
           type="button"
           onClick={onCancel}
+          className="btn-secondary"
           style={{
             background: "none",
-            border: "1px solid var(--color-border)",
-            color: "var(--color-secondary)",
-            borderRadius: 6,
-            padding: "7px 14px",
+            borderRadius: "var(--radius-control)",
+            padding: "var(--space-2) var(--space-4)",
             cursor: "pointer",
             fontSize: 13,
           }}
@@ -388,16 +388,14 @@ function TenantForm({ initial, onSave, onCancel }: TenantFormProps) {
         <button
           type="submit"
           disabled={saving}
+          className="btn-primary"
           style={{
-            background: "var(--color-accent)",
             border: "none",
             color: "var(--color-on-signal)",
-            borderRadius: 6,
-            padding: "7px 14px",
-            cursor: "pointer",
+            borderRadius: "var(--radius-control)",
+            padding: "var(--space-2) var(--space-4)",
             fontSize: 13,
             fontWeight: 600,
-            opacity: saving ? 0.7 : 1,
           }}
         >
           {saving ? "Saving…" : "Save tenant"}
@@ -420,11 +418,12 @@ function DeleteConfirm({ tenant, onConfirm, onCancel, deleting }: DeleteConfirmP
   return (
     <div
       data-testid="delete-confirm"
+      className="panel-enter"
       style={{
         background: "var(--color-surface)",
         border: "1px solid var(--color-border)",
-        borderRadius: 8,
-        padding: 20,
+        borderRadius: "var(--radius-card)",
+        padding: "var(--space-5)",
         display: "flex",
         flexDirection: "column",
         gap: 14,
@@ -441,12 +440,11 @@ function DeleteConfirm({ tenant, onConfirm, onCancel, deleting }: DeleteConfirmP
         <button
           type="button"
           onClick={onCancel}
+          className="btn-secondary"
           style={{
             background: "none",
-            border: "1px solid var(--color-border)",
-            color: "var(--color-secondary)",
-            borderRadius: 6,
-            padding: "7px 14px",
+            borderRadius: "var(--radius-control)",
+            padding: "var(--space-2) var(--space-4)",
             cursor: "pointer",
             fontSize: 13,
           }}
@@ -457,16 +455,15 @@ function DeleteConfirm({ tenant, onConfirm, onCancel, deleting }: DeleteConfirmP
           type="button"
           onClick={onConfirm}
           disabled={deleting}
+          className="btn-press"
           style={{
             background: "var(--color-error-bg)",
             border: "1px solid rgba(255,92,104,0.4)",
             color: "var(--color-error)",
-            borderRadius: 6,
-            padding: "7px 14px",
-            cursor: "pointer",
+            borderRadius: "var(--radius-control)",
+            padding: "var(--space-2) var(--space-4)",
             fontSize: 13,
             fontWeight: 600,
-            opacity: deleting ? 0.7 : 1,
           }}
         >
           {deleting ? "Deleting…" : "Delete"}
@@ -543,20 +540,21 @@ function TenantsTab({ onToast }: TenantsTabProps) {
         <div style={{ fontSize: 13, color: "var(--color-secondary)" }}>
           Tenants match streams by pattern or beacon meta tag for billing reconciliation.
         </div>
+        {/* s111 D20: '+' glyph dropped — the label carries the meaning alone. */}
         <button
           onClick={() => { setShowForm(true); setEditTenant(null); }}
+          className="btn-primary"
           style={{
-            background: "var(--color-accent)",
             border: "none",
             color: "var(--color-on-signal)",
-            borderRadius: 6,
-            padding: "7px 14px",
+            borderRadius: "var(--radius-control)",
+            padding: "var(--space-2) var(--space-4)",
             cursor: "pointer",
             fontSize: 12,
             fontWeight: 600,
           }}
         >
-          + New tenant
+          New tenant
         </button>
       </div>
 
@@ -601,7 +599,7 @@ function TenantsTab({ onToast }: TenantsTabProps) {
                   style={{
                     background: "var(--color-surface)",
                     border: "1px solid var(--color-border)",
-                    borderRadius: 8,
+                    borderRadius: "var(--radius-card)",
                     padding: "14px 16px",
                     display: "flex",
                     alignItems: "flex-start",
@@ -617,7 +615,7 @@ function TenantsTab({ onToast }: TenantsTabProps) {
                         <span style={{
                           background: "var(--color-surface-2)",
                           border: "1px solid var(--color-border)",
-                          borderRadius: 4,
+                          borderRadius: "var(--radius-pill)",
                           padding: "2px 8px",
                           fontSize: 11,
                           fontFamily: "var(--font-mono)",
@@ -630,7 +628,7 @@ function TenantsTab({ onToast }: TenantsTabProps) {
                         <span style={{
                           background: "var(--color-surface-2)",
                           border: "1px solid var(--color-border)",
-                          borderRadius: 4,
+                          borderRadius: "var(--radius-pill)",
                           padding: "2px 8px",
                           fontSize: 11,
                           fontFamily: "var(--font-mono)",
@@ -648,12 +646,12 @@ function TenantsTab({ onToast }: TenantsTabProps) {
                     <button
                       onClick={() => { setEditTenant(tenant); setShowForm(false); }}
                       aria-label={`Edit ${tenant.name}`}
+                      className="btn-secondary"
                       style={{
                         background: "none",
-                        border: "1px solid var(--color-border)",
-                        color: "var(--color-secondary)",
-                        borderRadius: 4,
-                        padding: "3px 8px",
+                        borderRadius: "var(--radius-control)",
+                        padding: "6px 10px",
+                        minHeight: 28,
                         cursor: "pointer",
                         fontSize: 11,
                       }}
@@ -663,12 +661,14 @@ function TenantsTab({ onToast }: TenantsTabProps) {
                     <button
                       onClick={() => setDeleteTenant(tenant)}
                       aria-label={`Delete ${tenant.name}`}
+                      className="btn-press"
                       style={{
                         background: "none",
                         border: "1px solid var(--color-error)",
                         color: "var(--color-error)",
-                        borderRadius: 4,
-                        padding: "3px 8px",
+                        borderRadius: "var(--radius-control)",
+                        padding: "6px 10px",
+                        minHeight: 28,
                         cursor: "pointer",
                         fontSize: 11,
                       }}
@@ -775,9 +775,9 @@ export function ReportsPage() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)" }}>
-        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Reports</h1>
+        <h1 className="page-title">Reports</h1>
         {license && (
           <Badge
             label={license.tier}
@@ -827,12 +827,12 @@ export function ReportsPage() {
                 <div style={{ display: "flex", gap: "var(--space-2)" }}>
                   <button
                     onClick={downloadCsv}
+                    className="btn-secondary"
                     style={{
                       background: "var(--color-surface-2)",
-                      border: "1px solid var(--color-border)",
-                      color: "var(--color-secondary)",
-                      borderRadius: 6,
+                      borderRadius: "var(--radius-control)",
                       padding: "6px 12px",
+                      minHeight: 28,
                       cursor: "pointer",
                       fontSize: 12,
                     }}
@@ -851,8 +851,8 @@ export function ReportsPage() {
                   {/* Egress method notice */}
                   <div style={{
                     background: "var(--color-surface-2)",
-                    borderRadius: 6,
-                    padding: "8px 14px",
+                    borderRadius: "var(--radius-control)",
+                    padding: "var(--space-2) var(--space-4)",
                     fontSize: 12,
                     color: "var(--color-secondary)",
                   }}>
@@ -860,6 +860,8 @@ export function ReportsPage() {
                   </div>
 
                   {/* Totals */}
+                  {/* s111 D9: shared <StatCard size="compact"> — same totals-row
+                      concept as Analytics; kills the fourth ad-hoc metric size (22). */}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "var(--space-3)" }}>
                     {[
                       { label: "Viewer-Minutes", value: usage.totals.viewer_minutes.toFixed(0) },
@@ -867,15 +869,7 @@ export function ReportsPage() {
                       { label: "Egress GB", value: usage.totals.egress_gb.toFixed(2) },
                       { label: "Recording GB", value: usage.totals.recording_gb.toFixed(2) },
                     ].map(({ label, value }) => (
-                      <div key={label} style={{
-                        background: "var(--color-surface)",
-                        border: "1px solid var(--color-border)",
-                        borderRadius: 8,
-                        padding: "14px 16px",
-                      }}>
-                        <div style={{ fontSize: 11, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500, marginBottom: "var(--space-1)" }}>{label}</div>
-                        <div style={{ fontSize: 22, fontWeight: 700 }}>{value}</div>
-                      </div>
+                      <StatCard key={label} size="compact" label={label} value={value} />
                     ))}
                   </div>
 
@@ -883,19 +877,14 @@ export function ReportsPage() {
                   {usage.rows.length === 0 ? (
                     <EmptyState title="No rows in range" description="Try widening the date range." />
                   ) : (
-                    <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, overflow: "hidden" }}>
+                    <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                         <thead style={{ background: "var(--color-surface-2)" }}>
                           <tr>
                             {["App", "Stream", "Tenant", "Viewer-Min", "Peak", "Egress GB", "Recording GB"].map((h) => (
-                              <th key={h} style={{
-                                padding: "10px 14px",
+                              <th key={h} className="label" style={{
+                                padding: "var(--space-3) var(--space-4)",
                                 textAlign: h === "App" || h === "Stream" || h === "Tenant" ? "left" : "right",
-                                fontSize: 11,
-                                color: "var(--color-secondary)",
-                                textTransform: "uppercase",
-                                letterSpacing: "0.06em",
-                                fontWeight: 600,
                               }}>
                                 {h === "Egress GB" ? (
                                   <span title={`Estimation method: ${usage.egress_method}`} style={{ cursor: "help", borderBottom: "1px dotted var(--color-muted)" }}>
@@ -909,13 +898,13 @@ export function ReportsPage() {
                         <tbody>
                           {usage.rows.map((row, i) => (
                             <tr key={i} style={{ borderTop: i === 0 ? "none" : "1px solid var(--color-border)" }}>
-                              <td style={{ padding: "8px 14px" }}>{row.app}</td>
-                              <td style={{ padding: "8px 14px", color: "var(--color-secondary)", fontSize: 12, fontFamily: "var(--font-mono)" }}>{row.stream_id ?? "—"}</td>
-                              <td style={{ padding: "8px 14px", color: "var(--color-secondary)", fontSize: 12 }}>{row.tenant ?? "—"}</td>
-                              <td style={{ padding: "8px 14px", textAlign: "right" }}>{row.viewer_minutes.toFixed(0)}</td>
-                              <td style={{ padding: "8px 14px", textAlign: "right" }}>{row.peak_concurrency.toLocaleString()}</td>
-                              <td style={{ padding: "8px 14px", textAlign: "right" }}>{row.egress_gb.toFixed(2)}</td>
-                              <td style={{ padding: "8px 14px", textAlign: "right" }}>{row.recording_gb.toFixed(2)}</td>
+                              <td style={{ padding: "var(--cell-pad)" }}>{row.app}</td>
+                              <td style={{ padding: "var(--cell-pad)", color: "var(--color-secondary)", fontSize: 12, fontFamily: "var(--font-mono)" }}>{row.stream_id ?? "—"}</td>
+                              <td style={{ padding: "var(--cell-pad)", color: "var(--color-secondary)", fontSize: 12 }}>{row.tenant ?? "—"}</td>
+                              <td data-numeric style={{ padding: "var(--cell-pad)", textAlign: "right" }}>{row.viewer_minutes.toFixed(0)}</td>
+                              <td data-numeric style={{ padding: "var(--cell-pad)", textAlign: "right" }}>{row.peak_concurrency.toLocaleString()}</td>
+                              <td data-numeric style={{ padding: "var(--cell-pad)", textAlign: "right" }}>{row.egress_gb.toFixed(2)}</td>
+                              <td data-numeric style={{ padding: "var(--cell-pad)", textAlign: "right" }}>{row.recording_gb.toFixed(2)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -947,20 +936,21 @@ export function ReportsPage() {
               style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}
             >
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                {/* s111 D20: '+' glyph dropped — the label carries the meaning alone. */}
                 <button
                   onClick={() => { setShowScheduleForm(true); setEditSchedule(null); }}
+                  className="btn-primary"
                   style={{
-                    background: "var(--color-accent)",
                     border: "none",
                     color: "var(--color-on-signal)",
-                    borderRadius: 6,
-                    padding: "7px 14px",
+                    borderRadius: "var(--radius-control)",
+                    padding: "var(--space-2) var(--space-4)",
                     cursor: "pointer",
                     fontSize: 12,
                     fontWeight: 600,
                   }}
                 >
-                  + New schedule
+                  New schedule
                 </button>
               </div>
 
@@ -977,7 +967,7 @@ export function ReportsPage() {
                   description="Create a schedule to automatically export usage reports as CSV or PDF."
                 />
               ) : (
-                <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, overflow: "hidden" }}>
+                <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
                   {schedules.map((sched, i) => (
                     <div key={sched.id}>
                       {editSchedule?.id === sched.id ? (
@@ -1008,13 +998,13 @@ export function ReportsPage() {
                           <div style={{ display: "flex", gap: 6 }}>
                             <button
                               onClick={() => { setEditSchedule(sched); setShowScheduleForm(false); }}
-                              style={{ background: "none", border: "1px solid var(--color-border)", color: "var(--color-secondary)", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 11 }}
+                              className="btn-secondary" style={{ background: "none", borderRadius: "var(--radius-control)", padding: "6px 10px", minHeight: 28, cursor: "pointer", fontSize: 11 }}
                             >
                               Edit
                             </button>
                             <button
                               onClick={() => void deleteSchedule(sched.id)}
-                              style={{ background: "none", border: "1px solid var(--color-error)", color: "var(--color-error)", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 11 }}
+                              className="btn-press" style={{ background: "none", border: "1px solid var(--color-error)", color: "var(--color-error)", borderRadius: "var(--radius-control)", padding: "6px 10px", minHeight: 28, cursor: "pointer", fontSize: 11 }}
                             >
                               Delete
                             </button>

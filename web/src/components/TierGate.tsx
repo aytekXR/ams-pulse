@@ -6,16 +6,21 @@
  * interface is the union of all three call sites.
  *
  * Residual bare literals (moved verbatim from the originals, not introduced):
- *   borderRadius: 8 | padding: "3rem 2rem" | gap: 16
- *   h2 fontSize: 18 | h2 fontWeight: 700 | h2 margin: "0 0 8px"
+ *   padding: "3rem 2rem" | gap: 16
  *   p  fontSize: 14 | p  margin: 0
- *   a  borderRadius: 6 | a padding: "10px 20px" | a fontSize: 13 | a fontWeight: 600
+ *   a  padding: "10px 20px" | a fontSize: 13 | a fontWeight: 600
+ *   (s111 D8: the h2 now rides the .page-title class — tokens.json type.h2 —
+ *   replacing the historical 18/700 literals. s111 D10: the historical
+ *   borderRadius 8/6 literals are gone — see C5 below.)
  *
- * CONFLICT NOTED (deferred — Wave 0 is pixel-equivalent extraction):
- *   a borderRadius: 6 should be var(--radius-control) = 8px per tokens.json
- *   radius.control = 8 and WAVE-PLAN §3 conflict C5 ("8 for controls"). Kept
- *   at 6 to preserve the pixel-exact original render; fix deferred to the page
- *   wave that touches this component (Wave 5 for Reports/Probes).
+ * CONFLICT C5 — CLOSED (s111 D10): the CTA now renders
+ *   var(--radius-control) (8) and the card var(--radius-card) (12), per
+ *   tokens.json radius and design-rationale §3 ("12 card / 8 control / full
+ *   pill. Nothing else.").
+ *   The CTA's background also moved OUT of the inline style: the
+ *   .tier-gate-cta class in global.css owns background (accent base,
+ *   accent-hover on hover — s111 D7) and press scale (M2); reintroducing an
+ *   inline background here would silently kill the hover state.
  *
  * WCAG fix (Wave 0 — a DELIBERATE DEVIATION from pixel-equivalent extraction,
  * mandated by the WAVE-PLAN §2.2 accessibility gate, which is BINDING: an
@@ -89,7 +94,7 @@ export function TierGate({
       style={{
         background: "var(--color-surface)",
         border: "1px solid var(--color-border)",
-        borderRadius: 8,
+        borderRadius: "var(--radius-card)",
         padding: "3rem 2rem",
         display: "flex",
         flexDirection: "column",
@@ -102,7 +107,7 @@ export function TierGate({
           remember to set it on every SVG they pass. */}
       <span aria-hidden="true">{icon}</span>
       <div>
-        <h2 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700 }}>{heading}</h2>
+        <h2 className="page-title" style={{ margin: "0 0 var(--space-2)" }}>{heading}</h2>
         <p
           style={{
             margin: 0,
@@ -119,9 +124,8 @@ export function TierGate({
         className="tier-gate-cta"
         style={{
           display: "inline-block",
-          background: "var(--color-accent)",
           color: "var(--color-on-signal)",
-          borderRadius: 6,
+          borderRadius: "var(--radius-control)",
           padding: "10px 20px",
           fontSize: 13,
           fontWeight: 600,

@@ -110,44 +110,50 @@ export function AuthGate({ children }: Props) {
         background: "var(--color-bg)",
       }}
     >
+      {/* s111 D22: no boxShadow — tokens.json elevation.note says shadows are
+          for overlays only; the login panel IS the page, so it is raised by
+          tone (surface on bg) + the 1px border, like every other card. */}
       <div
         style={{
           background: "var(--color-surface)",
           border: "1px solid var(--color-border)",
-          borderRadius: 12,
+          borderRadius: "var(--radius-card)",
           padding: "2.5rem 2rem",
           width: "100%",
           maxWidth: 400,
-          boxShadow: "0 24px 64px rgba(0,0,0,0.5)",
         }}
       >
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <img src="/logo/pulse-mark.svg" alt="Pulse" width="40" height="40" style={{ marginBottom: 12 }} />
-          <h1 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 700 }}>Pulse</h1>
-          <p style={{ margin: 0, fontSize: 14, color: "var(--color-muted)" }}>
+          <h1 className="page-title" style={{ margin: "0 0 4px" }}>Pulse</h1>
+          <p style={{ margin: 0, fontSize: 14, color: "var(--color-secondary)" }}>
             Enter your API token to continue
           </p>
         </div>
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <label style={{ fontSize: 13, fontWeight: 500, color: "var(--color-muted)" }}>
+          <label style={{ fontSize: 13, fontWeight: 500, color: "var(--color-secondary)" }}>
             API Token
+            {/* s111 D4: className="filter-input" supplies the tokenized
+                :focus-visible ring from global.css — the old outline:"none"
+                left keyboard users with zero focus indication on the first
+                control of every session (same fix as QoePage QO-4). */}
             <input
               type="password"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="plt_…"
               autoFocus
+              className="filter-input"
               style={{
                 display: "block",
                 width: "100%",
                 marginTop: 6,
                 background: "var(--color-surface-2)",
                 border: `1px solid ${error ? "var(--color-error)" : "var(--color-border)"}`,
-                borderRadius: 6,
+                borderRadius: "var(--radius-control)",
                 padding: "8px 12px",
                 color: "var(--color-text)",
                 fontSize: 14,
-                outline: "none",
                 boxSizing: "border-box",
               }}
             />
@@ -157,14 +163,17 @@ export function AuthGate({ children }: Props) {
               {error}
             </p>
           )}
+          {/* s111 D7/M2: .btn-primary owns background (accent base,
+              accent-hover on hover) + press scale + focus ring — background
+              must not be set inline or :hover can never override it. */}
           <button
             type="submit"
+            className="btn-primary"
             style={{
               marginTop: 4,
-              background: "var(--color-accent)",
               color: "var(--color-on-signal)",
               border: "none",
-              borderRadius: 6,
+              borderRadius: "var(--radius-control)",
               padding: "10px",
               fontSize: 14,
               fontWeight: 600,
@@ -177,14 +186,17 @@ export function AuthGate({ children }: Props) {
         {oidcEnabled && (
           <>
             <hr style={{ border: "none", borderTop: "1px solid var(--color-border)", margin: "8px 0" }} />
+            {/* s111 D7: border comes from the .btn-secondary base coat so the
+                border-color hover can win; color:text is a deliberate inline
+                override (login CTA reads stronger than the secondary coat). */}
             <button
               type="button"
               onClick={() => { window.location.href = "/auth/oidc/login"; }}
+              className="btn-secondary"
               style={{
                 background: "var(--color-surface-2)",
                 color: "var(--color-text)",
-                border: "1px solid var(--color-border)",
-                borderRadius: 6,
+                borderRadius: "var(--radius-control)",
                 padding: "10px",
                 fontSize: 14,
                 fontWeight: 600,
@@ -195,7 +207,7 @@ export function AuthGate({ children }: Props) {
             </button>
           </>
         )}
-        <p style={{ marginTop: 20, marginBottom: 0, fontSize: 12, color: "var(--color-muted)", textAlign: "center" }}>
+        <p style={{ marginTop: 20, marginBottom: 0, fontSize: 12, color: "var(--color-secondary)", textAlign: "center" }}>
           Generate a token in Settings → API Tokens.
         </p>
       </div>

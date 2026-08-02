@@ -146,7 +146,7 @@ test.describe("Alerts", () => {
     await expect(page.getByRole("heading", { name: "Alerts" })).toBeVisible();
 
     // Open the new rule form.
-    await page.getByRole("button", { name: "+ New rule" }).click();
+    await page.getByRole("button", { name: "New rule" }).click();
     await expect(page.getByRole("heading", { name: "New alert rule" })).toBeVisible();
 
     // Submit with both name and threshold empty — triggers the name error.

@@ -61,10 +61,20 @@
   /* Motion tokens (tokens.json motion) */
   --motion-fast: 120ms ease-out;
   --motion-base: 200ms ease-out;
+  /* Fade-only transitions (opacity/color) ride a separate token so the
+   * reduced-motion block can keep comprehension-aiding fades while killing
+   * movement (s111 M11). Value is tokens.json motion.base VERBATIM — an
+   * alias, not an invented value (D-071). */
+  --motion-fade: 200ms ease-out;
 
   /* Density tokens — default mode (tokens.json layout + type) */
   /* tableRowHeight=40 (authoritative; JS 44 was a phase-1 divergence) */
   --row-height:    40px;
+  /* s111 D18/D19: static-table cell padding DERIVED from --row-height so every
+   * table rides the density modes (13px body line box ≈ 20px + 2× block pad
+   * → 32/40/48, matching ROW_HEIGHT_MAP). Inline 16px comes from space[3].
+   * Derived on-grid from existing tokens, not invented (D-071). */
+  --cell-pad: calc((var(--row-height) - 20px) / 2) var(--space-4);
   /* card padding=24 (tokens.json space[4]=24) */
   --card-padding:  24px;
   /* metric type size=40 (tokens.json type.metric.size) */
@@ -165,7 +175,12 @@
 }
 
 /* -------------------------------------------------------------------------
- * Reduced-motion: collapse all motion tokens to instant
+ * Reduced-motion (s111 M11): movement dies, comprehension-aiding fades stay.
+ * --motion-fast/--motion-base carry every transform/size transition, so
+ * zeroing them kills all movement instantly. --motion-fade is deliberately
+ * NOT zeroed: it is only ever attached to opacity transitions (e.g. the
+ * toast entrance), which are not vestibular triggers — "reduced motion means
+ * fewer and gentler animations, not zero" (WCAG 2.1 SC 2.3.3 guidance).
  * ------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   :root {
@@ -209,10 +224,44 @@ input, select, textarea {
   color: inherit;
 }
 
-/* Tabular numerics for metric values and table numerics */
+/* -------------------------------------------------------------------------
+ * Type roles (s111 D8/D11) — the two most-repeated text roles, defined once.
+ *
+ * .page-title — tokens.json type.h2 (22/28, 600): the page-title role. Every
+ * page <h1> (and TierGate / wizard step headings) previously rendered an
+ * invented 18/20px; the value now lives here, sourced from the brandkit,
+ * instead of in 14 call sites (D-071).
+ *
+ * .label — tokens.json type.label VERBATIM (11/16, 500, mono, 0.1em,
+ * uppercase) + var(--color-secondary) per the binding WCAG table. Used for
+ * section headings, table headers and stat labels — the one role tokens.json
+ * defines most precisely and no call site rendered (33 drifting copies of
+ * 0.05–0.08em sans replaced). Plex Mono marks system text per rationale §1.
+ * ------------------------------------------------------------------------- */
+.page-title {
+  margin: 0;
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 600;
+}
+.label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-secondary);
+}
+
+/* Tabular numerics for metric values and table numerics.
+ * [data-numeric] (s111 D12): element-agnostic — StreamsTable's live cells are
+ * <div role="gridcell">, which the old td[data-numeric] selector could never
+ * match, so the two tables that update every few seconds were exactly the
+ * ones jittering (design-rationale §1: metrics always use tabular-nums). */
 .metric-value,
 [data-metric],
-td[data-numeric] {
+[data-numeric] {
   font-variant-numeric: tabular-nums;
 }
 
@@ -234,15 +283,198 @@ td[data-numeric] {
  * styles/__tests__/focus-rings.test.ts pins both halves — a className with no
  * rule is a false a11y promise, a rule with no className is dead CSS.
  * Wave 2 adds .seg-btn (SegmentedControl), .btn-secondary and .picker-btn.
+ * s111 (D21/D4) adds .nav-link, .icon-btn, .btn-primary, .btn-press — the
+ * shell controls and login form join the same contract.
  * ------------------------------------------------------------------------- */
 .tier-gate-cta:focus-visible,
 .tabs-btn:focus-visible,
 .filter-input:focus-visible,
 .seg-btn:focus-visible,
 .btn-secondary:focus-visible,
-.picker-btn:focus-visible {
+.picker-btn:focus-visible,
+.nav-link:focus-visible,
+.icon-btn:focus-visible,
+.btn-primary:focus-visible,
+.btn-press:focus-visible {
   outline: 2px solid var(--color-link);
   outline-offset: 2px;
+}
+
+/* -------------------------------------------------------------------------
+ * Interaction states (s111 D7/M2/M6/D13) — hover/active/disabled vocabulary.
+ * Inline style objects cannot express :hover/:active, so interaction styling
+ * extends the focus-ring className contract above: the component sets a bare
+ * className, these rules supply the state styling. All values are existing
+ * tokens (D-071): accent-hover is tokens.json signalHover (G3-corrected in
+ * light); durations ride the motion tokens, which collapse to 0ms under
+ * reduced motion — state feedback becomes instant, movement never plays.
+ *
+ * Base coats: a class below OWNS the properties it declares — call sites must
+ * not set those same properties inline (inline style would defeat :hover).
+ * ------------------------------------------------------------------------- */
+.btn-primary,
+.tier-gate-cta {
+  background: var(--color-accent);
+  transition: background var(--motion-fast), transform var(--motion-fast);
+}
+.icon-btn {
+  color: var(--color-secondary);
+  transition: color var(--motion-fast), transform var(--motion-fast);
+}
+.nav-link {
+  background: transparent;
+  transition: background var(--motion-fast), color var(--motion-fast);
+}
+/* Active nav tint rides aria-current (react-router stamps it on the active
+ * NavLink), so hover and active tints coexist without inline backgrounds. */
+.nav-link[aria-current="page"],
+.nav-link[aria-current="page"]:hover {
+  background: rgba(var(--color-accent-rgb), 0.1);
+}
+/* M6: shared Tabs/SegmentedControl join the Layout fade vocabulary (the
+ * canonical widgets snapped while their Layout twins faded at 120ms). */
+.tabs-btn {
+  transition: color var(--motion-fast);
+}
+.seg-btn {
+  transition: background var(--motion-fast), color var(--motion-fast);
+}
+.btn-press,
+.btn-secondary,
+.picker-btn {
+  transition: color var(--motion-fast), border-color var(--motion-fast), transform var(--motion-fast);
+}
+/* s111 D7 (features half): base coats so :hover can actually win — inline
+ * color/border at a call site would defeat the hover rules below, so
+ * .btn-secondary/.picker-btn call sites must NOT set color or border inline.
+ * The picker's selected state rides aria-pressed (DateRangePicker already
+ * stamps it), mirroring the nav-link aria-current pattern. */
+.btn-secondary,
+.picker-btn {
+  color: var(--color-secondary);
+  border: 1px solid var(--color-border);
+}
+.picker-btn {
+  background: var(--color-surface-2);
+}
+.picker-btn[aria-pressed="true"] {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-on-signal);
+}
+
+/* Hover — gated so touch devices don't accumulate sticky hover states. */
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary:hover,
+  .tier-gate-cta:hover {
+    background: var(--color-accent-hover);
+  }
+  .icon-btn:hover {
+    color: var(--color-text);
+  }
+  .nav-link:hover {
+    background: rgba(var(--color-accent-rgb), 0.05);
+  }
+  .btn-secondary:hover,
+  .picker-btn:not([aria-pressed="true"]):hover {
+    color: var(--color-text);
+    border-color: var(--color-border-strong);
+  }
+}
+
+/* M2: pressed feedback — scale inside the subtle 0.95–0.98 band, riding
+ * --motion-fast (120ms, within the 100–160ms press budget). */
+.btn-press:active,
+.btn-primary:active,
+.btn-secondary:active,
+.icon-btn:active,
+.picker-btn:active,
+.tier-gate-cta:active {
+  transform: scale(0.97);
+}
+
+/* D13: disabled buttons are visibly inert. Native <button> everywhere, so
+ * this one rule covers every current and future call site. (cursor loses to
+ * an inline cursor:pointer where one exists; opacity always applies.) */
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* -------------------------------------------------------------------------
+ * Toast enter/exit (s111 D6/M1) — fade-dominant per tokens.json motion.note
+ * ("Live data updates fade, never slide. No bounce."). Opacity rides
+ * --motion-fade (survives reduced motion — a comprehension-aiding fade);
+ * the 4px settle rides --motion-base (collapses to 0ms — movement dies).
+ * Transitions, not keyframes, so rapidly stacked toasts retarget smoothly.
+ * ------------------------------------------------------------------------- */
+.toast {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity var(--motion-fade), transform var(--motion-base);
+}
+@starting-style {
+  .toast {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.toast[data-leaving] {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+/* -------------------------------------------------------------------------
+ * Panel/step entrance (s111 M5/M8) — inline CRUD forms, delete-confirm
+ * clusters, detail panels and wizard steps enter with a fade + ≤4px settle
+ * ("fade, never slide" — tokens.json motion.note). Opacity rides
+ * --motion-fade (survives reduced motion); movement rides --motion-base
+ * (collapses to 0ms). Exit stays instant — dismissal should feel immediate
+ * (asymmetric enter/exit), and no unmount-state plumbing is needed.
+ * ------------------------------------------------------------------------- */
+.panel-enter {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity var(--motion-fade), transform var(--motion-base);
+}
+@starting-style {
+  .panel-enter {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* s111 M8: the once-ever onboarding success moment — the single
+ * delight-budget spot in the product. Starts from scale(0.9)+opacity (never
+ * from scale(0)); one-shot keyframe is fine here — it fires once and is never
+ * interrupted. Duration/curve ride --motion-base VERBATIM (D-071: no invented
+ * motion values), so reduced motion collapses it to 0ms → instant, exactly
+ * today's behaviour. */
+@keyframes check-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+.check-in {
+  animation: check-in var(--motion-base);
+}
+
+/* s111 M9: breathing skeleton — the single loading affordance for chart
+ * panels (no spinner doubling; the sr-only status text still announces
+ * loading). Nonessential loop: it unmounts with the loading state. */
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+.skeleton {
+  animation: skeleton-pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
 }
 
 /* -------------------------------------------------------------------------

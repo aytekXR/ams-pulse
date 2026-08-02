@@ -28,13 +28,17 @@ const variantStyles: Record<NonNullable<Props["variant"]>, { bg: string; color: 
 export function Badge({ label, variant = "default" }: Props) {
   const { bg, color } = variantStyles[variant];
   return (
+    // s111 D10: radius 4 → var(--radius-pill) — the component calls itself a
+    // "semantic status pill" and tokens.json radius is {control 8, card 12,
+    // pill 999}, "nothing else" (design-rationale §3). Horizontal padding
+    // grows 8→10 so the rounded caps keep the cap-height ratio.
     <span
       style={{
         display: "inline-block",
         background: bg,
         color,
-        borderRadius: 4,
-        padding: "2px 8px",
+        borderRadius: "var(--radius-pill)",
+        padding: "2px 10px",
         fontSize: 11,
         fontWeight: 600,
         letterSpacing: "0.05em",

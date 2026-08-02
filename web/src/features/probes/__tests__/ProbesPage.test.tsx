@@ -287,7 +287,7 @@ describe("ProbesPage create form validation", () => {
     await waitFor(() => {
       expect(screen.getByText(/no probes configured/i)).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByText("+ New Probe"));
+    fireEvent.click(screen.getByText("New Probe"));
     await waitFor(() => {
       expect(screen.getByLabelText(/create probe form/i)).toBeInTheDocument();
     });
@@ -358,7 +358,7 @@ describe("ProbeForm a11y — aria-invalid, aria-describedby, error placement", (
   async function openForm() {
     render(<ProbesPage />, { wrapper });
     await waitFor(() => screen.getByText(/no probes configured/i));
-    fireEvent.click(screen.getByText("+ New Probe"));
+    fireEvent.click(screen.getByText("New Probe"));
     await waitFor(() => screen.getByLabelText(/create probe form/i));
   }
 
@@ -507,7 +507,7 @@ describe("ProbesPage chart colour pins (source assertions)", () => {
   it("data-series <Line> strokes are JS values, never var() strings", () => {
     // `<Line\s` — NOT `<Line`, which also matches <LineChart>, whose body contains the
     // CartesianGrid's legitimate var(--color-border).
-    const lineStrokes = [...src.matchAll(/<Line\s[\s\S]{0,300}?\/>/g)].map((m) => m[0]);
+    const lineStrokes = [...src.matchAll(/<Line\s[\s\S]{0,400}?\/>/g)].map((m) => m[0]);
     expect(lineStrokes.length).toBeGreaterThan(0);
     for (const line of lineStrokes) {
       expect(line).not.toMatch(/stroke="var\(/);
@@ -524,10 +524,15 @@ describe("ProbesPage chart colour pins (source assertions)", () => {
   it("the decorative TierGate icon uses the theme-aware accent token, not a hard-coded hex", () => {
     // Anchored to the <svg> element so it cannot be satisfied by a Recharts <Line> elsewhere
     // in the file — the failure mode of the test this replaces.
-    const svg = src.match(/<svg[\s\S]*?<\/svg>/);
-    expect(svg).not.toBeNull();
-    expect(svg![0]).toContain('stroke="var(--color-accent)"');
-    expect(svg![0]).not.toMatch(/stroke=\{CHART_COLORS\[\d\]\}/);
+    // s111 D20 added a currentColor close-icon <svg> earlier in the file, so
+    // scan every svg: the TierGate icon must be among them with the accent
+    // token, and no svg may carry a CHART_COLORS literal stroke.
+    const svgs = [...src.matchAll(/<svg[\s\S]*?<\/svg>/g)].map((m) => m[0]);
+    expect(svgs.length).toBeGreaterThan(0);
+    expect(svgs.some((svg) => svg.includes('stroke="var(--color-accent)"'))).toBe(true);
+    for (const svg of svgs) {
+      expect(svg).not.toMatch(/stroke=\{CHART_COLORS\[\d\]\}/);
+    }
   });
 });
 

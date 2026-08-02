@@ -13,6 +13,7 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/Badge";
 import { SegmentedControl } from "@/components/SegmentedControl";
+import { StatCard } from "@/features/live/StatCard";
 import type { FleetNode } from "@/lib/api/types";
 import { useStatusColors, CHART_COLORS } from "@/lib/chartColors";
 
@@ -67,7 +68,7 @@ function LoadBar({ value, color, status }: { value: number; color: string; statu
         flex: 1,
         height: 5,
         background: "var(--color-surface-2)",
-        borderRadius: 3,
+        borderRadius: "var(--radius-pill)",
         overflow: "hidden",
         minWidth: 60,
       }}>
@@ -76,25 +77,46 @@ function LoadBar({ value, color, status }: { value: number; color: string; statu
             Without one they can only re-assert the palette constants they imported —
             which is what the old FleetPage colour tests did, and why a swap of the
             memory-healthy colour to status-green would have left them all green. */}
+        {/* s111 M10: the fill tweens transform (compositor-only), not width
+            (layout+paint every frame — multiplied on wall-density NOC screens).
+            The track clips via overflow:hidden, so the fill carries no radius. */}
         <div
           data-testid="loadbar-fill"
           data-status={status}
           style={{
-            width: `${Math.min(value, 100)}%`,
+            width: "100%",
             height: "100%",
             background: color,
-            borderRadius: 3,
-            transition: "width var(--motion-base)",
+            transform: `scaleX(${Math.min(value, 100) / 100})`,
+            transformOrigin: "left center",
+            transition: "transform var(--motion-base)",
           }}
         />
       </div>
-      <span style={{ fontSize: 11, color: "var(--color-secondary)", width: 32, textAlign: "right" }}>
+      {/* s111 D12: data-numeric → tabular-nums (global.css); this value
+          refreshes every 30s and must not jitter. */}
+      <span data-numeric style={{ fontSize: 11, color: "var(--color-secondary)", width: 32, textAlign: "right" }}>
         {value.toFixed(0)}%
       </span>
       <span className="sr-only">{status}</span>
     </div>
   );
 }
+
+/* s111 D20: drawn 12px 2px-stroke arrows replace the '↓'/'↑' font glyphs so
+ * network direction renders in the app's single icon system (font glyphs
+ * drift in weight against the drawn SVG set); sr-only "in"/"out" text carries
+ * the direction to assistive tech, which the bare glyphs never did. */
+const arrowDown = (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+    <path d="M12 5v14M19 12l-7 7-7-7" />
+  </svg>
+);
+const arrowUp = (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+    <path d="M12 19V5M5 12l7-7 7 7" />
+  </svg>
+);
 
 function lastSeenLabel(ts: number): string {
   const diff = Date.now() - ts;
@@ -114,7 +136,7 @@ function NodeCard({ node }: NodeCardProps) {
     <div style={{
       background: "var(--color-surface)",
       border: "1px solid var(--color-border)",
-      borderRadius: 8,
+      borderRadius: "var(--radius-card)",
       padding: "16px 20px",
       display: "flex",
       flexDirection: "column",
@@ -168,8 +190,20 @@ function NodeCard({ node }: NodeCardProps) {
 
       {(node.net_in_mbps != null || node.net_out_mbps != null) && (
         <div style={{ display: "flex", gap: "var(--space-3)", fontSize: 12, color: "var(--color-secondary)" }}>
-          {node.net_in_mbps != null && <span>↓ {node.net_in_mbps.toFixed(1)} Mbps</span>}
-          {node.net_out_mbps != null && <span>↑ {node.net_out_mbps.toFixed(1)} Mbps</span>}
+          {node.net_in_mbps != null && (
+            <span data-numeric style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+              {arrowDown}
+              <span className="sr-only">in</span>
+              {node.net_in_mbps.toFixed(1)} Mbps
+            </span>
+          )}
+          {node.net_out_mbps != null && (
+            <span data-numeric style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+              {arrowUp}
+              <span className="sr-only">out</span>
+              {node.net_out_mbps.toFixed(1)} Mbps
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -212,10 +246,10 @@ export function FleetPage() {
   const edgeCount = nodes.filter((n) => n.role === "edge").length;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)" }}>
-        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Fleet</h1>
+        <h1 className="page-title">Fleet</h1>
         <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
           {/* The hex fallbacks these var() calls used to carry were dead AND stale:
               --color-warning and --color-success are defined in BOTH themes, so the
@@ -245,11 +279,9 @@ export function FleetPage() {
             className="btn-secondary"
             style={{
               background: "var(--color-surface-2)",
-              border: "1px solid var(--color-border)",
-              color: "var(--color-secondary)",
-              borderRadius: 4,
-              padding: "4px 10px",
-              cursor: "pointer",
+              borderRadius: "var(--radius-control)",
+              padding: "6px 10px",
+              minHeight: 28,
               fontSize: 11,
             }}
           >
@@ -273,8 +305,11 @@ export function FleetPage() {
       </div>
 
       {/* Aggregate header */}
+      {/* s111 D9: shared <StatCard> replaces the hand-rolled 22px cards so the
+          aggregate values ride var(--metric-size)/var(--card-padding) and the
+          density modes apply on this ops screen too. */}
       {nodes.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "var(--space-3)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "var(--space-3)" }}>
           {[
             { label: "Total Nodes", value: nodes.length },
             { label: "Up", value: upCount },
@@ -282,17 +317,7 @@ export function FleetPage() {
             { label: "Origins", value: originCount },
             { label: "Edges", value: edgeCount },
           ].map(({ label, value }) => (
-            <div key={label} style={{
-              background: "var(--color-surface)",
-              border: "1px solid var(--color-border)",
-              borderRadius: 8,
-              padding: "var(--space-3) var(--space-4)",
-            }}>
-              <div style={{ fontSize: 11, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500, marginBottom: "var(--space-1)" }}>
-                {label}
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 700 }}>{value}</div>
-            </div>
+            <StatCard key={label} label={label} value={value} />
           ))}
         </div>
       )}
@@ -315,12 +340,12 @@ export function FleetPage() {
           {nodes.map((node) => <NodeCard key={node.node_id} node={node} />)}
         </div>
       ) : (
-        <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, overflow: "hidden" }}>
+        <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead style={{ background: "var(--color-surface-2)" }}>
               <tr>
                 {["Node ID", "Role", "Status", "Last Seen", "Version", "CPU", "Memory", "Network"].map((h) => (
-                  <th key={h} scope="col" style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>
+                  <th key={h} scope="col" className="label" style={{ padding: "var(--space-3) var(--space-4)", textAlign: "left" }}>
                     {h}
                   </th>
                 ))}
@@ -329,12 +354,12 @@ export function FleetPage() {
             <tbody>
               {nodes.map((node, i) => (
                 <tr key={node.node_id} style={{ borderTop: i === 0 ? "none" : "1px solid var(--color-border)" }}>
-                  <td style={{ padding: "10px 14px", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600 }}>{node.node_id}</td>
-                  <td style={{ padding: "10px 14px" }}><Badge label={node.role} variant={roleVariant(node.role)} /></td>
-                  <td style={{ padding: "10px 14px" }}><Badge label={node.status} variant={statusVariant(node.status)} /></td>
-                  <td style={{ padding: "10px 14px", color: "var(--color-secondary)", fontSize: 12 }}>{lastSeenLabel(node.last_seen)}</td>
-                  <td style={{ padding: "10px 14px", color: "var(--color-secondary)", fontSize: 12 }}>{node.version ?? "—"}</td>
-                  <td style={{ padding: "10px 14px", minWidth: 100 }}>
+                  <td style={{ padding: "var(--cell-pad)", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600 }}>{node.node_id}</td>
+                  <td style={{ padding: "var(--cell-pad)" }}><Badge label={node.role} variant={roleVariant(node.role)} /></td>
+                  <td style={{ padding: "var(--cell-pad)" }}><Badge label={node.status} variant={statusVariant(node.status)} /></td>
+                  <td style={{ padding: "var(--cell-pad)", color: "var(--color-secondary)", fontSize: 12 }}>{lastSeenLabel(node.last_seen)}</td>
+                  <td style={{ padding: "var(--cell-pad)", color: "var(--color-secondary)", fontSize: 12 }}>{node.version ?? "—"}</td>
+                  <td style={{ padding: "var(--cell-pad)", minWidth: 100 }}>
                     {node.cpu_pct != null ? (
                       <LoadBar
                         value={node.cpu_pct}
@@ -343,7 +368,7 @@ export function FleetPage() {
                       />
                     ) : "—"}
                   </td>
-                  <td style={{ padding: "10px 14px", minWidth: 100 }}>
+                  <td style={{ padding: "var(--cell-pad)", minWidth: 100 }}>
                     {node.mem_pct != null ? (
                       <LoadBar
                         value={node.mem_pct}
@@ -358,9 +383,16 @@ export function FleetPage() {
                       />
                     ) : "—"}
                   </td>
-                  <td style={{ padding: "10px 14px", fontSize: 12, color: "var(--color-secondary)" }}>
+                  <td data-numeric style={{ padding: "var(--cell-pad)", fontSize: 12, color: "var(--color-secondary)" }}>
                     {node.net_in_mbps != null || node.net_out_mbps != null ? (
-                      <span>↓{(node.net_in_mbps ?? 0).toFixed(1)} ↑{(node.net_out_mbps ?? 0).toFixed(1)} Mbps</span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                        {arrowDown}
+                        <span className="sr-only">in</span>
+                        {(node.net_in_mbps ?? 0).toFixed(1)}
+                        {arrowUp}
+                        <span className="sr-only">out</span>
+                        {(node.net_out_mbps ?? 0).toFixed(1)} Mbps
+                      </span>
                     ) : "—"}
                   </td>
                 </tr>

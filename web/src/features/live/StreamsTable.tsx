@@ -1,6 +1,7 @@
 import { useRef, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Badge } from "@/components/Badge";
+import { EmptyState } from "@/components/EmptyState";
 import type { LiveStream } from "@/lib/api/types";
 import { useDensity } from "@/lib/ThemeContext";
 
@@ -67,12 +68,9 @@ export function StreamsTable({ streams }: Props) {
   );
 
   // ST-1/ST-2: padding uses --space-3 (exact 12px match).
+  // s111 D2/D11: font styling moved to the tokenized .label role (global.css)
+  // — the 11px muted header text failed the binding WCAG table.
   const headerStyle: React.CSSProperties = {
-    fontSize: 11,
-    fontWeight: 600,
-    color: "var(--color-muted)",
-    textTransform: "uppercase",
-    letterSpacing: "0.07em",
     padding: "0 var(--space-3)",
     textAlign: "left" as const,
   };
@@ -95,7 +93,7 @@ export function StreamsTable({ streams }: Props) {
       style={{
         background: "var(--color-surface)",
         border: "1px solid var(--color-border)",
-        borderRadius: "var(--radius-control)",
+        borderRadius: "var(--radius-card)",
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
@@ -118,13 +116,13 @@ export function StreamsTable({ streams }: Props) {
           role="row"
           aria-rowindex={1}
         >
-          <div role="columnheader" style={{ ...headerStyle, width: colWidths.stream }}>Stream</div>
-          <div role="columnheader" style={{ ...headerStyle, width: colWidths.app }}>App</div>
-          <div role="columnheader" style={{ ...headerStyle, width: colWidths.node }}>Node</div>
-          <div role="columnheader" style={{ ...headerStyle, width: colWidths.state }}>State</div>
-          <div role="columnheader" style={{ ...headerStyle, width: colWidths.viewers, textAlign: "right" as const }}>Viewers</div>
-          <div role="columnheader" style={{ ...headerStyle, width: colWidths.bitrate, textAlign: "right" as const }}>Bitrate</div>
-          <div role="columnheader" style={{ ...headerStyle, width: colWidths.health }}>Health</div>
+          <div role="columnheader" className="label" style={{ ...headerStyle, width: colWidths.stream }}>Stream</div>
+          <div role="columnheader" className="label" style={{ ...headerStyle, width: colWidths.app }}>App</div>
+          <div role="columnheader" className="label" style={{ ...headerStyle, width: colWidths.node }}>Node</div>
+          <div role="columnheader" className="label" style={{ ...headerStyle, width: colWidths.state }}>State</div>
+          <div role="columnheader" className="label" style={{ ...headerStyle, width: colWidths.viewers, textAlign: "right" as const }}>Viewers</div>
+          <div role="columnheader" className="label" style={{ ...headerStyle, width: colWidths.bitrate, textAlign: "right" as const }}>Bitrate</div>
+          <div role="columnheader" className="label" style={{ ...headerStyle, width: colWidths.health }}>Health</div>
         </div>
       </div>
 
@@ -139,18 +137,12 @@ export function StreamsTable({ streams }: Props) {
         style={{ overflowY: "auto", maxHeight: 520, flex: 1 }}
       >
         {streams.length === 0 ? (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              height: 120,
-              color: "var(--color-muted)",
-              fontSize: 13,
-            }}
-          >
-            No active streams
-          </div>
+          /* s111 D16: empty states teach (design-rationale par.3 — "show the RTMP
+             publish URL"), same pattern QoePage already proves out. */
+          <EmptyState
+            title="No active streams"
+            description={"Publish a stream to see it here — e.g. rtmp://<your-ams-host>/<app>/<streamId>. Streams appear within seconds of the first frame."}
+          />
         ) : (
           // ST-1: second rowgroup owns all virtualised data rows.
           <div style={{ height: totalHeight, position: "relative" }} role="rowgroup">
@@ -191,19 +183,22 @@ export function StreamsTable({ streams }: Props) {
                   >
                     {stream.stream_id ?? "—"}
                   </div>
-                  <div role="gridcell" style={{ ...cellStyle, width: colWidths.app, color: "var(--color-muted)" }}>
+                  <div role="gridcell" style={{ ...cellStyle, width: colWidths.app, color: "var(--color-secondary)" }}>
                     {stream.app ?? "—"}
                   </div>
-                  <div role="gridcell" style={{ ...cellStyle, width: colWidths.node, color: "var(--color-muted)", fontSize: 12 }}>
+                  <div role="gridcell" style={{ ...cellStyle, width: colWidths.node, color: "var(--color-secondary)", fontSize: 12 }}>
                     {stream.node_id ?? "—"}
                   </div>
                   <div role="gridcell" style={{ ...cellStyle, width: colWidths.state }}>
                     <Badge label={stream.publisher_state ?? "unknown"} variant={stateVariant(stream.publisher_state)} />
                   </div>
-                  <div role="gridcell" style={{ ...cellStyle, width: colWidths.viewers, textAlign: "right" }}>
+                  {/* s111 D12: data-numeric activates tabular-nums via the
+                      global.css [data-numeric] selector — these two cells
+                      update every few seconds and were the ones jittering. */}
+                  <div role="gridcell" data-numeric style={{ ...cellStyle, width: colWidths.viewers, textAlign: "right" }}>
                     {(stream.viewers ?? 0).toLocaleString()}
                   </div>
-                  <div role="gridcell" style={{ ...cellStyle, width: colWidths.bitrate, textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 12 }}>
+                  <div role="gridcell" data-numeric style={{ ...cellStyle, width: colWidths.bitrate, textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 12 }}>
                     {fmtBitrate(stream.bitrate_kbps)}
                   </div>
                   <div role="gridcell" style={{ ...cellStyle, width: colWidths.health }}>
@@ -222,7 +217,7 @@ export function StreamsTable({ streams }: Props) {
           padding: "6px 12px",
           borderTop: "1px solid var(--color-border)",
           fontSize: 12,
-          color: "var(--color-muted)",
+          color: "var(--color-secondary)",
           background: "var(--color-surface-2)",
           flexShrink: 0,
         }}

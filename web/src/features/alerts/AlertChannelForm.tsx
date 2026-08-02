@@ -61,15 +61,16 @@ export function AlertChannelForm({ initial, onSave, onCancel }: Props) {
     }
   };
 
+  // s111 D4-pattern: outline:"none" removed — inputs carry
+  // className="filter-input" so the shared :focus-visible ring applies.
   const inputStyle: React.CSSProperties = {
     background: "var(--color-surface-2)",
     border: "1px solid var(--color-border)",
-    borderRadius: 6,
+    borderRadius: "var(--radius-control)",
     padding: "7px 10px",
     color: "var(--color-text)",
     fontSize: 13,
     width: "100%",
-    outline: "none",
     boxSizing: "border-box",
   };
 
@@ -94,7 +95,7 @@ export function AlertChannelForm({ initial, onSave, onCancel }: Props) {
         Channel name *
         <input
           ref={nameRef}
-          style={{ ...inputStyle, borderColor: errors.name ? "var(--color-error)" : "var(--color-border)" }}
+          className="filter-input" style={{ ...inputStyle, borderColor: errors.name ? "var(--color-error)" : "var(--color-border)" }}
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Ops team Slack"
@@ -110,7 +111,7 @@ export function AlertChannelForm({ initial, onSave, onCancel }: Props) {
 
       <label style={labelStyle}>
         Type
-        <select style={inputStyle} value={type} onChange={(e) => setType(e.target.value as ChannelType)}>
+        <select className="filter-input" style={inputStyle} value={type} onChange={(e) => setType(e.target.value as ChannelType)}>
           {CHANNEL_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
       </label>
@@ -121,7 +122,7 @@ export function AlertChannelForm({ initial, onSave, onCancel }: Props) {
           <input
             ref={emailToRef}
             type="email"
-            style={{ ...inputStyle, borderColor: errors.emailTo ? "var(--color-error)" : "var(--color-border)" }}
+            className="filter-input" style={{ ...inputStyle, borderColor: errors.emailTo ? "var(--color-error)" : "var(--color-border)" }}
             value={emailTo}
             onChange={(e) => setEmailTo(e.target.value)}
             placeholder="alerts@example.com"
@@ -142,7 +143,7 @@ export function AlertChannelForm({ initial, onSave, onCancel }: Props) {
           <input
             ref={webhookUrlRef}
             type="url"
-            style={{ ...inputStyle, borderColor: errors.webhookUrl ? "var(--color-error)" : "var(--color-border)" }}
+            className="filter-input" style={{ ...inputStyle, borderColor: errors.webhookUrl ? "var(--color-error)" : "var(--color-border)" }}
             value={webhookUrl}
             onChange={(e) => setWebhookUrl(e.target.value)}
             placeholder="https://hooks.slack.com/services/…"
@@ -167,11 +168,10 @@ export function AlertChannelForm({ initial, onSave, onCancel }: Props) {
         <button
           type="button"
           onClick={onCancel}
+          className="btn-secondary"
           style={{
             background: "var(--color-surface-2)",
-            border: "1px solid var(--color-border)",
-            color: "var(--color-secondary)",
-            borderRadius: 6,
+            borderRadius: "var(--radius-control)",
             padding: "var(--space-2) var(--space-4)",
             cursor: "pointer",
             fontSize: 13,
@@ -182,16 +182,14 @@ export function AlertChannelForm({ initial, onSave, onCancel }: Props) {
         <button
           type="submit"
           disabled={saving}
+          className="btn-primary"
           style={{
-            background: "var(--color-accent)",
             border: "none",
             color: "var(--color-on-signal)",
-            borderRadius: 6,
+            borderRadius: "var(--radius-control)",
             padding: "8px 20px",
-            cursor: "pointer",
             fontSize: 13,
             fontWeight: 600,
-            opacity: saving ? 0.7 : 1,
           }}
         >
           {saving ? "Saving…" : "Save channel"}

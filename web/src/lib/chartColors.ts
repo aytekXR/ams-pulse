@@ -55,6 +55,31 @@ export function useStatusColors(): StatusColorMap {
   return theme === "light" ? LIGHT_STATUS_COLORS : STATUS_COLORS;
 }
 
+/* ─── Chart furniture (s111 D17) ──────────────────────────────────────────────
+ * One spec for the non-data parts of every chart surface, so ticks/legends/
+ * tooltips stop drifting per page (secondary@11 vs muted@11 vs secondary@10…).
+ * These are STYLE objects, not SVG stroke/fill props on series — browsers
+ * resolve the CSS vars here (ticks already used vars product-wide).
+ * Sizes: 11 = type.label.size, 12 = type.caption.size (tokens.json). */
+
+/** Axis tick style — pass as `tick={CHART_TICK}` on XAxis/YAxis. */
+export const CHART_TICK = { fill: "var(--color-secondary)", fontSize: 11 } as const;
+
+/** Legend wrapper style — pass as `wrapperStyle={CHART_LEGEND_STYLE}`. */
+export const CHART_LEGEND_STYLE = { fontSize: 12, color: "var(--color-secondary)" } as const;
+
+/** Tooltip surface — pass as `contentStyle={CHART_TOOLTIP_STYLE}`. */
+export const CHART_TOOLTIP_STYLE = {
+  background: "var(--color-surface)",
+  border: "1px solid var(--color-border)",
+  borderRadius: "var(--radius-control)",
+  color: "var(--color-text)",
+  fontSize: 12,
+} as const;
+
+/** ReferenceLine label font size — type.label.size (9px was unreadable on a NOC wall). */
+export const CHART_REF_LABEL_SIZE = 11;
+
 /** Protocol-to-color map for ProtocolDonut — hue per protocol, not semantic status */
 export const PROTOCOL_COLORS: Record<string, string> = {
   hls:    '#2CE5A7', // dataviz[0]

@@ -36,6 +36,9 @@ export function DateRangePicker({ value, onChange }: Props) {
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
+      {/* s111 D7: .picker-btn owns background/color/border — the selected state
+          rides [aria-pressed="true"] in global.css. Do not re-add those
+          properties inline; they would defeat :hover. */}
       {PRESETS.map((preset) => (
         <button
           key={preset.label}
@@ -48,10 +51,7 @@ export function DateRangePicker({ value, onChange }: Props) {
           aria-pressed={value.label === preset.label}
           className="picker-btn"
           style={{
-            background: value.label === preset.label ? "var(--color-accent)" : "var(--color-surface-2)",
-            border: "1px solid var(--color-border)",
-            color: value.label === preset.label ? "var(--color-on-signal)" : "var(--color-secondary)",
-            borderRadius: 6,
+            borderRadius: "var(--radius-control)",
             padding: "6px 12px",
             cursor: "pointer",
             fontSize: 12,
@@ -67,10 +67,7 @@ export function DateRangePicker({ value, onChange }: Props) {
         aria-expanded={showCustom}
         className="picker-btn"
         style={{
-          background: value.label === "Custom" ? "var(--color-accent)" : "var(--color-surface-2)",
-          border: "1px solid var(--color-border)",
-          color: value.label === "Custom" ? "var(--color-on-signal)" : "var(--color-secondary)",
-          borderRadius: 6,
+          borderRadius: "var(--radius-control)",
           padding: "6px 12px",
           cursor: "pointer",
           fontSize: 12,
@@ -88,7 +85,7 @@ export function DateRangePicker({ value, onChange }: Props) {
             gap: "var(--space-2)",
             background: "var(--color-surface)",
             border: "1px solid var(--color-border)",
-            borderRadius: 8,
+            borderRadius: "var(--radius-control)",
             padding: "var(--space-2) var(--space-3)",
           }}
         >
@@ -104,7 +101,7 @@ export function DateRangePicker({ value, onChange }: Props) {
             style={{
               background: "var(--color-surface-2)",
               border: "1px solid var(--color-border)",
-              borderRadius: 4,
+              borderRadius: "var(--radius-control)",
               padding: "var(--space-1) var(--space-2)",
               color: "var(--color-text)",
               fontSize: 12,
@@ -120,7 +117,7 @@ export function DateRangePicker({ value, onChange }: Props) {
             style={{
               background: "var(--color-surface-2)",
               border: "1px solid var(--color-border)",
-              borderRadius: 4,
+              borderRadius: "var(--radius-control)",
               padding: "var(--space-1) var(--space-2)",
               color: "var(--color-text)",
               fontSize: 12,
@@ -128,13 +125,13 @@ export function DateRangePicker({ value, onChange }: Props) {
           />
           <button
             onClick={applyCustom}
-            className="picker-btn"
+            className="btn-primary"
             style={{
-              background: "var(--color-accent)",
               border: "none",
               color: "var(--color-on-signal)",
-              borderRadius: 4,
-              padding: "4px 10px",
+              borderRadius: "var(--radius-control)",
+              padding: "6px 10px",
+              minHeight: 28,
               cursor: "pointer",
               fontSize: 12,
             }}

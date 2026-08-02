@@ -265,7 +265,7 @@ export function AnomaliesPage() {
   if (license && !anomaliesEntitled(license.tier)) {
     return (
       <div style={{ maxWidth: 700, margin: "0 auto", paddingTop: 40 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 24px" }}>Anomaly Detection</h1>
+        <h1 className="page-title" style={{ margin: "0 0 var(--space-5)" }}>Anomaly Detection</h1>
         <TierGate
           icon={
             <svg
@@ -298,10 +298,10 @@ export function AnomaliesPage() {
           display: "flex",
           alignItems: "center",
           gap: "var(--space-4)",
-          marginBottom: 20,
+          marginBottom: "var(--space-5)",
         }}
       >
-        <h1 style={{ flex: 1, fontSize: 20, fontWeight: 700, margin: 0 }}>
+        <h1 className="page-title" style={{ flex: 1 }}>
           Anomaly Detection
         </h1>
         {/* Sigma selector */}
@@ -319,7 +319,7 @@ export function AnomaliesPage() {
             style={{
               background: "var(--color-surface)",
               border: "1px solid var(--color-border)",
-              borderRadius: 4,
+              borderRadius: "var(--radius-control)",
               color: "var(--color-text)",
               padding: "var(--space-1) var(--space-2)",
               fontSize: 13,
@@ -337,16 +337,15 @@ export function AnomaliesPage() {
         <button
           onClick={fetchAnomalies}
           disabled={loading}
+          className="btn-primary"
           style={{
-            background: "var(--color-accent)",
             color: "var(--color-on-signal)",
             border: "none",
-            borderRadius: 6,
+            borderRadius: "var(--radius-control)",
             padding: "6px 14px",
+            minHeight: 28,
             fontSize: 13,
             fontWeight: 600,
-            cursor: loading ? "not-allowed" : "pointer",
-            opacity: loading ? 0.7 : 1,
           }}
         >
           Refresh
@@ -377,7 +376,7 @@ export function AnomaliesPage() {
           style={{
             background: "var(--color-surface)",
             border: "1px solid var(--color-border)",
-            borderRadius: 8,
+            borderRadius: "var(--radius-card)",
             overflow: "hidden",
           }}
         >
@@ -392,92 +391,64 @@ export function AnomaliesPage() {
               <thead>
                 <tr style={{ background: "var(--color-surface-2)" }}>
                   <th
+                    className="label"
                     style={{
                       padding: "var(--space-2) var(--space-3)",
                       textAlign: "left",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: "var(--color-secondary)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
                     }}
                   >
                     Metric
                   </th>
                   <th
+                    className="label"
                     style={{
                       padding: "var(--space-2) var(--space-3)",
                       textAlign: "left",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: "var(--color-secondary)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
                     }}
                   >
                     Scope
                   </th>
                   <th
+                    className="label"
                     style={{
                       padding: "var(--space-2) var(--space-3)",
                       textAlign: "right",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: "var(--color-secondary)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
                     }}
                   >
                     Observed / Expected
                   </th>
                   <th
+                    className="label"
                     style={{
                       padding: "var(--space-2) var(--space-3)",
                       textAlign: "right",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: "var(--color-secondary)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
                     }}
                   >
                     Delta
                   </th>
                   <th
+                    className="label"
                     style={{
                       padding: "var(--space-2) var(--space-3)",
                       textAlign: "right",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: "var(--color-secondary)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
                     }}
                   >
                     Sigma
                   </th>
                   <th
+                    className="label"
                     style={{
                       padding: "var(--space-2) var(--space-3)",
                       textAlign: "left",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: "var(--color-secondary)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
                     }}
                   >
                     Severity
                   </th>
                   <th
+                    className="label"
                     style={{
                       padding: "var(--space-2) var(--space-3)",
                       textAlign: "left",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: "var(--color-secondary)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
                     }}
                   >
                     Detected At
