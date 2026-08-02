@@ -17,7 +17,7 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { LicenseRequiredGate, isLicenseError } from "@/components/LicenseRequiredGate";
 import { EmptyState } from "@/components/EmptyState";
 import { StatCard } from "@/features/live/StatCard";
-import { CHART_COLORS } from "@/lib/chartColors";
+import { CHART_COLORS, CHART_TICK, CHART_LEGEND_STYLE, CHART_TOOLTIP_STYLE } from "@/lib/chartColors";
 import type {
   AudienceResponse,
   GeoResponse,
@@ -86,9 +86,9 @@ export function AnalyticsPage() {
   // above an upsell reads as a broken screen. The heading stays for orientation.
   if (licenseError) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)" }}>
-          <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Analytics</h1>
+          <h1 className="page-title">Analytics</h1>
         </div>
         <LicenseRequiredGate
           error={licenseError}
@@ -115,17 +115,17 @@ export function AnalyticsPage() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)" }}>
-        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Analytics</h1>
+        <h1 className="page-title">Analytics</h1>
+        {/* s111 D7: .btn-secondary owns color/border (hover would be defeated
+            by inline copies — do not re-add them here). */}
         <button
           onClick={exportCsv}
           className="btn-secondary"
           style={{
             background: "var(--color-surface-2)",
-            border: "1px solid var(--color-border)",
-            color: "var(--color-secondary)",
-            borderRadius: 6,
+            borderRadius: "var(--radius-control)",
             padding: "6px 12px",
             cursor: "pointer",
             fontSize: 12,
@@ -190,11 +190,11 @@ export function AnalyticsPage() {
                   style={{
                     background: "var(--color-surface)",
                     border: "1px solid var(--color-border)",
-                    borderRadius: 8,
+                    borderRadius: "var(--radius-card)",
                     padding: "var(--space-4)",
                   }}
                 >
-                  <h2 style={{ margin: "0 0 var(--space-4)", fontSize: 13, fontWeight: 600, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  <h2 className="label" style={{ margin: "0 0 var(--space-4)" }}>
                     Audience over time
                   </h2>
                   <ResponsiveContainer width="100%" height={280}>
@@ -207,22 +207,20 @@ export function AnalyticsPage() {
                       accessibilityLayer
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                      <XAxis dataKey="ts" tick={{ fill: "var(--color-secondary)", fontSize: 11 }} />
-                      <YAxis tick={{ fill: "var(--color-secondary)", fontSize: 11 }} />
-                      <Tooltip
-                        contentStyle={{
-                          background: "var(--color-surface)",
-                          border: "1px solid var(--color-border)",
-                          borderRadius: 6,
-                          color: "var(--color-text)",
-                        }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: 12, color: "var(--color-secondary)" }} />
+                      <XAxis dataKey="ts" tick={CHART_TICK} />
+                      <YAxis tick={CHART_TICK} />
+                      {/* s111 M4: instant tooltip — no 400ms position-lag while
+                          scrubbing the timeline (functional data, QO-1 rule). */}
+                      <Tooltip isAnimationActive={false} contentStyle={CHART_TOOLTIP_STYLE} />
+                      <Legend wrapperStyle={CHART_LEGEND_STYLE} />
                       {/* stroke= is an SVG presentation attribute: it needs a literal hex,
                           not var(--chart-N). Same hex as before, named by dataviz index. */}
-                      <Line type="monotone" dataKey="views" stroke={CHART_COLORS[1]} dot={false} strokeWidth={2} name="Views" />
-                      <Line type="monotone" dataKey="uniques" stroke={CHART_COLORS[0]} dot={false} strokeWidth={2} name="Uniques" />
-                      <Line type="monotone" dataKey="peak" stroke={CHART_COLORS[4]} dot={false} strokeWidth={2} name="Peak concurrent" />
+                      {/* QO-1 (s111 D5/M0): isAnimationActive={false} — tokens.json
+                          motion.note bans slide animations on charts unconditionally;
+                          CSS motion tokens cannot reach Recharts' JS engine. */}
+                      <Line type="monotone" dataKey="views" stroke={CHART_COLORS[1]} dot={false} strokeWidth={2} name="Views" isAnimationActive={false} />
+                      <Line type="monotone" dataKey="uniques" stroke={CHART_COLORS[0]} dot={false} strokeWidth={2} name="Uniques" isAnimationActive={false} />
+                      <Line type="monotone" dataKey="peak" stroke={CHART_COLORS[4]} dot={false} strokeWidth={2} name="Peak concurrent" isAnimationActive={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -237,7 +235,7 @@ export function AnalyticsPage() {
                   style={{
                     background: "var(--color-surface)",
                     border: "1px solid var(--color-border)",
-                    borderRadius: 8,
+                    borderRadius: "var(--radius-card)",
                     overflow: "hidden",
                   }}
                 >
@@ -245,7 +243,7 @@ export function AnalyticsPage() {
                     <thead style={{ background: "var(--color-surface-2)" }}>
                       <tr>
                         {["Country", "Views", "Unique Viewers", "Watch Time"].map((h) => (
-                          <th key={h} scope="col" style={{ padding: "10px 14px", textAlign: h === "Country" ? "left" : "right", fontSize: 11, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{h}</th>
+                          <th key={h} scope="col" className="label" style={{ padding: "var(--space-3) var(--space-4)", textAlign: h === "Country" ? "left" : "right" }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -253,10 +251,11 @@ export function AnalyticsPage() {
                       {/* GeoRow: { country, region?, views, uniques, watch_time_s } */}
                       {(geo.rows ?? []).map((row) => (
                         <tr key={row.country} style={{ borderTop: "1px solid var(--color-border)" }}>
-                          <td style={{ padding: "8px 14px" }}>{row.country ?? "Unknown"}</td>
-                          <td style={{ padding: "8px 14px", textAlign: "right" }}>{(row.views ?? 0).toLocaleString()}</td>
-                          <td style={{ padding: "8px 14px", textAlign: "right" }}>{(row.uniques ?? 0).toLocaleString()}</td>
-                          <td style={{ padding: "8px 14px", textAlign: "right" }}>{Math.round((row.watch_time_s ?? 0) / 60)}m</td>
+                          <td style={{ padding: "var(--cell-pad)" }}>{row.country ?? "Unknown"}</td>
+                          {/* s111 D12: data-numeric → tabular-nums (global.css) */}
+                          <td data-numeric style={{ padding: "var(--cell-pad)", textAlign: "right" }}>{(row.views ?? 0).toLocaleString()}</td>
+                          <td data-numeric style={{ padding: "var(--cell-pad)", textAlign: "right" }}>{(row.uniques ?? 0).toLocaleString()}</td>
+                          <td data-numeric style={{ padding: "var(--cell-pad)", textAlign: "right" }}>{Math.round((row.watch_time_s ?? 0) / 60)}m</td>
                         </tr>
                       ))}
                     </tbody>
@@ -278,7 +277,7 @@ export function AnalyticsPage() {
                   style={{
                     background: "var(--color-surface)",
                     border: "1px solid var(--color-border)",
-                    borderRadius: 8,
+                    borderRadius: "var(--radius-card)",
                     overflow: "hidden",
                   }}
                 >
@@ -286,7 +285,7 @@ export function AnalyticsPage() {
                     <thead style={{ background: "var(--color-surface-2)" }}>
                       <tr>
                         {["Device", "Browser", "OS", "Views"].map((h) => (
-                          <th key={h} scope="col" style={{ padding: "10px 14px", textAlign: h === "Views" ? "right" : "left", fontSize: 11, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{h}</th>
+                          <th key={h} scope="col" className="label" style={{ padding: "var(--space-3) var(--space-4)", textAlign: h === "Views" ? "right" : "left" }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -294,10 +293,11 @@ export function AnalyticsPage() {
                       {/* DeviceRow: { device, os, browser, protocol, views, uniques, watch_time_s } */}
                       {(device.rows ?? []).map((row, i) => (
                         <tr key={i} style={{ borderTop: "1px solid var(--color-border)" }}>
-                          <td style={{ padding: "8px 14px" }}>{row.device ?? "Unknown"}</td>
-                          <td style={{ padding: "8px 14px" }}>{row.browser ?? "—"}</td>
-                          <td style={{ padding: "8px 14px" }}>{row.os ?? "—"}</td>
-                          <td style={{ padding: "8px 14px", textAlign: "right" }}>{(row.views ?? 0).toLocaleString()}</td>
+                          <td style={{ padding: "var(--cell-pad)" }}>{row.device ?? "Unknown"}</td>
+                          <td style={{ padding: "var(--cell-pad)" }}>{row.browser ?? "—"}</td>
+                          <td style={{ padding: "var(--cell-pad)" }}>{row.os ?? "—"}</td>
+                          {/* s111 D12: data-numeric → tabular-nums (global.css) */}
+                          <td data-numeric style={{ padding: "var(--cell-pad)", textAlign: "right" }}>{(row.views ?? 0).toLocaleString()}</td>
                         </tr>
                       ))}
                     </tbody>

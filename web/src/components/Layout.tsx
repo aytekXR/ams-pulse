@@ -205,28 +205,33 @@ export function Layout({ children, wsConnected, overview: _overview, tier }: Lay
         >
           {navItems.map((item) => (
             <li key={item.to}>
+              {/* s111: className="nav-link" carries background (base/hover/
+                  aria-current active tint), transition and the focus ring from
+                  global.css — background must NOT return to this inline style
+                  or :hover can never override it. paddingLeft ternary removed
+                  (M3): the transparent 2px border already reserves the
+                  indicator space, so the old 14/16 split double-compensated
+                  and shifted the icon+label 2px on every route change.
+                  Inactive color is --color-secondary, not muted (binding WCAG
+                  table: muted fails AA for 13px text). */}
               <NavLink
                 to={item.to}
                 end={item.to === "/"}
+                className="nav-link"
                 style={({ isActive }) => ({
                   display: "flex",
                   alignItems: "center",
                   gap: 10,
                   padding: "8px 16px",
-                  paddingLeft: isActive ? 14 : 16,
-                  color: isActive ? "var(--color-text)" : "var(--color-muted)",
-                  background: isActive
-                    ? `rgba(var(--color-accent-rgb),0.1)`
-                    : "transparent",
+                  color: isActive ? "var(--color-text)" : "var(--color-secondary)",
                   borderLeft: isActive
                     ? `2px solid var(--color-accent)`
                     : "2px solid transparent",
                   textDecoration: "none",
                   fontSize: 13,
                   fontWeight: isActive ? 600 : 400,
-                  borderRadius: 4,
+                  borderRadius: "var(--radius-control)",
                   margin: "1px 8px",
-                  transition: `background var(--motion-fast), color var(--motion-fast)`,
                 })}
               >
                 {item.icon}
@@ -237,8 +242,8 @@ export function Layout({ children, wsConnected, overview: _overview, tier }: Lay
                       marginLeft: "auto",
                       fontSize: 9,
                       background: "var(--color-surface-2)",
-                      color: "var(--color-muted)",
-                      borderRadius: 3,
+                      color: "var(--color-secondary)",
+                      borderRadius: "var(--radius-pill)",
                       padding: "1px 4px",
                       fontWeight: 600,
                     }}
@@ -263,22 +268,27 @@ export function Layout({ children, wsConnected, overview: _overview, tier }: Lay
         >
           {/* Theme toggle */}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {/* s111: .icon-btn owns color (secondary base, text on hover),
+                transition, press scale and the focus ring — color must not be
+                set inline here. minHeight 28 + 6px padding is the desktop
+                pointer floor (D14; --min-touch=44 is the touch bar, which the
+                52px-row shell cannot honour without redesign — noted). */}
             <button
               onClick={toggleTheme}
               aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
               title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+              className="icon-btn"
               style={{
                 background: "none",
                 border: "1px solid var(--color-border)",
-                color: "var(--color-secondary)",
                 cursor: "pointer",
-                padding: "3px 8px",
-                borderRadius: 6,
+                padding: "6px 10px",
+                minHeight: 28,
+                borderRadius: "var(--radius-control)",
                 display: "flex",
                 alignItems: "center",
                 gap: 5,
                 fontSize: 11,
-                transition: `border-color var(--motion-fast), color var(--motion-fast)`,
               }}
             >
               {theme === "dark" ? (
@@ -310,19 +320,26 @@ export function Layout({ children, wsConnected, overview: _overview, tier }: Lay
             aria-label="Display density"
             style={{
               display: "flex",
-              borderRadius: 6,
+              borderRadius: "var(--radius-control)",
               overflow: "hidden",
               border: "1px solid var(--color-border)",
             }}
           >
+            {/* s111: className="seg-btn" joins the focus-ring contract (D21)
+                and supplies the shared fade transition (M6). Inactive color is
+                --color-secondary (muted fails AA at this size, binding WCAG
+                table); 11px is the type.label size (was an off-scale 10);
+                6px padding + minHeight 28 is the desktop pointer floor (D14). */}
             {DENSITY_SEGMENTS.map((seg) => (
               <button
                 key={seg.value}
                 onClick={() => setDensity(seg.value)}
                 aria-pressed={density === seg.value}
+                className="seg-btn"
                 style={{
                   flex: 1,
-                  padding: "3px 0",
+                  padding: "6px 0",
+                  minHeight: 28,
                   background:
                     density === seg.value
                       ? `rgba(var(--color-accent-rgb),0.15)`
@@ -333,11 +350,10 @@ export function Layout({ children, wsConnected, overview: _overview, tier }: Lay
                   color:
                     density === seg.value
                       ? "var(--color-accent)"
-                      : "var(--color-muted)",
+                      : "var(--color-secondary)",
                   cursor: "pointer",
-                  fontSize: 10,
+                  fontSize: 11,
                   fontWeight: density === seg.value ? 600 : 400,
-                  transition: `background var(--motion-fast), color var(--motion-fast)`,
                 }}
               >
                 {seg.label}
@@ -369,18 +385,23 @@ export function Layout({ children, wsConnected, overview: _overview, tier }: Lay
               {tier}
             </span>
           )}
+          {/* s111: .icon-btn owns color (secondary — muted failed the binding
+              WCAG bar even for icon-buttons' hover-label role) + focus ring. */}
           <button
             onClick={handleSignOut}
             title="Sign out"
+            className="icon-btn"
             style={{
               background: "none",
               border: "none",
-              color: "var(--color-muted)",
               cursor: "pointer",
-              padding: 4,
-              borderRadius: 4,
+              padding: 6,
+              minWidth: 28,
+              minHeight: 28,
+              borderRadius: "var(--radius-control)",
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
             }}
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -407,9 +428,12 @@ export function Layout({ children, wsConnected, overview: _overview, tier }: Lay
         >
           <div style={{ flex: 1 }} />
           {/* Connection status */}
+          {/* s111 D0: --color-secondary, not muted — the Live badge is the
+              product's core trust element (§3) and 12px text is normal text
+              under the binding WCAG table, where muted fails AA. */}
           <div
             title={wsConnected ? "Live push connected" : "Polling mode (WebSocket unavailable)"}
-            style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--color-muted)" }}
+            style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--color-secondary)" }}
           >
             <span
               style={{

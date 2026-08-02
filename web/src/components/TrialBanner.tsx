@@ -16,7 +16,7 @@
  * All colors come from CSS custom properties in global.css (brandkit tokens).
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLicense } from "@/lib/LicenseContext";
 
 const DISMISSED_KEY = "trial-banner-dismissed";
@@ -26,11 +26,25 @@ export function TrialBanner() {
   const [dismissed, setDismissed] = useState(
     () => sessionStorage.getItem(DISMISSED_KEY) === "1",
   );
+  // s111 M7: two-phase dismiss. Phase 1 sets `leaving` — the strip loses its
+  // alert role immediately (out of the a11y tree at once) and its height
+  // transitions 36→0 on var(--motion-base) so the page below settles instead
+  // of jumping 36px in one frame. Phase 2 unmounts on transitionend, with a
+  // timeout fallback (below) for environments where it never fires.
+  // Reduced motion: --motion-base collapses to 0ms → instant, today's behavior.
+  const [leaving, setLeaving] = useState(false);
 
   const handleDismiss = () => {
     sessionStorage.setItem(DISMISSED_KEY, "1");
-    setDismissed(true);
+    setLeaving(true);
   };
+
+  useEffect(() => {
+    if (!leaving) return;
+    // Fallback slightly over motion.base (200ms) in case transitionend is lost.
+    const t = window.setTimeout(() => setDismissed(true), 250);
+    return () => window.clearTimeout(t);
+  }, [leaving]);
 
   // Expired banner — always show, non-dismissable
   if (isTrialExpired) {
@@ -65,9 +79,16 @@ export function TrialBanner() {
 
     return (
       <div
-        role="alert"
+        role={leaving ? undefined : "alert"}
+        aria-hidden={leaving || undefined}
+        onTransitionEnd={(e) => {
+          if (e.propertyName === "height") setDismissed(true);
+        }}
         style={{
-          height: 36,
+          height: leaving ? 0 : 36,
+          opacity: leaving ? 0 : 1,
+          overflow: "hidden",
+          transition: "height var(--motion-base), opacity var(--motion-fast)",
           flexShrink: 0,
           display: "flex",
           alignItems: "center",
@@ -84,22 +105,32 @@ export function TrialBanner() {
           License expires in {daysRemaining} {dayWord} — activate a key in
           Settings › License.
         </span>
+        {/* s111 D20/D14: drawn 2px-stroke SVG replaces the '×' font glyph
+            (one icon system, consistent weight); minWidth rides the
+            minTouchTarget token — height is capped by the 36px strip, so the
+            hit area grows sideways, which is where the room is. .icon-btn
+            supplies the focus ring + press scale; the warning colour stays
+            inline (inline wins over the class base, intentionally). */}
         <button
           onClick={handleDismiss}
           aria-label="Dismiss license expiry notice"
+          className="icon-btn"
           style={{
             background: "none",
             border: "none",
             cursor: "pointer",
             color: "var(--color-warning)",
-            fontSize: 16,
-            lineHeight: 1,
             padding: "0 4px",
+            minWidth: "var(--min-touch)",
+            alignSelf: "stretch",
             display: "flex",
             alignItems: "center",
+            justifyContent: "center",
           }}
         >
-          ×
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
         </button>
       </div>
     );

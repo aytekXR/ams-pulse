@@ -21,11 +21,14 @@
  * (auto-activation), which is correct here — switching view is instant and
  * lossless. Roving tabIndex: the checked radio is the group's single tab stop.
  *
- * Style values transferred VERBATIM from FleetPage's inline toggle — this
- * extraction may not move a pixel. Residual bare literals kept as-is:
- *   container borderRadius: 4 | button padding: "4px 10px" | fontSize: 11
- * (4px has a --space-1 token but 10px has none; splitting the shorthand would
- * gain nothing, so it stays verbatim — same call the Tabs extraction made.)
+ * Style values transferred VERBATIM from FleetPage's inline toggle — the
+ * extraction did not move a pixel. Residual bare literals kept as-is:
+ *   button padding: "4px 10px" | fontSize: 11
+ * (10px has no space token; splitting the shorthand would gain nothing.)
+ * s111 D10: container borderRadius 4 → var(--radius-control) — tokens.json
+ * radius is {control 8, card 12, pill 999}, "nothing else" (§3), and a
+ * segmented control is a control. Button fade transition rides the .seg-btn
+ * class in global.css (s111 M6 — unified with the Layout fade vocabulary).
  *
  * ONE DELIBERATE DEVIATION, mandated by the BINDING WAVE-PLAN §2.2 contrast
  * gate (an extraction may not ship a component that fails AA):
@@ -100,7 +103,7 @@ export function SegmentedControl({
       style={{
         display: "flex",
         border: "1px solid var(--color-border)",
-        borderRadius: 4,
+        borderRadius: "var(--radius-control)",
         overflow: "hidden",
       }}
     >

@@ -12,9 +12,9 @@
  *   button padding: "8px 16px" | fontSize: 13
  *   active-indicator: "2px solid"
  *
- * Touch-target (44pt, tokens.json layout.minTouchTarget) and inter-button gap
- * (8px, --space-2) improvements are deferred to the page waves (Wave 2–4) to
- * maintain pixel-exact extraction in Wave 0.
+ * Touch-target: s111 D14 — buttons carry minHeight var(--min-touch) (44,
+ * tokens.json layout.minTouchTarget); the underline still sits on the strip's
+ * shared bottom border. Inter-button gap stays 0 (verbatim from the sources).
  *
  * ARIA pattern implemented (non-pixel — adds HTML semantics only):
  *   role="tablist" on container
@@ -129,6 +129,8 @@ export function Tabs({ tabs, activeTab, onTabChange, wrap = false }: TabsProps) 
               borderBottom: `2px solid ${isActive ? "var(--color-accent)" : "transparent"}`,
               color: isActive ? "var(--color-text)" : "var(--color-secondary)",
               padding: "8px 16px",
+              // s111 D14: minTouchTarget floor (was ~36px effective height)
+              minHeight: "var(--min-touch)",
               cursor: "pointer",
               fontSize: 13,
               fontWeight: isActive ? 600 : 400,

@@ -15,14 +15,17 @@ export function ComingSoon({ feature, wave = "Wave 2" }: Props) {
         height: "100%",
         padding: "4rem 2rem",
         textAlign: "center",
-        color: "var(--color-muted)",
+        // s111 D3: secondary, not muted — the 14px <p> inherits this colour
+        // and muted fails the binding WCAG table for normal text. The icon
+        // keeps muted separately (non-text UI, 3:1 bar).
+        color: "var(--color-secondary)",
       }}
     >
-      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: "var(--color-muted)" }} aria-hidden>
         <rect x="2" y="3" width="20" height="14" rx="2" />
         <path d="M8 21h8M12 17v4" />
       </svg>
-      <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600, color: "var(--color-text)" }}>
+      <h2 className="page-title" style={{ color: "var(--color-text)" }}>
         {feature}
       </h2>
       <p style={{ margin: 0, fontSize: 14, maxWidth: 360 }}>

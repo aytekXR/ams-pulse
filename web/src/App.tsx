@@ -138,7 +138,7 @@ function AppRoutesInner() {
           <Route
             path="*"
             element={
-              <div style={{ padding: "3rem", color: "var(--color-muted)", fontSize: 14 }}>
+              <div style={{ padding: "3rem", color: "var(--color-secondary)", fontSize: 14 }}>
                 Page not found — <a href="/">go home</a>
               </div>
             }

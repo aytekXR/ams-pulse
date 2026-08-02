@@ -9,7 +9,8 @@
  *  - SC-1: outer div has role="group" with a composed aria-label.
  *  - SC-2: value span carries data-metric attribute (activates tabular-nums
  *          via global.css [data-metric] selector).
- *  - SC-4: borderRadius uses var(--radius-control), not a hardcoded 8.
+ *  - SC-4: borderRadius uses a radius token, not a hardcoded 8
+ *          (s111 D10: cards ride var(--radius-card)).
  *  - SC-5: gap uses var(--space-1), not a hardcoded 4.
  *
  * jsdom does NOT resolve CSS custom properties, so we assert on the serialised
@@ -135,14 +136,14 @@ describe("StatCard — tabular numerics (SC-2)", () => {
   });
 });
 
-// ── Wave 1: SC-4 — var(--radius-control) ─────────────────────────────────────
+// ── Wave 1: SC-4 — radius token (s111 D10: card radius) ─────────────────────
 
 describe("StatCard — border-radius token (SC-4)", () => {
-  it("borderRadius uses var(--radius-control), not a hardcoded integer", () => {
+  it("borderRadius uses var(--radius-card), not a hardcoded integer", () => {
     const { container } = render(<StatCard label="Viewers" value={42} />);
     const card = container.firstElementChild as HTMLElement;
     const styleText = card.getAttribute("style") ?? card.style.cssText;
-    expect(styleText).toContain("var(--radius-control)");
+    expect(styleText).toContain("var(--radius-card)");
     // Guard: raw integer 8 must NOT appear (would mean the token wasn't applied).
     // We check for "8px" or ": 8;" patterns that would indicate a hardcoded value.
     // Note: "8" alone is too broad (could match in other values), so check for the

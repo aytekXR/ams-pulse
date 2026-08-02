@@ -24,7 +24,7 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { LicenseRequiredGate, isLicenseError } from "@/components/LicenseRequiredGate";
 import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/Badge";
-import { CHART_COLORS, useStatusColors } from "@/lib/chartColors";
+import { CHART_COLORS, useStatusColors, CHART_TICK, CHART_LEGEND_STYLE, CHART_TOOLTIP_STYLE, CHART_REF_LABEL_SIZE } from "@/lib/chartColors";
 import type { IngestHealthResponse, IngestStream } from "@/lib/api/types";
 
 function healthVariant(score: number): "success" | "warning" | "error" | "muted" {
@@ -62,11 +62,11 @@ function StreamDetail({ stream, onClose }: StreamDetailProps) {
   }));
 
   return (
-    <div style={{
+    <div className="panel-enter" style={{
       background: "var(--color-surface)",
       border: "1px solid var(--color-border)",
-      borderRadius: 8,
-      padding: 20,
+      borderRadius: "var(--radius-card)",
+      padding: "var(--space-5)",
       display: "flex",
       flexDirection: "column",
       gap: "var(--space-4)",
@@ -80,12 +80,12 @@ function StreamDetail({ stream, onClose }: StreamDetailProps) {
         <button
           onClick={onClose}
           aria-label="Close stream detail"
+          className="btn-secondary"
           style={{
             background: "none",
-            border: "1px solid var(--color-border)",
-            color: "var(--color-secondary)",
-            borderRadius: 4,
-            padding: "4px 10px",
+            borderRadius: "var(--radius-control)",
+            padding: "6px 10px",
+            minHeight: 28,
             cursor: "pointer",
             fontSize: 12,
           }}
@@ -102,8 +102,8 @@ function StreamDetail({ stream, onClose }: StreamDetailProps) {
           style={{
             background: "var(--color-error-bg)",
             border: "1px solid var(--color-error)",
-            borderRadius: 6,
-            padding: "10px 14px",
+            borderRadius: "var(--radius-control)",
+            padding: "var(--space-3) var(--space-4)",
           }}
         >
           <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-error)", marginBottom: 6 }}>
@@ -113,7 +113,7 @@ function StreamDetail({ stream, onClose }: StreamDetailProps) {
             {dropTimes.map((d, i) => (
               <span key={i} style={{
                 background: "rgba(224,82,82,0.15)",
-                borderRadius: 4,
+                borderRadius: "var(--radius-pill)",
                 padding: "2px 8px",
                 fontSize: 11,
                 color: "var(--color-error)",
@@ -128,43 +128,47 @@ function StreamDetail({ stream, onClose }: StreamDetailProps) {
       {/* Bitrate + FPS */}
       {chartData.length > 0 && (
         <>
-          <div style={{ background: "var(--color-surface-2)", borderRadius: 8, padding: 14 }}>
-            <h3 style={{ margin: "0 0 12px", fontSize: 12, fontWeight: 600, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          <div style={{ background: "var(--color-surface-2)", borderRadius: "var(--radius-control)", padding: "var(--space-4)" }}>
+            <h3 className="label" style={{ margin: "0 0 var(--space-3)" }}>
               Bitrate & FPS
             </h3>
             <ResponsiveContainer width="100%" height={180}>
               <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="ts" tick={{ fill: "var(--color-secondary)", fontSize: 10 }} />
-                <YAxis yAxisId="bitrate" orientation="left" tick={{ fill: "var(--color-secondary)", fontSize: 10 }} unit=" kbps" />
-                <YAxis yAxisId="fps" orientation="right" tick={{ fill: "var(--color-secondary)", fontSize: 10 }} unit=" fps" />
-                <Tooltip contentStyle={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 6, color: "var(--color-text)" }} />
-                <Legend wrapperStyle={{ fontSize: 11, color: "var(--color-secondary)" }} />
+                <XAxis dataKey="ts" tick={CHART_TICK} />
+                <YAxis yAxisId="bitrate" orientation="left" tick={CHART_TICK} unit=" kbps" />
+                <YAxis yAxisId="fps" orientation="right" tick={CHART_TICK} unit=" fps" />
+                <Tooltip isAnimationActive={false} contentStyle={CHART_TOOLTIP_STYLE} />
+                <Legend wrapperStyle={CHART_LEGEND_STYLE} />
                 {dropTimes.map((d, i) => (
-                  <ReferenceLine key={i} x={d.ts} yAxisId="bitrate" stroke={statusColors.critical} strokeDasharray="3 3" label={{ value: "drop", fontSize: 9, fill: statusColors.critical }} />
+                  <ReferenceLine key={i} x={d.ts} yAxisId="bitrate" stroke={statusColors.critical} strokeDasharray="3 3" label={{ value: "drop", fontSize: CHART_REF_LABEL_SIZE, fill: statusColors.critical }} />
                 ))}
-                <Line yAxisId="bitrate" type="monotone" dataKey="bitrate" stroke={CHART_COLORS[1]} dot={false} strokeWidth={2} name="Bitrate" />
-                <Line yAxisId="fps" type="monotone" dataKey="fps" stroke={CHART_COLORS[0]} dot={false} strokeWidth={2} name="FPS" />
+                {/* QO-1 (s111 D5/M0): isAnimationActive={false} — tokens.json
+                    motion.note bans slide animations on charts unconditionally;
+                    CSS motion tokens cannot reach Recharts' JS engine. */}
+                <Line yAxisId="bitrate" type="monotone" dataKey="bitrate" stroke={CHART_COLORS[1]} dot={false} strokeWidth={2} name="Bitrate" isAnimationActive={false} />
+                <Line yAxisId="fps" type="monotone" dataKey="fps" stroke={CHART_COLORS[0]} dot={false} strokeWidth={2} name="FPS" isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
 
-          <div style={{ background: "var(--color-surface-2)", borderRadius: 8, padding: 14 }}>
-            <h3 style={{ margin: "0 0 12px", fontSize: 12, fontWeight: 600, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          <div style={{ background: "var(--color-surface-2)", borderRadius: "var(--radius-control)", padding: "var(--space-4)" }}>
+            <h3 className="label" style={{ margin: "0 0 var(--space-3)" }}>
               Packet Loss & Jitter
             </h3>
             <ResponsiveContainer width="100%" height={160}>
               <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="ts" tick={{ fill: "var(--color-secondary)", fontSize: 10 }} />
-                <YAxis yAxisId="loss" orientation="left" tick={{ fill: "var(--color-secondary)", fontSize: 10 }} unit="%" />
-                <YAxis yAxisId="jitter" orientation="right" tick={{ fill: "var(--color-secondary)", fontSize: 10 }} unit=" ms" />
-                <Tooltip contentStyle={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 6, color: "var(--color-text)" }} />
-                <Legend wrapperStyle={{ fontSize: 11, color: "var(--color-secondary)" }} />
+                <XAxis dataKey="ts" tick={CHART_TICK} />
+                <YAxis yAxisId="loss" orientation="left" tick={CHART_TICK} unit="%" />
+                <YAxis yAxisId="jitter" orientation="right" tick={CHART_TICK} unit=" ms" />
+                <Tooltip isAnimationActive={false} contentStyle={CHART_TOOLTIP_STYLE} />
+                <Legend wrapperStyle={CHART_LEGEND_STYLE} />
                 {/* Threshold indicators */}
-                <ReferenceLine yAxisId="loss" y={1} stroke={statusColors.warning} strokeDasharray="4 2" label={{ value: "1% threshold", fontSize: 9, fill: statusColors.warning }} />
-                <Line yAxisId="loss" type="monotone" dataKey="pkt_loss" stroke={statusColors.critical} dot={false} strokeWidth={2} name="Packet Loss %" />
-                <Line yAxisId="jitter" type="monotone" dataKey="jitter" stroke={CHART_COLORS[4]} dot={false} strokeWidth={2} name="Jitter ms" />
+                <ReferenceLine yAxisId="loss" y={1} stroke={statusColors.warning} strokeDasharray="4 2" label={{ value: "1% threshold", fontSize: CHART_REF_LABEL_SIZE, fill: statusColors.warning }} />
+                {/* QO-1 (s111 D5/M0): see comment on the bitrate chart above. */}
+                <Line yAxisId="loss" type="monotone" dataKey="pkt_loss" stroke={statusColors.critical} dot={false} strokeWidth={2} name="Packet Loss %" isAnimationActive={false} />
+                <Line yAxisId="jitter" type="monotone" dataKey="jitter" stroke={CHART_COLORS[4]} dot={false} strokeWidth={2} name="Jitter ms" isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -218,9 +222,9 @@ export function IngestPage() {
   // above an upsell reads as a broken screen. The heading stays for orientation.
   if (licenseError) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)" }}>
-          <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Ingest Health</h1>
+          <h1 className="page-title">Ingest Health</h1>
         </div>
         <LicenseRequiredGate
           error={licenseError}
@@ -247,9 +251,9 @@ export function IngestPage() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)" }}>
-        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Ingest Health</h1>
+        <h1 className="page-title">Ingest Health</h1>
         <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
           <span style={{
             width: 7,
@@ -264,13 +268,12 @@ export function IngestPage() {
           <button
             onClick={load}
             disabled={loading}
+            className="btn-secondary"
             style={{
               background: "var(--color-surface-2)",
-              border: "1px solid var(--color-border)",
-              color: "var(--color-secondary)",
-              borderRadius: 4,
-              padding: "4px 10px",
-              cursor: "pointer",
+              borderRadius: "var(--radius-control)",
+              padding: "6px 10px",
+              minHeight: 28,
               fontSize: 11,
             }}
           >
@@ -294,21 +297,16 @@ export function IngestPage() {
           <div style={{
             background: "var(--color-surface)",
             border: "1px solid var(--color-border)",
-            borderRadius: 8,
+            borderRadius: "var(--radius-card)",
             overflow: "hidden",
           }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead style={{ background: "var(--color-surface-2)" }}>
                 <tr>
                   {["Stream", "App", "Node", "Health", "Drops", ""].map((h) => (
-                    <th key={h} style={{
-                      padding: "10px 14px",
+                    <th key={h} className="label" style={{
+                      padding: "var(--space-3) var(--space-4)",
                       textAlign: h === "" ? "right" : "left",
-                      fontSize: 11,
-                      color: "var(--color-secondary)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                      fontWeight: 600,
                     }}>
                       {h}
                     </th>
@@ -326,47 +324,46 @@ export function IngestPage() {
                     }}
                     onClick={() => setSelected(selected?.stream_id === s.stream_id ? null : s)}
                   >
-                    <td style={{ padding: "10px 14px", fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: 12 }}>{s.stream_id}</td>
-                    <td style={{ padding: "10px 14px", color: "var(--color-secondary)" }}>{s.app}</td>
-                    <td style={{ padding: "10px 14px", color: "var(--color-secondary)", fontSize: 12 }}>{s.node_id ?? "—"}</td>
-                    <td style={{ padding: "10px 14px" }}>
+                    <td style={{ padding: "var(--cell-pad)", fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: 12 }}>{s.stream_id}</td>
+                    <td style={{ padding: "var(--cell-pad)", color: "var(--color-secondary)" }}>{s.app}</td>
+                    <td style={{ padding: "var(--cell-pad)", color: "var(--color-secondary)", fontSize: 12 }}>{s.node_id ?? "—"}</td>
+                    <td style={{ padding: "var(--cell-pad)" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
                         <div data-testid="health-bar-bg" aria-hidden="true" style={{
                           width: 60,
                           height: 6,
                           background: "var(--color-surface-2)",
-                          borderRadius: 3,
+                          borderRadius: "var(--radius-pill)",
                           overflow: "hidden",
                         }}>
                           <div style={{
                             width: `${s.health_score}%`,
                             height: "100%",
                             background: s.health_score >= 80 ? "var(--color-success)" : s.health_score >= 50 ? "var(--color-warning)" : "var(--color-error)",
-                            borderRadius: 3,
                           }} />
                         </div>
                         <Badge label={healthLabel(s.health_score)} variant={healthVariant(s.health_score)} />
                       </div>
                     </td>
-                    <td style={{ padding: "10px 14px", color: "var(--color-secondary)", fontSize: 12 }}>
+                    <td style={{ padding: "var(--cell-pad)", color: "var(--color-secondary)", fontSize: 12 }}>
                       {(s.drop_events ?? []).length > 0 ? (
                         <span style={{ color: "var(--color-error)", fontWeight: 600 }}>
                           {s.drop_events!.length} drop{s.drop_events!.length > 1 ? "s" : ""}
                         </span>
                       ) : "—"}
                     </td>
-                    <td style={{ padding: "10px 14px", textAlign: "right" }}>
+                    <td style={{ padding: "var(--cell-pad)", textAlign: "right" }}>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelected(selected?.stream_id === s.stream_id ? null : s);
                         }}
+                        className="btn-secondary"
                         style={{
                           background: "none",
-                          border: "1px solid var(--color-border)",
-                          color: "var(--color-secondary)",
-                          borderRadius: 4,
-                          padding: "3px 8px",
+                          borderRadius: "var(--radius-control)",
+                          padding: "6px 10px",
+                          minHeight: 28,
                           cursor: "pointer",
                           fontSize: 11,
                         }}

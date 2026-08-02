@@ -260,11 +260,11 @@ describe("StreamsTable — data cell roles (ST-3)", () => {
 // ── Wave 1: token substitution pins ──────────────────────────────────────────
 
 describe("StreamsTable — token substitution pins", () => {
-  it("outer container borderRadius uses var(--radius-control)", () => {
+  it("outer container borderRadius uses var(--radius-card) (s111 D10: table containers ride the card radius)", () => {
     const { container } = render(<StreamsTable streams={[]} />, { wrapper });
     const outerDiv = container.firstElementChild as HTMLElement;
     const styleText = outerDiv.getAttribute("style") ?? outerDiv.style.cssText;
-    expect(styleText).toContain("var(--radius-control)");
+    expect(styleText).toContain("var(--radius-card)");
   });
 
   it("header cell padding uses var(--space-3) not a hardcoded 12px", () => {

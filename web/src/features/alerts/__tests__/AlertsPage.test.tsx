@@ -69,18 +69,18 @@ describe("AlertsPage (msw)", () => {
     expect(screen.getByText(/cpu_pct/)).toBeInTheDocument();
   });
 
-  it("shows '+ New rule' button on the rules tab after load", async () => {
+  it("shows 'New rule' button on the rules tab after load", async () => {
     renderAlerts();
     await waitForRulesLoaded();
     expect(
-      screen.getByRole("button", { name: /\+ new rule/i })
+      screen.getByRole("button", { name: /^new rule$/i })
     ).toBeInTheDocument();
   });
 
-  it("opens AlertRuleForm when '+ New rule' is clicked", async () => {
+  it("opens AlertRuleForm when 'New rule' is clicked", async () => {
     renderAlerts();
     await waitForRulesLoaded();
-    fireEvent.click(screen.getByRole("button", { name: /\+ new rule/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^new rule$/i }));
     expect(
       screen.getByRole("heading", { name: /new alert rule/i })
     ).toBeInTheDocument();
@@ -89,7 +89,7 @@ describe("AlertsPage (msw)", () => {
   it("cancels the rule form when Cancel is clicked", async () => {
     renderAlerts();
     await waitForRulesLoaded();
-    fireEvent.click(screen.getByRole("button", { name: /\+ new rule/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^new rule$/i }));
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
     expect(
       screen.queryByRole("heading", { name: /new alert rule/i })
@@ -130,7 +130,7 @@ describe("AlertsPage (msw)", () => {
     await waitForRulesLoaded();
 
     // Open the form
-    await user.click(screen.getByRole("button", { name: /\+ new rule/i }));
+    await user.click(screen.getByRole("button", { name: /^new rule$/i }));
 
     // Fill Name
     const nameInput = screen.getByPlaceholderText(/e\.g\. High CPU/i);

@@ -250,7 +250,7 @@ test.describe("ProbesPage", () => {
       // The new probe must not be present before the create.
       await expect(page.getByText("New Origin Probe")).toHaveCount(0);
 
-      await page.getByRole("button", { name: "+ New Probe" }).click();
+      await page.getByRole("button", { name: "New Probe" }).click();
       await expect(page.getByRole("form", { name: "Create probe form" })).toBeVisible();
 
       await page.getByLabel("Name").fill("New Origin Probe");
@@ -281,7 +281,7 @@ test.describe("ProbesPage", () => {
       await page.goto("/probes");
       await expect(page.getByText("Main HLS stream")).toBeVisible();
 
-      await page.getByRole("button", { name: "+ New Probe" }).click();
+      await page.getByRole("button", { name: "New Probe" }).click();
       await expect(page.getByRole("form", { name: "Create probe form" })).toBeVisible();
 
       await page.getByLabel("Name").fill("Test Probe");

@@ -52,7 +52,7 @@ const session = Pulse.init({
     <div style={{
       background: "var(--color-bg)",
       border: "1px solid var(--color-border)",
-      borderRadius: 6,
+      borderRadius: "var(--radius-control)",
       padding: "var(--space-3)",
       position: "relative",
     }}>
@@ -68,15 +68,14 @@ const session = Pulse.init({
       </pre>
       <button
         onClick={copy}
+        className="btn-secondary"
         style={{
           position: "absolute",
           top: 8,
           right: 8,
           background: "var(--color-surface-2)",
-          border: "1px solid var(--color-border)",
-          color: "var(--color-secondary)",
-          borderRadius: 4,
-          padding: "2px 8px",
+          borderRadius: "var(--radius-control)",
+          padding: "4px 8px",
           cursor: "pointer",
           fontSize: 11,
         }}
@@ -209,22 +208,24 @@ export function SettingsPage() {
     }
   };
 
+  // s111 D4-pattern: outline:"none" removed — inputs carry
+  // className="filter-input" so the shared :focus-visible ring applies.
   const inputStyle: React.CSSProperties = {
     background: "var(--color-surface-2)",
     border: "1px solid var(--color-border)",
-    borderRadius: 6,
+    borderRadius: "var(--radius-control)",
     padding: "7px 10px",
     color: "var(--color-text)",
     fontSize: 13,
-    outline: "none",
   };
 
+  // s111 D7/D14: pair with className="btn-secondary" — the class owns
+  // color/border; 28px is the desktop-pointer floor for small row controls.
   const smBtnStyle: React.CSSProperties = {
     background: "var(--color-surface-2)",
-    border: "1px solid var(--color-border)",
-    color: "var(--color-secondary)",
-    borderRadius: 4,
-    padding: "4px 10px",
+    borderRadius: "var(--radius-control)",
+    padding: "6px 10px",
+    minHeight: 28,
     cursor: "pointer",
     fontSize: 11,
   };
@@ -232,7 +233,7 @@ export function SettingsPage() {
   const infoBox: React.CSSProperties = {
     background: "var(--color-surface-2)",
     border: "1px solid var(--color-border)",
-    borderRadius: 6,
+    borderRadius: "var(--radius-control)",
     padding: "var(--space-3) var(--space-4)",
     fontSize: 13,
   };
@@ -251,8 +252,8 @@ export function SettingsPage() {
   const prometheusUrl = `${window.location.protocol}//${window.location.host}/metrics`;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Settings</h1>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
+      <h1 className="page-title">Settings</h1>
 
       {/*
         Custom tab bar: flexWrap="wrap" supports 6 tabs on narrow screens.
@@ -282,26 +283,27 @@ export function SettingsPage() {
             <div role="tabpanel" id="settings-panel-sources" aria-labelledby="tab-sources">
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  {/* s111 D20: '+' glyph dropped — the label carries the meaning. */}
                   <button
+                    className="btn-primary"
                     style={{
-                      background: "var(--color-accent)",
                       border: "none",
                       color: "var(--color-on-signal)",
-                      borderRadius: 6,
-                      padding: "7px 14px",
+                      borderRadius: "var(--radius-control)",
+                      padding: "var(--space-2) var(--space-4)",
                       cursor: "pointer",
                       fontSize: 12,
                       fontWeight: 600,
                     }}
                     onClick={() => toast("Use the onboarding wizard to add sources", "info")}
                   >
-                    + Add source
+                    Add source
                   </button>
                 </div>
                 {sources.length === 0 ? (
                   <p style={{ color: "var(--color-secondary)", fontSize: 13 }}>No AMS sources configured.</p>
                 ) : (
-                  <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, overflow: "hidden" }}>
+                  <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
                     {sources.map((src, i) => (
                       <div
                         key={src.id}
@@ -319,7 +321,7 @@ export function SettingsPage() {
                         </div>
                         <Badge label={src.type} variant="info" />
                         <button
-                          style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
+                          className="btn-secondary" style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
                           onClick={() => void deleteSource(src.id)}
                         >
                           Remove
@@ -338,27 +340,27 @@ export function SettingsPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
                   <button
+                    className="btn-primary"
                     style={{
-                      background: "var(--color-accent)",
                       border: "none",
                       color: "var(--color-on-signal)",
-                      borderRadius: 6,
-                      padding: "7px 14px",
+                      borderRadius: "var(--radius-control)",
+                      padding: "var(--space-2) var(--space-4)",
                       cursor: "pointer",
                       fontSize: 12,
                       fontWeight: 600,
                     }}
                     onClick={() => void createApiToken()}
                   >
-                    + New token
+                    New token
                   </button>
                 </div>
                 {/* Newly created API token (shown once — server hashes on creation and never returns plaintext again) */}
                 {newApiToken && (
-                  <div style={{
+                  <div className="panel-enter" style={{
                     background: "rgba(88,166,255,0.08)",
                     border: "1px solid rgba(88,166,255,0.25)",
-                    borderRadius: 8,
+                    borderRadius: "var(--radius-card)",
                     padding: "var(--space-4)",
                     display: "flex",
                     flexDirection: "column",
@@ -368,27 +370,30 @@ export function SettingsPage() {
                       <span style={{ fontWeight: 700, color: "var(--color-info)", fontSize: 13 }}>
                         Token created — copy it now, it won't be shown again
                       </span>
+                      {/* s111 D20: drawn close icon, not the "x" font glyph */}
                       <button
                         onClick={() => setNewApiToken(null)}
                         aria-label="Dismiss token"
-                        style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--color-info)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}
+                        className="btn-press"
+                        style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--color-info)", cursor: "pointer", minWidth: 28, minHeight: 28, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
                       >
-                        ×
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                          <path d="M18 6 6 18M6 6l12 12" />
+                        </svg>
                       </button>
                     </div>
                     <div style={{ ...infoBox, fontFamily: "var(--font-mono)", fontSize: 12, wordBreak: "break-all", position: "relative" }}>
                       {newApiToken.token}
                       <button
                         onClick={() => void navigator.clipboard.writeText(newApiToken.token).then(() => toast("Token copied", "success"))}
+                        className="btn-secondary"
                         style={{
                           position: "absolute",
                           top: 8,
                           right: 8,
                           background: "var(--color-surface-2)",
-                          border: "1px solid var(--color-border)",
-                          color: "var(--color-secondary)",
-                          borderRadius: 4,
-                          padding: "2px 8px",
+                          borderRadius: "var(--radius-control)",
+                          padding: "4px 8px",
                           cursor: "pointer",
                           fontSize: 11,
                         }}
@@ -402,7 +407,7 @@ export function SettingsPage() {
                 {tokens.length === 0 ? (
                   <EmptyState title="No API tokens" description="API tokens authenticate dashboard and API clients." />
                 ) : (
-                  <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, overflow: "hidden" }}>
+                  <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
                     {tokens.map((tok, i) => (
                       <div
                         key={tok.id}
@@ -422,7 +427,7 @@ export function SettingsPage() {
                           </div>
                         </div>
                         <button
-                          style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
+                          className="btn-secondary" style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
                           onClick={() => void deleteToken(tok.id)}
                         >
                           Revoke
@@ -438,7 +443,7 @@ export function SettingsPage() {
           {/* ── Ingest Tokens tab (Wave-2 addition) ── */}
           {tab === "ingest" && (
             <div role="tabpanel" id="settings-panel-ingest" aria-labelledby="tab-ingest">
-              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
                 <div style={infoBox}>
                   <strong>Ingest tokens</strong> authenticate the beacon SDK. Each token can be scoped to a stream
                   or app. Tokens are revocable; never expose raw values in client-side code beyond the SDK init call.
@@ -446,28 +451,28 @@ export function SettingsPage() {
 
                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
                   <button
+                    className="btn-primary"
                     style={{
-                      background: "var(--color-accent)",
                       border: "none",
                       color: "var(--color-on-signal)",
-                      borderRadius: 6,
-                      padding: "7px 14px",
+                      borderRadius: "var(--radius-control)",
+                      padding: "var(--space-2) var(--space-4)",
                       cursor: "pointer",
                       fontSize: 12,
                       fontWeight: 600,
                     }}
                     onClick={() => void createIngestToken()}
                   >
-                    + New ingest token
+                    New ingest token
                   </button>
                 </div>
 
                 {/* Newly created token (shown once) */}
                 {newIngestToken && (
-                  <div style={{
+                  <div className="panel-enter" style={{
                     background: "rgba(88,166,255,0.08)",
                     border: "1px solid rgba(88,166,255,0.25)",
-                    borderRadius: 8,
+                    borderRadius: "var(--radius-card)",
                     padding: "var(--space-4)",
                     display: "flex",
                     flexDirection: "column",
@@ -479,9 +484,13 @@ export function SettingsPage() {
                       </span>
                       <button
                         onClick={() => setNewIngestToken(null)}
-                        style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--color-info)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}
+                        aria-label="Dismiss token"
+                        className="btn-press"
+                        style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--color-info)", cursor: "pointer", minWidth: 28, minHeight: 28, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
                       >
-                        ×
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                          <path d="M18 6 6 18M6 6l12 12" />
+                        </svg>
                       </button>
                     </div>
                     <div style={{ ...infoBox, fontFamily: "var(--font-mono)", fontSize: 12, wordBreak: "break-all" }}>
@@ -497,7 +506,7 @@ export function SettingsPage() {
                     description="Create an ingest token to authenticate the beacon SDK in your player."
                   />
                 ) : (
-                  <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, overflow: "hidden" }}>
+                  <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
                     {ingestTokens.map((tok, i) => (
                       <div
                         key={tok.id}
@@ -518,7 +527,7 @@ export function SettingsPage() {
                         </div>
                         <Badge label="ingest" variant="info" />
                         <button
-                          style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
+                          className="btn-secondary" style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
                           onClick={() => void deleteToken(tok.id)}
                         >
                           Revoke
@@ -538,13 +547,13 @@ export function SettingsPage() {
           {/* ── Integrations tab (Wave-2 addition) ── */}
           {tab === "integrations" && (
             <div role="tabpanel" id="settings-panel-integrations" aria-labelledby="tab-integrations">
-              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
                 {/* Prometheus */}
                 <div style={{
                   background: "var(--color-surface)",
                   border: "1px solid var(--color-border)",
-                  borderRadius: 8,
-                  padding: 20,
+                  borderRadius: "var(--radius-card)",
+                  padding: "var(--space-5)",
                   display: "flex",
                   flexDirection: "column",
                   gap: "var(--space-3)",
@@ -555,7 +564,7 @@ export function SettingsPage() {
                     set <code style={{ fontFamily: "var(--font-mono)" }}>PULSE_METRICS_TOKEN</code> to require a bearer token.
                   </p>
                   <div style={infoBox}>
-                    <div style={{ fontSize: 11, color: "var(--color-secondary)", marginBottom: "var(--space-1)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Scrape URL</div>
+                    <div className="label" style={{ marginBottom: "var(--space-1)" }}>Scrape URL</div>
                     <div style={{ fontFamily: "var(--font-mono)", fontSize: 13, wordBreak: "break-all" }}>{prometheusUrl}</div>
                   </div>
                   <p style={{ margin: 0, fontSize: 12, color: "var(--color-secondary)" }}>
@@ -565,7 +574,7 @@ export function SettingsPage() {
                     margin: 0,
                     background: "var(--color-bg)",
                     border: "1px solid var(--color-border)",
-                    borderRadius: 6,
+                    borderRadius: "var(--radius-control)",
                     padding: "var(--space-3)",
                     fontSize: 12,
                     fontFamily: "var(--font-mono)",
@@ -584,8 +593,8 @@ export function SettingsPage() {
                 <div style={{
                   background: "var(--color-surface)",
                   border: "1px solid var(--color-border)",
-                  borderRadius: 8,
-                  padding: 20,
+                  borderRadius: "var(--radius-card)",
+                  padding: "var(--space-5)",
                   display: "flex",
                   flexDirection: "column",
                   gap: 14,
@@ -603,7 +612,7 @@ export function SettingsPage() {
                         value={s3Bucket}
                         onChange={(e) => setS3Bucket(e.target.value)}
                         placeholder="my-pulse-reports"
-                        style={{ ...inputStyle }}
+                        className="filter-input" style={{ ...inputStyle }}
                       />
                     </label>
                     <label style={{ fontSize: 12, color: "var(--color-secondary)", display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
@@ -613,7 +622,7 @@ export function SettingsPage() {
                         value={s3Region}
                         onChange={(e) => setS3Region(e.target.value)}
                         placeholder="us-east-1"
-                        style={{ ...inputStyle }}
+                        className="filter-input" style={{ ...inputStyle }}
                       />
                     </label>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -624,7 +633,7 @@ export function SettingsPage() {
                           value={s3KeyEnvRef}
                           onChange={(e) => setS3KeyEnvRef(e.target.value)}
                           placeholder="AWS_ACCESS_KEY_ID"
-                          style={{ ...inputStyle }}
+                          className="filter-input" style={{ ...inputStyle }}
                         />
                       </label>
                       <label style={{ fontSize: 12, color: "var(--color-secondary)", display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
@@ -634,7 +643,7 @@ export function SettingsPage() {
                           value={s3SecretEnvRef}
                           onChange={(e) => setS3SecretEnvRef(e.target.value)}
                           placeholder="AWS_SECRET_ACCESS_KEY"
-                          style={{ ...inputStyle }}
+                          className="filter-input" style={{ ...inputStyle }}
                         />
                       </label>
                     </div>
@@ -645,12 +654,12 @@ export function SettingsPage() {
                     <div style={{ display: "flex", justifyContent: "flex-end" }}>
                       <button
                         type="submit"
+                        className="btn-primary"
                         style={{
-                          background: "var(--color-accent)",
                           border: "none",
                           color: "var(--color-on-signal)",
-                          borderRadius: 6,
-                          padding: "7px 14px",
+                          borderRadius: "var(--radius-control)",
+                          padding: "var(--space-2) var(--space-4)",
                           cursor: "pointer",
                           fontSize: 13,
                           fontWeight: 600,
@@ -668,14 +677,14 @@ export function SettingsPage() {
           {/* ── License tab ── */}
           {tab === "license" && (
             <div role="tabpanel" id="settings-panel-license" aria-labelledby="tab-license">
-              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
                 {license && (
                   <div
                     style={{
                       background: "var(--color-surface)",
                       border: "1px solid var(--color-border)",
-                      borderRadius: 8,
-                      padding: "20px",
+                      borderRadius: "var(--radius-card)",
+                      padding: "var(--space-5)",
                       display: "flex",
                       flexDirection: "column",
                       gap: "var(--space-3)",
@@ -696,8 +705,8 @@ export function SettingsPage() {
                     {license.limits && (
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
                         {Object.entries(license.limits).map(([k, v]) => (
-                          <div key={k} style={{ background: "var(--color-surface-2)", borderRadius: 6, padding: "var(--space-2) var(--space-3)" }}>
-                            <div style={{ fontSize: 11, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{k.replace(/_/g, " ")}</div>
+                          <div key={k} style={{ background: "var(--color-surface-2)", borderRadius: "var(--radius-control)", padding: "var(--space-2) var(--space-3)" }}>
+                            <div className="label">{k.replace(/_/g, " ")}</div>
                             <div style={{ fontSize: 15, fontWeight: 600, marginTop: 2 }}>{v === -1 ? "∞" : String(v)}</div>
                           </div>
                         ))}
@@ -710,8 +719,8 @@ export function SettingsPage() {
                   style={{
                     background: "var(--color-surface)",
                     border: "1px solid var(--color-border)",
-                    borderRadius: 8,
-                    padding: "20px",
+                    borderRadius: "var(--radius-card)",
+                    padding: "var(--space-5)",
                   }}
                 >
                   <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 600 }}>
@@ -719,6 +728,7 @@ export function SettingsPage() {
                   </h3>
                   <form onSubmit={(e) => void saveLicense(e)} style={{ display: "flex", gap: 10 }}>
                     <input
+                      className="filter-input"
                       style={{ ...inputStyle, flex: 1 }}
                       type="text"
                       value={licenseKey}
@@ -728,16 +738,14 @@ export function SettingsPage() {
                     <button
                       type="submit"
                       disabled={savingLicense || !licenseKey.trim()}
+                      className="btn-primary"
                       style={{
-                        background: "var(--color-accent)",
                         border: "none",
                         color: "var(--color-on-signal)",
-                        borderRadius: 6,
+                        borderRadius: "var(--radius-control)",
                         padding: "var(--space-2) var(--space-4)",
-                        cursor: "pointer",
                         fontSize: 13,
                         fontWeight: 600,
-                        opacity: savingLicense ? 0.7 : 1,
                       }}
                     >
                       {savingLicense ? "Activating…" : "Activate"}

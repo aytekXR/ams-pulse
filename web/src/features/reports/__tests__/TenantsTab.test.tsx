@@ -269,7 +269,7 @@ describe("ReportsPage tenants tab", () => {
     });
   });
 
-  it("shows tenant form when '+ New tenant' clicked", async () => {
+  it("shows tenant form when 'New tenant' clicked", async () => {
     // VD-01: use business tier (pro is now gated)
     vi.mocked(adminApi.getLicense).mockResolvedValue({ tier: "business", valid: true });
     vi.mocked(adminApi.listTenants).mockResolvedValue({
@@ -279,8 +279,8 @@ describe("ReportsPage tenants tab", () => {
     render(<ReportsPage />);
     await waitFor(() => screen.getByRole("tab", { name: /tenants/i }));
     fireEvent.click(screen.getByRole("tab", { name: /tenants/i }));
-    await waitFor(() => screen.getByText(/\+ new tenant/i));
-    fireEvent.click(screen.getByText(/\+ new tenant/i));
+    await waitFor(() => screen.getByText(/^new tenant$/i));
+    fireEvent.click(screen.getByText(/^new tenant$/i));
     await waitFor(() => {
       expect(screen.getByTestId("tenant-form")).toBeInTheDocument();
     });
@@ -321,8 +321,8 @@ describe("ReportsPage tenants tab", () => {
     render(<ReportsPage />);
     await waitFor(() => screen.getByRole("tab", { name: /tenants/i }));
     fireEvent.click(screen.getByRole("tab", { name: /tenants/i }));
-    await waitFor(() => screen.getByText(/\+ new tenant/i));
-    fireEvent.click(screen.getByText(/\+ new tenant/i));
+    await waitFor(() => screen.getByText(/^new tenant$/i));
+    fireEvent.click(screen.getByText(/^new tenant$/i));
     await waitFor(() => screen.getByTestId("tenant-form"));
 
     // Fill in name

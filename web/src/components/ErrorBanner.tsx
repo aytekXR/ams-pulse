@@ -10,7 +10,7 @@ export function ErrorBanner({ message, onRetry }: Props) {
       style={{
         background: "var(--color-error-bg, rgba(255,92,104,0.1))",
         border: "1px solid var(--color-error, #FF5C68)",
-        borderRadius: 6,
+        borderRadius: "var(--radius-control)",
         padding: "12px 16px",
         display: "flex",
         alignItems: "center",
@@ -20,13 +20,15 @@ export function ErrorBanner({ message, onRetry }: Props) {
     >
       <span style={{ flex: 1, fontSize: 14 }}>{message}</span>
       {onRetry && (
+        // s111 M2/D21: .btn-press supplies press scale + focus ring.
         <button
           onClick={onRetry}
+          className="btn-press"
           style={{
             background: "none",
             border: "1px solid currentColor",
             color: "inherit",
-            borderRadius: 4,
+            borderRadius: "var(--radius-control)",
             padding: "4px 10px",
             cursor: "pointer",
             fontSize: 12,
