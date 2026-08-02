@@ -26,16 +26,17 @@ export function LiveDashboard({ onConnectionChange }: { onConnectionChange?: (v:
     : null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Live Dashboard</h1>
+        <h1 className="page-title">Live Dashboard</h1>
+        {/* s111 D1/D7: muted text purged; .btn-secondary owns color/border so
+            hover can win (do not re-add them inline). */}
         <button
           onClick={refresh}
+          className="btn-secondary"
           style={{
             background: "var(--color-surface-2)",
-            border: "1px solid var(--color-border)",
-            color: "var(--color-muted)",
-            borderRadius: 6,
+            borderRadius: "var(--radius-control)",
             padding: "6px 12px",
             cursor: "pointer",
             fontSize: 12,
@@ -99,11 +100,11 @@ export function LiveDashboard({ onConnectionChange }: { onConnectionChange?: (v:
               style={{
                 background: "var(--color-surface)",
                 border: "1px solid var(--color-border)",
-                borderRadius: "var(--radius-control)",
+                borderRadius: "var(--radius-card)",
                 padding: "var(--space-4)",
               }}
             >
-              <h2 style={{ margin: "0 0 var(--space-3)", fontSize: 13, fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              <h2 className="label" style={{ margin: "0 0 var(--space-3)" }}>
                 Protocol mix
               </h2>
               <ProtocolDonut data={overview?.protocol_mix ?? { webrtc: 0, hls: 0, rtmp: 0, dash: 0, other: 0 }} />
@@ -113,22 +114,22 @@ export function LiveDashboard({ onConnectionChange }: { onConnectionChange?: (v:
               style={{
                 background: "var(--color-surface)",
                 border: "1px solid var(--color-border)",
-                borderRadius: "var(--radius-control)",
+                borderRadius: "var(--radius-card)",
                 padding: "var(--space-4)",
               }}
             >
-              <h2 style={{ margin: "0 0 var(--space-3)", fontSize: 13, fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              <h2 className="label" style={{ margin: "0 0 var(--space-3)" }}>
                 By application
               </h2>
               {(overview?.apps ?? []).length === 0 ? (
-                <p style={{ color: "var(--color-muted)", fontSize: 13, margin: 0 }}>No data</p>
+                <p style={{ color: "var(--color-secondary)", fontSize: 12, margin: 0 }}>No data</p>
               ) : (
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
-                    <tr style={{ color: "var(--color-muted)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                      <th style={{ textAlign: "left", padding: "var(--space-1) var(--space-2)", fontWeight: 600 }}>App</th>
-                      <th style={{ textAlign: "right", padding: "var(--space-1) var(--space-2)", fontWeight: 600 }}>Viewers</th>
-                      <th style={{ textAlign: "right", padding: "var(--space-1) var(--space-2)", fontWeight: 600 }}>Publishers</th>
+                    <tr>
+                      <th className="label" style={{ textAlign: "left", padding: "var(--space-1) var(--space-2)" }}>App</th>
+                      <th className="label" style={{ textAlign: "right", padding: "var(--space-1) var(--space-2)" }}>Viewers</th>
+                      <th className="label" style={{ textAlign: "right", padding: "var(--space-1) var(--space-2)" }}>Publishers</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -138,8 +139,10 @@ export function LiveDashboard({ onConnectionChange }: { onConnectionChange?: (v:
                         style={{ borderTop: "1px solid var(--color-border)" }}
                       >
                         <td style={{ padding: "var(--space-2)", fontFamily: "var(--font-mono)", fontSize: 12 }}>{app.app}</td>
-                        <td style={{ padding: "var(--space-2)", textAlign: "right" }}>{(app.viewers ?? 0).toLocaleString()}</td>
-                        <td style={{ padding: "var(--space-2)", textAlign: "right" }}>{app.publishers ?? 0}</td>
+                        {/* s111 D12: data-numeric → tabular-nums (global.css);
+                            these cells update live and must not jitter. */}
+                        <td data-numeric style={{ padding: "var(--space-2)", textAlign: "right" }}>{(app.viewers ?? 0).toLocaleString()}</td>
+                        <td data-numeric style={{ padding: "var(--space-2)", textAlign: "right" }}>{app.publishers ?? 0}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -150,7 +153,7 @@ export function LiveDashboard({ onConnectionChange }: { onConnectionChange?: (v:
 
           {/* Streams table (virtualized) */}
           <div>
-            <h2 style={{ margin: "0 0 var(--space-3)", fontSize: 13, fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            <h2 className="label" style={{ margin: "0 0 var(--space-3)" }}>
               Active streams ({streams.length.toLocaleString()})
             </h2>
             <StreamsTable streams={streams} />

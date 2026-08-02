@@ -27,14 +27,59 @@ const FOCUS_RING_CONTRACT: Record<string, string[]> = {
   "filter-input": [
     "../../features/qoe/QoePage.tsx",
     "../../features/analytics/DateRangePicker.tsx",
+    // s111 D4: the login token input joins the contract (it previously set
+    // outline:"none" with no replacement ring).
+    "../../components/AuthGate.tsx",
+    // s111 features pass: every input that suppressed its outline joins too.
+    "../../features/settings/OnboardingWizard.tsx",
+    "../../features/settings/SettingsPage.tsx",
+    "../../features/reports/ReportsPage.tsx",
+    "../../features/alerts/AlertRuleForm.tsx",
+    "../../features/alerts/AlertChannelForm.tsx",
   ],
   // Wave 2
   "seg-btn": ["../../components/SegmentedControl.tsx"],
   "btn-secondary": [
     "../../features/analytics/AnalyticsPage.tsx",
     "../../features/fleet/FleetPage.tsx",
+    // s111 D7 features pass
+    "../../features/live/LiveDashboard.tsx",
+    "../../features/ingest/IngestPage.tsx",
+    "../../features/alerts/AlertsPage.tsx",
+    "../../features/probes/ProbesPage.tsx",
+    "../../features/audit-log/AuditLogPage.tsx",
+    "../../features/settings/SettingsPage.tsx",
+    "../../features/reports/ReportsPage.tsx",
   ],
   "picker-btn": ["../../features/analytics/DateRangePicker.tsx"],
+  // s111 D21/D7: shell controls + shared buttons join the contract.
+  "nav-link": ["../../components/Layout.tsx"],
+  "icon-btn": [
+    "../../components/Layout.tsx",
+    "../../components/TrialBanner.tsx",
+    "../../features/probes/ProbesPage.tsx",
+    "../../features/settings/OnboardingWizard.tsx",
+  ],
+  "btn-primary": [
+    "../../components/AuthGate.tsx",
+    // s111 D7 features pass
+    "../../features/alerts/AlertsPage.tsx",
+    "../../features/probes/ProbesPage.tsx",
+    "../../features/anomalies/AnomaliesPage.tsx",
+    "../../features/audit-log/AuditLogPage.tsx",
+    "../../features/settings/OnboardingWizard.tsx",
+    "../../features/settings/SettingsPage.tsx",
+    "../../features/reports/ReportsPage.tsx",
+    "../../features/analytics/DateRangePicker.tsx",
+    "../../features/qoe/QoePage.tsx",
+  ],
+  "btn-press": [
+    "../../components/ErrorBanner.tsx",
+    "../../features/probes/ProbesPage.tsx",
+    "../../features/reports/ReportsPage.tsx",
+    "../../features/settings/OnboardingWizard.tsx",
+    "../../features/settings/SettingsPage.tsx",
+  ],
 };
 
 /**

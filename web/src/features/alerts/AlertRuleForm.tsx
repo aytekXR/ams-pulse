@@ -160,14 +160,15 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
     color: "var(--color-secondary)",
   };
 
+  // s111 D4-pattern: outline:"none" removed — inputs carry
+  // className="filter-input" so the shared :focus-visible ring applies.
   const inputStyle: React.CSSProperties = {
     background: "var(--color-surface-2)",
     border: "1px solid var(--color-border)",
-    borderRadius: 6,
+    borderRadius: "var(--radius-control)",
     padding: "7px 10px",
     color: "var(--color-text)",
     fontSize: 13,
-    outline: "none",
   };
   return (
     <form onSubmit={(e) => void handleSubmit(e)} style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
@@ -184,7 +185,7 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
         <select
           id="rule-rule-type"
           aria-label="Rule type"
-          style={inputStyle}
+          className="filter-input" style={inputStyle}
           value={ruleType}
           onChange={(e) => handleRuleTypeChange(e.target.value as "threshold" | "anomaly")}
         >
@@ -199,7 +200,7 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
         <input
           id="rule-name"
           ref={nameRef}
-          style={{ ...inputStyle, borderColor: errors.name ? "var(--color-error)" : "var(--color-border)" }}
+          className="filter-input" style={{ ...inputStyle, borderColor: errors.name ? "var(--color-error)" : "var(--color-border)" }}
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. High CPU alert"
@@ -217,7 +218,7 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "var(--space-3)" }}>
         <div style={fieldStyle}>
           <label htmlFor="rule-metric" style={labelStyle}>Metric</label>
-          <select id="rule-metric" style={inputStyle} value={metric} onChange={(e) => setMetric(e.target.value)}>
+          <select id="rule-metric" className="filter-input" style={inputStyle} value={metric} onChange={(e) => setMetric(e.target.value)}>
             {(ruleType === "anomaly" ? ANOMALY_METRICS : METRICS).map((m) => (
               <option key={m} value={m}>{m}</option>
             ))}
@@ -230,7 +231,7 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
               <label htmlFor="rule-operator" style={labelStyle}>Operator</label>
               <select
                 id="rule-operator"
-                style={inputStyle}
+                className="filter-input" style={inputStyle}
                 value={operator}
                 onChange={(e) => setOperator(e.target.value as "gt" | "lt" | "gte" | "lte" | "eq")}
               >
@@ -242,7 +243,7 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
               <input
                 id="rule-threshold"
                 ref={thresholdRef}
-                style={{ ...inputStyle, borderColor: errors.threshold ? "var(--color-error)" : "var(--color-border)" }}
+                className="filter-input" style={{ ...inputStyle, borderColor: errors.threshold ? "var(--color-error)" : "var(--color-border)" }}
                 type="number"
                 value={threshold}
                 onChange={(e) => setThreshold(e.target.value)}
@@ -266,7 +267,7 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
                 id="rule-sigma"
                 aria-label="Sigma"
                 ref={sigmaRef}
-                style={{ ...inputStyle, borderColor: errors.sigma ? "var(--color-error)" : "var(--color-border)" }}
+                className="filter-input" style={{ ...inputStyle, borderColor: errors.sigma ? "var(--color-error)" : "var(--color-border)" }}
                 type="number"
                 step="0.1"
                 value={sigma}
@@ -286,7 +287,7 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
               <input
                 id="rule-min-samples"
                 aria-label="Min Samples"
-                style={inputStyle}
+                className="filter-input" style={inputStyle}
                 type="number"
                 value={minSamples}
                 onChange={(e) => setMinSamples(e.target.value)}
@@ -301,7 +302,7 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "var(--space-3)" }}>
         <div style={fieldStyle}>
           <label htmlFor="rule-severity" style={labelStyle}>Severity</label>
-          <select id="rule-severity" style={inputStyle} value={severity} onChange={(e) => setSeverity(e.target.value as typeof severity)}>
+          <select id="rule-severity" className="filter-input" style={inputStyle} value={severity} onChange={(e) => setSeverity(e.target.value as typeof severity)}>
             {SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
@@ -311,7 +312,7 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
           </label>
           <select
             id="rule-window"
-            style={{ ...inputStyle, opacity: ruleType === "anomaly" ? 0.6 : 1 }}
+            className="filter-input" style={{ ...inputStyle, opacity: ruleType === "anomaly" ? 0.6 : 1 }}
             value={ruleType === "anomaly" ? 3600 : windowS}
             onChange={(e) => setWindowS(Number(e.target.value))}
             disabled={ruleType === "anomaly"}
@@ -323,7 +324,7 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
           <label htmlFor="rule-cooldown" style={labelStyle}>Cooldown (s)</label>
           <input
             id="rule-cooldown"
-            style={inputStyle}
+            className="filter-input" style={inputStyle}
             type="number"
             value={cooldownS}
             onChange={(e) => setCooldownS(e.target.value)}
@@ -333,29 +334,29 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
       </div>
 
       {/* Scope (optional) */}
-      <details style={{ background: "var(--color-surface-2)", borderRadius: 6, padding: "var(--space-3)" }}>
+      <details style={{ background: "var(--color-surface-2)", borderRadius: "var(--radius-control)", padding: "var(--space-3)" }}>
         <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--color-secondary)", fontWeight: 500 }}>
           Scope (optional -- leave blank to match all)
         </summary>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "var(--space-3)", marginTop: "var(--space-3)" }}>
           <div style={fieldStyle}>
             <label htmlFor="rule-scope-stream" style={labelStyle}>Stream ID</label>
-            <input id="rule-scope-stream" style={inputStyle} value={scopeStreamId} onChange={(e) => setScopeStreamId(e.target.value)} placeholder="any" />
+            <input id="rule-scope-stream" className="filter-input" style={inputStyle} value={scopeStreamId} onChange={(e) => setScopeStreamId(e.target.value)} placeholder="any" />
           </div>
           <div style={fieldStyle}>
             <label htmlFor="rule-scope-app" style={labelStyle}>App</label>
-            <input id="rule-scope-app" style={inputStyle} value={scopeApp} onChange={(e) => setScopeApp(e.target.value)} placeholder="any" />
+            <input id="rule-scope-app" className="filter-input" style={inputStyle} value={scopeApp} onChange={(e) => setScopeApp(e.target.value)} placeholder="any" />
           </div>
           <div style={fieldStyle}>
             <label htmlFor="rule-scope-node" style={labelStyle}>Node ID</label>
-            <input id="rule-scope-node" style={inputStyle} value={scopeNodeId} onChange={(e) => setScopeNodeId(e.target.value)} placeholder="any" />
+            <input id="rule-scope-node" className="filter-input" style={inputStyle} value={scopeNodeId} onChange={(e) => setScopeNodeId(e.target.value)} placeholder="any" />
           </div>
         </div>
         <div style={{ marginTop: "var(--space-3)", ...fieldStyle }}>
           <label htmlFor="rule-group-by" style={labelStyle}>Group by dimension (e.g. stream_id, app, node_id)</label>
           <input
             id="rule-group-by"
-            style={inputStyle}
+            className="filter-input" style={inputStyle}
             value={groupBy}
             onChange={(e) => setGroupBy(e.target.value)}
             placeholder="stream_id"
@@ -389,11 +390,10 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
         <button
           type="button"
           onClick={onCancel}
+          className="btn-secondary"
           style={{
             background: "var(--color-surface-2)",
-            border: "1px solid var(--color-border)",
-            color: "var(--color-secondary)",
-            borderRadius: 6,
+            borderRadius: "var(--radius-control)",
             padding: "var(--space-2) var(--space-4)",
             cursor: "pointer",
             fontSize: 13,
@@ -404,16 +404,14 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
         <button
           type="submit"
           disabled={saving}
+          className="btn-primary"
           style={{
-            background: "var(--color-accent)",
             border: "none",
             color: "var(--color-on-signal)",
-            borderRadius: 6,
+            borderRadius: "var(--radius-control)",
             padding: "8px 20px",
-            cursor: "pointer",
             fontSize: 13,
             fontWeight: 600,
-            opacity: saving ? 0.7 : 1,
           }}
         >
           {saving ? "Saving…" : "Save rule"}

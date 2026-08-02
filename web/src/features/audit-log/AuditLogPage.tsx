@@ -29,18 +29,16 @@ function formatActor(e: AuditEntry): string {
   return "—";
 }
 
+// s111 D11: font styling lives in the tokenized .label role (global.css);
+// only layout props remain here.
 const thStyle: CSSProperties = {
   padding: "var(--space-2) var(--space-3)",
   textAlign: "left",
-  fontSize: 11,
-  fontWeight: 600,
-  color: "var(--color-secondary)",
-  textTransform: "uppercase",
-  letterSpacing: "0.06em",
 };
 
 const tdStyle: CSSProperties = {
-  padding: "10px 12px",
+  // s111 D19: block padding derives from --row-height so density modes apply.
+  padding: "calc((var(--row-height) - 20px) / 2) var(--space-3)",
   fontSize: 12,
   color: "var(--color-text)",
   borderBottom: "1px solid var(--color-border)",
@@ -126,27 +124,26 @@ export function AuditLogPage() {
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)", marginBottom: 12 }}>
-        <h1 style={{ flex: 1, fontSize: 20, fontWeight: 700, margin: 0 }}>Audit Log</h1>
+        <h1 className="page-title" style={{ flex: 1 }}>Audit Log</h1>
         <button
           onClick={() => load(null)}
           disabled={loading}
+          className="btn-primary"
           style={{
-            background: "var(--color-accent)",
             color: "var(--color-on-signal)",
             border: "none",
-            borderRadius: 6,
+            borderRadius: "var(--radius-control)",
             padding: "6px 14px",
+            minHeight: 28,
             fontSize: 13,
             fontWeight: 600,
-            cursor: loading ? "not-allowed" : "pointer",
-            opacity: loading ? 0.7 : 1,
           }}
         >
           Refresh
         </button>
       </div>
 
-      <p style={{ fontSize: 13, color: "var(--color-secondary)", margin: "0 0 20px", maxWidth: 760 }}>
+      <p style={{ fontSize: 13, color: "var(--color-secondary)", margin: "0 0 var(--space-5)", maxWidth: 760 }}>
         Every change to alert rules &amp; channels, users, tokens, probes, report schedules, AMS sources,
         tenants and the licence is recorded here — who made it, when, and from where. Entries are
         append-only and newest first.
@@ -176,7 +173,7 @@ export function AuditLogPage() {
           style={{
             background: "var(--color-surface)",
             border: "1px solid var(--color-border)",
-            borderRadius: 8,
+            borderRadius: "var(--radius-card)",
             overflow: "hidden",
           }}
         >
@@ -187,12 +184,12 @@ export function AuditLogPage() {
             >
               <thead>
                 <tr style={{ background: "var(--color-surface-2)" }}>
-                  <th style={thStyle}>Time</th>
-                  <th style={thStyle}>Actor</th>
-                  <th style={thStyle}>Action</th>
-                  <th style={thStyle}>Object</th>
-                  <th style={thStyle}>Object ID</th>
-                  <th style={thStyle}>Source IP</th>
+                  <th className="label" style={thStyle}>Time</th>
+                  <th className="label" style={thStyle}>Actor</th>
+                  <th className="label" style={thStyle}>Action</th>
+                  <th className="label" style={thStyle}>Object</th>
+                  <th className="label" style={thStyle}>Object ID</th>
+                  <th className="label" style={thStyle}>Source IP</th>
                 </tr>
               </thead>
               <tbody>
@@ -213,16 +210,14 @@ export function AuditLogPage() {
               <button
                 onClick={() => load(nextCursor)}
                 disabled={loadingMore}
+                className="btn-secondary"
                 style={{
                   background: "var(--color-surface-2)",
-                  color: "var(--color-text)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 6,
+                  borderRadius: "var(--radius-control)",
                   padding: "6px 16px",
+                  minHeight: 28,
                   fontSize: 13,
                   fontWeight: 600,
-                  cursor: loadingMore ? "not-allowed" : "pointer",
-                  opacity: loadingMore ? 0.7 : 1,
                 }}
               >
                 {loadingMore ? "Loading…" : "Load more"}

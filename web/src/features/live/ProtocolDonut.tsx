@@ -1,6 +1,6 @@
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import type { ProtocolMix } from "@/lib/api/types";
-import { PROTOCOL_COLORS, CHART_COLORS } from "@/lib/chartColors";
+import { PROTOCOL_COLORS, CHART_COLORS, CHART_LEGEND_STYLE, CHART_TOOLTIP_STYLE } from "@/lib/chartColors";
 
 interface Props {
   data: ProtocolMix;
@@ -64,7 +64,7 @@ export function ProtocolDonut({ data }: Props) {
 
   if (entries.length === 0) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 160, color: "var(--color-muted)", fontSize: 13 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 160, color: "var(--color-secondary)", fontSize: 12 }}>
         No viewers
       </div>
     );
@@ -101,20 +101,16 @@ export function ProtocolDonut({ data }: Props) {
             />
           ))}
         </Pie>
-        <Tooltip
-          contentStyle={{
-            background: "var(--color-surface)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 6,
-            color: "var(--color-text)",
-          }}
-        />
+        {/* s111 M4: isAnimationActive={false} — the 400ms position-lag trails the
+            cursor while an operator reads precise values; instant is correct for
+            functional data (same rule as the QO-1 Line fix). */}
+        <Tooltip isAnimationActive={false} contentStyle={CHART_TOOLTIP_STYLE} />
         {/* iconType="circle" pairs a consistent shape with colour so adjacent
             series remain distinguishable without relying on hue alone (P-5). */}
         <Legend
           iconSize={10}
           iconType="circle"
-          wrapperStyle={{ fontSize: 12, color: "var(--color-muted)" }}
+          wrapperStyle={CHART_LEGEND_STYLE}
         />
       </PieChart>
     </ResponsiveContainer>

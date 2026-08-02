@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { alertsApi, ApiError } from "@/api/client";
 import { AlertRuleForm } from "./AlertRuleForm";
 import { AlertChannelForm } from "./AlertChannelForm";
@@ -62,6 +62,23 @@ export function AlertsPage() {
   const [confirmDeleteRuleId, setConfirmDeleteRuleId] = useState<string | null>(null);
   const [confirmDeleteChannelId, setConfirmDeleteChannelId] = useState<string | null>(null);
 
+  // s111 D15: the confirmation renders INSIDE the affected row (the old
+  // top-of-list strip could sit off-screen for row 40 of a long list, named no
+  // rule, and never moved keyboard focus). Focus lands on "Yes, delete" when a
+  // confirmation opens and returns to the row's Delete button on cancel.
+  const confirmRuleBtnRef = useRef<HTMLButtonElement | null>(null);
+  const ruleDeleteBtnRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const confirmChannelBtnRef = useRef<HTMLButtonElement | null>(null);
+  const channelDeleteBtnRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  useEffect(() => {
+    if (confirmDeleteRuleId) confirmRuleBtnRef.current?.focus();
+  }, [confirmDeleteRuleId]);
+
+  useEffect(() => {
+    if (confirmDeleteChannelId) confirmChannelBtnRef.current?.focus();
+  }, [confirmDeleteChannelId]);
+
   const loadAll = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -114,7 +131,9 @@ export function AlertsPage() {
   };
 
   const cancelDeleteRule = () => {
+    const id = confirmDeleteRuleId;
     setConfirmDeleteRuleId(null);
+    if (id) ruleDeleteBtnRefs.current[id]?.focus();
   };
 
   const saveChannel = async (data: AlertChannelWrite) => {
@@ -148,7 +167,9 @@ export function AlertsPage() {
   };
 
   const cancelDeleteChannel = () => {
+    const id = confirmDeleteChannelId;
     setConfirmDeleteChannelId(null);
+    if (id) channelDeleteBtnRefs.current[id]?.focus();
   };
 
   const testChannel = async (id: string) => {
@@ -169,36 +190,43 @@ export function AlertsPage() {
     }
   };
 
+  // s111 D7: pair with className="btn-primary" — the class owns background
+  // (accent -> accent-hover on hover); re-adding it inline would kill hover.
   const btnStyle: React.CSSProperties = {
-    background: "var(--color-accent)",
     border: "none",
     color: "var(--color-on-signal)",
-    borderRadius: 6,
-    padding: "7px 14px",
+    borderRadius: "var(--radius-control)",
+    padding: "var(--space-2) var(--space-4)",
     cursor: "pointer",
     fontSize: 12,
     fontWeight: 600,
   };
 
+  // s111 D7/D14: pair with className="btn-secondary" — the class owns
+  // color/border (destructive variants override them inline, deliberately
+  // keeping their fixed error colour). 28px = the audit's desktop-pointer
+  // floor for small row controls.
   const smBtnStyle: React.CSSProperties = {
     background: "var(--color-surface-2)",
-    border: "1px solid var(--color-border)",
-    color: "var(--color-secondary)",
-    borderRadius: 4,
-    padding: "4px 10px",
+    borderRadius: "var(--radius-control)",
+    padding: "6px 10px",
+    minHeight: 28,
     cursor: "pointer",
     fontSize: 11,
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Alerts</h1>
+        <h1 className="page-title">Alerts</h1>
+        {/* s111 D20: '+' glyph dropped from the labels — a font character
+            standing in for an icon drifts in weight against the app's drawn
+            2px-stroke SVG system, and "New rule" carries the meaning alone. */}
         {tab === "rules" && (
-          <button style={btnStyle} onClick={() => setEditingRule("new")}>+ New rule</button>
+          <button className="btn-primary" style={btnStyle} onClick={() => setEditingRule("new")}>New rule</button>
         )}
         {tab === "channels" && (
-          <button style={btnStyle} onClick={() => setEditingChannel("new")}>+ New channel</button>
+          <button className="btn-primary" style={btnStyle} onClick={() => setEditingChannel("new")}>New channel</button>
         )}
       </div>
 
@@ -215,13 +243,15 @@ export function AlertsPage() {
 
       {error && <ErrorBanner message={error} onRetry={loadAll} />}
 
-      {/* Rule form */}
+      {/* Rule form — s111 M5: .panel-enter fades the conditional mount in
+          (200ms, "fade never slide"); exit stays instant. */}
       {editingRule !== null && (
         <div
+          className="panel-enter"
           style={{
             background: "var(--color-surface)",
             border: "1px solid var(--color-border)",
-            borderRadius: 10,
+            borderRadius: "var(--radius-card)",
             padding: "var(--space-5)",
           }}
         >
@@ -233,13 +263,14 @@ export function AlertsPage() {
         </div>
       )}
 
-      {/* Channel form */}
+      {/* Channel form — s111 M5: same entrance as the rule form. */}
       {editingChannel !== null && (
         <div
+          className="panel-enter"
           style={{
             background: "var(--color-surface)",
             border: "1px solid var(--color-border)",
-            borderRadius: 10,
+            borderRadius: "var(--radius-card)",
             padding: "var(--space-5)",
           }}
         >
@@ -258,48 +289,18 @@ export function AlertsPage() {
           {/* Rules panel — aria-labelledby references the id="tab-rules" button emitted by <Tabs> */}
           {tab === "rules" && (
             <div role="tabpanel" id="panel-rules" aria-labelledby="tab-rules">
-              {/* Inline confirmation step for destructive rule deletion */}
-              {confirmDeleteRuleId && (
-                <div
-                  data-testid="delete-rule-confirm"
-                  style={{
-                    background: "var(--color-error-bg)",
-                    border: "1px solid var(--color-error)",
-                    borderRadius: 8,
-                    padding: "var(--space-3) var(--space-4)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "var(--space-3)",
-                    marginBottom: "var(--space-3)",
-                  }}
-                >
-                  <span style={{ flex: 1, fontSize: 13 }}>
-                    Delete this alert rule? This action cannot be undone.
-                  </span>
-                  <button
-                    style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
-                    onClick={() => void confirmDeleteRule()}
-                  >
-                    Yes, delete
-                  </button>
-                  <button style={smBtnStyle} onClick={cancelDeleteRule}>
-                    Cancel
-                  </button>
-                </div>
-              )}
-
               {rules.length === 0 ? (
                 <EmptyState
                   title="No alert rules"
                   description="Create a rule to start monitoring your streams and infrastructure."
-                  action={<button style={btnStyle} onClick={() => setEditingRule("new")}>Create first rule</button>}
+                  action={<button className="btn-primary" style={btnStyle} onClick={() => setEditingRule("new")}>Create first rule</button>}
                 />
               ) : (
                 <div
                   style={{
                     background: "var(--color-surface)",
                     border: "1px solid var(--color-border)",
-                    borderRadius: 8,
+                    borderRadius: "var(--radius-card)",
                     overflow: "hidden",
                   }}
                 >
@@ -323,13 +324,45 @@ export function AlertsPage() {
                       <Badge label={rule.severity} variant={severityVariant(rule.severity)} />
                       {!rule.enabled && <Badge label="disabled" variant="muted" />}
                       {rule.enabled && rule.muted && <Badge label="muted" variant="muted" />}
-                      <button style={smBtnStyle} onClick={() => setEditingRule(rule)}>Edit</button>
-                      <button
-                        style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
-                        onClick={() => requestDeleteRule(rule.id)}
-                      >
-                        Delete
-                      </button>
+                      {/* s111 D15: confirmation replaces THIS row's actions —
+                          attached to the object it deletes, names the rule, and
+                          manages focus (see the refs above). */}
+                      {confirmDeleteRuleId === rule.id ? (
+                        <div
+                          data-testid="delete-rule-confirm"
+                          role="group"
+                          aria-label={`Confirm deleting rule ${ruleDisplayName(rule)}`}
+                          className="panel-enter"
+                          style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}
+                        >
+                          <span style={{ fontSize: 12, color: "var(--color-error)" }}>
+                            Delete “{ruleDisplayName(rule)}”? This action cannot be undone.
+                          </span>
+                          <button
+                            ref={confirmRuleBtnRef}
+                            className="btn-secondary"
+                            style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
+                            onClick={() => void confirmDeleteRule()}
+                          >
+                            Yes, delete
+                          </button>
+                          <button className="btn-secondary" style={smBtnStyle} onClick={cancelDeleteRule}>
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <button className="btn-secondary" style={smBtnStyle} onClick={() => setEditingRule(rule)}>Edit</button>
+                          <button
+                            ref={(el) => { ruleDeleteBtnRefs.current[rule.id] = el; }}
+                            className="btn-secondary"
+                            style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
+                            onClick={() => requestDeleteRule(rule.id)}
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -340,49 +373,18 @@ export function AlertsPage() {
           {/* Channels panel */}
           {tab === "channels" && (
             <div role="tabpanel" id="panel-channels" aria-labelledby="tab-channels">
-              {/* Inline confirmation step for destructive channel deletion — same model as rules */}
-              {confirmDeleteChannelId && (
-                <div
-                  data-testid="delete-channel-confirm"
-                  style={{
-                    background: "var(--color-error-bg)",
-                    border: "1px solid var(--color-error)",
-                    borderRadius: 8,
-                    padding: "var(--space-3) var(--space-4)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "var(--space-3)",
-                    marginBottom: "var(--space-3)",
-                  }}
-                >
-                  <span style={{ flex: 1, fontSize: 13 }}>
-                    Delete this notification channel? Alert rules routing to it will stop
-                    notifying. This action cannot be undone.
-                  </span>
-                  <button
-                    style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
-                    onClick={() => void confirmDeleteChannel()}
-                  >
-                    Yes, delete
-                  </button>
-                  <button style={smBtnStyle} onClick={cancelDeleteChannel}>
-                    Cancel
-                  </button>
-                </div>
-              )}
-
               {channels.length === 0 ? (
                 <EmptyState
                   title="No notification channels"
                   description="Add a channel to receive alerts via email, Slack, or webhook."
-                  action={<button style={btnStyle} onClick={() => setEditingChannel("new")}>Add channel</button>}
+                  action={<button className="btn-primary" style={btnStyle} onClick={() => setEditingChannel("new")}>Add channel</button>}
                 />
               ) : (
                 <div
                   style={{
                     background: "var(--color-surface)",
                     border: "1px solid var(--color-border)",
-                    borderRadius: 8,
+                    borderRadius: "var(--radius-card)",
                     overflow: "hidden",
                   }}
                 >
@@ -402,21 +404,52 @@ export function AlertsPage() {
                         <div style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>{ch.type}</div>
                       </div>
                       <Badge label={ch.type} variant="info" />
-                      <button
-                        style={{ ...smBtnStyle, color: "var(--color-accent-hover)", borderColor: "var(--color-accent)" }}
-                        onClick={() => void testChannel(ch.id)}
-                        disabled={testingChannel === ch.id}
-                      >
-                        {testingChannel === ch.id ? "Sending…" : "Test fire"}
-                      </button>
-                      <button style={smBtnStyle} onClick={() => setEditingChannel(ch)}>Edit</button>
-                      <button
-                        style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
-                        onClick={() => setConfirmDeleteChannelId(ch.id)}
-                        aria-label={`Delete channel ${ch.name}`}
-                      >
-                        Delete
-                      </button>
+                      {/* s111 D15: same row-attached confirmation model as rules. */}
+                      {confirmDeleteChannelId === ch.id ? (
+                        <div
+                          data-testid="delete-channel-confirm"
+                          role="group"
+                          aria-label={`Confirm deleting channel ${ch.name}`}
+                          className="panel-enter"
+                          style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}
+                        >
+                          <span style={{ fontSize: 12, color: "var(--color-error)" }}>
+                            Delete “{ch.name}”? Rules routing to it stop notifying. This action cannot be undone.
+                          </span>
+                          <button
+                            ref={confirmChannelBtnRef}
+                            className="btn-secondary"
+                            style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
+                            onClick={() => void confirmDeleteChannel()}
+                          >
+                            Yes, delete
+                          </button>
+                          <button className="btn-secondary" style={smBtnStyle} onClick={cancelDeleteChannel}>
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            className="btn-secondary"
+                            style={{ ...smBtnStyle, color: "var(--color-accent-hover)", borderColor: "var(--color-accent)" }}
+                            onClick={() => void testChannel(ch.id)}
+                            disabled={testingChannel === ch.id}
+                          >
+                            {testingChannel === ch.id ? "Sending…" : "Test fire"}
+                          </button>
+                          <button className="btn-secondary" style={smBtnStyle} onClick={() => setEditingChannel(ch)}>Edit</button>
+                          <button
+                            ref={(el) => { channelDeleteBtnRefs.current[ch.id] = el; }}
+                            className="btn-secondary"
+                            style={{ ...smBtnStyle, color: "var(--color-error)", borderColor: "var(--color-error)" }}
+                            onClick={() => setConfirmDeleteChannelId(ch.id)}
+                            aria-label={`Delete channel ${ch.name}`}
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -437,7 +470,7 @@ export function AlertsPage() {
                   style={{
                     background: "var(--color-surface)",
                     border: "1px solid var(--color-border)",
-                    borderRadius: 8,
+                    borderRadius: "var(--radius-card)",
                     overflow: "hidden",
                   }}
                 >
@@ -445,18 +478,19 @@ export function AlertsPage() {
                     <thead style={{ background: "var(--color-surface-2)" }}>
                       <tr>
                         {["Rule ID", "Severity", "State", "Time", "Value"].map((h) => (
-                          <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, color: "var(--color-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{h}</th>
+                          <th key={h} className="label" style={{ padding: "var(--space-3) var(--space-4)", textAlign: "left" }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {history.map((entry) => (
                         <tr key={entry.id} style={{ borderTop: "1px solid var(--color-border)" }}>
-                          <td style={{ padding: "8px 14px", fontWeight: 500, fontFamily: "var(--font-mono)", fontSize: 12 }}>{entry.rule_id}</td>
-                          <td style={{ padding: "8px 14px" }}><Badge label={entry.severity} variant={severityVariant(entry.severity)} /></td>
-                          <td style={{ padding: "8px 14px" }}><Badge label={entry.state} variant={stateVariant(entry.state)} /></td>
-                          <td style={{ padding: "8px 14px", color: "var(--color-secondary)", fontFamily: "var(--font-mono)", fontSize: 12 }}>{fmtTs(entry.ts)}</td>
-                          <td style={{ padding: "8px 14px", fontFamily: "var(--font-mono)", fontSize: 12 }}>{entry.value != null ? String(entry.value) : "—"}</td>
+                          <td style={{ padding: "var(--cell-pad)", fontWeight: 500, fontFamily: "var(--font-mono)", fontSize: 12 }}>{entry.rule_id}</td>
+                          <td style={{ padding: "var(--cell-pad)" }}><Badge label={entry.severity} variant={severityVariant(entry.severity)} /></td>
+                          <td style={{ padding: "var(--cell-pad)" }}><Badge label={entry.state} variant={stateVariant(entry.state)} /></td>
+                          <td style={{ padding: "var(--cell-pad)", color: "var(--color-secondary)", fontFamily: "var(--font-mono)", fontSize: 12 }}>{fmtTs(entry.ts)}</td>
+                          {/* s111 D12: data-numeric → tabular-nums (global.css) */}
+                          <td data-numeric style={{ padding: "var(--cell-pad)", fontFamily: "var(--font-mono)", fontSize: 12 }}>{entry.value != null ? String(entry.value) : "—"}</td>
                         </tr>
                       ))}
                     </tbody>

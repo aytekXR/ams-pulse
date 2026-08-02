@@ -349,16 +349,15 @@ describe("QoePage token substitutions (px → CSS var, hex → CHART_COLORS)", (
     expect(CHART_COLORS[4]).toBe("#FFB224");
   });
 
-  it("cardStyle borderRadius references var(--radius-control) not a raw number", async () => {
+  it("card borderRadius references a radius token, not a raw number (s111 D10: cards ride var(--radius-card))", async () => {
     mockGetSummary.mockResolvedValue({
       totals: { startup_p50_ms: 300, startup_p95_ms: 900, rebuffer_ratio: 0.02, error_rate: 0.001 },
       bitrate_timeline: [],
     });
     render(<QoePage />);
     await waitFor(() => screen.getByText(/startup p50/i));
-    // The KPI cards should have borderRadius referencing the CSS variable
-    const cards = document.querySelectorAll<HTMLElement>('[style*="border-radius: var(--radius-control)"]');
-    // At minimum the summary cards and chart wrapper must have the token
+    // The KPI cards (shared <StatCard>) must have borderRadius referencing the card token
+    const cards = document.querySelectorAll<HTMLElement>('[style*="border-radius: var(--radius-card)"]');
     expect(cards.length).toBeGreaterThan(0);
   });
 

@@ -25,7 +25,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { probesApi, adminApi, ApiError } from "@/api/client";
-import { CHART_COLORS } from "@/lib/chartColors";
+import { CHART_COLORS, CHART_TICK, CHART_LEGEND_STYLE, CHART_TOOLTIP_STYLE } from "@/lib/chartColors";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { EmptyState } from "@/components/EmptyState";
@@ -45,7 +45,7 @@ function SyntheticBadge() {
         background: "var(--color-info-bg)",
         color: "var(--color-info)",
         border: "1px solid rgba(88,166,255,0.25)",
-        borderRadius: 4,
+        borderRadius: "var(--radius-pill)",
         padding: "2px 8px",
         fontSize: 10,
         fontWeight: 700,
@@ -211,7 +211,7 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
   const inputStyle: React.CSSProperties = {
     background: "var(--color-surface-2)",
     border: "1px solid var(--color-border)",
-    borderRadius: 4,
+    borderRadius: "var(--radius-control)",
     color: "var(--color-text)",
     padding: "6px 10px",
     fontSize: 13,
@@ -225,8 +225,8 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
       style={{
         background: "var(--color-surface)",
         border: "1px solid var(--color-border)",
-        borderRadius: 8,
-        padding: 20,
+        borderRadius: "var(--radius-card)",
+        padding: "var(--space-5)",
         display: "flex",
         flexDirection: "column",
         gap: 14,
@@ -353,16 +353,14 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
         <button
           type="submit"
           disabled={saving}
+          className="btn-primary"
           style={{
-            background: "var(--color-accent)",
             color: "var(--color-on-signal)",
             border: "none",
-            borderRadius: 6,
+            borderRadius: "var(--radius-control)",
             padding: "8px 18px",
             fontSize: 13,
             fontWeight: 600,
-            cursor: saving ? "not-allowed" : "pointer",
-            opacity: saving ? 0.7 : 1,
           }}
         >
           {saving ? "Saving…" : initial ? "Save Changes" : "Create Probe"}
@@ -371,14 +369,12 @@ function ProbeForm({ initial, onSave, onCancel, saving }: ProbeFormProps) {
           type="button"
           onClick={onCancel}
           disabled={saving}
+          className="btn-secondary"
           style={{
             background: "none",
-            color: "var(--color-secondary)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 6,
+            borderRadius: "var(--radius-control)",
             padding: "8px 18px",
             fontSize: 13,
-            cursor: "pointer",
           }}
         >
           Cancel
@@ -472,7 +468,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
       style={{
         background: "var(--color-surface)",
         border: "1px solid var(--color-border)",
-        borderRadius: 8,
+        borderRadius: "var(--radius-card)",
         overflow: "hidden",
         marginTop: "var(--space-2)",
       }}
@@ -505,32 +501,42 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
         <button
           onClick={onClose}
           aria-label="Close results panel"
+          className="icon-btn"
           style={{
             background: "none",
             border: "none",
-            color: "var(--color-secondary)",
             cursor: "pointer",
-            padding: "2px 6px",
-            fontSize: 16,
+            padding: 6,
+            minWidth: 28,
+            minHeight: 28,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
-          ×
+          {/* drawn close icon, not the "x" font glyph (app icon system) */}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
         </button>
       </div>
 
       <div style={{ padding: "var(--space-4)" }}>
         {loading && (
           <>
-            <LoadingSpinner label="Loading synthetic probe results…" />
-            {/* Chart skeleton — visual structure while timeline data loads */}
+            {/* s111 M9: the breathing skeleton is the single loading affordance
+                (a static gray block reads as empty/errored, and a spinner above
+                it duplicated the signal). The sr-only status text carries the
+                announcement; reduced motion gets the static block + that text. */}
+            <span role="status" className="sr-only">Loading synthetic probe results…</span>
             <div
               data-testid="chart-skeleton"
               aria-hidden
+              className="skeleton"
               style={{
                 background: "var(--color-surface-2)",
-                borderRadius: 4,
+                borderRadius: "var(--radius-control)",
                 height: 120,
-                marginTop: "var(--space-2)",
               }}
             />
           </>
@@ -547,17 +553,8 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
         {!loading && results.length > 0 && (
           <>
             {/* TTFB timeline */}
-            <div style={{ marginBottom: 20 }}>
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: "var(--color-secondary)",
-                  marginBottom: "var(--space-2)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.06em",
-                }}
-              >
+            <div style={{ marginBottom: "var(--space-5)" }}>
+              <div className="label" style={{ marginBottom: "var(--space-2)" }}>
                 Time to First Byte (ms)
               </div>
               <ResponsiveContainer width="100%" height={120}>
@@ -566,12 +563,12 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                   <XAxis
                     dataKey="ts"
                     tickFormatter={formatTsShort}
-                    tick={{ fontSize: 10, fill: "var(--color-secondary)" }}
+                    tick={CHART_TICK}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={{ fontSize: 10, fill: "var(--color-secondary)" }}
+                    tick={CHART_TICK}
                     axisLine={false}
                     tickLine={false}
                     width={40}
@@ -583,15 +580,15 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                     labelFormatter={(ts: unknown) =>
                       typeof ts === "number" ? new Date(ts).toLocaleString() : String(ts)
                     }
-                    contentStyle={{
-                      background: "var(--color-surface)",
-                      border: "1px solid var(--color-border)",
-                      fontSize: 12,
-                    }}
+                    isAnimationActive={false}
+                    contentStyle={CHART_TOOLTIP_STYLE}
                   />
-                  <Legend wrapperStyle={{ fontSize: 11, color: "var(--color-secondary)" }} />
+                  <Legend wrapperStyle={CHART_LEGEND_STYLE} />
                   {/* 500ms warning threshold — amber dataviz[4] */}
                   <ReferenceLine y={500} stroke={CHART_COLORS[4]} strokeDasharray="4 2" />
+                  {/* QO-1 (s111 D5/M0): isAnimationActive={false} — tokens.json
+                      motion.note bans slide animations on charts unconditionally;
+                      CSS motion tokens cannot reach Recharts' JS engine. */}
                   <Line
                     type="monotone"
                     dataKey="ttfb_ms"
@@ -600,6 +597,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                     dot={false}
                     connectNulls={false}
                     name="TTFB (ms)"
+                    isAnimationActive={false}
                   />
                   <Line
                     type="monotone"
@@ -609,6 +607,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                     dot={false}
                     connectNulls={false}
                     name="Segment TTFB (ms)"
+                    isAnimationActive={false}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -616,17 +615,8 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
 
             {/* Bitrate timeline */}
             {chartData.some((d) => d.bitrate_kbps != null) && (
-              <div style={{ marginBottom: 20 }}>
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: "var(--color-secondary)",
-                    marginBottom: "var(--space-2)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                  }}
-                >
+              <div style={{ marginBottom: "var(--space-5)" }}>
+                <div className="label" style={{ marginBottom: "var(--space-2)" }}>
                   Measured Bitrate (kbps)
                 </div>
                 <ResponsiveContainer width="100%" height={100}>
@@ -638,12 +628,12 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                     <XAxis
                       dataKey="ts"
                       tickFormatter={formatTsShort}
-                      tick={{ fontSize: 10, fill: "var(--color-secondary)" }}
+                      tick={CHART_TICK}
                       axisLine={false}
                       tickLine={false}
                     />
                     <YAxis
-                      tick={{ fontSize: 10, fill: "var(--color-secondary)" }}
+                      tick={CHART_TICK}
                       axisLine={false}
                       tickLine={false}
                       width={40}
@@ -656,12 +646,10 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                       labelFormatter={(ts: unknown) =>
                         typeof ts === "number" ? new Date(ts).toLocaleString() : String(ts)
                       }
-                      contentStyle={{
-                        background: "var(--color-surface)",
-                        border: "1px solid var(--color-border)",
-                        fontSize: 12,
-                      }}
+                      isAnimationActive={false}
+                      contentStyle={CHART_TOOLTIP_STYLE}
                     />
+                    {/* QO-1 (s111 D5/M0): see comment on the TTFB chart above. */}
                     <Line
                       type="monotone"
                       dataKey="bitrate_kbps"
@@ -669,6 +657,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                       strokeWidth={2}
                       dot={false}
                       name="Bitrate (kbps)"
+                      isAnimationActive={false}
                     />
                   </LineChart>
                 </ResponsiveContainer>
@@ -676,16 +665,7 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
             )}
 
             {/* Recent results table */}
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: "var(--color-secondary)",
-                marginBottom: "var(--space-2)",
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}
-            >
+            <div className="label" style={{ marginBottom: "var(--space-2)" }}>
               Recent Results
             </div>
             <div style={{ overflowX: "auto" }}>
@@ -696,49 +676,48 @@ function ProbeResultsPanel({ probe, onClose }: ProbeResultsPanelProps) {
                 <thead>
                   <tr style={{ background: "var(--color-surface-2)" }}>
                     <th
+                      className="label"
                       style={{
                         padding: "6px 10px",
                         textAlign: "left",
-                        fontWeight: 600,
-                        color: "var(--color-secondary)",
                       }}
                     >
                       Time
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "center", fontWeight: 600, color: "var(--color-secondary)" }}>
+                    <th className="label" style={{ padding: "6px 10px", textAlign: "center" }}>
                       Type
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "center", fontWeight: 600, color: "var(--color-secondary)" }}>
+                    <th className="label" style={{ padding: "6px 10px", textAlign: "center" }}>
                       Status
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-secondary)" }}>
+                    <th className="label" style={{ padding: "6px 10px", textAlign: "right" }}>
                       TTFB
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-secondary)" }}>
+                    <th className="label" style={{ padding: "6px 10px", textAlign: "right" }}>
                       Segment TTFB
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-secondary)" }}>
+                    <th className="label" style={{ padding: "6px 10px", textAlign: "right" }}>
                       Bitrate
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "center", fontWeight: 600, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
+                    <th className="label" style={{ padding: "6px 10px", textAlign: "center", whiteSpace: "nowrap" }}>
                       Signaling
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
+                    <th className="label" style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap" }}>
                       Connect
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "center", fontWeight: 600, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
+                    <th className="label" style={{ padding: "6px 10px", textAlign: "center", whiteSpace: "nowrap" }}>
                       ICE State
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
+                    <th className="label" style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap" }}>
                       RTT
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
+                    <th className="label" style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap" }}>
                       Jitter
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "var(--color-secondary)", whiteSpace: "nowrap" }}>
+                    <th className="label" style={{ padding: "6px 10px", textAlign: "right", whiteSpace: "nowrap" }}>
                       Loss
                     </th>
-                    <th style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "var(--color-secondary)" }}>
+                    <th className="label" style={{ padding: "6px 10px", textAlign: "left" }}>
                       Error
                     </th>
                   </tr>
@@ -941,10 +920,11 @@ function DeleteConfirm({ probeName, onConfirm, onCancel, deleting }: DeleteConfi
           onCancel();
         }
       }}
+      className="panel-enter"
       style={{
         background: "var(--color-surface)",
         border: "1px solid var(--color-error)",
-        borderRadius: 8,
+        borderRadius: "var(--radius-card)",
         padding: "var(--space-4)",
         maxWidth: 400,
         display: "flex",
@@ -961,16 +941,16 @@ function DeleteConfirm({ probeName, onConfirm, onCancel, deleting }: DeleteConfi
         <button
           onClick={onConfirm}
           disabled={deleting}
+          className="btn-press"
           style={{
             background: "var(--color-error-bg)",
             color: "var(--color-error)",
             border: "1px solid var(--color-error)",
-            borderRadius: 6,
+            borderRadius: "var(--radius-control)",
             padding: "6px 14px",
+            minHeight: 28,
             fontSize: 13,
             fontWeight: 600,
-            cursor: deleting ? "not-allowed" : "pointer",
-            opacity: deleting ? 0.7 : 1,
           }}
         >
           {deleting ? "Deleting…" : "Delete"}
@@ -978,14 +958,13 @@ function DeleteConfirm({ probeName, onConfirm, onCancel, deleting }: DeleteConfi
         <button
           onClick={onCancel}
           disabled={deleting}
+          className="btn-secondary"
           style={{
             background: "none",
-            color: "var(--color-secondary)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 6,
+            borderRadius: "var(--radius-control)",
             padding: "6px 14px",
+            minHeight: 28,
             fontSize: 13,
-            cursor: "pointer",
           }}
         >
           Cancel
@@ -1080,12 +1059,14 @@ function ProbeRow({
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <button
             onClick={() => onViewResults(probe)}
+            className="btn-press"
             style={{
               background: showingResults ? "rgba(88,166,255,0.15)" : "none",
               color: "var(--color-info)",
               border: "1px solid rgba(88,166,255,0.25)",
-              borderRadius: 4,
-              padding: "3px 9px",
+              borderRadius: "var(--radius-control)",
+              padding: "6px 10px",
+              minHeight: 28,
               fontSize: 11,
               cursor: "pointer",
               fontWeight: 600,
@@ -1097,12 +1078,12 @@ function ProbeRow({
           </button>
           <button
             onClick={() => onEdit(probe)}
+            className="btn-secondary"
             style={{
               background: "none",
-              color: "var(--color-secondary)",
-              border: "1px solid var(--color-border)",
-              borderRadius: 4,
-              padding: "3px 9px",
+              borderRadius: "var(--radius-control)",
+              padding: "6px 10px",
+              minHeight: 28,
               fontSize: 11,
               cursor: "pointer",
             }}
@@ -1112,12 +1093,14 @@ function ProbeRow({
           </button>
           <button
             onClick={() => onDelete(probe)}
+            className="btn-press"
             style={{
               background: "none",
               color: "var(--color-error)",
               border: "1px solid var(--color-error)",
-              borderRadius: 4,
-              padding: "3px 9px",
+              borderRadius: "var(--radius-control)",
+              padding: "6px 10px",
+              minHeight: 28,
               fontSize: 11,
               cursor: "pointer",
             }}
@@ -1267,7 +1250,7 @@ export function ProbesPage() {
   if (license && !canUseProbes(license.tier)) {
     return (
       <div style={{ maxWidth: 700, margin: "0 auto", paddingTop: 40 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 24px" }}>
+        <h1 className="page-title" style={{ margin: "0 0 var(--space-5)" }}>
           Synthetic Probes
         </h1>
         <TierGate
@@ -1304,46 +1287,45 @@ export function ProbesPage() {
           display: "flex",
           alignItems: "center",
           gap: "var(--space-4)",
-          marginBottom: 20,
+          marginBottom: "var(--space-5)",
         }}
       >
-        <h1 style={{ flex: 1, fontSize: 20, fontWeight: 700, margin: 0 }}>
+        <h1 className="page-title" style={{ flex: 1 }}>
           Synthetic Probes
         </h1>
         <SyntheticBadge />
         <button
           onClick={fetchProbes}
           disabled={loading}
+          className="btn-secondary"
           style={{
             background: "none",
-            color: "var(--color-secondary)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 6,
+            borderRadius: "var(--radius-control)",
             padding: "6px 12px",
+            minHeight: 28,
             fontSize: 12,
-            cursor: loading ? "not-allowed" : "pointer",
-            opacity: loading ? 0.7 : 1,
           }}
         >
           Refresh
         </button>
+        {/* s111 D20: '+' glyph dropped — the label carries the meaning alone. */}
         <button
           onClick={() => {
             setEditingProbe(null);
             setShowForm(true);
           }}
+          className="btn-primary"
           style={{
-            background: "var(--color-accent)",
             color: "var(--color-on-signal)",
             border: "none",
-            borderRadius: 6,
+            borderRadius: "var(--radius-control)",
             padding: "6px 14px",
             fontSize: 13,
             fontWeight: 600,
             cursor: "pointer",
           }}
         >
-          + New Probe
+          New Probe
         </button>
       </div>
 
@@ -1352,8 +1334,8 @@ export function ProbesPage() {
         style={{
           background: "rgba(88,166,255,0.08)",
           border: "1px solid rgba(88,166,255,0.25)",
-          borderRadius: 6,
-          padding: "8px 14px",
+          borderRadius: "var(--radius-control)",
+          padding: "var(--space-2) var(--space-4)",
           fontSize: 12,
           color: "var(--color-info)",
           marginBottom: "var(--space-4)",
@@ -1379,8 +1361,10 @@ export function ProbesPage() {
       )}
 
       {/* Create/edit form */}
+      {/* s111 M5: conditional form fades in via the shared .panel-enter (on the
+          <form> card itself, added below through ProbeForm's container). */}
       {(showForm || editingProbe) && (
-        <div style={{ marginBottom: 20 }}>
+        <div className="panel-enter" style={{ marginBottom: "var(--space-5)" }}>
           <ProbeForm
             initial={editingProbe ?? undefined}
             onSave={handleSave}
@@ -1414,15 +1398,15 @@ export function ProbesPage() {
       {!loading && !error && probes.length === 0 && !showForm && (
         <EmptyState
           title="No probes configured"
-          description='Create a synthetic probe to monitor your streams from outside your infrastructure. Click "+ New Probe" to get started.'
+          description='Create a synthetic probe to monitor your streams from outside your infrastructure. Click "New Probe" to get started.'
           action={
             <button
               onClick={() => setShowForm(true)}
+              className="btn-primary"
               style={{
-                background: "var(--color-accent)",
                 color: "var(--color-on-signal)",
                 border: "none",
-                borderRadius: 6,
+                borderRadius: "var(--radius-control)",
                 padding: "8px 18px",
                 fontSize: 13,
                 fontWeight: 600,
@@ -1440,7 +1424,7 @@ export function ProbesPage() {
           style={{
             background: "var(--color-surface)",
             border: "1px solid var(--color-border)",
-            borderRadius: 8,
+            borderRadius: "var(--radius-card)",
             overflow: "hidden",
           }}
         >
@@ -1462,14 +1446,10 @@ export function ProbesPage() {
                   ].map((h) => (
                     <th
                       key={h}
+                      className="label"
                       style={{
                         padding: "var(--space-2) var(--space-3)",
                         textAlign: h === "Interval" ? "right" : "left",
-                        fontSize: 11,
-                        fontWeight: 600,
-                        color: "var(--color-secondary)",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.06em",
                         whiteSpace: "nowrap",
                       }}
                     >

@@ -18,13 +18,14 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { qoeApi, ApiError } from "@/api/client";
-import { CHART_COLORS } from "@/lib/chartColors";
+import { CHART_COLORS, CHART_TICK, CHART_LEGEND_STYLE, CHART_TOOLTIP_STYLE } from "@/lib/chartColors";
 import { DateRangePicker, defaultDateRange } from "@/features/analytics/DateRangePicker";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { LicenseRequiredGate, isLicenseError } from "@/components/LicenseRequiredGate";
 import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/Badge";
+import { StatCard } from "@/features/live/StatCard";
 import type { QoeSummaryResponse } from "@/lib/api/types";
 
 export function QoePage() {
@@ -75,35 +76,13 @@ export function QoePage() {
     p95: b.bitrate_kbps_p95 ? Math.round(b.bitrate_kbps_p95) : 0,
   }));
 
-  const cardStyle: React.CSSProperties = {
-    background: "var(--color-surface)",
-    border: "1px solid var(--color-border)",
-    borderRadius: "var(--radius-control)",
-    padding: "16px 20px",
-  };
-
-  const labelStyle: React.CSSProperties = {
-    fontSize: 11,
-    color: "var(--color-muted)",
-    textTransform: "uppercase",
-    letterSpacing: "0.06em",
-    fontWeight: 500,
-    marginBottom: 6,
-  };
-
-  const valueStyle: React.CSSProperties = {
-    fontSize: 28,
-    fontWeight: 700,
-    lineHeight: 1,
-  };
-
   // A licence refusal replaces the page body: showing filters and an empty chart
   // above an upsell reads as a broken screen. The heading stays for orientation.
   if (licenseError) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)" }}>
-          <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Viewer QoE</h1>
+          <h1 className="page-title">Viewer QoE</h1>
         </div>
         <LicenseRequiredGate
           error={licenseError}
@@ -130,9 +109,9 @@ export function QoePage() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)" }}>
-        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Viewer QoE</h1>
+        <h1 className="page-title">Viewer QoE</h1>
       </div>
 
       {/* Slice controls */}
@@ -150,7 +129,7 @@ export function QoePage() {
           style={{
             background: "var(--color-surface-2)",
             border: "1px solid var(--color-border)",
-            borderRadius: 6,
+            borderRadius: "var(--radius-control)",
             padding: "6px 10px",
             color: "var(--color-text)",
             fontSize: 13,
@@ -167,7 +146,7 @@ export function QoePage() {
           style={{
             background: "var(--color-surface-2)",
             border: "1px solid var(--color-border)",
-            borderRadius: 6,
+            borderRadius: "var(--radius-control)",
             padding: "6px 10px",
             color: "var(--color-text)",
             fontSize: 13,
@@ -189,11 +168,11 @@ export function QoePage() {
               href="https://github.com/aytekXR/ams-pulse#sdk-setup"
               target="_blank"
               rel="noopener noreferrer"
+              className="btn-primary"
               style={{
                 display: "inline-block",
-                background: "var(--color-accent)",
                 color: "var(--color-on-signal)",
-                borderRadius: 6,
+                borderRadius: "var(--radius-control)",
                 padding: "var(--space-2) var(--space-4)",
                 fontSize: 13,
                 fontWeight: 600,
@@ -207,47 +186,35 @@ export function QoePage() {
       ) : (
         <>
           {/* Summary cards */}
+          {/* s111 D9: the shared <StatCard> replaces the hand-rolled third card
+              variant — value size rides var(--metric-size) and padding rides
+              var(--card-padding), so Wall/Compact density finally applies here.
+              QO-5 threshold colour + Badge survive via valueColor/trailing. */}
           {totals && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "var(--space-3)" }}>
-              <div style={cardStyle}>
-                <div style={labelStyle}>Startup p50</div>
-                <div style={valueStyle}>{totals.startup_p50_ms.toFixed(0)}<span style={{ fontSize: 14, color: "var(--color-muted)", marginLeft: "var(--space-1)" }}>ms</span></div>
-              </div>
-              <div style={cardStyle}>
-                <div style={labelStyle}>Startup p95</div>
-                <div style={valueStyle}>{totals.startup_p95_ms.toFixed(0)}<span style={{ fontSize: 14, color: "var(--color-muted)", marginLeft: "var(--space-1)" }}>ms</span></div>
-              </div>
-              {/* QO-5: Badge added alongside color for color-not-only compliance (WCAG 1.4.1).
-                  QO-5: Dead fallback hex dropped — var(--color-warning) is defined for both themes
-                  in global.css (:root #FFB224 dark; [data-theme="light"] #B45309 light). */}
-              <div style={cardStyle}>
-                <div style={labelStyle}>Rebuffer Ratio</div>
-                <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-2)", flexWrap: "wrap" }}>
-                  <div style={{ ...valueStyle, color: totals.rebuffer_ratio > 0.05 ? "var(--color-warning)" : "inherit" }}>
-                    {(totals.rebuffer_ratio * 100).toFixed(1)}<span style={{ fontSize: 14, color: "var(--color-muted)", marginLeft: "var(--space-1)" }}>%</span>
-                  </div>
-                  {totals.rebuffer_ratio > 0.05 && <Badge label="HIGH" variant="warning" />}
-                </div>
-              </div>
-              {/* QO-5: Same pattern for error rate.
-                  Dead fallback hex dropped — var(--color-error) is defined for both themes
-                  (:root #FF5C68 dark; [data-theme="light"] #DC2626 light). */}
-              <div style={cardStyle}>
-                <div style={labelStyle}>Error Rate</div>
-                <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-2)", flexWrap: "wrap" }}>
-                  <div style={{ ...valueStyle, color: totals.error_rate > 0.01 ? "var(--color-error)" : "inherit" }}>
-                    {(totals.error_rate * 100).toFixed(2)}<span style={{ fontSize: 14, color: "var(--color-muted)", marginLeft: "var(--space-1)" }}>%</span>
-                  </div>
-                  {totals.error_rate > 0.01 && <Badge label="HIGH" variant="error" />}
-                </div>
-              </div>
+              <StatCard label="Startup p50" value={totals.startup_p50_ms.toFixed(0)} unit="ms" />
+              <StatCard label="Startup p95" value={totals.startup_p95_ms.toFixed(0)} unit="ms" />
+              <StatCard
+                label="Rebuffer Ratio"
+                value={(totals.rebuffer_ratio * 100).toFixed(1)}
+                unit="%"
+                valueColor={totals.rebuffer_ratio > 0.05 ? "var(--color-warning)" : undefined}
+                trailing={totals.rebuffer_ratio > 0.05 ? <Badge label="HIGH" variant="warning" /> : undefined}
+              />
+              <StatCard
+                label="Error Rate"
+                value={(totals.error_rate * 100).toFixed(2)}
+                unit="%"
+                valueColor={totals.error_rate > 0.01 ? "var(--color-error)" : undefined}
+                trailing={totals.error_rate > 0.01 ? <Badge label="HIGH" variant="error" /> : undefined}
+              />
             </div>
           )}
 
           {/* Bitrate timeline */}
           {chartData.length > 0 ? (
-            <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-control)", padding: "var(--space-4)" }}>
-              <h2 style={{ margin: "0 0 var(--space-4)", fontSize: 13, fontWeight: 600, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-card)", padding: "var(--space-4)" }}>
+              <h2 className="label" style={{ margin: "0 0 var(--space-4)" }}>
                 Bitrate Timeline (Kbps)
               </h2>
               <ResponsiveContainer width="100%" height={240}>
@@ -255,17 +222,12 @@ export function QoePage() {
                     data points keyboard-navigable (Recharts v2.1+). */}
                 <LineChart accessibilityLayer data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis dataKey="ts" tick={{ fill: "var(--color-muted)", fontSize: 11 }} />
-                  <YAxis tick={{ fill: "var(--color-muted)", fontSize: 11 }} unit=" kbps" />
-                  <Tooltip
-                    contentStyle={{
-                      background: "var(--color-surface)",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: 6,
-                      color: "var(--color-text)",
-                    }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 12, color: "var(--color-muted)" }} />
+                  <XAxis dataKey="ts" tick={CHART_TICK} />
+                  <YAxis tick={CHART_TICK} unit=" kbps" />
+                  {/* s111 M4: instant tooltip — the default 400ms position-lag
+                      trails the crosshair while reading precise p50/p95 values. */}
+                  <Tooltip isAnimationActive={false} contentStyle={CHART_TOOLTIP_STYLE} />
+                  <Legend wrapperStyle={CHART_LEGEND_STYLE} />
                   {/* QO-1: isAnimationActive={false} — tokens.json motion.note bans slide
                       animations on charts unconditionally ("never slide charts"), not only
                       under prefers-reduced-motion. CSS --motion-base does not reach Recharts'
