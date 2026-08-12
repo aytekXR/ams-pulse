@@ -6,7 +6,7 @@
 
 # --- web UI ---
 # node:22-alpine
-FROM node@sha256:926d6cafec97f338577041890465522f70fe74aa6fe4b021a4fd7f87a5996b25 AS web
+FROM node@sha256:bde0dae02f2b12d2bce5ee72b2432f0e511767b7b2dc4dd3b064df11ae422fee AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json* ./
 RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
