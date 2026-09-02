@@ -11244,6 +11244,80 @@ on Apple Developer Program enrolment.
 
 ---
 
+## D-192 — §S124 (2026-09-02): docs v2 + AMS 3.1.0 say operators still need Pulse — and prod has been blind for 21 days
+
+**Trigger:** the operator forwarded Ant Media's Documentation-V2 feedback email and asked for a
+docs check, a roadmap update, and a "do they still need our product" report. Both halves of the
+session mattered; the second was found by the opening gate, not the request.
+
+### The competitive re-assessment (the request)
+
+**docs.antmedia.io/v2 is a documentation re-platform, not a product pivot** — a Docusaurus site
+covering AMS 2.16/2.17/3.0/Next. The product event that matters is **AMS v3.1.0 (2026-08-31)**:
+the G-27 panel revamp shipped publicly (new React management dashboard), plus Java 21 and 127
+resolved issues. Method: all 289 current-version pages mirrored locally (Cloudflare 403s the
+plain fetcher; a browser UA works) and swept by a 34-agent workflow — 9 doc slices (110
+findings) + Pulse feature map + release-notes read → 11 per-feature verdicts → **independent
+adversarial verification of every verdict** (each quote re-opened in its source page; each
+"no overlap" re-searched from scratch) → completeness critic (zero uncovered files).
+
+**Verdict — operators still need Pulse (report: `docs/assessment/ams-3.1-docs-v2-assessment.md`):**
+- **F6 / F9 / F10: zero AMS-native overlap.** F1–F5/F7/F8: partial — and every partial is the
+  same shape: AMS emits raw data (analytics JSON log since v2.10, REST stats, Kafka topics,
+  webhooks), Pulse is the storage/alerting/visualization layer AMS's own docs tell operators to
+  assemble from third parties. The enterprise-guide production checklist literally requires
+  "Monitoring with alerting is set up (Grafana, Prometheus/Loki, or New Relic)".
+- **All 8 positioning gap-claims re-verified intact:** no native Prometheus (#3122 unbuilt
+  through 3.1.0), webhooks unsigned (zero HMAC hits across 289 pages), no retention, no
+  built-in alerting, no client QoE, no billing, no anomaly, no probes. #7926 (24 h freeze,
+  our §2.16 demand evidence) is NOT in the 3.1.0 fixed list.
+- **The one medium threat is F1 vs the new panel** (live-only, current-node-only today; #7911
+  says the dashboard work "enhanc[es] backend APIs" → REST-drift watch). 3.1.0 also *helps*:
+  #7726/#2724/`play_finished` status-accuracy fixes clean data we consume.
+- **Source-verified at tag `ams-v3.1.0`:** all 10 consumed `Broadcast` fields present,
+  identically typed; `currentFPS` still absent (LIM-04); `ClusterNode` still role/version-less
+  (LIM-10; additive `note` field harmless). Live 3.1.0 validation = new **§2.48** lane
+  (autonomous, community image, isolated stack).
+- Docs-v2 nuance: "marketplace" there means *cloud* images only; the plugin marketplace is
+  referenced once. Our listing channel exists but is not doc-surfaced.
+
+### The prod finding (the gate)
+
+**Prod Pulse has been blind since 2026-08-12 12:42 UTC — 509 h at reading, zero pages.**
+Component-scoped `/healthz` (read from inside the container): collector `degraded`, "no
+successful AMS poll for 509h4m46s … dial tcp 161.97.172.146:5080: connect: connection refused".
+ClickHouse count **identical across two samples** (1,591,248; newest row 2026-08-11 13:05 —
+the last real stream event). Root cause, dated to the minute: the operator's `antmedia`
+container was **recreated 2026-08-12T12:40:44Z in bridge mode with no published ports** (it
+formerly ran `--network host`); the collector's last successful poll back-computes to 12:42.
+AMS itself is healthy inside (StatsCollector ticking, still `antmedia/enterprise:3.0.3`).
+Separately, `/etc/nginx/sites-enabled/` lost the `pulse.beyondkaira.com` symlink on
+**2026-08-11 ~16:00** (the conf survives in sites-available; `ams.beyondkaira.com` is disabled
+too; a `test.beyondkaira.com` vhost was enabled the same minute) — so the public dashboard URL
+now serves the apex TR landing, and the S124-opening domain healthz returned literal
+"beyondkaira.com" with HTTP 200: **the exact whole-body-grep trap D-166 fixed in
+deployment.sh, live again at the DNS layer.**
+
+Both fixes are operator-owned infra (no sudo here; restarts of their container are theirs) —
+queued as **`docs/operator-expected.md` §0** with exact commands. Not touched autonomously.
+**§2.45 escalated:** second blind incident, ~65× the first (7 h 46 m → 21 days). The
+built-in self-alert semantics ruling is now the highest-leverage operator answer open.
+
+### Ledger corrections and process notes
+
+- **"AMS 3.0.3 is still the latest AMS release" was stale** in RESUME-PROMPT §1 and
+  `docs/compatibility.md` (both said so as of 2026-07-30) — 3.1.0 shipped 2026-08-31.
+  Corrected in both; compatibility matrix gains a source-verified 3.1.0 row.
+- The docs mirror lives at `~/.cache/amsdocs-v2/` (289 files, `SOURCE_URL` first line each) —
+  reusable for §2.48 and the per-minor re-assessment trigger.
+- Gate reads that paid: the two-sample ClickHouse rule caught the frozen count that a single
+  read would have passed as "non-zero"; the component-scoped healthz caught what the
+  domain-level 200 hid.
+
+**Files:** `docs/assessment/ams-3.1-docs-v2-assessment.md` (new) · ROADMAP-V2 §2.48 + §2.45
+escalation + §A′ · `docs/compatibility.md` 3.1.0 row · `docs/operator-expected.md` §0 + docs
+feedback item · RESUME-PROMPT refresh.
+
 ## D-191 — §S123: the marketplace blocker is gone, and the rotation found a landmine
 
 **Date:** 2026-07-31 · **Trigger:** operator asked "are we ready for the marketplace? if not make

@@ -34,7 +34,7 @@
 | Known hot path | O(N²) `rebuildSnapshot` at poll boundaries; mitigated to 1.0 vCPU (D-065 WO-C); real fix is post-GA backlog |
 | Open operator items | O7 (GHCR public), U3 (Pro+ license key — optional QoE unlock) |
 
-## Future roadmap — consolidated OPEN / gated items (as of 2026-07-22, S96 close)
+## Future roadmap — consolidated OPEN / gated items (as of 2026-09-02, S124 close)
 
 > **Why this section exists:** as of S96 (D-160) the **concrete non-gated autonomous backlog is
 > drained** — S89/S91/S92 swept the codebase 3×, S95 swept the last un-swept D-157/D-158 delta
@@ -55,7 +55,15 @@
 > ability to notice its own failures, which is what D-164 exposed. These need no operator input.
 - **§2.45 Nothing ALERTS when Pulse goes blind** — D-164 made `/healthz` honest; nothing pages.
   The cheapest first step (a `pulse_collector_last_success_timestamp` gauge on `/metrics`) is
-  fully autonomous; the built-in alert rule needs a semantics decision first.
+  fully autonomous; the built-in alert rule needs a semantics decision first. **★ S124: the
+  second blind incident ran 21 DAYS (D-192) — see the §2.45 escalation. The semantics decision
+  is now the highest-leverage operator answer on the board.**
+- **§2.48 AMS 3.1.0 compatibility lane** (NEW, S124/D-192) — live-validate the G-27 9-endpoint
+  surface against a real AMS 3.1.0 community image in an isolated stack; add the `v3.1.0` mock
+  profile; flip the compatibility-matrix row. Source-verification already done; fully
+  autonomous. The competitive re-assessment that seeded it is ✅ DONE
+  (`docs/assessment/ams-3.1-docs-v2-assessment.md`: operators still need Pulse; F1 vs the new
+  panel is the only medium-threat watch item).
 - **SESSION-101 verification of D-164** — ✅ DONE (D-166). Proven live in an isolated stack; the
   `/healthz` signal was sound but **`deployment.sh` step 6 was broken** (grepped the whole body,
   passed while the collector was degraded) — fixed and re-proven.
@@ -741,6 +749,55 @@ stream rules, which ship muted) — because the failure it catches is invisible 
 maintenance windows; which channels at which tier (a Free-tier user still deserves to know their monitor is dead); does
 `/metrics` expose a `pulse_collector_last_success_timestamp` gauge so Prometheus users can alert on it themselves (cheapest
 partial win, and probably the right first step).
+
+**★ S124 ESCALATION (D-192, 2026-09-02): the second blind incident, and it ran 21 DAYS.** The
+S124 opening gate found prod's collector with **no successful AMS poll for 509 h** — the
+operator's `antmedia` container was recreated 2026-08-12 12:40 UTC in bridge mode with no
+published ports (last successful poll 12:42 UTC, same minute), and nothing paged. The Prometheus
+gauge shipped in D-167 could have caught it — but only for an operator who runs Prometheus,
+which is exactly the population Pulse exists to serve WITHOUT that stack. The first incident
+(D-164) was 7 h 46 m; this one is ~65× longer. The built-in self-alert rule is no longer a
+nice-to-have: it is the demand-proven top of §C the moment the operator answers the two open
+semantics questions (maintenance windows; channels-per-tier). Infra restoration itself is
+operator-owned (nginx vhost + AMS port exposure) — queued in `docs/operator-expected.md` §0.
+
+### 2.48  AMS 3.1.0 + docs v2 competitive re-assessment — and the 3.1.0 compatibility lane  [S–M]  (S124/D-192, 2026-09-02 — assessment ✅ DONE; compat lane OPEN, autonomous)
+
+**Trigger:** Ant Media's 2026-09 email announcing Documentation V2 (`docs.antmedia.io/v2/`),
+plus **AMS v3.1.0 released 2026-08-31** — the first AMS release since our 3.0.3 validation, and
+the one that ships the G-27 panel revamp publicly (new React management dashboard, Java 21,
+127 resolved issues).
+
+**✅ Done (D-192): the competitive re-assessment.** All 289 current-version docs-v2 pages
+mirrored and swept by a 34-agent workflow (110 findings → 11 per-feature verdicts, every one
+adversarially verified). **Verdict: operators still need Pulse.** F6/F9/F10 have zero AMS-native
+overlap; F1–F5/F7/F8 are partial with the overlap being raw-data emission, not the product
+layer; all 8 positioning gap-claims (no native Prometheus — #3122 still unbuilt; unsigned
+webhooks — no HMAC anywhere in docs v2; no retention/alerting/QoE/billing) re-verified intact.
+The only medium-threat item is **F1 vs the new 3.1.0 panel** (live-only, current-node-only —
+but the moving part to watch). Full report: `docs/assessment/ams-3.1-docs-v2-assessment.md`.
+G-27's July architecture-based "PROCEED, non-existential" verdict (§2.41/D-158) is now
+**publicly confirmable** — the panel shipped and its docs describe management UX, not analytics.
+3.1.0 also *helps* us: #7726/#2724/`play_finished` status-accuracy fixes clean up data we
+consume, and #7926 (the 24 h freeze, our §2.16 demand evidence) is NOT fixed.
+
+**OPEN — the 3.1.0 compatibility lane [S–M], autonomous via the community image:**
+1. Source-verification is ✅ done (D-192): all 10 consumed `Broadcast` fields present and
+   identically typed at `ams-v3.1.0`; `currentFPS` still absent (LIM-04 stands); `ClusterNode`
+   still role/version-less (LIM-10 stands; new additive `note` field harmless).
+2. Live-validate the G-27 9-endpoint surface (`docs/compatibility.md`) against a real 3.1.0 —
+   `ant-media/ant-media-server` community image in an ISOLATED compose project (never
+   pulse-prod), mock-profile + the applicable qa/realams scenarios. Watch specifically for
+   panel-driven REST drift: #7911 says the new dashboard work "enhanc[es] backend APIs".
+3. Add a `v3.1.0` profile to `ams_version_matrix_test.go` + the compatibility-matrix row flip
+   (source-verified → live-validated). Re-probe LIM-04/LIM-23/LIM-18/LIM-28 against the live
+   instance while it is up (the retest-stale-assumptions rule).
+4. Enterprise-only checks stay gated on the operator's license (their container is still
+   3.0.3-EE, currently unreachable — §0 of the operator queue).
+
+**Standing trigger:** re-run the docs/panel threat assessment at every AMS minor release —
+the panel is the one surface that could grow toward F1/F2. Cheap check: the 3-file diff of
+`dashboard-features`/`webhooks`/monitoring category pages plus the release-notes scan.
 
 ### 2.41  Opt-in load-testing lane + Ant Media panel-revamp (G-27) assessment — operator-requested mid-session  [✅ DONE — docs + QA-tooling only, NO prod roll; load lane NOT yet run (needs the operator's dedicated instance)]  ✅ S94 (D-158, 2026-07-19, PR #183)
 

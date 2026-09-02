@@ -16,13 +16,43 @@
 > **iOS TestFlight** is still blocked by item A (Apple Developer Program enrolment) and nothing
 > else. The two tracks are independent.
 >
-> **Prod:** healthy on the pinned v0.4.0-139 build. ⚠ Standing hazard, not yet closed: `pulse-migrate`
-> bind-mounts `contracts/` from the working tree, so **any `docker compose up -d` on prod applies
-> migrations from the git checkout to whatever binary is deployed.** That caused a 5-minute ingest
-> outage on 2026-07-31 (recovered). Pre-flight check: `deploy/runbooks/upgrade-rollback.md` §1.
-> Rolling prod forward (item 11) closes it permanently.
+> **Prod: ⚠ BLIND since 2026-08-12 — see §0 below, it outranks everything else on this page.**
+> Pulse itself is up (v0.4.0-139, ClickHouse + meta `ok`), but its collector has had no
+> successful AMS poll for 3 weeks and the public URL serves the wrong site. Two small infra
+> actions only you can do restore it.
+>
+> ⚠ Standing hazard, not yet closed: `pulse-migrate` bind-mounts `contracts/` from the working
+> tree, so **any `docker compose up -d` on prod applies migrations from the git checkout to
+> whatever binary is deployed.** That caused a 5-minute ingest outage on 2026-07-31 (recovered).
+> Pre-flight check: `deploy/runbooks/upgrade-rollback.md` §1. Rolling prod forward (item 11)
+> closes it permanently.
 
 ---
+
+## 0. URGENT — prod Pulse is blind and its public URL serves the wrong site
+
+Found at the S124 session-open gate (2026-09-02); full forensics in `decisions.md` D-192.
+Both causes date to your VPS maintenance on Aug 11–12 and both fixes are yours (root/sudo,
+and it is your `antmedia` container — the loop deliberately does not restart it):
+
+1. **Re-expose AMS to the host.** The `antmedia` container was recreated 2026-08-12T12:40Z in
+   bridge mode with **no published ports** (it previously ran `--network host`), so Pulse's
+   collector target `http://161.97.172.146:5080` refuses and ingest has been frozen since that
+   minute. AMS itself is healthy inside the container. Recreate it with `--network host` as
+   before (or `-p 5080:5080`, which also restores the `ams.beyondkaira.com` vhost target if you
+   re-enable it). Pulse needs no restart — the collector recovers on its next poll and the loop
+   will verify ingest moving again.
+2. **Re-enable the Pulse vhost.** `/etc/nginx/sites-enabled/pulse.beyondkaira.com.conf` was
+   removed ~2026-08-11 16:00 (the conf file survives in `sites-available/`), so
+   `https://pulse.beyondkaira.com` now falls through to the apex TR landing:
+   `sudo ln -s /etc/nginx/sites-available/pulse.beyondkaira.com.conf /etc/nginx/sites-enabled/ && sudo nginx -t && sudo systemctl reload nginx`.
+   If taking the vhost down was deliberate, say so and the loop will stop treating it as an
+   incident (the dashboard stays reachable to you via SSH port-forward either way).
+
+**Why nothing paged you for 3 weeks:** this is exactly §2.45's decision-gated gap — the
+built-in "Pulse collector offline" self-alert is designed and waiting on your two rulings
+(maintenance-window semantics; channels per tier). Second incident of this class, ~65× longer
+than the first. One word on each ruling unblocks the build.
 
 ## A. iOS TestFlight — the critical path
 
@@ -212,6 +242,16 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
     vhost is written and waiting at `deploy/nginx/pulse-website.conf` and needs your `sudo`.
     Either way the App Store URLs in A3 change, so decide before A3 if you care.
 
+13-bis. *Small, time-boxed:* **answer Ant Media's Documentation-V2 feedback form** (their
+    2026-09 email; 2–3 minutes, $25 gift card offered). Cheap pre-submission goodwill with the
+    exact team that will evaluate our listing. If you want ammunition: S124's assessment read
+    all 289 pages — honest, useful feedback would be (a) the REST statistics endpoints deserve
+    a consolidated reference page (currently scattered), and (b) the webhooks page documents no
+    authentication for payloads — both true, both harmless to our positioning to say out loud.
+    Full analysis: `docs/assessment/ams-3.1-docs-v2-assessment.md`. Note for your own planning,
+    not the form: **AMS 3.1.0 is out (2026-08-31)** — the verdict is that Pulse's case is
+    intact (three features have zero native overlap; the new panel is the one watch item).
+
 13. ~~**Four open HIGH CodeQL alerts**~~ **✅ DONE 2026-07-31 — zero open alerts.** All six
     were triaged adversarially and dispositioned; the record a security reviewer can read is
     `docs/security/codeql-triage.md`. Three dismissed false-positive, one dismissed won't-fix
@@ -251,10 +291,10 @@ load-evidence format (A9). Details: `docs/marketplace/submission-process.md`.
 
 ---
 
-*Prod: healthy — v0.4.0-139 (unchanged), all three `/healthz` components `ok`, **1,400,267**
-server events, newest 5 s old at the check, collector actively ingesting, 0 errors in the
-preceding 90 s. It survived a 5-minute ingest outage during the rotation (see item 1) and is back
-on exactly the build and schema it had before. A prod roll is item 11, never automatic.*
+*Prod at the S124 read (2026-09-02): v0.4.0-139 (unchanged), ClickHouse + meta `ok`,
+**collector `degraded` — no successful AMS poll since 2026-08-12 12:42 UTC** (see §0). Ingest
+frozen at **1,591,248** server events (verified identical across two samples; newest row
+2026-08-11 13:05). A prod roll is item 11, never automatic.*
 
 *Noticed while probing your AMS: its licence shows `type: trial`, `endDate 2026-07-27` — i.e.
 **expired as of 2026-07-28**. It affects nothing we ship, but it does affect future live

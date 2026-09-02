@@ -1,10 +1,11 @@
 # Pulse — AMS Version Compatibility Matrix
 
 **Product:** Pulse: Self-Hosted Analytics, QoE Monitoring and Alerting for Ant Media Server  
-**Last updated:** 2026-07-30 — fleet resource metrics row corrected: CPU/mem/disk come
-from `/rest/v2/system-resources` (D-179), not "via Kafka only"; AMS 2.16/2.17 coverage added and
-source citations de-numbered in D-179; reviewed against AMS 3.0.3 (still the latest AMS
-release); G-27 section added D-161 (2026-07-22)
+**Last updated:** 2026-09-02 — AMS 3.1.0 (released 2026-08-31) row added, **source-verified
+at tag `ams-v3.1.0`, not yet live-validated** (live lane: ROADMAP-V2 §2.48, D-192); prior
+review history: fleet resource metrics row corrected in D-179 (CPU/mem/disk come from
+`/rest/v2/system-resources`, not "via Kafka only"); AMS 2.16/2.17 coverage added D-179;
+G-27 section added D-161 (2026-07-22)
 
 ---
 
@@ -12,6 +13,7 @@ release); G-27 section added D-161 (2026-07-22)
 
 | AMS Version | Validation Status | Pulse Support Level | Source |
 |-------------|------------------|---------------------|--------|
+| 3.1.0 (released 2026-08-31) | **Source-verified only** — every `Broadcast` field Pulse consumes present and identically typed at `ams-v3.1.0`; `currentFPS` still absent (LIM-04 unchanged); `ClusterNode` still carries no role/version (LIM-10 applies; new additive `note` field is not read). Live validation pending (ROADMAP-V2 §2.48) — the new 3.1.0 management panel's backend-API work (upstream #7911) is the specific drift risk to check | Expected compatible | AMS source at `ams-v3.1.0`; D-192 |
 | 3.0.3 Enterprise (build 20260504\_1443) | **LIVE-VALIDATED** | **Supported — primary target** | 46/50 scenario scripts PASS, qa/realams S17–S18, D-079/D-080 |
 | 3.0.2 | Mock-profile only | Mock-compatible | `.github/workflows/ams-version-matrix.yml`; `ams_version_matrix_test.go` → `amsProfiles` entry `v3.0.2` |
 | 2.17.x | Mock-profile only (**source-verified** against `ams-v2.17.1`) | Mock-compatible | `ams_version_matrix_test.go` → `amsProfiles` entry `v2.17.1` |
