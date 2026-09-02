@@ -23,115 +23,98 @@
 > `agents/handoffs/sessions/SESSION-NNN.md` and `decisions.md` (operator directive).
 > **Replace this block each session — never append to it.**
 
+**⚠⚠ LIVE INCIDENT — PROD IS BLIND, 21 DAYS AND COUNTING (found S124, 2026-09-02).** The
+collector has had **no successful AMS poll since 2026-08-12 12:42 UTC**: the operator's
+`antmedia` container was recreated that minute (2026-08-12T12:40:44Z) in **bridge mode with no
+published ports** — it formerly ran `--network host` — so nothing listens on host 5080 and the
+collector's `http://161.97.172.146:5080` target refuses. AMS itself is healthy inside (still
+`antmedia/enterprise:3.0.3`). Separately, `/etc/nginx/sites-enabled/` lost the
+`pulse.beyondkaira.com` symlink on **2026-08-11 ~16:00** (conf survives in sites-available), so
+the public dashboard URL serves the apex TR landing — a domain-level `/healthz` returns literal
+"beyondkaira.com" HTTP 200. **Read prod health from inside the container**
+(`docker exec pulse-prod-pulse-1 wget -qO- http://127.0.0.1:8090/healthz`), never via the
+domain, until §0 of `docs/operator-expected.md` is done. Both fixes are operator-owned infra
+(no sudo; their container) — **do not restart their AMS or touch nginx autonomously.** When AMS
+is reachable again, verify the collector recovers on its own and ingest resumes (two-sample
+ClickHouse read). ClickHouse frozen at 1,591,248 `server_events` (newest 2026-08-11 13:05).
+This is §2.45's failure mode, second occurrence, ~65× the first — the built-in self-alert
+semantics ruling is now the highest-leverage operator answer open.
+
 **Where the product is:** **Our side of the marketplace submission is DONE.** `v0.4.5` is the
-submission target, `CLICKHOUSE_PASSWORD` is rotated (`git log -S` on the live value returns **0
-commits across all refs**), and the outreach email to Ankush at Ant Media is **sent** (S123,
-2026-08-01). Per the agreed process they now arrange a developer meeting and hand over the
-qualification steps their dev team defined. **The next move is theirs, not ours.**
+submission target and the outreach email to Ankush at Ant Media is **sent** (S123, 2026-08-01).
+They arrange the developer meeting and hand over qualification steps. **The next move is
+theirs, not ours.** Meanwhile **AMS v3.1.0 shipped 2026-08-31** (first release since our 3.0.3
+validation — new React management panel = the G-27 revamp gone public, Java 21) and Ant Media
+re-platformed their docs (`docs.antmedia.io/v2/`). S124 swept all 289 current docs pages +
+the release notes with an adversarially-verified 34-agent workflow: **operators still need
+Pulse** — F6/F9/F10 zero native overlap, the rest partial (AMS emits raw data; Pulse is the
+product layer), all 8 positioning gap-claims intact, the new panel the only medium-threat
+watch item. Report: `docs/assessment/ams-3.1-docs-v2-assessment.md`. Follow-up lane: **§2.48**
+(live-validate the G-27 endpoint surface vs a community 3.1.0 in an isolated stack — fully
+autonomous; source-verification already done, all 10 consumed `Broadcast` fields present at
+`ams-v3.1.0`, LIM-04/LIM-10 unchanged).
 
-**Nothing on the engineering side blocks the marketplace.** Everything left is waiting on
-something external or deliberately deferred — the list is at the bottom of this block. Do not
-invent work to fill the wait; re-verify the delta instead (see the standing lessons).
-
-**⚠⚠ THE LIVE HAZARD, and it is the single most important thing on this page.** `pulse-migrate`
-**bind-mounts `contracts/` from the host working tree**, so prod's schema follows the git
-checkout rather than the deployed image. Prod is pinned to v0.4.0-139 (2026-07-23) while `main`
-has moved well past it, so **any `docker compose up -d` on prod applies migrations the deployed
-binary does not understand.** On 2026-07-31 a password rotation did exactly that: it applied
-`0011_server_events_ingest_error.sql`, took `server_events` 40 → 42 columns, and every insert
-failed (`expected 42 arguments, got 40`) for five minutes. Recovered by dropping the two columns
-and clearing the ledger row, deliberately back to the pre-rotation state rather than forward,
-because a version roll was not authorised. `deploy/scripts/rotate-clickhouse-password.sh` now
-refuses on this mismatch (`check_pending_migrations`); the manual pre-flight is in
-`deploy/runbooks/upgrade-rollback.md` §1. **Rolling prod forward closes it permanently and is the
-highest-value item on the debt list.**
-
-**The prod compose command in this file was stale and would have failed** — it named
-`deploy/docker-compose.prod-tls.yml`, deleted by PR #199 in the Caddy→nginx cutover. The live
-stack runs **three** files (`prod + real-ams + backup`). Fixed in §6/§7. Generalisation worth
-keeping: **ask the running stack (`com.docker.compose.project.config_files`), do not trust a doc
-about it.**
-
-**All CodeQL alerts are triaged and zero are open** (`docs/security/codeql-triage.md`). Three
-dismissed false-positive, one dismissed won't-fix **with a mitigation shipped**, two excluded as
-vendored ReDoc bundle code. The judge in that triage **overruled both analysts** on the one that
-mattered: they argued "high-entropy machine secret, the rule does not apply", which holds only
-for the hex path — `deriveKey` SHA-256s anything that is not exactly 64 hex chars, and
-`PULSE_SECRET_KEY=mysecretpassword1` clears the 16-byte floor. **A floor on length is not a floor
-on entropy.** The derivation was NOT changed: a KDF swap orphans every existing encrypted
-credential and no `pulse rekey` exists. A startup warning ships instead.
-
-**Four gate gaps were closed this session, and all four were the same shape: a check that could
-not fail.**
-- **npm advisories were ungated entirely** — Trivy scans the image (OS packages + Go binary) and
-  never sees bundled JS, so a HIGH in `react-router` sat green for weeks. New `npm-audit` job.
-- **`THIRD-PARTY-LICENSES.md --check` was never run by anything** — silently stale.
-- **The shellcheck guard was a 6-path hand-list** that had already drifted; three more scripts
-  were uncovered, one shipping to customers inside the Helm chart. Now discovery-based.
-- **`CodeQL` was not a required context** — only `Analyze (…)`, which reports that the scan RAN,
-  not what it FOUND. That is why four HIGH alerts sat open for three weeks behind green CI.
-Required contexts are now **18** and the live setting matches the script (verified via the API).
-
-**Two defects were "wrong in two places at once", which is why nothing caught them.** The website
-sold historical analytics (F2) and ingest health (F4) inside the **Free** plan while both are
-`CheckDataAPI`-gated — a Free user following our own pricing page got `403 LICENSE_REQUIRED`.
-F2 was website-vs-docs; **F4 was wrong in the docs AND the website simultaneously**, so the
-cross-check compared two copies of the same error. Operator ruled the code is right. All ten
-features now agree across code, `product.md`, `overview.md`, `licensing-public.md` and the site.
-
-**A test that mirrors production logic cannot test production.** `TierGate.test.ts` kept its own
-copies of the gate predicates and passed while asserting the opposite of shipped behaviour. Rules
-now live in `web/src/lib/entitlements.ts`, each mapped to its server `Check*`; planting the
-historical drift now fails.
+**⚠⚠ THE STANDING HAZARD.** `pulse-migrate` **bind-mounts `contracts/` from the host working
+tree**, so prod's schema follows the git checkout rather than the deployed image. Prod is
+pinned to v0.4.0-139 (2026-07-23) while `main` has moved well past it, so **any
+`docker compose up -d` on prod applies migrations the deployed binary does not understand**
+(2026-07-31: five-minute ingest outage, `expected 42 arguments, got 40`; recovered).
+`deploy/scripts/rotate-clickhouse-password.sh` refuses on the mismatch
+(`check_pending_migrations`); manual pre-flight: `deploy/runbooks/upgrade-rollback.md` §1.
+**Rolling prod forward closes it permanently and is the highest-value item on the debt list.**
 
 **Two independent tracks:**
 - **Marketplace** — our side complete; awaiting Ant Media's reply. Queue:
-  `docs/operator-expected.md` §B (item 5 lists what to capture).
+  `docs/operator-expected.md` §B (item 5 lists what to capture). Docs-v2 nuance from S124:
+  their docs' "marketplace" is cloud images only; the plugin marketplace is barely
+  doc-surfaced — the Ankush/developer-meeting track is the real path, keep discovery
+  expectations modest.
 - **iOS TestFlight** — blocked by **Apple Developer Program enrolment** only. §A is the path.
+  (Re-checked S124: no `APP_STORE_CONNECT_*` secrets yet.)
 
-**Standing lessons that keep paying (condensed — session narration lives in `sessions/`):**
+**Standing lessons that keep paying (condensed — session narration lives in `decisions.md`):**
 
-- **Run the guard the way CI runs it — same shell flags AND same argument passing.** Re-earned
-  twice: extracting a guard under `set -euo pipefail` failed where CI's `bash -e` passes, and
-  passing `check-doc-stamps.sh` its base ref as an ENV var silently skipped check B and reported
-  PASS, because the script reads it positionally.
-- **Fix the class, not the instance — then check you actually did.** The shellcheck guard, the
-  startup-flake budget (6 sites across 4 files, and my first pass fixed ONE), and the four
-  copy-pasted secret-key validators were all the same failure. Grep for siblings before claiming
-  a fix.
-- **Test the artifact, not the source.** The API reference passed a static CDN grep while the
-  browser still fetched `cdn.redoc.ly` — the bundle injects its logo at runtime from a string in
-  minified JS. Only loading it with `--network none` found it.
-- **Audit the exculpations.** Five rounds running. This session the hostile audit's loudest
-  finding — "BLOCKER: no cosign signatures exist" — was itself **refuted** by running the
-  documented command with a v3 client. Its author fell into the trap our docs warn about.
-- **A fix that does not change the artifact has not been verified.** Prove a guard BOTH ways —
-  plant the defect, watch it fail.
-- **Before filing a defect against code, confirm the artifact you tested was built from it.**
+- **Run the guard the way CI runs it — same shell flags AND same argument passing.**
+- **Fix the class, not the instance — then check you actually did.** Grep for siblings before
+  claiming a fix.
+- **Test the artifact, not the source.** Only loading the built page with `--network none`
+  found the runtime CDN fetch a static grep passed.
+- **Audit the exculpations.** Five rounds running; round 11's loudest "BLOCKER" was itself
+  refuted by running the documented command.
+- **A fix that does not change the artifact has not been verified.** Prove a guard BOTH ways.
+- **A domain-level 200 is not service health** (S124): the vhost fell through to another site
+  and `/healthz` "passed" with the wrong body. Component-scope the read, from inside the
+  container — the D-166 whole-body-grep trap can reappear at the DNS/vhost layer.
+- **Sample the moving number twice** (S124): a single ClickHouse count read as "non-zero, fine";
+  the second identical sample is what proved ingest frozen.
 - **⚠ Concurrent-session hazard is real.** If HEAD moves or the tree dirties with work you did
   not do, STOP and inspect. Quarantine, never delete.
 
 **Open engineering debt — NOTHING here blocks the marketplace:**
-- **Roll prod forward** — closes the migrate/binary hazard above permanently. Highest value.
-- **`pulse rekey`** — prerequisite for properly closing CodeQL #6 (Argon2id behind a versioned
-  blob format, with migration). ADR-0004 defers it.
+- **Roll prod forward** — closes the migrate/binary hazard permanently. Highest value.
+- **§2.48 AMS 3.1.0 live-compat lane** — autonomous (community image, isolated stack); flip the
+  compatibility-matrix row source-verified → live-validated; re-probe LIM-04/18/23/28 live.
+- **`pulse rekey`** — prerequisite for properly closing CodeQL #6. ADR-0004 defers it.
 - Waiting on external things: cluster node-alerting rework (LIM-10, needs a real 2-node cluster) ·
-  capacity number + AV-15 live Kafka validation (needs a PAYG AMS) · TestFlight (needs Apple).
-- Deliberately deferred: release candidate push via buildx `push-by-digest=true` (round 6 H-09) —
-  changes the publish mechanism and cannot be exercised by the dry-run path, only a real tag.
+  capacity number + AV-15 live Kafka validation (needs a PAYG AMS) · TestFlight (needs Apple) ·
+  §2.45 self-alert build (needs the operator's two semantics answers — escalated S124).
+- Deliberately deferred: release candidate push via buildx `push-by-digest=true` (round 6 H-09).
 - Smaller: the iOS app's `KeychainService` duplicates PulseKit's `TokenStore` · surface
   `stream_ingest_error` (LIM-27) · thread the owning node through per-app polling (LIM-28) ·
-  probe whether `ams-webrtc-stats` can restore per-stream FPS (LIM-04 rests on a LIM-01-style
-  inference) · self-host the IBM Plex OFL woff2 files for `website/` and the iOS app (the **web
-  UI already self-hosts them**) · optional: a `crypto.getRandomValues` middle tier in the beacon
-  SDK (better than the `Math.random` fallback in HTTP contexts; would not close any alert).
+  probe whether `ams-webrtc-stats` can restore per-stream FPS (LIM-04) · self-host the IBM Plex
+  OFL woff2 files for `website/` and the iOS app · optional `crypto.getRandomValues` middle tier
+  in the beacon SDK.
 
 **Do first, every session:**
-1. **Gate reads** — prod health (component-scoped `/healthz`, plus a ClickHouse count sampled
-   TWICE to prove it is *moving*, not merely non-zero), git/PR drift, concurrent-session check.
-2. **Has Ant Media replied?** If so, capture the answers per `docs/operator-expected.md` item 5.
-3. **Check whether the Apple account exists yet** (`gh secret list` for `APP_STORE_CONNECT_*`).
-4. **If a TestFlight public link arrives**, do the `/beta/` swap and redeploy.
+1. **Gate reads** — prod health (component-scoped `/healthz` **from inside the container**,
+   plus a ClickHouse count sampled TWICE to prove it is *moving*), git/PR drift,
+   concurrent-session check.
+2. **Is prod still blind?** (§0 of `docs/operator-expected.md`.) If the operator restored AMS
+   port exposure and/or the nginx vhost, verify collector recovery + ingest moving, then close
+   §0 and update this block.
+3. **Has Ant Media replied?** If so, capture the answers per `docs/operator-expected.md` item 5.
+4. **Check whether the Apple account exists yet** (`gh secret list` for `APP_STORE_CONNECT_*`).
+5. **If a TestFlight public link arrives**, do the `/beta/` swap and redeploy.
 
 **Operator queue:** `docs/operator-expected.md`. **How we got here** (read only if you need it):
 `decisions.md` · `agents/handoffs/sessions/` · `docs/assessment/`.
@@ -142,15 +125,17 @@ historical drift now fails.
 - **Shipped product, pre-marketplace.** All 10 PRD features implemented and live-validated
   against a real AMS 3.0.3 Enterprise (46/50 scenarios). **Latest release: v0.4.5** (2026-07-30,
   the marketplace submission target; it carries review rounds 7–11 plus the S122 corrections,
-  which v0.4.4 did not). AMS 3.0.3 is still the latest AMS release.
-- **Production** runs behind host nginx on this VPS at `https://pulse.beyondkaira.com`, against
-  the operator's own `antmedia` container (AMS Enterprise 3.0.3, `--network host`). It is on the
-  stamped **v0.4.0-139** build — rolling prod forward is deliberate and operator-gated, never
-  automatic. Health at last check (S123, 2026-07-31, AFTER the rotation and its 5-minute ingest
-  outage): all three `/healthz` components `ok`, **1,400,267** server events, newest 5 s old,
-  0 ERROR lines in the preceding 30 min, row count verified *increasing* across two samples
-  (re-read S123 close, 2026-08-01: **1,417,734** events, newest 4 s old).
-  ⚠ Prod's schema is now one migration BEHIND the tree on purpose (0011 reverted) so the pinned
+  which v0.4.4 did not). **AMS 3.1.0 is the latest AMS release** (2026-08-31; source-verified
+  compatible at the field level, live validation = §2.48; the operator's own container is still
+  3.0.3-EE).
+- **Production** runs on this VPS on the stamped **v0.4.0-139** build — rolling prod forward is
+  deliberate and operator-gated, never automatic. **⚠ Currently DEGRADED — see the incident
+  block above:** collector blind since 2026-08-12 (AMS container recreated without published
+  ports), public vhost gone since 2026-08-11 (the domain serves the apex landing). ClickHouse
+  and meta components `ok`; ingest frozen at **1,591,248** server events (S124 read, verified
+  identical across two samples). The operator's `antmedia` container is AMS Enterprise 3.0.3,
+  now **bridge mode, no ports** (formerly `--network host`).
+  ⚠ Prod's schema is one migration BEHIND the tree on purpose (0011 reverted) so the pinned
   binary keeps working — see §7.
 - **The iOS app exists and is CI-verified** (D-186). `ios/PulseKit` — Foundation-only, **296 tests
   green on Linux** (re-verified S122 in CI's `swift:6.1` container from a clean `git archive` copy), which is the point of the split: no Apple toolchain exists on this VPS, so
