@@ -141,7 +141,7 @@ services:
     # substitutes; raw ClickHouse aborts on the first statement (Code 62
     # SYNTAX_ERROR) and applies NO tables at all (D-065 WO-D). Schema is applied
     # exclusively by the pulse-migrate one-shot container.
-    image: clickhouse/clickhouse-server@sha256:1d1f6508eba2dccce2cee9913907c5f7766327debc57a6b1991f2c9e3176c163
+    image: clickhouse/clickhouse-server@sha256:5a55fb7517cbba97a99b8676a748fd13e4709049a4d1f5d5be5c20695da4c91b
     environment:
       CLICKHOUSE_USER: "${CLICKHOUSE_USER}"
       CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD}"

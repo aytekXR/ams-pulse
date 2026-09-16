@@ -53,7 +53,7 @@ services:
   # silent failure (docker logs backup shows the crash). This avoids silently
   # crash-looping the sidecar on expected transient errors (network blip, etc.).
   backup:
-    image: clickhouse/clickhouse-server@sha256:1d1f6508eba2dccce2cee9913907c5f7766327debc57a6b1991f2c9e3176c163
+    image: clickhouse/clickhouse-server@sha256:5a55fb7517cbba97a99b8676a748fd13e4709049a4d1f5d5be5c20695da4c91b
     entrypoint: ["/bin/bash", "/scripts/pulse-backup.sh"]
     command: ["daemon"]
     deploy:
