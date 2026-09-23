@@ -32,7 +32,7 @@ RUN CGO_ENABLED=0 go build \
 
 # --- runtime ---
 # alpine:3.21
-FROM alpine@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+FROM alpine@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 # Create the meta-store/secret-key dir owned by the non-root pulse user so a fresh
 # pulse-data named volume inherits pulse:pulse ownership (else SQLITE_CANTOPEN at /var/lib/pulse).
 RUN adduser -D -H pulse && mkdir -p /var/lib/pulse && chown pulse:pulse /var/lib/pulse
