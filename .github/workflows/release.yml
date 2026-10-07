@@ -59,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Guard check #16 resolves the previous tag with `git describe --tags`, which
           # needs full history AND tags. The default shallow depth-1 checkout has
@@ -73,7 +73,7 @@ jobs:
       # so the workspace matches the release being published.
       - name: Checkout publish tag (dispatch npm-publish path)
         if: github.event_name == 'workflow_dispatch' && inputs.publish_tag != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.publish_tag }}
 
