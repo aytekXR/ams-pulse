@@ -104,13 +104,20 @@ export function AlertsPage() {
     void loadAll();
   }, [loadAll]);
 
+  // A refused save keeps the form open with the user's input and says why. Before D-194 the
+  // error escaped as an unhandled rejection: Save re-enabled and nothing else happened.
   const saveRule = async (data: AlertRuleWrite) => {
-    if (editingRule === "new") {
-      await alertsApi.createRule(data);
-      toast("Rule created", "success");
-    } else if (editingRule) {
-      await alertsApi.updateRule(editingRule.id, data);
-      toast("Rule updated", "success");
+    try {
+      if (editingRule === "new") {
+        await alertsApi.createRule(data);
+        toast("Rule created", "success");
+      } else if (editingRule) {
+        await alertsApi.updateRule(editingRule.id, data);
+        toast("Rule updated", "success");
+      }
+    } catch (err) {
+      toast(err instanceof ApiError ? `Rule not saved: ${err.message}` : "Rule not saved", "error");
+      return;
     }
     setEditingRule(null);
     void loadAll();
@@ -137,12 +144,17 @@ export function AlertsPage() {
   };
 
   const saveChannel = async (data: AlertChannelWrite) => {
-    if (editingChannel === "new") {
-      await alertsApi.createChannel(data);
-      toast("Channel created", "success");
-    } else if (editingChannel) {
-      await alertsApi.updateChannel(editingChannel.id, data);
-      toast("Channel updated", "success");
+    try {
+      if (editingChannel === "new") {
+        await alertsApi.createChannel(data);
+        toast("Channel created", "success");
+      } else if (editingChannel) {
+        await alertsApi.updateChannel(editingChannel.id, data);
+        toast("Channel updated", "success");
+      }
+    } catch (err) {
+      toast(err instanceof ApiError ? `Channel not saved: ${err.message}` : "Channel not saved", "error");
+      return;
     }
     setEditingChannel(null);
     void loadAll();

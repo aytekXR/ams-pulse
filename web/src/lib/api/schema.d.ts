@@ -1229,7 +1229,16 @@ export interface components {
             id: string;
             /** @description Human-readable display name for the alert rule (e.g. "High rebuffer ratio") */
             name: string;
-            /** @description Metric name, e.g. rebuffer_ratio, bitrate_kbps, viewer_count */
+            /**
+             * @description Metric name. Threshold rules accept `stream_offline`, `viewer_count`,
+             *     `viewer_count_floor` (`viewer_drop_pct` is its deprecated alias),
+             *     `ingest_bitrate_kbps`, `ingest_bitrate_floor`, `fps`, `rebuffer_ratio`, `error_rate`,
+             *     `node_cpu`, `node_mem`, `node_disk`, `node_down`, `node_degraded`, `cert_expiry`
+             *     and `license_expiry`; any other name returns 422 `INVALID_RULE`. Anomaly rules take
+             *     their own set (see `rule_type`) — note the node metrics are `node_cpu` / `node_mem` /
+             *     `node_disk` for threshold rules but `cpu_pct` / `mem_pct` / `disk_pct` for anomaly
+             *     rules.
+             */
             metric: string;
             /**
              * @description Rule evaluation mode.
@@ -1295,6 +1304,16 @@ export interface components {
         AlertRuleWrite: {
             /** @description Human-readable display name for the alert rule */
             name: string;
+            /**
+             * @description Metric name. Threshold rules accept `stream_offline`, `viewer_count`,
+             *     `viewer_count_floor` (`viewer_drop_pct` is its deprecated alias),
+             *     `ingest_bitrate_kbps`, `ingest_bitrate_floor`, `fps`, `rebuffer_ratio`, `error_rate`,
+             *     `node_cpu`, `node_mem`, `node_disk`, `node_down`, `node_degraded`, `cert_expiry`
+             *     and `license_expiry`; any other name returns 422 `INVALID_RULE`. Anomaly rules take
+             *     their own set (see `rule_type`) — note the node metrics are `node_cpu` / `node_mem` /
+             *     `node_disk` for threshold rules but `cpu_pct` / `mem_pct` / `disk_pct` for anomaly
+             *     rules.
+             */
             metric: string;
             /**
              * @description Rule evaluation mode.

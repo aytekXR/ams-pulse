@@ -302,7 +302,7 @@ and enabled/muted state.
 |-------|-------|
 | Rule type | `threshold` (metric vs fixed value) or `anomaly` (statistical deviation) |
 | Name | Required; used as the display label throughout the UI |
-| Metric | e.g. `viewer_count`, `cpu_pct`, `ingest_bitrate_kbps`, `node_down` |
+| Metric | Threshold rules: stream, viewer-QoE and node metrics, e.g. `stream_offline`, `ingest_bitrate_floor`, `rebuffer_ratio`, `node_cpu`, `node_down`. Anomaly rules: `viewer_count`, `ingest_bitrate_kbps`, `cpu_pct`, `mem_pct`, `disk_pct`, `ams_api_latency_ms`. Every metric and what it measures: [alerting runbook](runbooks/alerting.md#supported-metrics) |
 | Operator / Threshold | For threshold rules: `gt`, `lt`, `gte`, `lte`, `eq` with a numeric value |
 | Sigma / Min Samples | For anomaly rules: sigma replaces operator+threshold; window is locked to 3600 s |
 | Severity | `info`, `warning`, or `critical` |
