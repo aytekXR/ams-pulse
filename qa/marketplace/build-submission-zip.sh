@@ -64,10 +64,40 @@ if [[ "$MODE" == full ]]; then
 fi
 
 # ── 3. Reference documents from the repository ─────────────────────────────────
-for f in docs/known-limitations.md docs/licensing-public.md docs/support.md docs/beacon-sdk.md \
-         docs/compatibility.md docs/user-guide.md SECURITY.md; do
+REF_DOCS=(docs/known-limitations.md docs/licensing-public.md docs/support.md docs/beacon-sdk.md
+          docs/compatibility.md docs/user-guide.md SECURITY.md)
+for f in "${REF_DOCS[@]}"; do
   cp "$REPO/$f" "$STAGE/documentation/other/"
 done
+# The copies keep their repository-relative links, which are dead ends in the ZIP (README.md,
+# LICENSE, runbooks …). Point them at the same files on GitHub; links between the copied
+# documents stay local.
+node - "$REPO" "$STAGE/documentation/other" "${REF_DOCS[@]}" <<'NODE'
+const fs = require("fs"), path = require("path");
+const [repo, outDir, ...docs] = process.argv.slice(2);
+const local = new Map(docs.map((d) => [d, path.basename(d)]));
+const BASE = "https://github.com/aytekXR/ams-pulse";
+const rewrite = (from, target) => {
+  if (/^([a-z][a-z0-9+.-]*:|#)/i.test(target)) return target;          // URL, mailto:, anchor
+  const [p, ...rest] = target.split("#");
+  const anchor = rest.length ? "#" + rest.join("#") : "";
+  const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(from), p));
+  if (resolved.startsWith("..")) return target;                         // outside the repo
+  if (local.has(resolved)) return local.get(resolved) + anchor;
+  if (/\.(png|jpe?g|gif|webp)$/i.test(resolved))                     // images must stay images
+    return `https://raw.githubusercontent.com/aytekXR/ams-pulse/main/${resolved}`;
+  const isDir = fs.existsSync(path.join(repo, resolved)) && fs.statSync(path.join(repo, resolved)).isDirectory();
+  return `${BASE}/${isDir ? "tree" : "blob"}/main/${resolved.replace(/\/$/, "")}${anchor}`;
+};
+for (const d of docs) {
+  const file = path.join(outDir, path.basename(d));
+  const src = fs.readFileSync(file, "utf8");
+  const out = src
+    .replace(/\]\(([^)\s]+)(\s+"[^"]*")?\)/g, (_, t, title = "") => `](${rewrite(d, t)}${title})`)
+    .replace(/^(\[[^\]]+\]:\s+)(\S+)/gm, (_, lead, t) => lead + rewrite(d, t));
+  fs.writeFileSync(file, out);
+}
+NODE
 
 # ── 4. PDFs ────────────────────────────────────────────────────────────────────
 log "rendering PDFs"

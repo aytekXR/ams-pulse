@@ -33,7 +33,12 @@ SPEC="contracts/openapi/pulse-api.yaml"
 OUT="docs/api/index.html"
 # Pinned deliberately: an unpinned bundle would make the generated file
 # non-reproducible and could change the docs without a contract change.
-REDOC_VERSION="v2.5.3"
+# The CLI and the ReDoc bundle it references are pinned as a pair: an unpinned `npx
+# @redocly/cli` started emitting a v2.5.4 <script> tag, which this script (correctly) refused
+# to inline, and docs/api/index.html silently went stale for two months (found by the v0.5.0
+# red team). Bump both together; the SRI check below verifies the bundle.
+REDOCLY_CLI_VERSION="2.59.0"
+REDOC_VERSION="v2.5.4"
 REDOC_URL="https://cdn.redocly.com/redoc/${REDOC_VERSION}/bundles/redoc.standalone.js"
 
 CHECK_ONLY=0
@@ -52,7 +57,7 @@ echo "==> building ReDoc HTML from $SPEC"
 # Roboto from fonts.googleapis.com. This repo self-hosts fonts and never uses a
 # font CDN, and a customer opening our API reference should not be reported to
 # Google.
-npx --yes @redocly/cli build-docs "$SPEC" --disableGoogleFont -o "$TMPDIR_BUILD/raw.html" >/dev/null
+npx --yes "@redocly/cli@${REDOCLY_CLI_VERSION}" build-docs "$SPEC" --disableGoogleFont -o "$TMPDIR_BUILD/raw.html" >/dev/null
 
 echo "==> fetching pinned ReDoc bundle ($REDOC_VERSION)"
 curl -fsS -m 120 -o "$TMPDIR_BUILD/redoc.js" "$REDOC_URL"

@@ -349,8 +349,8 @@ export interface paths {
         };
         /**
          * Download the usage report as a CSV file attachment
-         * @description Business-tier gated CSV export of the same usage data returned by
-         *     `GET /reports/usage` (identical `ComputeUsage` backing), streamed as a
+         * @description CSV export of the same usage data returned by `GET /reports/usage`
+         *     (identical `ComputeUsage` backing; open to all since v0.5.0), streamed as a
          *     file download (`Content-Disposition: attachment; filename=usage-report-YYYY-MM-DD.csv`).
          *     `format=csv` is the only value supported today; `format=pdf` returns 501
          *     (Phase 3 white-label PDF — see `docs/known-limitations.md`). Registered
@@ -1992,7 +1992,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Authenticated but not authorized (e.g. tier gate) */
+        /** @description Authenticated but not authorized (e.g. the wrong token kind, or a role without permission) */
         Forbidden: {
             headers: {
                 [name: string]: unknown;

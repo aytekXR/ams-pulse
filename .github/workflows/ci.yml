@@ -27,6 +27,18 @@ jobs:
           npx --yes @redocly/cli lint --skip-rule=path-parameters-defined \
             contracts/openapi/pulse-api.yaml
 
+  # ── 1b. API reference ────────────────────────────────────────────────────────
+  # docs/api/index.html is GENERATED from the contract (scripts/build-api-docs.sh). Nothing
+  # checked it, so it kept the old license and tier text for two months after the contract
+  # changed (found by the v0.5.0 red team). Deliberately NOT a required check: it fetches the
+  # pinned ReDoc bundle from cdn.redocly.com, and a CDN outage must not block merges.
+  api-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docs/api/index.html matches the contract
+        run: bash scripts/build-api-docs.sh --check
+
   # ── 2. Server ─────────────────────────────────────────────────────────────────
   server:
     runs-on: ubuntu-latest

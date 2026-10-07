@@ -59,8 +59,9 @@ product that competes with Pulse. The beacon SDKs are MIT-licensed.
 - **Problem (§7.2):** AMS operators have no product-grade visibility into audience or QoE;
   DIY Grafana stacks measure servers, not viewers, and take weeks to build.
 - **UVP (§7.8):** "See every viewer, every stream, every node — in real time, on your own
-  infrastructure." Installs in minutes; zero AMS modification; tiered so a solo operator
-  starts free and a platform pays for QoE/billing/anomaly depth.
+  infrastructure." Installs in minutes; zero AMS modification. (The PRD tiered it so a solo
+  operator starts free and a platform pays for QoE/billing/anomaly depth; since v0.5.0 every
+  feature is free on every install.)
 - **Numeric acceptance criteria** (the binding ones; full list `docs/ARCHITECTURE.md` §4):
   stream visible on dashboard ≤10 s after publish; ingest-degradation detection ≤15 s;
   13-month dimensional analytics query ≤3 s; alert detect→notify ≤5 s; beacon SDK ≤15 KB
