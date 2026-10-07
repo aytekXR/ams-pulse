@@ -26,7 +26,7 @@ so Pulse is not their distributor. They are named in the last section for comple
 
 | Component | Licence |
 |---|---|
-| Pulse server and web UI | PolyForm Noncommercial 1.0.0 for the Free tier; a commercial subscription is required for paid production use. See `LICENSE` and `docs/licensing-public.md`. |
+| Pulse server and web UI | PolyForm Shield License 1.0.0 — free for any use, including commercial use; the one restriction is that you may not use it to provide a product that competes with Pulse. See `LICENSE` and `docs/licensing-public.md`. |
 | `sdk/beacon-js` (npm `ams-pulse-beacon`) | MIT — embeddable in any player, including commercial products |
 | `sdk/beacon-swift` (`PulseBeacon`) | MIT |
 
