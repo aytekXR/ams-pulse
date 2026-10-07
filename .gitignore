@@ -1,5 +1,7 @@
 # Binaries / build output
 /server/bin/
+# Packaged deliverables (qa/marketplace/build-submission-zip.sh)
+/dist/
 /web/dist/
 /sdk/beacon-js/dist/
 *.exe

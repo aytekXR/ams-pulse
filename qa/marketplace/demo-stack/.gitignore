@@ -1,0 +1,3 @@
+# Runtime state written by up.sh / seed-demo.mjs (admin token, demo license, ids).
+.state/
+.env

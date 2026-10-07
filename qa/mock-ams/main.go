@@ -16,6 +16,7 @@
 //	GET /rest/v2/cluster/nodes                             → 404 (flat route absent on real AMS 3.x)
 //	GET /rest/v2/cluster/nodes/{offset}/{size}             → HTTP 500 (standalone) or paginated []ClusterNodeDTO (cluster)
 //	GET /rest/v2/system-status                             → {"cpuUsage":15.0,"ramUsage":40.0}
+//	GET /rest/v2/system-resources                          → real-AMS-3.0.3-shaped CPU / memory / disk snapshot
 //	GET /rest/v2/version                                   → {"versionName":"3.0.3","versionType":"Enterprise","buildNumber":"mock"}
 //	GET /{app}/rest/v2/vods/list/{offset}/{size}           → [] (empty VoD list)
 //	POST /rest/v2/users/authenticate                       → {"success":true} + Set-Cookie: JSESSIONID=mock
@@ -53,6 +54,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -406,6 +408,33 @@ func (s *Server) routes() {
 		writeJSON(w, map[string]any{
 			"cpuUsage": 15.0,
 			"ramUsage": 40.0,
+		})
+	})
+
+	// GET /rest/v2/system-resources  (AMS 3.x console route; Pulse prefers it, D-179)
+	// Same nested shape as a real AMS 3.0.3 (server/pkg/amsclient/testdata/
+	// system_resources_real_v303.json), trimmed to the fields Pulse reads. Values are
+	// a plausible mid-size node with a slow, bounded CPU drift so dashboards are not
+	// frozen; they are simulated, not measured.
+	s.mux.HandleFunc("/rest/v2/system-resources", func(w http.ResponseWriter, r *http.Request) {
+		const gib = 1 << 30
+		phase := float64(time.Now().Unix()%600) / 600 * 2 * math.Pi
+		cpu := math.Round(32 + 7*math.Sin(phase))
+		totalMem, totalDisk := float64(16*gib), float64(200*gib)
+		inUseMem := math.Round(totalMem * (0.44 + 0.03*math.Sin(phase/2)))
+		writeJSON(w, map[string]any{
+			"cpuUsage": map[string]any{"systemCPULoad": cpu, "processCPULoad": math.Round(cpu * 0.6)},
+			"systemInfo": map[string]any{
+				"osName": "Linux", "osArch": "amd64", "javaVersion": "17", "processorCount": 8,
+			},
+			"systemMemoryInfo": map[string]any{
+				"totalMemory": totalMem, "inUseMemory": inUseMem, "freeMemory": totalMem - inUseMem,
+				"availableMemory": totalMem - inUseMem,
+			},
+			"fileSystemInfo": map[string]any{
+				"totalSpace": totalDisk, "inUseSpace": math.Round(totalDisk * 0.29),
+				"usableSpace": math.Round(totalDisk * 0.71), "freeSpace": math.Round(totalDisk * 0.71),
+			},
 		})
 	})
 

@@ -555,6 +555,52 @@ func TestSystemStatus(t *testing.T) {
 	}
 }
 
+// TestSystemResources_RealV303Shape verifies GET /rest/v2/system-resources answers
+// in the shape a real AMS 3.0.3 sends (server/pkg/amsclient/testdata/
+// system_resources_real_v303.json): nested cpuUsage.systemCPULoad, and
+// systemMemoryInfo / fileSystemInfo byte counters with in-use <= total. Pulse's
+// restpoller prefers this route (D-179); without it the dashboard shows 0 % CPU/RAM.
+func TestSystemResources_RealV303Shape(t *testing.T) {
+	ts, _ := newTestServer(t)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/rest/v2/system-resources")
+	if err != nil {
+		t.Fatalf("GET /rest/v2/system-resources: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	var res struct {
+		CPUUsage struct {
+			SystemCPULoad *float64 `json:"systemCPULoad"`
+		} `json:"cpuUsage"`
+		SystemMemoryInfo struct {
+			TotalMemory *float64 `json:"totalMemory"`
+			InUseMemory *float64 `json:"inUseMemory"`
+		} `json:"systemMemoryInfo"`
+		FileSystemInfo struct {
+			TotalSpace *float64 `json:"totalSpace"`
+			InUseSpace *float64 `json:"inUseSpace"`
+		} `json:"fileSystemInfo"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		t.Fatalf("decode system-resources: %v", err)
+	}
+	if res.CPUUsage.SystemCPULoad == nil || *res.CPUUsage.SystemCPULoad < 0 || *res.CPUUsage.SystemCPULoad > 100 {
+		t.Errorf("cpuUsage.systemCPULoad missing or out of 0..100: %v", res.CPUUsage.SystemCPULoad)
+	}
+	m := res.SystemMemoryInfo
+	if m.TotalMemory == nil || m.InUseMemory == nil || *m.TotalMemory <= 0 || *m.InUseMemory > *m.TotalMemory {
+		t.Errorf("systemMemoryInfo invalid: total=%v inUse=%v", m.TotalMemory, m.InUseMemory)
+	}
+	f := res.FileSystemInfo
+	if f.TotalSpace == nil || f.InUseSpace == nil || *f.TotalSpace <= 0 || *f.InUseSpace > *f.TotalSpace {
+		t.Errorf("fileSystemInfo invalid: total=%v inUse=%v", f.TotalSpace, f.InUseSpace)
+	}
+}
+
 // TestVersion verifies that GET /rest/v2/version returns 200 with
 // versionName, versionType, and buildNumber fields.
 func TestVersion(t *testing.T) {
