@@ -1,0 +1,30 @@
+# Cosign verification of the released image — run 2026-10-01 (UTC), exit code 0
+# Client: official image ghcr.io/sigstore/cosign/cosign:v3.1.3 (latest cosign release at run time)
+# Command (exactly as documented in marketplace-copy.md, installation step 3):
+cosign verify \
+  --certificate-identity-regexp '^https://github\.com/aytekXR/ams-pulse/\.github/workflows/release\.yml@refs/tags/v.+$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/aytekxr/ams-pulse:0.4.5
+
+# stderr (image-pull progress lines omitted):
+
+Verification for ghcr.io/aytekxr/ams-pulse:0.4.5 --
+The following checks were performed on each of these signatures:
+  - The cosign claims were validated
+  - Existence of the claims in the transparency log was verified offline
+  - The code-signing certificate was verified using trusted certificate authority certificates
+# stdout (signature payload):
+[
+    {
+        "critical": {
+            "identity": {
+                "docker-reference": "ghcr.io/aytekxr/ams-pulse:0.4.5"
+            },
+            "image": {
+                "docker-manifest-digest": "sha256:542fead11883dbe42cb85b95d82e6ebc489a047923db1920896b3c0d9031854f"
+            },
+            "type": "https://sigstore.dev/cosign/sign/v1"
+        },
+        "optional": {}
+    }
+]

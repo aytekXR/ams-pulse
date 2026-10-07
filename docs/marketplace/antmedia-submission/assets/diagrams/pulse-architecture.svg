@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="t d">
+  <title id="t">How Pulse attaches to Ant Media Server</title>
+  <desc id="d">Pulse runs beside Ant Media Server on the operator's own infrastructure. It polls the AMS REST v2 API read-only, receives player QoE beacons, stores metrics in ClickHouse and configuration in a local meta store, and serves the web UI and API on port 8090. Alerts go to email, Slack, Telegram, PagerDuty or a signed webhook.</desc>
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#9FB0C0"/>
+    </marker>
+    <marker id="ahs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#2CE5A7"/>
+    </marker>
+    <style>
+      .t  { font-family: 'IBM Plex Sans','Helvetica Neue',Helvetica,Arial,sans-serif; fill: #E8EEF4; }
+      .s  { font-family: 'IBM Plex Sans','Helvetica Neue',Helvetica,Arial,sans-serif; fill: #9FB0C0; }
+      .m  { font-family: 'IBM Plex Mono',ui-monospace,Menlo,monospace; fill: #9FB0C0; }
+      .ms { font-family: 'IBM Plex Mono',ui-monospace,Menlo,monospace; fill: #2CE5A7; }
+      .lb { font-family: 'IBM Plex Mono',ui-monospace,Menlo,monospace; fill: #2CE5A7; letter-spacing: 0.1em; }
+      .box { fill: #10161D; stroke: #2B3947; stroke-width: 1.5; }
+      .inner { fill: #161E27; stroke: #1E2833; stroke-width: 1; }
+      .pulse { fill: #10161D; stroke: #2CE5A7; stroke-width: 2; }
+      .wire { stroke: #9FB0C0; stroke-width: 2; fill: none; }
+      .wire-s { stroke: #2CE5A7; stroke-width: 2.5; fill: none; }
+      .dash { stroke: #9FB0C0; stroke-width: 1.6; fill: none; stroke-dasharray: 6 6; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" fill="#0A0E14"/>
+
+  <!-- Title -->
+  <g transform="translate(60 44)">
+    <rect width="40" height="40" rx="10" fill="#10161D"/>
+    <path d="M7.5 20 H13.75 L16.875 11.25 L22.5 28.75 L25.625 20 H32.5" fill="none" stroke="#2CE5A7" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text class="t" x="116" y="64" font-size="26" font-weight="600">How Pulse attaches to Ant Media Server</text>
+  <text class="s" x="116" y="90" font-size="15">Self-hosted beside AMS · read-only REST integration · metrics and viewer data stay on your infrastructure</text>
+
+  <!-- Column A: AMS -->
+  <rect class="box" x="60" y="150" width="360" height="300" rx="12"/>
+  <text class="lb" x="84" y="182" font-size="12">YOUR STREAMING STACK</text>
+  <text class="t" x="84" y="214" font-size="21" font-weight="600">Ant Media Server</text>
+  <rect class="inner" x="84" y="234" width="312" height="58" rx="8"/>
+  <text class="t" x="100" y="258" font-size="15" font-weight="500">REST API v2 · port 5080</text>
+  <text class="m" x="100" y="279" font-size="12.5">/rest/v2/…  ·  /{app}/rest/v2/…</text>
+  <rect class="inner" x="84" y="302" width="312" height="58" rx="8"/>
+  <text class="t" x="100" y="326" font-size="15" font-weight="500">Applications and live streams</text>
+  <text class="m" x="100" y="347" font-size="12.5">WebRTC · HLS · RTMP · DASH</text>
+  <text class="s" x="84" y="392" font-size="13.5">Unchanged: no plugin, JAR or WAR.</text>
+  <text class="s" x="84" y="413" font-size="13.5">Allow Pulse's IP in each app's REST filter</text>
+  <text class="s" x="84" y="432" font-size="13.5">and give Pulse an AMS login.</text>
+
+  <!-- Column A: players -->
+  <rect class="box" x="60" y="520" width="360" height="250" rx="12"/>
+  <text class="lb" x="84" y="552" font-size="12">YOUR VIEWERS</text>
+  <text class="t" x="84" y="584" font-size="21" font-weight="600">Players + Pulse Beacon SDK</text>
+  <text class="s" x="84" y="614" font-size="14">hls.js · &lt;video&gt; / video.js · AMS WebRTC</text>
+  <text class="s" x="84" y="638" font-size="14">MIT licensed · 3.52 KB gzipped</text>
+  <rect class="inner" x="84" y="660" width="312" height="84" rx="8"/>
+  <text class="t" x="100" y="686" font-size="14.5" font-weight="500">Measured in the player:</text>
+  <text class="s" x="100" y="708" font-size="13.5">startup time · rebuffering · bitrate</text>
+  <text class="s" x="100" y="728" font-size="13.5">switches · errors · watch time</text>
+
+  <!-- Column B: Pulse -->
+  <rect class="pulse" x="600" y="150" width="470" height="620" rx="14"/>
+  <text class="lb" x="626" y="182" font-size="12">SELF-HOSTED · DOCKER COMPOSE OR HELM</text>
+  <text class="t" x="626" y="214" font-size="21" font-weight="600">Pulse — one Go binary</text>
+
+  <rect class="inner" x="626" y="234" width="418" height="58" rx="8"/>
+  <text class="t" x="642" y="258" font-size="15" font-weight="500">Collector</text>
+  <text class="s" x="642" y="279" font-size="13">polls AMS every 5 s · ingest health · fleet discovery</text>
+
+  <rect class="inner" x="626" y="302" width="418" height="58" rx="8"/>
+  <text class="t" x="642" y="326" font-size="15" font-weight="500">Alerting · anomaly detection · probes · reports</text>
+  <text class="s" x="642" y="347" font-size="13">rules every 5 s · σ-baselines · HLS/DASH/WebRTC/RTMP</text>
+
+  <rect class="inner" x="626" y="370" width="418" height="58" rx="8"/>
+  <text class="t" x="642" y="394" font-size="15" font-weight="500">Web UI · REST + WebSocket API</text>
+  <text class="m" x="642" y="415" font-size="12.5">port 8090 · /api/v1 · /api/v1/live/ws</text>
+
+  <rect class="inner" x="626" y="438" width="418" height="58" rx="8"/>
+  <text class="t" x="642" y="462" font-size="15" font-weight="500">Beacon ingest</text>
+  <text class="m" x="642" y="483" font-size="12.5">POST /ingest/beacon · token auth · rate-limited</text>
+
+  <!-- Storage row -->
+  <rect class="inner" x="626" y="530" width="201" height="214" rx="8"/>
+  <text class="t" x="642" y="558" font-size="15" font-weight="500">ClickHouse</text>
+  <text class="s" x="642" y="584" font-size="13">stream events</text>
+  <text class="s" x="642" y="604" font-size="13">viewer sessions</text>
+  <text class="s" x="642" y="624" font-size="13">QoE beacon events</text>
+  <text class="s" x="642" y="644" font-size="13">hourly / daily rollups</text>
+  <text class="m" x="642" y="676" font-size="12">raw: 90 days (default)</text>
+  <text class="m" x="642" y="696" font-size="12">rollups: up to 13 mo.</text>
+  <text class="m" x="642" y="716" font-size="12">(capped by tier)</text>
+
+  <rect class="inner" x="843" y="530" width="201" height="214" rx="8"/>
+  <text class="t" x="859" y="558" font-size="15" font-weight="500">Meta store</text>
+  <text class="s" x="859" y="584" font-size="13">SQLite (default)</text>
+  <text class="s" x="859" y="604" font-size="13">or Postgres</text>
+  <text class="s" x="859" y="636" font-size="13">rules · channels · users</text>
+  <text class="s" x="859" y="656" font-size="13">tokens · audit log</text>
+  <text class="m" x="859" y="696" font-size="12">secrets encrypted</text>
+  <text class="m" x="859" y="716" font-size="12">(AES-256-GCM)</text>
+
+  <!-- Column C -->
+  <rect class="box" x="1180" y="150" width="360" height="170" rx="12"/>
+  <text class="lb" x="1204" y="182" font-size="12">ALERT CHANNELS</text>
+  <text class="t" x="1204" y="214" font-size="21" font-weight="600">Notifications</text>
+  <text class="s" x="1204" y="244" font-size="14">Email · Slack · Telegram</text>
+  <text class="s" x="1204" y="268" font-size="14">PagerDuty · signed webhook</text>
+  <text class="m" x="1204" y="298" font-size="12.5">channel types depend on tier</text>
+
+  <rect class="box" x="1180" y="360" width="360" height="190" rx="12"/>
+  <text class="lb" x="1204" y="392" font-size="12">YOUR TEAM</text>
+  <text class="t" x="1204" y="424" font-size="21" font-weight="600">Operators</text>
+  <text class="s" x="1204" y="454" font-size="14">Browser → https://pulse.your-domain</text>
+  <text class="s" x="1204" y="478" font-size="14">TLS reverse proxy → port 8090</text>
+  <text class="m" x="1204" y="510" font-size="12.5">admin token · SSO/OIDC (Enterprise)</text>
+
+  <rect class="box" x="1180" y="590" width="360" height="180" rx="12"/>
+  <text class="lb" x="1204" y="622" font-size="12">OPTIONAL INTEGRATIONS</text>
+  <text class="t" x="1204" y="654" font-size="21" font-weight="600">Data out</text>
+  <text class="s" x="1204" y="684" font-size="14">Prometheus /metrics</text>
+  <text class="s" x="1204" y="708" font-size="14">CSV / PDF usage reports</text>
+  <text class="s" x="1204" y="732" font-size="14">S3-compatible export</text>
+
+  <!-- Wires, A ↔ B (gap x 420–600) -->
+  <path class="wire-s" d="M626 263 H 426" marker-end="url(#ahs)"/>
+  <text class="ms" x="436" y="252" font-size="11.5">read-only GET /rest/v2</text>
+
+  <path class="dash" d="M626 331 H 426" marker-end="url(#ah)"/>
+  <text class="m" x="438" y="322" font-size="11.5">synthetic probes</text>
+
+  <path class="wire" d="M420 645 H 560 V 467 H 620" marker-end="url(#ah)"/>
+  <text class="m" x="432" y="634" font-size="11.5">QoE beacons</text>
+  <text class="m" x="432" y="664" font-size="11.5">via your TLS proxy</text>
+
+  <!-- Wires, B → C (gap x 1070–1180) -->
+  <path class="wire" d="M1044 331 H 1110 V 235 H 1174" marker-end="url(#ah)"/>
+  <path class="wire" d="M1044 392 H 1125 V 455 H 1174" marker-end="url(#ah)"/>
+  <path class="wire" d="M1044 412 H 1095 V 680 H 1174" marker-end="url(#ah)"/>
+
+  <!-- Footer -->
+  <text class="s" x="60" y="842" font-size="13.5">Ports: 8090 web UI + API + beacon ingest (default) · 8091 dedicated beacon listener (optional) · 8092 signed-webhook receiver (optional).</text>
+  <text class="s" x="60" y="864" font-size="13.5">No phone-home: license keys are verified offline. Viewer IP addresses are not stored; an optional GeoIP lookup uses them transiently.</text>
+</svg>

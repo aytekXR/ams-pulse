@@ -1,0 +1,58 @@
+$ curl -fsSL https://raw.githubusercontent.com/aytekXR/ams-pulse/main/deploy/quickstart/install.sh \
+    | bash -s -- --ams-url http://172.17.0.1:15080 --email demo-admin@example.com --password '********'
+Downloading docker-compose.quickstart.yml...
+
+Checking image access: ghcr.io/aytekxr/ams-pulse:0.4.5
+Image OK.
+Wrote <workdir>/quickstart/.env (mode 600)
+
+Starting Pulse stack...
+ Network pulse-quickstart_default Creating 
+ Network pulse-quickstart_default Created 
+ Volume pulse-quickstart_pulse-data Creating 
+ Volume pulse-quickstart_pulse-data Created 
+ Volume pulse-quickstart_clickhouse-data Creating 
+ Volume pulse-quickstart_clickhouse-data Created 
+ Container pulse-quickstart-clickhouse-1 Creating 
+ Container pulse-quickstart-clickhouse-1 Created 
+ Container pulse-quickstart-pulse-migrate-1 Creating 
+ Container pulse-quickstart-pulse-migrate-1 Created 
+ Container pulse-quickstart-pulse-1 Creating 
+ Container pulse-quickstart-pulse-1 Created 
+ Container pulse-quickstart-clickhouse-1 Starting 
+ Container pulse-quickstart-clickhouse-1 Started 
+ Container pulse-quickstart-clickhouse-1 Waiting 
+ Container pulse-quickstart-clickhouse-1 Healthy 
+ Container pulse-quickstart-pulse-migrate-1 Starting 
+ Container pulse-quickstart-pulse-migrate-1 Started 
+ Container pulse-quickstart-pulse-migrate-1 Waiting 
+ Container pulse-quickstart-clickhouse-1 Waiting 
+ Container pulse-quickstart-clickhouse-1 Healthy 
+ Container pulse-quickstart-pulse-migrate-1 Exited 
+ Container pulse-quickstart-pulse-1 Starting 
+ Container pulse-quickstart-pulse-1 Started 
+
+Waiting for Pulse to become healthy (up to 90s)...
+Verifying the AMS connection (up to 40s)...
+Pulse is healthy.
+
+Looking for bootstrap admin token...
+
+======================================================================
+  FIRST RUN — Admin bootstrap token (shown ONCE — save it now):
+
+    plt_[REDACTED]
+
+  UI:  http://localhost:8090
+======================================================================
+
+Next steps:
+  1. Open http://localhost:8090 and enter the admin token shown above.
+  2. Complete the 4-step onboarding wizard (welcome → source → verify → done).
+  3. Free tier active (1 AMS node, 7-day retention).
+     To upgrade: paste a trial key in Settings → License in the UI,
+     or set PULSE_LICENSE_KEY in <workdir>/quickstart/.env and re-run:
+       docker compose -f <workdir>/quickstart/docker-compose.quickstart.yml --env-file <workdir>/quickstart/.env up -d
+
+For more: https://github.com/aytekXR/ams-pulse/blob/main/docs/runbooks/install.md
+[installer exit code: 0, wall time: 73 s]
