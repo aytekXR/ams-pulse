@@ -90,12 +90,12 @@ and `ios/PulseKit/Package.swift` both declare no package dependencies.
 | `go.opentelemetry.io/otel` | v1.44.0 | Apache-2.0 | copyright notice that is included in or attached to the work |
 | `go.opentelemetry.io/otel/trace` | v1.44.0 | Apache-2.0 | copyright notice that is included in or attached to the work |
 | `go.yaml.in/yaml/v3` | v3.0.4 | Apache-2.0 | copyright staring in 2011 when the project was ported over: |
-| `golang.org/x/crypto` | v0.53.0 | BSD-3-Clause | Copyright 2009 The Go Authors. |
-| `golang.org/x/net` | v0.56.0 | BSD-3-Clause | Copyright 2009 The Go Authors. |
+| `golang.org/x/crypto` | v0.55.0 | BSD-3-Clause | Copyright 2009 The Go Authors. |
+| `golang.org/x/net` | v0.57.0 | BSD-3-Clause | Copyright 2009 The Go Authors. |
 | `golang.org/x/oauth2` | v0.30.0 | BSD-3-Clause | Copyright 2009 The Go Authors. |
-| `golang.org/x/sync` | v0.21.0 | BSD-3-Clause | Copyright 2009 The Go Authors. |
-| `golang.org/x/sys` | v0.46.0 | BSD-3-Clause | Copyright 2009 The Go Authors. |
-| `golang.org/x/text` | v0.39.0 | BSD-3-Clause | Copyright 2009 The Go Authors. |
+| `golang.org/x/sync` | v0.22.0 | BSD-3-Clause | Copyright 2009 The Go Authors. |
+| `golang.org/x/sys` | v0.47.0 | BSD-3-Clause | Copyright 2009 The Go Authors. |
+| `golang.org/x/text` | v0.41.0 | BSD-3-Clause | Copyright 2009 The Go Authors. |
 | `golang.org/x/time` | v0.14.0 | BSD-3-Clause | Copyright 2009 The Go Authors. |
 | `gopkg.in/yaml.v3` | v3.0.1 | Apache-2.0 | copyright staring in 2011 when the project was ported over: |
 | `modernc.org/libc` | v1.73.4 | BSD-2-Clause | Copyright (c) 2017 The Libc Authors. All rights reserved. |

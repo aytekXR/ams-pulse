@@ -29,6 +29,13 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 - **`GET /admin/license` reports `all_features_free`** (contract first). The web UI gates through
   a single `gatingTier()` helper that treats it as fully unlocked, so no upgrade prompt appears
   anywhere. Settings → License now says Pulse is free and shows no activation form.
+- **Documentation describes the free model throughout.** Tier claims removed from the guides
+  (anomaly detection, Prometheus, license activation), FAQ, troubleshooting, install runbook,
+  `SECURITY.md` (supported line now v0.5.x) and the architecture diagram; the generated API
+  reference (`docs/api/index.html`) is rebuilt — it still showed the old license and tier gates,
+  because its generator had broken on an unpinned `@redocly/cli` (now pinned, with a CI check);
+  and the user guide's screenshots are retaken from v0.5.0 on the demo stack (the July set showed
+  an Enterprise license and the old license form; the Analytics shot was mocked).
 - **`/metrics` needs a token on the quickstart.** With every feature free, `/metrics` is served
   on every install; the quickstart installer now generates `PULSE_METRICS_TOKEN` (kept across
   re-runs) and the quickstart, base and production compose files pass it through. Without a
@@ -67,6 +74,15 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 - **Quickstart installer:** uses an image already present locally when the registry pull fails
   (the documented offline path could not work), prints a correct build-from-source command,
   and its next steps no longer promise a setup wizard that does not appear.
+
+### Security
+
+- **Fixable HIGH CVEs cleared before release** (found by running the release's Trivy gate on the
+  candidate image): the image is now built with **Go 1.26.8** (the builder pin, labelled 1.25,
+  was in fact go1.26.5, with eight stdlib CVEs including CVE-2026-33818 and CVE-2026-56853),
+  `golang.org/x/crypto` **v0.55.0** (CVE-2026-56854; `x/net`, `x/sync`, `x/sys`, `x/text` move
+  to the versions it requires), and runs on **Alpine 3.24.2** with OpenSSL 3.5.8
+  (CVE-2026-14456). The builder and runtime pins are multi-arch index digests.
 
 ### Added
 
