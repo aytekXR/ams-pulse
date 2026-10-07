@@ -19,10 +19,10 @@ predictable even on installations with thousands of concurrent streams.
 
 ## Enabling the scrape endpoint
 
-The `/metrics` endpoint is available without a scrape token on Business or
-Enterprise tier (see [Known limitations](#known-limitations)). When
-`PULSE_METRICS_TOKEN` is set, every scrape request must supply it as a Bearer
-token:
+The `/metrics` endpoint is served on every install (since v0.5.0 every feature is free;
+before, it needed a Business or Enterprise key). When `PULSE_METRICS_TOKEN` is set, every
+scrape request must supply it as a Bearer token — the quickstart installer generates one
+and writes it to its `.env` (kept across re-runs):
 
 ```sh
 export PULSE_METRICS_TOKEN=my-secret-scrape-token
@@ -32,8 +32,9 @@ Restart Pulse. The token can be any string; it is compared with a constant-time
 string comparison. Store it in a Kubernetes Secret (see Helm guide below).
 
 If `PULSE_METRICS_TOKEN` is unset, the endpoint serves metrics without any
-token check — appropriate for a private network where the port is not exposed
-publicly.
+token check, and Pulse warns at startup — acceptable only on a private network where the
+port is not reachable from outside. Behind a reverse proxy that forwards everything to
+Pulse, set the token (or block `/metrics` at the proxy).
 
 > **Security note:** The `/metrics` endpoint is not blocked by the admin Bearer token.
 > It uses its own token to allow Prometheus to scrape without an admin credential.
@@ -138,7 +139,7 @@ sample lines appear.
 >     summary: "Pulse has not polled AMS successfully in over its staleness window"
 > ```
 
-**Sample output** (Business tier, idle instance with no AMS nodes connected):
+**Sample output** (idle instance with no AMS nodes connected):
 
 ```text
 # HELP pulse_live_viewers Current live viewer count
@@ -362,11 +363,6 @@ The Helm chart mounts `pulse-secrets` as environment variables via `envFrom.secr
 - **Bounded metrics only.** Per-stream or per-viewer cardinality metrics are not
   exposed via `/metrics`. Use the REST API (`/api/v1/live/streams`,
   `/api/v1/analytics/*`) or the Pulse UI for stream-level detail.
-- **Business tier gate.** The `/metrics` endpoint requires Business or Enterprise
-  tier (`CheckPrometheus` license check). Free and Pro tiers receive
-  `403 LICENSE_REQUIRED` with body
-  `{"code":"LICENSE_REQUIRED","message":"Prometheus endpoint (F8) requires Business tier or higher (current: \"<tier>\")"}`.
-  Set `PULSE_LICENSE_KEY` to upgrade, or use the Pulse UI directly (always available).
 
 **Phase-3 roadmap:** Additional QoE metrics (startup p50/p95, rebuffer ratio,
 error rate) and per-application aggregates are planned for Wave 3.

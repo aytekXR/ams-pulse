@@ -293,7 +293,6 @@ curl -X PUT https://your-domain/api/v1/alerts/rules/<rule_id> \
 
 **Check:**
 
-- Confirm the license tier is Pro or higher (Slack requires Pro).
 - Verify the incoming webhook URL in the Slack App configuration matches what
   is stored in the Pulse channel config.
 

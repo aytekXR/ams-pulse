@@ -34,7 +34,7 @@ fixed-name variables each have a dedicated row, plus one dynamic-name row for `P
 
 Pulse reads all configuration from `PULSE_*` environment variables.
 
-> **YAML config is not operative in v0.4.x.** A `pulse.yaml` / `--config` parser
+> **YAML config is not operative (as of v0.5.0).** A `pulse.yaml` / `--config` parser
 > exists in `server/internal/config` but is not wired into the binary entry point
 > (`HOOK(BE-02)` in `server/cmd/pulse/main.go`) — the shipped binary silently
 > ignores any YAML file. Variables marked below as read only by the YAML loader
@@ -289,7 +289,7 @@ design.
 
 ## 3. User management
 
-User management is **API-only** as of v0.4.x. The Settings → Users tab in the web
+User management is **API-only** as of v0.5.0. The Settings → Users tab in the web
 UI shows "User management — coming in a future update" (LIM-25).
 
 **Endpoints** (all require an admin-scoped `api` token):
@@ -337,7 +337,8 @@ curl -s -X PUT https://<pulse-host>/api/v1/admin/license \
   -H "Content-Type: application/json" \
   -d '{"key":"<PULSE_LICENSE_KEY value>"}'
 ```
-The new tier takes effect immediately. Confirm with `GET /api/v1/admin/license`.
+The key is loaded immediately; confirm with `GET /api/v1/admin/license`. Since v0.5.0 it
+changes nothing — see the next section.
 
 ### License keys are optional from v0.5.0
 
@@ -491,5 +492,6 @@ the full runbook, including the stamped-build pattern and `pre-dNNN` rollback ta
 
 **Compatibility stance:** ClickHouse migrations are forward-only and are applied
 idempotently at startup (`pulse serve` runs `MIGRATE` on boot). No breaking config
-changes have been made within the v0.4.x line. Check the `CHANGELOG.md` `[Unreleased]`
-section before upgrading.
+changes have been made through v0.5.0 (v0.5.0 adds the optional `PULSE_METRICS_TOKEN`
+passthrough; license keys become optional). Check the `CHANGELOG.md` entry for the release
+you are upgrading to.

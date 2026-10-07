@@ -149,7 +149,7 @@ DELETE /api/v1/admin/users/{userId}
 ```
 
 An admin-scoped API token is required; every change is recorded in the
-audit log. SSO/OIDC user provisioning (Enterprise) is unaffected — first-
+audit log. SSO/OIDC user provisioning is unaffected — first-
 login auto-provisioning works end to end. As a workaround, manage access
 via API tokens (Settings → API Tokens, which has a full UI).
 
@@ -243,8 +243,8 @@ There are two separate paths — do not confuse them:
 - **Scheduled PDF reports**: a report schedule with
   `format: pdf` generates a PDF statement each run, with the logo set by
   `PULSE_REPORT_LOGO_PATH`. A white-label header (your company name and
-  address) additionally requires an Enterprise license with the
-  `white_label` claim.
+  address) is set per schedule (`whitelabel_header`); like every feature
+  since v0.5.0, it needs no license key.
 - **Interactive on-demand export**: only CSV is available
   (`GET /api/v1/reports/export?format=csv`). Requesting `format=pdf` there
   returns `501 NOT_IMPLEMENTED`; the "Export PDF" button has been removed
@@ -337,7 +337,7 @@ built yet; it is deferred unless a multi-tenant customer is imminent.
 For now, operators running multi-tenant deployments can use the API
 directly to generate per-tenant reports and manage tenant records.
 
-> `docs/ARCHITECTURE.md` §Tier model.
+> `docs/runbooks/reports.md` §Tenant mapping.
 
 ---
 

@@ -579,7 +579,7 @@ Six tabs accessible via the top tab bar (wraps on narrow screens):
 | API Tokens | Create and revoke dashboard/API bearer tokens |
 | Ingest Tokens | Create and revoke beacon SDK tokens |
 | Integrations | Prometheus scrape URL, S3 export destination |
-| License | View current tier and activate a license key |
+| License | Shows that Pulse is free: every feature, no limits, no license key needed |
 | Users | Stub — see below |
 
 ### Sources tab

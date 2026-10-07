@@ -66,8 +66,8 @@ walkthrough comes from real runs of the installer. Admin tokens and passwords ar
 
 ## Pending from Ant Media
 
-Submission requirements, review timeline, load-test expectations, commission terms. Each is an
-item in `operator-expected.md`.
+Submission requirements, review timeline, load-test expectations, their terms for a free
+listing. Each is an item in `operator-expected.md` §2.
 
 ## Rebuilding this package
 

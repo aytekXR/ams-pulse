@@ -230,7 +230,7 @@ Cluster fleet discovery ──────────────────�
 | Document | Description |
 |---|---|
 | [docs/overview.md](docs/overview.md) | **Start here** — evaluator-facing overview: what Pulse is, architecture + deployment + data-flow diagrams |
-| [docs/user-guide.md](docs/user-guide.md) | Per-screen walkthrough of the web UI (all pages, onboarding, tier gates) |
+| [docs/user-guide.md](docs/user-guide.md) | Per-screen walkthrough of the web UI (all pages, onboarding) |
 | [docs/admin-guide.md](docs/admin-guide.md) | Administrator reference: complete config-variable table, tokens, users, retention, ports, proxies |
 | [docs/api-guide.md](docs/api-guide.md) | API quickstart (auth, WS, ingest, rate limits) + rendered OpenAPI reference (`docs/api/index.html`) |
 | [docs/faq.md](docs/faq.md) | Operator FAQ (install, licensing, privacy, features, operations) |
@@ -303,6 +303,9 @@ sqlite3 :memory: < contracts/db/meta/0001_init.sql        # meta DDL
 ---
 
 ## Roadmap (from PRD §7.14)
+
+> The tier labels in this history (Pro+, Business+) describe the license model before v0.5.0.
+> Since v0.5.0 every feature is free on every install.
 
 - **Wave 1 / MVP (complete):** Collector, live ops dashboard (F1), historical analytics (F2), core alerting (F5), Docker Compose installer, licensing.
 - **Wave 2 (complete):** QoE beacon SDK (F3, now 3.52 KB gzip), ingest health (F4, 250 µs detection), usage/billing reports (F6, ±1% reconciliation), cluster fleet view (F7, ≤30 s discovery), full data API + Prometheus (F8), Telegram/PD/webhook channels, Helm chart.

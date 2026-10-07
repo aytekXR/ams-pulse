@@ -82,7 +82,8 @@ curl -fsSL https://raw.githubusercontent.com/aytekXR/ams-pulse/main/deploy/quick
 ```
 
 The script prompts interactively for any missing required flags when a TTY is attached.
-Append `--license-key <key>` to activate a Pro/Business/Enterprise license on first boot.
+Pulse v0.5.0 needs no license key — every feature is included. `--license-key <key>` is still
+accepted for installs that carry a legacy key; it changes nothing.
 
 **Exit codes** (for scripted installs — a degraded install is not a healthy one):
 

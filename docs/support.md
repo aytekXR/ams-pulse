@@ -21,11 +21,11 @@ guaranteed response times.
 
 | Version | Status |
 |---|---|
-| v0.4.x | Supported — security fixes and bug fixes |
-| < v0.4.0 | Not supported — upgrade to the latest v0.4.x release |
+| v0.5.x | Supported — security fixes and bug fixes |
+| < v0.5.0 | Not supported — upgrade to the latest v0.5.x release (a drop-in upgrade; every feature is free) |
 
 This matches the supported-versions table in `SECURITY.md` exactly. "Supported" means security
-patches are backported to the current v0.4.x line.
+patches are backported to the current v0.5.x line.
 
 Previous minor (e.g. v0.3.x): best-effort for **90 days** after a new minor GA, then EOL.
 Extend this table with that row when applicable and update `SECURITY.md` to match.
