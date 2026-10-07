@@ -20,9 +20,9 @@ reproduces values Pulse recorded.
 
 | File | Size | Caption | Notes |
 |---|---|---|---|
-| `walkthrough/step-1-install-output.png` | 1920×1356 | *One command installs Pulse and ClickHouse, checks the AMS connection and prints a one-time admin token.* | Verbatim installer output; admin token and password masked. The `--ams-url` shown is the demo environment's simulator address. |
-| `walkthrough/step-4a-sign-in.png` | 1920×1080 | *Open `http://<your-server>:8090` and sign in with the admin token.* | Shows the sign-in fix (F1), which ships with the next release. |
-| `walkthrough/step-4b-dashboard-first-run.png` | 1920×1080 | *Streams from your Ant Media Server appear within seconds of the first poll.* | Released image installed by the published installer, first sign-in. |
+| `walkthrough/step-1-install-output.png` | 1920×1436 | *One command installs Pulse and ClickHouse, checks the AMS connection and prints a one-time admin token.* | Verbatim output of the published installer with the released v0.5.0 image (2026-10-07), run from `/opt/pulse`; admin token and password masked. The `--ams-url` shown is the demo environment's simulator address. |
+| `walkthrough/step-4a-sign-in.png` | 1920×1080 | *Open `http://<your-server>:8090` and sign in with the admin token.* | Released v0.5.0 image, first visit — no "Session expired" message (F1). |
+| `walkthrough/step-4b-dashboard-first-run.png` | 1920×1080 | *Streams from your Ant Media Server appear within seconds of the first poll.* | Released v0.5.0 image installed by the published installer; first sign-in through the form — the sidebar's FREE label appears at once (D14 fixed). |
 
 ## Screenshots (1920×1080, dark theme)
 

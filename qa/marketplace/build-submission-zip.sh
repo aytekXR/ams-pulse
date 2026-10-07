@@ -145,6 +145,16 @@ scan_stage() {
     done <<< "$ips"
     bad=1
   fi
+  # Unfilled template placeholders (a WEB_GATES_RESULT once shipped in the submission notes).
+  # Allowed by name: TESTFLIGHT_PUBLIC_LINK_PLACEHOLDER, the documented fill-in point on the
+  # website's /beta/ page that waits on Apple enrolment.
+  local placeholder='\b(PENDING_[A-Z][A-Z_]{2,}|[A-Z]{2,}(_[A-Z]{2,})*_(RESULT|RESULTS|PLACEHOLDER))\b'
+  local residue
+  residue=$(grep -rInE "$placeholder" "$STAGE" 2>/dev/null | grep -v 'TESTFLIGHT_PUBLIC_LINK_PLACEHOLDER' || true)
+  if [[ -n "$residue" ]]; then
+    printf '%s\n' "$residue" | cut -c1-200 >&2
+    bad=1
+  fi
   # Absolute paths from the build host.
   if grep -rIl -e '/home/aytek' -e '/tmp/claude-' "$STAGE" >/dev/null 2>&1; then
     grep -rIn -e '/home/aytek' -e '/tmp/claude-' "$STAGE" | cut -c1-200 >&2

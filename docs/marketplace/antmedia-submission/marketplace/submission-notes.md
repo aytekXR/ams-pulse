@@ -61,7 +61,11 @@ was found and fixed then.
 | AMS login backoff (live, wrong password) | 9/9 — backoff 1 → 2 → 4 → 8 min observed; the 5-minute AMS lock respected; a person can sign in to AMS once the lock lapses; the right password logs in at once |
 | Quickstart installer on AMS 3.1.0 | 19/19 — local-image fallback, `.env` mode 600, metrics token (401 without, 200 with), `all_features_free`, idempotent re-run |
 | Go: `gofmt`, `vet`, build, `test -race` (golang:1.25) | Pass — 26/26 packages, 1,982 tests, 0 failed, 4 skipped (Kafka, `npx` and poppler are absent on this host) |
-| Web: generated-types drift, build, lint, unit tests, Playwright | WEB_GATES_RESULT |
+| Web: generated-types drift, build, lint, unit tests, Playwright | Pass — no type drift; build and lint clean; vitest **819/819** (CI coverage thresholds met; the alerts suite 183/183 after one more test); Playwright **70/70** |
+| Red team on the PR (8 lenses, then a confirmation round; every finding put to skeptics) | 13 findings upheld (10 of the first round's 11, 3 more in the confirmation round), all fixed before merge — stale tier/license text across docs, the diagram and the generated API reference; dead links in the ZIP. One "critical" refuted (install page 404 before the merge). Found while fixing: the user guide's Enterprise-era screenshots, retaken from v0.5.0 |
+| Pre-release Trivy (the release's own settings, on the candidate image) | Found fixable HIGH CVEs (Go stdlib, `x/crypto`, OpenSSL) → fixed; re-scan 0 |
+| Release **v0.5.0** (tag on `8523b47`) | Release workflow green: multi-arch image, SBOM/provenance, Trivy gate, chart 0.4.0 to OCI; `cosign verify` (v3 client) passes and the signed digest is the `0.5.0` index digest; image anonymously pullable |
+| Published installer + released image (walkthrough) | Exit **0**; FREE label right after the first sign-in (D14 fixed); no "Session expired" (F1) |
 | Beacon SDK | 70/70 tests; 3.52 KB gzipped (budget 15 KB) |
 | Release version guard (`release.yml`, run locally), doc stamps, website checks, Helm lint, ShellCheck 0.9.0 and 0.11.0 | Pass |
 
@@ -208,9 +212,9 @@ warning banner now.
 
 | Assets | Build | Data |
 |---|---|---|
-| `assets/screenshots/*`, `assets/hero/*`, `walkthrough/step-4a-sign-in.png` | **Retaken 2026-10-07** from the v0.5.0 release candidate built from this tree (`0.5.0-rc1`), keyless — every feature free, sidebar reads FREE | Demo stack: simulated AMS, synthetic viewers (1,192 replayed sessions + live traffic); incident staged 11:42–11:45 UTC |
-| `walkthrough/step-1-install-output.png` | Corrected installer (F2) + released v0.4.5 image (2026-10-01) — to be retaken with the released v0.5.0 image | Real run; token and password masked; AMS URL is the simulator's bridge address |
-| `walkthrough/step-4b-dashboard-first-run.png` | Released v0.4.5 image via the published installer (2026-10-01) — to be retaken with v0.5.0 | Real first sign-in, simulator data |
+| `assets/screenshots/*`, `assets/hero/*` | **Retaken 2026-10-07** from the v0.5.0 release candidate built from this tree (`0.5.0-rc1`), keyless — every feature free, sidebar reads FREE | Demo stack: simulated AMS, synthetic viewers (1,192 replayed sessions + live traffic); incident staged 11:42–11:45 UTC |
+| `walkthrough/step-1-install-output.png` | Published installer + released **v0.5.0** image (2026-10-07), run from `/opt/pulse` in a client container (docker socket only) | Real run; token and password masked; AMS URL is the simulator's bridge address |
+| `walkthrough/step-4b-dashboard-first-run.png`, `walkthrough/step-4a-sign-in.png` | Released **v0.5.0** image via the published installer (2026-10-07); real first sign-in through the form | Real first sign-in, simulator data |
 
 Hero facts, from this run's records: the bitrate rule fired on `studio-b` at 11:43:44.104 UTC at
 894.46 kbps; the e-mail reached Mailpit at 11:43:44.711 (0.6 s) and the signed webhook arrived the

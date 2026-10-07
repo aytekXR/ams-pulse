@@ -5,8 +5,9 @@ Docker Compose install, Kubernetes (experimental), offline installs, and what to
 before exposing Pulse beyond a private network.
 
 **Release covered:** Pulse **v0.5.0** — image `ghcr.io/aytekxr/ams-pulse:0.5.0` (public,
-signed), the Helm chart published with v0.5.0. **Verified:** the quickstart below was run end to end on
-2026-10-01 as a fresh install (no previous Pulse on the host; installer exit code `0`, 73 seconds).
+signed), Helm chart 0.4.0. **Verified:** the quickstart below was run end to end with the released
+v0.5.0 image on 2026-10-07 as a fresh install (installer exit code `0`; the walkthrough images are
+that run), after a first verified run on 2026-10-01.
 
 ---
 
