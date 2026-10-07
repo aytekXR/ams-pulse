@@ -16,15 +16,18 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate JSON schemas (ajv draft2020)
         run: |
-          npx --yes ajv-cli compile --spec=draft2020 --strict=false \
+          npx --yes ajv-cli@5.0.0 compile --spec=draft2020 --strict=false \
             -s contracts/events/ams-server-event.schema.json \
             -s contracts/events/beacon-event.schema.json \
             -s contracts/events/alert-notification.schema.json
       - name: Lint OpenAPI spec (redocly)
         # path-parameters-defined skipped: {channelId} param missing in skeleton
         # contract; INT-01 will fix in wave-1 contract freeze (D-004).
+        # Pinned (same version as scripts/build-api-docs.sh): unpinned `npx @redocly/cli`
+        # resolved to 2.60.0 the hour it was published, whose tarball npm served as 404,
+        # and failed CI on main for the v0.5.0 merge. Bump deliberately, both places.
         run: |
-          npx --yes @redocly/cli lint --skip-rule=path-parameters-defined \
+          npx --yes @redocly/cli@2.59.0 lint --skip-rule=path-parameters-defined \
             contracts/openapi/pulse-api.yaml
 
   # ── 1b. API reference ────────────────────────────────────────────────────────

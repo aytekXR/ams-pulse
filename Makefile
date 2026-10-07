@@ -80,11 +80,11 @@ lint-sdk: sdk/beacon-js/node_modules/.package-lock.json ## ESLint the beacon SDK
 # ---------------------------------------------------------------------------
 
 validate-contracts: ## Validate JSON schemas (ajv) and OpenAPI spec (redocly)
-	npx --yes ajv-cli compile --spec=draft2020 --strict=false \
+	npx --yes ajv-cli@5.0.0 compile --spec=draft2020 --strict=false \
 	  -s contracts/events/ams-server-event.schema.json \
 	  -s contracts/events/beacon-event.schema.json \
 	  -s contracts/events/alert-notification.schema.json
-	npx --yes @redocly/cli lint --skip-rule=path-parameters-defined \
+	npx --yes @redocly/cli@2.59.0 lint --skip-rule=path-parameters-defined \
 	  contracts/openapi/pulse-api.yaml
 
 validate-realams-p0: ## Run the P0 real-AMS validation suite (requires pulse-realams stack)
