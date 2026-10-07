@@ -34,7 +34,7 @@
 | Known hot path | O(N²) `rebuildSnapshot` at poll boundaries; mitigated to 1.0 vCPU (D-065 WO-C); real fix is post-GA backlog |
 | Open operator items | O7 (GHCR public), U3 (Pro+ license key — optional QoE unlock) |
 
-## Future roadmap — consolidated OPEN / gated items (as of 2026-09-02, S124 close)
+## Future roadmap — consolidated OPEN / gated items (as of 2026-10-07, S125 close — v0.5.0 released and in prod)
 
 > **Why this section exists:** as of S96 (D-160) the **concrete non-gated autonomous backlog is
 > drained** — S89/S91/S92 swept the codebase 3×, S95 swept the last un-swept D-157/D-158 delta
@@ -42,8 +42,8 @@
 > install, or an operator decision/action** — none is cleanly autonomous. This is the forward
 > plan, grouped by what unblocks each. The autonomous loop keeps checking the two-minute gate
 > each session and picks any item up the moment its blocker clears. Detail lives in the numbered
-> §2 entries; operator-facing asks live in `docs/operator-expected.md`. Prod is stable at
-> **v0.4.0-131-g6b5bd38** — nothing here is required to keep the system healthy.
+> §2 entries; operator-facing asks live in `docs/operator-expected.md`. Prod runs
+> **v0.5.0** (`8523b47`, rolled 2026-10-07) — nothing here is required to keep the system healthy.
 
 ### A. Date-gated — auto-unlocks, NO human needed
 - *(empty — §2.7, the last date-gated item, shipped S98/D-162 on its unlock day 2026-07-23,
@@ -58,10 +58,23 @@
   fully autonomous; the built-in alert rule needs a semantics decision first. **★ S124: the
   second blind incident ran 21 DAYS (D-192) — see the §2.45 escalation. The semantics decision
   is now the highest-leverage operator answer on the board.**
+- **§2.49 Analytics accuracy (D1–D4)** (S125/D-193; **scheduled by the operator, D-194**) — ★ **top
+  engineering item.** Audience analytics always returns 0 (UInt64→int64 scan error swallowed);
+  audience/usage rollups count every heartbeat upsert; QoE ratios understated ×(n+1)/2. One
+  data-model change + backfill + producer-shaped fixtures. **Operator ruling 2026-10-07: list now,
+  fix next** — v0.5.0 ships with the defects disclosed as LIM-30 and kept out of all marketing.
 - **§2.48 AMS 3.1.0 compatibility lane** (NEW, S124/D-192) — live-validate the G-27 9-endpoint
   surface against a real AMS 3.1.0 community image in an isolated stack; add the `v3.1.0` mock
   profile; flip the compatibility-matrix row. Source-verification already done; fully
-  autonomous. The competitive re-assessment that seeded it is ✅ DONE
+  autonomous. *(S125 correction: Docker Hub has no 3.1.0 community image — `antmedia/community`
+  tops out at `2.14.0`; `antmedia/enterprise:3.1.0` exists but needs a license key. So the live
+  lane is license-gated after all, or runs against 2.14.0 only.)* *(S125/D-194: ✅ **live-validated**
+  — AMS 3.1.0 Enterprise on the VPS with the operator's trial key (valid to **2026-10-16**): 44/61
+  scenarios pass, no AMS regression; matrix row flipped. **Remaining, autonomous while the trial
+  lasts:** refresh six outdated scenario expectations (FL-01/H-01 expect `null` CPU — predates
+  D-179; FL-02 version; P-03 now reaches `app_accepted`; WH-03 recording now counted; H-06 must use
+  `node_cpu` with a non-firing threshold), fix the `validate-all` summary's evidence glob (it
+  reports TC-I-05-SRT as NOEVID), add the `v3.1.0` mock profile.)* The competitive re-assessment that seeded it is ✅ DONE
   (`docs/assessment/ams-3.1-docs-v2-assessment.md`: operators still need Pulse; F1 vs the new
   panel is the only medium-threat watch item).
 - **SESSION-101 verification of D-164** — ✅ DONE (D-166). Proven live in an isolated stack; the
@@ -761,7 +774,31 @@ nice-to-have: it is the demand-proven top of §C the moment the operator answers
 semantics questions (maintenance windows; channels-per-tier). Infra restoration itself is
 operator-owned (nginx vhost + AMS port exposure) — queued in `docs/operator-expected.md` §0.
 
-### 2.48  AMS 3.1.0 + docs v2 competitive re-assessment — and the 3.1.0 compatibility lane  [S–M]  (S124/D-192, 2026-09-02 — assessment ✅ DONE; compat lane OPEN, autonomous)
+### 2.49  Analytics accuracy — audience, usage and QoE aggregates are wrong for SDK traffic  [M]  (S125/D-193, 2026-10-01 — OPEN; operator D-194: the listing goes live first, this is the next release)
+
+**Found by** running the marketplace captures through a real stack instead of route mocks, and
+reading one ground-truth session back through the API (`qa/marketplace/demo-stack/seed-demo.mjs
+truth`). Evidence: `docs/marketplace/antmedia-submission/internal/evidence/`.
+
+| ID | Defect | Root cause |
+|---|---|---|
+| D1 | `/analytics/audience` returns zeros whenever data exists | `countMerge`/`uniqMerge` → UInt64 scanned into `int64` (`query.go:330-331, 526-527`); error swallowed at `api/server.go:1324-1327` |
+| D2 | audience rollup counts each session upsert as a view; sums running watch totals | `mv_audience_1h/1d` aggregate every `viewer_sessions` insert; stitcher writes one per heartbeat |
+| D3 | usage-report viewer-minutes ×(n+1)/2 (115 vs 10 for a 10-min view) | `mv_usage_1d` sums `watch_time_s/60` of every upsert |
+| D4 | QoE rebuffer ratio / error rate understated | `mv_qoe_*` sums cumulative `watch_ms`; `countState()` used as session count |
+| D5 | daily audience drops the first partial day | `buildTimeWhere` compares Date bucket with exact `from` |
+
+**Plan (one coherent change, TDD):** (1) red tests first — ClickHouse integration tests fed in
+the **producer's real shape** (20 heartbeats, cumulative `watch_ms`, one stitcher upsert per
+heartbeat) asserting 1 view / 600 s / 1.0 %; (2) store per-upsert **deltas** (watch time,
+`watch_ms`) in new columns written by the stitcher/beacon path, or emit final rows only to the
+rollup path; count views as `uniq(session_id)`; error rate over distinct sessions; (3) cast the
+audience aggregates and log query errors; floor `from` to the bucket; (4) new forward-only
+migration (contracts CR) + rollup re-backfill script; (5) re-run `seed-demo.mjs truth`, then
+re-capture the Analytics / QoE / Reports screenshots for the marketplace. Ship as v0.4.6 or v0.5.0.
+Fixing D1 alone is **not** acceptable — it would turn visible zeros into silently inflated numbers.
+
+### 2.48  AMS 3.1.0 + docs v2 competitive re-assessment — and the 3.1.0 compatibility lane  [S–M]  (S124/D-192, 2026-09-02 — assessment ✅ DONE; live validation ✅ S125/D-194; harness + mock-profile follow-ups OPEN)
 
 **Trigger:** Ant Media's 2026-09 email announcing Documentation V2 (`docs.antmedia.io/v2/`),
 plus **AMS v3.1.0 released 2026-08-31** — the first AMS release since our 3.0.3 validation, and
@@ -781,7 +818,15 @@ G-27's July architecture-based "PROCEED, non-existential" verdict (§2.41/D-158)
 3.1.0 also *helps* us: #7726/#2724/`play_finished` status-accuracy fixes clean up data we
 consume, and #7926 (the 24 h freeze, our §2.16 demand evidence) is NOT fixed.
 
-**OPEN — the 3.1.0 compatibility lane [S–M], autonomous via the community image:**
+**S125/D-194 status:** item 2 ✅ — the full `qa/realams` sweep ran against AMS 3.1.0 Enterprise
+(operator trial key, valid to 2026-10-16; no community 3.1.0 image exists): 44 pass / 10 skip /
+7 fail of 61, none an AMS regression, plus live alerting, QoE, backoff and installer runs; the
+matrix row is flipped (`docs/compatibility.md`). TC-I-06 re-confirmed LIM-04 (`currentFPS` still
+absent). One failure (TC-H-06) exposed a real web-UI defect, fixed in v0.5.0. **Still open:** the
+scenario-expectation refresh listed in the consolidated block above, item 3's mock profile, and
+the LIM-23/LIM-18/LIM-28 re-probes.
+
+**The 3.1.0 compatibility lane [S–M] (original plan):**
 1. Source-verification is ✅ done (D-192): all 10 consumed `Broadcast` fields present and
    identically typed at `ams-v3.1.0`; `currentFPS` still absent (LIM-04 stands); `ClusterNode`
    still role/version-less (LIM-10 stands; new additive `note` field harmless).

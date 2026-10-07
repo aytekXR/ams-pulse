@@ -4,55 +4,25 @@
 `agents/handoffs/decisions.md`, `agents/handoffs/sessions/` and
 `agents/handoffs/RESUME-PROMPT.md`.*
 
-> **✅ SUBMITTED SIDE DONE — the ball is with Ant Media.** `CLICKHOUSE_PASSWORD` is rotated
-> (`git log -S` on the live value returns **0 commits across all refs**), and the outreach email
-> to Ankush is **sent**. Per the agreed process they now arrange a developer meeting and hand
-> over the qualification steps. Item 5 lists what to capture from that reply.
->
-> **Nothing on the engineering side blocks the marketplace.** The remaining loop-owned work is
-> either waiting on something external (a real 2-node cluster, a PAYG AMS, an Apple account) or
-> deliberately deferred — see `agents/handoffs/RESUME-PROMPT.md`.
->
-> **iOS TestFlight** is still blocked by item A (Apple Developer Program enrolment) and nothing
-> else. The two tracks are independent.
->
-> **Prod: ⚠ BLIND since 2026-08-12 — see §0 below, it outranks everything else on this page.**
-> Pulse itself is up (v0.4.0-139, ClickHouse + meta `ok`), but its collector has had no
-> successful AMS poll for 3 weeks and the public URL serves the wrong site. Two small infra
-> actions only you can do restore it.
->
-> ⚠ Standing hazard, not yet closed: `pulse-migrate` bind-mounts `contracts/` from the working
-> tree, so **any `docker compose up -d` on prod applies migrations from the git checkout to
-> whatever binary is deployed.** That caused a 5-minute ingest outage on 2026-07-31 (recovered).
-> Pre-flight check: `deploy/runbooks/upgrade-rollback.md` §1. Rolling prod forward (item 11)
-> closes it permanently.
+> **v0.5.0 is released and in production (2026-10-07).** Pulse is free; your decisions (developer
+> credit, no prices, no purchase link, the page title, D1–D4 to the roadmap) are applied
+> everywhere, and the Ant Media package is ready to send. Prod runs v0.5.0 and ingests from your
+> AMS 3.1.0 Enterprise. What is left for you is §0 and §B1–B4; iOS (§A) is independent.
 
 ---
 
-## 0. URGENT — prod Pulse is blind and its public URL serves the wrong site
+## 0. Do soon
 
-Found at the S124 session-open gate (2026-09-02); full forensics in `decisions.md` D-192.
-Both causes date to your VPS maintenance on Aug 11–12 and both fixes are yours (root/sudo,
-and it is your `antmedia` container — the loop deliberately does not restart it):
-
-1. **Re-expose AMS to the host.** The `antmedia` container was recreated 2026-08-12T12:40Z in
-   bridge mode with **no published ports** (it previously ran `--network host`), so Pulse's
-   collector target `http://161.97.172.146:5080` refuses and ingest has been frozen since that
-   minute. AMS itself is healthy inside the container. Recreate it with `--network host` as
-   before (or `-p 5080:5080`, which also restores the `ams.beyondkaira.com` vhost target if you
-   re-enable it). Pulse needs no restart — the collector recovers on its next poll and the loop
-   will verify ingest moving again.
-2. **Re-enable the Pulse vhost.** `/etc/nginx/sites-enabled/pulse.beyondkaira.com.conf` was
-   removed ~2026-08-11 16:00 (the conf file survives in `sites-available/`), so
-   `https://pulse.beyondkaira.com` now falls through to the apex TR landing:
+1. **Enable the Pulse vhost** — prod is up on `127.0.0.1:8090`, but
+   `https://pulse.beyondkaira.com` still serves the apex landing because its vhost is not in
+   `sites-enabled` (removed ~2026-08-11):
    `sudo ln -s /etc/nginx/sites-available/pulse.beyondkaira.com.conf /etc/nginx/sites-enabled/ && sudo nginx -t && sudo systemctl reload nginx`.
-   If taking the vhost down was deliberate, say so and the loop will stop treating it as an
-   incident (the dashboard stays reachable to you via SSH port-forward either way).
-
-**Why nothing paged you for 3 weeks:** this is exactly §2.45's decision-gated gap — the
-built-in "Pulse collector offline" self-alert is designed and waiting on your two rulings
-(maintenance-window semantics; channels per tier). Second incident of this class, ~65× longer
-than the first. One word on each ruling unblocks the build.
+   `/metrics` now requires its bearer token (`PULSE_METRICS_TOKEN` in `deploy/.env`), so
+   exposing the app is safe. If removing the vhost in August was deliberate, say so.
+2. **Renew the AMS license before 2026-10-16.** The `antmedia` container (AMS 3.1.0 Enterprise)
+   runs on the trial key that expires **2026-10-16 09:29 UTC**. Apply the new key through the run
+   command's `-l` argument — `start.sh` blanks the `LICENSE_KEY` environment variable. When the
+   key lapses, prod's collector goes blind again.
 
 ## A. iOS TestFlight — the critical path
 
@@ -71,7 +41,7 @@ Full runbook with screenshots-worth-of-detail: **`docs/mobile/ios-testflight.md`
 | **A3** | **Create the App Store Connect app record.** ⚠ The App Store *name* must be globally unique and plain "Pulse" is certainly taken. Suggestions: "Pulse for Ant Media", "Pulse Stream Monitor", "Pulse AMS". The on-device name stays "Pulse" regardless. | appstoreconnect.apple.com | 10 min |
 | **A4** | **Create an App Store Connect API key** — Users and Access → Integrations → App Store Connect API → **App Manager** role. You get an Issuer ID, a Key ID, and a `.p8` file **that can only be downloaded once.** | appstoreconnect.apple.com | 5 min |
 | **A5** | **Add three repository secrets** (Settings → Secrets and variables → Actions): `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_PRIVATE_KEY`. ⚠ The private key is the **`.p8` contents verbatim**, BEGIN/END lines included — *not* base64. Optionally `APPLE_TEAM_ID` (10 chars); add it if A6 fails with "requires a development team". | github.com repo settings | 5 min |
-| **A6** | **Trigger the build**: Actions → **ios** → Run workflow, or push a tag `ios-v0.4.5`. The job archives, signs, uploads, and prints where to look. Without the secrets it skips loudly rather than failing — so a run before A5 tells you nothing is broken, only that it is waiting. | github.com Actions | 15 min |
+| **A6** | **Trigger the build**: Actions → **ios** → Run workflow, or push a tag `ios-v0.5.0`. The job archives, signs, uploads, and prints where to look. Without the secrets it skips loudly rather than failing — so a run before A5 tells you nothing is broken, only that it is waiting. | github.com Actions | 15 min |
 | **A7** | **Invite testers.** *Internal* (up to 100 App Store Connect users, **no review**, available minutes after processing) is the fast path — use it first. *External* (up to 10,000, needs a one-time Beta App Review, gives you a public link) is the one that produces a shareable URL. | appstoreconnect.apple.com | 10 min |
 | **A8** | **Publish the public link.** Once external testing is approved, App Store Connect gives you a `testflight.apple.com/join/…` URL. Search the repo for **`TESTFLIGHT_PUBLIC_LINK_PLACEHOLDER`** — it appears once, in `website/beta/index.html`, currently rendered as a disabled button. Replace that block with a real link (the exact replacement is in the HTML comment beside it) and the site redeploys on merge. Or hand the loop the URL and it will do it. | repo | 5 min |
 
@@ -92,217 +62,63 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
 
 ---
 
-## B. Marketplace queue (leverage order)
+## B. Marketplace
 
-1. ~~**Rotate `CLICKHOUSE_PASSWORD`**~~ **✅ DONE 2026-07-31.** Rotated with
-   `deploy/scripts/rotate-clickhouse-password.sh`, which backs up `deploy/.env`, recreates every
-   consumer (including the backup sidecar — the classic miss), then verifies the new credential
-   works, **the old one is REJECTED**, the row count did not go backwards, all three `/healthz`
-   components are `ok`, and the sidecar carries the new value. It rolls back automatically on any
-   failure.
+1. **Send the Ant Media materials.** Build the shareable ZIP with
+   `bash qa/marketplace/build-submission-zip.sh ant-media` →
+   `dist/pulse-for-ant-media-server-marketplace-materials.zip` (its `README.md` is the entry
+   point). The package's own to-do list is `docs/marketplace/antmedia-submission/operator-expected.md`.
+2. **Confirm the spelling of your name.** Everything credits **Aytekin Erdogan**, as you wrote it;
+   earlier `LICENSE` versions read "Aytek Erdoğan". Say if you want the "ğ" before sending.
+3. **Read `/privacy/` and `/terms/`** on the website — legal statements published in your name.
+4. **Delete exactly ONE GHCR version — and nothing else.** A GHCR *version* is a digest, not a
+   tag; most `candidate-*` tags share a digest with a release, so deleting them deletes the
+   release (and its SBOM, provenance and signature). Live package, 2026-10-07:
 
-   **Verification, without printing the secret:** `git log -S` on the new value's 32-char prefix
-   returns **0 commits across all refs**. The old prefix still appears in 2 commits — history
-   cannot be un-published, which is precisely why rotation was the only fix — but that value is
-   now dead.
-
-   **Two things you should still do:**
-   - The plaintext backup of the previous env file is at `deploy/.env.bak.20260731T112701Z`
-     (mode 600, gitignored). Once you are satisfied: `shred -u deploy/.env.bak.20260731T112701Z`.
-   - The *other* chat-exposed credentials in `deploy/.env` and `oguz-testing.md` were **not**
-     rotated — only ClickHouse was. Rotate the rest when convenient.
-
-   ⚠ **What this rotation uncovered, which matters more than the rotation.** Recreating the
-   stack applied `0011_server_events_ingest_error.sql` from the working tree to the pinned
-   v0.4.0-139 binary, took `server_events` from 40 to 42 columns, and **dropped ingest for five
-   minutes** (`expected 42 arguments, got 40`). Recovered by dropping the two columns and clearing
-   the ledger row; prod is back on exactly the build and schema it had before. The cause is
-   structural: **`pulse-migrate` bind-mounts `contracts/` from the host repo, so prod's schema
-   follows the git checkout rather than the deployed image.** The rotation script now refuses when
-   the tree holds migrations the deployed binary predates, and
-   `deploy/runbooks/upgrade-rollback.md` §1 carries the pre-flight check for any other prod
-   `up -d`. Rolling prod forward (item 11) closes the gap for good.
-
-2. **Review `docs/marketplace/listing.md`** — the submission copy. Free of placeholders and
-   internal notes, so it is safe to paste verbatim. Override anything; the category and all
-   price wording are yours.
-
-3. **Submit the listing** to the Ant Media Marketplace (your account) — paste from
-   `listing.md`, never from `listing-draft.md` (internal). **`v0.4.5` is RELEASED and is the
-   submission target** — it carries review rounds 7–11 plus the S122 corrections, so the tag an evaluator
-   pulls now contains its own security fixes. Artifact index:
-   `docs/marketplace/submission-package.md`.
-
-   Everything a reviewer checks by hand was executed against the **published v0.4.5 artifacts**,
-   not assumed: `cosign verify` with a v3 client **passes** (digest `542fead1…`), `helm pull
-   oci://ghcr.io/aytekxr/charts/pulse --version 0.3.3` **pulls anonymously**, the
-   `curl … | bash` quickstart URL **resolves 200**, and a Trivy scan of the released image returns
-   **0 HIGH/CRITICAL** (Alpine 0, Go binary 0). Chart semver is **0.3.3** now, not 0.3.2 — the
-   listing and install docs say so.
-
-   One thing to have ready if their reviewer asks about CVEs: the release pipeline **blocked
-   v0.4.5 once** on a HIGH finding (CVE-2026-56852 in `golang.org/x/text`, an indirect dependency)
-   and the release only went out after it was patched. That is a good story, not a bad one — it
-   demonstrates the gate is real — and `CHANGELOG.md` records it under 0.4.5 Security.
-
-   ⚠ **If their reviewer verifies our image signature, tell them to use cosign v3 or newer.**
-   Our images are correctly signed, but the signature is stored as an OCI 1.1 *referrer* rather
-   than under the old `sha256-<digest>.sig` tag, so a **cosign v2 client reports
-   `Error: no signatures found`** (v2.4.3 fails, v3.0.2 passes — verified both ways). The
-   README at the tag says so too, but saying it up front costs one sentence and avoids a
-   security reviewer concluding we ship unsigned images.
-
-4. **Set up billing** in the marketplace (tiers / Founding-Operators campaign / trial).
-
-5. ~~**Send the Ankush email**~~ **✅ SENT 2026-07-31/08-01 (operator).** The process is now
-   in Ant Media's court: per the agreed flow, they arrange a developer meeting and hand over
-   the qualification steps their dev team defined. Text kept at
-   `docs/marketplace/ankush-reply-draft.md` for reference — it is what they received.
-
-   **When the reply lands, the useful things to capture** (these close the A1–A10 assumptions
-   that several docs still carry as `⚠ ASSUMPTION` markers):
-   - **A1, ask first — it shapes everything else:** can Pulse list as a standalone self-hosted
-     service, or do they want an AMS-side artifact? Bitmovin lists as a WAR.
-   - The qualification checklist itself, plus screenshot/logo/video specs (A2/A3) and whether
-     linking to our GitHub docs is acceptable or they need uploads (A8).
-   - Review flow, timeline, and whether the security review is audited or self-certified (A5).
-   - **Load-evidence format and thresholds (A9)** — this one gates item 6 below. Better to run
-     the lane once to their specification than produce a number in the wrong shape.
-   - AMS version-support expectation (A7), trial mechanics (A6), listing category (A10).
-   - Post-year-one revenue terms **in writing**, and whether the vendor agreement can carry an
-     API-stability / deprecation-notice commitment.
-
-   Log every answer here and close the rows in `docs/marketplace/submission-process.md` §2.
-
-6. **Load lane on a PAYG AMS** → the real capacity number for the listing. Same instance, two
-   birds: set `server.kafka_brokers` in `red5.properties` so the loop can run **AV-15** (live
-   Kafka validation → drops the EXPERIMENTAL label from the Kafka path), and make it a
-   **2-node cluster** to close **LIM-10**. This is the single highest-value technical unblock:
-   several ways cluster node alerting can miss during an AMS API outage are known, and **none is
-   safely fixable without a real cluster to verify against** — so they are disclosed in LIM-10
-   rather than guessed at. A 2-node cluster converts that disclosure into a fix or a proof.
-
-7. **Add an `NPM_TOKEN` repo secret** if you want `npm install ams-pulse-beacon` to work — the
-   release workflow then publishes automatically on the next tag (or via `workflow_dispatch`
-   `publish_tag`). Without it nothing fails; the tarball still attaches to the release.
-
-8. **Delete exactly ONE GHCR tag — and do NOT delete the other four.** ⚠ The previous version of
-   this item told you to delete "the four `candidate-*` tags by hand in the GHCR package UI".
-   **Following that would have deleted the v0.4.5 release.** A GHCR *package version* is a
-   manifest digest, not a tag, and the UI deletes versions. Four of the five `candidate-*` tags
-   ride the **same digest as a release tag**, so deleting them deletes the release — along with
-   its SBOM, provenance and cosign signature. `release.yml` has always known this (its cleanup
-   step refuses to delete a multi-tag digest); only this doc was wrong.
-
-   Verified against the live package on 2026-07-31:
-
-   | Version id | Tags on that digest | Action |
+   | Version id | Tags | Action |
    |---|---|---|
-   | `1080500729` | `candidate-5c561bc4` **only** | **DELETE — this is the vulnerable one** |
-   | `1080581868` | `0.4.5`, `latest`, `0.4`, `0`, `candidate-7d522596` | **DO NOT DELETE** |
-   | `1069926970` | `0.4.4`, `candidate-34a25fc4` | **DO NOT DELETE** |
-   | `1068860998` | `0.4.3`, `candidate-669952ed` | **DO NOT DELETE** |
-   | `1068283272` | `0.4.2`, `candidate-e318a053` | **DO NOT DELETE** |
+   | `1080500729` | `candidate-5c561bc4` **only** | **DELETE** — built before the CVE-2026-56852 fix; publicly pullable |
+   | `1350838126` | `0.5.0`, `0.5`, `0`, `latest`, `candidate-8523b47c` | **DO NOT DELETE** (the current release) |
+   | `1080581868` · `1069926970` · `1068860998` · `1068283272` | `0.4.5` · `0.4.4` · `0.4.3` · `0.4.2` (+ their `candidate-*`) | **DO NOT DELETE** |
+   | `sha256-…` tagged versions | signature / attestation referrers | **DO NOT DELETE** |
 
-   Only `candidate-5c561bc4` is a standalone image, and it is the one that matters: it was built
-   from commit `5c561bc4`, which `git merge-base --is-ancestor 5c561bc4 7d52259` confirms predates
-   the CVE-2026-56852 fix. It is publicly pullable and carries the HIGH CVE. The other four are
-   harmless aliases — pulling one yields byte-identically the released image.
-
-   **Do it in the web UI** (GitHub → Packages → ams-pulse → versions → the version whose only tag
-   is `candidate-5c561bc4` → Delete). This cannot be automated from here: the session token holds
-   `read:packages`, not `delete:packages` (re-probed 2026-07-31), so the loop cannot do it for you.
-
-   **To stop it recurring**, add a **`GHCR_CLEANUP_TOKEN`** repo secret (a PAT with
-   `delete:packages`). `release.yml` already has the cleanup step wired and correctly guarded — it
-   deletes a quarantine image only when the candidate tag is the *sole* tag on the digest, i.e.
-   only on the failed-release path. Without the secret that step warns loudly and no-ops, which is
-   exactly what happened here. The complementary loop-owned fix (round-6 H-09, buildx
-   `push-by-digest=true`) remains deliberately deferred until after submission — it changes the
-   publish mechanism and cannot be exercised by the dry-run path, only by a real tag.
-
-9. **Demo FINAL** — re-record the voiceover over the dark rough-cut attached to the release.
-   ⚠ **Re-read `docs/marketplace/demo-video-script.md` first:** the edge/origin viewer-dedup
-   line was corrected because it claimed behaviour AMS 3.x cannot support.
-
-10. **Confirm the licensor legal name** stamped in `LICENSE` and `licensing-public.md`:
-    "Aytek Erdoğan (beyondkaira.com)". Both files already carry this identical string — this is
-    purely your sign-off that it is the correct legal form.
-
-11. *Optional:* **roll prod forward** (a deliberate `deployment.sh` deploy on your go-ahead;
-    prod is healthy on its stamped v0.4.0-139 build). Note that prod will not show the new Fleet
-    CPU/memory/disk gauges until it is rolled — that is a code change. · **VPS Chromium deps**
-    (`sudo npx playwright install-deps chromium`) if you want screenshot captures to run
-    natively on the VPS rather than via the Playwright container.
-
-12. *Optional, iOS-adjacent:* **point a domain at the website.** It publishes to
-    `aytekxr.github.io/ams-pulse/` with no action from you. If you would rather it lived at
-    `beyondkaira.com` or a subdomain, there are two routes: a GitHub Pages custom domain (a DNS
-    record plus one repo setting), or serving the same static files from this VPS — the nginx
-    vhost is written and waiting at `deploy/nginx/pulse-website.conf` and needs your `sudo`.
-    Either way the App Store URLs in A3 change, so decide before A3 if you care.
-
-13-bis. *Small, time-boxed:* **answer Ant Media's Documentation-V2 feedback form** (their
-    2026-09 email; 2–3 minutes, $25 gift card offered). Cheap pre-submission goodwill with the
-    exact team that will evaluate our listing. If you want ammunition: S124's assessment read
-    all 289 pages — honest, useful feedback would be (a) the REST statistics endpoints deserve
-    a consolidated reference page (currently scattered), and (b) the webhooks page documents no
-    authentication for payloads — both true, both harmless to our positioning to say out loud.
-    Full analysis: `docs/assessment/ams-3.1-docs-v2-assessment.md`. Note for your own planning,
-    not the form: **AMS 3.1.0 is out (2026-08-31)** — the verdict is that Pulse's case is
-    intact (three features have zero native overlap; the new panel is the one watch item).
-
-13. ~~**Four open HIGH CodeQL alerts**~~ **✅ DONE 2026-07-31 — zero open alerts.** All six
-    were triaged adversarially and dispositioned; the record a security reviewer can read is
-    `docs/security/codeql-triage.md`. Three dismissed false-positive, one dismissed won't-fix
-    **with a mitigation shipped** (a startup warning when `PULSE_SECRET_KEY` is not canonical
-    64-hex — the derivation was deliberately NOT changed, because a KDF swap would orphan every
-    existing encrypted credential and no `pulse rekey` exists yet). Two were vendored ReDoc
-    bundle code and are excluded from analysis.
-
-    The gap that hid them is closed too: `CodeQL` is now the **18th required context**. The two
-    `Analyze (…)` checks that were already required only report whether the scan *ran*; the
-    aggregate reports what it *found*. Nothing is needed from you here.
+   Web UI: GitHub → Packages → ams-pulse → versions → the one whose only tag is
+   `candidate-5c561bc4` → Delete. The session token has `read:packages` only (re-probed
+   2026-10-07). To make the release workflow clean up after itself, add a `GHCR_CLEANUP_TOKEN`
+   repo secret (a PAT with `delete:packages`).
+5. **Ant Media's answers** — submission requirements, review timeline, load-test format and
+   thresholds, their terms for a free listing (the package's `operator-expected.md` §2; the
+   A-ledger in `docs/marketplace/submission-process.md` §2). Bring to the developer meeting:
+   listing format and category (A2/A10), asset specs (A3), review flow and SLA (A5), AMS
+   version-support expectations (A7), docs-linking policy (A8), load-evidence format (A9).
+6. *Optional:*
+   - **`deploy/.env.bak.20260731T112701Z`** still holds the pre-rotation ClickHouse secret
+     (mode 600): `shred -u` it when you are satisfied. The other chat-exposed credentials in
+     `deploy/.env` and `oguz-testing.md` were never rotated — only ClickHouse was.
+   - **Load lane on a PAYG AMS** — the real capacity number for the listing; with
+     `server.kafka_brokers` set it also runs AV-15 (Kafka), and as a **2-node cluster** it lets
+     LIM-10 be fixed or proven instead of disclosed.
+   - **`NPM_TOKEN`** repo secret, so `ams-pulse-beacon` publishes to npm on release.
+   - **Re-record the demo video** over the current UI (re-read `docs/marketplace/demo-video-script.md` first).
+   - **A custom domain for the website** (GitHub Pages custom domain, or serve it from this VPS —
+     the vhost is written at `deploy/nginx/pulse-website.conf` and needs your `sudo`). Decide
+     before A3 if you care: the App Store URLs follow it.
+   - **Ant Media's Documentation-V2 feedback form** (their 2026-09 e-mail, 2–3 minutes) — honest
+     notes: the REST statistics endpoints need one consolidated reference page; the webhooks page
+     documents no payload authentication (`docs/assessment/ams-3.1-docs-v2-assessment.md`).
 
 ## Decision-gated engineering (one word each unblocks a build)
 
-- **§2.45** Pulse-native self-alert paging half — maintenance-window semantics plus the
-  tier/channels ruling. (The Prometheus half has already shipped.)
+- **§2.45** Pulse-native self-alert ("Pulse collector offline") — the **maintenance-window
+  semantics** ruling. (The channels-per-tier half is moot since v0.5.0: every channel is free.)
+  Prod has gone blind twice without paging anyone; this is the alert that would have.
 - **§2.44 `[FO-1]`** firing-orphan behaviour for node/QoE alerts whose subject vanishes:
   auto-resolve-after-grace (the loop's lean) / stay-firing / leave-as-is.
-- ~~**`[ANOM-TIER]`**~~ **RESOLVED S122 — you ruled "advertise correctly", so anomaly detection is
-  now Business+ everywhere.** Implemented in the grant-only direction: `CheckAnomalies` admits
-  Business, so no tenant loses anything and e2e A5 keeps passing. Two things turned up while doing
-  it. The web UI also gated on Enterprise, so an entitled Business tenant would have met an
-  "upgrade to Enterprise" wall over data the API was already serving — fixed, with the Pro floor
-  now pinned by tests on both sides. And the note above that said *"the new website deliberately
-  does not state anomaly detection's tier at all"* **was wrong**: the site said `F9 - ENTERPRISE`
-  in the feature card *and* listed anomaly detection under Enterprise in the pricing table. Both
-  corrected. Nothing is outstanding for you here; the tier table in item 3 is safe to paste.
-- **Dependabot queue** (17 PRs open, operator-held): confirm the hold, or authorise a
-  batch-absorb session per `docs/dependabot-policy.md`.
-
-## Standing meeting items (A-ledger)
-
-Bring to the Ant Media developer meeting: listing format/category confirmation (A2/A10), asset
-specs (A3), post-year-1 revenue terms **in writing** (A4), review flow/SLA (A5), trial
-expectations (A6), AMS version-support expectations (A7), docs-linking policy (A8), and
-load-evidence format (A9). Details: `docs/marketplace/submission-process.md`.
+- **Dependabot queue** (operator-held): confirm the hold, or authorise a batch-absorb session per
+  `docs/dependabot-policy.md`. v0.5.0 absorbed only the CVE-relevant subset (Go 1.26.8,
+  `golang.org/x/crypto` v0.55.0, Alpine 3.24.2).
 
 ---
 
-*Prod at the S124 read (2026-09-02): v0.4.0-139 (unchanged), ClickHouse + meta `ok`,
-**collector `degraded` — no successful AMS poll since 2026-08-12 12:42 UTC** (see §0). Ingest
-frozen at **1,591,248** server events (verified identical across two samples; newest row
-2026-08-11 13:05). A prod roll is item 11, never automatic.*
-
-*Noticed while probing your AMS: its licence shows `type: trial`, `endDate 2026-07-27` — i.e.
-**expired as of 2026-07-28**. It affects nothing we ship, but it does affect future live
-validation against that instance, including item 6's load lane.*
-
-*Tier packaging ruling you gave on 2026-07-31, now enforced everywhere: **ingest health (F4) is
-Pro+, not Free.** The server had gated it at Pro+ since a deliberate fix ("was leaking to Free"),
-while `docs/product.md`, `docs/overview.md` and the website all advertised it as Free — wrong
-together, so no cross-check caught it. The website's pricing table was selling both F4 **and**
-historical analytics (F2) inside the Free plan; a Free user following it hit `403
-LICENSE_REQUIRED` on both. All ten features now agree across code, docs and site.*
+*Prod at the S125 close (2026-10-07): **v0.5.0** (`8523b47`), every `/healthz` component `ok`,
+ingesting from AMS 3.1.0 Enterprise; rollback image `pulse-prod-pulse:pre-d194` (= v0.4.5-9).*

@@ -1,8 +1,9 @@
 # Review of Ant Media's draft marketplace page
 
 **Source reviewed:** Google Doc "ams-pulse-page-draft" (Ant Media marketing; read 2026-10-01).
-**Reviewed against:** the code and configuration at `main` @ `0cae261` (v0.4.5 + 10 commits),
-a fresh build of that tree, and a live run of the published installer (v0.4.5 image).
+**Reviewed against:** the code and configuration at `main` @ `0cae261` (v0.4.5 + 10 commits) and
+a live run of the published installer on 2026-10-01; re-checked against the released **v0.5.0**
+(2026-10-07), including a live run of the published installer with the v0.5.0 image.
 **Updated 2026-10-07** for the developer's decisions — Pulse is free (PolyForm Shield 1.0.0),
 developed by Aytekin Erdogan (individual), page title "Pulse for Ant Media Server", no purchase
 link — and for the v0.5.0 release they ship in.
@@ -29,7 +30,7 @@ The corrected page text is assembled in [`marketplace-copy.md`](marketplace-copy
 | H3 | "It polls the same REST API your server already exposes to tell you who's watching, where, on what device, at what quality" | **FIX** | REST polling gives streams, viewer counts per protocol, ingest bitrate and node health. *Where*, *what device* and viewer-side *quality* come from the Pulse Beacon SDK embedded in the player; *where* additionally needs a GeoIP database the operator supplies (MaxMind GeoLite2 is not bundled). Replacement: *"It reads the REST API your server already exposes for live streams, viewers and ingest health — and its lightweight player SDK measures what each viewer actually experiences: startup time, rebuffering, bitrate and errors, by device."* |
 | H4 | "alerts you the moment something breaks" | **OK** | Rules are evaluated every 5 s; detection-to-notification measured at 201 ms in lab validation, and on 2026-10-01 the alert e-mail arrived 0.8 s after the rule fired. |
 | H5 | CTA "[Get ams-pulse] — link to vendor's install/pricing page [URL needed]" | **DECIDED** | Pulse is free, so there is no purchase or checkout link. The button becomes **"Install Pulse — free"** → `https://aytekxr.github.io/ams-pulse/get/` (the install page). |
-| H6 | CTA "View Documentation — …/docs/user-guide.md" | **OK** | URL resolves (HTTP 200). Keep it on `main`: the docs corrections from this audit (e.g. the IP-privacy statement) live there once merged, while the `v0.4.5` copies still carry the old wording. |
+| H6 | CTA "View Documentation — …/docs/user-guide.md" | **OK** | URL resolves (HTTP 200). Keep it on `main` (or `v0.5.0`): the docs corrections from this audit (e.g. the IP-privacy statement) are there; the `v0.4.5` copies still carry the old wording. |
 | H7 | Hero visual "[Screenshot needed] Dashboard view with a live alert callout … 'Alert Triggered — Viewer QoE Degraded'" | **ANSWERED** | Delivered: `assets/hero/`. The callout uses a real rule type (`rebuffer_ratio`) that fired in the demo environment; the values on the callout are the ones Pulse recorded. |
 
 ## Intro

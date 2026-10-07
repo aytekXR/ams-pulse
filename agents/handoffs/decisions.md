@@ -11244,6 +11244,89 @@ on Apple Developer Program enrolment.
 
 ---
 
+## D-193 — §S125 (2026-10-01): the Ant Media submission package — and a real stack found what mocked captures hid for months
+
+**Trigger:** Ant Media's marketing team sent a marketplace page draft (Google Doc
+*ams-pulse-page-draft*, structured like their Scotty page) with five open asks: logo,
+dashboard/alert screenshots, company/legal entity, pricing/purchase link, dashboard URL/port.
+The operator asked for a complete, verified submission package as one ZIP.
+
+**Delivered:** `docs/marketplace/antmedia-submission/` (README, `operator-expected.md` in six
+sections, page copy in Ant Media's structure, claim-by-claim draft review, answers to the five
+asks, eight operator guides, asset inventory, checklist, submission notes) + `assets/` (outlined
+SVG/PNG logo kit, annotated hero, 14 screenshots, install walkthrough, architecture diagram) +
+`dist/ams-pulse-antmedia-marketplace-submission.zip` built by
+`qa/marketplace/build-submission-zip.sh` (fail-closed secret scan, proven both ways).
+
+**How the images were made — the decision that mattered.** The July screenshots were
+route-mocked (no backend). This session built `qa/marketplace/demo-stack/`: the real image from
+the tree + ClickHouse + `qa/mock-ams` + Mailpit + a webhook sink, fed through the public APIs
+only (AMS simulator control API, `/api/v1`, `/ingest/beacon`), with a 24 h replayed beacon
+history and a staged incident. A ground-truth session (`seed-demo.mjs truth`: 1 view, 600 s,
+one 6 s stall) was read back through the API.
+
+### Findings (none were known; all reproduced)
+
+- **D1 — audience analytics always 0.** `countMerge`/`uniqMerge` return UInt64 into `int64`
+  fields → clickhouse-go `converting UInt64 to *int64 is unsupported`; the handler swallows the
+  error and returns zeros (`query.go:330-331, 526-527`; `api/server.go:1324-1327`). Reproduced
+  with the real `query.Service` against the demo ClickHouse.
+- **D2/D3 — rollups count every session upsert.** `mv_audience_*` counts each heartbeat upsert
+  as a view and sums running watch totals (truth 1 view / 600 s → 20 / 6,300 s);
+  `mv_usage_1d` → 115 viewer-minutes for a true 10. The ±1% reconciliation claim holds only for
+  fixtures with one row per session.
+- **D4 — QoE ratios understated.** The SDK sends cumulative `watch_ms`; `mv_qoe_*` sums it
+  (×(n+1)/2) and counts rows as sessions. Truth 1.0% → API 0.095%; a stream rebuffering ≈8%
+  never tripped a 5% rule.
+- D5 day-bucket boundary; D6 UI edit drops e-mail SMTP config; D7 e-mails omit the affected
+  stream, History shows rule IDs; D8 wildcard stream_offline RESOLVED while still down; D9–D12
+  cosmetic (plus D14, found at the final-image check: the sidebar tier label and trial banner stay
+  hidden until a reload after the first sign-in); D13 "viewer IPs SHA-256 hashed" is false in five
+  docs — nothing is stored (`HashIP` is dead code).
+- Ant Media's draft: install command fails without `--password`; Helm step incomplete and the
+  chart is experimental; "no config changes"/"no credentials shared" inaccurate; "synthetic
+  probes for anomaly detection" conflates two features.
+
+### Fixed this session (tests first where code)
+
+F1 `AuthGate` no longer tells a first-time visitor "Session expired" (regression test; fresh
+browser verified on the rebuilt image). F2 `install.sh`: local-image fallback for side-loaded or
+source-built images, correct build-from-source hint, accurate next steps (ShellCheck 0.9.0 +
+0.11.0; real run exit 0). F3 `qa/mock-ams` serves `/rest/v2/system-resources` in the real 3.0.3
+shape (red → green). F4 docs: troubleshooting/faq/install/alerting corrected (fallback,
+wizard, `/metrics` unauthenticated when no token, SMTP creds encrypted, UI-edit hazard).
+F5 website: FAQ claims fixed, `/get/` page (CTA target), footer wrap fixes a pre-existing
+390 px overflow. **Not fixed, deliberately:** D1–D4 need a data-model change (rollups,
+migrations, backfill) — an operator-gated design decision, not a packaging patch; fixing D1
+alone would replace zeros with silently inflated numbers.
+
+### Verification
+
+Published installer (main + v0.4.5 GHCR image): exit 0 in 73 s; first sign-in lands on the live
+dashboard. Alert path end to end: bitrate rule fired at 842.976 kbps, e-mail +0.8 s, HMAC
+webhook +~1 s, resolve after recovery. Final gates: see
+`docs/marketplace/antmedia-submission/marketplace/submission-notes.md` §1.
+
+### Operator decisions requested (package `operator-expected.md`)
+
+Legal entity (repo names an individual; "Beyond Technologies" appears only in the brief),
+price confirmation (D-169 list is proposed, not confirmed), purchase URL (none exists),
+D1–D4 fix-before-listing, v0.4.6 release, page title Pulse vs ams-pulse.
+
+### Lessons
+
+- **A capture that cannot fail cannot find bugs.** Months of route-mocked screenshots showed
+  a populated Analytics page that the real product has never rendered. Run marketing captures
+  through the real pipeline.
+- **Fixtures must use the producer's shape.** Every aggregation test fed one row per session;
+  the real stitcher writes one per heartbeat and the real SDK sends running totals.
+- **A swallowed error is indistinguishable from "no data".** `if err != nil { result = empty }`
+  hid a 100% failure rate.
+- **`pkill -f <pattern>` matches its own shell** — it killed the command that ran it. Stop
+  background work by task id.
+
+---
+
 ## D-192 — §S124 (2026-09-02): docs v2 + AMS 3.1.0 say operators still need Pulse — and prod has been blind for 21 days
 
 **Trigger:** the operator forwarded Ant Media's Documentation-V2 feedback email and asked for a
@@ -11608,3 +11691,171 @@ destructive git command.** The recovery was clean only because promotion is scan
 against a ~7-minute norm. Same tree hash had already passed `server` in 7m16s on the PR, so it was
 infrastructure, not code — cancel and re-run, do not start debugging. Confirm with the tree hash,
 which is the cheap discriminator.
+
+---
+
+## D-194 — §S125 (2026-10-07): Pulse is free — v0.5.0, PolyForm Shield, and a live run on AMS 3.1.0
+
+**Trigger:** the operator answered the open marketplace items and widened the scope: developer
+credit = the individual **Aytekin Erdogan**; prices: **free, at least the first year**; **no
+purchase link**; page title **"Pulse for Ant Media Server"**; D1–D4 **to the roadmap**; **make it
+fully free**; open a PR, red-team it (code *and* pages), merge on confirmation, deploy to
+`pulse.beyondkaira.com`; release so the screenshots stay true; a ZIP for Ant Media; full repo/`gh`
+authority; and a fresh **AMS trial license**: prune the old AMS and reinstall, then test every
+feature with workflows. Asked and answered (AskUserQuestion): license **PolyForm Shield 1.0.0**,
+tag **v0.5.0**, AMS **3.1.0 Enterprise**.
+
+**The design decision that mattered — free by policy, not by deleting the tier model.**
+`license.Manager.SetAllFeaturesFree` is a per-manager switch (a package global would race with
+parallel tests) that `cmd/pulse/newLicenseManager` turns on. Every `Check*` gate passes and
+`Entitlements()` is unlimited whatever key is loaded; `Tier()`, `Valid()` and expiry stay honest.
+`license.New()` alone still enforces, so the 76 existing tier tests still guard a live code path
+and a future paid model is a one-line flip. New tests pin both halves: every gate open for keyless,
+paid, expired and refreshed managers; the enforcing default intact; a `-race` toggle test; an API
+test whose **control** first proves each of 8 endpoints really was 403 under enforcement (so it
+cannot pass by choosing ungated endpoints); a `serve` wiring test over every load path. Contract
+first: `LicenseInfo.all_features_free`; the web UI gates through one `gatingTier()` helper.
+
+**Second-order effect found by checking, not by testing:** with every gate open, `/metrics` is
+served on every install — and the prod vhost proxies `/` wholesale, and the quickstart publishes
+its port on all interfaces. The installer now generates `PULSE_METRICS_TOKEN`; the quickstart,
+base and prod compose files pass it through (the base file had it commented out — the realams test
+stack proved the token never reached the container: 200 without a token until fixed).
+
+**Found live while reinstalling AMS — the login lockout loop.** The moment AMS 3.1.0 came up,
+prod and realams Pulse polled it before the admin user existed; AMS locks an account for 300 s after
+two failures, and the collector retried a rejected login on every 5 s poll — so the account would
+stay locked for as long as Pulse ran, locking humans out of the AMS console too (the installer asks
+for the admin account). Fixed: rejected logins back off 1→2→4→8→15 min, never sooner than the lock
+AMS reports; a 401/403 re-logins at most once a minute (the old `minLoginInterval` throttle was
+silently bypassed because `invalidateSession()` ran first). 8 tests; 5 proven red against the old
+code in a scratch worktree.
+
+**AMS:** old install (3.0.3, expired trial, bridge mode since 2026-08-12) removed with its volume;
+`antmedia/enterprise:3.1.0` (build 20260831_1439) on host networking with the new trial (valid to
+**2026-10-16**). Admin recreated with the credentials prod/realams use; `pulse-test` app recreated.
+**REST IP filter tightened** from the old `0.0.0.0/0` (app REST open to the internet, unauthenticated)
+to `127.0.0.1,172.16.0.0/12,161.97.172.146/32` — the last entry because the harness reaches AMS via
+the public IP, which the first sweep proved (403 → restarted). **Prod is no longer blind**: it
+resumed ingest the moment AMS was reachable (99 events in 10 min, read from ClickHouse).
+
+**Tests (workflows):**
+- *Explore:* every UI page in a real browser (33/34 — the one "defect", `/audit` 404, refuted: the
+  route is `/audit-log`) and every API endpoint against the contract (100/100, CRUD included).
+- *Full `qa/realams` sweep on AMS 3.1.0:* **44 pass, 10 skip, 7 fail of 61, no AMS regression.**
+  The harness prints 43 + 1 `NOEVID`: that row is TC-I-05-SRT, which passed 2/2 — the
+  `validate-all` summary globs `S*-TC-I-05-*` and the SRT script names its evidence
+  `TC-I-05-SRT-*` (and both scripts map to the same `tc`). 5 failures are outdated expectations
+  (FL-01/H-01 expect `null` CPU — written before D-179 made Pulse read `system-resources`; FL-02
+  version; P-03 now reaches `app_accepted`; WH-03 recording now counted), 1 is the AMS CPU guard
+  (L-01, 96 % > 75 %), and **1 is a real defect (H-06 → F13, below)**. Skips: preconditions,
+  RTMP capacity (LIM-12), HLS inflation (LIM-02).
+- *Installer on AMS 3.1.0:* 19/19 (local-image fallback, metrics token, idempotent re-run).
+- *Alert delivery, live:* 15/16 (1 documented skip) — fired at 909.32 kbps, resolved at
+  2,640.6 kbps, stream-offline fired, every webhook HMAC verified.
+- *Player QoE, live (real HLS + beacon SDK):* 14/14 — startup p50 885.5 ms / p95 1,151.5 ms;
+  audience 0 as LIM-30 documents.
+- *Login backoff, live (wrong password):* 9/9 — 1 → 2 → 4 → 8 min observed; AMS's 5-min lock
+  respected; a human can sign in once the lock lapses.
+
+**F13/F14 — found by auditing a triage verdict, not by a test.** The triage agent filed TC-H-06
+(422 creating a threshold rule on `cpu_pct`) as a harness defect. The scenario's evidence history
+said otherwise: PASS on 07-11 and 07-19, FAIL since — the API started refusing at D-166 (v0.4.1,
+`ValidateRuleSpec` wired in). The harness *was* outdated, but so was the UI: the rule form's
+threshold list offered `cpu_pct`, `mem_pct`, `packet_loss_pct`, `jitter_ms`, `rtt_ms`,
+`health_score` — the evaluator's `default` branch drops all six, so before v0.4.1 such rules saved
+and never fired; since, they 422 — and it never offered `node_cpu`/`node_mem`/`node_disk`/
+`stream_offline`/`viewer_count_floor`/`ingest_bitrate_floor`/`error_rate`. And the 422 was
+invisible: `saveRule` had no catch and the form's submit was try/finally, so Save re-enabled and
+nothing else happened (F14, same for channels). TC-H-06 "passed" in July only because it expected
+no firing — a rule that can never fire satisfies that. Fixed: `metrics.ts` holds the form's lists
+with a reason for each API-only metric, a vitest guard parses `KnownMetricNames` and
+`supportedAnomalyMetrics` out of the Go source, editing shows the stored metric, the rule-type
+switch maps `node_cpu` ↔ `cpu_pct`; refused saves toast the server's reason. Six new tests red
+against the old code. Every mock had modelled threshold rules on `cpu_pct` — a state the server
+refuses — which is why no test ever noticed.
+
+**Also:** LIM-30 evidence lives in `docs/marketplace/antmedia-submission/internal/evidence/` (public docs now cite D-193 instead; the Ant-Media ZIP's link scan caught the old pointers, along with two stale `operator-expected.md` section references).
+
+**Docs/website/package:** five parallel doc agents (licensing, website, product/operator docs,
+remaining tier docs, package guides) with exclusive file ownership; every report reviewed and spot
+corrected (a re-titled retired LIM, a false log-line quote, `PULSE_HOST_PORT=… curl | bash` which
+sets the variable for curl, not the installer — mine, from D-193). LIM-29 retired.
+
+**Release prep:** pins → 0.5.0, chart 0.4.0, goldens regenerated with Helm 3.17.0; the release
+workflow's own version guard extracted and run locally (check #16 adapted for a pre-commit run).
+
+**Red team (PR #283) — 8 lenses, 24 agents, every finding put to skeptics (two for high/critical).**
+License gates, AMS backoff, web UI and deploy/release came back clean (the web lens created a rule
+for every offered metric on the live stack; the deploy lens ran the version guard and both
+ShellChecks). 10 of 11 findings were upheld, all of one class — **stale tier/license text**: the
+anomaly, Prometheus and license-activation guides, FAQ Q13, troubleshooting, the install runbook,
+the website's LIM-24 card, the architecture diagram, and the package's own to-do list (still
+pricing tiers under PolyForm Noncommercial). The refuted one was a "critical" 404 on the install
+page, which goes live with the merge. A sweep for the class found more than the reviewers had:
+`SECURITY.md` (fail-closed 403 table, v0.4.x supported), `support.md`, the `ARCHITECTURE.md`
+component table, README, admin guide, monitoring runbook. A **confirmation round** (two
+confirmers + an independent multi-phrasing sweep) verified every fix and upheld three more: the
+generated API reference (`docs/api/index.html`) still showed the old license and 45 tier gates —
+its generator had been failing closed for two months on an unpinned `@redocly/cli` whose output
+changed (pinned CLI + ReDoc as a pair, regenerated, new non-required `api-docs` CI job);
+`product.md`'s UVP; dead relative links in the shareable ZIP's reference docs (now GitHub URLs).
+Checking those ZIP links led to the **user guide's 15 screenshots**: July captures from an
+Enterprise-licensed, partly route-mocked demo (ENTERPRISE sidebar, a key-activation form with
+"Contact sales", a mocked Analytics page) — retaken from v0.5.0 on the demo stack, captions fixed,
+LIM-30 notes added to QoE and Reports.
+
+**Trivy before tagging.** Running the release's own Trivy gate locally on the candidate image found
+fixable HIGH CVEs that would have failed the tag (and, per the v0.4.5 precedent, left a public
+`candidate-<sha>` alias): the builder pin labelled `golang:1.25-alpine` was **go1.26.5** (eight
+stdlib CVEs), `golang.org/x/crypto` v0.53.0, Alpine 3.24.1/OpenSSL 3.5.7. Fixed minimally —
+golang:1.26-alpine (go1.26.8), x/crypto v0.55.0, alpine 3.24.2 (multi-arch index digests);
+dependabot's broader #276/#278 (Go 1.27) left for after the release. Re-scan: 0; race suite
+1,982/1,982; the image booted against the real AMS.
+
+**Merge, release, deploy.** PR #283 squash-merged as `b2bf4f6` — and `ci` failed on `main` in
+`contracts`: the unpinned `npx --yes @redocly/cli lint` resolved to 2.60.0 within the hour it was
+published, and npm served that tarball as 404 (metadata present, file absent). PR #284 pinned
+`@redocly/cli@2.59.0` (the version `build-api-docs.sh` already pins) and `ajv-cli@5.0.0` →
+`8523b47`. Gate green (`ci` + `e2e` on `8523b47`) → **v0.5.0 tagged on `8523b47`** (annotated,
+`^{commit}` verified before the push). Release run 37635195720 green: multi-arch index
+`sha256:b0d5e101…`, SBOM/provenance, Trivy gate, chart 0.4.0 to `oci://ghcr.io/aytekxr/charts`;
+cosign v3 verify passes with the anchored identity and the signed digest **equals** the `0.5.0`
+index digest; anonymous pull works; release notes rebuilt from the CHANGELOG. The install
+walkthrough was retaken from the **published installer + released image** (exit 0, FREE label at
+the first sign-in, no "Session expired") — run in an ephemeral `docker:cli` container (socket
+only, cwd `/opt/pulse`) so the image shows no username; the quickstart has no bind mounts.
+
+**Prod rolled forward v0.4.5-9 → v0.5.0** (`upgrade-rollback.md`): `deploy/.env` backed up;
+`PULSE_METRICS_TOKEN` generated (prod had none — `/metrics` would have been public through the
+vhost the moment it is enabled); rollback tag `pulse-prod-pulse:pre-d194` (= v0.4.5-9); backup
+sidecar run OK; no pending migrations (none since `7145905`); stamped build
+`pulse v0.5.0 (commit 8523b47)`; `up -d` with the canonical three files — which also **restored
+the loopback publishes `127.0.0.1:8090-8092`** that a 2026-08-12 session had dropped with an
+ad-hoc `no-ports.override.yml`. Smoke: health all `ok` (collector `ok`), `/metrics` 401 → 200 with
+the token, unsigned webhook 401, limits 512 MiB / 0.5 CPU, `all_features_free: true` (prod still
+loads an old enterprise key — inert), 0 errors, ingest moving. **The public vhost is still not in
+`sites-enabled`** (operator `sudo`). Test stacks (realams, demo) and test images removed.
+
+**Lessons:**
+- *A "harness defect" verdict on a scenario that used to pass is a claim about history — read the
+  history.* The triage was right that the scenario was stale and wrong that nothing else was; the
+  evidence directories dated the break to v0.4.1 in one `ls`.
+- *A generator that fails closed and is never run is a stale file.* `build-api-docs.sh` refused
+  (correctly) to inline an unexpected script tag; nothing ran it, so the API reference kept the
+  old license for two months. Pin generator inputs and check the output in CI.
+- *Run the release gate before the release.* Trivy on the candidate image cost two minutes; a
+  failed tag costs a public candidate alias and a re-cut.
+- *Pin every tool CI fetches at run time.* An unpinned `npx` turned a registry hiccup into a red
+  `main` on release day; the API-docs generator had broken the same way two months earlier.
+- *A monitor that cannot fail is not a monitor.* This host's `gh` has no `pr checks --json`; a
+  watch built on it polled an error for 30 minutes in silence. Run the poll once by hand first.
+- *Mocks that model states the server refuses hide UI bugs.* Every fixture used `cpu_pct` as a
+  threshold metric; pinning UI option lists to the server's own source is the cheap guard.
+- *A policy flip opens doors you were not looking at.* "All features free" was correct and tested;
+  the `/metrics` exposure only surfaced by asking what each newly opened gate *publishes*.
+- *A wait-and-retry loop against a lockout is a lockout.* Any client that retries authentication
+  on a fixed cadence against a server with a failed-attempt lock must back off on rejection.
+- *Restricting a firewall changes what your own tests can see.* Tightening the REST filter broke the
+  harness's ground-truth reads via the public IP; the first sweep's failures were the filter, not
+  the product.

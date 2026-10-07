@@ -319,8 +319,7 @@ OIDC re-maps the role from IdP groups on every login and never reads the
 stored value. Password login does not exist; SSO is the sole human login
 path when OIDC is enabled.
 
-> `docs/product.md` §2 (roadmap note); `docs/operator-expected.md` §[10]
-> (team-management model discussion).
+> `docs/product.md` §2 (roadmap note).
 
 ---
 
