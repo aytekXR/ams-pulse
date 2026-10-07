@@ -33,9 +33,15 @@ export function AuthGate({ children }: Props) {
   // Wave-2: listen for 401 events from the API client to auto-redirect
   useEffect(() => {
     const handler = () => {
+      // A 401 means a session EXPIRED only if there was one. On a first visit
+      // LicenseProvider's pre-login /admin/license fetch also 401s, and telling a
+      // brand-new operator their "session expired" is false (marketplace audit).
+      const hadToken = getToken() !== null;
       clearToken();
       _setToken(null);
-      setError("Session expired or token revoked. Please enter your token again.");
+      if (hadToken) {
+        setError("Session expired or token revoked. Please enter your token again.");
+      }
     };
     window.addEventListener("pulse:auth:401", handler);
     return () => window.removeEventListener("pulse:auth:401", handler);

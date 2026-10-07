@@ -7,9 +7,10 @@
  * (d) future expires_at, valid = false (server stale) => isTrialExpired true
  * (e) fetch-error => license stays null; no console.error thrown
  * (f) LicenseProvider fetches on mount and populates context
+ * (g) D14: it fetches again when a token is set after mount (the first sign-in)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import React from "react";
 
 // Mock the API client before imports that depend on it
@@ -159,6 +160,25 @@ describe("LicenseProvider / useLicense", () => {
     expect(result.current.isTrialExpired).toBe(true);
     expect(result.current.daysRemaining).not.toBeNull();
     expect(result.current.daysRemaining!).toBeLessThanOrEqual(0);
+  });
+
+  // D14: the provider mounts before sign-in, so on a first visit its fetch gets 401 and the
+  // sidebar tier label (and trial banner) stayed empty until a reload. Signing in emits
+  // pulse:auth:token (api/client setToken); the provider must fetch again on it.
+  it("(g) D14: re-fetches the license when a token is set after mount (first sign-in)", async () => {
+    const lic: LicenseInfo = { tier: "free", valid: true, all_features_free: true };
+    mockGetLicense.mockRejectedValueOnce(new Error("401")).mockResolvedValueOnce(lic);
+
+    const { result } = renderHook(() => useLicense(), { wrapper: Wrapper });
+    await waitFor(() => expect(mockGetLicense).toHaveBeenCalledTimes(1));
+    expect(result.current.license).toBeNull();
+
+    act(() => {
+      window.dispatchEvent(new Event("pulse:auth:token"));
+    });
+
+    await waitFor(() => expect(result.current.license).toEqual(lic));
+    expect(mockGetLicense).toHaveBeenCalledTimes(2);
   });
 
   it("throws when useLicense called outside LicenseProvider", () => {

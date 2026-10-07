@@ -1,8 +1,9 @@
 /**
  * LicenseContext — app-wide license state (D-089)
  *
- * Single fetch on mount; error => context value stays null (no console.error spam
- * since that would trip the Playwright zero-console-error gate).
+ * Fetches on mount and again after sign-in (D14); error => context value stays
+ * null (no console.error spam since that would trip the Playwright
+ * zero-console-error gate).
  *
  * WHY client-side computation of expiry:
  *   Older AMS Pulse instances may return a stale `valid` field in the server
@@ -63,19 +64,27 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    adminApi
-      .getLicense()
-      .then((lic) => {
-        if (!cancelled) setLicense(lic);
-      })
-      .catch(() => {
-        // Intentionally swallow; context stays null.
-        // Do NOT console.error — that would trip the Playwright
-        // zero-console-error gate.
-        if (!cancelled) setLicense(null);
-      });
+    const load = () => {
+      adminApi
+        .getLicense()
+        .then((lic) => {
+          if (!cancelled) setLicense(lic);
+        })
+        .catch(() => {
+          // Intentionally swallow; context stays null.
+          // Do NOT console.error — that would trip the Playwright
+          // zero-console-error gate.
+          if (!cancelled) setLicense(null);
+        });
+    };
+    load();
+    // D14: this provider mounts before sign-in, so on a first visit the fetch
+    // above gets 401. Signing in emits pulse:auth:token (api/client setToken);
+    // fetch again then, or the tier label stays empty until a reload.
+    window.addEventListener("pulse:auth:token", load);
     return () => {
       cancelled = true;
+      window.removeEventListener("pulse:auth:token", load);
     };
   }, []);
 

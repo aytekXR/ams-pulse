@@ -67,6 +67,8 @@ export function getToken(): string | null {
 
 export function setToken(token: string): void {
   localStorage.setItem(TOKEN_KEY, token);
+  // D14: tell providers mounted before sign-in (LicenseProvider) to fetch again.
+  window.dispatchEvent(new Event("pulse:auth:token"));
 }
 
 export function clearToken(): void {
