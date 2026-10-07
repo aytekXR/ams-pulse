@@ -6,8 +6,9 @@ PRD: `docs/prd-report.md` §7 (the rest of that file is market analysis — cont
 ## Current state
 
 **Shipped product, pre-marketplace.** All 10 PRD features are implemented and live-validated
-against a real AMS 3.0.3 Enterprise (46/50 scenarios); latest release v0.4.5; production runs
-behind host nginx on this VPS. The wave plan in `agents/manifest.yaml` is complete — current
+against a real AMS 3.1.0 Enterprise (2026-10-07; AMS 3.0.3 in July, 46/50 scenarios); latest
+release v0.5.0 — **Pulse is free** (every feature, no license key, PolyForm Shield 1.0.0; the
+tier code is dormant, D-194); production runs v0.5.0 on this VPS for host nginx. The wave plan in `agents/manifest.yaml` is complete — current
 work follows `agents/handoffs/ROADMAP-V2.md` and the session protocol in
 `agents/handoffs/RESUME-PROMPT.md` (start there, not at the wave plan). Remaining open items
 are mostly operator-gated marketplace-submission steps (`docs/operator-expected.md`).
