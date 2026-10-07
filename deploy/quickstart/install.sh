@@ -7,7 +7,7 @@
 #   2. Collects AMS connection details (flags or interactive prompts)
 #   3. Fetches docker-compose.quickstart.yml if not co-located
 #   4. Preflights the image pull — fails honestly on 401/403 with auth instructions
-#   5. Generates PULSE_SECRET_KEY if absent
+#   5. Generates PULSE_SECRET_KEY and PULSE_METRICS_TOKEN if absent
 #   6. Writes .env (chmod 600); removed on pre-start failure (kept if stack started)
 #   7. Brings up the stack
 #   8. Polls /healthz for up to 90 s (fails hard on timeout — NEVER claims success)
@@ -38,7 +38,7 @@ set -euo pipefail
 # PULSE_REF pins all raw.githubusercontent.com downloads to the release tag
 # matching the pinned image, so a curl|bash install can never pair an old image
 # with a newer compose file from main (the release-time guard enforces the pin).
-PULSE_REF="${PULSE_REF:-v0.4.5}"
+PULSE_REF="${PULSE_REF:-v0.5.0}"
 REPO_RAW="https://raw.githubusercontent.com/aytekXR/ams-pulse/${PULSE_REF}"
 REPO_WEB="https://github.com/aytekXR/ams-pulse"
 HEALTHZ_DEADLINE=90   # seconds
@@ -47,7 +47,7 @@ HEALTHZ_DEADLINE=90   # seconds
 # discovered in the UI a minute later. Must exceed the 30 s collector staleness
 # floor (D-164) for the verdict to be meaningful.
 COLLECTOR_SETTLE_SECONDS="${COLLECTOR_SETTLE_SECONDS:-40}"
-export PULSE_IMAGE="${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.5}"
+export PULSE_IMAGE="${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.5.0}"
 # Host port for the Pulse UI/API. Override when 8090 is already taken on this
 # machine: PULSE_HOST_PORT=18090 ./install.sh …
 export PULSE_HOST_PORT="${PULSE_HOST_PORT:-8090}"
@@ -105,7 +105,7 @@ Flags:
   --ams-url      <url>   AMS REST base URL  (e.g. http://10.0.1.10:5080)
   --email        <addr>  AMS admin email
   --password     <pass>  AMS admin password
-  --license-key  <key>   Pulse license key  (optional; empty = Free tier)
+  --license-key  <key>   Pulse license key  (optional; every feature is free without one)
   --help                 Show this message and exit
 
 Environment overrides:
@@ -203,6 +203,14 @@ fi
 # ── Preflight: verify image is accessible before writing any secrets to disk ──
 printf '\nChecking image access: %s\n' "$PULSE_IMAGE"
 PULL_OUT="$(docker pull "$PULSE_IMAGE" 2>&1)" && PULL_RC=0 || PULL_RC=$?
+# A failed pull is not fatal when the image is already on this host: a side-loaded
+# image (`docker load`, air-gapped installs) or one built from source (`docker build
+# -t pulse:dev …`) has no registry to pull from. Without this, both documented
+# offline paths died here with a "registry access" error.
+if [[ $PULL_RC -ne 0 ]] && docker image inspect "$PULSE_IMAGE" >/dev/null 2>&1; then
+  printf 'Registry pull failed, but %s is already present locally — using the local image.\n' "$PULSE_IMAGE"
+  PULL_RC=0
+fi
 if [[ $PULL_RC -ne 0 ]]; then
   if printf '%s' "$PULL_OUT" | grep -qiE '401|403|unauthorized|denied|not found|manifest unknown'; then
     printf '\n' >&2
@@ -221,9 +229,9 @@ if [[ $PULL_RC -ne 0 ]]; then
     printf '      https://github.com/aytekXR/ams-pulse/pkgs/container/ams-pulse\n' >&2
     printf '  - Retry the pull directly:  docker pull %s\n' "$PULSE_IMAGE" >&2
     printf '\n' >&2
-    printf 'Option 2 — Build from source (no registry needed):\n' >&2
-    printf '  git clone %s\n' "$REPO_WEB" >&2
-    printf '  cd ams-pulse && make build\n' >&2
+    printf 'Option 2 — Build the image from source (no registry needed):\n' >&2
+    printf '  git clone %s && cd ams-pulse\n' "$REPO_WEB" >&2
+    printf '  docker build -f deploy/docker/pulse.Dockerfile -t pulse:dev .\n' >&2
     printf '  PULSE_IMAGE=pulse:dev bash deploy/quickstart/install.sh ...\n' >&2
     printf '\n' >&2
     printf 'Still stuck? Open an issue: %s/issues\n' "$REPO_WEB" >&2
@@ -267,11 +275,22 @@ if [[ -f "$ENV_FILE" ]]; then
   # the same class of bug as N5, in the one case the code's own comment
   # ("do not change unless self-signing") anticipates.
   EXISTING_PUBKEY="$(env_value PULSE_LICENSE_PUBKEY)"
+  # Keep the scrape token stable across re-runs — Prometheus is configured with it.
+  EXISTING_METRICS_TOKEN="$(env_value PULSE_METRICS_TOKEN)"
 fi
 
 # ── Generate PULSE_SECRET_KEY if not already in environment ──────────────────
 if [[ -z "${PULSE_SECRET_KEY:-}" ]]; then
   PULSE_SECRET_KEY="$(openssl rand -hex 32)"
+fi
+
+# ── Generate PULSE_METRICS_TOKEN if absent ───────────────────────────────────
+# Every feature is free from v0.5.0, so /metrics is served on every install. The
+# quickstart publishes its port on all interfaces; without a token the metrics
+# would be readable by anyone who can reach it (D-194).
+PULSE_METRICS_TOKEN="${PULSE_METRICS_TOKEN:-${EXISTING_METRICS_TOKEN:-}}"
+if [[ -z "$PULSE_METRICS_TOKEN" ]]; then
+  PULSE_METRICS_TOKEN="$(openssl rand -hex 24)"
 fi
 
 # ── Official Pulse license verification key ──────────────────────────────────
@@ -300,6 +319,8 @@ fi
   # Official Pulse license verification key — do not change unless self-signing.
   # A self-signed key already present in .env is preserved across re-runs.
   printf 'PULSE_LICENSE_PUBKEY=%s\n' "$LICENSE_PUBKEY"
+  # Bearer token for Prometheus scrapes of /metrics.
+  printf 'PULSE_METRICS_TOKEN=%s\n' "$PULSE_METRICS_TOKEN"
 } >"$ENV_FILE"
 chmod 600 "$ENV_FILE"
 printf 'Wrote %s (mode 600)\n' "$ENV_FILE"
@@ -479,14 +500,11 @@ fi
 
 # ── Next steps ────────────────────────────────────────────────────────────────
 printf '\nNext steps:\n'
-printf '  1. Open http://localhost:%s and enter the admin token shown above.\n' "$PULSE_HOST_PORT"
-printf '  2. Complete the 4-step onboarding wizard (welcome → source → verify → done).\n'
-if [[ -z "$LICENSE_KEY" ]]; then
-  printf '  3. Free tier active (1 AMS node, 7-day retention).\n'
-  printf '     To upgrade: paste a trial key in Settings → License in the UI,\n'
-  printf '     or set PULSE_LICENSE_KEY in %s and re-run:\n' "$ENV_FILE"
-  printf '       docker compose -f %s --env-file %s up -d\n' "$COMPOSE_FILE" "$ENV_FILE"
-fi
+printf '  1. Open http://localhost:%s (or http://<this-host>:%s) and enter the admin token shown above.\n' "$PULSE_HOST_PORT" "$PULSE_HOST_PORT"
+printf '  2. The live dashboard opens straight away — AMS is already configured from your flags.\n'
+printf '     (The optional setup wizard stays available at /onboarding.)\n'
+printf '  3. Every feature is included — Pulse is free; no license key is needed.\n'
+printf '     Prometheus: scrape /metrics with the bearer token PULSE_METRICS_TOKEN in %s.\n' "$ENV_FILE"
 printf '\nFor more: %s/blob/main/docs/runbooks/install.md\n' "$REPO_WEB"
 
 # Degraded installs exit 2 so automation can distinguish them; interactive users

@@ -17,7 +17,7 @@ name: pulse-quickstart
 services:
 
   pulse-migrate:
-    image: ${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.5}
+    image: ${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.5.0}
     entrypoint: ["pulse", "migrate"]
     restart: "no"
     environment:
@@ -35,7 +35,7 @@ services:
         condition: service_healthy
 
   pulse:
-    image: ${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.4.5}
+    image: ${PULSE_IMAGE:-ghcr.io/aytekxr/ams-pulse:0.5.0}
     ports:
       # WARNING: Port 8090 is published on 0.0.0.0 without TLS. Docker's DNAT
       # rules bypass host firewall INPUT chains, so this port is internet-reachable
@@ -71,10 +71,14 @@ services:
       PULSE_SECRET_KEY: "${PULSE_SECRET_KEY}"
 
       # ── License ──────────────────────────────────────────────────────────────
-      # Empty = Free tier (1 node, 7-day retention). Paste trial key to unlock.
+      # Optional. Pulse is free — every feature works without a key (v0.5.0+).
       PULSE_LICENSE_KEY: "${PULSE_LICENSE_KEY:-}"
       # Official Pulse license verification key — do not change unless self-signing.
       PULSE_LICENSE_PUBKEY: "${PULSE_LICENSE_PUBKEY}"
+
+      # ── Prometheus ───────────────────────────────────────────────────────────
+      # Bearer token required on /metrics; install.sh generates it. Empty = no auth.
+      PULSE_METRICS_TOKEN: "${PULSE_METRICS_TOKEN:-}"
 
       # ── Migrations ───────────────────────────────────────────────────────────
       PULSE_MIGRATIONS_DIR: "/usr/share/pulse/migrations"
