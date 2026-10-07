@@ -1,5 +1,8 @@
 # Ant Media Marketplace — Submission Process
 
+> **Pricing/licensing superseded (v0.5.0, 2026-10-07).** From v0.5.0 Pulse is fully free under
+> the PolyForm Shield License 1.0.0. All tier and pricing references below are outdated.
+
 **Product:** Pulse — Analytics & QoE Monitoring for AMS
 **Prepared:** S97 / D-161 (2026-07-22)
 **Contact thread:** Ankush Banyal (Ant Media)
@@ -68,7 +71,7 @@ Each assumption below is tagged where used across the docs pack as
 | A2 | Listing format: title ≤60 chars, short description ≤250 chars, 5–6 feature bullets, ~6 screenshots | Our own analysis of existing listings, not a published spec |
 | A3 | Screenshot/logo/video specs | Unpublished; we prepared 1920×1080 PNGs, SVG + 256px logos, 1200×630 OG banner, a 2–3 min video script as defaults |
 | A4 | Revenue: first-year 100%/no-commission (publicly stated); **post-year-1 unknown** | Get post-year-1 terms in writing |
-| A5 | Review flow: functional install review + doc review + security/scale questions; security review possibly self-certified | No published SLA/timeline; our posture: SECURITY.md, zero phone-home, cosign/SBOM, IP hashing |
+| A5 | Review flow: functional install review + doc review + security/scale questions; security review possibly self-certified | No published SLA/timeline; our posture: SECURITY.md, zero phone-home, cosign/SBOM, viewer IPs never stored |
 | A6 | A trial offer is expected; our mechanic is a **14-day Pro key on request** (decided D-169; no automated minting yet — request via support@beyondkaira.com or marketplace listing) | Delivery is manual; key-mint ceremony is operator-gated |
 | A7 | AMS-version-support requirement (N-1/N-2?) unknown | Our position: 3.0.3 (current latest stable) live-validated; older versions mock-profile only — honestly disclosed |
 | A8 | Linking to our GitHub docs is acceptable | If uploads/PDFs required, the markdown pack converts cleanly |
@@ -103,7 +106,8 @@ Each assumption below is tagged where used across the docs pack as
 - **Supply chain:** cosign-signed multi-arch images, SBOM + provenance, Trivy-gated
   releases, Dependabot policy.
 - **Security/privacy:** [`../../SECURITY.md`](../../SECURITY.md); zero phone-home;
-  viewer IPs SHA-256-hashed (optional anonymization); GeoIP only via operator-supplied
+  viewer IPs never stored (used in memory for the optional GeoIP lookup; optional truncation —
+  corrected 2026-10-01, they were wrongly described as SHA-256-hashed); GeoIP only via operator-supplied
   MMDB; secrets encrypted at rest (AES-256-GCM); audit log on admin writes.
 
 ## 5. Expected review workflow and post-submission follow-up

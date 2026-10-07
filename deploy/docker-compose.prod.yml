@@ -110,6 +110,9 @@ services:
       PULSE_SECRET_KEY: "${PULSE_SECRET_KEY:-}"
       PULSE_WEBHOOK_ADDR: ":8092"
       PULSE_WEBHOOK_SECRET: "${PULSE_WEBHOOK_SECRET:-}"
+      # Bearer token required on /metrics (served on every install from v0.5.0 —
+      # every feature is free). Empty = unauthenticated; set it in deploy/.env.
+      PULSE_METRICS_TOKEN: "${PULSE_METRICS_TOKEN:-}"
 
       # ── Reports ──────────────────────────────────────────────────────────
       # Persist artifacts on the pulse-data volume (D-142/D-143): the code

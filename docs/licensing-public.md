@@ -1,10 +1,10 @@
 # Pulse — Licensing Explained
 
-**Last updated:** 2026-07-31
+**Last updated:** 2026-10-07
 
 This page is the human-readable guide to Pulse licensing. It covers the
-open-source licenses that govern the code, the commercial tiers and what each
-unlocks, how license keys work, trial access, and frequently asked questions.
+open-source licenses that govern the code, what is free, how license keys
+work (they are optional), and the support model.
 
 The *license texts themselves* always govern; summaries on this page are for
 clarity and do not modify or replace any license. Where this page and a
@@ -16,224 +16,142 @@ license text conflict, the license text prevails.
 
 Pulse is made up of two independently licensed components.
 
-### 1.1 Server, web UI, and deploy tooling — PolyForm Noncommercial 1.0.0
+### 1.1 Server, web UI, and deploy tooling — PolyForm Shield License 1.0.0
 
 The main Pulse codebase (everything in `server/`, `web/`, and `deploy/`) is
-released under the **PolyForm Noncommercial 1.0.0** license,
-**Copyright (c) 2026 Aytek Erdoğan (beyondkaira.com)**. The full text is in
+released under the **PolyForm Shield License 1.0.0**,
+**Copyright (c) 2026 Aytekin Erdogan (beyondkaira.com)**. The full text is in
 the root `LICENSE` file and at
-<https://polyformproject.org/licenses/noncommercial/1.0.0>.
+<https://polyformproject.org/licenses/shield/1.0.0>.
 
-**What noncommercial users may do freely:**
+**What the PolyForm Shield license allows:**
 
-- Use, run, and operate Pulse for any noncommercial purpose — including
-  personal study, research, hobby projects, private entertainment, and
-  religious observance.
+- Use, run, and operate Pulse for any purpose, including commercial use, free
+  of charge.
 - Self-host Pulse on your own infrastructure.
-- Modify the source code and make derivative works, for noncommercial purposes.
+- Modify the source code and make derivative works.
 - Share copies (modified or unmodified) with others, provided you pass along
   these license terms and any Required Notices.
 
-**Who qualifies as noncommercial without a separate agreement:**
+**The one restriction:**
 
-Charitable organisations, educational institutions, public research
-organisations, public-safety and health organisations, environmental
-protection organisations, and government institutions may use Pulse under the
-PolyForm NC terms regardless of their funding source.
-
-**What requires a commercial license:**
-
-Any use that does not qualify as noncommercial under the above definitions —
-including running Pulse as part of a commercial service, embedding it in a
-paid product, or using it in an organisation whose primary activity is
-commercial — requires a separate commercial license from the copyright holder.
-The commercial license is delivered through the tier subscription model
-described in §2 below.
+You may not use Pulse to provide a product that competes with it. Goods and
+services compete even when they provide functionality through different
+interfaces or for different platforms — applications compete with services,
+libraries with plugins, and so on. If you market a product as a practical
+substitute for Pulse, it competes.
 
 > The license text itself governs all rights and restrictions. This summary is
 > provided for readability only.
 
-### 1.2 Beacon SDK — MIT
+### 1.2 Beacon SDKs — MIT
 
-The player QoE beacon SDK (`sdk/beacon-js/`) is released under the **MIT
-License** (`sdk/beacon-js/LICENSE`). You may embed the beacon in any player —
-including commercial products and services — freely, without a commercial
-license from Pulse. The MIT license places no restriction on commercial use.
-
----
-
-## 2. Commercial tiers
-
-A Pulse commercial license is delivered as a signed **license key** that is
-activated on your Pulse deployment. The key encodes your tier and
-entitlements; no phone-home is required for verification.
-
-### 2.1 Tier entitlements
-
-The table below reflects the runtime entitlements enforced by
-`server/internal/license/license.go`. The Code column names the authoritative
-source; where the PRD and code diverge, the code governs (divergences are
-noted).
-
-| Tier | Price | Max Nodes | Max Streams | Retention | Alert Channels | Data API | White-label |
-|------|-------|-----------|-------------|-----------|----------------|----------|-------------|
-| **Free** | $0/month | 1 | Unlimited | 7 days | Email only | No | No |
-| **Pro** | $99/month | 10 | Unlimited | 90 days | Email, Slack, Telegram | Yes | No |
-| **Business** | $299/month | 50 | Unlimited | 396 days (13 months) | Email, Slack, Telegram, PagerDuty, Webhook | Yes | No |
-| **Enterprise** | from $799/month | Unlimited | Unlimited | Unlimited | All channels | Yes | Yes |
-
-Prices are set for launch (operator-delegated, D-169) — subject to operator override. Annual subscriptions are billed at 10× the monthly price (two months free). See §4 for the Founding Operators launch campaign.
-
-**Notes on the table:**
-
-- **Max Streams** is unlimited at every tier; there is no per-tier stream cap.
-- **Max Nodes (Pro):** The PRD §7.11 states "1 to 2 nodes" but the code enforces `MaxNodes = 10`. The code is the operative value. The deliberate tier ladder is Free 1 / Pro 10 / Business 50 / Enterprise unlimited — Pro is positioned for multi-node edge networks; Business adds multi-tenant billing and reporting.
-- **Retention** for Enterprise is absent/null in the claims (`retention_days`
-  absent or null maps to unlimited at runtime via `buildEntitlements`; the
-  value `0` in the claims JSON is also treated as unlimited, but `null` is the
-  canonical encoding per the `license.go` header comment).
-
-**Additional features by tier:**
-
-| Feature | Minimum tier |
-|---------|-------------|
-| Historical analytics — audience, geo and device breakdowns (F2) | Pro+ |
-| Ingest health scoring — per-stream 0–100 score and bitrate timeline (F4) | Pro+ |
-| Player QoE beacon SDK events | Pro+ |
-| Analytics CSV export (audience / geo / device, `?format=csv`) | Pro+ |
-| Usage and billing reports (viewer-minutes, egress, VoD storage) + their CSV/PDF export | Business+ |
-| Multi-tenant billing | Business+ |
-| Prometheus `/metrics` endpoint | Business+ |
-| Anomaly detection (Welford baselines) | Business+ |
-| White-label PDF reports | Enterprise |
-| SSO / OIDC | Enterprise |
-
-### 2.2 What a license key is
-
-A Pulse license key is a **self-contained, offline-verifiable signed token**.
-It does not require a connection to any Pulse or vendor server to activate or
-to stay active. The key is structured as:
-
-```
-base64(claimsJSON) . base64(ed25519_signature)
-```
-
-The claims JSON encodes your tier, node limit, retention period, feature
-flags, and optional expiry. The signature is produced with the vendor's
-ed25519 private key and verified at startup against the vendor public key
-embedded in your deployment. A key that cannot be verified falls back
-gracefully to the Free tier — the server continues to run.
-
-### 2.3 Activation paths
-
-You can activate a license key by any of three methods:
-
-1. **Environment variable** — set `PULSE_LICENSE_KEY=<key>` in your
-   environment before starting Pulse. The key is read at boot.
-2. **Offline file** — set `PULSE_LICENSE_FILE=<path>` to a file containing
-   the key string. Useful for air-gapped deployments where environment
-   variables are not practical.
-3. **Runtime API** — send `PUT /api/v1/admin/license {"key":"<key>"}` with an
-   admin bearer token. The key takes effect immediately without a restart; use
-   `GET /api/v1/admin/license` to confirm the active tier and expiry.
-
-### 2.4 Expiry and graceful downgrade
-
-Keys for subscription licenses carry an `expires_at` timestamp. When a key
-expires:
-
-- The server continues to run without interruption.
-- The active tier reverts to **Free**.
-- Paid-feature API endpoints return `403 LICENSE_REQUIRED` until a valid key
-  is re-activated.
-- No data is lost; data already collected is retained up to the Free-tier
-  retention window (7 days).
-
-Perpetual licenses (no `expires_at`) do not expire.
+The player QoE beacon SDKs (`sdk/beacon-js/` and `sdk/beacon-swift/`) are
+released under the **MIT License** (see their respective `LICENSE` files).
+You may embed the beacon in any player — including commercial products and
+services — freely, with no restriction on commercial use.
 
 ---
 
-## 3. Trial access
+## 2. Pricing — Pulse is free
 
-**14-day Pro trial — no credit card.** Request a trial key from the Ant Media
-Marketplace listing or by emailing
-[support@beyondkaira.com](mailto:support@beyondkaira.com); the key arrives by
-email (typically within 1 business day) and activates in Settings → License.
-The trial key provides full Pro-tier entitlements (10 nodes, 90-day retention,
-Slack and Telegram alerts, QoE beacon integration) for the trial period. On
-expiry the deployment gracefully reverts to Free — no data loss (see §2.4).
+Pulse is free: every feature, no license key, no node or retention limits.
+This is the launch policy for at least the first year (from October 2026).
 
-A trial that converts to a paid subscription during the Founding Operators
-launch window qualifies for campaign pricing (see §4).
-
----
-
-## 4. Pricing
-
-The prices in §2.1 are set for launch (operator-delegated, D-169) — subject to operator override. Annual subscriptions are billed at 10× the monthly price (two months free).
-
-### 4.1 Launch campaign — Founding Operators
-
-To maximise early adoption, a **Founding Operators** campaign applies to any deployment that activates a paid tier during the launch window.
-
-**Eligibility:** the first **6 months** after the marketplace listing goes live, or the first **100** paid activations — whichever comes first.
-
-**Campaign prices for the first 12 months:**
-
-| Tier | First 12 months | Standard price after |
-|------|-----------------|----------------------|
-| Free | $0/month (unchanged) | $0/month |
-| Pro | **$9/month** (~91% off) | $99/month |
-| Business | **$29/month** (~90% off) | $299/month |
-| Enterprise | **90-day free pilot, then 25% off year one** | from $799/month |
-
-**Terms:**
-
-- Campaign price is locked at the time of signup.
-- At the 12-month renewal, the subscription auto-reverts to the standard price with **30 days** advance email notice.
-- Founding Operators keep a permanent **10% loyalty discount** on standard pricing at every renewal thereafter.
-- Free tier remains free — no campaign required.
-
----
-
-## 5. Frequently asked questions
-
-### Can I use the Free tier for a commercial deployment?
-
-No. The Free tier is not a commercial license. The Pulse server, web UI, and
-deploy tooling are licensed under PolyForm Noncommercial 1.0.0; any
-commercial deployment requires a commercial tier (Pro, Business, or
-Enterprise). The Free tier is available to noncommercial users (see §1.1) at
+There are no paid plans, no subscriptions, and no purchase required. Every
+feature that Pulse offers — live ops dashboard, historical analytics, QoE
+beacon ingest, alerting with all channels, usage reports, Prometheus /metrics,
+anomaly detection, synthetic probes, SSO/OIDC — is available to every user at
 no cost.
+
+---
+
+## 3. License keys (optional, for compatibility)
+
+### 3.1 Do I need a license key?
+
+No. From v0.5.0, Pulse runs with an "all features free" policy. Every feature
+is unlocked by default without any key.
+
+### 3.2 Are license keys still accepted?
+
+Yes, for compatibility with deployments that already have one. The server
+accepts keys via:
+
+1. **Environment variable** — `PULSE_LICENSE_KEY=<key>`
+2. **Offline file** — `PULSE_LICENSE_FILE=<path>` to a file containing the key
+3. **Runtime API** — `PUT /api/v1/admin/license {"key":"<key>"}`
+
+A valid key is accepted and logged, but it does not change what features are
+available — all features are already free.
+
+### 3.3 Technical details
+
+License keys are self-contained, offline-verifiable signed tokens (ed25519).
+They do not require a connection to any external server. The API endpoint
+`GET /api/v1/admin/license` reports the current state, including the field
+`all_features_free: true` which confirms the server is running in all-features-
+free mode.
+
+The old tier model (Free/Pro/Business/Enterprise) remains in the codebase as
+a dormant mechanism. It is not active and does not restrict any functionality.
+
+---
+
+## 4. Support
+
+Support is best effort through GitHub issues and support@beyondkaira.com, with
+no guaranteed response times.
+
+| Channel | Where |
+|---|---|
+| GitHub Issues | [github.com/aytekXR/ams-pulse/issues](https://github.com/aytekXR/ams-pulse/issues) |
+| Email | support@beyondkaira.com |
+| Security vulnerabilities | aytek@beyondkaira.com (do not open a public issue) |
+
+See `docs/support.md` for the bug-report guide and what to include.
+
+---
+
+## 5. Version history
+
+Versions before v0.5.0 were released under the PolyForm Noncommercial 1.0.0
+license, which restricted commercial use without a paid license. From v0.5.0
+onwards, Pulse is licensed under PolyForm Shield 1.0.0 and all features are
+free.
+
+---
+
+## 6. Frequently asked questions
+
+### Can I use Pulse commercially?
+
+Yes. Pulse is free for commercial use under the PolyForm Shield License 1.0.0.
+The one restriction is that you may not use it to provide a product that
+competes with Pulse.
 
 ### Does the beacon SDK have the same restriction?
 
-No. The beacon SDK (`sdk/beacon-js/`) is MIT-licensed and may be embedded in
-commercial players and products freely, without a commercial Pulse license.
-Only the server-side components are under PolyForm Noncommercial 1.0.0.
-
-### What happens when my subscription license expires?
-
-Pulse downgrades gracefully to Free tier (see §2.4). The server keeps
-running; only paid-tier features become unavailable. Renew your license key
-and activate it via any of the three paths in §2.3 to restore full access.
+No. The beacon SDKs (`sdk/beacon-js/` and `sdk/beacon-swift/`) are MIT-licensed
+and may be embedded in commercial players and products freely, with no
+restriction.
 
 ### Can I run Pulse in an air-gapped environment?
 
-Yes. License verification is entirely offline — no connection to any external
-server is needed. Activate via environment variable (`PULSE_LICENSE_KEY`) or
-offline file (`PULSE_LICENSE_FILE`) before starting the server. The
-Enterprise tier is the recommended tier for air-gapped deployments (see the
-"What's included per tier" section of `docs/marketplace/listing.md`).
+Yes. No license key is required, and no connection to any external server is
+needed. Pulse is fully self-contained.
 
 ### Can I modify the source code and run my modified version commercially?
 
-Modifications for noncommercial purposes are permitted under PolyForm NC 1.0.0.
-Running a modified version commercially (including any derived service) still
-requires a commercial license from the copyright holder.
+Yes, as long as you do not use the modified version to provide a product that
+competes with Pulse.
+
+### What if I have an old license key from before v0.5.0?
+
+It will still be accepted, but it is no longer needed. All features are free
+regardless of what tier the key encodes.
 
 ---
 
-*Sources: `LICENSE` (PolyForm NC 1.0.0), `sdk/beacon-js/LICENSE` (MIT),
-`docs/licensing.md`, `server/internal/license/license.go:90–150`,
-`docs/marketplace/listing.md` (tier/pricing and per-tier sections).*
+*Sources: `LICENSE` (PolyForm Shield 1.0.0), `sdk/beacon-js/LICENSE` (MIT),
+`sdk/beacon-swift/LICENSE` (MIT), `server/internal/license/license.go`.*

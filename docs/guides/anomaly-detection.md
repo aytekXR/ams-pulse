@@ -1,7 +1,7 @@
 # Anomaly Detection (F9)
 
 **Status: Shipped (Wave 3-MVP + Wave-3-Plus)**
-**Tier: Enterprise only**
+**Availability: every install** — free, no license key (v0.5.0+; before v0.5.0 it needed a Business or Enterprise key)
 
 Pulse detects statistical deviations in stream and node metrics using rolling
 baselines. When a metric diverges beyond a configurable sigma threshold, the
@@ -273,8 +273,8 @@ Authorization: Bearer <token>
 }
 ```
 
-**Tier gate:** Returns `403 LICENSE_REQUIRED` for Free and Pro tiers.
-Enterprise tier required.
+**Availability:** served on every install since v0.5.0 (all features free); no license
+key is needed.
 
 ### Web UI
 
@@ -283,7 +283,6 @@ Navigate to `/anomalies` in the Pulse dashboard. The page shows:
   sigma, severity badge, and detection timestamp.
 - The sensitivity selector (maps to `min_sigma` query param).
 - An empty state with the "baselines learning" explanation when no flags exist.
-- An upsell gate for non-Enterprise tenants.
 
 ---
 

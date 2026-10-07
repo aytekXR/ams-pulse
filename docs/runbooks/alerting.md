@@ -2,7 +2,7 @@
 
 **PRD ref:** F5 (core alerting)  
 **Budget:** alert detection-to-notification < 30 s (QA-verified: 15 s)  
-**Last updated:** 2026-06-15 — V3b fix-loop: muted suppression, group_by grouping, node_down absence detection, cron range syntax all verified and shipped.
+**Last updated:** 2026-10-07 — the rule form offers exactly the metrics the server accepts, and the API-only ones are marked (D-194); every channel type on every install (v0.5.0, no tiers); e-mail channel: SMTP credentials are encrypted at rest (the old note said otherwise), SMTP settings are API-only, and editing an API-configured e-mail channel in the UI drops them (marketplace audit). Earlier: 2026-06-15 V3b fix-loop — muted suppression, group_by grouping, node_down absence detection, cron range syntax verified.
 
 ---
 
@@ -64,6 +64,11 @@ A disabled rule's `muted` state is not surfaced — it has no effect until the r
 
 ### Supported metrics
 
+The web UI's rule form offers every threshold metric below except `cert_expiry`, `fps`,
+`license_expiry` and the deprecated `viewer_drop_pct` (reasons in the table); the API accepts all
+of them. Any other name is refused with 422 `INVALID_RULE` — including `cpu_pct` / `mem_pct` /
+`disk_pct`, which are the *anomaly*-rule names for the node metrics.
+
 | Metric name | Evaluated against | Notes |
 |---|---|---|
 | `stream_offline` | Live aggregator | Emits value `1.0` while a scoped stream is absent (offline) and on the offline edge for wildcard rules. Use `operator: eq`, `threshold: 1` — a threshold of 0 would match the ONLINE state and fire while the stream is healthy. |
@@ -71,22 +76,22 @@ A disabled rule's `muted` state is not surfaced — it has no effect until the r
 | `viewer_drop_pct` | Live aggregator | **Deprecated alias for `viewer_count_floor`** — accepted by the API and evaluator for backward compatibility but not preferred for new rules. Evaluates the same absolute viewer count, not a drop percentage. |
 | `viewer_count` | Live aggregator | Absolute viewer count per stream |
 | `ingest_bitrate_kbps` | Live aggregator | Ingested bitrate for active streams |
-| `fps` | Live aggregator | Current frames-per-second |
+| `fps` | Live aggregator | Current frames-per-second. AMS 3.x does not report FPS (LIM-04), so the value is always 0 there — the web UI's rule form does not offer it. |
 | `node_cpu` | Live aggregator | CPU % per node (0–100). AMS returns 0–100 directly; Pulse passes it through unchanged. |
 | `node_mem` | Live aggregator | Memory % per node |
 | `node_disk` | Live aggregator | Disk % per node |
-| `rebuffer_ratio` | ClickHouse `rollup_qoe_1h` | QoE rebuffer ratio from beacon-fed hourly rollup (D-062). Requires beacon ingest data (Pro+ license, U3). Rule is skipped with a WARN log when the QoE reader is not configured or ClickHouse returns an error. A value of 0.0 means no buffering events in the window (evaluated normally against the threshold). |
+| `rebuffer_ratio` | ClickHouse `rollup_qoe_1h` | QoE rebuffer ratio from beacon-fed hourly rollup (D-062). Requires beacon ingest data. Rule is skipped with a WARN log when the QoE reader is not configured or ClickHouse returns an error. A value of 0.0 means no buffering events in the window (evaluated normally against the threshold). |
 | `error_rate` | ClickHouse `rollup_qoe_1h` | QoE error rate from beacon-fed hourly rollup (D-062). Same beacon/license/skip semantics as `rebuffer_ratio`. |
 | `ingest_bitrate_floor` | Live aggregator (raw kbps) | Fires when the raw ingest bitrate of a stream falls below the rule's `threshold` kbps. The default rule uses `operator: lt, threshold: 500` — fires when ingest kbps drops below 500. The value is the live `IngestBitrate` field directly (not a ratio or health score). |
 | `node_down` | Fleet discovery | Fires when a cluster node is absent from the live snapshot (not seen within `3 × PollInterval`). Use a scope `node_id` to target a specific node, or leave scope empty to monitor all nodes. |
 | `node_degraded` | Fleet discovery | Fires while a node meets the degraded condition: CPU > 90%, memory > 90%, **or** 3 consecutive AMS API errors (`LiveNodeStats.Degraded()`) |
-| `cert_expiry` | TLS dial to host | Fires when TLS certificate days_left < threshold (e.g. `threshold: 30`) |
-| `license_expiry` | Pulse licence key | Fires when the licence key expires in fewer than `threshold` **days** (e.g. `operator: lt, threshold: 14`). Global — leave `scope` empty. A perpetual key (no expiry) or the free/no-key fallback never fires. This is the out-of-band counterpart to the dashboard's expiry banner: a customer who never opens the UI still gets warned through their channels before the key downgrades. Example rule: `{"name":"licence expiring","metric":"license_expiry","operator":"lt","threshold":14,"severity":"critical","channel_ids":["<your-channel>"]}`. |
+| `cert_expiry` | TLS dial to host | Fires when TLS certificate days_left < threshold (e.g. `threshold: 30`). Put the `host:port` to check in `scope.stream_id`; create it through the API (the rule form does not offer it). |
+| `license_expiry` | Pulse licence key | Fires when a loaded licence key expires in fewer than `threshold` **days** (`operator: lt`). Pulse v0.5.0 is free and needs no key, so on a keyless install (and with a perpetual key) this rule never fires; it remains for installs that still load a key. API only — the rule form does not offer it. |
 
 > **QoE metrics (`rebuffer_ratio`, `error_rate`) — what you need:**
 > These rules read the `rollup_qoe_1h` ClickHouse aggregate table via the QoE reader
-> (D-062). For data to appear there, player-side beacons must be active — which requires
-> a Pro+ license (U3). Without a configured QoE reader or when ClickHouse is unreachable,
+> (D-062). For data to appear there, player-side beacons must be active.
+> Without a configured QoE reader or when ClickHouse is unreachable,
 > the evaluator skips every stream for those rules and emits one WARN log per tick
 > (`alert: qoe_reader not configured — rebuffer_ratio/error_rate rules skipped this tick (D-062: G6)`).
 > The legacy HealthScore proxy (`(1−HealthScore)×0.1` / `×0.05`) was removed in D-062.
@@ -154,8 +159,6 @@ Channels are created via the UI (Settings → Alerts → Channels) or the API
 
 ### Email (SMTP)
 
-Supported on all tiers.
-
 **Via UI:** Settings → Alerts → Channels → New channel → type: email.
 
 **Via API:**
@@ -176,9 +179,16 @@ Supported on all tiers.
 
 **Implementation details:**
 - STARTTLS is **disabled by default** (`starttls: false`); add `"starttls": true` to enable it. TLS errors are non-fatal against local SMTP servers.
-- `password` is stored in the channel config (public portion — not encrypted). Avoid using
-  shared SMTP accounts; prefer a dedicated alerts credential with send-only permissions.
-- Free tier: email is the only supported channel type.
+- `username` and `password` are stored encrypted at rest (AES-256-GCM, with the other channel
+  secrets — D-106, pinned by `s44_smtp_secret_test.go`) and are never returned by the API.
+  Still prefer a dedicated, send-only alerts credential over a shared SMTP account.
+- The web UI's channel form sets the **recipient only**; SMTP server settings (`smtp_addr`,
+  `from`, `username`, `password`, `starttls`) are configured through the API as shown above.
+- ⚠ **Do not edit an API-configured email channel in the web UI.** The update replaces the
+  whole channel config, so saving the UI form (recipient only) silently drops the SMTP
+  settings and the next delivery fails (`"accepted": false`). Change email channels with
+  `PUT /api/v1/alerts/channels/{id}` and send the full config. (Found in the 2026-10-01
+  marketplace audit; tracked in `docs/marketplace/antmedia-submission/marketplace/submission-notes.md`.)
 
 **Email config keys** (source of truth: `server/internal/alert/factory.go`):
 
@@ -192,11 +202,6 @@ Supported on all tiers.
 | `starttls` | No | `false` | Enable STARTTLS (bool) |
 
 ### Slack (incoming webhook)
-
-Supported on Pro tier and above.
-
-> Note: Slack channel type is implemented since Wave 1 (code: `channels.SlackChannel`).
-> Pro tier enforcement is implemented in Wave 2.
 
 **Via UI:** Settings → Alerts → Channels → New channel → type: slack.
 
@@ -233,8 +238,6 @@ Scope: `stream_id=live/main-stage`
 
 ### Telegram
 
-Supported on Pro tier and above.
-
 **Via UI:** Settings → Alerts → Channels → New channel → type: telegram.
 
 **Via API:**
@@ -264,8 +267,6 @@ Pulse sends HTML-formatted messages via the Bot API `sendMessage` method.
 
 ### PagerDuty
 
-Supported on Business tier and above.
-
 **Via API:**
 ```json
 {
@@ -291,8 +292,6 @@ alert ID for reliable trigger/resolve pairing.
 | `pagerduty_severity` | No | Override severity string sent to PagerDuty (e.g. `critical`, `error`, `warning`, `info`) |
 
 ### Webhook (generic HTTP + HMAC)
-
-Supported on Business tier and above.
 
 **Via API:**
 ```json

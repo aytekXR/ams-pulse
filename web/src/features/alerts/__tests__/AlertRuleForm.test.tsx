@@ -4,6 +4,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { AlertRuleForm } from "../AlertRuleForm";
+import { ANOMALY_METRICS, THRESHOLD_METRICS } from "../metrics";
 import type { AlertRuleWrite } from "@/lib/api/types";
 
 describe("AlertRuleForm", () => {
@@ -70,7 +71,7 @@ describe("AlertRuleForm", () => {
     const initial = {
       id: "rule-1",
       name: "High CPU",
-      metric: "cpu_pct",
+      metric: "node_cpu",
       operator: "gt" as const,
       threshold: 90,
       window_s: 300,
@@ -334,5 +335,75 @@ describe("AlertRuleForm — anomaly rule type (S11 WO-B)", () => {
     expect(data.rule_type).toBe("threshold");
     expect(data.operator).toBe("gt");
     expect(data.threshold).toBe(99.5);
+  });
+});
+
+// ── D-194: the metric select offers what the server accepts ────────────────
+
+describe("AlertRuleForm — metrics the server accepts (D-194)", () => {
+  const rule = (metric: string, rule_type: "threshold" | "anomaly" = "threshold") => ({
+    id: "rule-1",
+    name: "Existing rule",
+    metric,
+    operator: "gt" as const,
+    threshold: 90,
+    window_s: rule_type === "anomaly" ? 3600 : 300,
+    severity: "warning" as const,
+    cooldown_s: 300,
+    enabled: true,
+    muted: false,
+    created_at: 0,
+    updated_at: 0,
+    rule_type,
+    sigma: 4,
+    min_samples: 30,
+  });
+  const metricSelect = () => screen.getByLabelText("Metric") as HTMLSelectElement;
+  const optionValues = () => Array.from(metricSelect().options).map((o) => o.value);
+  const selectedText = () => metricSelect().selectedOptions[0]?.textContent;
+
+  it("offers exactly the threshold metrics the server evaluates", () => {
+    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    expect(optionValues()).toEqual([...THRESHOLD_METRICS]);
+  });
+
+  it("offers exactly the anomaly metrics once the rule type is anomaly", () => {
+    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/rule type/i), { target: { value: "anomaly" } });
+    expect(optionValues()).toEqual([...ANOMALY_METRICS]);
+  });
+
+  it("editing a node_cpu rule shows node_cpu (it used to show the first option)", () => {
+    render(<AlertRuleForm initial={rule("node_cpu")} onSave={vi.fn()} onCancel={vi.fn()} />);
+    expect(metricSelect().value).toBe("node_cpu");
+    expect(selectedText()).toBe("node_cpu");
+  });
+
+  it("an API-only metric stays selected and is not flagged when editing", () => {
+    render(<AlertRuleForm initial={rule("cert_expiry")} onSave={vi.fn()} onCancel={vi.fn()} />);
+    expect(metricSelect().value).toBe("cert_expiry");
+    expect(selectedText()).toBe("cert_expiry");
+  });
+
+  it("a stored metric the server refuses is shown and flagged, not silently swapped", () => {
+    render(<AlertRuleForm initial={rule("cpu_pct")} onSave={vi.fn()} onCancel={vi.fn()} />);
+    expect(metricSelect().value).toBe("cpu_pct");
+    expect(selectedText()).toMatch(/not supported/i);
+  });
+
+  it("switching to anomaly and back maps node_cpu ↔ cpu_pct, and node_cpu is saved", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<AlertRuleForm onSave={onSave} onCancel={vi.fn()} />);
+    fireEvent.change(metricSelect(), { target: { value: "node_cpu" } });
+    fireEvent.change(screen.getByLabelText(/rule type/i), { target: { value: "anomaly" } });
+    expect(metricSelect().value).toBe("cpu_pct");
+    fireEvent.change(screen.getByLabelText(/rule type/i), { target: { value: "threshold" } });
+    expect(metricSelect().value).toBe("node_cpu");
+
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. High CPU/i), { target: { value: "CPU high" } });
+    fireEvent.change(screen.getByPlaceholderText("0"), { target: { value: "90" } });
+    fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect((onSave.mock.calls[0][0] as AlertRuleWrite).metric).toBe("node_cpu");
   });
 });

@@ -219,7 +219,7 @@ packet loss) from browser viewer sessions. Beacons POST to `/ingest/beacon` on
 the main API port (`:8090`) or the dedicated ingest listener
 (`PULSE_INGEST_LISTEN_ADDR`). Requires an ingest token (kind=ingest). Populates
 `qoe/summary` with viewer-perceived quality data that REST polling cannot provide.
-A Pro+ license lifts the ingest gate (see `internal/license/license.go`).
+From v0.5.0, beacon ingest is enabled on every install (all-features-free policy).
 
 ---
 
@@ -769,7 +769,7 @@ alerting, auth/OIDC, reports, TLS, rate limits). The single complete reference i
 | `PULSE_SECRET_KEY` | AES-GCM key for encrypting stored credentials | _(empty or <16 bytes → hard startup failure for non-`:memory:` DSNs)_ | Yes |
 | `PULSE_RETENTION_DAYS` | Raw event TTL in days | `90` | No |
 | `PULSE_ROLLUP_TTL_DAYS` | Rollup table TTL in days | `395` | No |
-| `PULSE_METRICS_TOKEN` | Bearer token required on `GET /metrics`; empty = no token check (the endpoint still requires a Business+ license — below that tier it returns 403 regardless of token); supports `_FILE` convention | _(empty)_ | Recommended |
+| `PULSE_METRICS_TOKEN` | Bearer token required on `GET /metrics`; empty = no token check; supports `_FILE` convention. From v0.5.0, `/metrics` is served on every install (all-features-free policy). | _(empty)_ | Recommended |
 | `PULSE_CORS_ALLOWED_ORIGINS` | Comma-separated CORS origins for `/api/v1/*` | _(empty)_ | No |
 | `PULSE_LOG_LEVEL` | Log level: `debug`, `info`, `warn`, `error` | `info` | No |
 | `PULSE_GEO_MMDB_PATH` | Path to MaxMind .mmdb for geo enrichment; empty = disabled | _(empty)_ | No |
@@ -783,7 +783,7 @@ alerting, auth/OIDC, reports, TLS, rate limits). The single complete reference i
 | `PULSE_S3_PREFIX` | S3 key prefix | `reports/` | No |
 | `PULSE_S3_REGION` | S3 region | `us-east-1` | No |
 | `PULSE_REPORTS_DIR` | Local directory for generated report artifacts | `pulse-reports` | No |
-| `PULSE_LICENSE_KEY` | License key string | _(empty = free tier)_ | No |
+| `PULSE_LICENSE_KEY` | License key string (optional from v0.5.0; keys are accepted for compatibility but do not change what is available) | _(empty)_ | No |
 | `PULSE_LICENSE_FILE` | Path to license file | _(empty)_ | No |
 
 ---

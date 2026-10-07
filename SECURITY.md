@@ -12,8 +12,8 @@ GitHub issue for security vulnerabilities.
 
 | Version | Supported |
 |---|---|
-| v0.4.x | Yes |
-| < v0.4.0 | No — upgrade to the latest v0.4.x release |
+| v0.5.x | Yes |
+| < v0.5.0 | No — upgrade to the latest v0.5.x release (a drop-in upgrade; every feature is free) |
 
 ## Security Design Overview
 
@@ -89,19 +89,19 @@ the edge-served CI policy (`connect-src 'self' ws://localhost:18080`) holds agai
 stack. It does not assert parity with the production nginx policy. (The retired production
 Caddyfiles were removed with the Caddy → nginx edge migration; see `deploy/MIGRATION.md`.)
 
-### License gates — fail-closed (403)
+### License gates — open on every install since v0.5.0
 
-Gated features return `403 LICENSE_REQUIRED` when the active license tier is insufficient:
+Every feature is enabled on every install: `newLicenseManager` turns on the
+all-features-free policy (`server/cmd/pulse/serve.go:810-817`), so every `Check*` gate
+passes (`server/internal/license/license.go:332`, and the early returns from line 416 on)
+and no request returns `403 LICENSE_REQUIRED`. The gates stay in code, fail-closed when
+the policy is off (`license.New` alone — what the license tests exercise), for a possible
+future paid model. A license key that fails to parse or verify is logged as a WARN and
+ignored; Pulse starts and every feature stays enabled.
 
-| Feature | Minimum tier | Handler location |
-|---|---|---|
-| `/metrics` (Prometheus) | Business | `server/internal/api/server.go:1003-1004`; `license.go:419-425` |
-| Usage/billing reports | Business | `license.go:394-400` |
-| Multi-tenant billing | Business | `license.go:383-389` |
-| QoE beacon ingest | Pro | `license.go:405-413` |
-
-The default tier when no license key is configured is **Free** (not a startup failure).
-A license init error is logged as WARN and falls back to Free tier.
+Consequence: `/metrics` is served on every install. Set `PULSE_METRICS_TOKEN` (the
+quickstart installer generates one) or keep the port private — without a token, Pulse
+logs a startup WARN (`server/internal/api/server.go:300-302`).
 
 ### Network exposure
 
@@ -149,6 +149,7 @@ digest if you want certainty: `docker buildx imagetools inspect ghcr.io/aytekxr/
 ## License
 
 The server, web UI, and deployment tooling are licensed under
-[PolyForm Noncommercial 1.0.0](LICENSE); the beacon SDK (`sdk/beacon-js/`) is MIT.
-See `docs/licensing.md` for the product license-key model. Licensing does not affect
-the security posture described above.
+[PolyForm Shield License 1.0.0](LICENSE); the beacon SDKs (`sdk/beacon-js/`,
+`sdk/beacon-swift/`) are MIT. See `docs/licensing.md` for the license-key model
+(keys are optional from v0.5.0). Licensing does not affect the security posture
+described above.

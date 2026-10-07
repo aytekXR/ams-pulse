@@ -1,0 +1,3 @@
+Error: --password is required (no TTY available for interactive prompt)
+Run with --help for usage.
+exit=1

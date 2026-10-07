@@ -35,17 +35,7 @@ in CI by `npm run size` (uses `@size-limit/preset-small-lib`).
 
 ## 2. Prerequisites
 
-### 2.1 License tier
-
-> **⚠️ Pro+ license required (F3 gate):**
-> The beacon ingest endpoint (`POST /ingest/beacon`) requires a Pro or higher
-> Pulse license. `CheckBeaconIngest()` in `server/internal/license/license.go`
-> (lines 405–413) rejects requests from Free-tier deployments with HTTP 403
-> and body `{"code":"LICENSE_REQUIRED","message":"..."}`. Configure
-> `PULSE_LICENSE_KEY` or `PULSE_LICENSE_FILE` before testing beacon delivery.
-> A deployment with neither env var set runs in Free tier.
-
-### 2.2 Provision an ingest token
+### 2.1 Provision an ingest token
 
 Beacon batches authenticate with an `X-Pulse-Ingest-Token` header — an API key
 distinct from the admin Bearer JWTs used for the `/api/v1/*` management surface.
@@ -65,7 +55,7 @@ identifiable by their `plt_` prefix. Pass it as the `token` field in `PulseConfi
 Alternatively, create and copy an ingest token from **Settings › Ingest Tokens** in the
 Pulse web UI — the tab provides a one-click copy of a pre-filled SDK snippet.
 
-### 2.3 Ingest URL
+### 2.2 Ingest URL
 
 Set `ingestUrl` in `PulseConfig` to your Pulse collector base URL (scheme +
 host, no path):
@@ -91,12 +81,12 @@ requests from any player page origin are accepted without allowlisting (see
 
 **Option A — tarball from GitHub Release (works today)**
 
-Download `ams-pulse-beacon-0.4.5.tgz` from the
-[v0.4.5 GitHub Release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.4.5) and install it
+Download `ams-pulse-beacon-0.5.0.tgz` from the
+[v0.5.0 GitHub Release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.5.0) and install it
 locally:
 
 ```bash
-npm install ./ams-pulse-beacon-0.4.5.tgz
+npm install ./ams-pulse-beacon-0.5.0.tgz
 ```
 
 **Option B — npm registry (coming)**
@@ -431,7 +421,7 @@ Response codes:
 |---|---|
 | `202 Accepted` | Batch accepted (all or partial events stored) |
 | `401 Unauthorized` | Token missing or invalid |
-| `403 LICENSE_REQUIRED` | Pulse license tier is Free; Pro+ required |
+| `403 FORBIDDEN` | Request rejected (check token and server logs) |
 | `413 Request Entity Too Large` | Batch body exceeds 64 KB |
 | `422 Unprocessable Entity` | All events in the batch failed schema validation |
 | `429 Too Many Requests` | Rate limit exceeded |
@@ -489,13 +479,6 @@ before removing listeners. It is safe to call multiple times.
 
 ## 11. Known limitations
 
-### Free tier — 403 LICENSE_REQUIRED
-
-Beacon ingest requires a Pro or higher Pulse license. Free-tier deployments
-(no `PULSE_LICENSE_KEY` or `PULSE_LICENSE_FILE`) receive HTTP 403 with body
-`{"code":"LICENSE_REQUIRED","message":"..."}` on every beacon POST. The SDK
-backs off and continues retrying; no playback impact, but no data is stored.
-
 ### Sampled-out sessions are silent by design
 
 When `sampleRate` is set below `1`, a fraction of `Pulse.init()` calls return
@@ -511,7 +494,7 @@ logged. If `qoe/summary` shows fewer sessions than expected, verify the
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | HTTP 401 on beacon POST | Token missing, wrong kind, or expired | Mint a new token with `kind=ingest` via `POST /api/v1/admin/tokens`; confirm the `X-Pulse-Ingest-Token` header is set (not `Authorization: Bearer`) |
-| HTTP 403 `LICENSE_REQUIRED` | Free tier deployment | Set `PULSE_LICENSE_KEY` or `PULSE_LICENSE_FILE` to a Pro+ license |
+| HTTP 403 FORBIDDEN | Token invalid or server configuration issue | Check token validity and server logs |
 | HTTP 429 rate limit | High viewer count exceeding 100 req/s per token (both ports enforce the same limit) | Spread traffic across per-player ingest tokens, or lower the SDK `sampleRate` |
 | No data in `qoe/summary` after play | Rollup window not elapsed | Wait 120 s after the first batch; verify `202` responses in server logs |
 | CSP blocks beacon POST | Script or fetch blocked by Content-Security-Policy | Self-host `dist/index.global.js` and add the Pulse origin to `connect-src` in your CSP header; do not load the SDK from any CDN |

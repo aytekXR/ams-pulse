@@ -1,0 +1,59 @@
+{
+ "items": [
+  {
+   "cooldown_until": null,
+   "group_key": "studio-b",
+   "id": "a9df2cc6-dd47-4a0a-864e-dfd95977b5ab",
+   "metric": "ingest_bitrate_kbps",
+   "rule_id": "1d553462-8f2a-47de-b013-1895185a8ae3",
+   "scope": {},
+   "severity": "warning",
+   "state": "resolved",
+   "threshold": 1500,
+   "ts": 1791373504138,
+   "value": 3414.233
+  },
+  {
+   "cooldown_until": null,
+   "group_key": "backstage-cam",
+   "id": "32f0979a-373c-41cb-8cbf-23e8fa570e2c",
+   "metric": "stream_offline",
+   "rule_id": "5a6815b4-fa1b-444f-9aad-85a8490388ed",
+   "scope": {},
+   "severity": "critical",
+   "state": "resolved",
+   "threshold": 1,
+   "ts": 1791373449104,
+   "value": 0
+  },
+  {
+   "cooldown_until": 1791374024104,
+   "group_key": "studio-b",
+   "id": "39571753-d99a-4999-aa91-035ccb785b6d",
+   "metric": "ingest_bitrate_kbps",
+   "rule_id": "1d553462-8f2a-47de-b013-1895185a8ae3",
+   "scope": {},
+   "severity": "warning",
+   "state": "firing",
+   "threshold": 1500,
+   "ts": 1791373424104,
+   "value": 894.46
+  },
+  {
+   "cooldown_until": 1791373719106,
+   "group_key": "backstage-cam",
+   "id": "38de0391-699a-4e51-8441-5e82896bc43c",
+   "metric": "stream_offline",
+   "rule_id": "5a6815b4-fa1b-444f-9aad-85a8490388ed",
+   "scope": {},
+   "severity": "critical",
+   "state": "firing",
+   "threshold": 1,
+   "ts": 1791373419106,
+   "value": 1
+  }
+ ],
+ "meta": {
+  "next_cursor": null
+ }
+}

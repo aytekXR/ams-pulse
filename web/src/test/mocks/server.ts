@@ -52,7 +52,7 @@ export const handlers = [
         {
           id: "rule-1",
           name: "High CPU Alert",
-          metric: "cpu_pct",
+          metric: "node_cpu",
           operator: "gt",
           threshold: 80,
           window_s: 300,
@@ -80,7 +80,7 @@ export const handlers = [
       {
         id: "rule-new",
         name: "New Rule",
-        metric: "cpu_pct",
+        metric: "node_cpu",
         operator: "gt",
         threshold: 80,
         window_s: 300,

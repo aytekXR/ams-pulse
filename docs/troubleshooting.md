@@ -168,21 +168,6 @@ variable to point at a real AMS host and restart.
 **Symptom:** The QoE page is empty or shows no viewer sessions. Beacon POSTs return
 HTTP 403 or 401.
 
-### Cause A — License tier gate
-
-Beacon ingest (F3 / QoE) requires **Pro tier or higher**. On Free tier every POST
-to `/ingest/beacon` returns HTTP 403 with body `{"code":"LICENSE_REQUIRED","message":"..."}`.
-
-**Check:**
-
-```bash
-curl -s https://your-domain/api/v1/admin/license \
-  -H "Authorization: Bearer plt_<admin-token>" | jq .tier
-```
-
-**Fix:** Apply a Pro or higher license key in Settings → License, or set
-`PULSE_LICENSE_KEY` and restart. See `docs/runbooks/install.md` Free tier limits.
-
 ---
 
 ### Cause B — Wrong token kind
@@ -269,21 +254,6 @@ The behavior is identical to `muted: true` during the window.
 
 ---
 
-### Cause C — Channel tier gate
-
-| Channel type | Minimum tier |
-|---|---|
-| Email | Free |
-| Slack, Telegram | Pro |
-| PagerDuty, Webhook | Business |
-
-Sending a test notification to a Slack channel on a Free-tier install will fail
-silently (the evaluator skips the channel). The channel test button in the UI
-returns an error if the tier check fails.
-
-**Fix:** Upgrade the license tier or use email for the current tier. See
-`docs/runbooks/alerting.md` Channel setup.
-
 ---
 
 ### Cause D — Rule disabled entirely
@@ -323,7 +293,6 @@ curl -X PUT https://your-domain/api/v1/alerts/rules/<rule_id> \
 
 **Check:**
 
-- Confirm the license tier is Pro or higher (Slack requires Pro).
 - Verify the incoming webhook URL in the Slack App configuration matches what
   is stored in the Pulse channel config.
 
@@ -335,19 +304,9 @@ the Pulse channel config. See `docs/runbooks/alerting.md` Slack.
 
 ## Reports are empty
 
-**Symptom:** `GET /api/v1/reports/usage` returns HTTP 403, or returns empty rows.
+**Symptom:** `GET /api/v1/reports/usage` returns empty rows.
 
-### Cause A — Tier gate
-
-All report endpoints (on-demand, CSV, PDF, scheduled S3 exports) require
-**Business tier or higher**. Free and Pro tier callers receive
-`{"code":"LICENSE_REQUIRED",...}`.
-
-**Fix:** Apply a Business or Enterprise license. See `docs/runbooks/reports.md`.
-
----
-
-### Cause B — No tenant mapping configured
+### Cause A — No tenant mapping configured
 
 Sessions not matched by any tenant rule appear with a blank `tenant` field.
 If no rules exist, all rows show `tenant: ""`. This is correct behaviour, not a bug.
@@ -357,7 +316,7 @@ If no rules exist, all rows show `tenant: ""`. This is correct behaviour, not a 
 
 ---
 
-### Cause C — No data in the time range
+### Cause B — No data in the time range
 
 Reports read ClickHouse rollup tables. If no streams were active in the requested
 date range, the report is legitimately empty.
@@ -383,8 +342,6 @@ Pulse keeps probe data strictly separate from organic QoE data.
 - A probe `success: false` with `error_code: timeout` means the Pulse server
   could not fetch the manifest within `timeout_s`. It does not mean viewers are
   affected.
-- Probes require **Pro tier or higher**. On Free tier, all probe CRUD endpoints
-  return HTTP 403 `LICENSE_REQUIRED`.
 
 See `docs/runbooks/probes.md` for the full error code table and coverage matrix.
 
@@ -517,7 +474,7 @@ Error: Docker Compose v2 not found.
 
 ```
 ERROR: The Pulse container image is not accessible from the registry.
-  Image : ghcr.io/aytekxr/ams-pulse:0.4.5
+  Image : ghcr.io/aytekxr/ams-pulse:0.5.0
 ```
 
 The image is **public** — no `docker login` is needed. A failure at this stage
@@ -525,10 +482,13 @@ means the tag does not exist, a network/proxy is blocking `ghcr.io`, or GHCR is
 rate-limiting you. Check the tag on the
 [package page](https://github.com/aytekXR/ams-pulse/pkgs/container/ams-pulse)
 (tags have **no `v` prefix** — `0.4.3`, not `v0.4.3`) and retry
-`docker pull ghcr.io/aytekxr/ams-pulse:0.4.5`. If your environment cannot reach
-GHCR at all, build from source instead (`make build`, then
-`PULSE_IMAGE=pulse:dev`). The installer pre-pulls before writing any credentials
-to disk, so this stage is always safe to retry.
+`docker pull ghcr.io/aytekxr/ams-pulse:0.5.0`. If your environment cannot reach
+GHCR at all, build the image from source instead
+(`docker build -f deploy/docker/pulse.Dockerfile -t pulse:dev .` from a clone, then
+`PULSE_IMAGE=pulse:dev bash deploy/quickstart/install.sh …`), or side-load a saved
+image with `docker load`. When the pull fails but the image is already present on the
+host, the installer uses the local copy. It pre-pulls before writing any credentials to
+disk, so this stage is always safe to retry.
 
 ---
 
@@ -556,38 +516,26 @@ removes the generated `.env` on failure; the next run generates a fresh
 
 ---
 
-## License key rejected — Pulse falls back to Free tier
+## AMS account locked after wrong password (v0.5.0 backoff)
 
-**Symptom:** The Pulse startup log contains:
+**Symptom:** Pulse cannot poll AMS; its logs show
+`amsclient: login failed (check PULSE_AMS_LOGIN_EMAIL/PASSWORD)` — or `… AMS locked the
+account for 5m0s after repeated failures …` — followed by `next login attempt in …`. Signing
+in to the AMS console with the same account may fail with "Too many login attempts".
 
-```
-license: init failed, using free tier
-```
+**Cause:** AMS locks an account for 5 minutes after 2 failed login attempts.
+Before v0.5.0, Pulse retried on every poll cycle (every 5 s), keeping the account
+permanently locked.
 
-**Cause:** The value of `PULSE_LICENSE_KEY` (or the file referenced by
-`PULSE_LICENSE_FILE`) is invalid, malformed, or expired. Pulse fails open for reads
-— already-collected data remains visible — but tier-gated features (Slack alerts,
-beacon ingest, probes, reports) fail closed with HTTP 403 until a valid key is set.
+**Fix (v0.5.0):** Pulse now backs off on login failures: 1, 2, 4, 8, then 15
+minutes between attempts (and never less than the lock period AMS reports). After
+fixing the password, Pulse recovers within at most the current
+backoff interval (up to 15 min), or immediately after a Pulse container restart.
+The password lives in `quickstart/.env` for quickstart installs (`deploy/.env` for the
+Compose deployments in `deploy/`).
 
-**Check:**
-
-```bash
-docker logs pulse-prod-pulse-1 2>&1 | grep 'license:'
-# Also check the UI: Settings → License shows current tier and expiry.
-
-curl -s https://your-domain/api/v1/admin/license \
-  -H "Authorization: Bearer plt_<admin-token>"
-```
-
-**Fix:**
-
-1. Obtain a valid key.
-2. Set `PULSE_LICENSE_KEY=<key>` in `deploy/.env`.
-3. Restart the pulse container: `docker compose up -d pulse`.
-
-The `license_expiry` alert metric can warn you before a key downgrades the
-instance. See `docs/runbooks/alerting.md` Supported metrics and
-`docs/guides/license-activation.md` for key activation details.
+Transport errors and HTTP 5xx replies are still retried every poll cycle. A
+401/403 on a REST call triggers at most one re-login per minute.
 
 ---
 

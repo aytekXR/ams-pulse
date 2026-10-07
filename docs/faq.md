@@ -1,6 +1,6 @@
 # Pulse — Operator FAQ
 
-**Product:** Pulse v0.4.5 · **Last updated:** 2026-07-30
+**Product:** Pulse v0.5.0 · **Last updated:** 2026-10-07
 
 Short answers to the questions operators ask most often.
 Each answer links to the canonical doc for deeper reading.
@@ -23,12 +23,13 @@ survives AMS upgrades without any coordination.
 
 ### Q2. Which AMS versions are supported?
 
-Validated live on **AMS 3.0.3 Enterprise**; best-effort compatibility with
-**AMS 2.10+** via version-tolerance tests (mock profiles).
+Validated live on **AMS 3.1.0 Enterprise** and **AMS 3.0.3 Enterprise**; best-effort
+compatibility with **AMS 2.10+** via version-tolerance tests (mock profiles).
 
 | AMS Version | Support level |
 |---|---|
-| **3.0.3 Enterprise Edition (build 20260504\_1443)** | **Live-validated — primary target** (46/50 scenario scripts PASS) |
+| **3.1.0 Enterprise Edition (build 20260831\_1439)** | **Live-validated — primary target** (2026-10-07, Pulse v0.5.0: 44/61 scenario scripts PASS, none of the failures an AMS regression; alerting, player QoE and the installer verified live) |
+| **3.0.3 Enterprise Edition (build 20260504\_1443)** | **Live-validated** (46/50 scenario scripts PASS) |
 | 2.10.x – 3.0.2 | Best-effort — version-tolerance tests (mock profiles); no live-wire guarantee |
 
 Deploy AMS 3.x for production. Real Docker images for older versions are
@@ -89,8 +90,8 @@ curl -fsSL https://raw.githubusercontent.com/aytekXR/ams-pulse/main/deploy/quick
 ```
 
 The script handles Docker preflight, `.env` writing, stack start,
-healthcheck polling, and bootstrap-token extraction. Append
-`--license-key <key>` to activate a paid tier on first boot.
+healthcheck polling, and bootstrap-token extraction. No license key is
+needed — every feature is free (`--license-key` is still accepted for compatibility).
 
 > Full walkthrough (including the 3-command manual variant):
 > `docs/runbooks/install.md` §Path A0.
@@ -106,7 +107,9 @@ almost always one of: a tag that does not exist (image tags have **no `v`
 prefix** — use `0.4.1`, not `v0.4.1`), a network/proxy blocking `ghcr.io`, or
 GHCR rate-limiting. Confirm the tag on the
 [package page](https://github.com/aytekXR/ams-pulse/pkgs/container/ams-pulse) and
-retry, or build from source (`make build`) if your environment cannot reach GHCR.
+retry, or — if your environment cannot reach GHCR — build the image from source
+(`docker build -f deploy/docker/pulse.Dockerfile -t pulse:dev .`) or side-load it with
+`docker load`, then run the installer with `PULSE_IMAGE=<that tag>`.
 
 Also note: image tags have **no `v` prefix** — the git tag `v0.4.0`
 publishes as image tag `0.4.0`, not `v0.4.0`.
@@ -146,7 +149,7 @@ DELETE /api/v1/admin/users/{userId}
 ```
 
 An admin-scoped API token is required; every change is recorded in the
-audit log. SSO/OIDC user provisioning (Enterprise) is unaffected — first-
+audit log. SSO/OIDC user provisioning is unaffected — first-
 login auto-provisioning works end to end. As a workaround, manage access
 via API tokens (Settings → API Tokens, which has a full UI).
 
@@ -155,82 +158,32 @@ via API tokens (Settings → API Tokens, which has a full UI).
 
 ---
 
-## Licensing and tiers
+## Licensing
 
-### Q9. What happens when my license expires?
+### Q9. Is Pulse free?
 
-Pulse degrades gracefully to Free tier. The server keeps running; you can
-still read all already-collected data. Tier-gated features return
-`403 LICENSE_REQUIRED`. A banner appears in the UI indicating the license
-state. Nothing crashes.
+Yes. From v0.5.0 Pulse is fully free. Every feature is included on every install
+with no license key: alert channels (email, Slack, Telegram, PagerDuty, webhook),
+QoE beacon ingest, historical analytics, usage reports and scheduled exports,
+anomaly detection, synthetic probes, Prometheus `/metrics`, SSO/OIDC, and
+white-label PDF reports. There are no node, stream, or retention limits imposed
+by licensing (actual data retention is whatever ClickHouse TTLs are configured
+to).
 
-To renew, activate a new key via any of three routes:
+The server, web UI, and deploy tooling are licensed under the PolyForm Shield
+License 1.0.0 — any use including commercial, free of charge; the one
+restriction is not using Pulse to provide a competing product. Beacon SDKs stay
+MIT. Versions before v0.5.0 were PolyForm Noncommercial 1.0.0.
 
-1. `PULSE_LICENSE_KEY=<key>` in `.env` and restart.
-2. `PULSE_LICENSE_FILE=/path/to/license.key` and restart.
-3. `PUT /api/v1/admin/license {"key":"<key>"}` — takes effect immediately,
-   no restart required.
-
-> `docs/guides/license-activation.md`; `docs/licensing.md` §2.4.
-
----
-
-### Q10. What does each tier include?
-
-| Limit / feature | Free | Pro | Business | Enterprise |
-|---|---|---|---|---|
-| AMS source nodes | 1 | **10** | **50** | Unlimited |
-| Data retention | 7 days | 90 days | 13 months | Unlimited |
-| Beacon QoE ingest (F3) | No | Yes | Yes | Yes |
-| Data API + Prometheus `/metrics` (F8) | No | API only | Yes | Yes |
-| Usage/billing reports (F6) | No | No | Yes | Yes |
-| Anomaly detection (F9) | No | No | Yes | Yes |
-| SSO / OIDC | No | No | No | Yes |
-| White-label PDF | No | No | No | Yes |
-| Notification channels | Email | Email, Slack, Telegram | + PagerDuty, Webhook | All |
-
-**Note on node limits:** The tier ladder is Free 1 / Pro 10 / Business 50 / Enterprise unlimited. Business allows up to 50 monitored nodes and adds multi-tenant billing, Prometheus, and scheduled reports. Pro is optimised for operators running up to 10 AMS edge nodes who need full API and QoE access. Unlimited nodes require Enterprise.
-
-> `docs/runbooks/install.md` §Free tier limits; `docs/product.md` §1 (feature table).
+License keys (`PULSE_LICENSE_KEY` / `PULSE_LICENSE_FILE`) still load for
+compatibility but are not needed and change nothing.
 
 ---
 
-### Q20. What do the tiers cost?
+### Q10. What about support?
 
-Standard pricing — monthly, or annual billed at 10× monthly (2 months free):
-
-| Tier | Monthly | Annual |
-|---|---|---|
-| Free | $0 | $0 |
-| Pro | $99 | $990 |
-| Business | $299 | $2,990 |
-| Enterprise | from $799 | custom |
-
-*Pricing set for launch (operator-delegated, D-169) — subject to operator override.*
-
-**Founding Operators launch campaign:** any deployment that activates a paid tier
-within the first **6 months** of the marketplace listing going live (or the first
-**100 paid activations**, whichever comes first) receives near-free first-year
-pricing: **Pro $9/month** and **Business $29/month** for the first 12 months, then
-standard rates apply. Enterprise: 90-day free pilot, then 25% off year one.
-Founding Operators also keep a permanent **10% loyalty discount** at every renewal
-thereafter. The campaign price locks at signup; a 30-day advance email notice goes
-out before auto-reverting to standard pricing.
-
-> `docs/licensing.md`; `docs/product.md` §1 (tier feature table).
-
----
-
-### Q21. Is there a free trial?
-
-Yes. **14-day Pro trial — no credit card.** Request a trial key from the Ant
-Media Marketplace listing or by emailing **support@beyondkaira.com**; the key
-arrives by email (typically within 1 business day) and activates in
-Settings → License. On expiry the deployment gracefully reverts to Free — no
-data loss. A trial that converts during the Founding Operators launch window
-qualifies for the campaign price (see Q20).
-
-> `docs/licensing-public.md` §3 (trial access).
+Support is best effort via GitHub Issues and **support@beyondkaira.com**, with
+no guaranteed response times.
 
 ---
 
@@ -239,16 +192,21 @@ qualifies for the campaign price (see Q20).
 ### Q11. Does my data leave my infrastructure?
 
 No. Pulse is entirely self-hosted. There is no SaaS component and no
-phone-home. License verification is offline — keys are validated locally
-via an ed25519 signature check against the vendor public key embedded in
-the binary (or the key you supply via `PULSE_LICENSE_PUBKEY`); no
-activation server is contacted.
+phone-home. Pulse needs no license key and contacts no activation server;
+a legacy key, if you still load one, is checked offline (an ed25519
+signature check against the public key embedded in the binary, or the key
+you supply via `PULSE_LICENSE_PUBKEY`).
 
-Viewer IPs from the beacon SDK are **SHA-256 hashed** before storage in
-ClickHouse — no raw IP is written to the database (verified:
-`normalize.go:281`, assessment TC-15 PASS). For additional GDPR/KVKK
-posture, set `PULSE_ANONYMIZE_IP=true` to also zero the last IPv4 octet
-(last 80 bits for IPv6) before geo lookup.
+Viewer IP addresses are **not stored** — neither raw nor hashed. The
+beacon endpoint uses the request IP only in memory, for the optional
+GeoIP lookup below; the REST path never sees viewer IPs at all, and the
+reserved `ip_hash` column in ClickHouse is never populated. For additional
+GDPR/KVKK posture, set `PULSE_ANONYMIZE_IP=true` to zero the last IPv4
+octet (last 80 bits for IPv6) before that lookup.
+
+*(Corrected 2026-10-01: this answer used to say viewer IPs were SHA-256
+hashed before storage. `HashIP` exists in `normalize.go` but is never
+called — nothing is stored, which is the stronger guarantee.)*
 
 Geo-country enrichment is opt-in and uses only an **operator-supplied**
 MaxMind GeoLite2 mmdb file (`PULSE_GEO_MMDB_PATH`). No lookup requests
@@ -268,9 +226,6 @@ The SDK (`sdk/beacon-js`, 3.52 KB gzip, MIT license) posts events to
 `/ingest/beacon` on your Pulse instance. No data is sent to any third
 party.
 
-Beacon ingest is gated to **Pro tier and above**. Without a Pro+ license,
-`/ingest/beacon` returns `403 LICENSE_REQUIRED`.
-
 QoE summary data is available at `GET /api/v1/qoe/summary`. Server-side
 metrics (bitrate, viewer count, packet loss) are always available from REST
 polling regardless of beacon deployment.
@@ -285,11 +240,11 @@ polling regardless of beacon deployment.
 
 There are two separate paths — do not confuse them:
 
-- **Scheduled PDF reports** (Business+ tier): a report schedule with
+- **Scheduled PDF reports**: a report schedule with
   `format: pdf` generates a PDF statement each run, with the logo set by
   `PULSE_REPORT_LOGO_PATH`. A white-label header (your company name and
-  address) additionally requires an Enterprise license with the
-  `white_label` claim.
+  address) is set per schedule (`whitelabel_header`); like every feature
+  since v0.5.0, it needs no license key.
 - **Interactive on-demand export**: only CSV is available
   (`GET /api/v1/reports/export?format=csv`). Requesting `format=pdf` there
   returns `501 NOT_IMPLEMENTED`; the "Export PDF" button has been removed
@@ -332,9 +287,8 @@ It depends on the rule type:
 
 ### Q15. Can I scrape Pulse metrics with Prometheus?
 
-Yes. Pulse exposes `GET /metrics` in the Prometheus text exposition format.
-The endpoint is gated to **Business tier and above** (Pro and Free receive
-`403 LICENSE_REQUIRED`).
+Yes. Pulse exposes `GET /metrics` in the Prometheus text exposition format
+on every install.
 
 Available metrics: `pulse_live_viewers`, `pulse_live_streams`,
 `pulse_live_publishers`, `pulse_ingest_bitrate_kbps`,
@@ -342,7 +296,8 @@ Available metrics: `pulse_live_viewers`, `pulse_live_streams`,
 `pulse_alerts_firing`.
 
 Set `PULSE_METRICS_TOKEN` to require a Bearer token for scrapes (recommended
-in any deployment where the port is not fully private).
+in any deployment where the port is not fully private). The quickstart
+installer generates this token in `quickstart/.env`.
 
 > Full scrape config, PromQL examples, and Grafana starter JSON:
 > `docs/guides/prometheus.md`.
@@ -351,7 +306,7 @@ in any deployment where the port is not fully private).
 
 ### Q16. Does Pulse support SSO / OIDC?
 
-Yes, on **Enterprise tier**. OIDC-based SSO is implemented and ships with:
+Yes. OIDC-based SSO is implemented and ships with:
 
 - Auto-provisioning of users on first SSO login.
 - Role mapping from IdP groups to Pulse roles (`admin`, `viewer`).
@@ -375,14 +330,14 @@ path when OIDC is enabled.
 
 Partially. The F6 multi-tenancy **API** (tenant-scoped usage reports,
 billing statements, per-tenant stream ownership) is code-complete and
-available on Business+ tier. A tenant-management UI and server-side
-per-tenant AUTH are demand-driven and have not been built yet; they are
-deferred unless a multi-tenant customer is imminent.
+available on every install, and tenants are managed in **Reports → Tenants**.
+Server-side per-tenant authentication is demand-driven and has not been
+built yet; it is deferred unless a multi-tenant customer is imminent.
 
 For now, operators running multi-tenant deployments can use the API
 directly to generate per-tenant reports and manage tenant records.
 
-> `docs/ARCHITECTURE.md` §Tier model.
+> `docs/runbooks/reports.md` §Tenant mapping.
 
 ---
 

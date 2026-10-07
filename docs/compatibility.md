@@ -1,9 +1,9 @@
 # Pulse — AMS Version Compatibility Matrix
 
 **Product:** Pulse: Self-Hosted Analytics, QoE Monitoring and Alerting for Ant Media Server  
-**Last updated:** 2026-09-02 — AMS 3.1.0 (released 2026-08-31) row added, **source-verified
-at tag `ams-v3.1.0`, not yet live-validated** (live lane: ROADMAP-V2 §2.48, D-192); prior
-review history: fleet resource metrics row corrected in D-179 (CPU/mem/disk come from
+**Last updated:** 2026-10-07 — **AMS 3.1.0 Enterprise live-validated** with Pulse v0.5.0 (S125,
+D-194: 61 scenario scripts, plus live alert delivery, player QoE, login backoff and the installer);
+2026-09-02: 3.1.0 row added, source-verified at tag `ams-v3.1.0` (D-192); prior review history: fleet resource metrics row corrected in D-179 (CPU/mem/disk come from
 `/rest/v2/system-resources`, not "via Kafka only"); AMS 2.16/2.17 coverage added D-179;
 G-27 section added D-161 (2026-07-22)
 
@@ -13,8 +13,8 @@ G-27 section added D-161 (2026-07-22)
 
 | AMS Version | Validation Status | Pulse Support Level | Source |
 |-------------|------------------|---------------------|--------|
-| 3.1.0 (released 2026-08-31) | **Source-verified only** — every `Broadcast` field Pulse consumes present and identically typed at `ams-v3.1.0`; `currentFPS` still absent (LIM-04 unchanged); `ClusterNode` still carries no role/version (LIM-10 applies; new additive `note` field is not read). Live validation pending (ROADMAP-V2 §2.48) — the new 3.1.0 management panel's backend-API work (upstream #7911) is the specific drift risk to check | Expected compatible | AMS source at `ams-v3.1.0`; D-192 |
-| 3.0.3 Enterprise (build 20260504\_1443) | **LIVE-VALIDATED** | **Supported — primary target** | 46/50 scenario scripts PASS, qa/realams S17–S18, D-079/D-080 |
+| 3.1.0 Enterprise (build 20260831\_1439) | **LIVE-VALIDATED** (2026-10-07, Pulse v0.5.0) | **Supported — primary target** | 44/61 scenario scripts PASS, 10 SKIP, 7 FAIL — none an AMS wire-format regression (details below); S125, D-194. Source-verified at `ams-v3.1.0` (D-192) |
+| 3.0.3 Enterprise (build 20260504\_1443) | **LIVE-VALIDATED** | **Supported** | 46/50 scenario scripts PASS, qa/realams S17–S18, D-079/D-080 |
 | 3.0.2 | Mock-profile only | Mock-compatible | `.github/workflows/ams-version-matrix.yml`; `ams_version_matrix_test.go` → `amsProfiles` entry `v3.0.2` |
 | 2.17.x | Mock-profile only (**source-verified** against `ams-v2.17.1`) | Mock-compatible | `ams_version_matrix_test.go` → `amsProfiles` entry `v2.17.1` |
 | 2.16.x | **Not profiled** — source-verified only | Expected compatible | AMS `Broadcast.java` / `ClusterNode.java` at `ams-v2.16.2` carry every field Pulse consumes, identically typed |
@@ -51,6 +51,46 @@ Report incompatibilities at `https://github.com/aytekXR/ams-pulse/issues`.
 ---
 
 ## Live-validated version detail
+
+### AMS 3.1.0 Enterprise Edition (build 20260831\_1439)
+
+**Validation program:** Session S125, 2026-10-07 — Pulse v0.5.0 against `antmedia/enterprise:3.1.0`
+on host networking (`qa/realams/` harness plus targeted live runs; D-194)
+
+| Run | Result |
+|-----|--------|
+| `qa/realams` scenario scripts (61) | **44 PASS / 10 SKIP / 7 FAIL** |
+| Alert delivery — real stream, e-mail and HMAC-signed webhook | 15/16 (1 documented skip) |
+| Player QoE — real HLS playback with the beacon SDK | 14/14 |
+| AMS login backoff — wrong password, live | 9/9 |
+| Quickstart installer | 19/19 |
+
+None of the 7 failures is an AMS wire-format regression:
+
+- **Outdated scenario expectations (5).** TC-FL-01 and TC-H-01 expect node CPU/memory to be `null`
+  on a standalone node; Pulse has read them from `/rest/v2/system-resources` since D-179 and
+  reported the real values. TC-FL-02 expects version 3.0.3. TC-P-03 expects the RTMP probe to stop
+  at `handshake_complete`; it reached `app_accepted`. TC-WH-03 expects `recording_gb = 0`; the
+  recording was counted.
+- **Host CPU guard (1).** TC-L-01: AMS refuses a new stream while host CPU is above its 75 % limit
+  ("Not enough resource. Due to high cpu load"), and the shared test host was at 96 %.
+- **A Pulse defect, fixed in v0.5.0 (1).** TC-H-06 creates a *threshold* rule on `cpu_pct` — the
+  anomaly-rule name; threshold rules use `node_cpu`. The API has refused it since v0.4.1, and the
+  web UI's rule form still offered it; the form now offers exactly the metrics the server accepts.
+
+The harness prints "43 pass, 8 fail": one of its rows (TC-I-05-SRT, 2/2 checks passed) writes its
+evidence under a name the summary does not match, so it is reported as `NOEVID`. Skips are
+preconditions (no VoD, no IP-blocked app, no SRT port, no webhook capture or signing proxy), the
+host's RTMP capacity (LIM-12) and HLS viewer-count inflation (LIM-02).
+
+**Observed on 3.1.0 (in addition to the 3.0.3 behaviors below, which still apply):**
+
+| Behavior | Impact on Pulse | Source |
+|----------|-----------------|--------|
+| `GET /rest/v2/version` → `versionName` `3.1.0`, `versionType` `Enterprise` | Shown in the fleet view | TC-FL-02 |
+| `currentFPS` still absent from the REST BroadcastDTO | `fps = 0` (LIM-04 unchanged) | TC-I-06 PASS |
+| Two failed logins lock the account for 300 s | Pulse v0.5.0 backs off a rejected login (1, 2, 4, 8, 15 min, never inside the lock); older Pulse retried every poll and kept the account locked | Live run; `server/pkg/amsclient` |
+| New streams refused above 75 % host CPU | Expect failed publishes, not a Pulse fault, on a loaded host | TC-L-01 |
 
 ### AMS 3.0.3 Enterprise Edition (build 20260504\_1443)
 
@@ -257,8 +297,8 @@ publishers/players, historically stable across UI releases.
 **Net:** the endpoints that drive stream monitoring are architecturally insulated from panel UI work,
 and the two console dependencies most at risk (auth, app discovery) already have deployed bypasses.
 Confirm at the meeting: (1) do `/rest/v2/*` paths + envelopes survive the revamp or is a v2→v3 jump
-planned; (2) does the new panel introduce a new auth mechanism replacing the cookie flow. See
-`docs/operator-expected.md` (top banner) for the full business + dev assessment.
+planned; (2) does the new panel introduce a new auth mechanism replacing the cookie flow. The full
+assessment is decision D-161 in `agents/handoffs/decisions.md`.
 
 ### Public-repo evidence (2026-07-22, `ant-media/Management-panel-reborn` @ `c4a0235`)
 

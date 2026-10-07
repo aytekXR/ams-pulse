@@ -1,0 +1,11 @@
+{
+  "name": "pulse-marketplace-tools",
+  "private": true,
+  "description": "Build tooling for the Ant Media Marketplace submission package (markdown → HTML/PDF rendering). Not shipped.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "marked": "14.1.4",
+    "opentype.js": "1.3.4"
+  }
+}

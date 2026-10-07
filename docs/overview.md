@@ -207,24 +207,31 @@ ORM that might silently cross it.
 
 ---
 
-## License Tiers
+## Licensing
 
-Pulse enforces four tiers via ed25519-signed license keys. The Free tier requires no key
-and no phone-home; all tiers run fully self-hosted.
+From v0.5.0, Pulse is fully free. Every feature ships on every install with no license
+key required:
 
-| Tier | Max nodes | Retention | Features | Alert channels |
-|---|---|---|---|---|
-| **Free** | 1 | 7 days | F1 live dashboard, F5 alerting (email), F7 fleet view | Email only |
-| **Pro** | 10 | 90 days | Free + F2 historical analytics, F3 QoE beacon SDK, F4 ingest health, F8 data API (REST + WebSocket), F10 synthetic probes | + Slack, Telegram |
-| **Business** | 50 | 396 days | Pro + F8 Prometheus `/metrics`, F6 usage/billing reports (CSV/PDF, S3, multi-tenant), F9 anomaly detection (Welford baselines) | + PagerDuty, Webhook |
-| **Enterprise** | Unlimited | Unlimited | Business + SSO (OIDC), white-label PDF reports | All five channels |
+- All alert channels (email, Slack, Telegram, PagerDuty, signed webhook)
+- QoE beacon ingest and historical analytics
+- Data API, Prometheus `/metrics`, usage reports and exports
+- Multi-tenant billing, anomaly detection, synthetic probes
+- SSO/OIDC, white-label PDF reports
+- No node, stream, or retention limits from licensing (retention is the configured
+  ClickHouse TTLs: `PULSE_RETENTION_DAYS` default 90, `PULSE_ROLLUP_TTL_DAYS` default 395)
 
-Max streams is unlimited on every tier. The node limit ladder is Free 1 / Pro 10 / Business 50 / Enterprise unlimited — Business targets high-retention reporting and multi-tenant billing use cases where up to 50 nodes suffice; Pro targets medium-scale streaming networks needing full API and QoE access. Unlimited nodes require Enterprise.
+The server, web UI, and deploy tooling are released under the PolyForm Shield License
+1.0.0 — any use including commercial is free; the one restriction is that you may not
+use Pulse to provide a competing product. Beacon SDKs remain MIT.
 
-License verification is fully offline: the binary verifies the ed25519 signature against
-the vendor public key embedded at build time (or supplied via `PULSE_LICENSE_PUBKEY`).
-A missing or invalid key falls back to Free tier — the server never refuses to start.
-See [`docs/licensing.md`](licensing.md) for minting and activation instructions.
+**Mechanism (for developers):** The codebase retains a Free/Pro/Business/Enterprise tier
+model and all `Check*` gates in `server/internal/license`, but `cmd/pulse` calls
+`license.SetAllFeaturesFree(true)` at startup, which opens every gate and makes
+`Entitlements()` unlimited whatever key is loaded. `GET /api/v1/admin/license` returns
+`all_features_free: true`. License keys (`PULSE_LICENSE_KEY` / `PULSE_LICENSE_FILE`)
+still load for compatibility but do not change what is available. See
+[`docs/licensing.md`](licensing.md) for the key format and minting ceremony (retained
+for a possible future paid model).
 
 ---
 
@@ -257,7 +264,7 @@ See [`docs/licensing.md`](licensing.md) for minting and activation instructions.
 | [`docs/beacon-sdk.md`](beacon-sdk.md) | Beacon SDK integration for hls.js, video.js, WebRTC, and native video |
 | [`docs/guides/prometheus.md`](guides/prometheus.md) | Prometheus scrape configuration, metric reference, Grafana starter panels |
 | [`docs/guides/anomaly-detection.md`](guides/anomaly-detection.md) | Welford model, sensitivity calibration, false-alarm math, tuning guide (F9) |
-| [`docs/licensing.md`](licensing.md) | Tier entitlements, key minting ceremony, activation methods |
+| [`docs/licensing.md`](licensing.md) | License mechanism (the dormant legacy tier model), key minting ceremony, activation methods |
 | [`docs/compatibility.md`](compatibility.md) | AMS version matrix, live-validated behaviors, known per-version gaps |
 | [`docs/AMS-INTEGRATION.md`](AMS-INTEGRATION.md) | AMS ingest paths, wire-format facts, operator setup against a real AMS |
 | [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) | Full component diagram, key boundaries, performance budgets, known issues |
@@ -266,4 +273,4 @@ See [`docs/licensing.md`](licensing.md) for minting and activation instructions.
 
 ---
 
-_Last updated: 2026-07-31._
+_Last updated: 2026-10-07._

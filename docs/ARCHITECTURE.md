@@ -3,9 +3,10 @@
 Authoritative technical-design document. PRD: `docs/prd-report.md` §7. Decisions with
 trade-offs get an ADR in `docs/adr/`.
 
-Last updated: 2026-07-30 — §3 rule 2 now names `internal/cluster` and is enforced by
-a test (D-179); previous sweep 2026-07-22 (D-161); content baseline D-062 with
-subsequent per-section amendments. QA gate: PASS_WITH_LIMITATIONS.
+Last updated: 2026-10-07 — D-194 v0.5.0: all-features-free policy; tier gates dormant.
+Prior: §3 rule 2 now names `internal/cluster` and is enforced by a test (D-179);
+previous sweep 2026-07-22 (D-161); content baseline D-062 with subsequent per-section
+amendments. QA gate: PASS_WITH_LIMITATIONS.
 
 ## 1. System context
 
@@ -72,10 +73,10 @@ Last updated: 2026-06-14 — Wave 3-MVP complete. QA gate: **PASS_WITH_LIMITATIO
 |---|---|---|
 | Probe runner | `internal/prober` | **Shipped** (F10 MVP + D-072/D-073/D-074/D-075) — HLS full; dash full (MPD+segment); webrtc phase-2a signaling+ICE (`ice_state`) + phase-2b RTP stats (`rtt_ms`/`jitter_ms`/`loss_pct`, D-075); rtmp phase-1 TCP handshake; 4-worker pool; 60 s config refresh |
 | Probe results store | `internal/store/clickhouse` | **Shipped** (F10) — `InsertProbeResult` + `QueryProbeResults`; `{retention_days}`-configurable TTL (D-073, default 90) |
-| Probe CRUD + API | `internal/api` | **Shipped** (F10) — `POST/GET/PUT/DELETE /probes`; `GET /probes/{id}/results`; Pro+ tier gate |
-| Anomaly detector | `internal/anomaly` | **Shipped** (F9 MVP) — Welford online baselines; σ=4.0; 0.43 FA/node-week; `GET /anomalies`; Business+ |
+| Probe CRUD + API | `internal/api` | **Shipped** (F10) — `POST/GET/PUT/DELETE /probes`; `GET /probes/{id}/results`; Pro+ tier gate (dormant since v0.5.0) |
+| Anomaly detector | `internal/anomaly` | **Shipped** (F9 MVP) — Welford online baselines; σ=4.0; 0.43 FA/node-week; `GET /anomalies`; Business+ gate (dormant since v0.5.0) |
 | Web UI — anomalies | `web/src/features/anomalies` | **Shipped** (F9) — flag table; sigma selector; severity badges; Enterprise gate |
-| Web UI — probes | `web/src/features/probes` | **Shipped** (F10) — CRUD form; results panel with TTFB+bitrate charts; 4-level synthetic labeling; Pro+ gate |
+| Web UI — probes | `web/src/features/probes` | **Shipped** (F10) — CRUD form; results panel with TTFB+bitrate charts; 4-level synthetic labeling; Pro+ gate (dormant since v0.5.0) |
 
 Minimal-but-working scope (D-001):
 - F9: 6 metrics (viewers, cpu_pct, mem_pct, ingest_bitrate_kbps, disk_pct — D-074; ams_api_latency_ms — D-087, Pulse-measured poller RTT); 1-hour rolling window; on-read flag computation + tick-persisted flag events (D-086).
@@ -107,18 +108,18 @@ Last updated: 2026-06-14 — Wave 2 implementation complete.
 | ClickHouse store | `internal/store/clickhouse` | **Shipped** — batched async inserts; viewer_sessions + rollup_qoe_1h added Wave 2 |
 | Meta store | `internal/store/meta` | **Shipped** — SQLite (pure-Go), AES-256-GCM; tenant + schedule CRUD added Wave 2 |
 | Alert evaluator | `internal/alert` | **Shipped** — 15 s detection latency; cert_expiry, node_up/down, ingest_bitrate_floor added Wave 2; `muted` suppression and `group_by` grouping fixed V3b |
-| Alert channels | `internal/alert/channels` | **Shipped** — Email, Slack, Telegram (Pro+); PagerDuty, Webhook (Business+, V3b); HMAC signature on webhook |
+| Alert channels | `internal/alert/channels` | **Shipped** — Email, Slack, Telegram, PagerDuty, Webhook (V3b) — all on every install since v0.5.0 (the old Pro+/Business+ channel gates are dormant); HMAC signature on webhook |
 | Query service | `internal/query` | **Shipped** — live + historical (ClickHouse); QoE + fleet endpoints Wave 2; geo/device breakdown (VD-06 V3a), QoE rollup queries (VD-11 V3a), ingest timeseries (VD-21 V3a) |
-| API server | `internal/api` | **Shipped** — 32 paths, 46 ops; /metrics, /qoe/*, /fleet/nodes, /reports/* added Wave 2; report tier gates, WS LiveOverview, token kind enforcement added V3b |
-| License manager | `internal/license` | **Shipped** — ed25519 verification; 4-tier model (free/pro/business/enterprise) per PRD §7.11; CheckReports, CheckBeaconIngest, CheckMultiTenant, CheckPrometheus added V3b |
-| Web UI | `web/` | **Shipped** — F1–F8; 150 tests green (V3b); tier gate logic updated for 4-tier model |
+| API server | `internal/api` | **Shipped** — 32 paths, 46 ops; /metrics, /qoe/*, /fleet/nodes, /reports/* added Wave 2; report tier gates (dormant since v0.5.0), WS LiveOverview, token kind enforcement added V3b |
+| License manager | `internal/license` | **Shipped** — ed25519 verification; 4-tier model retained (free/pro/business/enterprise); from v0.5.0 all gates are bypassed by `SetAllFeaturesFree(true)` at startup — every feature is enabled on every install |
+| Web UI | `web/` | **Shipped** — F1–F8; 150 tests green (V3b); tier gate logic updated for 4-tier model (since v0.5.0 `gatingTier()` unlocks everything) |
 | Beacon SDK | `sdk/beacon-js/` | **Shipped** (F3) — 3.52 KB gzip, 65 tests green, MIT license; header fix (VD-09), `rebuffer_end` (VD-12), bitrate levels (VD-13) applied V3a |
-| Beacon ingest | `internal/collector/beacon` | **Shipped** (F3) — token auth, rate limit, 64 KB body cap, schema validation; Pro+ tier gate (VD-15 V3b); geo/UA enrichment from HTTP request (VD-08 V3a) |
+| Beacon ingest | `internal/collector/beacon` | **Shipped** (F3) — token auth, rate limit, 64 KB body cap, schema validation; Pro+ tier gate (VD-15 V3b; dormant since v0.5.0); geo/UA enrichment from HTTP request (VD-08 V3a) |
 | Kafka collector | `internal/collector/kafka` | **Shipped** — pure-Go kafka-go; 8 contract tests; D-007.5 no-broker limitation; `lag` + `parse_errors` in `/healthz` (Wave-3-Plus, VD-27) |
 | Geo/UA enrichment | `internal/collector/enrichment` | **Shipped** — MMDBGeoResolver, EmbeddedUAParser, AnonymizeIP; absent DB = no-op; MMDB test fixture valid (VD-17 V3a) |
 | Session stitcher | `internal/collector/sessions` | **Shipped** — viewer join/heartbeat/leave stitching; 5 tests |
 | Ingest health | `internal/collector/ingest` | **Shipped** (F4) — health score formula, 141 µs detection; `HealthScore` non-zero from REST events (VD-20 V3a); ingest timeseries returned by API (VD-21 V3a) |
-| Reports (CSV/PDF) | `internal/reports` | **Shipped** (F6) — accounting, tenant mapping, statement gen, scheduler, S3 uploader; 5-field cron support (VD-36 V3b); Business+ tier gate (VD-35 V3b); peak sourced from `rollup_concurrency_1d` true windowed max (Wave-3-Plus, VD-38) |
+| Reports (CSV/PDF) | `internal/reports` | **Shipped** (F6) — accounting, tenant mapping, statement gen, scheduler, S3 uploader; 5-field cron support (VD-36 V3b); Business+ tier gate (VD-35 V3b; dormant since v0.5.0); peak sourced from `rollup_concurrency_1d` true windowed max (Wave-3-Plus, VD-38) |
 | Cluster discovery | `internal/cluster` | **Shipped** (F7) — 30 s poll, new node visible ≤30 s; `IsEdgeStream()` implemented (VD-03 V3a); node version field (VD-40 V3a) |
 | Prometheus /metrics | `internal/api` | **Shipped** (F8) — 5 metrics, bounded cardinality; scrape token uses `subtle.ConstantTimeCompare` (VD-S1 V3b) |
 | Helm chart | `deploy/helm/pulse/` | **Shipped** (authored-unexecuted per D-002) — lint passes, 3 template variants |
@@ -152,7 +153,7 @@ Last updated: 2026-06-14 — Wave 2 implementation complete.
    private endpoints, so the customer-facing Data API (F8) gets parity for free.
 5. **Beacon ingest is hostile-input territory.** Token auth, rate limits, size caps,
    schema validation. It is the only internet-facing surface.
-6. **Free tier must stay cheap.** 2-vCPU sidecar budget drives defaults: sampling,
+6. **Must stay cheap to run.** 2-vCPU sidecar budget drives defaults: sampling,
    batch sizes, ClickHouse low-footprint tuning.
 
 ## 4. Performance budgets (from PRD acceptance criteria)
@@ -267,8 +268,10 @@ Additional Wave-1 library decisions:
 - IP anonymization switch for GDPR/KVKK postures (geo degrades to country).
   Configured via `PULSE_ANONYMIZE_IP=true`. Effective in Wave 2+ (geo enrichment
   implemented); beacon path extracts client IP from `X-Forwarded-For` / `RemoteAddr`.
-- License check fails open for reading already-collected data, fails closed for
-  tier-gated features; Free tier requires no key and no phone-home.
+- License mechanism: the tier model and `Check*` gates are retained in
+  `server/internal/license` for a possible future paid model, but from v0.5.0
+  `SetAllFeaturesFree(true)` is called at startup, so every gate passes and all
+  features are available on every install. License keys are optional.
 - `/metrics` endpoint: set `PULSE_METRICS_TOKEN` to require a scrape token.
   The token comparison uses `subtle.ConstantTimeCompare` (VD-S1 V3b — timing oracle fixed).
 - WebSocket `/live/ws`: cross-origin policy enforced via `AllowedWSOrigins` config;
@@ -457,7 +460,7 @@ Configurable via: `PULSE_INGEST_TARGET_BITRATE_KBPS` (default 2000),
 | GAP-3-003 | Master HLS playlist probe: `bitrate_kbps=0` — follow first variant URL | BE-01 | **CLOSED Wave-3-Plus** — prober follows master-playlist variant to a media segment; `TestHLSProbe_MasterFollowsVariant` asserts `bitrate=66.7 seg_ttfb_ms=1` |
 | GAP-3-004 | Zero-stddev blind spot: constant metric streams prevent z-score computation | BE-02 | **CLOSED Wave-3-Plus** — epsilon floor applied in `ComputeFlags`: `effStddev = max(stddev, relEps·|mean|, absEps)`; `TestAnomaly_ConstantBaseline_LargeDeviation_Flags` PASS (sigma=80.00, 1 flag); false-alarm rate unchanged 0.43/node-week |
 | GAP-3-005 | `GET /probes/{id}/results` returns empty list when ClickHouse is unavailable (correct behavior) | BE-02 | Open — by design |
-| GAP-3-006 | Pro tier license test gap: only Enterprise key tested for probe entitlement | BE-02 | Open — Phase-3 |
+| GAP-3-006 | Pro tier license test gap: only Enterprise key tested for probe entitlement | BE-02 | Moot since v0.5.0 — the tier gates are dormant (D-194) |
 
 ### Known limitations (post Wave-3-Plus)
 

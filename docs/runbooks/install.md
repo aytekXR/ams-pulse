@@ -64,7 +64,7 @@ and bootstrap-token extraction.
 
 > **Image tag format:** Pulse image tags have **no `v` prefix**. The git release tag
 > `v0.4.3` is published as image tag `0.4.3` (not `v0.4.3`). Always omit the `v`
-> when specifying an image tag (e.g. `ghcr.io/aytekxr/ams-pulse:0.4.5`).
+> when specifying an image tag (e.g. `ghcr.io/aytekxr/ams-pulse:0.5.0`).
 
 ### Prerequisites
 
@@ -82,7 +82,8 @@ curl -fsSL https://raw.githubusercontent.com/aytekXR/ams-pulse/main/deploy/quick
 ```
 
 The script prompts interactively for any missing required flags when a TTY is attached.
-Append `--license-key <key>` to activate a Pro/Business/Enterprise license on first boot.
+Pulse v0.5.0 needs no license key — every feature is included. `--license-key <key>` is still
+accepted for installs that carry a legacy key; it changes nothing.
 
 **Exit codes** (for scripted installs — a degraded install is not a healthy one):
 
@@ -128,8 +129,10 @@ docker compose -f docker-compose.quickstart.yml --env-file .env logs pulse \
 ```
 
 Open `http://localhost:8090` and enter the token on the **Pulse login screen** (the
-first screen you see — not a step inside the onboarding wizard). The onboarding wizard
-starts automatically after you sign in, when no AMS sources are configured yet.
+first screen you see — not a step inside the onboarding wizard). The quickstart already
+configures AMS from your flags, so the live dashboard opens directly after sign-in; the
+optional onboarding wizard (`/onboarding`) starts automatically only on installs that have
+no AMS configured at all.
 
 ---
 
@@ -190,7 +193,7 @@ export PULSE_AMS_LOGIN_PASSWORD=your-ams-password
 # 32-byte hex key for encrypting secrets at rest (generate once, keep safe):
 export PULSE_SECRET_KEY=$(openssl rand -hex 32)
 
-# License key — optional; empty = Free tier (1 node, 7-day retention):
+# License key — optional; Pulse is free with all features:
 # export PULSE_LICENSE_KEY=
 
 # Official Pulse license verification key — do not change unless self-signing:
@@ -244,7 +247,7 @@ docker compose \
 > at startup so that env var must be set.
 
 > **Note — base compose defaults to the signed GHCR image:** `docker-compose.yml`
-> now defaults to `ghcr.io/aytekxr/ams-pulse:0.4.5` (cosign-signed, SBOM-attached;
+> now defaults to `ghcr.io/aytekxr/ams-pulse:0.5.0` (cosign-signed, SBOM-attached;
 > `ghcr.io/aytekxr/ams-pulse` is **public** — no `docker login` needed). Image tags
 > have no `v` prefix: the git tag `v0.4.3` publishes the image tag `0.4.3`
 > (also `0.4`, `0`, `latest`). The image tag is overridable via the `PULSE_IMAGE`
@@ -551,8 +554,8 @@ get that default; the binary runs correctly without it.
 | `PULSE_POLL_INTERVAL` | `5s` | AMS REST poll interval (e.g. `2s`, `10s`) |
 | `PULSE_WEBHOOK_ADDR` | — | Address for the AMS webhook receiver (optional) |
 | `PULSE_WEBHOOK_SECRET` | — | HMAC shared secret for webhook validation |
-| `PULSE_LICENSE_KEY` | — | License key (empty = Free tier) |
-| `PULSE_LICENSE_FILE` | — | Path to offline license file (air-gapped Enterprise) |
+| `PULSE_LICENSE_KEY` | — | License key (optional; Pulse is free with all features) |
+| `PULSE_LICENSE_FILE` | — | Path to offline license file (optional; for compatibility) |
 | `PULSE_RETENTION_DAYS` | `90` | Raw event retention in ClickHouse (days) |
 | `PULSE_ROLLUP_TTL_DAYS` | `395` | Rollup table TTL in ClickHouse (days; 395 ≈ 13 months) |
 | `PULSE_MIGRATIONS_DIR` | auto from source tree | Override path to ClickHouse migration SQL files |
@@ -563,7 +566,7 @@ get that default; the binary runs correctly without it.
 | Variable | Default | Description |
 |---|---|---|
 | `PULSE_INGEST_LISTEN_ADDR` | — (main listener) | Dedicated beacon ingest address, e.g. `:8091`. Set to expose beacon on a separate port for DMZ routing. |
-| `PULSE_METRICS_TOKEN` | — (401 without) | Prometheus scrape token. Set to enable `/metrics` with token auth. See [Prometheus guide](../guides/prometheus.md). |
+| `PULSE_METRICS_TOKEN` | — (unauthenticated) | Prometheus scrape token. When set, `/metrics` requires `Authorization: Bearer <token>`; when unset, `/metrics` is served **without authentication** (a startup warning says so). The quickstart installer generates this token in `quickstart/.env`. Set it on any reachable deployment. See [Prometheus guide](../guides/prometheus.md). |
 | `PULSE_ANONYMIZE_IP` | `false` | Set `true` to zero last IPv4 octet / last 80 IPv6 bits before geo lookup and ClickHouse storage (GDPR/KVKK posture). |
 | `PULSE_GEO_MMDB_PATH` | — (no-op) | Path to a MaxMind GeoLite2 `.mmdb` file for geo enrichment. Absent = no-op, one WARN logged. Register at maxmind.com for the free GeoLite2 download (D-007.4). |
 | `PULSE_KAFKA_BROKERS` | — (disabled) | **EXPERIMENTAL** (LIM-19: never live-validated against a real AMS broker). Comma-separated Kafka broker addresses, e.g. `kafka1:9092,kafka2:9092`. Empty = Kafka source disabled. |
@@ -619,7 +622,7 @@ geo:
   # mmdb_path: /data/GeoLite2-City.mmdb   # user-supplied; register at maxmind.com
 
 license:
-  # key: ...             # empty = Free tier
+  # key: ...             # optional; Pulse is free with all features
 ```
 
 ---
@@ -724,7 +727,7 @@ version and its `appVersion` are whatever `deploy/helm/pulse/Chart.yaml` carries
 tag you install — see the `--version` pin below):
 
 ```sh
-helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.3 \
+helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.4.0 \
   --set pulse.ams.url=http://your-ams:5080 \
   --set pulse.ams.nodeId=node-01 \
   --set pulse.secretRef.name=pulse-secrets
@@ -736,7 +739,7 @@ helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.3 \
 > the other** — ask the chart:
 >
 > ```sh
-> helm show chart oci://ghcr.io/aytekxr/charts/pulse --version 0.3.3 | grep -E '^(version|appVersion):'
+> helm show chart oci://ghcr.io/aytekxr/charts/pulse --version 0.4.0 | grep -E '^(version|appVersion):'
 > ```
 >
 > *(This note deliberately no longer states a chart-version/appVersion pair. It used
@@ -835,21 +838,16 @@ Upgrades follow the stamped-build two-step procedure in [`deploy/runbooks/upgrad
 
 ---
 
-## Free tier limits
+## Licensing
 
-Pulse starts in Free tier when no license key is configured:
+From v0.5.0 Pulse is fully free. Every feature is included on every install with
+no license key required: all alert channels (email, Slack, Telegram, PagerDuty,
+webhook), QoE beacon ingest, historical analytics, usage reports and scheduled
+exports, anomaly detection, synthetic probes, Prometheus `/metrics`, SSO/OIDC,
+and white-label PDF reports. No node, stream, or retention limits are imposed by
+licensing.
 
-| Limit | Free | Pro | Business | Enterprise |
-|---|---|---|---|---|
-| AMS source nodes | 1 | 10 | 50 | Unlimited |
-| Notification channels | Email only | Email, Slack, Telegram | Email, Slack, Telegram, PagerDuty, Webhook | All |
-| Data retention | 7 days | 90 days | 13 months | Unlimited |
-| Data API, CSV export | No | Yes | Yes | Yes |
-| Usage reports + scheduled exports | No | No | Yes | Yes |
-| White-label PDF | No | No | No | Yes |
-| Beacon ingest (QoE) | No (403 LICENSE_REQUIRED) | Yes | Yes | Yes |
-| Prometheus `/metrics` endpoint | No (403 LICENSE_REQUIRED) | No (403 LICENSE_REQUIRED) | Yes | Yes |
-
-Upgrading: set `PULSE_LICENSE_KEY` in your environment or YAML config.
-The license check **fails open for reads** — you can always read already-collected
-data even if the key is invalid. Tier-gated features fail closed (return 403).
+License keys (`PULSE_LICENSE_KEY` / `PULSE_LICENSE_FILE`) still load for
+compatibility but are not needed and change nothing. Settings → License now shows:
+_"Pulse is free — every feature is included, with no node or retention limits.
+No license key is needed."_

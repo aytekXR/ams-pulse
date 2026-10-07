@@ -1,0 +1,16 @@
+Accuracy check — run 1 (2026-10-01 ~19:20 UTC), demo stack pulse-mktdemo, image ams-pulse:mktdemo (0.4.5-10-g0cae261)
+Ground truth (seed-demo.mjs truth): one beacon session on an isolated stream (truth-1790882382357), 20 heartbeats 30 s apart
+(watch_ms cumulative 30000..600000, as the SDK sends it), one 6000 ms stall -> 1 view, 600 s watched, rebuffer ratio 1.0 %.
+
+GET /api/v1/qoe/summary totals:      {"startup_p50_ms":1000,"startup_p95_ms":1000,"rebuffer_ratio":0.0009523809523809524,"error_rate":0}
+  -> rebuffer ratio 0.095 % reported vs 1.0 % true = 10.5x understated = (n+1)/2 for n=20 heartbeats (sum of cumulative watch_ms).
+GET /api/v1/analytics/audience totals: {"views":0,"uniques":0,"watch_time_s":0,"peak_concurrency":0}
+ClickHouse rollup_audience_1h for the stream: bucket 19:00  views=20  uniques=1  watch_time_s=6300  peak=1
+  -> 20 "views" (one per heartbeat upsert row) and 6300 s (sum of cumulative upserts) for 1 view / 600 s.
+ClickHouse rollup_usage_1d sum(viewer_minutes) for the stream: 115   (truth 10)
+ClickHouse viewer_sessions FINAL sum(watch_time_s)/60:           10    (correct)
+ClickHouse viewer_sessions (no FINAL) sum(watch_time_s)/60:      20
+Direct reproduction with the real query.Service (go test -tags mktrepro, file removed afterwards):
+  interval=hour err=clickhouse [ScanRow]: (views) converting UInt64 to *int64 is unsupported. try using *uint64 result=<nil>
+  interval=day  err=<nil> result=&{Totals:{Views:0 ...} Timeseries:[]}   (Date bucket < from timestamp -> today's bucket excluded)
+API handler server/internal/api/server.go:1324-1327 swallows the error and returns zeros without logging.

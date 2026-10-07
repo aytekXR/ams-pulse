@@ -1,19 +1,25 @@
 # Pulse licensing — repo license, and how product license keys are minted & distributed
 
-Last updated: 2026-07-27 (D-181 stamp correction; last content change D-173, which
-replaced the dev key with the official verification key below).
+Last updated: 2026-10-07 (D-194 v0.5.0 all-features-free transition; last content
+change D-173 before that, which replaced the dev key with the official verification
+key below).
 
 ## 1. Repository license (what users may do with the code)
 
-- **Server, web UI, deploy tooling: PolyForm Noncommercial 1.0.0** (root `LICENSE`,
-  chosen D-066). Anyone may use, modify, and share Pulse **for noncommercial
-  purposes**; commercial use requires a separate license from the copyright
-  holder. This matches the tier model: the vendor sells commercial rights
-  (dual licensing) while the code stays source-visible.
-- **Beacon SDK: MIT** (`sdk/beacon-js/LICENSE`, unchanged). The SDK is embedded
-  in customers' players, so it stays permissive on purpose.
+- **Server, web UI, deploy tooling: PolyForm Shield License 1.0.0** (root `LICENSE`,
+  changed D-194). Anyone may use, modify, and share Pulse for any purpose,
+  including commercial use, free of charge. The one restriction is that you may
+  not use it to provide a product that competes with Pulse.
+- **Beacon SDKs: MIT** (`sdk/beacon-js/LICENSE`, `sdk/beacon-swift/LICENSE`). The
+  SDKs are embedded in customers' players, so they stay permissive on purpose.
 
-## 2. Product license keys (what unlocks paid tiers at runtime)
+**History:** Versions before v0.5.0 were released under PolyForm Noncommercial 1.0.0.
+
+## 2. Product license keys (optional from v0.5.0)
+
+From v0.5.0, Pulse runs with an "all features free" policy (`license.SetAllFeaturesFree`).
+License keys are accepted for compatibility with existing deployments, but they are
+not required and do not change what is available.
 
 A Pulse license key is a signed claims blob, not a lookup against a server:
 
@@ -33,8 +39,9 @@ Verification: `ed25519.Verify` against, in order:
    `devPublicKeyHex` is retained in the source for self-signing/test workflows
    only and is NOT the runtime default.
 
-A key that fails to parse/verify/expire **fails open to Free tier** (the server
-still runs; paid gates return 403 `LICENSE_REQUIRED`).
+In the legacy tier model, a key that failed to parse/verify/expire would fail open
+to Free tier. With the all-features-free policy active, this distinction no longer
+matters — all features are available regardless of key state.
 
 ### 2.1 One-time vendor key ceremony (operator, offline)
 
@@ -236,12 +243,14 @@ until their `expires_at`. To rotate the vendor keypair:
 
 > **Ordering hazard — read before touching `PULSE_LICENSE_PUBKEY`.**
 > `PULSE_LICENSE_PUBKEY` is read exactly once, at `Manager.New()` (i.e. server
-> startup). Rolling the env var and restarting a node **immediately** downgrades
-> every outstanding customer key to Free tier on that node — `ed25519.Verify`
-> will fail for all keys signed by the old private key. Do not restart any node
-> with the new public key until you have re-minted **all** active customer
-> licenses with the new private key and delivered the new keys to customers.
-> Plan for a coordinated cutover window.
+> startup). Rolling the env var and restarting a node **immediately** causes
+> every outstanding customer key to fail verification on that node —
+> `ed25519.Verify` will fail for all keys signed by the old private key. Under
+> the all-features-free policy this has no practical effect (all features remain
+> available), but if a paid model is reintroduced, do not restart any node with
+> the new public key until you have re-minted **all** active customer licenses
+> with the new private key and delivered the new keys to customers. Plan for a
+> coordinated cutover window.
 
 1. Generate a new keypair (step 3a).
 2. Re-mint all active customer licenses with the new private key and deliver the

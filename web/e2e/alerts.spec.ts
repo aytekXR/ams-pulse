@@ -23,7 +23,7 @@ import { stubApp, json, collectErrors } from "./support/stubs";
 const RULE_FIXTURE = {
   id: "rule-1",
   name: "High CPU Alert",
-  metric: "cpu_pct",
+  metric: "node_cpu",
   operator: "gt",
   threshold: 80,
   window_s: 300,

@@ -14,10 +14,10 @@ COPY web/ ./
 RUN npm run build
 
 # --- server ---
-# golang:1.25-alpine — digest pinned 2026-07-08 via `docker image inspect golang:1.25-alpine --format '{{index .RepoDigests 0}}'`
-# Tag: golang:1.25-alpine  Go: go1.25.12
-# To refresh: docker pull golang:1.25-alpine && docker image inspect golang:1.25-alpine --format '{{index .RepoDigests 0}}'
-FROM golang@sha256:079e59808d2d252516e27e3f3a9c003740dee7f75e55aa71528766d52bcfc16a AS server
+# golang:1.26-alpine (multi-arch index) — digest pinned 2026-10-07; Go: go1.26.8. The previous
+# pin was labelled 1.25 but was go1.26.5, whose stdlib CVEs blocked the v0.5.0 Trivy gate.
+# To refresh: docker buildx imagetools inspect golang:1.26-alpine  (use the index Digest)
+FROM golang@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c AS server
 WORKDIR /src/server
 COPY server/go.mod server/go.sum* ./
 RUN go mod download || true
@@ -31,8 +31,9 @@ RUN CGO_ENABLED=0 go build \
       -o /out/pulse ./cmd/pulse
 
 # --- runtime ---
-# alpine:3.21
-FROM alpine@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+# alpine:3.24.2 (multi-arch index) — digest pinned 2026-10-07; carries OpenSSL 3.5.8-r0
+# (CVE-2026-14456 fixed). Refresh: docker buildx imagetools inspect alpine:3.24
+FROM alpine@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 # Create the meta-store/secret-key dir owned by the non-root pulse user so a fresh
 # pulse-data named volume inherits pulse:pulse ownership (else SQLITE_CANTOPEN at /var/lib/pulse).
 RUN adduser -D -H pulse && mkdir -p /var/lib/pulse && chown pulse:pulse /var/lib/pulse

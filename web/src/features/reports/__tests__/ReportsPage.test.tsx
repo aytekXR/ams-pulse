@@ -209,6 +209,27 @@ describe("ReportsPage tier gate", () => {
     expect(screen.queryByText(/requires business tier/i)).toBeNull();
   });
 
+  // D-194: a keyless v0.5.0 server reports tier "free" with all_features_free: true.
+  it("D-194: shows usage tab on a keyless v0.5.0 server (all_features_free)", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue({
+      tier: "free",
+      valid: true,
+      all_features_free: true,
+    });
+    const { reportsApi } = await import("@/api/client");
+    vi.mocked(reportsApi.getUsage).mockResolvedValue({
+      rows: [],
+      totals: { viewer_minutes: 0, peak_concurrency: 0, egress_gb: 0, recording_gb: 0 },
+      egress_method: "bitrate_x_watch_time",
+    });
+    render(<ReportsPage />);
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /usage/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/requires business tier/i)).toBeNull();
+    expect(screen.queryByRole("link", { name: /upgrade license/i })).toBeNull();
+  });
+
   it("shows usage tab when license is 'enterprise'", async () => {
     vi.mocked(adminApi.getLicense).mockResolvedValue({
       tier: "enterprise",

@@ -113,6 +113,28 @@ describe("AuthGate — 401 redirect fix", () => {
       expect(screen.getByText(/session expired/i)).toBeInTheDocument();
     });
   });
+
+  // Regression (marketplace audit 2026-10-01): on a FIRST visit there is no token,
+  // but LicenseProvider's pre-login /admin/license fetch still 401s and fires
+  // pulse:auth:401. Telling a brand-new operator their "session expired" right
+  // after install is false — there was never a session.
+  it("does not claim a session expired when a 401 arrives and no token was ever stored", async () => {
+    mockGetToken.mockReturnValue(null);
+    render(
+      <AuthGate>
+        <div data-testid="protected">Protected</div>
+      </AuthGate>
+    );
+
+    act(() => {
+      window.dispatchEvent(new Event("pulse:auth:401"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/session expired/i)).not.toBeInTheDocument();
+  });
 });
 
 // ─── OIDC phase-2 tests (S14 WO-C) ──────────────────────────────────────────

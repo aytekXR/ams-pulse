@@ -1,7 +1,6 @@
 # Pulse — Usage Reports Runbook
 
-**PRD ref:** F6 (usage/billing reports) · **Status: Shipped (Wave 2 + V3b + Wave-3-Plus)**  
-**Tier:** Business tier required for all report access (on-demand, CSV, PDF, scheduled S3 exports). White-label PDF header requires Enterprise tier. Free and Pro tiers receive 403 on all report endpoints (enforced V3b VD-35).
+**PRD ref:** F6 (usage/billing reports) · **Status: Shipped (Wave 2 + V3b + Wave-3-Plus)**
 
 ---
 
@@ -9,8 +8,8 @@
 
 Pulse generates per-tenant viewer-minute and egress usage statements. Operators
 create tenant mapping rules that associate stream-name patterns or stream metadata
-tags with tenant identifiers. Reports are available as CSV and PDF (Business+ tier)
-with white-label PDF headers (Enterprise tier). Scheduled exports can push reports to S3.
+tags with tenant identifiers. Reports are available as CSV and PDF, with optional
+white-label PDF headers. Scheduled exports can push reports to S3.
 
 ---
 
@@ -145,7 +144,6 @@ Common presets:
 
 ### Creating a schedule via API
 
-Requires Business tier or higher (returns 403 for Free and Pro).
 
 ```sh
 # Monthly report on the 1st at 06:00 (5-field cron)
@@ -207,16 +205,12 @@ export PULSE_S3_REGION=us-east-1    # required even for S3-compatible endpoints
 
 ## White-label config
 
-The PDF statement header can show your company name and address (Enterprise tier only — `white_label` entitlement):
+The PDF statement header can show your company name and address:
 
 > **Phase-3 roadmap:** A dedicated `GET/PUT /api/v1/admin/whitelabel` endpoint
 > for global brand config (company name, address, logo URL) is planned for Wave 3
 > (CR-2, WO-205). In Wave 2, the PDF report header is minimal. White-label PDF polish
 > is a Phase-3 item.
-
-Note: **Business tier** enables report access (CSV, PDF, scheduling) but the white-label
-PDF header requires **Enterprise tier** (`white_label: true` entitlement). Business-tier
-PDF exports have a standard Pulse header.
 
 ---
 

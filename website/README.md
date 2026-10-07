@@ -2,7 +2,7 @@
 
 Static marketing and documentation site for Pulse.
 
-Last updated: 2026-07-28
+Last updated: 2026-10-07
 
 ## What this is
 
@@ -19,6 +19,7 @@ served directly. The design system is hand-coded from
 website/
   index.html          # Home page
   beta/               # iOS beta signup page
+  get/                # Get Pulse: install steps + licenses (marketplace CTA target)
   privacy/            # Privacy policy
   support/            # Support page
   terms/              # Terms of service

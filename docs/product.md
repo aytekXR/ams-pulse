@@ -30,25 +30,27 @@ to an Ant Media Server (AMS) deployment and answers, out of the box:
 agencies operating AMS for clients — anyone who must answer "is the stream OK?" for paying
 customers without shipping viewer data to a third party.
 
-**The 10 features (all shipped; current release v0.4.5):**
+**The 10 features (all shipped; current release v0.5.0):**
 
-| # | Feature | One-liner | Tier |
-|---|---|---|---|
-| F1 | Live ops dashboard | streams, viewers, nodes, ≤10 s visibility, WS push | Free+ |
-| F2 | Historical analytics | geo/device breakdowns; rollup history capped by tier retention (Pro 90 d, Business+ 13 mo) | Pro+ |
-| F3 | Player QoE beacon SDK | 3.52 KB JS SDK (MIT): startup time, rebuffer, bitrate, errors | Pro+ |
-| F4 | Ingest health | 0–100 health score per stream, degradation detection | Pro+ |
-| F5 | Alerting | email/Slack/Telegram/PagerDuty/webhook, mute, grouping, maintenance windows | Free+ (channels tiered) |
-| F6 | Usage/billing reports | per-tenant CSV/PDF, S3 export, ±1% reconciliation | Business+ |
-| F7 | Cluster fleet view | auto-discovery ≤30 s (roles not exposed by AMS 3.x — LIM-10) | Free+ |
-| F8 | Data API + Prometheus | full REST/WS API (Pro+); `/metrics` scrape (Business+) | Pro+ / Business+ |
-| F9 | Anomaly detection | Welford baselines, σ-deviation alerts, <1 false alarm/node-week | Business+ |
-| F10 | Synthetic probes | HLS probing (TTFB, bitrate); WebRTC/RTMP/DASH reachability | Pro+ |
+| # | Feature | One-liner |
+|---|---|---|
+| F1 | Live ops dashboard | streams, viewers, nodes, ≤10 s visibility, WS push |
+| F2 | Historical analytics | geo/device breakdowns; 13-month rollup history |
+| F3 | Player QoE beacon SDK | 3.52 KB JS SDK (MIT): startup time, rebuffer, bitrate, errors |
+| F4 | Ingest health | 0–100 health score per stream, degradation detection |
+| F5 | Alerting | email/Slack/Telegram/PagerDuty/webhook, mute, grouping, maintenance windows |
+| F6 | Usage/billing reports | per-tenant CSV/PDF, S3 export; viewer-minutes from player-SDK sessions are currently overstated (LIM-30, fix on the roadmap) |
+| F7 | Cluster fleet view | auto-discovery ≤30 s (roles not exposed by AMS 3.x — LIM-10) |
+| F8 | Data API + Prometheus | full REST/WS API; `/metrics` scrape |
+| F9 | Anomaly detection | Welford baselines, σ-deviation alerts, <1 false alarm/node-week |
+| F10 | Synthetic probes | HLS probing (TTFB, bitrate); WebRTC/RTMP/DASH reachability |
 
-**Tiers:** Free / Pro / Business / Enterprise — enforced by ed25519-signed license keys
-(`docs/licensing.md`; server gates return 403 `LICENSE_REQUIRED`).
+**Pricing:** Pulse is free: every feature, no license key, no node or retention limits.
+This is the launch policy for at least the first year (from October 2026).
 
-**License:** server + web + deploy = PolyForm Noncommercial 1.0.0; beacon SDK = MIT.
+**License:** Pulse is free for any use, including commercial use, under the PolyForm
+Shield License 1.0.0 — the one restriction is that you may not use it to provide a
+product that competes with Pulse. The beacon SDKs are MIT-licensed.
 
 ---
 
@@ -57,16 +59,17 @@ customers without shipping viewer data to a third party.
 - **Problem (§7.2):** AMS operators have no product-grade visibility into audience or QoE;
   DIY Grafana stacks measure servers, not viewers, and take weeks to build.
 - **UVP (§7.8):** "See every viewer, every stream, every node — in real time, on your own
-  infrastructure." Installs in minutes; zero AMS modification; tiered so a solo operator
-  starts free and a platform pays for QoE/billing/anomaly depth.
+  infrastructure." Installs in minutes; zero AMS modification. (The PRD tiered it so a solo
+  operator starts free and a platform pays for QoE/billing/anomaly depth; since v0.5.0 every
+  feature is free on every install.)
 - **Numeric acceptance criteria** (the binding ones; full list `docs/ARCHITECTURE.md` §4):
   stream visible on dashboard ≤10 s after publish; ingest-degradation detection ≤15 s;
   13-month dimensional analytics query ≤3 s; alert detect→notify ≤5 s; beacon SDK ≤15 KB
   gzip; dashboard usable at 500 concurrent streams; install→first-dashboard ≤10 min.
 - **Non-goals:** not a CDN, not a player, not a transcoder controller, not multi-CMS
   analytics (AMS-only by design), not SaaS.
-- **Business model (§7.13):** free tier as funnel; Pro/Business/Enterprise license keys sold
-  by the vendor (minting ceremony: `docs/licensing.md` §3); noncommercial self-hosting free.
+- **Business model (§7.13):** Pulse is free — every feature, no license key needed, no
+  node or retention limits. Commercial use is permitted under PolyForm Shield 1.0.0.
 - **Post-GA roadmap (ROADMAP-V2 §2/§3):** anomaly rule type in-product, SSO/OIDC, white-label
   PDF, Postgres meta store (HA), native WebRTC/RTMP/DASH probes, mobile beacon SDKs.
 

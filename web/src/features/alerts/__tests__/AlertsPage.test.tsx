@@ -65,8 +65,8 @@ describe("AlertsPage (msw)", () => {
   it("renders the metric/operator/threshold detail line", async () => {
     renderAlerts();
     await waitForRulesLoaded();
-    // Rendered as "cpu_pct gt 80 · window 300s · cooldown 300s"
-    expect(screen.getByText(/cpu_pct/)).toBeInTheDocument();
+    // Rendered as "node_cpu gt 80 · window 300s · cooldown 300s"
+    expect(screen.getByText(/node_cpu/)).toBeInTheDocument();
   });
 
   it("shows 'New rule' button on the rules tab after load", async () => {
@@ -110,7 +110,7 @@ describe("AlertsPage (msw)", () => {
           {
             id: "rule-created",
             name: "CPU Alert Test",
-            metric: "cpu_pct",
+            metric: "node_cpu",
             operator: "gt",
             threshold: 75,
             window_s: 300,
@@ -152,6 +152,56 @@ describe("AlertsPage (msw)", () => {
     expect((capturedBody as { name: string }).name).toBe("CPU Alert Test");
     expect((capturedBody as { threshold: number }).threshold).toBe(75);
     expect((capturedBody as { enabled: boolean }).enabled).toBe(true);
+  });
+
+  // D-194: a refused save used to escape as an unhandled rejection — Save re-enabled and the
+  // user saw nothing. It must say why and keep the form (and the user's input) open.
+  it("a refused save shows the server's reason and keeps the form open", async () => {
+    const user = userEvent.setup({ delay: null });
+    server.use(
+      http.post("http://localhost/api/v1/alerts/rules", () =>
+        HttpResponse.json(
+          { code: "INVALID_RULE", message: "invalid alert rule spec: window_s must be <= 604800" },
+          { status: 422 },
+        ),
+      ),
+    );
+
+    renderAlerts();
+    await waitForRulesLoaded();
+    await user.click(screen.getByRole("button", { name: /^new rule$/i }));
+    await user.type(screen.getByPlaceholderText(/e\.g\. High CPU/i), "Refused rule");
+    await user.type(screen.getByPlaceholderText("0"), "75");
+    await user.click(screen.getByRole("button", { name: /save rule/i }));
+
+    expect(await screen.findByText(/Rule not saved: invalid alert rule spec/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /new alert rule/i })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/e\.g\. High CPU/i)).toHaveValue("Refused rule");
+    expect(screen.getByRole("button", { name: /save rule/i })).toBeEnabled();
+  });
+
+  it("a refused channel save shows the server's reason and keeps the form open", async () => {
+    const user = userEvent.setup({ delay: null });
+    server.use(
+      http.post("http://localhost/api/v1/alerts/channels", () =>
+        HttpResponse.json(
+          { code: "INVALID_CHANNEL", message: "smtp_addr resolves to a blocked address" },
+          { status: 422 },
+        ),
+      ),
+    );
+
+    renderAlerts();
+    await waitForRulesLoaded();
+    await user.click(screen.getByRole("tab", { name: /channels/i }));
+    await user.click(await screen.findByRole("button", { name: /^new channel$/i }));
+    await user.type(screen.getByPlaceholderText(/e\.g\. Ops team Slack/i), "Ops mail");
+    await user.type(screen.getByPlaceholderText("alerts@example.com"), "ops@example.com");
+    await user.click(screen.getByRole("button", { name: /save channel/i }));
+
+    expect(await screen.findByText(/Channel not saved: smtp_addr resolves to a blocked address/)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/e\.g\. Ops team Slack/i)).toHaveValue("Ops mail");
+    expect(screen.getByRole("button", { name: /save channel/i })).toBeEnabled();
   });
 
   it("shows empty-state on Channels tab when API returns no channels", async () => {

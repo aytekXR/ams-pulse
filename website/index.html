@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pulse - Real-Time Analytics for Ant Media Server</title>
+  <title>Pulse for Ant Media Server - Real-Time Analytics</title>
   <meta name="description" content="Self-hosted streaming analytics, alerting, and viewer QoE for Ant Media Server operators. Read-only integration, data never leaves your infrastructure.">
 
   <!-- Open Graph -->
@@ -40,8 +40,8 @@
       <div class="nav-links">
         <a href="#features">Features</a>
         <a href="#how-it-works">How it works</a>
-        <a href="#tiers">Tiers</a>
         <a href="#faq">FAQ</a>
+        <a href="get/">Get Pulse</a>
         <a href="beta/" class="btn btn-sm btn-secondary">iOS Beta</a>
         <a href="https://github.com/aytekXR/ams-pulse" class="btn btn-sm btn-primary">GitHub</a>
       </div>
@@ -61,8 +61,8 @@
         On your infrastructure. Never ours.
       </p>
       <div class="flex gap-4 justify-center" style="margin-top:var(--space-5);">
-        <a href="https://github.com/aytekXR/ams-pulse" class="btn btn-primary">View on GitHub</a>
-        <a href="#how-it-works" class="btn btn-secondary">See how it works</a>
+        <a href="get/" class="btn btn-primary">Get Pulse</a>
+        <a href="https://github.com/aytekXR/ams-pulse" class="btn btn-secondary">View on GitHub</a>
       </div>
       <!-- Source: docs/ARCHITECTURE.md section 4 numeric acceptance criteria -->
       <!-- STREAM VISIBLE: budget 10 s, measured 1.50 s (B-01); ALERT DELIVERY: budget 30 s, measured 201 ms (VD-31); BEACON SDK: 3.52 KB gzip (C-W2-03); 13-MONTH QUERY: budget 3 s, measured 145 ms (C9b) -->
@@ -87,7 +87,6 @@
         <div class="grid grid-auto">
           <!-- F1: Live ops dashboard - Source: docs/product.md feature table row F1; docs/marketplace/listing.md bullet 1 -->
           <div class="card">
-            <p class="label text-signal mb-3">F1 - FREE</p>
             <h3 class="mb-3">Live ops dashboard</h3>
             <p class="text-secondary mb-0">
               Streams, viewers, nodes with real-time visibility over WebSocket push.
@@ -96,7 +95,6 @@
           </div>
           <!-- F2: Historical analytics - Source: docs/product.md feature table row F2 -->
           <div class="card">
-            <p class="label text-signal mb-3">F2 - PRO</p>
             <h3 class="mb-3">Historical analytics</h3>
             <p class="text-secondary mb-0">
               Geo and device breakdowns with rollup history. Dimensional queries answer
@@ -105,7 +103,6 @@
           </div>
           <!-- F3: QoE beacon SDK - Source: docs/product.md feature table row F3; docs/marketplace/listing.md bullet 2 -->
           <div class="card">
-            <p class="label text-signal mb-3">F3 - PRO</p>
             <h3 class="mb-3">Player QoE beacon SDK</h3>
             <p class="text-secondary mb-0">
               3.52 KB MIT-licensed JavaScript SDK measures startup time, rebuffering,
@@ -114,7 +111,6 @@
           </div>
           <!-- F4: Ingest health - Source: docs/product.md feature table row F4 -->
           <div class="card">
-            <p class="label text-signal mb-3">F4 - PRO</p>
             <h3 class="mb-3">Ingest health</h3>
             <p class="text-secondary mb-0">
               A 0-100 health score per stream from bitrate, FPS, keyframe cadence, loss,
@@ -123,16 +119,14 @@
           </div>
           <!-- F5: Alerting - Source: docs/product.md feature table row F5; docs/marketplace/listing.md bullet 3 -->
           <div class="card">
-            <p class="label text-signal mb-3">F5 - FREE+</p>
             <h3 class="mb-3">Alerting</h3>
             <p class="text-secondary mb-0">
               Email, Slack, Telegram, PagerDuty, and webhooks with grouping, muting,
-              and maintenance windows. Channels gated by tier.
+              and maintenance windows.
             </p>
           </div>
           <!-- F6: Usage/billing reports - Source: docs/product.md feature table row F6; docs/marketplace/listing.md bullet 5 -->
           <div class="card">
-            <p class="label text-signal mb-3">F6 - BUSINESS</p>
             <h3 class="mb-3">Usage and billing reports</h3>
             <p class="text-secondary mb-0">
               Per-tenant CSV and PDF statements with S3 export. Viewer-minutes reconciled
@@ -141,7 +135,6 @@
           </div>
           <!-- F7: Cluster fleet view - Source: docs/product.md feature table row F7 -->
           <div class="card">
-            <p class="label text-signal mb-3">F7 - FREE</p>
             <h3 class="mb-3">Cluster fleet view</h3>
             <p class="text-secondary mb-0">
               Auto-discovers AMS cluster nodes within 30 seconds with per-node IDs,
@@ -150,16 +143,14 @@
           </div>
           <!-- F8: Data API + Prometheus - Source: docs/product.md feature table row F8; docs/marketplace/listing.md bullet 4 -->
           <div class="card">
-            <p class="label text-signal mb-3">F8 - PRO+ / BUSINESS+</p>
             <h3 class="mb-3">Data API + Prometheus</h3>
             <p class="text-secondary mb-0">
-              The full REST and WebSocket API the dashboard uses (Pro and above), plus a
-              /metrics scrape endpoint for existing Prometheus stacks (Business and above).
+              The full REST and WebSocket API the dashboard uses, plus a
+              /metrics scrape endpoint for existing Prometheus stacks.
             </p>
           </div>
           <!-- F9: Anomaly detection - Source: docs/product.md feature table row F9; docs/marketplace/listing.md bullet 6 -->
           <div class="card">
-            <p class="label text-signal mb-3">F9 - BUSINESS+</p>
             <h3 class="mb-3">Anomaly detection</h3>
             <p class="text-secondary mb-0">
               Welford online baselines flag sigma-deviations in viewers, CPU, and memory.
@@ -168,7 +159,6 @@
           </div>
           <!-- F10: Synthetic probes - Source: docs/product.md feature table row F10 -->
           <div class="card">
-            <p class="label text-signal mb-3">F10 - PRO</p>
             <h3 class="mb-3">Synthetic probes</h3>
             <p class="text-secondary mb-0">
               HLS probing from outside-in: manifest and segment TTFB, measured bitrate,
@@ -268,84 +258,49 @@
       </div>
     </section>
 
-    <!-- TIERS SECTION -->
-    <!-- Source: server/internal/license/license.go tier constants; docs/faq.md Q10; docs/overview.md tier table -->
-    <section id="tiers" class="section section-alt">
-      <div class="container">
+    <!-- LICENSE SECTION -->
+    <section id="license" class="section section-alt">
+      <div class="container" style="max-width:860px;">
         <div class="section-header">
-          <p class="label text-signal">TIERS</p>
-          <h2>Start free. Pay for depth.</h2>
+          <p class="label text-signal">LICENSE</p>
+          <h2>Free for any use.</h2>
         </div>
-        <p class="text-secondary mb-7 max-w-prose">
-          All tiers are self-hosted with offline ed25519 license keys — no phone-home, ever.
-          Noncommercial self-hosting is free under PolyForm Noncommercial.
-        </p>
-        <!-- Source: server/internal/license/license.go lines 83-88; docs/overview.md tier table; docs/faq.md Q10 -->
-        <div class="grid grid-auto-lg">
-          <!-- FREE tier -->
+        <div class="card card-featured">
+          <p class="text-secondary mb-4">
+            Pulse is free for any use, including commercial use, under the
+            <a href="https://polyformproject.org/licenses/shield/1.0.0/">PolyForm Shield License 1.0.0</a> —
+            the one restriction is that you may not use it to provide a product that competes with Pulse.
+          </p>
+          <p class="text-secondary mb-4">
+            Every feature, no license key, no node or retention limits — free for at least the first year.
+          </p>
+          <p class="text-secondary mb-0">
+            The Beacon SDKs (embedded in video players) remain MIT-licensed.
+          </p>
+        </div>
+        <div class="grid grid-auto mt-6">
           <div class="card">
-            <p class="label text-signal mb-3">FREE</p>
-            <h3 class="mb-4">Solo operators</h3>
-            <ul class="text-secondary" style="padding-left:var(--space-5);line-height:2;">
-              <!-- Source: docs/overview.md tier table: Free row.
-                   Historical analytics (F2) and ingest health (F4) are NOT here:
-                   both are CheckDataAPI-gated on the server, i.e. Pro+. They were
-                   listed as Free and a Free user following this would have hit a
-                   403 on both. -->
-              <li>Live dashboard + fleet view</li>
-              <li>Email alerts only</li>
-              <li>1 AMS node, 7-day retention</li>
-            </ul>
+            <h3 class="mb-3">No license key needed</h3>
+            <p class="text-secondary mb-0">
+              All features are unlocked by default. License keys still work for compatibility
+              but are not required.
+            </p>
           </div>
-          <!-- PRO tier -->
-          <div class="card card-featured">
-            <p class="label text-signal mb-3">PRO</p>
-            <h3 class="mb-4">Production streams</h3>
-            <ul class="text-secondary" style="padding-left:var(--space-5);line-height:2;">
-              <!-- Source: docs/overview.md tier table: Pro row -->
-              <li>Everything in Free</li>
-              <li>Historical analytics (geo + device breakdowns)</li>
-              <li>Ingest health scoring</li>
-              <li>Player QoE beacon SDK</li>
-              <li>Synthetic HLS probes</li>
-              <li>Slack + Telegram alerts</li>
-              <li>Data API</li>
-              <li>90-day retention, up to 10 nodes</li>
-            </ul>
-          </div>
-          <!-- BUSINESS tier -->
           <div class="card">
-            <p class="label text-signal mb-3">BUSINESS</p>
-            <h3 class="mb-4">Platforms and agencies</h3>
-            <ul class="text-secondary" style="padding-left:var(--space-5);line-height:2;">
-              <!-- Source: docs/overview.md tier table: Business row -->
-              <li>Everything in Pro</li>
-              <li>Usage and billing reports</li>
-              <li>Multi-tenant CSV/PDF + S3</li>
-              <li>PagerDuty + webhook channels</li>
-              <li>Prometheus /metrics</li>
-              <li>Anomaly detection (sigma-baselines)</li>
-              <li>13-month retention, up to 50 nodes</li>
-            </ul>
+            <h3 class="mb-3">No limits</h3>
+            <p class="text-secondary mb-0">
+              No node count limits, no stream limits, no retention caps imposed by licensing.
+              Scale as your infrastructure requires.
+            </p>
           </div>
-          <!-- ENTERPRISE tier -->
           <div class="card">
-            <p class="label text-signal mb-3">ENTERPRISE</p>
-            <h3 class="mb-4">OEM and broadcast</h3>
-            <ul class="text-secondary" style="padding-left:var(--space-5);line-height:2;">
-              <!-- Source: docs/overview.md tier table: Enterprise row -->
-              <li>Everything in Business</li>
-              <li>White-label + OEM embedding</li>
-              <li>SSO / OIDC</li>
-              <li>Priority support</li>
-              <li>Unlimited nodes and retention</li>
-            </ul>
+            <h3 class="mb-3">Commercial use included</h3>
+            <p class="text-secondary mb-0">
+              Use Pulse commercially at no cost. The only restriction: do not use Pulse
+              to build a competing product.
+            </p>
           </div>
         </div>
-        <!-- Source: docs/marketplace/listing.md tier table note -->
-        <p class="text-muted caption text-center mt-6">
-          Pricing is set by the operator. Contact for current rates and trial access.
-        </p>
       </div>
     </section>
 
@@ -372,8 +327,8 @@
           <summary>Does my data leave my infrastructure?</summary>
           <p>
             No. Pulse is entirely self-hosted. There is no SaaS component and no phone-home.
-            License verification is offline — keys are validated locally via an ed25519 signature
-            check. Viewer IPs from the beacon SDK are SHA-256 hashed before storage.
+            Pulse needs no license key and contacts no activation server. Viewer IP addresses are never stored: the beacon endpoint uses them only in
+            memory, for an optional GeoIP lookup you enable yourself.
           </p>
         </details>
         <!-- Source: docs/faq.md Q5; docs/marketplace/listing.md install summary -->
@@ -391,16 +346,16 @@
           <p>
             Keep them — Pulse ships a /metrics endpoint. Grafana measures your servers; Pulse
             measures your audience: who is watching, on what device, with what startup time and
-            rebuffer ratio, deduplicated across origin and edge nodes.
+            rebuffer ratio — and alerts you when it goes wrong.
           </p>
         </details>
-        <!-- Source: docs/faq.md Q9 -->
+        <!-- Source: docs/faq.md Q9 (updated for free model) -->
         <details>
-          <summary>What happens when my license expires?</summary>
+          <summary>Do I need a license key?</summary>
           <p>
-            Pulse degrades gracefully to Free tier. The server keeps running; you can still read
-            all already-collected data. Tier-gated features return 403 LICENSE_REQUIRED. A banner
-            appears in the UI indicating the license state. Nothing crashes.
+            No. All features are unlocked by default. License keys still work for compatibility
+            with earlier deployments, but new installations do not need one. Pulse is free for
+            any use, including commercial use, under the PolyForm Shield License 1.0.0.
           </p>
         </details>
         <!-- Source: docs/faq.md Q12 -->
@@ -495,15 +450,25 @@
           <div class="card">
             <h3 class="mb-3">Interactive PDF export is not implemented</h3>
             <p class="text-secondary mb-0">
-              On-demand <code>format=pdf</code> returns 501. Scheduled PDF reports (Business+) work.
+              On-demand <code>format=pdf</code> returns 501. Scheduled PDF reports work.
               Use CSV export or browser Print for one-off PDFs.
               <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/known-limitations.md#lim-24-interactive-pdf-export-is-not-implemented-scheduled-pdf-reports-are">LIM-24</a>
+            </p>
+          </div>
+          <!-- LIM-30: SDK-session aggregates (found 2026-10-01, D-193) -->
+          <div class="card">
+            <h3 class="mb-3">SDK-session analytics are being fixed</h3>
+            <p class="text-secondary mb-0">
+              For player-SDK sessions, the Audience summary currently shows zero, usage viewer-minutes
+              run high and QoE rebuffer/error ratios run low. Live dashboard, alerting on live metrics,
+              ingest health and probes are unaffected.
+              <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/known-limitations.md#lim-30-audience-analytics-usage-viewer-minutes-and-qoe-ratios-are-wrong-for-player-sdk-sessions">LIM-30</a>
             </p>
           </div>
         </div>
         <p class="text-secondary text-center mt-6">
           <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/known-limitations.md">
-            Full limitations list (28 entries)
+            Full limitations list (29 active)
           </a>
         </p>
       </div>
@@ -514,11 +479,12 @@
       <div class="container text-center">
         <h2 class="mb-4">See every viewer. Tonight.</h2>
         <p class="text-secondary max-w-prose mb-6" style="margin-left:auto;margin-right:auto;">
-          The free tier needs no key, no signup, no phone-home. Fifteen minutes from
+          Every feature, no key, no signup, no phone-home. Fifteen minutes from
           <code>docker compose up</code> to your first live dashboard.
         </p>
         <div class="flex gap-4 justify-center" style="flex-wrap:wrap;">
-          <a href="https://github.com/aytekXR/ams-pulse" class="btn btn-primary">View on GitHub</a>
+          <a href="get/" class="btn btn-primary">Get Pulse</a>
+          <a href="https://github.com/aytekXR/ams-pulse" class="btn btn-secondary">View on GitHub</a>
           <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/runbooks/install.md" class="btn btn-secondary">Install Guide</a>
           <a href="beta/" class="btn btn-secondary">iOS Beta</a>
         </div>
@@ -546,7 +512,7 @@
         <a href="privacy/">Privacy</a>
         <a href="terms/">Terms</a>
       </div>
-      <p class="footer-legal">PolyForm Noncommercial 1.0.0 (server) / MIT (beacon SDK)</p>
+      <p class="footer-legal">PolyForm Shield 1.0.0 (server) / MIT (beacon SDK)</p>
     </div>
   </footer>
 </body>

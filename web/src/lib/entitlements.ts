@@ -28,6 +28,23 @@ export type Tier = components["schemas"]["LicenseInfo"]["tier"];
 export const TIER_ORDER: readonly Tier[] = ["free", "pro", "business", "enterprise"] as const;
 
 /**
+ * The tier to pass to the predicates below — call sites gate on
+ * `canUseX(gatingTier(license))`, never on `license.tier` directly.
+ *
+ * D-194 (v0.5.0): Pulse is free. The server reports `all_features_free: true`
+ * and opens every gate (license.SetAllFeaturesFree), so this returns the top
+ * tier and every predicate passes. A server older than v0.5.0 omits the field
+ * and still enforces tiers, so the real tier is returned. `undefined` while the
+ * license is unknown — the predicates deny it, as before.
+ */
+export function gatingTier(
+  license: { tier?: string | null; all_features_free?: boolean } | null | undefined,
+): string | undefined {
+  if (license?.all_features_free) return "enterprise";
+  return license?.tier ?? undefined;
+}
+
+/**
  * True when `tier` is at least `min`.
  *
  * An unrecognised tier string returns false (deny), matching the server's

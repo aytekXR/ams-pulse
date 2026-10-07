@@ -1,7 +1,14 @@
 # Activating your Pulse license
 
+> **Pulse v0.5.0 and later need no license key.** Every feature is included on every
+> install, for any use including commercial (see [licensing-public.md](../licensing-public.md)).
+> A key you still load is verified and reported by `GET /api/v1/admin/license`, but it
+> changes nothing: no feature is gated and no limit applies, whether the key is valid,
+> expired or absent. This guide is kept for installs that carry a legacy key and for a
+> possible future paid model.
+
 This guide is for a customer who has received a `PULSE_LICENSE_KEY` value and
-wants to enable their paid tier on a running Pulse deployment.
+wants to load it on a running Pulse deployment.
 
 If you are the vendor minting new keys, see `docs/licensing.md` instead.
 
@@ -136,21 +143,15 @@ deployment and retry.
 
 ## What happens when the license expires
 
-Pulse **fails open**. When `expires_at` passes:
-
-- The server keeps running; already-collected data remains accessible.
-- Paid-tier endpoints return **403 `LICENSE_REQUIRED`** until a new key is
-  activated.
-- The effective tier reverts to `free` for gate checks (1 node, 7-day
-  retention, no Data API, no Slack/PagerDuty alerts).
-
-To avoid a gap in service, activate a renewed key before expiry using
-Route C (no restart needed). Your vendor can issue a new key with
-`-expires 365` at `qa/licensegen`.
+**Since v0.5.0, nothing changes for your users.** When `expires_at` passes, the
+license endpoint reports the key as no longer valid, and every feature stays enabled
+with no limits — the all-features-free policy does not depend on the key. (Before
+v0.5.0, an expired key dropped the install to the Free tier's limits and paid-tier
+endpoints returned `403 LICENSE_REQUIRED`.)
 
 ## Reading the tier in the UI
 
-Navigate to **Settings → License** (top-right menu). The current tier,
-expiry date (if set), and per-feature limits are shown there. The UI
+Navigate to **Settings → License** (top-right menu). Since v0.5.0 the tab says
+Pulse is free and shows every limit as "Unlimited". The UI
 reads `GET /api/v1/admin/license` on page load — the same endpoint you
 called above.

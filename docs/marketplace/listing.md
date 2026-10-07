@@ -1,5 +1,16 @@
 # Pulse — Marketplace Listing Copy
 
+> ⚠ **Superseded (2026-10-07).** The pricing, licensing, and tier information in this file
+> is outdated. From v0.5.0 Pulse is fully free under the PolyForm Shield License 1.0.0 — all
+> features are included with no license key required. For the current marketplace copy, see
+> [`antmedia-submission/marketplace/marketplace-copy.md`](antmedia-submission/marketplace/marketplace-copy.md).
+> Until the analytics accuracy defects D1–D4 in
+> [`antmedia-submission/marketplace/submission-notes.md`](antmedia-submission/marketplace/submission-notes.md) §4
+> are fixed, **do not paste** these claims from below: "viewer-minutes reconciled to ±1%" (long
+> description and bullet 5) and the SS4 "Audience analytics" screenshot description. The screenshots
+> listed at the end of this file were route-mocked (no backend); the new package's screenshots
+> come from a running stack.
+
 > **Submission copy.** This file contains the exact text to paste into the Ant Media Marketplace
 > listing form. It has no internal identifiers, no internal notes, and no negotiating context.
 > Internal working notes, source-code cross-references, and decision history are in
@@ -216,7 +227,7 @@ Pulse installs in under 15 minutes via:
 - **Docker Compose** — `install.sh` (health-gated, no-TTY safe) sets up the full stack with a
   single command; database migrations are baked into the Docker image (no bind mount required).
 - **Helm** — chart published to GHCR as an OCI artifact, anonymously pullable:
-  `helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.3`. Installing from
+  `helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.4.0`. Installing from
   a local chart path is also supported.
 - **Binary** — build from source with Go 1.25+, or use the checksummed release binaries
   (`pulse-linux-amd64` / `pulse-linux-arm64`, verifiable against the `SHA256SUMS` asset)

@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import type { AlertRule, AlertRuleWrite } from "@/lib/api/types";
+import { ANOMALY_METRICS, THRESHOLD_METRICS, isSupportedMetric, metricForRuleType } from "./metrics";
 
 interface Props {
   initial?: AlertRule;
@@ -7,27 +8,8 @@ interface Props {
   onCancel: () => void;
 }
 
-// All metrics supported by threshold rules.
-const METRICS = [
-  "viewer_count",
-  "ingest_bitrate_kbps",
-  "cpu_pct",
-  "mem_pct",
-  "packet_loss_pct",
-  "jitter_ms",
-  "rtt_ms",
-  "health_score",
-  "rebuffer_ratio",
-  // D-087: node up/down and degraded status (rung 2 + rung 3 of early-warning ladder).
-  "node_degraded",
-  "node_down",
-];
-
-// Anomaly rules: only metrics tracked by the Welford Detector.
-// Detector tracks: viewers (-> "viewer_count"), ingest_bitrate_kbps (stream-scoped),
-// cpu_pct, mem_pct, disk_pct (node-scoped), ams_api_latency_ms (node-scoped, D-087).
-// window_s must be 3600 (anomaly.go hardcoded Detector window).
-const ANOMALY_METRICS = ["viewer_count", "ingest_bitrate_kbps", "cpu_pct", "mem_pct", "disk_pct", "ams_api_latency_ms"];
+// Metric lists live in ./metrics.ts, pinned to the server's lists by a test. Anomaly rules
+// take only what the Welford detector tracks, and window_s must be 3600 (its fixed window).
 
 const OPERATORS = ["gt", "lt", "gte", "lte", "eq"] as const;
 const SEVERITIES = ["info", "warning", "critical"] as const;
@@ -42,14 +24,9 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
   const [minSamples, setMinSamples] = useState(String(initial?.min_samples ?? "30"));
 
   const [name, setName] = useState(initial?.name ?? "");
-  // In anomaly mode, metric is restricted to ANOMALY_METRICS.
-  const [metric, setMetric] = useState(() => {
-    const m = initial?.metric ?? METRICS[0];
-    if (initial?.rule_type === "anomaly" && !ANOMALY_METRICS.includes(m)) {
-      return ANOMALY_METRICS[0];
-    }
-    return m;
-  });
+  // An existing rule keeps its stored metric, even one the form does not offer: the select
+  // then lists it too, so it shows what the rule really watches.
+  const [metric, setMetric] = useState(initial?.metric ?? THRESHOLD_METRICS[0]);
   const [operator, setOperator] = useState<"gt" | "lt" | "gte" | "lte" | "eq">(
     initial?.operator ?? "gt",
   );
@@ -74,18 +51,18 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
   const thresholdRef = useRef<HTMLInputElement>(null);
   const sigmaRef = useRef<HTMLInputElement>(null);
 
-  // Handle rule type switch: enforce constraints when switching to anomaly.
+  // Handle rule type switch: the two types accept different metrics (node_cpu ↔ cpu_pct …),
+  // and anomaly rules require window_s=3600.
   const handleRuleTypeChange = (newType: "threshold" | "anomaly") => {
     setRuleType(newType);
+    setMetric(metricForRuleType(metric, newType));
     if (newType === "anomaly") {
-      // Lock window to 3600 (only valid window for anomaly rules).
       setWindowS(3600);
-      // Restrict metric to anomaly-supported metrics.
-      if (!ANOMALY_METRICS.includes(metric)) {
-        setMetric(ANOMALY_METRICS[0]);
-      }
     }
   };
+
+  const offeredMetrics = ruleType === "anomaly" ? ANOMALY_METRICS : THRESHOLD_METRICS;
+  const metricOptions = offeredMetrics.includes(metric) ? offeredMetrics : [...offeredMetrics, metric];
 
   // Returns the error map and calls setErrors; caller checks Object.keys(errs).length.
   const validate = (): Record<string, string> => {
@@ -219,8 +196,10 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
         <div style={fieldStyle}>
           <label htmlFor="rule-metric" style={labelStyle}>Metric</label>
           <select id="rule-metric" className="filter-input" style={inputStyle} value={metric} onChange={(e) => setMetric(e.target.value)}>
-            {(ruleType === "anomaly" ? ANOMALY_METRICS : METRICS).map((m) => (
-              <option key={m} value={m}>{m}</option>
+            {metricOptions.map((m) => (
+              <option key={m} value={m}>
+                {isSupportedMetric(m, ruleType) ? m : `${m} (not supported — choose another)`}
+              </option>
             ))}
           </select>
         </div>

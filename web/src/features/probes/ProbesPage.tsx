@@ -33,7 +33,7 @@ import { Badge } from "@/components/Badge";
 import { useToast } from "@/components/Toast";
 import { TierGate } from "@/components/TierGate";
 import type { Probe, ProbeWrite, ProbeResult, LicenseInfo } from "@/lib/api/types";
-import { canUseProbes } from "@/lib/entitlements";
+import { canUseProbes, gatingTier } from "@/lib/entitlements";
 
 // ─── Synthetic label badge ────────────────────────────────────────────────────
 
@@ -1185,7 +1185,7 @@ export function ProbesPage() {
   // DENIED, not granted. The server made exactly this change in D-133/S71 and the
   // client had kept the old negative check.
   useEffect(() => {
-    if (license && canUseProbes(license.tier)) {
+    if (license && canUseProbes(gatingTier(license))) {
       fetchProbes();
     }
   }, [license, fetchProbes]);
@@ -1247,7 +1247,7 @@ export function ProbesPage() {
   }
 
   // Gate: only Pro+ (positive membership — see the fetch effect above)
-  if (license && !canUseProbes(license.tier)) {
+  if (license && !canUseProbes(gatingTier(license))) {
     return (
       <div style={{ maxWidth: 700, margin: "0 auto", paddingTop: 40 }}>
         <h1 className="page-title" style={{ margin: "0 0 var(--space-5)" }}>

@@ -29,6 +29,7 @@ import {
   canUseProbes,
   canUseReports,
   canUseSSO,
+  gatingTier,
   isChannelAllowed,
   tierAtLeast,
   type Tier,
@@ -172,5 +173,40 @@ describe("VD-01: notification channel entitlement matrix (PRD §7.11)", () => {
 
   it("an unknown channel type is denied on every tier", () => {
     for (const t of ALL_TIERS) expect(isChannelAllowed(t, "carrier-pigeon")).toBe(false);
+  });
+});
+
+/**
+ * D-194 (v0.5.0): Pulse is free — every feature, for everyone. The server says so
+ * with `all_features_free: true` on GET /admin/license and opens every gate
+ * (license.SetAllFeaturesFree). The client must then show no upgrade prompt
+ * anywhere, whatever `tier` says, while an older server that omits the field keeps
+ * enforcing tiers. Every row of MATRIX runs through gatingTier here, so a new gated
+ * feature is covered automatically.
+ */
+describe("D-194: all_features_free unlocks every gate", () => {
+  const freeForAll = { tier: "free" as Tier, all_features_free: true };
+
+  for (const row of MATRIX) {
+    it(`${row.feature} is unlocked on a keyless v0.5.0 server`, () => {
+      expect(row.fn(gatingTier(freeForAll) as string)).toBe(true);
+    });
+  }
+
+  it("every notification channel is unlocked", () => {
+    for (const ch of ["email", "slack", "telegram", "pagerduty", "webhook"]) {
+      expect(isChannelAllowed(gatingTier(freeForAll), ch)).toBe(true);
+    }
+  });
+
+  it("an older server without the field keeps tier enforcement", () => {
+    expect(gatingTier({ tier: "free" })).toBe("free");
+    expect(gatingTier({ tier: "pro", all_features_free: false })).toBe("pro");
+    expect(canUseReports(gatingTier({ tier: "free" }))).toBe(false);
+  });
+
+  it("no license (still loading or the fetch failed) gives no tier", () => {
+    expect(gatingTier(null)).toBeUndefined();
+    expect(gatingTier(undefined)).toBeUndefined();
   });
 });

@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Get Pulse - Pulse for Ant Media Server</title>
+  <meta name="description" content="Install Pulse next to your Ant Media Server in minutes: one-command installer, AMS access checklist, free for any use.">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Get Pulse - Pulse for Ant Media Server">
+  <meta property="og:description" content="Install Pulse next to your Ant Media Server in minutes. Every feature, free for any use.">
+  <meta property="og:image" content="../assets/og-image.png">
+  <meta property="og:url" content="https://aytekxr.github.io/ams-pulse/get/">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Get Pulse - Pulse for Ant Media Server">
+  <meta name="twitter:description" content="Install Pulse next to your Ant Media Server in minutes. Every feature, free for any use.">
+  <meta name="twitter:image" content="../assets/og-image.png">
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../assets/favicon-16.png">
+
+  <link rel="stylesheet" href="../assets/pulse.css">
+</head>
+<body>
+  <a href="#main" class="sr-only">Skip to main content</a>
+
+  <!-- NAV -->
+  <nav class="nav" aria-label="Main navigation">
+    <div class="container nav-inner">
+      <a href="../" class="nav-brand" aria-label="Pulse home">
+        <img src="../assets/pulse-mark.svg" alt="" width="32" height="32">
+        <span class="nav-brand-name">pulse</span>
+        <span class="nav-brand-sub">for Ant Media Server</span>
+      </a>
+      <div class="nav-links">
+        <a href="../#features">Features</a>
+        <a href="../#faq">FAQ</a>
+        <a href="../get/" aria-current="page">Get Pulse</a>
+        <a href="https://github.com/aytekXR/ams-pulse" class="btn btn-sm btn-primary">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main" tabindex="-1">
+    <header class="hero" style="padding-bottom:var(--space-8);">
+      <div class="container hero-content" style="padding-top:var(--space-8);">
+        <h1 class="hero-title" style="font-size:var(--type-display-size);">Get Pulse</h1>
+        <p class="hero-subtitle max-w-prose" style="margin-left:auto;margin-right:auto;">
+          Install Pulse next to your Ant Media Server in a few minutes.
+          Every feature is free for any use, including commercial use.
+        </p>
+      </div>
+    </header>
+
+    <!-- 1. BEFORE YOU INSTALL -->
+    <section class="section">
+      <div class="container" style="max-width:860px;">
+        <div class="section-header">
+          <p class="label text-signal">STEP 1</p>
+          <h2>Check what Pulse needs</h2>
+        </div>
+        <div class="card">
+          <ul class="text-secondary" style="padding-left:var(--space-5);line-height:1.9;margin:0;">
+            <li>A Linux host with <strong>Docker Engine 24+</strong> and <strong>Docker Compose v2</strong>, 2 vCPU and 2 GB RAM.</li>
+            <li>Network access from that host to your Ant Media Server REST API (normally port <code>5080</code>).</li>
+            <li>An <strong>AMS admin login</strong> for Pulse — a dedicated account is best.</li>
+            <li>In each AMS application Pulse should monitor, the Pulse host's IP added to the application's
+              <strong>REST IP filter</strong> (AMS allows only <code>127.0.0.1</code> by default).</li>
+          </ul>
+          <p class="text-secondary mt-6 mb-0">
+            Pulse installs nothing on Ant Media Server — no plugin, no restart. It only reads the REST API.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. INSTALL -->
+    <section class="section section-alt">
+      <div class="container" style="max-width:860px;">
+        <div class="section-header">
+          <p class="label text-signal">STEP 2</p>
+          <h2>Run the installer</h2>
+        </div>
+        <pre><code><span class="code-prompt">$</span> curl -fsSL https://raw.githubusercontent.com/aytekXR/ams-pulse/main/deploy/quickstart/install.sh \
+    | bash -s -- --ams-url http://<span class="code-var">YOUR-AMS</span>:5080 \
+                 --email <span class="code-var">YOUR-AMS-ADMIN-EMAIL</span> \
+                 --password '<span class="code-var">YOUR-AMS-PASSWORD</span>'</code></pre>
+        <p class="text-secondary mt-6">
+          All three flags are required when the script is piped into <code>bash</code>. The installer pulls the
+          signed Pulse image, starts Pulse and ClickHouse, checks that Pulse can reach your AMS, and prints a
+          one-time admin token. Prefer to read it first?
+          <a href="https://github.com/aytekXR/ams-pulse/blob/main/deploy/quickstart/install.sh">View install.sh</a>.
+        </p>
+        <p class="text-secondary mb-0">
+          Kubernetes, offline hosts and production hardening:
+          <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/runbooks/install.md">install guide</a>.
+        </p>
+      </div>
+    </section>
+
+    <!-- 3. OPEN THE DASHBOARD -->
+    <section class="section">
+      <div class="container" style="max-width:860px;">
+        <div class="section-header">
+          <p class="label text-signal">STEP 3</p>
+          <h2>Open the dashboard</h2>
+        </div>
+        <div class="card">
+          <p class="mb-4">
+            Go to <code>http://&lt;your-server&gt;:8090</code> and sign in with the admin token the installer
+            printed. Your streams appear within seconds; the green <strong>Live</strong> badge means updates are
+            streaming in.
+          </p>
+          <p class="text-secondary mb-0">
+            Port 8090 serves plain HTTP. On a public server, put a TLS reverse proxy in front of it and use
+            <code>https://pulse.your-domain</code>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. LICENSE INFO -->
+    <section class="section section-alt">
+      <div class="container" style="max-width:860px;">
+        <div class="section-header">
+          <p class="label text-signal">LICENSE</p>
+          <h2>Free for any use</h2>
+        </div>
+        <div class="card">
+          <p class="text-secondary mb-4">
+            Pulse is free for any use, including commercial use, under the
+            <a href="https://polyformproject.org/licenses/shield/1.0.0/">PolyForm Shield License 1.0.0</a> —
+            the one restriction is that you may not use it to provide a product that competes with Pulse.
+          </p>
+          <p class="text-secondary mb-4">
+            Every feature, no license key, no node or retention limits — free for at least the first year.
+          </p>
+          <p class="text-secondary mb-0">
+            License keys still work for compatibility with earlier deployments, but new installations
+            do not need one. All features are unlocked by default.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. VERIFY -->
+    <section class="section">
+      <div class="container" style="max-width:860px;">
+        <div class="section-header">
+          <p class="label text-signal">OPTIONAL</p>
+          <h2>Verify the image signature</h2>
+        </div>
+        <p class="text-secondary">
+          Images are signed with Cosign and ship with an SBOM and SLSA provenance. Use Cosign v3 or newer
+          (v2 cannot read the OCI 1.1 signature format and reports "no signatures found").
+        </p>
+        <pre><code><span class="code-prompt">$</span> cosign verify \
+    --certificate-identity-regexp '^https://github\.com/aytekXR/ams-pulse/\.github/workflows/release\.yml@refs/tags/v.+$' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    ghcr.io/aytekxr/ams-pulse:0.5.0</code></pre>
+      </div>
+    </section>
+
+    <!-- HELP -->
+    <section class="section section-alt">
+      <div class="container text-center" style="max-width:860px;">
+        <h2 class="mb-4">Stuck?</h2>
+        <p class="text-secondary mb-6">
+          The most common first-install issue is the AMS REST IP filter (HTTP 403 in the Pulse logs).
+        </p>
+        <div class="flex gap-4" style="justify-content:center;flex-wrap:wrap;">
+          <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/troubleshooting.md" class="btn btn-primary">Troubleshooting</a>
+          <a href="../support/" class="btn btn-secondary">Support</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="../assets/pulse-mark.svg" alt="" width="28" height="28">
+        <span class="footer-brand-name">pulse</span>
+        <span class="footer-brand-sub">Real-time analytics for Ant Media Server</span>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/aytekXR/ams-pulse">GitHub</a>
+        <a href="https://github.com/aytekXR/ams-pulse/blob/main/docs/overview.md">Docs</a>
+        <a href="../support/">Support</a>
+        <a href="../">Home</a>
+        <a href="../privacy/">Privacy</a>
+        <a href="../terms/">Terms</a>
+      </div>
+      <p class="footer-legal">PolyForm Shield 1.0.0 (server) / MIT (beacon SDK)</p>
+    </div>
+  </footer>
+</body>
+</html>

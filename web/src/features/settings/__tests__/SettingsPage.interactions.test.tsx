@@ -282,7 +282,7 @@ describe("SettingsPage — license tab", () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it("renders the license card with tier badge, expiry, and limits (-1 → ∞)", async () => {
+  it("renders the license card with tier badge, expiry, and limits (-1 → Unlimited)", async () => {
     h.getLicense.mockResolvedValue({
       tier: "pro",
       valid: true,
@@ -297,9 +297,30 @@ describe("SettingsPage — license tab", () => {
     expect(screen.getByText(/max streams/i)).toBeInTheDocument();
     expect(screen.getByText(/max nodes/i)).toBeInTheDocument();
     expect(screen.getByText("100")).toBeInTheDocument();
-    expect(screen.getByText("∞")).toBeInTheDocument();
+    expect(screen.getByText("Unlimited")).toBeInTheDocument();
     // tier != free → the form heading is "Update license key"
     expect(screen.getByRole("heading", { name: /update license key/i })).toBeInTheDocument();
+  });
+
+  // D-194 (v0.5.0): Pulse is free. A keyless server reports all_features_free and
+  // null (unlimited) limits; the tab must say so, offer no upgrade path, and never
+  // print a raw "null" (D11).
+  it("D-194: says every feature is free and offers no key form on a v0.5.0 server", async () => {
+    h.getLicense.mockResolvedValue({
+      tier: "free",
+      valid: true,
+      all_features_free: true,
+      expires_at: null,
+      limits: { max_nodes: null, max_streams: null, retention_days: null, data_api: true, white_label: true },
+    });
+    await gotoTab(/license/i);
+
+    expect(await screen.findByText(/every feature is included/i)).toBeInTheDocument();
+    expect(screen.queryByText(/contact sales/i)).toBeNull();
+    expect(screen.queryByPlaceholderText(/PULSE-XXXX/i)).toBeNull();
+    expect(screen.queryByText("null")).toBeNull();
+    expect(screen.getAllByText("Unlimited")).toHaveLength(3);
+    expect(screen.getAllByText("Yes")).toHaveLength(2);
   });
 
   it("activates a license key, toasts the new tier, and clears the input", async () => {

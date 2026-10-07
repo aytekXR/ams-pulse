@@ -22,6 +22,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,6 +42,68 @@ import (
 // minLoginInterval is the shortest interval between two forced re-logins.
 // A permanent IP-block 403 must not cause a login storm.
 const minLoginInterval = 3 * time.Second
+
+// Login backoff (S125/D-194). AMS locks an account for 300 s after two failed
+// logins, and the collector polls every 5 s. Retrying a rejected login on every
+// poll therefore kept the account locked for as long as Pulse ran — locking
+// humans out of the AMS console too, since the installer asks for the admin
+// account. A rejected login now waits 1, 2, 4, 8, then 15 minutes, and never
+// less than the lock AMS reports. Transport errors and 5xx replies cannot lock
+// an account and are still retried on every poll.
+const (
+	loginBackoffBase = time.Minute
+	loginBackoffMax  = 15 * time.Minute
+	// amsLockMargin lands the retry just after the lock AMS reported.
+	amsLockMargin = 10 * time.Second
+	// forcedReloginInterval bounds the re-logins triggered by a 401/403 reply. An
+	// expired session is renewed on the first 403; a 403 that a fresh session
+	// cannot fix (the per-app REST IP filter) then costs one login a minute rather
+	// than one per app per poll.
+	forcedReloginInterval = time.Minute
+)
+
+// amsLockRe extracts the lock duration from AMS's reply, e.g.
+// "Too many login attempts. User is blocked for 300 secs".
+var amsLockRe = regexp.MustCompile(`(?i)blocked for (\d+) sec`)
+
+// loginRejectedError means AMS answered the login and refused it. It carries
+// only what Pulse derived from the reply, never the reply text, so it is safe
+// to republish on /healthz (D-185).
+type loginRejectedError struct {
+	lockedFor time.Duration // > 0 when AMS reported a temporary account lock
+}
+
+func (e *loginRejectedError) Error() string {
+	if e.lockedFor > 0 {
+		return fmt.Sprintf("amsclient: login failed — AMS locked the account for %s after repeated "+
+			"failures (check PULSE_AMS_LOGIN_EMAIL/PASSWORD)", e.lockedFor)
+	}
+	return "amsclient: login failed (check PULSE_AMS_LOGIN_EMAIL/PASSWORD)"
+}
+
+// loginBackoffError is returned instead of attempting a login while the backoff
+// after a rejected login is still running.
+type loginBackoffError struct {
+	wait time.Duration
+	last error
+}
+
+func (e *loginBackoffError) Error() string {
+	return fmt.Sprintf("%v; next login attempt in %s", e.last, e.wait.Round(time.Second))
+}
+
+func (e *loginBackoffError) Unwrap() error { return e.last }
+
+// isLoginRejection reports whether a login error means "AMS refused these
+// credentials" — the kind that counts towards AMS's account lock.
+func isLoginRejection(err error) bool {
+	var rej *loginRejectedError
+	if errors.As(err, &rej) {
+		return true
+	}
+	var hse *httpStatusError
+	return errors.As(err, &hse) && (hse.Status == http.StatusUnauthorized || hse.Status == http.StatusForbidden)
+}
 
 // clusterProbeInterval is how often ClusterNodes re-probes /rest/v2/cluster-mode-status
 // relative to the total number of ClusterNodes calls. At the default 5 s restpoller cadence,
@@ -380,6 +443,12 @@ type Client struct {
 	loginMu       sync.Mutex
 	lastLogin     time.Time
 	loggedIn      bool
+	// Login backoff state (loginMu). See loginBackoffBase.
+	loginFailures     int
+	nextLoginAt       time.Time
+	lastLoginErr      error
+	lastForcedRelogin time.Time
+	now               func() time.Time // time.Now; a fake clock in tests
 
 	// clusterMu protects the cluster-mode cache (clusterModeKnown, clusterModeIsCluster,
 	// clusterCallCount). The Client may be used concurrently by multiple goroutines
@@ -484,6 +553,7 @@ func New(cfg Config) *Client {
 		authHeader:    auth,
 		loginEmail:    cfg.LoginEmail,
 		loginPassword: cfg.LoginPassword,
+		now:           time.Now,
 	}
 }
 
@@ -528,16 +598,31 @@ func (c *Client) login(ctx context.Context) error {
 	}
 
 	var result struct {
-		Success bool `json:"success"`
+		Success bool   `json:"success"`
+		Message string `json:"message"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&result); err != nil {
 		return fmt.Errorf("amsclient: decode login response: %w", err)
 	}
 	if !result.Success {
-		return fmt.Errorf("amsclient: login failed (check PULSE_AMS_LOGIN_EMAIL/PASSWORD)")
+		rej := &loginRejectedError{}
+		if m := amsLockRe.FindStringSubmatch(result.Message); m != nil {
+			if secs, err := strconv.Atoi(m[1]); err == nil && secs > 0 {
+				rej.lockedFor = time.Duration(secs) * time.Second
+			}
+		}
+		return rej
 	}
 	// Cookie jar already holds the JSESSIONID from the Set-Cookie header.
 	return nil
+}
+
+// clock returns the client's current time (time.Now unless a test set c.now).
+func (c *Client) clock() time.Time {
+	if c.now == nil {
+		return time.Now()
+	}
+	return c.now()
 }
 
 // invalidateSession marks the session as expired so the next ensureLogin
@@ -550,10 +635,13 @@ func (c *Client) invalidateSession() {
 
 // ensureLogin is a no-op when loginEmail is empty (bearer-only or no-auth mode).
 // Otherwise, mutex-guarded:
-//   - If not yet logged in: always logs in (no throttle).
-//   - If force=true and already logged in within minLoginInterval: throttled
-//     no-op (prevents login storms on permanent IP-block 403s).
-//   - If force=true and last login is older than minLoginInterval: re-logs in.
+//   - If logged in and force=false: no-op.
+//   - If logged in, force=true and the last login is within minLoginInterval:
+//     throttled no-op (reuse the session rather than hammering login).
+//   - While the backoff after a rejected login runs: returns loginBackoffError
+//     without contacting AMS.
+//   - Otherwise logs in. A rejection starts or extends the backoff; a success
+//     clears it.
 func (c *Client) ensureLogin(ctx context.Context, force bool) error {
 	if c.loginEmail == "" {
 		return nil
@@ -561,28 +649,64 @@ func (c *Client) ensureLogin(ctx context.Context, force bool) error {
 	c.loginMu.Lock()
 	defer c.loginMu.Unlock()
 
-	if !c.loggedIn {
-		// Not logged in (initial or after session invalidation): always login.
-		if err := c.login(ctx); err != nil {
-			return err
-		}
-		c.loggedIn = true
-		c.lastLogin = time.Now()
+	if c.loggedIn && (!force || c.clock().Sub(c.lastLogin) < minLoginInterval) {
 		return nil
 	}
+	if wait := c.nextLoginAt.Sub(c.clock()); wait > 0 {
+		return &loginBackoffError{wait: wait, last: c.lastLoginErr}
+	}
+	if err := c.login(ctx); err != nil {
+		c.loggedIn = false
+		if isLoginRejection(err) {
+			c.loginFailures++
+			shift := c.loginFailures - 1
+			if shift > 10 {
+				shift = 10 // keeps the shift far from overflow; the cap applies anyway
+			}
+			backoff := loginBackoffBase << shift
+			if backoff > loginBackoffMax {
+				backoff = loginBackoffMax
+			}
+			var rej *loginRejectedError
+			if errors.As(err, &rej) && rej.lockedFor > 0 && rej.lockedFor+amsLockMargin > backoff {
+				backoff = rej.lockedFor + amsLockMargin
+			}
+			c.nextLoginAt = c.clock().Add(backoff)
+			c.lastLoginErr = err
+		}
+		return err
+	}
+	c.loggedIn = true
+	c.lastLogin = c.clock()
+	c.loginFailures = 0
+	c.nextLoginAt = time.Time{}
+	c.lastLoginErr = nil
+	return nil
+}
 
-	if force {
-		if time.Since(c.lastLogin) < minLoginInterval {
-			// Throttle: we re-logged in very recently; reuse the existing session
-			// rather than hammering login. This caps re-logins at ≤ 2 per
-			// minLoginInterval even if 403s keep arriving.
-			return nil
-		}
-		if err := c.login(ctx); err != nil {
-			return err
-		}
-		c.loggedIn = true
-		c.lastLogin = time.Now()
+// forcedReloginAllowed reports whether a 401/403 may trigger a re-login now,
+// and if so records it. See forcedReloginInterval.
+func (c *Client) forcedReloginAllowed() bool {
+	c.loginMu.Lock()
+	defer c.loginMu.Unlock()
+	now := c.clock()
+	if !c.lastForcedRelogin.IsZero() && now.Sub(c.lastForcedRelogin) < forcedReloginInterval {
+		return false
+	}
+	c.lastForcedRelogin = now
+	return true
+}
+
+// pendingLoginBackoff returns the backoff error while a rejected login's
+// backoff is running and there is no session, else nil.
+func (c *Client) pendingLoginBackoff() error {
+	c.loginMu.Lock()
+	defer c.loginMu.Unlock()
+	if c.loggedIn {
+		return nil
+	}
+	if wait := c.nextLoginAt.Sub(c.clock()); wait > 0 {
+		return &loginBackoffError{wait: wait, last: c.lastLoginErr}
 	}
 	return nil
 }
@@ -627,20 +751,27 @@ func (c *Client) getJSON(ctx context.Context, path string, out any) error {
 	}
 
 	// On 401/403 and with cookie-session auth: invalidate the session, attempt
-	// one re-login, and retry the GET exactly once. The throttle in ensureLogin
-	// prevents a login storm if the 403 is due to a permanent IP block.
+	// one re-login, and retry the GET exactly once — at most once per
+	// forcedReloginInterval, so a 403 that a fresh session cannot fix (a
+	// permanent IP block) does not log in again on every poll.
 	if (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) &&
 		c.loginEmail != "" {
-		resp.Body.Close()
-		// Invalidate so ensureLogin(true) will re-login even within minLoginInterval.
-		c.invalidateSession()
-		if loginErr := c.ensureLogin(ctx, true); loginErr != nil {
-			// Re-login itself failed (wrong credentials etc.): surface that error.
-			return loginErr
-		}
-		resp, err = c.doGet(ctx, path)
-		if err != nil {
-			return err
+		if c.forcedReloginAllowed() {
+			resp.Body.Close()
+			// Invalidate so ensureLogin(true) will re-login even within minLoginInterval.
+			c.invalidateSession()
+			if loginErr := c.ensureLogin(ctx, true); loginErr != nil {
+				// Re-login itself failed (wrong credentials etc.): surface that error.
+				return loginErr
+			}
+			resp, err = c.doGet(ctx, path)
+			if err != nil {
+				return err
+			}
+		} else if backoffErr := c.pendingLoginBackoff(); backoffErr != nil {
+			// No session because the login is backing off: that, not the 403, is the cause.
+			resp.Body.Close()
+			return backoffErr
 		}
 	}
 	defer resp.Body.Close()
