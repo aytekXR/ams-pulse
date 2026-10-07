@@ -96,9 +96,12 @@ df -h /    # host filesystem
 
 ## Prometheus /metrics
 
-`/metrics` requires **Business+ tier** (returns `403 LICENSE_REQUIRED` for Free/Pro).
-If `PULSE_METRICS_TOKEN` is set, scrapers must send `Authorization: Bearer <token>`;
-comparison is constant-time. Rate-limited at 10 rps / burst 20 per IP before token check.
+`/metrics` is available on every install. If `PULSE_METRICS_TOKEN` is set, scrapers
+must send `Authorization: Bearer <token>`; comparison is constant-time. When unset,
+`/metrics` is served unauthenticated (and Pulse logs a startup warning).
+Rate-limited at 10 rps / burst 20 per IP before token check.
+
+The quickstart installer generates `PULSE_METRICS_TOKEN` in `quickstart/.env`.
 
 Verified: `handleMetrics` in `server/internal/api/server.go`; `CheckPrometheus` in `server/internal/license/license.go`.
 
@@ -207,7 +210,7 @@ sustained for more than a few minutes or paired with service-level errors.
 | `restpoller: poll error` / `app poll error` | `collector/restpoller/restpoller.go:152,238` | Transient AMS REST call failure; next poll will retry |
 | `alert evaluator: list rules failed` | `alert/evaluator.go:281` | Transient SQLite read error listing rules; next tick retries |
 | `alert evaluator: list channels failed — registry not updated` | `alert/evaluator.go:320` | Transient SQLite read error listing channels; registry unchanged this tick, next tick retries |
-| `alert: qoe_reader not configured — rebuffer_ratio/error_rate rules skipped this tick` | `alert/wave2.go:86` | QoEReader not wired (Free tier, or QoE collector not running); fires at most once per tick by design (D-062 G6) |
+| `alert: qoe_reader not configured — rebuffer_ratio/error_rate rules skipped this tick` | `alert/wave2.go:86` | QoEReader not wired (QoE collector not running); fires at most once per tick by design (D-062 G6) |
 | `alert: qoe_reader error — stream skipped for this tick` | `alert/wave2.go:94` | Transient QoE DB/CH error; stream skips one evaluation tick |
 | `clickhouse: server event channel full, dropping event` | `store/clickhouse/clickhouse.go:237` | Backpressure from bursty AMS; individual event dropped, no data loss beyond that event |
 | `kafka: commit offset failed` | `kafka.go:168` | Transient Kafka commit; will retry on next record |

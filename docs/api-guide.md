@@ -14,7 +14,7 @@
 6. [Prometheus metrics endpoint](#6-prometheus-metrics-endpoint)
 7. [Rate limits](#7-rate-limits)
 8. [Error envelope](#8-error-envelope)
-9. [Tier gates and LICENSE\_REQUIRED errors](#9-tier-gates-and-license_required-errors)
+9. [Licensing](#9-licensing)
 10. [Curl examples](#10-curl-examples)
 
 ---
@@ -175,7 +175,7 @@ Usage and billing reports.
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/reports/usage` | Viewer-minutes, peak concurrency, egress GB, recording GB |
-| GET | `/reports/export` | Download usage report as CSV attachment (Business+) |
+| GET | `/reports/export` | Download usage report as CSV attachment |
 | GET | `/reports/schedules` | List scheduled report exports |
 | POST | `/reports/schedules` | Create a scheduled CSV/PDF export |
 | PUT | `/reports/schedules/{scheduleId}` | Update a scheduled report |
@@ -202,7 +202,7 @@ Configuration: data sources, license, tokens, users, tenants, audit log.
 | POST | `/admin/users` | Create a local user |
 | PUT | `/admin/users/{userId}` | Update a local user |
 | DELETE | `/admin/users/{userId}` | Delete a local user (idempotent) |
-| GET | `/admin/tenants` | List tenant definitions (Business+) |
+| GET | `/admin/tenants` | List tenant definitions |
 | POST | `/admin/tenants` | Create a tenant definition |
 | GET | `/admin/tenants/{tenantId}` | Get a tenant definition |
 | PUT | `/admin/tenants/{tenantId}` | Update a tenant definition |
@@ -218,7 +218,7 @@ Cluster topology.
 
 ### anomalies — 1 operation
 
-Baseline-deviation anomaly flags (Business tier or higher).
+Baseline-deviation anomaly flags.
 
 | Method | Path | Purpose |
 |--------|------|---------|
@@ -243,7 +243,7 @@ Unauthenticated infrastructure endpoints.
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/healthz` | Component liveness check (ClickHouse, meta store, collector, Kafka) |
-| GET | `/metrics` | Prometheus text exposition (Business+, optional scrape token) |
+| GET | `/metrics` | Prometheus text exposition (optional scrape token) |
 
 ### ingest — 1 operation
 
@@ -343,7 +343,7 @@ They are revocable per-stream and listed with `?kind=ingest`.
 | Max events per batch | 100 |
 | Rate limit (dedicated ingest port) | 100 req/s per token, burst 200 |
 | Rate limit (main port `/ingest/beacon`) | 100 req/s per token, burst 200 |
-| Tier gate | Pro+ (`LICENSE_REQUIRED` on Free tier) |
+| Tier gate | None (all features included) |
 
 ### Request body (`BeaconBatch`)
 
@@ -393,7 +393,6 @@ validation.
 ## 6. Prometheus metrics endpoint
 
 **Path:** `GET /metrics`  
-**Tier gate:** Business+ (`403 LICENSE_REQUIRED` on Free and Pro)  
 **Full guide:** [docs/guides/prometheus.md](guides/prometheus.md)
 
 Returns Prometheus text exposition format (`text/plain; version=0.0.4`).
@@ -463,7 +462,7 @@ Common HTTP status codes:
 |--------|---------|
 | `400` | Invalid request parameters |
 | `401` | Missing or invalid authentication |
-| `403` | Authenticated but not authorized (scope, tier, or token kind) |
+| `403` | Authenticated but not authorized (scope or token kind) |
 | `404` | Resource not found |
 | `409` | Conflict — duplicate name or resource already exists |
 | `413` | Beacon body exceeds 64 KB |
@@ -474,36 +473,14 @@ Common HTTP status codes:
 
 ---
 
-## 9. Tier gates and LICENSE\_REQUIRED errors
+## 9. Licensing
 
-Pulse enforces feature access by license tier. Calling a tier-gated endpoint on an
-insufficient tier returns:
+From v0.5.0 Pulse is fully free. All API endpoints are available on every install
+with no license key required. There are no tier-gated features or `LICENSE_REQUIRED`
+errors.
 
-```
-HTTP 403 Forbidden
-```
-
-```json
-{
-  "code": "LICENSE_REQUIRED",
-  "message": "Prometheus endpoint (F8) requires Business tier or higher (current: \"pro\")"
-}
-```
-
-| Feature | Minimum tier |
-|---------|-------------|
-| Beacon ingest (`/ingest/beacon`) | Pro |
-| CSV export (`/reports/export`) | Business |
-| Prometheus (`/metrics`) | Business |
-| Multi-tenant (`/admin/tenants`) | Business |
-| Data API (public `/api/v1` with ingest token) | Pro |
-| White-label PDF reports | Enterprise |
-| Anomaly detection (`/anomalies`, anomaly alert rules) | Business |
-| SSO/OIDC (`/auth/oidc/*`) | Enterprise |
-
-Free tier requires no license key and never phones home. Upgrade by calling
-`PUT /api/v1/admin/license` with your license key, or by setting
-`PULSE_LICENSE_KEY` before starting Pulse.
+License keys (`PULSE_LICENSE_KEY` / `PULSE_LICENSE_FILE`) still load for
+compatibility but are not needed and change nothing.
 
 ---
 

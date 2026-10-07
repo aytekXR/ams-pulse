@@ -1,14 +1,14 @@
 # Pulse — Known Limitations
 
-**Product:** Pulse v0.4.5 (last refreshed S109, 2026-07-27)  
+**Product:** Pulse v0.5.0 (last refreshed D-194, 2026-10-07)  
 **Source:** `docs/assessment/documentation-gaps.md` (DG-01 through DG-18),
 `docs/assessment/final-assessment.md` §1 and Appendix B (v0.3.0 baseline; see
 `docs/assessment/marketplace-compliance-review-2026-07-25.md` for current
 marketplace readiness),
 `docs/assessment/capability-map.md`
 
-This document lists every known operator-facing limitation of Pulse v0.4.5 in
-priority order. Each entry states what the limitation means for you, and what
+This document lists every known operator-facing limitation of Pulse v0.5.0 in
+priority order. As of v0.5.0, 29 entries are active (1 retired). Each entry states what the limitation means for you, and what
 workaround or roadmap path exists.
 
 ---
@@ -548,10 +548,8 @@ GET /api/v1/anomalies?metric=viewers&min_sigma=10
 A `min_sigma` of 10 suppresses the first-viewer spike while still surfacing
 sustained high-anomaly events.
 
-**Note — Enterprise tier required:** Anomaly detection is gated to Enterprise tier.
-`GET /api/v1/anomalies` returns `403 LICENSE_REQUIRED` on Free or Pro licenses
-(`server/internal/api/wave3.go` lines 4–5, 45–48;
-`server/internal/license/license.go` lines 356–363).
+**Note:** Anomaly detection is available on every install from v0.5.0; no license key
+is required.
 
 **Roadmap:** An observation-side skip (analogous to the `APILatencyMS > 0`
 presence guard — a ~2-line change) remains an open follow-up option if operators
@@ -596,10 +594,9 @@ for this release.
 (`GET /api/v1/reports/export?format=csv`); requesting `format=pdf` there returns
 `501 NOT_IMPLEMENTED`, and the "Export PDF" button has been removed. **Scheduled
 reports are a separate, implemented path:** a report schedule with `format: pdf`
-generates a real PDF statement each run (Business+ tier), with the logo set by
-`PULSE_REPORT_LOGO_PATH`; the custom white-label header (your company name and
-address on the statement) additionally requires an Enterprise license with the
-`white_label` claim. (Verified D-161: `server/internal/api/export.go:40-44`;
+generates a real PDF statement each run, with the logo set by
+`PULSE_REPORT_LOGO_PATH`. The custom white-label header (your company name and
+address on the statement) is available on every install — set it on the report schedule. (Verified D-161: `server/internal/api/export.go:40-44`;
 `server/internal/reports/scheduler.go:255-277`; `statement.go:194,265`.)
 
 **Root cause:** The interactive export endpoint predates the scheduled-statement
@@ -623,8 +620,7 @@ renderer. No ETA. File a feature request if this is blocking your use case.
 future update." Creating, updating, and deleting Pulse users works today only via
 the API: `GET/POST /api/v1/admin/users`, `PUT/DELETE /api/v1/admin/users/{userId}`
 (admin-scoped token required; every change is recorded in the audit log). SSO/OIDC
-user provisioning (Enterprise) is unaffected — first-login provisioning works end
-to end.
+user provisioning is unaffected — first-login provisioning works end to end.
 
 **Root cause:** The users API shipped with full test coverage (D-100); the
 management UI tab was deferred behind higher-priority dashboard work.
@@ -737,45 +733,49 @@ verified rather than guessed.
 
 ### LIM-29: Historical queries are silently capped to your tier's retention window
 
-**What it means for you:** If you ask for a longer time range than your licence
-retains, Pulse does not refuse the request and does not tell you it shortened
-it — it silently moves the start of the range forward and answers for the
-shorter window. On a Free licence a request for "the last 30 days" returns the
-last **7** days, and the response looks exactly like a successful 30-day answer:
-same shape, same HTTP 200, no warning field, no header.
+> **RESOLVED in v0.5.0.** The license-based retention cap is removed; all installs
+> now retain data as long as the ClickHouse TTL settings allow. This entry is kept
+> for historical reference only.
 
-The practical effect is that a chart or an exported CSV can look like a complete
-answer to the question you asked when it is not. It matters most when you are
-comparing periods ("this month vs last month") or exporting for a report,
-because the truncation is invisible in the output.
+**What it means for you:** From v0.5.0 no license-based retention limit is
+enforced. Historical queries return data for the full range available in
+ClickHouse, subject only to the `PULSE_RETENTION_DAYS` and `PULSE_ROLLUP_TTL_DAYS`
+settings you configure.
 
-The caps are the retention figures from your tier:
+The silent-clamp behavior described in previous versions (where a request for
+30 days on Free tier would silently return 7 days) no longer applies. Retention is
+now a configuration matter, not a licensing matter.
 
-| Tier | Retention | A request for 30 days returns |
-|---|---|---|
-| Free | 7 days | 7 days |
-| Pro | 90 days | 30 days |
-| Business | 396 days (13 months) | 30 days |
-| Enterprise | unlimited | 30 days |
+---
 
-**Root cause:** `applyRetention` in `server/internal/query/query.go` clamps the
-`from` parameter to `now - retentionDays` before the query runs. The clamp is
-deliberate — it stops a query scanning partitions that the retention policy is
-entitled to have deleted, and it keeps a long-range request from becoming an
-expensive scan — but it was implemented as a silent clamp rather than a reported
-one.
+### LIM-30: Audience analytics, usage viewer-minutes and QoE ratios are wrong for player-SDK sessions
 
-**Workaround:** Compare the `from` you asked for against the earliest bucket in
-the response; if they differ, you hit the cap. Equivalently, keep requested
-ranges within your tier's retention. Note that the underlying data really is
-subject to the retention policy, so a longer window would not return more rows
-in any case — what is missing is the *signal*, not the data.
+**What it means for you:** if your players run the Pulse beacon SDK, three views built from
+viewer sessions are currently unreliable:
 
-**Roadmap:** Report the clamp rather than hide it — return the effective range
-in the response `meta` and surface a note in the UI when the requested range was
-shortened. This is an additive response-shape change, so it needs a contract
-revision (`contracts/openapi/pulse-api.yaml`) rather than a code-only fix, and
-it is deliberately not being slipped in ahead of the marketplace submission.
+- **Analytics → Audience** (and its CSV export) shows **zero** views, viewers, watch time and
+  peak concurrency, even while sessions are recorded.
+- **Reports → Usage** overstates **viewer-minutes** (and the egress estimate derived from them)
+  by roughly (heartbeats + 1) ÷ 2 per session — about 10× for a ten-minute view.
+- **QoE** understates the **rebuffer ratio** by the same factor and the **error rate** as well,
+  so `rebuffer_ratio` / `error_rate` alert rules fire far later than their thresholds suggest.
+
+Live dashboard, alerting on live metrics, ingest health, probes, anomaly detection on polled
+metrics and the fleet view are not affected. Startup-time percentiles on the QoE page are correct.
+
+**Root cause:** the session stitcher writes a `viewer_sessions` row on every heartbeat, and the
+SDK sends `watch_ms` as a running total; the rollup materialized views count every inserted row
+as a view and sum the running totals. Separately, the audience query scans `UInt64` aggregates
+into `int64` fields, the scan error is swallowed, and the API returns zeros. Found and reproduced
+on 2026-10-01 with a single ground-truth session (D-193; evidence in
+`docs/marketplace/antmedia-submission/internal/evidence/`).
+
+**Workaround:** for viewer-minutes, query `viewer_sessions FINAL` directly (its per-session
+totals are correct); for QoE, use startup-time percentiles, probes and ingest rules rather than
+rebuffer/error ratios.
+
+**Roadmap:** one data-model fix (per-heartbeat deltas or final rows into the rollups, distinct
+sessions as views), a migration and a rollup backfill — ROADMAP-V2 §2.49.
 
 ---
 
@@ -792,6 +792,8 @@ it is deliberately not being slipped in ahead of the marketplace submission.
 | S105 (2026-07-25) | Kafka consumer aligned to official AMS topics (`ams-instance-stats`/`ams-webrtc-stats`, source-derived from AMS `StatsCollector.java`, fixture-tested + broker-integration-tested); LIM-01/LIM-04 topic refs updated; LIM-19 title and body updated to reflect fixed consumer alignment (what remains open is live AMS-producer validation, AV-15); header → v0.4.1 |
 | REVIEW-MP3 R9/R15 (S108, 2026-07-26) | Added LIM-27 (AMS ingest-error webhooks recorded in `stream_ingest_error` but not yet surfaced in UI/alerts/API — includes the ClickHouse query) and LIM-28 (cluster-only: stream-level node filtering uses the configured node ID while the Fleet view uses real AMS cluster IDs); header → v0.4.2; count 26 → 28 |
 | Review round 4 F-03/F-04/F-05/F-06/F-13 (S109, 2026-07-27) | **LIM-10 rewritten** from a confidence gap to provable fact: AMS 3.x exposes no node `role` or `version`, so all nodes display as `origin` and edge/origin viewer dedup is **inactive**, not merely unvalidated; added the cluster node-alerting reliability gaps (eviction race, discovery streak reset, `/applications` short-circuit, invisible `down` state, unverified `lastUpdateTime` unit, mode-flip blind window). **LIM-28 extended** — apps on other cluster nodes are invisible rather than mislabelled, per-viewer QoE via REST is largely absent on clusters, and `PULSE_AMS_URL` must point at one origin node (load balancing breaks stream-end detection and the cookie jar); `originAdress` sourced to the real-AMS capture fixtures. **LIM-01 corrected** — real wire fields are `cpu`/`memory`, not the mock-only `cpuUsage`/`memoryUsage` aliases. Count unchanged at 28 |
+| D-193 (S125, 2026-10-01) | Added LIM-30: audience analytics returns zeros, usage viewer-minutes overstated and QoE rebuffer/error ratios understated for beacon-SDK sessions (found by the marketplace audit's ground-truth session check); fix tracked as ROADMAP-V2 §2.49. Count 29 → 30 |
+| D-194 (S125, 2026-10-07) | **LIM-29 retired** — license-based retention cap removed in v0.5.0 (all features free); entry preserved for historical reference. **LIM-22** tier note corrected — anomaly detection is no longer tier-gated. Header → v0.5.0. Count 30 → 29 active (1 retired) |
 
 ---
 

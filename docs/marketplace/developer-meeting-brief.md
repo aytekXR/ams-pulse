@@ -7,6 +7,9 @@
 
 # Ant Media developer meeting — brief & agenda
 
+> **Pricing/licensing superseded (v0.5.0, 2026-10-07).** From v0.5.0 Pulse is fully free under
+> the PolyForm Shield License 1.0.0. All tier and pricing references below are outdated.
+
 **Purpose:** the meeting Ankush Banyal offered once "the plugin is fully ready and you
 have the relevant documentation." Goals: (1) get the qualification steps, (2) settle the
 listing artifact/format questions, (3) close the G-27/G-21 technical questions, (4) open
@@ -64,7 +67,7 @@ Ask in this order (details: [`submission-process.md`](submission-process.md) §2
 2. **The qualification steps** your dev team defined — checklist, artifact formats,
    screenshot/logo/video specs (A2/A3), docs hosting (A8).
 3. **Review flow + timeline (A5); security review** — audited or self-certified? (Our
-   posture: SECURITY.md, zero phone-home, signed images + SBOM, IP hashing.)
+   posture: SECURITY.md, zero phone-home, signed images + SBOM, viewer IPs never stored.)
 4. **Load-test evidence (A9):** we built a load lane that can drive your official tools
    (WebRTC Load Test Tool, hls_players.sh) and asserts our numbers stay correct under
    load; what evidence format / thresholds do you want?

@@ -156,7 +156,7 @@ Variables with `_FILE` support (from `server/internal/config/secrets.go:GetSecre
 
 | Variable | Default | Required? | _FILE support? | What it does |
 |---|---|---|---|---|
-| `PULSE_LICENSE_KEY` | (empty = Free) | No | **No** | License key string; empty = Free tier (1 node, 7-day retention). **No `_FILE` convention**; the variable is read via `os.Getenv` directly. |
+| `PULSE_LICENSE_KEY` | (empty) | No | **No** | License key string (optional from v0.5.0). Keys are accepted for compatibility but do not change what is available — all features are enabled on every install via the all-features-free policy. **No `_FILE` convention**; the variable is read via `os.Getenv` directly. |
 | `PULSE_LICENSE_FILE` | (empty) | No | No | Path to a file containing the license key (for air-gapped/offline installs); read via `os.ReadFile` at startup |
 | `PULSE_LICENSE_OFFLINE_FILE` | (empty) | No | No | Legacy config-path variable for offline license verification; present in the YAML config loader (`internal/config`) but has no effect in the production `pulse serve` command path. Use `PULSE_LICENSE_FILE` instead. |
 | `PULSE_LICENSE_PUBKEY` | (embedded vendor key) | No | No | Hex-encoded ed25519 public key used to verify license signatures. Leave unset to use the default embedded vendor public key. Set only when overriding the key — for example, in CI/staging with a separate signing key. |
@@ -303,7 +303,7 @@ UI shows "User management — coming in a future update" (LIM-25).
 
 Every mutating call is written to the audit log (`GET /api/v1/admin/audit-log`).
 
-User roles are `"admin"` or `"viewer"`. OIDC/SSO user provisioning (Enterprise tier)
+User roles are `"admin"` or `"viewer"`. OIDC/SSO user provisioning
 uses first-login provisioning via `PULSE_OIDC_GROUP_ROLE_MAP` and is not affected
 by the UI gap.
 
@@ -339,12 +339,14 @@ curl -s -X PUT https://<pulse-host>/api/v1/admin/license \
 ```
 The new tier takes effect immediately. Confirm with `GET /api/v1/admin/license`.
 
-### Graceful expiry
+### License keys are optional from v0.5.0
 
-When a license expires, Pulse **fails open**: the server keeps running and existing
-data remains accessible. Paid-tier endpoints return `403 LICENSE_REQUIRED` until a
-new key is activated. The tier reverts to Free for gate checks. Activate a renewed
-key via Route C (no restart needed) before expiry to avoid a service gap.
+From v0.5.0, Pulse runs with an all-features-free policy. License keys are accepted
+for compatibility with existing deployments, but they are not required and do not
+change what is available — all features are enabled on every install regardless of
+key state. The tier gates described in older documentation are dormant; the
+mechanism exists in the codebase for a possible future paid model but is bypassed
+at startup via `license.SetAllFeaturesFree(true)`.
 
 ---
 

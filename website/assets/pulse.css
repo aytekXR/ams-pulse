@@ -600,7 +600,8 @@ td a:not(.btn):hover {
 
 .footer-links {
   display: flex;
-  gap: 28px;
+  flex-wrap: wrap; /* six links overflowed a 390 px phone by 10–18 px (2026-10-01 audit) */
+  gap: 12px 28px;
   font-size: 13px;
 }
 

@@ -4,8 +4,8 @@ Operational guides written as features land (owner: INFRA-01 with DOC-01):
 
 - `install.md` — the 15-minute marketplace install guide (launch asset, PRD §7.12), incl. the Upgrading section
 - [`alerting.md`](alerting.md) — alert rule semantics, channels, maintenance windows
-- [`probes.md`](probes.md) — synthetic probes (Pro+)
-- [`reports.md`](reports.md) — usage/billing reports (Business+)
+- [`probes.md`](probes.md) — synthetic probes
+- [`reports.md`](reports.md) — usage/billing reports
 - [`productionize.md`](productionize.md) — the production wiring (host-nginx edge + consolidated compose)
 
 Operator-facing reference docs (in `docs/`): [`../overview.md`](../overview.md) ·

@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/aytekXR/ams-pulse/main/deploy/quick
 **Released image:** `ghcr.io/aytekxr/ams-pulse` — **public** (no authentication needed to
 pull), cosign-signed, multi-arch (amd64/arm64), SBOM + provenance, published by a CI-gated
 tag pipeline.
-Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.4.5**).
+Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.5.0**).
 
 **Docker Compose (signed image — recommended for evaluators):**
 
@@ -46,7 +46,7 @@ only). Without it the base file is `expose:`-only — correct for the production
 path, where a TLS-terminating reverse proxy sits in front, but it leaves the UI
 unreachable from the host. Set `PULSE_HOST_PORT` if 8090 is already taken.
 
-This pulls `ghcr.io/aytekxr/ams-pulse:0.4.5` — cosign-signed, SBOM-attached, no
+This pulls `ghcr.io/aytekxr/ams-pulse:0.5.0` — cosign-signed, SBOM-attached, no
 authentication required (`ghcr.io/aytekxr/ams-pulse` is public).
 To verify the image signature before running:
 
@@ -54,7 +54,7 @@ To verify the image signature before running:
 cosign verify \
   --certificate-identity-regexp '^https://github\.com/aytekXR/ams-pulse/\.github/workflows/release\.yml@refs/tags/v.+$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/aytekxr/ams-pulse:0.4.5
+  ghcr.io/aytekxr/ams-pulse:0.5.0
 ```
 
 > **The regexp is anchored on purpose.** `--certificate-identity-regexp` is an
@@ -133,29 +133,29 @@ PULSE_SECRET_KEY=$(openssl rand -hex 32) \
 
 ## Feature status
 
-Last updated: **2026-07-30** — all 10 PRD features shipped; latest release **v0.4.5**.
-The maintainer's production instance runs behind host-nginx TLS against a real AMS 3.0.3
-Enterprise (currently on the stamped **v0.4.0-139** build; the roll to 0.4.5 is deliberate,
-not automatic). Product one-pager: [docs/product.md](docs/product.md).
+Last updated: **2026-10-07** — all 10 PRD features shipped and free for everyone; latest release **v0.5.0**.
+The maintainer's production instance runs behind host-nginx TLS against a real AMS 3.1.0
+Enterprise (currently on a stamped **v0.4.5-9** build from August, until it is rolled forward to v0.5.0).
+Product one-pager: [docs/product.md](docs/product.md).
 
 | Feature | PRD ref | Status | Notes |
 |---|---|---|---|
 | Live ops dashboard | F1 | **Shipped** | Streams, viewers, nodes; WS push broadcasts `LiveOverview` shape; ≤10 s stream visibility. Edge/origin viewer dedup is implemented and unit-tested but **inactive on AMS 3.x** — it keys on a node `role` the AMS cluster endpoint does not expose (LIM-10) |
 | Historical analytics | F2 | **Shipped** | Geo + device breakdown: real rows from `viewer_sessions`; 13-month rollup: 150 ms measured (budget 3 s) |
 | QoE beacon SDK | F3 | **Shipped** | TypeScript, 3.52 KB gzip (budget 15 KB); 65 tests; MIT; `rebuffer_end` from HlsAdapter; bitrate from `hls.levels[]` |
-| QoE beacon round-trip | F3 | **Shipped** | SDK sends `X-Pulse-Ingest-Token`; main-port `/ingest/beacon` persists to EventSink (64 KB cap); Pro+ tier required; beacon events geo/UA enriched |
+| QoE beacon round-trip | F3 | **Shipped** | SDK sends `X-Pulse-Ingest-Token`; main-port `/ingest/beacon` persists to EventSink (64 KB cap); beacon events geo/UA enriched |
 | QoE summary (`/qoe/summary`) | F3 | **Shipped** | Queries `rollup_qoe_1h`; `startup_p50_ms` non-zero (250 ms measured); `bitrate_kbps_p50` field |
 | Ingest health monitoring | F4 | **Shipped** | Health score formula; `health_score` 0–100 scale; ingest timeseries + drop_events in API; 250 µs detection (budget 15 s) |
-| Core alerting | F5 | **Shipped** | Email (Free+), Slack/Telegram (Pro+), PagerDuty/Webhook (Business+); `muted=true` suppresses notifications; `group_by` collapses storm alerts; `node_down` fires on node absence; maintenance windows with range cron syntax |
-| Usage / billing reports | F6 | **Shipped** | Business+ tier required; interactive export CSV-only; scheduled reports CSV **or** PDF per schedule (white-label header Enterprise); tenant mapping; S3 export; ±1% reconciliation; 5-field cron schedules work; `peak_concurrency` sourced from true windowed max (`rollup_concurrency_1d`) |
+| Core alerting | F5 | **Shipped** | Email/Slack/Telegram/PagerDuty/Webhook; `muted=true` suppresses notifications; `group_by` collapses storm alerts; `node_down` fires on node absence; maintenance windows with range cron syntax |
+| Usage / billing reports | F6 | **Shipped** | Interactive export CSV-only; scheduled reports CSV **or** PDF per schedule (white-label header available); tenant mapping; S3 export; ±1% reconciliation on one-row-per-session fixtures — real player-SDK sessions currently overstate viewer-minutes ([LIM-30](docs/known-limitations.md), fix on the roadmap); 5-field cron schedules work; `peak_concurrency` sourced from true windowed max (`rollup_concurrency_1d`) |
 | Cluster fleet view | F7 | **Shipped** | Auto-discovery ≤ 30 s (budget 2 min); real per-node IDs, CPU/memory from the AMS 3.x cluster wire. AMS 3.x exposes **no role or version field** on that endpoint, so every node displays as `origin` with no version (LIM-10) |
 | Data API + Prometheus | F8 | **Shipped** | 5 bounded metrics; scrape token uses constant-time compare; Grafana starter panels |
 | Helm install path | §7.10 | **Shipped** (authored) | Lint and template verified; cluster deploy deferred D-002 |
-| Licensing + tier enforcement | — | **Shipped** | 4-tier: Free/Pro/Business/Enterprise (PRD §7.11); ed25519 verification; 403 on gated features; token kind enforcement |
+| Licensing + tier enforcement | — | **Shipped** | All features free (v0.5.0+); legacy 4-tier model dormant in code; ed25519 verification; token kind enforcement |
 | API (REST + WebSocket) | — | **Shipped** | 42 paths, 59 ops, OpenAPI-conformant; WS origin enforcement; idempotent DELETE documented |
 | Onboarding wizard | §7.12 | **Shipped** | 4-step first-run flow |
-| Anomaly detection | F9 | **Shipped** (Wave 3-MVP + Wave-3-Plus, Business+) | Welford baselines; σ=4.0; modeled 0.43 false alarms/node-week across 5 metrics (target <1); minSamples=30 warmup; hysteresis cooldown; epsilon floor — constant-baseline deviations now flagged |
-| Synthetic probes | F10 | **Shipped** (Wave 3-MVP + Wave-3-Plus, Pro+) | HLS full — media and master playlists; `ttfb_ms` + `segment_ttfb_ms` stored separately; bitrate >0 for master playlists; dash full MPD+segment (D-073); webrtc signaling+ICE+RTP stats rtt/jitter/loss (D-072/D-074/D-075); rtmp TCP handshake (D-073); 60 s config refresh; 4-worker pool; 90-day result TTL |
+| Anomaly detection | F9 | **Shipped** (Wave 3-MVP + Wave-3-Plus) | Welford baselines; σ=4.0; modeled 0.43 false alarms/node-week across 5 metrics (target <1); minSamples=30 warmup; hysteresis cooldown; epsilon floor — constant-baseline deviations now flagged |
+| Synthetic probes | F10 | **Shipped** (Wave 3-MVP + Wave-3-Plus) | HLS full — media and master playlists; `ttfb_ms` + `segment_ttfb_ms` stored separately; bitrate >0 for master playlists; dash full MPD+segment (D-073); webrtc signaling+ICE+RTP stats rtt/jitter/loss (D-072/D-074/D-075); rtmp TCP handshake (D-073); 60 s config refresh; 4-worker pool; 90-day result TTL |
 
 ### Known limitations (Phase-3 / deferred)
 
@@ -229,20 +229,20 @@ Cluster fleet discovery ──────────────────�
 
 | Document | Description |
 |---|---|
-| [docs/overview.md](docs/overview.md) | **Start here** — evaluator-facing overview: what Pulse is, architecture + deployment + data-flow diagrams, tiers |
+| [docs/overview.md](docs/overview.md) | **Start here** — evaluator-facing overview: what Pulse is, architecture + deployment + data-flow diagrams |
 | [docs/user-guide.md](docs/user-guide.md) | Per-screen walkthrough of the web UI (all pages, onboarding, tier gates) |
 | [docs/admin-guide.md](docs/admin-guide.md) | Administrator reference: complete config-variable table, tokens, users, retention, ports, proxies |
 | [docs/api-guide.md](docs/api-guide.md) | API quickstart (auth, WS, ingest, rate limits) + rendered OpenAPI reference (`docs/api/index.html`) |
 | [docs/faq.md](docs/faq.md) | Operator FAQ (install, licensing, privacy, features, operations) |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Symptom → cause → fix index |
-| [docs/support.md](docs/support.md) | Support policy (channels, SLA targets, bug-report guide) — pending operator finalization |
-| [docs/licensing-public.md](docs/licensing-public.md) | Licensing explained: PolyForm NC + MIT SDK + commercial tiers + trial (draft) |
+| [docs/support.md](docs/support.md) | Support policy (channels, bug-report guide) |
+| [docs/licensing-public.md](docs/licensing-public.md) | Licensing explained: PolyForm Shield + MIT SDK, all features free |
 | [docs/marketplace/submission-package.md](docs/marketplace/submission-package.md) | Ant Media Marketplace submission pack index (listing, screenshots, process, meeting brief) |
 | [docs/product.md](docs/product.md) | Product one-pager: what Pulse is, distilled PRD, brand-kit design prompt |
 | [docs/prd-report.md](docs/prd-report.md) | Full PRD (§7) + AMS marketplace/market analysis (§§1–6) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Component diagram, boundaries, performance budgets, Wave-2 implementation status, ingest health score formula |
 | [docs/AMS-INTEGRATION.md](docs/AMS-INTEGRATION.md) | AMS integration guide: ingest paths, wire-format facts, operator setup against a real AMS |
-| [docs/licensing.md](docs/licensing.md) | Repo license (PolyForm NC) + product license keys: tiers, minting (`-privkey`/`-expires`), vendor key ceremony |
+| [docs/licensing.md](docs/licensing.md) | Repo license (PolyForm Shield) + product license keys: legacy minting (`-privkey`/`-expires`), vendor key ceremony |
 | [docs/dependabot-policy.md](docs/dependabot-policy.md) | Dependency-update policy: cadence per bump class, merge mechanics, co-upgrade clusters |
 | [docs/operator-expected.md](docs/operator-expected.md) | Live checklist of actions only the human operator can do (refreshed every session) |
 | [docs/runbooks/install.md](docs/runbooks/install.md) | Install guide: Docker Compose + QA-verified local binary + Helm (Kubernetes) |
@@ -250,8 +250,8 @@ Cluster fleet discovery ──────────────────�
 | [docs/runbooks/reports.md](docs/runbooks/reports.md) | Usage reports: tenant mapping, egress estimation, schedule setup, S3 export, reconciliation |
 | [docs/beacon-sdk.md](docs/beacon-sdk.md) | Beacon SDK integration: AMS WebRTC, hls.js, video.js, native video; sampling; privacy |
 | [docs/guides/prometheus.md](docs/guides/prometheus.md) | Prometheus scrape config, metric reference, Grafana starter panels |
-| [docs/guides/anomaly-detection.md](docs/guides/anomaly-detection.md) | F9 anomaly detection: Welford statistical model, sensitivity calibration, false-alarm math, tuning min_sigma, API usage (Business+) |
-| [docs/runbooks/probes.md](docs/runbooks/probes.md) | F10 synthetic probes: creating probes, HLS/protocol coverage, result interpretation, synthetic vs organic labeling (Pro+) |
+| [docs/guides/anomaly-detection.md](docs/guides/anomaly-detection.md) | F9 anomaly detection: Welford statistical model, sensitivity calibration, false-alarm math, tuning min_sigma, API usage |
+| [docs/runbooks/probes.md](docs/runbooks/probes.md) | F10 synthetic probes: creating probes, HLS/protocol coverage, result interpretation, synthetic vs organic labeling |
 | [docs/adr/0001-tech-stack.md](docs/adr/0001-tech-stack.md) | ADR: Go + React + ClickHouse stack decision |
 | [docs/adr/0002-storage-clickhouse.md](docs/adr/0002-storage-clickhouse.md) | ADR: two-store split (ClickHouse + SQLite) |
 | [docs/adr/0003-single-binary.md](docs/adr/0003-single-binary.md) | ADR: single binary with role flags |
@@ -315,11 +315,14 @@ sqlite3 :memory: < contracts/db/meta/0001_init.sql        # meta DDL
 
 ## License
 
-- **Server, web UI, and deployment tooling:** [PolyForm Noncommercial 1.0.0](LICENSE) —
-  Copyright (c) 2026 Aytek Erdoğan (beyondkaira.com).
-  Free for noncommercial use; commercial tiers available — see `docs/licensing-public.md`.
+Pulse is free for any use, including commercial use, under the PolyForm Shield License
+1.0.0 — the one restriction is that you may not use it to provide a product that competes
+with Pulse. The beacon SDKs are MIT-licensed.
+
+- **Server, web UI, and deployment tooling:** [PolyForm Shield License 1.0.0](LICENSE) —
+  Copyright (c) 2026 Aytekin Erdogan (beyondkaira.com).
 - **SDKs** (`sdk/beacon-js`, `sdk/beacon-swift`): MIT —
-  Copyright (c) 2026 Aytek Erdoğan (beyondkaira.com).
+  Copyright (c) 2026 Aytekin Erdogan (beyondkaira.com).
   Both ship with **zero runtime dependencies**, so embedding either adds no third-party
   obligations of its own.
 - **Third-party code Pulse redistributes:** [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) —

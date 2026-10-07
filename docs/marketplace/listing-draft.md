@@ -1,3 +1,7 @@
+> **Superseded (2026-10-07).** From v0.5.0, Pulse is fully free with no tier restrictions.
+> The tier entitlements and pricing context below are historical and no longer apply.
+> See [`listing.md`](listing.md) for the current submission copy.
+
 > **Internal working file.** Submission copy — the exact text to paste into the marketplace
 > form — lives in [`listing.md`](listing.md). Do not paste from this file. This file holds
 > internal notes, source-code cross-references, decision history, and status tracking only.

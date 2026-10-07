@@ -149,6 +149,7 @@ digest if you want certainty: `docker buildx imagetools inspect ghcr.io/aytekxr/
 ## License
 
 The server, web UI, and deployment tooling are licensed under
-[PolyForm Noncommercial 1.0.0](LICENSE); the beacon SDK (`sdk/beacon-js/`) is MIT.
-See `docs/licensing.md` for the product license-key model. Licensing does not affect
-the security posture described above.
+[PolyForm Shield License 1.0.0](LICENSE); the beacon SDKs (`sdk/beacon-js/`,
+`sdk/beacon-swift/`) are MIT. See `docs/licensing.md` for the license-key model
+(keys are optional from v0.5.0). Licensing does not affect the security posture
+described above.

@@ -1,43 +1,19 @@
 # Support Policy
 
-> **Support policy set for launch (operator-delegated, D-169).**
-> All SLA, channel, email, hours, and version-support decisions are resolved below.
-> ✅ The **support@beyondkaira.com** mailbox is **provisioned and live** (operator confirmed
-> 2026-07-25, D-171) — no provisioning task remains. Operator may override any value.
-> Marketplace-readiness checklist row 7.
+**Last updated:** 2026-10-07
 
 ---
 
 ## 1. Support channels
 
+Support is best effort through GitHub issues and support@beyondkaira.com, with no
+guaranteed response times.
+
 | Channel | Where | Notes |
 |---|---|---|
-| GitHub Issues | [github.com/aytekXR/ams-pulse/issues](https://github.com/aytekXR/ams-pulse/issues) | Source-available (PolyForm NC); public bug tracking |
-| Email | support@beyondkaira.com | Non-security requests; provisioned and live (D-171) |
+| GitHub Issues | [github.com/aytekXR/ams-pulse/issues](https://github.com/aytekXR/ams-pulse/issues) | Public bug tracking |
+| Email | support@beyondkaira.com | Non-security requests |
 | Security vulnerabilities | aytek@beyondkaira.com | **Do not open a public issue** — see §3 |
-
-### Response-time targets by tier
-
-| Tier | Support channel | First-response target |
-|---|---|---|
-| **Free** | GitHub Issues only | Community / best-effort; no SLA |
-| **Pro** | GitHub Issues + email | **2 business days** |
-| **Business** | GitHub Issues + email | **1 business day** |
-| **Enterprise** | Named contact + shared Slack/Teams channel | **4 business hours** (critical); named contact + onboarding assistance; custom SLA addendum available |
-
-Support email: **support@beyondkaira.com** — provisioned and live (operator, 2026-07-25).
-Set the same address in the marketplace listing. A ticketing alias (Freshdesk/Zendesk) can front
-it later without changing the published address.
-_Set for launch (operator-delegated, D-169) — subject to operator override._
-
-**Trial key requests:** email **support@beyondkaira.com** with your deployment
-details to request a 14-day Pro trial key (no credit card required). The key
-typically arrives within 1 business day and activates via Settings → License.
-See `docs/licensing-public.md` §3 for the full trial policy.
-
-Business hours: **Monday–Friday 09:00–18:00 UTC**, excluding public holidays.
-State this explicitly in the Enterprise SLA addendum.
-_Set for launch (operator-delegated, D-169) — subject to operator override._
 
 ---
 
@@ -99,16 +75,7 @@ Open a GitHub Issue with the label **enhancement** and describe:
 
 - The use-case / problem you are solving (not just the proposed solution).
 - Your deployment scale (stream count, viewer count, AMS version).
-- Whether this is blocking a purchase or renewal decision.
 
 > **OPERATOR-DECISION** Define the public roadmap artifact — proposed: a pinned GitHub Issue or a
 > public GitHub Project board. Link it from the README and marketplace listing. Items accepted into
 > the roadmap are tagged **roadmap** in the issue tracker.
-
-Enterprise customers may submit feature requests directly through their named contact; prioritisation
-is subject to the commercial agreement.
-
----
-
-*Support policy set for launch (operator-delegated, D-169). Remaining open `OPERATOR-DECISION`
-item (public roadmap §5) is non-blocking for marketplace submission.*

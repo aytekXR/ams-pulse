@@ -1,5 +1,8 @@
 # Email to Ankush Banyal (Ant Media) — initiate marketplace integration
 
+> **Pricing/licensing superseded (v0.5.0, 2026-10-07).** From v0.5.0 Pulse is fully free under
+> the PolyForm Shield License 1.0.0. All tier and pricing references in this draft are outdated.
+
 > **The operator sends this from their own account — never send on their behalf.**
 > Rewritten 2026-07-31 (D-191/S123). Content derived from
 > [`submission-process.md`](submission-process.md) §1 (the agreed process),
@@ -64,14 +67,14 @@ curl -fsSL https://raw.githubusercontent.com/aytekXR/ams-pulse/main/deploy/quick
   | bash -s -- --ams-url http://YOUR-AMS:5080 --email you@example.com
 ```
 
-The image is public on GHCR (`ghcr.io/aytekxr/ams-pulse:0.4.5`, multi-arch amd64/arm64). If your
+The image is public on GHCR (`ghcr.io/aytekxr/ams-pulse:0.5.0`, multi-arch amd64/arm64). If your
 team verifies signatures:
 
 ```sh
 cosign verify \
   --certificate-identity-regexp '^https://github\.com/aytekXR/ams-pulse/\.github/workflows/release\.yml@refs/tags/v.+$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/aytekxr/ams-pulse:0.4.5
+  ghcr.io/aytekxr/ams-pulse:0.5.0
 ```
 
 ⚠ One practical note that will save your developer a confusing ten minutes: **this needs a cosign
@@ -158,8 +161,9 @@ attribution file rather than left to be discovered.
   e2e, Helm lint and template goldens, SDK size gate, CodeQL, npm advisory gate, shellcheck, and a
   nightly AMS wire-format matrix.
 - **Live validation:** 46/50 scenarios against real AMS 3.0.3 Enterprise.
-- **Privacy:** viewer IPs are SHA-256 hashed with optional full anonymisation; GeoIP only from an
-  operator-supplied MMDB; secrets encrypted at rest (AES-256-GCM); admin writes are audit-logged.
+- **Privacy:** viewer IPs are not stored (used in memory for the optional GeoIP lookup only);
+  GeoIP only from an operator-supplied MMDB; secrets encrypted at rest (AES-256-GCM); admin writes
+  are audit-logged.
 
 ## What I'd like from the meeting
 

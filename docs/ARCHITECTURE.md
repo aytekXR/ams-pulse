@@ -3,9 +3,10 @@
 Authoritative technical-design document. PRD: `docs/prd-report.md` §7. Decisions with
 trade-offs get an ADR in `docs/adr/`.
 
-Last updated: 2026-07-30 — §3 rule 2 now names `internal/cluster` and is enforced by
-a test (D-179); previous sweep 2026-07-22 (D-161); content baseline D-062 with
-subsequent per-section amendments. QA gate: PASS_WITH_LIMITATIONS.
+Last updated: 2026-10-07 — D-194 v0.5.0: all-features-free policy; tier gates dormant.
+Prior: §3 rule 2 now names `internal/cluster` and is enforced by a test (D-179);
+previous sweep 2026-07-22 (D-161); content baseline D-062 with subsequent per-section
+amendments. QA gate: PASS_WITH_LIMITATIONS.
 
 ## 1. System context
 
@@ -110,7 +111,7 @@ Last updated: 2026-06-14 — Wave 2 implementation complete.
 | Alert channels | `internal/alert/channels` | **Shipped** — Email, Slack, Telegram (Pro+); PagerDuty, Webhook (Business+, V3b); HMAC signature on webhook |
 | Query service | `internal/query` | **Shipped** — live + historical (ClickHouse); QoE + fleet endpoints Wave 2; geo/device breakdown (VD-06 V3a), QoE rollup queries (VD-11 V3a), ingest timeseries (VD-21 V3a) |
 | API server | `internal/api` | **Shipped** — 32 paths, 46 ops; /metrics, /qoe/*, /fleet/nodes, /reports/* added Wave 2; report tier gates, WS LiveOverview, token kind enforcement added V3b |
-| License manager | `internal/license` | **Shipped** — ed25519 verification; 4-tier model (free/pro/business/enterprise) per PRD §7.11; CheckReports, CheckBeaconIngest, CheckMultiTenant, CheckPrometheus added V3b |
+| License manager | `internal/license` | **Shipped** — ed25519 verification; 4-tier model retained (free/pro/business/enterprise); from v0.5.0 all gates are bypassed by `SetAllFeaturesFree(true)` at startup — every feature is enabled on every install |
 | Web UI | `web/` | **Shipped** — F1–F8; 150 tests green (V3b); tier gate logic updated for 4-tier model |
 | Beacon SDK | `sdk/beacon-js/` | **Shipped** (F3) — 3.52 KB gzip, 65 tests green, MIT license; header fix (VD-09), `rebuffer_end` (VD-12), bitrate levels (VD-13) applied V3a |
 | Beacon ingest | `internal/collector/beacon` | **Shipped** (F3) — token auth, rate limit, 64 KB body cap, schema validation; Pro+ tier gate (VD-15 V3b); geo/UA enrichment from HTTP request (VD-08 V3a) |
@@ -267,8 +268,10 @@ Additional Wave-1 library decisions:
 - IP anonymization switch for GDPR/KVKK postures (geo degrades to country).
   Configured via `PULSE_ANONYMIZE_IP=true`. Effective in Wave 2+ (geo enrichment
   implemented); beacon path extracts client IP from `X-Forwarded-For` / `RemoteAddr`.
-- License check fails open for reading already-collected data, fails closed for
-  tier-gated features; Free tier requires no key and no phone-home.
+- License mechanism: the tier model and `Check*` gates are retained in
+  `server/internal/license` for a possible future paid model, but from v0.5.0
+  `SetAllFeaturesFree(true)` is called at startup, so every gate passes and all
+  features are available on every install. License keys are optional.
 - `/metrics` endpoint: set `PULSE_METRICS_TOKEN` to require a scrape token.
   The token comparison uses `subtle.ConstantTimeCompare` (VD-S1 V3b — timing oracle fixed).
 - WebSocket `/live/ws`: cross-origin policy enforced via `AllowedWSOrigins` config;
