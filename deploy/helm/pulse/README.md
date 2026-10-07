@@ -53,7 +53,7 @@ kubectl create secret generic pulse-clickhouse-secret \
 
 # 2. Install the chart (default: SQLite meta, bundled ClickHouse).
 #    Published to GHCR as an OCI artifact on every release, anonymously pullable:
-#      helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.3.3 \
+#      helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.4.0 \
 #        --set pulse.ams.url=http://your-ams:5080 ...
 #    The chart semver is independent of appVersion and moves on its own schedule —
 #    read both from Chart.yaml rather than assuming they track (round-7 review I-02:
@@ -80,7 +80,7 @@ helm upgrade pulse ./deploy/helm/pulse -f my-values.yaml
 | Key | Default | Description |
 |-----|---------|-------------|
 | `pulse.image.repository` | `ghcr.io/aytekxr/ams-pulse` | Canonical GHCR image (cosign-signed on release) |
-| `pulse.image.tag` | `0.4.5` | Image tag |
+| `pulse.image.tag` | `0.5.0` | Image tag |
 | `pulse.image.digest` | `""` | Manifest digest for immutable pinning (overrides tag when set) |
 | `pulse.replicaCount` | `1` | Pulse replicas (use 1 with SQLite; N with postgres.enabled) |
 | `pulse.resources.requests.cpu` | `250m` | CPU request (2-vCPU tier) |
@@ -100,8 +100,8 @@ helm upgrade pulse ./deploy/helm/pulse -f my-values.yaml
 | `pulse.rollupTTLDays` | `395` | `PULSE_ROLLUP_TTL_DAYS` — rollup TTL (~13 months) |
 | `pulse.meta.dsn` | `""` | `PULSE_META_DSN` (auto: `/var/lib/pulse/pulse_meta.db`) |
 | `pulse.webhookAddr` | `""` | `PULSE_WEBHOOK_ADDR` — webhook HTTP listener (e.g. `:8092`) |
-| `pulse.license.key` | `""` | `PULSE_LICENSE_KEY` (empty = Free tier) |
-| `pulse.license.offlineFile` | `""` | `PULSE_LICENSE_FILE` (air-gapped Enterprise) |
+| `pulse.license.key` | `""` | `PULSE_LICENSE_KEY` (optional; Pulse is free with all features included) |
+| `pulse.license.offlineFile` | `""` | `PULSE_LICENSE_FILE` (optional; for compatibility only) |
 | `pulse.logLevel` | `info` | `PULSE_LOG_LEVEL` (debug\|info\|warn\|error) |
 | `pulse.secretRef.name` | `""` | Name of Secret providing sensitive env vars |
 | `pulse.persistence.enabled` | `true` | PVC for SQLite meta store |
@@ -150,7 +150,7 @@ helm upgrade pulse ./deploy/helm/pulse -f my-values.yaml
 | `PULSE_SECRET_KEY` | **YES** | `PULSE_SECRET_KEY` | 32-byte hex key for AES-256-GCM; binary crashes at boot if absent (`optional: false`) |
 | `PULSE_AMS_AUTH_TOKEN` | no | `PULSE_AMS_AUTH_TOKEN` | AMS REST bearer token |
 | `PULSE_WEBHOOK_SECRET` | no | `PULSE_WEBHOOK_SECRET` | HMAC-SHA256 global webhook validation secret |
-| `PULSE_METRICS_TOKEN` | no | `PULSE_METRICS_TOKEN` | Prometheus scrape token (Wave 2) |
+| `PULSE_METRICS_TOKEN` | no | `PULSE_METRICS_TOKEN` | Prometheus scrape token; when unset, `/metrics` is served unauthenticated |
 | `PULSE_POSTGRES_DSN` | when `postgres.enabled` | `PULSE_META_DSN` | Full Postgres DSN |
 | `PULSE_S3_ACCESS_KEY_ID` | no | `PULSE_S3_ACCESS_KEY_ID` | S3 access key ID (when `s3Export.enabled`) |
 | `PULSE_S3_SECRET_ACCESS_KEY` | no | `PULSE_S3_SECRET_ACCESS_KEY` | S3 secret access key (when `s3Export.enabled`) |

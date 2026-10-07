@@ -8,6 +8,81 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ---
 
+## [0.5.0] - 2026-10-07
+
+### Changed
+
+- **Pulse is free — every feature, for everyone, commercial use included (D-194).** The server,
+  web UI and deploy tooling move from PolyForm Noncommercial 1.0.0 to the **PolyForm Shield
+  License 1.0.0**: free for any use, including commercial; the one restriction is providing a
+  product that competes with Pulse. The beacon SDKs stay MIT. There are no paid tiers, prices,
+  trials or purchase links; this is the launch policy for at least the first year. Copyright
+  now names the developer, Aytekin Erdogan.
+- **Every entitlement gate is open on every install.** `cmd/pulse` turns on the license
+  manager's all-features-free policy (`license.SetAllFeaturesFree`), so every `Check*` gate
+  passes and entitlements are unlimited whatever key is loaded: all five alert channels, QoE
+  beacon ingest, historical analytics, usage reports, multi-tenant billing, anomaly detection,
+  synthetic probes, Prometheus `/metrics`, SSO/OIDC and white-label reports, with no node,
+  stream or license-retention limits. The tier model stays in code, dormant and still tested,
+  so a future paid model would be a policy flip rather than a rewrite. License keys still load
+  for compatibility but change nothing.
+- **`GET /admin/license` reports `all_features_free`** (contract first). The web UI gates through
+  a single `gatingTier()` helper that treats it as fully unlocked, so no upgrade prompt appears
+  anywhere. Settings → License now says Pulse is free and shows no activation form.
+- **`/metrics` needs a token on the quickstart.** With every feature free, `/metrics` is served
+  on every install; the quickstart installer now generates `PULSE_METRICS_TOKEN` (kept across
+  re-runs) and the quickstart, base and production compose files pass it through. Without a
+  token `/metrics` stays unauthenticated, and Pulse warns at startup.
+
+### Fixed
+
+- **A wrong AMS password no longer keeps the AMS account locked (found live on AMS 3.1.0).** AMS
+  locks an account for 300 s after two failed logins, and the collector retried a rejected
+  login on every 5 s poll — so a wrong password, or a Pulse started before the AMS admin
+  existed, kept the account locked for as long as Pulse ran, locking people out of the AMS
+  console too. A rejected login now backs off 1, 2, 4, 8, then 15 minutes (never less than
+  the lock AMS reports); transport errors and 5xx are still retried every poll.
+- **A 403 that a new session cannot fix no longer logs in on every poll.** The re-login on a
+  401/403 bypassed its own throttle, so a per-application REST IP filter (AMS's default
+  `127.0.0.1`) caused a fresh login per application per poll. It is now at most one a minute;
+  an expired session still renews on the first 403.
+- **A first visit no longer says "Session expired".** The sign-in page showed it to a brand-new
+  operator because the pre-login license fetch returns 401.
+- **Settings → License shows "Unlimited", not `null`** (D11), and Yes/No for flags.
+- **The sidebar's plan label appears right after the first sign-in** (D14), not only after a
+  reload: signing in now tells the license context to fetch again.
+- **The alert-rule form offers exactly the metrics the server accepts (found on AMS 3.1.0).**
+  For threshold rules it offered `cpu_pct`, `mem_pct`, `packet_loss_pct`, `jitter_ms`, `rtt_ms`
+  and `health_score` — names the evaluator never handled, so such rules saved but never fired
+  until v0.4.1, and have been refused with 422 since — and it did not offer `node_cpu`,
+  `node_mem`, `node_disk`, `stream_offline`, `viewer_count_floor`, `ingest_bitrate_floor` or
+  `error_rate` at all, so no CPU or memory threshold alert could be made in the UI. Editing a
+  rule now shows its real metric (it showed the first option), switching rule type maps
+  `node_cpu` ↔ `cpu_pct`, and a test pins the form's lists to the server's. **Upgrade note:** a
+  threshold rule saved before v0.4.1 with one of the six names has never fired; its edit form now
+  flags the metric as not supported — choose `node_cpu` / `node_mem` instead.
+- **A refused save is reported.** Saving an alert rule or channel that the server rejected did
+  nothing visible (the error was dropped); it now shows the server's reason and keeps the form
+  open with your input.
+- **Quickstart installer:** uses an image already present locally when the registry pull fails
+  (the documented offline path could not work), prints a correct build-from-source command,
+  and its next steps no longer promise a setup wizard that does not appear.
+
+### Added
+
+- `docs/marketplace/antmedia-submission/` — the Ant Media Marketplace submission package: page
+  copy, answers, guides, real-application screenshots and brand assets, with
+  `qa/marketplace/` tooling to rebuild every asset and the ZIP.
+- Website: a **Get Pulse** install page; the pricing section is replaced by the license
+  terms; FAQ corrections (viewer IPs are never stored; no origin/edge deduplication claim).
+- Web UI polish since v0.4.5 (#252): WCAG-compliant muted text, interaction states, reduced
+  motion.
+
+### Known issues
+
+- Audience analytics, usage-report viewer-minutes and QoE ratios are wrong for player-SDK
+  sessions (LIM-30); the fix is a data-model change on the roadmap (ROADMAP-V2 §2.49).
+
 ## [0.4.5] - 2026-07-30
 
 ### Added
