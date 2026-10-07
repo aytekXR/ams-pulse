@@ -23,12 +23,13 @@ survives AMS upgrades without any coordination.
 
 ### Q2. Which AMS versions are supported?
 
-Validated live on **AMS 3.0.3 Enterprise**; best-effort compatibility with
-**AMS 2.10+** via version-tolerance tests (mock profiles).
+Validated live on **AMS 3.1.0 Enterprise** and **AMS 3.0.3 Enterprise**; best-effort
+compatibility with **AMS 2.10+** via version-tolerance tests (mock profiles).
 
 | AMS Version | Support level |
 |---|---|
-| **3.0.3 Enterprise Edition (build 20260504\_1443)** | **Live-validated — primary target** (46/50 scenario scripts PASS) |
+| **3.1.0 Enterprise Edition (build 20260831\_1439)** | **Live-validated — primary target** (2026-10-07, Pulse v0.5.0: 44/61 scenario scripts PASS, none of the failures an AMS regression; alerting, player QoE and the installer verified live) |
+| **3.0.3 Enterprise Edition (build 20260504\_1443)** | **Live-validated** (46/50 scenario scripts PASS) |
 | 2.10.x – 3.0.2 | Best-effort — version-tolerance tests (mock profiles); no live-wire guarantee |
 
 Deploy AMS 3.x for production. Real Docker images for older versions are
@@ -191,10 +192,10 @@ no guaranteed response times.
 ### Q11. Does my data leave my infrastructure?
 
 No. Pulse is entirely self-hosted. There is no SaaS component and no
-phone-home. License verification is offline — keys are validated locally
-via an ed25519 signature check against the vendor public key embedded in
-the binary (or the key you supply via `PULSE_LICENSE_PUBKEY`); no
-activation server is contacted.
+phone-home. Pulse needs no license key and contacts no activation server;
+a legacy key, if you still load one, is checked offline (an ed25519
+signature check against the public key embedded in the binary, or the key
+you supply via `PULSE_LICENSE_PUBKEY`).
 
 Viewer IP addresses are **not stored** — neither raw nor hashed. The
 beacon endpoint uses the request IP only in memory, for the optional

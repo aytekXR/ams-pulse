@@ -526,7 +526,7 @@ When the first viewer connects, the detector fires a very high-sigma anomaly fla
 This is **not a false alarm in the statistical sense** — "audience appeared after a
 long quiet period" is a genuine deviation from baseline behavior, and the ruling
 at S28/D-090 is to keep it (`docs/guides/anomaly-detection.md` §2 "Zero-viewer
-baselines and the first-viewer spike"; `docs/operator-expected.md` §2.17.1).
+baselines and the first-viewer spike").
 
 **Root cause:** The viewer count is fed to the Welford accumulator unconditionally
 for every active stream tick — `0` is a real measurement, not a sentinel.
@@ -767,8 +767,7 @@ metrics and the fleet view are not affected. Startup-time percentiles on the QoE
 SDK sends `watch_ms` as a running total; the rollup materialized views count every inserted row
 as a view and sum the running totals. Separately, the audience query scans `UInt64` aggregates
 into `int64` fields, the scan error is swallowed, and the API returns zeros. Found and reproduced
-on 2026-10-01 with a single ground-truth session (D-193; evidence in
-`docs/marketplace/antmedia-submission/internal/evidence/`).
+on 2026-10-01 with a single ground-truth session (decision D-193).
 
 **Workaround:** for viewer-minutes, query `viewer_sessions FINAL` directly (its per-session
 totals are correct); for QoE, use startup-time percentiles, probes and ingest rules rather than
