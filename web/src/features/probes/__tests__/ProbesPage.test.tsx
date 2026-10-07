@@ -183,6 +183,17 @@ describe("ProbesPage tier gate", () => {
     expect(screen.queryByText(/requires pro tier/i)).toBeNull();
   });
 
+  it("D-194: a keyless v0.5.0 server (all_features_free) shows probes with no upsell", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue({ ...freeLicense, all_features_free: true });
+    vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });
+    render(<ProbesPage />, { wrapper });
+    await waitFor(() => {
+      expect(screen.getByText("Main HLS stream")).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/requires pro tier/i)).toBeNull();
+    expect(screen.queryByRole("link", { name: /upgrade license/i })).toBeNull();
+  });
+
   it("shows probe list when license is 'enterprise'", async () => {
     vi.mocked(adminApi.getLicense).mockResolvedValue(enterpriseLicense);
     vi.mocked(probesApi.list).mockResolvedValue({ items: sampleProbes, meta: {} });

@@ -2777,10 +2777,12 @@ func licenseToAPI(lic *license.Manager) map[string]any {
 		expiresAt = exp.UnixMilli()
 	}
 	return map[string]any{
-		"tier":         string(lic.Tier()),
-		"valid":        lic.Valid(),
-		"expires_at":   expiresAt,
-		"offline_file": false,
+		"tier":  string(lic.Tier()),
+		"valid": lic.Valid(),
+		// D-194: lets the UI drop every upgrade prompt; ent above is already unlimited.
+		"all_features_free": lic.AllFeaturesFree(),
+		"expires_at":        expiresAt,
+		"offline_file":      false,
 		"limits": map[string]any{
 			"max_nodes":      nullableInt(ent.MaxNodes),
 			"max_streams":    nullableInt(ent.MaxStreams),

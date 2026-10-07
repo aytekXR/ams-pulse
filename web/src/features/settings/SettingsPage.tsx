@@ -88,6 +88,16 @@ const session = Pulse.init({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
+/**
+ * One license-limit value for display. Unlimited is null on the wire (and -1 from
+ * older servers) — never print a raw "null" (D11). Booleans read Yes/No.
+ */
+function formatLimit(v: unknown): string {
+  if (v === null || v === undefined || v === -1) return "Unlimited";
+  if (typeof v === "boolean") return v ? "Yes" : "No";
+  return String(v);
+}
+
 export function SettingsPage() {
   const { toast } = useToast();
   const [tab, setTab] = useState<Tab>("sources");
@@ -97,6 +107,8 @@ export function SettingsPage() {
   const [tokens, setTokens] = useState<Token[]>([]);
   const [ingestTokens, setIngestTokens] = useState<Token[]>([]);
   const [license, setLicense] = useState<LicenseInfo | null>(null);
+  // D-194: v0.5.0+ servers unlock every feature; there is nothing to activate.
+  const allFeaturesFree = license?.all_features_free === true;
   const [licenseKey, setLicenseKey] = useState("");
   const [savingLicense, setSavingLicense] = useState(false);
   const [newIngestToken, setNewIngestToken] = useState<TokenCreated | null>(null);
@@ -697,6 +709,12 @@ export function SettingsPage() {
                         variant={license.tier === "enterprise" ? "success" : license.tier === "pro" ? "info" : "muted"}
                       />
                     </div>
+                    {allFeaturesFree && (
+                      <p style={{ margin: 0, fontSize: 13, color: "var(--color-secondary)" }}>
+                        Pulse is free — every feature is included, with no node or retention
+                        limits. No license key is needed.
+                      </p>
+                    )}
                     {license.expires_at && (
                       <p style={{ margin: 0, fontSize: 13, color: "var(--color-secondary)" }}>
                         Expires: {new Date(license.expires_at).toLocaleDateString()}
@@ -707,7 +725,7 @@ export function SettingsPage() {
                         {Object.entries(license.limits).map(([k, v]) => (
                           <div key={k} style={{ background: "var(--color-surface-2)", borderRadius: "var(--radius-control)", padding: "var(--space-2) var(--space-3)" }}>
                             <div className="label">{k.replace(/_/g, " ")}</div>
-                            <div style={{ fontSize: 15, fontWeight: 600, marginTop: 2 }}>{v === -1 ? "∞" : String(v)}</div>
+                            <div style={{ fontSize: 15, fontWeight: 600, marginTop: 2 }}>{formatLimit(v)}</div>
                           </div>
                         ))}
                       </div>
@@ -715,46 +733,48 @@ export function SettingsPage() {
                   </div>
                 )}
 
-                <div
-                  style={{
-                    background: "var(--color-surface)",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: "var(--radius-card)",
-                    padding: "var(--space-5)",
-                  }}
-                >
-                  <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 600 }}>
-                    {license?.tier && license.tier !== "free" ? "Update license key" : "Activate license"}
-                  </h3>
-                  <form onSubmit={(e) => void saveLicense(e)} style={{ display: "flex", gap: 10 }}>
-                    <input
-                      className="filter-input"
-                      style={{ ...inputStyle, flex: 1 }}
-                      type="text"
-                      value={licenseKey}
-                      onChange={(e) => setLicenseKey(e.target.value)}
-                      placeholder="PULSE-XXXX-XXXX-XXXX"
-                    />
-                    <button
-                      type="submit"
-                      disabled={savingLicense || !licenseKey.trim()}
-                      className="btn-primary"
-                      style={{
-                        border: "none",
-                        color: "var(--color-on-signal)",
-                        borderRadius: "var(--radius-control)",
-                        padding: "var(--space-2) var(--space-4)",
-                        fontSize: 13,
-                        fontWeight: 600,
-                      }}
-                    >
-                      {savingLicense ? "Activating…" : "Activate"}
-                    </button>
-                  </form>
-                  <p style={{ margin: "12px 0 0", fontSize: 12, color: "var(--color-secondary)" }}>
-                    Free tier requires no license key. Contact sales for Pro/Enterprise keys.
-                  </p>
-                </div>
+                {!allFeaturesFree && (
+                  <div
+                    style={{
+                      background: "var(--color-surface)",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: "var(--radius-card)",
+                      padding: "var(--space-5)",
+                    }}
+                  >
+                    <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 600 }}>
+                      {license?.tier && license.tier !== "free" ? "Update license key" : "Activate license"}
+                    </h3>
+                    <form onSubmit={(e) => void saveLicense(e)} style={{ display: "flex", gap: 10 }}>
+                      <input
+                        className="filter-input"
+                        style={{ ...inputStyle, flex: 1 }}
+                        type="text"
+                        value={licenseKey}
+                        onChange={(e) => setLicenseKey(e.target.value)}
+                        placeholder="PULSE-XXXX-XXXX-XXXX"
+                      />
+                      <button
+                        type="submit"
+                        disabled={savingLicense || !licenseKey.trim()}
+                        className="btn-primary"
+                        style={{
+                          border: "none",
+                          color: "var(--color-on-signal)",
+                          borderRadius: "var(--radius-control)",
+                          padding: "var(--space-2) var(--space-4)",
+                          fontSize: 13,
+                          fontWeight: 600,
+                        }}
+                      >
+                        {savingLicense ? "Activating…" : "Activate"}
+                      </button>
+                    </form>
+                    <p style={{ margin: "12px 0 0", fontSize: 12, color: "var(--color-secondary)" }}>
+                      Free tier requires no license key. Contact sales for Pro/Enterprise keys.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           )}

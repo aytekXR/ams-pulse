@@ -139,6 +139,20 @@ describe("AnomaliesPage rendering", () => {
     expect(screen.queryByText(/requires business tier/i)).not.toBeInTheDocument();
   });
 
+  it("D-194: a keyless v0.5.0 server (all_features_free) shows anomalies with no upsell", async () => {
+    vi.mocked(adminApi.getLicense).mockResolvedValue({ ...freeLicense, all_features_free: true });
+    vi.mocked(anomaliesApi.list).mockResolvedValue({
+      items: sampleFlags,
+      meta: { total: 3 },
+    });
+    render(<AnomaliesPage />);
+    await waitFor(() => {
+      expect(screen.getByText("viewers")).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/requires business tier/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /upgrade license/i })).toBeNull();
+  });
+
   it("shows anomaly flags table when enterprise-entitled", async () => {
     vi.mocked(adminApi.getLicense).mockResolvedValue(enterpriseLicense);
     vi.mocked(anomaliesApi.list).mockResolvedValue({

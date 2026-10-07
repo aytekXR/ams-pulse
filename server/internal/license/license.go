@@ -26,9 +26,17 @@
 // PULSE_LICENSE_PUBKEY env var to override the embedded key with a hex-encoded
 // ed25519 public key (for CI/staging environments).
 //
-// # Free tier (no key)
+// # All features free (v0.5.0+, D-194)
 //
-// Free tier is the default when no license key is configured:
+// Pulse is free for everyone: every release from v0.5.0 calls
+// SetAllFeaturesFree(true) at startup (cmd/pulse), which opens every Check*
+// gate and reports unlimited Entitlements, whatever key is (or is not) loaded.
+// Tier() still names the loaded key, so the state stays honest.
+//
+// # Free tier (no key) — tier enforcement only
+//
+// With the policy off (New's default, kept for a future paid model and still
+// covered by the tier tests), Free tier applies when no key is configured:
 //   - 1 AMS node monitored
 //   - 7-day data retention
 //   - Email alerts only (no Slack/PagerDuty/webhook)
@@ -152,6 +160,17 @@ var enterpriseTierEntitlements = Entitlements{
 	Channels:      []string{"email", "slack", "pagerduty", "telegram", "webhook"},
 }
 
+// allFeaturesEntitlements is what every manager reports while the
+// all-features-free policy is on: no limits, every channel, every flag.
+var allFeaturesEntitlements = Entitlements{
+	MaxNodes:      -1,
+	MaxStreams:    -1,
+	RetentionDays: -1,
+	DataAPI:       true,
+	WhiteLabel:    true,
+	Channels:      []string{"email", "slack", "telegram", "pagerduty", "webhook"},
+}
+
 // claims is the parsed JSON payload from a license key.
 type claims struct {
 	Tier          string `json:"tier"`
@@ -174,6 +193,9 @@ type Manager struct {
 	offlineFile   string
 	pubKey        ed25519.PublicKey
 	degradedByExp bool // true after mid-run expiry downgrade; makes maybeExpireLocked idempotent
+	// allFree is the all-features-free policy (D-194). Deliberately separate from
+	// the tier state: activate, setFree and expiry never touch it.
+	allFree bool
 }
 
 // devPublicKeyHex is the embedded dev/test public key (ed25519).
@@ -290,13 +312,34 @@ func (m *Manager) Tier() Tier {
 	return m.tier
 }
 
-// Entitlements returns the current tier entitlements.
+// Entitlements returns the current tier entitlements — or, while the
+// all-features-free policy is on, unlimited entitlements whatever the tier.
 // Triggers a lazy expiry check on every call.
 func (m *Manager) Entitlements() Entitlements {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.maybeExpireLocked()
+	if m.allFree {
+		return allFeaturesEntitlements
+	}
 	return m.entitlements
+}
+
+// SetAllFeaturesFree turns the all-features-free policy (D-194) on or off for
+// this manager. While on, every Check* gate passes and Entitlements reports no
+// limits; the tier, validity and expiry state are left untouched so they stay
+// honest. cmd/pulse turns it on for every v0.5.0+ server.
+func (m *Manager) SetAllFeaturesFree(on bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.allFree = on
+}
+
+// AllFeaturesFree reports whether the all-features-free policy is on.
+func (m *Manager) AllFeaturesFree() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.allFree
 }
 
 // Valid returns whether the license is valid (not expired, signature OK).
@@ -370,6 +413,9 @@ func (m *Manager) CheckDataAPI() error {
 // CheckProbes returns nil if the tier includes synthetic probe access (F10).
 // Probes require Pro tier or higher (§7.11 pricing table).
 func (m *Manager) CheckProbes() error {
+	if m.AllFeaturesFree() {
+		return nil // D-194: every feature is free
+	}
 	t := m.Tier()
 	// Positive membership (matches the 5 sibling checks) — an unknown tier string is
 	// blocked, not silently granted access as the old `t == TierFree` gate did (D-133/S71 [23]).
@@ -390,6 +436,9 @@ func (m *Manager) CheckProbes() error {
 // grant-only direction: no tenant loses a capability it has today, and the tier tables
 // in the docs and the marketplace listing now describe what the code actually does.
 func (m *Manager) CheckAnomalies() error {
+	if m.AllFeaturesFree() {
+		return nil // D-194: every feature is free
+	}
 	t := m.Tier()
 	if t != TierBusiness && t != TierEnterprise {
 		return fmt.Errorf("anomaly detection (F9) requires Business tier or higher (current: %q)", t)
@@ -400,6 +449,9 @@ func (m *Manager) CheckAnomalies() error {
 // CheckMultiTenant returns nil if the tier includes multi-tenant billing (F6 tenant CRUD).
 // Multi-tenant billing requires Business tier or higher (PRD §7.11 table); Free and Pro → 403.
 func (m *Manager) CheckMultiTenant() error {
+	if m.AllFeaturesFree() {
+		return nil // D-194: every feature is free
+	}
 	t := m.Tier()
 	if t != TierBusiness && t != TierEnterprise {
 		return fmt.Errorf("multi-tenant billing (F6) requires Business tier or higher (current: %q)", t)
@@ -411,6 +463,9 @@ func (m *Manager) CheckMultiTenant() error {
 // Reports require Business tier or higher (PRD §7.11: "usage reports" is a Business+ feature).
 // Free and Pro tiers receive 403.
 func (m *Manager) CheckReports() error {
+	if m.AllFeaturesFree() {
+		return nil // D-194: every feature is free
+	}
 	t := m.Tier()
 	if t != TierBusiness && t != TierEnterprise {
 		return fmt.Errorf("usage/billing reports (F6) require Business tier or higher (current: %q)", t)
@@ -422,6 +477,9 @@ func (m *Manager) CheckReports() error {
 // Beacon ingest (player-side QoE data) requires Pro tier or higher (PRD §7.11 table).
 // Free tier returns 403.
 func (m *Manager) CheckBeaconIngest() error {
+	if m.AllFeaturesFree() {
+		return nil // D-194: every feature is free
+	}
 	t := m.Tier()
 	// Positive membership (matches the 5 sibling checks) — an unknown tier string is
 	// blocked, not silently granted access as the old `t == TierFree` gate did (D-133/S71 [23]).
@@ -436,6 +494,9 @@ func (m *Manager) CheckBeaconIngest() error {
 // Free and Pro tiers are blocked by this gate (the handler returns 403 LICENSE_REQUIRED);
 // there is no unauthenticated /metrics fallback path.
 func (m *Manager) CheckPrometheus() error {
+	if m.AllFeaturesFree() {
+		return nil // D-194: every feature is free
+	}
 	t := m.Tier()
 	if t != TierBusiness && t != TierEnterprise {
 		return fmt.Errorf("Prometheus endpoint (F8) requires Business tier or higher (current: %q)", t)
@@ -448,6 +509,9 @@ func (m *Manager) CheckPrometheus() error {
 // Business are blocked — the OIDC login/callback routes return 403 and the
 // status endpoint reports SSO disabled so the SPA does not offer the button.
 func (m *Manager) CheckSSO() error {
+	if m.AllFeaturesFree() {
+		return nil // D-194: every feature is free
+	}
 	if m.Tier() != TierEnterprise {
 		return fmt.Errorf("SSO / OIDC login requires Enterprise tier (current: %q)", m.Tier())
 	}

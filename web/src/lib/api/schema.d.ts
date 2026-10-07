@@ -579,15 +579,16 @@ export interface paths {
          * @description Prometheus text exposition format (Content-Type:
          *     `text/plain; version=0.0.4`). Low-cardinality gauges and counters only.
          *
-         *     **License gate:** Requires Business or Enterprise tier. Free and Pro
-         *     tiers receive `403 LICENSE_REQUIRED` regardless of any token (there is
-         *     no unauthenticated fallback path).
+         *     **License gate:** none since v0.5.0 (every feature is free). Under tier
+         *     enforcement (`all_features_free` false; no current release) it requires
+         *     Business or Enterprise, and other tiers receive `403 LICENSE_REQUIRED`.
          *
          *     **Scrape token (optional):** When `PULSE_METRICS_TOKEN` is set, the
          *     endpoint additionally requires `Authorization: Bearer <token>`
-         *     (constant-time compared). If the env var is unset, any valid Business+
-         *     instance exposes metrics without a token — rely on network-level controls
-         *     (firewall, reverse-proxy ACL) for access restriction in that case.
+         *     (constant-time compared). If the env var is unset, metrics are served
+         *     without a token (Pulse logs a warning at startup) — set it, as the
+         *     quickstart installer does, or restrict access at the network level
+         *     (firewall, reverse-proxy ACL).
          */
         get: operations["getMetrics"];
         put?: never;
@@ -938,8 +939,8 @@ export interface paths {
          * List tenant definitions
          * @description Returns all configured tenants for multi-tenant billing (F6).
          *     Tenants match streams by `stream_pattern` (SQL LIKE / regex) or
-         *     by `meta_tag_key`/`meta_tag_value` (beacon meta field). Requires
-         *     Business tier (D-010).
+         *     by `meta_tag_key`/`meta_tag_value` (beacon meta field). Open to all
+         *     since v0.5.0; under tier enforcement it requires Business (D-010).
          */
         get: operations["listTenants"];
         put?: never;
@@ -948,7 +949,7 @@ export interface paths {
          * @description Creates a new tenant. `name` must be unique (meta constraint →
          *     409 on duplicate). At least one of `stream_pattern` or
          *     (`meta_tag_key` + `meta_tag_value`) must be provided.
-         *     Requires Business tier (D-010).
+         *     Open to all since v0.5.0; under tier enforcement it requires Business (D-010).
          */
         post: operations["createTenant"];
         delete?: never;
@@ -1762,9 +1763,17 @@ export interface components {
             error?: string | null;
         };
         /**
-         * @description License status and tier entitlements (PRD §7.11 four-tier matrix).
+         * @description License status and tier entitlements.
          *
-         *     **Tier entitlement matrix:**
+         *     **Since v0.5.0 every feature is free.** A Pulse server runs with
+         *     `all_features_free: true`: every entitlement gate is open and `limits`
+         *     reports no limits, with or without a license key. `tier` still names the
+         *     key that is loaded (`free` when there is none). Clients must treat
+         *     `all_features_free: true` as "everything is unlocked" and must not gate on
+         *     `tier`.
+         *
+         *     The matrix below is the tier-enforcement model that applies only when
+         *     `all_features_free` is false (no current release runs that way):
          *     | Tier       | Nodes | Retention | Channels               | Data API | White-label | Multi-tenant | Anomalies |
          *     |------------|-------|-----------|------------------------|----------|-------------|--------------|-----------|
          *     | free       | 1     | 7 days    | email                  | no       | no          | no           | no        |
@@ -1774,14 +1783,18 @@ export interface components {
          */
         LicenseInfo: {
             /**
-             * @description License tier (PRD §7.11):
-             *     - `free`: 1 node, 7-day retention, email alerts only — $0/mo
-             *     - `pro`: 10 nodes, 90-day retention, Slack/Telegram, CSV export — $99/mo
-             *     - `business`: 50 nodes, 13-month retention, PagerDuty/webhooks, usage reports, multi-tenant, API+Prometheus, anomaly detection — $299/mo
-             *     - `enterprise`: unlimited nodes, SSO, white-label reports, air-gapped licensing — from $799/mo
+             * @description Tier named by the loaded license key; `free` when no key is loaded.
+             *     Under tier enforcement (see the schema description) it decides what
+             *     is unlocked; with `all_features_free: true` it is informational only.
              * @enum {string}
              */
             tier: "free" | "pro" | "business" | "enterprise";
+            /**
+             * @description True when every feature is unlocked regardless of `tier` (the v0.5.0+
+             *     policy). Clients must not show upgrade prompts when this is true.
+             *     Absent from servers older than v0.5.0, which enforce tiers.
+             */
+            all_features_free?: boolean;
             valid: boolean;
             limits?: components["schemas"]["TierLimits"];
             /** @description Unix epoch ms; null for perpetual/free */
@@ -2843,7 +2856,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            /** @description Business tier or higher required — anomaly detection (F9) is gated to Business and Enterprise subscribers (license.CheckAnomalies) */
+            /** @description Returned only under tier enforcement (`all_features_free` false; no current release) — anomaly detection (F9) then requires Business or Enterprise (license.CheckAnomalies) */
             403: {
                 headers: {
                     [name: string]: unknown;

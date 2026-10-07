@@ -98,7 +98,16 @@ func openAPISpec(t *testing.T) *openapi3.T {
 
 // setupTestServer creates an httptest.Server with the API handler and
 // returns the server URL, a pre-created admin token, and a cleanup func.
+// The license is keyless with tier enforcement on (license.New's default).
 func setupTestServer(t *testing.T) (ts *httptest.Server, adminToken string, cleanup func()) {
+	t.Helper()
+	lic, _ := license.New("", "")
+	return setupTestServerWithLicense(t, lic)
+}
+
+// setupTestServerWithLicense is setupTestServer with a caller-supplied license
+// manager — e.g. one with the all-features-free policy on, as cmd/pulse runs it.
+func setupTestServerWithLicense(t *testing.T, lic *license.Manager) (ts *httptest.Server, adminToken string, cleanup func()) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -131,8 +140,7 @@ func setupTestServer(t *testing.T) (ts *httptest.Server, adminToken string, clea
 		t.Fatalf("CreateToken: %v", err)
 	}
 
-	// License, live provider, query service.
-	lic, _ := license.New("", "")
+	// Live provider and query service.
 	live := &fakeLiveProvider{}
 	qsvc := query.New(live, nil, lic)
 

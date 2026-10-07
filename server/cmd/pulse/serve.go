@@ -314,13 +314,9 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 	// (moved to after metaStore so SourceSecrets can be populated — B7).
 
 	// HOOK(BE-02): Wire license manager.
-	lic, err := license.New(os.Getenv("PULSE_LICENSE_KEY"), os.Getenv("PULSE_LICENSE_FILE"))
-	if err != nil {
-		logger.Warn("license: init failed, using free tier", "error", err)
-		// license.New never returns an error on fallback — but guard anyway.
-		lic, _ = license.New("", "")
-	}
-	logger.Info("pulse: license loaded", "tier", lic.Tier(), "valid", lic.Valid())
+	lic := newLicenseManager(os.Getenv("PULSE_LICENSE_KEY"), os.Getenv("PULSE_LICENSE_FILE"), logger)
+	logger.Info("pulse: license loaded", "tier", lic.Tier(), "valid", lic.Valid(),
+		"all_features_free", lic.AllFeaturesFree())
 
 	// HOOK(BE-02): Wire meta store. Backend selected by PULSE_META (default: sqlite);
 	// PULSE_POSTGRES_DSN is a convenience override that sets backend=postgres + DSN
@@ -802,6 +798,24 @@ func wireAlertAnomalyReader(eval *alert.Evaluator, store alert.AnomalyBaselineRe
 	if store != nil {
 		eval.SetAnomalyBaselineReader(store)
 	}
+}
+
+// newLicenseManager builds the license manager serve() runs with. Every v0.5.0+
+// server turns the all-features-free policy on (D-194): Pulse is free — every
+// feature, commercial use included. A configured key still loads and verifies,
+// so the tier and validity shown in the UI stay accurate.
+//
+// D-194 wiring pin: license_policy_test.go calls this directly for every load
+// outcome (no key, rejected key, unreadable offline file).
+func newLicenseManager(key, file string, logger *slog.Logger) *license.Manager {
+	lic, err := license.New(key, file)
+	if err != nil {
+		logger.Warn("license: init failed, using free tier", "error", err)
+		// license.New never returns an error on fallback — but guard anyway.
+		lic, _ = license.New("", "")
+	}
+	lic.SetAllFeaturesFree(true)
+	return lic
 }
 
 // wireAlertLicenseExpiry wires the licence-key expiry checker to the alert evaluator

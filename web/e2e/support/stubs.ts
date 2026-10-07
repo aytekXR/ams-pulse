@@ -51,6 +51,12 @@ function limitsFor(tier: Tier) {
 export interface StubAppOptions {
   /** Licence tier the app boots with. Drives every TierGate on the page. */
   tier?: Tier;
+  /**
+   * D-194: report `all_features_free: true`, as every v0.5.0+ server does —
+   * every gate opens whatever `tier` says. Off by default so the tier specs keep
+   * exercising enforcement (what a pre-v0.5.0 server does).
+   */
+  allFeaturesFree?: boolean;
   /** Auth token written to localStorage before the first script runs. */
   token?: string;
 }
@@ -60,7 +66,7 @@ export interface StubAppOptions {
  * Call from `test.beforeEach` BEFORE `page.goto`.
  */
 export async function stubApp(page: Page, options: StubAppOptions = {}): Promise<void> {
-  const { tier = "enterprise", token = "plt_e2e" } = options;
+  const { tier = "enterprise", token = "plt_e2e", allFeaturesFree = false } = options;
 
   await page.addInitScript(
     ([key, value]) => localStorage.setItem(key, value),
@@ -71,9 +77,12 @@ export async function stubApp(page: Page, options: StubAppOptions = {}): Promise
     json(route, {
       tier,
       valid: true,
+      ...(allFeaturesFree ? { all_features_free: true } : {}),
       expires_at: null,
       offline_file: false,
-      limits: limitsFor(tier),
+      limits: allFeaturesFree
+        ? { max_nodes: null, max_streams: null, retention_days: null, data_api: true, white_label: true }
+        : limitsFor(tier),
     }),
   );
 

@@ -16,7 +16,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { Badge } from "@/components/Badge";
 import { TierGate } from "@/components/TierGate";
 import type { AnomalyFlag, LicenseInfo, AlertScope } from "@/lib/api/types";
-import { canUseAnomalies } from "@/lib/entitlements";
+import { canUseAnomalies, gatingTier } from "@/lib/entitlements";
 
 // ─── Tier entitlement ─────────────────────────────────────────────────────────
 
@@ -30,7 +30,7 @@ import { canUseAnomalies } from "@/lib/entitlements";
  * it. It used to be inline here, and the test that "guarded" it kept its own copy — so
  * the test passed while asserting the pre-S122 (wrong) rule.
  */
-function anomaliesEntitled(tier: LicenseInfo["tier"]): boolean {
+function anomaliesEntitled(tier: string | undefined): boolean {
   return canUseAnomalies(tier);
 }
 
@@ -248,7 +248,7 @@ export function AnomaliesPage() {
   // Fetch anomalies once the license is confirmed as entitled (Business+, per S122 —
   // the server gate in license.CheckAnomalies is the authority; this mirrors it).
   useEffect(() => {
-    if (license && anomaliesEntitled(license.tier)) {
+    if (license && anomaliesEntitled(gatingTier(license))) {
       fetchAnomalies();
     }
   }, [license, fetchAnomalies]);
@@ -262,7 +262,7 @@ export function AnomaliesPage() {
   }
 
   // Gate: Business and above
-  if (license && !anomaliesEntitled(license.tier)) {
+  if (license && !anomaliesEntitled(gatingTier(license))) {
     return (
       <div style={{ maxWidth: 700, margin: "0 auto", paddingTop: 40 }}>
         <h1 className="page-title" style={{ margin: "0 0 var(--space-5)" }}>Anomaly Detection</h1>
