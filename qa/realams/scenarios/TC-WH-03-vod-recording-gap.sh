@@ -9,7 +9,7 @@
 #   AMS truth:    vodCount > 0 (WebRTCAppEE has ~24 GB VoDs)
 #   Pulse assert: recording_gb == 0 (no vodReady webhook delivery — AMS 3.0.3 unsigned)
 #                 Documents BUG-002: recording_gb gap caused by webhook unavailability
-#   Exit:         0 PASS | 1 FAIL
+#   Exit:         0 PASS | 1 FAIL | 77 SKIP (default: BUG-002 is fixed — see the gate below)
 #
 # Evidence establishes BUG-002: AMS has VoDs but Pulse cannot count them because
 # vodReady webhooks are not delivered (AMS 3.0.3 cannot sign hooks, O3 decision).
@@ -18,6 +18,17 @@ set -euo pipefail
 
 SCENARIO="TC-WH-03"
 echo "=== ${SCENARIO}: VoD recording gap (BUG-002 evidence) ===" >&2
+
+# ── BUG-002 is fixed (S23/D-085, 2026-07-12: VoD REST poll) ───────────────────
+# This scenario asserted the BUG (recording_gb == 0 while AMS has VoDs). On a fixed build it
+# can only fail for the right reason — the S125 run on AMS 3.1.0 saw recording_gb > 0 — so it
+# now SKIPs and points at the positive check, TC-REC-01. It still runs its original evidence
+# check when a pre-fix build is declared with PULSE_HAS_VOD_POLL=0.
+if [ "${PULSE_HAS_VOD_POLL:-1}" = "1" ]; then
+  echo "[TC-WH-03] SKIP — BUG-002 is fixed (VoD REST poll, D-085); TC-REC-01 is the positive check." >&2
+  echo "  Run with PULSE_HAS_VOD_POLL=0 against a pre-fix build to reproduce the old evidence." >&2
+  exit 77
+fi
 
 # ── Harness bootstrap ────────────────────────────────────────────────────────
 _DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

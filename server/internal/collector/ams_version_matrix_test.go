@@ -20,7 +20,7 @@
 //
 // # AMS version matrix (INFRA-01 workflow: .github/workflows/ams-version-matrix.yml)
 //
-//	Versions: 2.10.0, 2.14.0, 3.0.2
+//	Versions: 2.10.0, 2.14.0, 2.17.1, 3.0.2, 3.1.0 (3.1.0's broadcast shape is a real capture)
 //	Environment: AMS_BASE_URL set by workflow when real containers available.
 package collector
 
@@ -230,6 +230,46 @@ var amsProfiles = []amsProfile{
 			},
 		},
 	},
+	{
+		// v3.1.0: the broadcast is the shape of a REAL AMS 3.1.0 Enterprise capture
+		// (S125, 2026-10-07 — qa/realams evidence of TC-V-08), not a guess: `name` is
+		// null when the publisher sets none, `publishType` is upper-case, `speed` is still
+		// sent, and there is no `appName` (the app is the path prefix) and no `currentFPS`
+		// (LIM-04 unchanged). `bitrate` is bits per second, as AMS sends it.
+		// The node is source-verified (ClusterNode.java at ams-v3.1.0, D-192): the 2.17
+		// field set plus the additive `note` field Pulse does not read — no 3.1.0 cluster
+		// has been run.
+		name: "v3.1.0",
+		broadcasts: []map[string]any{
+			{
+				"streamId":          "val-v08-1791372492",
+				"name":              nil,
+				"status":            "broadcasting",
+				"type":              "liveStream",
+				"publishType":       "RTMP",
+				"startTime":         int64(1791372493795),
+				"hlsViewerCount":    4,
+				"webRTCViewerCount": 2,
+				"rtmpViewerCount":   0,
+				"dashViewerCount":   0,
+				"bitrate":           float64(2121312),
+				"speed":             float64(1.0),
+				"originAdress":      "192.0.2.10",
+			},
+		},
+		nodes: []map[string]any{
+			{
+				"id":                   "node-1",
+				"ip":                   "192.0.2.10",
+				"cpu":                  float64(41.0),
+				"memory":               float64(62.0),
+				"status":               "alive",
+				"lastUpdateTime":       int64(1791372493795),
+				"dbQueryAveargeTimeMs": float64(2), // AMS's own spelling — do not "fix"
+				"note":                 "",
+			},
+		},
+	},
 }
 
 // newProfileServer creates an httptest.Server serving the given AMS profile.
@@ -436,8 +476,18 @@ func TestAMSVersionMatrix(t *testing.T) {
 					if cpuPct < 0 {
 						t.Errorf("[%s] cpu_pct=%.1f < 0 (invalid)", profile.name, cpuPct)
 					}
+					// Node identity: real AMS sends `id` (2.17+/3.x shapes), old mocks `nodeId`.
+					// This used to log n.NodeID — the legacy alias, empty for every real-shaped
+					// profile — and never checked the identity the event actually carries.
+					if normalized.NodeID == "" || normalized.NodeID != n.PrimaryID() {
+						t.Errorf("[%s] node event NodeID=%q, want PrimaryID()=%q (id=%q nodeId=%q ip=%q)",
+							profile.name, normalized.NodeID, n.PrimaryID(), n.ID, n.NodeID, n.IP)
+					}
+					if n.ID != "" && normalized.NodeID != n.ID {
+						t.Errorf("[%s] node event NodeID=%q, want the real wire id %q", profile.name, normalized.NodeID, n.ID)
+					}
 					t.Logf("[%s] PASS: ClusterNode → node=%s cpu_pct=%.1f",
-						profile.name, n.NodeID, cpuPct)
+						profile.name, normalized.NodeID, cpuPct)
 				}
 				t.Logf("[%s] PASS: ClusterNodes → %d nodes", profile.name, len(nodes))
 			}
@@ -502,7 +552,7 @@ func TestAMSVersionMatrix_CIOnlyAssertions(t *testing.T) {
 	t.Log("   (D-W1-001 regression: critical to verify against each version)")
 	t.Log("")
 	t.Log("Workflow: .github/workflows/ams-version-matrix.yml")
-	t.Log("Versions: 2.10.0, 2.14.0, 3.0.2")
+	t.Log("Versions: 2.10.0, 2.14.0, 2.17.1, 3.0.2, 3.1.0")
 	t.Log("Run: CGO_ENABLED=0 go test -tags integration -run TestAMSVersionMatrix ./internal/collector/...")
 	// This test always passes — it's documentation only.
 }

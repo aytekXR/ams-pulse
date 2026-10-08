@@ -9,7 +9,9 @@
 #                 3. GET /api/v1/fleet/nodes → Pulse representation
 #   AMS truth:    cluster/nodes=404; system-status has osName/javaVersion
 #   Pulse assert: 0 or 1 node; if present: os_name/java_version populated;
-#                 cpu_pct/mem_pct absent-or-null (NOT false-zero)
+#                 cpu_pct/mem_pct are REAL readings from /rest/v2/system-resources
+#                 (D-179): numbers in [0,100] close to AMS ground truth. (Until D-179
+#                 standalone nodes had none and this asserted null, not false-zero.)
 #   Exit:         0 PASS | 1 FAIL
 #
 set -euo pipefail
@@ -95,12 +97,32 @@ if [ "${_node_count}" -gt 0 ]; then
   assert_eq "$([ -n "${_pulse_java}" ] && echo present || echo absent)" "present" \
     "${SCENARIO} fleet node java_version populated from AMS system-status" || true
 
-  # cpu_pct and mem_pct must be null — standalone AMS does not expose these
-  _cpu_val="$(printf '%s' "${_node}" | jq '.cpu_pct' 2>/dev/null || echo null)"
-  assert_eq "${_cpu_val}" "null" "${SCENARIO} fleet node cpu_pct null (not false-zero)" || true
+  # cpu_pct / mem_pct are real since D-179: Pulse polls /rest/v2/system-resources, which a
+  # standalone AMS serves. Compare with the same endpoint read now (CPU moves fast: wide band).
+  _res_raw="$(curl -s -m 15 -b "${AMS_COOKIE_FILE}" \
+    "${AMS_URL}/rest/v2/system-resources" 2>/dev/null || echo '{}')"
+  _ams_cpu="$(printf '%s' "${_res_raw}" | jq '.cpuUsage.systemCPULoad // empty' 2>/dev/null || true)"
+  _ams_mem="$(printf '%s' "${_res_raw}" | jq 'if .systemMemoryInfo.totalMemory > 0 then (.systemMemoryInfo.inUseMemory / .systemMemoryInfo.totalMemory * 100) else empty end' 2>/dev/null || true)"
+  log "AMS system-resources: cpu=${_ams_cpu:-?} mem_pct=${_ams_mem:-?}"
 
+  _cpu_val="$(printf '%s' "${_node}" | jq '.cpu_pct' 2>/dev/null || echo null)"
   _mem_val="$(printf '%s' "${_node}" | jq '.mem_pct' 2>/dev/null || echo null)"
-  assert_eq "${_mem_val}" "null" "${SCENARIO} fleet node mem_pct null (not false-zero)" || true
+  assert_eq "$([ "${_cpu_val}" != "null" ] && echo number || echo null)" "number" \
+    "${SCENARIO} fleet node cpu_pct reported (system-resources, D-179)" || true
+  assert_eq "$([ "${_mem_val}" != "null" ] && echo number || echo null)" "number" \
+    "${SCENARIO} fleet node mem_pct reported (system-resources, D-179)" || true
+  if [ "${_cpu_val}" != "null" ]; then
+    assert_gte "${_cpu_val}" 0 "${SCENARIO} cpu_pct >= 0" || true
+    assert_lte "${_cpu_val}" 100 "${SCENARIO} cpu_pct <= 100" || true
+    [ -n "${_ams_cpu}" ] && { assert_within "${_cpu_val}" "${_ams_cpu}" 35 \
+      "${SCENARIO} cpu_pct within 35 points of AMS systemCPULoad" || true; }
+  fi
+  if [ "${_mem_val}" != "null" ]; then
+    assert_gte "${_mem_val}" 0 "${SCENARIO} mem_pct >= 0" || true
+    assert_lte "${_mem_val}" 100 "${SCENARIO} mem_pct <= 100" || true
+    [ -n "${_ams_mem}" ] && { assert_within "${_mem_val}" "${_ams_mem}" 5 \
+      "${SCENARIO} mem_pct within 5 points of AMS in-use/total memory" || true; }
+  fi
 
   printf 'pulse_node_os_name=%s\npulse_node_java_version=%s\npulse_cpu_pct=%s\npulse_mem_pct=%s\n' \
     "${_pulse_os}" "${_pulse_java}" "${_cpu_val}" "${_mem_val}" \

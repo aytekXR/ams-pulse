@@ -8,11 +8,9 @@
 #   correctly populates totals.recording_gb in GET /api/v1/reports/usage.
 #   This scenario is intentionally silent/SKIP on stacks predating the fix.
 #
-# GATING — PULSE_HAS_VOD_POLL=1 must be set explicitly in the environment.
-#   Without it this scenario exits 77 (SKIP) immediately, before any network
-#   call.  This prevents false FAILs and false PASSes on pre-fix deployments.
-#
-#   Set PULSE_HAS_VOD_POLL=1 only after ALL THREE components are deployed:
+# GATING — runs by default: the fix shipped in S23/D-085 (2026-07-12), so every
+#   release since v0.4.0 has it. Set PULSE_HAS_VOD_POLL=0 to SKIP on a build that
+#   predates the fix, i.e. one missing any of the three components:
 #     1. server/pkg/amsclient: ListVods / ListVodsPaged
 #     2. server/internal/collector/restpoller: pollVods + high-water-mark dedup
 #     3. ClickHouse migration: mv_recording_1d materialized view
@@ -44,7 +42,7 @@
 # EXIT CODES
 #   0   PASS  — recording_gb > 0 AND within tolerance of expected byte total
 #   1   FAIL  — recording_gb stayed 0 after 90 s, or value outside tolerance
-#   77  SKIP  — PULSE_HAS_VOD_POLL unset (pre-fix stack), or pulse-test has
+#   77  SKIP  — PULSE_HAS_VOD_POLL=0 (pre-fix stack declared), or pulse-test has
 #              no VoDs (AMS environment premise unmet)
 #
 # RELATED
@@ -60,10 +58,10 @@ echo "=== ${SCENARIO}: VoD REST poll populates recording_gb (BUG-002 post-fix) =
 # ── Feature gate: SKIP on pre-fix stacks ─────────────────────────────────────
 # Check BEFORE sourcing the harness so that stacks without the fix never reach
 # the polling loop.  The Makefile treats exit 77 as SKIP (not FAIL).
-if [ "${PULSE_HAS_VOD_POLL:-0}" != "1" ]; then
-  echo "[${SCENARIO}] SKIP — PULSE_HAS_VOD_POLL is not set (assumed pre-fix stack)" >&2
-  echo "  Set PULSE_HAS_VOD_POLL=1 only after deploying the BUG-002 VoD REST poll fix." >&2
-  echo "  Required: amsclient.ListVods, restpoller.pollVods, mv_recording_1d MV." >&2
+PULSE_HAS_VOD_POLL="${PULSE_HAS_VOD_POLL:-1}"
+if [ "${PULSE_HAS_VOD_POLL}" != "1" ]; then
+  echo "[${SCENARIO}] SKIP — PULSE_HAS_VOD_POLL=${PULSE_HAS_VOD_POLL} (pre-fix stack declared)" >&2
+  echo "  The fix: amsclient.ListVods, restpoller.pollVods, mv_recording_1d MV (S23/D-085)." >&2
   exit 77
 fi
 

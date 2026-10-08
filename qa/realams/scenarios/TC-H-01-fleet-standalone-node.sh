@@ -8,7 +8,9 @@
 #                 2. Check Pulse /api/v1/fleet/nodes
 #   AMS truth:    /rest/v2/system-status → {osName:Linux, osArch:amd64, javaVersion:17, ...}
 #   Pulse assert: fleet/nodes → node card has os_name/java_version populated;
-#                 cpu_pct and mem_pct are null (absent-or-null, NOT false-zero)
+#                 cpu_pct and mem_pct are reported (numbers in [0,100]) — Pulse reads them
+#                 from /rest/v2/system-resources since D-179 (TC-FL-01 compares them
+#                 with AMS ground truth). Until D-179 this asserted null, not false-zero.
 #   Exit:         0 PASS | 1 FAIL | 77 SKIP (fleet/nodes returns 0 items — not implemented)
 #
 set -euo pipefail
@@ -83,14 +85,21 @@ _pulse_java_ver="$(printf '%s' "${_node}" | jq -r '.java_version // ""' 2>/dev/n
 assert_eq "$([ -n "${_pulse_java_ver}" ] && echo present || echo absent)" "present" \
   "${SCENARIO} fleet node java_version is populated" || true
 
-# cpu_pct must be null (absent or null — NOT 0.0)
-# jq returns "null" (string) for both absent key and explicit null; returns "0" for zero
+# cpu_pct / mem_pct: real readings since D-179 (system-resources) — present and in range
 _cpu_val="$(printf '%s' "${_node}" | jq '.cpu_pct' 2>/dev/null || echo null)"
-assert_eq "${_cpu_val}" "null" "${SCENARIO} fleet node cpu_pct is null (not false-zero)" || true
-
-# mem_pct must be null
 _mem_val="$(printf '%s' "${_node}" | jq '.mem_pct' 2>/dev/null || echo null)"
-assert_eq "${_mem_val}" "null" "${SCENARIO} fleet node mem_pct is null (not false-zero)" || true
+assert_eq "$([ "${_cpu_val}" != "null" ] && echo number || echo null)" "number" \
+  "${SCENARIO} fleet node cpu_pct reported" || true
+assert_eq "$([ "${_mem_val}" != "null" ] && echo number || echo null)" "number" \
+  "${SCENARIO} fleet node mem_pct reported" || true
+if [ "${_cpu_val}" != "null" ]; then
+  assert_gte "${_cpu_val}" 0 "${SCENARIO} cpu_pct >= 0" || true
+  assert_lte "${_cpu_val}" 100 "${SCENARIO} cpu_pct <= 100" || true
+fi
+if [ "${_mem_val}" != "null" ]; then
+  assert_gte "${_mem_val}" 0 "${SCENARIO} mem_pct >= 0" || true
+  assert_lte "${_mem_val}" 100 "${SCENARIO} mem_pct <= 100" || true
+fi
 
 log "os_name=${_pulse_os_name}  java_version=${_pulse_java_ver}  cpu_pct=${_cpu_val}  mem_pct=${_mem_val}"
 printf 'pulse_node_os_name=%s\npulse_node_java_version=%s\npulse_node_cpu_pct=%s\npulse_node_mem_pct=%s\n' \

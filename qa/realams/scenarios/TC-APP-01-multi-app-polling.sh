@@ -125,7 +125,7 @@ assert_gte "${_open_count}" 1 "${SCENARIO} at least 1 open AMS app found" || tru
 # (blocked apps must NOT appear — 403 should be swallowed, not crash)
 _found_blocked_in_pulse=0
 for _bapp in ${_blocked_apps}; do
-  _in_pulse="$(printf '%s' "${_pulse_app_names}" | grep -c "^${_bapp}$" 2>/dev/null || echo 0)"
+  _in_pulse="$(printf '%s' "${_pulse_app_names}" | grep -c "^${_bapp}$" 2>/dev/null || true)"; _in_pulse="${_in_pulse:-0}"
   if [ "${_in_pulse}" -gt 0 ]; then
     log "WARN: blocked app ${_bapp} appears in Pulse overview (unexpected)"
     _found_blocked_in_pulse=$(( _found_blocked_in_pulse + 1 ))
@@ -140,7 +140,7 @@ for _oapp in ${_open_apps}; do
     "${AMS_URL}/${_oapp}/rest/v2/broadcasts/list/0/1" \
     | jq 'if type == "array" then length else 0 end' 2>/dev/null || echo 0)"
   if [ "${_ams_stream_count}" -gt 0 ]; then
-    _in_pulse="$(printf '%s' "${_pulse_app_names}" | grep -c "^${_oapp}$" 2>/dev/null || echo 0)"
+    _in_pulse="$(printf '%s' "${_pulse_app_names}" | grep -c "^${_oapp}$" 2>/dev/null || true)"; _in_pulse="${_in_pulse:-0}"
     assert_gte "${_in_pulse}" 1 "${SCENARIO} open app ${_oapp} (has streams) appears in Pulse overview" || true
   fi
 done

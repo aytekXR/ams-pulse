@@ -1,7 +1,8 @@
 # Pulse — AMS Version Compatibility Matrix
 
 **Product:** Pulse: Self-Hosted Analytics, QoE Monitoring and Alerting for Ant Media Server  
-**Last updated:** 2026-10-07 — **AMS 3.1.0 Enterprise live-validated** with Pulse v0.5.0 (S125,
+**Last updated:** 2026-10-08 — `v3.1.0` mock profile added from a real 3.1.0 capture (S126);
+2026-10-07 — **AMS 3.1.0 Enterprise live-validated** with Pulse v0.5.0 (S125,
 D-194: 61 scenario scripts, plus live alert delivery, player QoE, login backoff and the installer);
 2026-09-02: 3.1.0 row added, source-verified at tag `ams-v3.1.0` (D-192); prior review history: fleet resource metrics row corrected in D-179 (CPU/mem/disk come from
 `/rest/v2/system-resources`, not "via Kafka only"); AMS 2.16/2.17 coverage added D-179;
@@ -13,7 +14,7 @@ G-27 section added D-161 (2026-07-22)
 
 | AMS Version | Validation Status | Pulse Support Level | Source |
 |-------------|------------------|---------------------|--------|
-| 3.1.0 Enterprise (build 20260831\_1439) | **LIVE-VALIDATED** (2026-10-07, Pulse v0.5.0) | **Supported — primary target** | 44/61 scenario scripts PASS, 10 SKIP, 7 FAIL — none an AMS wire-format regression (details below); S125, D-194. Source-verified at `ams-v3.1.0` (D-192) |
+| 3.1.0 Enterprise (build 20260831\_1439) | **LIVE-VALIDATED** (2026-10-07, Pulse v0.5.0) | **Supported — primary target** | 44/61 scenario scripts PASS, 10 SKIP, 7 FAIL — none an AMS wire-format regression (details below); S125, D-194. Source-verified at `ams-v3.1.0` (D-192); mock profile `v3.1.0` in `ams_version_matrix_test.go` (S126) |
 | 3.0.3 Enterprise (build 20260504\_1443) | **LIVE-VALIDATED** | **Supported** | 46/50 scenario scripts PASS, qa/realams S17–S18, D-079/D-080 |
 | 3.0.2 | Mock-profile only | Mock-compatible | `.github/workflows/ams-version-matrix.yml`; `ams_version_matrix_test.go` → `amsProfiles` entry `v3.0.2` |
 | 2.17.x | Mock-profile only (**source-verified** against `ams-v2.17.1`) | Mock-compatible | `ams_version_matrix_test.go` → `amsProfiles` entry `v2.17.1` |
@@ -31,7 +32,9 @@ runs Go in-process mock profiles — not live containers.
 **What "2.10+" means precisely** (external review round 6, H-04 — the claim previously
 read as inclusive of versions with zero coverage):
 
-- **Profiled in CI:** 2.10.0, 2.14.0, **2.17.1**, 3.0.2 — mock wire-format profiles.
+- **Profiled in CI:** 2.10.0, 2.14.0, **2.17.1**, 3.0.2, **3.1.0** — mock wire-format profiles; the
+  3.1.0 broadcast is the shape of a real AMS 3.1.0 capture (null `name`, upper-case `publishType`,
+  no `appName`/`currentFPS`), its cluster node is source-verified.
 - **Source-verified (2026-07-27):** every field Pulse consumes from `Broadcast.java`
   (`hlsViewerCount`, `webRTCViewerCount`, `rtmpViewerCount`, `dashViewerCount`, `bitrate`,
   `speed`, `status`, `publishType`, `startTime`, `originAdress`) is present and identically
