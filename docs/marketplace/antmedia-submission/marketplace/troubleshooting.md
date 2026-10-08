@@ -38,9 +38,11 @@ origin, add it to `PULSE_ALLOWED_WS_ORIGINS`. Other pages (Alerts, Settings, …
 
 ## No alert notifications
 
-1. **Default rules are muted and have no channel** — attach a channel and un-mute.
-2. **E-mail channel created in the UI** — it has no SMTP server; configure it through the API
-   (alerting guide §2). If you later edit it in the UI, the SMTP settings are dropped.
+1. **The rule has no channel, or is muted** — the default rules ship both. Edit the rule, tick
+   a channel under **Notify channels**, uncheck **Muted**. The Rules list shows each rule's
+   channels; a rule with **No channel** records history but notifies no one.
+2. **E-mail channel without an SMTP server** — set the SMTP server (`host:port`), sender and,
+   if needed, user and password in the channel form; without them Pulse tries `localhost:587`.
 3. **Maintenance window or cooldown** active for the rule.
 4. Use **Test fire** on the channel to separate delivery problems from rule problems.
 

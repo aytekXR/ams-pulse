@@ -224,17 +224,25 @@ All four default rules seeded on first run (`stream_offline`, `viewer_drop_pct`,
 `node_cpu`, `ingest_bitrate_floor`) are seeded with `muted: true`. They evaluate
 and record history but send no notifications until unmuted.
 
-**Check:** In Settings → Alerts → Rules, inspect the muted column. A muted rule
-shows evaluations in the History tab but produces no channel notifications.
+**Check:** In Alerts → Rules, each rule shows whether it is muted and which channels it
+notifies. A muted rule — or one with no channel — shows evaluations in the History tab but
+produces no channel notifications.
 
-**Fix:** Assign a channel to the rule and set `muted: false`:
+**Fix:** Edit the rule, tick a channel under **Notify channels**, untick **Muted**, and save.
+Through the API, `PUT` replaces the whole rule (a body with only `muted` and `channel_ids`
+is refused), so send the listed rule back with the two fields changed:
 
 ```bash
-curl -X PUT https://your-domain/api/v1/alerts/rules/<rule_id> \
-  -H "Authorization: Bearer plt_<admin-token>" \
-  -H "Content-Type: application/json" \
-  -d '{"muted": false, "channel_ids": ["<channel_id>"]}'
+RULE=<rule_id>
+curl -s -H "Authorization: Bearer plt_<admin-token>" "https://your-domain/api/v1/alerts/rules?limit=500" \
+  | jq --arg id "$RULE" '.items[] | select(.id == $id) | .muted = false | .channel_ids = ["<channel_id>"]' \
+  | curl -X PUT "https://your-domain/api/v1/alerts/rules/$RULE" \
+      -H "Authorization: Bearer plt_<admin-token>" -H "Content-Type: application/json" -d @-
 ```
+
+Before v0.5.1 the rule form had no channel picker: a rule saved in the UI was left with no
+channel, and editing one in the UI removed the channels set through the API. Re-check the
+channels of rules edited in the UI on an earlier version.
 
 See `docs/runbooks/alerting.md` Default rule pack and enabled vs muted semantics.
 
@@ -242,15 +250,16 @@ See `docs/runbooks/alerting.md` Default rule pack and enabled vs muted semantics
 
 ### Cause B — Maintenance window is active
 
-A rule with a `maintenance_window` cron expression suppresses notifications
-during the configured window. History is still written; notifications are not sent.
-The behavior is identical to `muted: true` during the window.
+A rule with `maintenance_windows` suppresses notifications while a window is open.
+History is still written; notifications are not sent. The behavior is identical to
+`muted: true` during the window.
 
-**Check:** Review the rule's `maintenance_window` field in the API or UI.
+**Check:** The rule form lists the rule's maintenance windows (read-only); the API returns
+them as `maintenance_windows`.
 
-**Fix:** To override immediately, set `muted: false` and remove the
-`maintenance_window` from the rule, then re-add it when ready. See
-`docs/runbooks/alerting.md` Maintenance windows.
+**Fix:** To override immediately, send the rule back with `maintenance_windows: []` (the
+same list → jq → `PUT` recipe as above, with `.maintenance_windows = []`), then re-add the
+windows when ready. See `docs/runbooks/alerting.md` Maintenance windows.
 
 ---
 
@@ -281,7 +290,7 @@ curl -X PUT https://your-domain/api/v1/alerts/rules/<rule_id> \
 - `smtp_addr` defaults to `localhost:587` — change to your real SMTP server.
 - `starttls` defaults to `false`. If your provider requires STARTTLS, set it
   explicitly in the channel config.
-- Test via UI: Settings → Alerts → Channels → Test button.
+- Test via UI: Alerts → Channels → **Test fire**.
 - Via API: `POST /api/v1/alerts/channels/<channel_id>/test`
 
 **Fix:** Update the channel config with correct `smtp_addr`, `username`,
