@@ -727,7 +727,7 @@ version and its `appVersion` are whatever `deploy/helm/pulse/Chart.yaml` carries
 tag you install — see the `--version` pin below):
 
 ```sh
-helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.4.0 \
+helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.4.1 \
   --set pulse.ams.url=http://your-ams:5080 \
   --set pulse.ams.nodeId=node-01 \
   --set pulse.secretRef.name=pulse-secrets
@@ -739,7 +739,7 @@ helm install pulse oci://ghcr.io/aytekxr/charts/pulse --version 0.4.0 \
 > the other** — ask the chart:
 >
 > ```sh
-> helm show chart oci://ghcr.io/aytekxr/charts/pulse --version 0.4.0 | grep -E '^(version|appVersion):'
+> helm show chart oci://ghcr.io/aytekxr/charts/pulse --version 0.4.1 | grep -E '^(version|appVersion):'
 > ```
 >
 > *(This note deliberately no longer states a chart-version/appVersion pair. It used

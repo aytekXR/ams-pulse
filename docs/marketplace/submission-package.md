@@ -4,7 +4,7 @@
 > the PolyForm Shield License 1.0.0. All tier and pricing references below are outdated.
 
 **Product:** Pulse — Analytics & QoE Monitoring for Ant Media Server
-**Version:** v0.5.0 (GHCR public, anonymously pullable) · **Prepared:** 2026-07-22; updated 2026-07-27
+**Version:** v0.5.1 (GHCR public, anonymously pullable) · **Prepared:** 2026-07-22; updated 2026-07-27
 
 This is the single page to hand Ant Media when the listing process starts: every
 submission artifact, where it lives, and its state. Statuses: **READY** (accurate,
@@ -84,8 +84,8 @@ operator's dedicated PAYG AMS run** — `bash qa/realams/run-load-suite.sh`).
   `/fleet/nodes` returning the real AMS 3.0.3 node, with the pulled image digest
   `sha256:75a76c67…727b4` matching the anonymously-resolved `0.4.3` and `latest` manifests.
   The Helm chart OCI package is anonymously pullable too — currently
-  `ghcr.io/aytekxr/charts/pulse:0.4.0` (chart semver is independent of appVersion; `0.4.0`
-  carries appVersion `0.5.0`, `0.3.3` carried `0.4.5`, `0.3.2` carried `0.4.4`).
+  `ghcr.io/aytekxr/charts/pulse:0.4.1` (chart semver is independent of appVersion; `0.4.1`
+  carries appVersion `0.5.1`, `0.4.0` carried `0.5.0`, `0.3.3` carried `0.4.5`).
 - ~~**MaxNodes reconcile** (Pro 10 vs Business 5 inversion)~~ **DONE (D-166):** Business is now 50;
   ladder is monotonic (Free 1 / Pro 10 / Business 50 / Enterprise ∞) with a regression test.
 - ~~**Pricing sign-off**~~ **DECIDED (D-169, operator-delegated):** standard Free $0 / Pro $99 /
