@@ -38,6 +38,15 @@ const RULE_FIXTURE = {
   min_samples: 30,
 };
 
+const CHANNEL_FIXTURE = {
+  id: "ch-1",
+  name: "Ops Slack",
+  type: "slack",
+  credential_set: true,
+  config_summary: {},
+  created_at: 1_700_000_000_000,
+};
+
 /**
  * Install the three alerts API routes the page fetches in parallel on mount.
  * Call BEFORE page.goto so the routes are registered before the first request.
@@ -295,5 +304,52 @@ test.describe("Alerts", () => {
     );
     await page.getByRole("button", { name: "Yes, delete" }).click();
     await deleteReq;
+  });
+  /**
+   * S126: the rule form had no channel picker and always sent no channel_ids — and PUT
+   * replaces the whole rule — so every rule saved in the UI notified no one, and an edit
+   * erased the channels and maintenance windows set through the API. These pin the payload
+   * a real browser sends.
+   */
+  test("New rule: the ticked channel is sent as channel_ids", async ({ page }) => {
+    await stubAlertRoutes(page, { channels: [CHANNEL_FIXTURE] });
+    await page.goto("/alerts");
+    await page.getByRole("button", { name: "New rule" }).click();
+
+    await page.locator("#rule-name").fill("CPU to Slack");
+    await page.locator("#rule-threshold").fill("90");
+    await page.getByRole("checkbox", { name: "Ops Slack (slack)" }).check();
+
+    const post = page.waitForRequest(
+      (req) => req.url().includes("/api/v1/alerts/rules") && req.method() === "POST",
+    );
+    await page.getByRole("button", { name: "Save rule" }).click();
+    const body = (await post).postDataJSON();
+    expect(body.channel_ids).toEqual(["ch-1"]);
+    expect(body.maintenance_windows).toEqual([]);
+  });
+
+  test("Edit rule: saving keeps its channels and maintenance windows", async ({ page }) => {
+    const windows = [{ start_cron: "0 22 6", duration_s: 7200 }];
+    await stubAlertRoutes(page, {
+      rules: [{ ...RULE_FIXTURE, channel_ids: ["ch-1"], maintenance_windows: windows }],
+      channels: [CHANNEL_FIXTURE],
+    });
+    await page.goto("/alerts");
+    await expect(page.getByText("Notifies Ops Slack")).toBeVisible();
+
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    await expect(page.getByRole("checkbox", { name: "Ops Slack (slack)" })).toBeChecked();
+    await expect(page.getByText("Every Saturday at 22:00 UTC for 2 h")).toBeVisible();
+    await page.getByRole("checkbox", { name: /^Muted/ }).check();
+
+    const put = page.waitForRequest(
+      (req) => req.url().includes("/api/v1/alerts/rules/rule-1") && req.method() === "PUT",
+    );
+    await page.getByRole("button", { name: "Save rule" }).click();
+    const body = (await put).postDataJSON();
+    expect(body.muted).toBe(true);
+    expect(body.channel_ids).toEqual(["ch-1"]);
+    expect(body.maintenance_windows).toEqual(windows);
   });
 });

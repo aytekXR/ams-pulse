@@ -69,6 +69,18 @@ describe("StreamsTable", () => {
     expect(screen.getByText(/no active streams/i)).toBeInTheDocument();
   });
 
+  // S126: a grid may own only rows — the empty-state heading used to sit directly in it.
+  it("empty state sits in a row/gridcell the grid owns", () => {
+    render(<StreamsTable streams={[]} />, { wrapper });
+    const heading = screen.getByRole("heading", { name: /no active streams/i });
+    const cell = heading.closest('[role="gridcell"]');
+    expect(cell).not.toBeNull();
+    expect(cell?.getAttribute("aria-colspan")).toBe("7");
+    expect(cell?.parentElement?.getAttribute("role")).toBe("row");
+    expect(cell?.closest('[role="rowgroup"]')?.closest('[role="grid"]')).not.toBeNull();
+    expect(screen.getByRole("grid").getAttribute("aria-rowcount")).toBe("2");
+  });
+
   it("shows stream count footer", () => {
     const streams = Array.from({ length: 5 }, (_, i) => makeStream(i));
     render(<StreamsTable streams={streams} />, { wrapper });

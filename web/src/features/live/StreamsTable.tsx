@@ -89,7 +89,7 @@ export function StreamsTable({ streams }: Props) {
     <div
       role="grid"
       aria-label="Active streams"
-      aria-rowcount={streams.length + 1}
+      aria-rowcount={Math.max(streams.length, 1) + 1}
       style={{
         background: "var(--color-surface)",
         border: "1px solid var(--color-border)",
@@ -138,11 +138,19 @@ export function StreamsTable({ streams }: Props) {
       >
         {streams.length === 0 ? (
           /* s111 D16: empty states teach (design-rationale par.3 — "show the RTMP
-             publish URL"), same pattern QoePage already proves out. */
-          <EmptyState
-            title="No active streams"
-            description={"Publish a stream to see it here — e.g. rtmp://<your-ams-host>/<app>/<streamId>. Streams appear within seconds of the first frame."}
-          />
+             publish URL"), same pattern QoePage already proves out.
+             S126: a grid may own only rows, so the message sits in one full-width
+             cell — it was a bare heading inside role="grid" (axe aria-required-children). */
+          <div role="rowgroup">
+            <div role="row">
+              <div role="gridcell" aria-colspan={7}>
+                <EmptyState
+                  title="No active streams"
+                  description={"Publish a stream to see it here — e.g. rtmp://<your-ams-host>/<app>/<streamId>. Streams appear within seconds of the first frame."}
+                />
+              </div>
+            </div>
+          </div>
         ) : (
           // ST-1: second rowgroup owns all virtualised data rows.
           <div style={{ height: totalHeight, position: "relative" }} role="rowgroup">

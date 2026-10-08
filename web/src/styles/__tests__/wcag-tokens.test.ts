@@ -82,6 +82,46 @@ describe("brandkit tokens — WCAG AA for text (>= 4.5:1)", () => {
     expect(contrast(dark.onSignal, dark.signalHover)).toBeGreaterThanOrEqual(4.5);
   });
 
+  // S126: every Badge variant as global.css renders it — label on its tint, over both
+  // surfaces a badge sits on. The label colour is read from global.css (--color-*-text),
+  // so reverting the stylesheet turns this red: light success/warning/error used their
+  // hues as labels, 2.74 / 4.26 / 4.14:1.
+  const css = readFileSync(resolve(here, "../global.css"), "utf-8");
+  const block = (selector: string) => {
+    const start = css.indexOf(`${selector} {`);
+    return css.slice(start, css.indexOf("\n}", start));
+  };
+  const cssVarToToken: Record<string, keyof typeof light> = {
+    "--color-text": "textPrimary", "--color-success": "healthy",
+    "--color-warning": "warning", "--color-error": "critical",
+  };
+  const labelToken = (theme: "dark" | "light", variant: string): keyof typeof light => {
+    const re = new RegExp(`--color-${variant}-text:\\s*var\\((--color-[a-z-]+)\\)`);
+    const m = re.exec(block(theme === "light" ? '[data-theme="light"]' : ":root")) ?? re.exec(block(":root"));
+    if (!m || !cssVarToToken[m[1]]) throw new Error(`global.css: no --color-${variant}-text mapping for ${theme}`);
+    return cssVarToToken[m[1]];
+  };
+  const badgeCases: Array<[string, string, string]> = [];
+  for (const [theme, t] of [["dark", dark], ["light", light]] as const) {
+    for (const [variant, hue, alpha] of [["success", t.healthy, 0.12], ["warning", t.warning, 0.12], ["error", t.critical, 0.1]] as const) {
+      const label = t[labelToken(theme, variant)];
+      for (const [surfaceName, surface] of [["surface", t.surface], ["raised", t.raised]] as const) {
+        badgeCases.push([`${theme} ${variant} badge over ${surfaceName}`, label, over(hue, surface, alpha)]);
+      }
+    }
+  }
+  it.each(badgeCases)("%s passes AA", (_label, fg, bg) => {
+    expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("S126: the selected density segment (signalHover on a 15% signal tint) passes AA", () => {
+    for (const t of [dark, light]) {
+      for (const surface of [t.surface, t.raised]) {
+        expect(contrast(t.signalHover, over(t.signal, surface, 0.15))).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
   it("G6: the info Badge passes AA in BOTH themes (light was 2.32:1 before the token fix)", () => {
     // Badge renders `color: info` on `background: info @ 10% over the surface`.
     expect(contrast(light.info, over(light.info, light.surface, 0.1))).toBeGreaterThanOrEqual(4.5);

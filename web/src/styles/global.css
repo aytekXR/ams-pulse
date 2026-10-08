@@ -104,6 +104,12 @@
   --color-warning-bg:   rgba(255,178,36,0.12);
   --color-info:         #58A6FF;
   --color-info-bg:      rgba(88,166,255,0.1);
+
+  /* Badge LABEL colours. Dark: the status hue itself (>= 4.97:1 on its tint). Light
+   * overrides these — see the light block. Pinned in wcag-tokens.test.ts. */
+  --color-success-text: var(--color-success);
+  --color-warning-text: var(--color-warning);
+  --color-error-text:   var(--color-error);
 }
 
 /* -------------------------------------------------------------------------
@@ -155,6 +161,16 @@
   --color-info-bg:      rgba(27,94,173,0.10);
   --color-success-bg:   rgba(11,166,120,0.12);
   --color-warning-bg:   rgba(180,83,9,0.12);
+
+  /* S126: light healthy / warning / critical are status hues, not text colours
+   * (design-rationale §2 verifies none of them for text): as badge labels on their own
+   * tint they measured 2.74 / 4.26 / 4.14:1, below AA. tokens.json has no darker text
+   * shade for them, so a light badge prints its label in textPrimary on the hue's tint —
+   * the tint keeps the hue, the label stays legible. Info keeps its own colour: its token
+   * was chosen for text (G6, 5.57:1). */
+  --color-success-text: var(--color-text);
+  --color-warning-text: var(--color-text);
+  --color-error-text:   var(--color-text);
 }
 
 /* -------------------------------------------------------------------------

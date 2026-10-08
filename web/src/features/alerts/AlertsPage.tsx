@@ -47,6 +47,15 @@ function ruleDisplayName(rule: AlertRule): string {
   return rule.name;
 }
 
+/** Who a rule notifies, by channel name (S126: a rule with no channel notifies no one). */
+function notifyLine(rule: AlertRule, channelNames: Map<string, string>): string {
+  const names = (rule.channel_ids ?? []).flatMap((id) => {
+    const n = channelNames.get(id);
+    return n === undefined ? [] : [n];
+  });
+  return names.length > 0 ? `Notifies ${names.join(", ")}` : "No channel: notifies no one";
+}
+
 export function AlertsPage() {
   const { toast } = useToast();
   const [tab, setTab] = useState<Tab>("rules");
@@ -202,6 +211,8 @@ export function AlertsPage() {
     }
   };
 
+  const channelNames = new Map(channels.map((c) => [c.id, c.name]));
+
   // s111 D7: pair with className="btn-primary" — the class owns background
   // (accent -> accent-hover on hover); re-adding it inline would kill hover.
   const btnStyle: React.CSSProperties = {
@@ -269,6 +280,7 @@ export function AlertsPage() {
         >
           <AlertRuleForm
             initial={editingRule === "new" ? undefined : editingRule}
+            channels={channels}
             onSave={saveRule}
             onCancel={() => setEditingRule(null)}
           />
@@ -331,6 +343,9 @@ export function AlertsPage() {
                         <div style={{ fontWeight: 600, fontSize: 13 }}>{ruleDisplayName(rule)}</div>
                         <div style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>
                           {rule.metric} {rule.operator} {rule.threshold} · window {rule.window_s}s · cooldown {rule.cooldown_s}s
+                        </div>
+                        <div style={{ fontSize: 12, color: "var(--color-secondary)", marginTop: 2 }}>
+                          {notifyLine(rule, channelNames)}
                         </div>
                       </div>
                       <Badge label={rule.severity} variant={severityVariant(rule.severity)} />
