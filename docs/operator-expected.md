@@ -7,19 +7,15 @@
 > **v0.5.0 is released and in production (2026-10-07).** Pulse is free; your decisions (developer
 > credit, no prices, no purchase link, the page title, D1–D4 to the roadmap) are applied
 > everywhere, and the Ant Media package is ready to send. Prod runs v0.5.0 and ingests from your
-> AMS 3.1.0 Enterprise. What is left for you is §0 and §B1–B4; iOS (§A) is independent.
+> AMS 3.1.0 Enterprise; `https://pulse.beyondkaira.com` is live again (vhost re-enabled
+> 2026-10-08). The Ant Media materials were sent on 2026-10-07. What is left for you is §0 and
+> §B1; iOS (§A) is independent.
 
 ---
 
 ## 0. Do soon
 
-1. **Enable the Pulse vhost** — prod is up on `127.0.0.1:8090`, but
-   `https://pulse.beyondkaira.com` still serves the apex landing because its vhost is not in
-   `sites-enabled` (removed ~2026-08-11):
-   `sudo ln -s /etc/nginx/sites-available/pulse.beyondkaira.com.conf /etc/nginx/sites-enabled/ && sudo nginx -t && sudo systemctl reload nginx`.
-   `/metrics` now requires its bearer token (`PULSE_METRICS_TOKEN` in `deploy/.env`), so
-   exposing the app is safe. If removing the vhost in August was deliberate, say so.
-2. **Renew the AMS license before 2026-10-16.** The `antmedia` container (AMS 3.1.0 Enterprise)
+1. **Renew the AMS license before 2026-10-16.** The `antmedia` container (AMS 3.1.0 Enterprise)
    runs on the trial key that expires **2026-10-16 09:29 UTC**. Apply the new key through the run
    command's `-l` argument — `start.sh` blanks the `LICENSE_KEY` environment variable. When the
    key lapses, prod's collector goes blind again.
@@ -64,34 +60,16 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
 
 ## B. Marketplace
 
-1. **Send the Ant Media materials.** Build the shareable ZIP with
-   `bash qa/marketplace/build-submission-zip.sh ant-media` →
-   `dist/pulse-for-ant-media-server-marketplace-materials.zip` (its `README.md` is the entry
-   point). The package's own to-do list is `docs/marketplace/antmedia-submission/operator-expected.md`.
-2. **Confirm the spelling of your name.** Everything credits **Aytekin Erdogan**, as you wrote it;
-   earlier `LICENSE` versions read "Aytek Erdoğan". Say if you want the "ğ" before sending.
-3. **Read `/privacy/` and `/terms/`** on the website — legal statements published in your name.
-4. **Delete exactly ONE GHCR version — and nothing else.** A GHCR *version* is a digest, not a
-   tag; most `candidate-*` tags share a digest with a release, so deleting them deletes the
-   release (and its SBOM, provenance and signature). Live package, 2026-10-07:
-
-   | Version id | Tags | Action |
-   |---|---|---|
-   | `1080500729` | `candidate-5c561bc4` **only** | **DELETE** — built before the CVE-2026-56852 fix; publicly pullable |
-   | `1350838126` | `0.5.0`, `0.5`, `0`, `latest`, `candidate-8523b47c` | **DO NOT DELETE** (the current release) |
-   | `1080581868` · `1069926970` · `1068860998` · `1068283272` | `0.4.5` · `0.4.4` · `0.4.3` · `0.4.2` (+ their `candidate-*`) | **DO NOT DELETE** |
-   | `sha256-…` tagged versions | signature / attestation referrers | **DO NOT DELETE** |
-
-   Web UI: GitHub → Packages → ams-pulse → versions → the one whose only tag is
-   `candidate-5c561bc4` → Delete. The session token has `read:packages` only (re-probed
-   2026-10-07). To make the release workflow clean up after itself, add a `GHCR_CLEANUP_TOKEN`
-   repo secret (a PAT with `delete:packages`).
-5. **Ant Media's answers** — submission requirements, review timeline, load-test format and
+1. **Read `/privacy/` and `/terms/`** on the website — legal statements published in your name.
+2. **Ant Media's answers** — submission requirements, review timeline, load-test format and
    thresholds, their terms for a free listing (the package's `operator-expected.md` §2; the
    A-ledger in `docs/marketplace/submission-process.md` §2). Bring to the developer meeting:
    listing format and category (A2/A10), asset specs (A3), review flow and SLA (A5), AMS
    version-support expectations (A7), docs-linking policy (A8), load-evidence format (A9).
-6. *Optional:*
+3. *Optional:*
+   - **`GHCR_CLEANUP_TOKEN`** repo secret (a PAT with `delete:packages`), so a failed release
+     run removes its own `candidate-<sha>` image instead of leaving it public (as v0.4.5's did —
+     deleted by hand on 2026-10-08).
    - **`deploy/.env.bak.20260731T112701Z`** still holds the pre-rotation ClickHouse secret
      (mode 600): `shred -u` it when you are satisfied. The other chat-exposed credentials in
      `deploy/.env` and `oguz-testing.md` were never rotated — only ClickHouse was.
@@ -120,5 +98,6 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
 
 ---
 
-*Prod at the S125 close (2026-10-07): **v0.5.0** (`8523b47`), every `/healthz` component `ok`,
-ingesting from AMS 3.1.0 Enterprise; rollback image `pulse-prod-pulse:pre-d194` (= v0.4.5-9).*
+*Prod (2026-10-08): **v0.5.0** (`8523b47`), every `/healthz` component `ok`, ingesting from AMS
+3.1.0 Enterprise, public at `https://pulse.beyondkaira.com` (`/metrics` and the API need tokens;
+unsigned webhooks get 401); rollback image `pulse-prod-pulse:pre-d194` (= v0.4.5-9).*

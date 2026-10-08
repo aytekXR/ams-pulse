@@ -29,19 +29,17 @@ beacon SDKs are MIT); developer credit Aytekin Erdogan; no purchase link. Releas
 `8523b47`, `ghcr.io/aytekxr/ams-pulse:0.5.0` (multi-arch, cosign-verified, Trivy clean), chart
 0.4.0. **Prod runs v0.5.0** (stamped `8523b47`), healthy and ingesting from **AMS 3.1.0
 Enterprise** on this VPS (host networking; trial key valid to **2026-10-16**); loopback publishes
-`127.0.0.1:8090-8092` restored; `PULSE_METRICS_TOKEN` set. Rollback image:
+`127.0.0.1:8090-8092` restored; `PULSE_METRICS_TOKEN` set; **public again at
+`https://pulse.beyondkaira.com`** (vhost re-enabled by the operator 2026-10-08). Rollback image:
 `pulse-prod-pulse:pre-d194` (= v0.4.5-9).
 
 **⚠ Waiting on the operator** (the package's `operator-expected.md` §1, and `docs/operator-expected.md`):
-1. **Enable the Pulse vhost** — `sudo ln -s /etc/nginx/sites-available/pulse.beyondkaira.com.conf
-   /etc/nginx/sites-enabled/ && sudo nginx -t && sudo systemctl reload nginx`. Until then the domain
-   serves the apex landing and the app is reachable on `127.0.0.1:8090` only. (`/metrics` needs the
-   token, so exposing it is safe.)
-2. **Renew the AMS license before 2026-10-16** (applied via the run command's `-l`, not the
+1. **Renew the AMS license before 2026-10-16** (applied via the run command's `-l`, not the
    `LICENSE_KEY` env var). When it lapses, prod goes blind again.
-3. Send the Ant Media ZIP (`bash qa/marketplace/build-submission-zip.sh ant-media`); confirm the
-   name spelling (Aytekin Erdogan vs Erdoğan); delete GHCR `candidate-5c561bc4` (needs
-   `delete:packages` or the web UI); read `/privacy/` and `/terms/`.
+2. Read `/privacy/` and `/terms/`. (Done by the operator: the vhost was re-enabled on 2026-10-08
+   — `https://pulse.beyondkaira.com` serves prod; the Ant Media ZIP was sent on
+   2026-10-07; "Aytekin Erdogan" is the confirmed spelling; GHCR `candidate-5c561bc4` was deleted
+   on 2026-10-08 once the token gained `delete:packages`.)
 
 **★ Top engineering item: §2.49 analytics accuracy (D1–D4, LIM-30)** — operator ruling "list now,
 fix next": audience analytics returns 0, the rollups count every heartbeat upsert, QoE ratios are
@@ -88,7 +86,7 @@ enrolment only.
 1. **Gate reads** — prod health from inside the container (component-scoped `/healthz`), a
    ClickHouse count sampled TWICE, git/PR drift, concurrent-session check.
 2. **AMS license** (expires 2026-10-16) and prod's collector.
-3. **Operator answers** — vhost enabled? the package's `operator-expected.md` §1? Ant Media's reply (§2)?
+3. **Operator answers** — the package's `operator-expected.md` §1? Ant Media's reply (§2)?
 4. Then §2.49.
 
 **Operator queue:** `docs/operator-expected.md`. **How we got here** (read only if you need it):
@@ -109,8 +107,9 @@ enrolment only.
   ingesting from the operator's `antmedia` container — **AMS 3.1.0 Enterprise, `--network host`,
   trial key to 2026-10-16**, app REST filter `127.0.0.1,172.16.0.0/12,<host public IP>/32`.
   Canonical three-file compose set; publishes `127.0.0.1:8090-8092` for host nginx;
-  `PULSE_METRICS_TOKEN` set. **The `pulse.beyondkaira.com` vhost is NOT in `sites-enabled`**
-  (removed ~2026-08-11; re-enabling needs the operator's `sudo`). Schema matches the tree
+  `PULSE_METRICS_TOKEN` set. **Public at `https://pulse.beyondkaira.com`** (vhost re-enabled
+  2026-10-08; verified: `/healthz` 200, `/metrics` and the API 401 without tokens, unsigned
+  webhooks 401). Schema matches the tree
   (migrations 0001–0011 applied).
 - **The iOS app exists and is CI-verified** (D-186). `ios/PulseKit` — Foundation-only, **296 tests
   green on Linux** (re-verified S122 in CI's `swift:6.1` container from a clean `git archive` copy), which is the point of the split: no Apple toolchain exists on this VPS, so

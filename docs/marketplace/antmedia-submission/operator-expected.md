@@ -7,41 +7,21 @@ Decided on 2026-10-07 and already applied everywhere: developer credit **Aytekin
 Shield 1.0.0, SDKs MIT), **no purchase link** (the main button points at
 `https://aytekxr.github.io/ams-pulse/get/`), page title **"Pulse for Ant Media Server"**, the
 analytics accuracy defects D1–D4 disclosed as LIM-30 and scheduled next (ROADMAP-V2 §2.49).
+**Sent to Ant Media on 2026-10-07** (the shareable ZIP); the developer name **Aytekin Erdogan**
+is confirmed as written; the vulnerable GHCR image `candidate-5c561bc4` was deleted on 2026-10-08.
 
 ---
 
 ## 1. Required from you
 
-### 1.1 Send the materials to Ant Media
-
-Send `dist/pulse-for-ant-media-server-marketplace-materials.zip` (build it with
-`bash qa/marketplace/build-submission-zip.sh ant-media`; it contains only the shareable files —
-start with its `README.md`). It answers their five open items and corrects their draft, whose
-install command fails as written.
-
-### 1.2 Confirm the spelling of your name
-
-The package, `LICENSE` and the SDK licenses credit **Aytekin Erdogan**, as you wrote it (the
-website names no developer). Earlier versions of `LICENSE` read "Aytek Erdoğan". If you want the Turkish "ğ" (or
-the short first name) on the page, say so before sending — it is a one-line change in each place.
-
-### 1.3 Renew the AMS license before 2026-10-16
+### 1.1 Renew the AMS license before 2026-10-16
 
 The AMS 3.1.0 Enterprise instance on this VPS runs on a trial key that expires on
 **2026-10-16**. Production Pulse polls that instance, and live demos or re-validation need it.
 Renew or replace the key (it is applied through the AMS run command's `-l` argument, not the
 `LICENSE_KEY` environment variable).
 
-### 1.4 Delete one vulnerable image version on GHCR
-
-`ghcr.io/aytekxr/ams-pulse:candidate-5c561bc4` (package version id `1080500729`) is left over
-from the v0.4.5 release run that Trivy blocked; it predates the CVE-2026-56852 fix. The
-repository token cannot delete packages (it lacks `delete:packages`; verified 2026-10-07).
-Either delete it in the web UI (GitHub → Packages → ams-pulse → that version → Delete — only
-that version; other `candidate-*` tags share digests with released versions), or run
-`gh auth refresh -h github.com -s delete:packages` once and ask the next session to delete it.
-
-### 1.5 Read `/privacy/` and `/terms/` on the website
+### 1.2 Read `/privacy/` and `/terms/` on the website
 
 They are legal statements published in your name. Read them before marketing traffic arrives.
 
