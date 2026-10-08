@@ -8,7 +8,7 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ---
 
-## [Unreleased]
+## [0.5.1] - 2026-10-08
 
 Found by the S126 live test campaign against v0.5.0 on AMS 3.1.0 Enterprise; each defect was
 reproduced on the released build before it was fixed.

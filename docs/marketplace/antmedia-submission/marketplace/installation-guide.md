@@ -4,7 +4,7 @@ For Ant Media Server operators. Covers the one-command quickstart (recommended),
 Docker Compose install, Kubernetes (experimental), offline installs, and what to change
 before exposing Pulse beyond a private network.
 
-**Release covered:** Pulse **v0.5.0** — image `ghcr.io/aytekxr/ams-pulse:0.5.0` (public,
+**Release covered:** Pulse **v0.5.0** — image `ghcr.io/aytekxr/ams-pulse:0.5.1` (public,
 signed), Helm chart 0.4.0. **Verified:** the quickstart below was run end to end with the released
 v0.5.0 image on 2026-10-07 as a fresh install (installer exit code `0`; the walkthrough images are
 that run), after a first verified run on 2026-10-01.
@@ -95,7 +95,7 @@ Keep `PULSE_SECRET_KEY` safe and unchanged: it encrypts the credentials Pulse st
 
 ## 5. Offline / air-gapped hosts
 
-On a machine with internet access: `docker pull ghcr.io/aytekxr/ams-pulse:0.5.0` and
+On a machine with internet access: `docker pull ghcr.io/aytekxr/ams-pulse:0.5.1` and
 `docker pull clickhouse/clickhouse-server@sha256:1d1f6508eba2dccce2cee9913907c5f7766327debc57a6b1991f2c9e3176c163`,
 then `docker save` both, copy, and `docker load` them on the target. Copy
 `deploy/quickstart/` (compose file + `install.sh`) alongside, and run `bash install.sh …` from

@@ -139,7 +139,7 @@ use OCI 1.1 referrers):
 cosign verify \
   --certificate-identity-regexp '^https://github\.com/aytekXR/ams-pulse/\.github/workflows/release\.yml@refs/tags/v.+$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/aytekxr/ams-pulse:0.5.0
+  ghcr.io/aytekxr/ams-pulse:0.5.1
 ```
 
 ### 4. Open the dashboard
@@ -210,4 +210,4 @@ Developed by **Aytekin Erdogan** — an individual developer (beyondkaira.com).
 | Install runbook | https://github.com/aytekXR/ams-pulse/blob/main/docs/runbooks/install.md |
 | Licensing | https://github.com/aytekXR/ams-pulse/blob/main/docs/licensing-public.md |
 | Known limitations | https://github.com/aytekXR/ams-pulse/blob/main/docs/known-limitations.md |
-| Container image | `ghcr.io/aytekxr/ams-pulse:0.5.0` |
+| Container image | `ghcr.io/aytekxr/ams-pulse:0.5.1` |

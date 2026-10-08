@@ -64,7 +64,7 @@ and bootstrap-token extraction.
 
 > **Image tag format:** Pulse image tags have **no `v` prefix**. The git release tag
 > `v0.4.3` is published as image tag `0.4.3` (not `v0.4.3`). Always omit the `v`
-> when specifying an image tag (e.g. `ghcr.io/aytekxr/ams-pulse:0.5.0`).
+> when specifying an image tag (e.g. `ghcr.io/aytekxr/ams-pulse:0.5.1`).
 
 ### Prerequisites
 
@@ -247,7 +247,7 @@ docker compose \
 > at startup so that env var must be set.
 
 > **Note — base compose defaults to the signed GHCR image:** `docker-compose.yml`
-> now defaults to `ghcr.io/aytekxr/ams-pulse:0.5.0` (cosign-signed, SBOM-attached;
+> now defaults to `ghcr.io/aytekxr/ams-pulse:0.5.1` (cosign-signed, SBOM-attached;
 > `ghcr.io/aytekxr/ams-pulse` is **public** — no `docker login` needed). Image tags
 > have no `v` prefix: the git tag `v0.4.3` publishes the image tag `0.4.3`
 > (also `0.4`, `0`, `latest`). The image tag is overridable via the `PULSE_IMAGE`

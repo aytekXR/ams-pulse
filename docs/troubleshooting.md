@@ -483,7 +483,7 @@ Error: Docker Compose v2 not found.
 
 ```
 ERROR: The Pulse container image is not accessible from the registry.
-  Image : ghcr.io/aytekxr/ams-pulse:0.5.0
+  Image : ghcr.io/aytekxr/ams-pulse:0.5.1
 ```
 
 The image is **public** — no `docker login` is needed. A failure at this stage
@@ -491,7 +491,7 @@ means the tag does not exist, a network/proxy is blocking `ghcr.io`, or GHCR is
 rate-limiting you. Check the tag on the
 [package page](https://github.com/aytekXR/ams-pulse/pkgs/container/ams-pulse)
 (tags have **no `v` prefix** — `0.4.3`, not `v0.4.3`) and retry
-`docker pull ghcr.io/aytekxr/ams-pulse:0.5.0`. If your environment cannot reach
+`docker pull ghcr.io/aytekxr/ams-pulse:0.5.1`. If your environment cannot reach
 GHCR at all, build the image from source instead
 (`docker build -f deploy/docker/pulse.Dockerfile -t pulse:dev .` from a clone, then
 `PULSE_IMAGE=pulse:dev bash deploy/quickstart/install.sh …`), or side-load a saved

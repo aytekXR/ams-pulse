@@ -62,5 +62,5 @@ commercial; the one restriction is providing a competing product); the beacon SD
 
 ## Versions
 
-Current release **v0.5.0** — `ghcr.io/aytekxr/ams-pulse:0.5.0`, the Helm chart published with v0.5.0.
+Current release **v0.5.0** — `ghcr.io/aytekxr/ams-pulse:0.5.1`, the Helm chart published with v0.5.0.
 Validated live on AMS 3.1.0 Enterprise and AMS 3.0.3 Enterprise.
