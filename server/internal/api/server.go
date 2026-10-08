@@ -2819,11 +2819,7 @@ func alertChannelFromAPI(body map[string]any, store *meta.Store, existing *meta.
 
 	merged := map[string]any{}
 	if existing != nil && existing.Type == chType {
-		stored, err := storedChannelConfig(store, existing)
-		if err != nil {
-			return meta.AlertChannelRow{}, err
-		}
-		for k, v := range stored {
+		for k, v := range storedChannelConfig(store, existing) {
 			if known[k] { // a key the channel never read (a pre-fix "url") is not carried
 				merged[k] = v
 			}
@@ -2889,28 +2885,28 @@ func alertChannelFromAPI(body map[string]any, store *meta.Store, existing *meta.
 	}, nil
 }
 
-// storedChannelConfig returns a stored channel's public and decrypted secret config.
-func storedChannelConfig(store *meta.Store, row *meta.AlertChannelRow) (map[string]any, error) {
+// storedChannelConfig returns a stored channel's public and decrypted secret config. What no
+// longer reads back is left out rather than failing the edit: after a PULSE_SECRET_KEY
+// rotation the stored secrets cannot be decrypted, and re-entering them is exactly how such a
+// channel is repaired — the required-key check then asks for whatever is missing.
+func storedChannelConfig(store *meta.Store, row *meta.AlertChannelRow) map[string]any {
 	out := map[string]any{}
 	if row.ConfigPublic != "" && row.ConfigPublic != "{}" && row.ConfigPublic != "null" {
 		if err := json.Unmarshal([]byte(row.ConfigPublic), &out); err != nil {
-			return nil, fmt.Errorf("stored channel config: %w", err)
+			out = map[string]any{}
 		}
 	}
 	if row.ConfigEnc != "" {
-		plain, err := store.Decrypt(row.ConfigEnc)
-		if err != nil {
-			return nil, fmt.Errorf("stored channel secrets: %w", err)
-		}
-		secret := map[string]any{}
-		if err := json.Unmarshal([]byte(plain), &secret); err != nil {
-			return nil, fmt.Errorf("stored channel secrets: %w", err)
-		}
-		for k, v := range secret {
-			out[k] = v
+		if plain, err := store.Decrypt(row.ConfigEnc); err == nil {
+			secret := map[string]any{}
+			if json.Unmarshal([]byte(plain), &secret) == nil {
+				for k, v := range secret {
+					out[k] = v
+				}
+			}
 		}
 	}
-	return out, nil
+	return out
 }
 
 // checkChannelConfigValues refuses values the channel could never send with. Reachability
