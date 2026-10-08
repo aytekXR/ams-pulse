@@ -29,6 +29,7 @@ func TestNextCronTime_Semantics(t *testing.T) {
 		{"0 0 29 2 *", "2026-03-01 00:00", "2028-02-29 00:00", "leap day found beyond one year"},
 		{"0 8 * * 7", "2026-10-08 10:00", "2026-10-11 08:00", "weekday 7 is Sunday"},
 		{"0 0 13 * 5", "2026-10-08 10:00", "2026-10-09 00:00", "dom AND weekday restricted → either (Friday 9th)"},
+		{"0 6 */2 * 1", "2026-10-08 10:00", "2026-10-19 06:00", "a step starting with * counts as unrestricted (Vixie DOM_STAR): odd-day Mondays, not the 9th"},
 		{"0 6 1 * *", "2026-10-08 10:00", "2026-11-01 06:00", "monthly preset (D-107 unchanged)"},
 		{"30 2", "2026-10-08 10:00", "2026-10-09 02:30", "2-field form"},
 		{"0 3 0", "2026-10-08 10:00", "2026-10-11 03:00", "3-field form: min hour weekday"},

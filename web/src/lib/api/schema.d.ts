@@ -1564,8 +1564,10 @@ export interface components {
              *     (`min hour day-of-month month weekday`), `min hour weekday`, or `min hour`
              *     (daily). Each field takes `*`, a value, a range `a-b`, a step `*\/n` or `a-b/n`,
              *     or a comma list; weekday 0-7 (0 and 7 = Sunday). When day-of-month and weekday
-             *     are both restricted, either matching is enough (standard cron). An expression
-             *     that does not parse, is out of range, or never fires (`0 0 31 2 *`) is refused.
+             *     are both restricted, either matching is enough; a field that begins with `*`
+             *     (a step such as `*\/2` included) counts as unrestricted, as in Vixie cron. An
+             *     expression that does not parse, is out of range, or never fires (`0 0 31 2 *`)
+             *     is refused.
              */
             cron: string;
             /** @enum {string} */

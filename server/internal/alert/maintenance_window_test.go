@@ -62,3 +62,23 @@ func TestValidatedWindowsAreTheOnesEvaluated(t *testing.T) {
 		t.Errorf("a validated window is not in effect at 00:15 the next day")
 	}
 }
+
+// A huge weekday range is refused before anything is allocated — the set used to grow one
+// entry per value (~300 MB for "0-100000000"), on the API path and on every evaluator tick.
+func TestCronFieldSet_HugeRangeIsRefusedCheaply(t *testing.T) {
+	start := time.Now()
+	for _, field := range []string{"0-100000000", "-5-3", "3-100", "100000000"} {
+		if _, _, err := cronFieldSet(field); err == nil {
+			t.Errorf("cronFieldSet(%q) = nil error, want refused", field)
+		}
+		if cronFieldMatches(field, 3) {
+			t.Errorf("cronFieldMatches(%q, 3) = true, want false", field)
+		}
+	}
+	if _, err := ValidateMaintenanceWindows([]any{map[string]any{"start_cron": "0 0 0-100000000", "duration_s": 3600.0}}); err == nil {
+		t.Errorf("a window with weekday 0-100000000 was accepted")
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Errorf("refusing huge ranges took %v — it must not expand them", d)
+	}
+}

@@ -478,9 +478,16 @@ func parseCronSimpleInternal(fields []string) (min, hour, weekday int, err error
 	return min, hour, weekday, nil
 }
 
+// maxCronValue is the largest value any cron field takes (minute 59).
+const maxCronValue = 59
+
 // cronFieldSet parses a cron field into a set of matching integers.
 // Returns (-1,nil) for "*" (any), a populated set for ranges, or a single value.
 // VD-33: ranges like "1-5" expand to all values in [low, high].
+//
+// Values outside 0-59 are refused before anything is allocated: the set used to grow one
+// entry per value, so a stored window weekday "0-100000000" cost ~300 MB and minutes of CPU
+// on every evaluator tick — and on the API path once windows were validated (S126 red team).
 func cronFieldSet(s string) (set map[int]struct{}, any bool, err error) {
 	if s == "*" {
 		return nil, true, nil
@@ -488,7 +495,7 @@ func cronFieldSet(s string) (set map[int]struct{}, any bool, err error) {
 	if idx := strings.Index(s, "-"); idx >= 0 {
 		low, err1 := strconv.Atoi(s[:idx])
 		high, err2 := strconv.Atoi(s[idx+1:])
-		if err1 != nil || err2 != nil || low > high {
+		if err1 != nil || err2 != nil || low > high || low < 0 || high > maxCronValue {
 			return nil, false, fmt.Errorf("cron: invalid range %q", s)
 		}
 		m := make(map[int]struct{}, high-low+1)
@@ -500,6 +507,9 @@ func cronFieldSet(s string) (set map[int]struct{}, any bool, err error) {
 	n, err := strconv.Atoi(s)
 	if err != nil {
 		return nil, false, fmt.Errorf("cron: invalid value %q: %w", s, err)
+	}
+	if n < 0 || n > maxCronValue {
+		return nil, false, fmt.Errorf("cron: value %q out of range 0-%d", s, maxCronValue)
 	}
 	return map[int]struct{}{n: {}}, false, nil
 }

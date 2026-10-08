@@ -121,8 +121,10 @@ MIN HOUR                       every day
 | `WEEKDAY` | 0-7 (0 and 7 = Sunday) |
 
 Each field takes `*`, a value, a range `a-b`, a step `*/n` or `a-b/n`, or a comma list
-(`1,15`). As in standard cron, when both `DOM` and `WEEKDAY` are restricted a day matching
-either one runs. An expression that does not parse, is out of range, or can never fire
+(`1,15`). As in Vixie cron (the cron most Linux systems run), when `DOM` and `WEEKDAY` are both
+restricted a day matching either one runs — but a field that begins with `*`, a step like
+`*/2` included, counts as unrestricted: `0 6 */2 * 1` runs on odd-numbered days that are
+Mondays, not on every odd day plus every Monday. An expression that does not parse, is out of range, or can never fire
 (`0 0 31 2 *`) is refused with `422 INVALID_SCHEDULE` — before v0.5.1 it was stored and run a
 month later, ranges used only their first value (`1-5` meant Mondays), and `MONTH` was
 ignored (a yearly `0 6 1 1 *` ran every month).
