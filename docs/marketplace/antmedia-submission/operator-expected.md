@@ -9,6 +9,8 @@ Shield 1.0.0, SDKs MIT), **no purchase link** (the main button points at
 analytics accuracy defects D1–D4 disclosed as LIM-30 and scheduled next (ROADMAP-V2 §2.49).
 **Sent to Ant Media on 2026-10-07** (the shareable ZIP); the developer name **Aytekin Erdogan**
 is confirmed as written; the vulnerable GHCR image `candidate-5c561bc4` was deleted on 2026-10-08.
+**v0.5.1 (2026-10-08)** fixes what a live test of v0.5.0 found — the alert-rule form could not
+route alerts to channels — and the package now describes v0.5.1 (§1.3).
 
 ---
 
@@ -24,6 +26,13 @@ Renew or replace the key (it is applied through the AMS run command's `-l` argum
 ### 1.2 Read `/privacy/` and `/terms/` on the website
 
 They are legal statements published in your name. Read them before marketing traffic arrives.
+
+### 1.3 Decide whether to resend the package
+
+Ant Media has the v0.5.0 ZIP. A v0.5.1 ZIP is built on the VPS at
+`dist/pulse-for-ant-media-server-marketplace-materials.zip` (rebuild:
+`bash qa/marketplace/build-submission-zip.sh ant-media`); its guides describe the channel picker
+and the e-mail SMTP fields v0.5.0 lacked. Send it now, or with their first review round.
 
 ---
 
