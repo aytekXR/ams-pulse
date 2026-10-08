@@ -1,14 +1,14 @@
 # Pulse — Known Limitations
 
-**Product:** Pulse v0.5.0 (last refreshed D-194, 2026-10-07)  
+**Product:** Pulse v0.5.1 (last refreshed D-195, 2026-10-08)  
 **Source:** `docs/assessment/documentation-gaps.md` (DG-01 through DG-18),
 `docs/assessment/final-assessment.md` §1 and Appendix B (v0.3.0 baseline; see
 `docs/assessment/marketplace-compliance-review-2026-07-25.md` for current
 marketplace readiness),
 `docs/assessment/capability-map.md`
 
-This document lists every known operator-facing limitation of Pulse v0.5.0 in
-priority order. As of v0.5.0, 29 entries are active (1 retired). Each entry states what the limitation means for you, and what
+This document lists every known operator-facing limitation of Pulse v0.5.1 in
+priority order. As of v0.5.1, 29 entries are active (1 retired). Each entry states what the limitation means for you, and what
 workaround or roadmap path exists.
 
 ---
@@ -793,6 +793,7 @@ sessions as views), a migration and a rollup backfill — ROADMAP-V2 §2.49.
 | Review round 4 F-03/F-04/F-05/F-06/F-13 (S109, 2026-07-27) | **LIM-10 rewritten** from a confidence gap to provable fact: AMS 3.x exposes no node `role` or `version`, so all nodes display as `origin` and edge/origin viewer dedup is **inactive**, not merely unvalidated; added the cluster node-alerting reliability gaps (eviction race, discovery streak reset, `/applications` short-circuit, invisible `down` state, unverified `lastUpdateTime` unit, mode-flip blind window). **LIM-28 extended** — apps on other cluster nodes are invisible rather than mislabelled, per-viewer QoE via REST is largely absent on clusters, and `PULSE_AMS_URL` must point at one origin node (load balancing breaks stream-end detection and the cookie jar); `originAdress` sourced to the real-AMS capture fixtures. **LIM-01 corrected** — real wire fields are `cpu`/`memory`, not the mock-only `cpuUsage`/`memoryUsage` aliases. Count unchanged at 28 |
 | D-193 (S125, 2026-10-01) | Added LIM-30: audience analytics returns zeros, usage viewer-minutes overstated and QoE rebuffer/error ratios understated for beacon-SDK sessions (found by the marketplace audit's ground-truth session check); fix tracked as ROADMAP-V2 §2.49. Count 29 → 30 |
 | D-194 (S125, 2026-10-07) | **LIM-29 retired** — license-based retention cap removed in v0.5.0 (all features free); entry preserved for historical reference. **LIM-22** tier note corrected — anomaly detection is no longer tier-gated. Header → v0.5.0. Count 30 → 29 active (1 retired) |
+| D-195 (S126, 2026-10-08) | Not a new limitation: v0.5.1 fixes defects the live campaign found — rules saved in the web UI notified no one (no channel picker), the channel form could not configure PagerDuty/Telegram/SMTP and edits dropped secrets, statement PDFs showed one line, report cron misread ranges and months, and malformed API input was stored and ignored (CHANGELOG 0.5.1). Header → v0.5.1. No count change |
 
 ---
 
