@@ -58,6 +58,12 @@
   fully autonomous; the built-in alert rule needs a semantics decision first. **★ S124: the
   second blind incident ran 21 DAYS (D-192) — see the §2.45 escalation. The semantics decision
   is now the highest-leverage operator answer on the board.**
+- **S126/D-195 — v0.5.1 shipped** from a live test campaign: UI-saved alert rules notified no one
+  (no channel picker), the channel form could not configure PagerDuty/Telegram/SMTP, statement
+  PDFs drew one line, report cron misread ranges and months, and the API stored and ignored
+  malformed input — all fixed, red-teamed and in prod. **Follow-ups:** validate that
+  `channel_ids` exist (needs channel deletion to cascade to rules first); handle `AlertsPage`
+  delete errors; D7/D8 alerting UX.
 - **§2.49 Analytics accuracy (D1–D4)** (S125/D-193; **scheduled by the operator, D-194**) — ★ **top
   engineering item.** Audience analytics always returns 0 (UInt64→int64 scan error swallowed);
   audience/usage rollups count every heartbeat upsert; QoE ratios understated ×(n+1)/2. One
@@ -74,7 +80,11 @@
   lasts:** refresh six outdated scenario expectations (FL-01/H-01 expect `null` CPU — predates
   D-179; FL-02 version; P-03 now reaches `app_accepted`; WH-03 recording now counted; H-06 must use
   `node_cpu` with a non-firing threshold), fix the `validate-all` summary's evidence glob (it
-  reports TC-I-05-SRT as NOEVID), add the `v3.1.0` mock profile.)* The competitive re-assessment that seeded it is ✅ DONE
+  reports TC-I-05-SRT as NOEVID), add the `v3.1.0` mock profile.)* *(S126/D-195: ✅ the scenario
+  refresh, the evidence glob and the `v3.1.0` mock profile shipped (#288) and were re-run live — 7
+  PASS, TC-WH-03 SKIP by design, TC-REC-01 SKIP (its standing VoD fixture went with the S125 AMS
+  reinstall; restoring it is an operator yes). **Remaining:** the LIM-23/LIM-18/LIM-28 re-probes.)*
+  The competitive re-assessment that seeded it is ✅ DONE
   (`docs/assessment/ams-3.1-docs-v2-assessment.md`: operators still need Pulse; F1 vs the new
   panel is the only medium-threat watch item).
 - **SESSION-101 verification of D-164** — ✅ DONE (D-166). Proven live in an isolated stack; the
@@ -798,7 +808,7 @@ migration (contracts CR) + rollup re-backfill script; (5) re-run `seed-demo.mjs 
 re-capture the Analytics / QoE / Reports screenshots for the marketplace. Ship as v0.4.6 or v0.5.0.
 Fixing D1 alone is **not** acceptable — it would turn visible zeros into silently inflated numbers.
 
-### 2.48  AMS 3.1.0 + docs v2 competitive re-assessment — and the 3.1.0 compatibility lane  [S–M]  (S124/D-192, 2026-09-02 — assessment ✅ DONE; live validation ✅ S125/D-194; harness + mock-profile follow-ups OPEN)
+### 2.48  AMS 3.1.0 + docs v2 competitive re-assessment — and the 3.1.0 compatibility lane  [S–M]  (S124/D-192, 2026-09-02 — assessment ✅ DONE; live validation ✅ S125/D-194; harness + mock profile ✅ S126/D-195; LIM re-probes OPEN)
 
 **Trigger:** Ant Media's 2026-09 email announcing Documentation V2 (`docs.antmedia.io/v2/`),
 plus **AMS v3.1.0 released 2026-08-31** — the first AMS release since our 3.0.3 validation, and

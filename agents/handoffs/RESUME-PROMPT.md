@@ -23,23 +23,27 @@
 > `agents/handoffs/sessions/SESSION-NNN.md` and `decisions.md` (operator directive).
 > **Replace this block each session — never append to it.**
 
-**v0.5.0 is released and in production (S125, 2026-10-07 — D-193, D-194).** Pulse is free: every
-feature on every install, no license key, commercial use included (PolyForm Shield 1.0.0; the
-beacon SDKs are MIT); developer credit Aytekin Erdogan; no purchase link. Release: tag on
-`8523b47`, `ghcr.io/aytekxr/ams-pulse:0.5.0` (multi-arch, cosign-verified, Trivy clean), chart
-0.4.0. **Prod runs v0.5.0** (stamped `8523b47`), healthy and ingesting from **AMS 3.1.0
-Enterprise** on this VPS (host networking; trial key valid to **2026-10-16**); loopback publishes
-`127.0.0.1:8090-8092` restored; `PULSE_METRICS_TOKEN` set; **public again at
-`https://pulse.beyondkaira.com`** (vhost re-enabled by the operator 2026-10-08). Rollback image:
-`pulse-prod-pulse:pre-d194` (= v0.4.5-9).
+**v0.5.1 is released and in production (S126, 2026-10-08 — D-195).** It fixes what a live test
+campaign found in v0.5.0, headed by **alert rules saved in the web UI notifying no one** (the rule
+form had no channel picker; an edit also erased API-set channels and windows), plus the channel
+form (PagerDuty/Telegram/SMTP), statement PDFs (only the first line on the page), report cron,
+silently ignored API input, maintenance windows stopping at midnight, quickstart hardening headers
+and light-theme contrast — CHANGELOG 0.5.1. Release: tag on `ad16c41`,
+`ghcr.io/aytekxr/ams-pulse:0.5.1` (multi-arch, cosign-verified, Trivy clean), chart 0.4.1. **Prod
+runs v0.5.1** (stamped `ad16c41`), healthy and ingesting from **AMS 3.1.0 Enterprise** on this VPS
+(host networking; trial key valid to **2026-10-16**), public at `https://pulse.beyondkaira.com`.
+Rollback image: `pulse-prod-pulse:pre-d195` (= v0.5.0, `8523b47`). Pulse is free (PolyForm Shield
+1.0.0; beacon SDKs MIT); developer credit Aytekin Erdogan; no purchase link.
 
-**⚠ Waiting on the operator** (the package's `operator-expected.md` §1, and `docs/operator-expected.md`):
+**⚠ Waiting on the operator** (`docs/operator-expected.md`):
 1. **Renew the AMS license before 2026-10-16** (applied via the run command's `-l`, not the
    `LICENSE_KEY` env var). When it lapses, prod goes blind again.
-2. Read `/privacy/` and `/terms/`. (Done by the operator: the vhost was re-enabled on 2026-10-08
-   — `https://pulse.beyondkaira.com` serves prod; the Ant Media ZIP was sent on
-   2026-10-07; "Aytekin Erdogan" is the confirmed spelling; GHCR `candidate-5c561bc4` was deleted
-   on 2026-10-08 once the token gained `delete:packages`.)
+2. **Resend the Ant Media package?** They have the v0.5.0 ZIP (sent 2026-10-07), whose UI could
+   not route alerts to channels. A v0.5.1 ZIP is built at
+   `dist/pulse-for-ant-media-server-marketplace-materials.zip` (gitignored; rebuild with
+   `bash qa/marketplace/build-submission-zip.sh ant-media`).
+3. Optional: allow restoring the TC-REC-01 VoD fixture (toggles `mp4MuxingEnabled` on the shared
+   AMS app `pulse-test` for one ~20 s publish).
 
 **★ Top engineering item: §2.49 analytics accuracy (D1–D4, LIM-30)** — operator ruling "list now,
 fix next": audience analytics returns 0, the rollups count every heartbeat upsert, QoE ratios are
@@ -47,12 +51,13 @@ understated. One data-model change + backfill + producer-shaped fixtures. Do NOT
 
 **The standing hazard, now dormant.** `pulse-migrate` bind-mounts `contracts/` from the working
 tree, so a prod `up -d` applies the checkout's migrations to the deployed binary (2026-07-31:
-five-minute ingest outage). Prod and `main` are both v0.5.0, so nothing is pending — the hazard
-returns the moment `main` gains a migration prod lacks. Roll prod forward with it; pre-flight:
+five-minute ingest outage). Prod runs v0.5.1 and `main` is v0.5.1 plus a QA-only commit (no
+migrations), so nothing is pending — the hazard returns the moment `main` gains a migration prod
+lacks. Roll prod forward with it; pre-flight:
 `deploy/runbooks/upgrade-rollback.md` §1.
 
-**Tracks:** Marketplace — package delivered; waiting on Ant Media (requirements, review timeline,
-load-test format, their terms for a free listing). iOS TestFlight — Apple Developer Program
+**Tracks:** Marketplace — v0.5.0 package delivered, v0.5.1 package built; waiting on Ant Media
+(requirements, review timeline, load-test format, their terms for a free listing). iOS TestFlight — Apple Developer Program
 enrolment only.
 
 **Standing lessons that keep paying (condensed — session narration lives in `decisions.md`):**
@@ -65,17 +70,26 @@ enrolment only.
   any poll command once by hand before arming a watch on it.
 - **Run marketing captures through the real pipeline; read every panel** (D-193). Fixtures must use
   the producer's shape.
-- **Run the guard the way CI runs it. Fix the class, not the instance. Test the artifact.**
+- **Run the guard the way CI runs it. Fix the class, not the instance. Test the artifact.** A `run:`
+  step without `shell:` is `bash -e` — wrapping it in `set -euo pipefail` aborted it silently (D-195).
+- **Follow the fix into its neighbours** (D-195): the v0.5.0 headline defect (UI rules notified no
+  one) was found while wiring an unrelated validation, not by the campaign that preceded it.
+- **A reviewer's "safe" claim is a lead** (D-195): "if the key changed, decryption fails and
+  returns 422" was the round-2 defect (key rotation blocked the channel-repair edit).
+- **This VPS has 6 CPU / 11 GB shared with prod and AMS** (D-195): parallel agents each compiling
+  in a fresh `golang:1.25` container hit 0 MB available and load ~520. Cap containers
+  (`-m 2g --cpus 2`), share a Go build cache, serialize heavy runs, arm a MemAvailable watchdog.
 - **A domain-level 200 is not service health**; **sample the moving number twice.**
 - **⚠ Concurrent-session hazard is real.** If HEAD moves or the tree dirties with work you did
   not do, STOP and inspect. **`pkill -f <pattern>` matches its own shell.**
 
 **Open engineering debt — beyond §2.49:**
-- **§2.48 harness refresh for AMS 3.1.0** — six outdated scenario expectations, the `validate-all`
-  evidence glob (reports TC-I-05-SRT as NOEVID), the `v3.1.0` mock profile. Autonomous while the
-  AMS trial lasts.
-- Alerting UX D6–D8; cosmetics D9/D10/D12; `AlertsPage` delete errors are still unhandled (the
-  pattern F14 fixed for saves).
+- Alerting follow-ups: `channel_ids` are not checked to exist (a strict check needs channel
+  deletion to cascade to rules first, or a re-saved rule would 422 after a channel is deleted);
+  `AlertsPage` delete errors are still unhandled (the pattern F14 fixed for saves); UX D7/D8;
+  cosmetics D9/D10/D12. The TC-REC-01 VoD fixture (lost in the S125 AMS reinstall).
+- §2.48 leftovers: the LIM-23/LIM-18/LIM-28 re-probes on AMS 3.1.0 (the harness refresh and the
+  `v3.1.0` mock profile shipped in #288).
 - **Dependabot backlog:** #276 (Go modules, incl. kin-openapi 0.149 — mind the sticky-servers
   trap), #278 (Go 1.27), #277, #280–#282, #275 — v0.5.0 took only the CVE-relevant subset.
 - `pulse rekey` (CodeQL #6, ADR-0004). Web tests that flake under host load — check `uptime`.
@@ -90,20 +104,22 @@ enrolment only.
 4. Then §2.49.
 
 **Operator queue:** `docs/operator-expected.md`. **How we got here** (read only if you need it):
-`decisions.md` (D-193, D-194) · `agents/handoffs/sessions/` · `docs/assessment/`.
+`decisions.md` (D-193, D-194, D-195) · `agents/handoffs/sessions/` · `docs/assessment/`.
 
 ---
 ## 1. CURRENT STATE (verified facts — refresh each session, never let this go stale)
 
 - **Shipped product, pre-marketplace.** All 10 PRD features implemented. **Latest release:
-  v0.5.0** (2026-10-07, tag on `8523b47`): every feature free (PolyForm Shield 1.0.0; the tier
+  v0.5.1** (2026-10-08, tag on `ad16c41` — fixes from the S126 live campaign, D-195; v0.5.0,
+  2026-10-07, `8523b47`, made Pulse free): every feature free (PolyForm Shield 1.0.0; the tier
   model is dormant code — `license.New` alone still enforces, `cmd/pulse` turns the
   all-features-free policy on). **Live-validated on AMS 3.1.0 Enterprise** (2026-10-07: 44/61
   scenario scripts pass, none of the failures an AMS regression; live alerting, player QoE, login
   backoff and the installer) and on AMS 3.0.3 Enterprise (46/50, July). **Known wrong:** F2's
   audience view returns 0 and F3/F6 aggregates are wrong for SDK traffic (LIM-30, §2.49).
-- **Production** runs on this VPS on the stamped **v0.5.0** build (`8523b47`, rolled 2026-10-07,
-  D-194; rollback image `pulse-prod-pulse:pre-d194` = v0.4.5-9). Health `ok` on every component,
+- **Production** runs on this VPS on the stamped **v0.5.1** build (`ad16c41`, rolled 2026-10-08,
+  D-195; rollback image `pulse-prod-pulse:pre-d195` = v0.5.0; backup taken before the swap,
+  `20261008-161737`). Health `ok` on every component,
   ingesting from the operator's `antmedia` container — **AMS 3.1.0 Enterprise, `--network host`,
   trial key to 2026-10-16**, app REST filter `127.0.0.1,172.16.0.0/12,<host public IP>/32`.
   Canonical three-file compose set; publishes `127.0.0.1:8090-8092` for host nginx;

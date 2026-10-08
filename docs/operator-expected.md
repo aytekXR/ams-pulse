@@ -4,12 +4,10 @@
 `agents/handoffs/decisions.md`, `agents/handoffs/sessions/` and
 `agents/handoffs/RESUME-PROMPT.md`.*
 
-> **v0.5.0 is released and in production (2026-10-07).** Pulse is free; your decisions (developer
-> credit, no prices, no purchase link, the page title, D1–D4 to the roadmap) are applied
-> everywhere, and the Ant Media package is ready to send. Prod runs v0.5.0 and ingests from your
-> AMS 3.1.0 Enterprise; `https://pulse.beyondkaira.com` is live again (vhost re-enabled
-> 2026-10-08). The Ant Media materials were sent on 2026-10-07. What is left for you is §0 and
-> §B1; iOS (§A) is independent.
+> **v0.5.1 is released and in production (2026-10-08).** It fixes what a live test of v0.5.0
+> found — most importantly, alert rules saved in the web UI notified no one (the form had no way
+> to choose channels). Prod runs v0.5.1 and ingests from your AMS 3.1.0 Enterprise at
+> `https://pulse.beyondkaira.com`. What is left for you is §0 and §B; iOS (§A) is independent.
 
 ---
 
@@ -60,13 +58,21 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
 
 ## B. Marketplace
 
-1. **Read `/privacy/` and `/terms/`** on the website — legal statements published in your name.
-2. **Ant Media's answers** — submission requirements, review timeline, load-test format and
+1. **Resend the Ant Media package?** They have the v0.5.0 ZIP (sent 2026-10-07). In v0.5.0 the
+   alert-rule form could not route alerts to channels, and the guides inside describe that form;
+   a v0.5.1 ZIP is built at `dist/pulse-for-ant-media-server-marketplace-materials.zip` on the VPS
+   (rebuild: `bash qa/marketplace/build-submission-zip.sh ant-media`). Your call whether to send it
+   now or with their first review round.
+2. **Read `/privacy/` and `/terms/`** on the website — legal statements published in your name.
+3. **Ant Media's answers** — submission requirements, review timeline, load-test format and
    thresholds, their terms for a free listing (the package's `operator-expected.md` §2; the
    A-ledger in `docs/marketplace/submission-process.md` §2). Bring to the developer meeting:
    listing format and category (A2/A10), asset specs (A3), review flow and SLA (A5), AMS
    version-support expectations (A7), docs-linking policy (A8), load-evidence format (A9).
-3. *Optional:*
+4. *Optional:*
+   - **Restore the TC-REC-01 VoD fixture** (the VoD-recording check skips without it; the S125 AMS
+     reinstall removed it): enable `mp4MuxingEnabled` on the AMS app `pulse-test` for one ~20 s
+     test publish, then disable it again. Say yes and the loop does it.
    - **`GHCR_CLEANUP_TOKEN`** repo secret (a PAT with `delete:packages`), so a failed release
      run removes its own `candidate-<sha>` image instead of leaving it public (as v0.4.5's did —
      deleted by hand on 2026-10-08).
@@ -98,6 +104,6 @@ before the site goes public.** Both carry an `OPERATOR REVIEW REQUIRED` marker i
 
 ---
 
-*Prod (2026-10-08): **v0.5.0** (`8523b47`), every `/healthz` component `ok`, ingesting from AMS
+*Prod (2026-10-08): **v0.5.1** (`ad16c41`), every `/healthz` component `ok`, ingesting from AMS
 3.1.0 Enterprise, public at `https://pulse.beyondkaira.com` (`/metrics` and the API need tokens;
-unsigned webhooks get 401); rollback image `pulse-prod-pulse:pre-d194` (= v0.4.5-9).*
+unsigned webhooks get 401); rollback image `pulse-prod-pulse:pre-d195` (= v0.5.0).*

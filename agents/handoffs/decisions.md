@@ -11859,3 +11859,88 @@ loads an old enterprise key — inert), 0 errors, ingest moving. **The public vh
 - *Restricting a firewall changes what your own tests can see.* Tightening the REST filter broke the
   harness's ground-truth reads via the public IP; the first sweep's failures were the filter, not
   the product.
+
+## D-195 — §S126 (2026-10-08): v0.5.1 — the UI's alert rules notified no one, and the API kept what it ignored
+
+**Trigger:** the operator: "Erdogan is correct, keep it. gh refreshed mail sent. Keep testing the
+product." The name was confirmed, the token gained `delete:packages` (GHCR `candidate-5c561bc4`
+deleted), and the Ant Media ZIP was sent; the work became a live test campaign against the
+released v0.5.0 on the real AMS 3.1.0 Enterprise.
+
+**How it was tested.** An isolated testbed (`/home/aytek/pulse-testbed`, compose project
+`pulse-testbed`, released `ghcr.io/aytekxr/ams-pulse:0.5.0` on 18090-18092) with real sinks —
+Mailpit, a webhook recorder, S3Mock — and a six-lane workflow campaign (reports, alerting,
+security, UI, ops, probes/fleet) with skeptic verification. Then hands-on reproduction of
+every upheld finding on the released build before any fix.
+
+**The headline was found by following a fix, not by the campaign.** While wiring
+`maintenance_windows` validation, the rule form turned out to send `maintenance_windows: []`
+on every save — and no `channel_ids` at all. A rule notifies only the channels it lists, and
+the form had no channel picker, so **every rule created or edited in the UI notified no one**
+(including a default rule "turned on" as the user guide said). Reproduced on the testbed: the
+form-shaped rule fired with 0 deliveries while the same rule with `channel_ids` was delivered;
+a UI-style edit wiped an API-set channel and window. The user's own prod rule (`deneme-alert`)
+has no channel.
+
+**What v0.5.1 fixes** (PR #287, CHANGELOG 0.5.1): the rule form's channel picker; the channel
+form's real per-type fields (PagerDuty/Telegram said "configure via environment variables" —
+none exist); channel `PUT` keeps omitted config keys (secrets are write-only); statement PDFs
+drew only their first line (`Td` is relative); report cron misread ranges/months/bounds and ran
+unparseable expressions a month later; the API stored wrong-typed and unknown fields (the
+runbooks' own `cron_expr`, `app_filter`, `maintenance_window` among them — `app_filter` left a
+"tenant-a" statement covering every tenant); maintenance windows stopped at midnight; the
+quickstart sent no hardening headers; light-theme badges and the density control were below
+AA; a bucket without an S3 endpoint left upload silently off.
+
+**Red team (10 agents, 5 lenses × skeptic):** security-01 CONFIRMED — the old `cronFieldSet`
+expanded `0-100000000` into a map before bounds-checking (~300 MB, minutes of CPU; on the new
+API path and, pre-existing, every evaluator tick) — fixed at the source. docs-001 CONFIRMED.
+reports-1 REFUTED (the code matches Vixie's DOM_STAR rule; docs and a test now pin it). And a
+reviewer's *safe* claim — "if the key changed, decryption fails and returns 422" — was the
+round-2 defect: after a `PULSE_SECRET_KEY` rotation the merge-on-update refused the very edit
+that repairs a channel. Lesson [[verify-reviewer-reassurances]] paid again.
+
+**The VPS ran out of memory under the red team.** Five agents compiling in fresh `golang:1.25`
+containers plus vitest drove MemAvailable to 0 and the load to ~520 on a 6-CPU / 11 GB box that
+also runs prod, AMS and other apps. Nothing was OOM-killed and prod stayed healthy — by luck. A
+MemAvailable watchdog (kill the newest throwaway container below 1 GB) then killed one of my
+own containers once, as designed. Rule now: memory-capped containers, a shared build cache,
+serialized heavy runs, a watchdog armed before any parallel build.
+
+**The release guard, run as CI runs it, caught three rounds of stale version strings** before
+the tag (doc headers, the Helm README table, chart pins in the install docs). My first
+extraction wrapped it in `set -euo pipefail`; the step runs as `bash -e`, and the stricter
+flags aborted silently on a grep that matched nothing.
+
+**Prod compatibility was checked before deploying:** every rule prod lists (5) replays
+through the new parser — POST 201, PUT back 200; prod has no channels or schedules.
+
+**Harness (PR #288):** the real-AMS scenarios refreshed for AMS 3.1.0 — re-run live: 7 PASS,
+TC-WH-03 SKIP by design, TC-REC-01 SKIP because the standing VoD fixture in `pulse-test` was lost
+in the S125 AMS reinstall (restoring it means toggling `mp4MuxingEnabled` on a shared AMS app —
+left for the operator's call).
+
+**Still open:** §2.49 analytics accuracy (D1–D4) remains the top engineering item. Follow-ups:
+`channel_ids` existence is not validated (a strict check needs channel deletion to cascade to
+rules first); AlertsPage delete errors are unhandled; D7/D8 alerting UX; the TC-REC-01 fixture.
+
+**Release and rollout.** PR #287 (squash `ad16c41`) carried the fixes and the version bump; `ci`
+and `e2e` green on the merge SHA before tagging; annotated tag `v0.5.1` dereferenced to
+`ad16c41` before the push. The release workflow passed its CI gate, version guard and Trivy
+scans: `ghcr.io/aytekxr/ams-pulse:0.5.1` (amd64 + arm64; cosign verified against the tag's
+workflow identity), chart `oci://ghcr.io/aytekxr/charts/pulse:0.4.1` (appVersion 0.5.1), binaries,
+`ams-pulse-beacon-0.5.1.tgz`, `SHA256SUMS`. Prod: rollback tag `pulse-prod-pulse:pre-d195`
+(= v0.5.0 `8523b47`, the running image), manual backup `20261008-161737` (ClickHouse + SQLite,
+exit 0), stamped build `pulse v0.5.1 (commit ad16c41)`, `up -d` (migrate exit 0 — no migrations
+since v0.5.0). Smoke: every `/healthz` component `ok`, 0 ERROR/panic lines, limits 512 MiB / 0.5
+CPU, public URL 200, the app's own hardening headers present, the served bundle carries the new
+form strings, and ClickHouse ingest sampled twice after the swap (5 → 43 rows over 3 min — the
+720/h steady state). A v0.5.1 Ant Media ZIP is built (6.5 MB, scan clean); resending it is the
+operator's call.
+
+**Lessons:**
+- *Follow the fix into its neighbours.* The campaign's six lanes missed the headline defect; it
+  surfaced while wiring an unrelated validation, by reading what the form actually sends.
+- *A reviewer's "safe" claim is a lead, not a verdict* — and here it named the defect outright.
+- *Run the guard with CI's shell flags.* `bash -e`, not `set -euo pipefail`.
+- *A shared VPS is a shared fate.* Parallel agents must cap, share caches and be watched.
