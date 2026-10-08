@@ -800,6 +800,7 @@ func TestParamConformance(t *testing.T) {
 				for i := 1; i <= 2; i++ {
 					postConformanceItem(t, bizTs.URL, "/api/v1/alerts/channels", bizTok, map[string]any{
 						"type": "webhook", "name": fmt.Sprintf("chan-lim-%d", i),
+						"config": map[string]any{"webhook_url": "https://example.com/hook"},
 					})
 				}
 				items, nc := getListPage(t, bizTs.URL, "/api/v1/alerts/channels?limit=1", bizTok)
@@ -822,6 +823,7 @@ func TestParamConformance(t *testing.T) {
 				for i := 1; i <= 2; i++ {
 					postConformanceItem(t, bizTs.URL, "/api/v1/alerts/channels", bizTok, map[string]any{
 						"type": "webhook", "name": fmt.Sprintf("chan-cur-%d", i),
+						"config": map[string]any{"webhook_url": "https://example.com/hook"},
 					})
 				}
 				_, nc := getListPage(t, bizTs.URL, "/api/v1/alerts/channels?limit=1", bizTok)

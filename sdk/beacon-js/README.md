@@ -22,12 +22,12 @@ community; the viewer-side moat no server-side DIY stack can replicate.
 
 ### Option A — tarball from GitHub Release (works today)
 
-Download `ams-pulse-beacon-0.5.0.tgz` from the
-[v0.5.0 GitHub Release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.5.0) and install it
+Download `ams-pulse-beacon-0.5.1.tgz` from the
+[v0.5.1 GitHub Release](https://github.com/aytekXR/ams-pulse/releases/tag/v0.5.1) and install it
 locally:
 
 ```bash
-npm install ./ams-pulse-beacon-0.5.0.tgz
+npm install ./ams-pulse-beacon-0.5.1.tgz
 ```
 
 ### Option B — npm registry (coming)

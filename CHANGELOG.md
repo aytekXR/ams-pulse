@@ -8,6 +8,72 @@ D-numbers reference the decision log at `agents/handoffs/decisions.md`.
 
 ---
 
+## [0.5.1] - 2026-10-08
+
+Found by the S126 live test campaign against v0.5.0 on AMS 3.1.0 Enterprise; each defect was
+reproduced on the released build before it was fixed.
+
+### Fixed
+
+- **Alert rules saved in the web UI notified no one.** The rule form had no way to choose
+  channels and always sent none, and a rule notifies only the channels in its `channel_ids` —
+  so every rule created in the UI, and every default rule turned on as the user guide said
+  (edit, uncheck Muted), recorded history and sent nothing. Saving an edit also erased the
+  channels and maintenance windows set through the API. The form now has **Notify channels**
+  checkboxes, keeps channel IDs it cannot show, keeps the rule's maintenance windows (listed
+  read-only), and warns when an active rule has no channel; the Rules list shows each rule's
+  channels or "No channel".
+- **The channel form could not configure most channels.** PagerDuty and Telegram showed
+  "Configure via environment variables" (no such variables exist) and saved an empty config;
+  e-mail offered only the recipient; and saving an edit erased the webhook signing secret and
+  the SMTP settings. Every type now has its real fields, secrets are write-only ("leave blank
+  to keep"), and `PUT /alerts/channels/{id}` keeps the config keys a request leaves out
+  (`""`/null removes one; a type change starts empty).
+- **Scheduled PDF statements showed only their first line.** Every later line was positioned
+  relative to the previous one and drawn above the page. Lines are now placed absolutely, a
+  statement longer than a page says how many rows it left out (the CSV has them all), and a
+  multi-line white-label address prints one line per line.
+- **Report schedule `cron` was misread.** A range kept only its first value (`1-5` ran on
+  Mondays, `9-17` at 09:00), the month field was ignored (a yearly schedule ran monthly), values
+  were not bounds-checked, and an expression that did not parse was stored and run a month
+  later. One parser now serves the API and the scheduler, with standard cron semantics, and an
+  expression that cannot run (`0 0 31 2 *`) is refused.
+- **Malformed input was stored and silently ignored** — now refused with a 422 that names the
+  field: a rule field of the wrong JSON type (`"threshold": "90"` was stored as 0 and fired on
+  every sample), fractional or negative counts, an unknown `rule_type`; unknown fields on rules,
+  schedules and channels (the runbooks' `cron_expr`, `maintenance_window` and `app_filter` —
+  the last left a "tenant-a" statement covering every tenant); maintenance windows written as
+  `{cron_expr, …}`, longer than 24 h or out of range; channel configs with a wrong key
+  (`url` for a webhook), a missing required key, a non-http(s) URL, an `smtp_addr` without a
+  port, or an address with a display name (it goes to the SMTP envelope as is); a white-label
+  header without a `name` or with keys it does not print. An unknown channel type is a 422, no
+  longer a misleading 403 "upgrade required".
+- **A maintenance window stopped at midnight.** `"0 23 *"` for two hours went quiet at 00:00,
+  and a Saturday window never reached Sunday; a window may now run past midnight (up to 24 h).
+- **S3 upload stayed off without a word** when `PULSE_S3_BUCKET` was set without
+  `PULSE_S3_ENDPOINT` — the reports runbook's AWS example. Startup now warns, and the runbook
+  sets the endpoint.
+- **An install served without a reverse proxy (the quickstart) sent no browser hardening
+  headers,** so the admin UI could be framed. Pulse now sends `X-Content-Type-Options`,
+  `X-Frame-Options: DENY`, `Referrer-Policy` and `Permissions-Policy` itself, with the same
+  values as the shipped proxy configs.
+- **Light-theme contrast:** success, warning and error badges (2.74 / 4.26 / 4.14:1) and the
+  selected display-density segment (4.32:1) were below WCAG AA. Light badges now print their
+  label in the primary text colour on the status tint, and the density control uses the
+  higher-contrast accent; all are pinned in `wcag-tokens.test.ts`, read from `global.css`.
+- **The live streams grid** put its empty-state heading directly inside `role="grid"`; it now
+  sits in a full-width row and cell.
+
+### Documentation
+
+- The alerting runbook, troubleshooting guide, API guide and user guide showed request bodies
+  the API refused or ignored (partial `PUT`s, `maintenance_window.cron_expr`); they now show
+  working ones, explain that `PUT` replaces a rule (with a list → jq → `PUT` recipe), and
+  describe the new forms. The reports runbook's schedule examples used `cron_expr`,
+  `app_filter` and `tenant_filter`, and said day-of-month and month were ignored; the e-mail
+  section claimed STARTTLS failures were non-fatal (they fail the delivery). The compose
+  file's S3 comment listed variable names the server never reads.
+
 ## [0.5.0] - 2026-10-07
 
 ### Changed

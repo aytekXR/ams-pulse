@@ -67,14 +67,14 @@ curl -fsSL https://raw.githubusercontent.com/aytekXR/ams-pulse/main/deploy/quick
   | bash -s -- --ams-url http://YOUR-AMS:5080 --email you@example.com
 ```
 
-The image is public on GHCR (`ghcr.io/aytekxr/ams-pulse:0.5.0`, multi-arch amd64/arm64). If your
+The image is public on GHCR (`ghcr.io/aytekxr/ams-pulse:0.5.1`, multi-arch amd64/arm64). If your
 team verifies signatures:
 
 ```sh
 cosign verify \
   --certificate-identity-regexp '^https://github\.com/aytekXR/ams-pulse/\.github/workflows/release\.yml@refs/tags/v.+$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/aytekxr/ams-pulse:0.5.0
+  ghcr.io/aytekxr/ams-pulse:0.5.1
 ```
 
 ⚠ One practical note that will save your developer a confusing ten minutes: **this needs a cosign

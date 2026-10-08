@@ -11,7 +11,9 @@ A new install seeds four rules — *Stream offline*, *Viewer floor breach*, *Nod
 exists**. Pulse records these alerts in History but **notifies nobody** until you:
 
 1. create at least one channel (**Alerts → Channels → New channel**), and
-2. attach it to a rule and un-mute the rule (**Alerts → Rules → Edit**).
+2. edit a rule (**Alerts → Rules → Edit**), tick the channel under **Notify channels**, and
+   un-mute it. The Rules list shows each rule's channels — **No channel** means the rule
+   records history but notifies nobody.
 
 ![Alert rules](../assets/screenshots/05-alert-rules.png)
 
@@ -19,7 +21,7 @@ exists**. Pulse records these alerts in History but **notifies nobody** until yo
 
 | Type | Configure |
 |---|---|
-| E-mail (SMTP) | Recipient in the UI; **SMTP server, sender and login through the API** (below). |
+| E-mail (SMTP) | UI or API: recipient, SMTP server (`host:port`), sender, login, STARTTLS. Login stored encrypted. |
 | Slack (incoming webhook) | UI or API. The webhook URL is stored encrypted. |
 | Telegram (bot) | UI or API. Bot token stored encrypted. |
 | PagerDuty (Events v2) | UI or API. Routing key stored encrypted. |
@@ -29,8 +31,8 @@ Each channel has a **Test fire** button that sends a sample notification.
 
 ![Alert channels](../assets/screenshots/07-alert-channels.png)
 
-**E-mail needs the API for SMTP settings.** The UI form only takes the recipient, so a channel
-created there tries `localhost:587` and fails. Create (or update) e-mail channels like this:
+**E-mail needs an SMTP server.** Without one Pulse tries `localhost:587` — in the container,
+the container itself — so set it in the channel form or through the API:
 
 ```sh
 curl -s -X POST http://<pulse>:8090/api/v1/alerts/channels \
@@ -41,9 +43,10 @@ curl -s -X POST http://<pulse>:8090/api/v1/alerts/channels \
                  "password":"<smtp-password>","starttls":true}}'
 ```
 
-> ⚠ Do **not** edit such a channel in the UI afterwards: saving the UI form replaces the
-> whole configuration with the recipient only and silently drops the SMTP settings. Change it
-> with `PUT /api/v1/alerts/channels/{id}` and send the full config.
+Secrets (SMTP login, webhook and bot tokens, routing keys, the signing secret) are never shown
+again. When you edit a channel — in the UI or with `PUT /api/v1/alerts/channels/{id}` — a
+secret you leave out is kept. A config the channel type cannot use (a missing URL, a wrong
+key name, an SMTP server without a port) is refused when you save it, not at the first alert.
 
 ## 3. Rules
 
@@ -56,7 +59,8 @@ curl -s -X POST http://<pulse>:8090/api/v1/alerts/channels \
 | Cooldown | Minimum time between repeated notifications for the same alert. |
 | Scope | Optional: limit to one application, stream, node or tenant. Empty = everything. |
 | Enabled / Muted | Disabled = not evaluated. Muted = evaluated and recorded, but nobody is notified. |
-| Maintenance windows | Cron-defined periods with no notifications (API). |
+| Notify channels | The channels the rule sends to. None = recorded in History, nobody notified. |
+| Maintenance windows | Recurring quiet periods, e.g. Sundays 02:00–03:00 UTC (`maintenance_windows`, set through the API; the form lists them). |
 | Rule type `anomaly` | Instead of a threshold, fire when a metric deviates σ standard deviations from its learned baseline. |
 
 ![Editing a rule](../assets/screenshots/06-alert-rule-editor.png)

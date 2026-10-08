@@ -84,8 +84,9 @@ your player — `docs/beacon-sdk.md` in the repository.
 ## 6. Alerting
 
 Rules and channels are created in the UI (**Alerts**) or the API; see
-[`alerting-guide.md`](alerting-guide.md). E-mail channels need SMTP settings that the UI form
-does not have yet: configure them through the API.
+[`alerting-guide.md`](alerting-guide.md). An e-mail channel needs an SMTP server (`host:port`)
+in its form — without one Pulse tries `localhost:587`, which in the container is the container
+itself. A rule notifies only the channels ticked under **Notify channels**.
 
 ## 7. Optional inputs and outputs
 

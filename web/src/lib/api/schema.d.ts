@@ -1301,6 +1301,15 @@ export interface components {
             /** @description Unix epoch ms */
             updated_at: number;
         };
+        /**
+         * @description A field the server does not read is refused with 422 `INVALID_RULE` (naming the
+         *     field), and so is a present field of the wrong JSON type — a string `threshold`
+         *     is not read as 0. The read-only keys a list item carries (`id`, `created_at`,
+         *     `updated_at`) are accepted and ignored, so a rule taken from
+         *     `GET /alerts/rules` can be edited and PUT back whole. PUT replaces the rule:
+         *     send every field you want to keep, including `channel_ids` and
+         *     `maintenance_windows`.
+         */
         AlertRuleWrite: {
             /** @description Human-readable display name for the alert rule */
             name: string;
@@ -1365,9 +1374,13 @@ export interface components {
              */
             muted: boolean;
             maintenance_windows?: components["schemas"]["MaintenanceWindow"][];
+            /**
+             * @description The channels this rule notifies. A rule with none records alert history but
+             *     notifies no one.
+             */
             channel_ids?: string[];
         };
-        /** @description Scope filters for alert evaluation; omit to evaluate globally */
+        /** @description Scope filters for alert evaluation; omit to evaluate globally. Other keys are refused (422). */
         AlertScope: {
             node_id?: string | null;
             app?: string | null;
@@ -1375,10 +1388,20 @@ export interface components {
             /** @description Scope the rule to one tenant (F6). Omit/empty = all tenants (backward compatible). For QoE metrics (rebuffer_ratio, error_rate) the per-stream reads are scoped to this tenant so a stream reused by multiple tenants no longer blends their numbers. */
             tenant?: string | null;
         };
+        /**
+         * @description While a window is open the rule is evaluated and recorded but sends no
+         *     notifications. A window opens on each matching day at its start time and stays
+         *     open `duration_s` seconds, at most 24 h; for longer maintenance add one window
+         *     per day. Other keys are refused (422) — the field is `start_cron`, not `cron_expr`.
+         */
         MaintenanceWindow: {
-            /** @description Cron expression for window start (UTC) */
+            /**
+             * @description Window start, UTC: `"min hour"` (every day) or `"min hour weekday"`. Minute
+             *     0-59 and hour 0-23 are single values (`*` means 0); weekday is `*`, 0-6
+             *     (0 = Sunday) or a range such as `1-5`. Example: `"0 2 6"` = Saturdays 02:00.
+             */
             start_cron: string;
-            /** @description Window duration in seconds */
+            /** @description Window duration in seconds (1 to 86400) */
             duration_s: number;
         };
         AlertChannelList: {
@@ -1399,6 +1422,13 @@ export interface components {
             /** @description Unix epoch ms */
             created_at: number;
         };
+        /**
+         * @description On update, config keys you omit keep their stored values — secrets are never
+         *     returned, so a client cannot send them back — and a key sent as `""` or null is
+         *     removed. Changing `type` starts from an empty config. A config key the channel
+         *     type does not read, a missing required key, a URL that is not http(s) or an
+         *     `smtp_addr` without a port is refused with 422 `INVALID_CHANNEL`.
+         */
         AlertChannelWrite: {
             /** @enum {string} */
             type: "email" | "slack" | "telegram" | "pagerduty" | "webhook";
@@ -1408,11 +1438,23 @@ export interface components {
         /**
          * @description Discriminated union on `type`. Use the parent `type` field to
          *     determine which properties apply. Secrets are stored encrypted and
-         *     never returned.
+         *     never returned. Required per type: webhook `webhook_url`; slack
+         *     `slack_webhook_url`; email `email_to`; telegram `telegram_bot_token` and
+         *     `telegram_chat_id`; pagerduty `pagerduty_routing_key`.
          */
         AlertChannelConfig: {
             /** @description email: recipient address */
             email_to?: string;
+            /** @description email: SMTP server as host:port (default localhost:587) */
+            smtp_addr?: string;
+            /** @description email: sender address (default pulse-alerts@localhost) */
+            from?: string;
+            /** @description email: SMTP AUTH user (secret) */
+            username?: string;
+            /** @description email: SMTP AUTH password (secret) */
+            password?: string;
+            /** @description email: upgrade the SMTP connection with STARTTLS (fails closed) */
+            starttls?: boolean;
             /** @description slack: incoming webhook URL (secret) */
             slack_webhook_url?: string;
             /** @description slack: channel name for display */
@@ -1423,6 +1465,8 @@ export interface components {
             telegram_chat_id?: string;
             /** @description pagerduty: integration routing key (secret) */
             pagerduty_routing_key?: string;
+            /** @description pagerduty: severity sent to PagerDuty, overriding the rule's (e.g. critical, error, warning, info) */
+            pagerduty_severity?: string;
             /** @description webhook: target URL */
             webhook_url?: string;
             /** @description webhook: HMAC signing secret (secret) */
@@ -1503,14 +1547,28 @@ export interface components {
             };
             /** @description Tenant mapping rule reference */
             tenant_mapping?: string | null;
-            /** @description White-label PDF header JSON (F6 Phase 3) */
-            whitelabel_header?: {
-                [key: string]: unknown;
-            } | null;
+            whitelabel_header?: components["schemas"]["WhitelabelHeader"] | null;
             /** @description Unix epoch ms */
             created_at: number;
         };
+        /**
+         * @description A field the server does not read is refused with 422 `INVALID_SCHEDULE` naming
+         *     it: the schedule is `cron` (not `cron_expr`) and the statement's scope is
+         *     `scope.app` / `scope.tenant` (not `app_filter` / `tenant_filter`). The read-only
+         *     keys a GET returns (`id`, `created_at`, `last_run_at`, `next_run_at`) are
+         *     accepted and ignored.
+         */
         ReportScheduleWrite: {
+            /**
+             * @description When the statement runs, in UTC: standard 5-field cron
+             *     (`min hour day-of-month month weekday`), `min hour weekday`, or `min hour`
+             *     (daily). Each field takes `*`, a value, a range `a-b`, a step `*\/n` or `a-b/n`,
+             *     or a comma list; weekday 0-7 (0 and 7 = Sunday). When day-of-month and weekday
+             *     are both restricted, either matching is enough; a field that begins with `*`
+             *     (a step such as `*\/2` included) counts as unrestricted, as in Vixie cron. An
+             *     expression that does not parse, is out of range, or never fires (`0 0 31 2 *`)
+             *     is refused.
+             */
             cron: string;
             /** @enum {string} */
             format: "csv" | "pdf";
@@ -1519,9 +1577,18 @@ export interface components {
                 tenant?: string | null;
             };
             tenant_mapping?: string | null;
-            whitelabel_header?: {
-                [key: string]: unknown;
-            } | null;
+            whitelabel_header?: components["schemas"]["WhitelabelHeader"] | null;
+        };
+        /**
+         * @description Header printed on the statement (PDF and CSV) in place of the Pulse header. The
+         *     PDF logo is server-wide (`PULSE_REPORT_LOGO_PATH`), not per schedule. Other keys
+         *     are refused (422).
+         */
+        WhitelabelHeader: {
+            /** @description Company name, the first header line */
+            name: string;
+            /** @description Address; each line (newline-separated) is its own header line */
+            address?: string;
         };
         FleetNodeList: {
             items: components["schemas"]["FleetNode"][];

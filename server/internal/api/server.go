@@ -31,12 +31,15 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -427,6 +430,23 @@ func (s *Server) Stop() {
 	}
 }
 
+// securityHeaders sets the browser hardening headers on every response. The production
+// reverse proxies set the same values (deploy/nginx, deploy/config/Caddyfile.ci), but an
+// install that serves Pulse directly — the quickstart — had none (S126), leaving the admin
+// UI frameable. The values match the proxies exactly, so a proxy that adds rather than
+// replaces sends duplicates the browsers treat as one. The Content-Security-Policy stays
+// with the proxy: it names the public origin, which only the proxy knows.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		next.ServeHTTP(w, r)
+	})
+}
+
 // Handler returns the http.Handler (for testing).
 func (s *Server) Handler() http.Handler {
 	return s.router
@@ -440,6 +460,7 @@ func (s *Server) buildRouter() {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(s.loggingMiddleware)
+	r.Use(securityHeaders)
 	r.Use(s.corsMiddleware)
 	r.Use(middleware.Recoverer)
 
@@ -1692,12 +1713,16 @@ func (s *Server) handleCreateAlertChannel(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "INVALID_JSON", "invalid request body")
 		return
 	}
+	// The tier gate applies to real channel types; anything else is a 422 from the parser
+	// below ("type must be one of …"), not an "upgrade required" for a type that does not exist.
 	chType, _ := body["type"].(string)
-	if err := s.lic.CheckChannelAllowed(chType); err != nil {
-		writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
-		return
+	if _, real := channelConfigSpec[chType]; real {
+		if err := s.lic.CheckChannelAllowed(chType); err != nil {
+			writeError(w, http.StatusForbidden, "LICENSE_REQUIRED", err.Error())
+			return
+		}
 	}
-	row, err := alertChannelFromAPI(body, s.store)
+	row, err := alertChannelFromAPI(body, s.store, nil)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "INVALID_CHANNEL", err.Error())
 		return
@@ -1723,7 +1748,7 @@ func (s *Server) handleUpdateAlertChannel(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "INVALID_JSON", "invalid request body")
 		return
 	}
-	row, err := alertChannelFromAPI(body, s.store)
+	row, err := alertChannelFromAPI(body, s.store, existing)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "INVALID_CHANNEL", err.Error())
 		return
@@ -2569,11 +2594,87 @@ func alertRuleToAPI(r meta.AlertRuleRow) map[string]any {
 	return m
 }
 
+// alertRuleFields is what alertRuleFromAPI reads, plus the read-only keys a list item
+// carries (id, created_at, updated_at) so a listed rule can be edited and PUT back whole.
+var alertRuleFields = []string{
+	"name", "metric", "operator", "threshold", "window_s", "severity", "cooldown_s",
+	"enabled", "muted", "scope", "channel_ids", "maintenance_windows", "group_by",
+	"rule_type", "sigma", "min_samples",
+	"id", "created_at", "updated_at",
+}
+
+var alertRuleFieldHints = map[string]string{
+	"maintenance_window": `"maintenance_windows", an array of {start_cron, duration_s}`,
+	"channels":           `"channel_ids"`,
+	"channel_id":         `"channel_ids", an array`,
+}
+
 func alertRuleFromAPI(body map[string]any) (meta.AlertRuleRow, error) {
-	name, _ := body["name"].(string)
-	metric, _ := body["metric"].(string)
-	operator, _ := body["operator"].(string)
-	severity, _ := body["severity"].(string)
+	if err := knownFields(body, alertRuleFields, alertRuleFieldHints); err != nil {
+		return meta.AlertRuleRow{}, err
+	}
+	// Every field goes through a typed accessor: a present value of the wrong JSON type
+	// is a 422, not a silent zero (S126: "threshold": "90" was stored as 0).
+	var errs []error
+	str := func(k string) string {
+		v, _, err := strField(body, k)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		return v
+	}
+	num := func(k string) (float64, bool) {
+		v, ok, err := numField(body, k)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		return v, ok
+	}
+	name, metric, operator, severity := str("name"), str("metric"), str("operator"), str("severity")
+	groupBy, ruleType := str("group_by"), str("rule_type")
+	threshold, _ := num("threshold")
+	windowS, _ := num("window_s")
+	cooldownS, _ := num("cooldown_s")
+	sigma, hasSigma := num("sigma")
+	minSamples, hasMinSamples := num("min_samples")
+	enabled, hasEnabled, err := boolField(body, "enabled")
+	if err != nil {
+		errs = append(errs, err)
+	}
+	muted, _, err := boolField(body, "muted")
+	if err != nil {
+		errs = append(errs, err)
+	}
+	scope, err := objField(body, "scope")
+	if err != nil {
+		errs = append(errs, err)
+	} else if err := stringObject("scope", scope, "stream_id", "app", "node_id", "tenant"); err != nil {
+		errs = append(errs, err)
+	}
+	if len(errs) > 0 {
+		return meta.AlertRuleRow{}, errs[0]
+	}
+	// Counts are whole numbers: 60.5 used to be stored as 60 without a word.
+	for _, f := range []struct {
+		name string
+		v    float64
+	}{{"window_s", windowS}, {"cooldown_s", cooldownS}, {"min_samples", minSamples}} {
+		if f.v != math.Trunc(f.v) {
+			return meta.AlertRuleRow{}, fmt.Errorf("%s must be a whole number, got %v", f.name, f.v)
+		}
+	}
+	if cooldownS < 0 {
+		return meta.AlertRuleRow{}, fmt.Errorf("cooldown_s must be 0 or more (0 means the default, 300), got %v", cooldownS)
+	}
+	if hasSigma && !(sigma > 0) {
+		return meta.AlertRuleRow{}, fmt.Errorf("sigma must be a positive number, got %v", sigma)
+	}
+	if hasMinSamples && minSamples < 0 {
+		return meta.AlertRuleRow{}, fmt.Errorf("min_samples must be 0 or more, got %v", minSamples)
+	}
+	if ruleType != "" && ruleType != "threshold" && ruleType != "anomaly" {
+		return meta.AlertRuleRow{}, fmt.Errorf("rule_type must be threshold or anomaly, got %q", ruleType)
+	}
 	if name == "" {
 		return meta.AlertRuleRow{}, fmt.Errorf("name required")
 	}
@@ -2583,36 +2684,40 @@ func alertRuleFromAPI(body map[string]any) (meta.AlertRuleRow, error) {
 	if operator == "" {
 		return meta.AlertRuleRow{}, fmt.Errorf("operator required")
 	}
-	threshold, _ := body["threshold"].(float64)
-	windowS, _ := body["window_s"].(float64)
-	cooldownS, _ := body["cooldown_s"].(float64)
 	if cooldownS == 0 {
 		cooldownS = 300
 	}
 	// enabled defaults to true (OpenAPI spec default); muted defaults to false.
-	enabled := true
-	if v, ok := body["enabled"].(bool); ok {
-		enabled = v
+	if !hasEnabled {
+		enabled = true
 	}
-	muted, _ := body["muted"].(bool)
 
 	scopeJSON := "{}"
-	if scope, ok := body["scope"]; ok && scope != nil {
+	if scope != nil {
 		if b, err := json.Marshal(scope); err == nil {
 			scopeJSON = string(b)
 		}
 	}
 	channelIDs := "[]"
-	if cids, ok := body["channel_ids"].([]any); ok {
+	if v, present := body["channel_ids"]; present && v != nil {
+		cids, ok := v.([]any)
+		if !ok {
+			return meta.AlertRuleRow{}, fmt.Errorf("channel_ids must be an array of channel ids, got %s", jsonType(v))
+		}
+		for i, c := range cids {
+			if _, ok := c.(string); !ok {
+				return meta.AlertRuleRow{}, fmt.Errorf("channel_ids[%d] must be a string, got %s", i, jsonType(c))
+			}
+		}
 		if b, err := json.Marshal(cids); err == nil {
 			channelIDs = string(b)
 		}
 	}
-	mw := "[]"
-	if mws, ok := body["maintenance_windows"].([]any); ok {
-		if b, err := json.Marshal(mws); err == nil {
-			mw = string(b)
-		}
+	// Validated exactly as the evaluator reads them (S126: `cron_expr`, the name the
+	// alerting runbook showed, was stored, ignored, and notifications went out).
+	mw, err := alert.ValidateMaintenanceWindows(body["maintenance_windows"])
+	if err != nil {
+		return meta.AlertRuleRow{}, err
 	}
 	row := meta.AlertRuleRow{
 		Name:               name,
@@ -2628,18 +2733,18 @@ func alertRuleFromAPI(body map[string]any) (meta.AlertRuleRow, error) {
 		MaintenanceWindows: mw,
 		ChannelIDs:         channelIDs,
 	}
-	if gb, ok := body["group_by"].(string); ok && gb != "" {
-		row.GroupBy = sql.NullString{String: gb, Valid: true}
+	if groupBy != "" {
+		row.GroupBy = sql.NullString{String: groupBy, Valid: true}
 	}
 	// S11 WO-B: anomaly rule fields.
-	if rt, ok := body["rule_type"].(string); ok && rt != "" {
-		row.RuleType = rt
+	if ruleType != "" {
+		row.RuleType = ruleType
 	}
-	if s, ok := body["sigma"].(float64); ok {
-		row.Sigma = s
+	if hasSigma {
+		row.Sigma = sigma
 	}
-	if ms, ok := body["min_samples"].(float64); ok {
-		row.MinSamples = int(ms)
+	if hasMinSamples {
+		row.MinSamples = int(minSamples)
 	}
 	return row, nil
 }
@@ -2655,28 +2760,108 @@ func alertChannelToAPI(c meta.AlertChannelRow) map[string]any {
 	}
 }
 
-func alertChannelFromAPI(body map[string]any, store *meta.Store) (meta.AlertChannelRow, error) {
-	chType, _ := body["type"].(string)
-	name, _ := body["name"].(string)
+// channelConfigSpec lists, per channel type, the config keys alert.BuildChannelFromRow
+// reads. Before S126 any config was stored: a webhook channel written with "url" (not
+// "webhook_url") was created, listed and tied to rules, and every alert it carried
+// failed with `Post "": unsupported protocol scheme`.
+var channelConfigSpec = map[string]struct{ required, optional []string }{
+	"webhook":   {[]string{"webhook_url"}, []string{"webhook_secret"}},
+	"slack":     {[]string{"slack_webhook_url"}, []string{"slack_channel"}},
+	"email":     {[]string{"email_to"}, []string{"smtp_addr", "from", "username", "password", "starttls"}},
+	"telegram":  {[]string{"telegram_bot_token", "telegram_chat_id"}, nil},
+	"pagerduty": {[]string{"pagerduty_routing_key"}, []string{"pagerduty_severity"}},
+}
+
+// channelSecretFields are stored encrypted and never returned.
+var channelSecretFields = map[string]bool{
+	"slack_webhook_url": true, "telegram_bot_token": true,
+	"pagerduty_routing_key": true, "webhook_secret": true,
+	// Email/SMTP auth pair — encrypted at rest, not stored in config_public.
+	// factory.BuildChannelFromRow merges public+decrypted config on read, so
+	// existing channels keep working and new ones no longer leak credentials.
+	"password": true, "username": true,
+}
+
+// alertChannelFromAPI builds a channel row from a request body. existing is the stored
+// channel on update (nil on create): config keys the body omits keep their stored values
+// — secrets are write-only, so a client cannot send them back, and a form that shows only
+// some fields must not erase the rest — and a key sent as "" or null is removed.
+func alertChannelFromAPI(body map[string]any, store *meta.Store, existing *meta.AlertChannelRow) (meta.AlertChannelRow, error) {
+	if err := knownFields(body, []string{"type", "name", "config", "id", "created_at", "credential_set", "config_summary"}, nil); err != nil {
+		return meta.AlertChannelRow{}, err
+	}
+	chType, _, err := strField(body, "type")
+	if err != nil {
+		return meta.AlertChannelRow{}, err
+	}
+	name, _, err := strField(body, "name")
+	if err != nil {
+		return meta.AlertChannelRow{}, err
+	}
 	if chType == "" {
 		return meta.AlertChannelRow{}, fmt.Errorf("type required")
 	}
-	if name == "" {
+	spec, ok := channelConfigSpec[chType]
+	if !ok {
+		return meta.AlertChannelRow{}, fmt.Errorf("type must be one of email, slack, telegram, pagerduty, webhook; got %q", chType)
+	}
+	if strings.TrimSpace(name) == "" {
 		return meta.AlertChannelRow{}, fmt.Errorf("name required")
 	}
-	config, _ := body["config"].(map[string]any)
-	secretFields := map[string]bool{
-		"slack_webhook_url": true, "telegram_bot_token": true,
-		"pagerduty_routing_key": true, "webhook_secret": true,
-		// Email/SMTP auth pair — encrypted at rest, not stored in config_public.
-		// factory.BuildChannelFromRow merges public+decrypted config on read, so
-		// existing channels keep working and new ones no longer leak credentials.
-		"password": true, "username": true,
+	config, err := objField(body, "config")
+	if err != nil {
+		return meta.AlertChannelRow{}, err
 	}
+	known := make(map[string]bool, len(spec.required)+len(spec.optional))
+	for _, k := range append(append([]string{}, spec.required...), spec.optional...) {
+		known[k] = true
+	}
+
+	merged := map[string]any{}
+	if existing != nil && existing.Type == chType {
+		for k, v := range storedChannelConfig(store, existing) {
+			if known[k] { // a key the channel never read (a pre-fix "url") is not carried
+				merged[k] = v
+			}
+		}
+	}
+	keys := make([]string, 0, len(config))
+	for k := range config {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		v := config[k]
+		if !known[k] {
+			return meta.AlertChannelRow{}, fmt.Errorf("config: unknown key %q for a %s channel (keys: %s)",
+				k, chType, strings.Join(append(append([]string{}, spec.required...), spec.optional...), ", "))
+		}
+		if v == nil || v == "" {
+			delete(merged, k)
+			continue
+		}
+		if k == "starttls" {
+			if _, ok := v.(bool); !ok {
+				return meta.AlertChannelRow{}, fmt.Errorf("config.starttls must be true or false, got %s", jsonType(v))
+			}
+		} else if _, ok := v.(string); !ok {
+			return meta.AlertChannelRow{}, fmt.Errorf("config.%s must be a string, got %s", k, jsonType(v))
+		}
+		merged[k] = v
+	}
+	for _, k := range spec.required {
+		if v, _ := merged[k].(string); strings.TrimSpace(v) == "" {
+			return meta.AlertChannelRow{}, fmt.Errorf("config.%s is required for a %s channel", k, chType)
+		}
+	}
+	if err := checkChannelConfigValues(merged); err != nil {
+		return meta.AlertChannelRow{}, err
+	}
+
 	publicConfig := make(map[string]any)
 	secretConfig := make(map[string]any)
-	for k, v := range config {
-		if secretFields[k] {
+	for k, v := range merged {
+		if channelSecretFields[k] {
 			secretConfig[k] = v
 		} else {
 			publicConfig[k] = v
@@ -2698,6 +2883,60 @@ func alertChannelFromAPI(body map[string]any, store *meta.Store) (meta.AlertChan
 		ConfigEnc:    configEnc,
 		ConfigPublic: string(publicJSON),
 	}, nil
+}
+
+// storedChannelConfig returns a stored channel's public and decrypted secret config. What no
+// longer reads back is left out rather than failing the edit: after a PULSE_SECRET_KEY
+// rotation the stored secrets cannot be decrypted, and re-entering them is exactly how such a
+// channel is repaired — the required-key check then asks for whatever is missing.
+func storedChannelConfig(store *meta.Store, row *meta.AlertChannelRow) map[string]any {
+	out := map[string]any{}
+	if row.ConfigPublic != "" && row.ConfigPublic != "{}" && row.ConfigPublic != "null" {
+		if err := json.Unmarshal([]byte(row.ConfigPublic), &out); err != nil {
+			out = map[string]any{}
+		}
+	}
+	if row.ConfigEnc != "" {
+		if plain, err := store.Decrypt(row.ConfigEnc); err == nil {
+			secret := map[string]any{}
+			if json.Unmarshal([]byte(plain), &secret) == nil {
+				for k, v := range secret {
+					out[k] = v
+				}
+			}
+		}
+	}
+	return out
+}
+
+// checkChannelConfigValues refuses values the channel could never send with. Reachability
+// (SSRF) is checked at dial time by design — this only catches what cannot work at all.
+func checkChannelConfigValues(cfg map[string]any) error {
+	for _, k := range []string{"webhook_url", "slack_webhook_url"} {
+		v, ok := cfg[k].(string)
+		if !ok {
+			continue
+		}
+		u, err := url.Parse(v)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("config.%s must be an http(s) URL, got %q", k, v)
+		}
+	}
+	if v, ok := cfg["smtp_addr"].(string); ok {
+		if _, port, err := net.SplitHostPort(v); err != nil || port == "" {
+			return fmt.Errorf("config.smtp_addr must be host:port (e.g. smtp.example.com:587), got %q", v)
+		}
+	}
+	// A plain address: the value goes to the SMTP envelope (MAIL FROM / RCPT TO) as is,
+	// where "Ops <ops@example.com>" is a syntax error and every delivery would fail.
+	for _, k := range []string{"email_to", "from"} {
+		if v, ok := cfg[k].(string); ok {
+			if a, err := mail.ParseAddress(v); err != nil || a.Address != v {
+				return fmt.Errorf("config.%s must be a plain e-mail address such as ops@example.com, got %q", k, v)
+			}
+		}
+	}
+	return nil
 }
 
 func amsSourceToAPI(src meta.AMSSourceRow) map[string]any {

@@ -46,7 +46,7 @@ They are legal statements published in your name. Read them before marketing tra
 | # | Improvement | Effort |
 |---|---|---|
 | 3.1 | Fix the analytics accuracy defects D1–D4 (LIM-30) — one data-model change plus a backfill; scheduled next (ROADMAP-V2 §2.49) | M |
-| 3.2 | Alerting UX: the affected stream and a dashboard link in e-mails (D7); keep SMTP settings when a channel is edited in the UI (D6); rule names and streams in History (D7); keep wildcard *stream offline* alerts firing until the stream returns (D8) | S–M each |
+| 3.2 | Alerting UX: the affected stream and a dashboard link in e-mails (D7); rule names and streams in History (D7); keep wildcard *stream offline* alerts firing until the stream returns (D8). (D6, SMTP settings dropped on a UI edit, is fixed in v0.5.1.) | S–M each |
 | 3.3 | Cosmetics: round sub-1 Mbps bitrates (D9), show env-configured AMS on Settings → Sources (D12), re-tune the health score (D10) | S |
 | 3.4 | Validate the Helm chart on a real cluster before advertising Kubernetes on the page | M |
 | 3.5 | Light-theme screenshot variants, if Ant Media's page uses light sections (`--theme light`) | S |

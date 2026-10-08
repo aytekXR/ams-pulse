@@ -103,82 +103,87 @@ not CDN accuracy.
 
 ## Schedule setup
 
-Scheduled reports accept both standard 5-field cron and Pulse's simplified 3-field format
-(V3b VD-36: 5-field cron parser added).
-
-### Cron expression format
-
-**Standard 5-field cron (recommended — matches system cron syntax):**
+A schedule's `cron` says when its statement runs, in UTC. It accepts standard 5-field cron
+and two short forms:
 
 ```
-MIN HOUR DOM MONTH WEEKDAY
+MIN HOUR DOM MONTH WEEKDAY     standard cron
+MIN HOUR WEEKDAY               Pulse short form
+MIN HOUR                       every day
 ```
 
-**Pulse simplified 3-field cron (also accepted):**
+| Field | Values |
+|---|---|
+| `MIN` | 0-59 |
+| `HOUR` | 0-23 |
+| `DOM` (5-field only) | 1-31 |
+| `MONTH` (5-field only) | 1-12 |
+| `WEEKDAY` | 0-7 (0 and 7 = Sunday) |
 
-```
-MIN HOUR WEEKDAY
-```
-
-| Field | Values | Examples |
-|---|---|---|
-| `MIN` | 0-59 or `*` | `0` = on the hour, `30` = :30 |
-| `HOUR` | 0-23 or `*` | `8` = 8 AM |
-| `DOM` (5-field only) | 1-31 or `*` | `1` = 1st of month; use `*` for weekly/daily schedules |
-| `MONTH` (5-field only) | 1-12 or `*` | `*` for all months |
-| `WEEKDAY` | 0-6 (0=Sun) or `*`; ranges `lo-hi` supported | `1` = Monday, `1-5` = Mon-Fri |
+Each field takes `*`, a value, a range `a-b`, a step `*/n` or `a-b/n`, or a comma list
+(`1,15`). As in Vixie cron (the cron most Linux systems run), when `DOM` and `WEEKDAY` are both
+restricted a day matching either one runs — but a field that begins with `*`, a step like
+`*/2` included, counts as unrestricted: `0 6 */2 * 1` runs on odd-numbered days that are
+Mondays, not on every odd day plus every Monday. An expression that does not parse, is out of range, or can never fire
+(`0 0 31 2 *`) is refused with `422 INVALID_SCHEDULE` — before v0.5.1 it was stored and run a
+month later, ranges used only their first value (`1-5` meant Mondays), and `MONTH` was
+ignored (a yearly `0 6 1 1 *` ran every month).
 
 Common presets:
 
-| Schedule | 5-field expression | 3-field expression |
+| Schedule | 5-field expression | Short form |
 |---|---|---|
-| Daily at midnight | `0 0 * * *` | `0 0 *` |
-| Monthly on 1st at 6 AM | `0 6 1 * *` | *(not representable in 3-field)* |
-| Weekly (Monday 6 AM) | `0 6 * * 1` | `0 6 1` |
+| Daily at midnight | `0 0 * * *` | `0 0` |
+| Monthly on the 1st at 06:00 | `0 6 1 * *` | *(needs DOM — 5-field only)* |
+| Weekly, Monday 06:00 | `0 6 * * 1` | `0 6 1` |
 | Weekdays at noon | `0 12 * * 1-5` | `0 12 1-5` |
+| Quarterly (1 Jan/Apr/Jul/Oct, 06:00) | `0 6 1 1,4,7,10 *` | — |
 
-> **Note:** When using 5-field cron, the `DOM` and `MONTH` fields are accepted
-> but only `MIN`, `HOUR`, and `WEEKDAY` drive next-run time computation. For
-> month-day scheduling, use the 5-field format and set `DOM=1` — the scheduler
-> will compute next Monday/Wednesday/etc from the WEEKDAY field.
+Every run covers the **previous calendar month** whatever the schedule, so a monthly
+schedule on the 1st is the usual choice.
 
 ### Creating a schedule via API
 
+The body takes `cron`, `format` (`csv` or `pdf`), an optional `scope` (`app`, `tenant`) and an
+optional `whitelabel_header`. Any other field is refused with a 422 that names it — the
+statement's scope is `scope`, not `app_filter`/`tenant_filter`, so a mistyped scope can no
+longer produce an unscoped statement.
 
 ```sh
-# Monthly report on the 1st at 06:00 (5-field cron)
+# Monthly PDF statement for one tenant, on the 1st at 06:00 UTC
 curl -X POST http://localhost:8090/api/v1/reports/schedules \
   -H "Authorization: Bearer plt_<admin_token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Monthly viewer-minutes report",
-    "cron_expr": "0 6 1 * *",
-    "format": "csv",
-    "app_filter": "live",
-    "tenant_filter": "tenant-a"
+    "cron": "0 6 1 * *",
+    "format": "pdf",
+    "scope": {"app": "live", "tenant": "tenant-a"},
+    "whitelabel_header": {"name": "Acme Streaming", "address": "1 Main St\nSpringfield"}
   }'
 
-# Equivalent 3-field form (same schedule, Pulse-specific syntax)
+# Weekly CSV for everything, Mondays 06:00 UTC (short form)
 curl -X POST http://localhost:8090/api/v1/reports/schedules \
   -H "Authorization: Bearer plt_<admin_token>" \
   -H "Content-Type: application/json" \
-  -d '{
-    "name": "Weekly viewer-minutes report",
-    "cron_expr": "0 6 1",
-    "format": "csv"
-  }'
+  -d '{"cron": "0 6 1", "format": "csv"}'
 ```
 
 ### S3 upload
 
-Add S3 config to enable automatic upload of generated reports:
+Add S3 config to enable automatic upload of generated reports. `PULSE_S3_ENDPOINT` is what
+turns upload on — without it nothing is uploaded, whatever else is set (Pulse logs a warning
+at startup when a bucket is set without an endpoint). For AWS use the regional endpoint:
 
 ```sh
+export PULSE_S3_ENDPOINT=https://s3.us-east-1.amazonaws.com
 export PULSE_S3_BUCKET=my-billing-reports
 export PULSE_S3_REGION=us-east-1
 export PULSE_S3_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
 export PULSE_S3_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG...
 ```
+
+Pulse addresses objects path-style: `PUT <endpoint>/<bucket>/<prefix><filename>`, signed with
+SigV4.
 
 Or use indirect references (recommended for secrets management):
 ```sh
@@ -191,7 +196,6 @@ export MY_S3_SECRET=wJalrXUtnFEMI/K7MDENG...
 The indirect reference pattern means S3 credentials are never stored in Pulse config
 or the meta database. The credential env vars are read at upload time only.
 
-Reports are uploaded to `s3://${PULSE_S3_BUCKET}/${PULSE_S3_PREFIX}${filename}`.
 Default prefix: `reports/`.
 
 ### S3-compatible endpoints (MinIO, DigitalOcean Spaces, etc.)
@@ -205,12 +209,20 @@ export PULSE_S3_REGION=us-east-1    # required even for S3-compatible endpoints
 
 ## White-label config
 
-The PDF statement header can show your company name and address:
+A schedule's `whitelabel_header` replaces the Pulse header on its statements (PDF and CSV)
+with your company name and address:
 
-> **Phase-3 roadmap:** A dedicated `GET/PUT /api/v1/admin/whitelabel` endpoint
-> for global brand config (company name, address, logo URL) is planned for Wave 3
-> (CR-2, WO-205). In Wave 2, the PDF report header is minimal. White-label PDF polish
-> is a Phase-3 item.
+```json
+"whitelabel_header": {"name": "Acme Streaming", "address": "1 Main St\nSpringfield"}
+```
+
+`name` is required; `address` is optional and each of its lines (newline-separated) is
+printed as its own header line. Any other key is refused (422) — before v0.5.1 a header
+written with other keys (`company`, …) was stored and the statement went out unbranded. The
+PDF logo is server-wide, set with `PULSE_REPORT_LOGO_PATH`, not per schedule.
+
+> A global `GET/PUT /api/v1/admin/whitelabel` endpoint (one brand config for all schedules)
+> is not implemented; the header is set per schedule.
 
 ---
 

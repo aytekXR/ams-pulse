@@ -5,17 +5,17 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { AlertRuleForm } from "../AlertRuleForm";
 import { ANOMALY_METRICS, THRESHOLD_METRICS } from "../metrics";
-import type { AlertRuleWrite } from "@/lib/api/types";
+import type { AlertChannel, AlertRule, AlertRuleWrite } from "@/lib/api/types";
 
 describe("AlertRuleForm", () => {
   it("renders the form with default fields", () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.getByRole("heading", { name: /new alert rule/i })).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/e\.g\. High CPU/i)).toBeInTheDocument();
   });
 
   it("shows validation error when name is empty on submit", async () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
     await waitFor(() => {
       expect(screen.getByText(/name is required/i)).toBeInTheDocument();
@@ -23,7 +23,7 @@ describe("AlertRuleForm", () => {
   });
 
   it("shows validation error when threshold is not a number", async () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     // Fill name
     fireEvent.change(screen.getByPlaceholderText(/e\.g\. High CPU/i), {
       target: { value: "Test rule" },
@@ -39,7 +39,7 @@ describe("AlertRuleForm", () => {
 
   it("calls onSave with correct data when form is valid", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
-    render(<AlertRuleForm onSave={onSave} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={onSave} onCancel={vi.fn()} />);
 
     fireEvent.change(screen.getByPlaceholderText(/e\.g\. High CPU/i), {
       target: { value: "CPU alert" },
@@ -62,7 +62,7 @@ describe("AlertRuleForm", () => {
 
   it("calls onCancel when cancel is clicked", () => {
     const onCancel = vi.fn();
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={onCancel} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={onCancel} />);
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
     expect(onCancel).toHaveBeenCalledOnce();
   });
@@ -85,7 +85,7 @@ describe("AlertRuleForm", () => {
       sigma: 4,
       min_samples: 30,
     };
-    render(<AlertRuleForm initial={initial} onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} initial={initial} onSave={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.getByRole("heading", { name: /edit rule/i })).toBeInTheDocument();
   });
 });
@@ -94,20 +94,20 @@ describe("AlertRuleForm", () => {
 
 describe("AlertRuleForm — a11y: label/input association", () => {
   it("name input is associated with its label via htmlFor/id", () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     // getByLabelText finds the input by its associated label text
     expect(screen.getByLabelText(/^name \*/i)).toBeInTheDocument();
   });
 
   it("threshold input is associated with its label via htmlFor/id", () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.getByLabelText(/^threshold \*/i)).toBeInTheDocument();
   });
 });
 
 describe("AlertRuleForm — a11y: aria-invalid + aria-describedby on error", () => {
   it("name input gains aria-invalid when name validation fails", async () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
     await waitFor(() => {
       const nameInput = screen.getByLabelText(/^name \*/i);
@@ -116,7 +116,7 @@ describe("AlertRuleForm — a11y: aria-invalid + aria-describedby on error", () 
   });
 
   it("name input aria-describedby points to the visible error span id", async () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
     await waitFor(() => {
       const nameInput = screen.getByLabelText(/^name \*/i);
@@ -130,7 +130,7 @@ describe("AlertRuleForm — a11y: aria-invalid + aria-describedby on error", () 
   });
 
   it("threshold input gains aria-invalid when threshold validation fails", async () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     // Fill name so only threshold fails
     fireEvent.change(screen.getByPlaceholderText(/e\.g\. High CPU/i), { target: { value: "Test" } });
     fireEvent.change(screen.getByPlaceholderText("0"), { target: { value: "abc" } });
@@ -142,7 +142,7 @@ describe("AlertRuleForm — a11y: aria-invalid + aria-describedby on error", () 
   });
 
   it("name input loses aria-invalid once a valid name is entered and form re-validates", async () => {
-    render(<AlertRuleForm onSave={vi.fn().mockResolvedValue(undefined)} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn().mockResolvedValue(undefined)} onCancel={vi.fn()} />);
     // Trigger name error
     fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
     await waitFor(() => expect(screen.getByText(/name is required/i)).toBeInTheDocument());
@@ -167,7 +167,7 @@ describe("AlertRuleForm — a11y: aria-invalid + aria-describedby on error", () 
  */
 describe("AlertRuleForm — a11y: the inline error is the live region", () => {
   it("the error message is announced (role=alert) and appears exactly ONCE in the DOM", async () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
 
     // An empty submit trips BOTH name and threshold, so there are legitimately two alerts —
@@ -182,7 +182,7 @@ describe("AlertRuleForm — a11y: the inline error is the live region", () => {
   });
 
   it("the invalid field is marked and points at that same message node", async () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
 
     const nameInput = await screen.findByLabelText(/name/i);
@@ -201,7 +201,7 @@ describe("AlertRuleForm — a11y: the inline error is the live region", () => {
 
 describe("AlertRuleForm — metric list content (D-087)", () => {
   it("ANOMALY_METRICS includes ams_api_latency_ms", () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     // Switch to anomaly mode so the anomaly metric dropdown is rendered.
     fireEvent.change(screen.getByLabelText(/rule type/i), { target: { value: "anomaly" } });
     // ams_api_latency_ms must be present as an option in the metric dropdown.
@@ -211,7 +211,7 @@ describe("AlertRuleForm — metric list content (D-087)", () => {
   });
 
   it("threshold METRICS includes node_degraded", () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     // Default mode is threshold.
     const options = screen.getAllByRole("option");
     const labels = options.map((o) => o.textContent ?? "");
@@ -219,7 +219,7 @@ describe("AlertRuleForm — metric list content (D-087)", () => {
   });
 
   it("threshold METRICS includes node_down", () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     // Default mode is threshold.
     const options = screen.getAllByRole("option");
     const labels = options.map((o) => o.textContent ?? "");
@@ -231,7 +231,7 @@ describe("AlertRuleForm — metric list content (D-087)", () => {
 
 describe("AlertRuleForm — anomaly rule type (S11 WO-B)", () => {
   it("renders threshold fields by default", () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     // Threshold mode: threshold input visible, sigma/min-samples absent
     expect(screen.getByPlaceholderText("0")).toBeInTheDocument();
     expect(screen.queryByLabelText(/sigma/i)).not.toBeInTheDocument();
@@ -239,7 +239,7 @@ describe("AlertRuleForm — anomaly rule type (S11 WO-B)", () => {
   });
 
   it("renders anomaly fields when rule_type is anomaly", () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     // Switch to anomaly
     const ruleTypeSelect = screen.getByLabelText(/rule type/i);
     fireEvent.change(ruleTypeSelect, { target: { value: "anomaly" } });
@@ -251,7 +251,7 @@ describe("AlertRuleForm — anomaly rule type (S11 WO-B)", () => {
   });
 
   it("validates sigma must be a positive number", async () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     // Switch to anomaly
     fireEvent.change(screen.getByLabelText(/rule type/i), { target: { value: "anomaly" } });
     // Fill name
@@ -267,7 +267,7 @@ describe("AlertRuleForm — anomaly rule type (S11 WO-B)", () => {
   });
 
   it("sigma input gains aria-invalid when sigma validation fails", async () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     fireEvent.change(screen.getByLabelText(/rule type/i), { target: { value: "anomaly" } });
     fireEvent.change(screen.getByPlaceholderText(/e\.g\. High CPU/i), { target: { value: "Test" } });
     fireEvent.change(screen.getByLabelText(/sigma/i), { target: { value: "" } });
@@ -280,7 +280,7 @@ describe("AlertRuleForm — anomaly rule type (S11 WO-B)", () => {
 
   it("does not validate threshold for anomaly rule", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
-    render(<AlertRuleForm onSave={onSave} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={onSave} onCancel={vi.fn()} />);
     // Switch to anomaly
     fireEvent.change(screen.getByLabelText(/rule type/i), { target: { value: "anomaly" } });
     // Fill name only — no threshold interaction needed
@@ -297,7 +297,7 @@ describe("AlertRuleForm — anomaly rule type (S11 WO-B)", () => {
 
   it("submits correct payload for anomaly rule", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
-    render(<AlertRuleForm onSave={onSave} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={onSave} onCancel={vi.fn()} />);
     // Switch to anomaly
     fireEvent.change(screen.getByLabelText(/rule type/i), { target: { value: "anomaly" } });
     // Fill name
@@ -319,7 +319,7 @@ describe("AlertRuleForm — anomaly rule type (S11 WO-B)", () => {
 
   it("submits correct payload for threshold rule", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
-    render(<AlertRuleForm onSave={onSave} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={onSave} onCancel={vi.fn()} />);
     // Fill name and threshold (default rule type is threshold)
     fireEvent.change(screen.getByPlaceholderText(/e\.g\. High CPU/i), {
       target: { value: "CPU threshold" },
@@ -363,37 +363,37 @@ describe("AlertRuleForm — metrics the server accepts (D-194)", () => {
   const selectedText = () => metricSelect().selectedOptions[0]?.textContent;
 
   it("offers exactly the threshold metrics the server evaluates", () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     expect(optionValues()).toEqual([...THRESHOLD_METRICS]);
   });
 
   it("offers exactly the anomaly metrics once the rule type is anomaly", () => {
-    render(<AlertRuleForm onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
     fireEvent.change(screen.getByLabelText(/rule type/i), { target: { value: "anomaly" } });
     expect(optionValues()).toEqual([...ANOMALY_METRICS]);
   });
 
   it("editing a node_cpu rule shows node_cpu (it used to show the first option)", () => {
-    render(<AlertRuleForm initial={rule("node_cpu")} onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} initial={rule("node_cpu")} onSave={vi.fn()} onCancel={vi.fn()} />);
     expect(metricSelect().value).toBe("node_cpu");
     expect(selectedText()).toBe("node_cpu");
   });
 
   it("an API-only metric stays selected and is not flagged when editing", () => {
-    render(<AlertRuleForm initial={rule("cert_expiry")} onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} initial={rule("cert_expiry")} onSave={vi.fn()} onCancel={vi.fn()} />);
     expect(metricSelect().value).toBe("cert_expiry");
     expect(selectedText()).toBe("cert_expiry");
   });
 
   it("a stored metric the server refuses is shown and flagged, not silently swapped", () => {
-    render(<AlertRuleForm initial={rule("cpu_pct")} onSave={vi.fn()} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} initial={rule("cpu_pct")} onSave={vi.fn()} onCancel={vi.fn()} />);
     expect(metricSelect().value).toBe("cpu_pct");
     expect(selectedText()).toMatch(/not supported/i);
   });
 
   it("switching to anomaly and back maps node_cpu ↔ cpu_pct, and node_cpu is saved", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
-    render(<AlertRuleForm onSave={onSave} onCancel={vi.fn()} />);
+    render(<AlertRuleForm channels={[]} onSave={onSave} onCancel={vi.fn()} />);
     fireEvent.change(metricSelect(), { target: { value: "node_cpu" } });
     fireEvent.change(screen.getByLabelText(/rule type/i), { target: { value: "anomaly" } });
     expect(metricSelect().value).toBe("cpu_pct");
@@ -405,5 +405,133 @@ describe("AlertRuleForm — metrics the server accepts (D-194)", () => {
     fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
     await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
     expect((onSave.mock.calls[0][0] as AlertRuleWrite).metric).toBe("node_cpu");
+  });
+});
+
+// ── S126: the rule notifies the channels ticked here; edits keep channels and windows ──
+
+describe("AlertRuleForm — notify channels and maintenance windows (S126)", () => {
+  // Before S126 the form had no channel picker and always sent no channel_ids (and
+  // maintenance_windows: []): every rule saved here notified no one, and an edit erased
+  // the channels and windows set through the API. PUT replaces the whole rule.
+  const CHANNELS: AlertChannel[] = [
+    { id: "ch-1", name: "Ops Slack", type: "slack", created_at: 1 },
+    { id: "ch-2", name: "NOC mail", type: "email", created_at: 2 },
+  ];
+  const existing = (over: Partial<AlertRule> = {}): AlertRule => ({
+    id: "rule-1",
+    name: "Existing rule",
+    metric: "node_cpu",
+    operator: "gt",
+    threshold: 90,
+    window_s: 300,
+    severity: "warning",
+    cooldown_s: 300,
+    enabled: true,
+    muted: false,
+    created_at: 0,
+    updated_at: 0,
+    rule_type: "threshold",
+    sigma: 4,
+    min_samples: 30,
+    ...over,
+  });
+  const saved = async (onSave: ReturnType<typeof vi.fn>) => {
+    fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    return onSave.mock.calls[0][0] as AlertRuleWrite;
+  };
+
+  it("a new rule sends the ticked channels (and no windows)", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<AlertRuleForm channels={CHANNELS} onSave={onSave} onCancel={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. High CPU/i), { target: { value: "CPU high" } });
+    fireEvent.change(screen.getByPlaceholderText("0"), { target: { value: "90" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /ops slack/i }));
+    const data = await saved(onSave);
+    expect(data.channel_ids).toEqual(["ch-1"]);
+    expect(data.maintenance_windows).toEqual([]);
+  });
+
+  it("an edit shows the rule's channels ticked and sends the changed selection", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<AlertRuleForm channels={CHANNELS} initial={existing({ channel_ids: ["ch-1"] })} onSave={onSave} onCancel={vi.fn()} />);
+    expect(screen.getByRole("checkbox", { name: /ops slack/i })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /noc mail/i })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("checkbox", { name: /ops slack/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /noc mail/i }));
+    expect((await saved(onSave)).channel_ids).toEqual(["ch-2"]);
+  });
+
+  it("an edit keeps channel IDs the list does not show", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <AlertRuleForm
+        channels={CHANNELS}
+        initial={existing({ channel_ids: ["ch-gone", "ch-1"] })}
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/also linked: 1 channel not in the list/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: /ops slack/i })); // untick ch-1
+    const ids = (await saved(onSave)).channel_ids;
+    expect(ids).toEqual(["ch-gone"]);
+  });
+
+  it("an edit shows the maintenance windows read-only and sends them back unchanged", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const windows = [
+      { start_cron: "0 22 6", duration_s: 7200 },
+      { start_cron: "30 1 1-5", duration_s: 1800 },
+      { start_cron: "0 3", duration_s: 5400 },
+    ];
+    render(<AlertRuleForm channels={CHANNELS} initial={existing({ maintenance_windows: windows })} onSave={onSave} onCancel={vi.fn()} />);
+    expect(screen.getByText("Every Saturday at 22:00 UTC for 2 h")).toBeInTheDocument();
+    expect(screen.getByText("Monday–Friday at 01:30 UTC for 30 min")).toBeInTheDocument();
+    expect(screen.getByText("Every day at 03:00 UTC for 1 h 30 min")).toBeInTheDocument();
+    expect(screen.getByText(/kept as they are when you save/i)).toBeInTheDocument();
+    expect((await saved(onSave)).maintenance_windows).toEqual(windows);
+  });
+
+  it("a window cron it cannot read is shown as written", () => {
+    render(
+      <AlertRuleForm
+        channels={[]}
+        initial={existing({ maintenance_windows: [{ start_cron: "*/5 2 *", duration_s: 3600 }] })}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('"*/5 2 *" for 1 h')).toBeInTheDocument();
+  });
+
+  it("an enabled, unmuted rule with no channel says it notifies no one — and still saves", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<AlertRuleForm channels={CHANNELS} initial={existing()} onSave={onSave} onCancel={vi.fn()} />);
+    expect(screen.getByTestId("rule-no-channel-hint")).toHaveTextContent(/notifies no one/i);
+    expect((await saved(onSave)).channel_ids).toEqual([]);
+  });
+
+  it("the hint goes away once a channel is ticked, or the rule is muted", () => {
+    render(<AlertRuleForm channels={CHANNELS} initial={existing()} onSave={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: /ops slack/i }));
+    expect(screen.queryByTestId("rule-no-channel-hint")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: /ops slack/i }));
+    expect(screen.getByTestId("rule-no-channel-hint")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: /^muted/i }));
+    expect(screen.queryByTestId("rule-no-channel-hint")).not.toBeInTheDocument();
+  });
+
+  it("with no channels configured, it points to the Channels tab", () => {
+    render(<AlertRuleForm channels={[]} onSave={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.getByText(/no channels yet\. add one on the channels tab/i)).toBeInTheDocument();
+  });
+
+  it("the channel checkboxes are grouped under a 'Notify channels' legend", () => {
+    render(<AlertRuleForm channels={CHANNELS} onSave={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.getByRole("group", { name: /notify channels/i })).toBeInTheDocument();
+    // The type is part of the name, separated — not "Ops Slackslack".
+    expect(screen.getByRole("checkbox", { name: "Ops Slack (slack)" })).toBeInTheDocument();
   });
 });

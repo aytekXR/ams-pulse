@@ -52,7 +52,7 @@ walkthrough comes from real runs of the installer. Admin tokens and passwords ar
 
 ## Versions
 
-- Product release: **v0.5.0** (`ghcr.io/aytekxr/ams-pulse:0.5.0`, the Helm chart published with v0.5.0).
+- Product release: **v0.5.0** (`ghcr.io/aytekxr/ams-pulse:0.5.1`, the Helm chart published with v0.5.0).
 - Screenshots: retaken on 2026-10-07 from the v0.5.0 release candidate (same file names); the
   installer walkthrough (step 1 and the first-run dashboard) is retaken from the released v0.5.0.
 

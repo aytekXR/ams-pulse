@@ -478,9 +478,16 @@ func parseCronSimpleInternal(fields []string) (min, hour, weekday int, err error
 	return min, hour, weekday, nil
 }
 
+// maxCronValue is the largest value any cron field takes (minute 59).
+const maxCronValue = 59
+
 // cronFieldSet parses a cron field into a set of matching integers.
 // Returns (-1,nil) for "*" (any), a populated set for ranges, or a single value.
 // VD-33: ranges like "1-5" expand to all values in [low, high].
+//
+// Values outside 0-59 are refused before anything is allocated: the set used to grow one
+// entry per value, so a stored window weekday "0-100000000" cost ~300 MB and minutes of CPU
+// on every evaluator tick — and on the API path once windows were validated (S126 red team).
 func cronFieldSet(s string) (set map[int]struct{}, any bool, err error) {
 	if s == "*" {
 		return nil, true, nil
@@ -488,7 +495,7 @@ func cronFieldSet(s string) (set map[int]struct{}, any bool, err error) {
 	if idx := strings.Index(s, "-"); idx >= 0 {
 		low, err1 := strconv.Atoi(s[:idx])
 		high, err2 := strconv.Atoi(s[idx+1:])
-		if err1 != nil || err2 != nil || low > high {
+		if err1 != nil || err2 != nil || low > high || low < 0 || high > maxCronValue {
 			return nil, false, fmt.Errorf("cron: invalid range %q", s)
 		}
 		m := make(map[int]struct{}, high-low+1)
@@ -500,6 +507,9 @@ func cronFieldSet(s string) (set map[int]struct{}, any bool, err error) {
 	n, err := strconv.Atoi(s)
 	if err != nil {
 		return nil, false, fmt.Errorf("cron: invalid value %q: %w", s, err)
+	}
+	if n < 0 || n > maxCronValue {
+		return nil, false, fmt.Errorf("cron: value %q out of range 0-%d", s, maxCronValue)
 	}
 	return map[int]struct{}{n: {}}, false, nil
 }
@@ -541,20 +551,25 @@ func cronMatches(startCron string, durationS int, now time.Time) bool {
 		hour = 0 // treat wildcard hour as midnight for window start computation
 	}
 
-	// Check weekday field (supports "*", exact, and "lo-hi" range).
-	if len(fields) == 3 {
-		if !cronFieldMatches(fields[2], int(now.Weekday())) {
-			return false
+	// A window may run past midnight, so check the one that started today and the one
+	// that started yesterday (the API caps duration_s at 24 h). Before S126 only today's
+	// start was checked: "0 23 *" for two hours went quiet at 00:00, and a Saturday
+	// window never covered Sunday. The weekday field (supports "*", exact, and "lo-hi")
+	// is matched against the day the window STARTS.
+	loc := now.Location()
+	for back := 0; back <= 1; back++ {
+		startDay := now.AddDate(0, 0, -back)
+		if len(fields) == 3 && !cronFieldMatches(fields[2], int(startDay.Weekday())) {
+			continue
+		}
+		year, month, day := startDay.Date()
+		windowStart := time.Date(year, month, day, hour, min, 0, 0, loc)
+		windowEnd := windowStart.Add(time.Duration(durationS) * time.Second)
+		if !now.Before(windowStart) && now.Before(windowEnd) {
+			return true
 		}
 	}
-
-	// Compute window start: today at hour:min.
-	loc := now.Location()
-	year, month, day := now.Date()
-	windowStart := time.Date(year, month, day, hour, min, 0, 0, loc)
-	windowEnd := windowStart.Add(time.Duration(durationS) * time.Second)
-
-	return !now.Before(windowStart) && now.Before(windowEnd)
+	return false
 }
 
 // inMaintenanceWindowCron returns true if now falls within any cron-based maintenance window.

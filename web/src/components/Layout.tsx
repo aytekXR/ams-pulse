@@ -347,9 +347,11 @@ export function Layout({ children, wsConnected, overview: _overview, tier }: Lay
                   border: "none",
                   borderRight:
                     seg.value !== "wall" ? "1px solid var(--color-border)" : "none",
+                  // Selected: the hover shade, the higher-contrast accent in each theme —
+                  // light signal on its own 15% tint is 4.32:1, below AA for 11px (S126).
                   color:
                     density === seg.value
-                      ? "var(--color-accent)"
+                      ? "var(--color-accent-hover)"
                       : "var(--color-secondary)",
                   cursor: "pointer",
                   fontSize: 11,

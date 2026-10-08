@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/aytekXR/ams-pulse/main/deploy/quick
 **Released image:** `ghcr.io/aytekxr/ams-pulse` — **public** (no authentication needed to
 pull), cosign-signed, multi-arch (amd64/arm64), SBOM + provenance, published by a CI-gated
 tag pipeline.
-Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.5.0**).
+Releases: <https://github.com/aytekXR/ams-pulse/releases> (current: **v0.5.1**).
 
 **Docker Compose (signed image — recommended for evaluators):**
 
@@ -46,7 +46,7 @@ only). Without it the base file is `expose:`-only — correct for the production
 path, where a TLS-terminating reverse proxy sits in front, but it leaves the UI
 unreachable from the host. Set `PULSE_HOST_PORT` if 8090 is already taken.
 
-This pulls `ghcr.io/aytekxr/ams-pulse:0.5.0` — cosign-signed, SBOM-attached, no
+This pulls `ghcr.io/aytekxr/ams-pulse:0.5.1` — cosign-signed, SBOM-attached, no
 authentication required (`ghcr.io/aytekxr/ams-pulse` is public).
 To verify the image signature before running:
 
@@ -54,7 +54,7 @@ To verify the image signature before running:
 cosign verify \
   --certificate-identity-regexp '^https://github\.com/aytekXR/ams-pulse/\.github/workflows/release\.yml@refs/tags/v.+$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/aytekxr/ams-pulse:0.5.0
+  ghcr.io/aytekxr/ams-pulse:0.5.1
 ```
 
 > **The regexp is anchored on purpose.** `--certificate-identity-regexp` is an
@@ -133,9 +133,9 @@ PULSE_SECRET_KEY=$(openssl rand -hex 32) \
 
 ## Feature status
 
-Last updated: **2026-10-07** — all 10 PRD features shipped and free for everyone; latest release **v0.5.0**.
+Last updated: **2026-10-08** — all 10 PRD features shipped and free for everyone; latest release **v0.5.1**.
 The maintainer's production instance runs behind host-nginx TLS against a real AMS 3.1.0
-Enterprise (currently on a stamped **v0.4.5-9** build from August, until it is rolled forward to v0.5.0).
+Enterprise.
 Product one-pager: [docs/product.md](docs/product.md).
 
 | Feature | PRD ref | Status | Notes |

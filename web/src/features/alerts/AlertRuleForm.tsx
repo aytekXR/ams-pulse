@@ -1,9 +1,11 @@
 import { useState, useRef } from "react";
-import type { AlertRule, AlertRuleWrite } from "@/lib/api/types";
+import type { AlertChannel, AlertRule, AlertRuleWrite, MaintenanceWindow } from "@/lib/api/types";
 import { ANOMALY_METRICS, THRESHOLD_METRICS, isSupportedMetric, metricForRuleType } from "./metrics";
 
 interface Props {
   initial?: AlertRule;
+  /** Every configured channel: the rule notifies the ones ticked in the form. */
+  channels: AlertChannel[];
   onSave: (data: AlertRuleWrite) => Promise<void>;
   onCancel: () => void;
 }
@@ -14,8 +16,36 @@ interface Props {
 const OPERATORS = ["gt", "lt", "gte", "lte", "eq"] as const;
 const SEVERITIES = ["info", "warning", "critical"] as const;
 const WINDOWS = [60, 300, 600, 1800, 3600];
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
+function fmtDuration(s: number): string {
+  if (s >= 3600 && s % 3600 === 0) return `${s / 3600} h`;
+  if (s >= 3600) return `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
+  if (s >= 60 && s % 60 === 0) return `${s / 60} min`;
+  return `${s} s`;
+}
+
+/** "0 22 6" → "Every Saturday at 22:00 UTC for 2 h"; a form it cannot read is shown as written. */
+function describeWindow(w: MaintenanceWindow): string {
+  const raw = `"${w.start_cron}" for ${fmtDuration(w.duration_s)}`;
+  const f = w.start_cron.trim().split(/\s+/);
+  if (f.length < 2 || f.length > 3) return raw;
+  // "*" in the minute or hour means 0: a window starts at one time of day.
+  const num = (v: string, hi: number) => (v === "*" ? 0 : /^\d+$/.test(v) && Number(v) <= hi ? Number(v) : NaN);
+  const min = num(f[0], 59);
+  const hour = num(f[1], 23);
+  if (Number.isNaN(min) || Number.isNaN(hour)) return raw;
+  let days = "Every day";
+  if (f.length === 3 && f[2] !== "*") {
+    const m = /^([0-6])(?:-([0-6]))?$/.exec(f[2]);
+    if (!m || (m[2] !== undefined && Number(m[2]) < Number(m[1]))) return raw;
+    days = m[2] === undefined ? `Every ${DAYS[Number(m[1])]}` : `${DAYS[Number(m[1])]}–${DAYS[Number(m[2])]}`;
+  }
+  const hhmm = `${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+  return `${days} at ${hhmm} UTC for ${fmtDuration(w.duration_s)}`;
+}
+
+export function AlertRuleForm({ initial, channels, onSave, onCancel }: Props) {
   // S11 WO-B: rule type state (threshold | anomaly).
   const [ruleType, setRuleType] = useState<"threshold" | "anomaly">(
     initial?.rule_type ?? "threshold",
@@ -43,6 +73,12 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
   const [scopeStreamId, setScopeStreamId] = useState(initial?.scope?.stream_id ?? "");
   const [scopeApp, setScopeApp] = useState(initial?.scope?.app ?? "");
   const [scopeNodeId, setScopeNodeId] = useState(initial?.scope?.node_id ?? "");
+  // PUT replaces the whole rule, so the form sends the channels and maintenance windows too.
+  // Before S126 it sent neither: every rule saved here notified no one, and an edit erased
+  // the channels and windows set through the API. IDs the checkboxes cannot show (a
+  // deleted channel) stay as they are — the checkboxes manage only the listed channels.
+  const [channelIds, setChannelIds] = useState<string[]>(initial?.channel_ids ?? []);
+  const windows = initial?.maintenance_windows ?? [];
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -60,6 +96,13 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
       setWindowS(3600);
     }
   };
+
+  const toggleChannel = (id: string, on: boolean) =>
+    setChannelIds((ids) => (on ? [...ids, id] : ids.filter((x) => x !== id)));
+  const listedIds = new Set(channels.map((c) => c.id));
+  const unlistedCount = channelIds.filter((id) => !listedIds.has(id)).length;
+  // A channel-less rule is legitimate (history only), so this is a hint, not an error.
+  const notifiesNoOne = enabled && !muted && !channelIds.some((id) => listedIds.has(id));
 
   const offeredMetrics = ruleType === "anomaly" ? ANOMALY_METRICS : THRESHOLD_METRICS;
   const metricOptions = offeredMetrics.includes(metric) ? offeredMetrics : [...offeredMetrics, metric];
@@ -118,7 +161,8 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
         muted,
         group_by: groupBy.trim() || undefined,
         scope: Object.keys(scope).length > 0 ? scope : undefined,
-        maintenance_windows: [],
+        channel_ids: channelIds,
+        maintenance_windows: windows,
       });
     } finally {
       setSaving(false);
@@ -342,6 +386,63 @@ export function AlertRuleForm({ initial, onSave, onCancel }: Props) {
           />
         </div>
       </details>
+
+      {/* Notify channels — S126: the rule notifies exactly the channels ticked here. */}
+      <fieldset style={{ border: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+        <legend style={{ ...labelStyle, padding: 0, marginBottom: "var(--space-1)" }}>Notify channels</legend>
+        {channels.length === 0 ? (
+          <p style={{ margin: 0, fontSize: 12, color: "var(--color-secondary)" }}>
+            No channels yet. Add one on the Channels tab, then pick it here.
+          </p>
+        ) : (
+          channels.map((ch) => (
+            <label key={ch.id} style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: 13, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={channelIds.includes(ch.id)}
+                onChange={(e) => toggleChannel(ch.id, e.target.checked)}
+                style={{ width: 14, height: 14, accentColor: "var(--color-accent)" }}
+              />
+              {ch.name}{" "}
+              <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>({ch.type})</span>
+            </label>
+          ))
+        )}
+        {unlistedCount > 0 && (
+          <p style={{ margin: 0, fontSize: 12, color: "var(--color-secondary)" }}>
+            Also linked: {unlistedCount} channel{unlistedCount === 1 ? "" : "s"} not in the list (kept as is).
+          </p>
+        )}
+        {notifiesNoOne && (
+          <p
+            data-testid="rule-no-channel-hint"
+            style={{
+              margin: 0,
+              fontSize: 12,
+              color: "var(--color-text)",
+              background: "var(--color-warning-bg)",
+              borderLeft: "3px solid var(--color-warning)",
+              borderRadius: "var(--radius-control)",
+              padding: "var(--space-2) var(--space-3)",
+            }}
+          >
+            No channel selected: this rule records alert history but notifies no one.
+          </p>
+        )}
+      </fieldset>
+
+      {/* Maintenance windows are not edited here (API only); the form shows them and keeps them. */}
+      {windows.length > 0 && (
+        <div style={fieldStyle}>
+          <span style={labelStyle}>Maintenance windows</span>
+          <ul style={{ margin: 0, paddingLeft: "var(--space-5)", fontSize: 13 }}>
+            {windows.map((w, i) => <li key={i}>{describeWindow(w)}</li>)}
+          </ul>
+          <span style={{ fontSize: 12, color: "var(--color-secondary)" }}>
+            Kept as they are when you save. Change them through the API (maintenance_windows).
+          </span>
+        </div>
+      )}
 
       {/* enabled / muted -- distinct controls per CR-2 */}
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>

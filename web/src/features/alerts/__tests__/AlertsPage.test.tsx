@@ -323,3 +323,53 @@ describe("AlertsPage — delete rule confirmation", () => {
     });
   });
 });
+
+// ── S126: rules show who they notify; the form ties a rule to channels ──────
+
+describe("AlertsPage — rule notification channels (S126)", () => {
+  const CHANNEL = { id: "ch-1", name: "Ops Slack", type: "slack", credential_set: true, config_summary: {}, created_at: 1 };
+  const RULE = {
+    id: "rule-1", name: "High CPU Alert", metric: "node_cpu", operator: "gt", threshold: 80,
+    window_s: 300, severity: "warning", cooldown_s: 300, enabled: true, muted: false,
+    created_at: 1_000_000, updated_at: 1_000_000,
+  };
+
+  it("a rule with no channel says so in the list", async () => {
+    renderAlerts();
+    await waitForRulesLoaded();
+    expect(screen.getByText("No channel: notifies no one")).toBeInTheDocument();
+  });
+
+  it("a rule with channels lists them by name", async () => {
+    server.use(
+      http.get("http://localhost/api/v1/alerts/rules", () =>
+        HttpResponse.json({ items: [{ ...RULE, channel_ids: ["ch-1"] }] })),
+      http.get("http://localhost/api/v1/alerts/channels", () => HttpResponse.json({ items: [CHANNEL] })),
+    );
+    renderAlerts();
+    expect(await screen.findByText("Notifies Ops Slack")).toBeInTheDocument();
+  });
+
+  it("the rule form offers the loaded channels and POSTs the ticked ones", async () => {
+    const user = userEvent.setup({ delay: null });
+    let capturedBody: { channel_ids?: string[]; maintenance_windows?: unknown[] } | undefined;
+    server.use(
+      http.get("http://localhost/api/v1/alerts/channels", () => HttpResponse.json({ items: [CHANNEL] })),
+      http.post("http://localhost/api/v1/alerts/rules", async ({ request }) => {
+        capturedBody = (await request.json()) as typeof capturedBody;
+        return HttpResponse.json({ ...RULE, id: "rule-created", channel_ids: ["ch-1"] }, { status: 201 });
+      }),
+    );
+    renderAlerts();
+    await waitForRulesLoaded();
+    await user.click(screen.getByRole("button", { name: /^new rule$/i }));
+    await user.type(screen.getByPlaceholderText(/e\.g\. High CPU/i), "CPU to Slack");
+    await user.type(screen.getByPlaceholderText("0"), "90");
+    await user.click(screen.getByRole("checkbox", { name: /ops slack/i }));
+    await user.click(screen.getByRole("button", { name: /save rule/i }));
+
+    await waitFor(() => expect(capturedBody).toBeDefined());
+    expect(capturedBody?.channel_ids).toEqual(["ch-1"]);
+    expect(capturedBody?.maintenance_windows).toEqual([]);
+  });
+});

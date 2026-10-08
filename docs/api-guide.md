@@ -551,12 +551,17 @@ curl -s -X POST \
     "window_s": 300,
     "severity": "warning",
     "enabled": true,
-    "channel_ids": []
+    "channel_ids": ["<channel_id>"]
   }' \
   https://pulse.example.com/api/v1/alerts/rules | jq '{id:.id, name:.name}'
 ```
 
 **Expected response (201):** `AlertRule` object with the generated `id`.
+
+`channel_ids` are the channels the rule notifies (`GET /alerts/channels` lists them); a rule
+with none records alert history but notifies no one. A field the API does not read, or one of
+the wrong JSON type (`"threshold": "10"`), is refused with `422 INVALID_RULE` naming it.
+`PUT /alerts/rules/{id}` replaces the whole rule — send every field you want to keep.
 
 ---
 

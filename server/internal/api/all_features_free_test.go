@@ -32,7 +32,7 @@ var formerlyGated = []gatedRequest{
 	{http.MethodGet, "/api/v1/reports/export?type=usage&format=csv", ""},
 	// Slack is not a Free-tier channel under enforcement.
 	{http.MethodPost, "/api/v1/alerts/channels",
-		`{"name":"ops","type":"slack","config":{"webhook_url":"https://hooks.slack.com/services/T0/B0/x"}}`},
+		`{"name":"ops","type":"slack","config":{"slack_webhook_url":"https://hooks.slack.com/services/T0/B0/x"}}`},
 }
 
 func allFreeLicense(t *testing.T) *license.Manager {

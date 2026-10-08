@@ -2,7 +2,7 @@
 
 **PRD ref:** F5 (core alerting)  
 **Budget:** alert detection-to-notification < 30 s (QA-verified: 15 s)  
-**Last updated:** 2026-10-07 — the rule form offers exactly the metrics the server accepts, and the API-only ones are marked (D-194); every channel type on every install (v0.5.0, no tiers); e-mail channel: SMTP credentials are encrypted at rest (the old note said otherwise), SMTP settings are API-only, and editing an API-configured e-mail channel in the UI drops them (marketplace audit). Earlier: 2026-06-15 V3b fix-loop — muted suppression, group_by grouping, node_down absence detection, cron range syntax verified.
+**Last updated:** 2026-10-08 — a rule notifies only the channels in its `channel_ids`, and the web form now has the channel picker it lacked (rules saved in the UI notified no one); maintenance windows are `maintenance_windows: [{start_cron, duration_s}]` (this page showed `maintenance_window.cron_expr`, which was silently ignored) and may now run past midnight and malformed rule, window and channel input is refused with a 422 instead of being stored; PUT replaces a rule, so the mute/disable examples now send the whole rule (S126). Earlier: 2026-10-07 — the rule form offers exactly the metrics the server accepts, and the API-only ones are marked (D-194); every channel type on every install (v0.5.0, no tiers); e-mail channel: SMTP credentials are encrypted at rest (the old note said otherwise), SMTP settings are API-only, and editing an API-configured e-mail channel in the UI drops them (marketplace audit). Earlier: 2026-06-15 V3b fix-loop — muted suppression, group_by grouping, node_down absence detection, cron range syntax verified.
 
 ---
 
@@ -46,8 +46,12 @@ A rule suppressed by a maintenance window or `muted: true` produces no notificat
 | `enabled` | boolean | **Default true.** When `false`, the rule is completely skipped — not evaluated, no history written. Use to pause a rule without deleting it. |
 | `muted` | boolean | When `true`, the rule is evaluated and history is written, but no notifications are dispatched. Use for maintenance periods where you want to keep the evaluation record. |
 | `group_by` | string | Optional. When set (e.g. `"app"`, `"stream_id"`), collapses multiple matching streams/nodes into a single notification per unique group key value. Without `group_by`, each stream fires independently. See [Storm protection](#storm-protection). |
-| `scope` | object | Optional filter: `node_id`, `app`, `stream_id` |
-| `channel_ids` | array | IDs of alert channels to notify |
+| `scope` | object | Optional filter: `node_id`, `app`, `stream_id`, `tenant`. Any other key is refused. |
+| `channel_ids` | array | IDs of the alert channels this rule notifies. **A rule with no channel records history but notifies no one.** In the UI: the rule form's **Notify channels** checkboxes. |
+| `maintenance_windows` | array | Optional recurring quiet periods: `[{"start_cron": "0 2 6", "duration_s": 3600}]`. See [Maintenance windows](#maintenance-windows). |
+
+A field the API does not read, or a field of the wrong JSON type (`"threshold": "90"`), is
+refused with `422 INVALID_RULE` naming it — it is not stored and ignored, or read as 0.
 
 #### `enabled` vs `muted` — distinct semantics
 
@@ -154,12 +158,19 @@ before firing, plus one tick confirmation). Budget: 30 s (PRD F5).
 
 ## Channel setup
 
-Channels are created via the UI (Settings → Alerts → Channels) or the API
-(`POST /api/v1/alerts/channels`). Each channel type has a different config shape.
+Channels are created via the UI (Alerts → Channels) or the API
+(`POST /api/v1/alerts/channels`). Each channel type has a different config shape. A config
+key the type does not read (`url` for a webhook — the key is `webhook_url`), a missing
+required key, a URL that is not http(s) or an `smtp_addr` without a port is refused with
+`422 INVALID_CHANNEL`; before v0.5.1 it was stored and every delivery failed.
+
+**Editing a channel** (`PUT /api/v1/alerts/channels/{id}`, or the UI form) keeps the config
+keys you leave out — secrets are never returned, so they cannot be sent back — and removes a
+key sent as `""` or null. Changing the type starts from an empty config.
 
 ### Email (SMTP)
 
-**Via UI:** Settings → Alerts → Channels → New channel → type: email.
+**Via UI:** Alerts → Channels → New channel → type: email.
 
 **Via API:**
 ```json
@@ -178,17 +189,14 @@ Channels are created via the UI (Settings → Alerts → Channels) or the API
 ```
 
 **Implementation details:**
-- STARTTLS is **disabled by default** (`starttls: false`); add `"starttls": true` to enable it. TLS errors are non-fatal against local SMTP servers.
+- STARTTLS is **disabled by default** (`starttls: false`); add `"starttls": true` to enable it.
+  If the upgrade then fails, the delivery fails — Pulse does not fall back to plaintext.
 - `username` and `password` are stored encrypted at rest (AES-256-GCM, with the other channel
   secrets — D-106, pinned by `s44_smtp_secret_test.go`) and are never returned by the API.
   Still prefer a dedicated, send-only alerts credential over a shared SMTP account.
-- The web UI's channel form sets the **recipient only**; SMTP server settings (`smtp_addr`,
-  `from`, `username`, `password`, `starttls`) are configured through the API as shown above.
-- ⚠ **Do not edit an API-configured email channel in the web UI.** The update replaces the
-  whole channel config, so saving the UI form (recipient only) silently drops the SMTP
-  settings and the next delivery fails (`"accepted": false`). Change email channels with
-  `PUT /api/v1/alerts/channels/{id}` and send the full config. (Found in the 2026-10-01
-  marketplace audit; tracked in `docs/marketplace/antmedia-submission/marketplace/submission-notes.md`.)
+- The web UI's channel form has every field above. Before v0.5.1 it set the recipient only,
+  and saving it dropped SMTP settings configured through the API; an edit now keeps every
+  key the form leaves blank.
 
 **Email config keys** (source of truth: `server/internal/alert/factory.go`):
 
@@ -203,7 +211,7 @@ Channels are created via the UI (Settings → Alerts → Channels) or the API
 
 ### Slack (incoming webhook)
 
-**Via UI:** Settings → Alerts → Channels → New channel → type: slack.
+**Via UI:** Alerts → Channels → New channel → type: slack.
 
 **Via API:**
 ```json
@@ -238,7 +246,7 @@ Scope: `stream_id=live/main-stage`
 
 ### Telegram
 
-**Via UI:** Settings → Alerts → Channels → New channel → type: telegram.
+**Via UI:** Alerts → Channels → New channel → type: telegram.
 
 **Via API:**
 ```json
@@ -352,8 +360,8 @@ prevent timing attacks.
 
 ## Test-fire
 
-Every configured channel has a test-fire button in the UI (Settings → Alerts →
-Channels → channel row → Test). This sends a synthetic `test: true` notification
+Every configured channel has a test-fire button in the UI (Alerts → Channels →
+channel row → Test fire). This sends a synthetic `test: true` notification
 to verify delivery before live alerts fire.
 
 **Via API:**
@@ -421,28 +429,33 @@ the condition clears regardless of where the cooldown timer stands.
 
 ### Maintenance windows
 
-Wave 2 implements cron-expression maintenance windows via the rule `maintenance_window`
-field.
-
-**Cron format:** 3-field `MIN HOUR WEEKDAY` plus an optional duration:
+A rule's `maintenance_windows` is an array of recurring windows. While one is open the rule
+is evaluated and its history is written, but no notifications are dispatched (the same
+semantics as `muted: true`).
 
 ```json
-{
-  "name": "Sunday maintenance window",
-  "metric": "node_cpu",
-  "operator": "gt",
-  "threshold": 80,
-  "maintenance_window": {
-    "cron_expr": "0 2 0",
-    "duration_s": 3600
-  }
-}
+"maintenance_windows": [
+  { "start_cron": "0 2 0", "duration_s": 3600 }
+]
 ```
 
-This rule is suppressed between 02:00–03:00 on Sundays (weekday=0).
+That window is open 02:00–03:00 UTC every Sunday.
 
-During a maintenance window, rules are evaluated and history is written but
-notifications are not dispatched (same semantics as `muted: true`).
+- **`start_cron`** (UTC) is `"min hour"` (every day) or `"min hour weekday"`. Minute (0-59)
+  and hour (0-23) are single values — the window starts at one time of day; `*` means 0.
+  Weekday is `*`, `0`-`6` (0 = Sunday) or a range such as `1-5`.
+- **`duration_s`** is a whole number of seconds from 1 to 86400 (24 h). A window may run
+  past midnight; the weekday is the day it starts. Maintenance longer than a day is several
+  windows — e.g. Saturday 22:00 to Monday 06:00 is
+  `[{"start_cron": "0 22 6", "duration_s": 86400}, {"start_cron": "0 22 0", "duration_s": 28800}]`.
+  (Before v0.5.1 a window stopped at midnight.)
+- The field names are exact: a window written as `cron_expr` (as an earlier version of this
+  page showed) or a singular `maintenance_window` field is refused with a 422 that names the
+  right field. Before v0.5.1 such input was stored, never matched, and notifications went out
+  during the intended window.
+
+The web form shows a rule's windows read-only and keeps them when you save; set or change
+them through the API.
 
 You can also use the two manual controls on rules:
 
@@ -451,21 +464,25 @@ You can also use the two manual controls on rules:
 
 See [enabled vs muted semantics](#enabled-vs-muted--distinct-semantics) in the Rule fields section for the full comparison.
 
+**Changing one field through the API.** `PUT /alerts/rules/{id}` replaces the whole rule —
+a body with only `{"muted": true}` is refused (`name required`), and a field you leave out
+is reset (an omitted `channel_ids` leaves the rule notifying no one). Take the rule from the
+list, change it, and send it back whole; the read-only `id`, `created_at` and `updated_at`
+it carries are accepted:
+
 **Mute a rule via API:**
 ```sh
-curl -X PUT http://localhost:8090/api/v1/alerts/rules/{rule_id} \
-  -H "Authorization: Bearer plt_<token>" \
-  -H "Content-Type: application/json" \
-  -d '{"muted": true}'
+RULE=<rule_id>
+curl -s -H "Authorization: Bearer plt_<token>" "http://localhost:8090/api/v1/alerts/rules?limit=500" \
+  | jq --arg id "$RULE" '.items[] | select(.id == $id) | .muted = true' \
+  | curl -X PUT "http://localhost:8090/api/v1/alerts/rules/$RULE" \
+      -H "Authorization: Bearer plt_<token>" -H "Content-Type: application/json" -d @-
 ```
 
-**Disable a rule via API:**
-```sh
-curl -X PUT http://localhost:8090/api/v1/alerts/rules/{rule_id} \
-  -H "Authorization: Bearer plt_<token>" \
-  -H "Content-Type: application/json" \
-  -d '{"enabled": false}'
-```
+**Disable a rule via API:** the same, with `.enabled = false`.
+
+**Route a rule to a channel and un-mute it** (the default rules ship muted with no channel):
+the same, with `.muted = false | .channel_ids = ["<channel_id>"]`.
 
 ---
 

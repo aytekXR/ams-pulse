@@ -298,7 +298,8 @@ with severity badges and edit controls")
 
 Lists all configured alert rules. Each rule row shows the rule name, metric
 expression (`metric operator threshold · window · cooldown`), severity badge,
-and enabled/muted state.
+enabled/muted state, and the channels the rule notifies — or **No channel**: such a rule
+records history but notifies no one.
 
 **Creating a rule** — click **+ New rule** to open the inline form:
 
@@ -315,15 +316,19 @@ and enabled/muted state.
 | Scope | Optional stream ID / app / node ID filter; leave blank to match all |
 | Enabled | Uncheck to pause the rule without deleting it |
 | Muted | Rule is evaluated and recorded but sends no notifications |
+| Notify channels | The channels this rule sends to — tick one or more (create them on the **Channels** tab first). With none ticked the rule records history but notifies no one, and the form says so. |
 
-**Default "Stream offline" rule** — fresh installs include a built-in rule for
-stream disconnection events. This rule ships **muted** so it does not flood
-channels on the first run. Enable notifications by editing the rule and
-unchecking **Muted**.
+**Default rules** — fresh installs include four built-in rules (stream offline,
+viewer floor, node CPU above 90 %, ingest bitrate floor). They ship **muted** and with
+no channel so they do not flood anyone on the first run. To turn one on, edit it, tick
+a channel under **Notify channels**, uncheck **Muted**, and save.
 
-**Maintenance windows** — use the **Muted** toggle on any rule to suppress
-notifications during planned maintenance. Unmute the rule when maintenance
-ends; history entries are still recorded while muted.
+**Maintenance windows** — a rule can carry recurring quiet periods (for example every
+Sunday 02:00–03:00 UTC) during which it is evaluated and recorded but sends nothing. They
+are set through the API (`maintenance_windows`, see the
+[alerting runbook](runbooks/alerting.md#maintenance-windows)); the rule form lists them
+read-only and keeps them when you save. For one-off maintenance, use the **Muted** toggle
+and unmute the rule when maintenance ends; history entries are still recorded while muted.
 
 Deleting a rule shows an inline confirmation banner before the API call is
 made.
@@ -340,10 +345,21 @@ Notification destinations. Supported types:
 | PagerDuty |
 | Webhook |
 
-Click **+ New channel** to configure a destination (webhook URL, email
-address, Slack incoming-webhook URL, etc.). The **Test fire** button sends a
-test payload immediately and reports accepted / failed with the channel's
-response message.
+Click **+ New channel** to configure a destination. The form asks for what each type
+needs:
+
+| Type | Fields |
+|------|--------|
+| Email | Recipient (required); SMTP server as `host:port` (default `localhost:587`), sender address, SMTP user and password, STARTTLS |
+| Slack | Incoming-webhook URL (required); channel name for display |
+| Telegram | Bot token and chat ID (both required) |
+| PagerDuty | Events API v2 routing key (required); optional severity override |
+| Webhook | URL (required); optional signing secret (HMAC) |
+
+Secrets — webhook and bot tokens, routing keys, the signing secret, SMTP credentials — are
+stored encrypted and never shown again. When you edit a channel, leave a secret field blank
+to keep the stored value. The **Test fire** button sends a test payload immediately and
+reports accepted / failed with the channel's response message.
 
 Deleting a channel requires confirmation; existing rules that route to the
 deleted channel stop notifying.
@@ -676,4 +692,4 @@ The density and theme settings are stored in `localStorage`.
 
 ---
 
-_Last updated: 2026-10-07_
+_Last updated: 2026-10-08_

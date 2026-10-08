@@ -430,11 +430,42 @@ func reportScheduleToAPI(r meta.ReportScheduleRow) map[string]any {
 	return m
 }
 
+// reportScheduleFields is what reportScheduleFromAPI reads, plus the read-only keys a
+// GET returns, so a schedule can be fetched, edited and PUT back whole.
+var reportScheduleFields = []string{
+	"cron", "format", "scope", "tenant_mapping", "whitelabel_header",
+	"id", "created_at", "last_run_at", "next_run_at",
+}
+
+var reportScheduleFieldHints = map[string]string{
+	"cron_expr":     `"cron"`,
+	"app_filter":    `"scope": {"app": …}`,
+	"tenant_filter": `"scope": {"tenant": …}`,
+	"app":           `"scope": {"app": …}`,
+	"tenant":        `"scope": {"tenant": …}`,
+}
+
 func reportScheduleFromAPI(body map[string]any) (meta.ReportScheduleRow, error) {
-	cronExpr, _ := body["cron"].(string)
-	format, _ := body["format"].(string)
-	if cronExpr == "" {
+	// An ignored key here is not harmless: the runbook's "app_filter" was dropped and the
+	// "scoped" statement covered every app and tenant.
+	if err := knownFields(body, reportScheduleFields, reportScheduleFieldHints); err != nil {
+		return meta.ReportScheduleRow{}, err
+	}
+	cronExpr, _, err := strField(body, "cron")
+	if err != nil {
+		return meta.ReportScheduleRow{}, err
+	}
+	format, _, err := strField(body, "format")
+	if err != nil {
+		return meta.ReportScheduleRow{}, err
+	}
+	if strings.TrimSpace(cronExpr) == "" {
 		return meta.ReportScheduleRow{}, fmt.Errorf("cron required")
+	}
+	// The scheduler's own parser: before S126 an expression it could not read was stored
+	// and silently run a month later.
+	if err := reports.ValidateCron(cronExpr); err != nil {
+		return meta.ReportScheduleRow{}, err
 	}
 	if format == "" {
 		format = "csv"
@@ -443,8 +474,15 @@ func reportScheduleFromAPI(body map[string]any) (meta.ReportScheduleRow, error) 
 		return meta.ReportScheduleRow{}, fmt.Errorf("format must be csv or pdf")
 	}
 
+	scope, err := objField(body, "scope")
+	if err != nil {
+		return meta.ReportScheduleRow{}, err
+	}
+	if err := stringObject("scope", scope, "app", "tenant"); err != nil {
+		return meta.ReportScheduleRow{}, err
+	}
 	scopeJSON := "{}"
-	if scope, ok := body["scope"]; ok && scope != nil {
+	if scope != nil {
 		if b, err := json.Marshal(scope); err == nil {
 			scopeJSON = string(b)
 		}
@@ -455,11 +493,30 @@ func reportScheduleFromAPI(body map[string]any) (meta.ReportScheduleRow, error) 
 		Format:    format,
 		ScopeJSON: scopeJSON,
 	}
-	if v, ok := body["tenant_mapping"].(string); ok && v != "" {
-		row.TenantMapping = sql.NullString{String: v, Valid: true}
+	tenantMapping, _, err := strField(body, "tenant_mapping")
+	if err != nil {
+		return meta.ReportScheduleRow{}, err
 	}
-	if v, ok := body["whitelabel_header"]; ok && v != nil {
-		if b, err := json.Marshal(v); err == nil {
+	if tenantMapping != "" {
+		row.TenantMapping = sql.NullString{String: tenantMapping, Valid: true}
+	}
+	wl, err := objField(body, "whitelabel_header")
+	if err != nil {
+		return meta.ReportScheduleRow{}, err
+	}
+	if wl != nil {
+		// Only what the statement renders. Before S126 any object was stored: a header
+		// written as {"company": …} printed nothing and the statement went out unbranded.
+		if _, ok := wl["logo_path"]; ok {
+			return meta.ReportScheduleRow{}, fmt.Errorf("whitelabel_header.logo_path is not set per schedule: the PDF logo is server-wide (PULSE_REPORT_LOGO_PATH)")
+		}
+		if err := stringObject("whitelabel_header", wl, "name", "address"); err != nil {
+			return meta.ReportScheduleRow{}, err
+		}
+		if name, _ := wl["name"].(string); strings.TrimSpace(name) == "" {
+			return meta.ReportScheduleRow{}, fmt.Errorf("whitelabel_header.name is required (the company name printed in the header)")
+		}
+		if b, err := json.Marshal(wl); err == nil {
 			row.WhitelabelHeader = sql.NullString{String: string(b), Valid: true}
 		}
 	}

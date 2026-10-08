@@ -13,9 +13,11 @@ interface Props {
 
 const variantStyles: Record<NonNullable<Props["variant"]>, { bg: string; color: string }> = {
   default: { bg: "var(--color-accent)",    color: "var(--color-on-signal)" },
-  success: { bg: "var(--color-success-bg)", color: "var(--color-success)" },
-  warning: { bg: "var(--color-warning-bg)", color: "var(--color-warning)" },
-  error:   { bg: "var(--color-error-bg)",   color: "var(--color-error)" },
+  // *-text: the hue in dark, textPrimary in light, where the hue fails AA as a label on
+  // its own tint (global.css; S126).
+  success: { bg: "var(--color-success-bg)", color: "var(--color-success-text)" },
+  warning: { bg: "var(--color-warning-bg)", color: "var(--color-warning-text)" },
+  error:   { bg: "var(--color-error-bg)",   color: "var(--color-error-text)" },
   info:    { bg: "var(--color-info-bg)",     color: "var(--color-info)" },
   // --color-secondary, not --color-muted: at 11px the badge label is normal
   // text, and muted gives 3.50:1 (dark) / 4.36:1 (light) on --color-surface-2 —
