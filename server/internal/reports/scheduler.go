@@ -364,9 +364,10 @@ func NextCronTime(cronExpr string, from time.Time) time.Time {
 	return nextCronTime(cronExpr, from)
 }
 
-// nextCronTime computes the next fire time for a cron expression.
-// Honors min/hour/day-of-month/weekday (D-107); the month field is ignored.
-// If cron parsing fails, defaults to a 1-month interval.
+// nextCronTime computes the next fire time for a cron expression (UTC; see cron.go for
+// the syntax). An expression that does not parse, or never fires, falls back to one
+// month ahead — the API refuses both at create/update time (ValidateCron, S126), so the
+// fallback only covers schedules stored before validation existed.
 func nextCronTime(cronExpr string, from time.Time) time.Time {
 	// The whole reporting pipeline is UTC (period math, ClickHouse storage, and
 	// next_run_at is persisted as an absolute UnixMilli). Interpret the cron
@@ -376,36 +377,12 @@ func nextCronTime(cronExpr string, from time.Time) time.Time {
 	// the UTC period boundary. Callers may pass time.Now() (local); normalise here
 	// so every call site is correct and this is provable via the exported wrapper.
 	from = from.UTC()
-	min, hour, dom, weekday, err := parseCronFieldsInternal(cronExpr)
+	spec, err := parseCronSpec(cronExpr)
 	if err != nil {
-		// Unknown format — schedule next month.
 		return from.AddDate(0, 1, 0)
 	}
-
-	// Find the next minute matching min/hour/dom/weekday from `from`. The window
-	// is ~1 year so a day-of-month that skips short months (e.g. dom=31) is still
-	// found; a monthly schedule exits within ~31 days.
-	t := from.Add(time.Minute)       // start from next minute
-	for i := 0; i < 60*24*366; i++ { // search up to ~1 year ahead
-		if (min < 0 || t.Minute() == min) &&
-			(hour < 0 || t.Hour() == hour) &&
-			cronDayMatches(t, dom, weekday) {
-			return t.Truncate(time.Minute)
-		}
-		t = t.Add(time.Minute)
+	if next, ok := spec.next(from); ok {
+		return next
 	}
-	return from.AddDate(0, 1, 0) // fallback
-}
-
-// cronDayMatches implements standard cron day-of-month / day-of-week semantics:
-// when BOTH fields are restricted the day matches if EITHER matches (Vixie cron
-// OR-semantics); otherwise each restricted field must match and a wildcard (-1)
-// always matches.
-func cronDayMatches(t time.Time, dom, weekday int) bool {
-	domSet := dom >= 0
-	wdaySet := weekday >= 0
-	if domSet && wdaySet {
-		return t.Day() == dom || int(t.Weekday()) == weekday
-	}
-	return (dom < 0 || t.Day() == dom) && (weekday < 0 || int(t.Weekday()) == weekday)
+	return from.AddDate(0, 1, 0)
 }

@@ -15,6 +15,7 @@ import (
 	"image/png"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -153,8 +154,11 @@ func generateCSV(report *UsageReport, opts StatementOptions, now time.Time) (*Ge
 		// CSV does not support native headers; emit as # comment lines at top.
 		// Most spreadsheet tools ignore lines starting with #.
 		_ = w.Write([]string{"# " + opts.Whitelabel.Name})
-		if opts.Whitelabel.Address != "" {
-			_ = w.Write([]string{"# " + opts.Whitelabel.Address})
+		// One "# " comment row per address line: the address is newline-separated, and a
+		// single field with embedded newlines came out quoted, with the second line
+		// losing its "#" prefix.
+		for _, line := range addressLines(opts.Whitelabel.Address) {
+			_ = w.Write([]string{"# " + line})
 		}
 	}
 	_ = w.Write([]string{"# Pulse Usage Statement"})
@@ -216,8 +220,10 @@ func generatePDF(report *UsageReport, opts StatementOptions, now time.Time) (*Ge
 	// White-label header block.
 	if opts.Whitelabel != nil && opts.Whitelabel.Name != "" {
 		pdf.addHeaderLine(opts.Whitelabel.Name)
-		if opts.Whitelabel.Address != "" {
-			pdf.addHeaderLine(opts.Whitelabel.Address)
+		// One header line per address line — Tj draws no line breaks, so a
+		// newline-separated address used to print as one run-on line.
+		for _, line := range addressLines(opts.Whitelabel.Address) {
+			pdf.addHeaderLine(line)
 		}
 	}
 	pdf.addHeaderLine("Pulse Usage Statement")
@@ -373,11 +379,14 @@ func (p *minimalPDF) render() ([]byte, error) {
 	fmt.Fprintf(&content, "BT\n")
 	fmt.Fprintf(&content, "/F1 10 Tf\n")
 
+	// Every line is placed with an ABSOLUTE text matrix (Tm). `x y Td` is relative to
+	// the start of the previous line, so the old "50 <y> Td" per line moved each line
+	// by another (50, y): only the first line landed on the page and the rest climbed
+	// off the top — every scheduled PDF since Wave 2 showed just its first line (S126).
 	// Header lines.
 	for _, line := range p.headerLines {
-		fmt.Fprintf(&content, "50 %.1f Td\n", yPos)
+		fmt.Fprintf(&content, "1 0 0 1 50 %.1f Tm\n", yPos)
 		fmt.Fprintf(&content, "(%s) Tj\n", escapePDFString(line))
-		fmt.Fprintf(&content, "T* \n")
 		yPos -= lineH
 	}
 	yPos -= lineH // extra space before table.
@@ -386,17 +395,21 @@ func (p *minimalPDF) render() ([]byte, error) {
 	fmt.Fprintf(&content, "/F1 9 Tf\n")
 	if len(p.tableHeader) > 0 {
 		line := joinCols(p.tableHeader)
-		fmt.Fprintf(&content, "50 %.1f Td\n", yPos)
+		fmt.Fprintf(&content, "1 0 0 1 50 %.1f Tm\n", yPos)
 		fmt.Fprintf(&content, "(%s) Tj\n", escapePDFString(line))
 		yPos -= lineH
 	}
 	fmt.Fprintf(&content, "/F1 8 Tf\n")
-	for _, row := range p.tableRows {
-		if yPos < 50 {
-			break // avoid overflow (single-page constraint for Wave 2)
+	for i, row := range p.tableRows {
+		// Single page: stop one line early and SAY so — rows were silently dropped.
+		if yPos < 50+lineH && i < len(p.tableRows)-1 {
+			fmt.Fprintf(&content, "1 0 0 1 50 %.1f Tm\n", yPos)
+			fmt.Fprintf(&content, "(%s) Tj\n", escapePDFString(fmt.Sprintf(
+				"... and %d more rows not shown - the CSV export has every row", len(p.tableRows)-i)))
+			break
 		}
 		line := joinCols(row)
-		fmt.Fprintf(&content, "50 %.1f Td\n", yPos)
+		fmt.Fprintf(&content, "1 0 0 1 50 %.1f Tm\n", yPos)
 		fmt.Fprintf(&content, "(%s) Tj\n", escapePDFString(line))
 		yPos -= lineH
 	}
@@ -538,7 +551,11 @@ func escapePDFString(s string) string {
 			out.WriteByte('\\')
 			out.WriteRune(c)
 		default:
-			if c < 128 {
+			if c < 0x20 || c == 0x7f {
+				// Control characters (a raw newline from a multi-line field, tabs,
+				// escapes) have no glyph in Helvetica: draw a space instead.
+				out.WriteByte(' ')
+			} else if c < 128 {
 				out.WriteRune(c)
 			} else {
 				// Replace non-ASCII with '?' (ASCII only for Helvetica built-in).
@@ -577,4 +594,15 @@ func ParseWhitelabelHeader(headerJSON string) *WhitelabelHeader {
 		return nil
 	}
 	return &h
+}
+
+// addressLines splits a newline-separated address (CRLF or LF) into its non-blank lines.
+func addressLines(address string) []string {
+	var lines []string
+	for _, l := range strings.Split(strings.ReplaceAll(address, "\r\n", "\n"), "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			lines = append(lines, l)
+		}
+	}
+	return lines
 }
