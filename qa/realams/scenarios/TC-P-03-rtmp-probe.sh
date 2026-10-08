@@ -7,7 +7,10 @@
 #   Steps:        1. Create RTMP probe → rtmp://<ams>:1935/LiveApp
 #                 2. Poll /api/v1/probes/{id}/results up to 180 s
 #   AMS truth:    AMS completes C0/C1/S0/S1/S2/C2 RTMP handshake
-#   Pulse assert: success=true, signaling_state=handshake_complete, connect_time_ms > 0
+#   Pulse assert: success=true, signaling_state=app_accepted (the URL names an app, so the
+#                 AMF0 connect must succeed — handshake_complete would mean it failed after
+#                 the TCP handshake), connect_time_ms > 0. July 2026 (AMS 3.0.3) stopped at
+#                 handshake_complete; AMS 3.1.0 (S125) reaches app_accepted.
 #   Exit:         0 PASS | 1 FAIL | 77 SKIP (probe creation failed)
 #
 set -euo pipefail
@@ -111,7 +114,7 @@ _success="$(printf '%s' "${_result}" | jq -r 'if .success == true then "true" el
 assert_eq "${_success}" "true" "${SCENARIO} success=true" || true
 
 _signaling="$(printf '%s' "${_result}" | jq -r '.signaling_state // ""')"
-assert_eq "${_signaling}" "handshake_complete" "${SCENARIO} signaling_state=handshake_complete" || true
+assert_eq "${_signaling}" "app_accepted" "${SCENARIO} signaling_state=app_accepted (AMF0 connect to LiveApp succeeded)" || true
 
 _connect_ms="$(printf '%s' "${_result}" | jq '.connect_time_ms // 0' 2>/dev/null || echo 0)"
 assert_gte "${_connect_ms}" 1 "${SCENARIO} connect_time_ms > 0" || true

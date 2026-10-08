@@ -6,8 +6,9 @@
 # Assertion matrix row:
 #   Steps:        1. GET /rest/v2/version (authed) for AMS version ground truth
 #                 2. GET /api/v1/fleet/nodes for Pulse representation
-#   AMS truth:    {versionName:"3.0.3", versionType:"Enterprise"}
-#   Pulse assert: fleet node card or system info shows AMS version 3.0.3 Enterprise
+#   AMS truth:    {versionName:"<x.y.z>", versionType:"Enterprise…"} — read live, never hardcoded
+#                 (it said 3.0.3 until the AMS 3.1.0 run, S125)
+#   Pulse assert: the fleet node's version contains the AMS versionName
 #   Exit:         0 PASS | 1 FAIL | 77 SKIP (fleet/nodes has no nodes)
 #
 set -euo pipefail
@@ -49,7 +50,8 @@ log "AMS version: versionName=${_ams_version_name}  versionType=${_ams_version_t
 printf 'ams_versionName=%s\nams_versionType=%s\n' "${_ams_version_name}" "${_ams_version_type}" \
   >> "${EVIDENCE_DIR}/timeline.txt"
 
-assert_eq "${_ams_version_name}" "3.0.3" "${SCENARIO} AMS versionName=3.0.3 (ground truth)" || true
+assert_eq "$([ -n "${_ams_version_name}" ] && echo present || echo absent)" "present" \
+  "${SCENARIO} AMS versionName reported (ground truth: ${_ams_version_name:-none})" || true
 # S17 live: this build reports versionType="Enterprise Edition" (S16 capture
 # said "Enterprise") — accept the Enterprise* family, record the exact string.
 case "${_ams_version_type}" in Enterprise*) _vt_family="Enterprise" ;; *) _vt_family="${_ams_version_type}" ;; esac
@@ -77,14 +79,14 @@ _pulse_version="$(printf '%s' "${_node}" | jq -r '.version // ""' 2>/dev/null ||
 log "Pulse fleet node version: '${_pulse_version}'"
 printf 'pulse_node_version=%s\n' "${_pulse_version}" >> "${EVIDENCE_DIR}/timeline.txt"
 
-# Assert Pulse surfaces AMS version containing "3.0.3"
-# Accept either exact "3.0.3" or a composed string like "3.0.3-Enterprise"
+# Pulse must surface the version AMS reports — exact or composed (e.g. "3.1.0-Enterprise")
 _version_present="$([ -n "${_pulse_version}" ] && echo present || echo absent)"
 assert_eq "${_version_present}" "present" "${SCENARIO} fleet node version field is populated" || true
 
-# Version must contain "3.0.3"
-_has_version_num="$(printf '%s' "${_pulse_version}" | grep -c '3\.0\.3' 2>/dev/null || echo 0)"
-assert_gte "${_has_version_num}" 1 "${SCENARIO} fleet node version contains '3.0.3'" || true
+# Version must contain the AMS versionName (grep -F: dots are literal). `|| true`, not
+# `|| echo 0`: grep -c already prints 0 on no match, and the old fallback doubled it.
+_has_version_num="$(printf '%s' "${_pulse_version}" | grep -cF "${_ams_version_name:-<none>}" 2>/dev/null || true)"
+assert_gte "${_has_version_num:-0}" 1 "${SCENARIO} fleet node version contains AMS versionName '${_ams_version_name}'" || true
 
 # ── Verdict ──────────────────────────────────────────────────────────────────
 scenario_verdict

@@ -64,7 +64,7 @@ validate-p0: auth ## Run P0 scenarios in order; SKIP(77)/MISSING do not fail; FA
 	  else \
 	    stamp=$$(mktemp); \
 	    bash "$$script"; rc=$$?; \
-	    evdir=$$(ls -td "$(EVIDENCE_ROOT)"/S*-"$${tc}-"* 2>/dev/null | head -1 || echo '-'); \
+	    evdir=$$(find "$(EVIDENCE_ROOT)" -maxdepth 1 -type d -newer "$$stamp" \( -name "S*-$${tc}-*" -o -name "$${tc}-*" \) -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-); [ -n "$$evdir" ] || evdir='-'; \
 	    case "$$rc" in \
 	      0)  if [ -f "$$evdir/verdict.txt" ] && [ "$$evdir/verdict.txt" -nt "$$stamp" ] \
 	             && head -1 "$$evdir/verdict.txt" | grep -q '^PASS'; then \
@@ -98,7 +98,7 @@ validate-p1: auth ## Run P1 scenarios in order; SKIP(77)/MISSING do not fail; FA
 	  else \
 	    stamp=$$(mktemp); \
 	    bash "$$script"; rc=$$?; \
-	    evdir=$$(ls -td "$(EVIDENCE_ROOT)"/S*-"$${tc}-"* 2>/dev/null | head -1 || echo '-'); \
+	    evdir=$$(find "$(EVIDENCE_ROOT)" -maxdepth 1 -type d -newer "$$stamp" \( -name "S*-$${tc}-*" -o -name "$${tc}-*" \) -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-); [ -n "$$evdir" ] || evdir='-'; \
 	    case "$$rc" in \
 	      0)  if [ -f "$$evdir/verdict.txt" ] && [ "$$evdir/verdict.txt" -nt "$$stamp" ] \
 	             && head -1 "$$evdir/verdict.txt" | grep -q '^PASS'; then \
@@ -129,7 +129,7 @@ validate-all: auth ## Run every TC-*.sh in scenarios/ (sorted); SKIP(77) OK; FAI
 	  tc=$$(basename "$$script" .sh | cut -d- -f1-3); \
 	  stamp=$$(mktemp); \
 	  bash "$$script"; rc=$$?; \
-	  evdir=$$(ls -td "$(EVIDENCE_ROOT)"/S*-"$${tc}-"* 2>/dev/null | head -1 || echo '-'); \
+	  evdir=$$(find "$(EVIDENCE_ROOT)" -maxdepth 1 -type d -newer "$$stamp" \( -name "S*-$${tc}-*" -o -name "$${tc}-*" \) -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-); [ -n "$$evdir" ] || evdir='-'; \
 	  case "$$rc" in \
 	    0)  if [ -f "$$evdir/verdict.txt" ] && [ "$$evdir/verdict.txt" -nt "$$stamp" ] \
 	           && head -1 "$$evdir/verdict.txt" | grep -q '^PASS'; then \

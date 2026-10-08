@@ -78,6 +78,18 @@ done
 
 capture_ams "/LiveApp/rest/v2/broadcasts/${STREAM_ID}" "phase1-ams"
 
+# Precondition (documented in the header since S17, implemented S126): if AMS never reaches
+# broadcasting, the publish was refused before Pulse had anything to see — most often AMS's
+# CPU guard, which refuses new streams above 75 % host CPU (S125: 96 %). SKIP, not FAIL.
+if [ "${_ams_status}" != "broadcasting" ]; then
+  _cpu_now="$(curl -s -m 10 -b "${AMS_COOKIE_FILE}" "${AMS_URL}/rest/v2/system-resources" 2>/dev/null \
+    | jq '.cpuUsage.systemCPULoad // empty' 2>/dev/null || true)"
+  log "SKIP: AMS never reached broadcasting (last status=${_ams_status}; AMS CPU ${_cpu_now:-?} %)"
+  printf 'SKIP\nPrecondition unmet: AMS never reached broadcasting for %s (last status=%s; AMS CPU %s %%; AMS refuses new streams above 75 %% CPU).\n' \
+    "${STREAM_ID}" "${_ams_status}" "${_cpu_now:-?}" > "${EVIDENCE_DIR}/verdict.txt"
+  exit 77
+fi
+
 # ── Poll Pulse /live/streams for stream visibility (≤30 s) ───────────────────────
 log "Polling Pulse /live/streams for ${STREAM_ID} (budget: 30 s)"
 _pulse_state=""
