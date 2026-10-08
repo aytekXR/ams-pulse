@@ -26,7 +26,7 @@ Status on 2026-10-07. Owner: **Dev** = the developer (operator), **AM** = Ant Me
 | Corrected page copy in the draft's structure | **Done** | `marketplace-copy.md` |
 | Install step 1 command (missing `--password`) | **Corrected** | `marketplace-copy.md` step 1 |
 | Helm step (experimental; incomplete command) | **Recommend removal** | `draft-review.md` S2 |
-| Send the corrections to Ant Media | **Pending** | Dev — `answers-for-ant-media.md` is ready to send |
+| Send the corrections to Ant Media | **Done** — the shareable ZIP was sent on 2026-10-07 | — |
 
 ## C. Things Ant Media is checking
 
@@ -58,5 +58,5 @@ Status on 2026-10-07. Owner: **Dev** = the developer (operator), **AM** = Ant Me
 | Product site live (`https://aytekxr.github.io/ams-pulse/`) | **Done** (HTTP 200) | — |
 | "Get Pulse" page + website fixes | **Done** — live at `https://aytekxr.github.io/ams-pulse/get/` (HTTP 200, 2026-10-07) | — |
 | No secrets in the package | **Done** — scanned, see submission notes | — |
-| Vulnerable `candidate-5c561bc4` GHCR image deleted | Pending — needs the `delete:packages` scope or the web UI | Operator |
+| Vulnerable `candidate-5c561bc4` GHCR image deleted | **Done** — 2026-10-08 (the tag now returns 404; releases intact) | — |
 | Review `/privacy/` and `/terms/` (legal statements in your name) | Pending | Operator |
