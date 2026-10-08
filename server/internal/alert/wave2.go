@@ -541,20 +541,25 @@ func cronMatches(startCron string, durationS int, now time.Time) bool {
 		hour = 0 // treat wildcard hour as midnight for window start computation
 	}
 
-	// Check weekday field (supports "*", exact, and "lo-hi" range).
-	if len(fields) == 3 {
-		if !cronFieldMatches(fields[2], int(now.Weekday())) {
-			return false
+	// A window may run past midnight, so check the one that started today and the one
+	// that started yesterday (the API caps duration_s at 24 h). Before S126 only today's
+	// start was checked: "0 23 *" for two hours went quiet at 00:00, and a Saturday
+	// window never covered Sunday. The weekday field (supports "*", exact, and "lo-hi")
+	// is matched against the day the window STARTS.
+	loc := now.Location()
+	for back := 0; back <= 1; back++ {
+		startDay := now.AddDate(0, 0, -back)
+		if len(fields) == 3 && !cronFieldMatches(fields[2], int(startDay.Weekday())) {
+			continue
+		}
+		year, month, day := startDay.Date()
+		windowStart := time.Date(year, month, day, hour, min, 0, 0, loc)
+		windowEnd := windowStart.Add(time.Duration(durationS) * time.Second)
+		if !now.Before(windowStart) && now.Before(windowEnd) {
+			return true
 		}
 	}
-
-	// Compute window start: today at hour:min.
-	loc := now.Location()
-	year, month, day := now.Date()
-	windowStart := time.Date(year, month, day, hour, min, 0, 0, loc)
-	windowEnd := windowStart.Add(time.Duration(durationS) * time.Second)
-
-	return !now.Before(windowStart) && now.Before(windowEnd)
+	return false
 }
 
 // inMaintenanceWindowCron returns true if now falls within any cron-based maintenance window.

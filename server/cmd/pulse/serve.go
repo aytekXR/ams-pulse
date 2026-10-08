@@ -559,6 +559,11 @@ func newServer(ctx context.Context, cfg EnvConfig, logger *slog.Logger) (*server
 		AccessKeyEnvRef: cfg.S3AccessKeyEnvRef,
 		SecretKeyEnvRef: cfg.S3SecretKeyEnvRef,
 	}
+	// The endpoint is what turns upload on (reports.NewScheduler); a bucket alone used to
+	// leave uploads off without a word — the reports runbook's AWS example set no endpoint.
+	if cfg.S3Bucket != "" && cfg.S3Endpoint == "" {
+		logger.Warn("reports: PULSE_S3_BUCKET is set but PULSE_S3_ENDPOINT is not — S3 upload is off; set the endpoint (AWS: https://s3.<region>.amazonaws.com)")
+	}
 	// PULSE_REPORT_LOGO_PATH: validate at boot (WARN if set but unreadable, never crash).
 	reports.ValidateLogoPath(cfg.ReportLogoPath, logger)
 

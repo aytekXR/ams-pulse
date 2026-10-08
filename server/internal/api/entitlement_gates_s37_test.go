@@ -96,7 +96,7 @@ func TestAlertChannel_UpdateToUnlicensedType_Blocked(t *testing.T) {
 
 	// Create an allowed (email) channel first.
 	created := doJSON(t, client, http.MethodPost, base+"/api/v1/alerts/channels", token, map[string]any{
-		"type": "email", "name": "ops-email", "config": map[string]any{"to": "ops@example.com"},
+		"type": "email", "name": "ops-email", "config": map[string]any{"email_to": "ops@example.com"},
 	})
 	if created.status != http.StatusCreated {
 		t.Fatalf("create email channel: expected 201, got %d: %s", created.status, created.body)

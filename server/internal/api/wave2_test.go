@@ -212,8 +212,8 @@ func TestAPI_FreeTier_AllowsEmailChannel(t *testing.T) {
 		"type": "email",
 		"name": "My Email Channel",
 		"config": map[string]any{
-			"from": "alerts@example.com",
-			"to":   "admin@example.com",
+			"from":     "alerts@example.com",
+			"email_to": "admin@example.com",
 		},
 	}
 	bodyBytes, _ := json.Marshal(body)

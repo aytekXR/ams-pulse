@@ -2363,6 +2363,14 @@ components:
 
     AlertRuleWrite:
       type: object
+      description: |
+        A field the server does not read is refused with 422 `INVALID_RULE` (naming the
+        field), and so is a present field of the wrong JSON type — a string `threshold`
+        is not read as 0. The read-only keys a list item carries (`id`, `created_at`,
+        `updated_at`) are accepted and ignored, so a rule taken from
+        `GET /alerts/rules` can be edited and PUT back whole. PUT replaces the rule:
+        send every field you want to keep, including `channel_ids` and
+        `maintenance_windows`.
       required: [name, metric, operator, threshold, window_s, severity]
       properties:
         name:
@@ -2439,12 +2447,16 @@ components:
             $ref: "#/components/schemas/MaintenanceWindow"
         channel_ids:
           type: array
+          description: |
+            The channels this rule notifies. A rule with none records alert history but
+            notifies no one.
           items:
             type: string
 
     AlertScope:
       type: object
-      description: Scope filters for alert evaluation; omit to evaluate globally
+      description: Scope filters for alert evaluation; omit to evaluate globally. Other keys are refused (422).
+      additionalProperties: false
       properties:
         node_id:
           type: [string, 'null']
@@ -2462,14 +2474,25 @@ components:
 
     MaintenanceWindow:
       type: object
+      description: |
+        While a window is open the rule is evaluated and recorded but sends no
+        notifications. A window opens on each matching day at its start time and stays
+        open `duration_s` seconds, at most 24 h; for longer maintenance add one window
+        per day. Other keys are refused (422) — the field is `start_cron`, not `cron_expr`.
+      additionalProperties: false
       required: [start_cron, duration_s]
       properties:
         start_cron:
           type: string
-          description: Cron expression for window start (UTC)
+          description: |
+            Window start, UTC: `"min hour"` (every day) or `"min hour weekday"`. Minute
+            0-59 and hour 0-23 are single values (`*` means 0); weekday is `*`, 0-6
+            (0 = Sunday) or a range such as `1-5`. Example: `"0 2 6"` = Saturdays 02:00.
         duration_s:
           type: integer
-          description: Window duration in seconds
+          minimum: 1
+          maximum: 86400
+          description: Window duration in seconds (1 to 86400)
 
     AlertChannelList:
       type: object
@@ -2506,6 +2529,12 @@ components:
 
     AlertChannelWrite:
       type: object
+      description: |
+        On update, config keys you omit keep their stored values — secrets are never
+        returned, so a client cannot send them back — and a key sent as `""` or null is
+        removed. Changing `type` starts from an empty config. A config key the channel
+        type does not read, a missing required key, a URL that is not http(s) or an
+        `smtp_addr` without a port is refused with 422 `INVALID_CHANNEL`.
       required: [type, name, config]
       properties:
         type:
@@ -2520,12 +2549,29 @@ components:
       description: |
         Discriminated union on `type`. Use the parent `type` field to
         determine which properties apply. Secrets are stored encrypted and
-        never returned.
+        never returned. Required per type: webhook `webhook_url`; slack
+        `slack_webhook_url`; email `email_to`; telegram `telegram_bot_token` and
+        `telegram_chat_id`; pagerduty `pagerduty_routing_key`.
       type: object
       properties:
         email_to:
           type: string
           description: "email: recipient address"
+        smtp_addr:
+          type: string
+          description: "email: SMTP server as host:port (default localhost:587)"
+        from:
+          type: string
+          description: "email: sender address (default pulse-alerts@localhost)"
+        username:
+          type: string
+          description: "email: SMTP AUTH user (secret)"
+        password:
+          type: string
+          description: "email: SMTP AUTH password (secret)"
+        starttls:
+          type: boolean
+          description: "email: upgrade the SMTP connection with STARTTLS (fails closed)"
         slack_webhook_url:
           type: string
           description: "slack: incoming webhook URL (secret)"
@@ -2541,6 +2587,9 @@ components:
         pagerduty_routing_key:
           type: string
           description: "pagerduty: integration routing key (secret)"
+        pagerduty_severity:
+          type: string
+          description: "pagerduty: severity sent to PagerDuty, overriding the rule's (e.g. critical, error, warning, info)"
         webhook_url:
           type: string
           description: "webhook: target URL"
@@ -2692,24 +2741,38 @@ components:
           type: [string, 'null']
           description: Tenant mapping rule reference
         whitelabel_header:
-          type: [object, 'null']
-          description: White-label PDF header JSON (F6 Phase 3)
-          additionalProperties: true
+          oneOf:
+            - $ref: "#/components/schemas/WhitelabelHeader"
+            - type: 'null'
         created_at:
           type: integer
           description: Unix epoch ms
 
     ReportScheduleWrite:
       type: object
+      description: |
+        A field the server does not read is refused with 422 `INVALID_SCHEDULE` naming
+        it: the schedule is `cron` (not `cron_expr`) and the statement's scope is
+        `scope.app` / `scope.tenant` (not `app_filter` / `tenant_filter`). The read-only
+        keys a GET returns (`id`, `created_at`, `last_run_at`, `next_run_at`) are
+        accepted and ignored.
       required: [cron, format]
       properties:
         cron:
           type: string
+          description: |
+            When the statement runs, in UTC: standard 5-field cron
+            (`min hour day-of-month month weekday`), `min hour weekday`, or `min hour`
+            (daily). Each field takes `*`, a value, a range `a-b`, a step `*/n` or `a-b/n`,
+            or a comma list; weekday 0-7 (0 and 7 = Sunday). When day-of-month and weekday
+            are both restricted, either matching is enough (standard cron). An expression
+            that does not parse, is out of range, or never fires (`0 0 31 2 *`) is refused.
         format:
           type: string
           enum: [csv, pdf]
         scope:
           type: object
+          additionalProperties: false
           properties:
             app:
               type: [string, 'null']
@@ -2718,8 +2781,25 @@ components:
         tenant_mapping:
           type: [string, 'null']
         whitelabel_header:
-          type: [object, 'null']
-          additionalProperties: true
+          oneOf:
+            - $ref: "#/components/schemas/WhitelabelHeader"
+            - type: 'null'
+
+    WhitelabelHeader:
+      type: object
+      description: |
+        Header printed on the statement (PDF and CSV) in place of the Pulse header. The
+        PDF logo is server-wide (`PULSE_REPORT_LOGO_PATH`), not per schedule. Other keys
+        are refused (422).
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: Company name, the first header line
+        address:
+          type: string
+          description: Address; each line (newline-separated) is its own header line
 
     # ── Fleet ─────────────────────────────────────────────────
     FleetNodeList:
